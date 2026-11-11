@@ -6,23 +6,16 @@ import { Expand } from "./expand";
 import { Row } from "./row";
 import { FoldLine } from "./agents";
 
-/* Assistant: the pieces of an agent that keeps going on its own (docs/plans/persistent-agent.md). Rows are the
- * dashboard's, so they sit in a page's groups and take its cursor; the heartbeat's quiet line in its thread is a
- * HarnessPrompt with Icons.Heartbeat. */
-
 export type ReportLevel = "urgent" | "attention" | "fyi" | "failed" | "none";
 const LEVEL_WORD: Record<ReportLevel, string> = { urgent: "Urgent", attention: "Attention", fyi: "FYI", failed: "Failed", none: "Nothing to say" };
 export const levelWord = (level: string) => LEVEL_WORD[level as ReportLevel] ?? level;
 
-/** How a report reads at a glance: a dot by level (nothing to say hollow); handled, a quiet check. */
 export const LevelMark = (props: { level: string; handled?: boolean }) =>
   <span class="ui-level ui-size-icon-sm" data-level={props.level} data-handled={props.handled ? "" : undefined} role="img" aria-label={props.handled ? "Handled" : levelWord(props.level)}>
     <Show when={props.handled} fallback={<Dot />}><Icons.Check /></Show>
   </span>;
 
 
-/** A report jbot sent (docs/plans/persistent-agent.md › The message log): one card in its stream opening the whole
- *  report in a reader (onOpen); still one message, so it takes its place as an answer does. */
 export function ReportCard(props: { title: string; line?: string; time?: string; notified?: boolean; onOpen: () => void }) {
   return <Card element="button" surface="outline" embedded size="row" class="ui-report-card" onClick={() => props.onOpen()}>
     <Row density="trail" lead={<Icons.FileText aria-hidden="true" />} label={<b class="ui-report-title">{props.title}</b>} detail={props.line}
@@ -30,8 +23,7 @@ export function ReportCard(props: { title: string; line?: string; time?: string;
   </Card>;
 }
 
-/** Messages in another room of jbot's (an email thread), folded into one quiet line in the app's stream, opening in
- *  place to the exchange (children). It never notifies, having reached the person there already. */
+/** It never notifies, having reached the person there already. */
 export function RoomRow(props: { icon: JSX.Element; channel: string; room: string; count: number; last?: string; time?: string; children?: JSX.Element }) {
   return <FoldLine folds class="ui-room" rowClass="ui-room-row" lead={props.icon}
     label={<span class="ui-room-head"><span class="ui-room-where">Over {props.channel}</span><b class="ui-room-name">{props.room}</b>
@@ -40,11 +32,9 @@ export function RoomRow(props: { icon: JSX.Element; channel: string; room: strin
     meta={props.time ? <time>{props.time}</time> : undefined} body={(exchange) => <div class="ui-room-body">{exchange}</div>}>{props.children}</FoldLine>;
 }
 
-/** jbot's picture: the Conduit app icon until jbot has a look of its own; sized by its place, like an icon. */
 export const AgentAvatar = (props: { class?: string; label?: string }) =>
   <img class={`ui-agent-avatar${props.class ? ` ${props.class}` : ""}`} src="/pwa-192x192.png" alt={props.label || ""} aria-hidden={props.label ? undefined : "true"} draggable={false} />;
 
-/** One email of a room, as a mail client shows it: its quoted thread folded behind "···". */
 export function EmailItem(props: { from: string; to?: string; time?: string; dateTime?: string; quoted?: string; children: JSX.Element }) {
   const [shown, setShown] = createSignal(false);
   return <article class="ui-email">
@@ -63,10 +53,7 @@ const CLOCK_ICON: Record<ClockKind, () => JSX.Element> = {
   heartbeat: () => <Icons.Heartbeat />, brief: () => <Icons.Brief />, feed: () => <Icons.Feed />, checkback: () => <Icons.Clock />, schedule: () => <Icons.Runtime />,
 };
 
-/** Something that runs on a clock: its kind's icon, name, cadence and last status, then when it runs next.
- *  warn: it failed, the icon a warning. */
 export function ClockRow(props: { kind: ClockKind; title: string; cadence: string; status?: string; next?: string; warn?: string; off?: boolean;
-  /** Where there is no width for it beside the title (a panel): when it runs is a line of its own under the title, whole. */
   wrap?: boolean; actions?: JSX.Element }) {
   return <Row density="list" data-clock="" data-wrap={props.wrap ? "" : undefined} data-off={props.off ? "" : undefined} title={props.warn}
     lead={props.warn ? <Icons.Warning class="ui-clock-warn" /> : CLOCK_ICON[props.kind]()} label={props.title}
@@ -74,13 +61,10 @@ export function ClockRow(props: { kind: ClockKind; title: string; cadence: strin
     meta={props.next || props.actions ? <span class="ui-clock-end"><Show when={props.next}><span>{props.next}</span></Show>{props.actions}</span> : undefined} />;
 }
 
-/** A moment on the day, in minutes after midnight (0 to 1440). */
 export interface DayMark { at: number; label: string; kind?: ClockKind }
 const pct = (minutes: number) => `${(Math.min(1440, Math.max(0, minutes)) / 14.4).toFixed(3)}%`;
 const hhmm = (minutes: number) => `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(Math.round(minutes % 60)).padStart(2, "0")}`;
 
-/** An agent's day on one line, midnight to midnight: quiet hours a tinted band, the heartbeat's ticks (`ticks`, as its
- *  timing rules place them; else every `pulse` minutes outside quiet hours), labelled marks (a brief), and now. */
 export function DayStrip(props: { now: number; quiet?: { start: number; end: number } | null; pulse?: number | null; ticks?: number[]; marks?: DayMark[]; label?: string }) {
   const bands = (): [number, number][] => {
     const quiet = props.quiet;

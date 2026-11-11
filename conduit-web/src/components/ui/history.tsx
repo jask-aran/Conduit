@@ -3,7 +3,6 @@ import { Show, splitProps, type JSX } from "solid-js";
 import { Row } from "./row";
 
 
-/** The chat history's scrolling list, with optional text wrapping. */
 export function HistoryList(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class" | "classList"> & { wrap?: boolean }) {
   const [local, rest] = splitProps(props, ["wrap"]);
   return <div {...rest} class="ui-history" data-wrap={local.wrap ? "" : undefined} />;
@@ -19,12 +18,10 @@ type HistoryRowContent = {
   datetime?: string;
 };
 type HistoryRowProps = HistoryRowContent & Omit<JSX.HTMLAttributes<HTMLElement>, "class" | "classList"> & {
-  /** A folded run of tool calls: a button opening just that run. */
   run?: boolean;
   open?: boolean;
 };
 
-/** An entry's timestamp and text, or a button for a folded run of tool calls: one Row line in the history's grid. */
 export function HistoryRow(props: HistoryRowProps) {
   const [local, rest] = splitProps(props, ["kind", "discarded", "active", "leaf", "connected", "time", "datetime", "children", "run", "open"]);
   return <Row density="trail" bare element={local.run ? "button" : "div"} {...rest} class={local.run ? "ui-history-row ui-history-run" : "ui-history-row"}
@@ -40,7 +37,6 @@ export function HistoryRow(props: HistoryRowProps) {
   </Row>;
 }
 
-/** A side branch's rail and body, with its text's nesting depth. */
 export function HistoryBranch(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "style" | "class" | "classList"> & { depth: number }) {
   const [local, rest] = splitProps(props, ["depth", "children"]);
   return <div {...rest} class="ui-history-branch" style={{ "--history-depth": String(local.depth) }}>

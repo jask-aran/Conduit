@@ -4,12 +4,7 @@ import * as Icons from "./icons";
 import { Card } from "./card";
 import { type Motion } from "./shared";
 
-/**
- * TourCard: one step of a guided tour that teaches by doing (the keyboard tour): a small raised frost Card in a corner,
- * the region it is about lit by the caller's Spotlight. Its body: the step's title, a sentence, its tasks as keycaps
- * (each ticked when seen); its actions Back, Skip, End, and Next once the step is done.
- * It never takes focus: the keys it teaches belong to where the person is. Its buttons are still reached by Tab.
- */
+/** It never takes focus: the keys it teaches belong to where the person is. */
 export type TourTask = { label: string; keys: string[]; state: "waiting" | "done" | "absent" };
 
 export function TourCard(props: {

@@ -1,14 +1,9 @@
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 
-/*
- * Fold, don't squeeze (DESIGN.md, Interaction): a row's controls keep their size, and what does not fit folds, by
- * measure, never at a tuned width. Every row that folds measures through these.
- */
+/* A row's controls keep their size, and what does not fit folds, by measure, never at a tuned width. */
 
-/** What changes a row's fit: its size, and with parts each child's (re-observed as they come and go); content: what it
- *  holds changing (attributes: those attributes too), measured with `content`, else `fit`. Measured where the observer
- *  delivers, after layout, where its reads are free: deferred to the next frame they come after that frame's writes (a
- *  dock easing open sets every pane's width) and lay the page out once per row per frame. */
+/** Measured where the observer delivers, after layout, where its reads are free: deferred to the next frame they come
+ *  after that frame's writes and lay the page out once per row per frame. */
 export function watchFit(row: HTMLElement, fit: () => void, options: { parts?: boolean; content?: () => void; attributes?: string[] } = {}) {
   const sizes = new ResizeObserver(() => fit());
   const observe = () => { sizes.disconnect(); sizes.observe(row); if (options.parts) for (const part of row.children) sizes.observe(part); };
@@ -21,8 +16,6 @@ export function watchFit(row: HTMLElement, fit: () => void, options: { parts?: b
   onCleanup(() => { sizes.disconnect(); changes?.disconnect(); });
 }
 
-/** How many parts stay, of `widths` (each with its gap, in the order they stay) in `room`; `more`: the room of the ⋯
- *  holding the rest, taken once any goes. The first part that does not fit takes every one after it. */
 export function keptParts(room: number, widths: readonly number[], more = 0) {
   if (widths.reduce((sum, width) => sum + width, 0) <= room) return widths.length;
   let left = room - more;
@@ -31,9 +24,7 @@ export function keptParts(room: number, widths: readonly number[], more = 0) {
   return count;
 }
 
-/** A row of parts that fold, last first, into a ⋯ (`more`): its parts are [data-fold], the ⋯ [data-fold-more] (taking
- *  its room only once something folds, or always with data-fold-keep), the rest stay. A folded part stays laid out,
- *  hidden, so its width is known when room comes back. setKept: how many still show; phone: none fold. Call from onMount. */
+/** A folded part stays laid out, hidden, so its width is known when room comes back. */
 export function foldRow(more: HTMLElement, setKept: (count: number) => void, phone?: () => boolean) {
   const row = more.parentElement;
   if (!row) return;
@@ -47,9 +38,6 @@ export function foldRow(more: HTMLElement, setKept: (count: number) => void, pho
   }, { parts: true });
 }
 
-/** A strip that gives way by measure, never a tuned width: while it overflows (or `over` says how much is cut) it takes
- *  its next of `steps` folds, keeping the width it needed, and gives each back once that wide again; content: a change
- *  to what it holds measures it again unfolded. `ref` it; count() is how many are taken. */
 export function createFolds(steps: number, options: { over?: (element: HTMLElement) => number; content?: boolean } = {}): {
   ref: (element: HTMLElement) => void;
   count: Accessor<number>;

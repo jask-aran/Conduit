@@ -1,49 +1,32 @@
 import { PHONE_LAYOUT_QUERY } from "./layout";
 
-/** Said on the window when the keyboard goes away with focus still in a field (Android's back button does this). */
 export const KEYBOARD_HIDDEN_EVENT = "conduit:keyboard-hidden";
 
-/** Every number a sync decided from, for a diagnostic readout. */
 export type ViewportReading = {
   source: string; inner: number; visual: number; base: number; offset: number; resting: number; keyboard: number;
   applied: number; shrank: boolean; dpr: number;
 };
 
-/** Which measurement is the truth: the visual viewport, or a layer that reports the keyboard (Chromium's
- *  VirtualKeyboard; "insets": the keyboard's own position, frame by frame, from the Android shell). */
 export type ViewportSource = "viewport" | "virtualkeyboard" | "insets";
 
 export type ViewportFollower = {
-  /** CSS pixels the keyboard covers, as the layer that knows reports them (0: none). Read at the next sync. */
   keyboard: number;
   source: ViewportSource;
-  /** How much room the navigation bar is owed with no keyboard in the way, as last read (readRestBottom). */
   readonly restBottom: number;
-  /** Read the navigation bar's resting room (--safe-area-inset-bottom-rest) again. */
   readRestBottom(): void;
-  /** Write the variables for what is known now. */
   sync(): void;
-  /** Stop following, and take the variables away. */
   stop(): void;
 };
 
-/**
- * The phone's viewport variables the library's styles read, kept current: --app-height (the room above the keyboard),
- * --vv-offset-top (where the visual viewport is panned to) and, where the keyboard's own position is known,
- * --safe-area-inset-bottom (the navigation bar's room, given up to the keyboard as it takes it); `data-vv-shell` on
- * <html> while they are set. Only in the phone's layout; elsewhere they are removed and the stylesheets' own values
- * stand. Started once; the caller tells it about a keyboard that a layer reports (`keyboard`, `source`).
- * The shell is moved, not scrolled: `--app-height` sizes `#root` and `.chat-main`, carrying the composer up; chasing
- * the keyboard by scrolling would fight whatever the transcript is doing on its own.
- */
+/** The shell is moved, not scrolled: `--app-height` sizes `#root` and `.chat-main`, carrying the composer up; chasing
+ *  the keyboard by scrolling would fight whatever the transcript is doing on its own. */
 export function followViewport(options: { onReading?: (reading: ViewportReading) => void } = {}): ViewportFollower {
   let keyboardWasShown = false;
   const root = document.documentElement;
   /* CSS pixels the keyboard covers, as the shell reports them. Never added to a viewport that already lost the
      keyboard (a resized WebView) -- that leaves the window a keyboard short; the resting height tells the cases apart. */
   let shellKeyboard = 0;
-  /* The navigation bar's room with no keyboard in the way; what is still owed is `rest - keyboard` on each frame.
-     Read once a travel, not once a frame: a computed style read inside the drawing costs a recalculation a frame. */
+  /* Read once a travel, not once a frame: a computed style read inside the drawing costs a recalculation a frame. */
   let restBottom = 0;
   let restingHeight = 0;
   let restingWidth = 0;
@@ -74,10 +57,8 @@ export function followViewport(options: { onReading?: (reading: ViewportReading)
     }
     const vv = window.visualViewport;
     const viewport = vv?.height ?? window.innerHeight;
-    /* Where the shell reports the keyboard frame by frame, the keyboard overlays the window, so `innerHeight` less
-       the keyboard is the only input. The visual viewport is unusable there: Chromium shrinks it by the whole keyboard
-       on the first frame, so the composer runs ahead of the keyboard (and springs up before going down on the way
-       back). Everywhere else the viewport is all there is. */
+    /* Where the shell reports the keyboard frame by frame, the visual viewport is unusable: Chromium shrinks it by the
+       whole keyboard on the first frame, so the composer would run ahead of the keyboard. */
     const owned = source === "insets";
     const measured = owned ? window.innerHeight : viewport;
     noteResting(measured);
@@ -86,9 +67,8 @@ export function followViewport(options: { onReading?: (reading: ViewportReading)
     // One of the two, never both: the viewport if it already lost the keyboard, else resting height less the keyboard.
     const height = Math.max(0, shellKeyboard && !viewportShrank ? restingHeight - shellKeyboard : measured);
     const offsetTop = vv?.offsetTop ?? 0;
-    // Only the height: the transcript holds its own scroll from a ResizeObserver on its scroller (a second hand here
-    // cost two forced layouts a frame). The navigation bar's room goes to the keyboard as it takes it, only where its
-    // position is known; elsewhere the stylesheet's resting value stands.
+    // Only the height: the transcript holds its own scroll from a ResizeObserver on its scroller, and a second hand
+    // here costs two forced layouts a frame.
     if (owned) {
       root.style.setProperty("--safe-area-inset-bottom", `${Math.max(0, restBottom - shellKeyboard).toFixed(1)}px`);
     }

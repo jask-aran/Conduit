@@ -1,14 +1,9 @@
-/* Terminal chrome (terminal.tsx). TermHeader: a terminal's top line, on the ground (the pane's material) over the
-   terminal's darker canvas, so no line divides them. Leading controls, the identity (status, title, context; it
-   truncates), the shortcuts, then the session and focus actions, all quiet ghost controls. What does not fit folds,
-   measured by TermHeader (data-folded): the shortcuts into the ⋯ first, then the actions' labels; nothing squeezes. */
 .ui-pane-header:where([data-header="term"]) { display: flex; min-height: var(--control); flex: none; align-items: center; gap: var(--space-lg);
   padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md); background: var(--background); }
 .ui-pane-header:where([data-header="term"]) svg { width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); }
 .ui-pane-header:where([data-header="term"]) strong { font-size: var(--text-row); font-weight: var(--weight-strong); }
 .ui-term-identity { display: flex; min-width: 0; align-items: center; gap: var(--space-md); margin-right: auto; overflow: hidden; }
 .ui-term-identity-end { display: flex; flex: none; align-items: center; margin-left: auto; }
-/* The document's ×, a tab's (CloseButton kind tab). */
 .ui-term-identity > .ui-icon-button:where([data-icon-button="tab"]) { margin-left: calc(-1 * var(--space-xs)); }
 .ui-term-identity > strong, .ui-term-context { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-term-context { color: var(--muted-foreground); font: var(--text-label) var(--font-data); }
@@ -22,7 +17,6 @@
 .ui-term-status[data-tone="warn"], .ui-term-status[data-tone="warn"] .ui-term-status-mark { color: var(--warn); }
 .ui-term-status[data-tone="danger"], .ui-term-status[data-tone="danger"] .ui-term-status-mark { color: var(--destructive); }
 
-/* The shortcuts inline while they fit; folded, the ⋯ menu holds them. */
 .ui-term-overflow { display: none; flex: none; align-items: center; }
 .ui-pane-header:where([data-header="term"])[data-folded~="shortcuts"] .ui-term-shortcuts { display: none; }
 .ui-pane-header:where([data-header="term"])[data-folded~="shortcuts"] .ui-term-overflow { display: flex; }
@@ -51,8 +45,6 @@
   background: color-mix(in oklch, var(--popover), transparent 4%); box-shadow: var(--lift-raised);
   color: var(--destructive); font-size: var(--text-caption); line-height: var(--leading-row); }
 
-/* TermKeys: a phone's key bar, a hairline over it, the page's ground, the safe area under it; it scrolls sideways
-   without a bar. TermKey: Keycap's face (the tint, mono) at a finger's size; pressed it brightens, armed it is ringed. */
 .ui-term-keys { display: flex; flex: none; gap: var(--space-sm); overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-x; scrollbar-width: none;
   padding: var(--space-sm) var(--space-md) calc(var(--space-sm) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   border-top: var(--hairline) solid var(--border); background: var(--background); }

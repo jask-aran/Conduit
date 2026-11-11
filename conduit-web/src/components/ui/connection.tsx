@@ -21,16 +21,10 @@ export function CameraPreview(props: { videoRef: (element: HTMLVideoElement) => 
   return <div class="ui-camera"><video ref={props.videoRef} playsinline muted /><div class="ui-camera-frame" aria-hidden="true" /><p role="status">{props.message}</p><Button variant="ghost" outline onClick={props.onClose}>Cancel</Button></div>;
 }
 
-/** Shared access page, including safe-area room and a scrollable keyboard layout. */
 export const ConnectionScreen = (props: { children: JSX.Element; embedded?: boolean }) => <main class="ui-connection-screen" data-embedded={props.embedded ? "" : undefined}>{props.children}</main>;
 
-/*
- * Signing in, one set of pieces for every place that does it (the sign-in screen, Connect, a server's own page):
- * an address that says what it found, a line saying so, and the password row that appears beneath it.
- */
 export type AddressState = "checking" | "found" | "missing";
 
-/** An address field that ticks once a server answered there; the looking is said by the ConnectionStatus beneath. */
 export function ConnectionAddress(props: JSX.InputHTMLAttributes<HTMLInputElement> & { state?: AddressState }) {
   const [local, rest] = splitProps(props, ["state"]);
   return <div class="ui-connection-address" data-state={local.state}>
@@ -41,18 +35,13 @@ export function ConnectionAddress(props: JSX.InputHTMLAttributes<HTMLInputElemen
   </div>;
 }
 
-/** The address and what acts on it, one row, as the password and its arrow are: the field, then its buttons (scan a
- *  code into it, go). */
 export const ConnectionEntry = (props: { children: JSX.Element }) => <div class="ui-connection-password">{props.children}</div>;
-/** A row's go button: the arrow, a spinner while it is busy. */
 export const ConnectionGo = (props: { label: string; busy?: boolean; disabled?: boolean }) =>
   <Button type="submit" variant="ghost" size="icon" aria-label={props.label} title={props.label} disabled={props.busy || props.disabled}><Show when={props.busy} fallback={<Icons.Proceed />}><Spinner /></Show></Button>;
 
-/** A row's scan button: reads a pairing code into the address. */
 export const ConnectionScan = (props: { onClick: () => void; disabled?: boolean }) =>
   <Button type="button" variant="ghost" size="icon" aria-label="Scan QR code" title="Scan QR code" disabled={props.disabled} onClick={() => props.onClick()}><Icons.QrCode /></Button>;
 
-/** Something to copy, shown whole in a field that scrolls (a pairing link), with its copy button; ticked for a moment once copied. */
 export function ConnectionCopy(props: { value: string; label: string; disabled?: boolean }) {
   const { on: copied, flash: flashCopied } = createFlash(1600);
   const copy = () => void navigator.clipboard.writeText(props.value).then(flashCopied);
@@ -62,7 +51,6 @@ export function ConnectionCopy(props: { value: string; label: string; disabled?:
   </div>;
 }
 
-/** What the check found, one line: the server's name (or its host) and a detail, or why nothing answered. It rises in. */
 export function ConnectionStatus(props: { state: AddressState; title: string; detail?: string }) {
   return <p class="ui-connection-status" data-state={props.state} role={props.state === "missing" ? "alert" : "status"}>
     <span class="ui-connection-status-mark ui-size-icon-sm" aria-hidden="true"><Show when={props.state === "checking"} fallback={props.state === "found" ? <Dot tone="success" /> : <CircleAlertIcon />}><Spinner /></Show></span>
@@ -70,12 +58,9 @@ export function ConnectionStatus(props: { state: AddressState; title: string; de
   </p>;
 }
 
-/** What follows the address, a step at a time (nothing, the look's status, the ways to find a server, the password),
- *  as Steps: the form, and a card around it, grows and shrinks rather than jumping. */
 export const ConnectionSteps = (props: { step: string; size?: string | number; children: JSX.Element }) =>
   <Steps class="ui-connection-steps" step={props.step} size={props.size}>{props.children}</Steps>;
 
-/** The password and its arrow, one row; busy while it signs in, its error beneath. Rises in when it follows an address. */
 export function ConnectionPassword(props: JSX.InputHTMLAttributes<HTMLInputElement> & { busy?: boolean; error?: string | null; reveal?: boolean }) {
   const [local, rest] = splitProps(props, ["busy", "error", "reveal", "id"]);
   const id = local.id ?? createUniqueId();
@@ -102,24 +87,19 @@ export function ServerControl(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>
   const busy = () => local.connectivity === "connecting" || local.connectivity === "reconnecting";
   const tone = () => local.connectivity === "online" ? "success" : local.connectivity === "offline" ? "danger" : local.connectivity === "reconnecting" ? "warn" : "muted";
   const dot = () => <StatusDot label={local.detail} tone={tone()} spinning={busy()} />;
-  // The name, and its state with the dot that shows it in the data voice: after the name inline (a desktop rail's foot), under it otherwise; compact, the dot alone.
   const state = () => <>{dot()}{local.detail}</>;
   return <Show when={!local.compact} fallback={<IconButton {...rest} kind="rail">{dot()}</IconButton>}>
     <Row {...(rest as RowProps)} element="button" density="trail" class="ui-server-control" label={local.name} detail={local.inline ? undefined : state()} meta={local.inline ? state() : undefined} />
   </Show>;
 }
 
-/** A name's initials: the first letters of its first and last words, or its first two; "?" for none. */
 export const initialsOf = (name: string) => {
   const words = name.trim().split(/\s+/).filter(Boolean);
   if (!words.length) return "?";
   const letters = words.length > 1 ? [words[0]![0], words.at(-1)![0]] : [...words[0]!].slice(0, 2);
   return letters.join("").toUpperCase();
 };
-/**
- * A person's picture (the account signed in to a hub): their initials on the surface's tint -- no hue, as nothing in
- * Conduit is coloured but state. size: sm in a menu row's icon slot, md beside a line, lg where it is the subject.
- */
+/** Initials on the surface's tint, no hue: nothing in Conduit is coloured but state. */
 export const Avatar = (props: { name: string; size?: "sm" | "md" | "lg"; label?: string; src?: string | null }) =>
   <span class="ui-avatar ui-size-icon" data-size={props.size ?? "sm"} role={props.label ? "img" : undefined} aria-label={props.label} aria-hidden={props.label ? undefined : "true"}>
     <Show when={props.src} fallback={initialsOf(props.name)}><img src={props.src!} alt="" draggable={false} /></Show></span>;

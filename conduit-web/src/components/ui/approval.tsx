@@ -6,17 +6,8 @@ import * as Icons from "./icons";
 import { ServiceIcon } from "./service-icons";
 import { type Motion } from "./shared";
 
-/*
- * An approval: an agent asking to do one thing that leaves its own space (send an email, start a chat, run a command
- * on a device). The same summary is asked two ways -- on the question card that takes the composer's place while a
- * harness waits for it (sync), or as an ApprovalCard in the thread that waits for the person while the agent carries
- * on (async) -- so an approval reads the same wherever it is answered.
- */
-
-/** A detail line: plain text, or an action with labelled fields ("To", "Subject") and a command in a block of its own. */
 export type ApprovalLine = string | { text?: string; fields?: { label: string; value: string }[]; code?: string };
 
-/** A line as plain text: for a tooltip or a notification. */
 export const approvalLineText = (line: ApprovalLine) => typeof line === "string" ? line
   : [line.text, ...(line.fields || []).map((field) => `${field.label}: ${field.value}`), line.code].filter(Boolean).join("\n");
 
@@ -31,7 +22,6 @@ function Line(props: { line: ApprovalLine }) {
   </li>;
 }
 
-/** What is asked: the service's mark (or the shield), a short title, a few detail lines; meta at the right (expiry). */
 export function ApprovalSummary(props: { title: string; service?: string | null; lines?: ApprovalLine[]; meta?: string }) {
   return <div class="ui-approval-summary">
     <div class="ui-approval-head">
@@ -46,14 +36,8 @@ export function ApprovalSummary(props: { title: string; service?: string | null;
 export type ApprovalState = "pending" | "allowed" | "declined" | "expired" | "used";
 export type ApprovalChoice = "allow" | "always" | "deny";
 
-/**
- * ApprovalCard: an approval in the thread. Pending, the summary over Allow / Always / Don't; answered, one quiet line.
- * busy: an answer on its way. bare: inside a surface whose row already names it (Needs you), no card or head of its own.
- */
 export function ApprovalCard(props: { title: string; service?: string | null; lines?: ApprovalLine[]; meta?: string; state: ApprovalState; busy?: boolean; motion?: Motion;
-  /** What Always would allow from now on ("Gmail · send, any input"); null: no lasting rule fits, so no Always. */
   always?: string | null;
-  /** The answers this approval offers; all three when not said. One left out is not drawn. */
   choices?: readonly ApprovalChoice[];
   bare?: boolean; onChoose?: (choice: ApprovalChoice) => void }) {
   const offers = (choice: ApprovalChoice) => !props.choices || props.choices.includes(choice);

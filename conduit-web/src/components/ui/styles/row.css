@@ -1,10 +1,6 @@
-/* Row (row.tsx): every row's box and voice -- a nav row, a list's, a menu's -- one flex line on no ground, its marks
-   and words in the row's gap, at rest in the row's tone. A density (data-density) sets the rest: nav and list in
-   nav.css and dashboard.css, menu in popover.css, each with its parts and its cursor. Loaded before them. */
+/* Each density's own rules (nav.css, dashboard.css, popover.css) load after this one. */
 .ui-row { display: flex; width: 100%; min-height: var(--row-min); align-items: center; gap: var(--row-gap); border: 0; border-radius: var(--radius-control); background: transparent; color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-size: var(--text-row); text-align: left; }
-/* Its fold: the chevron last, muted (it turns by the fold rule, foundations.css). */
 .ui-row-fold { flex: none; margin-left: auto; color: var(--muted-foreground); }
-/* A line: its mark muted, its title whole, its context muted and cut short, its meta and end at the end. */
 .ui-row:where([data-density="line"]) { padding: 0 var(--space-sm); color: inherit; font: inherit; font-size: var(--text-row); }
 .ui-row-lead:where([data-density="line"] *) { display: inline-flex; flex: none; align-items: center; gap: var(--row-gap); color: var(--muted-foreground); }
 .ui-row-title:where([data-density="line"] *) { flex: none; white-space: nowrap; }
@@ -13,7 +9,6 @@
 .ui-row-end:where([data-density="line"] *) { display: inline-flex; flex: none; align-items: center; margin-left: auto; padding-left: var(--space-md); }
 .ui-row-meta:where([data-density="line"] *) + .ui-row-end { margin-left: 0; }
 
-/* A tree's row: a tool's height, stepped in by its depth, chevron and icon leading; selected or pointed at, washed. */
 .ui-row:where([data-density="tree"]) { min-height: var(--control-tool); gap: var(--space-sm); padding: var(--space-xs) var(--space-md) var(--space-xs) calc((.3125 + var(--depth, 0) * .875) * var(--u-space)); color: var(--muted-foreground); }
 .ui-row:where([data-density="tree"])[data-selected] { background: var(--tint); color: var(--foreground); }
 @media (hover: hover) { .ui-row:where([data-density="tree"]):is(:hover, [data-selected]) { background: var(--tint); color: var(--foreground); } }
@@ -21,8 +16,6 @@
 .ui-row-title:where([data-density="tree"] *) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-row-end:where([data-density="tree"] *) { display: inline-flex; flex: none; margin-left: auto; color: var(--muted-foreground); }
 @media (--conduit-phone-layout) { .ui-row:where([data-density="tree"]) { min-height: var(--control); } }
-/* A trail's line: at its words' height in the tone it sits in, washed under the pointer or in focus; its fold shows
-   then, or open. */
 .ui-row:where([data-density="trail"]) { min-width: 0; min-height: 0; padding: var(--space-2xs) var(--space-sm); color: inherit; font: inherit; font-size: var(--text-row); line-height: var(--leading-row); }
 .ui-row:where([data-density="trail"]):is(button, a) { cursor: pointer; }
 .ui-row:where([data-density="trail"]):disabled { cursor: default; }

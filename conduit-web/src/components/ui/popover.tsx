@@ -7,21 +7,13 @@ import { Keycap } from "./controls";
 import { Row, type RowProps } from "./row";
 import { type Density, type Motion, hovers, motionOf, moveCursor } from "./shared";
 
-/** under: a phone's submenu is open as a panel over it, so it dims and takes no taps. */
-/** wide: a readout rather than a list, at a measure of its own (the context breakdown). */
-/** unfolds: its rows open in place (the chat menu's Context): as wide as its cap from the start, growing with them. */
-/** A measure (Foundations · Space): a popover's width or height cap. */
 export type Measure = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
-/** A popover fits its rows inside its caps (--menu-width-cap, --menu-height-cap, a phone's smaller) and the room its
- *  host leaves (--menu-room, Kobalte's inside the safe area), then scrolls. width, height: its own caps, in a measure. */
 export function Menu(props: JSX.HTMLAttributes<HTMLDivElement> & { density?: Density; motion?: Motion; under?: boolean; wide?: boolean; unfolds?: boolean; width?: Measure; height?: Measure }) {
   const [, rest] = splitProps(props, ["class", "density", "motion", "under", "wide", "unfolds", "width", "height", "children", "style"]);
   const caps = () => ({ ...(props.width ? { "--menu-width": `var(--measure-${props.width})` } : {}), ...(props.height ? { "--menu-height": `var(--measure-${props.height})` } : {}), ...(typeof props.style === "object" ? props.style : {}) });
   return <Frost lift="raised" role="menu" class={cn("ui-menu", props.class)} onPointerOver={moveCursor} {...rest} style={caps()} data-wide={props.wide ? "" : undefined} data-unfolds={props.unfolds ? "" : undefined} data-fits="" data-density={props.density} data-under={props.under ? "" : undefined} {...motionOf(props.motion)}>{props.children}</Frost>;
 }
 
-/** A menu's section: a list of items (the default) or a slider, with an optional title and a note beside it.
- *  scroll: a long list scrolls in its own height (a pick list under its search). */
 export function Section(props: JSX.HTMLAttributes<HTMLDivElement> & { note?: JSX.Element; kind?: "list" | "slider"; scroll?: boolean }) {
   const [, rest] = splitProps(props, ["title", "note", "kind", "scroll", "children", "class", "role"]);
   return <div {...rest} role={props.role ?? "group"} aria-label={props.title} class="ui-section" data-kind={props.kind ?? "list"} data-scroll={props.scroll ? "" : undefined}>
@@ -30,8 +22,6 @@ export function Section(props: JSX.HTMLAttributes<HTMLDivElement> & { note?: JSX
   </div>;
 }
 
-/** A search section: the field alone, filtering the list after it or opening a full search; keys: its shortcut (never
- *  on a phone). field: what a behaviour adds to the input. */
 export function SearchSection(props: { placeholder: string; value?: string; keys?: string[]; onInput?: (value: string) => void; field?: JSX.InputHTMLAttributes<HTMLInputElement> }) {
   return <div role="search" class="ui-section ui-search-section" data-kind="search">
     <Icons.Search /><input {...props.field} class="ui-search" placeholder={props.placeholder} value={props.value ?? ""} onInput={(event) => props.onInput?.(event.currentTarget.value)} />
@@ -39,35 +29,23 @@ export function SearchSection(props: { placeholder: string; value?: string; keys
   </div>;
 }
 
-/** RowGroup: a row and its icon actions side by side, each its own item for the arrow keys; actions show on the hovered
- *  or cursor row (always where nothing hovers). */
 export const RowGroup = (props: { actions: JSX.Element; children: JSX.Element }) =>
   <div class="ui-row-group">{props.children}<span class="ui-row-actions">{props.actions}</span></div>;
-/** RowAction: one action in a RowGroup, an icon named by its label; destructive, it washes red. */
 export function RowAction(props: JSX.HTMLAttributes<HTMLDivElement> & { label: string; icon: JSX.Element; destructive?: boolean }) {
   const [local, rest] = splitProps(props, ["label", "icon", "destructive", "children"]);
   return <div role="menuitem" {...rest} class="ui-row-action" aria-label={local.label} title={local.label} data-destructive={local.destructive ? "" : undefined}>{local.icon}</div>;
 }
 
-/** An item in a list section. Icon, meta, keys and opens are its parts; checked, disabled and destructive its states. */
 export function Item(props: JSX.HTMLAttributes<HTMLDivElement> & {
   icon?: JSX.Element; meta?: JSX.Element; detail?: JSX.Element; keys?: string[]; opens?: boolean; active?: boolean;
-  /** detailData: the second line is a value (an address, a command), in the Data voice, not the Caption voice. */
   detailData?: boolean;
-  /** field: the row is its section's title, the name in the label's voice and meta its value ("CONTEXT  8% used ›"). */
   field?: boolean;
-  /** keysFirst: the keycaps lead the row (the leader menu, where the key is what you read first). */
   keysFirst?: boolean;
   checked?: boolean; disabled?: boolean; destructive?: boolean; children: JSX.Element;
-  /** end: a control at the row's end, after its meta (a remove ×); reveal: shown only on the lit or hovered row, never on a phone. */
   end?: JSX.Element; reveal?: boolean;
-  /** away: choosing it opens somewhere else (another window or origin): the mark sits where a submenu's chevron does. */
   away?: boolean;
-  /** onCursor: the pointer is over the row, for a list that keeps its own cursor (never a touch: see moveCursor). */
   onCursor?: () => void;
-  /** onOpens: the chevron is a press of its own (a folder's: open it in place, where the row's press goes in); aria-expanded turns it. */
   onOpens?: () => void; opensLabel?: string;
-  /** indent: a child, under the row it belongs to. picked: in an edit, chosen or not -- a check column, and the wash on each chosen. */
   indent?: boolean; picked?: boolean;
 }) {
   const [, rest] = splitProps(props, ["icon", "meta", "detail", "detailData", "keys", "opens", "active", "field", "keysFirst", "checked", "disabled", "destructive", "children", "end", "class", "onOpens", "opensLabel", "indent", "picked", "reveal", "away", "onCursor"]);
@@ -86,8 +64,6 @@ export function Item(props: JSX.HTMLAttributes<HTMLDivElement> & {
   </Row>;
 }
 
-/** The letters of a label a query matched: the run when it holds the query, else its letters in order; null when it
- *  matched on something unseen (a keyword). */
 export function matchedLetters(text: string, query: string): Set<number> | null {
   const q = query.trim().toLowerCase();
   if (!q) return null;
@@ -104,27 +80,20 @@ export function matchedLetters(text: string, query: string): Set<number> | null 
   return hits;
 }
 
-/** Typing lights the match, the rest of the label muted; a keyword-only match stays plain. */
 export function Match(props: { text: string; query: string }) {
   const hits = () => matchedLetters(props.text, props.query);
   return <Show when={hits()} fallback={props.text}>{(lit) =>
     <span class="ui-match">{[...props.text].map((char, index) => lit().has(index) ? <b>{char}</b> : char)}</span>}</Show>;
 }
 
-/** A run of keys, a keycap each; first: they lead the row (the leader). */
 const Keys = (props: { keys: string[]; first?: boolean }) => <span class="ui-keys" data-first={props.first ? "" : undefined}><For each={props.keys}>{(key) => <Keycap>{key}</Keycap>}</For></span>;
 
-/** A line of a readout: what it is, and its value at the end (a total, a cost, a reset time). */
 export const Readout = (props: { label: JSX.Element; value?: JSX.Element }) => <Row density="line" bare class="ui-readout" data-still=""><span>{props.label}</span><Show when={props.value}><span>{props.value}</span></Show></Row>;
 
-/** A rule between groups of a menu's rows, where it has no sections. */
 export const Rule = () => <hr class="ui-rule" />;
-/** A row's meta: muted, after its label (a value, a latency). */
 
-/** A behavior engine can supply focus, selection and keyboard attributes. */
 export const MenuAction = (props: JSX.HTMLAttributes<HTMLDivElement>) => <Row density="menu" bare {...(props as unknown as RowProps)} class="ui-menu-action" />;
 
-/** Menu panels keep the parent in place; the behavior adapter supplies coordinates. */
 export const MenuParent = (props: JSX.HTMLAttributes<HTMLDivElement> & { under: boolean }) => {
   const [local, rest] = splitProps(props, ["under"]);
   return <div {...rest} class="ui-menu-parent" data-under={local.under ? "" : undefined} />;

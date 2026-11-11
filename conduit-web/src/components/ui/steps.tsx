@@ -1,15 +1,8 @@
 import { createComputed, createEffect, on, type JSX } from "solid-js";
 import { duration, easing, reducedMotion } from "./motion";
 
-/**
- * Room for one thing at a time, in something whose own size should follow it (a form, a centred card): when the step
- * changes, the room eases from the height it had to the height it needs and what is new fades in, so what holds it
- * grows and shrinks rather than jumping. step: which is shown, "" for none. size: anything else its height depends
- * on (rows arriving, an error), which moves the room without the fade.
- *
- * Its height is laid out per frame, so it is for small things (a sign-in form, a card's QR). What opens in a long
- * list or a scroller is an Expand, which lays the page out once.
- */
+/** Its height is laid out per frame, so it is for small things (a sign-in form, a card's QR); what opens in a long
+ *  list or a scroller is an Expand, which lays the page out once. */
 export function Steps(props: { step: string; size?: string | number; class?: string; children: JSX.Element }) {
   let box: HTMLDivElement | undefined;
   let from = 0;

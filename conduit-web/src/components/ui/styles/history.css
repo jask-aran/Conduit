@@ -1,5 +1,3 @@
-/* Chat history (history.tsx): timestamp columns, tool runs and side branches. A row is a bare Row line laid out
-   as the history's grid: its time, then its text. */
 .ui-history {
   --history-time-width: calc(2.5 * var(--u-space));
   --history-gap: calc(0.625 * var(--u-space));
@@ -39,8 +37,6 @@
 .ui-history-tick { position: absolute; top: calc(var(--space-2xs) + var(--history-line-height) / 2); left: calc(var(--history-gutter) + var(--history-depth, 1) * var(--history-step) - var(--history-tick)); width: var(--history-tick); height: var(--hairline); background: var(--muted-foreground); opacity: var(--opacity-muted); }
 @media (hover: hover) { .ui-history-row:hover { background: var(--tint); }
 }
-/* A folded run of tool calls is a control, not a line of text (a Row line's button): it opens just
-   that run, and the button in the header stays the blunt all-or-nothing one. */
 .ui-history-run .ui-history-text { display: flex; align-items: center; gap: var(--space-xs); }
 .ui-history-chevron { width: var(--space-lg); height: var(--space-lg); flex: none; opacity: var(--opacity-rest); }
 @media (hover: hover) { .ui-history-run:hover .ui-history-chevron { opacity: 1; }
@@ -65,9 +61,6 @@
 .ui-history[data-wrap] .ui-history-row code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .ui-history-row small { color: var(--muted-foreground); font-size: var(--text-label); text-transform: capitalize; }
 
-/* Empty chat history keeps its centred icon, heading and explanation. */
-
-/* Phone geometry uses the phone density unit (16px). */
 @media (--conduit-phone-layout) {
   .ui-history { --history-time-width: calc(2.25 * var(--u-space)); --history-row-pad: var(--space-sm); --history-line-height: calc(1.0625 * var(--u-space)); padding: var(--space-xs) var(--space-sm) var(--space-sm); font-size: var(--text-row); }
   .ui-history-time, .ui-history-row small { font-size: var(--text-label); }

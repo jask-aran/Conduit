@@ -1,20 +1,16 @@
-/* Feedback: the marks, note and bar drawn over the app while its interface is marked up (development clients only).
-   The layer is above everything, notifications included: a toast or a menu can be what is marked. */
+/* Over everything, notifications included: a toast or a menu can be what is marked. */
 .ui-feedback-layer { position: fixed; inset: 0; z-index: var(--layer-feedback); pointer-events: none; font-family: var(--font-sans); }
 .ui-feedback-layer[data-select] { pointer-events: auto; cursor: crosshair; }
 .ui-feedback-layer > :is(.ui-feedback-note, .ui-feedback-bar) { pointer-events: auto; cursor: auto; }
 
-/* A mark is a hairline in the ring colour; a chosen one is the primary line with the wash inside it. */
 .ui-feedback-mark { position: fixed; box-sizing: border-box; border: var(--hairline) solid var(--ring); border-radius: var(--radius-inset); pointer-events: none; }
 .ui-feedback-mark[data-kind="chosen"] { border-color: var(--primary); background: var(--accent); }
 .ui-feedback-mark[data-kind="chosen"][data-current] { border-width: var(--stroke); }
 .ui-feedback-mark[data-kind="member"] { border-style: dashed; border-color: var(--primary); }
 .ui-feedback-mark[data-kind="marquee"] { border-style: dashed; background: var(--accent); }
 .ui-feedback-mark[data-kind="drawn"] { border-color: transparent; }
-/* A drawing: the primary line over the whole window, with the glyph shadow so it reads on any ground. */
 .ui-feedback-drawing { position: fixed; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; fill: none; stroke: var(--primary); stroke-width: var(--stroke); stroke-linecap: round; stroke-linejoin: round; filter: var(--glyph-shadow); }
 .ui-feedback-drawing marker > path { fill: var(--primary); stroke: none; }
-/* Its tag hangs above its top left corner (inside the corner when there is no room above, from the right corner at the window's right edge): the number filled, the name beside it. */
 .ui-feedback-tag { position: absolute; bottom: 100%; left: calc(-1 * var(--hairline)); display: flex; max-width: var(--measure-sm); align-items: center; gap: var(--space-xs); overflow: hidden; border-radius: var(--radius-inset); background: var(--frame); color: var(--foreground); font: var(--weight-lift) var(--text-label)/var(--control-2xs) var(--font-data); white-space: nowrap; }
 .ui-feedback-tag[data-inside] { top: 0; bottom: auto; }
 .ui-feedback-layer .ui-feedback-tag[data-press] { pointer-events: auto; cursor: pointer; }
@@ -24,13 +20,11 @@
 .ui-feedback-tag > span:only-child { padding-left: var(--space-xs); }
 .ui-feedback-mark[data-kind="cursor"] > .ui-feedback-tag { color: var(--muted-foreground); }
 
-/* The note: a compact card placed by the app beside what it marks. */
 .ui-feedback-note { position: fixed; width: var(--measure-md); max-width: calc(100% - 2 * var(--space-xl)); }
 .ui-feedback-note .ui-card { width: 100%; }
 .ui-feedback-note .ui-card > h3 { display: flex; align-items: center; gap: var(--space-sm); font-family: var(--font-data); font-size: var(--text-row); }
 .ui-feedback-note .ui-card > p { overflow: hidden; font-family: var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
 
-/* The bar: one raised frost pill at the foot, centred. */
 .ui-feedback-bar { position: fixed; bottom: var(--space-xl); left: 50%; display: flex; max-width: calc(100% - 2 * var(--space-xl)); align-items: center; gap: var(--space-lg); border-radius: var(--radius-surface); padding: var(--space-sm) var(--space-sm) var(--space-sm) var(--space-sm); color: var(--foreground); font-size: var(--text-row); translate: -50% 0; }
 .ui-feedback-status { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
 .ui-feedback-switch { display: flex; align-items: center; gap: var(--space-sm); color: var(--muted-foreground); white-space: nowrap; }

@@ -1,14 +1,10 @@
 .ui-frost.ui-rider { border-radius: var(--cmp-radius); }
 
-/* Rider: frost on a composer's top edge (either composer): a row (title, body, actions) or a card (the question). */
 .ui-rider { --rider-gap: var(--space-lg); --rider-slot: var(--control-sm); }
-/* A rider rises out of the composer and drops back in (frost.css); removed by hand, it fades in place. A takeover card
-   rises further, once the composer has gone. */
 .ui-rider[data-layout="card"] { --rise: var(--space-4xl); --frost-enter-delay: var(--duration-quick); }
 .ui-rider[data-leaving="remove"], .ui-chip[data-leaving="remove"] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
 .ui-frost.ui-rider[data-layout="row"] { display: flex; align-items: center; gap: var(--rider-gap); padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-lg); }
 .ui-frost.ui-rider[data-layout="strip"] { display: flex; align-items: center; gap: var(--space-sm); padding: 0 var(--space-sm) 0 0; }
-/* Wave: the voice while dictating, a PillWave across the rider at the composer's padding, over its Aura. */
 .ui-frost.ui-rider[data-layout="wave"] { position: relative; display: flex; height: var(--control); align-items: center; padding: 0 var(--space-lg); }
 .ui-rider[data-layout="wave"] > .ui-pill-wave { position: relative; height: var(--control-xs); }
 .ui-rider[data-layout="wave"] > .ui-aura { z-index: -1; }
@@ -19,7 +15,6 @@
 :is(.ui-actions:where([data-actions="rider"]), .ui-rider-top) .ui-button[data-size^="icon"]:is(:focus-visible) { color: var(--foreground); }
 @media (hover: hover) { :is(.ui-actions:where([data-actions="rider"]), .ui-rider-top) .ui-button[data-size^="icon"]:is(:hover, :focus-visible) { color: var(--foreground); } }
 
-/* Lines: text that waits (the queued messages), one line each until opened. */
 .ui-lines { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: var(--space-xs); margin: 0; padding: 0; list-style: none; }
 .ui-line { display: flex; min-width: 0; align-items: flex-start; gap: var(--space-sm); }
 .ui-line-body { display: -webkit-box; min-width: 0; flex: 1; margin: 0; overflow: hidden; font-size: var(--text-body); line-height: var(--leading-row); white-space: pre-wrap; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
@@ -27,7 +22,6 @@
 .ui-line-more { display: inline-flex; width: var(--icon-lg); height: var(--icon-lg); flex: none; align-items: center; justify-content: center; margin-top: var(--hairline); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0; color: var(--muted-foreground); cursor: pointer; }
 .ui-line-more:is(:focus-visible) { background: var(--tint); color: inherit; }
 @media (hover: hover) { .ui-line-more:is(:hover, :focus-visible) { background: var(--tint); color: inherit; } }
-/* References: a file's lines, wrapping; each a quiet tinted capsule, its name strong and the rest muted, cut short. */
 .ui-references { display: flex; min-width: 0; flex: 1; flex-wrap: wrap; gap: var(--space-xs); }
 .ui-reference { display: inline-flex; min-width: 0; max-width: 100%; align-items: center; gap: var(--space-2xs); border-radius: var(--radius-control); background: var(--tint); padding: 0 var(--space-2xs) 0 var(--space-sm); font-size: var(--text-caption); }
 .ui-reference-body { display: inline-flex; min-width: 0; height: var(--control-xs); align-items: center; gap: var(--space-xs); border: 0; background: transparent; padding: 0; color: inherit; font: inherit; cursor: pointer; }
@@ -40,8 +34,6 @@
 .ui-reference > .ui-button[data-size^="icon"]:is(:focus-visible) { color: var(--foreground); }
 @media (hover: hover) { .ui-reference > .ui-button[data-size^="icon"]:is(:hover, :focus-visible) { color: var(--foreground); } }
 
-/* Chips: things attached, scrolling sideways with faded edges. An image is its
-   thumbnail; a file its mark, name and size. Uploading: a ring; failed: red, a retry mark. */
 .ui-chips { --fade-start: 0px; --fade-end: 0px; display: flex; min-width: 0; flex: 1; gap: var(--space-sm); overflow-x: auto; padding: var(--space-md); overscroll-behavior-x: contain; scroll-snap-type: x proximity; scroll-padding-inline: var(--space-md); scrollbar-width: none;
   mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%); }
 .ui-chips::-webkit-scrollbar { display: none; }
@@ -55,7 +47,6 @@
 .ui-chip[data-kind="file"] .ui-chip-media { width: auto; height: auto; background: none; }
 .ui-chip-media :is(.ui-file-icon, .ui-file-icon-generic, svg:not(.ui-chip-ring, .ui-chip-retry)) { display: block; width: var(--icon); height: var(--icon); }
 .ui-chip-media img { width: 100%; height: 100%; object-fit: cover; }
-/* ChipCopy (a Chip's, an Attachment's): the name over its detail. A Chip's keeps to one line each, cut short. */
 .ui-chip-copy { display: grid; min-width: 0; }
 .ui-chip-copy strong { font-size: var(--text-row); font-weight: var(--weight-strong); }
 .ui-chip .ui-chip-copy { max-width: var(--measure-xs); line-height: var(--leading-tight); }
@@ -72,26 +63,20 @@
 @media (hover: none) { .ui-chip-remove { opacity: 1; } }
 .ui-chip[data-entering] { --grow: .85; animation: ui-grow var(--duration-gentle) var(--ease-arrive) backwards; }
 
-/* The question: a card rider. Its top (title or tabs, close), the prompt, choices, a foot of hints and buttons. */
 .ui-rider-top { display: flex; min-height: var(--control-sm); align-items: center; gap: var(--space-sm); }
 .ui-rider-top > .ui-title-text { min-width: 0; flex: 1; overflow: hidden; padding-left: var(--space-md); text-overflow: ellipsis; white-space: nowrap; }
 .ui-rider-top > .ui-button:last-child { margin-left: auto; }
 .ui-prompt { margin: var(--space-2xs) var(--space-md) var(--space-xs); font-size: var(--text-body); font-weight: var(--weight-strong); line-height: var(--leading-row); letter-spacing: -.005em; overflow-wrap: anywhere; }
 .ui-prompt span { color: var(--muted-foreground); font-size: var(--text-body); font-weight: var(--weight-rest); }
-/* A choice follows Interaction: the current one white at the current weight, no tick; several chosen (pick any)
-   are the wash on each, and the cursor on one brightens it a step. */
 .ui-choice { min-height: var(--control-lg); gap: var(--space-lg); padding: var(--space-sm) var(--space-lg); color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); cursor: pointer; }
 .ui-choice[data-highlighted] { background: var(--tint); color: var(--foreground); }
 .ui-choice[aria-selected="true"] { color: var(--foreground); }
 .ui-choices:not([aria-multiselectable="true"]) > .ui-choice[aria-selected="true"] > .ui-row-title { font-weight: var(--weight-current); }
 .ui-choices[aria-multiselectable="true"] > .ui-choice[aria-selected="true"][data-highlighted] { background: linear-gradient(var(--tint), var(--tint)), var(--tint); }
-/* A choice's key is a unit wide; its label starts the choice's padding, the key and the gap in, which a
-   wrapped detail and the rider's note line up under. */
 .ui-rider, .ui-choices { --choice-label: calc(var(--u-space) + var(--space-lg)); }
 .ui-choice-key { width: var(--u-space); flex: none; color: var(--muted-foreground); font: var(--text-caption)/var(--leading-none) var(--font-label); text-align: right; }
 .ui-choice[data-highlighted] .ui-choice-key { color: var(--foreground); }
 .ui-choice > .ui-row-title { font-size: var(--text-row); font-weight: var(--weight-lift); }
-/* Holding its own answer, the title takes the line. */
 .ui-choice[data-own] > .ui-row-title { display: flex; min-width: 0; flex: 1; font-weight: inherit; }
 .ui-choice > .ui-row-context { flex: 1; font-size: var(--text-body); }
 .ui-choice-input { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0; color: var(--foreground); font: inherit; font-size: var(--text-body); line-height: var(--leading-row); outline: 0; resize: none; }
@@ -116,21 +101,17 @@
   .ui-choice > .ui-row-context { flex-basis: 100%; order: 4; padding-left: var(--choice-label); white-space: normal; }
 }
 .ui-choices-page { display: grid; gap: var(--space-xs); }
-/* A Choice holding its own answer: a TextArea (several lines) or a bare input (one), set as the label is. */
 .ui-choice .ui-row-title > .ui-textarea { min-width: 0; flex: 1; font-size: var(--text-body); line-height: var(--leading-row); }
 
-/* RiderButton: rides over the transcript above the composer (scroll to latest, cancel an edit), resting frost. */
 .ui-frost.ui-rider-button { display: inline-flex; width: var(--control-lg); height: var(--control-lg); flex: none; align-items: center; justify-content: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: 0; color: var(--foreground); font: var(--weight-lift) var(--text-row) var(--font-sans); white-space: nowrap; cursor: pointer; transition: filter var(--duration-quick) var(--ease-change); }
 .ui-rider-button svg { width: var(--icon-lg); height: var(--icon-lg); flex: none; }
 .ui-frost.ui-rider-button[data-labelled] { width: auto; padding: 0 var(--space-xl) 0 var(--space-lg); }
 .ui-rider-button:is(:focus-visible) { outline: 0; filter: brightness(var(--brighten)); }
 @media (hover: hover) { .ui-rider-button:is(:hover, :focus-visible) { outline: 0; filter: brightness(var(--brighten)); } }
-/* It fades in where it rides when there is something below, and out when there is not. */
 .ui-rider-button[data-entering] { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-rider-button[data-leaving] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
 /* Hidden in place: it fades out quickly and back in gently, never redrawn. */
 .ui-rider-button { transition: opacity var(--duration-gentle) var(--ease-arrive), bottom var(--duration-gentle) var(--ease-arrive); }
-/* Riding: centred over what it rides, as high as its host says; beside: to the left of the centred one, a gap apart. */
 .ui-rider-button[data-ride] { position: absolute; left: 50%; bottom: var(--ride-bottom, var(--space-lg)); z-index: var(--stack-ride); translate: -50% 0; }
 .ui-rider-button[data-ride="beside"] { translate: calc(-100% - var(--control-lg) / 2 - var(--space-sm)) 0; }
 .ui-rider-button[data-hidden] { opacity: 0; pointer-events: none; transition-duration: var(--duration-quick); transition-timing-function: var(--ease-leave); }

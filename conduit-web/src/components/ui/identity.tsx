@@ -4,8 +4,6 @@ import { Button, Field, Input, Swatch } from "./controls";
 
 type IdentityValue = { mode: "monogram" | "icon"; value: string; color: string };
 type Toggle = (value: boolean | ((current: boolean) => boolean)) => void;
-/** Identity editor: the caller owns the draft and save; every control and its
- * presentation belong to v2. Palette colours are the workspace's data. */
 export function IdentityEditor(props: {
   compact?: boolean; saving?: boolean; preview: JSX.Element;
   draft: () => IdentityValue; canSave: () => boolean;

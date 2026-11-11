@@ -5,25 +5,13 @@ import { cn } from "@/lib/utils";
 import { haptic, type Haptic } from "./haptics";
 import { TextArea } from "./controls";
 
-/* Pill: the phone's floating frost controls on shared tokens (--pill-*); the kind decides the shape, never a prop:
-   PillButton (a circle; stretch: across its row), PillField (a capsule of text), PillWave (the voice as bars). A switch
-   is a Segmented pill. */
 type PillAction = { label: string; icon: JSX.Element };
-/** A pill's button: its label and icon, and the caller's own button attributes (a handler, disabled, a title). */
 type PillAttrs = JSX.ButtonHTMLAttributes<HTMLButtonElement> & Record<`data-${string}`, string | undefined>;
 const pillSlot = (item: PillAction, onPick?: (label: string) => void, attrs?: PillAttrs) => <button type="button" aria-label={item.label} title={item.label} {...attrs}
   {...(onPick ? { onClick: (event: MouseEvent) => { event.stopPropagation(); onPick(item.label); } } : {})}>{item.icon}</button>;
 
-/**
- * folded: a circle that comes and goes (Send, Scroll to latest) folds to nothing, its gap with it, so a stretched
- * neighbour takes the room. voice: stays while a PhoneComposer listens. aura: the mic, filled with an Aura while
- * listening; stretched, a short pill at the row's end. open: its menu is open, so it stays lit while its row dims.
- * haptic: a press that acts at once (mic, Send, Stop) is felt on a phone.
- */
 export function PillButton(props: PillAction & { stretch?: boolean; folded?: boolean; voice?: boolean; aura?: boolean; open?: boolean; haptic?: Haptic; onPick?: (label: string) => void; button?: PillAttrs }) {
   const mic = !!props.aura;
-  // A tuck: out when folded, or when its scope's parts are out and it is not a voice control; dimmed under its scope's
-  // menu unless it opened it.
   const scope = useMoveScope();
   const out = () => !!props.folded || (!(props.voice || mic) && !!scope.out?.());
   // The caller's attributes stay live on the one button (merged lazily, so a change never rebuilds it).
@@ -35,22 +23,15 @@ export function PillButton(props: PillAction & { stretch?: boolean; folded?: boo
     aria-hidden={props.folded ? "true" : undefined}>{mic
       ? pillSlot({ get label() { return props.label; }, icon: <><Aura />{props.icon}</> }, props.onPick, attrs)
       : pillSlot(props, props.onPick, attrs)}</Frost>;
-  // Stretched, the mic gives its grow to the room before it to become an orb pill at the row's end (a give).
   return mic && props.stretch ? <><span class="ui-pill-room" data-move="give" />{pill}</> : pill;
 }
-/** Its own textarea, or the caller's field as children; it fades itself as its scope says. */
 export function PillField(props: { placeholder?: string; value?: string; onInput?: (value: string) => void; class?: string; children?: JSX.Element }) {
   const scope = useMoveScope();
   return <Frost class={cn("ui-pill ui-pill-field", props.class)} data-move="fade" data-out={scope.out?.() ? "" : undefined} data-under={scope.under?.() ? "" : undefined}><Show when={props.children} fallback={<TextArea placeholder={props.placeholder} value={props.value} onInput={(event) => props.onInput?.(event.currentTarget.value)} />}>{props.children}</Show></Frost>;
 }
 
-/**
- * Aura: a field of colour behind a surface. Each blob is a direction, an OKLCh colour, an orbit (seconds a turn,
- * negative turning back) and a swell (how its reach answers the level); each circles near its edge, breathing twice a
- * turn. Every point blends them all by distance (a mesh gradient), hue their weighted mean and chroma held, so colours
- * meet in colour, never grey. The level (--aura-level) turns them faster, brighter and rebalanced; strength (0-1,
- * --aura-strength) how strongly it shows. Drawn small and scaled up; it runs only while shown.
- */
+/* Every point blends the blobs by distance, hue their weighted mean and chroma held, so colours meet in colour, never
+   grey. Drawn small and scaled up; it runs only while shown. */
 const AURA_BLOBS = [
   { from: 180, l: .58, c: .2, h: 290, orbit: 7, swell: .5 },
   { from: 300, l: .64, c: .21, h: 22, orbit: -9, swell: -.35 },
@@ -68,7 +49,6 @@ function oklchToRgb(l: number, a: number, b: number): [number, number, number] {
   return [gamma(4.0767416621 * L - 3.3077115913 * M + .2309699292 * S), gamma(-1.2684380046 * L + 2.6097574011 * M - .3413193965 * S), gamma(-.0041960863 * L - .7034186147 * M + 1.707614701 * S)];
 }
 export function Aura(props: { on?: boolean; level?: number; strength?: number }) {
-  // On: its own say, or its scope's voice (a PhoneComposer listening lights the mic's and the track's).
   const scope = useMoveScope();
   let box!: HTMLSpanElement, canvas!: HTMLCanvasElement;
   onMount(() => {
@@ -119,7 +99,6 @@ export function Aura(props: { on?: boolean; level?: number; strength?: number })
     const start = () => { wake = performance.now() + 500; if (!frame) frame = requestAnimationFrame(draw); };
     fit();
     const resize = new ResizeObserver(fit), view = new IntersectionObserver(([entry]) => { seen = !!entry?.isIntersecting; if (seen) start(); });
-    // What shows it: its own data-on, or its pill's and composer's attributes (styles/pill.css, .ui-aura).
     const shows = new MutationObserver(start);
     shows.observe(box.closest(".ui-phone-composer") ?? box.parentElement ?? box, { attributes: true, subtree: true, attributeFilter: ["data-on", "data-show", "data-voice", "data-state", "data-mode"] });
     box.addEventListener("transitionstart", start);
@@ -129,10 +108,7 @@ export function Aura(props: { on?: boolean; level?: number; strength?: number })
   return <span ref={box} class="ui-aura" data-on={props.on || scope.voice?.() ? "" : undefined} aria-hidden="true" style={{ "--aura-level": props.level === undefined ? undefined : String(props.level), "--aura-strength": props.strength === undefined ? undefined : String(props.strength) }}><canvas ref={canvas} /></span>;
 }
 
-/** PillWave: the voice as it comes, no surface: whole-pixel bars on a fixed pitch, newest at the right; silence is a
- *  dotted line. levels: 0-1, oldest first. gain: how much a level is lifted before drawing (speech sits low). */
 export function PillWave(props: { levels: number[]; gain?: number }) {
-  // In a scope that says when it is out (a surface composer's track), it fades itself.
   const scope = useMoveScope();
   let box!: HTMLDivElement;
   const [count, setCount] = createSignal(0);

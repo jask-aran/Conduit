@@ -1,4 +1,3 @@
-/* Workbench (workbench.tsx): one thing worked on, its title choosing it, the split filling the page's height. */
 .ui-workbench { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: var(--space-lg); }
 .ui-workbench-title-line { display: flex; min-width: 0; align-items: center; gap: var(--space-xs); }
 .ui-workbench-actions { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); }
@@ -11,7 +10,6 @@
 .ui-workbench-side > .ui-chain { padding: 0; }
 .ui-workbench-side > .ui-chain > :not(.ui-chain-gap) { width: 100%; }
 .ui-workbench-title, .ui-group:where([data-group="workbench"]) { display: flex; flex-direction: column; gap: var(--space-2xs); }
-/* The title starts where the page's heading and the rows' words do, not at the rows' edge. */
 .ui-workbench-title { padding-inline: var(--row-inset); }
 .ui-group:where([data-group="workbench"]) > .ui-title { margin: 0 0 var(--space-2xs); padding-inline: var(--row-inset); }
 .ui-group:where([data-group="workbench"]) > .ui-note:where([data-note="workbench"]) { padding-inline: var(--row-inset); }
@@ -19,10 +17,7 @@
 .ui-workbench-fact code { flex: none; font: var(--text-caption) var(--font-data); }
 .ui-workbench-fact > .ui-row-context { flex: 0 1 auto; font-size: inherit; }
 .ui-workbench-fact > .ui-row-end { margin-left: 0; padding-left: 0; }
-/* The rows that turn a phone's workbench between its side column and its main pane: not drawn where both show. */
 .ui-workbench-opens, .ui-workbench-back { display: none; }
-/* On a phone the side column and the main pane take turns (WorkbenchSplit open). Closed: the side column is the page,
-   at its own height, the page scrolling. Open: the main pane fills the page under its way back, the title gone. */
 @media (--conduit-phone-layout) {
   .ui-workbench, .ui-workbench-split { flex: none; }
   .ui-workbench-split { flex-direction: column; }
@@ -35,21 +30,17 @@
   .ui-workbench-split-open > .ui-workbench-main { display: flex; min-height: 0; flex: 1; }
 }
 .ui-workbench-name { min-width: 0; margin: 0; overflow: hidden; color: var(--foreground); font-size: var(--text-heading); font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
-/* WorkbenchPick: a row that chooses, and its own control after it. */
 .ui-workbench-pick { display: flex; min-width: 0; align-items: center; gap: var(--space-xs); }
 .ui-workbench-pick > .ui-row { min-width: 0; flex: 1; }
 .ui-workbench-pick > :not(.ui-row) { flex: none; }
-/* A side column in two parts (WorkbenchSplit facts): the picks give way and scroll, the chosen one's facts under them. */
 .ui-workbench-side-parts { overflow: hidden; }
 .ui-workbench-picks, .ui-workbench-facts { display: flex; min-height: 0; flex-direction: column; gap: var(--space-lg); overflow: auto; scrollbar-width: none; }
 .ui-workbench-picks { min-height: var(--measure-xs); flex: 0 1 auto; }
 .ui-workbench-facts { max-height: 50%; flex: none; border-top: var(--hairline) solid var(--tint); padding-top: var(--space-md); }
 @media (--conduit-phone-layout) { .ui-workbench-side-parts, .ui-workbench-picks, .ui-workbench-facts { max-height: none; overflow: visible; } }
-/* WorkbenchFold: a group's row, and its picks under it, set in a step. */
 .ui-workbench-fold, .ui-workbench-fold-body { display: flex; flex-direction: column; }
 .ui-workbench-fold-body { padding-left: var(--space-md); }
 .ui-workbench-picks:has(> .ui-workbench-fold) { gap: 0; }
-/* WorkbenchPair: the main pane's own two columns, a list as wide as its names and the chosen one's pane taking the rest. */
 .ui-workbench-pair { display: flex; min-height: 0; flex: 1; align-items: stretch; gap: var(--space-lg); }
 .ui-workbench-pair-list { display: flex; min-width: var(--measure-xs); flex: 0 1 var(--measure-sm); flex-direction: column; gap: var(--space-sm); overflow: auto; scrollbar-width: none; }
 .ui-workbench-pair-list > .ui-chain { padding: 0; }

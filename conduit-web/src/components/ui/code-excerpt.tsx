@@ -4,8 +4,6 @@ import { syntaxHighlighting } from "@codemirror/language";
 import { codeHighlightStyle } from "./code-setup";
 import type { JSX } from "solid-js";
 
-/** Read-only code engine, highlighted as the editor is (codeHighlightStyle).
- * Callers supply language, line numbers, diff data and selection decorations. */
 export const codeExcerptSetup = (numbers: Parameters<typeof lineNumbers>[0] = {}) => [
   lineNumbers(numbers), highlightSpecialChars(), EditorState.readOnly.of(true), EditorView.editable.of(false),
   syntaxHighlighting(codeHighlightStyle, { fallback: true }),

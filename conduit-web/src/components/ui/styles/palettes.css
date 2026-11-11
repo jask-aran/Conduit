@@ -1,7 +1,5 @@
-/* Palettes: named sets of colours from outside Conduit's own theme, each colour under its palette's own name
-   (--<palette>-<colour>). Nothing draws with these directly: a use (code, the terminal, categories, workspace
-   identity) points at a palette's colours, in theme.css for the CSS uses and palettes.ts for identity, so a palette
-   swaps in one place. palettes.ts lists the same names and labels for the pickers and the gallery. */
+/* Nothing draws with these directly: a use points at a palette's colours (theme.css, palettes.ts), so a palette swaps
+   in one place. */
 
 /* Catppuccin Mocha's accents (catppuccin.com/palette). Workspace identity. */
 :root {
@@ -20,8 +18,6 @@
   --catppuccin-mocha-lavender: #b4befe;
 }
 
-/* One Dark (Atom's), with the brights, black and white a terminal needs, and Conduit's terminal ground, text,
-   cursor and selection. Code and the terminal. */
 :root {
   --one-dark-foreground: #abb2bf;
   --one-dark-comment: #5c6370;
@@ -50,7 +46,6 @@
   --one-dark-selection: #35404b;
 }
 
-/* Conduit categories: nine hues at one lightness, distinct side by side in a bar, slate the quiet one. Categories. */
 :root {
   --conduit-categories-violet: oklch(0.72 0.15 300);
   --conduit-categories-slate: oklch(0.7 0.02 260);

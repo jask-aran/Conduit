@@ -1,21 +1,15 @@
-/* Overlay: raised frost over a dimmed page (palette, chat search, settings).
-   Sizes measured from the app at desktop, written over 12.8 so a phone scales. */
-/* The dim every overlay lays over what is behind it: a scrim, a drawer's backdrop, a tray's. */
 :is(.ui-scrim, .ui-backdrop, .ui-tray-scrim) { background: var(--dim); }
 .ui-scrim { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; align-items: start; padding: var(--space-xl); }
-/* The scrim dims in and out; the surface on it moves. */
 .ui-scrim[data-entering] { animation: ui-fade-in var(--duration-gentle) var(--ease-change) backwards; }
 .ui-scrim[data-leaving] { animation: ui-fade-out var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
 .ui-scrim[data-placement="center"] { align-items: center; }
-/* Backdrop: the dim, the whole screen, one layer under its drawer; only a phone's drawers cover the page (on a wider
-   screen the same panel sits beside it, open, with nothing to dismiss). */
+/* Only a phone's drawers cover the page; on a wider screen the same panel sits beside it, with nothing to dismiss. */
 .ui-backdrop { display: none; position: fixed; inset: 0; z-index: calc(var(--layer-drawer) - 1); border: 0; padding: 0; cursor: pointer; -webkit-tap-highlight-color: transparent;
   animation: ui-fade-in var(--duration-gentle) var(--ease-change) backwards; }
 .ui-backdrop[data-layer="panel"] { z-index: calc(var(--layer-panel) - 1); }
-/* Kept mounted with its drawer: it fades in as the drawer opens and out as it shuts, on the drawer's own timing. */
+/* Kept mounted with its drawer, fading on the drawer's own timing. */
 .ui-backdrop[data-fade] { animation: none; opacity: 0; pointer-events: none; transition: opacity var(--duration-quick) var(--ease-leave); }
 .ui-backdrop[data-fade="open"] { opacity: 1; pointer-events: auto; transition: opacity var(--duration-gentle) var(--ease-arrive); }
-/* The sidebar's (a phone's, under the page): the dim goes with the page as it slides off the sidebar (nav.css --drawer). */
 .ui-backdrop[data-layer="drawer"][data-fade] { opacity: var(--drawer); transform: translateX(calc(var(--drawer) * var(--drawer-width)));
   transition: opacity var(--duration-gentle) var(--ease-arrive), transform var(--duration-gentle) var(--ease-arrive); }
 .ui-backdrop[data-layer="drawer"][data-fade="open"] { --drawer: 1; transition-duration: var(--duration-gentle); transition-timing-function: var(--ease-arrive); }
@@ -24,22 +18,18 @@
 [data-density="phone"] .ui-backdrop { display: block; }
 @media (--conduit-phone-layout) { .ui-backdrop { display: block; } }
 .ui-frost.ui-overlay { display: flex; width: min(var(--overlay-width, var(--measure-2xl)), 100%); max-height: var(--overlay-height, none); flex-direction: column; overflow: hidden; border-radius: var(--radius-surface); padding: 0; color: var(--foreground); font-size: var(--text-body); }
-/* A rail overlay holds its height (--overlay-height) whichever section it shows, short of the window. */
 .ui-overlay[data-layout="rail"] { height: var(--overlay-height, auto); max-height: calc(100dvh - 2 * var(--space-xl)); flex-direction: row; }
 .ui-overlay-bar { display: flex; flex: none; align-items: center; gap: var(--space-lg); border-bottom: var(--hairline) solid var(--tint); padding: var(--space-md) var(--space-lg); }
-/* The lead is one mark at one size and colour, whichever it is (search, the command prompt, back). */
 .ui-overlay-lead { display: inline-grid; flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-overlay-lead svg { width: var(--icon-lg); height: var(--icon-lg); color: var(--muted-foreground); }
 .ui-overlay-input { min-width: 0; height: var(--control-lg); flex: 1; border: 0; outline: 0; background: transparent; padding: 0; color: var(--foreground); font-size: var(--text-body); font-weight: var(--weight-rest); line-height: var(--leading-text); }
 .ui-overlay-input::placeholder { color: var(--muted-foreground); }
 .ui-overlay-bar :is(.ui-seg, .ui-crumbs) { flex: none; }
-/* A chip: a scope or a view as a mono token on the keycap's tint, its × muted until pressed near. */
 .ui-overlay-chip { display: inline-flex; height: var(--control-xs); flex: none; align-items: center; gap: var(--space-2xs); border: 0; border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs) 0 var(--space-sm);
   color: var(--foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-none) var(--font-data); white-space: nowrap; cursor: pointer; }
 .ui-overlay-chip > svg { width: var(--icon-xs); height: var(--icon-xs); color: var(--muted-foreground); }
 .ui-overlay-chip:is(:focus-visible) > svg { color: var(--foreground); }
 @media (hover: hover) { .ui-overlay-chip:is(:hover, :focus-visible) > svg { color: var(--foreground); } }
-/* Its rows: a popover's Items at the overlay's scale (Type · Scale, Space), full colour; group titles plain, not ruled. */
 .ui-overlay-list {
   min-height: 0; flex: 1; overflow: auto; padding: var(--space-sm) var(--space-md); }
 .ui-overlay-list .ui-row:where([data-density="menu"]) > .ui-icon { color: var(--muted-foreground); }
@@ -51,21 +41,17 @@
 .ui-overlay-hints { display: flex; min-height: var(--control-lg); flex: none; flex-wrap: wrap; align-items: center; gap: var(--space-sm) var(--space-xl); border-top: var(--hairline) solid var(--tint); padding: var(--space-md) var(--space-lg); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-overlay-hints span { display: inline-flex; align-items: center; gap: var(--space-xs); white-space: nowrap; }
 .ui-overlay-hints-end { margin-left: auto; gap: var(--space-xl) !important; }
-/* A hint that is also its action's button: the hint as drawn, its label white, the wash under the pointer. */
 .ui-overlay-hints button { display: inline-flex; align-items: center; gap: var(--space-xs); margin: calc(-1 * var(--space-2xs)) calc(-1 * var(--space-xs)); border: 0; border-radius: var(--radius-control); background: transparent;
   padding: var(--space-2xs) var(--space-xs); color: var(--foreground); font: inherit; white-space: nowrap; cursor: pointer; }
 .ui-overlay-hints button:is(:focus-visible) { outline: none; background: var(--tint); }
 @media (hover: hover) { .ui-overlay-hints button:is(:hover, :focus-visible) { outline: none; background: var(--tint); } }
 .ui-overlay-hints > b { color: var(--foreground); font-weight: var(--weight-strong); white-space: nowrap; }
-/* The phone's bar of actions, in the hints' place: a desktop has the hints. */
 .ui-actions:where([data-actions="overlay"]) { display: none; }
 .ui-overlay-title { margin: 0; font-size: var(--text-heading); font-weight: var(--weight-strong); line-height: var(--leading-text); letter-spacing: -0.02em; }
-/* The rail beside a page: the sidebar's NavGroups, washed as a popover's rows are. */
 .ui-overlay-rail { display: flex; width: var(--measure-sm); flex: none; flex-direction: column; gap: var(--space-xs); overflow: auto; border-right: var(--hairline) solid var(--tint); padding: var(--space-2xl) var(--space-lg); }
 .ui-overlay-rail > .ui-overlay-page-head { margin-bottom: var(--space-md); }
 .ui-overlay-title:focus { outline: none; }
 .ui-overlay-rail .ui-group:where([data-group="nav"]) + .ui-group:where([data-group="nav"]) { margin-top: var(--space-md); }
-/* The current section is white and bold with no fill; the wash is only the cursor. */
 .ui-overlay .ui-row:where([data-density="nav"]):is(:focus-visible) { background: var(--tint); }
 @media (hover: hover) { .ui-overlay .ui-row:where([data-density="nav"]):is(:hover, :focus-visible) { background: var(--tint); } }
 .ui-overlay .ui-row:where([data-density="nav"])[aria-current="page"]:not(:hover) { background: transparent; }
@@ -74,18 +60,14 @@
 .ui-overlay-facts > dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-xs) var(--space-md); margin: 0; padding: 0 var(--space-md); font-size: var(--text-caption); }
 .ui-overlay-facts > dl > div { display: contents; }
 .ui-overlay-facts dt { color: var(--muted-foreground); white-space: nowrap; }
-/* A value is never cut short: one too long for the rail breaks at a space onto a second line. */
 .ui-overlay-facts dd { min-width: 0; margin: 0; color: var(--foreground); text-align: right; overflow-wrap: anywhere; }
 .ui-overlay-page { --page-inset: var(--space-4xl); --page-top: var(--space-2xl); --page-bottom: var(--space-4xl); display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
-/* Its head holds still and its body scrolls, so the section's name and the way back are always there. */
 .ui-overlay-page > .ui-overlay-page-head { flex: none; margin: 0; padding: var(--page-top) var(--page-inset) var(--space-lg) calc(var(--page-inset) + var(--space-md)); }
 .ui-overlay-page-body { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: auto; padding: 0 var(--page-inset) var(--page-bottom); }
-/* Settling to a new width (overlay.tsx createWidthSettle): the page holds the width it lands at against the rail and
-   the frame clips it, as a pane's document does (shell.css .ui-sheet[data-moving]). */
+/* The page holds the width it lands at and the frame clips it, so nothing re-wraps while the width settles. */
 .ui-overlay[data-settling] > .ui-overlay-page { width: var(--overlay-page-width, auto); flex: none; }
 .ui-overlay-page-head { display: flex; align-items: center; gap: var(--space-lg); margin-bottom: var(--space-lg); padding-left: var(--space-md); }
 .ui-group:where([data-group="setting"]) { display: flex; flex-direction: column; gap: var(--hairline); }
-/* A setting title's line: the title at its own width, what is said beside it quiet on the same baseline. */
 .ui-setting-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-sm); margin: 0 0 var(--space-sm); }
 .ui-setting-head > small { color: var(--muted-foreground); font-size: var(--text-row); }
 .ui-setting-title { box-sizing: border-box; width: auto; max-width: 100%; min-width: 0; margin: 0; field-sizing: content; padding: var(--space-2xs) var(--space-md); border: var(--hairline) solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--foreground); font: var(--weight-strong) var(--text-title)/var(--leading-tight) var(--font-sans); letter-spacing: -0.02em; }
@@ -95,20 +77,13 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-columns:where([data-group="setting"]) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--measure-sm)), 1fr)); gap: var(--space-md) var(--space-2xl); }
 .ui-group:where([data-group="column"]) { position: relative; display: flex; min-width: 0; flex-direction: column; gap: var(--hairline); }
 .ui-group:where([data-group="column"]) + .ui-group:where([data-group="column"])::before { position: absolute; top: 0; bottom: 0; left: calc(-0.5 * var(--space-2xl)); border-left: var(--hairline) solid var(--tint); content: ""; }
-/* A group's actions start where its lines' names do: the first button is set back by its own padding. */
+/* The first button is set back by its own padding, so its words start where the lines' names do. */
 .ui-actions:where([data-actions="setting"]) { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: var(--space-sm); margin-inline-start: calc(var(--space-md) - var(--space-lg)); }
 .ui-actions:where([data-actions="setting"]) > .ui-button { white-space: nowrap; }
 .ui-group:where([data-group="setting"]) + .ui-group:where([data-group="setting"]) { margin-top: var(--space-lg); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-xl); }
-/* A Reading among a page's groups is parted from the group before it as a group is. */
 .ui-group:where([data-group="setting"]) + .ui-reading { margin-top: var(--space-lg); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-xl); }
-/* A settings line (and the recorder under it) is at least a row's height, a finger's on a phone. */
 :root, [data-density], .ui-overlay { --line-min: max(var(--control), var(--row-min)); }
-/* A line too narrow for its name and its control (a phone, a line of several) wraps the control under the name, at its own width: neither squeezes. */
 .ui-setting-line { display: flex; min-height: var(--line-min); flex-wrap: wrap; align-items: center; gap: var(--space-2xs) var(--space-xl); border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); font-size: var(--text-row); }
-/* Focus anywhere in a row, or the pointer on it, is the row's wash: every row alike, a switch's row too (its thumb
-   and segments sit inset in it, see .ui-seg). */
-/* No wash on a setting line: its control is the target and shows hover and focus itself; the wash is for one-action rows. */
-/* The recorder: a second line as tall as a setting line, inset under its label, a dashed --tint line round it. */
 .ui-setting-recorder { display: flex; min-height: var(--line-min); align-items: center; gap: var(--space-md); border: var(--hairline) dashed var(--tint); border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); font-size: var(--text-row); }
 .ui-recorder-dot { animation: ui-recorder-pulse var(--duration-pulse) ease-in-out infinite; }
 @keyframes ui-recorder-pulse { 50% { opacity: var(--opacity-faint); } }
@@ -126,21 +101,15 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-setting-line > span:first-child { display: flex; min-width: min-content; max-width: 100%; flex: 1 1 min-content; align-items: baseline; overflow: hidden; white-space: nowrap; }
 /* The state counts for nothing in the name's width (width 0) and takes what the line has left. */
 .ui-setting-line > span:first-child > small { width: 0; min-width: 0; flex: 1 1 0; overflow: hidden; text-overflow: ellipsis; }
-/* mono: the name is data (a model id, a tool), in the data face; its state stays in the row's. */
 .ui-setting-line > span:first-child[data-mono] { font: var(--weight-rest) var(--text-caption) var(--font-data); }
 .ui-setting-line > span:first-child[data-mono] > small { font: var(--weight-rest) var(--text-row) var(--font-sans); }
 .ui-setting-line > span:first-child > small { margin-left: var(--space-md); color: var(--muted-foreground); font-size: inherit; }
-/* Every row's control sits in one column of one width, so they line up. */
 .ui-setting-control { display: inline-flex; min-width: 0; max-width: 100%; flex: 0 1 auto; margin-left: auto; align-items: center; justify-content: flex-end; gap: var(--space-xs); }
-/* A field takes the control column's width (a select, a switch, a button is its own size), so on a phone a field drops under its name and the rest stay beside theirs. */
 .ui-setting-control > input.ui-input { width: var(--setting-control-width, var(--measure-md)); min-width: 0; max-width: 100%; flex: 0 1 auto; }
-/* A segmented switch is as wide as its words (its segments even), not stretched to a field's width. */
 .ui-setting-control > .ui-seg { width: max-content; max-width: 100%; flex: 0 1 auto; }
-/* A setting's context mark: after its name, muted, brightening to say it opens what the setting changes. */
 .ui-setting-context { display: inline-flex; vertical-align: middle; margin-left: var(--space-xs); color: var(--muted-foreground); cursor: pointer; }
 .ui-setting-context:focus-visible, .ui-setting-context[data-expanded] { color: var(--foreground); outline: none; }
 @media (hover: hover) { .ui-setting-context:hover { color: var(--foreground); } }
-/* What a line holds besides a field (a value read, a link out, a note or details, waiting): muted, on the tint. */
 .ui-setting-value { min-width: 0; color: var(--muted-foreground); }
 .ui-setting-value[data-mono] { font: var(--weight-rest) var(--text-caption) var(--font-data); }
 .ui-setting-state-link { border: 0; padding: 0; background: none; color: inherit; font: inherit; text-decoration: underline; text-decoration-color: color-mix(in oklch, currentcolor, transparent 60%); text-underline-offset: 0.2em; cursor: pointer; }
@@ -158,23 +127,17 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-setting-details :is(ol, p) { margin: var(--space-xs) 0 0; }
 .ui-setting-details ol { padding-left: var(--space-xl); }
 .ui-setting-details code { font: var(--text-caption) var(--font-data); }
-/* A command or a name in a note (set a password with …): the data face, as in details. */
 .ui-note:where([data-note="setting"]) code { font: var(--text-caption) var(--font-data); color: var(--foreground); }
 .ui-setting-wide { display: flex; flex-direction: column; gap: var(--space-md); padding: var(--space-2xs) var(--space-md) var(--space-md); }
-/* Source text (a prompt): the code face, so its line breaks read as meant; a measure tall at most, scrolling inside. */
 .ui-setting-wide > .ui-textarea { min-height: calc(4 * var(--control-xs)); max-height: var(--measure-xl); font-family: var(--font-code); font-size: var(--text-caption); line-height: var(--leading-text); overscroll-behavior: contain; }
 .ui-setting-wide > .ui-textarea:focus { border-color: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); }
-/* The title gives way (an ellipsis) before the status or the close does: neither wraps. */
 .ui-overlay-status { display: inline-flex; flex: none; white-space: nowrap; align-items: center; gap: var(--space-sm); color: var(--muted-foreground); font-size: var(--text-row); }
 .ui-overlay-status[data-failed] { color: var(--destructive); }
-/* On a phone an overlay is full screen, nothing round it dimmed: one column, the split's aside
-   and the hints gone, settings' rail a screen of its own. */
 [data-density="phone"] .ui-scrim, .ui-scrim[data-density="phone"] { padding: var(--phone-overlay-padding, var(--space-md)); background: transparent; }
 :is([data-density="phone"] .ui-frost.ui-overlay, .ui-frost.ui-overlay[data-density="phone"]) { width: 100%; height: 100%; max-height: none; }
 [data-density="phone"] .ui-overlay-split { grid-template-columns: minmax(0, 1fr); }
 [data-density="phone"] .ui-overlay-aside { display: none; }
 [data-density="phone"] .ui-overlay-rail { width: 100%; border-right: 0; }
-/* A phone's settings run nearly edge to edge, the fields a narrower column, so a name and its control share a line on any reasonable phone; wrapping is only the fallback. */
 [data-density="phone"] .ui-overlay-rail { padding: var(--space-lg) var(--space-md); }
 [data-density="phone"] .ui-overlay-page { --page-inset: var(--space-md); --page-top: var(--space-lg); --page-bottom: var(--space-lg); }
 [data-density="phone"] .ui-setting-line { column-gap: var(--space-lg); }
@@ -184,8 +147,6 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 [data-density="phone"] .ui-overlay-hints { display: none; }
 [data-density="phone"] .ui-actions:where([data-actions="overlay"]) { display: flex; flex: none; gap: var(--space-md); border-top: var(--hairline) solid var(--tint); padding: var(--space-md); }
 [data-density="phone"] .ui-actions:where([data-actions="overlay"]) > .ui-button { min-height: var(--control-lg); flex: 1; }
-/* The app's phone: an overlay's dialog (the palette, chat search, Settings: pinned to the top or centred) fills the
-   screen inside the safe area, every one at the same inset; a small centred Dialog keeps its own. */
 @media (--conduit-phone-layout) {
   .ui-scrim[data-dialog]:is([data-placement="top"], [data-placement="middle"], :has(> .ui-overlay)) { padding: var(--phone-overlay-padding, var(--space-md)); background: transparent; }
   .ui-scrim > .ui-frost.ui-overlay { width: 100%; height: 100%; max-height: none; }
@@ -202,56 +163,45 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
   .ui-scrim .ui-actions:where([data-actions="overlay"]) > .ui-button { min-height: var(--control-lg); flex: 1; }
 }
 
-/* Glance: chat search's preview column, in the row's voice; the prompt as the user's message, the answer a step dimmer. */
 .ui-glance { display: grid; min-width: 0; align-content: start; gap: var(--space-lg); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-glance > * { min-width: 0; }
 .ui-glance-title { display: flex; align-items: flex-start; gap: var(--row-gap); color: var(--foreground); font: var(--weight-strong) var(--text-row)/var(--leading-tight) var(--font-sans); }
 .ui-glance-title + .ui-glance-facts { margin-top: calc(-1 * var(--space-sm)); }
 .ui-glance-facts { font: var(--weight-rest) var(--text-caption)/var(--leading-text) var(--font-data); }
 .ui-glance-facts + .ui-glance-facts { margin-top: calc(-1 * var(--space-lg)); }
-/* The prompt is the user's message (Bubble), smaller and clamped to four lines. */
 .ui-frost.ui-bubble.ui-glance-prompt { display: -webkit-box; max-width: 92%; margin: 0 0 0 auto; overflow: hidden; font-size: var(--text-row); white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
 .ui-glance-turn { display: flex; align-items: center; gap: var(--row-gap); }
 .ui-glance-orb { display: inline-grid; flex: none; }
 .ui-glance-answer { display: -webkit-box; margin: 0; overflow: hidden; color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); font-size: var(--text-row); line-height: var(--leading-text); -webkit-box-orient: vertical; -webkit-line-clamp: 7; }
 .ui-glance-answer[data-math] { display: block; max-height: 15em; -webkit-line-clamp: unset; --fade-at: 15em; --fade-length: 2.5em; }
 .ui-glance-answer[data-math] .katex-display { margin: .55em 0; overflow: hidden; text-align: left; }
-/* GlanceBody: a whole text in the answer's voice, unclamped; headings and bold a step heavier (lift) under the title. */
 .ui-glance-body > .ui-answer { --answer-gap: var(--space-md); color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); font-size: var(--text-row); line-height: var(--leading-text); }
 .ui-glance-body > .ui-answer :is(h1, h2, h3, h4) { color: var(--foreground); font-size: inherit; font-weight: var(--weight-lift); }
 .ui-glance-turn b, .ui-glance-body > .ui-answer :is(strong, b) { color: var(--foreground); font-weight: var(--weight-lift); }
 .ui-glance .ui-section { margin-inline: calc(-1 * var(--space-md)); }
 
-/* Kobalte's shared dialog host. The frost itself fades on Card, not its ancestor. */
+/* The frost itself fades on Card, not its ancestor. */
 .ui-scrim[data-dialog] { position: fixed; inset: 0; z-index: var(--layer-dialog); min-height: 0; outline: none; padding: calc(var(--space-xl) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) var(--space-xl) calc(var(--space-xl) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
-/* Above the keyboard: the visual viewport's height (--app-height, viewport.ts), not the window's, which the
-   keyboard overlays. A dialog taller than what is left scrolls within it, and a centred one never centres past the top. */
+/* The visual viewport's height (--app-height), not the window's, which the keyboard overlays. */
 .ui-scrim[data-dialog] { inset: var(--vv-offset-top, 0px) 0 auto 0; height: var(--app-height, 100dvh); overflow-y: auto; overscroll-behavior: contain; }
 .ui-scrim[data-dialog][data-placement="center"] { align-items: safe center; }
 /* Middle: the top edge sits where the overlay at its full height would be centred, and stays there as it shrinks. */
 .ui-scrim[data-dialog][data-placement="middle"] { padding-top: max(calc(var(--space-xl) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))), calc((var(--app-height, 100dvh) - var(--overlay-height, 0px)) / 2)); }
 .ui-scrim[data-dialog][data-state="closed"] { animation: ui-dialog-close var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
-/* Keep the behavior host mounted for Card's exit, including in reduced motion. Its dim goes with the card rather than
-   at the end of it (its colour, not its opacity: the frost fades on Card, not under a fading ancestor). */
+/* Keeps the host mounted for Card's exit, including in reduced motion. Its dim goes by its colour, not its opacity,
+   so the frost does not fade under a fading ancestor. */
 @keyframes ui-dialog-close { from { visibility: visible; } to { visibility: visible; background-color: transparent; } }
 /* A copy of a dialog playing its leave (dialog.tsx createLeave) is under any dialog opened since. */
 .ui-scrim[data-dialog][inert] { z-index: calc(var(--layer-dialog) - 1); }
-/* Settings search: the rail's field under its title, and the line a result led to, marked for a moment. */
 .ui-overlay-rail > .ui-lead-input { flex: none; margin-bottom: var(--space-sm); }
 .ui-setting-line[data-found] { border-radius: var(--radius-control); background: var(--tint); transition: background var(--duration-gentle) var(--ease-arrive); }
-/* The control column ends on one edge: a field's box, a switch, a select's chevron and a read value all end there, so
-   a ghost button at the line's end, which has no box at rest, is set out by its own padding until its words (or its
-   icon) end there too. Its wash, when it shows, reaches past the edge into the line's own room.
-   (A ghost button's weight is the surface's: --weight-action, foundations.css.) */
+/* A ghost button at the line's end has no box at rest, so it is set out by its own padding until its words end on the
+   control column's edge. */
 .ui-setting-control > .ui-button:where([data-variant="ghost"]:not([data-outline])):last-child { margin-inline-end: calc(-1 * var(--space-lg)); }
 .ui-setting-control > .ui-button:where([data-variant="ghost"][data-size^="icon"]:not([data-outline])):last-child { margin-inline-end: calc(-1 * var(--space-sm)); }
-/* A step's number, before its name: data, muted, a fixed width so the names line up. */
 .ui-setting-step { display: inline-block; min-width: var(--space-2xl); flex: none; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); }
-/* A name that is data (a model id, a tool) can be long: it shortens with its state before the control drops. */
 .ui-setting-line > span:first-child[data-mono] { display: block; min-width: 0; flex-basis: var(--measure-2xs); text-overflow: ellipsis; }
 .ui-setting-line > span:first-child[data-mono] > small { display: inline; width: auto; }
-/* A read value alone in a line (a path, an address) shortens rather than dropping under its name. */
 .ui-setting-control:has(> .ui-setting-value:only-child) { min-width: 0; }
-/* A page filtered by Settings search: what did not match is not drawn, and the first group shown has no rule over it. */
 .ui-overlay-page-body [data-filtered-out] { display: none; }
 .ui-overlay-page-body .ui-group[data-filter-first] { margin-top: 0; border-top: 0; padding-top: 0; }

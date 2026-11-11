@@ -7,8 +7,8 @@ import { haptic, overlayHaptics } from "./haptics";
 import { createFullscreenPortalMount } from "./portal";
 import { Note } from "./state";
 
-/* Row menus wait for the first open to have been shown: building every chat, folder and project row's menu machinery
- * was a tenth of a second of a phone's first open. Until `attachRowMenus()` rows draw as the elements they wrap. */
+/* Row menus wait for the first open: building every row's menu machinery takes a tenth of a second of a phone's first
+ * open. Until `attachRowMenus()` rows draw as the elements they wrap. */
 const [rowMenusAttached, setRowMenusAttached] = createSignal(false);
 export const attachRowMenus = () => setRowMenusAttached(true);
 import { Dynamic } from "solid-js/web";
@@ -16,13 +16,11 @@ import { Menu as Surface, type Measure, MenuAction, Item, RowAction, RowGroup, S
 import { Button, SelectTrigger, SliderValue } from "./controls";
 import { PillButton } from "./pill";
 // Both are measured once, until the window or Interface size changes: Kobalte reads them on every position update,
-// and a probe each time laid the page out again.
+// and a probe each time would lay the page out again.
 let edges: unknown, gapPx: number | undefined;
 if (typeof window !== "undefined") for (const change of ["resize", "conduit:ui-scale"]) addEventListener(change, () => { edges = gapPx = undefined; });
-/** The room a popover keeps from the window's edges: a gutter, and the system bars an edge-to-edge window draws
- *  under (the safe area), so a menu never runs under a phone's navigation bar. */
-/* A touch that picks a row closes the menu on pointerup, and its click would then land on whatever was under the menu.
- * That click is spent: once the surface has gone, the next click within the tap's time does nothing. Mice are untouched. */
+/* A touch that picks a row closes the menu on pointerup, and its click would then land on whatever was under the menu,
+ * so the next click within the tap's time does nothing. Mice are untouched. */
 const SURFACES = "[data-slot='ui-menu-content'], [data-slot='ui-menu-sub-content'], [data-slot='ui-context-menu-content'], [data-slot='ui-popover-content']";
 let spent: { surface: Element; until: number } | null = null;
 if (typeof document !== "undefined") {
@@ -49,11 +47,9 @@ function measureEdges() {
   const side = (inset: string) => 8 + (parseFloat(inset) || 0);
   const padding = { top: side(style.paddingTop), right: side(style.paddingRight), bottom: side(style.paddingBottom), left: side(style.paddingLeft) };
   probe.remove();
-  // Each edge its own (one number pushed a menu off a phone's left edge by its status bar); floating-ui takes a side
-  // each, though Kobalte's type says a number.
+  // Each edge its own: floating-ui takes a side each, though Kobalte's type says a number.
   return padding as unknown as number;
 }
-/** The room between a control and its popover (--popover-gap), so the menu does not read as part of the control. */
 function popoverGap() { return gapPx ??= measureGap(); }
 function measureGap() {
   const probe = document.createElement("div");
@@ -69,15 +65,12 @@ export const DropdownMenu = Object.assign((props: ComponentProps<typeof KMenu>) 
   overlayHaptics(() => props.open);
   return <KMenu overflowPadding={padding} gutter={gap} {...props} onOpenChange={(open) => { haptic(open ? "open" : "dismiss"); props.onOpenChange?.(open); }} />;
 }, KMenu);
-/** A row's right-click (or long-press, Menu, Shift+F10) menu. Its rows, sections, choices and submenus are the
- *  Menu's own (MenuRow, MenuSection, MenuRadioItem, MenuSub), which work in either. */
 export const ContextMenu = (props: ParentProps<{ placement?: "right-start" | "bottom-start"; onOpenChange?: (open: boolean) => void }>) =>
   <Show when={rowMenusAttached()} fallback={<RowMenuDeferred.Provider value={true}>{props.children}</RowMenuDeferred.Provider>}>
     <KContextMenu modal={false} fitViewport overflowPadding={edgePadding()} placement={props.placement ?? "right-start"} onOpenChange={(open) => { haptic(open ? "hold" : "dismiss"); props.onOpenChange?.(open); }}>{props.children}</KContextMenu>
   </Show>;
-/* Until attachRowMenus, a row draws as the element it wraps and has no menu (see the top of the file). */
 const RowMenuDeferred = createContext(false);
-// Typed as Kobalte's own trigger, so each row's props are checked as before.
+// Typed as Kobalte's own trigger, so each row's props are checked.
 export const ContextMenuTrigger = ((props: Record<string, unknown>) => {
   if (!useContext(RowMenuDeferred)) return <KContextMenu.Trigger {...props} />;
   const [local, rest] = splitProps(props, ["as"]);
@@ -85,17 +78,16 @@ export const ContextMenuTrigger = ((props: Record<string, unknown>) => {
 }) as typeof KContextMenu.Trigger;
 export const MenuGroup = KMenu.Group;
 export const ContextMenuGroup = KContextMenu.Group;
-/** A menu opened by the caller's own control (`as`: a HeaderButton). */
 export const MenuControl = KMenu.Trigger;
 export function MenuTrigger(props: ParentProps<{ disabled?: boolean; "aria-label"?: string }>) { return <KMenu.Trigger as={Button} variant="ghost" {...props} />; }
-/** A pill that opens a menu without taking focus from what is being typed, nor handing it back on close while `keep()`
- *  (on a phone, a moment away from the text makes Android drop and re-raise the keyboard). */
+/** Keeps focus in what is being typed: on a phone, a moment away from the text makes Android drop and re-raise the
+ *  keyboard. */
 export function MenuPillTrigger(props: { label: string; icon: JSX.Element; open?: boolean; disabled?: boolean; keep: () => boolean; ref?: (element: HTMLButtonElement) => void }) {
   return <KMenu.Trigger as={(attrs: ComponentProps<typeof PillButton>["button"]) => <PillButton label={props.label} icon={props.icon} open={props.open} button={attrs} />}
     disabled={props.disabled} onPointerDown={(event: PointerEvent) => event.preventDefault()}
     ref={(element: HTMLButtonElement) => { holdFocus(element, props.keep); props.ref?.(element); }} />;
 }
-/** An element that declines focus while `keep()`: Kobalte's own focus calls (the trigger on close, the menu on open) leave the typing where it is. */
+/** Kobalte's own focus calls (the trigger on close, the menu on open) are declined while `keep()`. */
 function holdFocus(element: HTMLElement, keep: () => boolean) {
   const focus = element.focus.bind(element);
   element.focus = (options?: FocusOptions) => { if (!keep()) focus(options); };
@@ -104,7 +96,6 @@ type Caps = { width?: Measure; height?: Measure; unfolds?: boolean };
 type ContentProps = ParentProps<Caps & { keep?: () => boolean; onOpenAutoFocus?: (event: Event) => void; onPointerDownOutside?: (event: Event) => void; onFocusOutside?: (event: FocusOutsideEvent) => void; onCloseAutoFocus?: (event: Event) => void }>;
 type RowProps = Omit<ComponentProps<typeof Item>, "onSelect"> & { onSelect?: () => void; closeOnSelect?: boolean };
 type ChoiceProps = RowProps & { value: string };
-/** keep: while true, opening leaves focus where it is (MenuPillTrigger's typing). */
 export function MenuContent(props: ContentProps) {
   const mount = createFullscreenPortalMount();
   const [local, rest] = splitProps(props, ["keep"]);
@@ -120,19 +111,16 @@ type ItemProps = ParentProps<{ disabled?: boolean; variant?: "destructive"; onSe
 export const MenuItem = (props: ItemProps) => <KMenu.Item as={MenuAction} disabled={props.disabled} onSelect={props.onSelect} data-destructive={props.variant === "destructive" ? "" : undefined}>{props.children}</KMenu.Item>;
 export const ContextMenuItem = (props: ItemProps) => <KContextMenu.Item as={MenuAction} disabled={props.disabled} onSelect={props.onSelect} data-destructive={props.variant === "destructive" ? "" : undefined}>{props.children}</KContextMenu.Item>;
 
-/** Choice rows and submenus: Kobalte supplies behavior, Item supplies its parts. */
 export const MenuRadioGroup = KMenu.RadioGroup;
 export const MenuRadioItem = (props: ChoiceProps) => <KMenu.RadioItem as={Item} {...props} closeOnSelect={props.closeOnSelect ?? true} />;
 export const MenuSubTrigger = (props: RowProps) => {
   const submenu = useContext(SubmenuContext);
   return <KMenu.SubTrigger as={Item} {...props} ref={submenu?.setTrigger} onPointerMove={(event: PointerEvent) => { if (submenu?.phone()) event.preventDefault(); }} opens />;
 };
-/** A Slider's value as the submenu's trigger: its levels to pick from, beside the slider. */
 export const MenuSubValue = (props: ParentProps<{ disabled?: boolean }>) => {
   const submenu = useContext(SubmenuContext);
   return <KMenu.SubTrigger as={SliderValue} disabled={props.disabled} ref={submenu?.setTrigger} onPointerMove={(event: PointerEvent) => { if (submenu?.phone()) event.preventDefault(); }}>{props.children}</KMenu.SubTrigger>;
 };
-/** Back to the parent from inside a submenu: a choice there that leaves the parent open (the next pick is often beside it). */
 export const useMenuBack = () => useContext(SubmenuContext)?.close ?? (() => {});
 export function MenuSubContent(props: ParentProps<Caps>) {
   const mount = createFullscreenPortalMount();
@@ -141,8 +129,6 @@ export function MenuSubContent(props: ParentProps<Caps>) {
     style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}><MenuBody>{props.children}</MenuBody></KMenu.SubContent></KMenu.Portal>;
 }
 export const MenuSection = (props: ParentProps<{ title?: string; note?: JSX.Element }>) => <KMenu.Group as={Section} title={props.title} note={props.note}>{props.children}</KMenu.Group>;
-/** actions: the row's own actions beside it, each a menu item (RowGroup) Down reaches after the row; a getter keeps one
- *  live (disabled while busy). */
 export type MenuRowAction = { label: string; icon: JSX.Element; onSelect: () => void; disabled?: boolean; destructive?: boolean };
 export const MenuRow = (props: RowProps & { actions?: MenuRowAction[] }) => {
   const [local, rest] = splitProps(props, ["actions"]);
@@ -154,7 +140,6 @@ export const MenuRow = (props: RowProps & { actions?: MenuRowAction[] }) => {
   </Show>;
 };
 
-/** Kobalte owns focus, selection and navigation in both layouts. Phone only changes placement and Back. */
 const MenuLayerContext = createContext<(child: (() => void) | undefined) => void>();
 const SubmenuContext = createContext<{
   phone: () => boolean;
@@ -207,8 +192,6 @@ export function MenuSub(props: ParentProps<{ phone?: boolean }>) {
     const inset = parseFloat(getComputedStyle(panel).paddingLeft);
     const offset = parent.querySelector<HTMLElement>(".ui-row")?.getBoundingClientRect().height ?? 0;
     const size = panel.getBoundingClientRect();
-    // It opens from its row in the direction its menu opened: top to the row's top under a hanging menu, foot to its
-    // foot over a rising one (the composer's).
     const row = anchor!.getBoundingClientRect();
     const edge = edgePadding() as unknown as { top: number; bottom: number };
     const hangs = box.top + box.height / 2 < innerHeight / 2;
@@ -218,7 +201,7 @@ export function MenuSub(props: ParentProps<{ phone?: boolean }>) {
   return <SubmenuContext.Provider value={{ phone: () => !!props.phone, close, setTrigger, setContent }}><KMenu.Sub open={open()} onOpenChange={(next) => { haptic(next ? "open" : "dismiss"); setOpen(next); }} getAnchorRect={anchorRect} fitViewport overflowPadding={edgePadding()}>{props.children}</KMenu.Sub></SubmenuContext.Provider>;
 }
 
-/** Something edited in place over the page: the menu's surface without a menu's keys, which would take the typing. */
+/** A menu's keys would take the typing, so this is the menu's surface without them. */
 export function Popover(props: ParentProps<{ open?: boolean; onOpenChange?: (open: boolean) => void; anchorRef?: () => HTMLElement | undefined; placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end" }>) {
   const padding = edgePadding(), gap = popoverGap();
   overlayHaptics(() => props.open);
@@ -230,7 +213,6 @@ export function PopoverContent(props: ParentProps<Caps & { "aria-label"?: string
   return <KPopover.Portal mount={mount()}><KPopover.Content as={Surface} data-piece="PopoverContent" data-slot="ui-popover-content" {...props} /></KPopover.Portal>;
 }
 
-/** A pick list under its search: typing filters it, arrows move the cursor, Enter picks. Each row is an Item's parts. */
 export function SearchList<T>(props: {
   items: T[];
   /** Whether a row stays for the typed text (already trimmed and lower-cased). */
@@ -243,7 +225,6 @@ export function SearchList<T>(props: {
 }) {
   const id = createUniqueId();
   const [query, setQuery] = createSignal("");
-  // The cursor; -1 while it rests in the search.
   const [active, setActive] = createSignal(-1);
   const rows = createMemo(() => {
     const needle = query().trim().toLowerCase();
@@ -276,11 +257,8 @@ export function SearchList<T>(props: {
   </>;
 }
 
-/**
- * A select drawn by the library: SelectTrigger opening a Menu of its choices. The hidden native select stays the value's
- * owner (options, value, ref, change event), and its id, name and title go to the trigger so a label's `for` reaches it.
- * search: a long list opens under a search (SearchList); a valueless option ("Choose a provider") is the trigger's text.
- */
+/** The hidden native select stays the value's owner, and its id, name and title go to the trigger so a label's `for`
+ *  reaches it. */
 export function Select(props: JSX.SelectHTMLAttributes<HTMLSelectElement> & { bare?: boolean; search?: string; look?: "field" | "title" | "icon"; icon?: JSX.Element }) {
   const [local, rest] = splitProps(props, ["ref", "id", "title", "disabled", "children", "aria-label", "bare", "search", "look", "icon"]);
   const [searching, setSearching] = createSignal(false);

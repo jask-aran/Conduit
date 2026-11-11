@@ -9,8 +9,6 @@ type Options = {
   action?: { label: string; onClick: (event: MouseEvent) => void };
 };
 
-// Sonner retains IDs, timers, pause, stacking, swipe and keyboard focus. Every
-// notification is drawn by the same v2 Toast as the gallery, with no stock body.
 function notify(kind: ToastKind, message: string, options: Options = {}) {
   return sonner.custom((id) => <Toast embedded kind={kind} description={options.description}
     onDismiss={() => sonner.dismiss(id)}

@@ -8,14 +8,8 @@ import { Card } from "./card";
 import { haptic, overlayHaptics } from "./haptics";
 import { Overlay, Scrim } from "./overlay";
 
-/*
- * A dialog leaves as it was, whatever its caller does. What shuts one usually clears what it showed in the same step
- * (the entry being read set to null), and some callers take the dialog out of the page as they shut it; either way
- * the surface left to play its leave was emptied, or gone. So as a dialog shuts (open goes false, or it is unmounted
- * while open) its scrim is copied whole, before the document is updated, and the copy (inert, no ids, scrolled as it
- * was) plays the leave beside it in the portal's mount, then goes; the real one is out of sight at once. Every Dialog
- * and OverlayDialog does this; leave={false} opts one out (nothing does).
- */
+/* What shuts a dialog usually clears what it showed in the same step, and some callers unmount it as they shut it, so
+ * as one shuts its scrim is copied whole before the document is updated, and the inert copy plays the leave. */
 function createLeave(scrim: () => HTMLElement | undefined, open: () => boolean, mount: () => Node | undefined, wanted: () => boolean) {
   const leave = () => {
     const real = scrim();
@@ -31,7 +25,6 @@ function createLeave(scrim: () => HTMLElement | undefined, open: () => boolean, 
     for (const surface of still.querySelectorAll(":scope > .ui-card, :scope > .ui-overlay")) { surface.removeAttribute("data-entering"); surface.setAttribute("data-leaving", ""); }
     for (const element of to) element.removeAttribute("id");
     (mount() ?? document.body).appendChild(still);
-    // A list left scrolled stays where it was.
     from.forEach((element, index) => { if (element.scrollTop && to[index]) to[index]!.scrollTop = element.scrollTop; });
     real.style.display = "none";
     setTimeout(() => still.remove(), duration("--duration-quick", still) + 60);
@@ -41,7 +34,6 @@ function createLeave(scrim: () => HTMLElement | undefined, open: () => boolean, 
   onCleanup(() => { if (open()) leave(); });
 }
 
-/** Kobalte owns modality and focus; Card and Scrim own every part of the surface. */
 export function Dialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -52,7 +44,6 @@ export function Dialog(props: {
   close?: boolean | string;
   actions?: JSX.Element;
   busy?: boolean;
-  /** false: no leave of its own (see createLeave). */
   leave?: boolean;
   onOpenAutoFocus?: (event: Event) => void;
   onCloseAutoFocus?: (event: Event) => void;
@@ -73,7 +64,6 @@ export function Dialog(props: {
   const change = (open: boolean) => { if (open || !props.busy) { if (!open) haptic("dismiss"); props.onOpenChange(open); } };
   let scrim: HTMLElement | undefined;
   createLeave(() => scrim, () => props.open, () => mount(), () => props.leave !== false);
-  // Back shuts it; busy, it takes the step and stays, as Escape does.
   createBack(() => props.open, () => change(false));
   const restore = (event: Event) => {
     if (props.onCloseAutoFocus) props.onCloseAutoFocus(event);
@@ -106,10 +96,7 @@ export function Dialog(props: {
   </K.Root>;
 }
 
-/** A large overlay (a palette, chat search): Kobalte owns modality and focus; Scrim and Overlay own the surface.
- *  Pinned near the top so filtering shrinks it from the bottom; placement="center" for one that does not filter;
- *  "middle" for one that filters and has a full height (--overlay-height): it sits where that height is centred and
- *  its top edge stays there as it shrinks. */
+/** Pinned near the top so filtering shrinks it from the bottom. */
 export function OverlayDialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -120,7 +107,6 @@ export function OverlayDialog(props: {
   onOpenAutoFocus?: (event: Event) => void;
   onCloseAutoFocus?: (event: Event) => void;
   onEscapeKeyDown?: (event: KeyboardEvent) => void;
-  /** false: no leave of its own (see createLeave). */
   leave?: boolean;
   children: JSX.Element;
 }) {

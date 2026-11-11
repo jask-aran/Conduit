@@ -1,4 +1,4 @@
-/* TourCard: the leader's small card, in a bottom corner, over dialogs so a step about the palette stays in view. */
+/* Over dialogs, so a step about the palette stays in view. */
 .ui-tour-placement {
   position: fixed; bottom: calc(var(--space-2xl) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); z-index: calc(var(--layer-dialog) + 1);
   display: flex; width: min(var(--measure-xl), calc(100vw - 2 * var(--space-lg))); pointer-events: auto; user-select: none;
@@ -8,7 +8,6 @@
 .ui-tour-body { display: grid; gap: var(--space-md); }
 .ui-tour-title { margin: 0; font-size: var(--text-row); font-weight: var(--weight-strong); line-height: var(--leading-text); }
 .ui-tour-text, .ui-tour-note { margin: 0; color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-reading); }
-/* Its tasks: a mark, what to do, its keys at the end; ticked white once seen, faint where it cannot be done here. */
 .ui-tour-tasks { display: grid; gap: var(--space-xs); margin: 0; padding: 0; list-style: none; }
 .ui-tour-tasks[data-also] { border-top: var(--hairline) solid var(--tint); padding-top: var(--space-md); }
 .ui-tour-tasks > li { display: flex; min-height: var(--control-xs); align-items: center; gap: var(--space-sm); color: var(--muted-foreground); font-size: var(--text-caption); }
@@ -20,7 +19,7 @@
 .ui-tour-task { min-width: 0; flex: 1; }
 .ui-tour-keys { display: inline-flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2xs); }
 .ui-tour-note, .ui-tour-tasks > li[data-state="done"], .ui-tour-tasks > li[data-state="done"] .ui-keycap { color: var(--foreground); }
-/* The tour's dim: the leader's Spotlight, fixed, never in the way of a press (the page is still the person's to use). */
+/* Never in the way of a press: the page is still the person's to use. */
 .ui-spotlight.ui-tour-spotlight { position: fixed; z-index: var(--layer-leader); pointer-events: none; }
 .ui-spotlight.ui-tour-spotlight[data-entering] { animation: ui-fade-in var(--duration-quick) var(--ease-change) backwards; }
 @media (prefers-reduced-motion: reduce) { .ui-spotlight.ui-tour-spotlight[data-entering] { animation: none; } }

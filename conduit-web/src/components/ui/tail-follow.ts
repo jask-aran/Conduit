@@ -6,10 +6,8 @@ export type TailFollowState = {
   velocity: number;
   lastTimeMs: number | null;
   owner: TailFollowOwner;
-  /** The target and the position written at the last frame, to tell the target's own movement since. */
   lastTarget: number | null;
   lastWritten: number | null;
-  /** A running average of how far the target moves a frame, which bounds the feed-forward. */
   targetDeltaEma: number;
 };
 
@@ -58,8 +56,8 @@ export function rebaseTailFollowState(
   };
 }
 
-/** Advance a critically damped tail-follow trajectory. The DOM scroll position is the authority each frame, so browser
- *  anchoring and a user handoff cannot leave the controller stale. */
+/** The DOM scroll position is the authority each frame, so browser anchoring and a user handoff cannot leave the
+ *  controller stale. */
 export function advanceTailFollow(
   state: TailFollowState,
   targetScrollTop: number,
@@ -123,10 +121,8 @@ export function advanceTailFollow(
   };
 }
 
-/** Distance from the bottom within which the scroll-to-latest button hides. */
 export const TAIL_NEAR_LATEST_PX = 80;
-/** Distance within which the app may take the tail back from the user; far tighter than TAIL_NEAR_LATEST_PX, since
- *  being close to the bottom is not consent to be pulled to it. */
+/** Far tighter than TAIL_NEAR_LATEST_PX, since being close to the bottom is not consent to be pulled to it. */
 export const TAIL_REJOIN_PX = 8;
 export const HISTORY_LOAD_TOP_PX = 240;
 
@@ -144,7 +140,6 @@ export function shouldLoadEarlierHistory(input: {
   following: boolean;
   maxScrollTop: number;
   scrollTop: number;
-  // Whether what is on screen has laid out -- no markdown still loading.
   settled?: boolean;
 }) {
   // A page that barely overflows cannot be scrolled up far enough to ask for more, so once laid out it asks itself.
@@ -161,16 +156,13 @@ export function shouldFollowAfterHistoryRestore(distanceFromBottom: number) {
   return distanceFromBottom <= TAIL_NEAR_LATEST_PX;
 }
 
-/** How close to the new bottom a clamped position lands for an upward move to read as content shrinking, not a reader. */
 const TAIL_CLAMP_TOLERANCE_PX = 1;
 
 export type TailScrollInput = {
   scrollTop: number;
   previousScrollTop: number | null;
   maxScrollTop: number;
-  /** The scrollable distance at the previous scroll observation. */
   previousMaxScrollTop?: number | null;
-  /** True once the user, not the spring, owns the scroll position. */
   userOwned: boolean;
   following: boolean;
 };
@@ -180,20 +172,15 @@ export type TailScrollDecision = {
   distanceFromBottom: number;
   nearLatest: boolean;
   atBottom: boolean;
-  /** Whether `following` should change, and to what. */
   following: boolean;
-  /** Schedule the idle handoff back to the spring. */
   rejoin: boolean;
 };
 
 /**
- * Decide what a scroll event means for tail following. An upward move drops following at once and never schedules a
- * rejoin, however close to the bottom it ends: scrolling up passes through the near-latest band, and treating that as
- * still following sprang the viewport back down under a reader.
- *
- * Except the browser's own clamp: content above can get shorter mid-generation (KaTeX replacing a taller placeholder),
- * clamping scrollTop down to the new bottom. A move up no larger than the shrink that lands on the new bottom is that
- * clamp, not a handoff; otherwise the follow would detach for good.
+ * An upward move drops following at once and never schedules a rejoin, however close to the bottom it ends: scrolling
+ * up passes through the near-latest band. Except the browser's own clamp: content above can get shorter mid-generation
+ * (KaTeX replacing a taller placeholder), clamping scrollTop down to the new bottom; a move up no larger than the
+ * shrink that lands on the new bottom is that clamp, not a handoff.
  */
 export function decideTailScroll(input: TailScrollInput): TailScrollDecision {
   const distanceFromBottom = Math.max(0, input.maxScrollTop - input.scrollTop);

@@ -103,193 +103,108 @@ import {
   XIcon
 } from "lucide-solid";
 
-/* The shared icon vocabulary, one glyph per concept (Icons.Settings): every icon two or more files use. Named exports,
-   so a bundle takes only the glyphs it uses. */
-/** Runtime activity and status. */
 export const Runtime = ActivityIcon;
-/** An agent's heartbeat: its tick, and the quiet line a beat leaves. */
 export const Heartbeat = HeartPulseIcon;
-/** A morning brief. */
 export const Brief = SunriseIcon;
-/** A feed: what an agent reads from on a clock. */
 export const Feed = RssIcon;
-/** A check-back or other timed task. */
 export const Clock = AlarmClockIcon;
-/** An agent's inbox: what its runs reported. */
 export const Inbox = InboxIcon;
-/** Quiet hours. */
 export const Quiet = MoonIcon;
-/** Add an item or open creation options. */
 export const Add = PlusIcon;
-/** Download, move downward or reach recent content. */
 export const ArrowDown = ArrowDownIcon;
-/** Something coming in: a notice Conduit writes into a thread. */
 export const ArrowDownLeft = ArrowDownLeftIcon;
-/** What a model was given as context: a system prompt, a section that changed. */
 export const Context = ScrollTextIcon;
-/** Return to the previous view. */
 export const Back = ArrowLeftIcon;
 export const Forward = ArrowRightIcon;
-/** Swap pane or comparison sides. */
 export const Swap = ArrowLeftRightIcon;
-/** Confirm a location or sign in. */
 export const Proceed = ArrowRightIcon;
-/** Move upward or publish changes. */
 export const ArrowUp = ArrowUpIcon;
-/** Delete text before the cursor. */
 export const Backspace = DeleteIcon;
-/** An agent notification. */
 export const Notification = BellIcon;
-/** A collection or grouped identity. */
 export const Boxes = BoxesIcon;
-/** A subagent: work an agent handed to another. */
 export const Agent = BotIcon;
-/** A message waiting to steer the running turn; one waiting its turn after it. */
 export const Steer = CornerDownRightIcon;
 export const Queued = ListEndIcon;
 export const Camera = CameraIcon;
-/** A chat or its messages. */
 export const Chat = MessageSquareIcon;
-/** A selected, successful or completed state. */
 export const Check = CheckIcon;
-/** Expand a choice or move to the next match. */
 export const ChevronDown = ChevronDownIcon;
-/** Return to the previous item. */
 export const ChevronLeft = ChevronLeftIcon;
-/** Open a child item or move forward. */
 export const ChevronRight = ChevronRightIcon;
-/** Close or dismiss the current surface. */
 export const Close = XIcon;
-/** Run a script or show code. */
 export const Code = CodeXmlIcon;
-/** Compact the chat context. */
 export const Compact = ShrinkIcon;
 export const Copy = CopyIcon;
 export const Paste = ClipboardPasteIcon;
-/** A model hosted on this machine. */
 export const LocalModel = CpuIcon;
-/** The application dashboard. */
 export const Dashboard = LayoutDashboardIcon;
-/** Delete the selected item. */
 export const Delete = Trash2Icon;
-/** Download a file or update. */
 export const Download = DownloadIcon;
-/** Edit or rename the selected item. */
 export const Edit = PencilIcon;
-/** Open a destination outside the current view. */
 export const ExternalLink = ExternalLinkIcon;
-/** A file with no more specific type. */
 export const File = FileIcon;
-/** A source file, file path or source view. */
 export const FileCode = FileCode2Icon;
-/** File changes or an unstaged diff. */
 export const FileDiff = FileDiffIcon;
-/** A text file, prompt or document view. */
 export const FileText = FileTextIcon;
-/** Give keyboard focus to the terminal. */
 export const Focus = FocusIcon;
-/** A folder or workspace location. */
 export const Folder = FolderIcon;
-/** The model service level. */
 export const ServiceLevel = GaugeIcon;
 export const GitBranch = GitBranchIcon;
-/** Review source-control changes. */
 export const GitCompareArrows = GitCompareArrowsIcon;
-/** Fetch content from the web. */
 export const Fetch = GlobeIcon;
-/** Hide content from view. */
 export const Hide = EyeOffIcon;
-/** The home directory or home view. */
 export const Home = HomeIcon;
 export const Image = ImageIcon;
-/** Insert or edit text at the cursor. */
 export const InsertText = TextCursorInputIcon;
 export const Keyboard = KeyboardIcon;
-/** Sign out of the server. */
 export const LogOut = LogOutIcon;
-/** Expand a pane or attachment. */
 export const Maximize = Maximize2Icon;
 export const SwitchCamera = SwitchCameraIcon;
-/** A message or agent narration. */
 export const Message = MessageSquareTextIcon;
-/** Feedback on something said (a message's foot). */
 export const Feedback = MessageSquareQuoteIcon;
 export const Microphone = MicIcon;
-/** Restore a pane to its smaller size. */
 export const Minimize = Minimize2Icon;
-/** This computer or display appearance. */
 export const Monitor = MonitorIcon;
-/** An agent's pointer over a page it drives (AgentPointer); the UI feedback tool, which points at pieces (the rail, development clients). */
 export const Pointer = MousePointer2Icon;
-/** Additional actions for this item. */
 export const More = EllipsisIcon;
-/** Move a chat into a folder. */
 export const MoveToFolder = FolderInputIcon;
 export const NewChat = MessageSquarePlusIcon;
 export const NewFolder = FolderPlusIcon;
-/** Edit the workspace identity. */
 export const WorkspaceIdentity = PaletteIcon;
-/** Collapse the file navigation. */
 export const CollapseFiles = PanelLeftCloseIcon;
-/** Expand the file navigation. */
 export const ExpandFiles = PanelLeftOpenIcon;
-/** Attach files to a message. */
 export const Attach = PaperclipIcon;
-/** Agent permissions and approval policy. */
 export const Permissions = ShieldCheckIcon;
-/** Keep an item in place. */
 export const Pin = PinIcon;
-/** Release a pinned item. */
 export const PinOff = PinOffIcon;
-/** Continue or start an operation. */
 export const Play = PlayIcon;
-/** View content or show a preview. */
 export const Preview = EyeIcon;
-/** A harness profile or grouped profiles. */
 export const Profile = LayersIcon;
-/** Scan or show a pairing code. */
 export const QrCode = QrCodeIcon;
-/** Reasoning controls or thinking content. */
 export const Reasoning = BrainIcon;
-/** Refresh, retry, reload or regenerate. */
 export const Refresh = RefreshCwIcon;
-/** Reset a value or restart an action. */
 export const Reset = RotateCcwIcon;
-/** Find content, commands or items. */
 export const Search = SearchIcon;
 export const Send = ArrowUpIcon;
 export const Server = ServerIcon;
-/** Application, workspace and terminal settings. */
 export const Settings = SettingsIcon;
-/** Share a chat or its link. */
 export const Share = ShareIcon;
-/** A shell command or terminal tool. */
 export const Shell = SquareTerminalIcon;
 export const Phone = SmartphoneIcon;
 export const Browser = GlobeIcon;
 export const Lock = LockIcon;
 export const User = CircleUserIcon;
-/** Show or hide the left sidebar. */
 export const Sidebar = PanelLeftIcon;
-/** Show two panes or comparison columns. */
 export const Split = Columns2Icon;
 export const Stop = SquareIcon;
-/** A terminal, command or command palette. */
 export const Terminal = TerminalIcon;
-/** Agent thinking or reasoning. */
 export const Thinking = LightbulbIcon;
-/** Undo an edit or discard changes. */
 export const Undo = Undo2Icon;
 export const Upload = UploadIcon;
-/** A warning or failed operation. */
 export const Warning = TriangleAlertIcon;
-/** Show or hide the workspace panel. */
 export const Workspace = PanelRightIcon;
 export const WrapText = WrapTextIcon;
-/** How a transcript draws the work between replies: Narrated or Folded. */
 export const Narration = ListCollapseIcon;
-/** A tool without a more specific kind. */
 export const Tool = WrenchIcon;
-/** A file-writing tool. */
 export const WriteFile = FilePenLineIcon;
 export const Mail = MailIcon;

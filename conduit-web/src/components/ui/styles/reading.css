@@ -1,10 +1,7 @@
-/* Reading (reading.tsx): a gauge's reading under its Meter. Everything at the caption's size; numbers in the data
-   face and tabular, names in the text's; inset as a menu's rows are, so it lines up with the rows around it. */
 .ui-reading { display: grid; gap: var(--space-lg); padding: var(--space-sm) var(--row-inset) var(--space-md); font-size: var(--text-caption); line-height: var(--leading-row); }
 .ui-reading-total { display: flex; justify-content: space-between; gap: var(--space-md); color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
 .ui-reading-figure { color: var(--foreground); font-family: var(--font-data); }
 
-/* The legend: a dot, the name, its share at the end; a part that opens is pressable and turns its chevron. */
 .ui-reading-parts { display: grid; margin: 0; padding: 0; list-style: none; }
 .ui-reading-part { display: flex; min-height: var(--control-sm); align-items: center; gap: var(--space-sm); margin-inline: calc(-1 * var(--space-xs)); padding-inline: var(--space-xs); border-radius: var(--radius-inset); color: var(--foreground); }
 .ui-reading-part[data-sub] { padding-inline-start: calc(var(--space-xs) + var(--icon-dot) + var(--space-sm)); color: var(--muted-foreground); }
@@ -16,8 +13,6 @@
 .ui-reading-part[role="button"]:is(:focus-visible, :active) { background: var(--tint); outline: none; }
 @media (hover: hover) { .ui-reading-part[role="button"]:hover { background: var(--tint); } }
 
-/* The account's figures: their name in the label's voice, then tiles side by side, as many as there are, each a tint
-   well -- its name, its number, a line under it. */
 .ui-reading-group { display: grid; gap: var(--space-sm); }
 .ui-reading-group > h4 { margin: 0; color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-row) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
 .ui-reading-stats { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: var(--space-sm); margin: 0; }
@@ -28,9 +23,7 @@
 /* The line under it wraps rather than being cut short: when it resets is the point of it. */
 .ui-reading-stat > dd + dd { color: var(--muted-foreground); white-space: normal; overflow-wrap: anywhere; }
 
-/* A foot line: what it says, in the lines' voice, its one control at the end. */
 .ui-reading-foot { display: flex; min-height: var(--control-sm); align-items: center; justify-content: space-between; gap: var(--space-md); color: var(--muted-foreground); }
 .ui-reading-foot > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* GaugeFigure: a ring and its figure, used over what there is, in the data face. */
 .ui-gauge-figure small { color: var(--muted-foreground); font-size: inherit; opacity: var(--opacity-rest); }
 .ui-gauge-figure { display: inline-flex; flex: none; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }

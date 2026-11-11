@@ -3,47 +3,26 @@ import { Show, untrack, type JSX } from "solid-js";
 import { Expand } from "./expand";
 import { Count } from "./controls";
 
-/**
- * Group: a titled run of rows or lines; the kind sets how its title reads and what it holds:
- *   setting, column   the quiet label over lines (a column is one of several side by side, in Columns); scope: whose
- *                     the settings are ("This device", "Every device", "The hub"), said where a view holds more than one
- *   nav               the sidebar's label, or none; away: what the rows are on is not there now ("Offline since …")
- *   workbench         a side section's title
- *   card, agent       a small heading over one side of a card, over a rider's list
- *   dash              a page's group: its heading (GroupHeading, GroupToggle) and actions over its rows, a row after
- *                     them (more); folded on a phone; order and section for the page's layout and the leader
- *   change            folds at its heading (GroupToggle) with a count, an action at the heading's right
- */
 export type GroupKind = "setting" | "column" | "nav" | "workbench" | "card" | "agent" | "dash" | "change";
 type Order = "first" | "list" | "rest";
 
 export function Group(props: {
   kind?: GroupKind;
-  /** What the group is called; a dash group's is its heading instead. */
   title?: JSX.Element;
-  /** A dash group's heading (GroupHeading, GroupToggle, GroupCompactHeading, GroupSwitches). */
   heading?: JSX.Element;
   count?: number | string | null;
-  /** Controls at the heading's right. */
   actions?: JSX.Element;
-  /** After the rows (a dash group's "Show more"). */
   more?: JSX.Element;
   away?: string;
-  /** A setting group's: whose its settings are, after the title. Only where one view mixes scopes. */
   scope?: string;
-  /** A change group's: open shows its rows; onToggle folds it. */
   open?: boolean;
   onToggle?: () => void;
-  /** A dash group's: folded hides its rows (a phone's); busy says its rows are loading. */
   folded?: boolean;
   busy?: boolean;
   order?: Order;
-  /** What the leader calls a dash group (chats, projects, workspaces, terminals, changes, files, folders). */
   section?: string;
-  /** A dash group's heading id when labelled; otherwise its name for assistive tech. */
   id?: string;
   labelled?: boolean;
-  /** An agent group leaving (its rider folding it away). */
   going?: boolean;
   children?: JSX.Element;
 }) {
@@ -66,21 +45,16 @@ export function Group(props: {
       <header class="ui-group-head"><GroupToggle open={Boolean(props.open)} count={props.count} onClick={() => props.onToggle?.()}>{props.title}</GroupToggle>{props.actions}</header>
       <Expand open={Boolean(props.open)}>{props.children}</Expand>
     </section>;
-    // A column with no title of its own (an environment, named by its first line) draws no label.
     default: return <section class="ui-group" data-group={kind} aria-label={name()}><Show when={kind !== "column" || props.title}><div class="ui-nav-label">{props.title}<Show when={props.scope}><span class="ui-nav-away">{props.scope}</span></Show></div></Show>{props.children}</section>;
   }
 }
 
-/** Groups side by side, as many as the room holds, a hairline between: Settings' columns, a card's two sides, the file
- *  browser's panes. The kind is the family whose spacing it takes. */
 export const Columns = (props: { kind?: "setting" | "card" | "browser"; children: JSX.Element }) =>
   <div class="ui-columns" data-group={props.kind ?? "setting"}>{props.children}</div>;
 
-/** A dash group's heading: the strong one, sentence case, with a count in data. The quiet label is the other kinds'. */
 export function GroupHeading(props: { id?: string; count?: number | string | null; children: JSX.Element }) {
   return <h2 id={props.id} class="ui-group-heading">{props.children}<Show when={props.count != null}><Count value={props.count!} /></Show></h2>;
 }
-/** A heading that folds its group: the chevron turns as it opens. */
 export function GroupToggle(props: { id?: string; open: boolean; count?: number | string | null; onClick: () => void; children: JSX.Element }) {
   return <h2 id={props.id} class="ui-group-heading"><button type="button" class="ui-group-toggle" aria-expanded={props.open} onClick={() => props.onClick()}>
     <Icons.ChevronRight class="ui-fold-chevron" />{props.children}<Show when={props.count != null}><Count value={props.count!} /></Show></button></h2>;

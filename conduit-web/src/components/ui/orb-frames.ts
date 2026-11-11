@@ -1,13 +1,11 @@
 import { finalizeFrame, makeProj, radiusScale, type Dot, type ModeFrame } from "thinking-orbs/engine";
 
-/* The orb's frames drawn for Conduit from the engine's own pieces (camera, dot scaling, z-sort) in its depth language:
-   the same object as the library's, moving differently. `t` is seconds. docs/design/orb-catalogue shows each frame. */
+/* `t` is seconds. */
 const TAU = Math.PI * 2;
 const SPIN = 0.5;
 const LAT_RINGS = 6;
 const LON_DENSITY = 17;
 
-/* The searching state's lat/lon lattice, without its scan, turned to `yaw`. */
 function sphere(size: number, yaw: number) {
   const c = size / 2;
   const scale = radiusScale(size, 0.6);
@@ -26,8 +24,7 @@ function sphere(size: number, yaw: number) {
   return finalizeFrame(dots, [], 0.3);
 }
 
-/* A finished turn's mark: the sphere turning slowly, a full turn in about
-   twelve seconds. */
+/* A full turn in about twelve seconds. */
 export const PLAIN_SPHERE: ModeFrame = (size, t) => sphere(size, 0.55 + t * SPIN);
 
 /* How far a sphere has turned by `t`, told as a loop of segments --
@@ -41,7 +38,6 @@ const easeOut: Ease = (x) => 1 - (1 - x) ** 3;
 /* Past the mark and back: `c` is how far past. */
 const back = (c: number): Ease => (x) => 1 + (c + 1) * (x - 1) ** 3 + c * (x - 1) ** 2;
 const backOut = back(1.7);
-/* Past the mark and back, and past again, dying away. */
 const spring: Ease = (x) => 1 - Math.exp(-7 * x) * Math.cos(14 * x);
 
 function turning(segments: Segment[]) {
@@ -60,9 +56,8 @@ function turning(segments: Segment[]) {
   };
 }
 
-/* The sputter: stretches of the plain sphere's turn snagging to a stop, between them jolts, stutters and kicks
-   backwards (about fourteen seconds before it repeats). Each change of pace keeps its speed where it meets a cruise: a
-   cubic ease out starts at three times its average, so it covers a third of what the cruise would in that time. */
+/* Each change of pace keeps its speed where it meets a cruise: a cubic ease out starts at three times its average, so
+   it covers a third of what the cruise would in that time. */
 const cruise = (seconds: number): Segment => [seconds, SPIN * seconds, linear];
 const slow = (seconds: number): Segment => [seconds, (SPIN * seconds) / 3, easeOut];
 const recover = (seconds: number): Segment => [seconds, (SPIN * seconds) / 3, easeIn];
@@ -82,11 +77,8 @@ const sputter = turning([
   recover(0.8),
 ]);
 
-/* A turn that did not finish, stopped or failed: the sphere sputtering. */
 export const SPUTTERING_SPHERE: ModeFrame = (size, t) => sphere(size, 0.55 + sputter(t));
 
-/* Points on a circle of radius `r` in the plane through the centre with
-   normal `n`, by angle. */
 function circle(n: [number, number, number]) {
   const length = Math.hypot(...n);
   const [nx, ny, nz] = n.map((value) => value / length) as [number, number, number];
@@ -98,8 +90,6 @@ function circle(n: [number, number, number]) {
     [0, 1, 2].map((i) => (u[i]! * Math.cos(angle) + v[i]! * Math.sin(angle)) * r) as [number, number, number];
 }
 
-/* Three orbits at different tilts, each with its particle running on and
-   the stretch of orbit it has just covered drawn with it, the rest faint. */
 const ORBITS: { normal: [number, number, number]; radius: number; reach: number; start: number; speed: number }[] = [
   { normal: [0, 1, 0], radius: 0.98, reach: 0.72, start: 0.4, speed: 1.4 },
   { normal: [0.9, 0.35, 0.2], radius: 0.9, reach: 0.45, start: 2.2, speed: -1.1 },
@@ -107,7 +97,6 @@ const ORBITS: { normal: [number, number, number]; radius: number; reach: number;
 ];
 const ORBIT_DOTS = 24;
 
-/* Editing: the orbits trailed. */
 export const ORBITS_TRAILED: ModeFrame = (size, t) => {
   const c = size / 2;
   const radius = c * 0.82;

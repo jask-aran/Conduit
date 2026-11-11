@@ -1,4 +1,3 @@
-/* DesktopComposer: resting frost holding a field above a toolbar, riders on its top edge; in units of the density (u). */
 .ui-composer-stack, .ui-composer-under, .ui-desktop-composer, .ui-composer-field, .ui-toolbar, .ui-rider {
   --cmp-radius: var(--radius-message);
   --cmp-field-min: calc(var(--control) + var(--space-md)); --cmp-field-max: var(--measure-xs);
@@ -9,21 +8,18 @@
   --cmp-rider-gap: var(--space-sm);
 }
 .ui-composer-stack { display: grid; gap: var(--cmp-rider-gap); }
-/* The composer's slot: the composer (with its riders) and a takeover (the question) share one cell, bottom-aligned.
-   Taken, the composer drops out of the pane but keeps its room, so its leaving moves nothing; it comes back gently. */
+/* Taken, the composer drops out of the pane but keeps its room, so its leaving moves nothing. */
 .ui-composer-slot { display: grid; grid-template-columns: minmax(0, 1fr); }
 .ui-composer-slot > * { grid-area: 1 / 1; align-self: end; min-width: 0; }
-/* Under: the state riders, a row of their own below the composer and its takeover, so neither moves them. The row
-   opens its room as a rider fades in, lifting the composer (and a transcript following the bottom); going, the room
-   closes behind it and the composer follows it down (it is never squeezed). */
+/* The state riders are a row of their own below the composer and its takeover, so neither moves them. */
 .ui-composer-slot > .ui-composer-under { grid-area: 2 / 1; display: grid; grid-template-columns: minmax(0, 1fr); padding-top: var(--cmp-rider-gap);
   height: auto; interpolate-size: allow-keywords; transition: height var(--duration-gentle) var(--ease-room), padding-top var(--duration-gentle) var(--ease-room); }
 @starting-style { .ui-composer-slot > .ui-composer-under { height: 0; padding-top: 0; } }
-/* Closing is even (--ease-room): a sped-up end or start moved a following transcript most in one frame. */
+/* Closing is even (--ease-room): a sped-up end or start moves a following transcript most in one frame. */
 .ui-composer-slot > .ui-composer-under:has(> .ui-rider-going) { height: 0; padding-top: 0; transition-timing-function: var(--ease-room); }
 .ui-composer-under > .ui-rider { --rise: var(--space-md); }
 .ui-composer-under > .ui-rider[data-leaving] { --rise: 100%; animation-duration: var(--duration-gentle); }
-/* The stack only moves; its frosts (riders, composer) fade themselves (6). */
+/* The stack only moves; its frosts (riders, composer) fade themselves. */
 .ui-composer-slot > .ui-composer-stack { --move: var(--duration-gentle); --move-ease: var(--ease-arrive); --hide-delay: 0s;
   transition: transform var(--move) var(--move-ease), visibility 0s var(--hide-delay); }
 .ui-composer-slot > .ui-composer-stack > * { --fade: var(--duration-gentle); --fade-ease: var(--ease-arrive);
@@ -31,14 +27,12 @@
 .ui-composer-slot[data-taken] > .ui-composer-stack { visibility: hidden; pointer-events: none; transform: translateY(calc(100% + var(--space-4xl)));
   --move: var(--duration-quick); --move-ease: var(--ease-leave); --hide-delay: var(--duration-quick); }
 .ui-composer-slot[data-taken] > .ui-composer-stack > * { opacity: 0; --fade: var(--duration-quick); --fade-ease: var(--ease-leave); }
-/* Its width: the pane declares --composer-width on its root; unset, its own default. min(.., 100%) keeps it
-   inside its pane, so no breakpoint is needed. */
+/* min(.., 100%) keeps it inside its pane, so no breakpoint is needed. */
 .ui-composer-width { width: min(var(--composer-width, var(--reading-width)), 100%); margin-inline: auto; }
 .ui-frost.ui-desktop-composer { position: relative; display: block; width: 100%; border-radius: var(--cmp-radius); padding: 0; }
 /* The app pins an empty field's height with !important; the composer's token wins it back. */
 .ui-composer-field > textarea { min-height: var(--cmp-field-min); max-height: var(--cmp-field-max); padding: var(--cmp-field-pad); font-size: var(--text-body); }
 .ui-composer-field > textarea:placeholder-shown { height: var(--cmp-field-min) !important; }
-/* Completion: over its field's text, at the field's padding and type. */
 .ui-completion { position: absolute; inset: 0; z-index: 1; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-body); line-height: var(--leading-row); pointer-events: none; white-space: pre; }
 .ui-completion > span { color: transparent; }
 .ui-completion > small { font-size: var(--text-caption); }
@@ -50,12 +44,11 @@
 .ui-toolbar-start { flex: 0 1 auto; }
 .ui-toolbar-start > *, .ui-toolbar-end > * { flex-shrink: 0; }
 .ui-toolbar-end { flex: 0 0 auto; }
-/* The primary slot: each action scales in where the last was, so nothing beside it moves; the aside (Stop beside
-   Send) steps in from the slot's side. A held control (dictating) breathes from the text colour to muted. */
+/* Each action scales in where the last was, so nothing beside it moves. */
 .ui-toolbar-primary { display: inline-grid; flex: none; place-items: center; }
 .ui-toolbar-primary > * { animation: ui-grow var(--duration-quick) var(--ease-arrive); }
-/* The aside tucks as a Pill does (motion.css, tuck): its room goes to its neighbours as it fades, in one move, and
-   comes back as it fades in, so its neighbours move rather than jump; its column clips it, never squeezed. */
+/* Its room goes to its neighbours as it fades, in one move, so they move rather than jump; its column clips it,
+   never squeezed. */
 .ui-toolbar-end > .ui-toolbar-aside { display: inline-grid; grid-template-columns: 1fr; color: var(--muted-foreground);
   --fade: var(--duration-gentle); --fade-ease: var(--ease-arrive);
   transition: grid-template-columns var(--duration-gentle) var(--ease-arrive), margin var(--duration-gentle) var(--ease-arrive), opacity var(--fade) var(--fade-ease); }
@@ -68,7 +61,6 @@
 .ui-toolbar [data-pointer-opened]:focus-visible:not(:hover) { background: transparent; }
 .ui-toolbar .ui-button[data-size^="icon"] svg { width: var(--cmp-icon); height: var(--cmp-icon); }
 
-/* Picker: a small ghost button showing what is picked; a setting muted, the subject (the model) at full weight. */
 .ui-picker { gap: var(--space-xs); color: var(--muted-foreground); }
 .ui-picker[data-subject] { color: var(--foreground); font-weight: var(--weight-current); }
 .ui-picker > .ui-picker-value { min-width: 0; max-width: calc(3 * var(--control)); }
@@ -76,13 +68,9 @@
 .ui-picker > .ui-picker-quiet { flex: none; color: var(--muted-foreground); font-weight: var(--weight-rest); }
 .ui-picker > .ui-picker-chevron { color: var(--muted-foreground); }
 
-/* Opening (its chat still arriving): the field alone; the toolbar and riders keep their room, unseen. */
 .ui-composer-slot[data-opening] :is(.ui-toolbar, .ui-composer-stack > :not(.ui-desktop-composer), .ui-composer-under) { visibility: hidden; }
 
-/* The field writes in the transcript's face, so a draft reads as it will in the transcript. */
 .ui-composer-field > textarea { font-family: var(--font-transcript); }
-/* MessageFeedback (composer.tsx): the composer at a bubble's width, under the message it is about. */
 .ui-frost.ui-desktop-composer.ui-message-feedback { width: min(65%, var(--measure-2xl)); margin-top: var(--space-sm); }
 .ui-message-feedback-note { padding-inline: var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
-/* A composer control that opens something (jbot's ring, its panel) reads pressed while what it opens is shown. */
 .ui-desktop-composer .ui-button[data-variant="ghost"][aria-expanded="true"] { background: var(--tint); }

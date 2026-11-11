@@ -1,8 +1,4 @@
-/*
- * Viewfinder (viewfinder.tsx): the camera as a card over the page's foot, picture in picture. Its corners are
- * concentric with the pills inset in it (their radius plus the inset), it rises in on the gentle arrive curve and
- * leaves the way it came, quick. The shutter is the one solid control: a light disc in a frost ring.
- */
+/* Its corners are concentric with the pills inset in it: their radius plus the inset. */
 .ui-viewfinder {
   --viewfinder-inset: var(--space-md);
   position: fixed; z-index: var(--layer-dialog); inset-inline: var(--space-md);
@@ -17,9 +13,7 @@
 @keyframes ui-viewfinder-in { from { opacity: 0; translate: 0 var(--space-xl); } }
 .ui-viewfinder > video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity var(--duration-gentle) var(--ease-arrive); }
 .ui-viewfinder > video[data-live] { opacity: 1; }
-/* The front camera shows as a mirror does. */
 .ui-viewfinder[data-facing="user"] > video { scale: -1 1; }
-/* The shutter's flash: a white wash that fades as the photo is taken. */
 .ui-viewfinder-flash { position: absolute; inset: 0; background: var(--on-media); opacity: 0; pointer-events: none; }
 .ui-viewfinder-flash[data-on] { animation: ui-viewfinder-flash var(--duration-gentle) var(--ease-leave); }
 @keyframes ui-viewfinder-flash { from { opacity: .7; } to { opacity: 0; } }

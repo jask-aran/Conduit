@@ -1,5 +1,4 @@
-/* The base every page stands on: Tailwind preflight's rules that the library relies on,
-   and the root's face, size and colours. */
+/* Tailwind preflight's rules that the library relies on, and the root's face, size and colours. */
 @layer reset {
   *, ::before, ::after, ::backdrop, ::file-selector-button { box-sizing: border-box; margin: 0; padding: 0; border: 0 solid; }
   * { border-color: var(--border); outline-color: color-mix(in oklab, var(--ring) 50%, transparent); }

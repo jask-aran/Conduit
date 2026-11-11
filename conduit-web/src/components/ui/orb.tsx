@@ -4,19 +4,14 @@ import { MODE_FRAMES, paintFrame, resolvePreset, type ModeFrame, type ModeOpts, 
 
 export type { ModeFrame, ModeOpts, OrbState };
 
-/*
- * A turn's mark: a dotted orb drawn by thinking-orbs' canvas engine (its geometry and painter; the loop is Conduit's,
- * since its own component is React). Live, it paints only while on screen and the tab is visible; a change of state
- * waits until the current one has shown for a moment, then crossfades with both still moving, so no frame is empty.
- * Paused (a settled turn, reduced motion) it is one still frame and changes without a fade. `frame` is given plain
- * seconds, not the state's preset speed.
- */
+/* The draw loop is Conduit's, since thinking-orbs' own component is React. A change of state waits until the current
+ * one has shown for a moment, then crossfades with both still moving, so no frame is empty. */
 const SIZE = 20;
 const DWELL_MS = 250;
 const FADE_MS = 200;
 const STILL_AT = 0.6;
 
-/* A CSS colour, var() included, as the painter's RGB: resolved on the canvas, read back off a one-pixel fill. */
+/* Resolved on the canvas and read back off a one-pixel fill, so var() colours work. */
 function rgbOf(element: HTMLElement, color: string) {
   const before = element.style.color;
   element.style.color = color;
@@ -32,8 +27,8 @@ function rgbOf(element: HTMLElement, color: string) {
 
 type Shown = { state: OrbState; opts?: ModeOpts; frame?: ModeFrame };
 
-/* One animation frame loop for every orb on the page, running only while one plays: a loop per orb drew every settled
- * turn in view every frame. */
+/* One animation frame loop for every orb on the page, running only while one plays: a loop per orb would draw every
+ * settled turn in view every frame. */
 type Player = { draw: (now: number) => void; interval: number; last: number };
 const players = new Set<Player>();
 let tick = 0;
@@ -72,19 +67,12 @@ const stop = (player: Player) => {
    wants 30. */
 export const settledOrbRate = (unfinished: boolean) => unfinished ? 30 : 15;
 
-/**
- * Orb: a dotted orb whose motion says what it is doing (a turn's mark, the mic listening). state: one of the
- * library's states; frame: a frame drawn for Conduit instead (orb-frames: PLAIN_SPHERE a settled turn,
- * SPUTTERING_SPHERE one that did not finish, ORBITS_TRAILED editing); tint: a colour for its dots; paused: one still
- * frame; rate: draws a second (settledOrbRate). It fills its box: the parent sizes it.
- */
 export function Orb(props: { state: OrbState; opts?: ModeOpts; frame?: ModeFrame; paused?: boolean; tint?: string; class?: string; rate?: number }) {
   let front!: HTMLCanvasElement;
   let back!: HTMLCanvasElement;
   const reduced = reducedMotion();
   const playing = () => !props.paused && !reduced;
 
-  // What is shown, and what it is fading from while a crossfade runs.
   const [shown, setShown] = createSignal<Shown>({ state: props.state, opts: props.opts, frame: props.frame });
   const [leaving, setLeaving] = createSignal<Shown | null>(null);
   let since = performance.now();
@@ -153,7 +141,6 @@ export function Orb(props: { state: OrbState; opts?: ModeOpts; frame?: ModeFrame
       player.interval = rate ? 1000 / rate : 0;
       if (plays && visible && document.visibilityState !== "hidden") play(player); else stop(player);
     };
-    // Still, it is drawn once for each change of what it shows.
     createEffect(() => {
       frontPreset();
       tint();

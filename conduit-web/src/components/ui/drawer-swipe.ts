@@ -3,27 +3,19 @@ import { haptic } from "./haptics";
 import { whenMotionEnds } from "./motion";
 import { feelDrawerAhead } from "./nav";
 
-/** What the phone's drawer swipe reads and sets: the NavPane's drawer and the workspace panel at the other edge. */
 export type DrawerSwipeOptions = {
-  /** Whether the layout is a phone's now: the swipe is heard only then. */
   phone: () => boolean;
-  /** The drawer open, and opened or shut (on letting go, or by a swipe that opens the other panel). */
   open: () => boolean;
   setOpen: (open: boolean) => void;
-  /** The panel at the right edge; available: whether there is one to open here. */
   other: { open: () => boolean; setOpen: (open: boolean) => void; available: () => boolean };
 };
 
-/** The phone's drawer swipe, heard on the window: the drawer opens from the left edge, the other panel from the right,
- *  either shuts across itself (edge-swipe.ts). Started once; returns its stop. */
 export function drawerSwipe(options: DrawerSwipeOptions): () => void {
   const { phone, open: drawerOpen, setOpen: setDrawerOpen, other } = options;
   let swipe: { id: number; gesture: EdgeSwipe } | null = null;
   // Safari outside an installed app takes the left edge for its own Back.
   const browserOwnsEdges = /iP(hone|ad|od)/.test(navigator.userAgent) && !(navigator as Navigator & { standalone?: boolean }).standalone;
   const keyboardUp = () => Boolean(window.visualViewport && window.visualViewport.height < window.innerHeight * 0.75);
-  // The sidebar follows the finger (nav.css --drawer, written once a frame); let go, it settles from there. The
-  // workspace panel only opens or shuts on letting go.
   type DrawerParts = { pane: HTMLElement; body: HTMLElement; shell: HTMLElement; backdrop: HTMLElement };
   const drawerParts = (): DrawerParts | null => {
     const pane = document.querySelector<HTMLElement>(".ui-nav-pane[data-drawer]");
@@ -32,8 +24,6 @@ export function drawerSwipe(options: DrawerSwipeOptions): () => void {
     const backdrop = document.querySelector<HTMLElement>('.ui-backdrop[data-layer="drawer"][data-fade]');
     return pane && body && shell && backdrop ? { pane, body, shell, backdrop } : null;
   };
-  // Carried past where it lands, it is felt there, and again if it comes back; let go, a landing already felt plays
-  // nothing more, and one a flick changed plays as a tap's does.
   let drag: { parts: DrawerParts; progress: number; frame: number; from: boolean; felt: boolean } | null = null;
   let stopSettle = () => {};
   const carry = (progress: number, lands: boolean) => {
@@ -56,7 +46,7 @@ export function drawerSwipe(options: DrawerSwipeOptions): () => void {
       for (const part of [drag.parts.body, drag.parts.shell, drag.parts.backdrop]) part.style.setProperty("--drawer", String(drag.progress));
     });
   };
-  /** How open the sidebar is drawn while still moving (0 to 1); null at rest. Read from the slide, not the state. */
+  /** Read from the slide, not the state. */
   const drawerMoving = (): number | null => {
     const parts = drawerParts();
     const width = parts?.pane.offsetWidth;
@@ -64,7 +54,6 @@ export function drawerSwipe(options: DrawerSwipeOptions): () => void {
     const at = new DOMMatrixReadOnly(getComputedStyle(parts.shell).transform).m41 / width;
     return Math.abs(at - (drawerOpen() ? 1 : 0)) * width > 2 ? Math.max(0, Math.min(1, at)) : null;
   };
-  /** Lets the carried sidebar go: it settles open or shut from where it is (open: whether it lands open). */
   const release = (open: boolean) => {
     if (!drag) return;
     const { parts, frame, felt } = drag;
@@ -79,8 +68,8 @@ export function drawerSwipe(options: DrawerSwipeOptions): () => void {
     // slide that never runs): the shell and the dim travel with it on the same duration.
     stopSettle = whenMotionEnds(parts.body, "transform", "--duration-gentle", () => { for (const part of [parts.pane, parts.shell, parts.backdrop]) part.removeAttribute("data-drawer-settle"); });
   };
-  // Heard first, on the window in capture: an open popover stops a touch outside it, which left a carried sidebar
-  // never let go. Moves and end are also heard where the touch started (once each), since once that target leaves
+  // Heard first, on the window in capture: an open popover stops a touch outside it, which would leave a carried
+  // sidebar never let go. Moves and end are also heard where the touch started (once each), since once that target leaves
   // the document they never reach the window.
   let heard: EventTarget | null = null;
   let last: Event | null = null;
@@ -106,7 +95,6 @@ export function drawerSwipe(options: DrawerSwipeOptions): () => void {
     if (swipeBlocked(event.target) || String(window.getSelection() || "")) return;
     const touch = event.touches[0]!;
     const opening = !drawerOpen() && !other.open();
-    // A sidebar still moving is caught and held where it is drawn, carried on or settled from there.
     const caught = other.open() ? null : drawerMoving();
     if (caught !== null) carry(caught, false);
     if (opening && browserOwnsEdges && caught === null) return;

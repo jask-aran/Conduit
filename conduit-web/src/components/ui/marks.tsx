@@ -1,13 +1,7 @@
 import { Show, type Component } from "solid-js";
 import { Dynamic } from "solid-js/web";
 
-/**
- * Product marks for the coding harnesses, served from `public/brand/` (provenance: `docs/brand/README.md`).
- * `tint: true` marks are one-colour artwork, a mask filled with `currentColor`. Where a surface asks for `artwork`,
- * Codex and Claude Code show their official mark as an image, never tinted or inverted. `brand` is the colour a
- * one-colour mark lights to (the sidebar, on hover); without one it lights to the foreground. Entries beyond the
- * shipped adapters are staged for the ones that follow.
- */
+/** Codex and Claude Code show their official mark as an image (`artwork`), never tinted or inverted. */
 export type Mark = { src: string; tint?: boolean; artwork?: string; brand?: string };
 
 const BLOSSOM: Mark = { src: "/brand/openai-blossom-mark.svg", tint: true };
@@ -34,7 +28,6 @@ export function HarnessMark(props: { id: string; class?: string; artwork?: boole
   </Show>;
 }
 
-/** `lively`: greyed like its row until the row is hovered or focused, then in its own colours. */
 export function ThreadHarnessMark(props: { id?: string; lively?: boolean; label?: string }) {
   const id = () => props.id || "conduit";
   const label = () => props.label || id();
@@ -46,7 +39,6 @@ export function ThreadHarnessMark(props: { id?: string; lively?: boolean; label?
   </span>;
 }
 
-/** A workspace's or place's own mark: an icon or monogram in its colour, sized by its slot. */
 export function Glyph(props: { icon?: Component; monogram?: string; colour?: string; class?: string; value?: string }) {
   return <span class={`ui-glyph${props.class ? ` ${props.class}` : ""}`} data-mode={props.monogram !== undefined ? "monogram" : "icon"} data-value={props.value} style={{ color: props.colour }} aria-hidden="true">
     <Show when={props.monogram !== undefined} fallback={<Dynamic component={props.icon} />}>

@@ -41,12 +41,9 @@
 .ui-code-host .cm-scroller::-webkit-scrollbar-track, .ui-code-host .cm-scroller::-webkit-scrollbar-corner { background: transparent; }
 .ui-code-host .cm-scroller::-webkit-scrollbar-thumb { border: var(--space-2xs) solid transparent; border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 
-/* TextEditor (text-editor.tsx): text edited in a box that scrolls inside itself, so the page around it never scrolls
-   for its text. A hairline round it as a field has; its bar (find, undo, redo, wrap) over the text; at a reading
-   height by default, or filling what its column leaves (fill). Find and replace opens under the text. */
+/* Scrolls inside itself, so the page around it never scrolls for its text. */
 .ui-text-editor { display: flex; height: var(--text-editor-height, min(calc(40 * var(--u-space)), 60dvh)); min-height: calc(12 * var(--u-space)); flex-direction: column; overflow: hidden; border: var(--hairline) solid var(--tint); border-radius: var(--radius-control); }
 .ui-text-editor[data-fill] { height: auto; flex: 1; }
-/* Fit: as tall as its text, up to a measure, then it scrolls inside itself. */
 .ui-text-editor[data-fit] { height: auto; min-height: 0; max-height: var(--measure-xl); }
 .ui-text-editor[data-fit] .ui-text-editor-host { flex: none; overflow: auto; }
 .ui-text-editor[data-fit] .ui-text-editor-host .cm-editor { height: auto; }
@@ -54,18 +51,15 @@
 .ui-text-editor-bar { display: flex; flex: none; align-items: center; gap: var(--space-xs); border-bottom: var(--hairline) solid var(--tint); padding: var(--space-2xs) var(--space-xs) var(--space-2xs) var(--space-md); }
 .ui-text-editor-head { display: flex; min-width: 0; flex: 1; align-items: center; gap: var(--space-2xs); }
 .ui-text-editor-tools { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); margin-left: auto; }
-/* Its foot reads as the file viewer's, on the pane's own ground (frost or a page), not the workspace's darker one. */
 .ui-text-editor > .ui-status-bar { min-height: var(--control-sm); border-top-color: var(--tint); background: transparent; padding-block: var(--space-2xs); }
 .ui-text-editor-bar .ui-icon-button:where([data-icon-button="file"])[aria-pressed="true"] { color: var(--foreground); }
 .ui-text-editor-host { min-width: 0; min-height: 0; flex: 1; overflow: hidden; font-size: var(--text-caption); }
 .ui-text-editor-host .cm-editor { height: 100%; }
 .ui-text-editor-host .cm-scroller { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 .ui-text-editor[data-readonly] .cm-cursor { display: none; }
-/* What the pane's head says: the name of what it holds (quiet when Conduit fills it in), then its actions. */
 .ui-heading:where([data-heading="editor"]) { min-width: 0; overflow: hidden; font-size: var(--text-row); font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
 .ui-heading:where([data-heading="editor"])[data-live] { color: var(--muted-foreground); }
 .ui-actions:where([data-actions="editor"]) { display: inline-flex; flex: none; align-items: center; gap: var(--space-2xs); margin-left: var(--space-xs); }
 .ui-text-editor-head .ui-seg { flex: none; }
-/* The marks TextEditor puts in prompt text: the tags it is wrapped in quiet, the slots Conduit fills marked. */
 .ui-prompt-tag { color: var(--muted-foreground); }
 .ui-prompt-slot { border-radius: var(--radius-control); background: var(--tint); padding: 0 var(--space-2xs); color: var(--foreground); }

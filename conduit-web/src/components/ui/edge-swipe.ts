@@ -1,10 +1,6 @@
 export type MobileSwipeAction = "open-sidebar" | "close-sidebar" | "open-workspace" | "close-workspace";
 
-/*
- * Phone panel swipes. Opening starts at a screen edge (sidebar left, workspace right), since a swipe from anywhere
- * opened them under every sideways scroll; closing may start anywhere. After LOCK_PX the touch is a swipe or a scroll,
- * and that is final. A swipe carries its panel with the finger and lands past COMMIT of the way, or where flicked.
- */
+/* Opening starts at a screen edge, since a swipe from anywhere would open a panel under every sideways scroll. */
 
 /** From the edge inward; reaches past Android's gesture-navigation Back strip, which never reaches the page. */
 export const EDGE_PX = 64;
@@ -16,31 +12,21 @@ const FLICK_MIN_PX = 24;
 const COMMIT = 0.4;
 /** The finger's speed is read over its last few moves, not the last one alone, which a touch screen makes noisy. */
 const VELOCITY_MS = 80;
-/** The one feel for every swipe the library carries (the drawer, a Tray). */
 export const SWIPE = { lockPx: LOCK_PX, sidewaysRatio: SIDEWAYS_RATIO, flickPxPerMs: FLICK_PX_PER_MS, flickMinPx: FLICK_MIN_PX, commit: COMMIT } as const;
 
-/** travel: the panel's px between shut and open when it follows the finger; without one it only opens or shuts on
- *  letting go, after the width's 30% (at most 120px). */
 export interface SwipeStart { x: number; y: number; t: number; width: number; sidebarOpen: boolean; workspaceOpen: boolean; travel?: number;
-  /** How open the sidebar is where a touch caught it still moving (0 to 1); the swipe carries on from there, from anywhere. */
   from?: number }
 export interface SwipePoint { x: number; y: number; t: number }
 
 export interface EdgeSwipe {
-  /** False once the touch is a scroll (or never could be a swipe): stop tracking it. */
   move(point: SwipePoint): "pending" | "swiping" | "abandoned";
-  /** What the touch would do, once it is a swipe: which panel, and which way. */
   readonly action: MobileSwipeAction;
-  /** How open its panel is at this point, 0 shut to 1 open. */
   progress(point: SwipePoint): number;
-  /** Whether, let go slowly here, it would land (past COMMIT of the way); a flick may still change that. */
   lands(point: SwipePoint): boolean;
-  /** On letting go: the action if it lands that way, null if the panel goes back (or the touch was never a swipe). */
   end(point: SwipePoint): MobileSwipeAction | null;
 }
 
 export function beginEdgeSwipe(start: SwipeStart): EdgeSwipe | null {
-  // Which action this touch could become, and which way it must go.
   const intent: { action: MobileSwipeAction; sign: 1 | -1 } | null =
     start.sidebarOpen ? { action: "close-sidebar", sign: -1 }
       : start.from !== undefined ? { action: "open-sidebar", sign: 1 }
@@ -96,8 +82,7 @@ export function beginEdgeSwipe(start: SwipeStart): EdgeSwipe | null {
   };
 }
 
-/** Whether a touch belongs to this element, not a panel swipe: text, controls, and anything that really scrolls
- *  sideways, read live so a new scroller needs no listing. */
+/** Read live, so a new sideways scroller needs no listing. */
 export function swipeBlocked(target: EventTarget | null): boolean {
   let node = target instanceof Element ? target : null;
   if (node?.closest("input, textarea, select, [contenteditable=''], [contenteditable='true'], [role='slider'], canvas, .ui-composer-slot, .ui-phone-composer, [data-mobile-swipe-ignore]")) return true;

@@ -42,8 +42,8 @@ for (const type of ["pointerup", "mouseup", "click", "touchend"]) {
 
 if (installedClientKind === "android") {
   void import("@capacitor/app").then(({ App }) => App.addListener("backButton", ({ canGoBack }) => {
-    // One step: a menu shuts first; then whatever holds a step back (components/ui/back.ts: a dialog, a page reached
-    // from a list, a search); then a dialog that holds none, by Escape; and only then the app's own history.
+    // One step: a menu shuts first; then whatever holds a step back (back.ts); then a dialog that holds none, by
+    // Escape; and only then the app's own history.
     if (visibleMenus().length && (escape() || !visibleMenus().length)) return;
     if (stepBack()) return;
     const dialogs = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"]')].filter((element) => !gone(element) && element.dataset.state !== "closed").length;

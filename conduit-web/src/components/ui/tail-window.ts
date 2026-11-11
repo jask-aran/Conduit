@@ -1,32 +1,16 @@
 import { cancelIdle, idle } from "./later";
 import { createComputed, createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js";
 
-/**
- * A transcript's tail first: opening a list (a chat, the jbot chat) draws its newest items alone, then more, before
- * that frame is painted, until they fill what shows them (`fills`); the list is `drawn` then -- everything on screen is
- * -- and what holds it may move (a phone's drawer slides back over it). The older items are added above, a step a
- * frame, while it holds its foot. `key` is what the list is of: a new one starts at its tail again.
- */
-
 export function createTailWindow<T>(options: {
   items: () => readonly T[];
   key: () => unknown;
-  /** Whether what is drawn fills what shows it (read after the drawing, before the paint). */
   fills: () => boolean;
-  /** How many it draws first, and how many more at a time until they fill (before the paint). */
   tail?: number;
-  /** A guess at an item's height and the height to fill (px): it opens on that many items (with a margin), drawn and
-   *  laid out once; `fills` still has the last word. */
   estimate?: (item: T) => number;
   room?: () => number;
-  /** Opened whole instead (read as it opens): a list coming back to a place read further up than its tail. */
   whole?: () => boolean;
-  /** What scrolls it, for one that does not hold its own foot (the chat transcript does): as older items go in above,
-   *  it keeps its distance from the foot, so what is in view stays put. */
   scroller?: () => HTMLElement | null | undefined;
-  /** How many older ones at a time, in idle time after the paint. */
   step?: number;
-  /** Run once older items are in, before the foot is held (laid out then): what puts the foot on a whole pixel. */
   settle?: () => void;
 }) {
   const tail = options.tail ?? 3;
@@ -59,7 +43,6 @@ export function createTailWindow<T>(options: {
     const start = Math.min(offset(), items.length);
     return start ? items.slice(start) : items;
   });
-  // Drawn and not yet filling: more, at once (still before the paint). Filling: drawn, and the rest a frame at a time.
   createEffect(on(offset, (start) => {
     if (untrack(drawn) && start === 0) return;
     // Measured only until drawn: a measure is a forced layout a step.

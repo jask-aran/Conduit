@@ -3,7 +3,6 @@ import type manifestType from "virtual:material-icon-manifest";
 
 type Manifest = typeof manifestType;
 
-/** File and folder names to their icon's file, from the build-time manifest. */
 export function materialIconLookup(manifest: Manifest) {
   const leafName = (path: string) => path.split(/[\\/]/).at(-1)?.toLowerCase() ?? path.toLowerCase();
   const iconAsset = (iconName: string | undefined) => (iconName && manifest.icons[iconName]) || "file.svg";

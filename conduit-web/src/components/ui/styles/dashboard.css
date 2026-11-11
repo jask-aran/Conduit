@@ -1,21 +1,16 @@
-/* Dashboard (dashboard.tsx): a place's page. Two columns (composer and list; what is live and changed) while the left
-   holds its controls at full size (the app measures and sets data-one-column); data-compact (a phone) changes only layout. */
 /* Registered, so the app reads them back as lengths when it measures where two columns stop fitting. */
 @property --dash-aside { syntax: "<length>"; inherits: true; initial-value: 0px; }
 @property --dash-gutter { syntax: "<length>"; inherits: true; initial-value: 0px; }
 .ui-dash { --dash-aside: calc(21.875 * var(--u-space)); --dash-min: calc(29.6875 * var(--u-space)); --dash-glyph: clamp(var(--dash-tile), 3vw, calc(1.325 * var(--dash-tile))); --dash-tile-action: calc(3.75 * var(--u-space)); --dash-gap: calc(2.5 * var(--u-space)); --dash-gutter: calc(1.875 * var(--u-space));
   --dash-max: calc(var(--reading-width) + var(--dash-gap) + var(--dash-aside));
   position: relative; z-index: 1; display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: auto; scrollbar-width: var(--native-scrollbar-width); }
-/* A shelf's tile sizes, wherever a shelf is (the dashboard, the hub's page). */
 :is(.ui-dash, .ui-folder-shelf) { --dash-tile: calc(2 * var(--u-icon)); --dash-folder: calc(7.1875 * var(--u-space)); }
-/* Centred when there is room; otherwise its left gutter holds and a body at its minimum runs off the right, so nothing drifts sideways. */
+/* Centred when there is room; otherwise its left gutter holds, so nothing drifts sideways. */
 .ui-dash-body { display: grid; width: min(var(--dash-max), calc(100% - 2 * var(--dash-gutter))); min-width: var(--dash-min); min-height: 0; flex: 1;
   grid-template-areas: "head head" "notice notice" "band band" "main aside"; grid-template-columns: minmax(0, var(--reading-width)) var(--dash-aside);
   grid-template-rows: auto auto auto minmax(var(--dash-aside), 1fr); column-gap: var(--dash-gap);
   margin: 0 0 0 max(var(--dash-gutter), calc((100% - var(--dash-max)) / 2)); padding: var(--space-3xl) 0 var(--space-2xl); }
 
-/* The head is one grid: the mark centred on both lines, the title with the quick actions at the right of its line, the
-   status line under both. The title keeps its size and the quick actions fold first; the status line stays one line. */
 .ui-dash-head { display: grid; min-width: 0; grid-area: head; grid-template-columns: auto minmax(0, max-content) minmax(var(--control-lg), 1fr);
   grid-template-areas: "glyph title actions" "glyph status status"; align-items: center; margin: 0 0 var(--space-3xl); }
 .ui-dash-glyph { --glyph-text: calc(.55 * var(--dash-glyph)); display: grid; width: var(--dash-glyph); aspect-ratio: 1; grid-area: glyph; margin-right: var(--space-xl); place-items: center; color: var(--muted-foreground); }
@@ -50,7 +45,6 @@
 .ui-dash-composer { --composer-width: 100%; }
 .ui-dash-main > .ui-group:where([data-group="dash"]) { min-height: 0; flex: 1; margin-top: var(--space-xl); }
 .ui-dash-main > .ui-group:where([data-group="dash"]) > .ui-group-body:where([data-group="dash"] *) { min-height: 0; flex: 1; overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
-/* Stacked: the left column's groups at their own size, ruled apart as the aside's are, the column scrolling. */
 .ui-dash[data-stacked] .ui-dash-main { overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
 .ui-dash[data-stacked] .ui-dash-main > .ui-group:where([data-group="dash"]) { flex: none; }
 .ui-dash[data-stacked] .ui-dash-main > .ui-group:where([data-group="dash"]) > .ui-group-body:where([data-group="dash"] *) { overflow: visible; }
@@ -58,21 +52,16 @@
 .ui-dash-aside { min-width: 0; min-height: 0; grid-area: aside; overflow-y: auto; scrollbar-width: var(--native-scrollbar-width); }
 .ui-dash-aside > .ui-group:where([data-group="dash"]) + .ui-group:where([data-group="dash"]) { margin-top: var(--space-xl); border-top: var(--hairline) solid var(--tint); padding-top: var(--space-lg); }
 
-/* A group: its heading (or switches) with actions at the right, then rows. */
 .ui-group-head:where([data-group="dash"] *) { display: flex; min-height: var(--control-sm); align-items: center; justify-content: space-between; gap: var(--space-md); padding: 0 var(--space-2xs) var(--space-2xs) var(--row-inset); }
 .ui-group-head:where([data-group="dash"] *):empty { display: none; }
 .ui-dash-main .ui-group-head:where([data-group="dash"] *) { padding-left: 0; }
 .ui-group:where([data-group="dash"])[data-folded] .ui-group-head:where([data-group="dash"] *) { padding-bottom: 0; }
 .ui-group:where([data-group="dash"]), .ui-group-body:where([data-group="dash"] *) { display: flex; min-width: 0; flex-direction: column; }
-/* Switches in the heading's place keep their size on one line; the actions take the rest and fold. */
 .ui-group-switches { display: flex; min-width: 0; flex: none; flex-wrap: nowrap; align-items: center; gap: var(--space-md); }
 .ui-group-switches > * { flex: none; white-space: nowrap; }
 .ui-group-head:where([data-group="dash"] *):has(> .ui-group-switches) > .ui-group-actions:where([data-group="dash"] *) { position: relative; min-width: 0; flex: 1 1 0; justify-content: flex-end; }
 .ui-group-actions:where([data-group="dash"] *) > * { flex: none; white-space: nowrap; }
 
-/* GroupHeading: the strong section name. Geist at the strong weight in sentence case, a step under the row, its
-   count in data. (The quiet label is .ui-title; a phone's labels take this voice through --label-*.) */
-/* The section label, as every section heading is (DESIGN.md): Paper Mono capitals, letter-spaced, muted, at rest. */
 .ui-group-heading { min-width: 0; margin: 0; overflow: hidden; color: var(--muted-foreground);
   font: var(--label-weight) var(--label-size)/var(--leading-row) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); text-overflow: ellipsis; white-space: nowrap; }
 .ui-group-heading .ui-count { margin-left: var(--space-md); }
@@ -88,8 +77,6 @@
 .ui-group-action .ui-count { margin-left: auto; padding-left: var(--space-lg); }
 .ui-group-actions:where([data-group="dash"] *) > .ui-counts:where([data-counts="list"]) { padding-inline: var(--space-md); font-size: var(--text-caption); }
 
-/* Rows: the sidebar's, at a page. */
-/* A page has room for a taller row than the sidebar: two units at least, the sidebar's where that is taller (a phone). */
 .ui-row:where([data-density="list"]) { min-width: 0; min-height: max(var(--row-min), calc(2.03125 * var(--u-space))); flex: none; padding: var(--space-2xs) var(--row-inset); font-size: var(--row-text); text-decoration: none; }
 .ui-row:where([data-density="list"]):is(button, a):is(:focus-visible, :active, [data-expanded], [data-held]), .ui-row:where([data-density="list"]):is([data-current], [aria-current="true"], [aria-current="page"]) { outline: none; background: var(--border); color: var(--foreground); }
 @media (hover: hover) { .ui-row:where([data-density="list"]):is(button, a):is(:hover, :focus-visible, :active, [data-expanded], [data-held]) { outline: none; background: var(--border); color: var(--foreground); } }
@@ -99,7 +86,6 @@
 .ui-row-context:where([data-density="list"] *) { min-width: 0; flex: 1 1 0; overflow: hidden; color: var(--muted-foreground); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
 .ui-row-context:where([data-density="list"] *) code { font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
 .ui-row-meta:where([data-density="list"] *) { flex: none; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); font-variant-numeric: tabular-nums; }
-/* A chat's harness mark in a row: greyed with its row, its own colours on the cursor (as a nav row's). */
 .ui-row:where([data-density="list"]):is(:focus-visible, [data-held]) .ui-thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; }
 @media (hover: hover) { .ui-row:where([data-density="list"]):is(:hover, :focus-visible, [data-held]) .ui-thread-harness-mark[data-lively] { color: var(--foreground); opacity: 1; } }
 .ui-row:where([data-density="list"]):is(:focus-visible) .ui-thread-harness-mark[data-lively] .ui-harness-mark-tinted { background-color: var(--harness-brand, currentColor); }
@@ -118,7 +104,6 @@
 .ui-note:where([data-note="dash"]) { margin: 0; padding: var(--space-md) var(--row-inset); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-note:where([data-note="dash"])[data-error] { color: var(--destructive); }
 
-/* Changes: the workspace panel's rows -- file mark, name, folder, counts, a status letter in its colour. */
 .ui-change-name { min-width: 0; flex: 0 1 auto; color: var(--foreground); }
 .ui-change-directory { min-width: 0; flex: 1; color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-change-status { width: var(--icon-sm); flex: none; color: var(--muted-foreground); font: var(--weight-strong) var(--text-caption)/var(--leading-row) var(--font-data); text-align: center; }
@@ -126,12 +111,10 @@
 .ui-counts:where([data-counts="list"]) { display: inline-flex; flex: none; gap: var(--space-xs); margin-left: auto; font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
 .ui-change-status[data-status="D"], .ui-counts:where([data-counts="list"]) [data-change="removed"] { color: var(--change-removed); }
 .ui-change-status:is([data-status="A"], [data-status="U"], [data-status="R"], [data-status="C"]), .ui-counts:where([data-counts="list"]) [data-change="added"] { color: var(--change-added); }
-/* Compact: under the muted chats, changes keep their colour only as a hint. */
 .ui-dash[data-compact] .ui-row:where([data-density="list"])[data-change-row] > svg { opacity: var(--opacity-rest); filter: grayscale(1); }
 .ui-dash[data-compact] .ui-change-name { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); }
 .ui-dash[data-compact] :is(.ui-row:where([data-density="list"])[data-change-row] .ui-counts:where([data-counts="list"]) [data-change], .ui-change-status) { color: var(--muted-foreground); }
 
-/* The folder shelf: project folders as folders, no box, the wash as cursor; two rows until all. */
 .ui-folder-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--dash-folder), 1fr)); gap: var(--space-2xs); }
 .ui-folder-shelf:not([data-all]) { grid-template-rows: repeat(2, auto); grid-auto-rows: 0; row-gap: 0; overflow: hidden; }
 .ui-dash[data-one-column]:not([data-compact]) .ui-folder-shelf { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -155,7 +138,6 @@
 /* The keyboard's cursor (the app's): a row left under a still pointer draws at rest until the pointer moves. */
 @media (hover: hover) { .ui-dash[data-keyboard-cursor] :is(.ui-row:where([data-density="list"]), .ui-dash-more, .ui-folder):hover:not(:focus-visible, [data-expanded], [data-held]) { background: transparent; } }
 
-/* One column: everything in one flow, ordered. */
 .ui-dash[data-one-column] .ui-dash-body { display: flex; width: calc(100% - 2 * var(--dash-gutter)); flex-direction: column; }
 .ui-dash[data-one-column] :is(.ui-dash-notice, .ui-dash-band) { order: 1; }
 .ui-dash[data-one-column] :is(.ui-dash-main, .ui-dash-aside) { display: contents; }
@@ -166,8 +148,6 @@
 .ui-dash[data-one-column] .ui-group:where([data-group="dash"])[data-order="list"] { order: 4; }
 .ui-dash[data-one-column] .ui-group:where([data-group="dash"])[data-order="rest"] { order: 5; }
 
-/* A phone: edge to edge at the phone's gutter, the composer docked at the foot (dock), quick actions a row of large
-   targets with their icons, the ⋯ in the chat header instead. */
 .ui-dash[data-compact] { overflow: hidden; }
 .ui-dash[data-compact] .ui-dash-body { width: 100%; min-width: 0; box-sizing: border-box; margin-inline: 0; overflow-y: auto;
   padding: var(--space-lg) var(--space-lg) calc(6.25 * var(--u-space) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); }
@@ -184,27 +164,17 @@
 .ui-change-status[data-conflict] { color: var(--destructive); }
 .ui-row:where([data-density="list"])[data-change-row][data-selected] { background: var(--tint); }
 
-/* A room (Dashboard room): the page's conversation and composer alone, at reading width, the conversation taking the
-   height the head leaves; on a phone the composer docks at the foot as a dashboard's does. */
 .ui-dash[data-room] { --dash-aside: 0px; --dash-gap: 0px; --dash-min: 0px; }
 .ui-dash[data-room] .ui-dash-body { grid-template-areas: "head" "notice" "band" "main"; grid-template-columns: minmax(0, var(--reading-width)); grid-template-rows: auto auto auto minmax(0, 1fr); }
-/* A room with no head (jbot's): the messages start right under the tab row, fading there as a chat's do. */
 .ui-dash[data-headless] .ui-dash-body { padding-top: 0; }
-/* A phone's room scrolls as a thread does: the messages run under the composer's dock (its own gradient at the foot),
-   the last one clearing its measured height, as a thread clears it. */
 .ui-dash[data-room][data-compact] .ui-dash-body { padding-bottom: 0; }
-/* A room's head is a line, not a page's masthead: its actions are icon buttons beside the name, on a phone too. */
 .ui-dash[data-room] .ui-dash-head { margin-bottom: var(--space-lg); }
 .ui-dash[data-room][data-compact] .ui-dash-head { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "glyph title actions" "glyph status actions"; }
-/* A row previewed in place (jbot's panel): Back and its way on, then the row as chat search previews it (Glance). */
 .ui-dash-peek { display: grid; gap: var(--space-md); padding-bottom: var(--space-md); }
 .ui-dash-peek-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
 .ui-dash-peek > .ui-glance { padding: 0 var(--row-inset); }
-/* jbot's panel: its day (and its spend) fixed at the top, the tab's groups scrolling under it. */
 .ui-dash-panel { display: flex; flex: 1 1 auto; flex-direction: column; gap: var(--space-sm); min-height: 0; }
-/* Its hairline runs the panel's whole width (--panel-inset: the panel's padding), not the column's. */
 .ui-dash-panel-top { display: grid; flex: none; gap: var(--space-sm); margin-inline: calc(-1 * var(--panel-inset, 0px)); padding: 0 var(--panel-inset, 0px) var(--space-sm); border-bottom: var(--hairline) solid var(--tint); }
-/* Its day and its spend, a clear step apart. */
 .ui-dash-panel-glance { display: flex; align-items: center; gap: var(--space-2xl); }
 .ui-dash-panel-day { flex: 1 1 auto; min-width: 0; }
 .ui-dash-panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin-inline: calc(-1 * var(--panel-inset, 0px)); padding-inline: var(--panel-inset, 0px); scrollbar-gutter: stable; scrollbar-width: thin; }

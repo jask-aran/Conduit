@@ -2,8 +2,7 @@ import { Show } from "solid-js";
 import * as Icons from "./icons";
 import { materialFileIconAsset, materialFolderIconAsset } from "./material-file-icons";
 
-/* A file's or folder's type, as Material's icon for it (a generic glyph where it has none). Not in the library's index:
-   its lookup table is large, so it loads with the views that list files (import "@/components/ui/file-marks"). */
+/* Not in the library's index: its lookup table is large, so it loads with the views that list files. */
 
 // Asset URLs keep SVG data out of the JavaScript chunk and its parse cost.
 const materialIconAssets = import.meta.glob<string>(

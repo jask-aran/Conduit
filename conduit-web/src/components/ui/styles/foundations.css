@@ -1,17 +1,11 @@
 @import "@fontsource-variable/inconsolata";
-/* Paper Mono (OFL, fonts/PaperMono-OFL.txt): the section labels' face. Meslo LG S Nerd Font Mono
-   (fonts/MesloLGSNerdFont-LICENSE.txt): the terminal's, for Nerd Font glyphs; fetched only once something draws in it. */
+/* Paper Mono (OFL, fonts/PaperMono-OFL.txt); Meslo LG S Nerd Font Mono (fonts/MesloLGSNerdFont-LICENSE.txt). */
 @font-face { font-family: "Meslo Nerd Font Mono"; src: url("../fonts/MesloLGSNerdFontMono-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
 @font-face { font-family: "Paper Mono"; src: url("../fonts/PaperMono-Variable.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: swap; }
-/* Density, measured from the app: text and spacing grow 1.25x on a phone, icons barely; popover rows and the frost
-   pill take their own measured sizes (rows ~1.8x, for a finger). */
-/* The faces, by role (Foundations · Fonts switches them; --font-sans is styles.css's). Labels, keycaps, the leader's
-   crumbs, data and code take the shipped Paper Mono so they look the same on every system; the terminal takes Meslo. */
+/* Labels, data and code take the shipped Paper Mono so they look the same on every system. */
 :root {
-  /* Weights: lift is a touch heavier, for text over frost (it reads thinner there) and small controls; strong, for
-     headings, buttons and values; current, where you are. */
+  /* Lift is a touch heavier for text over frost, where it reads thinner. */
   --weight-light: 300; --weight-rest: 400; --weight-lift: 500; --weight-strong: 600; --weight-current: 660;
-  /* The transcript's face (reading column, composer field, dictation captions); the app sets it from Settings. */
   --font-transcript: var(--font-sans);
   --font-label: "Paper Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
   --font-data: "Paper Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
@@ -19,8 +13,6 @@
   --font-terminal: "Meslo Nerd Font Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
   --font-wordmark: "Conduit Wordmark", sans-serif;
 }
-/* A chat's reading column (ChatScroller): width, gutter, and how far a table (or code, with --transcript-code-bleed)
-   may bleed past it; set from Settings presets. It is the reading width, not the composer's typing measure. */
 :root {
   --transcript-column-width: var(--reading-width);
   --transcript-column-gutter: var(--page-gutter);
@@ -28,57 +20,37 @@
   /* The bleed centres on the column, a little left of the pane's centre: the gutter on both sides keeps it inside. */
   --transcript-wide-max: calc(100cqw - 2 * var(--transcript-column-gutter));
 }
-/* Motion (DESIGN Motion): three curves and two durations -- quick out, gentle in. Arriving, opening and settling are
-   gentle; leaving and folding quick and accelerating; a change in place quick and plain. Each piece owns its moves,
-   from these tokens and the shapes below; reduced motion drops the move and keeps the end state. */
+/* Arriving, opening and settling are gentle; leaving and folding quick and accelerating; a change in place quick and
+   plain. */
 :root {
   --ease-arrive: cubic-bezier(.2, .8, .2, 1);
   --ease-leave: cubic-bezier(.4, 0, 1, 1);
   --ease-change: ease;
-  /* Room closing under something following it (the transcript as the composer's room goes): even at both ends, so no
-     frame carries much of the move. */
+  /* Even at both ends, so no frame carries much of the move. */
   --ease-room: cubic-bezier(.45, 0, .55, 1);
-  /* A chat's stack: transcript, composer over its foot, a panel over both (Tray, Ledge), Scroll to latest over all. */
   --stack-transcript: 1; --stack-composer: 2; --stack-over: 3; --stack-ride: 4;
-  /* The page's stack, bottom to top; a piece's own stacking stays local. The sidebar's pane over what slides under its
-     edge; the dock over the panes when it floats. */
   --layer-nav: 20;
   --layer-dock: 40;
-  /* A phone's drawers (sidebar's, then the workspace panel's over it), each one's Backdrop just under it. */
   --layer-drawer: 55;
-  /* How far a phone's page slides off the sidebar under it, leaving the page's edge showing. */
   --drawer-width: 85vw;
-  /* A dragged tab's drop wash. */
   --layer-drop: 60;
   --layer-panel: 70;
-  /* The region cue. */
   --layer-cue: 73;
-  /* The leader's dim, its card one above, under a dialog. */
   --layer-leader: 74;
-  /* The pill a dragged tab or row travels as. */
   --layer-drag: 80;
   --layer-dialog: 100;
-  /* A popover (menu, submenu, picker) over everything it opens from, a dialog included. */
   --layer-popover: 105;
   --layer-notification: 110;
-  /* The feedback tool marks anything, a toast included. */
   --layer-feedback: 120;
-  --duration-quick: 150ms;   /* leaving, folding away; a change in place */
-  --duration-gentle: 250ms;  /* arriving, opening, settling into place */
-  /* Expand: what opens in place under its row slides on its measured height, both ways, on the one curve. */
+  --duration-quick: 150ms;
+  --duration-gentle: 250ms;
   --duration-fold: 240ms; --ease-fold: cubic-bezier(.32, .72, 0, 1);
-  /* Settle: panes easing to new widths start from rest; a curve that starts at speed moves a pane hundreds of pixels
-     in its first frame, which reads as a snap. */
+  /* Starts from rest: a curve that starts at speed moves a pane hundreds of pixels in its first frame, which reads as
+     a snap. */
   --ease-settle: cubic-bezier(.2, 0, 0, 1);
-  /* Travel: something large crossing the page (the composer docking after a first send, a split opening), on
-     --ease-arrive. */
   --duration-travel: 400ms;
-  /* Effects keep their own time: a voice level, a copy's wash, a spinner (three times slower under reduced motion),
-     a recording's pulse, something live breathing. */
   --duration-follow: 120ms; --duration-flash: 700ms; --duration-spin: 800ms; --duration-pulse: 1.2s; --duration-breathe: 1.6s;
-  /* Haptics (haptics.ts): platform primitives, `name scale [delay ms]`, comma separated -- crisp or a thump, never a
-     buzz; the person's strength scales them. tick: a side chosen, a fold. click: a press that acts. thud: a long press
-     taking hold. settle: something put away. rise: a change committed (Save). knock: one that cannot be taken back. */
+  /* Parsed by haptics.ts: `name scale [delay ms]`, comma separated. */
   --haptic-tick: tick .6;
   --haptic-click: click .7;
   --haptic-thud: thud .9;
@@ -86,19 +58,10 @@
   --haptic-rise: quick-rise .5, click .8 50;
   --haptic-knock: thud .8, thud .55 90;
 }
-/*
- * Motion invariants; a new state or piece is added within them, never as an exception:
- * 1. Layers: a piece's parts stack in one order in every state; what is above stays above while anything fades.
- * 2. One transition list per part, in its base rule, naming every property any state moves; a state sets only values
- *    and timing variables, so no state can drop a property's move and snap it.
- * 3. Room opens before a part fades in and goes only once it has faded out (or a clip reveals it): nothing is squeezed.
- * 4. One spot, one thing: two parts that share a spot never show at once.
- * 5. A change is one move from its first frame; parts that answer it move with it, over its duration.
- * 6. A frosted part fades itself, never through an ancestor: an ancestor's opacity under 1 becomes the frost's
- *    backdrop, so it blurs nothing until the fade ends. Whatever holds a frost moves only its room.
- * Timing variables never inherit, so a parent's state cannot retime a child: --move/--move-ease/--move-delay
- * (geometry), --fade/--fade-ease/--fade-delay (opacity), --fold-delay (room), --hide-delay (visibility, once faded).
- */
+/* One transition list per part, in its base rule, naming every property any state moves; a state sets only values
+   and these timing variables, so no state can drop a property's move and snap it. They never inherit, so a parent's
+   state cannot retime a child. A frosted part fades itself, never through an ancestor: an ancestor's opacity under 1
+   becomes the frost's backdrop, so it blurs nothing until the fade ends. */
 @property --move { syntax: "*"; inherits: false; }
 @property --move-ease { syntax: "*"; inherits: false; }
 @property --move-delay { syntax: "*"; inherits: false; }
@@ -107,52 +70,32 @@
 @property --fade-delay { syntax: "*"; inherits: false; }
 @property --fold-delay { syntax: "*"; inherits: false; }
 @property --hide-delay { syntax: "*"; inherits: false; }
-/* The shapes a move takes: a fade, or a fade that rises --rise and drops back the way it came. */
 @keyframes ui-fade-in { from { opacity: 0; } }
 @keyframes ui-fade-out { to { opacity: 0; } }
 @keyframes ui-rise { from { opacity: 0; transform: translateY(var(--rise, var(--space-md))); } }
 @keyframes ui-drop { to { opacity: 0; transform: translateY(var(--rise, var(--space-md))); } }
-/* In place: grows from a fraction (--grow), or steps in from beside (--slide; the end, so it slides back toward the start). */
 @keyframes ui-grow { from { opacity: 0; transform: scale(var(--grow, .6)); } }
 @keyframes ui-slide { from { opacity: 0; transform: translateX(var(--slide, var(--space-md))); } }
-/* A word arriving in what is read (an answer streaming, captions) comes in by its colour, not its opacity. */
 @keyframes ui-word-in { from { color: transparent; } }
 @media (prefers-reduced-motion: reduce) {
   :is(.ui-menu, .ui-card, .ui-toast, .ui-overlay, .ui-rider, .ui-chip, .ui-scrim, .ui-step-item, .ui-message, .ui-message-foot, .ui-rider-button, .ui-trace-fold, .ui-transcript-row):is([data-entering], [data-leaving]), .ui-message[data-entering] > *, .ui-answer-word, .ui-answer-math-in, .ui-toolbar-primary > *, .ui-toolbar-end > [aria-pressed="true"] { animation: none; }
   .ui-fold-chevron, .ui-rider-button, .ui-menu, .ui-composer-slot > .ui-composer-under, .ui-composer-slot > .ui-composer-stack, .ui-composer-slot > .ui-composer-stack > *, .ui-toolbar-end > .ui-toolbar-aside { transition: none; }
 }
-/*
- * Scale: a density gives its unit (16px), and --scale-ui scales it: the user's Interface size (--ui-scale, Settings ·
- * Interface) times the region's own size (--scale-region). Each region -- chrome (the default), sidebar, floating
- * frost, composer, transcript -- has a size per density, ours to tune (gallery Space · Scale); the user moves them all
- * at once. Every gap is a Space step in the unit. Rows keep their measured height and text, never below 40px on a phone.
- */
 :root {
   --scale-chrome-desktop: 1; --scale-sidebar-desktop: 1; --scale-frost-desktop: 1; --scale-composer-desktop: 1; --scale-transcript-desktop: 1;
   --scale-chrome-phone: 1; --scale-sidebar-phone: 1; --scale-frost-phone: 1; --scale-composer-phone: 1; --scale-transcript-phone: 1;
 }
-/* The phone's unit at any density: what a finger needs (the pills, the same size wherever they sit). */
 :root { --u-phone: 16px; --u-touch: calc(var(--u-phone) * var(--scale-ui)); }
-/* Lines, in whole pixels at any scale: hairline (borders, rules), thin stroke (spinner, check box), stroke (a thumb's
-   ring, a wave's bar), track (slider, progress bar). */
 :root { --hairline: 1px; --stroke-thin: 1.5px; --stroke: 2px; --track-size: 4px; }
-/* Leading: none (keycap, glyph box), tight (titles, names), row (rows, toasts), text (typing, messages), code, reading
-   (the answer). */
 :root { --leading-none: 1; --leading-tight: 1.3; --leading-row: 1.4; --leading-text: 1.5; --leading-code: 1.6; --leading-reading: 1.66; }
-/* Tones: how far text and lines fall back from --foreground toward transparent (oklch) -- strong (a glance's answer),
-   rest, quiet (a value beside the strong one), faint (struck out), line (a field's hover border), wash (destructive). */
 :root { --tone-strong: 20%; --tone-rest: 32%; --tone-quiet: 45%; --tone-faint: 62%; --tone-line: 70%; --tone-wash: 85%;
-  /* Opacities of a whole part: rest (a mark), muted (discarded, uploading), disabled (a control, a planned step),
-     faint (a pulse's low); a hover lightens or darkens by one step. */
   --opacity-rest: .78; --opacity-muted: .55; --opacity-disabled: .45; --opacity-faint: .35; --brighten: 1.12; --darken: .88; }
-/* The reading column: the composer's and the transcript's width unless their pane declares --composer-width. */
 :root { --reading-width: 47.5rem; }
 :root, [data-density="desktop"] {
   --u-base: 16px; --row-min-floor: 0px; --row-min-units: 1.875; --row-text-units: 0.8125;
   --scale-chrome: var(--scale-chrome-desktop); --scale-sidebar: var(--scale-sidebar-desktop); --scale-frost: var(--scale-frost-desktop);
   --scale-composer: var(--scale-composer-desktop); --scale-transcript: var(--scale-transcript-desktop);
   --frost-inset-units: .25; --nav-label-pad-units: .25;
-  /* A section label: Paper Mono capitals at desktop, where the type around it is small and tight. */
   --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em;
 }
 [data-density="phone"] {
@@ -160,7 +103,7 @@
   --scale-chrome: var(--scale-chrome-phone); --scale-sidebar: var(--scale-sidebar-phone); --scale-frost: var(--scale-frost-phone);
   --scale-composer: var(--scale-composer-phone); --scale-transcript: var(--scale-transcript-phone);
   --frost-inset-units: .375; --nav-label-pad-units: .375;
-  /* Desktop's label, declared again so its size resolves at the phone's unit (scaled up like everything else). */
+  /* Declared again so the label's size resolves at the phone's unit. */
   --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em;
 }
 @media (--conduit-phone-layout) { :root {
@@ -170,8 +113,8 @@
   --frost-inset-units: .375; --nav-label-pad-units: .375;
   --label-face: var(--font-label); --label-weight: var(--weight-rest); --label-case: uppercase; --label-tracking: .07em;
 } }
-/* The regions: each takes its own size and the units are worked out again inside it. In the transcript a row's text
-   (a trace, a trail, a table) is a step under the body on both densities, not a finger list's. */
+/* The units are worked out again inside each region. In the transcript a row's text stays a step under the body on
+   both densities, not a finger list's. */
 :root, [data-density] { --scale-region: var(--scale-chrome); }
 .ui-nav-pane { --scale-region: var(--scale-sidebar); }
 .ui-menu, .ui-overlay, .ui-card, .ui-toast-frame { --scale-region: var(--scale-frost); }
@@ -180,47 +123,29 @@
 :root, [data-density], .ui-nav-pane, .ui-menu, .ui-overlay, .ui-card, .ui-toast-frame, .ui-composer-stack, .ui-phone-composer, .ui-transcript, .ui-read, .ui-bubble, .ui-answer {
   --scale-ui: calc(var(--ui-scale, 1) * var(--scale-region));
   --u-space: calc(var(--u-base) * var(--scale-ui)); --u-type: var(--u-space); --u-icon: var(--u-space);
-  /* Space: nine steps, in the unit. */
   --space-2xs: calc(0.125 * var(--u-space)); --space-xs: calc(0.25 * var(--u-space)); --space-sm: calc(0.375 * var(--u-space));
   --space-md: calc(0.5 * var(--u-space)); --space-lg: calc(0.75 * var(--u-space)); --space-xl: var(--u-space);
   --space-2xl: calc(1.25 * var(--u-space)); --space-3xl: calc(1.5 * var(--u-space)); --space-4xl: calc(2 * var(--u-space));
-  /* Flow: a transcript's vertical rhythm, by how two neighbours relate, each looser (DESIGN Transcript › Rhythm):
-     lines of a block, a part attached above, blocks of a text, a change of kind, message to reply, exchange to next. */
   --flow-line: var(--space-2xs); --flow-attached: var(--space-sm); --flow-block: var(--space-lg);
   --flow-step: var(--space-xl); --flow-exchange: var(--space-2xl); --flow-turn: var(--space-4xl);
-  /* Rows of work keep the trail's gap; the answer stands clear of the work it came from, twice a step. */
   --flow-work: var(--space-2xs); --flow-answer: var(--space-4xl);
-  /* Icons: a × in a tiny control, a chevron, the icon, a pill's, a ring, and a dot (a status). */
   --icon-xs: calc(0.6875 * var(--u-icon)); --icon-sm: calc(0.875 * var(--u-icon)); --icon: var(--u-icon); --icon-lg: calc(1.125 * var(--u-icon)); --icon-xl: calc(1.5 * var(--u-icon)); --icon-dot: calc(0.5 * var(--u-icon));
-  /* Controls (an icon button is as wide as tall): 2xs is a keycap, a slider thumb; tool, a workspace tool's and a file
-     header's. */
   --control-2xs: calc(1.125 * var(--u-space)); --control-xs: calc(1.5 * var(--u-space)); --control-tool: calc(1.75 * var(--u-space)); --control-sm: calc(1.875 * var(--u-space)); --control: calc(2.25 * var(--u-space)); --control-lg: calc(2.5 * var(--u-space));
-  /* Measures: widths (or scrolling heights) of a panel, a column, a card, an overlay, the wide reading column. */
   --measure-2xs: calc(8 * var(--u-space)); --measure-xs: calc(12 * var(--u-space)); --measure-sm: calc(15 * var(--u-space)); --measure-md: calc(20 * var(--u-space));
   --measure-lg: calc(25 * var(--u-space)); --measure-xl: calc(30 * var(--u-space)); --measure-2xl: calc(40 * var(--u-space)); --measure-3xl: calc(60 * var(--u-space));
   --measure-dialog-large: calc(60 * var(--u-space));
-  /* A series' height: the room its columns grow in (Usage's days). */
   --series-height: calc(4 * var(--u-space));
-  /* Rows: their measured height and text, in the unit. */
   --row-text: calc(var(--row-text-units) * var(--u-type)); --row-min: max(var(--row-min-floor), calc(var(--row-min-units) * var(--u-space)));
   --row-inset: var(--space-md); --row-pad: var(--space-sm) var(--row-inset); --row-gap: var(--space-md);
-  /* A frost surface's inset and a nav label's padding: xs on desktop, sm on a phone, in the region's unit. */
   --frost-inset: calc(var(--frost-inset-units) * var(--u-space)); --nav-label-pad: calc(var(--nav-label-pad-units) * var(--u-space)) var(--space-md);
-  /* The room a column keeps from a narrower pane's edges. */
   --page-gutter: calc(3 * var(--u-space));
   --nav-indent: calc(1.875 * var(--u-space));
-  /* A popover's distance from the control that opens it. */
   --popover-gap: var(--space-md);
 }
-/* Radii (DESIGN.md rounded): inset, a keycap's or inline code's; control, rows, buttons, inputs, chips; surface,
-   popovers, cards, overlays, nesting their rows; message, the composer, its riders and the user's message, at the
-   transcript's scale and under half a one-line bubble's height, so one line is a rounded box, never a pill; round,
-   the phone's pill groups and small bits inside controls. */
+/* --radius-message stays under half a one-line bubble's height, so one line is a rounded box, never a pill. */
 :root, [data-density], .ui-nav-pane, .ui-menu, .ui-overlay, .ui-card, .ui-toast-frame, .ui-composer-stack, .ui-phone-composer, .ui-transcript, .ui-read, .ui-bubble, .ui-answer {
   --radius-control: calc(0.5 * var(--u-space)); --radius-inset: calc(0.6 * var(--radius-control)); --radius-surface: calc(var(--radius-control) + var(--frost-inset));
   --radius-message: calc(1.125 * var(--u-base) * var(--ui-scale, 1) * var(--scale-transcript)); --radius-round: 999px;
-  /* Type sizes by role (Type · Scale): label (section labels, keycaps); caption (details, hints, data); row (rows,
-     controls); body (messages, typing, titles); heading (a page's title); display (the dashboard's). */
   --text-label: calc(0.625 * var(--u-type)); --text-caption: calc(0.75 * var(--u-type)); --label-size: var(--text-label);
   --text-row: var(--row-text); --text-body: var(--u-type); --text-title: calc(1.1875 * var(--u-type)); --text-heading: calc(1.40625 * var(--u-type)); --text-display: calc(1.71875 * var(--u-type));
   --pill-icon: var(--icon-lg);
@@ -231,45 +156,34 @@
   --frost-fill: #ffffff2b;
   --frost-blur: blur(24px);
   --frost-highlight: inset 0 1px 0 rgb(255 255 255 / 50%), inset 0 -1px 0 rgb(255 255 255 / 10%);
-  /* Elevation: rest, laid over what it belongs to (a tooltip, a docked card); raised, over everything round it (a
-     floating dock, a popover); side, a pane slid over its neighbour from the left. */
   --lift-rest: 0 8px 32px rgb(0 0 0 / 10%);
   --lift-raised: 0 24px 70px rgb(0 0 0 / 38%);
   --lift-side: 12px 0 28px rgb(0 0 0 / 20%);
   --frost-lift-rest: var(--lift-rest);
   --frost-lift-raised: var(--lift-raised);
-  --status-success: oklch(0.62 0.17 145); --status-warn: oklch(0.75 0.15 75); --status-unread: oklch(0.68 0.17 250); /* a row's live state */
-  /* Syntax roles read the selected code palette. */
+  --status-success: oklch(0.62 0.17 145); --status-warn: oklch(0.75 0.15 75); --status-unread: oklch(0.68 0.17 250);
   --syntax-keyword: var(--code-purple); --syntax-string: var(--code-green); --syntax-number: var(--code-orange);
   --syntax-title: var(--code-blue); --syntax-variable: var(--code-red); --syntax-type: var(--code-yellow); --syntax-meta: var(--code-orange);
   --syntax-comment: var(--code-comment);
-  --frost-sheen: rgb(255 255 255 / 10%); --frost-glow: rgb(255 255 255 / 14%); /* the aura's light from above, its rim */
-  /* Over an image: a control's ground and glyph, and the shadow that keeps a glyph read on any picture. */
+  --frost-sheen: rgb(255 255 255 / 10%); --frost-glow: rgb(255 255 255 / 14%);
   --on-media-ground: rgb(0 0 0 / 62%); --on-media: #fff; --glyph-shadow: drop-shadow(0 0 var(--stroke) rgb(0 0 0 / 65%));
-  --frost-core-ground: oklch(0.3 0.006 264 / 90%); /* a mid grey, nearly opaque: it stops what is behind, without going dark */
+  --frost-core-ground: oklch(0.3 0.006 264 / 90%);
   --frost-tint: oklch(1 0 0 / 10%);
-  /* The dim behind a desktop overlay (the scrim), the leader's spotlight, the phone's open sidebar. */
   --dim: rgb(0 0 0 / 42%);
-  /* The region cue's dim, which reads without hiding the page. */
   --dim-faint: rgb(0 0 0 / 18%);
-  /* Fog: the pane's ground thinned and blurred over a drop about to land; unlike a dim, the content stays placeable. */
   --fog: color-mix(in oklch, var(--background), transparent 22%);
   --fog-blur: blur(9.6px);
-  /* Under: a piece under something opened beside it (a submenu, a pill's menu) dims in place; one for Pill and Menu. */
   --dim-under: saturate(.6) opacity(.38);
   --live: oklch(0.62 0.17 145); --warn: oklch(0.75 0.15 75);
 }
 
-/* What a surface gives its controls: --tint, its washes and lines; --well, the fill under an input or outline button
-   (none over frost, its own fill); --field, a tool field's fill (a search LeadInput), never frost on frost;
-   `initial` lets a ground inside frost take its tint again. */
-/* --weight-action: a ghost button's words. On the ground its wash and place make it a button, so it is strong; over
-   frost, where it has no fill at rest, strong words read as headings, so it is the lifted weight. */
+/* `--field: initial` lets a ground inside frost take its tint again. --weight-action is lifted over frost, where a
+   ghost button has no fill at rest and strong words read as headings. */
 :root, [data-surface="ground"] { --tint: var(--border); --well: color-mix(in oklch, var(--background), black 25%); --field: initial; --weight-action: var(--weight-strong); }
 [data-surface="frost"] { --tint: var(--frost-tint); --well: transparent; --field: transparent; --weight-action: var(--weight-lift); }
 
-/* A scroller's native bar: the standard properties win over WebKit's painting when not auto, so Firefox keeps a thin
-   bar and Chrome/Safari the shared thumb each piece draws. */
+/* The standard properties win over WebKit's painting when not auto, so Firefox keeps a thin bar and Chrome/Safari
+   the thumb each piece draws. */
 :root {
   --native-scrollbar-width: thin;
   --native-scrollbar-color: color-mix(in oklch, var(--muted-foreground), transparent 42%) transparent;
@@ -278,31 +192,26 @@
   :root { --native-scrollbar-width: auto; --native-scrollbar-color: auto; }
 }
 
-/* Never a ring (DESIGN Interaction): keyboard focus is the wash each piece draws on :focus-visible. Not scoped with
-   [class*="ui-"] *: that ancestor test restyles everything inside on any class change (~2.5 ms per pane ease end). */
+/* Keyboard focus is the wash each piece draws on :focus-visible. Not scoped with [class*="ui-"] *: that ancestor
+   test restyles everything inside on any class change. */
 :is(:focus, :focus-visible) { outline: none !important; }
-/* The section label, for every section: popovers, cards, riders, the sidebar. */
 .ui-title, .ui-title-text, .ui-nav-label, .ui-crumbs > button { color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
 
-/* Tabular figures wherever numbers tick or line up. */
 :is(.ui-keycap, .ui-choice-key, .ui-hints, .ui-overlay-hints, .ui-chip-copy small, .ui-seg small, .ui-slider-value) { font-variant-numeric: tabular-nums; }
-/* Expand: what opens and shuts in place under its row; only its height moves (expand.tsx). */
 .ui-expand { overflow: hidden; overflow-anchor: none; }
 .ui-steps { box-sizing: border-box; }
 .ui-steps[data-moving] { overflow: hidden; }
-/* A fold's chevron turns a quarter as its control opens, or a half with data-turn=half. */
 .ui-fold-chevron { transition: rotate var(--duration-quick) var(--ease-change); }
 :is([aria-expanded="true"] > .ui-fold-chevron, .ui-fold-chevron[data-open]) { rotate: 90deg; }
 :is([aria-expanded="true"] > .ui-fold-chevron, .ui-fold-chevron[data-open])[data-turn="half"] { rotate: 180deg; }
 
-/* Utilities, early in the cascade so a piece's own rule still wins. */
+/* Early in the cascade so a piece's own rule still wins. */
 .ui-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-size-icon { width: var(--icon); height: var(--icon); }
 .ui-size-icon-sm { width: var(--icon-sm); height: var(--icon-sm); }
 [data-wash]:focus-visible { background: var(--tint); }
 @media (hover: hover) { [data-wash]:hover { background: var(--tint); } }
 
-/* Recipes many pieces' parts share: an icon's box at each size, one line cut short, a box filling its own. */
 .ui-field-label > svg, .ui-approval-done > .ui-approval-icon, .ui-report-end > svg, .ui-connection-address-mark svg, .ui-connection-status-mark > svg, .ui-group-toggle > svg, .ui-group-action > svg, .ui-row-lead:where([data-density="list"] *) > :is(svg, img), .ui-pane-header:where([data-header="file"]) :is(.ui-icon-button:where([data-icon-button="file"]), .ui-icon-button:where([data-icon-button="pane"])):not(.ui-pane-tabs *) > svg, .ui-row-end:where([data-density="nav"] *) > svg, .ui-status > .ui-spinner, .ui-client-mark > svg, .ui-chain-mark > svg, .ui-setting-context > svg, .ui-icon-button:where([data-icon-button="tab"]) > svg, .ui-icon-button:where([data-icon-button="tool"]) > svg, .ui-row-action > svg, .ui-step-icon > .ui-spinner, .ui-message-foot .ui-button[data-size^="icon"] svg, .ui-file-swap svg, .ui-window-controls > button svg, .ui-title-bar .ui-spinner { height: var(--icon-sm); width: var(--icon-sm); }
 .ui-dash-quick-action > svg, .ui-report-card .ui-row-lead, .ui-browser-summary > svg, .ui-attachment-media svg, .ui-input[data-look="icon"] > svg, .ui-seg button svg, .ui-icon-button:where([data-icon-button="dash"]) > svg, .ui-nav-toggle svg, .ui-row-lead:where([data-density="nav"] *) > .ui-thread-harness-mark, .ui-network-mark > svg, .ui-icon-button:where([data-icon-button="pane"]) > svg, :is(.ui-actions:where([data-actions="rider"]), .ui-rider-top) .ui-button[data-size^="icon"] svg, .ui-line-more svg, .ui-rider-button[data-labelled] svg, .ui-toast-icon svg { height: var(--icon); width: var(--icon); }
 .ui-keycap > svg, .ui-agent-report > svg, .ui-day-quiet-label > svg, .ui-code > figcaption .ui-button svg, .ui-keycap-remove svg, .ui-row:where([data-density="menu"])[data-field] > .ui-chevron, .ui-reference > .ui-button svg, .ui-chip-remove svg, .ui-row-end:where([data-density="tree"] *) > svg, .ui-envelope-open > svg { height: var(--icon-xs); width: var(--icon-xs); }

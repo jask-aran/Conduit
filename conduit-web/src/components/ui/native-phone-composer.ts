@@ -19,7 +19,6 @@ function bezier(value: string): Bezier {
   if (a === undefined || b === undefined || c === undefined || d === undefined || ![a, b, c, d].every(Number.isFinite) || a < 0 || a > 1 || c < 0 || c > 1) throw new Error("Invalid composer easing");
   return [a, b, c, d];
 }
-/** Live Foundations tokens; no native timing constants. */
 function motionSpec(element: Element = document.documentElement) {
   return { quick: duration("--duration-quick", element), gentle: duration("--duration-gentle", element),
     arrive: bezier(easing("--ease-arrive", element)), leave: bezier(easing("--ease-leave", element)),
@@ -87,7 +86,6 @@ export function describe(root: HTMLElement) {
         radius: parseFloat(fieldStyle.borderRadius), iconSize: icon ? icon.getBoundingClientRect().width : 18 } };
   } finally { copy.remove(); }
 }
-/** Resolve the WebView's default selection and the textarea's caret into sRGB for the native field. */
 function fieldColours(input: HTMLTextAreaElement) {
   const probe = document.createElement("span");
   probe.style.color = "Highlight"; input.parentElement?.append(probe);
@@ -153,7 +151,7 @@ export function mirror(root: HTMLElement, input: HTMLTextAreaElement, plugin: Na
       if (stopped) { await plugin.end(); return; }
       ready = true; preference.addEventListener("change", sync);
       // Only what changes where the parts end up (row width, draft lines), not the parts that move: describing the
-      // composer on each frame of a move cost the frame. State changes come through the attributes.
+      // composer on each frame of a move costs the frame. State changes come through the attributes.
       for (const element of [root.querySelector(".ui-phone-row"), input]) if (element) sizes.observe(element);
       attributes.observe(root, { subtree: true, attributes: true, childList: true }); sync();
     } catch (error) { restore(); throw error; }

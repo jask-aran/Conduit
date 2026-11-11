@@ -1,16 +1,11 @@
-/* Nav: the sidebar on the frame (DESIGN Interaction, List row): a head, a list and a foot, and the narrow rail. Rows
-   rest grey; the cursor is the wash and white; current is white at the current weight, no fill, and so is the folder
-   holding it (within); open beside is white at the resting weight. */
 @font-face { font-family: "Conduit Wordmark"; src: url("../../../client/assets/fonts/druk-wide-web-super.woff2") format("woff2"); font-style: normal; font-weight: 400; font-display: swap; }
 :root, [data-density], .ui-nav-pane {
-  /* The pane open and folded to its rail, in the sidebar's size. */
   --nav-width: calc(18.125 * var(--u-space)); --nav-rail-width: calc(3.25 * var(--u-space));
   --nav-brand: calc(2.625 * var(--u-space)); --nav-wordmark: calc(1.171875 * var(--u-type));
 }
-/* The top line every pane header centres on, the sidebar's too: the chrome's, so they line up at any sidebar size. */
+/* The chrome's line, so every pane header and the sidebar line up at any sidebar size. */
 :root, [data-density] { --nav-line: var(--control); }
 
-/* The pane. Its width moves on the quick change (--duration-quick, --ease-change); data-instant skips it. */
 .ui-nav-pane { position: relative; z-index: var(--layer-nav); width: var(--nav-width); flex: none; contain: layout; overflow: hidden; transition: width var(--duration-quick) var(--ease-change); }
 .ui-nav-pane[data-instant] { transition: none; }
 .ui-nav-pane-body { position: absolute; inset: 0 auto 0 0; display: flex; width: var(--nav-width); flex-direction: column; overflow: hidden; background: transparent; color: var(--foreground); }
@@ -20,13 +15,12 @@
 /* The head: centred on the top line, so its icons sit level with a pane header's and the wordmark on its baseline. */
 .ui-nav-head { display: flex; align-items: center; gap: var(--space-2xs); padding: calc(var(--nav-line) - var(--nav-brand) / 2) var(--space-md) var(--space-2xs); }
 .ui-nav-head > .ui-seg { order: 3; flex: none; }
-/* A pill of the head's own (a phone's jbot), before the section switch. */
 .ui-nav-head > .ui-pill { order: 2; flex: none; margin-left: auto; margin-right: var(--space-xs); }
 .ui-nav-brand { display: flex; order: 1; min-width: 0; height: var(--nav-brand); flex: 1; align-items: center; border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-xs); color: inherit; }
 .ui-nav-brand > span { font: var(--weight-rest) var(--nav-wordmark)/1 var(--font-wordmark); letter-spacing: 0; }
 
-/* The list: scrolled on the compositor (below 1.5x a transparent scroller is not, and each frame re-layered the page).
-   Scroll anchoring is off while a folder slides: every frame moved the scroll, and the rows above jumped. */
+/* will-change: below 1.5x a transparent scroller is not scrolled on the compositor, and each frame re-layers the
+   page. Scroll anchoring is off while a folder slides, or every frame moves the scroll and the rows above jump. */
 .ui-nav-list { min-height: 0; flex: 1; overflow-y: auto; padding: var(--space-sm) var(--space-md); scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); will-change: scroll-position; overflow-anchor: none; }
 .ui-nav-foot { padding: var(--space-md); border-top: var(--hairline) solid var(--border); }
 
@@ -37,10 +31,8 @@
 .ui-nav-away::before { margin-right: var(--space-sm); content: "·"; }
 .ui-group:where([data-group="nav"])[data-away] > :not(.ui-nav-label) { opacity: var(--opacity-muted); }
 
-/* A row. A folder's row is a row holding its link and its chevron. */
 .ui-row:where([data-density="nav"]) { min-width: 0; padding: var(--space-2xs) var(--row-inset); line-height: var(--leading-text); }
 .ui-row:where([data-density="nav"])[data-indent] { padding-left: var(--nav-indent); }
-/* The second level's icon sits where the first level's text starts. */
 .ui-row:where([data-density="nav"])[data-indent="2"] { padding-left: calc(var(--nav-indent) + var(--icon) + var(--row-gap)); }
 .ui-row-lead:where([data-density="nav"] *) { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; color: var(--muted-foreground); }
 .ui-row-title:where([data-density="nav"] *)[data-stacked] { display: flex; flex-direction: column; line-height: 1.2; }
@@ -53,7 +45,6 @@
 .ui-nav-folder, .ui-nav-folder > .ui-row-end { position: relative; }
 .ui-nav-toggle { display: grid; width: 100%; height: 100%; place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; color: var(--muted-foreground); cursor: pointer; }
 
-/* The cursor: the wash and white. Held: the window is away and the cursor waits where it was. */
 /* On a phone a row is never washed by a touch: a tap goes somewhere (the current row says where), and a long press
    opens its menu. Pressed or with its menu open, a row is washed only where a pointer hovers. */
 .ui-row:where([data-density="nav"]):is(:focus-visible, [data-focus-shown], [data-held], [data-held-within], [data-selected]), .ui-icon-button:where([data-icon-button="rail"]):is(:focus-visible, [data-held]) { background: var(--border); color: var(--foreground); }
@@ -71,7 +62,6 @@
 
 @media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-seg button:hover:not(:focus-visible, [data-held], [aria-checked="true"]) { background: transparent; color: var(--muted-foreground); } }
 
-/* A harness's mark rests greyed with its row and shows its own colours on the cursor or the current row (ThreadHarnessMark lively). */
 .ui-row-lead:where([data-density="nav"] *):has(> .ui-harness-mark) { width: var(--icon-sm); }
 .ui-row:where([data-density="nav"]) > .ui-row-lead:where([data-density="nav"] *) > .ui-harness-mark { width: var(--icon-sm); height: calc(0.75 * var(--icon-sm)); opacity: var(--opacity-rest); transition: opacity var(--duration-quick) var(--ease-change); }
 .ui-row:where([data-density="nav"]):is(:focus-visible, [aria-current="page"]) > .ui-row-lead:where([data-density="nav"] *) > .ui-harness-mark { opacity: 1; }
@@ -97,7 +87,6 @@
 .ui-nav-folder-body { contain: layout paint; }
 
 .ui-note:where([data-note="nav"]) { padding: var(--space-2xs) var(--space-md) var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
-/* The rail: shown only while the pane is folded, when the list's other rows are away. */
 .ui-nav-rail { display: none; flex-direction: column; align-items: center; padding: var(--space-md) 0 var(--space-xs); }
 .ui-nav-rail-section { display: flex; flex-direction: column; gap: var(--space-2xs); }
 .ui-icon-button:where([data-icon-button="rail"]) { position: relative; display: grid; width: var(--control); height: var(--control); flex: none; place-items: center; border: 0; border-radius: var(--radius-control); background: transparent; color: color-mix(in oklch, var(--foreground), transparent var(--tone-strong)); }
@@ -109,7 +98,6 @@
   font-size: var(--text-caption); font-weight: var(--weight-strong); line-height: calc(var(--icon-sm) - 2 * var(--stroke-thin)); font-variant-numeric: tabular-nums; text-align: center; content: attr(data-count); }
 .ui-icon-button:where([data-icon-button="rail"])[data-live]::after { position: absolute; right: var(--space-xs); bottom: var(--space-xs); width: var(--space-sm); height: var(--space-sm); border: var(--stroke-thin) solid var(--frame); border-radius: var(--radius-round); background: var(--status-success); content: ""; }
 
-/* Folded to the rail: the head stacks, the brand, rows and links go, and the rail's buttons fade in once the edge moved. */
 @keyframes ui-nav-rail-in { from { opacity: 0; } to { opacity: 1; } }
 .ui-nav-pane[data-folded] .ui-nav-head { flex-direction: column; align-items: center; gap: var(--space-lg); padding-inline: 0; }
 .ui-nav-pane[data-folded] .ui-nav-head > .ui-button { margin-top: var(--space-xs); }
@@ -121,10 +109,6 @@
 .ui-nav-pane[data-folded] .ui-nav-head > .ui-seg .ui-seg-thumb { inset: calc(var(--seg-pad) + (100% - 2 * var(--seg-pad)) / var(--segments) * var(--segment)) var(--seg-pad) auto; width: auto; height: calc((100% - 2 * var(--seg-pad)) / var(--segments)); transition: top var(--duration-gentle) var(--ease-arrive); }
 @media (prefers-reduced-motion: reduce) { .ui-nav-pane[data-folded] :is(.ui-nav-rail, .ui-nav-head > .ui-seg) { animation: none; } }
 
-/* A phone's: under the page, which slides --drawer-width off to show it, dimmed; the sidebar comes forward from a step
-   back and in the dark. --drawer is how open it is (0-1), the finger's own while carried (data-drawer-drag); let go
-   (data-drawer-settle), it lands from there on the arrive curve. No foot; the server is the list's first line
-   (NavLead), so what it says never moves the head. */
 @property --drawer { syntax: "<number>"; inherits: false; initial-value: 0; }
 /* Off screen at rest shut, so it is not drawn under the page; there at once to open, and put away once the page is back.
    conventions-ok: black, the dark the sidebar comes forward out of; no colour token is black */
@@ -142,15 +126,12 @@
 .ui-nav-pane[data-drawer] .ui-nav-head { min-height: calc(var(--pill-size) + var(--space-md) + var(--space-xs)); justify-content: space-between; padding: var(--space-md) var(--space-md) var(--space-xs); }
 .ui-nav-pane[data-drawer] .ui-nav-brand { flex: none; height: var(--pill-slot); padding: 0 var(--space-md); }
 .ui-nav-pane[data-drawer] .ui-nav-brand > span { transform: translateY(0.16em); }
-/* NavLead: the server filling the line, its actions ghost icons at its end; a notice under it. */
 .ui-nav-lead { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-xs); margin-bottom: var(--space-md); }
 .ui-nav-lead-line { display: flex; min-width: 0; align-items: center; gap: var(--space-xs); }
 .ui-nav-lead-line > :first-child { min-width: 0; flex: 1; }
 .ui-nav-lead-actions { display: flex; flex: none; gap: var(--space-2xs); }
 
-/* StatusDot: a row's live state in an --icon slot, a dot in its tone (or a Spinner while it works). */
 .ui-status { display: inline-grid; flex: none; place-items: center; color: var(--muted-foreground); }
-/* A dot's size is --dot: the icon-dot by default; a tab's or a file's smaller mark sets its own. */
 .ui-status-dot { width: var(--dot, var(--icon-dot)); height: var(--dot, var(--icon-dot)); flex: none; border-radius: var(--radius-round); background: currentColor; }
 :is(.ui-status, .ui-status-dot)[data-tone="success"] { color: var(--status-success); }
 :is(.ui-status, .ui-status-dot)[data-tone="active"] { color: var(--muted-foreground); }
@@ -158,8 +139,6 @@
 :is(.ui-status, .ui-status-dot)[data-tone="danger"] { color: var(--destructive); }
 :is(.ui-status, .ui-status-dot)[data-tone="unread"] { color: var(--status-unread); }
 .ui-status[data-stale] { opacity: var(--opacity-muted); }
-/* PaneMark (row.tsx): the pane a chat is open in, at the row's end; its showing tab at the foreground. */
 .ui-pane-mark { color: var(--muted-foreground); font: var(--weight-light) var(--text-label)/1 var(--font-data); letter-spacing: 0; }
 .ui-pane-mark[data-shown] { color: var(--foreground); }
-/* A pane's own, first in its header: the place label's quiet, a step before what follows. */
 .ui-pane-mark[data-self] { flex: none; margin-inline: var(--space-xs) var(--space-sm); }

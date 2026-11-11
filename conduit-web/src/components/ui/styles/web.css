@@ -1,6 +1,4 @@
-/* Web: a page in a pane. The bar is a ToolBar; the address its field, as the Files filter is (a mark, then the field on
-   the tint); the screen the rest of the pane, the page drawn whole on the ground, a state said over it in the empty
-   pane's voice. Focus on the screen is the page's (its own caret), so the screen draws none. */
+/* Focus on the screen is the page's (its own caret), so the screen draws none. */
 .ui-web { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
 .ui-lead-input:where([data-lead-input="web"]) { position: relative; display: flex; min-width: 0; flex: 1; align-items: center; }
 .ui-lead-input:where([data-lead-input="web"]) > svg { position: absolute; left: var(--space-md); width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); pointer-events: none; }
@@ -14,8 +12,7 @@
 .ui-web-state[data-tone="error"] { color: var(--destructive); }
 .ui-web-state code { font: var(--text-caption) var(--font-data); color: var(--foreground); }
 @media (prefers-reduced-motion: reduce) { .ui-web-frame { transition: none; } }
-/* AgentPointer: big and plain on purpose -- the person follows it across a whole page. The mark's tip is the point
-   (the box sits at x, y); it glides between places, a ring goes out from the tip on a press, its label rides beside. */
+/* Big and plain on purpose: the person follows it across a whole page. */
 .ui-agent-pointer { position: absolute; top: 0; left: 0; z-index: 2; display: flex; align-items: flex-start; gap: var(--space-2xs); pointer-events: none;
   transition: transform var(--duration-travel) var(--ease-room), opacity var(--duration-gentle) var(--ease-change); will-change: transform; }
 .ui-agent-pointer[data-resting] { opacity: 0; }

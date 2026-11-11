@@ -1,7 +1,5 @@
 @import "@fontsource-variable/geist";
 :root { --font-sans: "Geist Variable", sans-serif; }
-/* Charcoal / glass: a deep cool-neutral ground, translucent raised surfaces, a near-white primary; selection is a
-   gray wash, and there is no blue accent token. */
 .dark {
   --frame: oklch(0.12 0.004 264); --background: oklch(0.186 0.005 264); --foreground: oklch(0.93 0.003 258);
   --card: oklch(0.225 0.006 264);
@@ -12,11 +10,8 @@
   --ring: oklch(0.78 0.008 258); --region-focus: oklch(0.86 0.006 258);
 }
 
-/* Uses: what each palette (palettes.css) colours. A use is chosen by an attribute on the root, its first palette the
-   default; another palette is another such block, and Settings offers the choice once a use has more than one.
-   Workspace identity is the TS use (palettes.ts), since it is saved per workspace. */
+/* A use is chosen by an attribute on the root, its first palette the default. */
 
-/* Code: syntax highlighting and inline code. The syntax roles (--syntax-*) read these. */
 :root, :root[data-code-palette="one-dark"] {
   --code-foreground: var(--one-dark-foreground);
   --code-comment: var(--one-dark-comment);
@@ -30,7 +25,6 @@
   --code-invalid: var(--one-dark-invalid);
   --code-invalid-foreground: var(--one-dark-invalid-text);
 }
-/* Terminal: the sixteen ANSI colours and the terminal's ground, text, cursor and selection (xterm reads them). */
 :root, :root[data-terminal-palette="one-dark"] {
   --ansi-background: var(--one-dark-ground);
   --ansi-foreground: var(--one-dark-text);
@@ -55,7 +49,6 @@
   --ansi-bright-cyan: var(--one-dark-bright-cyan);
   --ansi-bright-white: var(--one-dark-bright-white);
 }
-/* Categories: kinds of content, in the context breakdown's order, then spares. */
 :root, :root[data-category-palette="conduit-categories"] {
   --category-1: var(--conduit-categories-violet);
   --category-2: var(--conduit-categories-slate);
@@ -68,8 +61,6 @@
   --category-9: var(--conduit-categories-clay);
 }
 :root {
-  /* Changes: content added, modified or removed: code's green and yellow, the theme's destructive. */
   --change-added: var(--code-green); --change-modified: var(--code-yellow); --change-removed: var(--destructive);
-  /* Brand: a harness mark's own colour, where a surface lights it. */
   --brand-claude-code: #d97757;
 }

@@ -5,12 +5,6 @@ import * as Icons from "./icons";
 import { whenMotionEnds } from "./motion";
 import { PillButton } from "./pill";
 
-/**
- * Viewfinder: the camera in a card over the page's foot (picture in picture), not the whole screen: what it sees,
- * Close at its start, the shutter in its middle, Flip (front and back) at its end, and Full camera in its top corner,
- * which hands over to the platform's own camera (onFull). The shutter takes the frame as a JPEG (onCapture) and the
- * card leaves; Close leaves the way it came. A camera it cannot open says so and offers the platform's instead.
- */
 export function Viewfinder(props: { onCapture: (file: File) => void; onFull: () => void; onClose: () => void }) {
   let video!: HTMLVideoElement;
   let root!: HTMLDivElement;
@@ -39,7 +33,6 @@ export function Viewfinder(props: { onCapture: (file: File) => void; onFull: () 
   onMount(() => { void start(); });
   onCleanup(() => { stopped = true; stop(); });
 
-  // Leaves the way it came (styles/viewfinder.css), then tells its owner.
   const leave = (then?: () => void) => {
     if (leaving()) return;
     setLeaving(true);

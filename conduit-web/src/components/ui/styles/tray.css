@@ -1,5 +1,4 @@
-/* PanelHead, PanelBody (tray.tsx): the inside Tray and Ledge share, and a chat's panel beside it. --panel-inset is
-   each surface's padding, declared once here, for what reaches its edges (a full-width hairline, the body's scroller). */
+/* --panel-inset is each surface's padding, declared once here, for what reaches its edges. */
 :is(.ui-tray-panel, .ui-ledge, .ui-chat-beside-panel) { --panel-inset: var(--space-lg); }
 .ui-panel-head { position: relative; display: flex; flex: none; align-items: center; justify-content: space-between; gap: var(--space-md); }
 .ui-panel-head > strong { min-width: 0; overflow: hidden; font-weight: var(--weight-strong); text-overflow: ellipsis; white-space: nowrap; }
@@ -8,12 +7,9 @@
 .ui-panel-body { display: flex; flex: 1 1 auto; flex-direction: column; gap: var(--space-md); min-height: 0; overflow-y: auto; overscroll-behavior: contain;
   margin-inline: calc(-1 * var(--panel-inset, 0px)); padding-inline: var(--panel-inset, 0px); scrollbar-gutter: stable; scrollbar-width: thin; }
 
-/* Tray: a phone's, risen from the foot over its container, a scrim over the rest. */
 .ui-tray { position: absolute; inset: 0; z-index: var(--stack-over); pointer-events: none; }
-/* The scrim is the dim every overlay lays over what is behind (overlay.css). */
 .ui-tray-scrim { position: absolute; inset: 0; opacity: 0; transition: opacity var(--duration-gentle) var(--ease-leave); }
 .ui-tray[data-open] .ui-tray-scrim { opacity: 1; pointer-events: auto; transition-timing-function: var(--ease-arrive); }
-/* Its reach: the most of its container it covers, the rest left showing (dimmed) above it. */
 .ui-tray-panel { --tray-reach: 85%; position: absolute; inset: auto 0 0; display: flex; height: min(var(--tray-reach), var(--measure-2xl)); flex-direction: column; gap: var(--space-md);
   box-sizing: border-box; overflow: hidden; padding: var(--space-lg) var(--panel-inset) calc(var(--space-lg) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   border-radius: var(--radius-surface) var(--radius-surface) 0 0; pointer-events: auto;
@@ -21,7 +17,6 @@
 .ui-tray-panel[data-fit] { height: auto; max-height: min(var(--tray-reach), var(--measure-2xl)); }
 .ui-tray[data-open] .ui-tray-panel { transform: none; visibility: visible; transition: transform var(--duration-gentle) var(--ease-arrive); }
 
-/* Ledge: a pointer's, faded in over its container just above the composer, at the composer's width. */
 .ui-ledge { position: absolute; inset: auto 0 var(--ledge-above, var(--space-md)); z-index: var(--stack-over); display: flex; flex-direction: column; gap: var(--space-md);
   width: min(var(--composer-width, var(--reading-width)), calc(100% - 2 * var(--space-4xl))); height: min(calc(100% - var(--ledge-above, var(--space-md)) - var(--space-lg)), var(--measure-xl));
   box-sizing: border-box; margin-inline: auto; overflow: hidden; padding: var(--panel-inset); border-radius: var(--radius-surface);
@@ -29,8 +24,7 @@
 .ui-ledge > .ui-panel-head { margin: calc(-1 * var(--space-xs)) calc(-1 * var(--space-xs)) 0 0; }
 .ui-ledge[data-open] { opacity: 1; pointer-events: auto; transition: opacity var(--duration-gentle) var(--ease-arrive); }
 .ui-ledge:not([data-open]) { content-visibility: hidden; transition-property: opacity, content-visibility; transition-behavior: allow-discrete; }
-/* LedgeStack: Ledges in a column at the composer's width, the last at the foot. One shut fades where it stood out of
-   the column, so the others keep their places; a fit one is as tall as it holds, up to the room left. */
+/* One shut fades where it stood out of the column, so the others keep their places. */
 .ui-ledge-stack { position: absolute; inset: auto 0 var(--ledge-above, var(--space-md)); z-index: var(--stack-over); display: flex; flex-direction: column; justify-content: flex-end; gap: var(--space-md);
   width: min(var(--composer-width, var(--reading-width)), calc(100% - 2 * var(--space-4xl))); height: calc(100% - var(--ledge-above, var(--space-md)) - var(--space-lg));
   margin-inline: auto; pointer-events: none; }

@@ -13,23 +13,8 @@ import {
   type TailFollowState,
 } from "./tail-follow";
 
-/** How long a scroll gesture is quiet before the tail is handed back. */
 const REJOIN_QUIET_MS = 120;
 
-/*
- * A transcript's follow (DESIGN Transcript): held at its latest while the reader is there, left where they scrolled
- * otherwise; the one engine every chat's transcript runs on.
- * - A move up is the reader's only with a reader behind it (wheel, key, touch and fling, a held press, Find); one made
- *   by the page laying out is not, and the follow carries on to the foot.
- * - Scroll to latest, and a send: one glide to the foot (glideToLatest), nothing else writing the scroll until it lands.
- * - spring: the tail spring (tail-follow.ts) carries the view down with live output; the reader takes it by scrolling
- *   up and hands it back by reaching the foot.
- * - The keyboard takes height from the bottom, so the transcript gives it back from the top.
- * - The docked composer is cleared by its measured height (dock-inset.ts).
- * holding: something else is moving the content (a panel reflow, a virtualizer refresh): its resizes are not chased.
- * finding: the page's own find is open; without it, Find is guessed from its keys (the browser's own, which says nothing).
- * onStep: after each follow step or reader scroll (a chat pages in its history there).
- */
 export function createTranscriptFollow(options: {
   spring?: () => boolean;
   live?: () => boolean;
@@ -42,12 +27,11 @@ export function createTranscriptFollow(options: {
   const spring = () => options.spring?.() ?? false;
   const empty = () => options.empty?.() ?? false;
   const step = () => options.onStep?.();
-  // The viewport, as the host has it (a ref set while it renders): effects of the host's may follow before attach.
+  // Set while the host renders: effects of the host's may run before attach.
   let attached: HTMLElement | undefined;
   const vp = () => options.viewport?.() ?? attached!;
   const [following, setFollowing] = createSignal(true);
   const [latestDistance, setLatestDistance] = createSignal(0);
-  /** Scrolled back from the latest by more than a glance: Scroll to latest shows. */
   const latestAway = createMemo(() => !following() && latestDistance() >= TAIL_NEAR_LATEST_PX);
 
   let scrollFrame: number | null = null;
@@ -75,7 +59,6 @@ export function createTranscriptFollow(options: {
 
   const cancelSpringFrame = () => { if (springFrame != null) cancelAnimationFrame(springFrame); springFrame = null; };
   const cancelRejoin = () => { if (rejoinTimer != null) clearTimeout(rejoinTimer); rejoinTimer = null; };
-  /** Who owns the tail spring: the app (it follows) or the reader (it waits); rebase: from where the view is now. */
   const setOwner = (owner: TailFollowOwner, rebase = false) => {
     springState = rebase
       ? rebaseTailFollowState(springState, scrollTop(), owner)
@@ -156,9 +139,7 @@ export function createTranscriptFollow(options: {
       if (following() && spring() && springState.owner === "app" && stillMoving) requestSpring();
     });
   };
-  /** Follow the foot as it is now: the spring's step, or a snap at the next frame. */
   const request = () => { if (spring()) requestSpring(); else scrollBottom(); };
-  /** Back to following from where the view is (a chat opened, the renderer changed). */
   const resume = () => {
     setFollowing(true);
     if (!spring()) return void scrollBottom();
@@ -166,43 +147,33 @@ export function createTranscriptFollow(options: {
     springState = createTailFollowState(scrollTop(), "app");
     requestSpring();
   };
-  /** Settle on the foot once laid out (fonts in, Markdown resolved): following only. */
   const settle = () => {
     if (!following()) return;
     if (spring()) requestSpring(); else scrollBottomNow();
   };
-  // Sending and Scroll to latest both ask to watch the answer arrive; the tail follow takes over where the glide lands.
   const followLatest = () => {
     setFollowing(true);
     glideToLatest(() => { setFollowing(true); resume(); });
   };
-  /** The reader lets go of the tail (a disclosure opened, history paged in above): it stays where it is. */
   const release = () => { cancelRejoin(); if (spring()) setOwner("user", true); setFollowing(false); };
 
   let readerScroll = (top: number) => { vp().scrollTop = top; };
 
-  /** Clear the composer docked over its foot (dock) by its measured height (dock-inset.ts) on root, following through
-   *  each change; onDock after each (a Scroll to latest riding above it re-anchored). Returns its undo. */
   const clearUnder = (root: HTMLElement, dock: HTMLElement, onDock?: () => void) => clearDock(root, dock, () => {
     // Reserve and follow in the same resize delivery, before paint.
     if (following()) setScrollTop(maxScrollTop(), false);
     onDock?.();
   });
 
-  /** Mount it on the viewport and what it scrolls (the transcript's content box), in onMount; root and dock: the host
-   *  and its composer dock, cleared as in clearUnder. */
   const attach = (target: { viewport: HTMLElement; thread: HTMLElement; root?: HTMLElement; dock?: HTMLElement | null; onDock?: () => void }) => {
     attached = target.viewport;
     const viewport = target.viewport;
     const thread = target.thread;
     const stopClearingDock = target.root && target.dock ? clearUnder(target.root, target.dock, target.onDock) : null;
 
-    /*
-     * Keyboard travel is driven by the scroller's own height (a ResizeObserver, once a frame), never the visual
-     * viewport, the keyboard's destination, which lurches it the whole distance at once. The position is held
-     * unclamped (the browser's clamp ate ten pixels every travel), as a distance from the bottom, which a shrinking
-     * scroller and its content both leave alone. Content changes are followed inside a travel only (TRAVEL_MS).
-     */
+    /* Keyboard travel is driven by the scroller's own height, never the visual viewport (the keyboard's destination),
+     which lurches it the whole distance at once. The position is held unclamped, as a distance from the bottom, since
+     the browser's clamp eats pixels every travel. */
     const TRAVEL_MS = 500;
     let lastScrollerHeight = 0, lastContentHeight = 0, travellingUntil = 0;
     let intendedScrollTop = -1, heldGap = -1;
@@ -227,8 +198,7 @@ export function createTranscriptFollow(options: {
     scrollerSizes.observe(viewport);
     scrollerSizes.observe(thread);
 
-    // When the reader last did something that can move the view: a wheel (momentum keeps sending), a key, a touch and
-    // its fling, a held press (scrollbar, selection drag), focus, Find while open. A move up inside that is theirs.
+    // When the reader last did something that can move the view; a move up inside that is theirs.
     let readerUntil = 0, finding = false;
     // Whether it laid out again since the last scroll: a move up the page made itself follows a layout change.
     let laidOut = false;
@@ -312,8 +282,7 @@ export function createTranscriptFollow(options: {
       // A fold moving (Expand marks its scroller): the reader opened or shut it, and it keeps its own place.
       if (viewport.dataset.folding) return syncLatestDistance();
       if (!following() || options.holding?.()) return;
-      // Before this frame paints (an observer runs after layout, before paint): a frame later, what grew (rows wrapping
-      // as the pane narrows, a reply arriving) was painted once where it was, a whole line low, and then snapped back.
+      // Before this frame paints: a frame later, what grew is painted once a line low and then snaps back.
       if (!spring()) return scrollBottomNow();
       request();
     });
@@ -344,7 +313,6 @@ export function createTranscriptFollow(options: {
     following, setFollowing, latestDistance, latestAway, syncLatestDistance,
     scrollTop, maxScrollTop, setScrollTop, scrollBottom, scrollBottomNow,
     request, resume, settle, followLatest, release, setOwner, cancelRejoin, cancelSpringFrame, cancelGlide,
-    /** Move the view as the reader's own scroll (a cursor, Find): the follow lets go if it is up. */
     readerScroll: (top: number) => readerScroll(top),
     attach, clearUnder,
   };

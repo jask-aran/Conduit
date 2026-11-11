@@ -3,15 +3,10 @@ import { createComputed, createEffect, createSignal, on, onCleanup, Show, type J
 import { haptic } from "./haptics";
 
 /**
- * What opens and shuts in place under the row that owns it (a folder's rows) over --duration-fold, on --ease-fold.
- * Shut, nothing is in the document. The page is laid out once, at the move's start (opening) or end (shutting);
- * between, what follows slides on a transform and the rows are revealed by a clip. Shutting, the rows stay drawn:
- * when the caller drops them at once, the slide runs over a still taken before they went (inert, no ids). A height
- * per frame repainted everything under it (missing a 120 Hz phone's frames); a grid track per frame stuttered.
- * In a scroller as tall as its content (a menu, data-fits), the scroller's height moves with the rows, laid out per
- * frame but only that small box; without it the menu's edge jumped first.
- * Shutting in a scroller near its end, the scroll will come back when the rows go, so everything in it slides down
- * that far with the move and the end looks as the last frame did, rather than the list jumping down.
+ * The page is laid out once, at the move's start (opening) or end (shutting); between, what follows slides on a
+ * transform and the rows are revealed by a clip: a height per frame repaints everything under it, and a grid track per
+ * frame stutters. Shutting, the slide runs over a still taken before the rows went. Shutting in a scroller near its
+ * end, everything in it slides down as far as the scroll will come back, so the list does not jump at the end.
  */
 export function Expand(props: { open: boolean; class?: string; children: JSX.Element }) {
   const [shown, setShown] = createSignal(props.open);
@@ -19,7 +14,6 @@ export function Expand(props: { open: boolean; class?: string; children: JSX.Ele
   let motions: Animation[] = [];
   let still: HTMLElement | undefined;
   let taken: HTMLElement | undefined;
-  // How much of the rows shows, 0 to 1, and where the move under way is taking it.
   let showing = props.open ? 1 : 0;
   let target = showing;
   // One toggle can write the open state twice (the click, then the preference coming back): only a real change moves.
@@ -85,7 +79,7 @@ export function Expand(props: { open: boolean; class?: string; children: JSX.Ele
       motions[0]!.onfinish = () => { for (const motion of motions) motion.cancel(); motions = []; showing = to; still?.remove(); still = undefined; done(); requestAnimationFrame(() => { if (!motions.length) unfold(); }); };
     };
     if (wanted) {
-      // Once the rows are laid out, before paint: a frame later, they showed whole for a frame first.
+      // Once the rows are laid out, before paint: a frame later, they would show whole for a frame first.
       queueMicrotask(() => {
         if (!box || props.open !== wanted) return;
         slide(box, 1, () => {});
@@ -106,7 +100,6 @@ export function Expand(props: { open: boolean; class?: string; children: JSX.Ele
   return <Show when={shown()}><div ref={box} class={props.class ? `ui-expand ${props.class}` : "ui-expand"}>{props.children}</div></Show>;
 }
 
-// What comes after it in its scroller: its next siblings, then each ancestor's. A still beside it is part of it.
 function following(node: HTMLElement) {
   const out: HTMLElement[] = [];
   for (let at: HTMLElement | null = node; at && !scrolls(at); at = at.parentElement) {

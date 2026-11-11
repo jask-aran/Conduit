@@ -1,65 +1,6 @@
-/*
- * Components v2: the unified library's styles, one file per family, imported here in cascade order (from JS, so each
- * file passes the build's CSS transforms, which skip @import). One frost material, two lifts; every size is a multiple
- * of a density unit (--u-type, --u-space, --u-icon); [data-density] sets them on any subtree, so one set of rules draws
- * desktop and phone.
- *
- *   Surfaces: a surface sets two values and the controls on it read only those: --tint, its lines and washes, and
- *   --well, the fill under an input or an outline button. The ground is the default; [data-surface=frost] (set by
- *   Frost, Menu, Card and the rest) brings frost's. No control has a rule of its own per surface.
- *
- *   reset           the base reset and the root face, size and colours
- *   foundations     tokens (type, motion, scale, space, radii, colour, surfaces) and the rules every piece shares
- *   controls        Button, Input, TextArea, Field, Keycap, Segmented, Slider, Progress, Spinner
- *   frost, orb      the material; the thinking orb's box
- *   fade            the fade at the foot of content cut short (code, a bubble, a glance)
- *   popover         Menu > Section > Item, Match
- *   reading         Reading: a gauge's totals, parts, figures and foot
- *   group           Group, Columns (every titled run of rows; kinds per family)
- *   state           Empty, Loading, Notice (each kind keyed on where it sits); Note (kinds per family)
- *   actions         IconButton, Actions (kinds per family)
- *   row             Row (nav, list, menu densities: the box and voice every row shares)
- *   nav             NavPane > Group > Row, NavFolder, IconButton
- *   dashboard       Dashboard, DashHeader, Group (GroupHeading), ChangeRow, FolderShelf
- *   shell           AppShell > Sheet (its backdrop), SheetFill; Dock > DockSurface, DockDocument; ToolContent
- *   pane            PaneTabRow > TabPlace > PaneTab, IconButton, ResizeEdge, DropWash, DropOverlay, DragPill, ToolRail, PaneHeader,
- *                   ToolBar, IconButton, LeadInput, Tree > TreeRow
- *   source          SourceView > SourceOverview | SourcePatch; ToolLine, CommitBox, ChangeLedger > Group >
- *                   ChangeList > RowGroup, ChangeNav, CommitList, PatchLines
- *   history         HistoryList > HistoryRow, HistoryBranch
- *   terminal        PaneHeader and its parts, TermState, TermKeys
- *   web             WebView > (ToolBar, LeadInput), WebScreen: a page in a pane (the hub's browser)
- *   file, viewer    FilesPane > FilesTree; FileView > PaneHeader, FileBody, StatusBar; FileViewer's sides; FileImage, FileMedia, FileCard
- *   editor          CodeSurface > CodeHost, AnnotationPopup, Comparison, DiffShell
- *   header          Header, HeaderCrumb, HeaderButton
- *   card, toast     Card (frost or .ui-outline); Toast
- *   feedback        FeedbackLayer > FeedbackMark, FeedbackNote, FeedbackBar (the UI feedback tool, development clients):
- *                   not imported here; feedback.tsx brings it, so it loads with the tool and not with the app
- *   overlay         Scrim > Overlay (Bar, List, Split, Hints, Rail, Page), Settings, Glance
- *   network         NetworkMap: devices, their environments and clients, hung from the head's
- *   leader          Leader, Crumbs, Spotlight
- *   tour            TourCard (the keyboard tour), its fixed Spotlight
- *   pill            Pill*, Aura
- *   viewfinder      Viewfinder (the camera, picture in picture)
- *   phone-composer  PhoneComposer
- *   tray            Tray: a phone's surface risen from the foot
- *   composer        DesktopComposer, Toolbar
- *   rider           Rider, Line, Chip, Choice, the question card, RiderButton
- *   approval        ApprovalSummary (the question card's, an ApprovalCard's), ApprovalCard
- *   chat            ChatView > ChatScroller > ChatEmpty, ComposerDock
- *   find            FindBar, and the ::highlight rules for its matches
- *   transcript      Transcript, Turn, Message, Bubble, Answer
- *   code, trace     CodeBlock, CopyButton; Trace, Trail, Step
- *   agents          AgentRows > AgentRow (a turn's subagents), AgentRider (a chat's background agents, a line each)
- *   assistant       LevelMark, ClockRow, DayStrip (an agent's day)
- *   identity        the account and server marks
- *   connection      sign-in, first connection, server selection
- *   browser         the computer's file browser
- *   marks           harness and file-type marks
- *   voice           VoiceWaveform monitor and compact input levels
- *   motion          the named moves (fade, fold, tuck, collapse, wipe, give) a part makes by data-move: last, so a
- *                   move's state is drawn over a family's resting geometry
- */
+/* Imported in cascade order from JS, so each file passes the build's CSS transforms, which skip @import. motion is
+ * last, so a move's state is drawn over a family's resting geometry; feedback.css comes with feedback.tsx instead, so
+ * it loads with the tool and not with the app. */
 import "./reset.css";
 import "./palettes.css";
 import "./theme.css";

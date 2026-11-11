@@ -1,19 +1,13 @@
-/* Card: a dialog, at most 30 units wide (384px on desktop) and never wider than its room. It
-   declares its spacing and every part sits on it: --card-edge all round (every box, a field
-   or the actions, meets that edge), --card-gap between its parts, --card-pair from the title to its
-   detail. Text is trimmed to its glyphs, so a gap is the space you see. Spacing is in units, so a
-   phone's is the desktop's scaled with its type; a phone's card differs only in being the screen's width. */
+/* Text is trimmed to its glyphs, so a gap is the space you see. */
 .ui-card { --card-edge: var(--space-2xl); --card-gap: var(--space-xl); --card-pair: var(--space-md);
   position: relative; display: flex; width: min(100%, var(--measure-xl)); min-height: 0; max-height: 100%; overflow-y: auto; flex-direction: column; gap: var(--card-gap); border-radius: var(--radius-surface); padding: var(--card-edge); color: var(--foreground); font-size: var(--text-row); }
 :is([data-density="phone"] .ui-card, .ui-card[data-density="phone"]) { width: 100%; }
 @media (--conduit-phone-layout) { .ui-card:not([data-density="desktop"]) { width: 100%; } }
 .ui-card > * { min-width: 0; margin: 0; }
 .ui-card > :is(h3, p) { text-box: trim-both cap alphabetic; }
-/* Its title is the Heading role, its detail the Caption role (Type). */
 .ui-card > h3 { color: var(--foreground); font-size: var(--text-body); font-weight: var(--weight-strong); }
 .ui-card > p { color: var(--muted-foreground); font-size: var(--text-caption); font-weight: var(--weight-rest); }
 .ui-card > h3 + p { margin-top: calc(var(--card-pair) - var(--card-gap)); }
-/* Outline: an outlined box on its ground (an outline Card, a client's card, the network map's boxes): a hairline, no fill. */
 .ui-outline { border: var(--hairline) solid var(--tint); border-radius: var(--radius-surface); }
 .ui-card[data-size="compact"] { --card-edge: var(--space-lg); --card-gap: var(--space-lg); width: min(100%, var(--measure-lg)); }
 .ui-card[data-size="row"] { padding: var(--space-md) var(--space-lg); }
@@ -21,7 +15,6 @@ button.ui-outline { color: var(--foreground); text-align: left; cursor: pointer;
 @media (hover: hover) { button.ui-outline:hover { border-color: var(--muted-foreground); } }
 button.ui-outline:focus-visible { outline: none; border-color: var(--foreground); }
 .ui-card[data-size="wide"] { width: min(100%, var(--measure-2xl)); }
-/* The × sits in the corner, its box the edge's half in; the title keeps clear of it. */
 .ui-card-close { position: absolute; top: calc(var(--card-edge) / 2); right: calc(var(--card-edge) / 2); }
 .ui-card[data-close] > h3 { padding-right: var(--space-4xl); }
 /* A box you see meets the edge (a field, an excerpt, a button); what has no box at rest lines up
@@ -29,22 +22,17 @@ button.ui-outline:focus-visible { outline: none; border-color: var(--foreground)
 .ui-card > .ui-preview { margin: 0; }
 .ui-card > .ui-section { margin-inline: calc(-1 * var(--row-inset)); }
 .ui-card .ui-textarea { min-height: calc(2 * var(--control)); }
-/* Attachments in a card: the composer's chips, one under another at the card's width. */
 .ui-card > .ui-chips { flex-direction: column; overflow: visible; padding: 0; mask: none; }
 .ui-card .ui-chip-body { width: 100%; }
 .ui-card .ui-chip-copy { max-width: none; text-align: left; }
-/* Actions share one width, the widest's, at the card's right edge. */
 .ui-actions:where([data-actions="card"]) { display: grid; width: fit-content; grid-auto-columns: 1fr; grid-auto-flow: column; gap: var(--space-md); margin-left: auto; }
 
-/* Shared dialog parts: content supplies state and handlers, never surface CSS. */
-/* Split: two flows side by side, each one QR wide (--measure-sm), a rule between; they stack (auto-fit) when the card cannot hold both, the rule then above the second. */
 .ui-card[data-size="split"] { width: min(100%, calc(2 * var(--measure-md) + 2 * var(--card-edge) + 2 * var(--space-2xl) + 4 * var(--hairline))); }
 .ui-columns:where([data-group="card"]) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--measure-sm)), 1fr)); gap: var(--card-gap) calc(2 * var(--space-2xl)); }
 .ui-group:where([data-group="card"]) { display: flex; min-width: 0; flex-direction: column; gap: var(--card-pair); }
 .ui-group:where([data-group="card"]) + .ui-group:where([data-group="card"]) { position: relative; }
 .ui-group:where([data-group="card"]) + .ui-group:where([data-group="card"])::before { position: absolute; top: 0; bottom: 0; left: calc(-1 * var(--space-2xl)); border-left: var(--hairline) solid var(--tint); content: ""; }
 .ui-group:where([data-group="card"]) > .ui-card-qr-room > .ui-card-qr { width: 100%; }
-/* One QR wide, a detail keeps to its line: the value truncates, its whole in its title. */
 .ui-group:where([data-group="card"]) > h4 { margin: 0 0 var(--space-2xs); color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
 .ui-card[data-size="large"] { width: min(100%, var(--measure-dialog-large)); }
 .ui-card-description { position: absolute; width: var(--hairline); height: var(--hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -61,7 +49,6 @@ button.ui-outline:focus-visible { outline: none; border-color: var(--foreground)
 .ui-card-details dd { margin: 0; overflow-wrap: anywhere; text-align: right; font-family: var(--font-data); font-weight: var(--weight-light); }
 .ui-card-qr { width: min(100%, var(--measure-sm)); aspect-ratio: 1; align-self: center; overflow: hidden; border-radius: var(--radius-control); background: var(--primary); transition: opacity var(--duration-quick) var(--ease-change); }
 .ui-card-qr svg { display: block; width: 100%; height: 100%; }
-/* What a QR opens, under it: one line of data, light, truncating with its whole in the title. */
 .ui-card-caption { margin: 0; color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); text-align: center; }
 .ui-actions:where([data-actions="card"]) > .ui-button:where([aria-expanded]) { white-space: nowrap; }
 .ui-card-qr-room { display: grid; justify-items: center; }
@@ -77,9 +64,6 @@ button.ui-outline:focus-visible { outline: none; border-color: var(--foreground)
 .ui-attachment-media img { display: block; max-width: 100%; max-height: var(--measure-xs); object-fit: contain; }
 .ui-attachment .ui-chip-copy { flex: 1; gap: var(--space-xs); overflow-wrap: anywhere; }
 .ui-attachment[data-error] .ui-chip-copy small { color: var(--destructive); }
-/* Tray: the files a message was sent with, under it at the person's side, wrapping. */
-/* Tray: a sent message's files under it, at the person's side, each (AttachmentTile) as tall as a one-line message:
-   a picture is the picture, cropped to that height; a file is a frost pill of its mark and its name, cut short. */
 .ui-attachments[data-form="tray"] { display: flex; flex-flow: row wrap; align-items: center; justify-content: flex-end; gap: var(--space-sm); width: 100%; margin: 0 0 var(--space-md); }
 .ui-attachment-tile { display: flex; height: calc(1lh + 2 * var(--space-md) + 2 * var(--hairline)); min-width: 0; }
 .ui-attachment-tile > button { display: flex; height: 100%; min-width: 0; max-width: var(--measure-xs); align-items: center; gap: var(--space-sm); margin: 0; padding: 0 var(--space-lg) 0 var(--space-md); border-radius: var(--radius-message); color: inherit; cursor: pointer; }
@@ -88,13 +72,10 @@ button.ui-outline:focus-visible { outline: none; border-color: var(--foreground)
 .ui-attachment-tile[data-image] > button { overflow: hidden; padding: 0; border: var(--hairline) solid var(--border); background: var(--card); }
 .ui-attachment-tile[data-image] img { display: block; width: auto; height: 100%; min-width: calc(1lh + 2 * var(--space-md)); max-width: var(--measure-xs); object-fit: cover; }
 .ui-attachment-tile > button[aria-current] { outline: var(--stroke) solid var(--foreground); outline-offset: calc(-1 * var(--stroke)); }
-/* Stage: the one thing a card is showing, whole, on the card itself (no ground of its own). It is one size whatever
-   it shows, so stepping from a picture to a file never moves the card: a picture is fitted in it, never cropped; a
-   file's text is a TextEditor that fills it. */
+/* One size whatever it shows, so stepping from a picture to a file never moves the card. */
 .ui-card-stage { display: flex; height: min(var(--measure-lg), 50dvh); flex-direction: column; align-items: center; justify-content: center; color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-card-stage img { display: block; max-width: 100%; max-height: 100%; min-height: 0; border-radius: var(--radius-control); object-fit: contain; }
 .ui-card-stage > .ui-text-editor { width: 100%; box-sizing: border-box; }
-/* Steps: before, the tiles, after, centred. */
 .ui-card-steps { display: flex; align-items: center; justify-content: center; gap: var(--space-sm); }
 .ui-card-steps > .ui-attachments[data-form="tray"] { width: auto; margin: 0; justify-content: center; }
 .ui-attachment-tile > button:focus-visible { outline: none; filter: brightness(var(--brighten)); }

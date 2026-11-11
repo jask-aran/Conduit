@@ -4,12 +4,6 @@ import { Frost } from "./frost";
 import { LeadInput } from "./controls";
 import { CloseButton, IconButton } from "./actions";
 
-/**
- * FindBar: a pane's find, frost floating over the top of what it searches: a LeadInput, the count ("3 of 12"),
- * Previous, Next, Close. The caller mounts it while open and owns the search; Enter is Next, Shift+Enter Previous,
- * Escape clears then closes (the Escape ladder). children: more after the field (the editor's replace and toggles);
- * plain: drawn in its host's row (CodeMirror's panel).
- */
 export function FindBar(props: {
   query: string;
   count?: string;

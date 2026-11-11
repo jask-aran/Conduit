@@ -1,47 +1,32 @@
-/* Pill: the phone's floating frost controls (the header's groups, the sidebar's toggle, the composer's buttons). One
-   icon is a circle; more share a capsule, each slot a pill-shaped target 1px from its edge. */
-/* One height for every pill: group, lone button, the field at one line -- in the phone's unit at any density (a finger's
-   row, a --control-lg slot, a --space-2xs gap, a --space-lg + 2xs field inset there). */
 :root { --pill-size: calc(2.75 * var(--u-touch)); --pill-slot: calc(2.5 * var(--u-touch)); --pill-slot-height: var(--pill-slot);
   --pill-gap: calc(0.125 * var(--u-touch)); --pill-field-pad: calc(0.875 * var(--u-touch)); }
 .ui-pill { transition: filter var(--duration-quick) var(--ease-change); }
 .ui-pill[data-under] { filter: var(--dim-under); }
 .ui-pill { display: inline-flex; height: var(--pill-size); align-items: center; gap: var(--pill-gap); padding: 0 var(--hairline); border-radius: var(--radius-round); }
 .ui-pill > button { display: grid; width: var(--pill-slot); height: var(--pill-slot-height); place-items: center; border: 0; border-radius: var(--radius-round); background: transparent; color: inherit; }
-/* A lone pill moves by its scope's move (styles/motion.css): fold on its own, tuck in a PhoneComposer's row. */
 .ui-pill[data-solo] { width: var(--pill-size); justify-content: center; padding: 0; }
-/* One icon size in every pill, alone or grouped, each in a 40px circle: as far from the sides as from the top. */
 .ui-pill > button svg, .ui-pill[data-surface] > :is(button, [data-slot="button"]) svg { width: var(--pill-icon); height: var(--pill-icon); }
 .ui-pill > button:is(:focus-visible) { background: var(--tint); }
 @media (hover: hover) { .ui-pill > button:is(:hover, :focus-visible) { background: var(--tint); } }
 .ui-pill[data-stretch] { width: auto; flex: 1 1 auto; }
 .ui-pill[data-stretch] > button { width: 100%; }
-/* The mic: its icon and the orb stacked in one button, crossfading. */
 .ui-pill[data-voice] > button { position: relative; isolation: isolate; }
-/* The mic: listening, its pill fills with an Aura (below) under its icon. */
 .ui-pill > button > .ui-aura { z-index: -1; }
 
-/* Aura: a field of colour behind frost, drawn by Aura (index.tsx) as a mesh blending all its blobs by distance at full
-   chroma, so none passes through grey. The one coloured glow DESIGN.md allows. This holds its frame: --aura-level
-   (0-1, from --voice-level), whether it shows, --aura-strength, and the frost over it. */
 @property --aura-level { syntax: "<number>"; inherits: true; initial-value: 0; }
 .ui-aura { --aura-level: var(--voice-level, 0); position: absolute; inset: 0; overflow: clip; border-radius: inherit; opacity: 0; pointer-events: none;
   --fade-ease: var(--ease-leave); transition: opacity var(--duration-gentle) var(--fade-ease), --aura-level var(--duration-follow) linear; }
-/* Its fade is its own: shown (on, or its scope's voice on), it blooms over the gentle duration as the move that shows
-   it runs, and goes back on the leaving curve; in a voice pill it drains on the move's own curve. */
 .ui-aura[data-on] { opacity: var(--aura-strength, 1); --fade-ease: var(--ease-arrive); }
 .ui-pill[data-voice] .ui-aura { --fade-ease: var(--ease-arrive); }
 .ui-aura > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* The frost over it: a lit rim and a faint sheen from the top, so the colour reads as behind the glass. */
 .ui-aura::after { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; background: linear-gradient(var(--frost-sheen), transparent 60%); box-shadow: var(--frost-highlight), inset 0 0 calc(.3 * var(--pill-size)) var(--frost-glow); }
-/* Field: text in the capsule; it grows with its lines. */
 .ui-pill-field { display: flex; width: 100%; height: auto; min-height: var(--pill-size); align-items: center; border-radius: var(--radius-message); padding: 0 var(--pill-field-pad); }
 .ui-pill-field .ui-textarea { width: 100%; max-height: var(--measure-sm); border: 0; background: transparent; padding: calc((var(--pill-size) - var(--space-2xs) - 1.4em) / 2) 0; color: inherit; font: inherit; font-size: var(--text-body); line-height: var(--leading-row); resize: none; outline: none; field-sizing: content; }
 .ui-pill-field .ui-textarea::placeholder { color: var(--muted-foreground); }
-/* The Pill wins over an app pill's own rules (it stands in for them in the Library previews). */
+/* Wins over an app pill's own rules, which it stands in for in previews. */
 .ui-frost.ui-pill[data-surface] { display: inline-flex; flex: none; }
 .ui-pill[data-surface] > :is(button, [data-slot="button"]) { width: var(--pill-slot); min-width: var(--pill-slot); height: var(--pill-slot-height); padding: 0; border-radius: var(--radius-round); }
 .ui-pill[data-surface][data-solo] > :is(button, [data-slot="button"]) { width: 100%; min-width: 0; height: 100%; }
 
-/* A phone's field writes in the transcript's face, as the desktop composer's does. */
 .ui-pill-field textarea { font-family: var(--font-transcript); }

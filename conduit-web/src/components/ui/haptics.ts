@@ -2,26 +2,9 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 import { createEffect, on } from "solid-js";
 import { touchOnly } from "./layout";
 
-/**
- * Haptics: what a touch that changes something feels like on a phone. Two layers, as colour has:
- * Effects are tokens (styles/foundations.css, --haptic-*): lists of the platform's primitives (tick, low-tick, click,
- * thud, quick-rise, slow-rise, quick-fall, spin), each at a scale (0-1) and delay (ms) -- `tick .5, click .7 40`.
- * Never a timed buzz: a key click is 10-20ms of drive, and a long one-shot rings on in the actuator.
- * Kinds are meanings, each a piece's own (callers do not fire them), each naming its effect. Every control has a
- * default kind; its `haptic` prop overrides it (a kind) or silences it (false):
- * - select (tick): a Segmented side, a Switch, each Slider stop, a Row that is a button or link;
- * - press (click): a PillButton that acts at once (mic, Send, Stop), a secondary or ghost Button;
- * - confirm (rise): a primary Button; destructive (knock): a destructive Button, or one saying so (a ghost Remove);
- * - hold (thud): a long press opening a context menu; fold (tick): an Expand or Disclosure opening or shutting;
- * - open (click): an overlay opening (menu, popover, dialog, the phone's drawer), or an OverlayPage arriving;
- * - dismiss (settle): an overlay closing, or that page going back.
- * fold, open and dismiss are felt only just after a touch, so what opens on its own (a drawer shut from the keyboard)
- * is not. Only a touch screen with nothing that hovers feels them.
- * The strength (Settings › Interface › Haptics, per device) scales every effect. In the app the native player
- * (ConduitHapticsPlugin) composes the primitives, falling back to the nearest predefined click; a browser vibrates.
- */
+/* Never a timed buzz: a key click is 10-20ms of drive, and a long one-shot rings on in the actuator. fold, open and
+ * dismiss are felt only just after a touch, so what opens on its own (a drawer shut from the keyboard) is not. */
 export type Haptic = "select" | "press" | "confirm" | "destructive" | "hold" | "fold" | "open" | "dismiss";
-/** A control's haptic prop: a kind in place of its default, or false for none. */
 export type HapticProp = Haptic | false;
 export type HapticEffect = "tick" | "click" | "thud" | "settle" | "rise" | "knock";
 export const HAPTIC_EFFECT: Record<Haptic, HapticEffect> = { select: "tick", press: "click", confirm: "rise", destructive: "knock", hold: "thud", fold: "tick", open: "click", dismiss: "settle" };
@@ -37,7 +20,7 @@ export function hapticStrength(): HapticStrength {
   try { stored = localStorage.getItem(STRENGTH_KEY); } catch { /* no storage: the default */ }
   return HAPTIC_STRENGTHS.some((option) => option.value === stored) ? stored as HapticStrength : "medium";
 }
-/** Saves this device's strength and plays a press at it, so the choice is felt as it is made. */
+/** Plays a press at the new strength, so the choice is felt as it is made. */
 export function saveHapticStrength(strength: HapticStrength): HapticStrength {
   try { localStorage.setItem(STRENGTH_KEY, strength); } catch { /* kept for this page only */ }
   playEffect(HAPTIC_EFFECT.press);
@@ -45,7 +28,7 @@ export function saveHapticStrength(strength: HapticStrength): HapticStrength {
 }
 
 type Step = { primitive: string; scale: number; delay: number };
-// Effect tokens are read once each (a computed-style read on a tap forced the page's style, ~4ms of it).
+// Effect tokens are read once each: a computed-style read on a tap forces the page's style.
 const read = new Map<HapticEffect, Step[]>();
 function steps(effect: HapticEffect): Step[] {
   let known = read.get(effect);
@@ -59,11 +42,8 @@ function parseSteps(value: string): Step[] {
 
 const native = registerPlugin<{ play(options: { steps: Step[]; weight: string }): Promise<void> }>("ConduitHaptics");
 const hasNative = () => Capacitor.isNativePlatform() && Capacitor.isPluginAvailable("ConduitHaptics");
-/* A browser has only a vibration: a few milliseconds by the strongest step's primitive. */
 const BROWSER_MS: Record<string, number> = { tick: 6, "low-tick": 6, click: 10, "quick-rise": 10, "quick-fall": 8, "slow-rise": 14, spin: 14, thud: 16 };
 
-/** An effect at this device's strength: its steps scaled, plus the nearest predefined effect for an actuator without
- *  the primitives. null when silent. */
 function scaledEffect(effect: HapticEffect): { steps: Step[]; weight: string } | null {
   const gain = HAPTIC_STRENGTHS.find((option) => option.value === hapticStrength())!.gain;
   if (!gain) return null;
@@ -72,10 +52,8 @@ function scaledEffect(effect: HapticEffect): { steps: Step[]; weight: string } |
   const weight = scaled.some((step) => step.primitive === "thud") ? "heavy" : scaled.some((step) => step.primitive !== "tick" && step.primitive !== "low-tick") ? "click" : "tick";
   return { steps: scaled, weight };
 }
-/** A kind's effect for a native piece to play itself (the camera card's shutter); null where a touch is not felt. */
 export function hapticSteps(kind: Haptic) { return touchOnly() ? scaledEffect(HAPTIC_EFFECT[kind]) : null; }
 
-/** Plays an effect token at this device's strength (the gallery plays them directly). */
 function playEffect(effect: HapticEffect) {
   const scaledOne = scaledEffect(effect);
   if (!scaledOne) return;
@@ -104,10 +82,8 @@ export function haptic(kind: Haptic) {
   playEffect(HAPTIC_EFFECT[kind]);
 }
 
-/** A control's feel: its haptic prop, else its default. */
 export function feel(prop: HapticProp | undefined, fallback: Haptic) { if (prop !== false) haptic(prop ?? fallback); }
 
-/** An overlay's own haptics, whoever opens or shuts it: felt opening and shutting (just after a touch). */
 export function overlayHaptics(open: () => boolean | undefined) {
   createEffect(on(open, (now, was) => { if (now && !was) haptic("open"); else if (!now && was) haptic("dismiss"); }, { defer: true }));
 }

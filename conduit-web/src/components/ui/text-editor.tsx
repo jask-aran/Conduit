@@ -10,13 +10,7 @@ import { StatusBar, StatusText } from "./file";
 import * as Icons from "./icons";
 import { IconButton } from "./actions";
 
-/*
- * Text edited in a box of its own (a prompt block, a note) with the workspace editor's setup (code-setup.ts), scrolling
- * inside itself so a settings page never scrolls for its text; tags and {{slots}} marked as PromptText marks them.
- * It brings CodeMirror, so it is not in the barrel: import it from here, lazily. Its bar: head, then find, undo, redo,
- * wrap; its foot: status and the caret. Mod-S saves when onSave is given. bar / status false: without them, for a few
- * lines in place. fit: as tall as its text, up to a measure.
- */
+/* It brings CodeMirror, so it is not in the barrel: import it from here, lazily. */
 const slotMarks = new MatchDecorator({
   regexp: /\{\{[^{}\n]*\}\}|<\/?(?:[a-z][\w-]*|\{\{[^{}\n]*\}\})(?:\s[^<>\n]*)?>/gi,
   decoration: (match) => Decoration.mark({ class: match[0].startsWith("{{") ? "ui-prompt-slot" : "ui-prompt-tag" }),

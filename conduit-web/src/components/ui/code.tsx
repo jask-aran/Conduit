@@ -5,20 +5,13 @@ import { Button, ShowMore } from "./controls";
 import { CODE_BLOCK } from "./shared";
 export { CODE_BLOCK } from "./shared";
 
-/** Copy: its icon turns to a check while the caller holds `copied` (about 1.2s) or data-copied is set on it. Whatever
- *  was copied marks itself `data-copied` and takes the fading copied wash. */
 export function CopyButton(props: { copied?: boolean; label?: string; onCopy?: () => void }) {
   return <Button variant="ghost" size="icon-xs" class="ui-copy" data-copied={props.copied ? "" : undefined} aria-label={props.copied ? "Copied" : props.label ?? "Copy"} onClick={() => props.onCopy?.()}>
     <Icons.Copy class="ui-copy-idle" /><Icons.Check class="ui-copy-done" />
   </Button>;
 }
 const moreLabel = (hidden: number) => `Show ${hidden} more ${hidden === 1 ? "line" : "lines"}`;
-/**
- * A fenced block: language and Copy over numbered lines that scroll sideways. A long one folds to `fold` lines,
- * "Show N more lines" under it and a chevron beside Copy (the caption pins, so it is the way out part-way down).
- * `streaming` pulses a folded block's foot. code: the text; or children: the caller's <code>, one CODE_BLOCK.line a
- * line, grown in place as it streams so a finished line is never rebuilt, with `lines` their count.
- */
+/** children: the caller's <code>, grown in place as it streams so a finished line is never rebuilt. */
 export function CodeBlock(props: { lang?: string; code?: string; lines?: number; onCopy?: () => void; copied?: boolean; fold?: number; open?: boolean; onToggle?: () => void; streaming?: boolean; children?: JSX.Element }) {
   const text = () => (props.code ?? "").split("\n");
   const count = () => props.lines ?? text().length;

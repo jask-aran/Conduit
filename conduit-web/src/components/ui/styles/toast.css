@@ -1,13 +1,9 @@
-/* Toast: raised frost, --radius-surface, 25 units wide at most (a phone: the screen's, inside the
-   overlay's inset). The text is the Row role; the glyph sits on its first line, the × at its end. */
 .ui-toaster { display: flex; width: min(100%, var(--measure-lg)); flex-direction: column-reverse; gap: var(--space-sm); }
 .ui-toast-frame { border-radius: var(--radius-surface); }
 .ui-toast { display: grid; width: min(100%, var(--measure-lg)); grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--space-sm) var(--space-md); padding: var(--space-md) var(--space-sm) var(--space-md) var(--space-lg); color: var(--foreground); font-size: var(--text-row); }
-/* A toast rises in from its edge and drops back to it (a phone's, at the top, comes down). */
 .ui-toast[data-entering] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-toast[data-leaving] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
 [data-density="phone"] .ui-toast, .ui-toast[data-density="phone"] { --rise: calc(-1 * var(--space-md)); }
-/* The glyph, the sentence and the × on one line; an action under the sentence, from its start. */
 .ui-toast-close { grid-area: 1 / 3; }
 .ui-toast > .ui-button[data-outline] { grid-area: 2 / 2; justify-self: start; }
 .ui-toast-icon { display: grid; height: var(--control-sm); place-items: center; }
@@ -21,10 +17,8 @@
 
 .ui-toast-copy { min-width: 0; }
 .ui-toast-description { margin: var(--space-xs) 0 0; color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-text); overflow-wrap: anywhere; }
-/* Sonner's behavioral host: only its positioning and gesture state remain.
-   All visible content is Toast, and all geometry and motion use v2 tokens. Its placement names data-y-position:
-   Sonner's own sheet, injected after ours, places it by [data-sonner-toaster][data-y-position], and at a tie won
-   (a phone's toasts hung below the screen's foot, their frost peeking up). */
+/* Named by data-y-position: Sonner's own sheet, injected after ours, places it by [data-sonner-toaster][data-y-position]
+   and would win at a tie. */
 .ui-notifications[data-sonner-toaster][data-y-position] { width: min(var(--measure-lg), calc(100% - 2 * var(--space-xl))); right: var(--space-xl); bottom: calc(var(--space-xl) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))); font-family: var(--font-sans); z-index: var(--layer-notification); }
 .ui-notifications[data-sonner-toaster] [data-sonner-toast] { width: 100%; outline: none; transition: transform var(--duration-gentle) var(--ease-arrive), opacity var(--duration-gentle) var(--ease-arrive); }
 .ui-notifications [data-sonner-toast][data-removed="true"] { transition-duration: var(--duration-quick); transition-timing-function: var(--ease-leave); }
@@ -33,7 +27,6 @@
 .ui-notifications [data-sonner-toast]:focus-visible { border-color: var(--foreground); }
 :is([data-density="phone"] :is(.ui-toaster, .ui-toast), :is(.ui-toaster, .ui-toast)[data-density="phone"]), .ui-notifications .ui-toast { width: 100%; }
 @media (--conduit-phone-layout) {
-  /* A phone's toasts come down from the top at the header pills' inset, the screen's width inside it. */
   .ui-notifications[data-sonner-toaster][data-y-position] { right: var(--space-md); left: var(--space-md); bottom: auto; top: calc(var(--space-md) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); width: auto; }
   .ui-notifications [data-sonner-toast][data-y-position="bottom"] { top: 0; bottom: auto; --lift: 1; --lift-amount: var(--gap); }
 }

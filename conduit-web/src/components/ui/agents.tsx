@@ -8,24 +8,18 @@ import { Group } from "./group";
 import { Rider } from "./rider";
 import { type Motion, motionOf, moveCursor } from "./shared";
 
-/* Agents: work an agent handed to another, in Conduit's words for every harness; where a subagent's own chat is
-   reached from. AgentRows sit under a turn's head, and a chat's background ones in an AgentRider on its composer. */
 export type AgentState = "running" | "finished" | "failed" | "stopped";
 const ENDED: Record<Exclude<AgentState, "running">, string> = { finished: "Finished", failed: "Failed", stopped: "Stopped" };
 
-/** A routine's mark, or an agent's when the routine has no mark of its own. */
 export const RoutineIcon = (props: { routine?: string }) => <Switch fallback={<Icons.Agent aria-hidden="true" />}>
   <Match when={props.routine === "heartbeat"}><Icons.Heartbeat aria-hidden="true" /></Match>
   <Match when={props.routine === "brief" || props.routine === "morning-brief"}><Icons.Brief aria-hidden="true" /></Match>
   <Match when={props.routine === "feed"}><Icons.Feed aria-hidden="true" /></Match>
 </Switch>;
 
-/** A state's mark: a spinner while it works, the agent's glyph once it has finished, a warning when it failed. */
 const Mark = (props: { state: AgentState }) =>
   <Show when={props.state === "running"} fallback={props.state === "failed" ? <Icons.Warning /> : <Icons.Agent />}><Spinner /></Show>;
 
-/** A trail Row that drops down what it holds (or does onOpen), `after` beside it outside its button: AgentLine's and
- *  RoomRow's. item: a list item; folds: it opens while it holds nothing yet. */
 export function FoldLine(props: { item?: boolean; folds?: boolean; class?: string; rowClass?: string; lineClass?: string; attrs?: Record<string, unknown>; lineAttrs?: Record<string, unknown>; lead: JSX.Element; label: JSX.Element; meta?: JSX.Element; after?: JSX.Element; "aria-label"?: string; onOpen?: () => void; bodyClass?: string; body?: (children: JSX.Element) => JSX.Element; children?: JSX.Element }) {
   const [open, setOpen] = createSignal(false);
   // Resolved once, in this owner: read again in the click handler, they would be built outside it (and throw).
@@ -42,14 +36,10 @@ export function FoldLine(props: { item?: boolean; folds?: boolean; class?: strin
   </Dynamic>;
 }
 
-/** A turn's subagents, one AgentRow each. */
 export const AgentRows = (props: { label?: string; children: JSX.Element }) =>
   <ul class="ui-agent-rows" aria-label={props.label ?? "Subagents"} onPointerOver={moveCursor}>{props.children}</ul>;
 
-/** A subagent: its mark, its id when in the background (sa-3), its task, its status (mono) and time; `line`: on one
- *  line (the rider's). onOpen opens its transcript; onStop stops one the turn does not own (a background agent). */
 export function AgentRow(props: { id?: string; title: string; state: AgentState; activity?: string; time?: string; usage?: string;
-  /** In a log of dated lines (a RunLine's `at`): the time of day it ended, which the row ends on as those do; how long it took joins how it ended. */
   at?: string; line?: boolean; onOpen?: () => void; onStop?: () => void; stopRoom?: boolean; motion?: Motion }) {
   const line = () => props.state === "running" ? props.activity || "Starting" : [ENDED[props.state], props.usage, props.at ? props.time : undefined].filter(Boolean).join(" · ");
   return <li class="ui-agent-row" data-state={props.state} data-line={props.line ? "" : undefined} {...motionOf(props.motion)}>
@@ -64,8 +54,6 @@ export function AgentRow(props: { id?: string; title: string; state: AgentState;
   </li>;
 }
 
-/** One quiet line for agents taken together, a disclosure of what it holds (Expand under it): the verb, the ids, the
- *  task for one, how they did, then a jump (AgentSpawn's Report, AgentReport's Started). */
 function AgentLine(props: { kind: "spawn" | "report" | "delegate" | "run"; verb: string; ids: string[]; keys?: string[]; count?: string; title?: string; where?: string; status?: string; icon?: JSX.Element; failed?: boolean; quiet?: boolean; onOpen?: () => void; jump?: { label: string; up?: boolean; onClick: () => void }; motion?: Motion; children?: JSX.Element }) {
   return <FoldLine item class="ui-agent-spawn" lineClass="ui-agent-row" rowClass="ui-agent-open" bodyClass="ui-agent-started"
     attrs={{ "data-kind": props.kind, "data-spawn": props.kind === "spawn" ? (props.keys || props.ids).join(" ") : undefined, "data-quiet": props.quiet ? "" : undefined, ...motionOf(props.motion) }}
@@ -79,33 +67,21 @@ function AgentLine(props: { kind: "spawn" | "report" | "delegate" | "run"; verb:
     body={(rows) => <ul class="ui-agent-rows">{rows}</ul>}>{props.children}</FoldLine>;
 }
 
-/**
- * Background subagents where they branched off a turn: one quiet line, not live rows (they belong to no turn once
- * started; the AgentRider shows how they are doing). ids: one or several ("sa-1, sa-2"); status taken together
- * ("2 of 3 running"). Drops down an AgentRow line each; onReport jumps to a report. data-spawn holds `keys` (else
- * the ids), for a report to jump back to.
- */
 export function AgentSpawn(props: { ids: string[]; keys?: string[]; title?: string; status?: string; onReport?: () => void; motion?: Motion; children?: JSX.Element }) {
   return <AgentLine kind="spawn" verb="Started" ids={props.ids} keys={props.keys} title={props.title} where="in the background" status={props.status} motion={props.motion}
     jump={props.onReport ? { label: "Report", onClick: props.onReport } : undefined}>{props.children}</AgentLine>;
 }
 
-/** The join, AgentSpawn's other end: answers that landed together on one line ("Reported sa-4, sa-5"), dropping down
- *  an AgentReportItem each; onBack jumps to where they started. */
 export function AgentReport(props: { ids: string[]; title?: string; status?: string; onBack?: () => void; motion?: Motion; children?: JSX.Element }) {
   return <AgentLine kind="report" verb="Reported" ids={props.ids} title={props.title} status={props.status} motion={props.motion}
     jump={props.onBack ? { label: "Started", up: true, onClick: props.onBack } : undefined}>{props.children}</AgentLine>;
 }
 
-/** Foreground agents a turn handed work to and waits for, the same line as Started: "Delegated 3 agents in this turn",
- *  how they are doing, dropping down an AgentRow line each (what each was given). The turn's own: no ids, no report. */
 export function AgentDelegate(props: { count: number; status?: string; motion?: Motion; children?: JSX.Element }) {
   return <AgentLine kind="delegate" verb="Delegated" ids={[]} count={`${props.count} ${props.count === 1 ? "agent" : "agents"}`}
     where="in this turn" status={props.status} motion={props.motion}>{props.children}</AgentLine>;
 }
 
-/** A run enters from outside the thread, with its report or its quiet summary. line: one line that opens its run,
- *  woken or not, its report left to what follows, with when it ended (`at`) where the outcome would be (jbot's message log). */
 export function RunLine(props: { icon: JSX.Element; label: string; number?: number | null; id?: string; trigger?: string; time?: string; woke: boolean; outcome?: string; status?: string; summary?: string; at?: string; onOpen?: () => void; line?: boolean; children?: JSX.Element }) {
   const quiet = () => !props.woke || Boolean(props.line);
   return <AgentLine kind="run" icon={props.icon} verb={props.number ? `${props.label} #${props.number}` : props.label} ids={props.id ? [props.id] : []} where={[props.trigger, props.time].filter(Boolean).join(" · ")}
@@ -116,21 +92,17 @@ export function RunLine(props: { icon: JSX.Element; label: string; number?: numb
   </AgentLine>;
 }
 
-/** One agent's report in an AgentReport: its line (an AgentRow, which opens its run), then what it said under its task. */
 export function AgentReportItem(props: { id: string; title: string; state: AgentState; time?: string; usage?: string; onOpen?: () => void; children: JSX.Element }) {
   return <><AgentRow line id={props.id} title={props.title} state={props.state} time={props.time} usage={props.usage} onOpen={props.onOpen} />
     <li class="ui-agent-said">{props.children}</li></>;
 }
 
-/** A chat's background agents on its composer: their AgentRows, each on one line (AgentRow line). No title: each row
- *  carries its agent's mark. A long list scrolls in place of growing over the transcript. */
 export function AgentRider(props: { motion?: Motion; children: JSX.Element }) {
   return <Rider class="ui-agent-rider" label="Agents" motion={props.motion}>
     <div class="ui-agent-groups">{props.children}</div>
   </Rider>;
 }
 
-/** One list in an AgentRider, under its label: Foreground (the agents a turn waits for) or Background. */
 export function AgentRiderGroup(props: { label: string; going?: boolean; children: JSX.Element }) {
   return <Group kind="agent" title={props.label} going={props.going}><AgentRows label={props.label}>{props.children}</AgentRows></Group>;
 }

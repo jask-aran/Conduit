@@ -1,7 +1,4 @@
 /**
- * The composer floats over the foot of what scrolls under it, so that scroller reserves the composer's measured height
- * (--transcript-composer-inset on `target`: the dock's border box plus a clearance). A multi-line draft, attachments or
- * the queued-message card grow it, and a following tail steps the output up out of their way.
  * Border box, because the keyboard changes only the stack's padding: a content-box observation reports once and never
  * again. Dictating on a phone, the pill folds under captions where it was; the room is still taken, so it is kept.
  */

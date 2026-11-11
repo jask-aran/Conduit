@@ -1,17 +1,13 @@
-/* Menu: a raised container; rows sit concentric inside it. */
 .ui-menu { outline: none; display: flex; min-width: var(--measure-xs); flex-direction: column; border-radius: var(--radius-surface); padding: var(--frost-inset); }
-/* A popover rises in and drops back (frost.css); where Kobalte drives it, on data-expanded/closed (it keeps a closing
-   menu mounted until its animation ends). */
+/* Kobalte keeps a closing menu mounted until its animation ends. */
 .ui-menu[data-expanded] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-menu[data-closed] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .ui-menu:is([data-entering], [data-expanded], [data-leaving], [data-closed]) { animation: none; } }
-/* Under a phone's submenu panel it dims where it stands, at once (a dim is a state, not a move), and takes no taps. */
 .ui-menu { transition: filter var(--duration-quick) var(--ease-change); }
 .ui-menu[data-under] { filter: var(--dim-under); pointer-events: none; }
 .ui-title { display: flex; align-items: baseline; justify-content: space-between; gap: var(--row-gap); padding: var(--space-sm) var(--space-md) var(--space-sm); }
 .ui-title small { font-weight: var(--weight-rest); letter-spacing: 0; text-transform: none; }
 .ui-section { display: flex; flex-direction: column; }
-/* A section inside a section is a part of it (a row's reading opened in place, Context): it follows with a gap, no rule. */
 .ui-section .ui-section + .ui-section { margin: var(--space-sm) 0 0; border-top: 0; padding: 0; }
 .ui-section + .ui-section { margin-top: var(--frost-inset); border-top: var(--hairline) solid var(--tint); margin-inline: calc(-1 * var(--frost-inset)); padding: var(--frost-inset) var(--frost-inset) 0; }
 .ui-search-section { flex-direction: row; align-items: center; gap: var(--row-gap); padding: var(--row-pad); }
@@ -21,39 +17,31 @@
 .ui-search::placeholder { color: var(--muted-foreground); }
 
 .ui-row:where([data-density="menu"]) { padding: var(--row-pad); font-weight: var(--weight-rest); line-height: var(--leading-text); cursor: default; user-select: none; outline: none; }
-/* The icon slot: every leading mark (lucide icon, workspace glyph, harness mark) fills one icon-sized square. */
 .ui-icon { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; }
 .ui-icon > * { width: 100% !important; height: 100% !important; }
 .ui-icon:has(> .ui-harness-mark) { width: var(--icon-sm); height: var(--icon-sm); }
-/* Meta: muted mono beside the title, right-aligned, tabular. */
 /* The meta gives way before the label does: a long one (a model's spec) truncates first. */
 .ui-row:where([data-density="menu"]) > small { flex: 0 4 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: auto; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
 .ui-row:where([data-density="menu"]) > .ui-keys { display: inline-flex; flex: none; gap: var(--space-xs); }
 .ui-row:where([data-density="menu"]) > .ui-chevron { width: var(--icon-sm); height: var(--icon-sm); color: var(--muted-foreground); }
-/* The cursor (DESIGN Interaction): one row at a time. The pointer moves it (moveCursor); hover never washes a second row. */
+/* One row at a time: the pointer moves the cursor, and hover never washes a second row. */
 .ui-row:where([data-density="menu"]):is([data-highlighted], [data-expanded]) { background: var(--tint); color: var(--foreground); }
-/* On a touch screen the row under the finger is washed while it is pressed: what lifting it will choose. */
 @media (hover: none) { .ui-row:where([data-density="menu"]):not([data-disabled]):active { background: var(--tint); color: var(--foreground); } }
-/* There a menu item is focused only to carry the keys: it is the cursor only when the focus is shown, so a row tapped or
-   returned to is not left washed. A search's rows keep theirs. */
+/* On touch a menu item is focused only to carry the keys: it is the cursor only when the focus is shown, so a row
+   tapped or returned to is not left washed. A search's rows keep theirs. */
 @media (hover: none) { .ui-row:where([data-density="menu"])[role^="menuitem"][data-highlighted]:not(:focus-visible, :active, [data-expanded]) { background: none; color: inherit; } }
 .ui-row:where([data-density="menu"])[data-checked], [data-surface="frost"] .ui-row:where([data-density="menu"])[data-checked] { color: var(--foreground); font-weight: var(--weight-current); }
-/* The row role, one for every row (list, menu, palette, settings, sidebar): over frost a touch heavier and brighter,
-   since text there reads thinner. */
+/* Over frost a touch heavier and brighter, since text there reads thinner. */
 [data-surface="frost"] :is(.ui-row:where([data-density="menu"]), .ui-row:where([data-density="nav"])) { color: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); font-weight: var(--weight-lift); }
-/* Icons muted at rest, white on the cursor; a current icon is drawn an eighth of its size (3 units), not a tenth. */
 .ui-row:where([data-density="menu"]) > .ui-icon { color: var(--muted-foreground); }
 .ui-row:where([data-density="menu"]):is([data-highlighted], [data-checked]) > .ui-icon { color: var(--foreground); }
 :is(.ui-row:where([data-density="menu"])[data-checked] > .ui-icon, .ui-row:where([data-density="nav"])[aria-current="page"] > .ui-row-lead:where([data-density="nav"] *)) svg.lucide { stroke-width: 3; }
-/* A harness mark rests greyed with its row and shows its colour on the cursor or the current row. */
 .ui-row:where([data-density="menu"]) .ui-harness-mark { filter: grayscale(1); opacity: var(--opacity-rest); }
 .ui-row:where([data-density="menu"]):is([data-highlighted], [data-checked]) .ui-harness-mark { filter: none; opacity: 1; }
 .ui-row:where([data-density="menu"])[data-disabled], [data-surface="frost"] .ui-row:where([data-density="menu"])[data-disabled] { pointer-events: none; color: color-mix(in oklch, var(--foreground), transparent var(--tone-faint)); text-decoration: line-through var(--stroke-thin); }
 .ui-row:where([data-density="menu"])[data-disabled] > small { text-decoration: none; }
 .ui-row:where([data-density="menu"])[data-destructive], .ui-row:where([data-density="menu"])[data-destructive] > .ui-icon { color: var(--destructive); }
-/* A row dragged over (data-drop-target, a list a pointer reorders): a line where the dragged row will land. */
 .ui-row:where([data-density="menu"])[data-drop-target] { box-shadow: inset 0 var(--stroke) 0 var(--foreground); }
-/* RowGroup: the row fills, its actions after it. Where a pointer hovers they show on the hovered row or the cursor's. */
 .ui-row-group { display: flex; width: 100%; min-width: 0; align-items: center; gap: var(--space-2xs); }
 .ui-row-group > .ui-row { min-width: 0; flex: 1; }
 .ui-row-actions { display: inline-flex; flex: none; gap: var(--space-2xs); }
@@ -66,29 +54,19 @@
 
 .ui-row:where([data-density="menu"]) > .ui-row-end { display: inline-flex; flex: none; margin-left: auto; margin-right: calc((var(--u-icon) - var(--control-sm)) / 2); }
 
-/* Heading section: the popover's subject, then items about it (a field row). */
-
-/* A field row: its name muted at the row role (never uppercase), its value after it. */
-/* A field row as its section's title (the plus menu's PROFILE and EFFORT): it unfolds the section's reading under it. */
 .ui-row:where([data-density="menu"])[data-field] > .ui-label { color: var(--muted-foreground); font: var(--label-weight) var(--label-size)/var(--leading-text) var(--label-face); letter-spacing: var(--label-tracking); text-transform: var(--label-case); }
 .ui-row:where([data-density="menu"])[data-field] > small { color: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-sans); }
 
-/* An item's detail: a second line under its label (a route's address). */
 .ui-row:where([data-density="menu"]) > .ui-label[data-stacked] { display: flex; flex-direction: column; }
 .ui-label > .ui-detail { overflow: hidden; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption)/var(--leading-tight) inherit; font-family: inherit; text-overflow: ellipsis; white-space: nowrap; }
-/* Data: a second line that is a value reads in the data face, as a row's meta does. */
 .ui-label > .ui-detail[data-data] { font-family: var(--font-data); }
-/* An app row's own icon, placed straight in the row (not in an icon slot), is sized as one. */
 .ui-match { color: var(--muted-foreground); }
 .ui-match > b { color: var(--foreground); font-weight: var(--weight-current); }
-/* A phone variant has no keyboard: shortcut keys are off (the leader's stay). */
 [data-density="phone"] .ui-keys { display: none; }
 @media (--conduit-phone-layout) { .ui-row:where([data-density="menu"]) > .ui-keys { display: none; } }
 .ui-keys[data-first] { display: inline-flex; min-width: calc(2 * var(--control-xs)); flex: none; gap: var(--space-xs); }
 
 
-/* Its caps: a phone's popover is narrower and shorter by default; a Menu sets its own. Inside them and its host's room
-   (--menu-room), it scrolls. */
 :root { --menu-width-cap: calc(100vw - var(--space-xl)); --menu-height-cap: var(--measure-2xl); }
 @media (--conduit-phone-layout) { :root { --menu-width-cap: var(--measure-sm); --menu-height-cap: var(--measure-lg); } }
 .ui-menu { max-width: min(var(--menu-width, var(--menu-width-cap)), calc(100vw - var(--space-xl))); max-height: min(var(--menu-height, var(--menu-height-cap)), var(--menu-room, 100dvh));
@@ -102,32 +80,21 @@
 
 @media (prefers-reduced-motion: reduce) { .ui-menu-parent { transition: none; } }
 
-/* Menu material and separators belong to the library, including previews. */
 .ui-menu .ui-rule { height: var(--hairline); margin: var(--frost-inset) calc(-1 * var(--frost-inset)); border: 0; background: var(--tint); }
-/* A long list scrolls in its own height, under the search that filters it. */
 .ui-section[data-scroll] { max-height: var(--measure-sm); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--tint) transparent; }
-/* A readout: a menu at its own measure, its lines caption type, tabular, the value at the end. */
-/* Kobalte lifts its positioner to the surface's own layer. */
 .ui-menu:not(.ui-menu-panel) { z-index: var(--layer-popover); }
 .ui-menu[data-wide] { width: var(--measure-md); --menu-width: var(--measure-md); }
-/* Unfolds: as wide as its cap from the start, so a row opening in place (Details, Context) neither widens nor moves it;
-   its height grows with what opens to the room it has, then it scrolls. */
+/* Unfolds: as wide as its cap from the start, so a row opening in place neither widens nor moves it. */
 .ui-menu[data-unfolds] { --menu-height-cap: 100dvh; width: min(var(--menu-width, var(--menu-width-cap)), calc(100vw - var(--space-xl))); }
 .ui-readout { min-height: 0; justify-content: space-between; gap: var(--row-gap); padding: 0 var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
-/* A long value (a tool list, an id) wraps at its end rather than pushing past the menu. */
 .ui-readout > span:last-child { min-width: 0; text-align: end; overflow-wrap: anywhere; }
 .ui-section > .ui-meter { margin: var(--space-xs) var(--space-md) var(--space-sm); }
-/* A chevron that is its own press: the glyph's box, the wash under the pointer. */
 button.ui-chevron { display: inline-grid; flex: none; place-items: center; border: 0; border-radius: var(--radius-inset); background: transparent; padding: 0; color: inherit; cursor: pointer; }
 @media (hover: hover) { button.ui-chevron:hover { background: var(--tint); color: var(--foreground); } }
-/* A child row sits an icon and a gap in, under its parent's label. */
 .ui-row:where([data-density="menu"]):not([data-highlighted], :hover) > .ui-row-end[data-reveal] { visibility: hidden; }
 @media (--conduit-phone-layout) { .ui-row:where([data-density="menu"]) > .ui-row-end[data-reveal] { display: none; } }
 .ui-row:where([data-density="menu"])[data-indent] { width: calc(100% - var(--icon) - var(--row-gap)); margin-left: calc(var(--icon) + var(--row-gap)); }
-/* An edit's check column: a box per row, ticked when chosen; chosen rows wear the wash. */
 .ui-row-check { display: inline-grid; flex: none; place-items: center; border: var(--hairline) solid color-mix(in oklch, var(--foreground), transparent var(--tone-line)); border-radius: var(--radius-inset); }
 .ui-row-check > svg { width: var(--icon-sm); height: var(--icon-sm); stroke-width: 3; }
 .ui-row:where([data-density="menu"])[data-picked] { background: var(--tint); color: var(--foreground); }
 .ui-row:where([data-density="menu"])[data-picked] > .ui-row-check { border-color: var(--foreground); background: var(--foreground); color: var(--background); }
-
-/* Text a row is given as its own span (not a label part) runs out in an ellipsis, as a label does. */

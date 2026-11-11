@@ -5,52 +5,29 @@ import { callHandler } from "./shared";
 import { feel, type HapticProp } from "./haptics";
 import * as Icons from "./icons";
 
-/**
- * Row: one line in a list -- a mark, the title (a detail under it), muted context, data at its end, a control's room.
- * Every row is one: nav (the sidebar's), list, menu (popover.tsx's Item), line (a fact's), trail (an agent's, a run's),
- * tree (a file's); the density sets its height, voice and cursor (styles/row.css, nav.css, dashboard.css, popover.css).
- * element: button (does one thing), link (goes somewhere), div (holds controls), label (its click is its control's).
- * bare: the children are the whole inside. Felt as select when tapped on a phone; haptic overrides it (false: none).
- */
 export type RowDensity = "nav" | "list" | "menu" | "line" | "trail" | "tree";
 
 export type RowProps = {
   density?: RowDensity;
   element?: "button" | "a" | "div" | "label";
-  /** The leading mark (an icon, a glyph, a harness's mark). A list row keeps its room even without one. */
   lead?: JSX.Element;
-  /** The title, when it is not the children (a list row's, passed with its other parts). */
   label?: JSX.Element;
-  /** A second, muted line under the title. */
   detail?: JSX.Element;
-  /** Muted words after the title, on its line (a folder, a source). A list row keeps their room, so its data stays at the end. */
   context?: JSX.Element;
-  /** Data at the end (a count, a time): muted. */
   meta?: JSX.Element;
-  /** A mark or a control at the very end, in a control's room. */
   end?: JSX.Element;
-  /** Under the row it belongs to; 2: under one of those. */
   indent?: boolean | 2;
-  /** How deep it is in a tree: indented that many steps (--depth). */
   depth?: number;
-  /** It opens what is under it: a chevron last, turning as the row's aria-expanded does (quarter: right to down, a
-   *  folder's; half: down to up, a fold's). */
   fold?: "quarter" | "half";
-  /** Where you are. */
   current?: boolean;
-  /** Holds where you are (a folder holding the open chat): drawn as current. */
   within?: boolean;
-  /** Open, but not where you are (the chat in the other pane). */
   open?: boolean;
-  /** Chosen for an action on several. */
   selected?: boolean;
-  /** Smaller and quieter: a row that leads elsewhere ("View all"). */
   quiet?: boolean;
   bare?: boolean;
   haptic?: HapticProp;
   class?: string;
   children?: JSX.Element;
-  /** Any element's ref: a row is whichever element it is drawn as. */
   ref?: HTMLElement | ((element: never) => void);
 }
   & Omit<JSX.HTMLAttributes<HTMLElement>, "children" | "ref" | "class">
@@ -65,7 +42,6 @@ export function Row(props: RowProps) {
   const element = () => local.element ?? "div";
   // A list row always draws its mark's room and its context's, so a column of them lines up and its data sits at the end.
   const keepsRoom = () => density() === "list";
-  // The row is a button, a link or a div: its attributes are passed through as the element it is.
   const click = (event: MouseEvent) => { if (element() !== "div") feel(local.haptic, "select"); callHandler(rest.onClick, event); };
   return <Dynamic component={element()} type={element() === "button" ? "button" : undefined} {...(rest as Record<string, unknown>)}
     onClick={click} class={cn("ui-row", local.class)} data-density={density()}
@@ -90,8 +66,6 @@ export function Row(props: RowProps) {
   </Dynamic>;
 }
 
-/** The letter of the pane holding a document (in reading order), in Paper Mono at a row's end; self: a pane's own,
- *  first in its PaneHeader. shown: the pane's showing tab, at the foreground; a tab behind another, muted. */
 export const PaneMark = (props: { pane: string; shown?: boolean; self?: boolean }) =>
   <span class="ui-pane-mark" data-shown={props.shown ? "" : undefined} data-self={props.self ? "" : undefined}
     title={props.self ? `Pane ${props.pane}` : props.shown ? `Showing in pane ${props.pane}` : `A tab in pane ${props.pane}`}

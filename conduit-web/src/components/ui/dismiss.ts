@@ -1,7 +1,5 @@
 import { createEffect, onCleanup } from "solid-js";
 
-/** While open: Esc (captured ahead of the app's, if untaken) closes it, or runs onEscape; with `inside`, so does a
- *  press outside those nodes (its own, and what it keeps live: the composer under a Ledge). */
 export function createDismiss(props: {
   open: () => boolean;
   onClose: () => void;

@@ -6,16 +6,10 @@ import { createDismiss } from "./dismiss";
 import { createFolds } from "./fit";
 import { Frost } from "./frost";
 
-/* A panel over what it belongs to: Tray (a phone's, risen from the foot) and Ledge (a pointer's, above the composer),
-   each a PanelHead over a PanelBody at one height whatever they hold (switching what it shows never moves it), the
-   head never wrapping. --panel-inset is the surface's padding, for what reaches its edges (a full-width hairline). */
+/* One height whatever a panel holds, so switching what it shows never moves it. */
 
-/** The parts of a panel's head a caller gives: a title, or a lead in its place; foldLead, a lead that folds (its
- *  Segmented to marks) when the head has no room for it, so the actions and the close never overflow. */
 export interface PanelHeadParts { title?: JSX.Element; lead?: JSX.Element; foldLead?: (folded: () => boolean) => JSX.Element; actions?: JSX.Element }
 
-/** A panel's head: its title (or a lead: tabs, a switch) by its actions and close; the lead gives way, never the close.
- *  A foldLead folds once the head overflows and unfolds at the width it needed (from its content, never a tuned width). */
 export function PanelHead(props: PanelHeadParts & { onClose?: () => void; grip?: boolean }) {
   const folds = createFolds(1);
   const lead = () => props.foldLead?.(() => folds.count() > 0) ?? props.lead;
@@ -25,14 +19,10 @@ export function PanelHead(props: PanelHeadParts & { onClose?: () => void; grip?:
     <span class="ui-panel-actions">{props.actions}<Show when={props.onClose}><CloseButton kind="pane" onClick={() => props.onClose?.()} /></Show></span>
   </div>;
 }
-/** What a panel holds, scrolling under its head edge to edge, its gutter kept. */
 export const PanelBody = (props: { children: JSX.Element }) => <div class="ui-panel-body">{props.children}</div>;
 
-/**
- * Tray: a phone's panel risen from the foot over a scrim, inside its container, so what holds it stays live. Put away
- * by its close, the scrim, Esc, or a swipe down past SWIPE.commit (edge-swipe.ts: one feel for every swipe). Shut, it
- * stays laid out off the foot and inert, so it rises at once. fit: as tall as what it holds, up to the one height.
- */
+/** Inside its container, so what holds it stays live. Shut, it stays laid out off the foot and inert, so it rises at
+ *  once. */
 export function Tray(props: PanelHeadParts & { open: boolean; onClose: () => void; label: string; fit?: boolean; children: JSX.Element }) {
   let panel!: HTMLElement;
   overlayHaptics(() => props.open);
@@ -93,9 +83,6 @@ export function Tray(props: PanelHeadParts & { open: boolean; onClose: () => voi
   </div>;
 }
 
-/** Ledges stacked over their container just above its composer (`above`: px over its foot): the first given on top, the
- *  last at the foot. Each is a Ledge as ever; a fit one is as tall as what it holds, up to the room the others leave.
- *  A press anywhere in the stack (or in `keep`) is not outside any of them. */
 const LedgeStackContext = createContext<{ stack: () => HTMLElement | undefined; keep?: () => Element | null | undefined } | null>(null);
 export function LedgeStack(props: { above: number; keep?: () => Element | null | undefined; children: JSX.Element }) {
   const [stack, setStack] = createSignal<HTMLElement>();
@@ -104,11 +91,7 @@ export function LedgeStack(props: { above: number; keep?: () => Element | null |
   </LedgeStackContext.Provider>;
 }
 
-/**
- * Ledge: a pointer's panel faded in just above its composer (`above`: px over the foot), at the composer's width,
- * nothing dimmed. Put away by its close, Esc or a press outside it and `keep` (the composer). Shut and settled it is
- * skipped from layout and paint, on its own layer so fading in composites what is drawn. fit: as tall as it holds.
- */
+/** Shut and settled it is skipped from layout and paint, on its own layer so fading in composites what is drawn. */
 export function Ledge(props: PanelHeadParts & { open: boolean; onClose: () => void; label: string; above?: number; keep?: () => Element | null | undefined; fit?: boolean; children: JSX.Element }) {
   let panel!: HTMLElement;
   const inStack = useContext(LedgeStackContext);

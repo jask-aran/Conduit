@@ -1,21 +1,17 @@
 import { createContext, createSignal, onCleanup, useContext, type Accessor } from "solid-js";
 import { cssTime } from "./shared";
 
-/** The media query for the reader's reduced-motion preference. */
 export const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 // One query, read each call: making one each time adds a parse and a lookup.
 let reducedMotionQuery: MediaQueryList | undefined;
 
-/** Read the current reduced-motion preference; false without matchMedia. */
 export function reducedMotion(): boolean {
   if (typeof matchMedia !== "function") return false;
   reducedMotionQuery ??= matchMedia(REDUCED_MOTION_QUERY);
   return reducedMotionQuery.matches;
 }
-/** How long a "Copied" confirmation holds before the copy control returns to rest. A hold, not a motion. */
 export const COPY_FEEDBACK_MS = 1200;
-/** A flag on for ms after each flash (a copy's tick): a second flash holds it from then, not from the first. */
 export function createFlash(ms = COPY_FEEDBACK_MS): { on: Accessor<boolean>; flash: () => void } {
   const [on, setOn] = createSignal(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -23,14 +19,12 @@ export function createFlash(ms = COPY_FEEDBACK_MS): { on: Accessor<boolean>; fla
   return { on, flash: () => { setOn(true); clearTimeout(timer); timer = setTimeout(() => setOn(false), ms); } };
 }
 
-/** Read a duration token in milliseconds. */
 export function duration(token: `--duration-${string}`, element: Element = document.documentElement): number {
   return cssTime(element, token, 0);
 }
 
-/** Call then once, when element's transition of property ends or is cancelled, or once the token's duration (and a
- *  beat) has passed, since a transition that never runs (reduced motion, nothing to change) sends neither. Returns its
- *  cancel. Without an element it only waits. */
+/** Also calls then once the token's duration (and a beat) has passed, since a transition that never runs (reduced
+ *  motion, nothing to change) sends neither event. */
 export function whenMotionEnds(element: Element | null | undefined, property: string, token: `--duration-${string}`, then: () => void): () => void {
   let timer = 0;
   const heard = (event: Event) => { if (event.target === element && (event as TransitionEvent).propertyName === property) done(); };
@@ -48,8 +42,8 @@ export function whenMotionEnds(element: Element | null | undefined, property: st
   return cancel;
 }
 
-/* Animation speed: multiplies the duration tokens (foundations.css --duration-*), which CSS transitions and duration()
-   both read, so whatever waits for a motion waits as long as it now takes. A motion with its own length keeps it. */
+/* Scales the duration tokens, which CSS transitions and duration() both read, so whatever waits for a motion waits as
+   long as it takes. */
 const SCALED_DURATIONS = ["quick", "gentle", "fold", "travel", "follow", "flash", "spin", "pulse", "breathe"].map((name) => `--duration-${name}`);
 
 const ms = (value: string) => {
@@ -58,7 +52,6 @@ const ms = (value: string) => {
   return Number.isFinite(number) ? (text.endsWith("ms") ? number : number * 1000) : null;
 };
 
-/** Set every duration token to its stylesheet length times scale, on <html> (1: the stylesheet's own). */
 export function scaleMotion(scale: number) {
   const root = document.documentElement;
   for (const token of SCALED_DURATIONS) root.style.removeProperty(token);
@@ -71,26 +64,18 @@ export function scaleMotion(scale: number) {
   }
 }
 
-/** Read an easing token from the current styles. */
 export function easing(token: `--ease-${string}`, element: Element = document.documentElement): string {
   return getComputedStyle(element).getPropertyValue(token).trim() || "ease";
 }
 
-/* Moves: the library's named moves (styles/motion.css), named in data-move (fade, fold, tuck, collapse, wipe, give),
-   state in data-out and, giving its room, data-folded. A holder of parts that move themselves (a frost fades itself,
-   never through its holder) tells them through a MoveScope. */
 export type MoveScope = {
-  /** The parts are not shown: each fades itself (a voice control stays). */
   out?: Accessor<boolean>;
-  /** A menu opened from one of them is over the rest: they dim at once, its opener lit. */
   under?: Accessor<boolean>;
-  /** The voice is on (listening): an Aura among them glows. */
   voice?: Accessor<boolean>;
 };
 export const MoveContext = createContext<MoveScope>({});
 export const useMoveScope = () => useContext(MoveContext);
 
-/** Glide: a block that grows (a new line of captions) glides what was there up into place. Returns its stop. */
 export function glide(element: HTMLElement): () => void {
   let height = 0;
   const observer = new ResizeObserver(() => {
@@ -116,11 +101,9 @@ const travelLeft = () => travel && travel.ends - performance.now() > 16 ? travel
    then rides it, one motion rather than the room on the tap and the keyboard a beat after. Given up after `withinMs`
    (a hardware keyboard). */
 let expected = 0;
-/** Every live collapse, so a travel can settle them all at once (settleRooms). */
 const collapses = new Set<() => void>();
-/* Settle every collapse to its state at once, unanimated. The native composer's keyboard travel calls it between
-   measuring the hidden web composer's start and end, so the whole change rides the travel's one compositor animation
-   (keyboard-travel.ts) rather than a room gliding by layout on the main thread. */
+/* Called between measuring the hidden web composer's start and end, so the whole change rides the keyboard travel's
+   one compositor animation rather than a room gliding by layout on the main thread. */
 export function settleRooms() {
   expected = 0;
   for (const settle of collapses) settle();
@@ -130,8 +113,7 @@ export function expectKeyboardTravel(withinMs = 400) {
   setTimeout(() => { if (expected && performance.now() >= expected) { expected = 0; for (const watcher of travelWatchers) watcher(); } }, withinMs + 10);
 }
 
-/** Measured collapse: content and room glide together from the first frame both ways, so what moves with the room (a
- *  transcript above the composer) makes one move. */
+/** Content and room glide together from the first frame both ways, so what moves with the room makes one move. */
 export function collapse(holder: HTMLElement): () => void {
   const content = holder.firstElementChild;
   if (!(content instanceof HTMLElement)) return () => {};

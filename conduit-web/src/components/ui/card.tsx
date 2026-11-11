@@ -9,8 +9,6 @@ import { type Density, type Motion, motionOf } from "./shared";
 import { Actions, CloseButton } from "./actions";
 import { ChipCopy } from "./rider";
 
-/** size wide: it holds content. close: a × in its corner, for a card with no Cancel. surface outline: a hairline on its
- *  ground (.ui-outline). element button: the whole card is one press; role/label: another role than dialog. */
 export function Card(props: { title?: JSX.Element; element?: "div" | "button"; onClick?: () => void; role?: "group"; label?: string; surface?: "frost" | "outline"; detail?: JSX.Element; description?: JSX.Element; embedded?: boolean; class?: string; density?: Density; size?: "wide" | "large" | "split" | "compact" | "row"; close?: boolean | (() => void); closeLabel?: string; closeDisabled?: boolean; actions?: JSX.Element; motion?: Motion; children?: JSX.Element }) {
   return <Frost as={props.element} type={props.element === "button" ? "button" : undefined} onClick={props.onClick} lift="raised" plain={props.surface === "outline"} role={props.role ?? (props.embedded ? undefined : "dialog")} aria-label={props.label ?? (!props.embedded && typeof props.title === "string" ? props.title : undefined)} class={cn("ui-card", props.surface === "outline" && "ui-outline", props.class)} data-density={props.density} data-size={props.size} data-close={props.close ? "" : undefined} {...motionOf(props.motion)}>
     <Show when={props.title}><h3>{props.title}</h3></Show><Show when={props.detail}><p>{props.detail}</p></Show>
@@ -22,42 +20,29 @@ export function Card(props: { title?: JSX.Element; element?: "div" | "button"; o
 }
 
 export const CardForm = (props: JSX.FormHTMLAttributes<HTMLFormElement>) => <form {...props} class="ui-card-form" />;
-/** Two sides of one task (pair this server, or add another): side by side while each keeps a QR's width, stacked when it cannot. Use with size="split". */
 export const CardBody = (props: { children: JSX.Element }) => <div class="ui-card-body">{props.children}</div>;
 export const CardRead = (props: { children: JSX.Element }) => <code class="ui-card-read">{props.children}</code>;
 export const CardDetails = (props: { children: JSX.Element }) => <dl class="ui-card-details">{props.children}</dl>;
-/** open: false keeps the code shut until asked for (a phone is likelier the one scanning than the one scanned); it
- *  opens and shuts as Steps, the card growing with it. */
+/** Shut until asked for: a phone is likelier the one scanning than the one scanned. */
 export const CardQR = (props: { svg: string; expired?: boolean; open?: boolean }) =>
   <Steps class="ui-card-qr-room" step={props.open ?? true ? "code" : ""}><Show when={props.open ?? true}><div class="ui-card-qr" innerHTML={props.svg} data-expired={props.expired ? "" : undefined} aria-label="Pairing QR code" role="img" /></Show></Steps>;
-/** Under a QR: what it opens, one line. */
 export const CardCaption = (props: { children: string; title?: string }) => <p class="ui-card-caption ui-truncate" title={props.title ?? props.children}>{props.children}</p>;
 export const CardPreview = (props: { children: JSX.Element }) => <div class="ui-card-preview">{props.children}</div>;
-/** Files, as Attachments. form: list (a draft's, in a card) or tray (a sent message's, under it at the person's side,
- *  a picture drawn as the picture, scrolling past its cap). label: what the group is, for a screen reader. */
 export const Attachments = (props: { form?: "list" | "tray"; label?: string; children: JSX.Element }) =>
   <ul class="ui-attachments" data-form={props.form ?? "list"} aria-label={props.label}>{props.children}</ul>;
-/** One thing shown whole in a card (a picture uncropped, a file's text in a TextEditor fill): the card's width and
- *  one height whatever it shows. */
 export const CardStage = (props: { children: JSX.Element }) => <div class="ui-card-stage">{props.children}</div>;
-/** Stepping through a card's things: the one before, what there is (tiles, the one shown marked), the one after,
- *  centred under the stage. */
 export const CardSteps = (props: { onPrevious: () => void; onNext: () => void; children: JSX.Element }) =>
   <div class="ui-card-steps">
     <Button variant="ghost" size="icon-sm" aria-label="Previous" title="Previous" onClick={() => props.onPrevious()}><Icons.ChevronLeft /></Button>
     {props.children}
     <Button variant="ghost" size="icon-sm" aria-label="Next" title="Next" onClick={() => props.onNext()}><Icons.ChevronRight /></Button>
   </div>;
-/** One file of a tray (a sent message's), as small as it reads: a picture as the picture, a file as a frost pill of
- *  its mark and name; each one line of a message tall, and a press shows it whole (onOpen). */
 export const AttachmentTile = (props: { name: string; image?: JSX.Element; icon: JSX.Element; current?: boolean; onOpen?: () => void }) =>
   <li class="ui-attachment-tile" data-image={props.image ? "" : undefined}>
     <button type="button" class={props.image ? undefined : "ui-frost"} aria-label={`Show ${props.name}`} aria-current={props.current ? "true" : undefined} title={props.name} onClick={() => props.onOpen?.()}>
       <Show when={props.image} fallback={<>{props.icon}<span>{props.name}</span></>}>{props.image}</Show>
     </button>
   </li>;
-/** One file: its image or an icon, its name and a detail (its size and type, or why it failed). onRemove: a remove
- *  button at its end. */
 export function Attachment(props: { name: string; detail: string; image?: JSX.Element; icon: JSX.Element; failed?: boolean; onRemove?: () => void }) {
   return <li class="ui-attachment" data-image={props.image ? "" : undefined} title={props.image ? props.name : undefined} data-error={props.failed ? "" : undefined}>
     <span class="ui-attachment-media" data-image={props.image ? "" : undefined}>{props.image ?? props.icon}</span>

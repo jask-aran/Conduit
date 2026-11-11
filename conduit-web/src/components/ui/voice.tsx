@@ -9,10 +9,8 @@ export interface VoiceWaveformProps {
   peak: Accessor<number>;
   state: VoiceWaveformState;
   barCount?: number;
-  /** Pixels allocated to each bar when the plot width is known. */
   barDensity?: number;
   variant?: "monitor" | "compact";
-  /** Multiplies each bar's level before it is drawn (clamped to full height). */
   gain?: number;
   ariaLabel?: string;
   class?: string;

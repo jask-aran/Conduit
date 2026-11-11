@@ -1,13 +1,8 @@
 import { createSignal, Show, type JSX } from "solid-js";
 import { CopyIcon, MinusIcon, SquareIcon, XIcon } from "lucide-solid";
 
-/* The window's own chrome when the native caption is off (Settings › Desktop › Title bar): TitleBar (lead, middle and
-   end slots; its empty space drags) and WindowControls (a "bar" row in Windows' widths, or a "rail" stack). Dragging is
-   the shell's: `data-tauri-drag-region` marks what drags, and only that element, not what it holds. */
-/** Whether the window has no caption of its own, so the app's own empty chrome (a pane's header, the tool rail, the
- *  sidebar's head) drags it: set by the desktop client; false everywhere else. */
+/* `data-tauri-drag-region` makes only the element it marks drag the window, not what it holds. */
 export const [windowDrags, setWindowDrags] = createSignal(false);
-/** The attribute that makes an element drag the window, while it should. */
 export const dragRegion = () => windowDrags() ? "" : undefined;
 export function TitleBar(props: { lead?: JSX.Element; middle?: JSX.Element; end?: JSX.Element }) {
   return <header class="ui-title-bar" data-tauri-drag-region="">

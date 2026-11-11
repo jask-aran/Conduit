@@ -1,4 +1,3 @@
-/* Source control: see components/ui/source.tsx. */
 .ui-tool-line { min-height: calc(var(--control-lg) + var(--space-md)); flex: none; gap: var(--space-sm); border-bottom: var(--hairline) solid var(--border); border-radius: 0; padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md); }
 .ui-tool-line > .ui-row-end { gap: var(--space-2xs); padding-left: 0; color: var(--muted-foreground); font: var(--text-caption) var(--font-data); white-space: nowrap; }
 .ui-tool-line > .ui-row-lead { gap: var(--space-sm); }
@@ -18,7 +17,6 @@
 .ui-group:where([data-group="change"]):not([data-open]) { min-height: 0; flex: none; }
 .ui-group:where([data-group="change"]) > header { display: flex; min-height: var(--control); flex: none; align-items: center; justify-content: space-between; gap: var(--space-sm); padding: var(--space-2xs) var(--space-sm) var(--space-2xs) var(--space-md); }
 .ui-group:where([data-group="change"]) > header > .ui-group-heading { min-width: 0; flex: 1; }
-/* Two groups side by side once each has room for a row's name, folder and counts. */
 @container (min-width: 32.5rem) {
   .ui-change-ledger > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ui-group:where([data-group="change"]) { min-width: 0; }
@@ -46,12 +44,10 @@
 .ui-patch [data-kind="deletion"] { background: color-mix(in oklch, var(--destructive), transparent 91%); color: color-mix(in oklch, var(--destructive), var(--foreground) 35%); }
 .ui-patch [data-kind="hunk"] { color: var(--warn); }
 .ui-patch [data-kind="heading"] { color: var(--foreground); font-weight: var(--weight-strong); }
-/* The change list and the patch scroll on the native bar, their thumb the shared one. */
 .ui-change-list, .ui-patch { scrollbar-color: var(--native-scrollbar-color); scrollbar-width: var(--native-scrollbar-width); }
 .ui-change-list::-webkit-scrollbar, .ui-patch::-webkit-scrollbar { width: var(--space-sm); height: var(--space-sm); }
 .ui-change-list::-webkit-scrollbar-thumb, .ui-patch::-webkit-scrollbar-thumb { border: var(--stroke) solid transparent; border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent 72%); background-clip: padding-box; }
 
-/* The tool's layout: SourceView > SourceOverview | SourcePatch; ChangeNav beside a review. */
 .ui-source-view { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; container-type: inline-size; }
 .ui-source-overview { display: flex; min-height: var(--measure-2xs); flex: 1 1 56%; flex-direction: column; overflow: hidden; }
 .ui-source-patch { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }

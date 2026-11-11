@@ -4,23 +4,16 @@ import { Dot, StatusDot } from "./nav";
 import { Row } from "./row";
 import { Empty } from "./state";
 
-/** A client of the network: an environment (an OS, a WSL distro) whose node shares its folders, an app or browser
- *  driving Conduit, or both (Windows with the app open on it is one client, headed). */
 export type NetworkClient = {
   id: string;
   name: string;
-  /** An app or a browser here drives Conduit; its form picks the mark. Headless otherwise. */
   headed?: "desktop" | "phone" | "browser";
-  /** Said muted after the name: "Conduit Dev · this app", "11 workspaces". */
   meta?: string;
   online: boolean;
 };
-/** A machine and its clients. Browsers with no machine of their own share one. */
 export type NetworkDevice = { id: string; name: string; clients: NetworkClient[] };
-/** The hub: the server the network is named for, the device it runs on (its box's title), and the client ("on Ubuntu"). */
 export type NetworkHub = { name: string; device?: string; meta?: string };
 
-/** A client's mark: its form when headed, a shell when not. */
 export const clientMark = (client: NetworkClient): JSX.Element => client.headed === "phone" ? <Icons.Phone />
   : client.headed === "browser" ? <Icons.Browser /> : client.headed ? <Icons.Monitor /> : <Icons.Shell />;
 
@@ -29,8 +22,7 @@ function Line(props: { icon: JSX.Element; name: string; meta?: string; online: b
     label={props.name} context={props.meta} end={<StatusDot label={props.online ? "Connected" : "Offline"} tone={props.online ? "success" : "muted"} />} /></li>;
 }
 
-/** The network as it stands: the hub at the top, every device hung from it by a line (dashed while none of its clients
- *  is connected), its clients inside. Clients talk only to the hub, so the hub is the root and devices its spokes. */
+/** Clients talk only to the hub, so the hub is the root and devices its spokes. */
 export function NetworkMap(props: { hub: NetworkHub; devices: NetworkDevice[]; label?: string }) {
   return <figure class="ui-network" aria-label={props.label ?? "Network"}>
     <section class="ui-outline ui-network-box" data-hub="" aria-label={props.hub.name}>
@@ -50,10 +42,8 @@ export function NetworkMap(props: { hub: NetworkHub; devices: NetworkDevice[]; l
   </figure>;
 }
 
-/** Cards of clients side by side, as many to a line as the room holds: a device's clients, opened. */
 export const ClientCards = (props: { label?: string; children: JSX.Element }) => <div class="ui-client-cards" role="list" aria-label={props.label}>{props.children}</div>;
 
-/** One client, outlined: mark, name and dot, what it says (Offline since …), the workspaces it mounts, its actions. */
 export function ClientCard(props: { client: NetworkClient; status: string; mark?: JSX.Element; places?: JSX.Element; actions?: JSX.Element }) {
   return <section class="ui-outline ui-client-card" role="listitem" aria-label={props.client.name} data-offline={props.client.online ? undefined : ""}>
     <header class="ui-client-head">
@@ -68,7 +58,6 @@ export function ClientCard(props: { client: NetworkClient; status: string; mark?
 }
 
 
-/** The workspaces a client mounts, under their label; `none`: a line in their voice instead. */
 export function ClientPlaces(props: { label?: string; none?: boolean; empty?: string; children?: JSX.Element }) {
   return <>
     <h5>{props.label ?? "Workspaces"}</h5>
@@ -77,12 +66,7 @@ export function ClientPlaces(props: { label?: string; none?: boolean; empty?: st
 }
 
 
-/** A chain: one thing at the top and what it is made of hung under it in order, the network map's boxes and lines
- *  stacked (a document's blocks under its role, Settings › Prompts). ChainLink a box (live: filled in elsewhere,
- *  dashed); ChainGap the line between two, carrying a control (insert here); ChainBreak a labelled stretch ("First message"). */
 export const ChainMap = (props: { label: string; children: JSX.Element }) => <figure class="ui-chain" aria-label={props.label}>{props.children}</figure>;
-/** meta: what it is (shared, yours, filled in by Conduit). size: how much there is, at the end. onSelect: chosen by a
- *  click (current), its actions beside the chain (ChainLayout's detail), never behind hover. */
 export function ChainLink(props: { name: string; index?: number; meta?: string; size?: string; live?: boolean; notice?: boolean; modified?: boolean; current?: boolean; onSelect?: () => void }) {
   const parts = () => ({
     lead: props.index != null || props.notice ? <>

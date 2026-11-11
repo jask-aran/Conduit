@@ -1,23 +1,14 @@
-/* Assistant: an agent that keeps going on its own: its inbox (InboxRow, LevelMark), its clock (ClockRow), its day
-   (DayStrip). Rows are list-density Rows; only their parts are drawn here. */
-
-/* A report's level: a dot, coloured only by state; hollow when it had nothing to say; a check once handled. */
 .ui-level { display: grid; place-items: center; color: var(--foreground); }
 .ui-level:is([data-level="urgent"], [data-level="failed"]) { color: var(--destructive); }
 .ui-level[data-level="none"] > .ui-status-dot { border: var(--stroke-thin) solid var(--muted-foreground); background: transparent; }
 .ui-level[data-level="fyi"], .ui-level[data-handled] { color: var(--muted-foreground); }
 
-/* An inbox entry: the row, then its report unfolding under it, at the row's text edge. Handled ones rest quieter. */
-
-/* A clock's row: its cadence in the data face; off (its setting turned off) rests faded; a failure's warning in warn. */
 .ui-row:where([data-density="list"])[data-clock][data-off] { opacity: var(--opacity-rest); }
-/* Wrapped: the title takes the line with what ends it; when it runs is under it, from the title's edge, on as many lines as it needs. */
 .ui-row:where([data-density="list"])[data-clock][data-wrap] { flex-wrap: wrap; row-gap: 0; }
 .ui-row:where([data-density="list"])[data-clock][data-wrap] > .ui-row-title { flex: 1 1 0; }
 .ui-row:where([data-density="list"])[data-clock][data-wrap] > .ui-row-context { order: 1; flex: 0 0 100%; padding-left: calc(var(--icon) + var(--row-gap)); white-space: normal; }
 .ui-level[data-level="attention"], .ui-row:where([data-density="list"])[data-clock] .ui-clock-warn { color: var(--warn); }
 
-/* The day: labels over their ticks, a hairline track with quiet hours tinted, the hours under it in the data face. */
 .ui-day { display: grid; min-width: 0; gap: var(--space-2xs); padding: var(--space-xs) var(--row-inset) var(--space-sm); color: var(--muted-foreground); font: var(--weight-light) var(--text-label)/var(--leading-tight) var(--font-data); font-variant-numeric: tabular-nums; }
 .ui-day-marks, .ui-day-hours { position: relative; height: calc(var(--text-label) * var(--leading-tight)); }
 .ui-day-label, .ui-day-hours > span { position: absolute; top: 0; translate: -50% 0; white-space: nowrap; }
@@ -35,15 +26,11 @@
 .ui-day-now { inset-block: calc(-1 * var(--space-2xs)); width: var(--stroke-thin); background: var(--foreground); }
 .ui-day-now::before { position: absolute; top: 0; left: 50%; width: calc(3 * var(--stroke-thin)); height: calc(3 * var(--stroke-thin)); border-radius: var(--radius-round); background: var(--foreground); content: ""; translate: -50% -50%; }
 
-/* A report in jbot's stream: a card at the answer's place, its title and first line, when it came, and the way in. */
-/* Its row is a Row line inside the card (the card is its box and wash), its chevron always shown. */
 .ui-report-card > .ui-row { padding: 0; }
 .ui-report-title { font-weight: var(--weight-lift); }
 .ui-clock-end, .ui-report-end { display: inline-flex; align-items: center; gap: var(--space-xs); }
 
-/* Another room's messages in jbot's stream, folded: one quiet line, opening in place to the exchange. */
 .ui-room { display: flex; min-width: 0; flex-direction: column; }
-/* Its line is a Row line (row.css), muted, bleeding past the column by its padding; its fold always shown. */
 .ui-room-row { width: calc(100% + 2 * var(--space-sm)); margin-inline: calc(-1 * var(--space-sm)); gap: var(--space-sm); color: var(--muted-foreground); }
 .ui-report-card .ui-row-fold, .ui-room-row > .ui-row-fold { opacity: 1; }
 .ui-room-head { display: flex; min-width: 0; align-items: baseline; gap: var(--space-sm); }
@@ -53,10 +40,8 @@
 .ui-room-head > .ui-room-last { min-width: 0; flex: 0 1 auto; overflow: hidden; font-size: var(--text-caption); opacity: var(--opacity-muted); text-overflow: ellipsis; }
 .ui-room-body { display: flex; flex-direction: column; gap: var(--space-md); padding: var(--space-sm) 0 var(--space-xs) calc(var(--icon-sm) + var(--space-sm)); }
 
-/* jbot's picture, in an icon's place: its box, the app icon's own rounding. */
 .ui-agent-avatar { display: block; width: 1em; height: 1em; flex: none; object-fit: contain; }
 
-/* An email of a room: a mail client's thread, one email under another on a hairline. */
 .ui-room-body:has(> .ui-email) { gap: 0; }
 .ui-email { display: flex; min-width: 0; flex-direction: column; gap: var(--space-xs); padding-block: var(--space-md); }
 .ui-email + .ui-email { border-top: 1px solid var(--tint); }

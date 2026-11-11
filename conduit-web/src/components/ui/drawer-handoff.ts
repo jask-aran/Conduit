@@ -1,15 +1,8 @@
-/*
- * A phone's drawer handing over to the page it opens:
- * - pressAhead: a held touch draws the page under the drawer a moment before the tap lands (a scroll usually shows
- *   itself first); released or scrolled (cancelled), the app keeps or puts back what it drew.
- * - shutDrawerOnto: the drawer slides back once the page is drawn (paneDrawn), never over it arriving in pieces.
- */
+/* pressAhead draws the page under the drawer while a touch is held, before the tap lands (a scroll usually shows itself
+ * first); shutDrawerOnto slides the drawer back only once the page is drawn, never over it arriving in pieces. */
 
-/** A pane is drawn when no ChatView in it is still opening (its lists still drawing what is on screen, or loading). */
 export const paneDrawn = (pane: ParentNode | null | undefined) => !pane?.querySelector(".ui-chat[data-opening]");
 
-/** A press's handlers for a row or button that opens a page: press after `hold` ms of a touch (when allowed),
- *  release(cancelled) when it lifts (false) or the browser takes it for a scroll (true). */
 export function pressAhead(options: { press: () => void; release: (cancelled: boolean) => void; when?: () => boolean; hold?: number }) {
   let timer = 0;
   return {
@@ -23,8 +16,6 @@ export function pressAhead(options: { press: () => void; release: (cancelled: bo
   };
 }
 
-/** Shut the drawer onto what `opening` opens, once drawn. at: the page's route and chat, waited on to change (the old
- *  page is drawn already) or for the open to settle. cap: the most it waits, ms; a slow load finishes in place. */
 export function shutDrawerOnto(options: { opening: Promise<unknown>; open: () => boolean; shut: () => void; drawn: () => boolean; at: () => string; cap?: number }) {
   let settled = false, failed = false;
   // Not only on the open's promise: that may also wait on reading the page afresh, long after it is drawn.

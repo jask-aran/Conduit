@@ -14,5 +14,4 @@
 .ui-file-icon-generic { color: var(--muted-foreground); }
 
 .ui-glyph { display: inline-grid; flex: none; place-items: center; font-size: calc(0.5625 * var(--u-type)); font-weight: 750; letter-spacing: -.04em; line-height: var(--leading-none); }
-/* A slot can size the monogram to itself (--glyph-text: the dashboard's glyph tile). */
 .ui-glyph[data-mode="monogram"] { font-size: var(--glyph-text, calc(0.5 * var(--u-type))); }

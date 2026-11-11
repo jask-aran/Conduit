@@ -1,26 +1,5 @@
-/*
- * Moves: the library's named moves on Foundations' timing (foundations.css, Motion), named in data-move. Each base rule
- * names every property it moves (invariant 2) and is its in; data-out its out, data-folded its room given. A part's
- * state is its piece's (a MoveScope, motion.ts); how it moves is only here, last in the cascade.
- *
- * Which move a part makes follows from what happens to its room, so each part has one way to go:
- *   - its room goes to a neighbour: tuck (every pill that comes and goes with what there is: Send, Stop, Scroll to latest)
- *   - something else takes its place where it stands: fade (pills under the voice track, the edit pills over the field)
- *   - it holds others and its room goes: collapse (the phone composer's field and its edit pills)
- *
- *   fade      comes and goes where it stands: in over the gentle duration from its first frame, out over the quick one
- *   tuck      a part in a row that goes keeps its size and slides under its left neighbour (--tuck-size, --tuck-gap),
- *             its room going with it, never seen squeezed or meeting its neighbour: out, it fades first (quick) and
- *             slides half a quick duration after; in, it slides out first and fades in half a quick duration on
- *   collapse  a holder glides its height and room over gentle on ease-room from the first frame both ways; out, what
- *             it holds fades over quick as its room goes (measured by motion.ts), so all of it makes one move
- *   wipe      revealed by a clip opening from its end over the gentle duration (shown at once); out, it fades over the
- *             quick one as the clip closes (--wipe-radius rounds the clip)
- *   give      room handed between neighbours by grow: whatever takes it grows as the other gives it
- *
- * And the move a menu's opener makes on what it opened from: under (data-under), the rest dims at once (the families'
- * own filter rules, as the fade lists carry filter at the quick duration).
- */
+/* Each base rule names every property its move touches, so no state can drop one; how a part moves is only here, last
+ * in the cascade. */
 [data-move="fade"] { --fade: var(--duration-gentle); --fade-ease: var(--ease-arrive); --fade-delay: 0s;
   transition: opacity var(--fade) var(--fade-ease) var(--fade-delay), filter var(--duration-quick) var(--ease-change); }
 [data-move="fade"][data-out] { opacity: 0; pointer-events: none; --fade: var(--duration-quick); --fade-ease: var(--ease-leave); }
