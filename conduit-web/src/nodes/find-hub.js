@@ -4,12 +4,8 @@ import { Bonjour } from "bonjour-service";
 import { embeddedAttestation, verifyLeafAttestation } from "../server-tls.js";
 
 /**
- * The hub again, on this network, when none of the ways a node knows reaches it (it moved to another address): by
- * its mDNS advertisement (lan-advertisement.js), which anyone could make, so only where it proves to be the hub the
- * node already knows. `hub` is `{ id, key }` -- its identity and Ed25519 public half, as it said them on a connection
- * the node made to it before (node-hub.js "routes"). A candidate counts when the leaf certificate it presents carries
- * that identity's attestation; the node then dials it pinned to exactly that certificate, so its key goes to nobody
- * else. Resolves to `[{ url, ca }]`.
+ * An mDNS advertisement anyone could make, so a candidate counts only when the leaf certificate it presents carries the
+ * known identity's attestation; the node then dials it pinned to exactly that certificate, so its key goes to nobody else.
  */
 export async function findHub(hub, { ms = 4000 } = {}) {
   if (!hub?.id || !hub?.key) return [];
@@ -23,7 +19,6 @@ export async function findHub(hub, { ms = 4000 } = {}) {
 
 const PRIVATE = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
 
-/** Where a hub with this identity says it is: its private IPv4 addresses and port, for as long as `ms`. */
 function advertised(id, ms) {
   return new Promise((resolve) => {
     const found = new Map();
@@ -48,7 +43,6 @@ function advertised(id, ms) {
   });
 }
 
-/** The certificate `address:port` presents, as PEM, when the hub's identity attested it; else null. */
 export function attestedLeaf(address, port, hub, ms = 4000) {
   return new Promise((resolve) => {
     let done = false;

@@ -11,23 +11,10 @@ const KEEP_EXITED_MS = 10 * 60_000;
 const MAX_PROCESSES = 32;
 
 /**
- * Processes this device runs for main: terminals, and later harnesses.
- *
- * A process belongs to the device, not to the socket that asked for it
- * (plan decision 18): when main's connection drops it keeps running, its
- * output is kept in a bounded buffer counted in bytes from its start, and
- * main reattaches from the last byte it had. Output older than the buffer is
- * gone; a reattach from before it says how much was skipped. An exited
- * process is kept a while so its last output and exit can still be read.
- *
- * `pty` gives a pseudo-terminal (node-pty, ConPTY on Windows); without it
- * the process has pipes, stdout and stderr told apart.
- *
- * A terminal shell, where tmux 3.3 or newer is installed (decision 28), is a
- * tmux session on this node's own socket, followed through a tmux client:
- * it outlives this node too, and a node starting again takes up the sessions
- * it finds, their screens repainted from the start. `scope` (the server
- * paired) keeps two servers' shells apart.
+ * A process belongs to the device, not to the socket that asked for it: when main's connection drops it keeps running,
+ * its output kept in a bounded buffer counted in bytes from its start, and main reattaches from the last byte it had. A
+ * terminal shell, where tmux 3.3 or newer is installed, is a tmux session on this node's own socket, so it outlives
+ * this node too. `scope` keeps two servers' shells apart.
  */
 export class NodeProcesses {
   constructor({ shellEnv = process.env, scope = "" } = {}) {
@@ -73,7 +60,6 @@ export class NodeProcesses {
     return this.view(record);
   }
 
-  /** A tmux client on the record's session: its screen is the terminal's output. */
   follow(record, { cols = 80, rows = 24 } = {}) {
     const child = nodePty.spawn(this.tmux.file, [...this.tmux.args, "attach-session", "-t", record.tmux],
       { name: "xterm-256color", cols, rows, cwd: os.homedir(), env: tmuxEnvironment(this.shellEnv) });
@@ -95,7 +81,6 @@ export class NodeProcesses {
     try { execFileSync(this.tmux.file, [...this.tmux.args, "has-session", "-t", name], { stdio: "ignore" }); return true; } catch { return false; }
   }
 
-  /** The shells a node before this one left in tmux, followed again from their repainted screens. */
   recover() {
     let listed = "";
     try {
@@ -132,7 +117,6 @@ export class NodeProcesses {
     record.timer.unref?.();
   }
 
-  /** Follow a process from byte `from`: what the buffer still has is replayed, then live output. */
   attach(id, from, listener) {
     const record = this.processes.get(id);
     if (!record) throw new Error("No such process on this device");
@@ -208,7 +192,6 @@ export class NodeProcesses {
 
 const TMUX_MIN = [3, 3];
 
-/** This node's tmux, on a socket of its own per server paired, or null where there is none (Windows, or too old). */
 function findTmux(scope) {
   if (process.platform === "win32") return null;
   const file = process.env.CONDUIT_TMUX_PATH || "tmux";
@@ -230,7 +213,6 @@ function tmuxEnvironment(source) {
   return env;
 }
 
-/** The device user's own shell, as a terminal would open it. */
 function defaultShell() {
   if (process.platform === "win32") return [process.env.COMSPEC || "powershell.exe"];
   return [process.env.SHELL || os.userInfo().shell || "/bin/sh", "-l"];

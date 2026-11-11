@@ -1,9 +1,4 @@
-/*
- * What a call sends, as labelled fields for an approval card: `{ to: ["rhys@…"], subject: "Thursday" }` reads
- * "To rhys@…", "Subject Thursday". Nested objects name their fields by their parent (`start.dateTime` → "Start",
- * `requestBody.summary` → "Summary"); a list of people reads by their address or name; a Gmail `raw` message is
- * decoded to its headers and body. Nothing is dropped silently: past the cap, the rest is counted.
- */
+/* Nothing is dropped silently: past the cap, the rest is counted. */
 const MAX_FIELDS = 10;
 const MAX_VALUE = 600;
 /** Wrappers whose name says nothing about what they hold. */
@@ -20,7 +15,6 @@ const labelOf = (key) => { const words = wordsOf(key).join(" ").toLowerCase(); r
 const clip = (text) => text.length > MAX_VALUE ? `${text.slice(0, MAX_VALUE - 1)}…` : text;
 const compact = (value) => { try { return JSON.stringify(value); } catch { return String(value); } };
 
-/** A Gmail `raw` (base64url RFC 822): its To/Cc/Bcc/Subject headers and plain body; null when it is not one. */
 function mimeFields(raw) {
   if (typeof raw !== "string" || raw.length < 24 || !/^[A-Za-z0-9_-]+={0,2}$/.test(raw)) return null;
   const text = Buffer.from(raw, "base64url").toString("utf8");
@@ -50,7 +44,6 @@ function valueText(value) {
   return compact(value);
 }
 
-/** The fields of one call's input; [] for nothing to show. */
 export function fieldsOf(input) {
   const out = [];
   const visit = (value, label, depth) => {
@@ -58,13 +51,11 @@ export function fieldsOf(input) {
     if (typeof value === "object" && !Array.isArray(value)) {
       const entries = Object.entries(value).filter(([, item]) => item !== null && item !== undefined && item !== "");
       if (!entries.length) return;
-      // One plain value inside names it by its parent: `start: { dateTime }` → "Start".
       if (label && entries.length === 1 && (typeof entries[0][1] !== "object" || entries[0][1] === null)) return visit(entries[0][1], label, depth);
       if (depth >= 3) return out.push({ label: label || "Input", value: clip(compact(value)) });
       for (const [key, item] of entries) {
         if (key === "raw") { const mime = mimeFields(item); if (mime) { out.push(...mime); continue; } }
         if (/Id$/.test(key) && typeof item === "string" && SELF.test(item)) continue;
-        // A wrapper (`requestBody`) adds no name and no depth; a "when" takes its parent's.
         if (WHEN.has(key) && label) visit(item, label, depth + 1);
         else if (WRAPPERS.has(key) && item && typeof item === "object" && !Array.isArray(item)) visit(item, label, depth);
         else visit(item, label ? `${label} ${labelOf(key).toLowerCase()}` : labelOf(key), depth + 1);
@@ -77,5 +68,4 @@ export function fieldsOf(input) {
   return out.length > MAX_FIELDS ? [...out.slice(0, MAX_FIELDS - 1), { label: "And", value: `${out.length - MAX_FIELDS + 1} more fields` }] : out;
 }
 
-/** Fields as one line of text, for a notification: "To rhys@…, Subject Thursday". */
 export const fieldsText = (fields, max = 200) => clip(fields.map(({ label, value }) => `${label} ${value}`).join(", ")).slice(0, max);

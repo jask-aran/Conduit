@@ -3,14 +3,8 @@ import { PassThrough, Writable } from "node:stream";
 import { RemoteProcess } from "./remote-process.js";
 
 /**
- * A harness process on a device, shaped as a child process for the harness's
- * own SDK (plan decision 5, remote spawn): main's adapter writes its stdin and
- * reads its stdout, the device runs it. It is returned at once, as a spawn
- * is; input written before the device has started it waits, in order.
- *
- * `harness` names what to run -- the device runs its own install -- and
- * `place` is where, `{ root, path }`. `env` holds only what the adapter adds;
- * this server's own environment is never sent.
+ * Returned at once, as a spawn is; input written before the device has started it waits, in order. `env` holds only
+ * what the adapter adds: this server's own environment is never sent.
  */
 export function spawnOnDevice(hub, nodeId, { harness, args, place, env = {}, signal, onStderr }) {
   const events = new EventEmitter();
@@ -58,12 +52,6 @@ export function spawnOnDevice(hub, nodeId, { harness, args, place, env = {}, sig
   };
 }
 
-/**
- * What a harness's SDK asks to spawn, as the device should run it: the flags
- * after the executable (and a script path, when the SDK runs a bundled one
- * under its own runtime), and only the variables it added to this server's
- * environment.
- */
 export function harnessLaunch({ args, env }) {
   const flag = args.findIndex((item) => String(item).startsWith("-"));
   return {
@@ -72,10 +60,6 @@ export function harnessLaunch({ args, env }) {
   };
 }
 
-/**
- * A harness command run to completion on the device, as `execFile` would:
- * `{ stdout, stderr }`, or an error carrying them when it fails.
- */
 export function execOnDevice(hub, nodeId, { harness, args, place, env = {}, timeout = 0 }) {
   return new Promise((resolve, reject) => {
     const child = spawnOnDevice(hub, nodeId, { harness, args, place, env });
@@ -98,12 +82,10 @@ export function execOnDevice(hub, nodeId, { harness, args, place, env = {}, time
   });
 }
 
-/** Refuse a device chat whose device is away or lacks the harness, before anything starts. */
 export function requireHarnessOn(hub, nodeId, harness, label) {
   if (hub?.live.get(nodeId)?.harnesses?.includes(harness)) return;
   throw Object.assign(new Error(`${label} is not available on that device: it is offline, or ${label} is not installed there`),
     { code: "harness_unavailable_on_device", status: 409 });
 }
 
-/** What a chat keeps of a harness session: its id, and for one on a device, which device -- it is found there. */
 export const opaqueSessionOf = (record) => (record.nodeId ? { threadId: record.sessionId, nodeId: record.nodeId } : record.sessionId);

@@ -10,7 +10,6 @@ import { splitFrontMatter } from "./routine-files.js";
 
 const FILES = { soul: "SOUL.md", user: "USER.md", memory: "MEMORY.md" };
 
-/** Where an added line goes: under `## section` (made at the end if missing), after its last line; else the end. */
 function addUnder(content, section, text) {
   if (!section) return `${content}${text}\n`;
   const lines = linesOf(content);
@@ -137,7 +136,6 @@ export async function acceptProposal(agent, id) {
   });
 }
 
-/** How many declined proposals the state doc keeps (`declined`), so a routine does not propose them again. */
 const DECLINED_KEPT = 100;
 
 export async function rejectProposal(agent, id) {
@@ -151,10 +149,7 @@ export async function rejectProposal(agent, id) {
   }));
 }
 
-/**
- * What a thread or run learned by inference, for a notes routine to promote or drop: one line appended to
- * NOTES.md, `- <date> | <origin> | <text>` with its provenance. Never edits another line; a replayed call adds nothing.
- */
+/** Never edits another line; a replayed call adds nothing. */
 async function note(agent, origin, text, attribution) {
   const root = await fs.realpath(agent.folder);
   const target = path.join(root, NOTES_FILE);
@@ -191,7 +186,6 @@ async function search(agent, query) {
   return found.join("\n") || "No matches.";
 }
 
-/** jbot's files as tagged blocks (routines.js `block`), each turn; USER.md without its front matter (the fields). */
 export async function render(agent) {
   const today = agent.today();
   const [soul, user, memory, diary] = await Promise.all(["soul", "user", "memory", "diary"].map(async (file) => read(await filePath(agent, file, today))));
@@ -212,10 +206,6 @@ export async function render(agent) {
 const SCOPES = { soul: "Who it is: read in every turn", user: "About you: read in every turn", memory: "What it keeps: read in every turn" };
 const BY = { home: "home thread", side: "a side thread", run: "a run", agent: "itself" };
 
-/**
- * Every line of its memory as an entry, for the memory view: which file and section, what reads it (scope), and who
- * wrote it, from where, when (provenance; none for a line you or an editor wrote). Diary days back `days`.
- */
 export async function memoryEntries(agent, { days = 14 } = {}) {
   const today = agent.today();
   const dates = [];
@@ -248,7 +238,6 @@ export async function memoryEntries(agent, { days = 14 } = {}) {
   return entries;
 }
 
-/** You forgetting one line, exactly as it stands (`line`): any line, yours or its own; none if it has changed since. */
 export async function forgetLine(agent, file, date, line) {
   if (typeof line !== "string" || !line.trim()) throw Object.assign(new Error("Choose a line."), { status: 400 });
   const target = await filePath(agent, file, date);
@@ -315,7 +304,7 @@ export function MemoryTools(runtime) {
       } catch (error) { return result(error.message || "Memory operation failed.", true); }
     },
   });
-  // jbot's threads only: a run gets RUN.md and what its routine opts into (routines.js), not the person's files.
+  // jbot's threads only: a run gets RUN.md and what its routine opts into, not the person's files.
   return { tools: [memory], sections: [section("agent-memory", async (input) => {
     const agent = runtime.agent;
     if (!agent?.enabled() || (await agent.describe(input.conversationId))?.role === "run") return undefined;

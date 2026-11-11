@@ -194,7 +194,6 @@ export async function listWatches(agent) {
   ];
 }
 
-/** Remove a watch or webhook by id (the dashboard's Watching group). */
 export async function removeWatch(agent, id) {
   return agent.update((doc) => {
     const token = Object.keys(doc.hooks).find((key) => doc.hooks[key].id === id);

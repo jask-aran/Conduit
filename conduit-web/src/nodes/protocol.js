@@ -2,39 +2,11 @@ import path from "node:path";
 import { NODE_TARGETS } from "../device-api.js";
 
 /**
- * The Conduit node protocol (plan decision 17), shared by both ends.
- *
- * A node dials the main server and stays connected; main calls into the
- * node's execution environment over that one socket. The vocabulary is
- * Conduit's own and versioned, so an installed node survives changes to
- * pi-durable's environment API: main adapts it, the wire does not move.
- *
- * node -> main   { type: "hello", version, name, platform, boot, ...capabilities (device-api.js DEVICE_CAPABILITIES) }
- *                { type: "capabilities", ...capabilities }   what it offers now (its owner changed what it shares)
- * main -> node   { type: "call", id, target: <a NODE_TARGETS key, device-api.js> | <handle id>, method, args, cwd: { root, path },
- *                  action?, from? }
- *                { type: "abort", id } | { type: "abort", action }
- * node -> main   { type: "result", id, value }       a Result, encoded
- *                { type: "failure", id, message }    the call itself could not run
- *                { type: "event", id, kind, seq?, ... }  exec output, watch changes
- *
- * A write or command carries an `action` id (src/nodes/receipts.js): asked
- * again after a reconnect, with `from` the next event main lacks, the node
- * answers from what it recorded instead of doing it again. `boot` names the
- * node's run; another boot has no receipts, so main reports the outcome
- * unknown.
- *
- * Values are JSON. Bytes travel as `{ $bytes: base64 }`, the environment's two
- * error classes as `{ $error: "file" | "exec", code, message, path?, spillPath? }`,
- * and an object with methods of its own (a line reader, a directory reader)
- * as `{ $handle: id }`, which main turns back into an object whose methods
- * are calls on that handle.
+ * The vocabulary is Conduit's own and versioned, so an installed node survives changes to pi-durable's environment
+ * API. A write or command carries an `action` id: asked again after a reconnect, the node answers from what it
+ * recorded instead of doing it again; another boot has no receipts, so main reports the outcome unknown.
  */
-/**
- * What this head offers past the protocol itself, told to a node in its
- * reply to hello (decision 30): a node uses only what is listed, so adding a
- * feature never refuses an older node. The version is for breaking changes.
- */
+/** A node uses only what is listed, so adding a feature never refuses an older node. The version is for breaking changes. */
 export const NODE_FEATURES = ["relay", "capabilities"];
 
 export const NODE_PROTOCOL_VERSION = 1;
@@ -49,7 +21,6 @@ export function encode(value) {
   return value;
 }
 
-/** Decode, building errors with the classes the caller's environment module exports. */
 export function decode(value, { FileError, ExecutionError, handle = null } = {}) {
   if (Array.isArray(value)) return value.map((item) => decode(item, { FileError, ExecutionError, handle }));
   if (!value || typeof value !== "object") return value;
@@ -61,12 +32,8 @@ export function decode(value, { FileError, ExecutionError, handle = null } = {})
 }
 
 /**
- * Which grant a method needs, and which of its arguments are paths.
- *
- * Checked on the node, against the roots its owner shared: main asks, the
- * device decides. A method that is not listed is not served. `contents`
- * marks a method that reads or writes what a file holds, not just its name:
- * those are refused on files the root keeps back (src/nodes/secrets.js).
+ * Checked on the node: main asks, the device decides. A method that is not listed is not served. `contents` methods
+ * are refused on files the root keeps back.
  */
 export const METHOD_GRANTS = Object.freeze({
   absolutePath: { grant: "read", paths: [] },
@@ -95,14 +62,12 @@ export const METHOD_GRANTS = Object.freeze({
   exec: { grant: "shell", paths: [] },
 });
 
-/** Whether a node serves this call (device-api.js NODE_TARGETS): asked of a declared target, a method it lists. */
 export function servedCall(target, method) {
   const declared = Object.hasOwn(NODE_TARGETS, target) ? NODE_TARGETS[target] : null;
   if (!declared) return false;
   return declared.methods === "grants" ? Object.hasOwn(METHOD_GRANTS, method) : declared.methods.includes(method);
 }
 
-/** Methods of the handles a call can return, by the method that made them. */
 export const HANDLE_METHODS = Object.freeze(["readLine", "read", "scanLines", "info", "next", "close"]);
 
 const inside = (root, target) => {
@@ -110,7 +75,6 @@ const inside = (root, target) => {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 };
 
-/** The shared root a path falls in, if it is shared with this grant. */
 export function rootFor(roots, absolute, grant) {
   return roots.find((root) => root[grant] && inside(path.resolve(root.path), absolute)) || null;
 }

@@ -11,26 +11,11 @@ const ACTIONS = new Set(Object.entries(METHOD_GRANTS)
   .filter(([, rule]) => rule.grant === "write" || rule.grant === "shell").map(([method]) => method));
 
 /**
- * A pi-durable execution environment on another device (plan decision 5).
- *
- * Every method is one call over the device's node socket, run there in `cwd`;
- * the device checks it against what it shares. The coding tools cannot tell
- * this from the local environment. A device that is offline is waited for
- * (the turn shows what it waits on). A call cut off by a disconnect is asked
- * again once the device is back: a read simply, a write or command by its
- * action id, which the device answers from its receipt -- the command having
- * kept running meanwhile, its output resumed where it broke off. Only a
- * device that restarted meanwhile cannot say; the outcome is reported as
- * unknown, never retried blind. A conversation told to go on without the
- * device (`excuse`, decision 21) stops waiting: each call says the device is
- * unavailable until it is back.
+ * A call cut off by a disconnect is asked again once the device is back: a read simply, a write or command by its
+ * action id. Only a device that restarted meanwhile cannot say; the outcome is reported as unknown, never retried blind.
  */
 export class RemoteExecutionEnv {
-  /**
-   * `place` is where calls run, `{ root, path }`: a root the device shares,
-   * by id, and a path inside it. `cwd` is only how that place reads to people
-   * and the model (the device's own path); nothing is sent by it.
-   */
+  /** `cwd` is only how `place` reads to people and the model; nothing is sent by it. */
   constructor({ hub, nodeId, place, cwd, onWait, excuse = null }) {
     this.hub = hub;
     this.excuse = excuse;
@@ -92,7 +77,6 @@ export class RemoteExecutionEnv {
     }
   }
 
-  /** A reader or watcher the device holds open, as an object whose methods are calls on it. */
   handle({ $handle, ...props }) {
     const object = { ...props };
     for (const method of HANDLE_METHODS) object[method] = (...args) => this.call($handle, method, args.slice(0, -1), args.at(-1));
@@ -115,7 +99,7 @@ export class RemoteExecutionEnv {
     });
   }
 
-  // Not served (see protocol.js): the device's temp directory is outside its roots.
+  // Not served: the device's temp directory is outside its roots.
   async createTempDir() { return err(new FileError("not_supported", "Temporary files are not created on a device")); }
   async createTempFile() { return err(new FileError("not_supported", "Temporary files are not created on a device")); }
 

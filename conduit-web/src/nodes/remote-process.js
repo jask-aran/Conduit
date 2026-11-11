@@ -11,14 +11,8 @@ const call = async (hub, nodeId, method, args, timeoutMs = 15_000) => {
 };
 
 /**
- * A process running on a device (node-processes.js), held from main.
- *
- * It is shaped like what node-pty and child processes give, so terminals and
- * harness adapters take it in their place: `onData`, `onExit`, `write`,
- * `resize`, `kill`, and stdout/stderr told apart for a piped process. It
- * counts the bytes it has had, so after a reconnect it asks the device for
- * the rest and nothing is shown twice. Writes while the device is away are
- * dropped -- a terminal's keystrokes are not worth replaying minutes later.
+ * It counts the bytes it has had, so after a reconnect it asks the device for the rest and nothing is shown twice.
+ * Writes while the device is away are dropped: a terminal's keystrokes are not worth replaying minutes later.
  */
 export class RemoteProcess {
   static async spawn(hub, nodeId, spec) {
@@ -28,11 +22,7 @@ export class RemoteProcess {
     return process;
   }
 
-  /**
-   * A process main already started, e.g. a terminal from before a restart. `claim` makes it the terminal a client
-   * here is typing into: the node refuses while a client attached to it directly holds it (`pty_in_use`), unless
-   * `takeover`. A node older than direct terminals has nothing to claim.
-   */
+  /** `claim`: the node refuses while a client attached to it directly holds it, unless `takeover`. */
   static async reattach(hub, nodeId, procId, { claim = false, takeover = false } = {}) {
     if (claim) {
       await call(hub, nodeId, "claim", [procId, Boolean(takeover)]).catch((error) => {
@@ -72,7 +62,6 @@ export class RemoteProcess {
     if (view.skipped) this.emitData(`\r\n[${view.skipped} bytes of output were lost while disconnected]\r\n`, "out");
   }
 
-  /** The device could not be followed again: a restarted device has none of its old processes. */
   lost(error) {
     // The device went again mid-attach: the process may well be running, and its next hello resumes this.
     if (error?.interrupted || error?.code === "device_offline") return;
@@ -151,7 +140,7 @@ export class RemoteProcess {
     void call(this.hub, this.nodeId, "resize", [this.procId, cols, rows]).catch(() => {});
   }
 
-  /** @returns {Promise<Error | null>} why the device was not told, if it was not */
+  /** @returns {Promise<Error | null>} */
   kill(signal) { return call(this.hub, this.nodeId, "kill", [this.procId, signal]).then(() => null, (error) => error); }
 
   /** Stop following; the process goes on running on the device. */

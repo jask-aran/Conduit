@@ -7,24 +7,8 @@ import { Type } from "@earendil-works/pi-ai";
 import { headlineOf } from "./inbox.js";
 
 /*
- * The jbot message log (docs/plans/persistent-agent.md, "Talking to the person"): what the person and jbot say to
- * each other, apart from jbot's thread, which is its working record. Every turn's final text is a message, to the room
- * its turn came from; the `message` tool says what final text cannot (speak first, a report, notify). Only the app
- * room exists yet.
- *
- * A message: `{ id, at, channel, room, direction: "in" | "out", sender: "person" | "jbot", title?, body,
- * notify: "none" | "push" | "urgent", delivery: { state: "pending" | "sent" | "failed" | "uncertain" | "held", at,
- * error? }, destination?, conversationId, entryId?, native? }`. `native` is the message in its channel's own form (an
- * email's headers, HTML and attachments), so a room never flattens what its channel can say. Ids are idempotency keys:
- * a replayed tool or a republished entry writes nothing twice.
- * The app room is delivered the moment it is written. A message out to another channel is written pending, with its
- * `destination` worked out then and kept (an email's recipients, subject and the message it answers), so what it was
- * sent to never depends on settings or a room changed after it was written; carried, it is sent or failed. One still
- * pending when the log loads was being carried when the hub stopped: it may or may not have gone, so it is uncertain,
- * never sent again on its own. A message in is sent (it reached jbot's thread) or, when the thread would not take it,
- * failed; an email in is pending until its thread takes it, and stays pending across a restart, so the next poll
- * delivers it again (email.js); or `held`, an email in from someone who does not wake jbot (email.js), which stays held: the person sees it in
- * its mail room and the held-mail routine reads it there (mail-task.js).
+ * Ids are idempotency keys: a replayed tool or a republished entry writes nothing twice. A message out to another
+ * channel keeps the destination worked out as it was written, so where it went never depends on later settings.
  */
 const APP = { channel: "app", room: "app" };
 
@@ -34,7 +18,6 @@ export class MessageLog {
     this.messages = [];
     this.ids = new Set();
     this.listeners = new Set();
-    // What carries a message to a channel's room (email: EmailChannel.send); the app room is delivered by being written.
     this.channels = {};
   }
 
@@ -49,7 +32,6 @@ export class MessageLog {
     return this;
   }
 
-  /** Newest last; `before` an id to page back from. */
   list({ before = null, limit = 50 } = {}) {
     const end = before ? this.messages.findIndex((message) => message.id === before) : this.messages.length;
     return this.messages.slice(Math.max(0, (end < 0 ? this.messages.length : end) - limit), end < 0 ? this.messages.length : end);
@@ -57,13 +39,10 @@ export class MessageLog {
 
   has(id) { return this.ids.has(id); }
 
-  /** The person's message written here before it reached the thread (log first): the thread's copy of it is this one. */
   claim(text) {
     return this.messages.findLast((item) => item.direction === "in" && !item.entryId && (item.prompt === text || item.body === text) && Date.now() - Date.parse(item.at) < 10 * 60_000) || null;
   }
 
-  /** The room a turn's answer goes back to: the room of the last message the person (or anyone) put in this thread
-   *  before `entryId`, when its channel can be written to without asking; else the app's. */
   replyRoom(conversationId, entryId) {
     const origin = this.messages.findLast((item) => item.direction === "in" && item.entryId != null && item.entryId < entryId && String(item.conversationId) === String(conversationId));
     if (!origin || origin.channel === "app") return APP;
@@ -75,7 +54,6 @@ export class MessageLog {
     if (this.ids.has(message.id)) return null;
     const away = message.direction === "out" && message.channel && message.channel !== "app";
     const channel = away ? this.channels[message.channel] : null;
-    // Where it goes, decided as it is written; a destination that cannot be named fails it at once.
     let destination = null;
     let unsent = null;
     if (away && !message.destination) {
@@ -91,7 +69,6 @@ export class MessageLog {
     this.ids.add(written.id);
     this.persist();
     for (const listener of this.listeners) listener({ type: "message", message: written });
-    // Out to another channel: written first (pending), then carried; what came of it is its delivery.
     if (away) {
       void (unsent ? Promise.reject(unsent) : channel ? channel.send(written) : Promise.reject(new Error(`No ${written.channel} channel`)))
         .then((native) => this.update(written.id, () => ({ native, delivery: { state: "sent", at: new Date().toISOString() } })))
@@ -120,12 +97,11 @@ export class MessageLog {
   }
 }
 
-/** A provider's label on a text part (pi-ai's TextSignatureV1), as durable-adapter reads it. */
+/** A provider's label on a text part, read as durable-adapter reads it. */
 const phaseOf = (part) => {
   if (!part?.textSignature?.startsWith("{")) return null;
   try { const phase = JSON.parse(part.textSignature)?.phase; return phase === "commentary" || phase === "final_answer" ? phase : null; } catch { return null; }
 };
-/** What of an assistant message is said to the person: its final answer, not commentary on the way. */
 export function finalText(message) {
   const texts = (message?.content || []).filter((part) => part.type === "text" && part.text?.trim());
   const labelled = texts.length > 0 && texts.every((part) => phaseOf(part));
@@ -133,7 +109,6 @@ export function finalText(message) {
   return said.map((part) => part.text).join("\n\n").trim();
 }
 
-/** Mirrors jbot's home thread into the log as it is written: the person's prompts in, every final answer out. */
 export async function mirrorHomeThread(agent, log) {
   const harness = await agent.runtime.open();
   return harness.subscribeCommits((publication) => {
@@ -153,7 +128,6 @@ export async function mirrorHomeThread(agent, log) {
         } else {
           const body = finalText(entry.model?.[0]);
           const stamp = entry.model?.[0]?.timestamp ? new Date(entry.model[0].timestamp).toISOString() : at;
-          // Back where the turn came from: an email of the person's is answered by email; anything else in the app.
           if (body) log.append({ id: `final:${entry.id}`, at: stamp, ...log.replyRoom(home, entry.id), direction: "out", sender: "jbot", body, conversationId: home, entryId: entry.id });
         }
       }
@@ -163,7 +137,6 @@ export async function mirrorHomeThread(agent, log) {
 
 const result = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
 
-/** The `message` tool: jbot speaking to the person beyond its final text. */
 export function MessageTools(runtime) {
   const message = defineTool({
     name: "message",

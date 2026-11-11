@@ -25,11 +25,6 @@ export async function readPolicy(agent) {
   return { policy: JSON.parse(JSON.stringify({ ...STARTER_POLICY, ...stored })), starter: !stored };
 }
 
-/**
- * The rules as jbot and Settings › Blocks read them (the live block `live-approval-rules`), without their tag: the
- * person's three lists, then how the gate treats their direct instructions and the tools that hold their own actions
- * (Settings › jbot: "No approval for your direct instructions", "Connected tools decide what is held").
- */
 export function renderRules(policy, settings = {}) {
   const list = (items) => items?.length ? items.map((item) => `- ${item}`).join("\n") : "(none)";
   const direct = settings.youAsk !== false

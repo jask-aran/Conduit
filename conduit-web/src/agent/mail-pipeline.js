@@ -9,20 +9,7 @@ import YAML from "yaml";
 import { splitQuoted } from "../email-quote.js";
 import { convertible, toMarkdown } from "../markdown/to-markdown.js";
 
-/*
- * One way an email becomes something jbot reads, whichever way it came: mail to jbot's own address (email.js) and the
- * person's Gmail, gathered by the heartbeat's email task (mail-task.js). PostalMime unpacks the message (headers, parts,
- * encodings, attachments); the HTML body, cleaned of what a reader never sees, and each document attachment go through
- * toMarkdown. Everything lands in jbot's folder under mail/<date>/<id>/:
- *
- *   message.eml     the original, byte for byte
- *   message.html    its HTML part, when it has one
- *   message.md      front matter (subject, from, to, cc, date, message id, and what the source adds: labels, a link,
- *                   the thread) and the body as Markdown
- *   <attachment>    each attachment, and <attachment>.md beside a document one
- *
- * The folder is named by the Message-ID, so one email reaching jbot both ways is one folder.
- */
+/* The folder is named by the Message-ID, so one email reaching jbot both ways is one folder. */
 const BODY_MAX = 200_000;
 const ATTACHMENT_CONVERT_MAX = 15 * 1024 * 1024;
 const GIST_MAX = 220;
@@ -30,10 +17,8 @@ const GIST_MAX = 220;
 const sha = (text) => crypto.createHash("sha256").update(text).digest("hex");
 const safeName = (name) => String(name || "attachment").replace(/[^\w.\- ]+/g, "_").slice(0, 120) || "attachment";
 export const named = (party) => party?.name ? `${party.name} <${party.address}>` : party?.address || "";
-/** Where an email's files go, relative to jbot's folder. */
 const mailDir = (messageId, at) => path.join("mail", at.slice(0, 10), sha(messageId).slice(0, 10));
 
-/** What a reader never sees in an email: hidden preheaders, tracking pixels, scripts and styles. */
 const HIDDEN = /display\s*:\s*none|visibility\s*:\s*hidden|mso-hide\s*:\s*all|max-height\s*:\s*0(?![.\d])|opacity\s*:\s*0(?![.\d])/i;
 export const INVISIBLE = /[\u034F\u00AD\u180E\u200B-\u200F\u2028-\u202F\u2060-\u206F\uFEFF]/g;
 export function cleanEmailHtml(html) {
@@ -58,9 +43,8 @@ export function cleanEmailHtml(html) {
 }
 
 /**
- * Email lays itself out with tables, nested deep; as Markdown they become tables of tables. A table is kept only when
- * it holds data: header cells, nothing nested, more than one column. The rest become plain blocks, rows and cells
- * alike, so what they hold reads in order.
+ * Email lays itself out with nested tables, which as Markdown become tables of tables: a table is kept only when it
+ * holds data, the rest become plain blocks so what they hold reads in order.
  */
 const LAYOUT = new Set(["table", "tbody", "thead", "tfoot", "tr", "td", "th", "center"]);
 const descendants = (node, test) => (node.children || []).some((child) => child.type === "tag" && (test(child) || descendants(child, test)));
@@ -76,7 +60,6 @@ function unwrapLayout(nodes) {
   }
 }
 
-/** The first line of its own words that says something: not an image, a lone link, or a greeting on its own. */
 function gistOf(text) {
   for (const line of String(text || "").split(/\n+/)) {
     const plain = line.replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[#>*_`|\\-]+/g, " ").replace(/\s+/g, " ").trim();
@@ -88,12 +71,7 @@ function gistOf(text) {
   return "";
 }
 
-/**
- * An email (its raw RFC 822 bytes) read and kept: `meta` is what its source knows beyond the message (labels, link,
- * thread, account). Returns what callers tell jbot: its parties, its Markdown, its own words apart from what it quotes,
- * a one-line gist, its files. Writes nothing when `folder` is null; no message.eml when `original` is false (a message
- * put back together from parts is not the original).
- */
+/** No message.eml when `original` is false: a message put back together from parts is not the original. */
 export async function readMail(raw, { folder = null, meta = {}, original = true } = {}) {
   const mail = await PostalMime.parse(raw);
   const messageId = mail.messageId || `<${sha(raw).slice(0, 32)}@conduit>`;

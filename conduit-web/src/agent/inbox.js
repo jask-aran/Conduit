@@ -4,27 +4,12 @@ import { Type } from "@earendil-works/pi-ai";
 import { AgentDoc, nextId } from "./agent-doc.js";
 import { inboxEntryText } from "./inbox-files.js";
 
-/*
- * Block II's inbox (docs/plans/persistent-agent.md, Vision): where context waits. Every run that ends with something
- * to say appends one entry; an entry that matters now (urgent, asked for, waiting on an approval) is told to the
- * person at once and lands handled, the rest wait for the heartbeat, or for the person to talk to jbot first, whose
- * home thread sees the unhandled headlines each turn. A run with nothing to say ends with `nothing_to_report` and
- * leaves no entry, only its history. Handled entries stay a week.
- *
- * An entry: `{ id, key, at, kind, title, subagentId, conversationId, level, headline, status, handledAt?, outcome?, for? }`,
- * `level` one of fyi, attention, urgent, failed; `status` unhandled or handled; `key` the run delivery it records;
- * `handledBy` the conversation that marked it (a heartbeat's run, for its line in the home thread).
- */
 const KEPT_MS = 7 * 86400_000;
 const KEPT_MAX = 200;
 const LEVEL_WORD = /^\s*(?:[*_`#>\s]*)(?:URGENT|ATTENTION|FYI|NOTHING)\b[*_`]*\s*[:.-]?\s*/i;
 
-/** How a run ended, if it said so with a tool: `{ outcome: "quiet" | "failed", reason?, at }`. */
 export const RunEnd = defineDoc({ checkpointWhen: () => false, kind: "conduit.agent.run-end", version: 1, scope: "conversation", initial: () => ({ end: null }) });
 
-/** A report's first line, without its level word, as the inbox and the home thread show it. */
-/** Markdown as the words it shows, for where it cannot be drawn (a headline, a notification): links as their text,
- *  no emphasis, code or block marks. */
 export const plainText = (text) => String(text || "")
   .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
   .replace(/`+([^`]*)`+/g, "$1")
@@ -49,20 +34,11 @@ export async function renderWaitingInbox(agent, state = null) {
       ...(items.length > 12 ? [`… and ${items.length - 12} more (conduit_inbox list).`] : [])].join("\n");
 }
 
-/*
- * An entry's text is a document of its own, one per entry id (pi-durable's keyed family), written once when it is
- * filed: the agent's document keeps only the index (what the inbox lists, filters and marks handled in the same commit
- * as a routine's cursors), so it no longer grows with every report and email it records. The text becomes the entry's
- * file (inbox-files.js), which is what is read after that.
- */
+/* An entry's text is a document of its own, so the agent's document keeps only the index and does not grow with every report. */
 export const InboxText = defineDocFamily({ family: true, checkpointWhen: () => false, kind: "conduit.agent.inbox-text", version: 1,
   scope: "session", initial: (seed) => ({ text: String(seed ?? "") }) });
 
-/*
- * An entry's status moves only here. It is filed unhandled, or handled as it is filed when it records what was told at
- * once; handle and dismiss mark it handled once, with when, how and by which conversation; reopen takes it back to
- * unhandled.
- */
+/* An entry's status moves only here. */
 function markHandled(item, outcome, at, conversationId) {
   if (item.status === "handled") return;
   item.status = "handled";
@@ -76,8 +52,6 @@ function markUnhandled(item, reopenedAt) {
   item.reopenedAt = reopenedAt;
 }
 
-/** File an entry in the caller's commit: its index in the agent's document, its text (`body`) beside it. `handled`
- *  (an outcome) files it already handled. */
 export async function fileEntry(tx, entry, now = Date.now(), { handled } = {}) {
   const { body, status, handledAt, outcome, ...index } = entry;
   const doc = await tx.doc(AgentDoc);
@@ -90,13 +64,12 @@ export async function fileEntry(tx, entry, now = Date.now(), { handled } = {}) {
   return item;
 }
 
-/** An entry's text as filed, or "" (an entry from before texts were their own documents carries `body`). */
+/** An older entry carries its text as `body`. */
 export async function filedText(reader, entry, context) {
   if (typeof entry.body === "string") return entry.body;
   return (await reader.snapshot(InboxText, entry.id, context))?.text || "";
 }
 
-/** Append an entry's index to the agent's document; idempotent by `key`. Prunes what has been handled a week. */
 export function appendEntry(doc, entry, now = Date.now()) {
   doc.inbox ||= {};
   const existing = Object.values(doc.inbox).find((item) => item.key === entry.key);
@@ -111,7 +84,6 @@ export function appendEntry(doc, entry, now = Date.now()) {
   return doc.inbox[id];
 }
 
-/** Entries newest first; `unhandled` only those still waiting. */
 export const listInbox = (state, { unhandled = false, for: recipient, kinds, addressed } = {}) => Object.values(state?.inbox || {})
   .filter((item) => (!unhandled || item.status === "unhandled")
     && (!kinds || kinds.includes(item.kind))
@@ -133,7 +105,7 @@ const recipients = (value) => {
   return [...new Set(names)];
 };
 
-/** Shared mutation functions. Caller identity comes from the route or tool, never the input. */
+/** Caller identity comes from the route or tool, never the input. */
 export async function addInboxEntry(tx, input, { author, by, key = `note:${crypto.randomUUID()}` }) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw badInbox("An entry is required.");
   const title = inboxText(input.title, "title");
@@ -181,7 +153,6 @@ const LEVEL_LABEL = { fyi: "FYI", attention: "ATTENTION", urgent: "URGENT", fail
 const addressedTo = (item) => item.for?.length ? ` · for: ${item.for.join(", ")}` : "";
 const line = (item, timeZone) => `- ${item.id} · ${LEVEL_LABEL[item.level] || item.level} · ${item.title}${addressedTo(item)}: ${item.headline || "(no text)"} (${item.kind}, ${new Intl.DateTimeFormat("en-AU", { timeZone, weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date(item.at))})`;
 
-/** Whether it is the person's quiet hours, in the agent's time zone: `{ enabled, start, end }`, wrapping midnight. */
 export function inQuietHours(settings, now = Date.now()) {
   const quiet = settings.quietHours;
   if (!quiet?.enabled) return false;
@@ -231,7 +202,7 @@ export function InboxTools(runtime) {
     if (state.home?.conversationId !== input.conversationId) return undefined;
     return renderWaitingInbox(agent, state);
   });
-  // conduit_inbox is the conduit MCP server's (server/conduit-mcp.js), which every profile's runtime mounts.
+  // conduit_inbox is the conduit MCP server's, which every profile's runtime mounts.
   return { tools: [quiet, failed], sections: [waiting] };
 }
 

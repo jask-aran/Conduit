@@ -14,35 +14,7 @@ const execFileLocal = promisify(execFileCallback);
 // What a harness saved on a device, read there; here, the same functions run in process.
 const HARNESS_READS = { claudeSession, codexRollout, opencodeService };
 
-/**
- * How an adapter runs a harness in one place (decision 24: the head is a
- * device like the others). The same methods whether the place is this
- * server's own folder or a device's, so an adapter never branches on where:
- *
- * - `spawn` / `execFile`: the harness's process, with Node's shapes. On a
- *   device the device runs its own install of `harness`, and only the
- *   variables the adapter added to this server's environment go along.
- * - `sdkSpawn`: what to hand an SDK that spawns its own process (Claude
- *   Code's `spawnClaudeCodeProcess`): `null` here, where the SDK spawns as it
- *   would anyway.
- * - `connect` / `fetch`: a harness's local service, by endpoint
- *   (`{ harness: "codex" }`, `{ port }`) or URL.
- * - `read`: what the harness saved (a session file, a rollout, a service's
- *   state), by the node's own readers (node-harnesses.js), run where it is.
- * - `require`: refuse at once when the place cannot run the harness.
- * - `shells` (a device's only): interactive shells the device keeps, across
- *   disconnects and this server's restarts -- started in the place (or, with
- *   `{ home: true }`, the device's home where its owner allows), followed
- *   again later, killed (when the device is next back, if it is away). This
- *   server's own shells are tmux sessions (pty-manager.js), which outlive it
- *   the same way.
- * - `env`: the durable agent's execution environment (files, shell) in a
- *   folder of the place: this machine's disk, or the device's node. `cwd` is
- *   how the folder reads; on a device the place is what is sent.
- *
- * `place` is `{ nodeId, place }` as a project or record carries them; no
- * node id is this server.
- */
+/** The same methods whether the place is this server's own folder or a device's, so an adapter never branches on where. */
 export function placeProcesses(hub, { nodeId = null, place = null } = {}) {
   if (!nodeId) {
     return {

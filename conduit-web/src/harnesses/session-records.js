@@ -4,52 +4,25 @@ import { isLiveEvent } from "../live-session-api.js";
 import { SocketDelivery, deliveryKey, isPaint, mergeDelivery } from "./socket-delivery.js";
 import { activityOf, turnInFlight } from "./turn.js";
 
-// The live-record store adapters share: the id and chat indexes, the attached
-// browser sockets, and the replay buffer. Codex and ChatGPT Web wrote
-// this identically; adapters now compose it instead so a new harness inherits
-// the socket and replay semantics rather than re-deriving them.
-//
-// This deliberately owns no process lifecycle. Each adapter owns its runtime;
-// none of that belongs to a record store.
+// This deliberately owns no process lifecycle: each adapter owns its runtime.
 export class SessionRecords {
-  /**
-   * @param capabilities the adapter's frozen ChatCapabilities
-   * @param backend the `{ protocol, implementation, installationId }` stamp for views
-   * @param extras per-record view fields this backend adds (title, linkUrl, ...)
-   * @param onPublish side effect before broadcast, e.g. the ChatGPT Web journal
-   * @param logs the per-chat order, for a backend whose transcript is stated
-   */
   constructor({ capabilities, backend, extras = () => ({}), onPublish = null, logs = null, delivery = null, replayLimit = 500 }) {
     this.logs = logs;
     this.replayLimit = replayLimit;
-    // Every harness gets the same delivery discipline: a frame's deltas are
-    // merged into one send, and a socket that has stopped keeping up
-    // given paint to drop rather than a longer queue to work through.
     this.delivery = delivery || new SocketDelivery();
     this.capabilities = capabilities;
     this.backend = backend;
     this.extras = extras;
     this.onPublish = onPublish;
-    // A turn starting, stopping or settling, for the server to say to every client (the runtime stream): a page that
-    // did not send it learns the chat is working, and joins its stream, from this alone.
+    // A page that did not send the turn learns the chat is working, and joins its stream, from this alone.
     this.onTurn = null;
     this.records = new Map();
     this.byChatId = new Map();
   }
 
   /**
-   * Keep what a reconnecting browser will need, and only one copy of the paint.
-   *
-   * The buffer used to take every event, which meant a busy turn filled all 500
-   * slots with deltas and evicted the ops that place the rows those deltas are
-   * painting into. A browser arriving mid-answer was then sent hundreds of
-   * deltas and no structure -- and, because the window is the *last* 500, the
-   * text it got started in the middle of the answer.
-   *
-   * Paint is merged here by the same key the wire merges on, so a block holds
-   * one entry carrying everything written into it so far. Structure is never
-   * pushed out by volume, the replay is the whole answer rather than its tail,
-   * and a turn costs a slot per block instead of one per token.
+   * Paint is merged here by the same key the wire merges on, so a block holds one entry: structure is never pushed out
+   * by volume, and the replay is the whole answer rather than its tail.
    */
   remember(record, event) {
     const key = deliveryKey(event);
@@ -71,23 +44,9 @@ export class SessionRecords {
   }
 
   /**
-   * Make room, paint first.
-   *
-   * A dropped delta costs a repaint; a dropped `message.open` costs the row the
-   * repaint would go in. Evicting by age alone treated them alike, so a turn
-   * with more blocks and tools than the buffer holds pushed its own structure
-   * out and left a reconnecting browser painting into nothing.
-   *
-   * Paint goes in age order until there is room -- all of it, not only the part
-   * that merges. Asking `deliveryKey` which entries were paint answered the
-   * narrower question "which of these merge", so a tool-heavy turn kept its own
-   * starts and ends and evicted the `message.open` they belong under.
-   *
-   * The record is given up only when a turn has stated more than the buffer can
-   * hold at all, and that is not silent: every record event carries its number
-   * in the chat's log, so a client replayed a buffer with a hole in it sees the
-   * gap, asks to be caught up from the last number it held, and is either sent
-   * what it missed or told to take the transcript again.
+   * A dropped delta costs a repaint; a dropped `message.open` costs the row the repaint would go in. So paint goes
+   * first, all of it, not only what merges (`deliveryKey`). A hole left past that is not silent: every event carries
+   * its number in the chat's log, so a client sees the gap and asks to be caught up.
    */
   evict(record, count) {
     let over = count;
@@ -106,21 +65,15 @@ export class SessionRecords {
 
   add(record) {
     record.adapterImplementation ||= this.backend.implementation;
-    // An adapter may seed the buffer before handing the record over -- ChatGPT
-    // Web fills it from its journal. The merge keys point at objects in that
-    // array, so they start empty alongside it rather than at whatever a reused
-    // record was holding.
+    // The merge keys point at objects in the events array, which an adapter may seed before handing the record over,
+    // so they start empty rather than at whatever a reused record was holding.
     record.paint = new Map();
-    // Every harness answers the same two questions about a process: is it
-    // alive, and can it answer yet. A record that never sets `ready` is taken
-    // at its word as ready; one that sets it false reads as starting until it
-    // says otherwise, exactly as a native process does.
     record.createdAt ||= new Date().toISOString();
     record.updatedAt ||= record.createdAt;
     // What the session holds is handed to its scope by the adapter as it is
     // taken; removing the record ends it, however the session ended.
     record.scope = new SessionScope();
-    // Derived, never written: see turn.js.
+    // Derived, never written.
     Object.defineProperty(record, "activity", { get() { return activityOf(this); }, enumerable: true, configurable: true });
     record.scope.defer(() => { record.status = "stopped"; record.active = false; });
     this.records.set(record.id, record);
@@ -159,13 +112,11 @@ export class SessionRecords {
       ready,
       // Somebody is waiting on an answer from it, so it is not free to reclaim.
       waiting: (record.pending?.size || 0) > 0,
-      // Alive but unable to answer is starting, whoever is running it. Without
-      // this a harness that reports readiness would still show as idle while it
-      // came up, and two backends would tell the same story differently.
+      // Alive but unable to answer is starting, whoever is running it, so every backend tells this the same way.
       activity: ready ? activityOf(record) : "starting",
       active: record.active, stopping: record.stopping, generation: record.generation,
-      // A turn is under way by any of the ways a harness says so (turn.js): what a restart waits out. The flags above
-      // are not the whole of it -- a turn sent to Codex and not yet begun, a compaction outside a turn.
+      // What a restart waits out. The flags above are not the whole of it: a turn sent to Codex and not yet begun, a
+      // compaction outside a turn.
       turnInFlight: turnInFlight(record),
       model: record.model, capabilities: this.capabilities, backend: this.backend,
       createdAt: record.createdAt || null, updatedAt: record.updatedAt || record.createdAt || null,
@@ -182,19 +133,12 @@ export class SessionRecords {
     };
   }
 
-  /**
-   * The order this record's events belong to.
-   *
-   * It is the chat's, not the process's, so a restarted daemon goes on
-   * numbering where the last one stopped. A record with no chat -- a driven
-   * thread, an ephemeral probe -- has no transcript to keep an order for, and a
-   * backend that states no transcript was given no log to keep one in.
-   */
+  /** The chat's order, not the process's, so a restarted daemon goes on numbering where the last one stopped. */
   logFor(record) {
     return record?.chatId && !record.ephemeral ? this.logs?.get(record.chatId) || null : null;
   }
 
-  /** @param {{ type: keyof typeof import("../live-session-api.js").LIVE_EVENTS }} event one live-session-api.js declares */
+  /** @param {{ type: keyof typeof import("../live-session-api.js").LIVE_EVENTS }} event */
   publish(record, event) {
     if (!isLiveEvent(event?.type)) throw new TypeError(`Live event ${event?.type} is not declared (live-session-api.js)`);
     record.updatedAt = new Date().toISOString();
@@ -203,7 +147,7 @@ export class SessionRecords {
     if (event?.type === "tool_activity" && (event.phase === "start" || event.phase === "end") && !event.at) {
       event = { ...event, at: record.updatedAt };
     }
-    // A turn that ran no tools changed nothing in its workspace (server.js closes its checkpoint unread).
+    // A turn that ran no tools changed nothing in its workspace.
     if ((event?.type === "transcript_op" && event.op === "tool.open") || (event?.type === "tool_activity" && event.phase === "start")) record.ranTools = true;
     // Numbered before it is buffered or sent, so the replay a reconnecting
     // browser reads carries the same sequence the live stream did.
@@ -215,14 +159,12 @@ export class SessionRecords {
     this.onPublish?.(record, stamped);
     for (const socket of record.clients) this.delivery.send(socket, stamped);
     if (event?.type === "status" && LOGGED_STATUS_PHASES.has(event.phase)) this.onTurn?.(record, stamped);
-    // Timed here, where every harness's events pass (server/turn-timings.js);
-    // a turn that has just ended is stated after its ending.
+    // Timed here, where every harness's events pass; a turn that has just ended is stated after its ending.
     const timed = this.logs?.timings?.observe(record, stamped);
     if (timed) this.publish(record, timed);
     return stamped;
   }
 
-  /** Pace one socket to the reader behind it. See `SocketDelivery`. */
   setFrameInterval(socket, ms) { return this.delivery.setFrameInterval(socket, ms); }
 
   // A reconnecting browser replays the whole buffer before it sees live events,
@@ -236,11 +178,7 @@ export class SessionRecords {
     // through the merge: a browser that has just arrived has nothing to merge
     // into, and the buffer is already bounded.
     for (const event of record.events) if (socket.readyState === 1) socket.send(this.delivery.serialize(event));
-    // Nothing: the stream sends the full catch-up frame immediately after this
-    // returns, built from the adapter's view. Returning a second, thinner
-    // `runtime_state` here meant every attach sent two of them, the first a
-    // strict subset of the second -- and that lean form was the only reason
-    // the browser had to understand two shapes of this event.
+    // Nothing: the stream sends the full catch-up frame immediately after this returns.
     return null;
   }
 }

@@ -7,16 +7,8 @@ import { decode, encode } from "./protocol.js";
 let tunnels = 0;
 
 /**
- * A byte stream to an endpoint on a device, as `net.connect` gives one here:
- * for a harness that serves its own clients locally -- Codex's daemon socket,
- * OpenCode's loopback service -- so main's adapter connects to it as it would
- * on this machine. `endpoint` is `{ harness }` for the harness's own socket, or
- * `{ port }` on the device's loopback; the device decides what it allows.
- *
- * It lives on one connection to the device: a dropped socket ends it, as a
- * dropped network connection would, and the adapter reconnects as it does.
- * A refused or missing endpoint fails with the code `net` would give
- * (`ECONNREFUSED`, `ENOENT`), so adapters that start a daemon on it still do.
+ * A dropped socket ends it, as a dropped network connection would. A refused or missing endpoint fails with the code
+ * `net` would give, so adapters that start a daemon on it still do.
  */
 export function tunnelTo(hub, nodeId, endpoint) {
   const node = hub.live.get(nodeId);
@@ -53,7 +45,7 @@ export function tunnelTo(hub, nodeId, endpoint) {
       withAbortSignal(AbortSignal.timeout(15_000), BACKGROUND_CONTEXT)), { FileError, ExecutionError });
     if (!result.ok) throw Object.assign(new Error(result.error.message), { code: result.error.code });
     if (result.value?.error) throw Object.assign(new Error(result.value.error.message), { code: result.value.error.code });
-    // Destroyed while it opened: the device's end is closed, where it was left connected until the node dropped.
+    // Destroyed while it opened: the device's end is closed too.
     if (stream.destroyed) return void send({ end: true });
     open = true;
     stream.emit("connect");
@@ -62,11 +54,6 @@ export function tunnelTo(hub, nodeId, endpoint) {
   return stream;
 }
 
-/**
- * `fetch` to a loopback HTTP service on a device, through a tunnel: what an
- * adapter needs of a Response -- `ok`, `status`, `text()`, `json()`, and
- * `body` to read a stream from.
- */
 export function fetchOnDevice(hub, nodeId, url, { method = "GET", headers = {}, body, signal } = {}) {
   const target = new URL(url);
   return new Promise((resolve, reject) => {

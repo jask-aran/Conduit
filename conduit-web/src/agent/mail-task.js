@@ -3,25 +3,13 @@ import { runSource } from "./feeds.js";
 import { gatherMail, mailSince } from "./mailbox.js";
 import { INVISIBLE, readMail } from "./mail-pipeline.js";
 
-/*
- * The `email` task: the person's new Gmail, for a routine (the heartbeat's first task). An Executor program lists the
- * inbox and fetches each message it has not seen whole, as its raw RFC 822 bytes still base64url-encoded (Executor's
- * sandbox decodes slowly); the hub decodes them and reads each through the mail pipeline (mail-pipeline.js), so the
- * mail lands in jbot's folder as mail/<date>/<id>/message.md beside its original. What the routine's run is given is an
- * index: one line per email with a gist and the path to its message.md, for the run to open what needs a closer look.
- *
- * In a routine's front matter: `- { id: email, kind: email }`, optionally `query` (Gmail search, default the inbox of
- * the last two days without promotions or social) and `max` (messages fetched a firing, default 25). Like any stream
- * task, its first firing only learns what is there.
- */
+/* The Executor program returns raw messages still base64url-encoded, since its sandbox decodes slowly; the hub decodes. */
 const DEFAULT_QUERY = "in:inbox newer_than:2d -category:promotions -category:social";
 const MAX = 25;
 /*
- * What one firing may pull through Executor, whose program has about 30 seconds, in two rounds of calls: the lists
- * (Gmail's search splits them by size), then every message at once. An email under 2 MB comes whole (attachments and
- * all), at most RAW_COUNT a firing, the rest waiting, unseen, for the next; a bigger one comes as its text and HTML
- * parts only, its attachments named. A batch too big to finish would otherwise fail the same way every heartbeat, its
- * cursor never moving. The Gmail accounts are found once and kept in the cursor, and found again if a list fails.
+ * Executor's program has about 30 seconds: an email under 2 MB comes whole, at most RAW_COUNT a firing; a bigger one
+ * comes as its text and HTML parts only. A batch too big to finish would fail the same way every firing, its cursor
+ * never moving.
  */
 const RAW_COUNT = 12;
 
@@ -66,10 +54,6 @@ const items = await Promise.all(plan.map(async (message) => {
 }));
 return [...items, { accounts }];`;
 
-/**
- * An email too big to fetch whole, put back together from its headers and body parts as a message the pipeline reads
- * like any other; its attachments stay in Gmail (named under not-fetched in message.md).
- */
 function partialMessage(item) {
   const boundary = `conduit-${item.gmailId}`;
   const part = (type, data) => data ? `--${boundary}\r\nContent-Type: ${type}; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n`
@@ -78,7 +62,6 @@ function partialMessage(item) {
     + `Content-Type: multipart/alternative; boundary="${boundary}"\r\n\r\n${part("text/plain", item.text)}${part("text/html", item.html)}--${boundary}--\r\n`);
 }
 
-/** Gmail's labels a reader cares about, as words: its categories, important, starred, unread. */
 const labelWords = (ids) => ids.filter((label) => /^CATEGORY_|^IMPORTANT$|^STARRED$|^UNREAD$/.test(label))
   .map((label) => label.replace(/^CATEGORY_/, "").toLowerCase()).filter((label) => label !== "personal");
 const linkOf = (item) => `https://mail.google.com/mail/u/0/#all/${item.gmailId}`;
@@ -88,7 +71,6 @@ const unescape = (text) => String(text || "").replace(/&(amp|lt|gt|quot|#39|#(\d
   code ? String.fromCodePoint(Number(code)) : { amp: "&", lt: "<", gt: ">", quot: '"', "#39": "'" }[name]).replace(INVISIBLE, "").replace(/\s+/g, " ").trim();
 const when = (at, zone) => new Intl.DateTimeFormat("en-AU", { timeZone: zone, weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date(at));
 
-/** The new Gmail, read into the mail pipeline: what gatherMail wants of a source (mailbox.js). */
 async function fetchGmail(agent, task, state) {
   const outcome = await runSource(agent, { kind: "executor", code: gmailProgram({ ...task, accounts: state.accounts }) },
     { seen: state.known, raw: true });
@@ -120,11 +102,6 @@ async function fetchGmail(agent, task, state) {
 
 const SHOWN = 60;
 
-/**
- * One firing: gather the new mail into the mailbox, then show this routine what the mailbox gathered since its last
- * firing (its first: the last day). `{ fresh, cursor, items, sources, block }` as routines.js's tasks give it;
- * `sources` the message.md files its report should point back to.
- */
 export async function mailTask(agent, task, cursor, { block, now = Date.now() } = {}) {
   const zone = agent.settings().timezone;
   const gathered = await gatherMail(agent, (state) => fetchGmail(agent, task, state))
@@ -144,12 +121,7 @@ export async function mailTask(agent, task, cursor, { block, now = Date.now() } 
     block: block(task.id, { new: lines.length, at: when(now, zone) }, [...notes, text.join("\n") || "Nothing new."].join("\n\n")) };
 }
 
-/**
- * The `held-mail` task: email to jbot from someone who does not wake it (email.js), held in its mail room, since the
- * routine last looked: one line each, its sender marked untrusted, with a few lines of its own words and the path to
- * its message.md. A routine on `trigger: { on: held-mail }` is woken by each one; this task is what it reads, so mail
- * that came while it was busy is read the next time.
- */
+/** Reads from a cursor rather than the waking event, so held mail that came while the routine was busy is read the next time. */
 export function heldMailTask(agent, task, cursor, { block, now = Date.now() } = {}) {
   const zone = agent.settings().timezone;
   // The first look goes back a day: what was held before the routine existed is not news.

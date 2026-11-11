@@ -5,19 +5,9 @@ const MAX_RECEIPTS = 500;
 const MAX_EVENT_BYTES = 1024 * 1024;
 
 /**
- * What this node did for each action main asked of it (plan: "How far do we
- * go on knowing whether a cut-off action happened?").
- *
- * A call that changes the device -- a write, a command -- carries an action
- * id. Its work belongs to the node, not to the socket that asked: a dropped
- * socket leaves it running, and main asking the same action again (after a
- * reconnect) is answered from the receipt -- its events from where main's
- * copy ended, then its result -- instead of doing it twice. `boot` names this
- * run of the node: receipts do not survive a restart, so main, seeing another
- * boot, reports the outcome as unknown rather than asking again.
- *
- * Events are numbered; a long command's oldest output is dropped past a
- * bound, and a replay from before it starts at what is left.
+ * An action's work belongs to the node, not to the socket that asked: asked again after a reconnect, it is answered
+ * from the receipt instead of done twice. Receipts do not survive a restart, so main, seeing another boot, reports the
+ * outcome as unknown rather than asking again.
  */
 export class Receipts {
   constructor() {
@@ -25,10 +15,6 @@ export class Receipts {
     this.items = new Map();
   }
 
-  /**
-   * Answer `action` through `listener` ({ event, result }): start it with
-   * `start(context-free emit, signal)` if it is new, else replay from `from`.
-   */
   follow(action, from, listener, start) {
     let receipt = this.items.get(action);
     if (!receipt) {

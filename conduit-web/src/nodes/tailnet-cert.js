@@ -2,12 +2,7 @@ import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-/**
- * A certificate for this machine's tailnet name, from Tailscale itself, so a page on https can read from the node
- * directly (plan: "files take the shortest way"): `tailscale cert` issues and renews it (Let's Encrypt, through the
- * tailnet's HTTPS setting) and keeps it in this node's home. Null where Tailscale is not installed, not on a tailnet
- * with HTTPS certificates, or will not issue one: the node then offers no https route and pages read through the hub.
- */
+/** Null where Tailscale will not issue one: the node then offers no https route and pages read through the hub. */
 const CLI = process.platform === "win32" ? ["C:\\Program Files\\Tailscale\\tailscale.exe", "tailscale"] : ["tailscale"];
 
 const run = (file, args) => new Promise((resolve, reject) => {

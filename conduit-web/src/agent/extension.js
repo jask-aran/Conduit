@@ -12,16 +12,7 @@ import { policyWraps } from "./policy.js";
 import { ScheduleTools } from "./schedule.js";
 import { RoutineTools } from "./routines.js";
 
-/**
- * The persistent agent's extension, selected by its threads (the `agent`
- * template) and inherited by its runs: memory, schedules, watches, chats, the inbox,
- * and the approval policy over every tool that could leave its folder (a connector's tools and `approved` are the
- * connectors extension's, which the Assistant selects too).
- *
- * Each part is `Part(runtime) → { tools?, tasks?, sections? }` and reaches the
- * agent at call time as `runtime.agent` (agent.js), which the server makes
- * after the runtime: a part never holds it at install.
- */
+/** A part reaches the agent as `runtime.agent` at call time: the server makes it after the runtime. */
 export function AgentExtension(runtime, installed) {
   const schedules = ScheduleTools(runtime);
   const parts = [MemoryTools(runtime), schedules, EventTools(runtime), ChatTools(runtime), InboxTools(runtime), MessageTools(runtime), FeedTools(runtime, schedules), RoutineTools(runtime)];
@@ -31,7 +22,7 @@ export function AgentExtension(runtime, installed) {
     tools: own,
     hooks: [routineToolGuard(runtime), routineCompactionGuard()],
     tasks: parts.flatMap((part) => part.tasks || []),
-    // The person's approval rules (live-approval-rules), so it knows what will be asked before it tries.
+    // The person's approval rules, so it knows what will be asked before it tries.
     sections: [...parts.flatMap((part) => part.sections || []), section("approval-rules", async () => runtime.agent?.enabled() ? renderRules((await readPolicy(runtime.agent)).policy, runtime.agent.settings()) : undefined)],
     // The device tools are another extension's; the agent's own outward tools are its own.
     wraps: [...policyWraps(runtime, [...installed, ...own]), ...["agent-memory", "agent-inbox"].map((key) =>

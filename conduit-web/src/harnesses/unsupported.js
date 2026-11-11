@@ -1,19 +1,9 @@
-// Capability flags stop being decorative here. An adapter declares what it can
-// do once, in its ChatCapabilities, and the refusals for everything else are
-// derived from that - rather than each adapter hand-writing four throwing stubs
-// that can drift out of step with the flags it advertises.
+// Refusals are derived from the capability flags, so they cannot drift out of step with what an adapter advertises.
 
 const refuse = (message) => () => {
   throw Object.assign(new Error(message), { code: "unsupported_interaction", status: 400 });
 };
 
-/**
- * Build the stub methods a backend must expose but cannot honour.
- *
- * @param capabilities the adapter's ChatCapabilities
- * @param label human name used in the refusal message
- * @param overrides methods the adapter implements after all, or extra refusals
- */
 export function unsupported(capabilities, { label, overrides = {} } = {}) {
   const stubs = {};
   if (!capabilities.approvals) {

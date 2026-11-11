@@ -19,12 +19,10 @@ import { decode, encode, HANDLE_METHODS, METHOD_GRANTS } from "./protocol.js";
 const MAX_DIRECT_BYTES = 512 * 1024 * 1024;
 const CHUNK_BYTES = 1024 * 1024;
 const MAX_READING = 4;
-// A sealed read's request: the grant, the query and the revision held, sealed.
 const MAX_SEALED_REQUEST = 16 * 1024;
 const [HEAD, BODY, END] = [0, 1, 2];
 const STATUS = { path_not_found: 404, ENOENT: 404, permission_denied: 403, file_too_large: 413 };
-// A terminal's input frame and unsent output, as the hub's terminal socket bounds them (pty-manager.js,
-// terminal-stream.js).
+// A terminal's input frame and unsent output, as the hub's terminal socket bounds them.
 const MAX_INPUT_BYTES = 4 * 1024 * 1024;
 const PENDING_LIMIT = 1024 * 1024;
 const dimension = (value, fallback) => {
@@ -33,12 +31,9 @@ const dimension = (value, fallback) => {
 };
 
 /**
- * A node answering reads itself, on loopback: what the hub's `GET /v0/projects/:id/file` answers, for a client holding
- * the hub's grant for that place (direct.js). It runs the hub's inspector over this device's disk through `call`, the
- * agent's own guarded environment call, so a grant reaches no further than the hub's calls do: the place must be a
- * shared root, the path inside it, and kept-back files stay kept back.
+ * Reads run through `call`, the agent's own guarded environment call, so a grant reaches no further than the hub's
+ * calls do: the place must be a shared root, the path inside it, and kept-back files stay kept back.
  */
-// How a read's answer is written: as it is, or sealed a frame at a time (below). `write` says whether to keep going.
 const plainOut = (response) => ({
   response,
   get headersSent() { return response.headersSent; },
@@ -82,13 +77,9 @@ const bodyOf = (request, limit) => new Promise((resolve, reject) => {
 });
 
 /*
- * Reads are sealed where their route is a LAN in plain HTTP (plan: sealed reads), as terminals are: `POST /sealed`
- * carries `[nonce length][the grant's nonce][a 16-byte id][the request sealed]`, the request being `{ grant, query,
- * ifNoneMatch }`; the answer is `[a 16-byte salt]` then frames, `[length][sealed]` each, a head (`{ status, headers }`)
- * first, body bytes, and an end, so a cut-short answer never looks whole. Keys: direct.js `readRequestKey` and
- * `readAnswerKey` under the grant's channel key. Over loopback, https or the tailnet, `GET /file` as it is.
- * `runSecret()` is the key this run of the node gave the hub over a link nobody else reads; with none, nothing is
- * sealed and reads go as they did.
+ * Reads are sealed where their route is a LAN in plain HTTP: `POST /sealed` carries `[nonce length][the grant's
+ * nonce][a 16-byte id][the request sealed]`; the answer is `[a 16-byte salt]` then frames, `[length][sealed]` each, a
+ * head first, body bytes, and an end, so a cut-short answer never looks whole.
  */
 export function serveDirect({ secret, runSecret = null, call, log = console, certificate = null, shells = null }) {
   // The agent's calls, as the hub's execution environment would make them over the socket; readers opened for one
@@ -159,7 +150,7 @@ export function serveDirect({ secret, runSecret = null, call, log = console, cer
       const challenge = url.searchParams.get("c");
       if (asked && !response.hasHeader("Access-Control-Allow-Origin")) letIn(asked);
       if (!nonce || !challenge || nonce.length > 64 || challenge.length > 128) return json(200, { ok: true });
-      // Bound to where it was reached, as the client checks it; unbound as well, for v0.8.7 clients' reads.
+      // Bound to where it was reached, as the client checks it; unbound as well, for clients that check the plain proof.
       const key = proofKey(secret(), nonce);
       const where = `${request.socket.encrypted ? String(request.socket.servername || "").toLowerCase() : arrivedAt}:${request.socket.localPort}`;
       return json(200, { ok: true, proof: proofOf(key, challenge), bound: boundProofOf(key, challenge, where) });
@@ -185,8 +176,6 @@ export function serveDirect({ secret, runSecret = null, call, log = console, cer
     if (asked && grant.origin === asked && !response.hasHeader("Access-Control-Allow-Origin")) letIn(asked);
     return serveRead(grant, url.searchParams, request.headers["if-none-match"], plainOut(response));
   };
-  // A sealed read's request opened (see above), or null: the grant must be for the nonce its key came from, and each
-  // id is read once.
   const openRead = async (request) => {
     const key = runSecret?.();
     if (!key) return null;
@@ -207,7 +196,6 @@ export function serveDirect({ secret, runSecret = null, call, log = console, cer
     spentReads.set(id, grant.expires);
     return { grant, channel, id, query: new URLSearchParams(asked.query), ifNoneMatch: typeof asked.ifNoneMatch === "string" ? asked.ifNoneMatch : undefined };
   };
-  // What the hub's `GET /v0/projects/:id/file` answers, written through `out`: as it is, or sealed.
   const serveRead = async (grant, params, ifNoneMatch, out) => {
     const { response } = out;
     const relative = params.get("path");
@@ -274,14 +262,9 @@ export function serveDirect({ secret, runSecret = null, call, log = console, cer
     }
   };
   /*
-   * Terminals attached here directly (plan: direct terminals): a WebSocket at `/pty`, sealed end to end. The client's
-   * first frame names the grant's nonce; from then every frame both ways is sealed under the key the hub gave the
-   * client and this node works out from that nonce (direct.js `nodeChannel`), the grant itself included. Someone on the
-   * network between them, or passing the frames on, can neither read nor change them; a frame that does not open ends
-   * the socket. Inside, it speaks what the hub's terminal socket speaks (terminal-stream.js), so a client cannot tell
-   * which way it is attached. `shells` keeps who holds each terminal, the hub's clients included (node-agent.js).
-   * Keys come from `runSecret()`, the one this run of the node gave the hub over a link nobody else reads; none, and
-   * no terminal is attached here.
+   * Terminals at `/pty` are sealed end to end: after the first frame names the grant's nonce, every frame both ways,
+   * the grant included, is sealed, and a frame that does not open ends the socket. Inside, it speaks what the hub's
+   * terminal socket speaks, so a client cannot tell which way it is attached.
    */
   const sockets = shells ? new WebSocketServer({ noServer: true, maxPayload: MAX_INPUT_BYTES + 64 }) : null;
   // A grant attaches once: its nonce is kept until it would have run out anyway.
@@ -394,8 +377,7 @@ export function serveDirect({ secret, runSecret = null, call, log = console, cer
   const listening = new Promise((resolve) => server.listen(0, "0.0.0.0", () => resolve(server.address().port)));
   server.on("error", (error) => log.warn?.(`[conduit-node] direct reads: ${error.message}`));
   // And over https, for pages (which may not read plain HTTP), under any name this machine has a certificate a browser
-  // trusts for: its tailnet name, from Tailscale (renewed daily), and its name on this network, from the hub
-  // (lan-names.js). One port; the name a client asks for picks the certificate.
+  // trusts for. One port; the name a client asks for picks the certificate.
   const contexts = new Map();
   let secure = null;
   let securePort = null;
@@ -427,7 +409,6 @@ export function serveDirect({ secret, runSecret = null, call, log = console, cer
   return {
     listening,
     addCertificate,
-    /** Where it answers over https, and under which names: null until it has a certificate. */
     secureRoute: () => (securePort && contexts.size ? { port: securePort, names: [...contexts.keys()] } : null),
     onSecureChange: (fn) => { changed = fn; },
     close: () => { server.close(); secure?.server?.close(); sockets?.close(); clearTimeout(renew); },

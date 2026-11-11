@@ -141,7 +141,6 @@ function validOnce(at, now) {
   return date.getUTCFullYear() === Number(match[1]) && date.getUTCMonth() + 1 === Number(match[2]) && date.getUTCDate() === Number(match[3]);
 }
 
-/** Daily slots expire after two hours. */
 export function slotFate(schedule, slot, now) {
   const late = now - Date.parse(slot);
   if (schedule.kind === "daily") {
@@ -151,7 +150,6 @@ export function slotFate(schedule, slot, now) {
   return late <= 6 * 3600000 ? "fire" : "missed";
 }
 
-/** How long a run's routine waits for the gathering due with it before going without it. */
 const GATHER_WAIT_MS = 5 * 60_000;
 
 function makeClock(runtime) {
@@ -177,9 +175,7 @@ function makeClock(runtime) {
         if (!waiting) return;
         await api.commit(() => ({ status: "running", checkpoint: { phase: "sleep", slot } }), context);
       },
-      // Asleep until the slot (a durable sleep: no process held, survives restarts), in steps of a minute against the
-      // wall clock: a timer does not count time the machine sleeps, so one long wait set at night fired hours late
-      // after the computer woke.
+      // In steps of a minute against the wall clock: a timer does not count time the machine sleeps.
       sleep: async (task, api, context) => {
         const slot = task.state.checkpoint.slot;
         const next = Date.parse(slot);
@@ -194,13 +190,10 @@ function makeClock(runtime) {
         const slot = task.state.checkpoint.slot;
         const fate = slotFate(schedule, slot, api.now());
         const missed = !agent.active() || Date.parse(slot) <= (agent.resumedAt || 0) || fate !== "fire";
-        // Admission is idempotent. The lifecycle gathers after its prerequisites finish.
         const routine = schedule.routine && !missed ? await readRoutine(agent.folder, schedule.routine).catch((error) => ({ error: error.message })) : null;
         let fired = routine && !routine.error ? await api.memo(`routine:${slot}`, context) : null;
-        // A routine whose run weighs what was gathered (the heartbeat, the brief) goes after the gathering due with it:
-        // the Email feed and the heartbeat both due at :18:57 must not race, or the run misses what the feed files in
-        // that moment and jbot has to find it on its own. It waits (a few seconds at a time, at most GATHER_WAIT_MS)
-        // until no gathering routine's slot is at or before its own.
+        // A routine whose run weighs what was gathered goes after the gathering due with it, or the run misses what
+        // a gathering routine files in that moment.
         if (routine && !routine.error && fired === undefined && routine.gate !== "never" && api.now() - Date.parse(slot) < GATHER_WAIT_MS) {
           const gatherers = new Set((await listRoutines(agent.folder)).filter((other) => !other.error && other.gate === "never").map((other) => `r-${other.name}`));
           const snapshot = await api.snapshot(AgentDoc, context);
@@ -212,7 +205,6 @@ function makeClock(runtime) {
         if (routine && !routine.error && fired === undefined) {
           fired = await api.memo(`routine:${slot}`, { admitted: true }, context);
         }
-        // A feed that reads (a program, a script) runs here, without a model; a run feed is a run like any other.
         const direct = schedule.feed && schedule.feed.source.kind !== "run";
         const outcome = direct && !missed ? await api.memo(`feed:${slot}`, await runSource(agent, schedule.feed.source, { seen: schedule.feed.seen || [] }), context) : null;
         const spends = schedule.routine ? false : !missed && !direct;
@@ -222,7 +214,7 @@ function makeClock(runtime) {
           const doc = await tx.doc(AgentDoc);
           const current = doc.schedules[task.input.scheduleId];
           if (!current || current.cancelling || current.clock !== task.id) return terminal();
-          // Taken already: run by hand while it was due (POST /v0/agent/schedules/:id/run).
+          // Taken already: run by hand while it was due.
           const taken = current.lastAt && Date.parse(current.lastAt) >= Date.parse(slot);
           if (agent.active() && Date.parse(slot) > (agent.resumedAt || 0)) {
             if (routine?.error) { doc.routineState ||= {}; doc.routineState[schedule.routine] = { lastAt: slot, lastError: routine.error }; }
@@ -255,10 +247,7 @@ function makeClock(runtime) {
   });
 }
 
-/**
- * Add a schedule item with its clock, in a commit on the home conversation: a feed's (feeds.js), from jbot or the
- * person. A feed's first run comes a minute later, so it learns what is there before anything new arrives.
- */
+/** A feed's first run comes a minute later, so it learns what is there before anything new arrives. */
 export function clockAdder(runtime) {
   const clock = makeClock(runtime);
   return async (tx, doc, item, conversationId) => {
@@ -385,8 +374,7 @@ export async function seedSchedules(agent) {
     const settings = agent.settings();
     const resumed = clockOn.get(agent) === false && settings.on !== false;
     clockOn.set(agent, settings.on !== false);
-    // The routine files are the clocks the hub owns: one `r-<name>` each. A built-in schedule from before them (the
-    // brief's, the heartbeat's) or one whose routine file went is removed.
+    // The routine files are the clocks the hub owns: one `r-<name>` each. Any other system schedule is removed.
     const desired = await routineClocks(agent);
     const schedules = (await agent.state()).schedules;
     const ids = new Set([...Object.keys(desired), ...Object.keys(schedules)]);
@@ -404,7 +392,7 @@ export async function seedSchedules(agent) {
         || JSON.stringify(old.rules) !== JSON.stringify(target.rules)
         || (["daily", "rules"].includes(old.kind) && old.zone !== settings.timezone));
       if (old && !changed) {
-        // Same clock, newer words (a built-in task's text changed in a release): take them without a new clock.
+        // Same clock, newer words: take them without a new clock.
         if (target.task !== old.task) await conversation.commit(async (tx) => {
           const current = (await tx.doc(AgentDoc)).schedules[id];
           if (current && current.clock === old.clock) current.task = target.task;
@@ -440,7 +428,6 @@ export async function seedSchedules(agent) {
   try { await work; } finally { if (seeding.get(agent) === work) seeding.delete(agent); }
 }
 
-/** Remove a schedule or a feed the person or the agent made (not a settings-owned one): its clock first. */
 export async function cancelSchedule(agent, id) {
   const marked = await agent.update((doc) => {
     const item = Object.hasOwn(doc.schedules, id) ? doc.schedules[id] : null;
@@ -463,19 +450,16 @@ export async function listSchedules(agent) {
   const zone = agent.settings().timezone;
   const now = Date.now();
   const state = await agent.state();
-  // A routine that only gathers (no run) shows as a feed does: where it reads from and how its last firing went.
   const routines = (await listRoutines(agent.folder)).filter((routine) => !routine.error);
   const gathers = new Map(routines.filter((routine) => routine.gate === "never")
     .map((routine) => [routine.name, routine.tasks[0]?.kind]));
   const wording = new Map(routines.map((routine) => [routine.name, triggerWords(routine.trigger)]));
-  // A routine under way (its fork or run working, or compacting the home thread after), by name.
   const running = new Map(Object.values(state.routineRuns || {}).map((run) => [run.routine?.name, run.compactionId ? "compacting" : "working"]));
   const progress = (routine) => ({ ...(running.has(routine) ? { running: running.get(routine) } : {}),
     ...(state.routineState?.[routine]?.compaction ? { compaction: state.routineState[routine].compaction } : {}) });
   // A routine switched off has no clock; it is listed as off (the page dims it), so turning it off never hides it.
   const off = routines.filter((routine) => routine.enabled === false && !state.schedules[`r-${routine.name}`])
     .map((routine) => ({ id: `r-${routine.name}`, title: routine.title || routine.name, kind: "rules", nextAt: null, lastAt: null, routine: routine.name, cadence: wording.get(routine.name), off: true, ...progress(routine.name) }));
-  // A routine an event starts (`trigger: { on: … }`) says so; one with no clock at all is listed all the same.
   const evented = new Set(routines.filter((routine) => (Array.isArray(routine.trigger) ? routine.trigger : [routine.trigger]).some((rule) => rule.kind === "on"))
     .map((routine) => routine.name));
   const waiting = routines.filter((routine) => routine.enabled !== false && evented.has(routine.name) && !state.schedules[`r-${routine.name}`])
@@ -490,7 +474,6 @@ export async function listSchedules(agent) {
       : gathers.has(routine) ? { source: gathers.get(routine) === "script" ? "script" : "executor", lastRunAt: last?.lastAt || null, lastCount: last?.fresh || 0,
         lastError: last?.lastError || null, primed: true } : null;
     return { id, title, kind, at, everyMinutes: kind === "rules" ? item.rules.find((rule) => rule.kind === "every" && rule.during === undefined)?.everyMinutes : everyMinutes, nextAt, lastAt, system, ...(routine ? { routine, task: item.task, ...(kind === "rules" || evented.has(routine) ? { cadence: wording.get(routine) } : {}) } : {}),
-      // Its rules as they apply now (a quiet window resolved to the hours), for the page's day strip.
       ...(kind === "rules" ? { rules: item.rules.map((rule) => ({ kind: rule.kind, ...(rule.everyMinutes ? { everyMinutes: rule.everyMinutes } : {}), ...(rule.at ? { at: rule.at } : {}), during: rule.during ?? null })) } : {}),
       ...(feed ? { feed } : {}), ...(routine ? progress(routine) : {}) };
   }), ...waiting, ...off]

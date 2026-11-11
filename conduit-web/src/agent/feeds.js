@@ -10,29 +10,14 @@ import { isReadAction, programPaths } from "./policy.js";
 import { sandboxHelper, sandboxedEnv } from "./sandbox.js";
 
 /*
- * Feeds (docs/plans/persistent-agent.md, Vision): sources that fill the inbox, mostly without a model. A feed is a
- * schedule item (schedule.js) with a `feed`, so its clock, its next time and its cancelling are a schedule's:
- *
- *   feed: { source, level, seen, primed, lastRunAt, lastCount, lastError }
- *   source: { kind: "executor", code }   a read-only Executor program, run by the hub (the person's accounts)
- *         | { kind: "script", command }  bash in jbot's sandboxed folder
- *         | { kind: "run", task }        a model run, for what needs judgement; it reports as a run does
- *
- * An executor program or a script prints (returns) JSON: an array of items, or `{ items }`, each
- * `{ id, title, detail?, text?, encoded?, at?, level?, url? }`: `detail` one line (a sender), `text` the content itself
- * (a mail's body, cut short), so whoever reads the inbox decides without going back to the source. A program may hand
- * the content over still encoded instead, `encoded: { data, mimeType }` (base64 or base64url, as Gmail gives a part):
- * the hub decodes it and turns HTML into text, which in Executor's sandbox took a minute for one large mail. The hub keeps the ids it has seen (the last 500) and puts what is new
- * into one inbox entry per tick; the first run only learns what is already there. An executor program is handed those
- * ids as `seen` (a Set), so it can skip fetching the details of what was already reported. jbot adds a feed through the
- * `feed` tool, which asks the person (policy.js): it runs on its own from then on, so a program may only read.
+ * A feed runs on its own once the person approves it, so a program may only read. A program may hand content over
+ * still encoded for the hub to decode, since decoding in Executor's sandbox is slow.
  */
 const MAX_ITEMS = 100;
 export const SEEN_KEPT = 500;
 const LEVELS = ["fyi", "attention", "urgent"];
 const EVERY = { min: 15, max: 1440 };
 
-/** Why a source cannot be a feed, or null. */
 export function sourceProblem(source) {
   if (!source || typeof source !== "object") return "A source is required: { kind: executor, code } | { kind: script, command } | { kind: run, task }.";
   if (source.kind === "executor") {
@@ -51,12 +36,7 @@ export function sourceProblem(source) {
 const TEXT_MAX = 2500;
 const LINKS_MAX = 8;
 const BODY_MAX = 30_000;
-/** Content kept as paragraphs: runs of blank lines and spaces folded, cut short. */
 const prose = (value, max) => { const kept = String(value ?? "").replace(/\r/g, "").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n\n").trim(); return kept.length > max ? `${kept.slice(0, max - 1)}…` : kept; };
-/**
- * An encoded mail part as `{ text, links }`: decoded (base64 or base64url); HTML, cleaned of what a reader never sees,
- * through the Markdown engine (its links stay where they are, as Markdown links). Quoted replies and a signature are cut.
- */
 async function decodeContent(encoded) {
   if (!encoded || typeof encoded.data !== "string") return { text: "", links: [] };
   const raw = Buffer.from(encoded.data.slice(0, 400_000), "base64url").toString("utf8");
@@ -68,8 +48,6 @@ async function decodeContent(encoded) {
 
 const text = (value, max) => { const flat = String(value ?? "").replace(/\s+/g, " ").trim(); return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat; };
 
-/** The list a program's or script's output carries, as it printed it: an array, `{ items }`, or Executor's `{ result }`
- *  around either. */
 function rawItemsOf(output) {
   let value = output;
   if (typeof value === "string") {
@@ -94,7 +72,6 @@ function rawItemsOf(output) {
   return value.slice(0, MAX_ITEMS);
 }
 
-/** JSON items out of a program's or script's output (`rawItemsOf`), each as a feed item. */
 async function itemsOf(output) {
   return Promise.all(rawItemsOf(output).map(async (item) => {
     const raw = item && typeof item === "object" ? item : { title: item };
@@ -109,12 +86,12 @@ async function itemsOf(output) {
   }));
 }
 
-/** Run a feed's source once: `{ items }` or `{ items: [], error }`. Never throws. */
+/** Never throws. */
 export async function runSource(agent, source, { signal, seen = [], raw = false } = {}) {
   const read = raw ? rawItemsOf : itemsOf;
   try {
     if (source.kind === "executor") {
-      // A check that fires as the hub starts found Executor still connecting, and failed until the next one.
+      // A check that fires as the hub starts finds Executor still connecting.
       await agent.connectors.ready("executor");
       const tool = agent.connectors.tools().find((item) => item.name === "mcp__executor__execute");
       if (agent.connectors.entry("executor").status !== "on" || !tool) return { items: [], error: "Executor isn't connected" };
@@ -140,10 +117,6 @@ export async function runSource(agent, source, { signal, seen = [], raw = false 
   } catch (error) { return { items: [], error: text(error?.message || "The feed failed.", 300) }; }
 }
 
-/**
- * Take one tick's outcome into the feed, in the clock's commit: remember what it saw, and put what is new into the
- * inbox as one entry. The first good tick only learns what is there.
- */
 export async function applyOutcome(tx, schedule, outcome, slot) {
   const feed = schedule.feed;
   const seen = new Set(feed.seen || []);
@@ -157,12 +130,10 @@ export async function applyOutcome(tx, schedule, outcome, slot) {
   feed.primed = true;
 }
 
-/** One item as the inbox and a run's task block show it: what it is, when, where, its links, then its text. */
 export const itemText = (item) => `- ${item.title || "(untitled)"}${item.detail ? ` — ${item.detail}` : ""}${item.at ? ` (${item.at})` : ""}`
   + `${item.url ? ` ${item.url}` : ""}${item.links?.length ? `\n  Links: ${item.links.map((link, index) => `[${index + 1}] ${link.label} <${link.url}>`).join(" · ")}` : ""}`
   + `${item.text ? `\n${item.text.replace(/^/gm, "  ")}` : ""}`;
 
-/** New items into the inbox as one entry (a feed's tick, a routine whose output is the inbox). */
 export async function fileItems(tx, { key, title, feedId = null, level = "fyi" }, fresh, slot) {
   const top = fresh.reduce((best, item) => LEVELS.indexOf(item.level) > LEVELS.indexOf(best) ? item.level : best, LEVELS.includes(level) ? level : "fyi");
   const line = (item) => `${item.title || "(untitled)"}${item.detail ? ` — ${item.detail}` : ""}`;
@@ -171,13 +142,11 @@ export async function fileItems(tx, { key, title, feedId = null, level = "fyi" }
     body: fresh.map(itemText).join("\n\n").slice(0, BODY_MAX) }, Date.parse(slot));
 }
 
-/** A feed's schedule item, ready for `addClocked` (schedule.js). */
 export function feedItem(doc, { title, everyMinutes, source, level }, by = null) {
   return { id: nextId(doc, "f"), kind: "every", at: null, everyMinutes, title: text(title, 80), task: null, by,
     feed: { source, level: LEVELS.includes(level) ? level : "fyi", seen: [], primed: false, lastRunAt: null, lastCount: 0, lastError: null } };
 }
 
-/** Why a feed cannot be added, or null. */
 export function feedProblem({ title, everyMinutes, source }) {
   if (typeof title !== "string" || !title.trim()) return "A title is required.";
   if (!Number.isInteger(everyMinutes) || everyMinutes < EVERY.min || everyMinutes > EVERY.max) return `everyMinutes is a whole number from ${EVERY.min} to ${EVERY.max}.`;

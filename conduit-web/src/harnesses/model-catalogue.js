@@ -1,12 +1,4 @@
-/**
- * What models a harness offers, for a harness with no live process.
- *
- * Asking costs a throwaway daemon - Codex starts an app-server just to answer -
- * so the answer is kept per folder and refreshed in the background. A composer
- * opening on a chat that is not warm yet renders from the last answer instead
- * of waiting on a process start, which is the whole point of showing the model
- * selector from cache rather than behind a spinner.
- */
+/** Asking costs a throwaway daemon, so the answer is kept per folder and refreshed in the background. */
 export function createHarnessModelCatalogue() {
   const cached = new Map();
   const inFlight = new Map();
@@ -23,13 +15,8 @@ export function createHarnessModelCatalogue() {
 
   return {
     /**
-     * The catalogue, from cache when we have one, and always refreshed after.
-     *
-     * `require` names a model somebody is counting on. A cached list that does
-     * not have it is not evidence it is gone -- it may simply predate an
-     * install -- and the cache exists to make the catalogue quick, never to be
-     * the reason a model looks unavailable. So that one case waits for a real
-     * answer, and everything downstream can treat a miss as the truth.
+     * A cached list without `require` is not evidence the model is gone: it may predate an install. So that one case
+     * waits for a real answer.
      */
     async list(implementation, cwd, adapter, { require = "" } = {}) {
       const key = `${implementation}\0${cwd}`;

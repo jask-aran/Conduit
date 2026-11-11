@@ -22,19 +22,17 @@ const hostZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
 const validZone = (zone) => { try { Intl.DateTimeFormat(undefined, { timeZone: zone }); return true; } catch { return false; } };
 const clock = (value) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ""));
 
-/** What the agent does unless the person says otherwise (agent.json in its folder). */
 const DEFAULT_SETTINGS = Object.freeze({
   name: "Agent",
   on: true,
-  // How much reaches the person: quiet (urgent only), normal (attention and up), chatty (FYI too).
   dial: "normal",
-  // In a turn the person started, edits to their own data through a connector go without an approval (policy.js).
+  // In a turn the person started, edits to their own data through a connector go without an approval.
   youAsk: true,
-  // Gating connectors decide what needs approval (policy.js); otherwise Conduit's read-action list decides.
+  // Gating connectors decide what needs approval; otherwise Conduit's read-action list decides.
   toolsDecide: true,
   // An ask still waiting is pushed once more after this many minutes; 0 never.
   remindMinutes: 10,
-  // A yes whose call is never made lapses after this many hours (asks.js); 0 never.
+  // A yes whose call is never made lapses after this many hours; 0 never.
   grantHours: 24,
   // Background runs stop for the day once they have spent this (USD); 0 is no limit.
   budgetUsdPerDay: 2,
@@ -42,7 +40,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   brief: { enabled: true, at: "08:00" },
   // Shown from (and written through to) routines/morning-brief.md and routines/heartbeat.md, which hold them.
   heartbeat: { enabled: true, everyMinutes: 60 },
-  // New mail into the context inbox (routines/email.md, packaged with Conduit): opt in, since it reads the person's mail.
+  // Opt in, since it reads the person's mail.
   email: { enabled: false },
   // Notifications respect these hours; work continues.
   quietHours: { enabled: true, start: "23:00", end: "07:00" },
@@ -54,23 +52,6 @@ const DEFAULT_SETTINGS = Object.freeze({
 const LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 const WORK = ["brief", "heartbeat", "other"];
 
-/**
- * The hub's persistent agent (docs/plans/persistent-agent.md): one per hub, the
- * Conduit durable agent running as a home thread that never ends, side threads
- * that share its memory, and background runs it is woken into.
- *
- * Its folder is a managed workspace on the hub (so its files and memory are
- * read and edited in Work like any workspace) holding agent.json, its identity
- * and memory files and whatever it writes. Its threads are roaming durable
- * chats in that workspace: their own folder is the agent's, and they reach any
- * device per call. A run is a background subagent of the home thread
- * (server/subagents.js) whose report reaches the home thread only when it
- * matters enough for the person's interruption setting.
- *
- * What pi-durable keeps (schedules, watches, proposals, spend) is `AgentDoc`;
- * the parts that read and write it are memory.js, schedule.js, events.js,
- * chat-tools.js and policy.js, composed in extension.js.
- */
 export class PersistentAgent {
   constructor({ runtime, registry, projects, launchLiveSession = null, findChatContext = null }) {
     this.runtime = runtime;
@@ -81,22 +62,19 @@ export class PersistentAgent {
     this.findChatContext = findChatContext;
     this.project = null;
     this.cached = null;
-    // Settings changes a part needs to act on (schedule.js reseeds the brief and heartbeat).
     this.settingsListeners = new Set();
     runtime.agent = this;
     runtime.agentDial = () => this.settings().dial;
     runtime.agentDay = () => this.today();
-    // Prompts: jbot's {{variables}}, and RUN.md for a subagent one of its threads starts (subagents.js).
     runtime.agentVars = () => promptVars(this);
     runtime.agentRunPrompt = async (conversationId) => this.enabled() && await this.describe(conversationId) ? runInstructions(this) : null;
   }
 
   get context() { return this.runtime.context; }
 
-  /** The agent's folder: its workspace's working root, once it is enabled. */
   get folder() { return this.project?.workingRoot || null; }
 
-  /** Whether this hub has an agent: its workspace exists. Read at startup, so a hub without one pays nothing. */
+  /** Read at startup, so a hub without an agent pays nothing. */
   async load() {
     const project = (await this.projects.list()).find((item) => item.slug === "conduit-agent");
     if (!project) return null;
@@ -108,15 +86,10 @@ export class PersistentAgent {
     return project;
   }
 
-  /**
-   * Keep the context inbox's files (inbox-files.js) in step with the agent's document, from load until `stopFollowing`:
-   * each change to the inbox rewrites what changed, in order.
-   */
   /*
    * A subagent's anchor only holds its run open, so one the runtime parked after too many unclean exits (pi-durable's
    * restart limit) is safe to start again, and while it is parked its run's reports cannot be delivered. A schedule's
-   * clock is the same: parked, it still reads as live (schedule.js keeps it) and never fires again. On load, every
-   * parked anchor and clock runs again; other parked work waits for the person (the agent page's Needs you).
+   * clock is the same: parked, it still reads as live and never fires again. Other parked work waits for the person.
    */
   async recoverAnchors() {
     const harness = await this.runtime.open();
@@ -152,13 +125,11 @@ export class PersistentAgent {
     } catch (error) { console.warn("The context inbox's files are not followed", error.message); }
   }
 
-  /** An entry's text as filed (inbox.js), before or without its file. */
   async entryText(entry) {
     const harness = await this.runtime.open();
     return filedText(harness, entry, this.context);
   }
 
-  /** Once: the texts entries carried in the agent's document become documents of their own (inbox.js, InboxText). */
   async moveInboxTexts() {
     const carrying = Object.values((await this.state()).inbox || {}).filter((entry) => typeof entry.body === "string");
     if (!carrying.length) return;
@@ -177,9 +148,6 @@ export class PersistentAgent {
 
   active() { return this.enabled() && this.settings().on !== false; }
 
-  /**
-   * The seed files it lacks (never over the person's): memory files, RUN.md, the built-in routines.
-   */
   async seedFolder() {
     await fs.mkdir(path.join(this.folder, "diary"), { recursive: true });
     for (const entry of await fs.readdir(SEED, { withFileTypes: true })) {
@@ -191,7 +159,6 @@ export class PersistentAgent {
     await seedRoutines(this.folder, path.join(SEED, "routines"));
   }
 
-  /** agent.json as last read, over the defaults. */
   settings() {
     const saved = this.cached || {};
     return {
@@ -213,7 +180,6 @@ export class PersistentAgent {
     return this.settings();
   }
 
-  /** Change agent.json; an invalid value is refused whole. */
   async saveSettings(patch = {}) {
     const next = { ...(this.cached || {}) };
     const before = this.settings().name;
@@ -298,7 +264,7 @@ export class PersistentAgent {
     // Off stops what was admitted as well as what would come: its runs under way and routine firings end as stopped.
     // Not waited for: a run slow to end must not hold the setting.
     if (off) void this.state().then((state) => this.stopRuns(state.home?.conversationId)).catch(() => {});
-    // The brief's and heartbeat's clocks are their routine files' now: Settings writes through to them.
+    // The brief's and heartbeat's clocks live in their routine files: Settings writes through to them.
     if (patch.brief) await this.adjustRoutine("morning-brief", (routine) => ({ ...routine, enabled: next.brief.enabled !== false,
       trigger: next.brief.at ? updateTrigger(routine.trigger, "at", { time: next.brief.at }) : routine.trigger }));
     if (patch.heartbeat) await this.adjustRoutine("heartbeat", (routine) => ({ ...routine, enabled: next.heartbeat.enabled !== false,
@@ -312,7 +278,6 @@ export class PersistentAgent {
     return this.settings();
   }
 
-  /** Today in the agent's time zone, `YYYY-MM-DD`: the day its budget counts. */
   today(at = Date.now()) {
     return new Intl.DateTimeFormat("en-CA", { timeZone: this.settings().timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
   }
@@ -322,13 +287,11 @@ export class PersistentAgent {
     return (await harness.snapshot(AgentDoc, this.context)) || AgentDoc.definition.initial();
   }
 
-  /** Change the agent's document in one commit: `change(doc, tx)` returns what the caller gets. */
   async update(change) {
     const harness = await this.runtime.open();
     return harness.commit(async (tx) => change(await tx.doc(AgentDoc), tx), this.context);
   }
 
-  /** Something the attention list says beside the work (a budget reached, a skipped run). */
   async notice(kind, text) {
     await this.update((doc) => {
       doc.notices.push({ id: `n-${doc.next++}`, kind, text, at: new Date().toISOString() });
@@ -338,16 +301,11 @@ export class PersistentAgent {
 
   async spentToday() { return (await this.state()).spend[this.today()] || 0; }
 
-  /** Whether today's budget is gone: background runs wait for tomorrow (or for the person to raise it). */
   async overBudget() {
     const budget = this.settings().budgetUsdPerDay;
     return budget > 0 && await this.spentToday() >= budget;
   }
 
-  /**
-   * Give this hub its agent: its workspace with the seed files, agent.json, and
-   * the home thread. Idempotent; an agent that exists is returned as it is.
-   */
   async enable({ name } = {}) {
     if (!this.project) {
       this.project = await this.projects.ensure({ slug: "conduit-agent", name: name || DEFAULT_SETTINGS.name, kind: "workspace", origin: "managed" });
@@ -363,7 +321,6 @@ export class PersistentAgent {
     return this.view();
   }
 
-  /** The home thread's chat, made on first use: a roaming durable chat in the agent's workspace. */
   async home() {
     const saved = (await this.state()).home;
     const existing = saved?.chatId && this.registry.metadata(saved.chatId);
@@ -374,7 +331,6 @@ export class PersistentAgent {
     return { chat, conversationId };
   }
 
-  /** A side thread: one project or recurring topic, sharing the agent's memory and folder. */
   async side(title = "") {
     if (!this.enabled()) throw Object.assign(new Error("This hub has no agent yet"), { code: "agent_not_enabled", status: 409 });
     const chat = await this.createThread("side", title);
@@ -389,7 +345,6 @@ export class PersistentAgent {
     return this.registry.update(chat.id, { status: "active", ...(title ? { title } : {}) });
   }
 
-  /** The thread's pi-durable conversation: launching its chat makes one (its opaque session). */
   async conversationOf(chat) {
     const current = this.registry.metadata(chat.id);
     if (!current?.backend?.opaqueSession) {
@@ -399,11 +354,6 @@ export class PersistentAgent {
     return Number(this.registry.metadata(chat.id)?.backend?.opaqueSession) || null;
   }
 
-  /**
-   * Who a conversation is to the agent: its `home` thread, a `side` thread, a
-   * `run` it was woken into (a child of the home thread), or `null`.
-   */
-  /** Whose a conversation is, for an approval: the agent's (describe), or else any chat's (`role: "chat"`). */
   async threadOf(conversationId) {
     const described = await this.describe(conversationId);
     if (described) return described;
@@ -423,13 +373,6 @@ export class PersistentAgent {
     return chat ? { role: chat.backend.agentThread, chatId: chat.id } : null;
   }
 
-  /**
-   * Wake the agent: a background run of the home thread with `task` as its
-   * whole brief. `key` makes it idempotent (a schedule's slot, an event's id);
-   * `kind` says what woke it (brief, heartbeat, checkback, event, webhook,
-   * manual). A run that would go over today's budget is skipped and noticed. `log: false` keeps it out of jbot's
-   * message log (the run says so: run.log), as its routine, watch or webhook asks.
-   */
   async wake({ key, kind, title, task, log = true }) {
     if (!this.enabled()) throw Object.assign(new Error("This hub has no agent yet"), { code: "agent_not_enabled", status: 409 });
     if (!this.active()) return null;
@@ -443,10 +386,6 @@ export class PersistentAgent {
     return conversation.commit((tx) => this.active() ? this.spawnRun(tx, conversationId, { key, kind, title, task, log }) : null, this.context);
   }
 
-  /**
-   * Abort the work it has admitted, each piece ending as stopped (no failure, no notice): every routine firing, and the
-   * runs under way of its home thread `conversationId` -- with `all`, the thread's background agents too.
-   */
   async stopRuns(conversationId, all = false) {
     const harness = await this.runtime.open();
     for (const { taskId } of Object.values((await this.state()).routineRuns || {})) {
@@ -456,11 +395,7 @@ export class PersistentAgent {
     if (conversationId) await stopBackgroundSubagents(harness, conversationId, this.context, (item) => all || Boolean(item.origin));
   }
 
-  /**
-   * A routine now, off its clock (Run now): its tasks gather and its run fires whatever its gate says, except a gate of
-   * never (only the tasks), and whatever is left of the day's budget: the person asked. Its cursors move as a firing's would;
-   * `key` keeps a retried request to one run.
-   */
+  /** Run now: the person asked, so the run fires whatever its gate (except never) and the day's budget say. */
   async fireRoutine(name, key) {
     if (!this.active()) return { error: "agent_off", status: 409 };
     const routine = await readRoutine(this.folder, name).catch((error) => ({ error: error.message }));
@@ -481,10 +416,6 @@ export class PersistentAgent {
     return { ran: routine.gate !== "never", taskId };
   }
 
-  /**
-   * An event (routine-files.js EVENTS) starts every routine on that is triggered by it (`trigger: { on: <event> }`):
-   * `text` is what its run is shown as an `<event>` block; `key` keeps one event to one run of each.
-   */
   async fireEvent(name, { key, text }) {
     if (!this.active() || await this.overBudget()) return [];
     const routines = (await listRoutines(this.folder)).filter((routine) => !routine.error && routine.enabled !== false
@@ -504,11 +435,6 @@ export class PersistentAgent {
     }, this.context);
   }
 
-  /**
-   * The same, inside a commit on the home conversation (a clock task's): `tx.createTask()` defaults to it. Every run's
-   * system prompt is RUN.md (routines.js), a routine's with its `<routine>` block; `raw` takes `task` as the whole
-   * first message (a routine composes its own). `output`: where its report goes (jbot, inbox, both).
-   */
   async spawnRun(tx, conversationId, { key, kind, title, task, instructions = null, output = null, raw = false, model = null, thinkingLevel = null, routineTaskId = null, log = true }) {
     if (!this.runtime.spawnBackground) throw new Error("Background subagents are not installed");
     const work = this.settings().work[kind === "brief" || kind === "morning-brief" ? "brief" : kind === "heartbeat" ? "heartbeat" : "other"];
@@ -518,13 +444,11 @@ export class PersistentAgent {
       origin: { kind, key, ...(output ? { output } : {}), ...(routineTaskId ? { routineTaskId } : {}), ...(log ? {} : { log: false }) }, gate: true, ...chosen });
   }
 
-  /** The agent as the API shows it. */
   async adjustRoutine(name, change) {
     const routine = await readRoutine(this.folder, name).catch(() => null);
     if (routine) await writeRoutine(this.folder, change(routine));
   }
 
-  /** Settings as the person sees them: the brief's and heartbeat's from their routine files. */
   async shownSettings() {
     const settings = this.settings();
     const [brief, beat, mail] = await Promise.all(["morning-brief", "heartbeat", "email"].map((name) => readRoutine(this.folder, name).catch(() => null)));
@@ -534,13 +458,11 @@ export class PersistentAgent {
     return settings;
   }
 
-  /** @returns {Promise<import("./agent-view.js").AgentView>} the view GET /v0/agent sends, attention aside (agent-view.d.ts) */
+  /** @returns {Promise<import("./agent-view.js").AgentView>} */
   async view(state) {
     if (!this.enabled()) return { enabled: false };
     const [current, settings] = await Promise.all([state || this.state(), this.shownSettings()]);
     state = current;
-    // Each entry's text is a file in its folder (inbox-files.js, kept in step by followInbox), which the page opens in
-    // the file viewer.
     const inbox = listInbox(state);
     return {
       enabled: true,
@@ -561,7 +483,6 @@ export class PersistentAgent {
 const KIND_WORDS = { manual: "The person asked for this run", checkback: "A check-back you set", event: "An event woke this run",
   webhook: "A webhook woke this run", feed: "A feed's check" };
 
-/** An ad-hoc run's first message: when and why, then its task. How it reports is RUN.md's (its system prompt). */
 const runBrief = (kind, task, timeZone, store) => notice(store, "wake-run", {
   now: new Date().toLocaleString("en-AU", { timeZone, dateStyle: "full", timeStyle: "short" }),
   reason: KIND_WORDS[kind] || `A ${kind} run`, task: String(task || "").trim(),

@@ -4,21 +4,16 @@ import YAML from "yaml";
 import { readFolderFile, splitFrontMatter, writeFolderFile } from "./routine-files.js";
 
 /*
- * The context inbox as files: each entry is `inbox/<date>-<id>-<title>.md` in jbot's folder, so the person sees it in
- * jbot's files and opens it in the file viewer like any other. Its front matter says what the entry is and where it
- * stands (kind, level, status, when and how it was handled, which routine it is for); its body is the entry's text.
- *
  * The body is the file's once written: an edit there is what jbot reads next. The front matter follows the entry's
- * record in the agent's document, which stays the source of its status for now, since a run marks entries handled in
- * the same commit that moves its cursors. A file goes when its entry does (deleted, or pruned a week after it was
- * handled). The agent keeps them in step as its document changes (agent.js).
+ * record in the agent's document, the source of its status, since a run marks entries handled in the same commit that
+ * moves its cursors.
  */
 const INBOX_DIR = "inbox";
 const FILE = /^\d{4}-\d{2}-\d{2}-i-?\d+-[^/]*\.md$/;
 
 const slug = (text) => String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "entry";
 
-/** The entry's file, relative to jbot's folder: from what never changes on it (when it came, its id, its title). */
+/** Named from what never changes on the entry: when it came, its id, its title. */
 export const inboxFile = (entry) => `${INBOX_DIR}/${entry.at.slice(0, 10)}-${entry.id}-${slug(entry.title === "Note" ? entry.headline : entry.title)}.md`;
 
 const header = (entry) => Object.fromEntries(Object.entries({
@@ -27,10 +22,6 @@ const header = (entry) => Object.fromEntries(Object.entries({
 }).filter(([, value]) => value !== undefined && value !== null && value !== ""));
 const render = (entry, body) => `---\n${YAML.stringify(header(entry), { lineWidth: 0 })}---\n\n${String(body || "").trim()}\n`;
 
-/**
- * Write the entry's file, or bring its front matter up to date and keep the body it has. `text` is its text when the
- * entry carries none (a run's report, read from the run).
- */
 export async function writeInboxFile(folder, entry, { text } = {}) {
   const relative = inboxFile(entry);
   await fs.mkdir(path.join(folder, INBOX_DIR), { recursive: true });
@@ -42,11 +33,6 @@ export async function writeInboxFile(folder, entry, { text } = {}) {
   if (next !== current) await writeFolderFile(folder, relative, next);
 }
 
-/**
- * Bring the inbox folder in step with the entries: each one's file written or updated, and those of entries that are
- * gone removed. `textOf(entry)` gives an entry's text as filed; `lastAnswer(conversationId)` a run's report, for
- * entries that point at their run.
- */
 export async function syncInboxFiles(folder, entries, { textOf, lastAnswer } = {}) {
   if (!folder) return;
   const dir = path.join(folder, INBOX_DIR);
@@ -66,7 +52,7 @@ export async function syncInboxFiles(folder, entries, { textOf, lastAnswer } = {
   for (const name of present) if (FILE.test(name) && !wanted.has(name)) await fs.rm(path.join(dir, name), { force: true });
 }
 
-/** The entry's text: its file's body when there is one (the person may have edited it), else its text as filed. */
+/** The file's body wins: the person may have edited it. */
 export async function inboxEntryText(agent, entry) {
   const text = agent.folder ? await readFolderFile(agent.folder, inboxFile(entry)).catch(() => null) : null;
   if (text === null) return agent.entryText ? agent.entryText(entry) : entry.body || "";

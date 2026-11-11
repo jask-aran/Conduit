@@ -2,16 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-/**
- * The harnesses installed on this device that Conduit may drive here (plan
- * decision 5): main's adapter for each runs against a process the node starts
- * (remote spawn), so the node only finds the command and reads back what the
- * harness saved -- one adapter per harness, all on main.
- *
- * Running a harness is running code as this device's user, so the node
- * offers its harnesses only when it shares a folder with the shell grant, and
- * starts one only in such a folder.
- */
+/** Running a harness is running code as this device's user, so harnesses are offered only with the shell grant. */
 // The names to look for, first found wins: the adapter speaks OpenCode 2, which installs as opencode2.
 const COMMANDS = { "claude-code": ["claude"], codex: ["codex"], fx: ["fx"], opencode: ["opencode2", "opencode"] };
 
@@ -34,11 +25,7 @@ export function findHarnesses() {
     .map(([id, names]) => [id, names.map(onPath).find(Boolean)]).filter(([, found]) => found));
 }
 
-/**
- * Where a tunnel may lead on this device: a harness's own socket, by name, or
- * a loopback port. Only with the shell grant somewhere -- a command could
- * reach either anyway.
- */
+/** Only with the shell grant somewhere: a command could reach either anyway. */
 export function tunnelTarget(endpoint) {
   if (endpoint?.harness === "codex") {
     return { path: path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "app-server-control", "app-server-control.sock") };
@@ -48,7 +35,6 @@ export function tunnelTarget(endpoint) {
   return null;
 }
 
-/** A Codex thread's rollout file on this device, by its id; null if there is none. */
 export async function codexRollout(threadId) {
   if (!SESSION_ID.test(String(threadId))) return null;
   const root = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "sessions");
@@ -58,7 +44,6 @@ export async function codexRollout(threadId) {
 
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** A Claude Code session's saved transcript on this device, by its id; null if there is none. */
 export async function claudeSession(sessionId) {
   if (!SESSION_ID.test(String(sessionId))) return null;
   const root = path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude"), "projects");
@@ -68,11 +53,6 @@ export async function claudeSession(sessionId) {
   return null;
 }
 
-/**
- * Where OpenCode's background service listens on this device, and its
- * password, as OpenCode's own state and config files say; `{}` if no live
- * service is recorded. Main asks `opencode service status` for the rest.
- */
 export async function opencodeService() {
   const file = async (variable, fallback) => {
     const root = process.env[variable] || path.join(os.homedir(), fallback);

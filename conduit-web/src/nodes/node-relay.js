@@ -3,56 +3,21 @@ import { EventEmitter } from "node:events";
 import readline from "node:readline";
 
 /*
- * Environments relayed over one device's connection (plan decision 25).
- *
- * A device's daemon (Windows) can carry another environment's node (a WSL
- * distro) on its own socket to main, instead of that node dialling main
- * itself. The relayed node runs as a child -- `conduit-node run --stdio` --
- * and speaks the node protocol unchanged over stdin/stdout, one JSON line per
- * frame. It keeps its own key and its own node id: the relay forwards its
- * hello and calls untouched and main checks its key as it would a direct
- * connection, so the relay can never speak for it. Which way an environment
- * connects is its own setting (`conduit-node relayed on|off`).
- *
- * The relay is trusted (decision 25): the relayed node's key passes through
- * it, so it could speak for that node. It is the same machine and user,
- * which can read that key on disk anyway.
- *
- * The child lines:
- *   child -> relay  { t: "open", key }   dial main (once per connection)
- *                   { t: "msg", d }      a frame for main
- *                   { t: "pong" }        answer to a ping
- *                   { t: "close" }       hang up
- *   relay -> child  { t: "opened", confidential }
- *                                        main took the key; whether the relay's
- *                                        own link to main is one nobody else
- *                                        reads (https, loopback), which the
- *                                        child cannot see and takes its word for
- *                   { t: "msg", d }      a frame from main
- *                   { t: "ping" }        main checking the child itself is alive
- *                   { t: "closed", reason }
- *
- * On the relay's socket to main the same, tagged by the environment:
- *   { type: "relay-open", env, key } / { type: "relay", env, d } / { type: "relay-pong", env } / { type: "relay-close", env }
- *   and from main { type: "relay-opened", env } / { type: "relay", env, d } / { type: "relay-ping", env } / { type: "relay-closed", env, reason }.
+ * A relayed node keeps its own key, and main checks it as it would a direct connection. The relay is still trusted:
+ * the key passes through it, but it is the same machine and user, which can read that key on disk anyway.
  */
 
 const RESPAWN_MS = [1000, 5000, 30000];
 // An open main has not answered by then is given up, and the child dials again.
 const OPEN_WAIT_MS = 30_000;
 
-/**
- * The relay's side: one environment, run as a child for as long as the relay
- * runs (its processes are the environment's, and outlive any one socket).
- * `attach(send)` when the relay's socket to main is up, `detach()` when it
- * drops; `deliver(frame)` for main's frames tagged with this environment.
- */
+/** Run as a child for as long as the relay runs: its processes are the environment's, and outlive any one socket. */
 export function relayEnvironment({ env, command, log = console }) {
   let child = null;
-  let up = null; // send to main, while the relay's socket is up
-  let confidential = false; // whether that socket is one nobody else reads
-  let wantsOpen = null; // the child's dial, waiting for the relay's socket
-  let opening = null; // sent to main, not yet answered: its give-up timer
+  let up = null;
+  let confidential = false;
+  let wantsOpen = null;
+  let opening = null;
   let open = false;
   let respawns = 0;
   let timer = null;
@@ -123,11 +88,7 @@ export function relayEnvironment({ env, command, log = console }) {
   };
 }
 
-/**
- * The relayed node's side: a socket to main, shaped as the agent uses a
- * WebSocket, over this process's stdin/stdout to its relay. Liveness is the
- * relay's to watch (its own socket's heartbeat), so a ping is answered here.
- */
+/** Liveness is the relay's to watch, so a ping is answered here. */
 export function stdioDialer({ input = process.stdin, output = process.stdout } = {}) {
   let current = null;
   readline.createInterface({ input }).on("line", (raw) => {

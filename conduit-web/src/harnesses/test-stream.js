@@ -1,13 +1,8 @@
 import { TestStreamAdapter, TEST_STREAM_CAPABILITIES } from "../test-stream-adapter.js";
 import { READY } from "./probe.js";
 
-// A backend with no backend behind it: it answers every prompt itself, at a
-// rate the model picker chooses, so the live path can be watched under steady
+// It answers every prompt itself, at a rate the model picker chooses, so the live path can be watched under steady
 // pressure without a provider deciding how fast today is.
-//
-// Built in and always available, like Pi, because there is nothing to install
-// and nothing to detect. It costs a manifest entry and an adapter; whether it
-// is offered at all is the `profile` flag below.
 export const manifest = {
   id: "test-stream",
   label: "Render test",

@@ -2,11 +2,8 @@ import { DurableAdapter, DURABLE_CAPABILITIES } from "../durable-adapter.js";
 import { DurableRuntime } from "../server/durable-runtime.js";
 import { READY } from "./probe.js";
 
-// The Conduit durable agent: Conduit's own chats -- the Assistant, Coding and
-// Runtime profiles (Conduit's templates) -- in a durable store this server
-// owns, so a restart resumes them rather than losing the turn. Built in --
-// nothing to install -- on the Pi agent directory's models and logins. It is
-// not a profile of its own: a chat picks a template.
+// A durable store this server owns, so a restart resumes a chat rather than losing the turn. It is not a profile of
+// its own: a chat picks a template.
 export const manifest = {
   id: "conduit-runtime",
   label: "Conduit",

@@ -1,9 +1,4 @@
-/**
- * What a gateway connector's call reaches, by service: Executor puts every app behind `call` and `execute`, so a step
- * that says "Executor" says nothing. Its actions are paths (`tools.google.api.calendar.events.calendarEventsList`);
- * the service is the app and, for Google, its API ("Google Calendar", "Gmail"). Executor's own tools (search,
- * describe, skills) reach no service.
- */
+/** Executor puts every app behind `call` and `execute`, so a step that says "Executor" says nothing. */
 const NAMED = [
   ["google.api.calendar", "Google Calendar"], ["google.api.drive", "Google Drive"], ["google.api.docs", "Google Docs"],
   ["google.api.sheets", "Google Sheets"], ["google.api.forms", "Google Forms"], ["google.api.meet", "Google Meet"],
@@ -13,7 +8,6 @@ const NAMED = [
 const OWN = new Set(["executor", "search", "describe", "skills"]);
 const titled = (word) => word ? `${word[0].toUpperCase()}${word.slice(1)}` : "";
 
-/** The service an action path reaches, or null for the gateway's own. */
 export function serviceOf(path) {
   const clean = String(path || "").replace(/^tools\./, "");
   const named = NAMED.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}.`));
@@ -22,7 +16,6 @@ export function serviceOf(path) {
   return !app || OWN.has(app) ? null : titled(app);
 }
 
-/** The action paths a gateway tool's input names: a call's `calls`, or a program's literal `tools.…(` uses. */
 function connectorPaths(name, args) {
   const tool = String(name).split("__").slice(2).join("__");
   // History keeps a call's arguments as a JSON preview, cut short when long: its paths are read off the text.
@@ -40,10 +33,6 @@ function connectorPaths(name, args) {
   return [];
 }
 
-/**
- * A connector call said as what it did (ToolFacts: verb present/past, kind, subject, aside): "Checked Gmail · search",
- * "Sent with Gmail", "Looked up Executor actions · calendar events". A gateway's own tools are what they are for.
- */
 const READS = /^(get|list|search|query|read|export|describe|check|find|lookup|fetch|count|batchget)$/;
 const SENDS = /^(send|reply|forward|share|post|submit|publish|invite)$/;
 const DELETES = /^(delete|remove|trash|empty|batchdelete|purge|destroy|cancel|unsubscribe|revoke|disconnect|clear)$/;
@@ -73,7 +62,6 @@ export function connectorFacts(name, args) {
     ...(typeof query === "string" && query.trim() ? { aside: `\u201c${query.trim().slice(0, 60)}\u201d` } : aside ? { aside } : {}) };
 }
 
-/** A gateway tool's step subject: the services it reaches, each once ("Google Calendar, Gmail"); null for none. */
 export function connectorSubject(name, args) {
   const services = [...new Set(connectorPaths(name, args).map(serviceOf).filter(Boolean))];
   return services.length ? services.join(", ") : null;

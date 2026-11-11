@@ -15,10 +15,8 @@ import { armReminder, opened, prunable, statusAt, transition } from "./asks.js";
 import { browserFor } from "../server/person-browser-tool.js";
 
 /** Outward calls need an asynchronous approval; private reads taint the conversation. */
-/** Tools that leave the folder only when given a device; and tools that always leave it. */
 const PLACED = ["read", "write", "edit", "bash"];
 const ALWAYS_OUTWARD = { start_chat: "start a chat", steer_chat: "post in one of your chats", feed: "add a feed", routine: "change a routine" };
-/** A tool whose other actions stay in its folder: only these leave it. */
 const OUTWARD_ACTIONS = { feed: ["add"], routine: ["save", "remove"] };
 /** Routine files change through `routine` (which asks), not a plain edit in the folder: judged by where the path lands. */
 const routineFile = (folder, name, args) => {
@@ -27,29 +25,19 @@ const routineFile = (folder, name, args) => {
   const target = path.resolve(folder, String(args?.path || ""));
   return target === dir || target.startsWith(`${dir}${path.sep}`);
 };
-/** Calls that read the person's own data, which taint the conversation: theirs directly, or what a source gathered of it. */
 const PRIVATE_READS = { chats: (args) => ["read", "search"].includes(args?.action), feed: (args) => args?.action === "test",
   routine: (args) => args?.action === "test", conduit_inbox: (args) => args?.action === "read" };
 const privateRead = (name, args) => PRIVATE_READS[name]?.(args) || (name.startsWith("mcp__") && connectorRead(name, args));
 
 /*
- * A connector's tool is `mcp__<connector>__<tool>`. One the server marks read-only is free (it is not wrapped). A
- * gateway such as Executor puts every app behind one `call` tool, `{ calls: { path, input } | [...] }`, so its calls
- * are judged by the actions they name: a read (a read word in its name, no write word: `gmail…messagesList`,
- * `calendar…eventsGet`) goes alone and taints the conversation, since it is the person's own data; anything else
- * (`gmail.send`, an unclear name) asks. A program (`execute`) cannot be read ahead of running, so it always asks.
+ * A gateway such as Executor puts every app behind one `call` tool, so its calls are judged by the actions they name:
+ * a read (a read word, no write word) goes alone and taints the conversation; anything else, or an unclear name, asks.
  */
 const READ_WORDS = new Set(["get", "list", "search", "query", "read", "export", "describe", "check", "find", "lookup", "fetch", "count", "batchget"]);
 const WRITE_WORDS = new Set(["send", "create", "insert", "update", "patch", "delete", "remove", "modify", "trash", "untrash", "import",
   "move", "copy", "clear", "append", "set", "put", "post", "watch", "stop", "start", "complete", "cancel", "submit", "resume",
   "connect", "disconnect", "reply", "forward", "archive", "share", "upload", "write", "add", "batchupdate", "batchmodify", "batchdelete", "empty", "run", "execute"]);
 const wordsOf = (path) => String(path).split(/[^A-Za-z0-9]+/).flatMap((part) => part.split(/(?<=[a-z0-9])(?=[A-Z])/)).map((word) => word.toLowerCase()).filter(Boolean);
-/*
- * What the person asked for, it does: in a turn the person started (their message, or their answer to an approval),
- * a connector call that only edits their own data goes without asking -- completing a task, moving an event, labelling
- * mail. One that sends as them or deletes still asks, as does anything a run or the heartbeat starts on its own, and
- * anything outside the connectors (another chat, a device, a routine). Settings › jbot turns it off.
- */
 const SEND_WORDS = new Set(["send", "reply", "forward", "share", "post", "submit", "publish", "invite"]);
 const DELETE_WORDS = new Set(["delete", "remove", "trash", "empty", "batchdelete", "purge", "destroy", "cancel", "unsubscribe", "revoke",
   "disconnect", "clear", "stop"]);
@@ -59,8 +47,6 @@ const editOnly = (name, args) => {
   const paths = connectorActions(name, args);
   return Boolean(paths?.length) && paths.every((path) => isReadAction(path) || editAction(path));
 };
-/** The prompts a turn can start from: the person's (a message, an approval's answer), a run's report, a run's quiet line
- *  (the heartbeat's, before runs had their own). */
 const TRIGGERS = new Set(["conduit.user", "conduit.subagent-report", "conduit.agent-beat", "conduit.run-quiet"]);
 async function personStarted(api, context) {
   return api.commit(async (tx) => {
@@ -77,16 +63,14 @@ async function personStarted(api, context) {
 }
 export const isReadAction = (path) => { const words = wordsOf(path); return !words.some((word) => WRITE_WORDS.has(word)) && words.some((word) => READ_WORDS.has(word)); };
 const connectorTool = (name) => name.split("__").slice(2).join("__");
-/** The actions a gateway `call` names, `tools.` dropped; null for a tool that is not one. */
 const connectorCalls = (name, args) => {
   if (connectorTool(name) !== "call") return null;
   const calls = Array.isArray(args?.calls) ? args.calls : args?.calls ? [args.calls] : [];
   return calls.map((call) => String(call?.path || "").replace(/^tools\./, ""));
 };
 /*
- * The actions a program (`execute`) names, read off its source: every use of `tools` must call a literal path
- * (`tools.gmail.api.users.messagesList(…)`, `tools["tools.google…eventsList"](…)`), and nothing may reach for them
- * another way (a computed name, globalThis, eval, a constructor…). null when that cannot be told before it runs.
+ * Every use of `tools` in a program must call a literal path, and nothing may reach for them another way (a computed
+ * name, globalThis, eval, a constructor…). null when that cannot be told before it runs.
  */
 const OPAQUE = /\b(?:globalThis|self|window|this|eval|Function|import|require|Reflect|Proxy|constructor|prototype|__proto__|with|arguments)\b/;
 const KEYWORDS = new Set(["return", "typeof", "await", "yield", "in", "of", "case", "void", "delete", "throw", "new", "else", "do"]);
@@ -100,7 +84,7 @@ function computedIndex(code) {
     const before = blank.slice(0, match.index).trimEnd();
     const word = /[\w$]+$/.exec(before)?.[0];
     const member = /[\w$)\]]$/.test(before) && !(word && KEYWORDS.has(word));
-    if (!member) continue; // an array literal
+    if (!member) continue;
     const index = /^\[\s*(\d+|"(\d+)")\s*\]/.exec(blank.slice(match.index));
     if (!index) return true;
     if (index[2] != null) {
@@ -120,24 +104,20 @@ export function programPaths(code) {
     paths.push((match[2] ?? match[3].replace(/\s/g, "").slice(1)).replace(/^tools\./, ""));
     rest = rest.replace(match[0], "(");
   }
-  // Whatever is left may not touch `tools`, name a way around it, or index by a computed value.
   const code_ = rest.replace(STRING, '""');
   return /\btools\b/.test(code_) || OPAQUE.test(code_) || computedIndex(rest) ? null : paths;
 }
 const programOf = (args) => args?.code ?? args?.source ?? args?.program;
-/** The actions a connector tool's call will take: a gateway call's, or a program's; null when not knowable. */
 const connectorActions = (name, args) => connectorCalls(name, args) ?? (connectorTool(name) === "execute" ? programPaths(programOf(args)) : null);
 const connectorRead = (name, args) => { const paths = connectorActions(name, args); return Boolean(paths?.length && paths.every(isReadAction)); };
 /*
- * A gating connector (for example, Executor) receives calls and programs without a prior ask. It returns
- * `approval-required` for an action it holds. That answer becomes the person's ask; Allow resumes the held request.
- * Conduit's read-action list is not consulted, so an invalid path fails at the connector instead of asking.
+ * A gating connector receives calls and programs without a prior ask and holds what needs approval itself. Conduit's
+ * read-action list is not consulted, so an invalid path fails at the connector instead of asking.
  */
 const connectorGates = (runtime, name) => runtime.agent?.settings().toolsDecide !== false && name.startsWith("mcp__") && CONNECTORS.find((connector) => connector.id === name.split("__")[1])?.gates === true && ["call", "execute"].includes(connectorTool(name));
 const resumeTool = (name) => name.startsWith("mcp__") && connectorTool(name) === "resume";
 const connectorResume = (runtime, name) => runtime.agent?.settings().toolsDecide !== false && CONNECTORS.find((connector) => connector.id === name.split("__")[1])?.gates === true && resumeTool(name);
 const connectorName = (name) => { const connector = name.split("__")[1] || ""; return `${connector[0]?.toUpperCase() ?? ""}${connector.slice(1)}`; };
-/** An action as words: `gmail.send` → "Gmail · send", `google.api.calendar.events.calendarEventsInsert` → "Google · calendar events insert". */
 function actionWords(path) {
   const parts = String(path).split(".").filter((part) => part !== "api");
   const app = parts[0] || "";
@@ -153,7 +133,6 @@ const mcpLabel = (name, args) => {
 };
 const summary = (name, args) => {
   if (name.startsWith("mcp__")) {
-    // What it will do, one action a line with what it sends; a script that cannot be read ahead says so.
     const calls = connectorCalls(name, args);
     const service = connectorName(name);
     if (calls) {
@@ -180,21 +159,15 @@ const summary = (name, args) => {
   return `${name} ${args.path || ""} on ${target}`;
 };
 /*
- * The person's own browser on a device (conduit_browser, server/person-browser-tool.js): driving it is acting as
- * them, signed in, so it is theirs to allow. One decision a thread and device, not a call: Allow lets this thread drive
- * it for a day. Its permission offers no Always (approval-api.js), so no rule ever stands in for the person. Listing
- * its tools (no `tool`) asks nothing. Watching it or not is theirs: it is their own browser window.
+ * Driving the person's own browser is acting as them, signed in, so it is theirs to allow: Allow covers a thread for a
+ * day, and its permission offers no Always, so no rule ever stands in for the person.
  */
 const BROWSER = "conduit_browser";
 const BROWSER_MS = 86400_000;
 const drivesBrowser = (name, args) => name === BROWSER && Boolean(args?.tool);
 const outward = (name, args) => drivesBrowser(name, args) || Boolean((ALWAYS_OUTWARD[name] && (!OUTWARD_ACTIONS[name] || OUTWARD_ACTIONS[name].includes(args?.action)))
   || (PLACED.includes(name) && args?.device));
-/**
- * Whether a tool asks the person before it runs, said of the tool rather than of one call (Settings › AI › Tools):
- * `{ asks: "never" | "always" | "sometimes", when? }`. `guarded`: the profile's chats take `policyWraps` (jbot's
- * threads and runs); a connector's tools take `connectorWraps` wherever they are selected. Mirrors `guard` below.
- */
+/** Whether a tool asks before it runs, said of the tool rather than of one call: mirrors `guard`. */
 export function askOf(tool, { guarded = false } = {}) {
   const name = tool?.name || "";
   if (name.startsWith("mcp__")) {
@@ -212,7 +185,6 @@ export function askOf(tool, { guarded = false } = {}) {
 }
 const SOURCE_WORDS = { executor: "Executor program", script: "Script in its folder", run: "A model run" };
 
-/** The kind of permission a call asks for (approval-api.js PERMISSIONS), which says what answers it offers. */
 export function permissionOf(name, args) {
   if (name === BROWSER) return "browser";
   // Resuming Executor's held request is one decision about one action, and a program cannot be read ahead of running.
@@ -222,11 +194,9 @@ export function permissionOf(name, args) {
   return "device";
 }
 
-/** What an Always would allow from now on, or null: the permission offers none, or nothing lasting fits this call. */
 async function ruleTarget(runtime, name, args) {
   if (!permissionChoices(permissionOf(name, args)).includes("always")) return null;
   if (name.startsWith("mcp__")) {
-    // A gateway call's rule is the exact set of actions.
     const paths = connectorCalls(name, args);
     return paths ? JSON.stringify([...new Set(paths)].sort()) : name;
   }
@@ -260,10 +230,6 @@ const canonical = (value) => Array.isArray(value) ? value.map(canonical)
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const result = (text, id, isError = false) => ({ output: [{ type: "text", text }], isError, details: { ask: id } });
 
-/*
- * What the approval card shows: a title, and lines that are plain text or `{ text?, fields?, code? }` -- an action
- * with what it sends as labelled fields, or a command or script as it will run (approval.tsx draws them).
- */
 const CODE_MAX = 2000;
 const codeOf = (text) => { const code = String(text ?? ""); return code.length > CODE_MAX ? `${code.slice(0, CODE_MAX)}\n… ${code.length - CODE_MAX} more characters` : code; };
 function presentation(name, args) {
@@ -312,11 +278,6 @@ function presentation(name, args) {
     lines: [target, ...args.path ? [String(args.path)] : [], ...name === "write" && args.content ? [{ code: codeOf(args.content) }] : []] };
 }
 
-/*
- * Every ask reaches the person's devices, a run's included (the run ends; the ask waits in the home thread), and
- * records which devices took it. Still waiting after the agent's remindMinutes (Settings › Agent), it is pushed once
- * more (asks.js armReminder: the reminder is kept on the ask). Not awaited by the call.
- */
 function tellPerson(runtime, ask, push) {
   const agent = runtime.agent;
   const record = (fields) => void agent.update?.((doc) => { const held = doc.asks?.[ask.id]; if (held) Object.assign(held, fields); })?.catch?.(() => {});
@@ -328,7 +289,6 @@ function tellPerson(runtime, ask, push) {
   armReminder(agent, { id: ask.id, remind });
 }
 
-/** Create an ask or consume one exact, single-use grant in the tool's commit. */
 async function approve(runtime, api, name, args, context, thread, shown = null) {
   const target = await ruleTarget(runtime, name, args);
   // Resuming one of Executor's held requests is the same decision however the answer is worded: keyed by the request.
@@ -378,11 +338,7 @@ async function approve(runtime, api, name, args, context, thread, shown = null) 
   return result(`Asked the person to approve: ${ask.title} (ask ${ask.id}). It waits for them in Needs you, the one place they approve from.${thread.run ? " Say in your report, in a few words, what is waiting and that it is in Needs you." : " Tell them in a line what is waiting and to approve it in Needs you."} Carry on with anything that does not depend on it. When they answer you will get a message.`, ask.id);
 }
 
-/**
- * `approved`: runs the call an allowed ask holds, once, in the thread it belongs to. The person's answer arrives as a
- * message naming the ask; the call itself (made by this thread earlier, or by a run) is the hub's copy, not retyped.
- */
-/** The tool an approved call names, as installed (unwrapped): looked up when it runs, since connectors are reinstalled. */
+/** Looked up when the call runs, since connectors are reinstalled. */
 const installedTool = (runtime, name) => name === "approved" ? null
   // A placed tool asked about is one given a device: the device tools' own, before the plain coding tools of that name.
   : [...(runtime.extensions?.values() || [])].sort((a, b) => (b.name === "device-tools") - (a.name === "device-tools"))
@@ -414,23 +370,16 @@ export function ApprovedTool(runtime) {
   });
 }
 
-/**
- * The wraps the agent extension applies to its threads' tools, built against the installed tools: approvals for what
- * leaves its folder, its own tools' private reads, and its local shell and files confined to its folder. A connector's
- * tools are guarded by the connectors extension instead (connectorWraps), wherever a chat selects them.
- */
 export function policyWraps(runtime, tools) {
   return guard(runtime, tools.filter((tool) => PLACED.includes(tool.name) || ALWAYS_OUTWARD[tool.name] || PRIVATE_READS[tool.name]), true);
 }
-/** A connector's tools in any chat that selects them (the agent's threads, the Assistant): a write asks first. */
 export function connectorWraps(runtime, tools) {
   return guard(runtime, tools.filter((tool) => tool.name.startsWith("mcp__") && !tool.connectorReadOnly), false);
 }
-/** conduit_browser wherever a chat selects it: driving a device's browser asks first, with the device it would drive named. */
 export function browserWraps(runtime, tools) {
   return guard(runtime, tools.filter((tool) => tool.name === BROWSER), false);
 }
-/** The thread an ask belongs to: a run's goes to the home thread, which outlives it. */
+/** A run's ask goes to the home thread, which outlives it. */
 async function threadFor(runtime, api) {
   const described = await runtime.agent.threadOf(api.conversationId);
   const run = described?.role === "run";
@@ -440,12 +389,7 @@ async function threadFor(runtime, api) {
   return { thread, run };
 }
 
-/*
- * The approval model (packages/pi-durable-approver) as Conduit hosts it: Executor's
- * held actions judged against the person's policy (Settings › Agent › Approvals) by the review model (Settings › AI ›
- * Helper models: Review, else the naming model), what it cannot allow asked of the person as before (an ask, a push,
- * Allow resumes it). No review model, or any failure of it: the person is asked, as without the approver.
- */
+/* No review model, or any failure of it: the person is asked, as without the approver. */
 const OUTSIDE_MS = 15 * 60_000;
 const approvers = new WeakMap();
 function approverOf(runtime) {
@@ -461,7 +405,6 @@ function approverOf(runtime) {
       return model;
     },
     policy: async () => (await readPolicy(runtime.agent)).policy,
-    // Its instructions are the Approval model document's (Settings › Prompts), the person's to edit.
     instructions: () => runtime.contextStore?.approvalInstructions(),
     words: (api) => personWords(runtime.agent, api.conversationId),
     holders: [executorHolder()],
@@ -477,7 +420,7 @@ function approverOf(runtime) {
     // always the person's. A thread that read a connector lately has outside content in it too, unless the person
     // started this turn with words they typed in that time ("reply to her for me"): then the judge weighs the action
     // against what they asked, and the outside content is only what the reply is about. Typed words are the message
-    // log's (person-words.js), never a prompt the hub generated; the turn's trigger must be theirs (personStarted).
+    // log's, never a prompt the hub generated; the turn's trigger must be theirs.
     untrusted: async (api, context) => {
       if ((await runtime.agent.threadOf(api.conversationId))?.role === "run") return true;
       const read = (await runtime.agent.state()).readOutside?.[api.conversationId] || 0;
@@ -507,7 +450,6 @@ function guard(runtime, tools, confine) {
         const picked = await browserFor(runtime, null, api, context).catch(() => null);
         if (picked) args = { ...args, device: picked.name };
       }
-      // The connector's own gate decides what is held, and the approval model judges it (approverOf, below).
       const judged = connectorGates(runtime, tool.name) || connectorResume(runtime, tool.name);
       if ((tool.name.startsWith("mcp__") && !judged && !connectorRead(tool.name, args)) || outward(tool.name, args)) {
         const { thread, run } = await threadFor(runtime, api);
@@ -522,9 +464,8 @@ function guard(runtime, tools, confine) {
       const local = confine && PLACED.includes(tool.name) && !args?.device;
       const env = local ? sandboxedEnv(api.env, { folder: runtime.agent.folder, dataRoot: runtime.dataRoot, shellEnv: runtime.shellEnv, helper: () => helper ||= sandboxHelper(runtime.dataRoot) }) : api.env;
       const result = judged ? await approverOf(runtime).gate(tool).execute(args, api, context) : await tool.execute(args, local ? { ...api, env } : api, context);
-      // What a connector read is outside content (mail, events, files): for a while, an outward action from this
-      // conversation is the person's to approve (Rule of Two, untrustedTurn).
-      // A script's reads cannot be told from its writes, so a script counts as reading.
+      // What a connector read is outside content: for a while, an outward action from this conversation is the
+      // person's to approve. A script's reads cannot be told from its writes, so a script counts as reading.
       // Both marks are kept in the agent's document, so a turn resumed after a restart still reads as having read them.
       const outside = tool.name.startsWith("mcp__") && !result?.isError && (connectorRead(tool.name, args) || connectorTool(tool.name) === "execute");
       const secret = privateRead(tool.name, args) && !result?.isError;

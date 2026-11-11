@@ -12,9 +12,7 @@ const namePattern = /^[a-z][a-z0-9-]{0,40}$/;
 const idPattern = /^[a-z][a-z0-9-]{0,30}$/;
 const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const keysOnly = (value, keys) => Object.keys(value).every((key) => keys.includes(key));
-/** Fields a task kind takes besides its id, kind and program. */
 const TASK_FIELDS = { inbox: ["all", "for", "kinds", "except", "addressed"], calendar: ["account", "calendars", "days"], email: ["query", "max"] };
-/** What an `on:` trigger can name: an email to jbot from someone who does not wake it (email.js). */
 const EVENTS = ["held-mail"];
 const oneLine = (error) => String(error.message || error).split(/\r?\n/)[0];
 
@@ -49,7 +47,6 @@ export function routineProblem(routine) {
   const unknownField = Object.keys(routine).find((key) => !fields.includes(key));
   if (unknownField) return `Unknown routine field ${unknownField}.`;
   if (typeof routine.name !== "string" || !namePattern.test(routine.name)) return "Invalid routine name.";
-  // What a block is shown doing in Working on (work-log.js): a few words, in place of the default for its kind.
   const labelled = (value) => value === undefined || (typeof value === "string" && value.trim().length > 0 && value.length <= 60);
   if (!labelled(routine.working)) return "Working is a few words (at most 60 characters).";
   if (typeof routine.title !== "string" || !routine.title.trim()) return "A title is required.";
@@ -61,7 +58,7 @@ export function routineProblem(routine) {
       if (!keysOnly(trigger, ["kind", "minutes", "during"]) || !Number.isInteger(trigger.minutes)
         || trigger.minutes < 5 || trigger.minutes > 1440) return "Every must be a whole number from 5 to 1440 minutes.";
     } else if (trigger.kind === "at") {
-      // `quiet`: the start of the person's quiet hours, whatever they are set to (routines.js routineClocks).
+      // `quiet`: the start of the person's quiet hours, whatever they are set to.
       if (!keysOnly(trigger, ["kind", "time", "during"]) || typeof trigger.time !== "string"
         || !(trigger.time === "quiet" || /^([01]\d|2[0-3]):[0-5]\d$/.test(trigger.time))) return "At must be a time in HH:MM format, or quiet.";
     } else if (trigger.kind === "once") {

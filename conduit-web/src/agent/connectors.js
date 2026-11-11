@@ -8,8 +8,6 @@ import { writePrivateJson } from "../private-file.js";
 /** A request to a connector may be a whole program (Executor's execute reading many messages): minutes, not seconds. */
 const CALL_MS = 120_000;
 
-/** The MCP servers the agent can reach the person's accounts through. resourceMetadata: where the server says its
- *  OAuth is described (its 401's `resource_metadata`). */
 export const CONNECTORS = [{ id: "executor", label: "Executor", url: "https://mcp.executor.sh/mcp",
   // Its calls answer `approval-required` for what it holds, and resume carries it out.
   gates: true,
@@ -61,16 +59,12 @@ export class Connectors {
     return [...this.entries.values()].map(({ info: { id, label, url }, status, tools, error }) => ({ id, label, url, status, tools: tools.length,
       names: tools.map((tool) => tool.label), ...(error ? { error } : {}) }));
   }
-  /** What one connected tool says it does, for a look at what the account reaches. */
   describe(id) { return this.entry(id).tools.map((tool) => ({ name: tool.label, description: tool.description, readOnly: tool.connectorReadOnly })); }
   instructions(id) { const entry = this.entry(id); return entry.status === "on" ? entry.instructions : null; }
   tools() { return [...this.entries.values()].flatMap((entry) => entry.tools); }
-  /** How long one has been down: since the hub started, or since it was last on. */
   downFor(id) { const entry = this.entry(id); return entry.status === "on" ? 0 : Date.now() - Math.max(this.bootAt, entry.downSince || 0); }
-  /** Down past the settle window: only then does anything say so (Needs you). */
   troubled(id) { return this.entry(id).status !== "on" && this.downFor(id) >= SETTLE_MS; }
-  /** Wait for one still coming up (the hub starting, a reconnect) before anything says it is not connected: what is
-   *  left of its settle window, and at least 15 s. */
+  /** Wait for one still coming up before anything says it is not connected. */
   async ready(id, timeoutMs = Math.max(15_000, SETTLE_MS - this.downFor(id))) {
     let timer;
     try {

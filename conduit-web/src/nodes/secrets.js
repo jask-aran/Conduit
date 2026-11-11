@@ -1,16 +1,8 @@
 import path from "node:path";
 
 /**
- * Files a node keeps back from Conduit even inside a shared root: their
- * contents are not read or written through browsing, attachments or the
- * agent's file tools (plan: "Which files never leave a device?"). Names still
- * list -- a workspace shows that `.env` is there -- and shell is unaffected,
- * since it has the device user's full access by decision.
- *
- * A pattern matches one path segment, case-insensitively (a Windows or macOS
- * disk would otherwise let `.ENV` through), with `*` for any run of
- * characters; ending in `/` it matches a directory, so everything under it.
- * A root edits the list: `deny` adds patterns, `allow` makes exceptions.
+ * Names still list, and shell is unaffected: it has the device user's full access. Patterns match case-insensitively,
+ * since a Windows or macOS disk would otherwise let `.ENV` through.
  */
 export const DEFAULT_DENY = Object.freeze([
   ".env", ".env.*",
@@ -41,7 +33,6 @@ const matches = (patterns, segments) => patterns.some((pattern) => {
   return directory ? segments.some((segment) => test.test(segment)) : test.test(segments.at(-1) || "");
 });
 
-/** The patterns a root keeps back, after its own edits. */
 export function rootDeny(root) {
   return { deny: [...DEFAULT_DENY, ...(root.deny || [])], allow: [...DEFAULT_ALLOW, ...(root.allow || [])] };
 }

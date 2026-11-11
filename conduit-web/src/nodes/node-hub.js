@@ -15,37 +15,23 @@ import { writePrivateJson } from "../private-file.js";
 const hash = (key) => crypto.createHash("sha256").update(key).digest("hex");
 
 /**
- * The devices paired with this main server, and the sockets they hold open.
- *
- * Pairing makes a device record and a key, shown once; main keeps only the
- * key's hash. A node presents the key when it dials in, from loopback or the
- * tailnet (plan decision 4) -- anything else is turned away before the key is
- * looked at. Each connected node's hello says which folders it shares and with
- * which grants; main shows that and calls inside it, and the node enforces it.
- *
- * `call` is how the remote environment reaches a device. A call to a device
- * that is not connected waits for it (decision 8), for as long as the caller's
- * context allows; `waiting` is emitted so the chat can say what it waits for.
- * A call in flight when the socket drops fails as interrupted.
+ * Main keeps only a pairing key's hash. A node dialling from anywhere but loopback, the tailnet or the private LAN is
+ * turned away before the key is looked at. The node enforces the grants its hello declares.
  */
-// Relayed environments (decision 25): how many one socket may carry, how long a
-// name may be, and how long an open may go without its node's hello.
 const RELAYS_PER_SOCKET = 8;
 const RELAY_ENV_MAX = 64;
 const HELLO_WAIT_MS = 30_000;
 
-/** Where a node says it answers reads itself (node-direct.js), as far as it can be taken at its word. */
+/** Where a node says it answers reads itself, as far as it can be taken at its word. */
 function directOf(direct, lanName = null) {
   if (!Number.isInteger(direct?.port) || direct.port <= 0) return null;
   const addresses = (Array.isArray(direct.addresses) ? direct.addresses : [])
     .filter((item) => typeof item?.address === "string" && /^[\d.]+$/.test(item.address) && ["private", "tailnet"].includes(item.reach)).slice(0, 8);
-  // Names it serves https under: its tailnet name, and the one the hub gave it here (lan-names.js), nothing else.
+  // Names it serves https under: its tailnet name, and the one the hub gave it here, nothing else.
   const names = (Array.isArray(direct.tls?.names) ? direct.tls.names : []).map((name) => String(name).toLowerCase())
     .filter((name) => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(name) && (name.endsWith(".ts.net") || name === lanName)).slice(0, 4);
   const tls = Number.isInteger(direct.tls?.port) && direct.tls.port > 0 && names.length ? { port: direct.tls.port, names } : null;
-  // Whether it binds its proofs to where it was reached and lets a client attach to its terminals itself, sealed
-  // (node-direct.js), as a v0.8.7 node does neither; and the key this run of it signs grants with, given only over a
-  // link nobody else reads (node-agent.js).
+  // The key this run of it signs grants with is given only over a link nobody else reads.
   const grantKey = typeof direct.grantKey === "string" && /^[A-Za-z0-9_-]{32,128}$/.test(direct.grantKey) ? direct.grantKey : null;
   return { port: direct.port, addresses, tls, bound: Boolean(direct.pty), pty: direct.pty === "sealed", reads: direct.reads === "sealed", grantKey };
 }
@@ -56,15 +42,11 @@ export class NodeHub extends EventEmitter {
     this.file = path.join(dataRoot, "nodes.json");
     this.allowRemote = allowRemote;
     this.lanNames = lanNames;
-    // Who this hub is (`{ id, key }`) and every way a node may reach it, told to each node as it connects
-    // (node-agent.js "routes"): a node paired by one address still finds the hub when that one stops answering.
+    // Every way a node may reach the hub, told to each node as it connects: a node paired by one address still finds
+    // the hub when that one stops answering.
     this.identity = identity;
     this.routes = routes;
-    // The name on this network each node was given, kept across its reconnects.
     this.lanNameOf = new Map();
-    // Nodes (one per paired environment, each with its own key) and the
-    // devices that group them: a desktop's Windows host and its WSL distro
-    // are two nodes on one device.
     this.records = null;
     this.devices = null;
     // Per node, the runs (by `boot`) a newer run has replaced: refused from then on.
@@ -73,7 +55,6 @@ export class NodeHub extends EventEmitter {
     // Device processes main follows, by `${nodeId} ${procId}`: they outlive a
     // socket, so a reconnect resumes each from the last byte it had.
     this.following = new Map();
-    // Byte streams to endpoints on devices (remote-tunnel.js), by `${nodeId} ${tunnelId}`.
     this.tunnels = new Map();
     // Every socket of a node, by node id, from connect: unpairing closes them all.
     this.attached = new Map();
@@ -105,10 +86,8 @@ export class NodeHub extends EventEmitter {
   }
 
   /**
-   * Writes go one at a time and replace the file whole (a temporary file
-   * renamed over it), so devices reconnecting together cannot interleave a
-   * torn nodes.json. A failed write is logged, never thrown at a socket
-   * handler: last-seen times are not worth the server.
+   * Writes go one at a time and replace the file whole, so devices reconnecting together cannot interleave a torn
+   * nodes.json. A failed write is logged, never thrown at a socket handler: last-seen times are not worth the server.
    */
   save() {
     this.saving = (this.saving || Promise.resolve()).then(async () => {
@@ -119,11 +98,10 @@ export class NodeHub extends EventEmitter {
     return done;
   }
 
-  /** Pair a node on a device: an existing one by id, else a new one by name. */
   async pair({ name, deviceId = null, deviceName = null } = {}) {
     await this.load();
-    // The hub's own device takes nodes too: on a desktop that is the hub
-    // (decision 29), its Windows side pairs into the device its WSL is the hub of.
+    // The hub's own device takes nodes too: on a desktop that is the hub, its Windows side pairs into the device its
+    // WSL is the hub of.
     const onHub = Boolean(deviceId) && deviceId === this.hub?.deviceId;
     let device = onHub ? { id: deviceId } : deviceId && this.devices.find((item) => item.id === deviceId);
     if (deviceId && !device) throw Object.assign(new Error("No such device"), { status: 404, code: "device_not_found" });
@@ -141,7 +119,6 @@ export class NodeHub extends EventEmitter {
     return { node: this.view(record), device: onHub ? (await this.listDevices())[0] : this.deviceView(device), key };
   }
 
-  /** A device's name, as the list shows it. The hub's device too. */
   async renameDevice(id, name) {
     await this.load();
     const value = String(name || "").trim().slice(0, 80);
@@ -161,7 +138,6 @@ export class NodeHub extends EventEmitter {
     await this.load();
     const gone = this.records.find((record) => record.id === id);
     this.records = this.records.filter((record) => record.id !== id);
-    // A device with no nodes left is gone with its last one.
     if (gone && !this.records.some((record) => record.deviceId === gone.deviceId)) {
       this.devices = this.devices.filter((device) => device.id !== gone.deviceId);
     }
@@ -176,10 +152,8 @@ export class NodeHub extends EventEmitter {
 
   view(record) {
     const live = this.live.get(record.id);
-    // What it can do (device-api.js): as it said if it is connected, else what is remembered of it.
     return { id: record.id, deviceId: record.deviceId, name: record.name, platform: live?.platform || record.platform || null,
       online: Boolean(live), ...capabilitiesOf(live, record), lastSeenAt: live ? new Date().toISOString() : record.lastSeenAt,
-      // The environment relaying it (decision 25), when it is not dialling itself.
       via: live?.socket?.via || null };
   }
 
@@ -190,10 +164,7 @@ export class NodeHub extends EventEmitter {
 
   async list() { return (await this.load()).map((record) => this.view(record)); }
 
-  /**
-   * Which paired environments are there now, for every client to know as it happens (the runtime stream): the hub's
-   * own is never offline, so it is not among them. Synchronous: what is loaded, which is everything once one has connected.
-   */
+  /** The hub's own environment is never offline, so it is not among them. */
   availability() {
     const deviceName = (id) => (this.devices || []).find((device) => device.id === id)?.name
       || (this.hub && id === this.hub.deviceId ? this.hubDevice.name || os.hostname() : null);
@@ -209,11 +180,7 @@ export class NodeHub extends EventEmitter {
     return [...hub, ...this.devices.map((device) => this.deviceView(device))];
   }
 
-  /**
-   * The hub's own device (decision 24): listed with the others, its node's
-   * roots the folders it holds workspaces in. It is not paired and never
-   * offline; its calls run in process, so it is not among `live` sockets.
-   */
+  /** The hub's own device is not paired and never offline; its calls run in process, so it is not among `live` sockets. */
   adoptHub({ deviceId, nodeId, name, roots, harnesses }) { this.hub = { deviceId, nodeId, name, roots, harnesses }; }
 
   async hubView() {
@@ -230,7 +197,6 @@ export class NodeHub extends EventEmitter {
       ...capabilitiesOf({ roots, harnesses: this.hub.harnesses() }), terminal: true, lastSeenAt: new Date().toISOString() };
   }
 
-  /** A root a node shares, by id, as it last said: `{ id, label, read, write, shell }`. */
   async root(nodeId, rootId) {
     const record = await this.get(nodeId);
     return (this.live.get(nodeId)?.roots || record?.roots || []).find((root) => root.id === rootId) || null;
@@ -238,26 +204,13 @@ export class NodeHub extends EventEmitter {
 
   async get(id) { return (await this.load()).find((record) => record.id === id) || null; }
 
-  /**
-   * The device's computer beyond its roots, where it lets this server browse: `list` a folder (home when none), or
-   * `share` one, which makes it a root and comes back as the roots it shares now. Not waited for when it is away.
-   */
-  /**
-   * A grant to read `place` on its node without passing through here, where the node answers reads itself
-   * (node-direct.js): its loopback address and the token, signed with the key hash the node can work out. Null when
-   * it is away or does not.
-   */
-  /**
-   * A name on this network for a node with an address on one, and the certificate for it, sent to the node; once it
-   * serves https under it, its next `direct` says so (lan-names.js). Nothing where the hub has no such names to give.
-   */
   async offerLanName(node, record, { renewed = false } = {}) {
     const address = node.direct?.addresses.find((item) => item.reach === "private")?.address;
     if (!this.lanNames || !address) return;
     const lan = await this.lanNames.forNode(record.id, address).catch(() => null);
     if (!lan || !node.ready || this.live.get(record.id) !== node) return;
     this.lanNameOf.set(record.id, lan.name);
-    // Already serving it, and the record already points here (forNode saw to that): nothing to send.
+    // Already serving it, and the record already points here: nothing to send.
     if (!renewed && node.direct?.tls?.names.includes(lan.name)) return;
     node.send({ type: "lan-cert", name: lan.name, cert: lan.cert, key: lan.key });
   }
@@ -273,16 +226,13 @@ export class NodeHub extends EventEmitter {
   async directGrant(nodeId, place, label = "", origin = "") {
     if (!place?.root) return null;
     const grant = await this.signDirect(nodeId, { place: { root: place.root, path: place.path || "" }, label, read: true }, DIRECT_TTL_MS, origin);
-    // And the key that seals a read over a LAN in plain HTTP (node-direct.js), where the node seals them.
     const direct = this.live.get(nodeId)?.direct;
     return grant && direct?.reads && direct.grantKey ? { ...grant, channel: channelKey(direct.grantKey, grant.nonce, "read") } : grant;
   }
 
   /**
-   * A grant to attach to one of a node's terminals without passing through here (node-direct.js), where it allows
-   * that, and the key that seals the channel end to end (direct.js `channelKey`): handed to the client here, over its
-   * own connection to the hub, and worked out by the node. Any route that reaches the node will do, a LAN in plain
-   * HTTP included: nobody between them can read or change what is typed or shown.
+   * The channel key is handed to the client over its own connection to the hub and worked out by the node, so any
+   * route that reaches the node will do, a LAN in plain HTTP included.
    */
   async directPtyGrant(nodeId, procId, origin = "") {
     const direct = this.live.get(nodeId)?.direct;
@@ -295,8 +245,7 @@ export class NodeHub extends EventEmitter {
     const node = this.live.get(nodeId);
     const record = await this.get(nodeId);
     if (!node?.ready || !node.direct || !record?.keyHash) return null;
-    // The run's own key where it gave one; a v0.8.7 node, or one reached over plain HTTP, checks reads with its
-    // pairing key's hash.
+    // The run's own key where it gave one; a node without one checks reads with its pairing key's hash.
     const secret = node.direct.grantKey || record.keyHash;
     const expiresAt = Date.now() + ttl;
     const { port, addresses } = node.direct;
@@ -309,7 +258,7 @@ export class NodeHub extends EventEmitter {
       ...addresses.map(({ address, reach }) => ({ url: `http://${address}:${port}`, reach })), ...secure];
     const nonce = crypto.randomBytes(12).toString("base64url");
     return { nodeId, routes, expiresAt, nonce, proof: proofKey(secret, nonce),
-      // Whether its proof is bound to the address it was reached at (direct.js): a client then takes nothing else.
+      // Whether its proof is bound to the address it was reached at: a client then takes nothing else.
       bound: node.direct.bound,
       // The page it is for, when one asked: the node lets that origin read the answer.
       token: signGrant(secret, { ...claims, expires: expiresAt, nonce, ...(origin ? { origin } : {}) }) };
@@ -348,12 +297,7 @@ export class NodeHub extends EventEmitter {
     return (key && records.find((item) => crypto.timingSafeEqual(Buffer.from(item.keyHash), Buffer.from(hash(key))))) || null;
   }
 
-  /*
-   * An environment relayed on another node's socket (node-relay.js, decision
-   * 25): it proves itself with its own key, as a direct connection would, and
-   * is then attached as one -- a socket of its own, its frames tagged `env` on
-   * the relay's. The relay's socket going carries them all with it.
-   */
+  /* A relayed environment proves itself with its own key, as a direct connection would. */
   async relayOpen(outer, relaySocket, { env, key }, relaying) {
     const reply = (message) => { if (relaySocket.readyState === 1) relaySocket.send(JSON.stringify({ ...message, env })); };
     if (typeof env !== "string" || !env || env.length > RELAY_ENV_MAX) return reply({ type: "relay-closed", reason: "bad environment name" });
@@ -379,12 +323,10 @@ export class NodeHub extends EventEmitter {
     };
     socket.close = (_code, reason) => { if (socket.readyState === 1) reply({ type: "relay-closed", reason: reason || "closed" }); socket.end(); };
     socket.terminate = socket.close;
-    // Which environment carries it, for the devices' map.
     socket.via = relaying.id;
     outer.relayed.set(env, socket);
     this.attach(record, socket);
     reply({ type: "relay-opened" });
-    // An open that never says hello is not kept.
     setTimeout(() => { if (socket.readyState === 1 && this.live.get(record.id)?.socket !== socket) socket.close(4002, "no hello"); }, HELLO_WAIT_MS).unref?.();
   }
 
@@ -392,7 +334,6 @@ export class NodeHub extends EventEmitter {
     // A call that opened a watcher keeps hearing its changes after it returns,
     // until the watcher it opened is closed: call id -> { handle, onEvent }.
     const node = { socket: ws, calls: new Map(), watchers: new Map(), roots: [], platform: null, ready: false,
-      // Environments relayed on this socket: env -> their socket (relayOpen).
       relayed: new Map() };
     let ids = 0;
     node.send = (message) => ws.send(JSON.stringify(message));
@@ -450,10 +391,8 @@ export class NodeHub extends EventEmitter {
           this.retired.set(record.id, retired);
         }
         previous?.socket.close(4000, "replaced");
-        // `boot` names this run of the node; a node without one keeps no receipts.
         Object.assign(node, helloCapabilities(message), { platform: message.platform || null,
           boot: typeof message.boot === "string" ? message.boot : null, ready: true,
-          // Where it answers reads itself on its own machine (node-direct.js).
           direct: directOf(message.direct, this.lanNameOf.get(record.id)) });
         void this.offerLanName(node, record);
         this.live.set(record.id, node);
@@ -486,7 +425,6 @@ export class NodeHub extends EventEmitter {
         }
         return;
       }
-      // What it offers, again: its owner shared a folder, stopped sharing one, or let it be browsed or not.
       if (message.type === "capabilities") {
         if (this.live.get(record.id) !== node) return;
         Object.assign(node, helloCapabilities(message));
@@ -495,7 +433,6 @@ export class NodeHub extends EventEmitter {
         this.emit("changed");
         return;
       }
-      // Where it answers reads, again: an https route found after its hello (a certificate takes a moment).
       if (message.type === "direct") {
         if (node.ready) { node.direct = directOf(message.direct, this.lanNameOf.get(record.id)); void this.offerLanName(node, record); }
         return;
@@ -539,7 +476,6 @@ export class NodeHub extends EventEmitter {
     });
   }
 
-  /** Wait for a device to be connected, for as long as `context` allows. */
   async online(nodeId, context, onWait) {
     for (;;) {
       // Listening before looking: a device that connects while this looks is not missed.
@@ -563,14 +499,9 @@ export class NodeHub extends EventEmitter {
     }
   }
 
-  /**
-   * One call on a device: `{ target, method, args, cwd }`, and for an action
-   * `{ action, from }`; events (output, changes) go to `onEvent`. `onSent`
-   * hears which run of the node (its boot) took the call; `boot` refuses to
-   * send to any other run -- a restarted node does not know the action.
-   */
+  /** `boot` refuses to send to any other run of the node: a restarted node does not know the action. */
   async call(nodeId, message, context, { onEvent, onWait, onSent, boot } = {}) {
-    // Only what is declared (device-api.js); a handle's methods are the node's to check.
+    // Only what is declared; a handle's methods are the node's to check.
     if (Object.hasOwn(NODE_TARGETS, message.target) && !servedCall(message.target, message.method)) throw new Error(`${message.target}.${message.method} is not a declared node call`);
     const node = await this.online(nodeId, context, onWait);
     if (boot !== undefined && node.boot !== boot) throw Object.assign(new Error("The device restarted"), { restarted: true });
@@ -582,9 +513,8 @@ export class NodeHub extends EventEmitter {
   }
 
   /**
-   * Stop a device process when its device is next connected: one main let go
-   * of while the device was away (a terminal closed) must not run on there
-   * unowned. Kept in nodes.json, so a restart here does not forget it.
+   * A process main let go of while its device was away must not run on there unowned. Kept in nodes.json, so a restart
+   * here does not forget it.
    */
   async killLater(nodeId, procId) {
     const record = await this.get(nodeId);
@@ -593,7 +523,6 @@ export class NodeHub extends EventEmitter {
     await this.save().catch(() => {});
   }
 
-  /** Follow a device process: `deliver` gets its output and exit; `resume` reattaches after a reconnect. */
   follow(follower) { this.following.set(`${follower.nodeId} ${follower.procId}`, follower); }
 
   unfollow(follower) {
@@ -612,13 +541,9 @@ const TAILNET_V4 = new net.BlockList();
 TAILNET_V4.addSubnet("100.64.0.0", 10, "ipv4");
 TAILNET_V4.addSubnet("127.0.0.0", 8, "ipv4");
 
-/** Loopback or a Tailscale address (100.64.0.0/10, fd7a:115c:a1e0::/48). */
 /**
- * The address a device dialled from. A proxy on this machine connects from
- * loopback for anyone, so a request it forwarded is judged by the client it
- * names: a tailnet address passed by `tailscale serve` is the device; a
- * public tunnel (Cloudflare, Funnel, any other forwarder) is refused, since
- * the pairing key alone was never meant to face the internet.
+ * A proxy on this machine connects from loopback for anyone, so a request it forwarded is judged by the client it
+ * names. A public tunnel is refused: the pairing key alone was never meant to face the internet.
  */
 export function clientAddress(request) {
   const headers = request.headers || {};
@@ -654,7 +579,6 @@ export function isTailnetOrLoopback(address = "") {
   return plain.toLowerCase().startsWith("fd7a:115c:a1e0:");
 }
 
-/** A WSL distro's name (os-release's NAME: "Ubuntu"), read once. */
 let distro;
 function distroName() {
   distro ??= fs.readFile("/etc/os-release", "utf8").then((text) => /^NAME="?([^"\n]+)"?$/m.exec(text)?.[1] || "WSL", () => "WSL");

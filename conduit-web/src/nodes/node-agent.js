@@ -25,59 +25,27 @@ const RETRY_MS = [1000, 2000, 5000, 10000, 30000];
 const HEARTBEAT_MS = 30_000;
 
 /**
- * The node role: this device's shared folders, served to the main server.
- *
- * The node dials main and keeps one socket open, redialling when it drops.
- * Every call names the directory it runs in and is checked here, against the
- * roots and grants the device's owner chose -- read, write, shell -- before
- * the device's own execution environment runs it. File calls never reach past
- * those roots: a path that resolves (symlinks included) outside them, or
- * through a link that resolves nowhere, is refused as `permission_denied`.
- *
- * `shell` is different in kind. A command starts in a shared root but runs as
- * this device's user, with everything that user can reach; nothing here
- * sandboxes it, so granting it is granting that. (It is also what makes the
- * check-then-use gap in file calls moot: only a command can plant a link.)
- *
- * What a call opened (a reader, a watcher) lives as a handle until main closes
- * it or the socket drops. A dropped socket aborts the calls in flight: main
- * reports them interrupted rather than this device running work nobody waits
- * for.
- *
- * `browse` lets this server see the computer beyond those roots: list any folder
- * this user can, and make one a root by asking. It is
- * set here, on the device, never by main; a folder shared so gets the grants
- * the device gives new folders (`newFolders`), and `onShare` keeps it, as
- * `conduit-node share` would have.
- *
- * `update` takes what the owner shares now (their settings changed) on the connection as it is: a folder no longer
- * shared, or shared with other grants, is nothing from the next call, and what was opened in it is closed.
+ * Every call is checked here against the roots and grants the device's owner chose. File calls never reach past those
+ * roots: a path that resolves outside them, or through a link that resolves nowhere, is refused. `shell` runs as this
+ * device's user with everything it can reach; nothing here sandboxes it, so granting it is granting that (and only a
+ * command can plant a link, which makes the check-then-use gap in file calls moot). `browse` is set here, never by main.
  */
 export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: shared, shellEnv = process.env, log = console,
-  // How main is reached: a WebSocket, or a relay's stdin/stdout (node-relay.js).
   // A way that does not answer is given up in seconds, not the system's connect timeout; one found by its
-  // advertisement is pinned to the certificate its identity attested (find-hub.js), whatever its name.
-  // Deflate, when the hub takes it (a node it reaches over the tailnet), as cheaply as it comes.
+  // advertisement is pinned to the certificate its identity attested, whatever its name.
   dial = (url, { key: bearer, ca }) => new WebSocket(url, { headers: { authorization: `Bearer ${bearer}` }, handshakeTimeout: 8000,
     perMessageDeflate: { threshold: 1024, zlibDeflateOptions: { level: 1, memLevel: 7 } },
     ...(ca ? { ca, checkServerIdentity: () => undefined } : {}) }),
-  // Environments this one carries on its socket (decision 25): relayEnvironment()s.
   relays = [], browse = false, onShare = null,
-  // The grants a folder shared by browsing gets: the device's choice for new folders, read when one is shared.
   newFolders = () => ({ write: true, shell: true }),
-  // Told when another run of this node took the pairing over (main replaced this connection).
   onReplaced = null,
-  // Answer reads for clients holding the hub's grant (node-direct.js), and over https with `certificate()`'s.
   direct = false, certificate = null,
-  // The hub's identity `{ id, key }` as it last said it, and where to keep what it says (its routes, its identity);
-  // `findHub(hub)` looks for it on this network when no way reaches it (find-hub.js).
   hub = null, onRoutes = null, findHub = null, attest = attestedLeaf,
-  // Whether the way main is reached is one nobody else can read: https, or this machine. A relayed environment's is
-  // its relay's, which this side cannot see: the relay says, and is trusted to (decision 25).
+  // Whether the way main is reached is one nobody else can read. A relayed environment's is its relay's, which this
+  // side cannot see: the relay says, and is trusted to.
   confidential = (url) => url.protocol === "wss:" || (url.protocol === "ws:" && /^(127\.|localhost$|\[::1\]$)/.test(url.hostname)) }) {
-  // Every way main can be reached, best first (the address it was paired by, then those it has told this node of):
-  // a failed attempt tries the next; the one that worked is tried first again after a drop, and a whole round failing
-  // looks for the hub by its advertisement before backing off (it may have moved to another address).
+  // A whole round of ways failing looks for the hub by its advertisement before backing off: it may have moved to
+  // another address.
   const ways = [...new Set([mainUrl, ...routes].filter(Boolean))].map((url) => ({ url }));
   let way = 0;
   let tried = 0;
@@ -90,22 +58,19 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   };
   const roots = shared.map(view);
   const envs = new Map();
-  // Processes outlive any one socket (decision 18): they are the device's.
+  // Processes outlive any one socket: they are the device's.
   const processes = new NodeProcesses({ shellEnv, scope: mainUrl });
   // Writes and commands by action id: they outlive a socket, and are never done twice.
   const receipts = new Receipts();
-  // The key direct grants are checked with, made afresh by each run (so a grant from before a restart is nothing) and
-  // given to main only over a confidential link: the pairing key may have crossed a LAN in plain HTTP, and what it
-  // could sign would then be anyone's. Without it reads use the pairing key's hash as v0.8.7 did, and no terminal is
-  // attached here directly.
+  // Made afresh by each run, so a grant from before a restart is nothing, and given to main only over a confidential
+  // link: the pairing key may have crossed a LAN in plain HTTP, and what it could sign would then be anyone's. Without
+  // it no terminal is attached here directly.
   const grantKey = crypto.randomBytes(32).toString("base64url");
   let granting = false;
-  // Who is typing into each terminal: main, for a client of its own, or a client attached here directly
-  // (node-direct.js). One at a time, as main keeps it among its own clients; a newcomer takes over only when asked.
-  // Main's hold is per terminal, not per socket: its clients outlive a dropped connection, and follow again after.
+  // Who is typing into each terminal, one at a time; a newcomer takes over only when asked. Main's hold is per
+  // terminal, not per socket: its clients outlive a dropped connection, and follow again after.
   const HUB = "hub";
   const holders = new Map();
-  // The connection to main now open: how to tell it something, and what it follows on it.
   let link = null;
   const takeFromHub = (procId) => {
     link?.following.get(procId)?.();
@@ -118,7 +83,6 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     link.send({ type: "proc", proc: view.id, kind: "exit", code: view.exit?.code ?? null, signal: view.exit?.signal ?? null, end: view.end });
   };
   const directShells = {
-    /** A client attaching here directly, by the hub's grant: `sink` gets the output, the exit, or being taken over. */
     attach(procId, { takeover = false, cols = 80, rows = 24 } = {}, sink) {
       const view = processes.get(procId);
       if (!view?.pty || view.exit) return { error: "pty_not_running", message: "Terminal is no longer running" };
@@ -140,15 +104,14 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   };
   // Harnesses are offered only with the shell grant somewhere: running one is running code.
   let harnesses = roots.some((root) => root.shell) ? findHarnesses() : {};
-  // This device's browser, made on first use; offered where harnesses are (a folder shared with commands).
   let browserHost = null;
   const deviceBrowser = () => browserHost ??= new BrowserHost({ session: "conduit-device",
     dataRoot: path.resolve(process.env.CONDUIT_NODE_HOME || path.join(os.homedir(), ".conduit-node")) });
   const offersBrowser = () => roots.some((root) => root.shell) && deviceBrowser().available;
-  // The person's own browser here (person-browser.js), offered as harnesses are: driving it is acting as them.
+  // Offered as harnesses are: driving the person's own browser is acting as them.
   const personBrowser = new PersonBrowser();
   const offersPersonBrowser = () => roots.some((root) => root.shell) && personBrowser.available;
-  // What a hello says this node offers. Roots go by id; the path is for people to read, main never sends it back.
+  // Roots go by id; the path is for people to read, main never sends it back.
   const capabilities = () => helloCapabilities({ harnesses: Object.keys(harnesses), browse: Boolean(browse && onShare), browser: offersBrowser(),
     personBrowser: offersPersonBrowser(), roots: roots.map(({ id, path: label, read, write, shell, allow }) => ({ id, label, read, write, shell, allow })) });
   let socket = null;
@@ -177,11 +140,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     socket?.close();
   };
 
-  /*
-   * Where a call runs: a root by id and a path inside it, `{ root, path }`.
-   * Main names places, never paths on this device; a root that is not shared
-   * (or a path leaving it) is nowhere.
-   */
+  /* Main names places, never paths on this device; a root that is not shared (or a path leaving it) is nowhere. */
   const placeOf = (place) => {
     const root = place && typeof place === "object" ? roots.find((item) => item.id === place.root) : null;
     if (!root) return null;
@@ -196,10 +155,6 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     return envs.get(cwd);
   };
 
-  /*
-   * A call on this device's files or processes at a place, by the grants of the folder it falls in: what main asks over
-   * the socket, and what direct reads (node-direct.js) ask here.
-   */
   async function envCall(method, decoded, cwd, context, emit, { confine = false } = {}) {
     const rule = METHOD_GRANTS[method];
     if (!rule) return err(new FileError("not_supported", `${method} is not served by this node`));
@@ -234,9 +189,8 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
   }
 
   // A plain-HTTP way to the hub at an address is tried over TLS first, pinned to the certificate the hub's identity
-  // attests (find-hub.js): its port answers both, and a link nobody else reads carries this run's grant key, so direct
-  // reads and terminals work on a LAN with no name or certificate of the user's. Plain still where the hub does not
-  // answer so, or this node has not learnt who it is yet (the first run after pairing).
+  // attests: a link nobody else reads carries this run's grant key, so direct reads and terminals work on a LAN with no
+  // name or certificate of the user's.
   const connect = () => {
     const chosen = ways[way % ways.length];
     const plain = new URL(chosen.url);
@@ -255,15 +209,12 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     // Handle ids are never reused, on this socket or the next: a reader main
     // still holds from before a reconnect names nothing rather than a stranger.
     const handles = new Map();
-    // The processes main follows on this socket: process id -> detach.
     const following = new Map();
-    // Byte streams main opened to endpoints here (remote-tunnel.js): tunnel id -> socket.
     const tunnels = new Map();
     const send = (message) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message)); };
     const here = { send, following, features: [],
       // Main told what this node offers now: by itself where it takes that, else by connecting again (processes stay).
       tell: () => (here.features.includes("capabilities") ? send({ type: "capabilities", ...capabilities() }) : ws.close()),
-      // What was opened in folders no longer shared as they were.
       close: (gone) => {
         for (const [id, handle] of handles) if (gone.has(handle.root)) { handles.delete(id); void handle.object.close?.(BACKGROUND_CONTEXT); }
       } };
@@ -304,7 +255,6 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
         if (message.end) tunnel?.end();
         return;
       }
-      // What main offers (decision 30): environments are carried only where it relays them.
       if (message.type === "welcome") {
         const features = here.features = Array.isArray(message.features) ? message.features : [];
         if (features.includes("relay")) for (const relay of relays) relay.attach(send, { confidential: granting });
@@ -326,7 +276,6 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
         return;
       }
       if (typeof message.type === "string" && message.type.startsWith("relay")) return relayFor(message.env)?.deliver(message);
-      // A name on this network from main, and the certificate for it (lan-names.js).
       if (message.type === "lan-cert") {
         if (served && typeof message.name === "string" && typeof message.cert === "string" && typeof message.key === "string") {
           void served.addCertificate({ name: message.name, cert: message.cert, key: message.key }).catch((error) => log.warn?.(`[conduit-node] ${error.message}`));
@@ -338,7 +287,6 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
         // Grants main gave before no longer stand (the direct server closes with the rest).
         end(message.replaced === true ? "replaced" : "refused");
         ws.close();
-        // Replaced by a newer run of it: as when main takes the connection over.
         if (ended === "replaced") onReplaced?.();
         return;
       }
@@ -389,7 +337,6 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       handles.clear();
       if (socket === ws) socket = null;
       if (ended) return;
-      // Not reached this way: the next one at once. After a drop, the same way again first.
       if (!opened) {
         way = (way + 1) % ways.length;
         if (++tried < ways.length) { timer = setTimeout(connect, 0); return; }
@@ -411,19 +358,13 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     });
     ws.on("error", (error) => { if (attempt === 0) log.warn?.(`[conduit-node] ${error.message}`); });
 
-    // By the root it was opened in, to close it when that is no longer shared.
     function keep(object, root) {
       const id = `h_${crypto.randomUUID()}`;
       handles.set(id, { object, root });
       return { $handle: id, ...(object.mode ? { mode: object.mode } : {}) };
     }
 
-    /*
-     * Processes, for the shell grant: spawn needs it on the directory it runs
-     * in; the rest act on a process by the id spawn returned. Output goes out
-     * as `proc` messages, not as a call's events, because following outlives
-     * the call that started it.
-     */
+    /* Output goes out as `proc` messages, not as a call's events, because following outlives the call that started it. */
     function runProcess(method, args) {
       try {
         if (method === "spawn") {
@@ -486,7 +427,6 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       }
     }
 
-    /** A byte stream to an endpoint here, for a harness's own clients; the shell grant is required. */
     function openTunnel(id, endpoint) {
       const target = roots.some((root) => root.shell) && typeof id === "string" && !tunnels.has(id) ? tunnelTarget(endpoint) : null;
       if (!target) return err(new FileError("permission_denied", "That endpoint is not open to Conduit on this device"));
@@ -505,11 +445,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       });
     }
 
-    /*
-     * The computer beyond its roots, where browsing is allowed: a folder's entries, by name and kind only (contents
-     * stay behind the roots' checks), and sharing a folder main chose -- the same root `conduit-node share --write
-     * --shell` makes. Anything else, or browsing not allowed, is refused.
-     */
+    /* A folder's entries by name and kind only: contents stay behind the roots' checks. */
     async function computer(method, [at, ...rest]) {
       if (!browse || !onShare) return err(new FileError("permission_denied", "This device does not let Conduit browse it"));
       const folder = at ? realish(String(at)) : os.homedir();
@@ -541,11 +477,9 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     let readMachine = null;
     async function run({ target, method, args = [], cwd }, context, emit) {
       const decoded = decode(args, { FileError, ExecutionError });
-      // Only what is declared (device-api.js NODE_TARGETS); any other target is a handle this node opened.
+      // Only what is declared; any other target is a handle this node opened.
       if (Object.hasOwn(NODE_TARGETS, target) && !servedCall(target, method)) return err(new FileError("not_supported", `${method} is not served by this node`));
-      // This device's browser (roadmap #9): its own agent-browser session and profile, offered as harnesses are --
-      // only where a folder is shared with commands -- and reached from other clients through the hub. `stream`
-      // answers the loopback port the hub then tunnels to (openTunnel, a port on this device).
+      // Offered only where a folder is shared with commands. `stream` answers the loopback port the hub then tunnels to.
       if (target === "browser") {
         if (!offersBrowser()) return err(new FileError("permission_denied", "This device does not offer its browser to Conduit"));
         const [first, second] = decoded;
@@ -569,10 +503,8 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
       }
 
       if (target === "proc") return runProcess(method, decoded);
-      // What a harness saved here, for the sessions main runs on it.
       if (target === "tunnel" && method === "open") return openTunnel(decoded[0], decoded[1]);
       if (target === "computer") return computer(method, decoded);
-      // This machine's readout (Settings › Devices, roadmap #14): CPU, memory, its home's disk, network, processes.
       if (target === "machine" && method === "read") return { ok: true, value: await (readMachine ??= createMachineReadout({ root: os.homedir() }))() };
       if (target === "harness") {
         if (method === "claudeSession" && harnesses["claude-code"]) return { ok: true, value: await claudeSession(decoded[0]) };
@@ -600,7 +532,7 @@ export function startNodeAgent({ mainUrl, routes = [mainUrl], key, name, roots: 
     // The https route comes when a certificate does: told to main then, and in every hello after.
     served.onSecureChange(tellDirect);
     // Its addresses change without its connection doing so (a laptop joins another network, Tailscale comes up after
-    // the node): looked at every half minute, and told to main when they differ from what it last said.
+    // the node).
     const watching = setInterval(() => { if (JSON.stringify(directInfo()) !== toldDirect) tellDirect(); }, 30_000);
     watching.unref?.();
   } else connect();
@@ -624,11 +556,8 @@ const view = (root) => ({ id: root.id, path: realish(root.path) || path.resolve(
   allow: root.allow || [], secrets: rootDeny(root) });
 
 /**
- * A path with its symlinks resolved, as far as it exists: a link inside a
- * shared root that points out of it is outside it, and a file about to be
- * created is judged by the directory it would be created in. A link that
- * resolves nowhere is `null` -- refused -- since writing through it would
- * create its target, wherever that is.
+ * A file about to be created is judged by the directory it would be created in. A link that resolves nowhere is
+ * `null`, refused, since writing through it would create its target, wherever that is.
  */
 function realish(target) {
   const absolute = path.resolve(target);

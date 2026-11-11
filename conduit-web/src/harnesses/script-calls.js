@@ -1,25 +1,11 @@
 import { parse } from "acorn";
 
 /**
- * A script step: a tool whose input is a program that calls other tools. Conduit
- * states it the same way for every
- * harness -- kind "script", its calls as `calls` on the tool row -- and this
- * module is the whole of the work an adapter shares:
- *
- * - `planScript(code, tools)` reads a JavaScript script's `tools.<name>(...)`
- *   calls before it runs, for the preview.
- * - `createScriptCalls(tools)` follows a running script's calls as the harness
- *   reports them, and says what its row should list now (`tool.calls`).
- * - `settledCalls(list, tools)` and `callsSubject(list)` state a finished
- *   script's calls, live on `tool.close` and read back from history.
- *
- * `tools` is the adapter's own reading of its tools: `kindOf(name)` and
- * `subjectOf(name, input)`, the same it uses for a tool called directly.
- * Wiring a new harness is mapping its nested-call events onto `start`/`end`.
+ * `tools` is the adapter's own reading of its tools, the same it uses for a tool called directly. Wiring a new harness
+ * is mapping its nested-call events onto `start`/`end`.
  */
 
 const LOOPS = new Set(["ForStatement", "ForInStatement", "ForOfStatement", "WhileStatement", "DoWhileStatement"]);
-// Array methods whose callback runs once per element.
 const ITERATORS = new Set(["map", "forEach", "flatMap", "filter", "reduce", "some", "every", "find"]);
 const MAX_PLANNED = 24;
 const MAX_NODES = 50_000;
@@ -28,9 +14,6 @@ const MAX_SHOWN = 40;
 const literal = (node) => node?.type === "Literal" && typeof node.value === "string" ? node.value
   : node?.type === "TemplateLiteral" && !node.expressions.length ? node.quasis[0]?.value.cooked ?? null : null;
 
-/* The input a call states literally: `{ command: "ls" }` reads as itself, and
-   so do objects and arrays of literals inside it (a gateway's `{ calls: [{ path:
-   "…" }] }`); a field built at runtime is left out. */
 const literalValue = (node, depth) => {
   const text = literal(node);
   if (text != null) return text;
@@ -57,7 +40,7 @@ function literalInput(node, depth = 0) {
 
 const step = (tools, name, input) => {
   const subject = tools.subjectOf(name, input);
-  // What the adapter can say of the call better than its subject (ToolFacts), less a diff: a script's rows are lines.
+  // What the adapter can say of the call better than its subject, less a diff: a script's rows are lines.
   const { diff, ...facts } = tools.factsOf?.(name, input) || {};
   const kind = tools.kindOf(name) || "other";
   // A message a script sends (notify) keeps what it said: it is drawn as its own row, as a direct call's is.
@@ -65,13 +48,7 @@ const step = (tools, name, input) => {
     ...(kind === "message" && input && typeof input === "object" ? { input } : {}) };
 };
 
-/**
- * The tools a script will call, read from its code before it runs: each
- * `<object>.<name>(...)` in the order written, what it acts on where that is a
- * literal, and whether it sits in a loop or a per-element callback -- such a
- * call is one planned row that repeats, never one row per iteration. Nothing
- * here runs the script; a script that does not parse has no plan.
- */
+/** A call in a loop or a per-element callback is one planned row that repeats, never one row per iteration. */
 function planScript(code, tools, { object = "tools" } = {}) {
   if (typeof code !== "string" || !code.includes(object)) return [];
   let program;
@@ -115,9 +92,7 @@ function planScript(code, tools, { object = "tools" } = {}) {
   return planned;
 }
 
-/* A call that has started takes the first planned row of its tool (and
-   subject, where the plan names one). A repeating row stays planned beneath
-   the calls it produces until the script ends. */
+/* A repeating row stays planned beneath the calls it produces until the script ends. */
 function startPlanned(calls, call) {
   const index = calls.findIndex((item) => item.planned && item.name === call.name && (!item.subject || item.subject === call.subject));
   if (index < 0) return [...calls, call];
@@ -137,38 +112,29 @@ function bound(calls) {
 
 const view = (calls) => calls.map(({ id: _id, startedAt: _at, ...call }) => call);
 
-/** A running script's calls, per script, as the harness reports them. */
 export function createScriptCalls(tools, { now = Date.now } = {}) {
   const scripts = new Map();
   return {
-    /** The script started; `code` gives it a preview when it is JavaScript. */
     open(scriptId, code) {
       const plan = code ? planScript(code, tools) : [];
       if (plan.length) scripts.set(scriptId, plan);
       return plan.length ? view(plan) : null;
     },
-    /** One of its calls started. Returns the row's calls now. */
     start(scriptId, callId, name, input) {
       const calls = startPlanned(scripts.get(scriptId) || [], { id: callId, ...step(tools, name, input), done: false, startedAt: now() });
       scripts.set(scriptId, bound(calls));
       return view(scripts.get(scriptId));
     },
-    /** One of its calls ended. Returns the row's calls now. */
     end(scriptId, callId, isError = false) {
       const calls = scripts.get(scriptId) || [];
       const call = calls.find((item) => item.id === callId);
       if (call) Object.assign(call, { done: true, isError: Boolean(isError), durationMs: now() - call.startedAt });
       return view(calls);
     },
-    /** The script ended; what it states as its calls comes from its result. */
     close(scriptId) { scripts.delete(scriptId); },
   };
 }
 
-/**
- * A finished script's calls, from whatever the harness records of them:
- * `{ name, input, isError, durationMs }` each, in order.
- */
 export function settledCalls(list, tools) {
   if (!Array.isArray(list)) return null;
   const shown = list.slice(-MAX_SHOWN);
@@ -184,7 +150,6 @@ export function settledCalls(list, tools) {
   ];
 }
 
-/** A finished script's subject: the tools it called, counted -- "bash ×2 · read". */
 export function callsSubject(list) {
   if (!Array.isArray(list) || !list.length) return null;
   const counts = new Map();

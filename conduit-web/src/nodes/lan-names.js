@@ -5,14 +5,8 @@ import os from "node:os";
 import path from "node:path";
 
 /**
- * Names on this network for the hub's nodes, so a browser here reads their files from them over https rather than
- * through the hub (plan: "files take the shortest way"; a home network is trusted). Each node with an address on a
- * private network gets `n-<id>.<domain>`, a DNS-only record pointing there, and the wildcard certificate covering it,
- * which the LAN names service (or scripts/lan-cert/issue.sh) keeps beside the hub's own
- * (~/.conduit/tls/nodes-*.pem). Without a certificate, nodes have no such name and pages read through the hub.
- *
- * Every LAN node holds the one key: a node could present another's name, but not answer that node's challenge, so a
- * client never hands it the other's grant.
+ * Every LAN node holds the one wildcard key: a node could present another's name, but not answer that node's
+ * challenge, so a client never hands it the other's grant.
  */
 export function lanNames({ dir = path.join(os.homedir(), ".conduit", "tls"), cf = process.env.CONDUIT_CF_CLI || "cf", provider = () => null, log = console } = {}) {
   let loaded = { at: 0, value: null };
@@ -44,7 +38,6 @@ export function lanNames({ dir = path.join(os.homedir(), ".conduit", "tls"), cf 
     if (rows[0]?.id) await dns.update(zone, rows[0].id, record);
     else await dns.create(zone, record);
   }
-  /** Point `name` at `address`, once per change; find its zone through the provider. */
   async function point(name, address) {
     const known = published.get(name);
     if (known?.address === address) return known.pending.then(() => true, () => false);
@@ -59,7 +52,6 @@ export function lanNames({ dir = path.join(os.homedir(), ".conduit", "tls"), cf 
   return {
     point,
     reload() { loaded = { at: 0, value: null }; published.clear(); zones.clear(); },
-    /** A node's name here and the certificate for it, pointed at `address` first; null when there is none to give. */
     async forNode(nodeId, address) {
       const found = await certificate();
       if (!found) return null;

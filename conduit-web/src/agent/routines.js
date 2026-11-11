@@ -8,27 +8,17 @@ import { Type } from "@earendil-works/pi-ai";
 import { startRoutine } from "./routine-task.js";
 import { listRoutines, parseRoutine, readFolderFile, readPerson, readRoutine, removeRoutine, renderVars, routineText, splitFrontMatter, writeRoutine } from "./routine-files.js";
 
-/**
- * Routines (docs/plans/persistent-agent.md, "Verbs and structures"): a trigger fires a routine; its tasks gather
- * without a model; its gate says whether its run fires; the run's report, or the tasks' new items, go to its output.
- * The files are routine-files.js's; the clock that fires them is schedule.js's. This is what happens in between.
- */
+/** A trigger fires a routine; its tasks gather without a model; its gate says whether its run fires. */
 
-/** Every run's base prompt, in the agent's folder: what a run is, how it reports, how it ends. */
 const RUN_FILE = "RUN.md";
-/** How much of the inbox a run's first message carries. */
 const ENTRIES = 25;
 const ENTRY_BODY = 6000;
 const BLOCK_MAX = 40_000;
-/** What threads and runs inferred, appended by `memory` note (memory.js), read by the `notes` task. */
 export const NOTES_FILE = "NOTES.md";
-/** How many recent declined proposals the `notes` task shows beside the notes. */
 const DECLINED_SHOWN = 30;
-/** A daily routine whose quiet-hours start is off fires at this time instead. */
 const QUIET_FALLBACK = "23:00";
-/** A NOTES.md line as memory.js writes it: `- <date> | <origin> | <text> <!-- conduit … at:<iso> -->`. */
+/** A NOTES.md line as memory.js writes it. */
 const NOTE_LINE = /^- (\S+) \| (\S+) \| (.*) <!-- conduit by:\S+ chat:\S+ call:(\S+) at:(\S+) -->$/;
-/** Opt-in context blocks a routine may ask for (`context:` in its front matter), by file. */
 const CONTEXT_FILES = { soul: "SOUL.md", user: "USER.md", memory: "MEMORY.md" };
 
 const escapeBlock = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -39,7 +29,6 @@ const attrText = (attrs = {}) => Object.entries(attrs).filter(([, value]) => val
 /** Escape data so it cannot close or forge prompt blocks. */
 export const block = (tag, attrs, text) => `<${tag}${attrText(attrs)}>\n${escapeBody(String(text || "").trim())}\n</${tag}>`;
 
-/** The {{variables}} prompts are filled with: the person's fields (USER.md front matter), the agent's, the time. */
 export async function promptVars(agent, now = Date.now()) {
   const person = agent.folder ? await readPerson(agent.folder).catch(() => ({})) : {};
   const timezone = agent.settings().timezone;
@@ -54,10 +43,7 @@ export async function promptVars(agent, now = Date.now()) {
 /** The agent's own folder is the agent's to change, so the hub reads it never through a link. */
 const folderText = async (agent, ...parts) => (await readFolderFile(agent.folder, ...parts)) ?? "";
 
-/**
- * A run's system prompt: RUN.md, then its routine's instructions as a `<routine>` block, then any context it opted
- * into. Stable between firings of one routine, so the provider's prompt cache holds.
- */
+/** Stable between firings of one routine, so the provider's prompt cache holds. */
 export async function runInstructions(agent, routine = null, now = Date.now()) {
   const { now: _now, ...vars } = await promptVars(agent, now);
   const store = agent.runtime?.contextStore;
@@ -76,22 +62,17 @@ export async function routineContext(agent, routine, now = Date.now()) {
   return parts.join("\n\n");
 }
 
-/** Conduit's own chats that finished since a time, outside the agent's workspace. */
 function finishedChats(agent, since) {
   return agent.registry.list().filter((chat) => chat.projectId !== agent.project?.id && Date.parse(chat.lastAssistantCompletedAt || "") > since)
     .sort((left, right) => Date.parse(right.lastAssistantCompletedAt) - Date.parse(left.lastAssistantCompletedAt));
 }
 
-/** Midnight today in a time zone, as an epoch: the calendar reader's window starts there. */
 function startOfDay(now, zone) {
   const local = new Date(new Date(now).toLocaleString("en-US", { timeZone: zone }));
   return now - (local.getHours() * 3600000 + local.getMinutes() * 60000 + local.getSeconds() * 1000);
 }
 
-/**
- * Events from today for `days` days, through Executor's Google Calendar (a built-in reader: the person writes no
- * program, only names the account). Events are state, not news: shown whole each time, never counted as new.
- */
+/** Events are state, not news: shown whole each time, never counted as new. */
 const calendarProgram = ({ account, calendars = ["primary"], days = 2 }, now, zone) => {
   const start = startOfDay(now, zone);
   return `const range = { timeMin: ${JSON.stringify(new Date(start).toISOString())}, timeMax: ${JSON.stringify(new Date(start + days * 86400000).toISOString())} };
@@ -103,7 +84,6 @@ return lists.flatMap((list) => list.items ?? []).map((event) => ({ id: event.id,
 
 const clip = (text, max) => { const flat = String(text || "").replace(/\s+/g, " ").trim(); return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat; };
 
-/** Lines in order until the block size runs out. */
 function capped(items) {
   const shown = [];
   let size = 0;
@@ -132,7 +112,6 @@ async function notesTask(agent, task, cursor, state) {
     block: block(task.id, { new: shown.length }, [text, ...(declined.length ? [`Declined by the person (never propose again without new evidence):\n${declined.join("\n")}`] : [])].join("\n\n")) };
 }
 
-/** One task, with its cursor: what it gathered as a block, how much of it is new, and the cursor to keep. */
 async function runTask(agent, task, cursor, state, now, routineName) {
   const zone = agent.settings().timezone;
   if (task.kind === "inbox") {
@@ -184,10 +163,7 @@ async function runTask(agent, task, cursor, state, now, routineName) {
   return { fresh: fresh.length, cursor: next, items: fresh, block: block(task.id, { new: fresh.length }, fresh.map(itemText).join("\n\n") || "Nothing new.") };
 }
 
-/**
- * Fire a routine: its tasks in order, its gate, and, when it runs, its run's prompt and first message. Returns plain
- * JSON (it is memoised by the clock), applied in a commit by `applyRoutine`. Never throws for a task's failure.
- */
+/** Returns plain JSON, since the clock memoises it; never throws for a task's failure. */
 export async function executeRoutine(agent, routine, { cursors = {}, state, now = Date.now(), force = false, event = null } = {}) {
   const next = {};
   const tasks = [];
@@ -210,7 +186,6 @@ export async function executeRoutine(agent, routine, { cursors = {}, state, now 
     fresh += done.fresh;
     items.push(...done.items);
   }
-  // What started it, when an event did (`trigger: { on: … }`): a line of its own; what it brought, its tasks gather.
   if (event) blocks.unshift(block("event", { name: event.name }, event.text));
   const run = force ? routine.gate !== "never" : routine.gate === "always" || (routine.gate === "when-new" && fresh > 0);
   if (!run) return { run: false, cursors: next, tasks, items, fresh };
@@ -227,7 +202,6 @@ export async function executeRoutine(agent, routine, { cursors = {}, state, now 
   };
 }
 
-/** Admission starts one durable lifecycle; gathering happens after prerequisites. */
 export async function applyRoutine(tx, doc, agent, conversationId, routine, outcome, slot) {
   if (outcome?.skipped) return;
   return startRoutine(tx, doc, agent, conversationId, routine, slot, { outcome });
@@ -243,7 +217,6 @@ export function completeRoutine(doc, routine, outcome, at) {
     lastError: outcome.tasks.filter((task) => task.error).map((task) => `${task.id}: ${task.error}`).join("; ") || null };
 }
 
-/** The routines, valid ones as the clock wants them: `r-<name>` schedule items (schedule.js seeds their clocks). */
 export async function routineClocks(agent) {
   const clocks = {};
   const quiet = agent.settings().quietHours;
@@ -257,7 +230,7 @@ export async function routineClocks(agent) {
       everyMinutes: rule.kind === "every" ? rule.minutes : null,
       ...(rule.during !== undefined ? { during: rule.during === "quiet" ? (quiet?.enabled ? `${quiet.start}-${quiet.end}` : null) : rule.during } : {}) });
     // A one-off whose time has passed has fired (or was missed): its file stays as a record, its clock does not.
-    // An event's trigger (`on:`) has no clock: the event starts the routine (agent.js fireEvent).
+    // An event's trigger (`on:`) has no clock: the event starts the routine.
     const timed = (Array.isArray(trigger) ? trigger : [trigger]).filter((rule) => rule.kind !== "on");
     const rules = timed.filter((rule) => rule.kind !== "once" || Date.parse(rule.at) >= Date.now() - 60_000).map(clockRule);
     if (!rules.length) continue;
@@ -278,10 +251,6 @@ export const triggerWords = (trigger, compact = false) => {
 };
 const TEST_SHOWN = 12_000;
 
-/**
- * jbot's hand on its routines: list, read and test them freely; save (a new file or a change) and remove ask the person
- * (policy.js). A saved routine's clock follows at once.
- */
 export function RoutineTools(runtime) {
   const routine = defineTool({
     name: "routine",

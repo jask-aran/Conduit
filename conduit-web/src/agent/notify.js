@@ -1,10 +1,5 @@
 import { headlineOf, inQuietHours, plainText } from "./inbox.js";
 
-/**
- * What of the agent reaches the person's devices (docs/plans/persistent-agent.md, "Reaching you"): a run's report
- * that their interruption setting lets through, and a question waiting on their approval. Each goes to every device
- * that registered for push with this hub; a tap opens the thread it came from.
- */
 const LEVEL_WORD = /^\s*(?:[*_`#>\s]*)(?:URGENT|ATTENTION|FYI|NOTHING)\b[*_`]*\s*[:.-]?\s*/i;
 const line = (text, max) => {
   const flat = plainText(String(text || "").replace(LEVEL_WORD, "")).replace(/\s+/g, " ").trim();
@@ -14,11 +9,9 @@ const line = (text, max) => {
 /** One gate for all push paths. Approval transport priority does not make an approval urgent. */
 const pushAllowed = (agent, level) => level === "urgent" || !agent || !inQuietHours(agent.settings());
 
-/** `runtime.agentNotify` for the durable runtime: called by the reporter and by approvals, never awaited by them. */
 export function agentNotifier({ agent, push, hubId, hubName = () => null }) {
   // Resolves to the devices it reached and missed, by label (`{ to, missed }`), or null when nothing was sent.
   return ({ kind, conversationId, title, text, level, key, always = false, waiting = 0, path = null }) => (async () => {
-    // The agent's threads, and any chat whose profile reaches the person's accounts (an approval it is waiting on).
     if (!pushAllowed(agent, level)) return { to: [], missed: [] };
     const thread = await agent.threadOf(conversationId);
     if (!thread?.chatId || thread.role === "run") return null;
@@ -37,8 +30,7 @@ export function agentNotifier({ agent, push, hubId, hubName = () => null }) {
       return null;
     }
     const devices = push.list();
-    // Plain text: a notification draws no markdown. A message's heading is its title, else its first line (its bold
-    // headline, by the house style), and the body is what follows, so neither says the other again.
+    // A message's heading is its title, else its first line, and the body is what follows, so neither says the other again.
     const heading = approval || chat ? "" : line(title || headlineOf(text, 60), 60);
     const said = line(text, 400);
     const stem = heading.replace(/…$/, "");
@@ -50,11 +42,10 @@ export function agentNotifier({ agent, push, hubId, hubName = () => null }) {
       body,
       // Who it is from, and a report's name: the app shows it as a message from them (older apps read title and body).
       ...(approval || chat ? {} : { sender: name, ...(heading && rest ? { heading } : {}) }),
-      // A message opens jbot's conversation (its page); an approval, the thread it waits in.
       path: path || (thread.role === "home" && !approval ? "/jbot" : `/chat/${thread.chatId}`),
       tag,
       hub: hubId(),
-      // Which hub (a network) it came from: one phone can hear from several (conduit-dev, conduit-local).
+      // One phone can hear from several hubs.
       ...(hubName() ? { hubName: hubName() } : {}),
       ...(approval ? { answer: { token: push.answerToken(key), allow: "Allow", ...(always ? { always: "Always" } : {}), deny: "Don't" } } : {}),
       urgency: urgent || approval ? "high" : "normal",

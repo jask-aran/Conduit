@@ -71,14 +71,12 @@ export async function startRoutine(tx, doc, agent, homeId, routine, slot, { outc
   });
   doc.routineRuns[taskId] = { taskId, routine, slot, key, force, ...(event ? { event } : {}), chain: [...chain, routine.name],
     previousAt: previous.lastAt || null, startedAt: Date.now(), ...(outcome ? { outcome } : {}) };
-  // Its item in the work log (work-log.js), which every step below moves on.
   await openWork(tx, { id: workId(taskId), kind: routine.name, title: routine.title || routine.name,
     origin: { kind: force ? "manual" : event ? "event" : chain.length ? "routine" : "clock" }, log: routine.log !== false });
   doc.routineState[routine.name] = { ...previous, key, taskId, lastAt: slot, lastError: null };
   return taskId;
 }
 
-/** A routine firing's item in the work log, by its task. */
 const workId = (taskId) => `routine:${taskId}`;
 /**
  * The child a before/after step waits on is this routine's to abort only when this routine started it (its key is
@@ -360,7 +358,6 @@ export function routineTask(runtime) {
             const usage = await runtime.routineContextUsage?.(home, context, api.settings?.compaction);
             const settings = { ...runtime.agent.settings().nightlyCompaction, ...step.compact };
             if (!shouldCompact(settings, usage)) {
-              // Said on its routine's row: not compacted, and why (the thread below the size it compacts from).
               const from = usage?.contextWindow ? Math.max(settings.minTokens, settings.minShare * usage.contextWindow) : null;
               await api.commit(async (tx) => { const doc = await tx.doc(AgentDoc); doc.routineState ||= {};
                 const compaction = { at: new Date(api.now()).toISOString(), done: false,

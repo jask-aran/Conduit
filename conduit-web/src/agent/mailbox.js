@@ -2,18 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { SEEN_KEPT } from "./feeds.js";
 
-/*
- * jbot's mailbox: the person's Gmail as gathered, in jbot's folder. Gathering is one thing and reading another, so any
- * routine can read the mail without depending on another routine's run or its commentary:
- *
- *   mail/<date>/<id>/     each email, as the mail pipeline keeps it (mail-pipeline.js)
- *   mail/index.jsonl      one line per email gathered: when, from, subject, labels, a line of what it says, its path
- *   mail/gmail.json       the gathering's own state: which messages are known, the Gmail accounts
- *
- * `gatherMail` fetches what is new into it (the email task does, whichever routine runs it); `mailSince` reads the
- * index from a time on, which is how each routine's email task shows it its own window: the heartbeat its hour, the
- * morning brief its day.
- */
+/* Gathering is one thing and reading another, so any routine can read the mail without depending on another's run. */
 const INDEX = path.join("mail", "index.jsonl");
 const STATE = path.join("mail", "gmail.json");
 
@@ -22,10 +11,7 @@ const readJson = (file) => fs.readFile(file, "utf8").then(JSON.parse, () => null
 /** One gathering at a time in this process: two routines firing together must not fetch the same mail twice. */
 let gathering = Promise.resolve();
 
-/**
- * Fetch the new mail into the mailbox. `fetchNew(state)` runs the source and reads each email (mail-task.js), returning
- * `{ error } | { accounts, known, lines }`. The first gathering only learns what is there.
- */
+/** `fetchNew(state)` returns `{ error } | { accounts, known, lines }`. */
 export function gatherMail(agent, fetchNew) {
   const run = gathering.then(async () => {
     const folder = agent.folder;
@@ -46,7 +32,6 @@ export function gatherMail(agent, fetchNew) {
   return run;
 }
 
-/** The mailbox's lines gathered after `since` (an ISO time), oldest first. */
 export async function mailSince(agent, since) {
   const text = await fs.readFile(path.join(agent.folder, INDEX), "utf8").catch(() => "");
   const after = Date.parse(since || "") || 0;

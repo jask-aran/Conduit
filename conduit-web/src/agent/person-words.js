@@ -19,21 +19,15 @@ export async function personWords(agent, conversationId, { messages = 20, chars 
   if (!source || !messages) return words;
 
   /*
-   * The person's words, from every channel that proves they wrote them (authenticated channels), each with `via`:
-   *  - app: typed on the agent's page, logged by POST /v0/agent/messages before it reached the thread, then claimed;
-   *  - thread: typed in the thread itself, from their own client: the entry carries `author: "person"`, stamped only by
-   *    the server's client-command path (live-session-stream.js), never by anything the hub generates;
-   *  - email: mail from their address whose sender the receiving server proved (DMARC and DKIM, email.js
-   *    authenticatedFrom), kept in the message log with `native.authenticated`.
-   * The mirror's own `in:${messageId}` rows are not proof: it labels generated prompts as person messages too. No pi.*
-   * kind, report, wake/subagent prompt, notice, model content or injected context is trusted here.
+   * Only channels that prove the person wrote them: an app message logged before it reached the thread, a thread entry
+   * whose `author: "person"` only the server's client-command path stamps, or mail the receiving server proved. The
+   * mirror's own `in:${messageId}` rows are not proof: it labels generated prompts as person messages too.
    */
   const typed = new Map((agent.runtime.messageLog?.messages || [])
     .filter((message) => message.channel === "app" && message.direction === "in" && message.sender === "person"
       && String(message.conversationId) === String(source) && message.entryId != null)
     .map((message) => [message.entryId, message]));
   const found = [];
-  // Mail the person sent from an address the receiving server proved: their words by email.
   for (const message of [...(agent.runtime.messageLog?.messages || [])].reverse()) {
     if (found.length >= messages) break;
     if (message.channel !== "email" || message.direction !== "in" || message.sender !== "person" || message.native?.authenticated !== true) continue;
