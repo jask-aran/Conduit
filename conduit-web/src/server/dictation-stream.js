@@ -20,8 +20,6 @@ const DEFAULT_LIMITS = Object.freeze({
 });
 
 // Eight 20 ms transport packets per native feed, kept separate from model decode options.
-const TRANSCRIBE_CPP_FEED_QUANTUM_MS = 160;
-const TRANSCRIBE_CPP_LIVE_QUEUE_LIMIT_MS = 5_000;
 const VOICE_SAMPLE_RATE = 16_000;
 
 function finalizationMultiplier(limits) {
@@ -594,7 +592,7 @@ function createServerDiagnostics() {
       meanAudioPerCallMs: 0,
       feedQuantumMs: null,
       feedQuantumSamples: null,
-      queueLimitMs: TRANSCRIBE_CPP_LIVE_QUEUE_LIMIT_MS,
+      queueLimitMs: null,
       acceptedThroughSample: 0,
       submittedThroughSample: 0,
       processedThroughSample: null,
@@ -867,12 +865,6 @@ function wavBlob(chunks, byteLength) {
   header.write("data", 36);
   header.writeUInt32LE(byteLength, 40);
   return new Blob([header, ...chunks], { type: "audio/wav" });
-}
-
-function pcmFloat32(buffer) {
-  const samples = new Float32Array(Math.floor(buffer.length / 2));
-  for (let index = 0; index < samples.length; index += 1) samples[index] = buffer.readInt16LE(index * 2) / 32768;
-  return samples;
 }
 
 class PcmAccumulator {
@@ -1375,303 +1367,6 @@ export function openOpenaiRealtimeStream({ url, headers, model = OPENAI_LIVE_MOD
   }));
 }
 
-export function createTranscribeCppStreamAdapter(emit, limits = {}, openStream, diagnostics = null, streaming = {}) {
-  let nativeStream = null;
-  let closed = false;
-  let inputClosed = false;
-  let finalized = false;
-  let feedError = null;
-  let errorReported = false;
-  let workerPromise = null;
-  let lastText = "";
-  let stableTextAvailable = false;
-  let acceptedThroughSample = 0;
-  let submittedThroughSample = 0;
-  let processedThroughSample = null;
-  let committedThroughSample = 0;
-  let currentBufferedMs = null;
-  let stopDrainStartedAt = null;
-  const queue = [];
-  let queuedSamples = 0;
-  const options = { streaming };
-  const feedQuantumMs = TRANSCRIBE_CPP_FEED_QUANTUM_MS;
-  const feedQuantumSamples = Math.round(feedQuantumMs * VOICE_SAMPLE_RATE / 1_000);
-  const queueLimitMs = Number.isFinite(Number(limits.liveQueueLimitMs)) && Number(limits.liveQueueLimitMs) > 0
-    ? Number(limits.liveQueueLimitMs)
-    : TRANSCRIBE_CPP_LIVE_QUEUE_LIMIT_MS;
-  const queueLimitSamples = Math.round(queueLimitMs * VOICE_SAMPLE_RATE / 1_000);
-  const configuration = {
-    family: streaming.family || null,
-    leftMs: streaming.leftMs ?? null,
-    chunkMs: streaming.chunkMs ?? null,
-    rightMs: streaming.rightMs ?? null,
-    latencyMs: Number.isFinite(Number(streaming.latencyMs)) ? Number(streaming.latencyMs) : null,
-    commitPolicy: streaming.commitPolicy || null,
-    stablePrefixAgreementN: streaming.stablePrefixAgreementN ?? null,
-    feedQuantumMs,
-    feedQuantumSamples,
-    queueLimitMs,
-    queueLimitSamples,
-  };
-
-  const syncDiagnostics = () => {
-    if (!diagnostics?.streaming) return;
-    const target = diagnostics.streaming;
-    const serverQueuedSamples = Math.max(0, acceptedThroughSample - submittedThroughSample);
-    target.acceptedThroughSample = Math.max(target.acceptedThroughSample || 0, acceptedThroughSample);
-    target.submittedThroughSample = Math.max(target.submittedThroughSample || 0, submittedThroughSample);
-    if (processedThroughSample !== null) {
-      target.processedThroughSample = Math.max(
-        target.processedThroughSample || 0,
-        Math.min(acceptedThroughSample, processedThroughSample),
-      );
-    }
-    target.committedThroughSample = Math.max(target.committedThroughSample || 0, committedThroughSample);
-    target.serverQueuedAudioMs = serverQueuedSamples / (VOICE_SAMPLE_RATE / 1_000);
-    target.maxServerQueueMs = Math.max(target.maxServerQueueMs || 0, target.serverQueuedAudioMs);
-    target.runtimeBufferedAudioMs = currentBufferedMs;
-    target.totalInferenceLagMs = currentBufferedMs === null ? null : target.serverQueuedAudioMs + currentBufferedMs;
-    target.maxNativeBufferMs = Math.max(target.maxNativeBufferMs || 0, currentBufferedMs || 0);
-    target.maxBufferedMs = Math.max(target.maxBufferedMs || 0, currentBufferedMs || 0);
-    target.meanAudioPerCallMs = target.feedCallCount
-      ? target.feedSamples / target.feedCallCount / (VOICE_SAMPLE_RATE / 1_000)
-      : 0;
-    if (diagnostics.watermarks) {
-      diagnostics.watermarks.acceptedThroughSample = Math.max(diagnostics.watermarks.acceptedThroughSample, acceptedThroughSample);
-      diagnostics.watermarks.submittedThroughSample = Math.max(diagnostics.watermarks.submittedThroughSample, submittedThroughSample);
-      if (processedThroughSample !== null) {
-        diagnostics.watermarks.processedThroughSample = Math.max(
-          diagnostics.watermarks.processedThroughSample || 0,
-          Math.min(acceptedThroughSample, processedThroughSample),
-        );
-      }
-      diagnostics.watermarks.committedThroughSample = Math.max(diagnostics.watermarks.committedThroughSample, committedThroughSample);
-    }
-  };
-
-  const opened = Promise.resolve().then(async () => {
-    if (typeof openStream !== "function") throw dictationError("voice_stream_unsupported", "The selected voice model does not expose stateful streaming", 409);
-    nativeStream = await openStream(options);
-    if (!nativeStream || typeof nativeStream.feed !== "function" || typeof nativeStream.finalize !== "function") {
-      throw dictationError("voice_stream_invalid", "The selected voice model returned an invalid streaming session", 502);
-    }
-    if (diagnostics) {
-      diagnostics.streaming.enabled = true;
-      diagnostics.streaming.family = configuration.family;
-      diagnostics.streaming.profile = { ...configuration };
-      diagnostics.streaming.feedQuantumMs = feedQuantumMs;
-      diagnostics.streaming.feedQuantumSamples = feedQuantumSamples;
-      diagnostics.streaming.queueLimitMs = queueLimitMs;
-    }
-    syncDiagnostics();
-    return nativeStream;
-  });
-
-  const reportError = (error, details = {}) => {
-    if (errorReported) return;
-    errorReported = true;
-    emit({
-      type: "error",
-      code: error?.code || "voice_stream_failed",
-      message: error?.message || "Stateful voice transcription failed",
-      fallbackEligible: !stableTextAvailable,
-      ...details,
-    });
-  };
-
-  const updateCursors = (update, endSample) => {
-    submittedThroughSample = Math.max(submittedThroughSample, endSample);
-    const committedMs = Number(update?.audioCommittedMs);
-    if (Number.isFinite(committedMs)) {
-      committedThroughSample = Math.max(
-        committedThroughSample,
-        Math.min(acceptedThroughSample, Math.max(0, Math.round(committedMs * VOICE_SAMPLE_RATE / 1_000))),
-      );
-    }
-    if (Number.isSafeInteger(update?.processedThroughSample) && update.processedThroughSample >= 0) {
-      processedThroughSample = Math.max(processedThroughSample || 0, update.processedThroughSample);
-    }
-    currentBufferedMs = Number.isFinite(Number(update?.bufferedMs)) ? Number(update.bufferedMs) : null;
-    syncDiagnostics();
-  };
-
-  const publish = (update, terminal = false) => {
-    if (!nativeStream || closed) return "";
-    const snapshot = nativeStream.text || {};
-    const committed = String(snapshot.committed || "");
-    const tentative = String(snapshot.tentative || "");
-    const full = String(snapshot.full || `${committed}${tentative}`).trim();
-    const revision = Number.isFinite(Number(update?.revision)) ? Number(update.revision) : null;
-    stableTextAvailable ||= Boolean(committed.trim());
-    if (diagnostics) {
-      diagnostics.streaming.lastRevision = revision;
-      diagnostics.streaming.revisionCount = Math.max(diagnostics.streaming.revisionCount, revision ?? 0);
-      if (committed.trim() && diagnostics.streaming.firstCommittedAt === null) diagnostics.streaming.firstCommittedAt = performance.now();
-      if (tentative.trim() && diagnostics.streaming.firstTentativeAt === null) diagnostics.streaming.firstTentativeAt = performance.now();
-    }
-    if (full !== lastText || terminal) {
-      emit({
-        type: terminal ? "final" : "partial",
-        text: full,
-        stableText: committed.trim(),
-        tentativeText: tentative.trim(),
-        revision,
-        audioCommittedMs: Number.isFinite(Number(update?.audioCommittedMs)) ? Number(update.audioCommittedMs) : null,
-        bufferedMs: Number.isFinite(Number(update?.bufferedMs)) ? Number(update.bufferedMs) : null,
-      });
-      lastText = full;
-    }
-    return full;
-  };
-
-  const takeFeedQuantum = (flush) => {
-    if (!queuedSamples || (!flush && queuedSamples < feedQuantumSamples)) return null;
-    const targetSamples = queuedSamples >= feedQuantumSamples ? feedQuantumSamples : queuedSamples;
-    const parts = [];
-    let remaining = targetSamples;
-    let startSample = null;
-    while (remaining > 0 && queue.length) {
-      const entry = queue[0];
-      const availableSamples = Math.floor(entry.buffer.length / 2) - entry.offsetSamples;
-      const takeSamples = Math.min(remaining, availableSamples);
-      if (startSample === null) startSample = entry.startSample + entry.offsetSamples;
-      parts.push(entry.buffer.subarray(entry.offsetSamples * 2, (entry.offsetSamples + takeSamples) * 2));
-      entry.offsetSamples += takeSamples;
-      remaining -= takeSamples;
-      queuedSamples -= takeSamples;
-      if (entry.offsetSamples >= Math.floor(entry.buffer.length / 2)) queue.shift();
-    }
-    if (remaining > 0 || startSample === null) return null;
-    return {
-      pcm: parts.length === 1 ? parts[0] : Buffer.concat(parts, targetSamples * 2),
-      startSample,
-      endSample: startSample + targetSamples,
-    };
-  };
-
-  const overflow = () => {
-    const queuedMs = Math.max(0, acceptedThroughSample - submittedThroughSample) / (VOICE_SAMPLE_RATE / 1_000);
-    const error = dictationError("live_queue_overflow", "Live voice transcription fell behind capture", 503);
-    inputClosed = true;
-    closed = true;
-    feedError = error;
-    queue.length = 0;
-    queuedSamples = 0;
-    if (diagnostics) {
-      diagnostics.streaming.overflow = {
-        code: "live_queue_overflow",
-        queuedMs,
-        acceptedThroughSample,
-        submittedThroughSample,
-        stableText: stableTextAvailable,
-      };
-    }
-    try { nativeStream?.reset?.(); }
-    catch (resetError) { reportError(resetError); }
-    reportError(error, { queueMs: queuedMs });
-  };
-
-  const enqueue = (data) => {
-    if (closed || inputClosed || feedError) return;
-    const copy = Buffer.from(data);
-    const sampleCount = Math.floor(copy.length / 2);
-    if (!sampleCount) return;
-    const startSample = acceptedThroughSample;
-    acceptedThroughSample += sampleCount;
-    const queuedMs = Math.max(0, acceptedThroughSample - submittedThroughSample) / (VOICE_SAMPLE_RATE / 1_000);
-    if (queuedMs > queueLimitMs) {
-      syncDiagnostics();
-      overflow();
-      return;
-    }
-    queue.push({ buffer: copy, offsetSamples: 0, startSample });
-    queuedSamples += sampleCount;
-    syncDiagnostics();
-    scheduleWorker();
-  };
-
-  const runWorker = async () => {
-    await opened;
-    while (!closed && !feedError) {
-      const item = takeFeedQuantum(inputClosed);
-      if (!item) break;
-      const stream = nativeStream;
-      if (!stream) break;
-      if (diagnostics) {
-        markInferenceQueued(diagnostics);
-        markInferenceStart(diagnostics);
-      }
-      const update = await stream.feed(pcmFloat32(item.pcm));
-      if (closed || feedError || stream !== nativeStream) break;
-      submittedThroughSample = Math.max(submittedThroughSample, item.endSample);
-      if (diagnostics) {
-        diagnostics.streaming.feedCount += 1;
-        diagnostics.streaming.feedCallCount += 1;
-        diagnostics.streaming.feedSamples += item.endSample - item.startSample;
-      }
-      updateCursors(update, item.endSample);
-      publish(update);
-    }
-    syncDiagnostics();
-  };
-
-  function scheduleWorker() {
-    if (workerPromise || closed || feedError) return workerPromise;
-    workerPromise = runWorker().catch((error) => {
-      feedError ||= error;
-      inputClosed = true;
-      reportError(error);
-    }).finally(() => {
-      workerPromise = null;
-      if (!closed && !feedError && (inputClosed ? queuedSamples > 0 : queuedSamples >= feedQuantumSamples)) scheduleWorker();
-    });
-    return workerPromise;
-  }
-
-  return {
-    opened,
-    write(data) { enqueue(data); },
-    async stop() {
-      await opened;
-      if (closed || finalized) return;
-      inputClosed = true;
-      stopDrainStartedAt = performance.now();
-      while (!closed && !feedError) {
-        scheduleWorker();
-        const activeWorker = workerPromise;
-        if (activeWorker) await activeWorker;
-        if (!workerPromise && queuedSamples === 0) break;
-      }
-      if (feedError) throw feedError;
-      if (closed || !nativeStream) return;
-      if (diagnostics) {
-        diagnostics.streaming.stopDrainMs = Math.max(0, performance.now() - stopDrainStartedAt);
-        markInferenceQueued(diagnostics);
-        markInferenceStart(diagnostics);
-      }
-      const stream = nativeStream;
-      const update = await stream.finalize();
-      if (stream !== nativeStream || closed) return;
-      finalized = true;
-      updateCursors(update, acceptedThroughSample);
-      if (diagnostics) markInferenceComplete(diagnostics);
-      const text = publish(update, true);
-      emit({ type: "adapter_closed", final: Boolean(text), text, stableText: String(stream.text?.committed || "").trim(), tentativeText: "" });
-    },
-    close() {
-      if (closed && !nativeStream) return;
-      closed = true;
-      inputClosed = true;
-      queue.length = 0;
-      queuedSamples = 0;
-      try { nativeStream?.reset?.(); }
-      catch (error) { reportError(error); }
-      nativeStream = null;
-      syncDiagnostics();
-    },
-  };
-}
-
 export function createDeepgramAdapter(config, emit, limits, fetchImpl, diagnostics = null, options = {}) {
   return createSnapshotAdapter(emit, limits, async (pcm) => {
     const endpoint = new URL(config.endpoint);
@@ -1761,8 +1456,6 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
     let progressiveNextPublish = 0;
     let progressiveText = "";
     let progressiveLastRangeEnd = 0;
-    let fallbackLiveToBatch = null;
-    let liveFallbackPromise = null;
     let segmentationProvider = null;
     const SHORT_FAILURE_AUDIO_BYTES = 1;
     const diagnostics = createServerDiagnostics();
@@ -1798,7 +1491,6 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       actualComputeBackend: null,
       loadedRuntimeVersion: null,
       progressiveBatch: false,
-      streamFallback: null,
     };
     const send = (event) => {
       if (client.readyState === client.OPEN) client.send(JSON.stringify(event));
@@ -2329,7 +2021,6 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
             send({ type: "waiting_for_transcription" });
             armFinalTimer(calculateFinalizationTimeoutMs({ audioBytes, adapter: runtimeMetadata.adapter, model: runtimeMetadata.model, limits }));
           }
-          if (liveFallbackPromise) await liveFallbackPromise;
           const current = adapter || await adapterAvailable;
           if (!current || phase === "ended") return;
           const finalizationTimeoutMs = calculateFinalizationTimeoutMs({
@@ -2357,23 +2048,11 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
             analysis: diagnostics.analysis,
             policy: diagnostics.analysis?.policy || null,
           };
-          try {
-            await current.stop({
-              segmentation,
-              progressive: progressiveEnabled,
-              text: progressiveText,
-            });
-          } catch (error) {
-            if (!liveFallbackPromise) throw error;
-            await liveFallbackPromise;
-            if (phase !== "ended" && adapter && adapter !== current) {
-              await adapter.stop({
-                segmentation,
-                progressive: progressiveEnabled,
-                text: progressiveText,
-              });
-            }
-          }
+          await current.stop({
+            segmentation,
+            progressive: progressiveEnabled,
+            text: progressiveText,
+          });
         } catch (error) { fail(error); }
       })();
     };
@@ -2452,12 +2131,8 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
           // one final per utterance, so completing on the first final would drop
           // every later segment.
         } else if (event.type === "adapter_closed") complete(phase === "stopping" ? stopReason || "stopped" : "upstream_closed", event);
-        else if (event.type === "error") {
-          const truth = transcriptTruth.snapshot();
-          const exactStableCheckpoint = truth.stableSegments.some((segment) => segment.throughSample === truth.committedThroughSample && segment.throughSample > 0);
-          if (fallbackLiveToBatch && (event.fallbackEligible || exactStableCheckpoint)) void fallbackLiveToBatch(event).catch(() => {});
-          else fail(dictationError(event.code || "asr_error", event.message || "Voice dictation failed", 502));
-        } else send(event);
+        else if (event.type === "error") fail(dictationError(event.code || "asr_error", event.message || "Voice dictation failed", 502));
+        else send(event);
       } catch (error) {
         fail(error);
       }
@@ -2502,7 +2177,6 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         actualComputeBackend: typeof config.actualComputeBackend === "string" ? config.actualComputeBackend : config.computeBackend || null,
         loadedRuntimeVersion: typeof config.loadedRuntimeVersion === "string" ? config.loadedRuntimeVersion : null,
         progressiveBatch: false,
-        streamFallback: null,
       };
       const segmentationMode = config.segmentation === "none" ? "none" : "heuristic";
       segmentationProvider = createSegmentationProvider({
@@ -2532,202 +2206,17 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         requestedComputeBackend: runtimeMetadata.requestedComputeBackend,
         actualComputeBackend: runtimeMetadata.actualComputeBackend,
         loadedRuntimeVersion: runtimeMetadata.loadedRuntimeVersion,
-        streamFallback: runtimeMetadata.streamFallback,
-      };
-      const updateRuntimeDiagnostics = () => {
-        diagnostics.runtime = {
-          mode: runtimeMetadata.mode,
-          inferenceMode: runtimeMetadata.inferenceMode,
-          model: runtimeMetadata.model,
-          precision: runtimeMetadata.precision,
-          backend: runtimeMetadata.backend,
-          computeBackend: runtimeMetadata.computeBackend,
-          capabilities: runtimeMetadata.capabilities,
-          native: runtimeMetadata.native,
-          modelId: runtimeMetadata.modelId,
-          artifactId: runtimeMetadata.artifactId,
-          resolvedProfileId: runtimeMetadata.resolvedProfileId,
-          execution: runtimeMetadata.execution,
-          segmentation: runtimeMetadata.segmentation,
-          fallback: runtimeMetadata.fallback,
-          requestedComputeBackend: runtimeMetadata.requestedComputeBackend,
-          actualComputeBackend: runtimeMetadata.actualComputeBackend,
-          loadedRuntimeVersion: runtimeMetadata.loadedRuntimeVersion,
-          streamFallback: runtimeMetadata.streamFallback,
-        };
       };
       let next;
-      if (config.adapter === "transcribe_cpp_stream_v1") {
-        next = createTranscribeCppStreamAdapter(emit, limits, config.stream, diagnostics, config.streaming || config.capabilities?.streaming || {});
-        try {
-          await next.opened;
-        } catch (error) {
-          next.close();
-          const sourceProfile = {
-            profileId: runtimeMetadata.resolvedProfileId,
-            adapter: runtimeMetadata.adapter,
-            model: runtimeMetadata.model,
-          };
-          const fallbackProfileId = runtimeMetadata.fallback?.profileId || null;
-          if (typeof config.transcribe !== "function") throw error;
-          runtimeMetadata = {
-            ...runtimeMetadata,
-            adapter: "transcribe_cpp_batch_fallback_v1",
-            inferenceMode: "batch",
-            capabilities: {
-              ...(runtimeMetadata.capabilities || {}),
-              inferenceMode: "batch",
-              partials: false,
-              streaming: null,
-              fallback: "wp5_progressive_batch",
-            },
-            streamFallback: {
-              from: "transcribe_cpp_stream_v1",
-              reason: error?.code || "voice_stream_open_failed",
-              replay: "from_zero",
-              replaySample: 0,
-              discardedTentativeRevisions: [],
-              stableCheckpoint: 0,
-              overlapSamples: 0,
-              duplicateBoundaryHandling: "none",
-              sourceProfile,
-              fallbackProfile: fallbackProfileId,
-              completingProfile: fallbackProfileId,
-            },
-          };
-          diagnostics.streaming.fallback = runtimeMetadata.streamFallback;
-          updateRuntimeDiagnostics();
-          next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { signal: sessionController.signal, sessionId, nextOperationId, watermarks: watermarkHooks });
-        }
-      } else if (config.adapter === OPENAI_LIVE_ADAPTER) {
+      if (config.adapter === OPENAI_LIVE_ADAPTER) {
         next = createOpenaiRealtimeStreamAdapter(emit, limits, config.stream, diagnostics, { watermarks: watermarkHooks });
         await next.opened;
       } else if (config.adapter === "deepgram_audio_v1") {
         next = createDeepgramAdapter(config, emit, limits, fetchImpl, diagnostics, { signal: sessionController.signal, sessionId, nextOperationId, watermarks: watermarkHooks });
-      } else if (config.adapter === "transcribe_cpp_batch_v1") {
+      } else if (config.adapter === "hex_batch_v1") {
         next = createSnapshotAdapter(emit, limits, config.transcribe, diagnostics, { progressive: false, useSegmentation: false, signal: sessionController.signal, sessionId, nextOperationId, watermarks: watermarkHooks });
       } else {
         next = createHttpAdapter(config, emit, limits, fetchImpl, diagnostics, { signal: sessionController.signal, watermarks: watermarkHooks });
-      }
-      if (config.adapter === "transcribe_cpp_stream_v1" && typeof config.transcribe === "function" && runtimeMetadata.adapter === "transcribe_cpp_stream_v1") {
-        const startLiveFallback = async (event) => {
-          if (phase === "ended" || runtimeMetadata.adapter !== "transcribe_cpp_stream_v1") return;
-          const truthBeforeFallback = transcriptTruth.snapshot();
-          const stableCheckpoint = truthBeforeFallback.committedThroughSample;
-          const stableSegment = truthBeforeFallback.stableSegments.at(-1) || null;
-          const hasStableCheckpoint = Boolean(stableSegment && stableCheckpoint > 0 && stableSegment.throughSample === stableCheckpoint);
-          const overlapSamples = hasStableCheckpoint ? Math.min(1_600, stableCheckpoint) : 0;
-          const replaySample = hasStableCheckpoint ? stableCheckpoint - overlapSamples : 0;
-          const sourceProfile = {
-            profileId: runtimeMetadata.resolvedProfileId,
-            adapter: runtimeMetadata.adapter,
-            model: runtimeMetadata.model,
-          };
-          const fallbackProfileId = runtimeMetadata.fallback?.profileId || null;
-          const fallbackEmit = (fallbackEvent) => {
-            if (!hasStableCheckpoint || !["final", "adapter_closed"].includes(fallbackEvent.type)) {
-              emit(fallbackEvent);
-              return;
-            }
-            const suffix = String(fallbackEvent.text || "").trim();
-            const text = suffix
-              ? appendProgressiveSegment(truthBeforeFallback.stableText, suffix, overlapSamples)
-              : truthBeforeFallback.stableText;
-            emit({
-              ...fallbackEvent,
-              text,
-              stableText: truthBeforeFallback.stableText,
-              tentativeText: "",
-            });
-          };
-          const previous = adapter;
-          const discardedTentative = transcriptTruth.discardTentative();
-          previous?.close();
-          adapter = null;
-          adapterReady = false;
-          pendingStreamChunks = [];
-          runtimeMetadata = {
-            ...runtimeMetadata,
-            adapter: "transcribe_cpp_batch_fallback_v1",
-            inferenceMode: "batch",
-            capabilities: {
-              ...(runtimeMetadata.capabilities || {}),
-              inferenceMode: "batch",
-              partials: false,
-              streaming: null,
-              fallback: hasStableCheckpoint ? "wp9_checkpoint_batch" : "wp5_progressive_batch",
-            },
-            streamFallback: {
-              from: "transcribe_cpp_stream_v1",
-              reason: event.code || "voice_stream_failed",
-              replay: hasStableCheckpoint ? "from_committed_sample" : "from_zero",
-              replaySample,
-              discardedTentativeRevisions: discardedTentative.revisions,
-              stableCheckpoint,
-              overlapSamples,
-              duplicateBoundaryHandling: hasStableCheckpoint ? "stable_prefix_preserved" : "none",
-              sourceProfile,
-              fallbackProfile: fallbackProfileId,
-              completingProfile: fallbackProfileId,
-            },
-          };
-          diagnostics.streaming.fallback = runtimeMetadata.streamFallback;
-          updateRuntimeDiagnostics();
-          const fallbackAdapter = createSnapshotAdapter(
-            fallbackEmit,
-            limits,
-            config.transcribe,
-            diagnostics,
-            {
-              progressive: !hasStableCheckpoint,
-              useSegmentation: !hasStableCheckpoint,
-              signal: sessionController.signal,
-              sessionId,
-              nextOperationId,
-              watermarks: watermarkHooks,
-              sampleOffset: replaySample,
-            },
-          );
-          await fallbackAdapter.opened;
-          if (phase === "ended") {
-            fallbackAdapter.close();
-            return;
-          }
-          adapter = fallbackAdapter;
-          if (pcmAccumulator.byteLength > replaySample * 2) {
-            adapter.write(pcmAccumulator.view().subarray(replaySample * 2));
-          }
-          // The replay above already carries the chunks that arrived while the
-          // fallback opened, so the ones held for it are dropped, not drained.
-          pendingStreamChunks = [];
-          adapterReady = true;
-          activateProgressiveBatch({ ...config, inferenceMode: "batch", execution: hasStableCheckpoint ? "stop" : config.execution }, fallbackAdapter);
-          send({
-            type: "stream_fallback",
-            from: "transcribe_cpp_stream_v1",
-            to: "transcribe_cpp_batch_fallback_v1",
-            reason: event.code || "voice_stream_failed",
-            replay: hasStableCheckpoint ? "from_committed_sample" : "from_zero",
-            replaySample,
-            discardedTentativeRevisions: discardedTentative.revisions,
-            stableCheckpoint,
-            overlapSamples,
-            duplicateBoundaryHandling: hasStableCheckpoint ? "stable_prefix_preserved" : "none",
-            sourceProfile,
-            fallbackProfile: fallbackProfileId,
-            completingProfile: fallbackProfileId,
-            ...runtimeMetadata,
-          });
-        };
-        fallbackLiveToBatch = (event) => {
-          if (!liveFallbackPromise) {
-            liveFallbackPromise = startLiveFallback(event).catch((error) => {
-              if (phase !== "ended") fail(error);
-              throw error;
-            });
-          }
-          return liveFallbackPromise;
-        };
       }
       await next.opened;
       if (phase === "ended") {
@@ -2736,19 +2225,14 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         return;
       }
       adapter = next;
-      if (runtimeMetadata.adapter === "transcribe_cpp_stream_v1" || runtimeMetadata.adapter === OPENAI_LIVE_ADAPTER) {
+      if (runtimeMetadata.adapter === OPENAI_LIVE_ADAPTER) {
         for (const chunk of pendingStreamChunks) adapter.write(chunk);
       } else if (pcmAccumulator.byteLength > 0) {
         adapter.write(pcmAccumulator.view());
       }
       pendingStreamChunks = [];
       adapterReady = true;
-      activateProgressiveBatch(
-        runtimeMetadata.adapter === "transcribe_cpp_batch_fallback_v1"
-          ? { ...config, inferenceMode: "batch" }
-          : config,
-        next,
-      );
+      activateProgressiveBatch(config, next);
       diagnostics.runtimeReadyAt = performance.now();
       send({ type: "runtime_ready", ...runtimeMetadata });
       settleAdapter(adapter);

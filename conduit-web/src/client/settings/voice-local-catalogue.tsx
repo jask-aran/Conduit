@@ -70,7 +70,7 @@ export default function VoiceLocalCatalogue(props: VoiceLocalCatalogueProps) {
   // The long variant facts are each option's title, not its label.
   const variantShortLabel = (artifact: CatalogueArtifact) => `${precisionLabel(artifact.precision)} · ${Math.ceil(artifact.approximateBytes / 1024 / 1024)} MiB`;
   const filesState = () => props.installingModelId
-    ? props.installProgress?.phase === "runtime" ? "Downloading the voice runtime…" : props.installProgress ? `${props.installProgress.phase} · ${Math.round(100 * props.installProgress.completedBytes / Math.max(1, props.installProgress.totalBytes))}%` : "Installing…"
+    ? props.installProgress?.phase === "runtime" ? "Hex is preparing the model…" : props.installProgress ? `${props.installProgress.phase} · ${Math.round(100 * props.installProgress.completedBytes / Math.max(1, props.installProgress.totalBytes))}%` : "Installing…"
     : artifactStateLabel(props.artifactStatus?.artifactState).replace(/^./, (first) => first.toUpperCase());
   return <>
     <SettingLine label="Model">

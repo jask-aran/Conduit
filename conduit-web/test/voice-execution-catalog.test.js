@@ -22,9 +22,9 @@ test("WP8 settings normalization writes the local selection and preserves remote
     await store.initialize();
     const saved = JSON.parse(await fs.readFile(filePath, "utf8"));
     assert.deepEqual(saved.localSelection, {
-      modelId: "moonshine-streaming-tiny",
-      artifactId: "moonshine-streaming-tiny-q8-gguf",
-      execution: "live",
+      modelId: "parakeet-unified-en",
+      artifactId: "parakeet-unified-en-q8-gguf",
+      execution: "stop",
       segmentation: "none",
     });
     assert.equal(saved.auth.secret, "kept-secret");

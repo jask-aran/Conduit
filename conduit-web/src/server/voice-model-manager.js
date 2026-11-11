@@ -1,9 +1,7 @@
-import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { Readable, Transform } from "node:stream";
-import { pipeline as streamPipeline } from "node:stream/promises";
-import { LOCAL_VOICE_MODELS, VOICE_EXECUTION_CATALOG, backendFor, publicVoiceExecutionCatalog } from "./voice-execution-catalog.js";
+import backend from "./voice-backends/hex.js";
+import { LOCAL_VOICE_MODELS, VOICE_EXECUTION_CATALOG, publicVoiceExecutionCatalog } from "./voice-execution-catalog.js";
 
 const MIB = 1024 * 1024;
 export { LOCAL_VOICE_MODELS };
@@ -20,132 +18,14 @@ function requiredModel(modelId) {
   return model;
 }
 
-function packageManifest(model) { return backendFor(model).manifest(model); }
-
-async function digestFile(filePath, algorithm = "sha256", size = 0) {
-  const hash = crypto.createHash(algorithm);
-  if (algorithm === "sha1") hash.update(`blob ${size}\0`);
-  const file = await fs.open(filePath, "r");
-  try { for await (const chunk of file.createReadStream()) hash.update(chunk); return hash.digest("hex"); }
-  finally { await file.close().catch(() => {}); }
-}
-
-async function verifiedExisting(artifact, destination) {
-  try {
-    if (artifact.sha256) return await digestFile(destination) === artifact.sha256;
-    if (artifact.gitBlob) return await digestFile(destination, "sha1", artifact.size) === artifact.gitBlob;
-    return true;
-  } catch (error) { if (error.code === "ENOENT") return false; throw error; }
-}
-
-const DOWNLOAD_RETRIES = 3;
-const DOWNLOAD_RETRY_BASE_MS = 1_000;
-
-async function hashFile(filePath, hash) {
-  const handle = await fs.open(filePath, "r");
-  try {
-    for await (const chunk of handle.createReadStream()) hash.update(chunk);
-  } finally { await handle.close(); }
-}
-
-async function downloadAttempt(fetchImpl, artifact, temporary, signal, onBytes) {
-  let partialBytes = 0;
-  try { partialBytes = (await fs.stat(temporary)).size; } catch (error) { if (error.code !== "ENOENT") throw error; }
-  if (partialBytes > 0) {
-    const sha256 = crypto.createHash("sha256");
-    await hashFile(temporary, sha256);
-    if (artifact.sha256 && sha256.digest("hex") === artifact.sha256) return { resumed: true };
-    if (!artifact.sha256) {
-      const gitBlob = crypto.createHash("sha1");
-      gitBlob.update(`blob ${artifact.size}\0`);
-      await hashFile(temporary, gitBlob);
-      if (partialBytes === Number(artifact.size) && gitBlob.digest("hex") === artifact.gitBlob) return { resumed: true };
-    }
-  }
-  if (partialBytes > 0 && partialBytes >= Number(artifact.size)) {
-    await fs.rm(temporary, { force: true });
-    partialBytes = 0;
-  }
-  const sha256 = artifact.sha256 ? crypto.createHash("sha256") : null;
-  const gitBlob = artifact.sha256 ? null : crypto.createHash("sha1");
-  if (gitBlob) gitBlob.update(`blob ${artifact.size}\0`);
-  if (partialBytes > 0) {
-    await hashFile(temporary, sha256);
-    if (gitBlob) await hashFile(temporary, gitBlob);
-  }
-  const headers = partialBytes > 0 ? { Range: `bytes=${partialBytes}-` } : undefined;
-  const response = await fetchImpl(artifact.url, { signal, redirect: "follow", headers });
-  if (!response.ok || !response.body) {
-    const error = modelError("voice_model_download_failed", `Could not download ${artifact.name} (${response.status})`, 502);
-    error.status = response.status;
-    throw error;
-  }
-  if (response.status !== 206 && partialBytes > 0) {
-    partialBytes = 0;
-    await fs.rm(temporary, { force: true });
-  }
-  const counter = new Transform({
-    transform(chunk, _encoding, callback) {
-      if (sha256) sha256.update(chunk);
-      if (gitBlob) gitBlob.update(chunk);
-      onBytes(chunk.length);
-      callback(null, chunk);
-    },
-  });
-  const file = await fs.open(temporary, partialBytes > 0 ? "a" : "w", 0o600);
-  try { await streamPipeline(Readable.fromWeb(response.body), counter, file.createWriteStream()); }
-  finally { await file.close().catch(() => {}); }
-  const verified = artifact.sha256
-    ? sha256.digest("hex") === artifact.sha256
-    : gitBlob.digest("hex") === artifact.gitBlob;
-  if (!verified) {
-    await fs.rm(temporary, { force: true });
-    throw modelError("voice_model_checksum", `Checksum verification failed for ${artifact.name}`, 502);
-  }
-  return { resumed: partialBytes > 0 };
-}
-
-async function download(fetchImpl, artifact, destination, signal, onBytes, { retries = DOWNLOAD_RETRIES, retryBaseMs = DOWNLOAD_RETRY_BASE_MS } = {}) {
-  if (await verifiedExisting(artifact, destination)) return { resumed: true };
-  await fs.mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
-  const temporary = `${destination}.part`;
-  let attempt = 0;
-  while (true) {
-    try {
-      const result = await downloadAttempt(fetchImpl, artifact, temporary, signal, onBytes);
-      await fs.rename(temporary, destination);
-      return result;
-    } catch (error) {
-      if (error?.name === "AbortError") throw error;
-      if (error?.status === 403 || error?.status === 404) throw error;
-      if (error?.code === "voice_model_checksum" || error?.status === 416) await fs.rm(temporary, { force: true }).catch(() => {});
-      attempt += 1;
-      if (attempt >= retries) throw error;
-      if (signal?.aborted) throw new DOMException("Installation cancelled", "AbortError");
-      await new Promise((resolve) => setTimeout(resolve, retryBaseMs * 2 ** (attempt - 1) + Math.floor(Math.random() * 250)));
-    }
-  }
-}
-
-function pcmFloat32(buffer) {
-  const samples = new Float32Array(Math.floor(buffer.length / 2));
-  for (let index = 0; index < samples.length; index += 1) samples[index] = buffer.readInt16LE(index * 2) / 32768;
-  return samples;
-}
-
 const DEFAULT_VOICE_MODEL_IDLE_TTL_MS = 5 * 60 * 1000;
 
 export class VoiceModelManager {
-  constructor({ root, catalog = VOICE_EXECUTION_CATALOG, fetchImpl = fetch, manifestResolver = packageManifest, runtimeLoader = null, downloadRetries = DOWNLOAD_RETRIES, downloadRetryBaseMs = DOWNLOAD_RETRY_BASE_MS, downloadConcurrency = 3, idleTtlMs = DEFAULT_VOICE_MODEL_IDLE_TTL_MS } = {}) {
+  constructor({ root, catalog = VOICE_EXECUTION_CATALOG, runtimeLoader = null, idleTtlMs = DEFAULT_VOICE_MODEL_IDLE_TTL_MS } = {}) {
     if (!root) throw new Error("VoiceModelManager requires a root directory");
     this.root = path.resolve(root);
     this.catalog = catalog;
-    this.fetchImpl = fetchImpl;
-    this.manifestResolver = manifestResolver;
     this.runtimeLoader = runtimeLoader;
-    this.downloadRetries = downloadRetries;
-    this.downloadRetryBaseMs = downloadRetryBaseMs;
-    this.downloadConcurrency = downloadConcurrency;
     this.idleTtlMs = Number.isFinite(Number(idleTtlMs)) ? Math.max(0, Number(idleTtlMs)) : DEFAULT_VOICE_MODEL_IDLE_TTL_MS;
     this.idleTimer = null;
     this.pinCount = 0;
@@ -273,40 +153,12 @@ export class VoiceModelManager {
     await fs.mkdir(this.root, { recursive: true, mode: 0o700 });
     const stats = await fs.statfs(this.root);
     if (Number(stats.bavail) * Number(stats.bsize) < model.minimumFreeBytes) throw modelError("voice_model_disk_space", `At least ${Math.ceil(model.minimumFreeBytes / MIB)} MiB of free space is required for ${model.label}`, 409);
-    await backendFor(model).prepare(model, { onProgress: (phase) => { this.progress.phase = phase; } });
-    this.progress.phase = "manifest";
-    const manifest = await this.manifestResolver(model, this.fetchImpl, signal);
-    this.progress.totalBytes = manifest.artifacts.reduce((sum, artifact) => sum + Number(artifact.size || 0), 0);
+    // Hex fetches and verifies the model into its own data folder; the manifest here only records that it did.
+    await backend.prepare(model, { onProgress: (phase) => { this.progress.phase = phase; } });
+    if (signal.aborted) throw new DOMException("Installation cancelled", "AbortError");
     const staging = this.stagingRoot(model.id);
     await fs.mkdir(staging, { recursive: true, mode: 0o700 });
-    const verified = new Array(manifest.artifacts.length);
-    let nextArtifact = 0;
-    const workers = Array.from({ length: Math.min(this.downloadConcurrency, manifest.artifacts.length) }, async () => {
-      while (true) {
-        if (signal.aborted) throw new DOMException("Installation cancelled", "AbortError");
-        const index = nextArtifact;
-        nextArtifact += 1;
-        if (index >= manifest.artifacts.length) return;
-        const artifact = manifest.artifacts[index];
-        this.progress.phase = "downloading";
-        this.progress.current = artifact.name;
-        const result = await download(this.fetchImpl, artifact, path.join(staging, artifact.relative), signal, (bytes) => { this.progress.completedBytes += bytes; }, { retries: this.downloadRetries, retryBaseMs: this.downloadRetryBaseMs });
-        verified[index] = { ...artifact, url: undefined };
-        if (result.resumed) this.progress.completedBytes += Number(artifact.size || 0);
-      }
-    });
-    await Promise.all(workers);
-    const finalManifest = {
-      schemaVersion: 2,
-      modelId: model.id,
-      engine: model.engine,
-      version: manifest.version,
-      modelRevision: manifest.modelRevision,
-      sourceRevision: manifest.sourceRevision || null,
-      runtime: manifest.runtime || null,
-      installedAt: new Date().toISOString(),
-      artifacts: verified,
-    };
+    const finalManifest = { schemaVersion: 3, modelId: model.id, engine: model.engine, installedAt: new Date().toISOString() };
     await fs.writeFile(path.join(staging, "manifest.json"), `${JSON.stringify(finalManifest, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
     this.progress.phase = "activating";
     // Only the running copy goes. stop() is the whole manager's shutdown, and it
@@ -363,11 +215,7 @@ export class VoiceModelManager {
   async startRuntime(model) {
     if (!await this.installedManifest(model.id)) throw modelError("voice_model_not_installed", `Install ${model.label} from Voice settings first`, 409);
     await this.stopActive();
-    // Hex keeps its own model files, so its model names none here.
-    const modelPath = model.modelFile ? path.join(this.modelRoot(model.id), model.modelFile) : null;
-    const runtime = this.runtimeLoader
-      ? await this.runtimeLoader(modelPath, model)
-      : await backendFor(model).createSession(model, { modelPath });
+    const runtime = this.runtimeLoader ? await this.runtimeLoader(model) : await backend.createSession(model);
     this.transcriber = runtime;
     this.activeModelId = model.id;
     return this.runtimeDescriptor(runtime, model);
@@ -377,17 +225,10 @@ export class VoiceModelManager {
     const model = requiredModel(modelId);
     await this.ensureRunning(model.id);
     const transcriber = this.transcriber;
-    const task = this.transcriptionTail.then(() => transcriber.transcribe(pcmFloat32(Buffer.from(pcm)), { signal: options.signal }));
+    const task = this.transcriptionTail.then(() => transcriber.transcribe(Buffer.from(pcm), { signal: options.signal }));
     this.transcriptionTail = task.then(() => undefined, () => undefined);
     const output = await task;
     return String(output?.text || "").trim();
-  }
-
-  async stream(modelId, options = {}) {
-    const model = requiredModel(modelId);
-    await this.ensureRunning(model.id);
-    if (typeof this.transcriber?.stream !== "function") throw modelError("voice_model_streaming", `${model.label} does not support stateful streaming`, 409);
-    return this.transcriber.stream(options);
   }
 
   async test(modelId) {
@@ -471,9 +312,9 @@ export class VoiceModelManager {
         blockedReason: null,
         artifactState: this.installingModelId === modelId ? "installing" : manifest ? "installed" : this.lastErrors.has(modelId) ? "failed" : "absent",
         runtimeState,
-        requestedComputeBackend: backendFor(artifact).runtime.requestedComputeBackend || null,
+        requestedComputeBackend: null,
         actualComputeBackend: runtime?.computeBackend || null,
-        loadedRuntimeVersion: active ? runtime?.native?.version || runtime?.runtimeVersion || backendFor(artifact).runtime.version || null : null,
+        loadedRuntimeVersion: active ? runtime?.native?.version || runtime?.runtimeVersion || null : null,
         lastErrorCode: this.lastErrorCodes.get(modelId) || null,
       };
     }));

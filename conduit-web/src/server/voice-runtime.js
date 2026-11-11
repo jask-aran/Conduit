@@ -2,8 +2,7 @@ import dns from "node:dns/promises";
 import net from "node:net";
 import { OPENAI_LIVE_ADAPTER, OPENAI_LIVE_MODEL, openaiAdapterFor } from "../voice-settings.js";
 import { openOpenaiRealtimeStream } from "./dictation-stream.js";
-import { VOICE_EXECUTION_CATALOG, artifactForProfile, backendFor, resolveVoiceExecutionProfile, selectionForLocalModel } from "./voice-execution-catalog.js";
-import { createVoiceRuntimeAdapters } from "./voice-runtime-adapters.js";
+import { VOICE_EXECUTION_CATALOG, artifactForProfile, resolveVoiceExecutionProfile, selectionForLocalModel } from "./voice-execution-catalog.js";
 
 function runtimeError(code, message, status = 400) {
   return Object.assign(new Error(message), { code, status });
@@ -93,33 +92,12 @@ export class VoiceRuntime {
           ? resolveVoiceExecutionProfile({ profileId: config.resolvedProfileId }, this.catalog)
           : resolveVoiceExecutionProfile(selectionForLocalModel(config.localModelId, this.catalog), this.catalog);
       const artifact = artifactForProfile(profile, this.catalog);
-      const backend = backendFor(artifact);
       const local = await this.modelManager.ensureRunning(artifact.legacyModelId);
-      const adapters = createVoiceRuntimeAdapters({
-        profile,
-        catalog: this.catalog,
-        modelManager: this.modelManager,
-        openStream: profile.execution === "live" && typeof this.modelManager.stream === "function"
-          ? (options) => this.modelManager.stream(artifact.legacyModelId, options)
-          : null,
-      });
-      const actualStreaming = profile.execution === "live" && Boolean(adapters.stream);
-      const adapter = profile.execution === "live" ? local.adapter : local.batchAdapter || "transcribe_cpp_batch_v1";
-      const transcribe = async (pcm, options = {}) => {
-        const result = await adapters.batch.transcribe({
-          pcm16: Buffer.from(pcm || []),
-          operationId: options.operationId || `voice-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          sequence: options.sequence || 0,
-          startSample: options.startSample || 0,
-          endSample: options.endSample || Math.floor(Buffer.byteLength(pcm || []) / 2),
-          signal: options.signal,
-        });
-        return result.text;
-      };
+      const transcribe = (pcm, options = {}) => this.modelManager.transcribe(artifact.legacyModelId, Buffer.from(pcm || []), { signal: options.signal });
       return {
         mode: "local",
-        inferenceMode: profile.execution === "live" ? "streaming" : "batch",
-        adapter,
+        inferenceMode: "batch",
+        adapter: local.adapter,
         provider: "local",
         localModelId: artifact.legacyModelId,
         model: artifact.legacyModelId,
@@ -131,18 +109,13 @@ export class VoiceRuntime {
         segmentation: profile.segmentation,
         fallback: profile.fallback ? { ...profile.fallback } : null,
         precision: artifact.precision || null,
-        backend: local.backend || backend.id,
+        backend: local.backend,
         computeBackend: local.computeBackend || null,
-        requestedComputeBackend: local.requestedComputeBackend || backend.runtime.requestedComputeBackend || null,
-        actualComputeBackend: local.actualComputeBackend || local.computeBackend || null,
-        loadedRuntimeVersion: local.runtimeVersion || local.native?.version || backend.runtime.version,
-        capabilities: local.capabilities || { inferenceMode: profile.execution === "live" ? "streaming" : "batch", partials: profile.execution === "live" },
-        streaming: actualStreaming ? local.capabilities?.streaming || null : null,
+        actualComputeBackend: local.computeBackend || null,
+        loadedRuntimeVersion: local.native?.version || null,
+        capabilities: local.capabilities,
         native: local.native || null,
-        ports: adapters,
-        wholeClips: Boolean(backend.wholeClips),
         transcribe,
-        stream: profile.execution === "live" && adapters.stream ? (options) => adapters.stream.openSession(options) : null,
       };
     }
     const adapter = config.provider === "openai" ? openaiAdapterFor(config.model) : config.adapter;

@@ -73,15 +73,8 @@ export function createVoiceTranscriber(voiceRuntime) {
       controller.signal.throwIfAborted();
       const ranges = analyzeSilence(pcm, pcm.length).segments;
       if (!ranges.length || !pcm.some((byte) => byte !== 0)) return "";
-      if (typeof config.transcribe === "function") {
-        const parts = [];
-        for (const [sequence, [startSample, endSample]] of (config.wholeClips ? [[0, pcm.length / 2]] : ranges).entries()) {
-          parts.push(await config.transcribe(pcm.subarray(startSample * 2, endSample * 2), {
-            signal: controller.signal, sequence, startSample, endSample,
-          }));
-        }
-        return parts.filter(Boolean).join(" ").trim();
-      }
+      // Hex filters silence and cuts long audio itself, so the recording goes to it whole.
+      if (typeof config.transcribe === "function") return String(await config.transcribe(pcm, { signal: controller.signal }) || "").trim();
       let text = "";
       let failure;
       const emit = (event) => {

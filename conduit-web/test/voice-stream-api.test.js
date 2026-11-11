@@ -163,67 +163,6 @@ test("dictation accepts PCM during cold resolve and includes it after stop", asy
   }
 });
 
-test("Moonshine Streaming Tiny live failure after tentative output discards revisions and replays from zero", async () => {
-  const upstream = await startUpstream([]);
-  const transcribed = [];
-  let feedCount = 0;
-  let resetCount = 0;
-  const nativeStream = {
-    get text() {
-      return feedCount ? { full: "draft words", committed: "", tentative: "draft words" } : { full: "", committed: "", tentative: "" };
-    },
-    async feed() {
-      feedCount += 1;
-      if (feedCount === 1) return { resultChanged: true, revision: 1, audioCommittedMs: 0, bufferedMs: 0 };
-      throw Object.assign(new Error("native stream failed after tentative output"), { code: "native_stream_failed" });
-    },
-    async finalize() { return { resultChanged: false, isFinal: true, revision: feedCount, audioCommittedMs: 0, bufferedMs: 0 }; },
-    reset() { resetCount += 1; },
-  };
-  const session = await startDictationBridge({
-    upstreamPort: upstream.address().port,
-    runtimeConfig: {
-      mode: "local",
-      inferenceMode: "streaming",
-      execution: "live",
-      segmentation: "none",
-      adapter: "transcribe_cpp_stream_v1",
-      provider: "local",
-      model: "moonshine-streaming-tiny-q8",
-      capabilities: { inferenceMode: "streaming", partials: true, streaming: { family: "moonshine" } },
-      streaming: { family: "moonshine" },
-      stream: async () => nativeStream,
-      transcribe: async (pcm) => {
-        transcribed.push(Buffer.from(pcm));
-        return "fallback from tentative";
-      },
-    },
-  });
-  const { client, next } = session;
-  try {
-    await session.opened;
-    await next((event) => event.type === "ready");
-    await next((event) => event.type === "runtime_ready");
-    for (let index = 0; index < 8; index += 1) client.send(Buffer.alloc(640, index + 1), { binary: true });
-    const partial = await next((event) => event.type === "partial" && event.tentativeText === "draft words");
-    assert.equal(partial.stableText, "");
-    for (let index = 8; index < 16; index += 1) client.send(Buffer.alloc(640, index + 1), { binary: true });
-    const fallback = await next((event) => event.type === "stream_fallback", 5_000);
-    assert.equal(fallback.replay, "from_zero");
-    assert.deepEqual(fallback.discardedTentativeRevisions, [1]);
-    assert.equal(fallback.stableCheckpoint, 0);
-    client.send(JSON.stringify({ type: "stop", audioBytesSent: 10_240 }));
-    const completed = await next((event) => event.type === "completed", 5_000);
-    assert.equal(completed.text, "fallback from tentative");
-    assert.equal(completed.streamFallback.replay, "from_zero");
-    assert.equal(transcribed.length, 1);
-    assert.equal(transcribed[0].length, 10_240);
-    assert.equal(resetCount, 1);
-  } finally {
-    await closeAll(session, upstream);
-  }
-});
-
 test("dictation shutdown closes sessions before draining accepted archives", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-voice-stream-shutdown-"));
   const recordingsRoot = path.join(root, "recordings");

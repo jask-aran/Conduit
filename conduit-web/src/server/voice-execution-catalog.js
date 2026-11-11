@@ -1,5 +1,4 @@
-import hex from "./voice-backends/hex.js";
-import transcribeCpp from "./voice-backends/transcribe-cpp.js";
+import backend from "./voice-backends/hex.js";
 
 function deepFreeze(value) {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
@@ -14,10 +13,7 @@ function catalogueError(code, message, details = {}) {
 
 // A managed model is one artifact of a catalogue model; each artifact has a stop profile, plus a live one that falls
 // back to it.
-export const LOCAL_VOICE_MODELS = deepFreeze([...transcribeCpp.models, ...hex.models].map((model) => ({ ...model })));
-
-// The engine that runs a model or artifact.
-export const backendFor = (model) => model?.engine === "hex" ? hex : transcribeCpp;
+export const LOCAL_VOICE_MODELS = deepFreeze(backend.models.map((model) => ({ ...model })));
 
 const ARTIFACT_DEFINITIONS = LOCAL_VOICE_MODELS.map((model) => ({ ...model, id: model.artifactId, legacyModelId: model.id }));
 

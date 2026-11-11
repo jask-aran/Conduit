@@ -114,7 +114,7 @@ export const SETTING_PAGES: Record<SettingsSection, { status?: string; busy?: bo
   </> },
   voice: { status: "Saved", body: () => <>
     <Group title="Dictation"><SettingLine label="Shortcut"><Input value="Ctrl+Space" readOnly title="Focus and press a shortcut" /></SettingLine><SettingLine label="Engine"><SelectTrigger value="Local" bare /></SettingLine><SettingLine label="Live captions"><SwitchDemo /></SettingLine></Group>
-    <Group title="Local model"><SettingLine label="Moonshine Streaming Tiny" state="downloading" plain><SettingValue mono>25 / 50 MB</SettingValue></SettingLine><SettingWide><Progress label="Download" value={25} max={50} /></SettingWide></Group>
+    <Group title="Local model"><SettingLine label="Parakeet Unified English" state="downloading" plain><SettingValue mono>25 / 50 MB</SettingValue></SettingLine><SettingWide><Progress label="Download" value={25} max={50} /></SettingWide></Group>
   </> },
   web: { body: () => <Group title="Search"><SettingLine label="Web search"><SwitchDemo /></SettingLine><SettingLine label="Provider"><SelectTrigger value="Brave" bare /></SettingLine><SettingLine label="Brave" plain><SettingLink href="#">Docs</SettingLink></SettingLine></Group> },
 };
