@@ -64,10 +64,7 @@ public final class ConduitContext {
         }
     }
 
-    /**
-     * Whether the person has turned Float screen context on: the Accessibility setting itself, not whether the
-     * service is bound right now (after Conduit's process dies it is unbound for a while though still allowed).
-     */
+    /** The setting, not whether the service is bound: after the process dies it is unbound for a while though allowed. */
     public static boolean screenReaderOn(Context context) {
         ComponentName expected = new ComponentName(context, ConduitScreenReader.class);
         String enabled = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
@@ -82,10 +79,7 @@ public final class ConduitContext {
         return false;
     }
 
-    /**
-     * Android's Accessibility list. (Its page for one service, ACCESSIBILITY_DETAILS_SETTINGS, resolves on Samsung but
-     * refuses apps with a SecurityException.)
-     */
+    /** ACCESSIBILITY_DETAILS_SETTINGS resolves on Samsung but refuses apps with a SecurityException. */
     public static void openScreenReaderSettings(Context context) {
         try { context.startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }
         catch (RuntimeException unavailable) { /* No settings app to open. */ }

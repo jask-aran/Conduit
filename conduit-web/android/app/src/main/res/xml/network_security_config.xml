@@ -1,21 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Cleartext, because a Conduit server on the network in front of you cannot
-  have a certificate. No public authority issues one for 192.168.0.128, so
-  refusing plain HTTP here does not raise the bar for that address; it
-  removes the address.
-
-  This is wider than it should be, and the reason is worth recording. Android
-  scopes cleartext by exact host, not by range: there is no way to write
-  "192.168/16 and nothing else" here, and the address is not known until
-  somebody types it. So the OS rule is all-or-nothing, and the actual boundary
-  is `normalizeServerOrigin` in the client, which accepts plain HTTP only for
-  loopback and the private ranges and refuses every other http:// address
-  before a request is made.
-
-  What that means honestly: the OS will carry cleartext this app asks for, and
-  what the app asks for is what the client's own rule allows. A defect in that
-  rule is no longer caught by a second wall underneath it.
+  Cleartext, because no public authority issues a certificate for a private address. Android scopes cleartext by
+  exact host, not range, so this is all-or-nothing and the real boundary is `normalizeServerOrigin` in the client,
+  which allows plain HTTP only for loopback and the private ranges.
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">

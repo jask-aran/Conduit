@@ -1,12 +1,5 @@
-//! The title bar is Windows', but its colour does not have to be. Left alone
-//! it paints the system caption above a near-black app, which reads as a
-//! second surface stacked on the frame rather than the top of one.
-//!
-//! These are the same tokens `styles.css` defines -- `--frame` and
-//! `--foreground`, converted once to sRGB -- so the caption, the window border
-//! and the app's gutter are one continuous colour. Keeping the native caption
-//! means the minimise, maximise and close buttons stay where Windows puts them
-//! and behave the way every other window does.
+//! The native caption in the app's `--frame` and `--foreground` (styles.css), so caption, border and gutter are one
+//! continuous colour.
 
 #[cfg(windows)]
 pub fn paint_caption<R: tauri::Runtime>(window: &tauri::WebviewWindow<R>) {

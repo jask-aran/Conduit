@@ -1,13 +1,6 @@
-//! Live update of the development client's interface: stage and swap, as the Android development client does.
-//!
-//! The window keeps loading its interface from this machine -- built in, or one taken from the connected server -- so
-//! starting stays instant and works with the server away. The page downloads the server's interface (it already knows
-//! the routes and the trust) and hands the zip here; it is unpacked beside the others, then swapped in by serving it
-//! in place of the built-in one, under the same origin, so storage and the session carry over.
-//!
-//! A swapped-in interface is on trial until it says it started (`interface_confirm`): one that never does is dropped at
-//! the next launch, back to the built-in one. A new installer brings its own interface, so a staged one taken under an
-//! older shell is dropped too. Development builds only: a release client must not run what a server hands it.
+//! A staged interface is served in place of the built-in one under the same origin, so storage and the session carry
+//! over. One that never says it started (`interface_confirm`) is dropped at the next launch, as is one staged under
+//! another shell. Development builds only: a release client must not run what a server hands it.
 
 use sha2::{Digest, Sha256};
 use std::{
@@ -25,7 +18,7 @@ use tauri::{
 
 const DEV_IDENTIFIER: &str = "com.jaskaran.conduit.desktop.dev";
 
-/// Where the staged interfaces live, and which one is served (None: the built-in one).
+/// `served` None is the built-in one.
 pub struct Interface {
     root: PathBuf,
     shell: String,
@@ -69,7 +62,7 @@ fn valid_build(build: &str) -> bool {
     build.len() == 16 && build.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-/// Serve a staged interface in place of the built-in one, for the development client. Before the app is built.
+/// Before the app is built.
 pub fn wrap<R: Runtime>(context: &mut Context<R>) -> Option<Interface> {
     if context.config().identifier != DEV_IDENTIFIER {
         return None;
@@ -102,7 +95,6 @@ fn chosen(root: &Path, shell: &str) -> Option<PathBuf> {
     dir.join("index.html").exists().then_some(dir)
 }
 
-/// The interface showing now: a staged one's build, or the built-in one's.
 #[tauri::command]
 pub fn interface_build(interface: State<'_, Interface>) -> String {
     let served = interface.served.read().ok().and_then(|served| served.clone());
@@ -111,7 +103,7 @@ pub fn interface_build(interface: State<'_, Interface>) -> String {
         .unwrap_or_else(|| interface.built_in.clone())
 }
 
-/// Unpack a server's interface (the zip as the body, its build in `x-build`) beside the others; never shows it.
+/// The zip as the body, its build in `x-build`.
 #[tauri::command]
 pub async fn interface_stage(interface: State<'_, Interface>, request: Request<'_>) -> Result<String, String> {
     let build = request.headers().get("x-build").and_then(|value| value.to_str().ok()).unwrap_or_default().to_string();
@@ -134,7 +126,6 @@ pub async fn interface_stage(interface: State<'_, Interface>, request: Request<'
     Ok(build)
 }
 
-/// Show a staged interface: served from now on, on trial until it starts, and the window reloaded into it.
 #[tauri::command]
 pub fn interface_apply<R: Runtime>(webview: Webview<R>, interface: State<'_, Interface>, build: String) -> Result<(), String> {
     let dir = interface.root.join(&build);
@@ -161,7 +152,6 @@ pub fn interface_apply<R: Runtime>(webview: Webview<R>, interface: State<'_, Int
     Ok(())
 }
 
-/// This interface started: it is kept at the next launch. Returns the build showing.
 #[tauri::command]
 pub fn interface_confirm(interface: State<'_, Interface>) -> String {
     let _ = fs::remove_file(interface.root.join("trial"));

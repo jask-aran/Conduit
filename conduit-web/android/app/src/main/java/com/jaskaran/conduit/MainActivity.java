@@ -12,33 +12,18 @@ import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.WebViewListener;
 
 public class MainActivity extends BridgeActivity {
-    // Whether the page has loaded, scripts and all, and so is drawing the same
-    // mark on the same frame as the launch screen. Its first commit was too
-    // early: a blank frame came before the mark.
+    // Set when the page has loaded, scripts and all: its first commit is too early, a blank frame before the mark.
     private volatile boolean pageVisible = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        /*
-         * The launch screen, held until the page has drawn.
-         *
-         * Without this the system took it down at the activity's first frame,
-         * which is the WebView's default white before index.html has painted:
-         * a white flash between two dark screens. Installing it also applies
-         * `postSplashScreenTheme`, which nothing did before. Two seconds is a
-         * ceiling for a page that never commits, not a wait.
-         */
+        // Held until the page has drawn, or the system drops it at the WebView's first, white frame. Two seconds is a
+        // ceiling for a page that never commits.
         SplashScreen splash = SplashScreen.installSplashScreen(this);
         long shownAt = android.os.SystemClock.uptimeMillis();
         splash.setKeepOnScreenCondition(() -> !pageVisible && android.os.SystemClock.uptimeMillis() - shownAt < 2000);
-        /*
-         * And kept over the window until the WebView has drawn into it. The
-         * WebView does not draw while the system's launch window covers the
-         * app, so taking the splash down outright showed the bare frame for
-         * a few hundred milliseconds before the page's own mark. The splash
-         * is handed into the window instead, the WebView is asked to say when
-         * what it holds is on screen, and only then does the splash fade.
-         */
+        // The WebView does not draw while the system's launch window covers the app, so the splash is kept over the
+        // window until the WebView says its content is on screen.
         splash.setOnExitAnimationListener(view -> {
             Runnable fade = new Runnable() {
                 private boolean done;
@@ -53,11 +38,8 @@ public class MainActivity extends BridgeActivity {
             });
             view.getView().postDelayed(fade, 1000);
         });
-        // Registered before the bridge is built, which is the only point at
-        // which a plugin living in the app rather than in a package can be
-        // added to it.
-        // A live-updated interface that never said it started is put back to
-        // the bundled one before the bridge reads which one to load.
+        // Before super.onCreate: the bridge reads which interface to load as it is built, and app plugins can only be
+        // registered before then.
         ConduitUpdaterPlugin.revertUnconfirmed(this);
         registerPlugin(ConduitDiscoveryPlugin.class);
         registerPlugin(ConduitKeyboardPlugin.class);
@@ -73,44 +55,19 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ConduitLoopbackPlugin.class);
         ConduitPushPlugin.handleIntent(this, getIntent());
         super.onCreate(savedInstanceState);
-        /*
-         * The status bar gets the system's own see-through scrim, as the
-         * navigation bar has by default (its contrast is enforced, the
-         * status bar's is not): edge to edge, the page runs under both, and
-         * without it the clock and icons sat on whatever scrolled past.
-         */
+        // Edge to edge the page runs under both bars, and only the navigation bar's contrast is enforced by default.
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             getWindow().setStatusBarContrastEnforced(true);
             getWindow().setNavigationBarContrastEnforced(true);
         }
-        /*
-         * Take the window out of legacy soft-input handling.
-         *
-         * Left in it, Android resizes the window for the keyboard itself, in
-         * one step, and runs no inset animation -- so a
-         * `WindowInsetsAnimationCompat` callback is installed correctly and
-         * never called once. Opting out is what turns the keyboard into an
-         * animated inset that `ConduitKeyboardPlugin` can follow frame by
-         * frame, and it is also what lets the keyboard overlay the page rather
-         * than shorten it, leaving the shell's height to the page.
-         */
+        // Out of legacy soft-input handling, which resizes in one step and runs no inset animation for
+        // ConduitKeyboardPlugin to follow.
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-        /*
-         * Installed after the bridge is built, because the bridge installs its
-         * own client as it builds and this one has to replace it rather than
-         * be replaced by it. It is that same client with one method added --
-         * subclassed rather than written fresh, since everything else the
-         * bridge does on a page load still has to happen.
-         */
+        // After the bridge is built: the bridge installs its own client as it builds.
         getBridge().setWebViewClient(new ConduitWebViewClient(getBridge()));
-        // The frame, not white, under anything the page has not drawn yet.
         getBridge().getWebView().setBackgroundColor(getColor(R.color.conduit_frame));
-        /*
-         * The page's renderer at the app's own priority, hidden or not. By default it drops to a cached process while
-         * the app is out of sight, and the app stays alive (Float's service) while its renderer is the first thing
-         * Android reclaims: the next open showed the last frame, the launch screen while the page loaded again, then
-         * the app. Kept, an open is the page as it was left.
-         */
+        // By default a hidden renderer drops to a cached process and is the first thing Android reclaims, while Float's
+        // service keeps the app alive, so the next open reloads the page.
         if (android.os.Build.VERSION.SDK_INT >= 26) {
             getBridge().getWebView().setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
         }
@@ -118,15 +75,7 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void onPageLoaded(WebView view) { pageVisible = true; }
         });
-        /*
-         * Identities handed in at launch, for a development build only, as
-         * `id:spkiBase64` pairs separated by commas.
-         *
-         * The real set arrives from the page's paired server records. This
-         * lets a build under test reach a server's TLS port before it has
-         * paired, and it is gated on the app being debuggable because a key
-         * any launcher can set is a key anything on the device can set.
-         */
+        // Debuggable builds only: a launch extra any launcher can set is one anything on the device can set.
         if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             String trust = getIntent() == null ? null : getIntent().getStringExtra("conduitTrust");
             if (trust != null && !trust.isEmpty()) {
@@ -140,19 +89,8 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
-    /*
-     * Coming back from the app switcher without a flash.
-     *
-     * Android shows its own picture of the app (the switcher's preview) while the app returns, and takes it down at
-     * the window's first frame. A WebView's first frame after being hidden is not the page: its drawn tiles were let
-     * go when it left the screen, so that frame is the WebView's background colour, and the page follows a few
-     * frames later once it has been drawn again. The preview is exactly what the page is about to show; what sits
-     * between them is those empty frames.
-     *
-     * So the app keeps its own last frame (copied from the window as it is paused) and lays it over the WebView
-     * while it is stopped. The window's first frame back is then that picture, the same as the preview it replaces,
-     * and it is taken away only once the WebView says the page is ready to be drawn, and has drawn it.
-     */
+    // A WebView's first frames after being hidden are its background colour (its tiles were let go), so the last
+    // frame is copied on pause and laid over it until the page has drawn again.
     private android.graphics.Bitmap lastFrame;
     private android.widget.ImageView returnCover;
     private final Runnable dropReturnCover = () -> {
@@ -189,7 +127,6 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onStop() {
         super.onStop();
-        // Laid over while out of sight, so it is already there in the first frame back.
         android.view.ViewGroup decor = (android.view.ViewGroup) getWindow().getDecorView();
         if (lastFrame == null || returnCover != null || lastFrame.getWidth() != decor.getWidth() || lastFrame.getHeight() != decor.getHeight()) return;
         returnCover = new android.widget.ImageView(this);
@@ -204,14 +141,12 @@ public class MainActivity extends BridgeActivity {
         super.onStart();
         if (returnCover == null) return;
         android.view.View cover = returnCover;
-        // The window changed shape while away (rotated, split): the picture no longer fits it.
         android.view.View decor = getWindow().getDecorView();
         if (lastFrame == null || lastFrame.getWidth() != decor.getWidth() || lastFrame.getHeight() != decor.getHeight()) { dropReturnCover.run(); return; }
         getBridge().getWebView().postVisualStateCallback(1, new WebView.VisualStateCallback() {
             // Ready to be drawn is not yet drawn: two frames on, the page is what is under the picture.
             @Override public void onComplete(long requestId) { cover.postOnAnimation(() -> cover.postOnAnimation(dropReturnCover)); }
         });
-        // A page that never answers is not left under a still picture.
         cover.postDelayed(dropReturnCover, 800);
     }
 

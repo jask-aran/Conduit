@@ -1,15 +1,5 @@
-//! The node role on this computer: the background companion that lets a
-//! Conduit server act here (plan, "How does the node role run on a desktop?").
-//!
-//! It is the same `conduit-node` every device runs, bundled with a Node
-//! runtime as an app resource (scripts/build-node-companion.mjs), started as a
-//! child of this process while "Serve this computer" is on and restarted if it
-//! stops. Because the shell keeps running in the tray with the window closed
-//! and can start at login, so does the node. Pairing and sharing go through
-//! the same CLI, so its settings file is the one truth; the running node takes
-//! each change to it as it is made, on the connections it has, so nothing here
-//! restarts it (which would end its terminals and commands). The shell only
-//! owns the process and the folder picker.
+//! Pairing and sharing go through the `conduit-node` CLI, so its settings file is the one truth; the running node takes
+//! each change live, so nothing here restarts it (which would end its terminals and commands).
 
 use std::fs::{self, OpenOptions};
 use std::path::PathBuf;
@@ -35,7 +25,6 @@ fn bundle_dir<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
     dir.join("conduit-node.mjs").is_file().then_some(dir)
 }
 
-/// The node's own settings, in this app's data: its pairings, shared folders and grants.
 fn node_home<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
     Some(app.path().app_config_dir().ok()?.join("node"))
 }
@@ -55,7 +44,6 @@ fn command<R: Runtime>(app: &AppHandle<R>, args: &[&str]) -> Result<Command, Str
     Ok(command)
 }
 
-/// One CLI command to completion, for pairing and sharing; its words are the error.
 fn run_cli<R: Runtime>(app: &AppHandle<R>, args: &[&str]) -> Result<String, String> {
     let output = command(app, args)?.stdin(Stdio::null()).output().map_err(|error| error.to_string())?;
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -83,11 +71,8 @@ fn spawn_node<R: Runtime>(app: &AppHandle<R>) -> Result<Child, String> {
     Ok(child)
 }
 
-/// The node, and everything it starts, ends with the app: Windows does not end
-/// a process's children with it, so a node outlived an app that was closed or
-/// updated and kept taking the pairing back from its successor's. A job that
-/// kills what it holds when its last handle closes -- the app's, as it exits
-/// however it exits -- holds the node from the moment it starts.
+/// Windows does not end a process's children with it, so a node would outlive the app and take the pairing back from
+/// its successor's. A kill-on-close job, whose last handle is the app's, holds the node from the moment it starts.
 #[cfg(windows)]
 fn hold_with_app(child: &Child) {
     use std::os::windows::io::AsRawHandle;
@@ -117,9 +102,7 @@ fn hold_with_app(child: &Child) {
     }
 }
 
-/// The node and everything it started: a command left running after the node
-/// is gone would finish unseen, while the server reports its outcome unknown.
-/// Windows kills one process, not its children, so the tree goes by taskkill.
+/// The whole tree, by taskkill: a command left running after the node would finish unseen, its outcome unknown.
 fn stop_child(companion: &Companion) {
     if let Some(mut child) = companion.child.lock().expect("companion lock").take() {
         #[cfg(windows)]
@@ -138,9 +121,7 @@ fn stop_child(companion: &Companion) {
     }
 }
 
-/// Keep the node running while it is wanted: started once, it watches for
-/// the rest of the app's life. A node that keeps failing (not paired yet, a
-/// server refusing it) is retried with growing pauses rather than in a loop.
+/// A node that keeps failing (not paired yet, a server refusing it) is retried with growing pauses.
 pub fn supervise<R: Runtime>(app: &AppHandle<R>, wanted: bool) {
     let companion = app.state::<Companion>();
     companion.wanted.store(wanted, Ordering::SeqCst);
@@ -175,8 +156,7 @@ pub fn supervise<R: Runtime>(app: &AppHandle<R>, wanted: bool) {
                             *slot = Some(child);
                             since = Instant::now();
                         }
-                        // It could not be started at all (its files are not there yet): tried again with the same
-                        // growing pauses as one that starts and fails, where it was tried every second.
+                        // Not started at all (its files are not there yet): the same growing pauses.
                         Err(_) => {
                             pause = (pause * 2).min(Duration::from_secs(30));
                             drop(slot);
@@ -191,7 +171,6 @@ pub fn supervise<R: Runtime>(app: &AppHandle<R>, wanted: bool) {
     });
 }
 
-/// The app is going away; the node goes with it.
 pub fn shutdown<R: Runtime>(app: &AppHandle<R>) {
     if let Some(companion) = app.try_state::<Companion>() {
         companion.wanted.store(false, Ordering::SeqCst);
@@ -202,11 +181,9 @@ pub fn shutdown<R: Runtime>(app: &AppHandle<R>) {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompanionStatus {
-    /// The bundle is in this build at all.
     available: bool,
     serving: bool,
     running: bool,
-    /// `conduit-node status`: this computer's name and what each server is shared.
     node: Option<serde_json::Value>,
 }
 
@@ -217,9 +194,8 @@ pub fn device_companion_status<R: Runtime>(app: AppHandle<R>, companion: State<'
     CompanionStatus { available: bundle_dir(&app).is_some(), serving: companion.wanted.load(Ordering::SeqCst), running, node }
 }
 
-/// What `conduit-node status` says, read straight from the node's settings (scripts/conduit-node.mjs `status`, the
-/// same shape, its keys left out): running the CLI for it took ~300 ms on the window's own thread, which froze the
-/// window while it ran, and the sidebar and Settings ask for it often.
+/// The same shape as `conduit-node status`, read straight from the settings: the CLI takes ~300 ms on the window's
+/// thread, and the sidebar and Settings ask often.
 fn node_status<R: Runtime>(app: &AppHandle<R>) -> Option<serde_json::Value> {
     use serde_json::{json, Value};
     let home = node_home(app)?;
@@ -249,7 +225,6 @@ fn node_status<R: Runtime>(app: &AppHandle<R>) -> Option<serde_json::Value> {
     Some(json!({ "name": settings.get("name").cloned().unwrap_or(Value::Null), "host": host, "pairings": pairings }))
 }
 
-/// Pair with a server, given the key it handed out and the node id it made.
 #[tauri::command]
 pub async fn device_companion_pair<R: Runtime>(app: AppHandle<R>, main_url: String, key: String, node_id: String, name: String, via: Option<Vec<String>>) -> Result<String, String> {
     let mut args = vec!["pair", main_url.as_str(), key.as_str(), "--node", node_id.as_str(), name.as_str()];
@@ -261,7 +236,6 @@ pub async fn device_companion_pair<R: Runtime>(app: AppHandle<R>, main_url: Stri
     run_cli(&app, &args)
 }
 
-/// Share a folder this person picks with one server.
 #[tauri::command]
 pub async fn device_companion_share<R: Runtime>(app: AppHandle<R>, main_url: String, write: bool, shell: bool) -> Result<Option<String>, String> {
     let Some(picked) = app.dialog().file().set_title("Share a folder with Conduit").blocking_pick_folder() else {
@@ -286,14 +260,12 @@ pub async fn device_companion_unshare<R: Runtime>(app: AppHandle<R>, main_url: S
     Ok(())
 }
 
-/// Let one server browse this computer and share the folders it picks, or stop it.
 #[tauri::command]
 pub async fn device_companion_browse<R: Runtime>(app: AppHandle<R>, main_url: String, on: bool) -> Result<(), String> {
     run_cli(&app, &["browse", if on { "on" } else { "off" }, "--server", &main_url])?;
     Ok(())
 }
 
-/// What folders shared with one server may do: those mounted from the app, and those it shares by browsing.
 #[tauri::command]
 pub async fn device_companion_new_folders<R: Runtime>(app: AppHandle<R>, main_url: String, write: bool, shell: bool) -> Result<(), String> {
     let mut args = vec!["new-folders", "--server", main_url.as_str()];

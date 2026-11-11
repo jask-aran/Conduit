@@ -12,7 +12,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
-/** Float's Workspace panel: where a new chat goes (no folder, a project, or a Workspace). */
 public final class FloatPlacesPanel extends FloatPanel {
     public interface Listener {
         void placeChosen(ConduitHubClient.Place place);
@@ -24,7 +23,7 @@ public final class FloatPlacesPanel extends FloatPanel {
 
     public FloatPlacesPanel(Context context, ConduitHubClient hub, Listener listener) { this(context, hub, listener, false); }
 
-    /** withJbot: a dictation's "Send to": jbot first, then every place a new chat can go (placeChosen(null) is jbot). */
+    /** withJbot: placeChosen(null) is jbot. */
     public FloatPlacesPanel(Context context, ConduitHubClient hub, Listener listener, boolean withJbot) {
         super(context, hub);
         this.listener = listener;
@@ -48,7 +47,6 @@ public final class FloatPlacesPanel extends FloatPanel {
         }, this::refresh);
     }
 
-    /** As the app's PROJECT menu (PlaceList, place-picker.tsx): each place's glyph and name, one row each. */
     private void render() {
         body.removeAllViews();
         if (withJbot) {

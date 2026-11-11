@@ -25,19 +25,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Find Conduit servers on the network this phone is on.
- *
- * The shell's half of `discoverServers()`. The server publishes
- * `_conduit._tcp` carrying its identity id and Ed25519 public half; this
- * browses for it and hands back what was advertised, without judging any of
- * it. Deciding whether an address is usable, and proving the identity before a
- * token is sent, both belong to the web half -- the rule lives in one place
- * and this is not it.
- *
- * Browsing is bounded to the question being asked. `NsdManager` holds the
- * multicast socket while discovery runs, and a standing listener would keep
- * the radio awake for an answer nobody wanted, so discovery starts on the call
- * and is stopped when the window closes whether or not anything was found.
+ * Hands back what `_conduit._tcp` advertised without judging it: whether an address is usable and proving the
+ * identity belong to the web half. Each browse is bounded because `NsdManager` holds the multicast socket while it runs.
  */
 @CapacitorPlugin(name = "ConduitDiscovery")
 public class ConduitDiscoveryPlugin extends Plugin {
@@ -46,14 +35,9 @@ public class ConduitDiscoveryPlugin extends Plugin {
     private static final long MIN_TIMEOUT_MS = 500;
     private static final long MAX_TIMEOUT_MS = 10_000;
 
-    /** The browse in progress, so it can be dropped when the activity goes. */
     private Browse browse;
 
-    /*
-     * A browse holds a multicast socket. Left to the timeout it would keep it
-     * for up to ten seconds after the window it was asked from has gone, which
-     * is the sort of thing that reads as a leak on a phone.
-     */
+    // Left to its timeout, a browse would hold the multicast socket for up to ten seconds after its window has gone.
     @Override
     protected void handleOnDestroy() {
         if (browse != null) browse.abandon();
@@ -61,7 +45,6 @@ public class ConduitDiscoveryPlugin extends Plugin {
         super.handleOnDestroy();
     }
 
-    /** The addresses a name stands for, as this device's resolver answers: how near a server's name really is. */
     @PluginMethod
     public void resolve(PluginCall call) {
         String host = call.getString("host", "");
@@ -83,8 +66,7 @@ public class ConduitDiscoveryPlugin extends Plugin {
         long timeout = Math.max(MIN_TIMEOUT_MS, Math.min(MAX_TIMEOUT_MS, call.getInt("timeoutMs", 3000).longValue()));
         NsdManager nsd = (NsdManager) getContext().getSystemService(Context.NSD_SERVICE);
         if (nsd == null) {
-            // No responder on this device: nothing found, which is a state the
-            // surface above already draws.
+            // No responder on this device: nothing found, a state the page already draws.
             call.resolve(empty());
             return;
         }
@@ -98,14 +80,7 @@ public class ConduitDiscoveryPlugin extends Plugin {
         return result;
     }
 
-    /**
-     * One bounded browse.
-     *
-     * Resolution is serialised because `resolveService` takes one at a time on
-     * older Android and fails the second with FAILURE_ALREADY_ACTIVE rather
-     * than queueing it -- a network with three servers on it would otherwise
-     * return one.
-     */
+    /** Resolution is serialised: older `resolveService` fails a second concurrent one with FAILURE_ALREADY_ACTIVE. */
     private final class Browse {
         private final NsdManager nsd;
         private final PluginCall call;
@@ -169,8 +144,7 @@ public class ConduitDiscoveryPlugin extends Plugin {
         private void record(NsdServiceInfo service) {
             List<String> addresses = new ArrayList<>();
             InetAddress host = service.getHost();
-            // Every address the host answers to, not only the first: which one
-            // is reachable is the web half's rule, and it needs the choice.
+            // Every address: which one is reachable is the web half's rule.
             if (host != null) addresses.add(host.getHostAddress());
             for (InetAddress extra : hostAddresses(service)) {
                 String text = extra.getHostAddress();
@@ -186,8 +160,7 @@ public class ConduitDiscoveryPlugin extends Plugin {
             entry.put("id", text(service, "id"));
             entry.put("publicKey", text(service, "key"));
             found.put(service.getServiceName() + ":" + service.getPort(), entry);
-            // As it resolves, so a list can show it without waiting out the
-            // whole browse; the call still resolves with everything at the end.
+            // So a list need not wait out the whole browse; the call still resolves with everything.
             notifyListeners("found", entry);
         }
 
@@ -204,15 +177,8 @@ public class ConduitDiscoveryPlugin extends Plugin {
         }
 
         /**
-         * Settle the call on the main thread.
-         *
-         * The timeout fires on a scheduled executor and NsdManager answers on a
-         * binder thread, so without this the resolve reaches Capacitor from
-         * neither. The bridge hands the reply to `JavaScriptReplyProxy`, which
-         * Android documents as `@UiThread`; on a WebView that enforces it the
-         * throw is swallowed by Capacitor's message handler and the JavaScript
-         * promise never settles -- the add-server dialog would search forever
-         * rather than say nothing was found.
+         * On the main thread: the reply goes to `JavaScriptReplyProxy`, which is `@UiThread`, and from another thread
+         * Capacitor swallows the throw and the promise never settles.
          */
         private void finish() {
             if (!settled.compareAndSet(false, true)) return;
@@ -225,7 +191,7 @@ public class ConduitDiscoveryPlugin extends Plugin {
             getActivity().runOnUiThread(() -> call.resolve(result));
         }
 
-        /** Give up the browse without answering: the call is already gone. */
+        /** Without answering: the call is already gone. */
         void abandon() {
             if (!settled.compareAndSet(false, true)) return;
             try { nsd.stopServiceDiscovery(discovery); } catch (Exception ignored) {}

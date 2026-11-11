@@ -19,52 +19,20 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Report where the keyboard is, every frame it is moving.
- *
- * Android animates the IME as an inset rather than moving it in one step, and
- * `WindowInsetsAnimationCompat` is the only place that interpolated position
- * can be read. The page sizes its shell from it, so the composer travels on the
- * keyboard's own curve instead of arriving at the end of it -- which is the
- * difference between a composer that sticks to the keyboard and one that jumps
- * to where the keyboard is about to be.
- *
- * Three things have to be true before a frame arrives, and the third is the
- * one that cost the time.
- *
- * The window must be out of legacy soft-input handling, where the framework
- * resizes it in one pass and runs no animation to follow -- hence
- * `SOFT_INPUT_ADJUST_NOTHING` here and `setDecorFitsSystemWindows(false)` in
- * `MainActivity`, which together leave the keyboard to overlay the page and the
- * page's height to the page. Nothing else may be moving the same surface, so
- * SystemBars' `insetsHandling` is `disable` and the safe-area variables it
- * injected are injected here instead -- the same names, so the stylesheets do
- * not know the difference, and the same rule that the bottom inset is the
- * keyboard's business while the keyboard is up.
- *
- * And `@capacitor/keyboard` must not be installed. It registers an animation
- * callback of its own, on the root view, with `DISPATCH_MODE_STOP` -- which
- * means precisely that the animation is not dispatched to anything beneath it.
- * It keeps `onStart` and `onEnd`, to report the keyboard's height once it has
- * settled, and discards the `onProgress` frames in between. So every callback
- * below the root, on any view, for any inset, silently receives nothing: the
- * plugin loads, the listener attaches, and no frame ever comes. That is the
- * whole of why the keyboard moved in one step, and removing the package is the
- * whole of the fix. Its one remaining job, reporting the height, is this
- * plugin's now.
+ * The keyboard's travel, read from `WindowInsetsAnimationCompat` so the composer follows its curve.
+ * Needs `SOFT_INPUT_ADJUST_NOTHING` here, `setDecorFitsSystemWindows(false)` in `MainActivity`, SystemBars'
+ * `insetsHandling: "disable"`, and `@capacitor/keyboard` not installed: its root callback uses `DISPATCH_MODE_STOP`,
+ * which hides every `onProgress` frame from callbacks below it.
  */
 @CapacitorPlugin(name = "ConduitKeyboard")
 public class ConduitKeyboardPlugin extends Plugin {
 
-    /** Points sampled off the system's interpolator, enough to redraw it. */
     private static final int CURVE_SAMPLES = 24;
 
     private float density = 1f;
     private View hostView = null;
-    /** The height already announced, to keep identical frames off the bridge. */
     private int lastSent = -1;
-    /** Whether the keyboard is mid-travel, and so reporting its own position. */
     private boolean animating = false;
-    /** The insets last applied, for a page that starts after they were (`safeArea`). */
     private WindowInsetsCompat lastInsets = null;
 
     @Override
@@ -78,14 +46,8 @@ public class ConduitKeyboardPlugin extends Plugin {
         ViewCompat.setOnApplyWindowInsetsListener(host, (v, insets) -> {
             lastInsets = insets;
             injectSafeArea(insets);
-            // The end of the story, and the whole of it where the platform
-            // declines to animate: a keyboard that appears without a curve
-            // still has to be reported, or the shell never learns it is there.
-            //
-            // Not while one is running, though. Insets are applied once at the
-            // start of an animation carrying the height the keyboard will
-            // finish at, and honouring that is the composer arriving before the
-            // keyboard does -- the jump this exists to remove.
+            // Reports a keyboard that appears without animating. Skipped mid-animation: insets are applied once at its
+            // start carrying the final height, and the composer would jump there ahead of the keyboard.
             if (!animating) emit(imeHeight(insets), false);
             return insets;
         });
@@ -106,17 +68,8 @@ public class ConduitKeyboardPlugin extends Plugin {
 
                 @Override
                 public WindowInsetsCompat onProgress(WindowInsetsCompat insets, List<WindowInsetsAnimationCompat> running) {
-                    /*
-                     * How far along the system says it is, beside where it
-                     * says the keyboard has got to.
-                     *
-                     * The page draws the curve on its own clock, which starts
-                     * when the description reaches it rather than when the
-                     * animation started, so it runs the width of the bridge
-                     * behind. The fraction is the system's own progress in
-                     * its own terms: with it the page can put its clock back
-                     * where it should have been.
-                     */
+                    // The page's clock starts when the description arrives, a bridge-width late; the system's fraction
+                    // lets it correct.
                     float fraction = -1f;
                     for (WindowInsetsAnimationCompat animation : running) {
                         if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) {
@@ -142,46 +95,22 @@ public class ConduitKeyboardPlugin extends Plugin {
     }
 
     /**
-     * The whole travel, once, instead of a sample of it per frame.
-     *
-     * A keyboard animation is an analytic curve: two bounds, a duration and an
-     * interpolator, all of them known before the first frame is drawn. Sending
-     * a position per frame samples that curve at whatever rate the bridge
-     * happens to run -- six callbacks across 285ms here -- and the page can
-     * only draw the samples it was given. Sent as a description, the page
-     * draws it on every frame it renders, at the display's rate rather than
-     * the bridge's, and no frame is ever late because none of them is waiting
-     * for a message.
-     *
-     * The curve is the system's own, sampled rather than guessed, because
-     * guessing which `PathInterpolator` Android used this release is how a
-     * composer ends up almost keeping up with a keyboard.
+     * The whole travel sent once as a description (bounds, duration, sampled interpolator), so the page draws it at
+     * the display's rate rather than the bridge's. The curve is sampled because Android's interpolator varies by release.
      */
     private void announce(WindowInsetsAnimationCompat animation, WindowInsetsAnimationCompat.BoundsCompat bounds) {
-        // The bounds are a range, not a direction: `getLowerBound` is the
-        // smaller inset and `getUpperBound` the larger, whichever way the
-        // keyboard is going.
+        // The bounds are a range, not a direction: lower is the smaller inset whichever way the keyboard is going.
         WindowInsetsCompat now = ViewCompat.getRootWindowInsets(hostView);
         int here = now == null ? 0 : (now.isVisible(WindowInsetsCompat.Type.ime()) ? animatingImeHeight(now) : 0);
         int low = Math.round(bounds.getLowerBound().bottom / density);
         int high = Math.round(bounds.getUpperBound().bottom / density);
-        /*
-         * The insets have already been applied for the state being animated
-         * to, so the height they report now is the destination, and the end of
-         * the range nearest it is which end that is.
-         *
-         * Asking instead whether the keyboard is on its way in answers the two
-         * common travels and the third one wrongly: a keyboard that changes
-         * height while it stays visible -- a layout with a number row, a
-         * one-handed switch -- is arriving by that test, and would be drawn
-         * climbing back to its old height while it shrank.
-         */
+        // Insets are already applied for the destination, so the bound nearest `here` is the end. Asking whether the
+        // keyboard is showing gets a height change while visible (number row, one-handed) backwards.
         int to = Math.abs(here - low) <= Math.abs(here - high) ? low : high;
         JSObject payload = new JSObject();
         payload.put("from", to == low ? high : low);
         payload.put("to", to);
-        // The animation's own duration is before the system's animator scale (developer options), which slows the
-        // keyboard itself: the web's travel takes the scaled time too, so a slowed keyboard is followed, not outrun.
+        // The animation's duration is unscaled, but the system's animator scale slows the keyboard itself.
         float durationScale = android.os.Build.VERSION.SDK_INT >= 33 ? android.animation.ValueAnimator.getDurationScale() : 1;
         payload.put("durationMs", Math.round(animation.getDurationMillis() * durationScale));
         JSArray curve = new JSArray();
@@ -192,23 +121,17 @@ public class ConduitKeyboardPlugin extends Plugin {
                 curve.put((double) Math.round((in == null ? t : in.getInterpolation(t)) * 1000) / 1000);
             }
         } catch (org.json.JSONException ignored) {
-            // A curve that cannot be described is not worth describing badly;
-            // the per-frame events still settle the keyboard without it.
+            // The per-frame events still settle the keyboard without a description.
             return;
         }
         payload.put("curve", curve);
         payload.put("here", here);
-        // When the system began it (wall clock: the page reads the same one), so the page can start in phase.
+        // Wall clock, because the page reads the same one.
         payload.put("startedAt", System.currentTimeMillis());
         notifyListeners("keyboardAnimation", payload);
     }
 
-    /**
-     * The keyboard's inset as it stands, without asking whether it counts as
-     * visible. Visibility flips at the start of a travel, so the gated height
-     * reads 0 for every frame of a hide; mid-animation the inset itself is the
-     * interpolated position, which is the whole point of reading it.
-     */
+    /** Not gated on visibility: it flips at the start of a hide, which would read 0 for every frame of it. */
     private int animatingImeHeight(WindowInsetsCompat insets) {
         return Math.round(insets.getInsets(WindowInsetsCompat.Type.ime()).bottom / density);
     }
@@ -219,11 +142,7 @@ public class ConduitKeyboardPlugin extends Plugin {
         return Math.round(ime.bottom / density);
     }
 
-    /**
-     * A frame the page has not been told about yet. Identical heights are
-     * dropped because an animation reports every frame whether or not it moved,
-     * and each one that reaches the page costs a layout.
-     */
+    /** Identical heights mid-animation are dropped: each one that reaches the page costs a layout. */
     private void emit(int height, boolean moving) {
         emit(height, moving, -1f);
     }
@@ -238,19 +157,7 @@ public class ConduitKeyboardPlugin extends Plugin {
         notifyListeners("keyboardGeometry", payload);
     }
 
-    /**
-     * The same four variables Capacitor's `insetsHandling: "css"` wrote, since
-     * turning that off to stop it padding the parent also turned this off.
-     *
-     * The bottom one goes to zero while the keyboard is up: the gesture bar is
-     * behind the keyboard then, and padding the composer clear of something
-     * nothing can touch is the strip of empty space under the transcript.
-     */
-    /**
-     * The safe area as it stands, asked for by the page when it starts. The variables live in the page, so insets
-     * applied before it committed -- a cold start, the page coming back after its renderer was reclaimed -- left it
-     * with none until the next change, and the composer sat under the gesture bar.
-     */
+    /** Asked for by the page when it starts: insets applied before it committed never reached it. */
     @PluginMethod
     public void safeArea(PluginCall call) {
         getActivity().runOnUiThread(() -> {
@@ -268,20 +175,8 @@ public class ConduitKeyboardPlugin extends Plugin {
 
     private void injectSafeArea(WindowInsetsCompat insets) {
         Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
-        /*
-         * The bottom inset as it stands with no keyboard, always, and never
-         * switched off because one arrived.
-         *
-         * The navigation bar is behind the keyboard while the keyboard is up,
-         * so nothing is owed room for it then -- but sending a 0 the moment
-         * the insets change makes that a step, and the keyboard's height is a
-         * curve. The composer's padding grew by a whole navigation bar on the
-         * first frame of a close and the composer jumped that far up the
-         * screen, while the shell it sits in had not started moving yet. So
-         * the resting value goes over as it is, under a name of its own, and
-         * the page takes the keyboard off it frame by frame on the same curve
-         * as everything else it draws.
-         */
+        // The resting bottom inset, never zeroed for the keyboard: a 0 would be a step where the keyboard is a curve.
+        // The page takes the keyboard off it frame by frame.
         String script = String.format(
             Locale.US,
             "try{var s=document.documentElement.style;" +

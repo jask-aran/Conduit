@@ -56,9 +56,8 @@ final class FloatRecorder {
     }
 
     /**
-     * Opens the microphone on the worker (its setup takes ~20ms, three frames at 120Hz, right as the dictation's
-     * row moves), then reports on the main thread and records. One start at a time; a start the service has torn down
-     * meanwhile (destroy) releases the microphone instead of reporting.
+     * On the worker: setup takes ~20ms, right as the dictation's row moves. A start torn down meanwhile (destroy)
+     * releases the microphone instead of reporting.
      */
     void begin(int generation) {
         if (starting) return;
@@ -82,8 +81,7 @@ final class FloatRecorder {
         try {
             int bufferSize = AudioRecord.getMinBufferSize(16_000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
             if (bufferSize <= 0) throw new IllegalStateException("Microphone is unavailable");
-            // MIC, as the app's own dictation records: VOICE_RECOGNITION moved a Bluetooth headset to its call profile and
-            // dropped music to call quality.
+            // Not VOICE_RECOGNITION: it moves a Bluetooth headset to its call profile and drops music to call quality.
             audio = new AudioRecord(MediaRecorder.AudioSource.MIC, 16_000,
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, Math.max(bufferSize, 6400));
             if (audio.getState() != AudioRecord.STATE_INITIALIZED) throw new IllegalStateException("Microphone is unavailable");

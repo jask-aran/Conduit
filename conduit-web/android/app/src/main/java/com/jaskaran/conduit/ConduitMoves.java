@@ -17,17 +17,14 @@ final class ConduitMoves {
     private final long quick, gentle;
     private final Interpolator arrive, leave, change, room;
     private final boolean reduced;
-    /** The keyboard's travel under way, if any: a room given during it takes its end and its curve. */
     private long travelEnds = 0; private Interpolator travelCurve = null;
     void travel(long durationMs, Interpolator curve) {
         travelEnds = android.os.SystemClock.uptimeMillis() + durationMs; travelCurve = curve;
         release();
     }
     /*
-     * Opening, the keyboard is expected: the field's and the edit pills' arrival (their room and their fade) waits for
-     * it, so the composer, the keyboard and the transcript make one motion on the keyboard's curve, instead of the
-     * composer starting on the tap and the keyboard a beat later. Released by the travel, or after a while without one
-     * (a hardware keyboard).
+     * Arrivals while the keyboard is expected wait for its travel, so composer and keyboard make one motion on its
+     * curve. Released after a while without one (a hardware keyboard).
      */
     private final java.util.List<Runnable> held = new java.util.ArrayList<>();
     private static boolean arrives(JSONObject state) {
@@ -57,7 +54,6 @@ final class ConduitMoves {
         return new PathInterpolator((float) points.optDouble(0), (float) points.optDouble(1), (float) points.optDouble(2), (float) points.optDouble(3));
     }
     static final class Part {
-        /** Arriving, held for the keyboard's travel (ConduitMoves.expectTravel). */
         boolean waiting;
         final View view;
         JSONObject state;
@@ -76,10 +72,8 @@ final class ConduitMoves {
         }
         void cancel() { for (ValueAnimator animation : running.values()) animation.cancel(); running.clear(); targets.clear(); }
     }
-    /** Begin at the live web presentation, including an entrance already in progress. */
     void seed(Part part, JSONObject state, float x, float y, float width, float height, float opacity) {
         part.state = state;
-        // Arriving while a keyboard is expected: seeded unseen, and held for the travel (update).
         if (expecting && arrives(state)) { part.waiting = true; opacity = 0; }
         part.x = x; part.y = y; part.width = width; part.height = height; part.opacity = opacity;
         part.values.put("x", x); part.values.put("y", y); part.values.put("width", width); part.values.put("height", height);
@@ -101,12 +95,10 @@ final class ConduitMoves {
         animation.addUpdateListener(value -> { float next = (float) value.getAnimatedValue(); part.values.put(key, next); set.set(next); part.draw(); });
         part.running.put(key, animation); animation.start();
     }
-    /** Rects are the row's solved flex layout: circles keep size while tucking; grow hands remaining room to the mic.
-     * Each geometric channel retains its current value on reversal and ignores unchanged destinations. */
+    /** Each geometric channel retains its current value on reversal and ignores unchanged destinations. */
     void update(Part part, JSONObject state, float x, float y, float width, float height, long roomDelay, boolean fieldOut) {
         boolean arriving = arrives(state) && (part.state == null || part.state.optBoolean("out") || part.waiting);
         if (expecting && arriving) {
-            // Unseen where it starts, and moved when the keyboard moves.
             if (part.state == null) part.opacity = 0;
             part.waiting = true; part.draw();
             held.add(() -> { part.waiting = false; update(part, state, x, y, width, height, roomDelay, fieldOut); });
@@ -139,7 +131,7 @@ final class ConduitMoves {
         to(part, "x", x, layoutTime, layoutDelay, layoutCurve, initial, v -> part.x = v);
         boolean edit = state.optBoolean("edit");
         // The edit pills fade where they stand: their holder holds them at its foot, so their room goes from above them.
-        // The field too: going, it keeps its size and place and fades there (motion.ts, collapse).
+        // The field too: going, it keeps its size and place and fades there.
         if (!((edit || field) && out)) to(part, "y", y, edit ? (left > 16 && !reduced ? left : layoutTime) : layoutTime, layoutDelay, edit ? (left > 16 && travelCurve != null && !reduced ? travelCurve : room) : layoutCurve, initial, v -> part.y = v);
         to(part, "width", width, layoutTime, layoutDelay, layoutCurve, initial, v -> part.width = v);
         if (!(field && out)) to(part, "height", height, layoutTime, layoutDelay, layoutCurve, initial, v -> part.height = v);

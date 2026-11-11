@@ -1,8 +1,5 @@
-//! The desktop shell. It owns the window, the tray, the single instance and
-//! the launch path -- never the transcript, the transport or anything a
-//! Conduit server is authoritative for. The bundled SolidJS client is the whole
-//! of the interface, and it reaches the same HTTPS and WebSocket endpoints the
-//! Android client does.
+//! The desktop shell: the window, the tray, the single instance and the launch path, never anything a Conduit server
+//! is authoritative for.
 
 mod capture;
 mod certificate_trust;
@@ -22,14 +19,12 @@ use std::sync::Mutex;
 
 use tauri::{Manager, WindowEvent};
 
-/// The argument the autostart entry launches Conduit with. It is a request to
-/// start hidden, not an instruction: the settings decide whether it is honoured.
+/// A request, not an instruction: the settings decide whether it is honoured.
 const HIDDEN_LAUNCH_ARG: &str = "--hidden";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut context = tauri::generate_context!();
-    // The development client may serve an interface taken from its server in place of its own (interface_bundle.rs).
     let interface = interface_bundle::wrap(&mut context);
     tauri::Builder::default()
         // A second launch is a request to see the window that already exists,
@@ -37,8 +32,6 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             tray::reveal(app);
         }))
-        // Updating is the client's command; the shell only supplies the
-        // verified channel it runs through.
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(global_shortcuts::plugin())
@@ -57,8 +50,7 @@ pub fn run() {
             app.manage(desktop_settings::Store(Mutex::new(settings)));
             app.manage(node_companion::Companion::default());
             node_companion::supervise(handle, settings.serve_as_device);
-            // Empty until the client says what it wants: the registry it holds
-            // is the only place a shortcut is decided.
+            // Empty until the client says what it wants: its registry is the only place a shortcut is decided.
             app.manage(global_shortcuts::Registered::default());
             tray::install(handle)?;
             update_window::restore(handle);
@@ -81,9 +73,6 @@ pub fn run() {
                 let _ = update_window::remember_update_window(window.app_handle().clone());
             }
             if let WindowEvent::CloseRequested { api, .. } = event {
-                // With the tray on, the close button means "put it away". With
-                // it off the button means what it says, and Quit is the only
-                // other way out.
                 if desktop_settings::keep_running_in_tray(window.app_handle()) {
                     api.prevent_close();
                     let _ = window.hide();

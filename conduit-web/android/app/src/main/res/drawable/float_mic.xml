@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- lucide mic, for Float's voice answer. -->
+<!-- lucide mic. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="18dp" android:height="18dp" android:viewportWidth="24" android:viewportHeight="24">
     <path android:pathData="M12,2a3,3 0,0 0,-3,3v7a3,3 0,0 0,6,0V5a3,3 0,0 0,-3,-3ZM19,10v2a7,7 0,0 1,-14,0v-2M12,19v3" android:strokeColor="#ffffff" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000" />
 </vector>

@@ -32,31 +32,26 @@ public class ConduitFloatService extends Service {
     private static ConduitFloatService active;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
-    /** Captures' miniatures, off the worker (which sends and records, and may be busy for seconds). */
+    /** Off the worker, which may be busy sending or recording for seconds. */
     private static final ExecutorService THUMBS = Executors.newSingleThreadExecutor();
     private final FloatMachine machine = new FloatMachine();
     private FloatWindow window;
     private FloatRecorder recorder;
     private FloatSender sender;
-    /** What the pill says when a send fails: the hub's own message, or why it could not be reached. */
     private volatile String errorText = "Couldn't send — open Conduit";
     private FloatRecorder.Capture capture;
     private String liveText = "";
     private volatile ConduitFloatLive live;
-    /** The words heard so far, beside the pill, when the voice model transcribes live. */
     private ConduitFloatCaption caption;
     private File recording;
     private boolean microphoneReady;
-    /** Whether the running Float may record (it was started from something visible); false when none runs. */
     static boolean microphoneReadyNow() { return active != null && active.microphoneReady; }
     private volatile boolean destroyed;
     private volatile int generation;
     private long sentAt;
     private FloatRadial radial;
-    /** Where the message being recorded goes: the radial's choice, or the hold's default until a slot locks it. */
     private FloatTarget target = FloatTarget.jbot();
     private FloatPanel panel;
-    /** Screenshots and photos gathered for the next message, oldest first. Sent with it, or dropped on cancel. */
     private final java.util.List<ConduitContext.Result> gathered = new java.util.ArrayList<>();
     /** Each held capture's miniature, in the same order as gathered. */
     private final java.util.List<android.graphics.Bitmap> thumbs = new java.util.ArrayList<>();
@@ -65,22 +60,16 @@ public class ConduitFloatService extends Service {
     private int gatheredGeneration;
     private FloatCaptures captures;
     private FloatShot shot;
-    /** The pill's ✕ stopped a dictation: back to the radial with the captures still held. */
     private boolean reopenAfterCancel;
     /**
-     * The microphone takes a moment to open (FloatRecorder.begin), and until it has the machine still reads HANDLE.
-     * What was asked of the recording in that moment is kept here and done as it starts: a hold let go then used to
-     * go unheard and the recording ran on, and a cancel then was undone by the start that followed it.
+     * The machine still reads HANDLE while the microphone opens (FloatRecorder.begin), so a release or cancel asked
+     * in that moment is kept here and done as the recording starts.
      */
     private enum Opening { NONE, OPENING, RELEASED, CANCELLED }
     private Opening opening = Opening.NONE;
 
     private boolean radialUp() { return radial != null && (radial.isOpen() || radial.isDictating()); }
 
-    /**
-     * The card of held captures under the handle (through the radial and the dictation, gone while a message sends or
-     * Conduit is in front), the radial's ✕ under it, and the handle lit whenever it holds captures or the radial is up.
-     */
     private void updateDiscard() {
         if (window == null) return;
         boolean holding = !gathered.isEmpty();
@@ -100,21 +89,17 @@ public class ConduitFloatService extends Service {
     static void setAppForeground(boolean foreground) {
         appForeground = foreground;
         if (active != null) {
-            // Conduit in front: the radial and any panel over it close (an assist from inside the app opened them).
+            // An assist from inside the app can leave the radial and a panel open.
             if (foreground) { if (active.radial != null) active.radial.hideNow(); if (active.window != null) active.window.lift(false); active.closePanel(); }
             active.updateVisibility();
             active.updateDiscard();
         }
     }
 
-    /** Settings changed an option Float shows by (Only on side key). */
     static void optionsChanged() { if (active != null) active.updateDiscard(); }
 
-    /** Called up by the side key while Only on side key is on; it goes again once Float is back at rest and empty. */
     private boolean summoned;
-    /** This dictation came from the side key: the next side key press sends it. */
     private boolean sideKeyRecording;
-    /** Between the side key and the radial it opens (the capture is still landing). */
     private boolean summoning;
 
     private boolean atRest() {
@@ -130,11 +115,6 @@ public class ConduitFloatService extends Service {
         window.setVisible(!hidden);
     }
 
-    /**
-     * The side key (Conduit as the assistant) handed Float the screen. While a side-key dictation runs, it sends it.
-     * Otherwise Float shows (Only on side key), keeps the screenshot when Side key screenshot is on, then opens the
-     * radial, or goes straight into dictation when Side key dictates is on.
-     */
     private void sideKey(ConduitContext.Result result) {
         if (destroyed) { if (result.image != null) result.image.delete(); return; }
         State state = machine.state();
@@ -143,7 +123,6 @@ public class ConduitFloatService extends Service {
             if (state == State.RECORDING && sideKeyRecording) stopRecording(false);
             return;
         }
-        // From rest it opens the radial or a dictation: a panel left open goes first.
         closePanel();
         summoned = true;
         summoning = true;
@@ -159,10 +138,6 @@ public class ConduitFloatService extends Service {
         else { if (result.image != null) result.image.delete(); next.run(); }
     }
 
-    /**
-     * A dictation that did not start from the radial's own target (Workspace, Recent, a hold): the dictation's row
-     * still comes up under the pill, its target bubble (slot's place, icon) with Screenshot and Camera.
-     */
     private void dictationRow(FloatRadial.Slot slot, int icon) {
         if (!radialUp()) openRadial();
         window.lift(false);
@@ -211,7 +186,6 @@ public class ConduitFloatService extends Service {
                 if (current.cancel) {
                     discard();
                     show(State.HANDLE);
-                    // The pill's ✕: back to the radial, the captures still held, to pick another target.
                     if (reopenAfterCancel) { reopenAfterCancel = false; main.postDelayed(() -> { if (!destroyed && !appForeground && machine.state() == State.HANDLE) openRadial(); }, 160); }
                 }
                 else if (saved) sendRecording();
@@ -224,7 +198,6 @@ public class ConduitFloatService extends Service {
             }
         });
         sender = new FloatSender(this, worker, main);
-        // The assistant (a long press on home) hands Float the screen: held like a screenshot, then where it goes.
         FloatAssist.receive(result -> main.post(() -> sideKey(result)));
     }
 
@@ -269,7 +242,7 @@ public class ConduitFloatService extends Service {
                     @Override public void onRetry() { retry(); }
                     @Override public void onDragEnded() {
                         window.snapToEdge();
-                        // The ✕ follows once the handle has settled on its edge.
+                        // Once the handle has settled on its edge.
                         main.postDelayed(ConduitFloatService.this::updateDiscard, 200);
                     }
                 });
@@ -303,8 +276,8 @@ public class ConduitFloatService extends Service {
     private Notification notification() {
         NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= 26) {
-            // Minimum importance: Android requires the foreground service's notification, but it folds away with no
-            // status-bar icon. A channel's importance is fixed once made, so the old LOW channel is replaced.
+            // Minimum importance folds the required notification away with no status-bar icon. A channel's importance
+            // is fixed once made, so the earlier channel is deleted.
             try { manager.deleteNotificationChannel("conduit_float"); } catch (RuntimeException stillInUse) {}
             NotificationChannel channel = new NotificationChannel("conduit_float_quiet", "Float", NotificationManager.IMPORTANCE_MIN);
             channel.setSound(null, null);
@@ -324,7 +297,6 @@ public class ConduitFloatService extends Service {
         if (window != null) window.refreshPlacement();
     }
 
-    /** The caption shows while listening and as it stops, once there are words. */
     private void updateCaption() {
         if (caption == null) return;
         if (away) { caption.hideNow(); return; }
@@ -333,7 +305,6 @@ public class ConduitFloatService extends Service {
         else caption.hide();
     }
 
-    /** The caption's header: where the words go. */
     private String targetLine() {
         if (target.kind == FloatTarget.Kind.JBOT) return "To jbot";
         if (target.kind == FloatTarget.Kind.CHAT) return "To " + (target.label == null ? "chat" : target.label);
@@ -347,7 +318,6 @@ public class ConduitFloatService extends Service {
         if (previous == State.RECORDING && next != State.RECORDING) closePanel();
         if (next == State.HANDLE) liveText = "";
         if (next != State.RECORDING) sideKeyRecording = false;
-        // The dictation's Screenshot and Camera go with the recording.
         if (next != State.RECORDING && radial != null && radial.isDictating()) radial.close();
         window.show(next, errorText, sentAt);
         updateDiscard();
@@ -358,12 +328,10 @@ public class ConduitFloatService extends Service {
             .putExtra("conduit.float.record", record));
     }
 
-    /** What a hold talks to before a slot is chosen: Settings' choice, jbot unless it says a new chat. */
     private FloatRadial.Slot holdTarget() {
         return "chat".equals(prefs().getString("holdTarget", "jbot")) ? FloatRadial.Slot.NEW_CHAT : FloatRadial.Slot.JBOT;
     }
 
-    /** Where the message goes now; while recording, it travels with the recording (a retry goes to the same place). */
     private void setTarget(FloatTarget next) {
         target = next;
         if (window != null) window.setTarget(next.kind == FloatTarget.Kind.JBOT ? R.drawable.ic_stat_conduit
@@ -383,7 +351,6 @@ public class ConduitFloatService extends Service {
         panel = null;
     }
 
-    /** Workspace: where a new chat goes. Chosen while recording (a locked hold), it retargets; at rest, it records. */
     private void openPlaces() {
         closePanel();
         FloatPlacesPanel places = new FloatPlacesPanel(this, hub(), new FloatPlacesPanel.Listener() {
@@ -401,7 +368,6 @@ public class ConduitFloatService extends Service {
         places.show(window.right(), Math.round(window.handleCentre()[1]));
     }
 
-    /** A dictation's target bubble: jbot or any place for a new chat; the words keep coming meanwhile. */
     private void openSendTo() {
         closePanel();
         FloatPlacesPanel places = new FloatPlacesPanel(this, hub(), new FloatPlacesPanel.Listener() {
@@ -419,7 +385,6 @@ public class ConduitFloatService extends Service {
         places.show(window.right(), Math.round(window.handleCentre()[1]));
     }
 
-    /** Recent: the latest replies; answer one by voice (records to that chat) or by typing (sent at once). */
     private void openRecent() {
         closePanel();
         final FloatRecentPanel[] recent = new FloatRecentPanel[1];
@@ -457,17 +422,14 @@ public class ConduitFloatService extends Service {
         if (radial == null) radial = new FloatRadial(this, new FloatRadial.Listener() {
             @Override public void chosen(FloatRadial.Slot slot) { radialChosen(slot); updateDiscard(); }
             @Override public void dismissed() { window.lift(false); updateDiscard(); }
-            // Clears what is held; the radial stays open to pick where the next message goes.
             @Override public void discard() { dropGathered(); updateDiscard(); }
             @Override public void retarget() { openSendTo(); }
-            // The handle held under the open radial (as when the side key summoned Float): the same hold as at rest.
             @Override public void handleHeld() { holdStarted(); }
             @Override public void handleReleased(boolean cancelled) { holdEnded(cancelled); }
         });
         return radial;
     }
 
-    /** The radial around the handle; the handle stays lit while it is open, as it does while held. */
     private void openRadial() {
         ConduitHubClient lists = hub();
         if (lists != null) { FloatPanel.warm("places", lists::places); FloatPanel.warm("recent", () -> lists.recentChats(20)); }
@@ -480,9 +442,7 @@ public class ConduitFloatService extends Service {
         updateDiscard();
     }
 
-    /** A tap's radial: a target starts recording to it. Workspace, Recent and the context slots come with their panels. */
     private void radialChosen(FloatRadial.Slot slot) {
-        // Screenshot and Camera work at rest and while dictating; the targets only from rest.
         if (slot == FloatRadial.Slot.SCREENSHOT) { screenshot(); return; }
         if (slot == FloatRadial.Slot.CAMERA) { photo(); return; }
         if (machine.state() != State.HANDLE) return;
@@ -494,14 +454,13 @@ public class ConduitFloatService extends Service {
                 radial.setTargetIcon(slot == FloatRadial.Slot.JBOT ? R.drawable.ic_stat_conduit : R.drawable.float_new_chat);
                 beginRecording();
                 break;
-            // The radial has gone at once (not faded): the panel takes the screen behind it as its frost.
+            // The radial went without fading: the panel takes the screen behind it as its frost.
             case WORKSPACE: openPlaces(); break;
             case RECENT: openRecent(); break;
             default: break;
         }
     }
 
-    /** Everything of Float off the screen for a capture (a frame or two), or back as it was. */
     /** Off the screen for a capture: nothing may bring the handle back meanwhile. */
     private boolean away;
     private final Runnable captureSafety = () -> {
@@ -522,24 +481,17 @@ public class ConduitFloatService extends Service {
         return capturing;
     }
 
-    /**
-     * A screenshot of what is under Float: Float leaves the screen first (ConduitContext waits two frames) and comes
-     * back exactly as it was, an open radial or a dictation included; the capture lands in the card.
-     */
     private void screenshot() {
         if (busyCapturing()) return;
-        // Float's Screenshot is screen context's: without it, say so and offer the way to turn it on.
         if (!ConduitContext.screenReaderOn(this)) { needScreenContext(); return; }
         capturing = true;
         capturingSince = SystemClock.uptimeMillis();
         setAway(true);
-        // Never left off the screen: back after 15s whatever happens to the capture.
         main.removeCallbacks(captureSafety);
         main.postDelayed(captureSafety, 15000);
         ConduitContext.screenshot(this, result -> captured(result, null));
     }
 
-    /** Screenshot without screen context: a word now, and a notification that opens Settings › Phone to set it up. */
     private void needScreenContext() {
         android.widget.Toast.makeText(this, "Screenshot needs Float screen context", android.widget.Toast.LENGTH_SHORT).show();
         NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
@@ -566,7 +518,6 @@ public class ConduitFloatService extends Service {
         ConduitContext.photo(this, result -> captured(result, null));
     }
 
-    /** A capture arrived: Float comes back, the flash and the copy flying into the card, then it is held. */
     private void captured(ConduitContext.Result result, Runnable then) {
         main.removeCallbacks(captureSafety);
         capturing = false;
@@ -610,13 +561,11 @@ public class ConduitFloatService extends Service {
                     updateDiscard();
                     if (then != null) then.run();
                 };
-                // Over the open arc, the radial draws it under its slots; otherwise its own window over everything.
                 if (radial == null || !radial.playShot(mini, flash, card, land)) shot.play(mini, flash, card, land);
             });
         });
     }
 
-    /** The gathered captures as files to send, in order: each picture, then its screen text when there is some. */
     private java.util.List<File> gatheredFiles() {
         java.util.List<File> files = new java.util.ArrayList<>();
         for (ConduitContext.Result result : gathered) {
@@ -633,7 +582,6 @@ public class ConduitFloatService extends Service {
         return files;
     }
 
-    /** The gathered captures are spent (sent) or let go (cancelled). */
     private void dropGathered() {
         gatheredGeneration++;
         gathered.clear();
@@ -644,10 +592,6 @@ public class ConduitFloatService extends Service {
         updateDiscard();
     }
 
-    /**
-     * Hold to talk (a setting, off by default): a hold opens the recorder pill at once, to the hold's target; letting
-     * go sends; letting go after dragging well away cancels.
-     */
     private void holdStarted() {
         if (machine.state() != State.HANDLE) return;
         setTarget(targetFor(holdTarget()));
@@ -669,7 +613,6 @@ public class ConduitFloatService extends Service {
         recorder.begin(generation + 1);
     }
 
-    /** The radial's slot as a send target. Workspace and Recent bring their own once their panels choose one. */
     private FloatTarget targetFor(FloatRadial.Slot slot) {
         return slot == FloatRadial.Slot.NEW_CHAT ? FloatTarget.newChat(null, "New chat") : FloatTarget.jbot();
     }
@@ -679,7 +622,6 @@ public class ConduitFloatService extends Service {
         opening = Opening.NONE;
         generation = next.generation;
         capture = next;
-        // Cancelled while it opened: it ends as a cancelled capture does, without ever showing.
         if (asked == Opening.CANCELLED) { recorder.stop(next, true); return; }
         prefs().edit().putBoolean("recordingComplete", false)
             .putString("recordingTarget", target.toJson())
@@ -778,7 +720,6 @@ public class ConduitFloatService extends Service {
         recorder.destroy(capture);
         sender.cancel();
         recorder.restoreVolume();
-        // Preserve only a failed, completed recording while enabled. Turning off also discards the retry.
         if (!prefs().getBoolean("enabled", false)) discard();
         worker.shutdown();
         if (window != null) window.dismiss();

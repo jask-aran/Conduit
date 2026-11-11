@@ -20,17 +20,12 @@ import android.view.WindowManager;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * The captures held for the next message, as a card under Float's handle: a miniature of each screenshot or photo,
- * the handle's own size, fanned into a little stack (up to three drawn) with a count once there are more than one.
- * It stays through the radial and the dictation; a tap on it at rest opens the radial. Its own touchable window (an
- * untouchable overlay is capped at 80% opacity).
- */
+/** A touchable window: an untouchable overlay is capped at 80% opacity. */
 final class FloatCaptures {
-    /** dp: the card (the handle's size), the gap under the handle, the room the stack and count take around it. */
+    /** dp. */
     static final float W = 32, H = 44, GAP = 8, PAD = 10;
     private static final float RADIUS = 9;
-    /** dp: how far each older card shows under the one above it, and how much narrower it is on each side. */
+    /** dp. */
     static final float PEEK = 4, PEEK_INSET = 3;
 
     private final Context context;
@@ -68,21 +63,18 @@ final class FloatCaptures {
 
     private int dp(float value) { return Math.round(value * context.getResources().getDisplayMetrics().density); }
 
-    /** Where the card goes for a handle centred at handleCentre (screen pixels): under it, on the same column. */
     static Rect cardRect(Context context, float[] handleCentre, float handleHeight) {
         float d = context.getResources().getDisplayMetrics().density;
         int left = Math.round(handleCentre[0] - W * d / 2), top = Math.round(handleCentre[1] + handleHeight / 2 + GAP * d);
         return new Rect(left, top, left + Math.round(W * d), top + Math.round(H * d));
     }
 
-    /** The ✕'s centre while the radial is open: under the card, in the same column. */
     static float[] discardCentre(Context context, Rect card, int held) {
         float d = context.getResources().getDisplayMetrics().density;
         int peeks = Math.max(0, Math.min(2, held - 1));
         return new float[] { card.exactCenterX(), card.bottom + peeks * PEEK * d + GAP * d + 12 * d };
     }
 
-    /** The held captures' miniatures, oldest first; empty hides the card. */
     void show(List<Bitmap> next, boolean right, Rect at) {
         thumbs.clear();
         thumbs.addAll(next);
@@ -111,7 +103,6 @@ final class FloatCaptures {
         }
     }
 
-    /** Out of sight for a capture, then back. */
     void setHidden(boolean hidden) {
         if (!dialog.isShowing()) return;
         card.animate().cancel();
@@ -122,7 +113,6 @@ final class FloatCaptures {
         card.animate().alpha(1).setDuration(180).start();
     }
 
-    /** Sent: the cards go up into the pill's bubble, then the card is gone. */
     void sendAway() {
         if (!dialog.isShowing()) return;
         card.animate().translationY(-dp(H)).scaleX(.6f).scaleY(.6f).alpha(0).setDuration(260)
@@ -165,7 +155,6 @@ final class FloatCaptures {
         @Override protected void onDraw(Canvas canvas) {
             int n = Math.min(3, thumbs.size());
             float pad = dp(PAD), w = dp(W), h = dp(H), r = dp(RADIUS);
-            // A deck seen from the front: the newest on top, each older card a little narrower, peeking out under it.
             for (int k = n - 1; k >= 0; k--) {
                 Bitmap bitmap = thumbs.get(thumbs.size() - 1 - k);
                 canvas.save();
@@ -178,7 +167,6 @@ final class FloatCaptures {
                 canvas.save();
                 canvas.clipPath(clip);
                 if (bitmap != null && !bitmap.isRecycled()) {
-                    // Centre-cropped to the card's shape.
                     float scale = Math.max(w / bitmap.getWidth(), h / bitmap.getHeight());
                     int sw = Math.round(w / scale), sh = Math.round(h / scale);
                     int sx = (bitmap.getWidth() - sw) / 2, sy = (bitmap.getHeight() - sh) / 2;

@@ -21,29 +21,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Let through a certificate only when a paired server's identity vouches for it.
- *
- * A Conduit server answers over TLS with a certificate it signed itself, so a
- * WebView reaching it raises `ERR_CERT_AUTHORITY_INVALID` and stops. That is
- * the correct default and it stays the default here: no identities refuses
- * everything. What makes a certificate acceptable is that it carries, in its
- * own extension, the server's Ed25519 identity signature over the hash of its
- * public key -- see `docs/connections.md` and `src/server-tls.js`. The shell
- * holds the identity keys of the servers this client has paired with, so it
- * can decide from the certificate alone, and a re-issued certificate needs
- * nothing new from the page.
- *
- * So the rule is narrow on purpose. The embedded attestation must verify
- * against one of those keys; the only errors it answers are an untrusted
- * authority (self-signed) and a name mismatch (the leaf is not re-issued when
- * the machine's addresses change, and the identity, not the name, is what is
- * checked). An expired or not-yet-valid certificate is still refused. The
- * natural bug in this method is `handler.proceed()` reached by any path that
- * did not verify a signature, and it is worse than having no TLS at all,
- * because it accepts every certificate on every network.
- *
- * The signature is checked with Tink, so this works on every supported API
- * level and whatever security providers the image ships.
+ * Let through a self-signed certificate only when its embedded attestation (a paired identity's Ed25519 signature
+ * over its public key's hash) verifies. Only an untrusted authority and a name mismatch are answered (the leaf is not
+ * re-issued when addresses change); expiry is still refused. `handler.proceed()` on any path that did not verify a
+ * signature accepts every certificate on every network.
  */
 public class ConduitWebViewClient extends BridgeWebViewClient {
 
@@ -53,9 +34,8 @@ public class ConduitWebViewClient extends BridgeWebViewClient {
     private static final String ATTESTATION_PREFIX = "conduit-leaf-spki-sha256.v1";
 
     /**
-     * DER of `ATTESTATION_EXTENSION_OID` in `src/server-tls.js`. Found in the
-     * certificate's bytes rather than through `getExtensionValue`, whose OID
-     * parsing stops at 64-bit arcs and this one is a 128-bit UUID.
+     * DER of `ATTESTATION_EXTENSION_OID` in `src/server-tls.js`. Found in the certificate's bytes because
+     * `getExtensionValue` stops at 64-bit arcs and this one is a 128-bit UUID.
      */
     private static final byte[] ATTESTATION_OID = {
         (byte) 0x06, (byte) 0x13, (byte) 0x69, (byte) 0x85, (byte) 0x84, (byte) 0xc8, (byte) 0xe0,
@@ -64,14 +44,11 @@ public class ConduitWebViewClient extends BridgeWebViewClient {
     };
 
     /**
-     * Identity id to Ed25519 public key (SPKI DER, base64), for every paired
-     * server. Empty is a refusal. Held statically because the certificate
-     * callback is reached from the WebView rather than from anything holding
-     * a server record.
+     * Identity id to Ed25519 SPKI DER, base64. Static because the certificate callback is reached from the WebView,
+     * not from anything holding a server record.
      */
     private static volatile Map<String, String> identities = Collections.emptyMap();
 
-    /** Replace the whole set; reports whether it changed. */
     public static boolean trust(Map<String, String> next) {
         Map<String, String> copy = Collections.unmodifiableMap(new HashMap<>(next));
         boolean changed = !copy.equals(identities);
@@ -81,10 +58,7 @@ public class ConduitWebViewClient extends BridgeWebViewClient {
 
     private static final String PREFS = "conduit-tls";
 
-    /**
-     * Keeps the paired identities (public keys only) for the app's native callers that run without the page: Float
-     * and push answers can start before the WebView has told this process who is paired.
-     */
+    /** Float and push answers can start before the WebView has told this process who is paired. */
     static void remember(android.content.Context context, Map<String, String> next) {
         org.json.JSONObject saved = new org.json.JSONObject();
         try { for (Map.Entry<String, String> identity : next.entrySet()) saved.put(identity.getKey(), identity.getValue()); }
@@ -92,7 +66,6 @@ public class ConduitWebViewClient extends BridgeWebViewClient {
         context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit().putString("identities", saved.toString()).apply();
     }
 
-    /** The remembered identities, when the page has not set any in this process yet. */
     static void restore(android.content.Context context) {
         if (!identities.isEmpty()) return;
         String saved = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).getString("identities", null);
@@ -125,7 +98,6 @@ public class ConduitWebViewClient extends BridgeWebViewClient {
         else handler.cancel();
     }
 
-    /** The id of the paired identity whose attestation this leaf carries, or null. */
     private static String vouchingIdentity(SslError error) {
         if (error.getCertificate() == null) return null;
         return vouchingIdentity(error.getCertificate().getX509Certificate());
@@ -144,18 +116,12 @@ public class ConduitWebViewClient extends BridgeWebViewClient {
             }
             return null;
         } catch (Exception failure) {
-            // A certificate or key that cannot be read cannot vouch for anything.
             Log.w(TAG, "certificate could not be checked", failure);
             return null;
         }
     }
 
-    /**
-     * The same rule for the app's own HTTPS requests (a live-update download):
-     * the system's trust first, then a leaf a paired identity vouches for. A
-     * vouched leaf is the server's identity, so its name is not checked
-     * against the address, as the page's requests do not check it either.
-     */
+    /** A vouched leaf's name is not checked against the address, as the page's requests do not check it either. */
     static void trustPaired(javax.net.ssl.HttpsURLConnection connection) throws Exception {
         java.util.concurrent.atomic.AtomicBoolean vouched = new java.util.concurrent.atomic.AtomicBoolean();
         connection.setSSLSocketFactory(pairedSocketFactory(vouched));
@@ -169,7 +135,6 @@ public class ConduitWebViewClient extends BridgeWebViewClient {
         return context.getSocketFactory();
     }
 
-    /** The platform's trust, or a certificate the hub's attestation vouches for (which sets vouched). */
     static javax.net.ssl.X509TrustManager pairedTrust(java.util.concurrent.atomic.AtomicBoolean vouched) throws Exception {
         javax.net.ssl.TrustManagerFactory factory = javax.net.ssl.TrustManagerFactory.getInstance(javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
         factory.init((java.security.KeyStore) null);
@@ -194,10 +159,8 @@ public class ConduitWebViewClient extends BridgeWebViewClient {
     private static final byte[] ED25519_SPKI_PREFIX = { 0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00 };
 
     /**
-     * Verified with Tink rather than the platform: on some images the only
-     * Ed25519 provider is the keystore wrapper, which accepts nothing but its
-     * own keys (the emulator's; the SM-S936B's happens to have another), and
-     * before API 33 there is none at all.
+     * Tink, not the platform: on some images the only Ed25519 provider is the keystore wrapper, which accepts only its
+     * own keys, and before API 33 there is none.
      */
     private static boolean ed25519Verify(byte[] spki, byte[] payload, byte[] signature) {
         if (spki.length != ED25519_SPKI_PREFIX.length + 32) return false;
@@ -210,7 +173,6 @@ public class ConduitWebViewClient extends BridgeWebViewClient {
         }
     }
 
-    /** The 64-byte signature in the attestation extension, or null. */
     private static byte[] embeddedAttestation(byte[] der) {
         outer:
         for (int at = 0; at <= der.length - ATTESTATION_OID.length; at++) {

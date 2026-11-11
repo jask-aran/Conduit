@@ -11,14 +11,11 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import org.json.JSONTokener;
 
-/**
- * How native code outside the WebView talks to the hub as the signed-in person: the origin's WebView cookie, and the
- * installed client's bearer token from secure storage. Nothing here is logged: no cookie, token or response body.
- */
+/** Nothing here is logged: no cookie, token or response body. */
 final class ConduitHubAuth {
     private ConduitHubAuth() {}
 
-    /** Read the existing secure-storage entry; do not duplicate a native session in plain preferences. */
+    /** Do not duplicate a native session in plain preferences. */
     static String nativeToken(Context context, String origin) throws Exception {
         // Matches native-auth-client.ts and @aparajita/capacitor-secure-storage's Android AES/GCM format.
         String key = "capacitor-storage_conduit.native.bearer-token." + origin.replaceAll("[^a-zA-Z0-9.\\-]+", "-");
@@ -38,11 +35,8 @@ final class ConduitHubAuth {
     }
 
     /**
-     * An authenticated connection to `origin + path`, not yet connected: redirects off, the paired hub's TLS pin, the
-     * origin's cookie when present, and the native session's bearer token when there is one (it wins: a stale cookie
-     * from an older shell must not hide the installed client's current session). Throws "Open Conduit to sign in" when
-     * there is neither. `tokenOrigin` is the server's stable origin the token is stored under (it can differ from the
-     * route being dialled).
+     * The bearer token wins over the cookie: a stale cookie must not hide the installed client's current session.
+     * `tokenOrigin` is the stable origin the token is stored under, which can differ from the route being dialled.
      */
     static HttpURLConnection open(Context context, String origin, String tokenOrigin, String path, String method) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(origin + path).openConnection();

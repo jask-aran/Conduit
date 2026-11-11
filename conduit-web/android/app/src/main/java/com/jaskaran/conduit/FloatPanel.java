@@ -28,12 +28,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
-/**
- * One-use native overlay in v2's popover language (popover.css .ui-menu, read off the phone's WebView): 240dp wide,
- * radius 14, a 6dp frost inset, FloatFrost over Samsung's live blur (or the screen behind it); 40dp rows of Geist 13.5 at weight 500 in the
- * foreground at 68%, washed white 7% at radius 8 while pressed; section labels in Paper Mono 10 uppercase. It rises
- * in 8dp over 250ms on --ease-arrive and drops back over 150ms on --ease-leave. Construct and show on the main thread.
- */
+/** One-use native overlay matching popover.css .ui-menu as the phone's WebView draws it. Main thread only. */
 public abstract class FloatPanel {
     /** --foreground; a row's resting text (the foreground at 68%, over frost); --muted-foreground; --tint. */
     protected static final int PRIMARY = 0xffe8e9eb, ROW = 0xade8e9eb, SECONDARY = 0xff8d8f94, TINT = 0x12ffffff;
@@ -130,7 +125,7 @@ public abstract class FloatPanel {
         // The menu's raised lift (--frost-lift-raised, read off the WebView's .ui-menu): 0 24px 70px black at 38%.
         decor.setElevation(dp(24));
         if (Build.VERSION.SDK_INT >= 28) { decor.setOutlineAmbientShadowColor(0); decor.setOutlineSpotShadowColor(0x61000000); }
-        // Samsung's live blur behind the card, clear, the frost drawn over it: no screenshot, no Screen context needed.
+        // Samsung's live blur needs no screenshot, so no Screen context.
         if (FloatLiveBlur.frost(window, root, frost)) {
             frost.setLive(true);
             FloatLiveBlur.apply(decor, FloatLiveBlur.radius(context), 0, dp(14));
@@ -167,10 +162,7 @@ public abstract class FloatPanel {
         }
     }
 
-    /**
-     * Shows the panel. With the screen reader on, it first takes the screen behind it as its frost backdrop (Float's
-     * windows get no system blur on phones without cross-window blur); the panel waits for it at most 400ms.
-     */
+    /** Float's windows get no system blur without cross-window blur, so the screen behind is taken as the backdrop. */
     public final void show(boolean right, int centerY) {
         if (closed || shown || waiting) return;
         ConduitScreenReader reader = ConduitScreenReader.instance;
@@ -192,7 +184,7 @@ public abstract class FloatPanel {
     }
 
     private boolean waiting;
-    /** When the opening rise ends (uptime ms); until it has started, a while from now. */
+    /** Uptime ms. */
     private volatile long settledAt = Long.MAX_VALUE / 2;
     private android.graphics.Bitmap backdrop;
     private boolean rightEdge;
@@ -272,11 +264,10 @@ public abstract class FloatPanel {
         WindowManager.LayoutParams p = window.getAttributes();
         int y = Math.max(dp(16), Math.min(centerY - root.getHeight() / 2, screenHeight - keyboardInset - dp(16) - root.getHeight()));
         if (p.y != y) { p.y = y; window.setAttributes(p); }
-        // The window's top-left on screen, for the frost's backdrop.
         frost.setOrigin(rightEdge ? screenLeft + screenWidth - p.x - p.width : screenLeft + p.x, screenTop + y);
     }
 
-    /** The panel's width in dp: v2's phone menu cap (--measure-sm). */
+    /** dp: --measure-sm. */
     protected int width() { return 240; }
 
     private void updateBlur(boolean blurred) {
@@ -310,7 +301,6 @@ public abstract class FloatPanel {
     protected abstract void onClosed();
     protected void onClosing() {}
 
-    /** The popover's title (.ui-title): its label face, muted, 6/8 padding; a back chevron before it when it has one. */
     protected final void heading(String title, Runnable back) {
         header.removeAllViews();
         LinearLayout line = new LinearLayout(context);
@@ -357,7 +347,6 @@ public abstract class FloatPanel {
         return view;
     }
 
-    /** A row's title: --text-row, weight 500 over frost, the foreground at 68%. */
     protected final TextView rowText(CharSequence value) {
         TextView view = text(value, 13.5f, ROW);
         view.setTypeface(face(500));
@@ -366,7 +355,6 @@ public abstract class FloatPanel {
         return view;
     }
 
-    /** A row's second line or meta (.ui-detail): --text-caption, muted. */
     protected final TextView detail(CharSequence value) {
         TextView view = text(value, 12, SECONDARY);
         view.setSingleLine(true);
@@ -374,7 +362,6 @@ public abstract class FloatPanel {
         return view;
     }
 
-    /** A section's label: Paper Mono 10, uppercase, tracked .07em, muted. */
     protected final TextView label(String value) {
         TextView view = text(value.toUpperCase(java.util.Locale.ROOT), 10, SECONDARY);
         view.setTypeface(paperMono);
@@ -393,17 +380,13 @@ public abstract class FloatPanel {
         view.setBackground(states);
     }
 
-    /** A menu row (.ui-row[data-density=menu]): 40dp tall on a phone, padding 6/8, the pressed wash. */
+    /** .ui-row[data-density=menu] on a phone. */
     protected final void rowStyle(View view) {
         view.setMinimumHeight(dp(40));
         view.setPadding(dp(8), dp(6), dp(8), dp(6));
         wash(view);
     }
 
-    /**
-     * A menu row with its icon slot (.ui-icon, 16dp, muted at rest; a workspace's glyph keeps its colour), its label,
-     * and its meta at the end (.ui-meta: muted Paper Mono caption).
-     */
     protected final LinearLayout iconRow(int icon, Integer colour, CharSequence name, String meta) {
         android.widget.ImageView glyph = new android.widget.ImageView(context);
         glyph.setImageResource(icon);
@@ -412,7 +395,6 @@ public abstract class FloatPanel {
         return leadRow(glyph, name, meta);
     }
 
-    /** A workspace's monogram in its icon slot: its letters in its colour, bold, filling the 16dp square. */
     protected final TextView monogram(String letters, int colour) {
         TextView mark = text(letters, letters.length() > 1 ? 9 : 11, colour);
         mark.setTypeface(face(700));
@@ -439,7 +421,6 @@ public abstract class FloatPanel {
         return row;
     }
 
-    /** An action as a menu row: its name in the row's voice. */
     protected final TextView button(String label, Runnable action) {
         TextView button = rowText(label);
         rowStyle(button);
@@ -448,7 +429,7 @@ public abstract class FloatPanel {
         return button;
     }
 
-    /** A section rule (.ui-section + .ui-section): a hairline of --tint across the whole panel, 6dp each side. */
+    /** .ui-section + .ui-section. */
     protected final View rule() {
         View rule = new View(context);
         rule.setBackgroundColor(TINT);
@@ -459,7 +440,6 @@ public abstract class FloatPanel {
     }
 
     protected final EditText input(String hint) {
-        // The search section (.ui-search): no box, --text-row, the hint muted; its rule follows it.
         EditText field = new EditText(context);
         field.setTypeface(face(400));
         field.setTextSize(13.5f);
@@ -509,7 +489,6 @@ public abstract class FloatPanel {
         }
     }
 
-    /** A note (.ui-note[data-note=menu]): --text-caption at row padding, muted, or the foreground for an error. */
     protected final void line(String value, int color) {
         TextView view = text(value, 12, color);
         view.setLineSpacing(0, 1.35f);
@@ -525,25 +504,22 @@ public abstract class FloatPanel {
 
     @FunctionalInterface protected interface HubCall<T> { T run() throws ConduitHubClient.Failure; }
 
-    /** The last answer to each panel's list, so a panel opens at its full size and does not grow mid-rise. */
+    /** So a panel opens at its full size and does not grow mid-rise. */
     private static final java.util.Map<String, Object> LAST = new java.util.concurrent.ConcurrentHashMap<>();
 
-    /** The last answer for key, or null (another panel's list: Recent reads the places for their glyphs). */
     static Object last(String key) { return LAST.get(key); }
-    /** Another hub: its lists are not this one's, so none of them may show (or be chosen) while it loads. */
+    /** Another hub's lists may not show, or be chosen, while this one's load. */
     static void forget() { synchronized (LAST) { generation++; LAST.clear(); } }
-    /** Bumped by forget: an answer fetched for an earlier hub is not kept. */
+    /** An answer fetched for an earlier hub is not kept. */
     private static int generation;
     private static int generation() { synchronized (LAST) { return generation; } }
     private static void remember(int asked, String key, Object value) { synchronized (LAST) { if (asked == generation) LAST.put(key, value); } }
 
-    /** Fetches a list ahead of its panel (as the radial opens), so even a first open has its rows. */
     static <T> void warm(String key, HubCall<T> call) {
         int asked = generation();
         HUB.execute(() -> { try { remember(asked, key, call.run()); } catch (ConduitHubClient.Failure | RuntimeException ignored) {} });
     }
 
-    /** The last list at once when there is one (else Loading…), then the fresh one in its place. */
     @SuppressWarnings("unchecked")
     protected final <T> void load(String key, HubCall<T> call, Consumer<T> result, Runnable retry) {
         int ticket = ++request;

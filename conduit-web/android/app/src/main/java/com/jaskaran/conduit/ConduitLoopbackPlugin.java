@@ -17,11 +17,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 
-/**
- * Catches the end of a provider sign-in (loopback.ts): listens on this device's loopback port while the system
- * browser signs in, answers the first request that carries a query, and hands its URL back. Loopback only; the
- * URL carries an authorization code, so it is never logged.
- */
+/** Loopback only; the URL carries an authorization code, so it is never logged. */
 @CapacitorPlugin(name = "ConduitLoopback")
 public class ConduitLoopbackPlugin extends Plugin {
     private static final int DEADLINE_MS = 10 * 60 * 1000;

@@ -1,5 +1,4 @@
-//! A picture of the page as the webview draws it (the feedback tool's screenshot), as PNG bytes. WebView2 takes it
-//! itself (CapturePreview), so nothing asks the person which window to share.
+//! WebView2 takes the picture itself (CapturePreview), so nothing asks the person which window to share.
 
 use tauri::ipc::Response;
 

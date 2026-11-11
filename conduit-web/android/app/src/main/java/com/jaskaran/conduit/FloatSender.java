@@ -90,7 +90,6 @@ final class FloatSender {
                                     byte[] bytes;
                                     File file = photos.get(i);
                                     try (FileInputStream in = new FileInputStream(file)) { bytes = in.readAllBytes(); }
-                                    // A capture's screen text travels as a text file beside its picture.
                                     boolean words = file.getName().endsWith(".txt");
                                     id = hub.uploadAttachment(chatId, bytes, words ? "text/plain" : "image/jpeg",
                                         (words ? "screen-" : "photo-") + (i + 1) + (words ? ".txt" : ".jpg"));
@@ -128,7 +127,6 @@ final class FloatSender {
     /** Remove delivery progress on success, cancel or discard; recording preferences are separate. */
     static synchronized void clearDelivery(Context context) { clearDelivery(context, null); }
 
-    /** One delivery's progress (all of them when deliveryId is null). */
     static synchronized void clearDelivery(Context context, String deliveryId) {
         SharedPreferences prefs = ConduitFloatPlugin.preferences(context);
         SharedPreferences.Editor edit = prefs.edit();

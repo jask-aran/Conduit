@@ -21,33 +21,15 @@ android {
         versionName System.getenv("CONDUIT_VERSION_NAME") ?: "0.0.0-dev"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
-             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
     buildTypes {
-        /*
-         * A debug build installs beside the released one rather than over it.
-         * Android keys an install by application id, and the two are signed by
-         * different keys, so without this a development build can only be
-         * installed by first uninstalling the real Conduit -- and the person
-         * testing is the same person relying on it. Same axis as the desktop
-         * client's `--dev`: its own id, its own name on the launcher, its own
-         * storage, so the token and the server list of one are not the other's.
-         *
-         * The launcher name comes from `src/debug/res`, which overrides main
-         * for this build type only.
-         */
+        // Its own id, so a debug build (signed by another key) installs beside the released one with its own storage.
         debug {
             applicationIdSuffix ".dev"
             versionNameSuffix "-dev"
         }
-        /*
-         * Conduit Durable: the client for the distributed-nodes head on the
-         * VPS while that branch is built -- a debug build with its own id and
-         * launcher name (src/durable/res), beside Conduit and Conduit Dev.
-         */
         durable {
             initWith debug
             applicationIdSuffix ".durable"
@@ -79,7 +61,6 @@ dependencies {
     implementation "com.google.crypto.tink:tink-android:1.23.0"
     // Float's live transcription socket (ConduitFloatLive); the app already carries the Kotlin stdlib it needs.
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
-    // The composer's camera card (ConduitCameraPlugin): the platform's camera pipeline, not the WebView's.
     implementation "androidx.camera:camera-camera2:1.4.2"
     implementation "androidx.camera:camera-lifecycle:1.4.2"
     implementation "androidx.camera:camera-view:1.4.2"

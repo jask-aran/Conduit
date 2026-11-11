@@ -14,9 +14,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Float's live preview: the recording's PCM streamed to the hub's dictation socket (/v0/dictation/stream, as the
- * app's composer does), its partial and final text handed back. It opens only when the selected voice model
- * transcribes live (/v0/voice/settings). Optional throughout: any failure ends it quietly and leaves the WAV alone.
+ * Optional throughout: any failure ends it quietly and leaves the WAV alone.
  * Protocol: wait for `ready`, send binary 16 kHz mono PCM16, then `{type:"stop", audioBytesSent}`.
  */
 final class ConduitFloatLive {
@@ -107,8 +105,6 @@ final class ConduitFloatLive {
         try {
             String token = null;
             try { token = tokenSource.get(); } catch (Exception ignored) {}
-            // The hub's paired-trust rule, as every Float request: the platform's trust, or a certificate its
-            // attestation vouches for (whose name is then not checked against the address).
             AtomicBoolean vouched = new AtomicBoolean();
             javax.net.ssl.X509TrustManager trust = ConduitWebViewClient.pairedTrust(vouched);
             javax.net.ssl.SSLContext tls = javax.net.ssl.SSLContext.getInstance("TLS");

@@ -1,12 +1,5 @@
-//! The facts the shell needs before the webview has loaded: whether closing
-//! the window means hiding it, whether Conduit starts with Windows, whether
-//! that start is a visible one, and whether this computer serves as a device.
-//!
-//! They are kept here rather than in the client's own settings because the
-//! close handler and the launch path both run before any of that is readable.
-//! The webview reads and writes them through two commands and renders them in
-//! Settings, so there is one place a person changes them and one place the
-//! shell asks.
+//! Kept here rather than in the client's own settings because the close handler and the launch path both run before
+//! the webview has loaded.
 
 use std::fs;
 use std::sync::Mutex;
@@ -15,14 +8,12 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime, State};
 use tauri_plugin_autostart::ManagerExt;
 
-/// What sits above the app: Windows' own caption, nothing (Conduit's sidebar and rail drag the window and hold its
-/// buttons), or Conduit's own bar. The two without the caption are an undecorated window.
+/// The two without Windows' caption are an undecorated window.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TitleBar {
     Native,
     None,
-    /// The default: the slimmest that still shows the hub and the window's buttons.
     #[default]
     Conduit,
 }
@@ -35,7 +26,6 @@ pub struct DesktopSettings {
     pub launch_at_login: bool,
     /// Only consulted on a launch the autostart entry made.
     pub start_hidden: bool,
-    /// Run the node role in the background, so a Conduit server can act here.
     pub serve_as_device: bool,
     pub title_bar: TitleBar,
 }
@@ -54,8 +44,7 @@ fn path<R: Runtime>(app: &AppHandle<R>) -> Option<std::path::PathBuf> {
 }
 
 pub fn load<R: Runtime>(app: &AppHandle<R>) -> DesktopSettings {
-    // A file that is missing, unreadable or from a future version is not worth
-    // failing a launch over: the defaults are the behaviour most people expect.
+    // A missing, unreadable or future-version file is not worth failing a launch over.
     path(app)
         .and_then(|file| fs::read_to_string(file).ok())
         .and_then(|text| serde_json::from_str(&text).ok())
@@ -71,7 +60,6 @@ fn persist<R: Runtime>(app: &AppHandle<R>, settings: &DesktopSettings) -> Result
     fs::write(file, text).map_err(|error| error.to_string())
 }
 
-/// The window's caption as the setting says: shown for Windows' own, gone for the other two.
 pub fn apply_title_bar<R: Runtime>(app: &AppHandle<R>, title_bar: TitleBar) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.set_decorations(title_bar == TitleBar::Native);
@@ -100,10 +88,8 @@ pub fn set_desktop_settings<R: Runtime>(
     state: State<'_, Store>,
     settings: DesktopSettings,
 ) -> Result<DesktopSettings, String> {
-    // The OS registration is the authority on launch-at-login, so it is changed
-    // first and its failure is reported rather than written down as success.
-    // Only when it changes: disabling what was never registered fails on
-    // Windows ("cannot find the file specified"), and so did every save.
+    // The OS registration is the authority, so it is changed first and its failure reported. Only when it changes:
+    // disabling what was never registered fails on Windows ("cannot find the file specified").
     let autostart = app.autolaunch();
     if autostart.is_enabled().unwrap_or(!settings.launch_at_login) != settings.launch_at_login {
         if settings.launch_at_login {

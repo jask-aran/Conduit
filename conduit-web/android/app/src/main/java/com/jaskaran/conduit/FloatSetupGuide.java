@@ -7,10 +7,8 @@ import android.widget.Toast;
 import java.util.function.BooleanSupplier;
 
 /**
- * Float's setup, while a step's Settings page is open: a toast saying what to tap there, and a watch for the step
- * being done that brings Conduit straight back. Settings lets no app open its own Accessibility entry or point at a
- * row, and hides every app's overlay over these pages (they are guarded against tapjacking), so a toast, which the
- * system draws, is the one way to say it there. Main thread only.
+ * Settings hides every app's overlay over these pages (tapjacking guard), so a toast, which the system draws, is the
+ * one way to say what to tap there. Main thread only.
  */
 final class FloatSetupGuide {
     private static final long POLL_MS = 300, GIVE_UP_MS = 5 * 60_000;
@@ -22,7 +20,6 @@ final class FloatSetupGuide {
 
     FloatSetupGuide(Context context) { this.context = context.getApplicationContext(); }
 
-    /** line: what to tap (none for a page that says it itself). done, when not null, is watched; true runs finished. */
     void show(String line, BooleanSupplier done, Runnable finished) {
         hide();
         if (line != null && !line.isEmpty()) Toast.makeText(context, line, Toast.LENGTH_LONG).show();
@@ -54,7 +51,7 @@ final class FloatSetupGuide {
         finished = null;
     }
 
-    /** Brings Conduit back over the Settings page: it closes what it opened, so the step's result comes through. */
+    /** Closes what it opened, so the step's result comes through. */
     static void returnToApp(Context context) {
         context.startActivity(new android.content.Intent(context, MainActivity.class)
             .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP

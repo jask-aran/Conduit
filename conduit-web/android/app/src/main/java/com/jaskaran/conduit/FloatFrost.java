@@ -10,15 +10,9 @@ import android.graphics.drawable.Drawable;
 import androidx.core.graphics.ColorUtils;
 
 /**
- * v2's .ui-frost for Float's own windows, the native phone composer's recipe (ConduitComposerPlugin.Frost): the fill is
- * white at 17% (--frost-fill) over the ground, a hairline of white at 30% over that fill, and the inset highlights,
- * white at 50% on top and 10% underneath, starting inside the border. There is no sheen gradient.
- *
- * Float floats over other apps, not over Conduit's page, so its ground is not known: with the system's cross-window
- * blur on, the window blurs what is behind it and the ground is the dark core at 50% over that blur (so what is behind
- * still reads through, as it does behind the app's popovers); without it the
- * ground is the composer's own page sample (#131216), giving the composer's flat #3b3a3d. The window's blur follows
- * this drawable's outline, so it reports its rounded rect.
+ * .ui-frost for Float's own windows, as ConduitComposerPlugin.Frost draws it. Float floats over other apps, so its
+ * ground is not known: with cross-window blur it is the dark core at 50% over that blur, without it the composer's
+ * page sample (#131216). The window's blur follows this drawable's outline, so it reports its rounded rect.
  */
 final class FloatFrost extends Drawable {
     private static final int GROUND = 0xff131216, GROUND_OVER_BLUR = 0x80131216, FILL = 0x2bffffff;
@@ -26,11 +20,11 @@ final class FloatFrost extends Drawable {
     private final RectF box = new RectF();
     private final Path inside = new Path(), shifted = new Path(), highlight = new Path();
     private final float line;
-    /** Corner radius in pixels; a negative radius is fully round (half the short side). */
+    /** Pixels; negative is fully round. */
     private final float radius;
     private boolean blurred;
     private int alpha = 255;
-    /** A blurred screenshot at 1/BACKDROP_SCALE size, and where this drawable's window sits on screen. */
+    /** At 1/BACKDROP_SCALE size. */
     private android.graphics.Bitmap backdrop;
     private int originX, originY;
     static final int BACKDROP_SCALE = 8;
@@ -38,20 +32,15 @@ final class FloatFrost extends Drawable {
     private final android.graphics.Rect source = new android.graphics.Rect();
     private final Path clip = new Path();
 
-    /**
-     * Lifted: Float's own controls (the radial's slots), as bright as its handle: over the blurred screen, the
-     * handle's ground (#3a3b3f) at 80% before the white fill, so a dark screen behind does not sink them.
-     */
+    /** The handle's ground under the fill, so a dark screen behind does not sink the radial's slots. */
     private boolean lifted;
-    /** Over Samsung's live blur (FloatLiveBlur), which carries the ground as its tint: only the white fill is drawn. */
+    /** Samsung's live blur carries the ground as its tint, so only the white fill is drawn. */
     private boolean live;
     void setLive(boolean live) { this.live = live; invalidateSelf(); }
     void setLifted(boolean lifted) { this.lifted = lifted; invalidateSelf(); }
     private static final int LIFT = 0x8c3a3b3f;
 
-    /** Draws this blurred screenshot behind the frost, as backdrop-filter does; null goes back to the ground. */
     void setBackdrop(android.graphics.Bitmap blurredScreen) { backdrop = blurredScreen; invalidateSelf(); }
-    /** Where the window's top-left is on screen, in pixels, so the right part of the backdrop shows. */
     void setOrigin(int x, int y) { if (x != originX || y != originY) { originX = x; originY = y; invalidateSelf(); } }
 
     /** Three box passes over the bitmap in place, horizontally then vertically each time: close to a Gaussian. */
@@ -122,7 +111,6 @@ final class FloatFrost extends Drawable {
         canvas.drawPath(highlight, paint);
     }
 
-    /** .ui-frost over a real backdrop: the blurred screen, white 17% over it, the hairline and highlights as tints. */
     private void drawOverBackdrop(Canvas canvas, float r) {
         android.graphics.Rect bounds = getBounds();
         clip.reset();

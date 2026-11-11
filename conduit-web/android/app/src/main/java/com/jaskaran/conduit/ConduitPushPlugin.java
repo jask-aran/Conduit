@@ -48,8 +48,8 @@ public class ConduitPushPlugin extends Plugin {
     }
 
     /**
-     * A notification tap, from a cold start or while running. Kept until the page consumes it, so a tap that started
-     * the app before the page could listen is not lost; `opened` only tells a running page to look.
+     * Kept until the page consumes it, so a tap that started the app before the page could listen is not lost;
+     * `opened` only tells a running page to look.
      */
     public static void handleIntent(Activity activity, Intent intent) {
         if (intent == null || !intent.hasExtra(INSTANCE) || !intent.hasExtra(PATH)) return;

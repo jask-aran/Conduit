@@ -16,11 +16,7 @@ import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.widget.TextView;
 
-/**
- * Float's caption: the words heard so far, live, in a frosted card beside the pill (above it when the pill sits low on
- * the screen, below when high), on the same edge. Its own overlay window, so it has its own blur and never takes a touch.
- * It shows the latest few lines; older words leave from the top behind an ellipsis.
- */
+/** Its own overlay window, so it has its own blur. */
 final class ConduitFloatCaption {
     private static final int LINES = 3;
     private static final float WIDTH = 248, GAP = 8, PAD_X = 14, PAD_Y = 9;
@@ -32,7 +28,6 @@ final class ConduitFloatCaption {
     private final TextView text, header;
     private final android.widget.LinearLayout card;
     private final GradientDrawable frost = new GradientDrawable();
-    /** Samsung's live blur behind the card (FloatLiveBlur), with the frost on the card over it. */
     private boolean live;
     private boolean shown;
 
@@ -43,7 +38,6 @@ final class ConduitFloatCaption {
         text.setLineSpacing(0, 1.15f);
         text.setTextColor(0xffe8e9eb);
         text.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        // Where the words go, as the app's labels: Paper Mono 10, uppercase, tracked, muted.
         header = new TextView(context);
         header.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 10);
         header.setAllCaps(true);
@@ -84,10 +78,6 @@ final class ConduitFloatCaption {
 
     private int dp(float value) { return Math.round(value * context.getResources().getDisplayMetrics().density); }
 
-    /**
-     * Shows words beside the pill. right: the edge it sits on; x: its distance from that edge; pillY and pillHeight
-     * its place; screenHeight the room Float has; blurred whether cross-window blur is on.
-     */
     void show(String words, String to, boolean right, int x, int pillY, int pillHeight, int screenHeight, boolean blurred) {
         words = words == null ? "" : words.trim();
         header.setText(to == null ? "" : to);
@@ -97,7 +87,6 @@ final class ConduitFloatCaption {
         String tail = tail(words, inner);
         TextPaint paint = text.getPaint();
         StaticLayout layout = StaticLayout.Builder.obtain(tail, 0, tail.length(), paint, inner).setLineSpacing(0, 1.15f).build();
-        // As wide as its words need, up to the card's width.
         float widest = 0;
         for (int i = 0; i < layout.getLineCount(); i++) widest = Math.max(widest, layout.getLineWidth(i));
         float headerWidth = header.getVisibility() == View.VISIBLE ? header.getPaint().measureText(header.getText().toString().toUpperCase()) * 1.07f : 0;
@@ -127,7 +116,6 @@ final class ConduitFloatCaption {
         }
     }
 
-    /** The last LINES lines of the words, older ones dropped from the front behind an ellipsis. */
     private String tail(String words, int inner) {
         TextPaint paint = text.getPaint();
         StaticLayout layout = StaticLayout.Builder.obtain(words, 0, words.length(), paint, inner).build();

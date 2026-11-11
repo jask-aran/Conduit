@@ -44,12 +44,8 @@ import java.util.Date;
 import java.util.Locale;
 
 /**
- * The composer's camera card (the web's Viewfinder, components/ui/viewfinder.tsx, drawn natively): CameraX's own
- * preview and capture in a card over the page's foot, picture in picture, so the picture is the camera pipeline's,
- * clear and at full rate, not the WebView's. Close at its start, the shutter in its middle, Flip at its end, Full
- * camera in its top corner. open() resolves { file } (a JPEG in the cache, read by the page as a photo), { full: true }
- * (hand over to the platform's camera app), { failed: true } (no camera here), or {} (closed). Its corners are
- * concentric with the pills inset in it; it rises in on the gentle arrive curve and leaves the way it came, quick.
+ * The web's Viewfinder (components/ui/viewfinder.tsx) drawn natively over the page, so the picture is the camera
+ * pipeline's, clear and at full rate, not the WebView's.
  */
 @CapacitorPlugin(name = "ConduitCamera", permissions = { @Permission(alias = "camera", strings = { Manifest.permission.CAMERA }) })
 public class ConduitCameraPlugin extends Plugin {
@@ -100,7 +96,6 @@ public class ConduitCameraPlugin extends Plugin {
         return shape;
     }
 
-    /** A frost pill as the page draws one: white 17% over the picture, its one light stroke, a light glyph. */
     private ImageButton pill(int icon, String label, View.OnClickListener click) {
         ImageButton button = new ImageButton(getContext());
         button.setImageResource(icon);
@@ -151,7 +146,6 @@ public class ConduitCameraPlugin extends Plugin {
         end.setMargins(0, 0, dp(INSET), dp(INSET + (SHUTTER - PILL) / 2));
         card.addView(pill(R.drawable.camera_flip, "Flip camera", view -> { front = !front; bind(); }), end);
 
-        // The shutter: a light disc in a frost ring, the one solid control.
         View shutter = new View(activity);
         GradientDrawable ring = circle(0x00000000, 0);
         ring.setStroke(dp(2), 0x2bffffff);
@@ -172,7 +166,6 @@ public class ConduitCameraPlugin extends Plugin {
         middle.setMargins(0, 0, 0, dp(INSET));
         card.addView(shutter, middle);
 
-        // Placed over the page's foot: inset from the sides, above the navigation bar, 3:4 within the room there is.
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(root);
         Insets bars = insets == null ? Insets.NONE : insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
         int width = root.getWidth() - 2 * dp(INSET);
@@ -237,7 +230,6 @@ public class ConduitCameraPlugin extends Plugin {
         });
     }
 
-    /** Leaves the way it came (quick, on the leaving curve), releases the camera and answers the page. */
     private void leave(JSObject answer) {
         if (card == null || leaving) return;
         leaving = true;

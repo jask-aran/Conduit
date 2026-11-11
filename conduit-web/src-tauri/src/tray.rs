@@ -1,12 +1,9 @@
-//! The tray is functional chrome, not a second way to navigate Conduit: four
-//! actions, and the ones that mean something inside the app are handed to the
-//! client's own command registry rather than reimplemented here.
+//! Actions that mean something inside the app are handed to the client's command registry, not reimplemented here.
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
-/// What the client listens for. One event, one payload-free command name.
 pub const NEW_CHAT_EVENT: &str = "desktop://new-chat";
 pub const CHECK_FOR_UPDATES_EVENT: &str = "desktop://check-for-updates";
 
@@ -25,8 +22,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         .icon(app.default_window_icon().cloned().expect("the bundle ships a window icon"))
         .tooltip(&name)
         .menu(&menu)
-        // Left click restores the window; the menu is the right-click gesture,
-        // so a click never has to be aimed at a menu the person did not want.
+        // Left click restores the window; the menu is right-click only.
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" => reveal(app),
@@ -40,9 +36,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
                 reveal(app);
                 let _ = app.emit(CHECK_FOR_UPDATES_EVENT, ());
             }
-            // The only way out when the close button hides. The keys the shell
-            // took from the whole system are given back before the process
-            // ends, so quitting never leaves a chord claimed by nothing.
+            // Global shortcuts are released before the process ends, so no chord is left claimed by nothing.
             "quit" => {
                 crate::global_shortcuts::release(app);
                 app.exit(0)
@@ -63,9 +57,8 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     Ok(())
 }
 
-/// One window state, reached the same way from every path: shown, unminimized,
-/// focused. A restore that leaves the window behind another one reads as a
-/// launch that did nothing.
+/// Shown, unminimized and focused from every path: a restore left behind another window reads as a launch that did
+/// nothing.
 pub fn reveal<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();

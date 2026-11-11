@@ -23,15 +23,9 @@ import android.view.WindowManager;
 import android.view.animation.PathInterpolator;
 
 /**
- * Float's radial: what a tap on the handle opens. One arc of six slots inward from Float's edge, centred on the handle:
- * jbot, New chat, Workspace, Recent, then (a slightly wider gap) Screenshot and Camera. Every slot is a tap target at
- * full strength. While captures are held, a ✕ sits under their card (FloatCaptures), in the column along the edge.
- * See docs/plans/float.md and the design sheet it links.
- *
  * One window draws everything (slots, names, ✕), so moving them is drawing, not relayouting windows, and the window
- * takes touches (Android caps an untouchable overlay at 80% opacity). Its frost draws the screen behind it, blurred,
- * when the screen reader can take it (FloatFrost's backdrop). While dictating only Screenshot and Camera stay, and the
- * window shrinks to them so the app underneath keeps its touches.
+ * takes touches (Android caps an untouchable overlay at 80% opacity). While dictating it shrinks to the row so the app
+ * underneath keeps its touches.
  */
 final class FloatRadial {
     enum Slot {
@@ -48,31 +42,21 @@ final class FloatRadial {
         void chosen(Slot slot);
         /** A tap outside every slot. The radial has started closing. */
         void dismissed();
-        /** The ✕ under the held captures. */
         void discard();
-        /** The dictation's target bubble: choose where the words go instead. */
         void retarget();
-        /**
-         * The handle, under this window while it is open, held still (Hold to talk): a hold dictation begins. The
-         * radial stays the touch's window until it is let go.
-         */
+        /** The radial stays the touch's window until it is let go. */
         void handleHeld();
-        /** That hold let go; cancelled when let go well away from where it began. */
         void handleReleased(boolean cancelled);
     }
 
     private static final Slot[] SLOTS = Slot.values();
-    /** dp: the arc's radius, a slot's diameter, the ✕'s, the margin kept from the screen's edges. */
+    /** dp. */
     private static final float RADIUS = 108, SLOT = 40, DISCARD = 24, MARGIN = 10;
-    /** dp the arc's centre sits under the handle's: the arc swings back toward the edge at the bottom, below the ✕. */
+    /** dp the arc's centre sits under the handle's, so the arc swings back toward the edge below the ✕. */
     private static final float DROP = 40;
-    /**
-     * Degrees from the inward direction around a centre DROP under the handle, top first: four targets 32° apart, a
-     * 38° step to the context pair. Symmetric: jbot and Camera both end at the screen's edge, the column of held
-     * captures and ✕ inside the arc between them.
-     */
+    /** Degrees from inward, top first. Symmetric, so jbot and Camera both end at the screen's edge. */
     private static final float[] ANGLES = { 86, 54, 22, -10, -48, -86 };
-    /** v2's popover motion: rise in on --ease-arrive over --duration-gentle, drop out on --ease-leave over --duration-quick. */
+    /** The popover's motion: in on --ease-arrive over --duration-gentle, out on --ease-leave over --duration-quick. */
     private static final long OPEN_MS = 250, CLOSE_MS = 150, STAGGER_MS = 18, DICTATE_MS = 220;
     private static final int ICON = 0xffe8e9eb;
 
@@ -82,7 +66,6 @@ final class FloatRadial {
     private final Listener listener;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Dialog dialog;
-    /** The full-screen window (the open arc), and the small one the dictation's row is handed to. */
     private final Surface surface;
     private final Surface[] rowSurfaces = new Surface[3];
     private final Dialog[] rowDialogs = new Dialog[3];
@@ -95,17 +78,12 @@ final class FloatRadial {
     private Mode mode = Mode.CLOSED;
     private boolean right, held, labels;
     private float anchorX, anchorY, discardX, discardY;
-    /** 0 closed .. 1 open (time through the open or close motion); dictation 0 .. 1 as the targets leave. */
     private float shown, dictated;
     private boolean closing;
     private Slot chosen, pressed;
     private boolean pressedDiscard;
     private float downX, downY;
-    /**
-     * A touch that began on the handle (this window covers it while open): a tap closes, as a tap elsewhere does; held
-     * still for HOLD_MS with Hold to talk on, it is the handle's hold. Until it lifts, the row's hand-off to its small
-     * windows waits, since closing this window would lose the touch.
-     */
+    /** While handleDown, the row's hand-off to its small windows waits: closing this window would lose the touch. */
     private boolean handleDown, handleHeld, shrinkPending;
     private static final long HOLD_MS = 250;
     private final Runnable holdStart = this::startHold;
@@ -185,10 +163,7 @@ final class FloatRadial {
         view.animate().alpha(1).setDuration(180).setInterpolator(new PathInterpolator(.2f, .8f, .2f, 1f)).start();
     }
 
-    /**
-     * A capture landing while the arc is open: the flash and the copy flying into the card drawn in this window,
-     * under the slots, so the arc stays in sight (FloatShot's window would cover it). done runs once it has landed.
-     */
+    /** Drawn in this window, under the slots, so the arc stays in sight (FloatShot's window would cover it). */
     boolean playShot(Bitmap copy, boolean flash, android.graphics.Rect card, Runnable done) {
         if (mode != Mode.OPEN || closing || !dialog.isShowing()) return false;
         if (shotMotion != null) shotMotion.cancel();
@@ -218,7 +193,6 @@ final class FloatRadial {
     private final android.graphics.RectF shotBox = new android.graphics.RectF();
     private final android.graphics.Path shotClip = new android.graphics.Path();
 
-    /** FloatShot's drawing, in screen pixels: the copy from the full screen into the card, then the flash over it. */
     private void paintShot(Canvas canvas) {
         if (shotT < 0) return;
         int w = surface.getWidth(), h = surface.getHeight();
@@ -255,10 +229,6 @@ final class FloatRadial {
     boolean isOpen() { return mode == Mode.OPEN && !closing; }
     boolean isDictating() { return mode == Mode.DICTATING; }
 
-    /**
-     * Opens around the handle. right: Float sits on the right edge; centreX/centreY: the handle's centre in screen
-     * pixels; screen: the whole screen in pixels; held: captures are held (the ✕ shows under their card at discardX/Y).
-     */
     void open(boolean right, float centreX, float centreY, int screenWidth, int screenHeight, boolean held, float[] discardCentre) {
         if (mode == Mode.OPEN && !closing) return;
         cancelMotion();
@@ -275,7 +245,7 @@ final class FloatRadial {
         mode = Mode.OPEN;
         closing = false;
         shown = 0;
-        // The frost's ground: the screen as it is now, before anything of the radial is on it.
+        // The frost's backdrop is taken before anything of the radial is on screen.
         int ticket = ++request;
         ConduitScreenReader reader = ConduitScreenReader.instance;
         if (!LIVE && backdrop == null && reader != null && Build.VERSION.SDK_INT >= 30 && ConduitContext.screenReaderOn(context)) {
@@ -293,7 +263,7 @@ final class FloatRadial {
     private void reveal() {
         if (mode == Mode.CLOSED) return;
         if (!dialog.isShowing()) dialog.show();
-        // Back from a dictation's row: the full window is up and drawing, so the row's can go.
+        // The row windows go only once the full window is drawing.
         if (rowShowing()) surface.postOnAnimation(() -> { if (mode != Mode.DICTATING) dismissRows(); });
         if (mode == Mode.OPEN) animateShown(1, OPEN_MS);
     }
@@ -305,25 +275,21 @@ final class FloatRadial {
         invalidateAll();
     }
 
-    /** Captures came or went while open: the ✕ follows. */
     void setHeld(boolean held, float[] discardCentre) {
         this.held = held;
         if (discardCentre != null) { discardX = discardCentre[0]; discardY = discardCentre[1]; }
         invalidateAll();
     }
 
-    /** Out of sight for a capture (a frame or two), then back exactly as it was. */
     void setHidden(boolean hidden) {
-        // Back after the capture: faded in with the shutter's flash, not popped.
         if (dialog.isShowing()) reappear(surface, hidden);
         for (int k = 0; k < 3; k++) if (rowDialogs[k].isShowing()) reappear(rowSurfaces[k], hidden);
         // The screen changes under a screenshot's flash; the next open takes a fresh backdrop.
         if (!hidden && mode == Mode.CLOSED) setBackdrop(null);
     }
 
-    /** The arc, turned away from the screen's top or bottom just enough that every slot stays on it. */
     private void layout(int width, int height) {
-        // Top and bottom keep MARGIN; the sides only Float's own edge gap (the arc's ends sit at the screen's edge).
+        // The sides keep only Float's edge gap: the arc's ends sit at the screen's edge.
         float margin = dp(MARGIN) + dp(SLOT) / 2f, side = dp(FloatWindow.EDGE) + dp(SLOT) / 2f - dp(1);
         float towardMiddle = anchorY < height / 2f ? -1 : 1;
         for (float turn = 0; turn <= 80; turn += 4) {
@@ -336,7 +302,7 @@ final class FloatRadial {
         place(0);
     }
 
-    /** turn: degrees the whole arc turns, positive toward the top. */
+    /** turn: degrees, positive toward the top. */
     private void place(float turn) {
         for (int i = 0; i < SLOTS.length; i++) {
             double a = Math.toRadians(ANGLES[i] + turn);
@@ -346,13 +312,9 @@ final class FloatRadial {
         }
     }
 
-    /**
-     * jbot or New chat was chosen: the chosen slot flies into the pill's start (pillX, pillY: its target glyph), the
-     * other targets shrink away, and Screenshot and Camera stay where they are for the dictation.
-     */
     void dictate(Slot slot) {
         if (mode != Mode.OPEN) return;
-        // From wherever each slot is this instant (the arc may still be opening): no jump to the arc first.
+        // From wherever each slot is this instant: the arc may still be opening.
         for (int i = 0; i < SLOTS.length; i++) {
             float p = progress(i);
             startX[i] = anchorX + (slotX[i] - anchorX) * p;
@@ -360,8 +322,6 @@ final class FloatRadial {
             startAlpha[i] = Math.min(1, p * 1.6f);
             startScale[i] = .7f + .3f * p;
         }
-        // The dictation's row under the pill, beside the captures' column: the target (tap it to send elsewhere),
-        // then Screenshot and Camera.
         float inward = right ? -1 : 1;
         for (int k = 0; k < 3; k++) { rowX[k] = anchorX + inward * dp(ROW_START + k * ROW_STEP); rowY[k] = anchorY + dp(ROW_DOWN); }
         cancelMotion();
@@ -385,13 +345,12 @@ final class FloatRadial {
         });
         dictation.start();
     }
-    /** dp: the row's distance under the handle's centre, its first slot's from the handle's centre, the step. */
+    /** dp. */
     private static final float ROW_DOWN = 50, ROW_START = 44, ROW_STEP = 48;
     private final float[] rowX = new float[3], rowY = new float[3];
     private final float[] startX = new float[SLOTS.length], startY = new float[SLOTS.length],
         startAlpha = new float[SLOTS.length], startScale = new float[SLOTS.length];
 
-    /** The row position of slot i while dictating, or -1 when it has none (the targets not chosen). */
     private int rowOf(int i) {
         if (SLOTS[i] == chosen) return 0;
         if (SLOTS[i] == Slot.SCREENSHOT) return 1;
@@ -399,7 +358,6 @@ final class FloatRadial {
         return -1;
     }
 
-    /** Retargeted while dictating: the bubble shows the new target's icon. */
     void setTargetIcon(int icon) {
         targetIcon = context.getDrawable(icon).mutate();
         targetIcon.setTint(ICON);
@@ -407,12 +365,10 @@ final class FloatRadial {
     }
     private Drawable targetIcon;
 
-    /** Dictating: the window covers only Screenshot and Camera, so the rest of the screen is the app's again. */
     private void shrinkToContext() {
         if (mode != Mode.DICTATING) return;
-        // Not a resize of the full window (the system moves a window a frame before it redraws, so they would jump):
-        // each of the three goes to a small window of its own, and once those have drawn, the
-        // full-screen one goes.
+        // Not a resize: the system moves a window a frame before it redraws, so the slots would jump. Small windows
+        // draw first, then the full-screen one goes.
         int half = dp(SLOT) / 2 + dp(4);
         for (int k = 0; k < 3; k++) {
             Window window = rowDialogs[k].getWindow();
@@ -437,7 +393,6 @@ final class FloatRadial {
         });
     }
 
-    /** Closes with the drop motion (from the open arc or the dictation's pair). */
     void close() {
         if (mode == Mode.CLOSED || closing) return;
         if (dictation != null) dictation.cancel();
@@ -453,8 +408,7 @@ final class FloatRadial {
         closing = false;
         shown = 0;
         chosen = pressed = null;
-        // A touch still down on the handle goes with it: its lift will not come here, so a hold it began is ended
-        // now (cancelled), where it used to stay open until the pill's Send.
+        // A touch still down on the handle will not deliver its lift here, so its hold ends now, cancelled.
         main.removeCallbacks(holdStart);
         boolean held = handleHeld;
         handleDown = handleHeld = shrinkPending = false;
@@ -491,7 +445,6 @@ final class FloatRadial {
         motion.start();
     }
 
-    /** How far slot i is through the open or close motion, eased; each slot on its own small delay. */
     private float progress(int i) {
         long total = (closing ? CLOSE_MS : OPEN_MS) + STAGGER_MS * (SLOTS.length - 1);
         float span = 1 - STAGGER_MS * (SLOTS.length - 1) / (float) total;
@@ -514,7 +467,6 @@ final class FloatRadial {
     }
 
     private boolean onDiscard(float x, float y) {
-        // The touch target is larger than the ✕ drawn: 22dp out from its centre.
         return held && mode == Mode.OPEN && Math.hypot(x - discardX, y - discardY) <= dp(22);
     }
 
@@ -568,7 +520,6 @@ final class FloatRadial {
         }
     }
 
-    /** The handle's touch lifted: a hold ends (sent, or cancelled away from it), a tap closes. */
     private void liftHandle(boolean away, boolean moved) {
         main.removeCallbacks(holdStart);
         boolean held = handleHeld;
@@ -599,10 +550,9 @@ final class FloatRadial {
             if (mode == Mode.DICTATING) {
                 int k = rowOf(i);
                 x = startX[i]; y = startY[i]; alpha = startAlpha[i]; scale = startScale[i];
-                // Closing from the dictation's row: they fade where they are (the row's window is only that big).
+                // Closing from the row they fade in place: the row's window is only that big.
                 float fade = closing ? shown : 1;
                 if (k >= 0) {
-                    // Into the row under the pill, on the rise curve, coming up to full as it goes.
                     x += (rowX[k] - x) * dictateIn;
                     y += (rowY[k] - y) * dictateIn;
                     alpha += (1 - alpha) * dictateIn;
@@ -626,7 +576,6 @@ final class FloatRadial {
             float x = labelX[i], y = labelY[i], slot = labelSize[i], alpha = labelAlpha[i];
             if (alpha > .01f && mode != Mode.DICTATING) {
                 names.setAlpha(Math.round(255 * alpha * .92f));
-                // Outward along the slot's own direction from the handle, so a name never lies over its neighbour.
                 float w = names.measureText(SLOTS[i].label), dx = x - anchorX, dy = y - anchorY;
                 float len = Math.max(1, (float) Math.hypot(dx, dy)), ux = dx / len, uy = dy / len;
                 float reach = slot / 2f + dp(7), px = x + ux * reach, py = y + uy * reach;
@@ -675,10 +624,7 @@ final class FloatRadial {
         icon.draw(canvas);
     }
 
-    /**
-     * A window's drawing: with Samsung's live blur, a pool of glass children (each one blurring what is behind its
-     * disc), placed under every round this frame draws; the slots are painted over them.
-     */
+    /** With Samsung's live blur, a pool of glass children is placed under every round this frame draws. */
     private final class Surface extends android.widget.FrameLayout {
         private final java.util.List<View> glass = new java.util.ArrayList<>();
         private final int row;
@@ -702,7 +648,6 @@ final class FloatRadial {
             super.dispatchDraw(canvas);
             canvas.drawRenderNode(content);
         }
-        /** Puts the next glass disc at (x, y) in this window, size across, at alpha. */
         void glass(float x, float y, float size, float alpha) {
             int base = dp(SLOT);
             if (used == glass.size()) {
@@ -723,7 +668,6 @@ final class FloatRadial {
         @Override public boolean onTouchEvent(MotionEvent event) { return touch(event); }
     }
 
-    /** Samsung's live blur behind each round, in place of the screenshot backdrop. */
     private static final boolean LIVE = FloatLiveBlur.available();
     private View drawingOn;
 }

@@ -23,7 +23,6 @@ import static com.jaskaran.conduit.FloatWindow.PILL;
 import static com.jaskaran.conduit.FloatWindow.HANDLE_W;
 import com.jaskaran.conduit.FloatMachine.State;
 
-/** One bounded overlay window, with separate accessible Cancel and Stop buttons. */
 final class FloatView extends FrameLayout {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint text = new TextPaint(Paint.ANTI_ALIAS_FLAG);
@@ -32,15 +31,12 @@ final class FloatView extends FrameLayout {
     private float downX, downY;
     private int initialX, initialY;
     private boolean dragging, moved;
-    /* The Aura, as the app's (components/ui/pill.tsx): a mesh of five coloured blobs behind the frost, each circling near
-       its edge, every point their blend by distance with the hue held. Drawn small and scaled up; the level turns them
-       faster, brightens them and moves their balance. It shows while recording and drains after. */
+    /* The Aura, as the app's (components/ui/pill.tsx). */
     private final float[][] blobs = { // from (deg), l, c, h, orbit (s a turn), swell
         { 180, .58f, .2f, 290, 7, .5f }, { 300, .64f, .21f, 22, -9, -.35f }, { 60, .64f, .23f, 345, 11, .6f },
         { 0, .74f, .17f, 62, -13, .45f }, { 125, .6f, .2f, 315, 8, -.3f } };
     private final float[] turns = { 0, 1.3f, 2.6f, 3.9f, 5.2f };
-    /* Scale: the blobs' size against the surface (the app's is 1); tempo: how fast they turn. At the app's size they
-       blend into one still gradient across a pill this small, so Float's are smaller and quicker. */
+    /* At the app's scale (1) the blobs blend into one still gradient across a pill this small. */
     private static final float AURA_SCALE = .45f, AURA_TEMPO = 2.2f;
     private Bitmap aura;
     private int[] auraPixels;
@@ -83,14 +79,10 @@ final class FloatView extends FrameLayout {
         void onSend();
         void onRetry();
         void onDragEnded();
-        /** Held still at rest for HOLD_MS, with Hold to talk on: a hold begins (the recorder pill opens). */
         void onHoldStart();
-        /** The held finger moved, in screen pixels. */
         void onHoldMove(float rawX, float rawY);
-        /** The hold let go; cancelled when dragged well away first, or when the system took the gesture away. */
         void onHoldEnd(boolean cancelled);
     }
-    /** How long a still press at rest waits before it is a hold rather than a tap. */
     private static final long HOLD_MS = 250;
     private boolean holding;
     private final Runnable holdStart = () -> {
@@ -105,13 +97,11 @@ final class FloatView extends FrameLayout {
     private State state = State.HANDLE;
     private String errorText = "Couldn't send — open Conduit";
     private float level;
-    /** How many captures (screenshots, photos) Float is holding for the next message; shown as a badge at rest. */
     private int gathered;
     private final Paint badgePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final android.text.TextPaint badgeText = new android.text.TextPaint(Paint.ANTI_ALIAS_FLAG);
     void setGathered(int count) { if (gathered != count) { gathered = count; invalidate(); } }
 
-    /** Where the recording goes (its bubble sits under the pill, the radial's): for Send's spoken name. */
     void setTarget(int icon, String name) { stopButton.setContentDescription("Send to " + name); }
     private long sentAt;
 
@@ -131,7 +121,6 @@ final class FloatView extends FrameLayout {
         cancelButton.setBackground(roundButton(0x12ffffff));
         cancelButton.setOnClickListener(view -> listener.onCancel());
         addView(cancelButton);
-        // Send, as the phone composer's Stop and send: the primary button, light with a dark arrow.
         stopButton = new ImageButton(getContext());
         stopButton.setImageResource(R.drawable.float_send);
         stopButton.setImageTintList(ColorStateList.valueOf(0xff141518));
@@ -170,7 +159,6 @@ final class FloatView extends FrameLayout {
     }
 
     private void buttons() {
-        // Sending and sent are the small bubble's own drawing; the buttons are the pill's.
         cancelButton.setVisibility(state == State.RECORDING || state == State.ERROR ? VISIBLE : GONE);
         stopButton.setVisibility(state == State.RECORDING ? VISIBLE : GONE);
         stopButton.setEnabled(state == State.RECORDING);
@@ -183,7 +171,6 @@ final class FloatView extends FrameLayout {
         setMeasuredDimension(window.frameWidth, window.frameHeight);
     }
 
-    /** How far the content has faded in: it waits until the pill is mostly open, and leaves first on close. */
     private float contentAlpha() { return Math.max(0, Math.min(1, (window.openness - .45f) / .55f)); }
 
     @Override protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
@@ -205,7 +192,7 @@ final class FloatView extends FrameLayout {
         stopButton.setAlpha(contentAlpha());
     }
 
-    /** Linear light to an sRGB byte. A table of 4096 steps over 0..1: three pow() a pixel were most of the Aura's frame. */
+    /** Linear light to an sRGB byte, as a table: three pow() a pixel were most of the Aura's frame. */
     private static final byte[] GAMMA = new byte[4097];
     static {
         for (int i = 0; i <= 4096; i++) {
@@ -215,7 +202,6 @@ final class FloatView extends FrameLayout {
     }
     private static int gamma(double x) { return x <= 0 ? 0 : x >= 1 ? 255 : GAMMA[(int) (x * 4096 + .5)] & 0xff; }
 
-    /** Steps the Aura on (dt seconds) and draws it into its small bitmap; false when it has nothing to show. */
     private boolean stepAura(float w, float h) {
         long now = SystemClock.uptimeMillis();
         float dt = auraLast == 0 ? 0 : Math.min(.1f, (now - auraLast) / 1000f);
@@ -265,7 +251,6 @@ final class FloatView extends FrameLayout {
     @Override protected void onDraw(Canvas canvas) {
         float w = getWidth(), h = getHeight();
         boolean right = window.prefs().getBoolean("right", true);
-        // The Aura under everything, clipped to the pill, with the frost's sheen and lit rim over it.
         if (stepAura(w, h)) {
             float rr = Math.min(w, h) / 2;
             clip.reset();
@@ -296,8 +281,7 @@ final class FloatView extends FrameLayout {
             canvas.restore();
             postInvalidateOnAnimation();
         }
-        // The frost (fill, its one stroke, the blur) is the window's background; this draws only what sits on it.
-        // A soft top highlight, inside the stroke, as v2's inset 0 1px 0 white 50%.
+        // The frost is the window's background. The top highlight is the frost's inset 0 1px 0 white 50%.
         float r = Math.min(w, h) / 2, inset = dp(1);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(dp(1));
@@ -305,11 +289,9 @@ final class FloatView extends FrameLayout {
         canvas.drawRoundRect(inset + dp(.5f), inset + dp(.5f), w - inset - dp(.5f), h - inset - dp(.5f), r - inset, r - inset, paint);
         paint.setShader(null);
         paint.setStyle(Paint.Style.FILL);
-        // At rest: the Conduit mark in the bubble's middle, fading as it opens.
         if (window.openness < 1) {
             mark.setAlpha(Math.round(235 * (1 - Math.min(1, window.openness / .45f))));
             float cx = right ? w - dp(HANDLE_W) / 2f : dp(HANDLE_W) / 2f;
-            // With captures held, the mark steps down and smaller to make room for their count above it.
             float half = dp(gathered > 0 ? 9 : 12), cy = h / 2 + (gathered > 0 ? dp(5) : 0);
             mark.setBounds(Math.round(cx - half), Math.round(cy - half), Math.round(cx + half), Math.round(cy + half));
             mark.draw(canvas);
@@ -346,7 +328,6 @@ final class FloatView extends FrameLayout {
                 x += bar + gap;
             }
         } else if (state == State.STOPPING || state == State.SENDING) {
-            // The small bubble: a light spinner in its middle.
             paint.setColor(Color.argb(Math.round(alpha * .9f), 232, 233, 235));
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(dp(2));
@@ -357,7 +338,6 @@ final class FloatView extends FrameLayout {
             paint.setStyle(Paint.Style.FILL);
             postInvalidateOnAnimation();
         } else if (state == State.SENT) {
-            // The tick draws itself on (220ms, decelerating), then holds until Float goes back to rest.
             float t = Math.min(1, (SystemClock.uptimeMillis() - sentAt) / 220f), drawn = 1 - (1 - t) * (1 - t) * (1 - t);
             float cx = offset + width / 2f, cy = h / 2;
             tickPart.rewind();
@@ -437,7 +417,6 @@ final class FloatView extends FrameLayout {
             case MotionEvent.ACTION_UP:
                 removeCallbacks(holdStart);
                 window.lift(false);
-                // Let go after dragging well away from where the hold began: cancelled.
                 if (holding) { holding = false; listener.onHoldEnd(Math.hypot(event.getRawX() - downX, event.getRawY() - downY) > dp(80)); return true; }
                 if (dragging) listener.onDragEnded();
                 else if (state != State.HANDLE && Math.hypot(event.getRawX() - downX, event.getRawY() - downY) > dp(60)) listener.onCancel();

@@ -30,7 +30,7 @@ public class ConduitFloatPlugin extends Plugin {
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         if (!prefs.getBoolean("migrated", false)) {
             SharedPreferences.Editor edit = prefs.edit();
-            // Read the old store once; an old enabled flag must never re-enable Float later.
+            // Read "conduit-bubble" once: its enabled flag must never re-enable Float later.
             for (java.util.Map.Entry<String, ?> entry : context.getSharedPreferences("conduit-bubble", Context.MODE_PRIVATE).getAll().entrySet()) {
                 String key = entry.getKey();
                 if (prefs.contains(key)) continue;
@@ -56,7 +56,6 @@ public class ConduitFloatPlugin extends Plugin {
     }
 
 
-    /** Conduit holds the assistant role (or, before roles, is the assistant setting). */
     private boolean isAssistant() {
         if (Build.VERSION.SDK_INT >= 29) {
             android.app.role.RoleManager roles = getContext().getSystemService(android.app.role.RoleManager.class);
@@ -86,7 +85,6 @@ public class ConduitFloatPlugin extends Plugin {
 
     @PluginMethod public void status(PluginCall call) { call.resolve(view()); }
 
-    /** Hold to talk (off by default) and what a hold talks to: "jbot", or "chat" for a new chat with no project. */
     @PluginMethod public void setHold(PluginCall call) {
         android.content.SharedPreferences.Editor edit = preferences(getContext()).edit();
         if (call.hasOption("holdToTalk")) edit.putBoolean("holdToTalk", Boolean.TRUE.equals(call.getBoolean("holdToTalk")));
@@ -99,7 +97,6 @@ public class ConduitFloatPlugin extends Plugin {
         call.resolve(view());
     }
 
-    /** The side key's options: Float only on the side key, whether it screenshots, whether it dictates and to where. */
     @PluginMethod public void setSideKey(PluginCall call) {
         android.content.SharedPreferences.Editor edit = preferences(getContext()).edit();
         for (String key : new String[] { "sideKeyOnly", "sideKeyScreenshot", "sideKeyDictates" })
@@ -204,11 +201,8 @@ public class ConduitFloatPlugin extends Plugin {
         screenContextStep(call);
     }
 
-    /*
-     * The assistant (optional): Android hands it the screen when it is called, but will not let it call itself, so it
-     * is reached from a key. Make Conduit the digital assistant, then (Samsung) the side key's press and hold. Then,
-     * when this is part of turning Float on, screen context.
-     */
+    // Android hands the assistant the screen when it is called but will not let it call itself, so it is reached from
+    // a key.
     private void assistantStep(PluginCall call) {
         permissionFlow = true;
         if (isAssistant()) { sideKeyStep(call); return; }
@@ -217,7 +211,6 @@ public class ConduitFloatPlugin extends Plugin {
             "assistantReturned", this::isAssistant, () -> nextAfterAssistant(call));
     }
 
-    /** Turning Float on, or Settings' Set up: screen context, then the assistant. */
     private boolean thenAssistant;
 
     @ActivityCallback private void assistantReturned(PluginCall call, ActivityResult result) {
@@ -227,9 +220,8 @@ public class ConduitFloatPlugin extends Plugin {
     }
 
     /**
-     * Samsung keeps a long press on home for Circle to Search; its side key can call the assistant instead: press and
-     * hold opens Float with the screen already taken. Its setting is hidden from apps, so the step shows until the
-     * person has been through the page once.
+     * Samsung keeps a long press on home for Circle to Search, so the side key calls the assistant. Its setting is
+     * hidden from apps, so the step shows until the person has been through the page once.
      */
     private void sideKeyStep(PluginCall call) {
         if (!sideKeyPending()) { nextAfterAssistant(call); return; }
@@ -251,7 +243,6 @@ public class ConduitFloatPlugin extends Plugin {
 
     private void nextAfterAssistant(PluginCall call) { permissionFlow = false; call.resolve(view()); }
 
-    /** Screen context is done or skipped: on to the assistant when turning Float on, else the flow ends. */
     private void afterScreenContext(PluginCall call) {
         if (thenAssistant) { thenAssistant = false; assistantStep(call); return; }
         permissionFlow = false;
@@ -259,13 +250,9 @@ public class ConduitFloatPlugin extends Plugin {
     }
 
     /*
-     * The rest of turning Float on, one step at a time, each introduced by a short dialog that says what to tap and
-     * can be skipped: Float screen context in Accessibility, and, when that comes back still off on Android 13+, App
-     * info > ⋮ > Allow restricted settings (an app installed from an APK is restricted until then; Samsung offers the
-     * item only once the service has been tried), then Accessibility again. Whether the app is restricted is hidden
-     * from it, and a flag kept for it lies after a reinstall (Android restores the app's preferences, not the
-     * permission), so screen context being on is the only thing read. Skipping leaves Float on, without instant
-     * screenshots.
+     * On Android 13+ an app installed from an APK is restricted until App info > ⋮ > Allow restricted settings, which
+     * Samsung offers only once the service has been tried. Whether the app is restricted is hidden from it, and a kept
+     * flag lies after a reinstall (preferences are restored, the permission is not), so only screen context is read.
      */
     private boolean triedRestricted;
 
@@ -303,12 +290,8 @@ public class ConduitFloatPlugin extends Plugin {
         afterScreenContext(call);
     }
 
-    /*
-     * A step's Settings page, opened at once (its first fallback that exists) with a toast saying what to tap there,
-     * and Conduit back by itself once the step is done when Android can tell (done). Back from the page goes on to
-     * the next step, as Skip did. Settings lets no app open its Accessibility entry, point at a row or draw over these
-     * pages, so the toast is how the way there is shown.
-     */
+    // Settings lets no app open its Accessibility entry, point at a row or draw over these pages, so a toast says what
+    // to tap.
     private void step(PluginCall call, String line, Intent[] intents, String callback,
                       java.util.function.BooleanSupplier done, Runnable skip) {
         for (Intent intent : intents) {
@@ -329,7 +312,6 @@ public class ConduitFloatPlugin extends Plugin {
     private String appLabel() { return getContext().getApplicationInfo().loadLabel(getContext().getPackageManager()).toString(); }
 
 
-    /** Settings' Set up: every step Float is still missing, in order, each skippable (Float is already on). */
     @PluginMethod public void setUp(PluginCall call) {
         getActivity().runOnUiThread(() -> { thenAssistant = true; screenContextStep(call); });
     }
@@ -357,7 +339,6 @@ public class ConduitFloatPlugin extends Plugin {
         if (call != null) call.resolve(view());
     }
 
-    /** On the intent that opens the app: show Settings › Phone (Float's notification to set up screen context). */
     static final String OPEN_SETTINGS = "conduit.float.settings";
 
     @Override protected void handleOnNewIntent(Intent intent) {
@@ -366,7 +347,7 @@ public class ConduitFloatPlugin extends Plugin {
     }
 
 
-    /** The section the app was opened for, until the page takes it (a cold start opens before it is listening). */
+    /** Held until the page takes it: a cold start opens before it is listening. */
     private static String settingsWanted;
 
     private void openSettingsFrom(Intent intent) {

@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- jbot's picture on its notifications: its mark in the app (the bot glyph, Icons.Agent), white on Conduit's black.
-     Not the app icon: Android badges each notification with that already. -->
+<!-- Not the app icon: Android badges each notification with that already. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="96dp" android:height="96dp" android:viewportWidth="40" android:viewportHeight="40">
     <path android:fillColor="@color/conduit_frame" android:pathData="M0,0h40v40h-40z" />

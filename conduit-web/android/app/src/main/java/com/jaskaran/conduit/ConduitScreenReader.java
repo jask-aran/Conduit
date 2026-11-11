@@ -103,15 +103,10 @@ public final class ConduitScreenReader extends AccessibilityService {
         } finally { for (AccessibilityNodeInfo child : children) child.recycle(); }
     }
 
-    /**
-     * The screen as a frost backdrop: one screenshot, an eighth of its size, blurred (three box passes, close to a
-     * Gaussian of v2's 24px blur). Float's windows have no system blur on phones without cross-window blur (Samsung),
-     * so FloatFrost draws this behind itself instead, as backdrop-filter does in the app. Null when it cannot be had.
-     */
     /** Off the main thread: the GPU readback and blur would otherwise drop the panel's opening frames. */
     private static final java.util.concurrent.Executor BACKDROP = java.util.concurrent.Executors.newSingleThreadExecutor();
 
-    /** The screen, blurred at an eighth of its size, for Float's frost; called back on this worker thread. */
+    /** Called back on the BACKDROP thread. */
     void backdrop(java.util.function.Consumer<Bitmap> done) { backdrop(done, true); }
 
     private void backdrop(java.util.function.Consumer<Bitmap> done, boolean retry) {

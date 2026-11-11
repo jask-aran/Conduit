@@ -1,15 +1,5 @@
-//! Find Conduit servers on the network this machine is on.
-//!
-//! The shell's half of `discoverServers()`. The server publishes
-//! `_conduit._tcp` with its identity id and Ed25519 public half in the TXT
-//! record; this browses for it and hands back what was advertised without
-//! judging any of it. Which address is usable, and whether the identity is
-//! the one already paired with, are the web half's questions -- those rules
-//! live in one place and this is not it.
-//!
-//! Bounded on purpose. The browse runs for the length of the question and the
-//! daemon is dropped with it, rather than holding a multicast socket open for
-//! the life of the window to answer something nobody asked.
+//! Hands back what `_conduit._tcp` advertised without judging it: which address is usable and whether the identity is
+//! paired are the web half's questions. Each browse is bounded so no multicast socket is held for the window's life.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -22,7 +12,6 @@ const SERVICE_TYPE: &str = "_conduit._tcp.local.";
 const MIN_TIMEOUT_MS: u64 = 500;
 const MAX_TIMEOUT_MS: u64 = 10_000;
 
-/// Exactly what was advertised. Shaped into a server by the client.
 #[derive(Clone, Serialize)]
 pub struct Advertisement {
     name: String,
@@ -33,8 +22,7 @@ pub struct Advertisement {
     public_key: String,
 }
 
-/// Each server is also sent down `on_found` as it resolves, so a list can
-/// show it without waiting out the whole browse.
+/// Each server is also sent down `on_found` as it resolves, so a list need not wait out the whole browse.
 #[tauri::command]
 pub async fn discover_servers(
     timeout_ms: Option<u64>,
@@ -79,16 +67,11 @@ fn browse(window: Duration, on_found: Channel<Advertisement>) -> Result<Vec<Adve
             Err(_) => break,
         }
     }
-    // Best effort: the daemon is going away either way, and a shutdown that
-    // fails is not something the person asking "what is on this network" can
-    // do anything about.
     let _ = daemon.shutdown();
     Ok(found.into_values().collect())
 }
 
-/// The addresses a name stands for, as this machine's resolver answers: a
-/// server's name can be on this network (`lan.example.com` at 192.168.x)
-/// though only its address says so. A name that does not resolve is none.
+/// A server's name can be on this network (`lan.example.com` at 192.168.x) though only its address says so.
 #[tauri::command]
 pub async fn resolve_host(host: String) -> Vec<String> {
     tauri::async_runtime::spawn_blocking(move || {

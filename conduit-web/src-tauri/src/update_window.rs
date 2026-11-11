@@ -12,8 +12,7 @@ struct Placement {
     width: u32,
     height: u32,
     maximized: bool,
-    /// Windows stores restored outer bounds, even while maximized/minimized.
-    /// Old updater snapshots stored inner size and remain readable.
+    /// Windows stores restored outer bounds, even while maximized/minimized. Snapshots with inner size stay readable.
     #[serde(default)]
     outer: bool,
 }

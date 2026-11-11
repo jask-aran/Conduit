@@ -21,7 +21,6 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-/** Recent replies and an answer composer in one overlay window. */
 public final class FloatRecentPanel extends FloatPanel {
     public interface Listener {
         void answerByVoice(ConduitHubClient.RecentChat chat);
@@ -46,7 +45,7 @@ public final class FloatRecentPanel extends FloatPanel {
         heading("Recent", null);
     }
 
-    /** A little wider than a menu: each row carries a reply's first lines. */
+    /** Wider than a menu: each row carries a reply's first lines. */
     @Override protected int width() { return 288; }
 
     @Override protected void onOpen() { refresh(); }
@@ -55,7 +54,6 @@ public final class FloatRecentPanel extends FloatPanel {
 
     private void refresh() { load("recent", () -> hub.recentChats(20), values -> { chats = values; showList(); }, this::refresh); }
 
-    /** The chat's place: Conduit's mark for a loose chat, a folder for a project, a workspace's own glyph and colour. */
     private android.widget.ImageView placeGlyph(ConduitHubClient.RecentChat chat) {
         ConduitHubClient.Place place = null;
         Object places = FloatPanel.last("places");
@@ -96,10 +94,8 @@ public final class FloatRecentPanel extends FloatPanel {
         for (ConduitHubClient.RecentChat chat : chats) {
             LinearLayout row = column();
             rowStyle(row);
-            // Title with its time as the row's meta (Paper Mono caption, tabular) at the end; the project under it.
             LinearLayout head = new LinearLayout(context);
             head.setGravity(Gravity.CENTER_VERTICAL);
-            // The place as its glyph before the title, as the app's lists: no line of its own.
             android.widget.ImageView glyph = placeGlyph(chat);
             LinearLayout.LayoutParams glyphSize = new LinearLayout.LayoutParams(dp(14), dp(14));
             glyphSize.setMargins(0, 0, dp(8), 0);
@@ -189,7 +185,6 @@ public final class FloatRecentPanel extends FloatPanel {
     private ImageButton icon(int drawable, String description, boolean filled) {
         ImageButton button = new ImageButton(context);
         button.setImageResource(drawable);
-        // --control-sm squares: the mic quiet with the wash; send the primary button, light with a dark arrow.
         button.setImageTintList(ColorStateList.valueOf(filled ? 0xff141518 : SECONDARY));
         button.setContentDescription(description);
         button.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);

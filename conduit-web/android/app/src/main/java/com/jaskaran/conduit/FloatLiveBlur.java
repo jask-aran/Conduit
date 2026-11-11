@@ -6,10 +6,7 @@ import android.view.View;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 
-/**
- * Samsung's own live blur behind a view (One UI's SemBlurInfo, reached by reflection): it blurs whatever is behind the
- * view's rounded rect, every frame, on devices that report no cross-window blur. Elsewhere it is simply unavailable.
- */
+/** One UI's SemBlurInfo, by reflection: a live blur on devices that report no cross-window blur. */
 final class FloatLiveBlur {
     private static final String TAG = "FloatLiveBlur";
     private static Constructor<?> builder;
@@ -53,21 +50,15 @@ final class FloatLiveBlur {
 
     static boolean available() { return AVAILABLE; }
 
-    /**
-     * The old screenshot frost's blur, matched on the phone over a test pattern: 80px at density 3.75 (1/8 of the
-     * screen, three box passes of round(24dp / 8 / 3)). A mean difference under 1/255 from it.
-     */
+    /** Matches the screenshot frost's blur (FloatFrost.blur at 1/8 scale) within 1/255, measured on a phone. */
     static int radius(android.content.Context context) { return Math.round(21.33f * context.getResources().getDisplayMetrics().density); }
 
-    /** Float's raised ground over the blur (FloatFrost's LIFT): its handle, slots and caption, as bright as each other. */
+    /** FloatFrost's LIFT, so the handle, slots and caption are as bright as each other. */
     static final int LIFT = 0x8c3a3b3f;
 
     /**
-     * A window whose frost is its background: Samsung's blur takes the place of the window's background drawable, so
-     * the frost moves onto the content (drawn over the blur, its hairline and highlights intact). No elevation: a
-     * shadow cast by glass shows through it (Android leaves it out only under the middle, so a clear square sits in a
-     * darkened rim), where CSS draws a box-shadow only outside the box; and the window, the panel's own size, has no
-     * room outside it.
+     * Samsung's blur takes the place of the window's background drawable, so the frost moves onto the content. No
+     * elevation: a shadow cast by glass shows through it, and the window has no room outside it.
      */
     static boolean frost(android.view.Window window, View content, android.graphics.drawable.Drawable frost) {
         if (!AVAILABLE) return false;
@@ -78,7 +69,6 @@ final class FloatLiveBlur {
         return true;
     }
 
-    /** Blurs what is behind view by radiusPx, tinted (an ARGB laid over the blur), in a rect of cornerPx corners. */
     static boolean apply(View view, int radiusPx, int tint, float cornerPx) {
         if (!AVAILABLE) return false;
         long[] last = applied.get(view);
@@ -100,10 +90,7 @@ final class FloatLiveBlur {
     }
 
     private static Method clipPath;
-    /**
-     * One blur behind several shapes: a view's blur clipped to path (its own coordinates). A window may ask the
-     * compositor for only a few blur regions (One UI ignores every one past its limit), so one region holds them all.
-     */
+    /** One region for several shapes: One UI ignores every blur region past its small limit. */
     static boolean applyPath(View view, int radiusPx, android.graphics.Path path) {
         if (!AVAILABLE) return false;
         try {

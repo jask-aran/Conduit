@@ -1,10 +1,5 @@
-//! The keys Conduit holds while it is not the focused application.
-//!
-//! The window owns the registry; this owns only the OS registration. The client
-//! sends the set it wants, the shell claims it, and a chord that fires comes
-//! back as the command id the client already knows how to run -- so there is one
-//! list of shortcuts, in the client, and the shell never decides what a key
-//! means.
+//! Only the OS registration: a chord that fires comes back as the client's command id, so the shell never decides what
+//! a key means.
 
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -15,14 +10,10 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 use crate::tray;
 
-/// What the client hears when a system-wide key fires: the command id, which is
-/// the same string its own registry dispatches on.
+/// Carries the same command id the client's own registry dispatches on.
 pub const COMMAND_EVENT: &str = "desktop://command";
 
-/// The command the shell answers itself. Revealing the window has to happen
-/// before the client can be told anything -- a hidden window has no visible
-/// reaction to offer -- so the shell does it first, for every command, and the
-/// client is told afterwards about whatever else the command means.
+/// The shell reveals the window itself, first, for every command: a hidden window has no visible reaction to offer.
 pub const REVEAL_COMMAND: &str = "desktop.reveal";
 
 #[derive(Clone, Debug, Deserialize)]
@@ -32,9 +23,7 @@ pub struct Requested {
     pub command_id: String,
 }
 
-/// The chords currently held, each with the command it stands for. Keyed by the
-/// parsed shortcut rather than by the text it was parsed from, so a lookup and
-/// an unregistration both work on what the OS actually holds.
+/// Keyed by the parsed shortcut, not its text, so lookups and unregistration work on what the OS actually holds.
 #[derive(Default)]
 pub struct Registered(pub Mutex<Vec<(Shortcut, String)>>);
 
@@ -49,13 +38,8 @@ fn parse(shortcuts: &[Requested]) -> Result<Vec<(Shortcut, String)>, String> {
         .collect()
 }
 
-/// Replace the whole set, or change nothing.
-///
-/// The order matters: every accelerator is parsed before any is registered, and
-/// what was held before is released only once the new set is held. A key that
-/// another application already owns therefore leaves the shortcuts that were
-/// working still working, and says which one was refused, rather than dropping
-/// the person to none at all.
+/// Replace the whole set, or change nothing: everything is parsed before anything is registered, and the old set is
+/// released only once the new one is held, so a key another application owns leaves the working shortcuts working.
 pub fn apply<R: Runtime>(app: &AppHandle<R>, shortcuts: Vec<Requested>) -> Result<(), String> {
     let wanted = parse(&shortcuts)?;
     let manager = app.global_shortcut();
@@ -71,8 +55,7 @@ pub fn apply<R: Runtime>(app: &AppHandle<R>, shortcuts: Vec<Requested>) -> Resul
             for taken in claimed {
                 let _ = manager.unregister(taken);
             }
-            // Whatever was working before this call is put back, so a refusal
-            // costs the new binding and nothing else.
+            // A refusal costs the new binding and nothing else.
             for (shortcut, _) in &held {
                 let _ = manager.register(*shortcut);
             }

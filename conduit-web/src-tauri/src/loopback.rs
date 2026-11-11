@@ -1,6 +1,4 @@
-//! Catches the end of a provider sign-in (loopback.ts): listens on 127.0.0.1:<port> while the system browser signs
-//! in, answers the first request that carries a query, and hands its URL back. Loopback only; the URL carries an
-//! authorization code, so it is never logged.
+//! Loopback only; the URL carries an authorization code, so it is never logged.
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, TcpListener};

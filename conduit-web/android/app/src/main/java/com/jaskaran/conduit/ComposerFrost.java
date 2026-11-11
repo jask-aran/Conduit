@@ -23,16 +23,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The native composer's live frost, from its first frame to its hand back. A live blur of the transcript can only be
- * drawn by the compositor in a layer above the app's (the app paints the transcript and the composer into one picture),
- * so this is a window over the app that can take neither focus nor touches: each pill and the field drawn there as the
- * web's .ui-frost (styles/frost.css) over Samsung's live blur, with a copy of what the real part shows (its icon; the
- * field's text, caret and selection), redrawn whenever the app's window draws. The real composer stays where it is,
- * keeping the keyboard and every touch, drawn at opacity 0 while this shows, so it rides the keyboard's travel with the
- * composer. Where the blur is not available it never shows, and the composer keeps its flat frost.
+ * A live blur of the transcript can only be drawn by the compositor in a layer above the app's, so the native
+ * composer's frost is a window over the app that takes neither focus nor touches, copying each part's contents. The
+ * real composer stays underneath at opacity 0, keeping the keyboard and every touch.
  *
- * One composer is always whole on screen: the real one goes only once this window's first frame is out, and at rest
- * this goes in the very frame the web's pills come back (handOver).
+ * One composer is always whole on screen: the real one goes only once this window's first frame is out, and this goes
+ * in the very frame the web's pills come back (handOver).
  */
 final class ComposerFrost {
     /* The web's frost (foundations.css): --frost-blur, --frost-fill, --frost-stroke, --frost-highlight, --frost-lift-rest. */
@@ -50,7 +46,7 @@ final class ComposerFrost {
     private PopupWindow window;
     private Layer layer;
     private ViewTreeObserver observer;
-    /** The glass's fill, 0 or 1; the real composer is drawn at 1 - shown. */
+    /** The real composer is drawn at 1 - shown. */
     private float shown;
     private boolean handing;
     private final ViewTreeObserver.OnDrawListener onDraw = this::sync;
@@ -61,7 +57,6 @@ final class ComposerFrost {
 
     static boolean available() { return FloatLiveBlur.available(); }
 
-    /** The frost window over the app, as the native composer first shows. */
     void show() {
         int height = content.getHeight();
         if (window != null || !available() || content.getWidth() == 0 || height <= 0) return;
@@ -94,17 +89,14 @@ final class ComposerFrost {
     }
 
     /**
-     * The web's pills are drawn again under this (the composer at rest). Removing the window outright took three
-     * frames, each a brighter double fill: the frost goes in the app's next frame, both windows synced; without that
-     * sync the glass keeps its blur, edges and contents but drops its fill, and the window goes two frames later.
+     * Removing the window outright takes three frames, each a brighter double fill, so the frost goes in the app's next
+     * frame with both windows synced; without that sync the glass drops its fill and the window goes two frames later.
      */
     void handOver(View web) {
         if (layer == null) { close(); return; }
         handing = true;
         Layer going = layer;
         Runnable later = () -> going.postOnAnimation(() -> going.postOnAnimation(() -> { if (layer == going) close(); }));
-        // Both windows' next frames presented as one: the frost (its glass and its blur) gone in the frame the web's
-        // pills are already in.
         if (android.os.Build.VERSION.SDK_INT >= 34) {
             try {
                 android.window.SurfaceSyncGroup together = new android.window.SurfaceSyncGroup("conduit-composer-frost");
@@ -120,7 +112,6 @@ final class ComposerFrost {
         afterFrame(going, later);
     }
 
-    /** At once: the composer is going. */
     void close() {
         if (observer != null && observer.isAlive()) observer.removeOnDrawListener(onDraw);
         observer = null;
@@ -129,7 +120,6 @@ final class ComposerFrost {
         window = null; layer = null; shown = 0; handing = false;
     }
 
-    /** Each frame the app's window draws: the glass follows its part, and the real composer fades as the fill arrives. */
     private void sync() {
         if (layer == null || handing) return;
         root.setAlpha(1 - shown);
@@ -167,7 +157,6 @@ final class ComposerFrost {
         layer.invalidate();
     }
 
-    /** The window's content: the blur behind every part, then each part's glass, each with its lift drawn outside it. */
     private final class Layer extends ViewGroup {
         final Map<View, Glass> glasses = new HashMap<>();
         private final View back;
@@ -184,7 +173,6 @@ final class ComposerFrost {
             float sigma = LIFT_BLUR_CSS / 2 * scale;
             lift.setMaskFilter(new BlurMaskFilter(Math.max(1, (sigma - .5f) / .57735f), BlurMaskFilter.Blur.NORMAL));
         }
-        /** The one blur region, set again only when its shapes change. */
         void blur(String shape, Path path) {
             if (shape.equals(blurred) || !back.isAttachedToWindow()) return;
             blurred = shape;
@@ -208,7 +196,6 @@ final class ComposerFrost {
         }
     }
 
-    /** One part's frost over the blur: its fill, the highlights and the border, then the part's own content. */
     private final class Glass extends View {
         final View real;
         final float radius;
@@ -217,7 +204,6 @@ final class ComposerFrost {
         private final Path outer = new Path(), inner = new Path(), shifted = new Path(), ring = new Path();
         Glass(Context context, View real, float radius) { super(context); this.real = real; this.radius = radius; }
 
-        /** opacity: the part's own (its moves); fill: how far the fill has come in. */
         void set(float opacity, float fill) {
             this.opacity = opacity; this.fill = fill;
             setVisibility(opacity > 0 ? VISIBLE : INVISIBLE);
@@ -253,7 +239,6 @@ final class ComposerFrost {
             paint.setColor(colour); canvas.drawPath(ring, paint);
         }
 
-        /** What the real part shows, drawn here without its own (flat) background. */
         private void contents(Canvas canvas) {
             canvas.save();
             Rect clip = real.getClipBounds();

@@ -19,11 +19,7 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.view.animation.PathInterpolator;
 
-/**
- * A capture lands: a soft white flash over the whole screen (peaking at 22% in the first 180ms, as the system
- * screenshot does), and a copy of what was taken shrinking from the full screen into the card under Float's handle on
- * the rise curve, its corners rounding as it goes. 480ms in all, then a tick. Main thread only.
- */
+/** The flash peaks at 22% in the first 180ms, as the system screenshot does. Main thread only. */
 final class FloatShot {
     private static final long FLASH_MS = 180, FLY_DELAY = 60, FLY_MS = 420;
     private final Context context;
@@ -35,7 +31,7 @@ final class FloatShot {
 
     private int dp(float value) { return Math.round(value * context.getResources().getDisplayMetrics().density); }
 
-    /** Plays over everything; bitmap may be null (the flash only). done runs once the copy has landed. */
+    /** bitmap may be null (the flash only). */
     void play(Bitmap bitmap, boolean flash, Rect card, Runnable done) {
         Dialog dialog = new Dialog(context, R.style.ConduitFloatTheme);
         dialogs.add(dialog);

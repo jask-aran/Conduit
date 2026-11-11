@@ -42,12 +42,11 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-/** The library PhoneComposer's described parts. Only inset progress moves the overlay itself. */
+/** Only inset progress moves the overlay itself. */
 @CapacitorPlugin(name = "ConduitComposer")
 public class ConduitComposerPlugin extends Plugin {
     private FrameLayout root, field;
     private EditText input;
-    /** The motion tokens the moves were built from. */
     private String motionSpec = null;
     private float scale, density, restBottom, fieldWidth, minHeight, iconSize, offsetX;
     private int navBottom, imeBottom;
@@ -57,7 +56,6 @@ public class ConduitComposerPlugin extends Plugin {
     private ConduitMoves moves;
     private final Map<String, ConduitMoves.Part> parts = new LinkedHashMap<>();
     private boolean webFocusable, webTouchFocusable, closingSent;
-    /** The live frost over the composer, from its first frame to its hand back (ComposerFrost). */
     private ComposerFrost frost;
 
     @PluginMethod public void begin(PluginCall call) {
@@ -162,7 +160,6 @@ public class ConduitComposerPlugin extends Plugin {
                 });
                 setParts(call.getArray("parts", new JSArray()), row);
                 frost = new ComposerFrost(getActivity(), content, root, parts, scale, part -> part.getBackground() instanceof Frost ? ((Frost) part.getBackground()).radius : 0);
-                // Live from the first frame, riding the keyboard up and down with the composer.
                 root.post(() -> { if (frost != null) frost.show(); });
                 ViewCompat.setOnApplyWindowInsetsListener(root, (view, insets) -> {
                     if (!animating) { if ((seenIme || hideRequested) && !insets.isVisible(WindowInsetsCompat.Type.ime())) announceClosing(); move(insets); if (closing && !insets.isVisible(WindowInsetsCompat.Type.ime())) atRest(); }
@@ -174,9 +171,9 @@ public class ConduitComposerPlugin extends Plugin {
                     }
                     @Override public WindowInsetsAnimationCompat.BoundsCompat onStart(WindowInsetsAnimationCompat animation, WindowInsetsAnimationCompat.BoundsCompat bounds) {
                         if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0 && root != null) {
-                            // A room given while the keyboard travels goes on the keyboard's own time and curve (motion.ts, travel).
+                            // A room given while the keyboard travels goes on the keyboard's own time and curve.
                             if (moves != null && animation.getDurationMillis() > 0) moves.travel(animation.getDurationMillis(), animation.getInterpolator());
-                            // Insets at onStart contain the destination. Do not change the per-frame tracking below.
+                            // Insets at onStart contain the destination.
                             WindowInsetsCompat target = ViewCompat.getRootWindowInsets(root);
                             // Only a hide of this composer's own keyboard: moving focus off the WebView can run a hide of
                             // the keyboard that was there before, which is not the person closing this one.
@@ -281,7 +278,6 @@ public class ConduitComposerPlugin extends Plugin {
         if (effect != null) ConduitHapticsPlugin.play(getContext(), effect.optJSONArray("steps"), effect.optString("weight", "tick"), part.view);
         JSObject event = new JSObject(); event.put("name", name); notifyListeners("action", event);
     }
-    /** The web supplies the blur rule and the library state table. Only draft presence is read locally. */
     private JSONArray closedParts(JSONArray description, JSONObject row) {
         // Java's trim omits some whitespace that JavaScript's draft.trim() removes.
         boolean empty = input.getText().toString().replaceAll("^[\\x09-\\x0D\\x20\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]+$", "").isEmpty();
@@ -403,8 +399,7 @@ public class ConduitComposerPlugin extends Plugin {
                     JSObject nextBlurStates = call.getObject("blurStates");
                     if (nextBlurStates != null) blurStates = nextBlurStates;
                     JSObject spec = call.getObject("motion");
-                    // Rebuilt only when the tokens change (reduced motion switched): rebuilding on every update dropped
-                    // what the moves were holding for the keyboard's travel.
+                    // Rebuilt only when the tokens change: a rebuild drops what the moves hold for the keyboard's travel.
                     if (spec != null && !spec.toString().equals(motionSpec)) { motionSpec = spec.toString(); moves = new ConduitMoves(spec); }
                     JSArray description = call.getArray("parts"); JSObject row = call.getObject("row");
                     if (description != null && row != null) setParts(description, row);
@@ -432,7 +427,7 @@ public class ConduitComposerPlugin extends Plugin {
                     getBridge().getWebView().postVisualStateCallback(0, new android.webkit.WebView.VisualStateCallback() {
                         @Override public void onComplete(long requestId) { finish.run(); }
                     });
-                    // A page that never answers is not left handing back (as MainActivity's return cover).
+                    // A page that never answers is not left handing back.
                     getBridge().getWebView().postDelayed(finish, 800);
                     return;
                 } else {
@@ -446,11 +441,8 @@ public class ConduitComposerPlugin extends Plugin {
         });
     }
     /*
-     * The field takes focus, then the keyboard is asked for -- in that order, and only once the field holds the input
-     * connection. Asked for any sooner the system shows a keyboard attached to nothing (a TYPE_NULL editor: Gboard
-     * draws its number row, the field has no caret), and the first tap on the field then attaches it, swapping the
-     * layout and the keyboard's height. A frame or two can pass before focus moves off the WebView, so this checks each
-     * frame, for a few.
+     * The keyboard is asked for only once the field holds the input connection: sooner, it attaches to a TYPE_NULL
+     * editor and the first tap swaps its layout and height. Focus can take a few frames to leave the WebView.
      */
     private void focusAndShow(int attempt) {
         if (root == null || closing || returning || input == null) return;
@@ -488,7 +480,6 @@ public class ConduitComposerPlugin extends Plugin {
     /** Only Bridge.reset calls this, as a page starts: the composer's page is gone, and its "ended" would reach no one. */
     @Override public void removeAllListeners() { super.removeAllListeners(); getActivity().runOnUiThread(this::remove); }
 
-    /** The library's waiting ring. It is an effect on --duration-spin, separate from the named moves. */
     private class Spinner extends Drawable implements Runnable {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final long duration, began = android.os.SystemClock.uptimeMillis();
@@ -509,13 +500,9 @@ public class ConduitComposerPlugin extends Plugin {
         @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
     }
 
-    /** One .ui-frost layer: Frost plain gives the row no extra material (frost.tsx).
-     * Flat reference fills use C = alpha * white + (1 - alpha) * pageGround, alpha = 43/255
-     * (--frost-fill, foundations.css). The effective backdrops inferred from the supplied phone samples
-     * are #131216 for the field/edit pills and #101115 for the row: #3b3a3d and #38393c.
-     * Border = white at 77/255 over that fill; inset highlights = white at 50% / 10%.
-     * frost.css paints the fill under the border; its inset shadows start INSIDE that border.
-     * There is no dense core and no vertical sheen gradient on these controls.
+    /**
+     * One .ui-frost layer, flat: fill = 43/255 white (--frost-fill) over the page ground, border = 77/255 white over
+     * that fill, inset highlights = white at 50% / 10%, starting inside the border as frost.css's do.
      */
     private class Frost extends Drawable {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -535,8 +522,7 @@ public class ConduitComposerPlugin extends Plugin {
             box.inset(line / 2, line / 2);
             Path inside = new Path();
             inside.addRoundRect(box, Math.max(0, radius - line), Math.max(0, radius - line), Path.Direction.CW);
-            // CSS inset shadows: subtract the same rounded box shifted by one CSS px.
-            // This follows the curved rim too, with no blur or vertical sheen gradient.
+            // CSS inset shadows: the same rounded box minus itself shifted by one CSS px, so the curved rim follows.
             Path shifted = new Path(inside), highlight = new Path(inside);
             shifted.offset(0, line); highlight.op(shifted, Path.Op.DIFFERENCE);
             paint.setStyle(Paint.Style.FILL);

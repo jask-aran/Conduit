@@ -18,11 +18,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONObject;
 
 /**
- * Plays the app's haptic effects (components/ui/haptics.ts, from the --haptic-* tokens) as the platform's own clear
- * haptics, never a timed buzz. An effect is a list of primitives, each with a scale (0-1) and a delay (ms):
- * composed from VibrationEffect.Composition where the actuator has them all (Android 11+, the rich ones), else the
- * nearest predefined effect (tick, click or heavy click, Android 10+), else the view's own haptic feedback. Touch
- * usage, so the system's touch-feedback switch silences them.
+ * components/ui/haptics.ts's effects as the platform's own haptics, never a timed buzz. Touch usage, so the system's
+ * touch-feedback switch silences them.
  */
 @CapacitorPlugin(name = "ConduitHaptics")
 public class ConduitHapticsPlugin extends Plugin {
@@ -55,8 +52,7 @@ public class ConduitHapticsPlugin extends Plugin {
         call.resolve();
     }
 
-    /** Plays an effect's steps (as haptics.ts sends them, already at the person's strength); native pieces (the
-     *  camera's shutter) play the ones their page handed them. */
+    /** Steps arrive already at the person's strength. */
     static void play(Context context, org.json.JSONArray steps, String weight, android.view.View view) {
         Vibrator vibrator = Build.VERSION.SDK_INT >= 31
             ? ((VibratorManager) context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE)).getDefaultVibrator()

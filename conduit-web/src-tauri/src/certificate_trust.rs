@@ -1,20 +1,8 @@
-//! Accept a server's self-signed TLS certificate only when a paired server's
-//! identity vouches for it -- the Windows half of what
-//! `ConduitWebViewClient.java` does on Android.
-//!
-//! The leaf carries, in a private extension, the server's Ed25519 identity
-//! signature over the hash of its own public key (`src/server-tls.js`). The
-//! page hands this shell the identity keys of the servers it has paired with;
-//! WebView2's `ServerCertificateErrorDetected` asks about each certificate it
-//! will not trust by itself, and the answer comes from the certificate and
-//! those keys alone.
-//!
-//! The rule is narrow on purpose. Only an untrusted authority (self-signed)
-//! and a name mismatch (the leaf is not re-issued when addresses change) are
-//! answered. Validity is checked here from the certificate's own dates, because
-//! WebView2 reports one status and an untrusted authority outranks expiry. The
-//! natural bug in this file is `ALWAYS_ALLOW` reached by any path that did not
-//! verify a signature, and it is worse than no TLS at all.
+//! Accept a self-signed certificate only when a paired identity's attestation in it verifies, as
+//! `ConduitWebViewClient.java` does on Android. Only an untrusted authority and a name mismatch (the leaf is not
+//! re-issued when addresses change) are answered. Validity is checked here from the certificate's own dates, because
+//! WebView2 reports one status and an untrusted authority outranks expiry. `ALWAYS_ALLOW` on any path that did not
+//! verify a signature is worse than no TLS at all.
 
 use std::sync::{LazyLock, RwLock};
 
@@ -44,14 +32,11 @@ pub struct TrustedIdentity {
     public_key: String,
 }
 
-/// Identity id and raw Ed25519 key, for every paired server. Empty refuses.
-/// Static because the certificate handler is reached from WebView2, not from
-/// anything holding app state.
+/// Static because the certificate handler is reached from WebView2, not from anything holding app state.
 static IDENTITIES: LazyLock<RwLock<Vec<(String, VerifyingKey)>>> = LazyLock::new(|| RwLock::new(Vec::new()));
 
-/// Replace the whole set. When it changes, WebView2's remembered approvals are
-/// cleared, so a certificate accepted for a forgotten server is asked about
-/// again rather than still allowed.
+/// When the set changes, WebView2's remembered approvals are cleared, so one accepted for a forgotten server is asked
+/// about again.
 #[tauri::command]
 pub fn trust_identities(app: tauri::AppHandle, identities: Vec<TrustedIdentity>) -> Result<(), String> {
     let mut next = Vec::new();
@@ -75,7 +60,6 @@ pub fn trust_identities(app: tauri::AppHandle, identities: Vec<TrustedIdentity>)
     Ok(())
 }
 
-/// The id of the paired identity that attested this certificate, or None.
 fn vouching_identity(der: &[u8]) -> Option<String> {
     let signature = Signature::from_slice(embedded_attestation(der)?).ok()?;
     let hash = STANDARD.encode(Sha256::digest(subject_public_key_info(der)?));
@@ -85,7 +69,6 @@ fn vouching_identity(der: &[u8]) -> Option<String> {
         .map(|(id, _)| id.clone())
 }
 
-/// The 64-byte signature in the attestation extension.
 fn embedded_attestation(der: &[u8]) -> Option<&[u8]> {
     let at = der.windows(ATTESTATION_OID.len()).position(|window| window == ATTESTATION_OID)? + ATTESTATION_OID.len();
     // The OCTET STRING wrapping every extension value, then ours.
@@ -113,7 +96,7 @@ fn element(der: &[u8], at: usize) -> Option<(u8, usize, usize)> {
     (end <= der.len()).then_some((tag, start, end))
 }
 
-/// The certificate's SubjectPublicKeyInfo, whole, as the server hashed it.
+/// Whole, as the server hashed it.
 fn subject_public_key_info(der: &[u8]) -> Option<&[u8]> {
     let (_, certificate, _) = element(der, 0)?;
     let (_, mut at, _) = element(der, certificate)?;
@@ -134,7 +117,6 @@ fn der_from_pem(pem: &str) -> Option<Vec<u8>> {
     STANDARD.decode(body.trim()).ok()
 }
 
-/// Install the certificate handler on the main window's WebView2.
 #[cfg(windows)]
 pub fn install(window: &tauri::WebviewWindow) {
     use webview2_com::Microsoft::Web::WebView2::Win32::*;

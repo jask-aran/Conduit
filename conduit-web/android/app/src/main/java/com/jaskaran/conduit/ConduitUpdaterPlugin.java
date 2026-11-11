@@ -31,25 +31,16 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
- * Download a release APK ahead of time, and hand it to the installer on request.
- *
- * The web half decides whether a release is newer; this only fetches the file
- * into the app's cache and opens the system installer on it. Android checks
- * the APK is signed with the same key as the running app and asks the person
- * before installing, so a file swapped in transit cannot become an update.
- *
- * One APK is kept, named for its version. A finished download is written as
- * `.part` and renamed, so a file under its final name is always complete.
+ * Android checks the APK is signed with the running app's key and asks before installing, so a file swapped in transit
+ * cannot become an update. A download is written as `.part` and renamed, so a file under its final name is complete.
  */
 @CapacitorPlugin(name = "ConduitUpdater")
 public class ConduitUpdaterPlugin extends Plugin {
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
-    /** Set by cancel(): the download under way stops at its next read, and the connection it reads from is closed. */
     private volatile boolean cancelled = false;
     private volatile HttpURLConnection reading = null;
 
-    /** Stop the download under way (an APK or an interface); the call that started it rejects with "Cancelled". */
     @PluginMethod
     public void cancel(PluginCall call) {
         cancelled = true;
@@ -131,7 +122,6 @@ public class ConduitUpdaterPlugin extends Plugin {
                         }
                     }
                 }
-                // Only the newest is worth keeping.
                 File[] old = directory().listFiles();
                 if (old != null) for (File file : old) if (!file.equals(part)) file.delete();
                 if (!part.renameTo(target)) throw new IllegalStateException("Could not keep the download");
@@ -155,8 +145,6 @@ public class ConduitUpdaterPlugin extends Plugin {
             return;
         }
         Context context = getContext();
-        // Sideloading needs a one-time per-app grant; send them to it, and
-        // the next attempt goes straight through.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.getPackageManager().canRequestPackageInstalls()) {
             Intent grant = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.getPackageName()));
             grant.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -174,13 +162,6 @@ public class ConduitUpdaterPlugin extends Plugin {
         call.resolve(new JSObject());
     }
 
-    // --- Live update of the interface (development builds) -----------------
-    //
-    // The app launches from the interface on the device; this only swaps in a
-    // newer one the server offers, after it is downloaded and unpacked whole.
-    // A swapped-in interface has to say it started (confirmBundle) within two
-    // launches, or MainActivity puts the bundled one back.
-
     static final String BUNDLE_PREFS = "ConduitBundle";
     static final String PENDING = "pending";
     static final String LAUNCHES = "pendingLaunches";
@@ -191,7 +172,6 @@ public class ConduitUpdaterPlugin extends Plugin {
         return dir;
     }
 
-    /** The build the app is showing: a downloaded one, or the bundled one's. */
     private String currentBuild() throws Exception {
         String path = getBridge().getServerBasePath();
         if (path != null && !path.isEmpty() && new File(path).getParentFile() != null
@@ -216,7 +196,6 @@ public class ConduitUpdaterPlugin extends Plugin {
         return connection;
     }
 
-    /** Fetch the server's interface if it differs from the one showing; never applies it. */
     @PluginMethod
     public void stageBundle(PluginCall call) {
         String origin = call.getString("origin");
@@ -282,7 +261,6 @@ public class ConduitUpdaterPlugin extends Plugin {
                     if (!part.renameTo(target)) throw new IllegalStateException("Could not keep the bundle");
                     part = null;
                 }
-                // Keep this one and the one showing; nothing older.
                 File[] all = bundles().listFiles();
                 if (all != null) for (File dir : all) if (!dir.getName().equals(build) && !dir.getName().equals(current)) deleteTree(dir);
                 result.put("state", "staged");
@@ -296,7 +274,6 @@ public class ConduitUpdaterPlugin extends Plugin {
         });
     }
 
-    /** Switch to a staged interface now: the page reloads from it. */
     @PluginMethod
     public void applyBundle(PluginCall call) {
         String build = call.getString("build");
@@ -313,7 +290,6 @@ public class ConduitUpdaterPlugin extends Plugin {
         getActivity().runOnUiThread(() -> getBridge().setServerBasePath(path));
     }
 
-    /** The interface started: keep it for the next launch. */
     @PluginMethod
     public void confirmBundle(PluginCall call) {
         getContext().getSharedPreferences(BUNDLE_PREFS, Context.MODE_PRIVATE).edit().remove(PENDING).remove(LAUNCHES).commit();
@@ -323,9 +299,8 @@ public class ConduitUpdaterPlugin extends Plugin {
     }
 
     /**
-     * Called before the bridge exists: an interface that started twice without confirming is dropped. One launch is
-     * not enough to judge it: one swapped in while the app was in the background, and the app killed there before the
-     * page ran, never had the chance, and dropping it put the app back on the interface its APK was built with.
+     * An interface that started twice without confirming is dropped. One launch is not enough: one swapped in while the
+     * app was in the background may be killed before its page ever ran.
      */
     static void revertUnconfirmed(Context context) {
         SharedPreferences prefs = context.getSharedPreferences(BUNDLE_PREFS, Context.MODE_PRIVATE);

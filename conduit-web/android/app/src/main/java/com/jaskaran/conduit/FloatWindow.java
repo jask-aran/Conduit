@@ -86,8 +86,7 @@ final class FloatWindow {
             decor.setOutlineAmbientShadowColor(0x1a000000);
             decor.setOutlineSpotShadowColor(0x1a000000);
         }
-        // Over Samsung's live blur the handle is the radial's own slot: the same FloatFrost (raised ground as the
-        // blur's tint, white fill, hairline, inset highlights), so open it reads as one of them.
+        // Over Samsung's live blur the handle is drawn as the radial's own slot, so open it reads as one of them.
         glass = new FloatFrost(-1, Math.max(1, dp(1)));
         glass.setLifted(true);
         glass.setLive(true);
@@ -136,7 +135,6 @@ final class FloatWindow {
 
     void setTarget(int icon, String name) { if (control != null) control.setTarget(icon, name); }
 
-    /** The handle's height in pixels at rest. */
     float handleHeight() { return dp(HANDLE_H); }
 
     int top() { return position.y; }
@@ -183,15 +181,12 @@ final class FloatWindow {
     }
 
     int controlHeight() { return Math.min(availableHeight, dp(state == State.HANDLE ? HANDLE_H : sending() ? SENDING : 44)); }
-    /** Sent off: the pill gathers into a small round bubble, a spinner and then a tick, and goes back to rest. */
     private boolean sending() { return state == State.STOPPING || state == State.SENDING || state == State.SENT; }
     private static final float SENDING = 40;
-    /** The pill's width in dp, and how far Float rests from the screen's edge. */
+    /** dp. */
     static final float PILL = 148, EDGE = 6;
-    /** At rest it dims well back, out of the way; a touch brings it up while held, and opening brings it up with the pill. */
     private static final float REST_ALPHA = .42f;
     private boolean touched;
-    /** At rest: a small upright capsule, close to the edge. */
     static final float HANDLE_W = 32, HANDLE_H = 40;
 
     private void place() {
@@ -203,7 +198,6 @@ final class FloatWindow {
             * Math.max(0, Math.min(1, prefs().getFloat("y", .45f))));
     }
 
-    /** Samsung's live blur behind the handle (FloatLiveBlur), its raised ground as the blur's tint. */
     private boolean live;
 
     private void updateFrost() {
@@ -215,8 +209,7 @@ final class FloatWindow {
         boolean blurred = blurEnabled;
         frost.setCornerRadii(null);
         frost.setCornerRadius(r);
-        // v2's white fill over its dark core ground; a denser core when blur is unavailable. Over Samsung's live
-        // blur the ground is the blur's own tint, so only the white fill is drawn here.
+        // Over Samsung's live blur the ground is the blur's own tint, so only the white fill is drawn.
         frost.setColor(live ? 0x2bffffff : androidx.core.graphics.ColorUtils.compositeColors(0x2bffffff,
             blurred ? 0xe63a3b3f : 0xfa3a3b3f));
         frost.setStroke(dp(1), 0x4dffffff);
@@ -270,14 +263,12 @@ final class FloatWindow {
             @Override public void onAnimationEnd(android.animation.Animator animation) {
                 if (morph != animation) return;
                 morph = null;
-                // Use the latest touch and attention state, including changes during the morph.
                 overlayWindow.getDecorView().setAlpha(state != State.HANDLE || touched || attention ? 1 : REST_ALPHA);
             }
         });
         morph.start();
     }
 
-    /** Held at rest it comes up to full; let go it settles back (opening takes over through updateFrame). */
     void lift(boolean held) {
         if (touched == held || (held && state != State.HANDLE)) return;
         touched = held;
@@ -285,7 +276,6 @@ final class FloatWindow {
         overlayWindow.getDecorView().animate().alpha(held || attention ? 1 : REST_ALPHA).setDuration(held ? 90 : 260).start();
     }
 
-    /** Holding captures for the next message: at rest it stays at full strength, as while touched. */
     private boolean attention;
     void setAttention(boolean next) {
         if (attention == next) return;
@@ -311,7 +301,6 @@ final class FloatWindow {
         snap.start();
     }
 
-    /** The handle's centre on screen, in pixels: where the radial opens. */
     float[] handleCentre() {
         boolean right = prefs().getBoolean("right", true);
         float half = dp(HANDLE_W) / 2f;
@@ -341,7 +330,6 @@ final class FloatWindow {
     }
     private int windowLeft(boolean right) { return right ? availableWidth - frameWidth - position.x : position.x; }
 
-    /** The whole screen in pixels (the radial's window covers all of it). */
     int[] screenSize() {
         if (Build.VERSION.SDK_INT >= 30) {
             Rect bounds = windows.getCurrentWindowMetrics().getBounds();
