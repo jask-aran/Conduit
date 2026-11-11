@@ -1,9 +1,3 @@
-/*
- * An email's own words apart from what it quotes: a reply carries the whole thread below it ("On …, X wrote:" then
- * "> " lines, or Outlook's "-----Original Message-----" / "From: … Sent: …"). The hub gives jbot only the new words
- * and the app folds the rest; the whole message stays in jbot's folder.
- */
-/** `{ own, quoted }`: the text up to where the quoting starts, trimmed; the quoted rest, or "". */
 export function splitQuoted(text) {
   const lines = String(text || "").split(/\r?\n/);
   for (let index = 1; index < lines.length; index++) {

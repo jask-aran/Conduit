@@ -20,7 +20,6 @@ export class ChatBackendRegistry {
     }
   }
 
-  /** Register built-in adapters and detected installations, plus device-only adapters. */
   static fromManifests(manifests, detection, config) {
     const registry = new ChatBackendRegistry();
     registry.detection = detection;
@@ -34,8 +33,7 @@ export class ChatBackendRegistry {
     for (const manifest of manifests) {
       const implementations = manifest.implementations || [manifest.id];
       const here = manifest.builtIn || Boolean(detection.get(manifest.id)?.available);
-      // Registered already (for devices, perhaps, before it was installed
-      // here): a probe that now finds it here only says so.
+      // Registered already (for devices, perhaps, before it was installed here): a probe only marks it local.
       if (implementations.some((implementation) => this.adapters.has(implementation))) {
         if (here) for (const implementation of implementations) this.local.add(implementation);
         continue;

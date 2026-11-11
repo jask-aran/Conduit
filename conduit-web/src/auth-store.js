@@ -3,8 +3,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { writePrivateFile } from "./private-file.js";
 
-// OWASP's current scrypt cost (2^17, r 8, p 1; issue #53). A hash keeps the cost it was made with: an older one still
-// verifies, and is made at this cost when the password is next set.
+// OWASP's scrypt cost. A hash keeps the cost it was made with: an older one still verifies, and is made at this cost
+// when the password is next set.
 const SCRYPT_N = 131072;
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
@@ -15,10 +15,8 @@ const SCRYPT_MAX_MEM = 192 * 1024 * 1024;
 const TOKEN_BYTES = 32;
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 /*
- * Sessions a script mints for itself (conduit-auth mint-session, probes, reports): `kind: "script"`. They lapse an hour
- * after their last use and never count toward MAX_SESSIONS, so a probe that crashed before signing out cannot push a
- * real device's sign-in out, and nothing needs clearing by hand. Those minted before the kind existed are known by
- * their agent names.
+ * Script sessions never count toward MAX_SESSIONS, so a probe that crashed before signing out cannot push a real
+ * device's sign-in out. Those without `kind: "script"` are known by their agent names.
  */
 const SCRIPT_TTL_MS = 60 * 60 * 1000;
 const MAX_SCRIPT_SESSIONS = 50;
@@ -66,7 +64,6 @@ function normalizeAuthFile(raw) {
         userAgent: typeof session.userAgent === "string" ? session.userAgent : null,
         kind: session.kind === "native" || session.kind === "script" ? session.kind : "browser",
       })) : [],
-    // One-time sign-in codes `conduit-server open` hands a browser; a minute each.
     handoffs: Array.isArray(raw.handoffs) ? raw.handoffs
       .filter((item) => item && typeof item.codeHash === "string" && Date.parse(item.expiresAt) > Date.now()) : [],
   };
@@ -125,8 +122,7 @@ function revisionFor(content) {
   return crypto.createHash("sha256").update(content).digest("base64");
 }
 
-// What the file looks like from outside: another process (the CLI) writing it
-// renames a new file in, so the inode, size or mtime moves.
+// Another process (the CLI) writing the file renames a new one in, so the inode, size or mtime moves.
 async function fileSignature(filePath) {
   try {
     const stat = await fs.stat(filePath);
@@ -246,7 +242,7 @@ async function acquireAuthLock(filePath) {
 function appendSession(data, session) {
   data.sessions = data.sessions.filter((item) => !expiredSession(item));
   data.sessions.push(session);
-  // Each kind is capped on its own, oldest first: scripts never take a device's place.
+  // Each kind is capped on its own, so scripts never take a device's place.
   const byAge = (list) => list.sort((a, b) => new Date(a.lastSeenAt) - new Date(b.lastSeenAt));
   const scripts = byAge(data.sessions.filter(scriptSession)).slice(-MAX_SCRIPT_SESSIONS);
   const people = byAge(data.sessions.filter((item) => !scriptSession(item))).slice(-MAX_SESSIONS);
@@ -265,9 +261,7 @@ export class AuthStore {
   }
 
   async load({ force = false } = {}) {
-    // A stat per call instead of a read: the copy in memory stands until the
-    // file changes under it. Taken before the read, so a write landing between
-    // the two only costs one more read.
+    // Taken before the read, so a write landing between the two only costs one more read.
     const signature = await fileSignature(this.filePath);
     if (!force && this.data && signature === this.signature) return this.data;
     this.signature = signature;
@@ -362,7 +356,7 @@ export class AuthStore {
     });
   }
 
-  /** A new password from a signed-in client: every other session ends (the old password may be why), this one stays. */
+  /** Every other session ends (the old password may be why the password changed); this one stays. */
   async changePassword(password, keepToken) {
     const hashed = await hashPassword(password);
     const keep = keepToken ? hashToken(keepToken) : null;
@@ -456,8 +450,7 @@ export class AuthStore {
 
   async touchSession(session, now = new Date()) {
     if (!session?.tokenHash) return false;
-    // The throttle first reads the copy in hand, without the lock: lastSeenAt
-    // only moves forward, so an old copy can only refresh early, never late.
+    // Read without the lock: lastSeenAt only moves forward, so an old copy can only refresh early, never late.
     const seen = session.lastSeenAt ? new Date(session.lastSeenAt).getTime() : 0;
     if (now.getTime() - seen < LAST_SEEN_REFRESH_MS) return false;
     return this._mutate((data) => {
@@ -534,7 +527,6 @@ export function statusSummary(store) {
   const data = store.data || { password: null, sessions: [] };
   return {
     hasPassword: Boolean(data.password),
-    // Devices and browsers signed in: what the cap is about; scripts' own sessions are counted apart.
     sessionCount: data.sessions ? data.sessions.filter((item) => !scriptSession(item) && !expiredSession(item)).length : 0,
     scriptSessions: data.sessions ? data.sessions.filter((item) => scriptSession(item) && !expiredSession(item)).length : 0,
   };

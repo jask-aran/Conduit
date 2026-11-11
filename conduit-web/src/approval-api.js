@@ -1,10 +1,5 @@
 /*
- * Approvals, declared once: the answers a person can give an ask, and the kinds of permission an agent asks for, each
- * with the answers it offers. The hub builds an ask's choices from this and refuses any other (agent/policy.js
- * permissionOf, agent/asks.js); the client's card draws only what an ask offers, and its types are these
- * (agent/agent-view.d.ts). A permission that must be decided each time leaves `always` out, and no rule can be made
- * for it, by the person or by anything else.
- *
+ * A permission that must be decided each time leaves `always` out, and no rule can be made for it.
  * Plain data and small functions, no imports: the client takes it as types.
  */
 export const APPROVAL_CHOICES = /** @type {const} */ ({
@@ -24,5 +19,4 @@ export const PERMISSIONS = /** @type {const} */ ({
   browser: { choices: ["allow", "deny"], allow: "this thread, for a day", says: "Driving the person's own signed-in browser on a device: asked of each thread, never allowed for good" },
 });
 
-/** The answers a permission offers; one not declared offers the two that need no rule. */
 export const permissionChoices = (permission) => (Object.hasOwn(PERMISSIONS, String(permission)) ? [...PERMISSIONS[permission].choices] : ["allow", "deny"]);

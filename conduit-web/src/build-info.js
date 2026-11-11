@@ -8,15 +8,14 @@ const git = (...args) => {
   catch { return ""; }
 };
 
-/** Artifact metadata, never user data. Dev versions follow the Windows updater convention. The commit is prefixed
- *  (git describe's "g"): a short hash of digits with a leading zero is not a valid semver identifier, and the build
- *  refused 0916886. */
+/** Artifact metadata, never user data. The commit is prefixed "g": a short hash of digits with a leading zero is not a
+ *  valid semver identifier. */
 export function buildStamp(env = process.env, now = new Date()) {
   try { return JSON.parse(readFileSync(new URL("../../BUILD.json", import.meta.url), "utf8")); }
   catch (error) { if (error.code !== "ENOENT") throw error; }
   const commit = (env.GITHUB_SHA || git("rev-parse", "HEAD")).slice(0, 12) || "unknown";
   const release = env.CONDUIT_RELEASE_TAG || (env.GITHUB_REF_TYPE === "tag" ? env.GITHUB_REF_NAME : "") || "";
-  // The last release, not a candidate: v0.8.5-rc.6 read as patch "5-rc" made every dev build 0.8.1.
+  // The last release, not a candidate: an -rc tag would parse as patch "5-rc".
   const last = git("describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "--exclude", "*-*") || "v0.0.0";
   const [major, minor, patch] = last.replace(/^v/, "").split(".").map(Number);
   const timestamp = now.toISOString().replace(/[-:T]/g, "").slice(0, 14);

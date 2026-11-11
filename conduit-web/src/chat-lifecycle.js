@@ -4,9 +4,8 @@ function conflict(code, message) {
   return Object.assign(new Error(message), { code, status: 409 });
 }
 
-// Serializes the transitions that change a chat's process, session mapping, or
-// owning project. Project guards are shared locks: deletion marks a project as
-// closing before waiting for active launch/move work to drain.
+// Project guards are shared locks: deletion marks a project as closing before waiting for active launch/move work to
+// drain.
 export class ChatLifecycle {
   constructor({ projectDrainTimeoutMs = 30_000, concurrency = new ServerConcurrency() } = {}) {
     this.concurrency = concurrency;
@@ -34,9 +33,7 @@ export class ChatLifecycle {
       if (existing.request?.spare && !request?.spare) {
         return existing.promise.catch(() => {}).then(() => this.runLaunch(chatId, work, request));
       }
-      // A passive browser attach may join a launch that already selected its
-      // model. A later model-bearing request cannot join a passive launch,
-      // because that would silently discard the requested model.
+      // A model-bearing request cannot join a passive launch: that would silently discard the requested model.
       const passiveJoin = request && !request.forceModel && !request.model && !request.thinkingLevel
         && (!request.requestedProject || request.requestedProject === existing.request?.requestedProject);
       const same = ["requestedProject", "model", "thinkingLevel", "forceModel"]
@@ -68,8 +65,7 @@ export class ChatLifecycle {
   }
 
   async withProjects(projectIds, work) {
-    // This guard increments counters only; it never waits for a chat lock.
-    // Callers may therefore take project guard -> chat lock without deadlock.
+    // Increments counters only and never waits for a chat lock, so callers may take project guard -> chat lock.
     const states = [...new Set(projectIds)].sort().map((projectId) => [projectId, this.projectState(projectId)]);
     for (const [, state] of states) {
       if (state.deleting) throw conflict("project_deleting", "This project is being deleted.");
@@ -96,9 +92,7 @@ export class ChatLifecycle {
     if (state.deleting) throw conflict("project_deleting", "This project is already being deleted.");
     state.deleting = true;
     if (state.active > 0) {
-      // Capture the active period's latch before yielding into Effect. The
-      // final project operation may resolve it and clear state.drain in the
-      // same turn; the captured promise still represents exactly that drain.
+      // Captured before yielding: the final project operation may resolve it and clear state.drain in the same turn.
       const drain = state.drain.promise;
       try {
         await this.concurrency.waitFor(

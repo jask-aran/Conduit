@@ -1,10 +1,3 @@
-/**
- * The one set of context categories Conduit speaks, whatever the harness.
- * A harness reports what it can and each adapter maps its own parts onto
- * these; a part Conduit has no category for is Other, never dropped. When a
- * category gathers several of a harness's parts, they become its items, so
- * nothing the harness said is lost.
- */
 const CONTEXT_CATEGORIES = Object.freeze([
   { id: "system-prompt", label: "System prompt", kind: "used" },
   { id: "tools", label: "Tools", kind: "used" },
@@ -18,11 +11,7 @@ const CONTEXT_CATEGORIES = Object.freeze([
   { id: "free", label: "Free space", kind: "free" },
 ]);
 
-/**
- * Gather a harness's parts -- `{ category, label, tokens, items? }`, each
- * already assigned a Conduit category id -- into Conduit's categories, in
- * Conduit's order.
- */
+/** Each part arrives already assigned a Conduit category id. */
 export function conduitCategories(parts) {
   const groups = new Map();
   for (const part of parts || []) {

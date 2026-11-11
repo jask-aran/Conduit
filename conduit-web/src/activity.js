@@ -1,9 +1,3 @@
-/**
- * What the indicator says a session is doing.
- *
- * Labels describe the shared record without naming a backend. The record does
- * not carry a harness name, so the same words apply to every chat.
- */
 export function activityLabel(activity, detail = null) {
   const base = {
     idle: "Ready (idle)",
@@ -19,7 +13,6 @@ export function activityLabel(activity, detail = null) {
   return base;
 }
 
-/** Fine-grained selected-chat activity for the transcript row. */
 export function deriveFineActivity({
   generation = "idle",
   processStatus = "none",
@@ -48,8 +41,7 @@ export function deriveFineActivity({
   if (processStatus === "starting" || generation === "submitting" || coarse === "starting") {
     return { kind: "starting", label: generation === "submitting" ? "Starting…" : "Starting agent…" };
   }
-  // Once the selected chat lifecycle is idle, do not keep showing activity from
-  // a stale coarse flag — the transcript row must clear when the turn ends.
+  // An idle lifecycle wins over a stale coarse flag, so the row clears when the turn ends.
   if (generation === "idle" && !toolName && !thinking && !responding && !retry) {
     return { kind: "idle", label: null };
   }

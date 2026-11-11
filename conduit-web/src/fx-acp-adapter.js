@@ -15,9 +15,8 @@ import { placeProcesses } from "./nodes/place-processes.js";
 import { within } from "./server/effect-concurrency.js";
 
 
-// fx's tools, by what they do, as its saved history names them. Live, ACP
-// states a kind of its own beside a name that may be only a title, so that is
-// read when the name is not one of these.
+// Live, ACP states a kind of its own beside a name that may be only a title, so that is read when the name is not one
+// of these.
 const FX_TOOL_KINDS = Object.freeze({
   terminal: "command", shell: "command",
   read_file: "read", grep_files: "read", glob_files: "read", list_files: "read", file_info: "read", read_tool_result: "read",
@@ -28,15 +27,12 @@ const FX_TOOL_KINDS = Object.freeze({
 const ACP_TOOL_KINDS = Object.freeze({
   execute: "command", read: "read", edit: "edit", delete: "edit", move: "edit", search: "search", fetch: "fetch",
 });
-// What a call acted on: fx's tools share their field names, and a search's
-// pattern says more than the directory it searched.
+// A search's pattern says more than the directory it searched.
 const subjectOf = (input) => input && typeof input === "object"
   ? toolSubject(["command", "pattern", "query", "url", "path"].map((field) => input[field]).find((value) => value != null)) ?? undefined
   : undefined;
 const kindOf = (name, acpKind) => Object.hasOwn(FX_TOOL_KINDS, name)
   ? FX_TOOL_KINDS[name] : toolKind(ACP_TOOL_KINDS, acpKind);
-// ACP's reasons a turn stopped, in Conduit's. A stopped turn is `cancelled` in
-// ACP and `aborted` to everything that draws one.
 const FX_STOP_REASONS = Object.freeze({
   end_turn: "stop", refusal: "stop", max_tokens: "length", max_turn_requests: "length",
   cancelled: "aborted", error: "error",
@@ -44,8 +40,7 @@ const FX_STOP_REASONS = Object.freeze({
 const OUTCOMES = Object.freeze({ aborted: "interrupted", error: "failed" });
 // A turn waits on fx's saved copy of it to settle, so the read may not hang it.
 const SESSION_READ_MS = 15_000;
-// A saved result, as Conduit states a tool's ending. fx saves a failure as
-// `failure`, and says nothing but the status to tell it from a success.
+// fx says nothing but the status to tell a failure from a success.
 const resultState = (result) => ({ isError: !["success", "cancelled"].includes(result.status),
   cancelled: result.status === "cancelled" });
 
@@ -74,9 +69,7 @@ const failure = (message, code = "backend_unavailable", status = 409) =>
 const outputText = (content) => (Array.isArray(content) ? content : [])
   .map((item) => item?.content?.text || item?.text || "").filter(Boolean).join("\n");
 
-// fx saves a turn by its place in the history, with no id. The names Conduit
-// streamed it under are kept beside the chat by that place, so the saved copy
-// and the chat log name each message once.
+// fx saves a turn by its place in the history, with no id, so the names Conduit streamed it under are kept by that place.
 // The chat store is loaded on use: it reaches this module through the harness list.
 const turnIdsFile = async (project, chatId) => {
   const { chatDirectory } = await import("./chat-store.js");
@@ -87,7 +80,6 @@ const readTurnIds = async (file) => {
 };
 
 class AcpClient {
-  /** `processes` is where fx runs: this server or a device (src/nodes/place-processes.js). */
   constructor(command, cwd, onNotification, onRequest, onExit = () => {}, processes) {
     this.child = processes.spawn("fx", command, ["acp"], { cwd, stdio: ["pipe", "pipe", "pipe"] });
     this.pending = new Map();
@@ -101,8 +93,7 @@ class AcpClient {
     this.child.stdout.on("data", (chunk) => this.read(chunk));
     this.child.stderr.on("data", (chunk) => { this.stderr = `${this.stderr}${chunk}`.slice(-8_192); });
     this.child.once("error", (cause) => this.fail(cause));
-    // A write racing the child's exit fails with EPIPE on stdin; unheard, that
-    // error would take the whole server down with it.
+    // A write racing the child's exit fails with EPIPE on stdin; unheard, it would take the server down.
     this.child.stdin.on("error", (cause) => this.fail(cause));
     this.child.once("exit", (code, signal) => {
       const cause = failure(this.stderr.trim() || `fx ACP exited (${signal || code})`, "backend_unavailable");
@@ -136,7 +127,7 @@ class AcpClient {
 
   write(message) {
     if (!this.child.stdin.writable) throw failure("fx ACP is not running");
-    // fx 0.0.10 accepts one JSON-RPC object per CRLF-delimited line.
+    // fx accepts one JSON-RPC object per CRLF-delimited line.
     this.child.stdin.write(`${JSON.stringify(message)}\r\n`);
   }
 
@@ -163,13 +154,11 @@ class AcpClient {
 }
 
 export class FxAcpAdapter extends EventEmitter {
-  // Starts its harness on a device for a device's workspace (live-session-launcher.js).
   runsOnDevices = true;
 
   constructor({ command = "fx", logs = null, nodeHub = null } = {}) {
     super();
     this.command = command;
-    // Paired devices: a chat in a device's workspace runs that device's fx.
     this.nodeHub = nodeHub;
     this.sessions = new SessionRecords({
       capabilities: FX_CAPABILITIES,
@@ -182,7 +171,6 @@ export class FxAcpAdapter extends EventEmitter {
     Object.assign(this, unsupported(FX_CAPABILITIES, { label: "fx" }));
   }
 
-  /** fx's own processes for a chat's place (`{ nodeId, place }`; none is this server). */
   processes(on) { return placeProcesses(this.nodeHub, on || {}); }
 
   async run(args, options = {}) {
@@ -305,11 +293,8 @@ export class FxAcpAdapter extends EventEmitter {
   }
 
   /**
-   * A step of the turn: what fx thought and said, then the tools it ran, until
-   * it next thinks or speaks. Each is a message of its own, in the order it
-   * happened, so the trace reads the way the turn went -- the shape fx saves
-   * too, where each tool step keeps the words that came before it. The last
-   * one, if it ran nothing, is the answer.
+   * Each step is a message of its own, in the order it happened: the shape fx saves too, where each tool step keeps
+   * the words that came before it.
    */
   openStep(record) {
     // A step the turn has moved on from was work towards the answer, not it.
@@ -333,7 +318,6 @@ export class FxAcpAdapter extends EventEmitter {
       seq: ++record.generationSeq, messageId: step.id, contentIndex: block.contentIndex, blockKind: kind, delta });
   }
 
-  /** Every step the turn took, finished: the answer as the answer, the rest as the work before it. */
   closeSteps(record, stopReason, answer, errorMessage = null) {
     const last = record.steps.at(-1);
     for (const step of record.steps) {
@@ -361,7 +345,6 @@ export class FxAcpAdapter extends EventEmitter {
     if (update.sessionUpdate === "agent_thought_chunk") {
       const delta = outputText([update.content]);
       if (!delta) return;
-      // Thinking starts a step, unless the one open has only thought so far.
       const step = current && current.blocks.every((block) => block.kind === "thinking") ? current : this.openStep(record);
       this.appendStepText(record, step, "thinking", delta);
       return;
@@ -369,8 +352,6 @@ export class FxAcpAdapter extends EventEmitter {
     if (update.sessionUpdate === "agent_message_chunk") {
       const delta = outputText([update.content]);
       if (!delta) return;
-      // So does speaking, unless the open step has said and run nothing yet,
-      // or this is the message it is already saying.
       const spoken = current?.blocks.some((block) => block.kind === "text");
       const ran = current?.blocks.some((block) => block.kind === "tool_call");
       const step = current && !ran && (!spoken || current.fxMessageId === update.messageId) ? current : this.openStep(record);
@@ -390,8 +371,7 @@ export class FxAcpAdapter extends EventEmitter {
         messageId: step.id, generationId, timestamp: tool.startedAt }));
       this.publish(record, { type: "tool_activity", phase: "start", generationId,
         seq: ++record.generationSeq, toolCallId: tool.id, name: tool.name, kind: tool.kind, subject: tool.subject, input: tool.input });
-      // The turn being painted places a running tool by its block, so the
-      // step says it is calling one now, not when the turn ends.
+      // The painted turn places a running tool by its block, so the step says it is calling one now.
       this.publish(record, { type: "assistant_content", phase: "final", generationId, seq: ++record.generationSeq,
         messageId: step.id, stopReason: "toolUse", errorMessage: null, blocks: step.blocks });
       return;
@@ -437,8 +417,7 @@ export class FxAcpAdapter extends EventEmitter {
     record.promptText = parseAttachmentEnvelope(message).message;
     record.steps = [];
     record.tools.clear();
-    // How long the saved history was before this turn, so a stopped turn can
-    // tell whether fx saved it.
+    // So a stopped turn can tell whether fx saved it.
     record.historyBefore = this.json(["session", "--id", record.sessionId, "--json"], { timeout: SESSION_READ_MS, on: record })
       .then((data) => data.history?.length ?? null, () => null);
     this.publish(record, messageOpen({ id: userMessageId, role: "user", generationId,
@@ -457,7 +436,7 @@ export class FxAcpAdapter extends EventEmitter {
     // Claim the turn before reading history; process exit can fail it again.
     record.generation.finishing = true;
     let stopReason = FX_STOP_REASONS[acpStopReason] || "stop";
-    // A turn that errors as it is stopped was stopped (turn.js outcomeOf).
+    // A turn that errors as it is stopped was stopped.
     if (stopReason === "error" && record.stopping) stopReason = "aborted";
     const stopped = stopReason === "aborted" || stopReason === "error";
     let error = null;
@@ -481,9 +460,7 @@ export class FxAcpAdapter extends EventEmitter {
           error: { code: "backend_unavailable", message: cause.message || String(cause) } });
       }
     }
-    // The answer is the last step if it ran nothing -- fx streamed it as it
-    // wrote it -- in the words fx saved. A turn that ran a tool last and still
-    // answered gets a step for the answer.
+    // A turn that ran a tool last and still answered gets a step for the answer.
     const last = record.steps.at(-1);
     const ranNothing = Boolean(last) && !last.blocks.some((block) => block.kind === "tool_call");
     const spoke = ranNothing && last.blocks.some((block) => block.kind === "text" && block.text.trim());
@@ -496,8 +473,7 @@ export class FxAcpAdapter extends EventEmitter {
     } else if (spoke) answer = last;
     // An ended turn answers nothing more: its prompts end with it.
     this.cancelRequests(record);
-    // What each tool returned, as fx saved it: ACP streams a preview, and a
-    // failure is told from a success only in the saved record.
+    // ACP streams a preview, and a failure is told from a success only in the saved record.
     const results = new Map((saved?.turn?.execution?.tool_steps || [])
       .flatMap((step) => step.tool_results || []).map((result) => [result.tool_call_id, result]));
     for (const tool of record.tools.values()) {
@@ -508,7 +484,6 @@ export class FxAcpAdapter extends EventEmitter {
           ...resultState(result), completedAt: tool.completedAt,
           generationId: record.generation.id }));
       } else if (!tool.closed) {
-        // And the ones still running end with the turn.
         tool.closed = true;
         this.publish(record, toolClose({ toolCallId: tool.id, output: tool.output,
           isError: stopReason !== "aborted", cancelled: stopReason === "aborted", generationId: record.generation.id }));
@@ -549,11 +524,7 @@ export class FxAcpAdapter extends EventEmitter {
     }
   }
 
-  /**
-   * The names this turn was streamed under, kept by its place in fx's history:
-   * the prompt, the answer, the step each tool ran in and when it started and
-   * finished -- which fx does not save -- and how the turn ended.
-   */
+  /** fx does not save these ids or tool times, so they are kept by the turn's place in fx's history. */
   async recordTurnIds(record, index, answer, outcome) {
     if (!record.turnIdsFile || index < 0) return;
     const ids = await readTurnIds(record.turnIdsFile);
@@ -612,12 +583,7 @@ export class FxAcpAdapter extends EventEmitter {
 
   listSessions(options) { return this.listThreads(options); }
 
-  /**
-   * fx's saved history as a transcript, in the shape it was streamed in: each
-   * step's words and the tools after them, then the answer. Steps fx saved
-   * with no words of their own ran on from the step before, as they did live;
-   * a step Conduit streamed is named what it was streamed as.
-   */
+  /** Steps fx saved with no words of their own ran on from the step before, as they did live. */
   static transcript(data, turnIds = {}) {
     const messages = [];
     const tools = [];
@@ -661,7 +627,6 @@ export class FxAcpAdapter extends EventEmitter {
     const record = liveSessionId ? this.get(liveSessionId) : null;
     const sessionId = record?.sessionId || (typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId);
     if (!sessionId) return { messages: [], tools: [], page: { before: null } };
-    // A device's session is read on the device, in its workspace.
     const on = record || (opaqueSession?.nodeId ? { nodeId: opaqueSession.nodeId, place: project?.place } : null);
     const [data, turnIds] = await Promise.all([this.json(["session", "--id", sessionId, "--json"], { on }),
       turnIdsFile(project, chatId).then((file) => readTurnIds(record?.turnIdsFile || file))]);

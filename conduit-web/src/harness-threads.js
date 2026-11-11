@@ -1,12 +1,8 @@
 import os from "node:os";
 import path from "node:path";
 
-// Harness thread discovery is machine-wide: adapters report every thread they
-// know about, each carrying the working directory it ran in. Conduit has no
-// folder registry to consult here, so "projects" are derived from those
-// directories - the same way the vendor apps present them.
+// Conduit has no folder registry to consult here, so "projects" are derived from each thread's working directory.
 
-/** Render an absolute path the way the sidebar does: home-relative, else as-is. */
 export function displayPath(absolute, home = os.homedir()) {
   if (!absolute) return "";
   if (absolute === home) return "~";
@@ -16,11 +12,8 @@ export function displayPath(absolute, home = os.homedir()) {
 const recency = (thread) => thread.updatedAt || thread.createdAt || 0;
 
 /**
- * Group discovered threads by working directory, newest folder first.
- *
- * `tracked` maps a native thread id to the Conduit chat that adopted it, so a
- * thread appears once - badged - instead of split across separate tracked and
- * adoptable lists.
+ * `tracked` maps a native thread id to the Conduit chat that adopted it, so a thread appears once, badged, instead of
+ * in separate tracked and adoptable lists.
  */
 export function groupThreadsByFolder(threads, { tracked = new Map(), home = os.homedir() } = {}) {
   const groups = new Map();
@@ -40,7 +33,6 @@ export function groupThreadsByFolder(threads, { tracked = new Map(), home = os.h
   return [...groups.values()].sort((left, right) => right.updatedAt - left.updatedAt);
 }
 
-/** Index the chat registry by the native thread id each chat adopted. */
 export function trackedByThread(chats, implementation) {
   const tracked = new Map();
   for (const chat of chats) {

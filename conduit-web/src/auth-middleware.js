@@ -24,14 +24,8 @@ const UNAUTHENTICATED_PWA_PATTERNS = [
   /^\/(?:sw|service-worker)\.js$/,
   /^\/workbox-[^/]+\.js$/,
   /^\/registerSW\.js$/,
-  // The compiled client itself. It has to be, because the service worker that
-  // is already served without a session lists every one of these paths in its
-  // precache manifest -- so withholding the files named there buys nothing and
-  // costs the shell: a page served from cache whose stylesheet is answered
-  // with 401 renders as unstyled HTML rather than as a sign-in screen. The
-  // bundles are content-hashed build output and carry nobody's data; what
-  // needs a session is the API they call, which still has one.
-  // The file icons are kept in a folder of their own (vite.config.js).
+  // The service worker, served without a session, precaches every one of these paths, so withholding them only
+  // breaks the shell: a cached page whose stylesheet is answered 401 renders unstyled. The bundles carry nobody's data.
   /^\/assets\/(?:file-icons\/)?[^/]+$/,
 ];
 
@@ -81,9 +75,8 @@ export function createRateLimiter() {
 }
 
 /*
- * Login throttling (issue #53): failures are counted per client, so one client cannot lock everyone out, under a
- * ceiling across all clients, so attempts spread over many addresses are still slowed. Kept in a file (when given
- * one), so a restart is no reset. A throttled attempt is refused before any password is checked: the 429 costs nothing.
+ * Failures are counted per client, so one client cannot lock everyone out, under a ceiling across all clients, so
+ * attempts spread over many addresses are still slowed. Kept in a file so a restart is no reset.
  */
 const GLOBAL_THRESHOLD = 50;
 const GLOBAL_WINDOW_MS = 15 * 60 * 1000;
@@ -119,10 +112,8 @@ export function createLoginThrottle({ file = null, now = () => Date.now() } = {}
     while (keys.size > KEYS_KEPT) keys.delete(keys.keys().next().value);
   };
   return {
-    /** When this client may try again (ms since the epoch); 0 when it may now. */
     retryAt(key, at = now()) {
-      // A client that has signed in before is not held by the ceiling: attempts spread over forged or many addresses
-      // slow strangers, never lock the owner out of their own hub.
+      // A client that has signed in before is not held by the ceiling, so forged addresses never lock the owner out.
       const entry = keys.get(key);
       const until = Math.max(entry?.nextAllowedAt || 0, entry?.trusted ? 0 : globalUntil);
       return until > at ? until : 0;
@@ -150,9 +141,7 @@ export function createLoginThrottle({ file = null, now = () => Date.now() } = {}
 }
 
 /**
- * Who is trying to sign in, for throttling: behind a proxy on this machine (Caddy, a tunnel's connector),
- * the client it names; otherwise the connection's own address. A name a client could forge only moves its own
- * attempts to another count -- the ceiling across all clients still holds.
+ * A name a client could forge only moves its own attempts to another count: the ceiling across all clients still holds.
  */
 export function loginThrottleKey(request) {
   const socket = String(request.socket?.remoteAddress || "").replace(/^::ffff:/, "");
@@ -172,17 +161,14 @@ function isBrowserNavigation(request) {
 }
 
 export function isAllowlistedPath(method, pathname) {
-  // `/v0/server/prove` answers without a session so that a client can check
-  // an address *before* it sends a token there. It signs a nonce the caller
-  // chose and says nothing else, which is the least that can settle "are you
-  // the server I paired with" without handing a credential to whatever
-  // answered.
+  // `/v0/server/prove` answers without a session so a client can check an address before it sends a token there; it
+  // signs a nonce the caller chose and says nothing else.
   // A webhook that wakes the persistent agent is called by other services: its token (32+ random bytes, made by the
   // agent's `watch` tool) is the secret, and the route answers an unknown one as a missing route.
   if (method === "GET" && /^\/v0\/agent\/connectors\/[A-Za-z0-9_-]+\/callback$/.test(pathname)) return true;
   if (method === "POST" && /^\/v0\/agent\/hooks\/[A-Za-z0-9_-]{43,}$/.test(pathname)) return true;
   if (method === "POST" && /^\/v0\/push\/answer\/[A-Za-z0-9_-]{43}$/.test(pathname)) return true;
-  // jbot's mailbox Worker saying mail has landed: it carries the mailbox's shared secret, and says nothing but "collect".
+  // The mailbox Worker carries the mailbox's shared secret and says nothing but "collect".
   if (method === "POST" && pathname === "/v0/agent/email/wake") return true;
   if (method !== "GET") return method === "POST" && ["/v0/auth/login", "/v0/auth/native-login", "/v0/auth/native-pair", "/v0/server/prove"].includes(pathname);
   if (pathname === "/v0/auth/handoff") return true;
@@ -190,10 +176,8 @@ export function isAllowlistedPath(method, pathname) {
   return UNAUTHENTICATED_PWA_PATTERNS.some((pattern) => pattern.test(pathname));
 }
 
-// Login "after" targets are same-origin paths only: a leading slash covers
-// real SPA routes, but protocol-relative values like "//evil.com/x" or
-// "/\evil.com" would slip a naive startsWith("/") guard and let an attacker
-// redirect a freshly-authenticated user off-origin. Reject them.
+// Protocol-relative values like "//evil.com/x" or "/\evil.com" pass a naive startsWith("/") guard and would redirect
+// a freshly signed-in user off-origin.
 export function safeRedirectTarget(value) {
   if (typeof value !== "string") return "/";
   if (!value.startsWith("/")) return "/";
@@ -285,30 +269,19 @@ function isSecureRequest(request) {
 const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
 /**
- * A request that arrived on the loopback interface never crossed a network, so
- * there is nothing for TLS to protect it from. Any forwarding header means a
- * proxy is in front and the address on the socket is the proxy's, not the
- * caller's, so the exemption does not apply.
+ * Any forwarding header means a proxy is in front and the socket address is the proxy's, so the exemption does not
+ * apply.
  */
 function isLoopbackRequest(request) {
   if (request.headers["x-forwarded-for"] || request.headers["x-forwarded-proto"]) return false;
   return LOOPBACK_ADDRESSES.has(String(request.socket?.remoteAddress || ""));
 }
 
-// IPv4-mapped IPv6 is how Node reports a v4 peer on a dual-stack socket, so
-// the prefix is stripped before matching against the shared private ranges.
+// Node reports a v4 peer on a dual-stack socket as IPv4-mapped IPv6, so the prefix is stripped before matching.
 
 /**
- * A request that arrived from a private address, on a socket with no proxy in
- * front of it, reached this server without crossing the internet. That is a
- * weaker claim than loopback and deliberately so: the traffic did cross a
- * network, one the caller and this machine are both sitting on.
- *
- * It is allowed because the alternative is not "more secure", it is "a server
- * on the LAN cannot be signed in to at all" -- no public authority issues a
- * certificate for 192.168.0.128, so requiring TLS here removes the address
- * rather than protecting it. The same line is drawn in the client's
- * `normalizeServerOrigin`, and the two have to agree.
+ * No public authority issues a certificate for a LAN address, so requiring TLS here would leave a LAN server impossible
+ * to sign in to. The client's `normalizeServerOrigin` draws the same line, and the two have to agree.
  */
 function isPrivateNetworkRequest(request) {
   if (request.headers["x-forwarded-for"] || request.headers["x-forwarded-proto"]) return false;
@@ -316,10 +289,6 @@ function isPrivateNetworkRequest(request) {
   return PRIVATE_HOST.test(address);
 }
 
-/**
- * Where a bearer token may be handed out: over TLS, or over a hop that did not
- * cross the internet.
- */
 function isTrustworthyRequest(request) {
   return isSecureRequest(request) || isLoopbackRequest(request) || isPrivateNetworkRequest(request);
 }
@@ -341,9 +310,7 @@ export function prepareAuthMiddleware(authStore) {
     const context = await validateNativeSession(authStore, request) || await validateSession(authStore, request);
     if (context) {
       request.conduitAuth = context;
-      // Rolling expiry: when touchSession actually advanced lastSeenAt
-      // (throttled to once per LAST_SEEN_REFRESH_MS), re-issue the cookie so
-      // the browser's 30-day window restarts from this request.
+      // Rolling expiry: re-issued whenever touchSession advanced lastSeenAt, so the 30-day window restarts.
       if (context.touched && !context.native) issueSessionCookie(response, context.token, { secure: isSecureRequest(request) });
       return next();
     }

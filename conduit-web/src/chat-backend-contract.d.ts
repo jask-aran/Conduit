@@ -1,5 +1,3 @@
-/** Backend-neutral contract for chat adapters. */
-
 export interface ChatCapabilities {
   history: "none" | "linear" | "tree";
   fork: boolean;
@@ -8,28 +6,16 @@ export interface ChatCapabilities {
   followUpQueue: boolean;
   cancel: boolean;
   /**
-   * An interrupted turn's partial assistant message survives as content the
-   * next turn can see.
-   *
-   * Interrupting is not continuing. It means: what the model had written when
-   * it was stopped stands as its answer, and a user message follows it saying
-   * that was not what was wanted. For that to mean anything the partial has to
-   * still be there when the next request is built.
-   *
-   * No integrated harness keeps interrupted text in the next model context.
-   * Codex does not persist it at all; ChatGPT Web never advances its cursor
-   * past an interrupted exchange. Where this is false, interrupting
-   * a text completion discards what was written, and the UI has to say so
-   * rather than implying the model was redirected mid-thought.
+   * An interrupted turn's partial assistant message survives as content the next turn can see. Where this is false,
+   * interrupting discards what was written, and the UI has to say so rather than imply the model was redirected.
    */
   interruptKeepsPartial: boolean;
   compaction: boolean;
   thinkingLevels: boolean;
   modelSwitch: boolean;
   toolUse: boolean;
-  /** Answers host-UI approval requests, i.e. respondHostUi is real. */
+  /** respondHostUi is real. */
   approvals: boolean;
-  /** Offers selectable permission profiles to choose between. */
   permissionModes: boolean;
   usage: boolean;
   replay: boolean;
@@ -81,14 +67,7 @@ export interface ChatBackendAdapter<LiveSession = unknown, ModelCatalog = unknow
     tree: unknown[];
   }>;
 
-  /**
-   * Project the transcript the backend has actually recorded.
-   *
-   * The live event stream is a reconstruction; this is the record. Conduit
-   * reads it to heal drift rather than trusting its own accumulated state.
-   * `project` is passed for backends whose store is validated against it and
-   * ignored by backends that own their own.
-   */
+  /** The live event stream is a reconstruction; this is the record, read to heal drift. */
   readTranscript(options: {
     liveSessionId?: string;
     chatId?: string;
@@ -112,7 +91,6 @@ export function assertChatBackendAdapter<T extends ChatBackendAdapter>(
   expectedCapabilities?: ChatCapabilities | null,
 ): T;
 
-/** A turn's status. (A chat row's status is the client's ChatStatus, client/api/contracts.ts.) */
 export type TurnStatus = "working" | "stopping" | "idle" | "failed";
 export type ChatActivity =
   | "idle"
@@ -129,60 +107,13 @@ interface EventBase {
 }
 
 /**
- * The two channels a turn is told on, and what each one promises.
- *
- * A turn is stated twice, on purpose. `transcript_op` says what the transcript
- * holds; `assistant_content` and `tool_activity` -- paint -- draw it arriving.
- * Both are in Conduit's words, translated once by the adapter, and they are not
- * two versions of the truth: one is the record and the other is the typewriter.
- *
- * Statements arrive at message granularity. `message.close` cannot be sent
- * until the answer is finished, because that is when it is known what the
- * answer says. Paint is the whole of why a reader watches a turn appear
- * instead of waiting for a paragraph to land at once.
- *
- * What makes the second channel safe to have is that it promises less, and
- * every part of the server is allowed to rely on it promising less:
- *
- * - It may be MERGED. Delivery holds deltas for a frame and concatenates them
- *   by block, so a harness writing at a thousand tokens a second costs one send
- *   per frame rather than one per token.
- * - It may be DROPPED. Past a socket's high-water mark paint is discarded
- *   rather than queued, because a reader who cannot draw what they already have
- *   is not helped by being sent more. What makes that safe is the promise
- *   below: the message is restated in full when it closes, so the worst a
- *   dropped delta costs is that the reader watches less of the answer arrive.
- *   A socket that comes back is also restated from the record's own copy of the
- *   turn -- the durable agent reduces from its events, replayed as
- *   `generation_replay`, or the merged paint buffer other harnesses keep and
- *   replay on attach. Neither is promised mid-stream: a socket that falls
- *   behind and recovers without reconnecting catches up at the next
- *   `message.close`.
- * - It is never AUTHORITATIVE. `message.close` restates the message in full, so
- *   a delta that never arrives costs a repaint and nothing else. Nothing
- *   downstream may conclude anything from paint that an op does not also say.
- * - It is never NUMBERED IN THE CHAT'S ORDER. Paint is excluded from the log,
- *   so a merged frame does not look like a hole to a client counting
- *   statements, and a client asking to be caught up is never caught up on
- *   paint. It does carry `seq`, the turn-local position both folds order by --
- *   two different numbers, and only the log's one is a promise about delivery.
- *   A turn's `seq` says where an event sits among that turn's events; a gap in
- *   it is expected, because merging and dropping are what make the gaps.
- *
- * An op may do none of those things. It is delivered, in order, exactly once,
- * and losing one leaves the browser holding a transcript the server does not
- * believe in.
- *
- * Paint is `assistant_content` and `tool_activity`, and nothing else. A turn's
- * transitions -- `status` with a phase -- and a runtime `error` are not paint:
- * a missed `settled` is a hole a client has to be caught up on, not a repaint
- * it can do without, so they are numbered in the chat's order and replayed
- * beside the ops. There are two channels, not three: the record, which is the
- * ops plus those transitions, and paint.
+ * A turn is stated twice: `transcript_op` (plus `status` transitions and runtime `error`) is the record; paint
+ * (`assistant_content`, `tool_activity`) draws it arriving. Paint may be merged per frame and dropped past a socket's
+ * high-water mark, is never authoritative (`message.close` restates the message in full), and is never numbered in the
+ * chat's order: its turn-local `seq` has gaps by design. An op is delivered in order, exactly once.
  */
 
 export type AssistantBlock =
-  /** `phase`: what the provider said the text was, where its stream says (DESIGN.md, Transcript › Turns). */
   | { kind: "text"; contentIndex: number; text: string; phase?: "commentary" | "final_answer" }
   | { kind: "thinking"; contentIndex: number; text: string; redacted: boolean }
   | { kind: "narration"; contentIndex: number; text: string }
@@ -208,22 +139,14 @@ export type AssistantContentEvent = EventBase & (
     blocks: AssistantBlock[];
     stopReason: string;
     errorMessage: string | null;
-    /**
-     * Who wrote it, when. The harness knows at this point and the reader is
-     * shown it; without these on the close the browser could only learn them by
-     * reloading the transcript, so a live answer and the same answer after a
-     * refresh disagreed about which model produced it.
-     */
+    /** On the close so a live answer and the same answer after a reload agree about which model produced it. */
     provider?: string | null;
     model?: string | null;
     timestamp?: string | null;
   }
 );
 
-/**
- * What a tool did, from the adapter's own table of its tool names (harnesses/transcript-ops.js TOOL_KINDS refuses any
- * other). `agent`: a subagent spawned or reporting; `message`: the agent sending the person something outside the thread.
- */
+/** `message`: the agent sending the person something outside the thread. */
 export type ToolKind = "command" | "read" | "edit" | "search" | "fetch" | "script" | "agent" | "message" | "other";
 
 /** Paint: a tool running, and its output as it arrives. Same promises. */
@@ -246,7 +169,7 @@ export type ToolActivityEvent = EventBase & {
 export interface PermissionRequestEvent extends EventBase {
   type: "permission_request";
   requestId: string;
-  /** `question` is a harness's question tool; see `src/harnesses/questions.js`. */
+  /** `question` is a harness's question tool. */
   kind: "confirm" | "select" | "input" | "editor" | "question";
   title: string;
   message: string;
@@ -259,7 +182,6 @@ export interface PermissionRequestEvent extends EventBase {
     options: Array<{ id: string; label: string; description: string; preview?: { format: "monospace" | "markdown"; text: string } }>;
     freeform: false | { placeholder?: string; multiline?: boolean; numeric?: boolean };
   }>;
-  /** Whether a note on an answer reaches the model. */
   notes?: boolean;
 }
 
@@ -269,72 +191,32 @@ export interface PermissionResolvedEvent extends EventBase {
 }
 
 /**
- * Where a generation has got to, stated.
- *
- * A status event carries two different things and they must not be confused. A
- * `phase` is a transition in the turn's life; without one the event is only
- * saying what the session is busy with -- an approval waiting, a mode changing
- * -- and no turn has started or finished.
- *
- * These used to be flattened into `status`/`activity` with the original name
- * passed along in `detail` as free text, and the browser rebuilt the five by
- * string-matching it, with a final `else` that called anything unrecognised a
- * started generation. So an approval request, which is not a transition at
- * all, arrived as the start of a turn.
+ * A `phase` is a transition in the turn's life; without one a status event only says what the session is busy with,
+ * and no turn has started or finished.
  */
 export type GenerationPhase = "started" | "running" | "stopping" | "stopped" | "settled";
 
 export interface StatusEvent extends EventBase {
   type: "status";
-  /** Absent when the event reports activity rather than a transition. */
   phase?: GenerationPhase;
   status: TurnStatus;
   activity: ChatActivity;
   detail: string | null;
-  /**
-   * On `started`: the answer this turn is continuing, when it is continuing
-   * one. The transcript shows a continued answer as the one message it is, so
-   * the browser needs the text being continued at the moment the turn opens.
-   */
 }
 
-/** A runtime failure names one of a fixed set of causes. */
 export type ChatError =
   | { code: "generation_limit" | "live_process_limit" | "rpc_timeout" | "auth_expired" | "backend_unavailable"; message: string }
   | { code: "rate_limited"; message: string; retryAfterMs: number };
 
-/**
- * A rejected command names why Conduit refused it, and that set is open --
- * `invalid_request`, `chat_not_found`, whatever a command handler throws.
- * These are Conduit's own words about its own API, not a harness failing.
- */
+/** Conduit's own words about its own API, not a harness failing; the set of codes is open. */
 export interface ChatRequestError { code: string; message: string }
 
-/**
- * Something went wrong, and whose fault it was.
- *
- * `runtime` is the harness or the session failing: the turn is lost and the
- * transcript says so. `request` is Conduit rejecting a command the browser
- * sent -- a malformed frame, a steer with nothing running -- which leaves the
- * turn exactly as it was.
- *
- * These used to travel as two event types, `runtime_error` and `client_error`.
- * The server now states both in the shared contract, so a rejected command
- * does not look like a backend failure or fail a turn that was still running.
- */
+/** A `request` error is Conduit rejecting a command the browser sent, which leaves the turn exactly as it was. */
 export type ErrorEvent = EventBase & (
   | { type: "error"; scope: "runtime"; error: ChatError }
   | { type: "error"; scope: "request"; error: ChatRequestError }
 );
 
-/**
- * What the session has spent, as the three views the composer draws.
- *
- * This declared six flat token counts that no adapter has ever sent. The one
- * emitter states the three summaries instead, so the counts are declared where
- * they actually live -- inside `contextUsage` and `sessionStats` -- rather
- * than as a shape the contract invented and nothing satisfies.
- */
 export interface UsageEvent extends EventBase {
   type: "usage";
   contextUsage: unknown | null;
@@ -342,35 +224,23 @@ export interface UsageEvent extends EventBase {
   cacheStats: unknown | null;
 }
 
-/** The turn's record on disk is settled. Carries the chat row and its artifacts. */
 export interface SessionCheckpointEvent extends EventBase {
   type: "session_checkpoint";
-  /** The whole chat row, or only its id and title. */
   chat?: { id: string; title?: string | null; [field: string]: unknown };
   chatId?: string;
   title?: string | null;
   artifacts?: unknown[];
 }
 
-/** The chat's subagents changed (one started or ended, or a running one's heartbeat): read them again. */
 export interface AgentsChangedEvent extends EventBase { type: "agents_changed" }
 
-/** A notice said once, as a toast, never kept in the transcript: a Pi extension's `ctx.ui.notify`, or the hub's own. */
+/** Said once, as a toast, never kept in the transcript. */
 export interface ExtensionNoticeEvent extends EventBase {
   type: "extension_notice";
   message: string;
   level?: "info" | "warning" | "error";
 }
 
-/**
- * Where the session stands, and everything a browser arriving late has missed.
- *
- * The first three are derived and always present. The rest are the catch-up:
- * the approvals the harness is waiting on, what is queued behind the current
- * turn, and the counters the composer draws. They were flowing undeclared --
- * three adapters passed them through and the fourth, being the only one that
- * rewrites the event, dropped them.
- */
 export interface RuntimeStateEvent extends EventBase {
   type: "runtime_state";
   status: TurnStatus;
@@ -384,76 +254,37 @@ export interface RuntimeStateEvent extends EventBase {
   cacheStats?: unknown | null;
 }
 
-/** How a turn ended (`turn.settle`). */
 export type TurnOutcome = "complete" | "interrupted" | "failed";
 
 /**
- * What the transcript holds, stated by the adapter.
- *
- * This is the record: the other of the two channels described above
- * `AssistantBlock`, and the reason the browser never has to work out what a
- * turn meant from the paint it watched arrive. An op is delivered, in order,
- * exactly once, and it is numbered -- none of the four things paint is allowed
- * to do apply to one.
- *
- * Every field is stated rather than inferred, including the two the browser
- * used to guess: `answers`, the prompt a message answers, and `interim`,
- * whether it is the turn's answer or the turn talking as it works. A harness
- * that leaves them out is refused rather than guessed at.
- *
- * `after` is filled in by the chat's log, not by the adapter: where a message
- * sits is the log's answer, because it is the thing that knows what the
- * transcript's last word was.
+ * A harness that leaves out `answers` or `interim` is refused rather than guessed at. `after` is filled in by the
+ * chat's log, not by the adapter: the log knows what the transcript's last word was.
  */
 export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
   | { op: "message.open"; message: { id: string; role: "user" | "assistant"; [field: string]: unknown };
       answers: string | null; after?: string | null }
   | { op: "message.close"; messageId: string; stopReason: string | null; interim: boolean;
       content: string; blocks: unknown[]; discarded?: true;
-      /** Who wrote it, with what, when, and what went wrong, when the harness knows. */
       provider?: string; model?: string; timestamp?: string; errorMessage?: string }
-  /** One row taken back (`keep`), the history cut after it, or cut through it. */
   | { op: "message.drop"; messageId: string; keep?: boolean; inclusive?: boolean }
   | { op: "tool.open"; toolCallId: string; name: string;
-      /** What it did, from the adapter's own table of its tool names. */
       kind: ToolKind;
-      /** What it acted on, in one line: the command, path, query or page. */
       subject?: string; input: unknown;
-      /** The message that owns it, when the harness says. */
       messageId?: string;
-      /** When it started, stamped as it did. */
       timestamp: string }
   /** A tool the user's stop killed is `cancelled`, never `isError`. */
   | { op: "tool.close"; toolCallId: string; output: unknown; isError: boolean; cancelled?: true;
-      /** What it did and to what, when that was only known once it had. */
       kind?: ToolKind; subject?: string;
-      /** The tools a script step called, in order. */
       calls?: { name: string; kind: string; subject?: string; isError?: boolean; durationMs?: number }[];
-      /** When it finished, stamped as it did. */
       completedAt: string }
-  /** A script's calls so far, each running (`done: false`) or ended. */
   | { op: "tool.calls"; toolCallId: string;
       calls: { name: string; kind: string; subject?: string; done?: boolean; isError?: boolean; durationMs?: number }[] }
-  /**
-   * How a turn ended, on the prompt it answers: stated by every harness when a
-   * turn ends, before the event that ends it. The browser refuses a finished
-   * turn that did not say, the same way it refuses a message without `answers`.
-   */
+  /** Stated by every harness before the event that ends the turn; the browser refuses a finished turn that did not say. */
   | { op: "turn.settle"; promptId: string; outcome: TurnOutcome }
-  /** How long the turn took, as Conduit measured it (server/turn-timings.js). */
   | { op: "turn.time"; promptId: string; timing: Record<string, unknown> }
 );
 
-/**
- * Where this chat's order stands.
- *
- * The server numbers every event that changes what the transcript says, so a
- * hole in the numbers is a fact rather than something inferred from messages
- * that look duplicated. `log_state` tells a browser where the sequence is;
- * `log_reset` tells one holding a number from a previous log to take a
- * snapshot instead of being replayed into a sequence that no longer means the
- * same thing.
- */
+/** `log_reset` tells a browser holding a number from a previous log to take a snapshot instead of being replayed. */
 export type ChatLogEvent = EventBase & (
   | { type: "log_state"; log: { id: string; seq: number } }
   | { type: "log_reset"; log: { id: string; seq: number } | null }
@@ -463,10 +294,8 @@ export type OptionalCapabilityEvent = EventBase & (
   | { type: "queue_state"; queue: { steering: unknown[]; followUp: unknown[] } }
   | { type: "compaction"; active: boolean }
   | { type: "retry"; active: boolean; retry?: unknown }
-  /** The backend's own record of recent turns, published to repair live drift. */
   | { type: "transcript_sync"; messages: unknown[]; tools: unknown[]; replace?: true }
   | { type: "generation_replay"; seq: number; generation: unknown }
-  /** Where the history now ends, so the browser cuts to it rather than deducing it. */
   | { type: "history_truncated"; beforeMessageId: string | null; afterMessageId: string | null }
 );
 

@@ -78,10 +78,7 @@ export function loadConfig(env = process.env) {
     runtimeSettingsFile: absolute(env.CONDUIT_RUNTIME_SETTINGS_FILE || path.join(dataRoot, "runtime.json")),
     identityFile: absolute(env.CONDUIT_IDENTITY_FILE || path.join(dataRoot, "identity.json")),
     leafFile: absolute(env.CONDUIT_LEAF_FILE || path.join(dataRoot, "leaf.json")),
-    // On by default: a server that cannot be found on the network it is on is
-    // the whole reason somebody ends up typing an IP address. Off is for a
-    // machine whose network is not the owner's -- a shared VPS, a work LAN --
-    // where announcing the service to everyone on it is not wanted.
+    // Off is for a machine whose network is not the owner's (a shared VPS, a work LAN).
     advertiseOnLan: env.CONDUIT_ADVERTISE_ON_LAN !== "false",
     remotesFile: absolute(env.CONDUIT_REMOTES_FILE || path.join(dataRoot, "remotes.json")),
     authFile: absolute(env.CONDUIT_AUTH_FILE || path.join(dataRoot, "auth.json")),

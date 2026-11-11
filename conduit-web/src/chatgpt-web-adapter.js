@@ -16,10 +16,6 @@ import { terminate } from "./server/effect-process.js";
 export const CHATGPT_WEB_CAPABILITIES = Object.freeze({
   history: "linear", fork: false, regenerate: false,
   steer: false, followUpQueue: false, cancel: true, compaction: false,
-  // The conversation lives in somebody else's account and Conduit follows it by
-  // cursor. `conversationId`/`parentMessageId` advance only on the sidecar's
-  // `done` event, which an interrupt never reaches, so the next prompt is sent
-  // from the message before the interrupted one and the partial is orphaned.
   thinkingLevels: true, modelSwitch: true, toolUse: false,
   approvals: false, permissionModes: false,
   usage: false, replay: false, attachments: false,
@@ -43,10 +39,8 @@ export class ChatGptWebAdapter extends EventEmitter {
         thinkingLevel: record.thinkingLevel, title: record.title || null,
         linkUrl: record.sessionId.conversationId ? `https://chatgpt.com/c/${record.sessionId.conversationId}` : null,
       }),
-      // Unlike every other harness there is nothing to read back: no session
-      // file, no thread API, nothing but an account somebody else owns. So the
-      // statements themselves are the transcript, and each one is durable
-      // before it is broadcast. Replaying them is what `transcript` does.
+      // There is nothing to read back (no session file, no thread API), so these statements are the transcript and
+      // each one is durable before it is broadcast.
       onPublish: (record, event) => {
         if (event.type === "transcript_op") this.appendJournal(record.chatId, event);
       },
@@ -162,13 +156,11 @@ export class ChatGptWebAdapter extends EventEmitter {
     beginTurn(record, generationId);
     record.generation.prompt = userMessageId;
     record.abortController = new AbortController();
-    // The prompt and the answer it will produce are both named before the
-    // request goes out, so nothing arrives needing a place to be worked out.
+    // Both named before the request goes out, so nothing arrives needing a place to be worked out.
     this.publish(record, messageOpen({ id: userMessageId, role: "user", generationId,
       content: userMessage, timestamp: new Date().toISOString() }));
     this.publish(record, messageOpen({ id: messageId, role: "assistant", generationId, answers: userMessageId }));
-    // What the turn has written so far, so an answer that fails or is stopped
-    // can still be settled with the text the reader watched arrive.
+    // So an answer that fails or is stopped can still be settled with the text the reader watched arrive.
     record.turn = { messageId, blocks: [] };
     this.publish(record, turnStarted(record));
     this.publish(record, { type: "assistant_content", generationId, phase: "start", seq: ++record.generationSeq, messageId });
@@ -205,11 +197,11 @@ export class ChatGptWebAdapter extends EventEmitter {
       this.publish(record, { type: "assistant_content", generationId, phase: "final", seq: ++record.generationSeq,
         messageId, stopReason: "stop", errorMessage: null,
         blocks: [{ kind: "text", contentIndex: 0, text: fullText }] });
-      // The whole reply arrived: it completed, even with a stop on its way (turn.js outcomeOf).
+      // The whole reply arrived: it completed, even with a stop on its way.
       this.closeTurn(record, "stop", fullText);
       this.settle(record, "settled");
     } catch (cause) {
-      // A reply that errors as it is stopped was stopped (turn.js outcomeOf).
+      // A reply that errors as it is stopped was stopped.
       if (cause.name === "AbortError" || record.stopping) {
         this.publish(record, { type: "assistant_content", generationId, phase: "final", seq: ++record.generationSeq,
           messageId, stopReason: "aborted", errorMessage: null, blocks: [{ kind: "text", contentIndex: 0, text: fullText }] });
@@ -220,13 +212,8 @@ export class ChatGptWebAdapter extends EventEmitter {
   }
 
   /**
-   * Settle the row this turn is holding.
-   *
-   * A row that was being written keeps what it had -- a stopped answer is text
-   * the reader watched arrive, and taking it away on settle is the flicker
-   * this whole mechanism exists to remove. One that was never written into is
-   * given back, so no blank answer is left waiting for something that is not
-   * coming.
+   * A row that was being written keeps what it had: a stopped answer is text the reader watched arrive. One never
+   * written into is given back, so no blank answer is left waiting.
    */
   closeTurn(record, stopReason, text = "") {
     const turn = record.turn;
@@ -238,15 +225,12 @@ export class ChatGptWebAdapter extends EventEmitter {
     }
     this.publish(record, messageClose({ messageId: turn.messageId, stopReason, interim: false,
       generationId: record.generation?.id || null,
-      // The cursor only advances on `done`, which an interrupt never reaches,
-      // so the next prompt is sent from the message before this one and the
-      // account keeps no record of what was written here.
+      // The cursor only advances on `done`, which an interrupt never reaches, so the account keeps no record of this.
       keepsPartial: CHATGPT_WEB_CAPABILITIES.interruptKeepsPartial,
       model: record.model || null,
       blocks: [{ kind: "text", contentIndex: 0, text }] }));
   }
 
-  /** How the turn ended, on its prompt; the journal keeps it for a reload. */
   settleTurn(record, outcome) {
     if (!record.generation?.prompt) return;
     this.publish(record, turnSettle({ promptId: record.generation.prompt, outcome, generationId: record.generation.id }));
@@ -321,15 +305,7 @@ export class ChatGptWebAdapter extends EventEmitter {
   runtimeState(record) { return this.sessions.runtimeState(record); }
   publish(record, event) { return this.sessions.publish(record, event); }
   journalPath(chatId) { return path.join(this.dataDir, "journals", `${chatId}.jsonl`); }
-  /**
-   * Keep a statement, without the number this process gave it.
-   *
-   * The sequence belongs to a log that dies with the process. Replaying a
-   * stamped event into a later one would hand a client a position in an order
-   * that no longer exists, and it would ask to be caught up from a number that
-   * means nothing. Unnumbered, it is applied as what it is: a statement about
-   * the transcript, made earlier.
-   */
+  /** Kept unnumbered: the sequence belongs to a log that dies with the process. */
   appendJournal(chatId, event) {
     const { log: _log, ...durable } = event;
     const file = this.journalPath(chatId);
@@ -338,18 +314,8 @@ export class ChatGptWebAdapter extends EventEmitter {
   }
   readJournal(chatId) { try { return fs.readFileSync(this.journalPath(chatId), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)); } catch { return []; } }
   /**
-   * The transcript, folded out of the statements that made it.
-   *
-   * There is nothing else to read: no session file, no thread API. So this
-   * replays the ops in the order they were stated, which is the same fold the
-   * browser runs on the live stream -- one description of what a transcript is,
-   * applied to the same statements at both ends.
-   *
-   * Journals written before this backend stated anything are still read, so a
-   * conversation that predates the change is not lost. That is the only reason
-   * the two older shapes appear below: nothing writes them -- `onPublish`
-   * journals `transcript_op` and nothing else, asserted in the adapter's
-   * tests -- and no live path knows their names.
+   * The same fold the browser runs on the live stream. The two older shapes below are only read, so older journals
+   * still load; `onPublish` journals `transcript_op` and nothing else.
    */
   transcript(chatId) {
     let messages = [];
@@ -364,16 +330,12 @@ export class ChatGptWebAdapter extends EventEmitter {
         stopped: event.stopReason === "aborted", stopReason: event.stopReason || null,
       });
     }
-    // A row still marked as arriving is one the process died holding; nothing
-    // is going to finish it now.
+    // A row still marked as arriving is one the process died holding.
     return messages.filter((message) => !message.streaming);
   }
   async readTranscript({ liveSessionId, chatId }) {
     const record = liveSessionId ? this.get(liveSessionId) : null;
-    // The journal is the whole of what Conduit ever knew about this chat -- the
-    // account exposes nothing to page back through -- so there is never an
-    // earlier page, and the transcript says so rather than leaving the browser
-    // to decide from an absent field.
+    // The journal is all Conduit ever knew about this chat, so there is never an earlier page.
     return { messages: this.transcript(chatId || record?.chatId), tools: [], page: { before: null } };
   }
   async readHistory(options) {

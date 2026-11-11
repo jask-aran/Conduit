@@ -25,22 +25,13 @@ import { usageFromRequests } from "./cache-stats.js";
 import { ConduitIds, ConduitWorkspace, ConduitNotices, USER_ENTRY } from "./server/durable-runtime.js";
 
 /**
- * Chats on Conduit's own runtime (pi-durable, see `server/durable-runtime.js`).
- *
- * pi-durable states everything as committed events on a conversation, and this
- * is the one place they become Conduit's vocabulary. Its record is the truth:
- * a reload folds its entries through the same op builders the live path uses,
- * so the two cannot describe a turn differently.
- *
- * Message identity is split by who knows it first. A prompt keeps the browser's
- * id, carried in its entry's data. An answer is named when it starts streaming,
- * which is before pi-durable has numbered its entry, so the name is written to
- * the conversation's `conduit.ids` document once the entry commits.
+ * A reload folds pi-durable's entries through the same op builders the live path uses, so the two cannot describe a
+ * turn differently. An answer is named when it starts streaming, before pi-durable has numbered its entry, so the name
+ * is written to the conversation's `conduit.ids` document once the entry commits.
  */
 export const DURABLE_CAPABILITIES = Object.freeze({
   history: "tree",
-  // Both are a fork of the conversation just before a prompt; the chat moves
-  // to the fork and the old branch stays in the store.
+  // Both fork the conversation just before a prompt; the old branch stays in the store.
   fork: true,
   regenerate: true,
   steer: true,
@@ -50,12 +41,11 @@ export const DURABLE_CAPABILITIES = Object.freeze({
   thinkingLevels: true,
   modelSwitch: true,
   toolUse: true,
-  // The runtime asks questions (its ask_user tool) through the same card an approval uses.
+  // The runtime's ask_user tool uses the same card an approval uses.
   approvals: true,
   permissionModes: false,
   usage: true,
-  // The turn is folded as it is published, as Pi and the Test stream do, so a
-  // reconnecting browser is restated the generation in progress.
+  // The turn is folded as it is published, so a reconnecting browser is restated the generation in progress.
   replay: true,
   attachments: true,
   interruptKeepsPartial: false,
@@ -78,7 +68,6 @@ const subjectOf = (name, args = {}) => toolSubject(
       : name === "fetch_content" ? args.urls || args.url
         : name === "source_check" ? args.claim || args.query
           : args.path);
-/** A Pi tool's line said better than its subject (transcript-ops, ToolFacts): from Pi's own input shapes. */
 const hostOf = (url) => { try { const { hostname, pathname } = new URL(url); return { host: hostname.replace(/^www\d*\./, ""), path: pathname.replace(/\/$/, "") }; } catch { return null; } };
 const more = (count) => count > 0 ? `and ${count} more` : "";
 const where = (path) => { const parts = String(path || "").split("/").filter(Boolean); return { name: parts.at(-1) || path, dir: parts.slice(-3, -1).join("/") }; };
@@ -94,7 +83,7 @@ function factsOf(name, args = {}) {
     const queries = (Array.isArray(args.queries) ? args.queries : [args.query]).filter((item) => typeof item === "string" && item.trim());
     const first = String(name === "source_check" ? args.claim || queries[0] || "" : queries[0] || "");
     if (!first) return null;
-    // `site:` is how a search is narrowed, not what it looks for: said as where it looked.
+    // `site:` is how a search is narrowed, not what it looks for.
     const site = /(?:^|\s)site:(\S+)/.exec(first)?.[1];
     const subject = first.replace(/(?:^|\s)site:\S+/g, " ").replace(/\s+/g, " ").trim();
     const aside = [site ? `on ${hostOf(`https://${site}`)?.host || site}` : "", name === "source_check" ? `${queries.length} ${queries.length === 1 ? "search" : "searches"}` : more(queries.length - 1)].filter(Boolean).join(" · ");
@@ -138,8 +127,7 @@ function factsOf(name, args = {}) {
   }
   return null;
 }
-// Every subagent action is an agent step; only a spawn names the agent it made (its id once it runs in the background,
-// its conversation once it has one), which the browser pins under the turn. Listing or messaging agents does not.
+// Only a spawn names the agent it made, which the browser pins under the turn.
 const agentFields = (name, input, details = {}) => name === "subagent" ? {
   kind: "agent", subject: input?.action === "list" ? "Background agents"
     : input?.id ? `${input.id}: ${details?.title || subagentTitle(input.task) || "Background agents"}`
@@ -150,7 +138,6 @@ const agentFields = (name, input, details = {}) => name === "subagent" ? {
 const agentStep = (event) => {
   if (event.type === "message_update" && event.changes?.some((change) => change.type.startsWith("text_"))) return "answering";
   if (event.type !== "tool_execution_start") return null;
-  // What it is doing in the person's terms, as a turn's live line says it (turn-digest.js): "checking Gmail".
   return doingOf(digestStep(event));
 };
 const digestStep = (event) => {
@@ -158,7 +145,6 @@ const digestStep = (event) => {
   return { name, kind: toolKind(TOOL_KINDS, name), subject: subjectOf(name, args) || undefined, facts: factsOf(name, args) || undefined, input: args,
     spawn: name === "subagent" && (!args.action || args.action === "spawn"), agent: name === "subagent" ? { id: args.id ?? null } : null };
 };
-// What a run did, from the tools it started, as a settled turn's line says it: "checked Gmail and searched the web".
 const agentDid = (starts) => digestLine(digestActs(starts.map((event) => ({ step: digestStep(event), failed: false }))));
 
 const SCRIPT_TOOLS = {
@@ -172,34 +158,26 @@ function codemodeResult(name, details) {
   if (name !== "codemode" || !Array.isArray(details?.calls)) return {};
   const calls = details.calls.map((call) => {
     let input = call.args;
-    // A preview cut short does not parse: what it shows is kept for what can be read off it (a connector's paths).
+    // A preview cut short does not parse; what it shows is kept for what can be read off it.
     if (typeof input === "string") try { input = JSON.parse(input); } catch { input = { preview: input }; }
     return { name: call.name, input, isError: call.status === "error", durationMs: call.durationMs };
   });
   return { calls: settledCalls(calls, SCRIPT_TOOLS), subject: callsSubject(calls) };
 }
-// pi-durable's default: past contextWindow minus this, the next request waits for a compaction.
+// pi-durable's default.
 const DEFAULT_COMPACTION_RESERVE = 16384;
 const STOP_REASONS = new Set(["stop", "toolUse", "length", "error", "aborted"]);
 
-/** What the transcript keeps about an attachment. */
 const attachmentSummary = (attachments = []) => attachments.map((item) => ({
   id: item.id, name: item.name || item.id, mimeType: item.mimeType || item.type || "application/octet-stream",
 }));
 
-/**
- * What the model is given for a prompt with attachments, as Conduit Pi gives
- * it: images as image input, any other file named by its path for the tools
- * to read. On a device the tools cannot reach this server's files, so a
- * text file is given inline and anything else is said to be out of reach.
- */
+/** On a device the tools cannot reach this server's files, so a text file is given inline. */
 async function promptInput(message, attachments = [], { onDevice = false, processor = null } = {}) {
-  // Each attachment read (and an image fitted) at once, kept in the order they were attached.
   const parts = await Promise.all(attachments.map(async (attachment) => {
     const type = String(attachment.mimeType || attachment.type || "");
     if (type.startsWith("image/") && type !== "image/svg+xml") {
-      // Fitted to the model as `read` fits one (the runtime's processor):
-      // sent as it was, a large screenshot was refused by the provider.
+      // Fitted as `read` fits one: a large screenshot sent as it is is refused by the provider.
       const bytes = await fs.readFile(attachment.path);
       const prepared = processor ? await processor.prepare(new Uint8Array(bytes), type, DEFAULT_IMAGE_LIMITS).catch(() => undefined) : undefined;
       return { image: { type: "image", data: prepared?.data ?? bytes.toString("base64"), mimeType: prepared?.mimeType ?? type } };
@@ -216,10 +194,6 @@ const failure = (message, code = "backend_unavailable", status = 409) => Object.
 const textOf = (content) => (Array.isArray(content) ? content : [])
   .filter((part) => part?.type === "text").map((part) => part.text || "").join("");
 
-/**
- * What a provider said its text was, where it says (pi-ai's `TextSignatureV1`: OpenAI Responses labels each message
- * `commentary` or `final_answer`); null where the stream carries no label (DESIGN.md, Transcript › Turns).
- */
 function textPhase(part) {
   if (!part?.textSignature?.startsWith("{")) return null;
   try {
@@ -228,10 +202,7 @@ function textPhase(part) {
   } catch { return null; }
 }
 
-/**
- * An assistant message's blocks, in Conduit's names. Text keeps the phase its provider gave it (`commentary`,
- * `final_answer`) for the renderer to place; an empty text part (Gemini sends one after each tool call) is nothing.
- */
+/** Gemini sends an empty text part after each tool call. */
 function blocksOf(message) {
   return (message?.content || []).flatMap((part, contentIndex) => {
     if (part.type === "text") {
@@ -245,7 +216,7 @@ function blocksOf(message) {
   });
 }
 
-/** pi-durable writes a stopped call's result as an error; the reader's stop makes it cancelled. */
+/** pi-durable writes a stopped call's result as an error. */
 const abortedResult = (entry) => (entry?.data?.diagnostics || []).some((item) => item?.code === "aborted");
 
 const stopReasonOf = (message) => (STOP_REASONS.has(message?.stopReason) ? message.stopReason : "stop");
@@ -253,8 +224,6 @@ const stopReasonOf = (message) => (STOP_REASONS.has(message?.stopReason) ? messa
 function assistantClose(message, messageId, generationId = null) {
   const stopReason = stopReasonOf(message);
   const blocks = blocksOf(message);
-  // Commentary or final answer, as the provider labelled its text; a message whose text says neither is commentary
-  // when it stopped to call a tool.
   const texts = blocks.filter((block) => block.kind === "text");
   const labelled = texts.length > 0 && texts.every((block) => block.phase);
   return messageClose({ messageId, stopReason, interim: labelled ? !texts.some((block) => block.phase === "final_answer") : stopReason === "toolUse", generationId,
@@ -264,19 +233,10 @@ function assistantClose(message, messageId, generationId = null) {
     errorMessage: message.errorMessage || null });
 }
 
-/**
- * A conversation's entries as the ops that would have stated them live.
- *
- * `ids` maps entry ids to the names their answers were streamed under; an
- * answer the process died before naming is called after its entry. A prompt
- * is settled by what came after it: answered, cut off by a stop, or failed.
- */
-/** A heartbeat's quiet line (subagents.js): what it did when it told no one, opening its run. */
 export const beatLine = (data = {}) => ["Heartbeat",
   data.handled ? `${data.handled} handled` : null,
   data.set ? `${data.set} check-back${data.set === 1 ? "" : "s"} set` : null].filter(Boolean).join(" · ");
-// A run's report, as the agent was given it: the report, what Conduit added to it for the agent (the decision it asks
-// for, stated apart since 0.8.9; split at its rule before), and who sent it.
+// Older reports carry what Conduit added for the agent after this rule.
 const APPENDED_RULE = "\n\n---\n";
 const modelText = (entry) => {
   const content = entry.model?.[0]?.content;
@@ -296,7 +256,6 @@ const userMessage = (entry) => {
     ...(data.attachments?.length ? { attachments: data.attachments } : {}) };
 };
 
-/** The tools a conversation had been offered before an entry: name -> the definition last sent (pi.system entries). */
 function toolsBefore(entries, beforeId) {
   const tools = new Map();
   for (const item of entries) {
@@ -312,9 +271,7 @@ function offerTools(tools, entry) {
 }
 
 /**
- * Read only the context this entry supplied; the model's wrapped summary stays verbatim. `before`: the tools offered
- * until then (toolsBefore), so a restatement (every tool removed and sent again, as pi-durable does when one changes)
- * names the ones whose definition changed; `restated` is left only when none did.
+ * pi-durable restates every tool when one changes, so `before` lets the entry name only those whose definition changed.
  */
 function contextEntry(entry, before = null) {
   if (entry.kind === "pi.compaction") return { kind: "compaction", sections: [], summary: modelText(entry) };
@@ -329,7 +286,6 @@ function contextEntry(entry, before = null) {
   const changed = before ? (message.toolsAdded || []).filter((tool) => removedNames.has(tool.name) && before.has(tool.name) && before.get(tool.name) !== JSON.stringify(tool)).map((tool) => tool.name) : [];
   const restated = sameNames && !changed.length;
   return { kind: sections.some(([name, text]) => name === "instructions" && typeof text === "string") ? "prompt" : "update",
-    // A null section is one the request took away.
     sections: sections.map(([name, text]) => ({ name, text: text ?? "", ...(text == null ? { removed: true } : {}) })),
     ...(message.toolsAdded || message.toolsRemoved ? { tools: {
       added: added.filter((name) => !removedNames.has(name)), removed: removed.filter((name) => !addedNames.has(name)),
@@ -337,10 +293,7 @@ function contextEntry(entry, before = null) {
     } } : {}) };
 }
 
-/**
- * How a context entry stands to the ones before it: `opening` for the first prompt a conversation was given, `resent`
- * for a prompt sent again because a compaction replaced what came before (not a change).
- */
+/** `resent` is a prompt sent again because a compaction replaced what came before, not a change. */
 function contextPlace(entries, entry) {
   let prompted = false, compacted = false;
   for (const item of entries) {
@@ -351,10 +304,7 @@ function contextPlace(entries, entry) {
   return { opening: !prompted, resent: prompted && compacted };
 }
 
-/**
- * A request that only took context away, then the next that sent all of it again: pi-durable restating its prompt.
- * The two are one change, drawn as the second under the first's id, so a live transcript's first line becomes it.
- */
+/** pi-durable restates its prompt by taking context away, then sending all of it again: the two are one change. */
 function restores(away, entry) {
   const gone = away?.kind === "pi.system" && away.model?.[0];
   if (!gone || gone.toolsAdded?.length || gone.toolsRemoved?.length || entry?.kind !== "pi.system") return false;
@@ -408,16 +358,9 @@ const quietRunOps = (entry) => {
 };
 
 const TURN_PROMPTS = new Set([USER_ENTRY, "conduit.subagent-report", "conduit.agent-beat"]);
-/**
- * The work a message of jbot's log came from (GET /v0/agent/work): the thread's entries from `from` (the person's
- * message before it, or just after the reply before it) through `through` (its own), as ops. lean leaves out what each
- * tool was given and gave back: the trail's lines are there without them, and a step opened reads them whole.
- * steer: the message is the person's, and its work is the turn it steered, up to it -- none (null) when no turn was
- * running (its last model message before it asked for no tools).
- */
+/** `steer`: the work is the turn the message steered, up to it; null when no turn was running. */
 export function workOps(entries, from, through, { lean = false, steer = false } = {}) {
   const until = steer ? through - 1 : through;
-  // From the turn's own prompt (the person's, a report or a beat), not turns before it that said nothing.
   const start = entries.findLast((entry) => entry.id >= from && entry.id <= until && TURN_PROMPTS.has(entry.kind))?.id ?? from;
   if (steer) {
     const last = entries.findLast((entry) => entry.id > start && entry.id <= until && entry.kind === "pi.assistant");
@@ -429,18 +372,15 @@ export function workOps(entries, from, through, { lean = false, steer = false } 
 
 export function entriesToOps(entries, ids = {}, runningTools = []) {
   const ops = [];
-  // The tools offered so far, so a restatement can say which changed.
   const offered = new Map();
   const calls = new Map();
   const details = new Map(entries.filter((entry) => entry.kind === "pi.tool-result")
     .map((entry) => [entry.model?.[0]?.toolCallId, entry.model?.[0]?.details]));
-  // When each call started, from its result (its end, less how long it ran): a call reopened from the record is
-  // stamped with when it ran, not when it was read back, or every saved step would say no time.
+  // A call reopened from the record is stamped with when it ran, not when it was read back.
   const started = new Map(entries.filter((entry) => entry.kind === "pi.tool-result" && entry.model?.[0]?.timestamp)
     .map((entry) => { const result = entry.model[0]; return [result.toolCallId, new Date(result.timestamp - (result.durationMs || 0)).toISOString()]; }));
   for (const slot of runningTools) if (slot.details && !details.get(slot.callId)) details.set(slot.callId, slot.details);
   const children = new Map([...details.values()].filter((detail) => detail?.subagentId).map((detail) => [detail.subagentId, detail]));
-  // Each request that restores the one before it, to the one it restores (restores).
   const restating = new Map();
   for (let at = 1; at < entries.length; at++) if (restores(entries[at - 1], entries[at])) restating.set(entries[at].id, entries[at - 1]);
   const restated = new Set([...restating.values()].map((entry) => entry.id));
@@ -466,7 +406,7 @@ export function entriesToOps(entries, ids = {}, runningTools = []) {
       if (!restated.has(entry.id)) ops.push(contextOp(entry, prompt, offered, contextPlace(entries, entry), restating.get(entry.id)));
       if (entry.kind === "pi.system") offerTools(offered, entry);
     } else if (entry.kind === "conduit.agent-beat") {
-      // Its own settled line: not a prompt, so a turn around it goes on as it was.
+      // Not a prompt, so a turn around it goes on as it was.
       ops.push(...beatOps(entry));
     } else if (entry.kind === "conduit.run-quiet") {
       ops.push(...quietRunOps(entry));
@@ -499,14 +439,12 @@ export function entriesToOps(entries, ids = {}, runningTools = []) {
 }
 
 export class DurableAdapter extends EventEmitter {
-  // Starts its harness on a device for a device's workspace (live-session-launcher.js).
   runsOnDevices = true;
 
   constructor({ runtime, logs = null } = {}) {
     super();
     this.runtime = runtime;
     runtime.refreshLiveTools = (extension) => this.refreshLiveTools(extension);
-    // A prompt edited in Settings › Prompts reaches the threads running now, not only the next ones.
     runtime.contextStore?.onChange?.(() => { void this.refreshInstructions(); });
     runtime.routineContextUsage = async (home, _context, compaction) => {
       const entries = await this.entries(home);
@@ -550,8 +488,7 @@ export class DurableAdapter extends EventEmitter {
     this.records = this.sessions.records;
     this.byChatId = this.sessions.byChatId;
     Object.assign(this, unsupported(DURABLE_CAPABILITIES, { label: "Conduit runtime" }));
-    // A store that exists may hold a turn the last process left running, and
-    // it goes on now rather than when somebody next opens that chat.
+    // A turn the last process left running goes on now, not when somebody next opens that chat.
     if (runtime?.exists()) {
       void runtime.open().then(() => this.reattach())
         .catch((error) => console.error("[conduit-runtime] could not open", error));
@@ -560,11 +497,6 @@ export class DurableAdapter extends EventEmitter {
 
   get context() { return this.runtime.context; }
 
-  /**
-   * Take up again every chat with work in flight, so what a resumed turn says
-   * reaches the chat's log and any page already open on it, rather than
-   * waiting for somebody to open the chat.
-   */
   async reattach() {
     const harness = this.runtime.harness;
     const { submissions } = await harness.inspect(this.context);
@@ -573,7 +505,6 @@ export class DurableAdapter extends EventEmitter {
     }
   }
 
-  /** Take up one conversation's chat, if it has one and it is not taken up already. */
   async attachConversation(conversationId) {
     const harness = this.runtime.harness;
     const identity = await harness.snapshot(ConduitIds, conversationId, this.context);
@@ -582,11 +513,9 @@ export class DurableAdapter extends EventEmitter {
     if (conversation) await this.start(conversation, { chatId, readOnly: Boolean(identity?.subagent), parentChatId: identity?.parentChatId });
   }
 
-  /** Which chat a conversation belongs to, kept beside it so a restart can find its way back. */
   async remember(conversation, chatId, workspace) {
     await conversation.commit(async (tx) => {
       (await tx.doc(ConduitIds, conversation.id)).chatId = chatId;
-      // The device whose folder this conversation works in; none is this server.
       if (workspace !== undefined) Object.assign(await tx.doc(ConduitWorkspace, conversation.id), workspace || { nodeId: null, place: null });
     }, this.context);
   }
@@ -607,7 +536,6 @@ export class DurableAdapter extends EventEmitter {
     const selected = (forceModel ? String(model).trim() : "") || String(context.chat.backend.model || "").trim();
     const level = (forceModel ? String(thinkingLevel).trim() : "")
       || String(context.chat.modelThinkingLevels?.[selected] || "").trim();
-    // The chat's profile is a Conduit template (Assistant when it names none).
     const options = { chatId: context.chat.id, project: context.project, model: selected, thinkingLevel: level,
       templateId: context.chat.templateId || context.chat.backend?.profileId || null,
       roaming: context.chat.backend?.roaming === true, readOnly: context.chat.status === "subagent", parentChatId: context.chat.backend?.parentChatId };
@@ -625,12 +553,7 @@ export class DurableAdapter extends EventEmitter {
     };
   }
 
-  /**
-   * A chat whose model has gone (its provider dropped it, its sign-in went,
-   * it left the scope) is moved to one that is here, as classic Pi did: the
-   * default where it is available, else the first, at the nearest thinking
-   * level it has. pi-durable refuses a turn on a model it cannot resolve.
-   */
+  /** pi-durable refuses a turn on a model it cannot resolve. */
   async recoverModel(record) {
     const from = record?.model;
     const available = from ? await this.runtime.availableModels().catch(() => null) : null;
@@ -677,7 +600,7 @@ export class DurableAdapter extends EventEmitter {
     }
     if (options.readOnly) return this.start(conversation, options);
     await this.configureSession(conversation, options);
-    // A conversation from before places learns its workspace's place.
+    // An older conversation learns its workspace's place.
     const workspace = await harness.snapshot(ConduitWorkspace, conversation.id, this.context);
     if (workspace?.nodeId && !workspace.place && options.project?.place) {
       await this.remember(conversation, options.chatId, { nodeId: remoteNode(options.project), place: options.project.place });
@@ -688,7 +611,6 @@ export class DurableAdapter extends EventEmitter {
     return record;
   }
 
-  // Restore and live refresh use the same fixed prompt slots and stored agent instructions.
   async sessionSettings(conversation, options) {
     const harness = this.runtime.harness;
     const stored = await harness.snapshot(DurableAgentDoc, conversation.id, this.context);
@@ -698,10 +620,8 @@ export class DurableAdapter extends EventEmitter {
       || (Array.isArray(stored?.extensions) && stored.extensions.includes("agent") ? "agent" : null);
     const roaming = options.roaming || Boolean((await harness.snapshot(ConduitWorkspace, conversation.id, this.context))?.roaming);
     const noticeState = await harness.snapshot(ConduitNotices, conversation.id, this.context);
-    // jbot's prompt is assembled with the variables fixed at its thread's start (noticeState.prompt), so it changes only
-    // when its documents do (a template update shipped, the person's Prompts): the thread takes the new one whenever it
-    // is configured (a restart, a Prompts edit), one cache miss for a real change; never a copy frozen at its start. A
-    // thread from before fixed variables fixes them now, once (what the notices then compare against), and goes on so.
+    // jbot's prompt uses the variables fixed at its thread's start, so it changes only when its documents do: one cache
+    // miss for a real change. A thread without fixed variables fixes them now, once.
     let fixedVars = noticeState?.prompt;
     if (templateId === "agent" && !fixedVars && this.runtime.agentVars) {
       const { now: _now, ...fixed } = await this.runtime.agentVars().catch(() => ({ now: null }));
@@ -730,8 +650,6 @@ export class DurableAdapter extends EventEmitter {
     });
   }
 
-  /** Every live thread configured again: its prompt assembled from its documents as they are now (one cache miss each
-   *  where the text changed; none where it did not). */
   async refreshInstructions() {
     this.instructionRefresh = (this.instructionRefresh || Promise.resolve()).then(async () => {
       for (const record of this.rawRecords()) {
@@ -743,7 +661,7 @@ export class DurableAdapter extends EventEmitter {
   }
 
   async refreshLiveTools(extension) {
-    // Queue the whole pass so each conversation is configured in refresh order, including children.
+    // Queued whole so each conversation is configured in refresh order, including children.
     this.toolRefresh = (this.toolRefresh || Promise.resolve()).then(async () => {
       const harness = this.runtime.harness;
       if (!harness) return;
@@ -786,14 +704,8 @@ export class DurableAdapter extends EventEmitter {
       status: "running", active: false, stopping: false, generation: null, generationSeq: 0,
       clients: new Set(), events: [], activeGeneration: null,
       model: "", modelId: "", provider: "", thinkingLevel: "", contextWindow: 0,
-      // What the turn in progress has named: its prompts by submission, the
-      // answer being written, and the tools it has open.
       prompts: new Map(), turn: null, usage: null, queue: [],
-      // Prompt text by message id, for the queue strip, and prompts placed
-      // before the run that answers them has said it started.
       texts: new Map(), unopened: new Map(), closedEntries: new Set(),
-      // How each queued prompt was sent: a steer joins the running turn, a
-      // follow-up waits for the next one.
       modes: new Map(),
     });
     record.scope.defer(() => { record.stream?.stop(); record.unasked?.(); record.unwaited?.(); record.unnoticed?.(); });
@@ -801,13 +713,10 @@ export class DurableAdapter extends EventEmitter {
     return record;
   }
 
-  /** Listen to a conversation: the chat's own, or the fork it has just moved to. */
   async follow(record, conversation) {
     await record.stream?.stop();
     record.conversation = conversation;
     record.conversationId = conversation.id;
-    // What the server keeps as the chat's opaque session, on its first prompt
-    // and at every checkpoint: the conversation it is on, a fork included.
     record.sessionId = String(conversation.id);
     await this.readAgent(record);
     record.unasked?.();
@@ -829,7 +738,6 @@ export class DurableAdapter extends EventEmitter {
     });
   }
 
-  /** Every entry of a conversation, oldest first. */
   async entries(conversation) {
     const entries = [];
     let cursor;
@@ -842,13 +750,8 @@ export class DurableAdapter extends EventEmitter {
   }
 
   /**
-   * Cut the chat's history just before a prompt (plan decision 16).
-   *
-   * pi-durable forks keep the parent's entries up to the one given, so the fork
-   * is taken at the entry before the prompt; a prompt with nothing before it
-   * starts a new conversation with the same agent. Either way the chat moves to
-   * the new conversation, and the prompt's text is handed back so a regenerate
-   * can ask it again. The old branch stays in the store, untouched.
+   * pi-durable forks keep the parent's entries up to the one given, so the fork is taken at the entry before the
+   * prompt; a prompt with nothing before it starts a new conversation with the same agent.
    */
   async fork(id, { nodeId } = {}) {
     const record = this.get(id);
@@ -901,7 +804,7 @@ export class DurableAdapter extends EventEmitter {
     record.contextWindow = (model && this.runtime.models?.getModel(model.provider, model.modelId)?.contextWindow) || 0;
   }
 
-  /** Which prompt each queued input is: the browser's id travels as the request id. */
+  /** The browser's id travels as the request id. */
   async promptIdsFor(record, inputs) {
     const harness = this.runtime.harness;
     const ids = [];
@@ -915,11 +818,6 @@ export class DurableAdapter extends EventEmitter {
     return ids;
   }
 
-  /**
-   * A run the last process was in the middle of: its prompts are looked up
-   * again, the tools it had going are taken as open, and the turn is stated as
-   * started, so a page attached now draws it as working.
-   */
   async resumeTurn(record, snapshot) {
     const turn = this.beginTurn(record, snapshot.run.inputs);
     turn.prompts = await this.promptIdsFor(record, snapshot.run.inputs);
@@ -967,12 +865,10 @@ export class DurableAdapter extends EventEmitter {
       this.finish(record);
       throw cause;
     }
-    // Conduit finds a prompt's attachments by the message they were sent with.
     return { generationId: turn.generationId, attachmentIdentity: { messageId } };
   }
 
-  // `byPerson`: typed by the person in their own client (live-session-stream's client commands), stamped on the entry as
-  // `author: "person"`; nothing the hub generates (notices, wakes, steers, reports) carries it.
+  // `byPerson`: typed by the person in their own client; nothing the hub generates carries it.
   async submit(record, text, messageId, whenBusy, attachments = [], isNotice = false, byPerson = false) {
     this.assertWritable(record);
     const summary = attachmentSummary(attachments);
@@ -998,14 +894,12 @@ export class DurableAdapter extends EventEmitter {
     return submission;
   }
 
-  /** One committed event, in Conduit's words. */
   async translate(record, event) {
-    // What a jbot thread's turn is doing now, in the turn digest's words, for Working on (routes/agent.js).
     const doing = record.templateId === "agent" && agentStep(event);
     if (doing && doing !== record.doing) { record.doing = doing; this.runtime.agentChanged?.(); }
     switch (event.type) {
       case "snapshot": {
-        // watchEvents replaces queued events with a snapshot on overflow. Rebuild what those events would have stated.
+        // watchEvents replaces queued events with a snapshot on overflow.
         if (!record.turn && event.run) await this.resumeTurn(record, event);
         const turn = record.turn;
         const identity = await this.runtime.harness.snapshot(ConduitIds, record.conversationId, this.context);
@@ -1112,10 +1006,8 @@ export class DurableAdapter extends EventEmitter {
     }
   }
 
-  /** A prompt entering the transcript mid-run is a steer or a follow-up the run took. */
   async placed(record, entry) {
     if (entry?.kind === "pi.system" || entry?.kind === "pi.compaction") {
-      // Read the entry order on first use too, including a session attached after its last prompt.
       const entries = await this.entries(record.conversation);
       const prompt = entries.findLast((item) => item.id < entry.id && (item.kind === USER_ENTRY || item.kind === "conduit.subagent-report"));
       const away = entries.findLast((item) => item.id < entry.id);
@@ -1126,11 +1018,10 @@ export class DurableAdapter extends EventEmitter {
     if (entry?.kind === "conduit.run-quiet") { for (const op of quietRunOps(entry)) this.publish(record, op); return; }
     if (entry?.kind === "conduit.subagent-report") {
       const data = entry.data || {};
-      // Reports have no browser prompt; open them at placement, as the agent was given them.
+      // Reports have no browser prompt, so they open at placement.
       const id = data.messageId || `u${entry.conversationId}-${entry.id}`;
       const child = data.conversationId ?? findSubagent(await backgroundSubagents(this.runtime.harness, record.conversationId, this.context), data.subagentId)?.child ?? null;
-      // Steered into a running turn (a plain report; a run's follows up, and the run that takes it opens it): the turn
-      // moves on from its prompt as for a steered message, so what comes next answers the report and is drawn under it.
+      // A plain report steered into a running turn: what comes next answers the report and is drawn under it.
       const turn = record.turn;
       if (turn?.inputs?.length && !data.origin && !turn.opened?.has(id)) {
         turn.opened ||= new Set();
@@ -1154,8 +1045,7 @@ export class DurableAdapter extends EventEmitter {
         if (message.notes !== undefined) this.publish(record, messageOpen({ id: messageId, ...message, generationId: turn.generationId }));
         return;
       }
-      // Placed before its run started, or a follow-up placed as the run ends:
-      // the run that answers it opens it (see run_start).
+      // Placed before its run started, or a follow-up placed as the run ends: the run that answers it opens it.
       if (!turn || !turn.inputs.length || record.modes.get(messageId) === "followUp") {
         record.unopened.set(messageId, { ...entry.data, text: message.content, ...(message.notes !== undefined ? { notes: message.notes } : {}) });
         return;
@@ -1163,7 +1053,6 @@ export class DurableAdapter extends EventEmitter {
       turn.opened ||= new Set();
       turn.opened.add(messageId);
       this.closeAnswer(record);
-      // The prompt the turn moves on from is answered now.
       for (const promptId of turn.prompts) this.publish(record, turnSettle({ promptId, outcome: "complete", generationId: turn.generationId }));
       this.publish(record, messageOpen({ id: messageId, ...message, generationId: turn.generationId }));
       turn.prompts = [messageId];
@@ -1202,7 +1091,7 @@ export class DurableAdapter extends EventEmitter {
     return turn.messageId;
   }
 
-  /** An answer still open when a steer lands is given up: nothing was committed into it. */
+  /** Nothing was committed into an answer still open when a steer lands. */
   closeAnswer(record) {
     const turn = record.turn;
     if (!turn?.messageId) return;
@@ -1214,9 +1103,8 @@ export class DurableAdapter extends EventEmitter {
     const turn = record.turn;
     if (!turn) return;
     const messageId = turn.messageId || this.openAnswer(record);
-    // How much of each block's text has gone out: pi-durable sends a block whole (`block`, or the whole `message`)
-    // when a field of it is set rather than appended -- the first words, or a signature at its end -- and only what
-    // follows what was sent is new. Dropping those lost a text's first words until the turn settled.
+    // pi-durable sends a block whole when a field of it is set rather than appended (the first words, or a signature
+    // at its end), so only what follows what was sent is new.
     if (turn.sent?.messageId !== messageId) turn.sent = { messageId, lengths: new Map(), phases: new Map() };
     const { lengths: sent, phases } = turn.sent;
     const send = (contentIndex, blockKind, delta) => {
@@ -1225,8 +1113,7 @@ export class DurableAdapter extends EventEmitter {
       this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "delta",
         seq: ++record.generationSeq, messageId, contentIndex, blockKind, delta });
     };
-    // A text's label -- commentary or final answer -- said once, as soon as its block has it (OpenAI Responses: when
-    // the message opens), and before its first word: the transcript places the text by it rather than guessing.
+    // Said before the text's first word: the transcript places the text by it rather than guessing.
     const label = (contentIndex, block) => {
       const phase = block?.type === "text" ? textPhase(block) : null;
       if (!phase || phases.get(contentIndex) === phase) return;
@@ -1242,7 +1129,6 @@ export class DurableAdapter extends EventEmitter {
     };
     for (const change of changes) {
       if (change.type === "message") { (change.message?.content || []).forEach((block, index) => whole(index, block)); continue; }
-      // A call is named as soon as it starts, so its trace says what it is doing rather than "Calling a tool".
       if (change.type === "toolcall_start" && change.block?.name) {
         this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "delta", seq: ++record.generationSeq,
           messageId, contentIndex: change.contentIndex, blockKind: "tool_call", delta: "", name: change.block.name,
@@ -1282,7 +1168,7 @@ export class DurableAdapter extends EventEmitter {
     const subject = subjectOf(event.toolName, event.args);
     const scriptCalls = event.toolName === "codemode" ? createScriptCalls(SCRIPT_TOOLS) : null;
     turn.tools.set(event.toolCallId, { ...known, details, timestamp: new Date().toISOString(), opened: true, output: "", ...(scriptCalls ? { scriptCalls } : {}) });
-    // A spawn opens at once, its agent's conversation stated again when the child has one (toolProgress).
+    // A spawn's agent conversation is stated again when the child has one.
     this.publish(record, toolOpen({ toolCallId: event.toolCallId, name: event.toolName, kind, subject, facts: factsOf(event.toolName, event.args), ...agentFields(event.toolName, event.args, details || {}), input: event.args,
       messageId: known.messageId, generationId: turn.generationId }));
     const plan = scriptCalls?.open(event.toolCallId, event.args?.code);
@@ -1372,11 +1258,6 @@ export class DurableAdapter extends EventEmitter {
     if (!record.readOnly) this.emit("settled", { record, completed: outcome === "complete" });
   }
 
-  /**
-   * The turn's next step runs on a device that is offline (plan decision 8):
-   * the chat says which, as a retry with nothing to count, until it is back,
-   * and offers to go on without it (decision 21) on the card a question uses.
-   */
   waitingForDevice(record, device) {
     if (record.waitingFor === device.id) return;
     record.waitingFor = device.id;
@@ -1397,7 +1278,6 @@ export class DurableAdapter extends EventEmitter {
         ] }],
     });
     const back = () => {
-      // Back: the card is moot.
       this.settleAsk(record, request.id, { id: request.id, withdrawn: true });
       done();
     };
@@ -1412,7 +1292,6 @@ export class DurableAdapter extends EventEmitter {
     this.runtime.nodeHub?.once(`online:${device.id}`, back);
   }
 
-  /** Put a question card up and wait for the answer (see the runtime's ask_user tool). */
   askUser(record, request) {
     return new Promise((resolve) => this.publish(record, ask(record, request.id, request, { resolve })));
   }
@@ -1434,7 +1313,6 @@ export class DurableAdapter extends EventEmitter {
     pending.resolve(response);
   }
 
-  /** A prompt refused before any run took it -- a model error before the first request, say. */
   submissionChanged(record, submission) {
     if (submission?.status !== "unanswered" || record.turn?.inputs.length) return;
     const turn = record.turn;
@@ -1518,7 +1396,7 @@ export class DurableAdapter extends EventEmitter {
       followUp: record.queue.filter((item) => item.mode !== "steer").map((item) => item.text) };
   }
 
-  /** The chat is being deleted: its background subagents stop rather than report into a conversation no one sees. */
+  /** Background subagents stop rather than report into a conversation no one sees. */
   async discard(chat) {
     const conversationId = Number(chat.backend?.opaqueSession);
     if (!Number.isInteger(conversationId) || !this.runtime.exists()) return;
@@ -1558,7 +1436,6 @@ export class DurableAdapter extends EventEmitter {
   }
 
   listModels() { return this.listAvailableModels(); }
-  // Commands and prompts precede the template's skills, as in classic Pi.
   listCommands(id) { return this.skillCommands(this.get(id)?.templateId); }
   listAvailableCommands({ template } = {}) { return this.skillCommands(template?.id); }
   async skillCommands(templateId) {
@@ -1568,7 +1445,6 @@ export class DurableAdapter extends EventEmitter {
     ];
   }
 
-  /** Expand model input while the transcript keeps the text the user typed. Commands consume the input. */
   async expandInput(record, text, { messageId, whenBusy, summary } = {}) {
     const match = /^\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(String(text || ""));
     if (!match) return text;
@@ -1657,8 +1533,7 @@ export class DurableAdapter extends EventEmitter {
     const before = await summaries();
     const taskId = await record.conversation.compact(instructions, this.context);
     const { outcome } = (await this.runtime.harness.waitForTask(taskId, this.context)).state;
-    // pi-durable keeps the most recent keepRecentTokens as they are and summarises only what is older; with nothing
-    // older it finishes without a summary, which the person is told rather than left wondering.
+    // With nothing older than keepRecentTokens, pi-durable finishes without a summary.
     const compacted = outcome?.status === "completed" && await summaries() > before;
     if (outcome?.status === "completed" && !compacted) {
       const keep = this.runtime.piSettings?.().compaction?.keepRecentTokens ?? 20000;
@@ -1670,10 +1545,6 @@ export class DurableAdapter extends EventEmitter {
 
   contextUsage(record) { return record?.history?.contextUsage || null; }
 
-  /**
-   * What the conversation has spent and how full its context is, read from
-   * pi.usage ledger; entries still supply current context and cache efficiency.
-   */
   async contextFromHistory({ conversation = null, opaqueSession = null } = {}) {
     const harness = await this.runtime.open();
     const held = conversation || await harness.conversation(Number(opaqueSession), this.context);
@@ -1692,8 +1563,7 @@ export class DurableAdapter extends EventEmitter {
     const configuredReserve = this.runtime.piSettings().compaction?.reserveTokens;
     const reserve = Number.isFinite(configuredReserve) && configuredReserve >= 0 ? configuredReserve : DEFAULT_COMPACTION_RESERVE;
     const compactAt = contextWindow && contextWindow > reserve ? contextWindow - reserve : null;
-    // Spend from pi-durable's ledger (failed attempts, summaries and tools count), the chat's own and its
-    // background subagents'; a foreground subagent's is already the chat's, as its call's usage.
+    // A foreground subagent's spend is already the chat's, as its call's usage; background ones are added.
     const ledgers = [await harness.snapshot(UsageDoc, held.id, this.context)];
     for (const item of await backgroundSubagents(harness, held.id, this.context)) ledgers.push(await harness.snapshot(UsageDoc, item.child, this.context));
     const ended = await endedUsage(harness, held.id, this.context);
@@ -1758,7 +1628,6 @@ export class DurableAdapter extends EventEmitter {
       all: tools.map((tool) => ({ name: tool.name, description: (tool.description || "").split(/\r?\n/)[0] })) } };
   }
 
-  /** Browser roster: foreground calls and the persistent background roster, each counted from its own ledger. */
   async agents(chat) {
     const conversationId = Number(chat.backend?.opaqueSession);
     if (!Number.isInteger(conversationId) || !conversationId) return [];
@@ -1779,10 +1648,8 @@ export class DurableAdapter extends EventEmitter {
       agents.push({ id: item.id, conversationId: item.child, title: item.title, mode: "background", ...(item.via ? { via: item.via } : {}),
         status, startedAt, endedAt, ...(item.run ? { run: { ...item.run, woke: Boolean(item.heard), status, startedAt, endedAt, conversationId: item.child } } : {}) });
     }
-    // A codemode script's foreground spawns, under the script's call (`via`).
     for (const item of await nestedSubagents(harness, conversationId, this.context)) {
-      // A stopped script's spawn is aborted mid-call, before it can note how it ended: the task that owns its child
-      // says whether it is still going.
+      // A stopped script's spawn is aborted before it can note how it ended: the task that owns its child says.
       let { status = "running", endedAt = null } = item;
       if (status === "running") {
         const record = await harness.commit((tx) => tx.conversation(item.conversationId), this.context).catch(() => null);
@@ -1819,8 +1686,7 @@ export class DurableAdapter extends EventEmitter {
       agent.chatId = child?.id || null;
       const ledger = await harness.snapshot(UsageDoc, agent.conversationId, this.context);
       const spent = [...Object.values(ledger?.models || {}), ...Object.values(ledger?.tools || {})];
-      // Its context at the end (its last request: what it held), as any chat's context pane says; a sum over its
-      // requests counts the cached prefix again each time.
+      // Its last request, not a sum: a sum counts the cached prefix again each time.
       const last = (await (await harness.conversation(agent.conversationId, this.context))?.entries({ order: "descending" }, 8, undefined, this.context))
         ?.items.find((entry) => entry.kind === "pi.assistant" && entry.model?.[0]?.usage)?.model[0].usage;
       agent.usage = { tokens: spent.reduce((sum, usage) => sum + (Number(usage.totalTokens) || 0), 0),
@@ -1835,11 +1701,6 @@ export class DurableAdapter extends EventEmitter {
     return stopBackgroundSubagent(await this.runtime.open(), Number(chat.backend?.opaqueSession), id, this.context);
   }
 
-  /**
-   * The subagents a chat's turns delegated to (src/server/subagents.js), on
-   * its conversation and the branches it left: each child's task and, once
-   * it has one, its answer. Their transcripts read as any conversation's.
-   */
   async subagents({ liveSessionId, opaqueSession }) {
     const record = liveSessionId ? this.get(liveSessionId) : null;
     const current = record?.conversationId ?? Number(opaqueSession);
@@ -1861,11 +1722,8 @@ export class DurableAdapter extends EventEmitter {
   }
 
   /**
-   * A chat moved to another project or workspace: its conversation, and every
-   * branch it left (an edit there forks from it), now work in the target's
-   * folder, on the target's device. Nothing in the store moves; the record and
-   * the agent's working directory change. A roaming chat stays roaming. The
-   * chat's live session is closed first by the caller and reopens in place.
+   * Every branch the chat left moves too (an edit there forks from it). Nothing in the store moves. The caller closes
+   * the chat's live session first.
    */
   async relocate({ opaqueSession, project }) {
     await this.assertConversationWritable(Number(opaqueSession));
@@ -1896,11 +1754,6 @@ export class DurableAdapter extends EventEmitter {
     }
   }
 
-  /**
-   * Start the chat's context again (pi-durable's reset): the model sees
-   * nothing before it, or only `handoff` when given; the transcript keeps
-   * everything. While a turn runs it waits for the next boundary.
-   */
   async reset({ liveSessionId, opaqueSession, handoff }) {
     await this.assertConversationWritable(this.get(liveSessionId)?.conversationId ?? Number(opaqueSession));
     const record = liveSessionId ? this.get(liveSessionId) : null;
@@ -1910,16 +1763,12 @@ export class DurableAdapter extends EventEmitter {
     await conversation.reset(String(handoff || "").trim() || undefined, this.context);
   }
 
-  /** The conversations a chat was on before the one given (its edits' forks), oldest first. */
   async branchesOf(conversationId) {
     const harness = await this.runtime.open();
     return ((await harness.snapshot(ConduitIds, conversationId, this.context))?.branches || []).filter(Number.isInteger);
   }
 
-  /**
-   * The chat's history as a tree, merged by original entry identity so a
-   * fork shares tools and context boundaries as well as messages.
-   */
+  /** Merged by original entry identity so a fork shares tools and context boundaries as well as messages. */
   async readHistory(options) {
     const { formatHistoryTool } = await import("./harnesses/history-tool.js");
     const record = options.liveSessionId ? this.get(options.liveSessionId) : null;
@@ -2027,11 +1876,7 @@ export class DurableAdapter extends EventEmitter {
   rawRecords() { return [...this.sessions.rawRecords()].filter((record) => !record.readOnly); }
   list() { return this.sessions.list().filter((view) => !this.get(view.id)?.readOnly); }
   track(id, chatId) { return this.sessions.reassign(id, chatId); }
-  /**
-   * Stop a chat's process. A turn here outlives its session -- it is durable,
-   * and would come back after a restart -- so stopping the process stops the
-   * turn too, as ending another harness's process does.
-   */
+  /** A durable turn outlives its session and would come back after a restart, so stopping the process stops it too. */
   async stopProcess(id) {
     if (this.get(id)?.active && !this.get(id)?.readOnly) await this.cancel(id).catch(() => {});
     await this.close(id);
@@ -2044,7 +1889,7 @@ export class DurableAdapter extends EventEmitter {
   }
 }
 
-/** `provider/model`, where the model id may itself contain slashes. */
+/** The model id may itself contain slashes. */
 function splitSpec(spec) {
   const value = String(spec || "").trim();
   const slash = value.indexOf("/");

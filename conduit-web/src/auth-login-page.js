@@ -1,8 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-// The normal build renders these templates from components/ui, including its
-// hashed CSS. There is no independent login markup or stylesheet to drift.
+// The normal build renders these templates from components/ui, so there is no separate login markup to drift.
 export function createLoginPageRenderer(clientDist) {
   const file = path.join(clientDist, "access/templates.json");
   let cached = null;

@@ -22,20 +22,18 @@ import { placeProcesses } from "./nodes/place-processes.js";
 import { mcpAccess } from "./server/mcp-access.js";
 import { claudeSession } from "./nodes/node-harnesses.js";
 
-// Claude Code's tools, by what they do.
 const CLAUDE_TOOL_KINDS = Object.freeze({
   Bash: "command", BashOutput: "command", KillShell: "command", PowerShell: "command",
   Read: "read", Glob: "read", Grep: "read", LS: "read", NotebookRead: "read",
   Edit: "edit", MultiEdit: "edit", Write: "edit", NotebookEdit: "edit",
   WebSearch: "search", WebFetch: "fetch",
 });
-// What a call acted on. A search's pattern says more than the directory it
-// searched, and an agent's description more than anything else it was handed.
+// A search's pattern says more than the directory it searched, and an agent's description more than anything else
+// it was handed.
 const subjectOf = (input) => input && typeof input === "object"
   ? toolSubject(["command", "pattern", "query", "url", "file_path", "notebook_path", "path", "description"]
     .map((field) => input[field]).find((value) => value != null)) ?? undefined
   : undefined;
-// The API's reasons a message stopped, in Conduit's.
 const STOP_REASONS = Object.freeze({
   end_turn: "stop", stop_sequence: "stop", refusal: "stop", pause_turn: "stop", tool_use: "toolUse",
   max_tokens: "length", model_context_window_exceeded: "length",
@@ -44,11 +42,9 @@ const OUTCOMES = Object.freeze({ aborted: "interrupted", error: "failed" });
 // An interrupt the CLI never answers with a result still ends the turn.
 const INTERRUPT_SETTLE_MS = 5_000;
 const INTERRUPTED = /^\[Request interrupted by user/;
-// A prompt Claude Code made itself -- a background task finishing, say -- is
-// named by the task, which the live notification and the saved entry share.
+// A prompt Claude Code made itself is named by the task, which the live notification and the saved entry share.
 const taskPromptId = (taskId, status) => `task_${taskId}_${status}`;
 const tagged = (text, tag) => text.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`))?.[1]?.trim() || "";
-/** A saved prompt that did not come from the user, in Conduit's words; null for the user's own. */
 const harnessPrompt = (entry, text) => {
   const kind = entry.origin?.kind;
   if (!kind || kind === "human") return null;
@@ -77,8 +73,7 @@ export const CLAUDE_CODE_CAPABILITIES = Object.freeze({
   interruptKeepsPartial: false,
 });
 
-// Claude Code's own modes, as it names them. Bypass is offered because the
-// query is started allowing it; choosing it is still the user's call, per chat.
+// Bypass is offered because the query is started allowing it; choosing it is still the user's call, per chat.
 const PERMISSION_MODES = Object.freeze([
   { id: "default", label: "Default", description: "Ask before anything your settings do not already allow" },
   { id: "auto", label: "Auto mode", description: "A classifier approves or blocks each action instead of asking" },
@@ -92,11 +87,7 @@ const DENY = "Deny";
 const RULE_SCOPES = Object.freeze({ session: "this session", localSettings: "in this project", projectSettings: "in this project",
   userSettings: "everywhere" });
 
-/**
- * What agreeing to Claude Code's suggestion would do, said as its own prompt
- * says it. The suggestion is not always a rule: for an edit it is switching
- * the session to accept edits, and a label that said "for session" hid that.
- */
+/** The suggestion is not always a rule: for an edit it switches the session to accept edits. */
 const suggestionLabel = (suggestions = []) => {
   const mode = suggestions.find((item) => item.type === "setMode")?.mode;
   if (mode === "acceptEdits") return "Allow all edits this session";
@@ -118,8 +109,7 @@ const outputText = (content) => typeof content === "string" ? content : (Array.i
   .map((item) => (item?.type === "text" ? item.text : "")).filter(Boolean).join("\n");
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-// Conduit names a prompt `m_<uuid>` and Claude Code keeps the uuid it is handed,
-// so the saved session names the prompt what the browser already calls it.
+// Claude Code keeps the uuid it is handed, so the saved session names the prompt what the browser already calls it.
 const promptId = (uuid) => `m_${uuid}`;
 const uuidOf = (messageId) => {
   const bare = String(messageId || "").replace(/^m_/, "");
@@ -160,11 +150,8 @@ const requestUsage = (usage) => {
 };
 
 /**
- * A saved session's entries in the order they were written, from the file
- * itself. The SDK's reader walks the chain back from its end, and a compaction
- * starts the chain again, so it would lose everything before the compaction.
- * A steer is saved as the command it was queued as, and read back as the
- * prompt it became.
+ * Read from the file itself: the SDK's reader walks the chain back from its end, and a compaction starts the chain
+ * again, so it would lose everything before the compaction.
  */
 async function readSavedSession(sessionId) {
   const text = await claudeSession(sessionId);
@@ -179,8 +166,7 @@ function parseSavedSession(text) {
     try { entry = line.trim() ? JSON.parse(line) : null; } catch { entry = null; }
     if (!entry?.uuid || entry.isSidechain || seen.has(entry.uuid)) continue;
     seen.add(entry.uuid);
-    // What a compaction summarised is not in the conversation Claude Code
-    // resumes, so nothing before it can be gone back to.
+    // What a compaction summarised is not in the conversation Claude Code resumes.
     if (entry.type === "system" && entry.subtype === "compact_boundary") {
       for (const earlier of entries) earlier.compacted = true;
       continue;
@@ -200,7 +186,7 @@ function parseSavedSession(text) {
 // A compaction asked for is saved as a command and its output; neither is a prompt.
 const COMPACTION_ENTRY = /^<command-name>\/compact<\/command-name>|^<local-command-stdout>/;
 
-/** The installed CLI, found on PATH as a shell would; the SDK wants a path. */
+/** The SDK wants a path. */
 function resolveCommand(command) {
   if (!command) return undefined;
   if (command.includes(path.sep)) return command;
@@ -211,11 +197,9 @@ function resolveCommand(command) {
   return undefined;
 }
 
-// `default` is an alias for one of the other rows, so the catalogue leaves it
-// out and lists each model once, under its own name.
+// `default` is an alias for one of the other rows.
 const catalogueRows = (models) => models.filter((model) => model.value !== "default");
 
-/** The row a model name means: its own, or the one an alias or a full id resolves to. */
 const modelSpec = (models, name) => {
   const rows = catalogueRows(models);
   if (rows.some((model) => model.value === name)) return name;
@@ -225,7 +209,6 @@ const modelSpec = (models, name) => {
 
 const effortLevels = (model) => (model?.supportsEffort ? model.supportedEffortLevels || [] : []);
 
-/** The effort Claude Code would run a model at: that model's setting, then the general one. */
 const effortFor = (model, settings) => {
   const levels = effortLevels(model);
   const wanted = settings.modelSettings?.[model?.resolvedModel]?.effortLevel || settings.effortLevel;
@@ -238,11 +221,6 @@ const catalogue = (models, settings) => catalogueRows(models).map((model) => ({
   defaultThinkingLevel: effortFor(model, settings),
 }));
 
-/**
- * The modes this folder allows, the one its settings start in first -- which
- * is the one a chat shows before it has chosen. Auto mode also needs a model
- * that can run it.
- */
 const permissionModes = (settings, model = null) => {
   const starts = settings.permissions?.defaultMode || "default";
   const refused = (id) => (id === "auto" && (settings.disableAutoMode === "disable" || model?.supportsAutoMode === false))
@@ -251,7 +229,6 @@ const permissionModes = (settings, model = null) => {
   return [...modes.filter((mode) => mode.id === starts), ...modes.filter((mode) => mode.id !== starts)];
 };
 
-/** The prompt stream a resident query reads: one message per Conduit prompt. */
 class InputQueue {
   constructor() { this.items = []; this.waiting = null; this.done = false; }
 
@@ -278,8 +255,7 @@ class InputQueue {
   }
 }
 
-// AskUserQuestion, asked as one. Claude Code always lets the user type their
-// own answer, and a note on a choice reaches the model as an annotation.
+// Claude Code always lets the user type their own answer, and a note on a choice reaches the model as an annotation.
 const askRequest = (id, input) => questionRequest({ id, title: "Claude has a question", notes: true,
   questions: (input.questions || []).map((question, index) => ({
     id: String(index), header: question.header || "", prompt: question.question || "",
@@ -291,7 +267,6 @@ const askRequest = (id, input) => questionRequest({ id, title: "Claude has a que
     freeform: { placeholder: "Something else" },
   })) });
 
-// Its reply is the chosen labels, comma-joined, keyed by the question's text.
 const askAnswer = (pending, response) => {
   if (isDismissal(response)) return { behavior: "deny", message: "The user dismissed the question." };
   const answers = {};
@@ -316,11 +291,7 @@ const approvalAnswer = (pending, response) => {
   return { behavior: "deny", message: "The user denied this tool call." };
 };
 
-/**
- * Claude Code's /context breakdown in Conduit's shape: each category with its
- * kind, and the itemised ones (MCP tools, agents, memory files) carrying their
- * items. Claude Code's own colours are terminal theme names, so they stay behind.
- */
+/** Claude Code's own colours are terminal theme names, so they stay behind. */
 function contextCategories(context) {
   if (!Array.isArray(context?.categories) || !context.categories.length) return null;
   const items = {
@@ -328,8 +299,7 @@ function contextCategories(context) {
     "Custom agents": (context.agents || []).map((agent) => ({ label: agent.agentType, tokens: agent.tokens })),
     "Memory files": (context.memoryFiles || []).map((file) => ({ label: file.path.split(/[\\/]/).pop() || file.path, tokens: file.tokens })),
   };
-  // Claude Code's kind first (classify on it, never on the English name, its
-  // docs say), then its names for the parts that occupy the window.
+  // Classify on Claude Code's kind first, never on the English name, as its docs say.
   const category = ({ name, kind, isDeferred }) => kind === "free" ? "free" : kind === "buffer" ? "buffer"
     : kind === "deferred" || isDeferred ? "deferred-tools"
     : /system prompt/i.test(name) ? "system-prompt"
@@ -341,14 +311,12 @@ function contextCategories(context) {
 }
 
 export class ClaudeCodeAdapter extends EventEmitter {
-  // Starts its harness on a device for a device's workspace (live-session-launcher.js).
   runsOnDevices = true;
 
   /** Each model's window as Claude Code last reported it, for threads read from history. */
   static windows = new Map();
-  /** Each model's autocompact reserve as Claude Code last reported it. */
   static buffers = new Map();
-  /** The claude.ai plan's windows, asked at most once a minute: they are the account's, not a chat's. */
+  /** Asked at most once a minute: the plan's windows are the account's, not a chat's. */
   static plan = { at: 0, value: null };
 
   static async planUsage(query) {
@@ -369,20 +337,16 @@ export class ClaudeCodeAdapter extends EventEmitter {
     return ClaudeCodeAdapter.plan.value;
   }
 
-  /** Where Claude Code compacts: the window less its autocompact reserve. */
   static compactAt(model, window) {
     const buffer = ClaudeCodeAdapter.buffers.get(model);
     return window && buffer ? window - buffer : null;
   }
 
-  /** `sdk` is the Agent SDK's surface; a test hands in its own. */
   constructor({ command = "claude", logs = null, sdk = claudeAgentSdk, nodeHub = null } = {}) {
     super();
     this.sdk = sdk;
-    // Paired devices: a chat in a device's workspace runs that device's Claude Code.
     this.nodeHub = nodeHub;
-    // Unfound, the SDK runs the Claude Code it ships with; either reads the
-    // user's ~/.claude configuration, credentials and sessions.
+    // Unfound, the SDK runs the Claude Code it ships with; either reads the user's ~/.claude.
     this.executable = resolveCommand(command);
     this.sessions = new SessionRecords({
       capabilities: CLAUDE_CODE_CAPABILITIES,
@@ -397,7 +361,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
 
   opaqueSessionOf(record) { return opaqueSessionOf(record); }
 
-  /** What Claude Code's settings say for a folder: model, effort, the mode a session starts in. */
   settingsFor(cwd) {
     return this.sdk.resolveSettings({ cwd }).then((resolved) => resolved?.effective || {}, () => ({}));
   }
@@ -422,12 +385,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     }, modelRecovery: null };
   }
 
-  /**
-   * One resident Claude Code per chat, reading prompts as they are sent.
-   *
-   * A new session is given its id up front, so the chat can keep it before a
-   * word is written; a saved one is resumed by it.
-   */
+  /** A new session is given its id up front, so the chat can keep it before a word is written. */
   async start({ chatId, project, model = "", thinkingLevel = "", permissionMode = "", sessionId, resume = false }) {
     const existing = this.getByChatId(chatId);
     if (existing) return existing;
@@ -451,10 +409,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
     record.scope.defer(() => this.cancelRequests(record));
     // Settings are read on this machine; a device's own apply there, when it starts.
     record.settings = record.nodeId ? {} : await this.settingsFor(record.cwd);
-    // Only what the chat chose is passed, and the rest is left to the user's
-    // own Claude Code settings and read back once it is up. The starting mode is
-    // the exception: an SDK session starts in `default` whatever the settings
-    // say, so the mode they name is passed on the chat's behalf.
+    // An SDK session starts in `default` whatever the settings say, so the mode they name is passed on the chat's
+    // behalf; everything else is left to the user's own settings.
     const startMode = permissionMode || permissionModes(record.settings)
       .find((mode) => mode.id === record.settings.permissions?.defaultMode && mode.allowed)?.id || "";
     try {
@@ -492,7 +448,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
     return this.start({ ...options, sessionId, resume: Boolean(saved) });
   }
 
-  /** A Claude Code for this record, on the session `session` names; the one before it is let go. */
   openQuery(record, session) {
     record.input = new InputQueue();
     const query = record.query = this.sdk.query({ prompt: record.input, options: {
@@ -503,14 +458,12 @@ export class ClaudeCodeAdapter extends EventEmitter {
       includePartialMessages: true,
       thinking: { type: "adaptive", display: "summarized" },
       canUseTool: (toolName, input, options) => this.canUseTool(record, toolName, input, options),
-      // Conduit's own tools (mcp-endpoint.js: its panes, the hub's browser) when it runs on the hub, which reaches them.
+      // Only when it runs on the hub, which reaches Conduit's own tools.
       ...(mcpAccess.url && !this.processes(record).sdkSpawn ? { mcpServers: {
         "conduit": { type: "http", url: `${mcpAccess.url}/chat/${encodeURIComponent(record.chatId)}`, headers: { Authorization: `Bearer ${mcpAccess.token}` } },
-        // The hub's browser: agent-browser's own server, on the page the person shares (browser-host.js).
         ...(mcpAccess.browser ? { "agent-browser": { type: "stdio", ...mcpAccess.browser } } : {}),
       } } : {}),
       stderr: (data) => { record.stderr = `${record.stderr}${data}`.slice(-8_192); },
-      // Where the chat runs: the SDK spawns its own process here, a device runs its own install.
       ...(() => {
         const spawn = this.processes(record).sdkSpawn?.("claude-code", (data) => { record.stderr = `${record.stderr}${data}`.slice(-8_192); });
         return spawn ? { spawnClaudeCodeProcess: spawn } : {};
@@ -529,14 +482,13 @@ export class ClaudeCodeAdapter extends EventEmitter {
     if (record.query === query) this.processExited(record, failure(record.stderr.trim() || cause?.message || "Claude Code exited"));
   }
 
-  /** Claude Code's stream, in Conduit's words. Subagents' own traffic stays inside their tool. */
+  /** Subagents' own traffic stays inside their tool. */
   message(record, message) {
     // A steer Claude Code has taken up is the prompt it now answers.
     if (message.type === "command_lifecycle") {
       if (message.state === "started") this.takeSteer(record, message.command_uuid);
       return;
     }
-    // Claude Code's own word on the plan, from the request it just made.
     if (message.type === "rate_limit_event") {
       const info = message.rate_limit_info;
       if (info?.utilization == null || !/^(five_hour|seven_day)(_(opus|sonnet))?$/.test(info.rateLimitType || "")) return;
@@ -558,8 +510,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
       record.permissionMode = message.permissionMode || record.permissionMode;
       return;
     }
-    // Claude Code changes mode itself -- an approval that turned on accepting
-    // edits, a plan approved -- and says so; the chat's picker follows it.
+    // Claude Code changes mode itself (an approval that turned on accepting edits, a plan approved) and says so.
     if (message.type === "system" && message.subtype === "status") {
       if (message.permissionMode && message.permissionMode !== record.permissionMode) {
         record.permissionMode = message.permissionMode;
@@ -569,8 +520,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
       return;
     }
     if (message.parent_tool_use_id) return;
-    // A background task finishing while nothing runs makes Claude Code start a
-    // turn of its own. The notification is held as that turn's prompt.
+    // A background task finishing while nothing runs makes Claude Code start a turn of its own.
     if (message.type === "system" && message.subtype === "task_notification") {
       if (!record.active) record.notices.push({ id: taskPromptId(message.task_id, message.status),
         content: message.summary || "A background task finished" });
@@ -591,11 +541,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     } else if (message.type === "result") this.finish(record, message);
   }
 
-  /**
-   * A turn Claude Code started without a prompt from here. It answers the
-   * notices that set it off, stated as a prompt the harness made, so the turn
-   * is grouped, settled and reloaded like any other.
-   */
+  /** The notices are stated as a prompt the harness made, so the turn is grouped, settled and reloaded like any other. */
   beginOwnTurn(record) {
     const notices = record.notices.splice(0);
     this.beginTurn(record, notices.length
@@ -603,7 +549,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
       : { id: promptId(crypto.randomUUID()), content: "Claude Code went on by itself", origin: "harness" });
   }
 
-  /** A turn opened on a prompt Conduit did not send just now: the harness's own, or a steer run after the turn it was meant for. */
   beginTurn(record, prompt) {
     const generationId = crypto.randomUUID();
     record.counts.userMessages += 1;
@@ -616,9 +561,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
   }
 
   /**
-   * A steer Claude Code folded into the running turn: the prompt that opened
-   * the turn is answered by what came before it, and what follows answers the
-   * steer. One that missed its turn opens the next.
+   * The prompt that opened the turn is answered by what came before the steer, and what follows answers the steer. One
+   * that missed its turn opens the next.
    */
   takeSteer(record, uuid) {
     const steer = record.steering.find((item) => item.uuid === uuid);
@@ -652,11 +596,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
     return { steering: record.steering.map((item) => item.text), followUp: record.followUp.map((item) => item.text) };
   }
 
-  /**
-   * What the session has spent: the last request's tokens from its own usage,
-   * the context from Claude Code's count of it, and the running totals from
-   * the turn's result.
-   */
   async publishUsage(record, result = null, detail = "summary") {
     const last = [...record.stepOrder].reverse().find((step) => step.usage)?.usage;
     if (last) record.contextUsage = { ...record.contextUsage, lastRequestUsage: requestUsage(last) };
@@ -694,11 +633,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     return record.contextUsage;
   }
 
-  /**
-   * A step of the turn is one message from the model: what it thought, said
-   * and called, in the order it did. It is named by the API's own message id,
-   * which the saved session keeps, so a reload names it the same.
-   */
+  /** Named by the API's own message id, which the saved session keeps, so a reload names it the same. */
   openStep(record, messageId) {
     const existing = record.steps.get(messageId);
     if (existing) return existing;
@@ -767,11 +702,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     }
   }
 
-  /**
-   * The model's message as Claude Code settled it, one block at a time. It
-   * restates what streamed; what did not stream -- a synthetic error reply, a
-   * tool whose input never finished arriving -- is stated from here.
-   */
+  /** What did not stream (a synthetic error reply, a tool whose input never finished arriving) is stated from here. */
   assistantMessage(record, message) {
     const content = Array.isArray(message.message?.content) ? message.message.content : [];
     const step = this.openStep(record, message.message?.id || message.uuid);
@@ -803,8 +734,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
       messageId: step.id, generationId, timestamp: tool.startedAt }));
     this.publish(record, { type: "tool_activity", phase: "start", generationId,
       seq: ++record.generationSeq, toolCallId: tool.id, name: tool.name, kind: tool.kind, subject: tool.subject, input: tool.input });
-    // The turn being painted places a running tool by its block, so the step
-    // says it is calling one now, not when the turn ends.
+    // The painted turn places a running tool by its block, so the step says it is calling one now.
     this.publish(record, { type: "assistant_content", phase: "final", generationId, seq: ++record.generationSeq,
       messageId: step.id, stopReason: "toolUse", errorMessage: null, blocks: this.blocksOf(step) });
   }
@@ -831,7 +761,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
     this.publish(record, toolClose({ toolCallId: tool.id, output, isError, cancelled, completedAt: tool.completedAt, generationId }));
   }
 
-  /** Every step the turn took, finished: the answer as the answer, the rest as the work before it. */
   closeSteps(record, stopReason, answer, errorMessage = null) {
     const last = record.stepOrder.at(-1);
     for (const step of record.stepOrder) {
@@ -874,7 +803,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
     return null;
   }
 
-  /** The request, taken and said to be resolved; null when it is no longer open. */
   resolveRequest(record, requestId) {
     const pending = take(record, requestId);
     if (pending) this.publish(record, pending.event);
@@ -913,10 +841,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     return { generationId, attachmentIdentity: { messageId: userMessageId } };
   }
 
-  /**
-   * A steer goes to Claude Code at once, which folds it in between tool calls
-   * and says when it has; a follow-up waits here for the turn to end.
-   */
+  /** A steer goes to Claude Code at once, which folds it in between tool calls; a follow-up waits for the turn to end. */
   async queue(id, mode, message, { attachments = [], messageId = "" } = {}) {
     const record = this.get(id);
     if (!record?.ready) throw failure("Claude Code session is not ready");
@@ -937,7 +862,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     return { queued: "steer", attachmentIdentity: { messageId: item.id } };
   }
 
-  /** Take back what Claude Code has not taken up yet; a steer it already has stays. */
+  /** A steer Claude Code already has stays. */
   async clearQueue(id) {
     const record = this.get(id);
     if (!record) throw failure("Claude Code session is not running");
@@ -956,7 +881,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
       discardedAttachmentIdentities: taken.map((item) => ({ messageId: item.id })) };
   }
 
-  /** The next message that waited for the turn to end, sent as the prompt it was. */
   async flushFollowUp(record) {
     const queued = record.followUp.shift();
     if (!queued) return;
@@ -967,7 +891,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     }
   }
 
-  /** `/compact`, run between turns; Claude Code says when it starts and ends. */
+  /** Claude Code says when the compaction starts and ends. */
   async compact(id) {
     const record = this.get(id);
     if (!record?.ready) throw failure("Claude Code session is not ready");
@@ -983,11 +907,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     return record ? this.publishUsage(record) : Promise.resolve(null);
   }
 
-  /**
-   * A new session holding what came before the chosen prompt. Claude Code
-   * copies the saved entries up to it under their own ids, so every message
-   * that stays is named as it was.
-   */
+  /** Claude Code copies the saved entries under their own ids, so every message that stays is named as it was. */
   async fork(id, { nodeId } = {}) {
     const record = this.get(id);
     if (!record?.ready) throw failure("Claude Code session is not ready");
@@ -1025,7 +945,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
       sourceMessage: { id: nodeId, text } };
   }
 
-  /** The saved session, from its file where there is one -- on the device, for a device's session. */
   async savedHistory(sessionId, nodeId = null) {
     if (nodeId) {
       const text = await this.sessionText(sessionId, nodeId);
@@ -1034,10 +953,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
     return (await readSavedSession(sessionId)) ?? this.sdk.getSessionMessages(sessionId).catch(() => []);
   }
 
-  /** Claude Code's processes in a place (`{ nodeId, place }`; none is this server). */
   processes(on) { return placeProcesses(this.nodeHub, on || {}); }
 
-  /** A session's saved file, as text, read where it ran (null offline or missing). */
   sessionText(sessionId, nodeId = null) { return this.processes({ nodeId }).read("claudeSession", sessionId); }
 
   finish(record, result = {}) {
@@ -1059,7 +976,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
     for (const tool of record.tools.values()) {
       if (!tool.closed) this.closeTool(record, tool, tool.output, true);
     }
-    // The answer is the last step, if it called nothing and said something.
     const spoke = Boolean(last) && !last.blocks.some((block) => block?.kind === "tool_call")
       && last.blocks.some((block) => block?.kind === "text" && block.text.trim());
     this.closeSteps(record, stopReason, spoke ? last : null, errorMessage);
@@ -1122,12 +1038,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
 
   listSessions(options) { return this.listThreads(options); }
 
-  /**
-   * A saved session as a transcript, in the shape it was streamed in: each
-   * model message a step of its words and the tools it called, the last one
-   * that called nothing the answer. Claude Code saves one entry per block, so
-   * entries are gathered back into their message by the API's id.
-   */
+  /** Claude Code saves one entry per block, so entries are gathered back into their message by the API's id. */
   static transcript(history) {
     const messages = [];
     const tools = [];
@@ -1149,8 +1060,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
         const text = blocks.filter((block) => block?.type === "text" && !ATTACHED.test(block.text))
           .map((block) => block.text).join("\n");
         if (!text.trim() || COMPACTION_ENTRY.test(text)) continue;
-        // The stop's own marker, not a prompt. A tool it killed is saved as an
-        // error; it was stopped.
         const made = harnessPrompt(entry, text);
         if (made) {
           prompt = { id: made.id, role: "user", origin: "harness", content: made.content, outcome: "complete" };
@@ -1193,7 +1102,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
         }
       }
     }
-    // Each prompt's last step, if it called nothing, is its answer.
     const byPrompt = new Map();
     for (const message of messages) if (message.role === "assistant") byPrompt.set(message.answers, message);
     for (const message of messages) {
@@ -1206,12 +1114,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     return { messages: messages.filter((message) => message.role === "user" || message.blocks.length), tools };
   }
 
-  /**
-   * An old thread's context from its saved session: each request's usage once
-   * (Claude Code writes a message's usage on every line of it), a compaction
-   * boundary resetting the cache prefix. The window is the one Claude Code
-   * last reported for the model while this server ran, if any.
-   */
+  /** Claude Code writes a message's usage on every line of it, so each request's is counted once. */
   async contextFromHistory({ opaqueSession }) {
     const sessionId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     const text = sessionId ? await this.sessionText(sessionId, opaqueSession?.nodeId) : null;
@@ -1238,10 +1141,6 @@ export class ClaudeCodeAdapter extends EventEmitter {
     return usage;
   }
 
-  /**
-   * An old thread's full /context breakdown: resume its session idle -- no
-   * prompt is sent, so nothing is written -- ask Claude Code, and close it.
-   */
   async contextBreakdown({ opaqueSession, project }) {
     const sessionId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!sessionId) return null;
@@ -1252,8 +1151,7 @@ export class ClaudeCodeAdapter extends EventEmitter {
     const query = this.sdk.query({ prompt: input, options: {
       cwd: project?.workingRoot,
       ...(this.executable ? { pathToClaudeCodeExecutable: this.executable } : {}),
-      // A throwaway fork: resuming the thread itself appends Claude Code's
-      // cost bookkeeping to it, and reading must not write.
+      // A throwaway fork: resuming the thread itself appends Claude Code's cost bookkeeping to it.
       resume: sessionId, forkSession: true, sessionId: scratch,
       allowDangerouslySkipPermissions: true,
     } });
@@ -1307,9 +1205,8 @@ export class ClaudeCodeAdapter extends EventEmitter {
   }
 
   /**
-   * Models without a chat open: a throwaway Claude Code asked and closed. It
-   * loads no settings, so no hook of the user's runs to answer a model list;
-   * the settings that say which effort each model runs at are read directly.
+   * It loads no settings, so no hook of the user's runs to answer a model list; the settings that say which effort each
+   * model runs at are read directly.
    */
   async listAvailableModels(cwd) {
     const input = new InputQueue();

@@ -3,13 +3,9 @@ import path from "node:path";
 import { writePrivateJson } from "./private-file.js";
 
 /**
- * Composer drafts and parked prompts. Drafts are written constantly and evict
- * by age; stash entries are deliberate, so the cap refuses rather than evicting
- * something the user chose to keep.
- *
- * Attachments are referenced by id, never copied. The rows belong to their
- * origin chat; `retainedAttachmentIds` is what stops the client's attachment
- * cleanup from deleting bytes a stash entry still points at.
+ * Drafts evict by age; stash entries are deliberate, so the cap refuses rather than evicting something kept.
+ * Attachments are referenced by id, never copied: `retainedAttachmentIds` stops the client's attachment cleanup from
+ * deleting bytes a stash entry still points at.
  */
 const MAX_DRAFT_BYTES = 128 * 1024;
 const MAX_DRAFTS = 200;
@@ -91,7 +87,6 @@ export class DraftStore {
     };
   }
 
-  /** Every attachment a draft or stash entry still points at. */
   retainedAttachmentIds() {
     const retained = new Set();
     for (const entry of Object.values(this.document.drafts)) for (const id of entry.attachmentIds) retained.add(id);
@@ -109,8 +104,7 @@ export class DraftStore {
     return entry ? { ...entry } : null;
   }
 
-  // Writes are serialized so a burst of draft saves cannot interleave two
-  // rename() calls onto the same path.
+  // Serialized so a burst of draft saves cannot interleave two rename() calls onto the same path.
   async #persist() {
     const write = this.writing.then(async () => {
       await writePrivateJson(this.filePath, this.document);

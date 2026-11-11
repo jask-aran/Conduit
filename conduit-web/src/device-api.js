@@ -1,26 +1,19 @@
 /*
- * The device API, declared once (docs/plans/screens-and-device-control.md): what the hub knows of each environment on
- * the network -- a device has one or more (Windows and a WSL distro are two of one machine); the code's word for one
- * is a node -- and the calls it makes into it. Both ends and the client read this: a node's hello is built and read
- * by it (helloCapabilities), the hub's view of a node is computed from it (capabilitiesOf), a node serves only the
- * targets and methods listed (protocol.js servedCall), and the client's types are inferred from it
- * (client/platform/devices.ts: Environment, Device). A capability added here is told, kept, listed and typed everywhere; one added anywhere else is not seen.
- *
+ * A device has one or more environments (Windows and a WSL distro are two of one machine); the code's word for one is
+ * a node. A capability added here is told, kept, listed and typed everywhere; one added anywhere else is not seen.
  * Plain data and small functions, no imports: the client takes it as types only.
  */
 
 /**
  * @typedef {{ id: string, label: string, read: boolean, write: boolean, shell: boolean, allow?: string[] }} SharedRoot
- * A folder an environment shares, with what it allows there.
  */
 
 /**
- * What an environment can do for the network. The key is the field's name in the hello and in the hub's view.
- *
- * `type`: its value -- "roots" (SharedRoot[]), "names" (string[]) or "flag" (boolean).
+ * The key is the field's name in the hello and in the hub's view.
+ * `type`: "roots" (SharedRoot[]), "names" (string[]) or "flag" (boolean).
  * `from`: "hello" (the environment says it) or a function of the others (the hub works it out).
  * `kept`: remembered while the environment is offline; otherwise true only while it is connected.
- * `screen`: the kind of screen it offers (a pane's view `<kind>:<node id>`, server/screens.js).
+ * `screen`: the kind of screen it offers (a pane's view `<kind>:<node id>`).
  * `agent`: an agent may use it, and through which of Conduit's tools.
  */
 export const DEVICE_CAPABILITIES = /** @type {const} */ ({
@@ -39,9 +32,8 @@ export const DEVICE_CAPABILITIES = /** @type {const} */ ({
 });
 
 /**
- * What the hub calls on a node (`{ type: "call", target, method }`, nodes/protocol.js). `for`: the capabilities it
- * serves. `methods`: every method served; "grants" is the environment's own, each by the grant of the folder it
- * touches (protocol.js METHOD_GRANTS). A target or method not listed is not served, and the hub does not ask for it.
+ * `for`: the capabilities a target serves. `methods`: every method served; "grants" is the environment's own, each by
+ * the grant of the folder it touches. A target or method not listed is not served, and the hub does not ask for it.
  */
 export const NODE_TARGETS = /** @type {const} */ ({
   env: { for: ["roots"], methods: "grants", says: "Files and commands in a shared folder" },
@@ -65,16 +57,10 @@ const READ = {
 const entries = Object.entries(DEVICE_CAPABILITIES);
 const told = entries.filter(([, capability]) => capability.from === "hello");
 
-/** The capabilities a hello carries, each as its type says: what a node sends, and what the hub takes from it. */
 export const helloCapabilities = (values) => Object.fromEntries(told.map(([key, capability]) => [key, READ[capability.type](values?.[key])]));
 
-/** Of a node's capabilities, those the hub remembers while it is away. */
 export const keptCapabilities = (held) => Object.fromEntries(told.filter(([, capability]) => capability.kept).map(([key]) => [key, held[key]]));
 
-/**
- * An environment's capabilities now: from what it said if it is connected (`live`), else what is remembered of it
- * (`record`); one not kept is false while it is away.
- */
 export function capabilitiesOf(live, record = {}) {
   const held = {};
   for (const [key, capability] of told) {
@@ -86,8 +72,6 @@ export function capabilitiesOf(live, record = {}) {
   return held;
 }
 
-/** The kinds of screen devices offer, by the capability that says so. */
 export const SCREEN_CAPABILITIES = Object.fromEntries(entries.filter(([, capability]) => capability.screen).map(([key, capability]) => [capability.screen, key]));
 
-/** An environment as people and agents name it: its device's name, with its own when the device has several. */
 export const environmentName = (device, node) => (device.nodes.length > 1 ? `${device.name} · ${node.name}` : device.name);

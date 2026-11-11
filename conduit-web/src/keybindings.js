@@ -1,17 +1,6 @@
 /**
- * Keyboard shortcuts as a file a person or an agent can read and edit (`keybindings.json`, beside preferences.json).
- *
- * Each key is a command id (Settings › Shortcuts lists them); its value is a binding or a list of them, and an empty
- * list unbinds the command. A binding is one stroke or two (a sequence), separated by a space; a stroke is modifiers
- * and a key joined by "+":
- *
- *   { "chat.new": "mod+shift+o", "pane.focus-left": ["mod+k h", "alt+left"], "voice.toggle": [] }
- *
- * `mod` is ⌘ on a Mac and Ctrl elsewhere; `ctrl` is the Mac's Control key; then `alt` and `shift`. Keys are letters,
- * digits, the names below, or a KeyboardEvent code ("BracketLeft"). Keys starting with "//" are comments.
- *
- * The client keeps the shape it always had (`{ code, key, modifiers }` strokes, ShortcutOverrides): this module
- * translates between the two, here on the hub, so the file is the only place the overrides are written.
+ * The client keeps its own stroke shape (ShortcutOverrides); this module translates on the hub, so the file is the only
+ * place the overrides are written.
  */
 
 const MODIFIERS = { mod: "primary", cmd: "primary", primary: "primary", ctrl: "control", control: "control", alt: "alt", option: "alt", opt: "alt", shift: "shift" };
@@ -63,7 +52,7 @@ function parseBinding(text) {
   return { strokes: strokes.map(parseStroke) };
 }
 
-/** The file's text as overrides, and what in it could not be read (each entry on its own: one bad line costs only itself). */
+/** Each entry is read on its own: one bad line costs only itself. */
 export function parseKeybindings(text) {
   let value;
   try { value = JSON.parse(text); }
@@ -86,7 +75,6 @@ export function parseKeybindings(text) {
 const strokeText = (stroke) => [...MODIFIER_ORDER.filter((modifier) => stroke.modifiers?.includes(modifier)).map((modifier) => MODIFIER_NAMES[modifier]),
   CODE_NAMES[stroke.code] || (/^Key[A-Z]$/.test(stroke.code) ? stroke.code.slice(3).toLowerCase() : /^Digit[0-9]$/.test(stroke.code) ? stroke.code.slice(5) : stroke.code)].join("+");
 
-/** Overrides as the file's text: sorted by command, one binding as a string, several as a list, none as []. */
 export function formatKeybindings(overrides) {
   const file = { "//": "Conduit keyboard shortcuts. Command ids are listed in Settings › Shortcuts. \"mod+shift+g\": mod is ⌘ on a Mac and Ctrl elsewhere, ctrl is the Mac's Control; \"mod+k h\" is a sequence; [] unbinds. Saved changes apply at once." };
   for (const commandId of Object.keys(overrides || {}).sort()) {

@@ -143,18 +143,8 @@ export class AttachmentStore {
   }
 
   /**
-   * The attachments this chat has already sent with a message.
-   *
-   * Stored files outlive the message they were sent with, so "everything in
-   * the directory" is not what the composer should be holding -- without this
-   * the composer of a chat reopened anywhere else fills up with the images of
-   * every message already in it. The send ledger answers for every harness,
-   * which the Pi session file cannot: it is the only record another backend
-   * writes at all.
-   *
-   * A discarded turn counts too. Its files are no longer decorating anything,
-   * but they were deliberately sent once, and returning them to the composer
-   * of whoever opens the chat next is a stranger outcome than leaving them.
+   * Stored files outlive the message they were sent with, so the composer holds only files not in this send ledger,
+   * the one record every harness has. A discarded turn's files still count as sent.
    */
   async announcedIds(project, chatId) {
     const rows = await this.messageRows(project, chatId);
@@ -162,14 +152,8 @@ export class AttachmentStore {
   }
 
   /**
-   * Attach stored files to the user messages that own them.
-   *
-   * `fromStart` says whether `transcript` begins at the chat's first message.
-   * Only an id can find a message inside a window; the anchor/ordinal and
-   * content fallbacks below count from the beginning of what they are given,
-   * so against a one-turn sync or a later page they resolve "the first user
-   * message of the chat" to whatever happens to lead the window -- which is
-   * how a regenerated turn came back wearing the opening message's image.
+   * `fromStart` says whether `transcript` begins at the chat's first message. Only an id can find a message inside a
+   * window; the anchor/ordinal and content fallbacks count from the start of what they are given.
    */
   async decorateMessages(project, chatId, transcript, { fromStart = true } = {}) {
     const rows = await this.messageRows(project, chatId);
@@ -178,8 +162,7 @@ export class AttachmentStore {
     const activeRows = rows.filter((row) => !row.identity || !discarded.has(identityKey(row.identity)));
     const used = new Set();
     const byId = new Map(activeRows.flatMap((row) => row.identity?.messageId ? [[row.identity.messageId, row]] : []));
-    // Rows written before Conduit owned Pi's message ids anchor on raw session
-    // entry ids, so a derived `pi:<entryId>` message answers to both.
+    // Older rows anchor on raw Pi session entry ids, so a derived `pi:<entryId>` message answers to both.
     const positions = new Map();
     (transcript || []).forEach((item, index) => {
       if (!item?.id) return;
@@ -200,8 +183,7 @@ export class AttachmentStore {
       const native = byId.get(item.id);
       if (native) return { ...item, attachments: native.attachments || [] };
       if (!fromStart) return item;
-      // Read compatibility for attachment records written before harness IDs
-      // became authoritative. New records never store message text.
+      // Older records carry message text instead of a harness id.
       const index = activeRows.findIndex((row, candidate) => !used.has(candidate) && row.message === item.content);
       if (index < 0) return item;
       used.add(index);
@@ -209,7 +191,6 @@ export class AttachmentStore {
     });
   }
 
-  /** Absolute path of a stored attachment, for adapters that take files natively. */
   pathFor(project, chatId, item) {
     return path.join(this.directories(project, chatId).attachments, item.storedName);
   }

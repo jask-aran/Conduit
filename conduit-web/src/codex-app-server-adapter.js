@@ -21,28 +21,15 @@ import { attachmentForDevice, imageDataUrl } from "./nodes/device-attachments.js
 export const CODEX_CAPABILITIES = Object.freeze({
   history: "linear", fork: true, regenerate: true,
   steer: true, followUpQueue: true, cancel: true, compaction: true,
-  // Codex does not persist a partial assistant message at all. Interrupting a
-  // turn 300 characters into its answer leaves `thread/read` and
-  // `thread/items/list` reporting that turn as `status: "interrupted"` holding
-  // the prompt and an empty `reasoning` stub -- the text is gone. Codex does
-  // keep the turn's completed items and injects a `<turn_aborted>` user marker
-  // after them, so interrupting during tool use carries its work forward; it is
-  // only the answer being written at that moment that is lost.
   thinkingLevels: true, modelSwitch: true, toolUse: true,
   approvals: true, permissionModes: true,
-  // `replay` means resuming a generation in progress, which Codex cannot do:
-  // its `replay` returns the current runtime state, not a generation.
+  // Codex's `replay` returns the current runtime state, not a generation in progress.
   usage: true, replay: false,
   attachments: true,
   interruptKeepsPartial: false,
 });
 
-// Codex asks for approval with a JSON-RPC *request* - it carries an id and
-// waits for a reply - so an unanswered one stalls the turn silently. Each entry
-// maps one approval method onto Conduit's neutral permission prompt and back
-// onto the decision vocabulary that method expects.
-// Codex's tool items, by what they do. Codex reads files through commands, so
-// there is no read of its own; an image it opens is one.
+// Codex reads files through commands, so there is no read of its own; an image it opens is one.
 const CODEX_TOOL_KINDS = Object.freeze({
   commandExecution: "command", fileChange: "edit", webSearch: "search", imageView: "read",
 });
@@ -68,8 +55,7 @@ const APPROVALS = {
       .filter(Boolean).join("\n\n") || "Codex wants to edit files in this folder.",
     decisions: { approve: "accept", session: "acceptForSession", deny: "decline" },
   },
-  // The pre-v2 spellings. An older app-server sends these for the same two
-  // decisions under a different vocabulary.
+  // An older app-server sends these for the same two decisions.
   execCommandApproval: {
     title: () => "Run a command",
     message: (params) => [commandText(params), params.reason].filter(Boolean).join("\n\n") || "Codex wants to run a command.",
@@ -91,9 +77,6 @@ const approvalChoice = (response) => {
   return ["approve", "session", "deny"][index] || "deny";
 };
 
-// Codex's request_user_input: questions of offered answers, a typed "other"
-// where it allows one, and a question with no options answered only by typing.
-// Its reply is the chosen labels and anything typed, per question id.
 const USER_INPUT = "item/tool/requestUserInput";
 const userInputRequest = (id, params) => questionRequest({ id, title: "Codex has a question",
   questions: (params.questions || []).map((question) => ({
@@ -115,11 +98,8 @@ const waitForClose = (socket, timeoutMs = 2_000) => {
   });
 };
 
-// A long-running Codex thread holds hundreds of items, and the commands, edits
-// and searches outnumber the conversation roughly five to one. Capping raw items
-// would therefore drop the start of the conversation to keep recent tool noise,
-// so the two are budgeted separately: the messages are the history worth having,
-// and tool activity is trimmed to the recent end.
+// Tool items outnumber messages roughly five to one, so capping raw items would drop the start of the conversation to
+// keep recent tool noise: the two are budgeted separately.
 const REPLAY_PAGE_LIMIT = 20;
 const REPLAY_MESSAGE_LIMIT = 500;
 const REPLAY_TOOL_LIMIT = 200;
@@ -133,7 +113,7 @@ const truncate = (output) => {
   return `${output.slice(0, REPLAY_OUTPUT_LIMIT)}\n… ${output.length - REPLAY_OUTPUT_LIMIT} more characters`;
 };
 
-/** The ChatGPT plan's windows, in Conduit's shape, from a rate-limit snapshot (camel or the rollout's snake case). */
+/** A snapshot comes in camel case, or the rollout's snake case. */
 function codexPlan(snapshot, previous = null) {
   if (!snapshot) return previous;
   const window = (id, value) => value && (value.usedPercent ?? value.used_percent) != null ? {
@@ -148,10 +128,9 @@ function codexPlan(snapshot, previous = null) {
 }
 
 export class CodexAppServerAdapter extends EventEmitter {
-  // Starts its harness on a device for a device's workspace (live-session-launcher.js).
   runsOnDevices = true;
 
-  /** The account's plan windows; Codex's are the account's, not a thread's. */
+  /** Codex's plan windows are the account's, not a thread's. */
   static plan = { at: 0, value: null };
 
   constructor({ command = "codex", socketPath = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
@@ -160,7 +139,6 @@ export class CodexAppServerAdapter extends EventEmitter {
     super();
     this.command = command;
     this.socketPath = socketPath;
-    // Paired devices: a chat in a device's workspace runs on that device's Codex daemon.
     this.nodeHub = nodeHub;
     this.requestTimeoutMs = requestTimeoutMs;
     this.discoveryIdleMs = discoveryIdleMs;
@@ -184,10 +162,8 @@ export class CodexAppServerAdapter extends EventEmitter {
 
   opaqueSessionOf(record) { return opaqueSessionOf(record); }
 
-  /** Codex's processes in a place (`{ nodeId, place }`; none is this server). */
   processes(on) { return placeProcesses(this.nodeHub, on || {}); }
 
-  /** Start the place's Codex daemon; chats asking at once share the one start. */
   startDaemon(record = null) {
     const key = record?.nodeId || "";
     this.daemonStarts ||= new Map();
@@ -235,8 +211,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       });
       record.sessionId = result.thread.id;
       record.model = result.model || model;
-      // Codex answers with its configured effort, not the one asked for; every
-      // turn sends the record's, so the one asked for is the one kept.
+      // Codex answers with its configured effort, not the one asked for; every turn sends the record's.
       record.thinkingLevel = thinkingLevel || result.reasoningEffort || result.thread?.reasoningEffort || "";
       // An omitted profile is meaningful: Codex must continue to resolve the
       // effective config instead of Conduit freezing its current result.
@@ -282,12 +257,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     }
   }
 
-  /**
-   * `thread/read` reports `historyMode: "paginated"` and an empty `turns` array
-   * for every stored thread - the history lives behind `thread/items/list`, one
-   * page of items at a time. This walks those pages so a resumed thread arrives
-   * with the work in it, not just whatever the summary happened to carry.
-   */
+  /** `thread/read` reports an empty `turns` array for every stored thread: the history lives behind `thread/items/list`. */
   async items(record, threadId, pageLimit = REPLAY_PAGE_LIMIT) {
     const rows = [];
     let cursor = null;
@@ -300,27 +270,17 @@ export class CodexAppServerAdapter extends EventEmitter {
     return rows;
   }
 
-  /**
-   * Codex records far more per turn than Conduit renders. Commands, file edits,
-   * MCP calls and searches all become the tool activity the live stream already
-   * publishes; reasoning is a message of its own, and compaction markers have
-   * nothing to show.
-   */
   static toolActivity(item) {
     const { kind: stated, subject: target, ...activity } = CodexAppServerAdapter.activityOf(item) || {};
     if (!activity.name) return null;
     const kind = stated || toolKind(CODEX_TOOL_KINDS, item.type);
-    // The four it names keep what they acted on as their input: the command,
-    // the changed paths, the query, the image. A web search says for itself.
     const subject = kind === "other" ? null : toolSubject(target ?? activity.input);
     return { ...activity, kind, ...(subject ? { subject } : {}) };
   }
 
   /**
-   * What a web search item did, which its `action` says: searched, opened a
-   * page, or looked for words in one. Opening the pages a search found is
-   * reported with an action of `other` and no query, and the results it
-   * returns are those pages -- so they are what it acted on.
+   * Opening the pages a search found is reported with an action of `other` and no query, and the results it returns
+   * are those pages, so they are what it acted on.
    */
   static webSearchTarget(item) {
     const action = item.action || {};
@@ -364,18 +324,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     return null;
   }
 
-  /**
-   * The rows worth keeping, in order: the most recent messages up to the
-   * message budget, and the most recent tool items up to the smaller tool one.
-   */
-  /**
-   * The window of a thread worth drawing, and where the rest of it starts.
-   *
-   * `before` is the cursor from a previous window: read the thread as it stood
-   * up to there. It is an index into the rows this read fetched, which is stable
-   * because a thread only grows at the end -- the same property that makes Pi's
-   * offset cursor work on a session file.
-   */
+  /** `before` is an index into the rows this read fetched, stable because a thread only grows at the end. */
   static recent(rows, { before = null } = {}) {
     const requested = Number.parseInt(before, 10);
     const end = Number.isInteger(requested) ? Math.max(0, Math.min(requested, rows.length)) : rows.length;
@@ -395,24 +344,13 @@ export class CodexAppServerAdapter extends EventEmitter {
       keep.add(index);
       first = index;
     }
-    // Only rows that would draw something count as more to fetch, or the browser
-    // would be offered a page that turns out to be empty.
+    // Only rows that would draw something count, or the browser would be offered a page that turns out empty.
     const hasMore = rows.slice(0, first).some((row) => isMessage(row?.item)
       || CodexAppServerAdapter.toolActivity(row?.item));
     return { rows: rows.filter((_row, index) => keep.has(index)), page: { before: hasMore ? String(first) : null } };
   }
 
-  /**
-   * The stored history as a settled transcript, in Pi's shape.
-   *
-   * Conduit builds a turn out of the assistant messages that follow a user
-   * message: the ones that ran tools, or that it marks `toolUse`, collapse into
-   * the reasoning rollup, and the one after them is the answer. A Codex turn is
-   * the same story told differently - commentary, commands, edits, then a final
-   * answer - so it maps straight onto that rather than needing a shape of its
-   * own. The commands hang off the message that ran them, which is how the
-   * rollup finds them.
-   */
+  /** The commands hang off the message that ran them, which is how the reasoning rollup finds them. */
   static threadTranscript(rows) {
     const messages = [];
     const tools = [];
@@ -420,18 +358,11 @@ export class CodexAppServerAdapter extends EventEmitter {
     let turnStatus;
     let turnStart = 0;
     let interim = null;
-    // Read back, a thread says the same two things the socket said: which
-    // prompt an answer answers, and whether a message is the answer or the turn
-    // talking as it works. There is no reading of the turn's shape underneath
-    // any more, so a thread that does not state both is refused rather than
-    // guessed at.
     let answering = null;
     const closeTurn = () => {
-      // Older threads carry no `phase`, so nothing would read as the answer.
-      // The turn's last message without commands is the closest thing to one.
+      // Older threads carry no `phase`; the turn's last message without commands is the closest thing to an answer.
       const turn = messages.slice(turnStart);
-      // How the turn ended is the thread's own status for it. One still in
-      // progress has not ended, and the live stream will say when it does.
+      // A turn still in progress has not ended, and the live stream will say when it does.
       const prompt = messages.find((message) => message.id === answering);
       const outcome = { completed: "complete", interrupted: "interrupted", failed: "failed" }[turnStatus];
       if (prompt && outcome && turn.some((message) => message.role === "assistant")) prompt.outcome = outcome;
@@ -439,9 +370,7 @@ export class CodexAppServerAdapter extends EventEmitter {
         const interrupted = turn.findLast((message) => message.role === "assistant");
         if (interrupted) {
           interrupted.stopReason = "aborted";
-          // Whatever of an interrupted turn the thread did keep is still not
-          // something Codex will send again, so a transcript read back from it
-          // says so exactly as the live stream did.
+          // Read back, it says so exactly as the live stream did.
           if (wasDiscarded(interrupted, { keepsPartial: CODEX_CAPABILITIES.interruptKeepsPartial })) {
             interrupted.discarded = true;
           }
@@ -479,8 +408,7 @@ export class CodexAppServerAdapter extends EventEmitter {
         continue;
       }
       if (item.type === "reasoning") {
-        // Reasoning with no summary is reasoning the model did and did not
-        // describe: Codex keeps only the provider's encrypted copy of it.
+        // Codex keeps only the provider's encrypted copy of reasoning with no summary.
         const text = itemPartsText(item.summary);
         messages.push({ id: item.id || `reasoning-${turnId}`, role: "assistant", content: "",
           blocks: [{ kind: "thinking", text, redacted: !text }], stopReason: "toolUse", interim: true, answers: answering });
@@ -495,7 +423,6 @@ export class CodexAppServerAdapter extends EventEmitter {
         interim = messages.at(-1);
       }
       interim.blocks.push({ kind: "tool_call", toolCallId: item.id, name: activity.name, input: activity.input });
-      // A command still running when the turn was interrupted went with it.
       const cancelled = row.turnStatus === "interrupted" && item.status === "inProgress";
       tools.push({ toolCallId: item.id, name: activity.name, kind: activity.kind, subject: activity.subject, input: activity.input, done: true,
         output: textResult(truncate(activity.output)), isError: activity.isError && !cancelled, ...(cancelled ? { cancelled } : {}) });
@@ -504,7 +431,6 @@ export class CodexAppServerAdapter extends EventEmitter {
     return { messages, tools };
   }
 
-  /** The plan's windows, asked at most once a minute and published when they arrive. */
   refreshPlan(record) {
     if (Date.now() - CodexAppServerAdapter.plan.at < 60_000) return;
     CodexAppServerAdapter.plan.at = Date.now();
@@ -518,16 +444,11 @@ export class CodexAppServerAdapter extends EventEmitter {
     }).catch(() => {});
   }
 
-  /**
-   * An old thread's context from its rollout file, where Codex records every
-   * token_count it reported live: the last one's request and window, each new
-   * total a request for the cache.
-   */
+  /** Codex's rollout file records every token_count it reported live; each new total is a request for the cache. */
   async contextFromHistory({ opaqueSession }) {
     const threadId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId;
     if (!threadId) return null;
     let text = null;
-    // The rollout is read where the thread ran.
     text = await this.processes({ nodeId: opaqueSession?.nodeId }).read("codexRollout", threadId);
     if (!text) return null;
     const requests = [];
@@ -558,7 +479,6 @@ export class CodexAppServerAdapter extends EventEmitter {
     const threadId = live?.sessionId
       || (typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId);
     if (!threadId) return { messages: [], tools: [], page: { before: null } };
-    // A device's thread is read from its own daemon, over a connection made for the read.
     const device = !live && opaqueSession?.nodeId && project?.place
       ? await this.start({ chatId: `read-${crypto.randomUUID()}`, cwd: project.workingRoot, nodeId: opaqueSession.nodeId, place: project.place })
       : null;
@@ -608,7 +528,6 @@ export class CodexAppServerAdapter extends EventEmitter {
     return { mode: "linear", leafId, tree: child ? [child] : [] };
   }
 
-  /** Codex messages can carry a flat string or an array of content parts. */
   static itemText(item) {
     if (typeof item?.text === "string") return item.text;
     if (typeof item?.content === "string") return item.content;
@@ -628,31 +547,20 @@ export class CodexAppServerAdapter extends EventEmitter {
       clients: new Set(), events: [], pending: new Map(),
       steering: [], followUp: [],
       permissionMode: "", permissionProfile: "", approvalPolicy: "", approvalsReviewer: "", serviceLevel: "",
-      // Two counters that both used to be called a sequence. `rpcRequestId` is
-      // Codex's own protocol -- the id a response is matched back to its
-      // request by, meaningful to nothing outside this file. `generationSeq` is
-      // the order a turn's events are in, which is what the browser reduces and
-      // what `seq` carries on the wire. A chat's own order is a third number
-      // again, and it lives in the log as `log.seq`.
+      // `rpcRequestId` matches a response back to its request, meaningful to nothing outside this file;
+      // `generationSeq` orders a turn's events and goes on the wire as `seq`.
       rpcRequestId: 0, generationSeq: 0, messageIds: new Set(),
-      // Not able to answer until the app-server has finished its handshake.
       ready: false,
     };
     this.sessions.add(record);
-    // A request still waiting when the session ends is answered with that.
     record.scope.defer(() => this.fail(record, new Error("The Codex session closed")));
-    // Announce the process the moment it exists, as a native one does, so the
-    // chat can show that its agent is coming up instead of showing nothing
-    // until it is already there.
+    // Announced the moment it exists, so the chat can show its agent coming up.
     this.emit("changed", { record, reason: "created" });
     try {
-      // The daemon socket carries one JSON-RPC message per WebSocket text
-      // frame. Rust's websocket endpoint rejects extension negotiation, so do
-      // not offer per-message compression.
+      // Rust's websocket endpoint rejects extension negotiation, so per-message compression is not offered.
       for (let attempt = 0; attempt < 2; attempt += 1) {
         record.socket = new WebSocket("ws://localhost/rpc", {
           perMessageDeflate: false,
-          // On a device, its daemon's socket, through the node.
           createConnection: () => this.processes(record).connect({ harness: "codex", path: this.socketPath }),
         });
         try {
@@ -677,8 +585,6 @@ export class CodexAppServerAdapter extends EventEmitter {
       this.write(record, { method: "initialized" });
       record.status = "running";
       record.ready = true;
-      // The handshake is done: this is the moment the agent is warm, and the
-      // one moment anyone can honestly say so.
       this.emit("changed", { record, reason: "ready" });
       return record;
     } catch (cause) {
@@ -733,19 +639,13 @@ export class CodexAppServerAdapter extends EventEmitter {
       else pending.resolve(message.result);
       return;
     }
-    // A message carrying BOTH an id and a method is a request from the server
-    // and needs a reply. Treating it as a notification is what left approval
-    // prompts unanswered and stalled the turn.
+    // A message carrying both an id and a method is a request from the server and needs a reply; unanswered, it stalls
+    // the turn silently.
     if (message.id != null && message.method) return this.serverRequest(record, message);
     if (message.method) this.notification(record, message.method, message.params || {});
   }
 
-  /**
-   * Answer a request the app-server made of us. Every path here replies:
-   * an approval becomes a permission prompt whose answer is written back, and
-   * anything we do not understand is refused immediately rather than ignored,
-   * so the turn fails loudly instead of hanging.
-   */
+  /** Every path here replies: anything not understood is refused at once, so the turn fails loudly instead of hanging. */
   serverRequest(record, message) {
     if (message.method === USER_INPUT) return this.userInput(record, message);
     const descriptor = APPROVALS[message.method];
@@ -762,7 +662,6 @@ export class CodexAppServerAdapter extends EventEmitter {
     this.ask(record, host, { rpcId: message.id, decisions: descriptor.decisions, generationId });
   }
 
-  /** A question the model asked with request_user_input, asked as one. */
   userInput(record, message) {
     const params = message.params || {};
     const generationId = params.turnId || record.generation?.id || null;
@@ -773,21 +672,16 @@ export class CodexAppServerAdapter extends EventEmitter {
   ask(record, host, held) {
     const { generationId } = held;
     this.publish(record, askHost(record, host.id, host, held));
-    // What the session is busy with, not a transition the turn made. It used to
-    // be published as a `status` with no phase, which is a shape neither fold
-    // has a case for: it took a place in the turn's sequence and then changed
-    // nothing at either end, and the browser's router sent it to the fold
-    // rather than to the chat. The state event is the one the browser reads.
+    // What the session is busy with, not a transition the turn made, so not a `status` in the turn's sequence.
     this.publish(record, { type: "runtime_state", generationId, session: this.view(record) });
   }
 
-  /** Send the user's answer back to Codex and let the turn continue. */
   respondHostUi(id, response) {
     const record = this.get(id);
     if (!record) throw error("Codex session is not running");
     const requestId = response?.id;
     const pending = take(record, requestId);
-    // Resolved already - answered in the Codex TUI, or a duplicate click.
+    // Resolved already: answered in the Codex TUI, or a duplicate click.
     if (!pending) return null;
     if (pending.host.kind === "question") {
       this.write(record, { id: pending.rpcId, result: { answers: userInputAnswers(pending.host, response) } });
@@ -810,25 +704,12 @@ export class CodexAppServerAdapter extends EventEmitter {
     this.publish(record, { type: "runtime_state", generationId: pending.generationId, session: this.view(record) });
   }
 
-  /**
-   * Whether this record's transcript is stated rather than inferred.
-   *
-   * It is the log that makes a statement worth anything: without one there is
-   * no order to state a position in, and the browser would be told a place it
-   * has no way to hold.
-   */
+  /** Without a log there is no order to state a position in. */
   states(record) {
     return Boolean(this.sessions.logFor(record));
   }
 
-  /**
-   * Say that a message now exists, and where.
-   *
-   * Codex names its own items, so these ops carry Codex's names. What Codex
-   * does not say is where a name belongs once a turn has been steered, queued
-   * into or interrupted -- and that is what the browser was left working out
-   * from ids, timestamps and the shape of the turn around a message.
-   */
+  /** Codex does not say where a message belongs once a turn has been steered, queued into or interrupted; this does. */
   openMessage(record, id, role, { answers = null, generationId = null, ...fields } = {}) {
     if (!id || !this.states(record)) return null;
     record.openMessages = record.openMessages || new Set();
@@ -837,37 +718,23 @@ export class CodexAppServerAdapter extends EventEmitter {
     return id;
   }
 
-  /** And that it is finished -- with the reason it stopped, and what it says. */
   closeMessage(record, id, stopReason = null, { blocks = [], interim = false } = {}) {
     if (!id || !this.states(record)) return null;
     record.openMessages?.delete(id);
     this.publish(record, messageClose({
       messageId: id, stopReason,
-      // Codex does not persist the answer it was writing when a turn was
-      // interrupted: the thread reports that turn holding the prompt and an
-      // empty reasoning stub. What the reader watched arrive is kept and
-      // marked, which the op does from this one fact about the harness.
+      // Codex does not persist the answer it was writing when a turn was interrupted: the thread keeps the prompt and
+      // an empty reasoning stub.
       keepsPartial: CODEX_CAPABILITIES.interruptKeepsPartial,
-      // Whether this message is the answer or the turn talking as it works.
-      // Codex says so itself, in the phase it gives the item; the browser is
-      // told, rather than deciding it from what a later message went on to do.
       interim,
       blocks,
-      // The turn's model, so it does not live only on the record while the
-      // close is the statement the transcript keeps. Codex does not name a
-      // provider or a write-time on the item.
+      // The close is the statement the transcript keeps; Codex names no provider or write-time on the item.
       model: record.model || null,
     }));
     return id;
   }
 
-  /**
-   * A carrier the turn has moved on from is finished with what it holds.
-   *
-   * Codex reports its commands beside the messages rather than inside them, so
-   * a turn's commentary and the commands it ran share one row. When the turn
-   * starts writing a different item, that row is done.
-   */
+  /** Codex reports commands beside the messages, so a turn's commentary and its commands share one row. */
   settleCarrier(record, nextMessageId) {
     const previous = record.turn;
     if (!previous || previous.messageId === nextMessageId) return;
@@ -876,12 +743,8 @@ export class CodexAppServerAdapter extends EventEmitter {
   }
 
   /**
-   * Settle the rows a finished turn still holds open.
-   *
-   * A row is given up only when nothing was ever written into it: an answer
-   * named and then cut off before its first token. One that was being written
-   * keeps what it had, because an interrupted turn may never report the item
-   * at all and dropping it would take away text the reader watched arrive.
+   * A row is given up only when nothing was ever written into it. An interrupted turn may never report the item at all,
+   * and dropping it would take away text the reader watched arrive.
    */
   dropUnwrittenMessages(record, stopReason = "aborted") {
     const open = record.openMessages;
@@ -901,14 +764,8 @@ export class CodexAppServerAdapter extends EventEmitter {
   }
 
   /**
-   * Hang a running command off the turn's assistant message.
-   *
-   * Conduit decides what belongs in the reasoning rollup from the content
-   * blocks: text followed by a tool call is interim work, text with nothing
-   * after it is the answer. Codex reports its commands beside the messages
-   * rather than inside them, so the adapter puts them where the rollup looks -
-   * otherwise every commentary line renders as its own answer and the commands
-   * never appear at all.
+   * The reasoning rollup reads text followed by a tool call as interim work. Codex reports its commands beside the
+   * messages, so they go where the rollup looks, or every commentary line renders as its own answer.
    */
   attachToolCall(record, turnId, toolCallId, activity) {
     if (!record.turn || record.turn.id !== turnId) {
@@ -926,13 +783,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       errorMessage: null, blocks: record.turn.blocks });
   }
 
-  /**
-   * Make the turn's carrier the message now being streamed, ready to take text.
-   *
-   * `item/completed` replaces this with what Codex says the message finally
-   * held. Until then it is what the reader has seen, which is all an interrupt
-   * leaves behind.
-   */
+  /** Until `item/completed` replaces it, this is what the reader has seen, which is all an interrupt leaves behind. */
   streamInto(record, turnId, messageId, kind) {
     if (record.turn?.messageId === messageId) return record.turn;
     this.settleCarrier(record, messageId);
@@ -1001,11 +852,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       const steeringCount = record.steering.length;
       record.steering = record.steering.filter((item) => item.id !== messageId);
       if (record.steering.length !== steeringCount) this.publishQueue(record);
-      // A steered or CLI-typed message reaches the transcript here, and an
-      // answer that follows answers it rather than the prompt that opened the
-      // turn: that prompt has been answered, and this is what Codex is
-      // replying to now.
-      // The prompt it moved on from is over, and drawn as history from here.
+      // An answer that follows a steered or CLI-typed message answers it, not the prompt that opened the turn.
       if (this.states(record) && record.answering && record.prompts?.has(record.answering)) {
         this.publish(record, turnSettle({ promptId: record.answering, outcome: "complete", generationId: turnId }));
         record.prompts.delete(record.answering);
@@ -1025,11 +872,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       }
       this.publish(record, { type: "assistant_content", generationId: turnId, phase: "delta", seq: ++record.generationSeq,
         messageId, contentIndex: 0, blockKind: "text", delta: params.delta || "" });
-      // Hold what has been streamed so far. An interrupted answer is the one
-      // case where Codex never reports the item at all -- the thread keeps the
-      // prompt and an empty reasoning stub and nothing else -- so without this
-      // the only copy of the text is the deltas, and the row was given up as
-      // one that had never been written into. The reader watched it arrive.
+      // Codex never reports an interrupted answer's item, so the deltas are the only copy of its text.
       this.streamInto(record, turnId, messageId, "text");
       record.turn.blocks[0].text += params.delta || "";
     } else if (method === "item/reasoning/summaryTextDelta") {
@@ -1071,7 +914,6 @@ export class CodexAppServerAdapter extends EventEmitter {
           phase: "start", seq: ++record.generationSeq, messageId });
       }
       this.settleCarrier(record, messageId);
-      // One Codex did not summarise is still reasoning that happened.
       record.turn = { id: turnId, messageId, blocks: [{ kind: "thinking", contentIndex: 0, text, redacted: !text }] };
       this.publish(record, { type: "assistant_content", generationId: turnId, phase: "final",
         seq: ++record.generationSeq, messageId, stopReason: "toolUse", errorMessage: null, blocks: record.turn.blocks });
@@ -1087,8 +929,7 @@ export class CodexAppServerAdapter extends EventEmitter {
             kind: activity.kind, subject: activity.subject, input: activity.input, messageId: record.turn?.messageId || null, generationId: turnId }));
         }
       } else {
-        // A search only says what it did once it has, so what it acted on is
-        // restated with what it returned.
+        // A search only says what it did once it has.
         this.publish(record, { type: "tool_activity", generationId: turnId, phase: "end", seq: ++record.generationSeq,
           toolCallId: params.item.id, name: activity.name, kind: activity.kind, subject: activity.subject,
           output: truncate(activity.output), isError: activity.isError });
@@ -1099,8 +940,7 @@ export class CodexAppServerAdapter extends EventEmitter {
         }
       }
     } else if (method === "serverRequest/resolved") {
-      // The prompt was answered somewhere else - the Codex TUI, or another
-      // client on the same thread. Clear ours rather than leave it hanging.
+      // Answered somewhere else: the Codex TUI, or another client on the same thread.
       for (const pending of asked(record)) {
         if (params.requestId != null && pending.rpcId !== params.requestId) continue;
         this.settleApproval(record, pending.id);
@@ -1111,15 +951,11 @@ export class CodexAppServerAdapter extends EventEmitter {
       const said = { completed: record.stopping ? null : "complete", interrupted: "interrupted", failed: "failed" }[params.turn?.status];
       const outcome = outcomeOf(said, record.stopping) || "complete";
       const failed = outcome === "failed";
-      // Stopped by us, or by Codex's own TUI or another client -- as the turn's status rather than through our stop.
       const interrupted = outcome === "interrupted";
       endTurn(record, outcome);
       record.compacting = false;
       for (const { id } of asked(record)) this.settleApproval(record, id);
-      // A turn nobody stopped, whose last message Codex never labelled, ends by
-      // saying that message was the answer. A turn that was interrupted says no
-      // such thing: what it had written is where it got to, not what it meant
-      // to say, and calling it the answer would hide that it was cut off.
+      // An interrupted turn's last message is where it got to, not its answer: calling it one would hide the cut.
       const promoted = !failed && !interrupted && record.turn?.phase == null && record.turn?.blocks?.some((block) => block.kind === "text")
         && !record.turn.blocks.some((block) => block.kind === "tool_call");
       if (promoted) {
@@ -1128,11 +964,7 @@ export class CodexAppServerAdapter extends EventEmitter {
           errorMessage: null, blocks: record.turn.blocks });
         this.closeMessage(record, record.turn.messageId, "stop", { blocks: record.turn.blocks, interim: false });
       }
-      // Whatever the turn still holds is settled with what it wrote, or given
-      // up if it wrote nothing -- so an interrupt leaves no row waiting for a
-      // message that is never coming.
       this.dropUnwrittenMessages(record, failed || interrupted ? "aborted" : "stop");
-      // Every prompt the turn answered, a steer included, ended with it.
       for (const promptId of this.states(record) ? record.prompts || [] : []) {
         this.publish(record, turnSettle({ promptId, generationId: turnId, outcome }));
       }
@@ -1145,14 +977,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     }
   }
 
-  /**
-   * Take a message sent while a turn is running.
-   *
-   * Steering hands it to Codex immediately - `turn/steer` delivers as soon as
-   * the running tool call settles, rather than after the whole turn. A
-   * follow-up waits for the turn to finish, which Codex has no endpoint for, so
-   * Conduit holds it and starts the next turn itself.
-   */
+  /** Codex has no endpoint for a follow-up, so Conduit holds it and starts the next turn itself. */
   async queue(id, type, message, { attachments = [] } = {}) {
     const record = this.get(id);
     if (!record) throw error("Codex session is not running");
@@ -1182,7 +1007,6 @@ export class CodexAppServerAdapter extends EventEmitter {
     return { queued: "steer", attachmentIdentity: { messageId: queued.id } };
   }
 
-  /** Start the next turn from the messages that waited for this one to finish. */
   async flushFollowUp(record) {
     const queued = record.followUp.shift();
     if (queued === undefined) return;
@@ -1194,7 +1018,6 @@ export class CodexAppServerAdapter extends EventEmitter {
     }
   }
 
-  /** Take back whatever has not been handed to Codex yet. */
   async clearQueue(id) {
     const record = this.get(id);
     if (!record) throw error("Codex session is not running");
@@ -1212,15 +1035,7 @@ export class CodexAppServerAdapter extends EventEmitter {
       queue: { steering: record.steering.map(text), followUp: record.followUp.map(text) } });
   }
 
-  /**
-   * Approval and sandbox policy for a thread. Omitted keys let Codex fall back
-   * to the user's own `~/.codex/config.toml`, so Conduit only overrides what it
-   * was actually asked to.
-   *
-   * `approvalPolicy` is untrusted | on-request | never; `sandbox` is
-   * read-only | workspace-write | danger-full-access, or an object carrying
-   * networkAccess and writableRoots.
-   */
+  /** Omitted keys let Codex fall back to the user's own `~/.codex/config.toml`. */
   static policy(approvalPolicy = "", approvalsReviewer = "", sandbox = null) {
     return {
       ...(APPROVAL_POLICIES.includes(approvalPolicy) ? { approvalPolicy } : {}),
@@ -1229,7 +1044,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     };
   }
 
-  /** A device's Codex cannot open this server's paths: images go as data URLs and files inline, where they can. */
+  /** A device's Codex cannot open this server's paths. */
   static async inputItems(message, attachments, { onDevice = false } = {}) {
     const images = (attachments || []).filter((item) => String(item?.type || "").startsWith("image/") && item.path);
     const files = (attachments || []).filter((item) => !String(item?.type || "").startsWith("image/") && item.path);
@@ -1246,13 +1061,10 @@ export class CodexAppServerAdapter extends EventEmitter {
     const record = this.get(id);
     if (!record?.sessionId) throw error("Codex thread is not ready");
     const clientUserMessageId = options?.clientUserMessageId || crypto.randomUUID();
-    // Stated before it is sent, not after Codex echoes it back. The prompt is
-    // the thing the next answer answers, so it has to be in the transcript
-    // before the answer arrives -- otherwise the answer is placed against
-    // whatever came before it, which is the previous turn.
+    // Stated before it is sent, or the answer arriving first is placed against the previous turn.
     record.messageIds.add(clientUserMessageId);
     record.answering = clientUserMessageId;
-    // The slot is held from turn/start until Codex says the turn started (see isGeneratingRecord).
+    // The slot is held from turn/start until Codex says the turn started.
     record.turnStarting = true;
     record.generation = null;
     record.stopping = false;
@@ -1278,8 +1090,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     } catch (cause) {
       // A late reply must not undo a started, settled or replacement turn.
       if (record.prompts !== prompts || !record.turnStarting) throw cause;
-      // A prompt Codex refused writes nothing, so the row stated for it goes
-      // back rather than waiting for a turn that will never start.
+      // A prompt Codex refused writes nothing, so the row stated for it goes back.
       record.messageIds.delete(clientUserMessageId);
       record.answering = null;
       record.turnStarting = false;
@@ -1502,11 +1313,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     return this.listThreads({ cwd, limit });
   }
 
-  /**
-   * List threads Codex knows about. Omitting `cwd` lists them machine-wide;
-   * passing one uses Codex's own server-side filter. The client-side filter
-   * stays as a guard against a future protocol that ignores the parameter.
-   */
+  /** The client-side filter guards against a protocol that ignores `cwd`. */
   async listThreads({ cwd, limit = 60 } = {}) {
     const record = await this.discovery();
     const result = await this.request(record, "thread/list", {
@@ -1527,11 +1334,7 @@ export class CodexAppServerAdapter extends EventEmitter {
     })).filter((thread) => thread.id && (!cwd || thread.cwd === cwd));
   }
 
-  /**
-   * Discovery reads the global thread database, so one app-server serves every
-   * lookup. Spawning per request costs seconds, which a dashboard that reloads
-   * on focus cannot pay. The process retires once it has been idle.
-   */
+  /** Spawning per request costs seconds, which a dashboard that reloads on focus cannot pay. */
   async discovery(cwd = os.homedir()) {
     if (this.discoveryStart) return this.discoveryStart;
     const existing = this.discoveryId ? this.get(this.discoveryId) : null;
@@ -1578,7 +1381,6 @@ export class CodexAppServerAdapter extends EventEmitter {
     }
     return result;
   }
-  /** Codex pushes its usage after every request; this answers with the latest. */
   refreshContext(id) { return Promise.resolve(this.get(id)?.contextUsage || null); }
   get(id) { return this.sessions.get(id); }
   getByChatId(chatId) { return this.sessions.getByChatId(chatId); }

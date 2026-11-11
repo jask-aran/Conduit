@@ -30,12 +30,9 @@ export function chatDirectory(project, chatId) {
 
 const at = (value) => Date.parse(value || "") || 0;
 
-/** The later of two timestamps; the completion clock only ever moves forward. */
 const laterOf = (left, right) => (at(right) > at(left) ? right : left) || null;
 
-// Unread is a comparison, not a stored flag: has the assistant finished
-// something since this chat was last read. Nothing has to transition it, so a
-// duplicate, late or missing event cannot leave it wrong.
+// Unread is a comparison, not a stored flag, so a duplicate, late or missing event cannot leave it wrong.
 const chatIsUnread = (chat) => chat?.status !== "subagent" && at(chat?.lastAssistantCompletedAt) > at(chat?.lastReadAt);
 
 export function chatView(chat) {
@@ -76,9 +73,7 @@ export class ChatStore {
     const reconciled = [];
     const usedIds = new Set();
     for (const item of rows) {
-      // An untracked thread's chat lasts as long as the page that opened it. One
-      // left by a closed tab or a stopped server goes here, rather than coming
-      // back as a chat nobody tracked.
+      // An untracked thread's chat lasts as long as the page that opened it.
       if (item.untracked) continue;
       const project = projectById.get(item.projectId);
       if (!project) continue;
@@ -96,8 +91,7 @@ export class ChatStore {
           : null,
         backend: item.backend || templateBackend({ id: item.templateId || "assistant", version: item.templateVersion }),
         modelThinkingLevels: modelThinkingLevelsFor(item),
-        // The device that owns the thread's work (decision 21); rows from before it was kept take their workspace's.
-        // ("head" was the head's name for a while before it was a device.)
+        // A row with no owner, or the old name "head", takes its workspace's.
         owner: typeof item.owner === "string" && item.owner && item.owner !== "head" ? item.owner : placeOf(project).device,
         createdAt,
         updatedAt: item.updatedAt || createdAt,
@@ -151,8 +145,7 @@ export class ChatStore {
       .map((entry) => fs.rm(path.join(directory, entry.name), { force: true })));
   }
 
-  // `untracked` chats stand behind threads that are not in Conduit: they run
-  // like any chat, but no list of Conduit's chats includes them unless asked.
+  // `untracked` chats stand behind threads that are not in Conduit.
   list({ includeHidden = false, includeUntracked = includeHidden } = {}) {
     return [...this.chats]
       .filter((chat) => includeUntracked || !chat.untracked)
@@ -186,8 +179,6 @@ export class ChatStore {
         : null,
       backend: selectedBackend,
       modelThinkingLevels: {},
-      // The device that owns the thread's work (plan decision 21): its
-      // workspace's, whoever typed; the head's for a chat in no workspace.
       // It stays when the device is away; a move is what changes it.
       owner: placeOf(project).device,
       createdAt: timestamp,
@@ -197,7 +188,6 @@ export class ChatStore {
       lastMessageAt: null,
       lastReadAt: null,
       ...(untracked ? { untracked: true } : {}),
-      // Started by a headless run rather than from a chat page.
       ...(run ? { run } : {}),
     };
     await this.ensureDirectories(project, chat.id);
@@ -252,9 +242,7 @@ export class ChatStore {
       "untracked",
     ];
     for (const key of allowed) if (Object.hasOwn(patch, key)) chat[key] = patch[key];
-    // The completion clock is the read watermark's other half, so it never
-    // regresses -- a re-read of an older session file must not resurrect or
-    // suppress unread.
+    // The read watermark's other half never regresses: a re-read of an older session file must not change unread.
     if (Object.hasOwn(patch, "lastAssistantCompletedAt")) {
       chat.lastAssistantCompletedAt = laterOf(previousCompletedAt, patch.lastAssistantCompletedAt);
     }
@@ -273,10 +261,8 @@ export class ChatStore {
   }
 
   /**
-   * Raise the read watermark. `upTo` is a completion timestamp this server
-   * issued and a client has rendered, never a browser clock, so skew cannot
-   * reach it and a receipt that arrives late, twice or from a second device
-   * can only re-assert ground already covered.
+   * `upTo` is a completion timestamp this server issued, never a browser clock, so a receipt that arrives late, twice
+   * or from a second device can only re-assert ground already covered.
    */
   async markRead(chatId, upTo) {
     const chat = this.metadata(chatId);

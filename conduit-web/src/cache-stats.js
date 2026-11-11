@@ -1,11 +1,7 @@
 /**
- * Cache efficiency every harness can report the same way. The share of input
- * served from cache is diluted by whatever is new; the eligible hit rate asks
- * only of what could have been cached -- the previous request's prompt, which
- * the next one repeats -- how much the provider actually reused.
- *
- * Each adapter feeds its requests in order as Conduit's request usage
- * ({ input, cacheRead, cacheWrite }, input excluding cache reads).
+ * The share of input served from cache is diluted by whatever is new; the eligible hit rate asks only of the previous
+ * request's prompt, which the next one repeats, how much the provider reused. Requests come in order as
+ * { input, cacheRead, cacheWrite }, input excluding cache reads.
  */
 const count = (value, fallback = null) => {
   if (value == null) return fallback;
@@ -31,7 +27,6 @@ function finishCacheStats(stats) {
   return { ...stats, eligibleHitRate: stats.eligibleTokens > 0 ? stats.cacheHits / stats.eligibleTokens : null };
 }
 
-/** Counts one request against a tracker ({ stats, previousPromptTokens }) and returns the stats. */
 export function countCacheRequest(tracker, usage) {
   const request = promptTokenParts(usage);
   if (!request) return tracker.stats || null;
@@ -52,12 +47,7 @@ export function countCacheRequest(tracker, usage) {
 /** After a compaction the next prompt repeats nothing. */
 function resetCachePrefix(tracker) { if (tracker) tracker.previousPromptTokens = null; }
 
-/**
- * What a harness's stored history says about its context, for a thread with
- * no live process: the last request's tokens against the window, the cache
- * over every request, and the session's token totals. `requests` are in
- * order, as Conduit's request usage; a null is a compaction.
- */
+/** A null in `requests` is a compaction. */
 export function usageFromRequests(requests, { contextWindow = null, model = null, cost = null, compactAt = null, plan = null } = {}) {
   const tracker = { stats: null, previousPromptTokens: null };
   const tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
@@ -80,7 +70,6 @@ export function usageFromRequests(requests, { contextWindow = null, model = null
   };
 }
 
-/** A plan window's name from its length: the 5-hour and weekly ones by name. */
 export function planWindowLabel(minutes) {
   if (minutes === 300) return "5-hour";
   if (minutes === 10080) return "Weekly";

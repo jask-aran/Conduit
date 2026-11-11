@@ -13,12 +13,8 @@ export function createActiveGeneration(id, { status = "submitting" } = {}) {
 }
 
 /**
- * What names a block, for as long as it is being written.
- *
- * The message id carries the generation already -- a claimed one is unique
- * outright, and the fallback the normalizer invents is prefixed with the
- * generation that invented it -- so naming the generation again here only made
- * every identity say it twice.
+ * The message id already carries the generation: a claimed one is unique outright, and the fallback the normalizer
+ * invents is prefixed with its generation.
  */
 export function contentBlockIdentity(messageId, contentIndex) {
   return `${messageId}:${contentIndex}`;
@@ -68,15 +64,8 @@ export function snapshotActiveGeneration(state) {
 }
 
 /**
- * The turn so far, from the events the browser is sent.
- *
- * It reduces exactly what crosses the socket, so the snapshot it builds is
- * what a browser that saw everything would have built. A reconnecting or
- * paused socket is restated from this snapshot, which makes paint droppable.
- *
- * Block starts and completions are gone with the rename, because the browser
- * is not sent them: a block opens on its first delta and completes when the
- * message closes, at both ends.
+ * Reduces exactly what crosses the socket, so a reconnecting or paused socket can be restated from this snapshot.
+ * The browser is not sent block starts or ends: a block opens on its first delta and completes when its message closes.
  */
 export function reduceActiveGeneration(current, event) {
   if (!event || !event.generationId) return current;
@@ -129,11 +118,9 @@ export function reduceActiveGeneration(current, event) {
         contentIndex: event.contentIndex,
         status: "streaming",
         identity: contentBlockIdentity(event.messageId, event.contentIndex),
-        // A call being written, named as soon as the harness knows which.
         ...(event.name ? { name: event.name, toolKind: event.toolKind } : {}),
         ...(event.subject ? { subject: event.subject } : {}),
         ...(event.toolCallId ? { toolCallId: event.toolCallId } : {}),
-        // Commentary or final answer, as its provider labelled it (DESIGN.md, Turns).
         ...(event.textPhase ? { phase: event.textPhase } : {}),
       });
       if (event.blockKind === "tool_call") block.inputText = `${existing?.inputText || ""}${event.delta}`;
@@ -167,9 +154,7 @@ export function reduceActiveGeneration(current, event) {
         ...(event.at ? { timestamp: event.at } : {}),
         input: event.input,
         status: "running",
-        // What the tool has returned so far. `status` says whether that is all
-        // of it, so there is one field to read rather than two to choose
-        // between.
+        // What the tool has returned so far; `status` says whether that is all of it.
         output: null,
         isError: false,
       };
@@ -231,20 +216,8 @@ export function reduceActiveGeneration(current, event) {
 }
 
 /**
- * Which of a turn's text is its final answer, and which is commentary (it talking as it works).
- *
- * A text its provider labelled says which from its first word (`phase`: OpenAI Responses). Otherwise it is decided
- * per message, from that message alone: its text is commentary when the
- * message is itself a step towards an answer -- it called a tool, or stopped to
- * call one -- and an answer otherwise.
- *
- * It used to be decided across the whole turn: any text with a tool call
- * anywhere after it was narration. That made a finished answer stop being one
- * retroactively. Steer a turn that has already answered, and the follow-on
- * message calls a tool -- so the answer already on screen was reclassified as
- * narration, folded into the collapsed trace, and to anyone watching it had
- * simply vanished. What a later message does cannot change what an earlier one
- * said.
+ * Unlabelled text is classified per message, from that message alone: a later message calling a tool (after a steer,
+ * say) must not turn an answer already on screen into commentary and fold it away.
  */
 export function textBlockClassifications(state) {
   const result = {};
