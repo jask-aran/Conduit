@@ -1,5 +1,5 @@
 import { Icons } from "@/components/ui";
-import { createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, untrack } from "solid-js";
+import { createEffect, createMemo, createResource, createSignal, For, lazy, on, onCleanup, onMount, Show, untrack } from "solid-js";
 import { holdBack } from "@/components/ui/back";
 import { formatShortcutBinding } from "../shortcuts/shortcut-normalize";
 import { BotIcon, ChartColumnIcon, LaptopIcon, Mic2Icon, NetworkIcon, SmartphoneIcon, SparklesIcon } from "lucide-solid";
@@ -23,6 +23,7 @@ import { toast } from "@/components/ui/notifications";
 import { api, readShared } from "../api/client";
 import { formatMicrophoneError, hasAudioSignal, microphoneName, rememberMicrophones, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
 import { installedClientKind } from "../platform/installed-client";
+import { hexAvailable } from "../platform/hex-local";
 import { isPhoneVoice, shortcutFromKeyboardEvent } from "../chat/voice-dictation";
 import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
 import { isWarmMicrophoneActive, stopWarmMicrophone } from "../chat/voice-dictation-client";
@@ -571,6 +572,7 @@ export function Settings(props: {
     finally { setFloatBusy(false); }
   };
   const [warmMicrophoneActive, setWarmMicrophoneActive] = createSignal(isWarmMicrophoneActive());
+  const [hexHere] = createResource(hexAvailable);
   const [voiceServerEdited, setVoiceServerEdited] = createSignal(false);
   const voiceAutosave = createAutosave<VoiceServerSettings>({
     save: (settings) => persistVoiceServer(settings),
@@ -1739,6 +1741,11 @@ export function Settings(props: {
                 </Group>
 
                 <Group title="Input" scope="This device">
+                  <Show when={hexHere() || voiceDraft().useHex}>
+                    <SettingLine label="Use Hex when available" title="Dictate through the Hex app on this computer, so audio stays here. The hub is used while Hex is not running." state={hexHere() ? undefined : <>not running</>}>
+                      <Switch label="Use Hex when available" checked={voiceDraft().useHex} onChange={(useHex) => updateVoiceDraft({ useHex })} />
+                    </SettingLine>
+                  </Show>
 
                   <Show when={isPhoneVoice()}>
                     <SettingLine label="Prefer speakerphone" title="Listen through the phone's own microphone, not a Bluetooth headset's, so music keeps playing in your headphones.">

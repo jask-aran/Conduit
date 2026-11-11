@@ -11,4 +11,6 @@ export interface VoiceDictationSettings {
   otherAudioLevel: number;
   captureProfile: "raw" | "processed";
   warmMicrophone: boolean;
+  /** Dictate through the Hex on this computer when it is running, so audio stays here. */
+  useHex: boolean;
 }

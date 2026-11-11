@@ -7,6 +7,7 @@ mod desktop_settings;
 mod dev_update;
 mod discovery;
 mod global_shortcuts;
+mod hex_local;
 mod interface_bundle;
 mod loopback;
 mod node_companion;
@@ -94,6 +95,11 @@ pub fn run() {
             interface_bundle::interface_apply,
             interface_bundle::interface_confirm,
             global_shortcuts::set_global_shortcuts,
+            hex_local::hex_available,
+            hex_local::hex_stream_open,
+            hex_local::hex_stream_audio,
+            hex_local::hex_stream_finish,
+            hex_local::hex_stream_cancel,
             discovery::discover_servers,
             discovery::resolve_host,
             certificate_trust::trust_identities,

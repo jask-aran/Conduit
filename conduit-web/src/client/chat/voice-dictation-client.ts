@@ -4,6 +4,7 @@ import { lowerOtherAudio, restoreOtherAudio } from "../platform/audio-ducking";
 import { audioInputConstraints, formatMicrophoneError, microphoneOpened, hasAudioSignal, isUnavailableAudioInputError, normalizeVoiceCaptureProfile, shouldSwapToSpeakerphone, type AudioSignalLevel, type VoiceCaptureProfile } from "./voice-audio";
 import type { VoiceDictationClientDiagnostics, VoiceDictationDiagnostics } from "./voice-dictation-diagnostics";
 import { dictationSocketUrl } from "../api/transport";
+import { hexAvailable, openHexDictation, type DictationSocket } from "../platform/hex-local";
 import { createLatest } from "../state/latest";
 
 const CAPTURE_DRAIN_TIMEOUT_MS = 250;
@@ -145,7 +146,7 @@ void import("./voice-dictation-diagnostics").then(({ createVoiceDictationDiagnos
 
 export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, options: VoiceDictationOptions = {}) {
   let state: VoiceDictationState = "idle";
-  let socket: WebSocket | null = null;
+  let socket: DictationSocket | null = null;
   let stream: MediaStream | null = null;
   let streamDeviceId: string | null = null;
   let streamProfile: VoiceCaptureProfile | null = null;
@@ -622,11 +623,16 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
           fail(formatted);
         },
       );
-      const url = await dictationSocketUrl();
+      // Hex on this computer when the person chose it and it answers; otherwise, and when Hex refuses, the hub.
+      const hex = loadVoiceDictationSettings().useHex && await hexAvailable() ? await openHexDictation().catch(() => null) : null;
+      const url = hex ? "" : await dictationSocketUrl();
       // Disposed or failed meanwhile, the take is over: a socket now would be no one's. A stop still needs it, as its
       // stop frame and the server's "completed" are how the take ends.
-      if (!thisTake() || !["starting", "finishing"].includes(state)) return;
-      const current = new WebSocket(url);
+      if (!thisTake() || !["starting", "finishing"].includes(state)) {
+        hex?.close();
+        return;
+      }
+      const current = hex ?? new WebSocket(url);
       socket = current;
       socket.binaryType = "arraybuffer";
       // An earlier take's socket goes on telling (its close comes late): only the current one is heard.

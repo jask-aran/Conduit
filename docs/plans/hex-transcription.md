@@ -37,14 +37,14 @@ or the first model install, as `voice-packages.js` did for the addon), pinning i
 releases carry no checksum file), and whether the VPS has the memory: the child holds about 1.2 GB while loaded.
 Hex's updater did not run in embedded mode in these tests; check before relying on that.
 
-**The Windows client.** The user's Windows Hex (dev channel) serves the local API: `%APPDATA%\hex\local-api.json`
-gives the port and token, and it answered from WSL over loopback. With its RTX 3070 it transcribed 3 to 26 s clips
-in 0.1 to 0.3 s and its `/streams` sent partial text (first partial about 3.3 s after the audio started, measured
-from WSL). Hex's `docs/windows.md` still says the API is missing on Windows; the running build disagrees. The
-desktop app's Rust shell can read the discovery file and call `POST /transcriptions`, or `/streams` (one live
-stream at a time, 10 s lease, Hex's own dictation goes first). A browser tab and the Android app cannot. The option
-belongs under Settings › Voice › Input (this device). Partial text there comes from `/streams`; find out first why
-its first partial took 3.3 s. A hub with a GPU is untested: embedded mode would be fast but still has no `/streams`.
+**The desktop client (built 2026-11-11).** Settings › Voice › Input has "Use Hex when available" (per device, off
+by default, shown only when the desktop shell finds a running Hex). With it on, dictation opens Hex's own `/streams`
+through the shell (`src-tauri/src/hex_local.rs` reads `local-api.json`; the token never reaches the page) and
+`src/client/platform/hex-local.ts` turns Hex's events into the dictation socket's frames. When Hex is not running or
+refuses the stream, that dictation goes to the hub. Hex's `docs/windows.md` says the API is missing on Windows; the
+running build serves it. Measured on the user's RTX 3070: first partial text about 3.3 s after the audio starts, then
+about once a second (that is the streaming model's own cadence), final text 0.05 to 0.3 s after stop. A browser tab
+and the Android app cannot reach Hex. Not built: the same switch for voice messages recorded by Android Float.
 
 ## Rules that apply
 
