@@ -75,6 +75,20 @@ input.ui-setting-title { outline: none; }
 input.ui-setting-title:focus-visible { border-color: var(--ring); background: var(--tint); }
 @media (hover: hover) { input.ui-setting-title:hover { background: var(--tint); } }
 .ui-columns:where([data-group="setting"]) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--measure-sm)), 1fr)); gap: var(--space-md) var(--space-2xl); }
+/* Lists of groups: side by side while two fit, one after the other when not. Each list draws a rule in the gap to its
+   left and in the gap above it; the clip hides the one a list at the start of a row, or in the top row, has no use for. */
+.ui-columns:where([data-group="lists"]) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--measure-sm)), 1fr)); gap: calc(var(--space-lg) + var(--space-xl)) var(--space-2xl); clip-path: inset(0 -100vmax -100vmax calc(-0.4 * var(--space-2xl))); }
+.ui-column { position: relative; min-width: 0; }
+.ui-column + .ui-column::before { position: absolute; top: 0; bottom: 0; left: calc(-0.5 * var(--space-2xl)); border-left: var(--hairline) solid var(--tint); content: ""; }
+.ui-column + .ui-column::after { position: absolute; top: calc(-1 * var(--space-xl)); right: 0; left: 0; border-top: var(--hairline) solid var(--tint); content: ""; }
+.ui-setting-views { display: flex; padding-bottom: var(--space-lg); }
+.ui-setting-list { display: grid; grid-template-columns: minmax(0, 1fr); }
+.ui-setting-list-head { display: flex; align-items: center; gap: var(--space-sm); padding: 0 var(--space-sm) var(--space-md); }
+.ui-setting-list-head > :first-child { margin-right: auto; }
+.ui-setting-list > .ui-row { width: 100%; text-align: start; }
+.ui-setting-list > .ui-row > .ui-row-title { min-width: 0; flex: 1; overflow: hidden; }
+.ui-setting-list > .ui-row > .ui-row-title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-setting-list > p { margin: 0; padding: 0 var(--space-sm) var(--space-xl); line-height: var(--leading-text); overflow-wrap: anywhere; }
 .ui-group:where([data-group="column"]) { position: relative; display: flex; min-width: 0; flex-direction: column; gap: var(--hairline); }
 .ui-group:where([data-group="column"]) + .ui-group:where([data-group="column"])::before { position: absolute; top: 0; bottom: 0; left: calc(-0.5 * var(--space-2xl)); border-left: var(--hairline) solid var(--tint); content: ""; }
 /* The first button is set back by its own padding, so its words start where the lines' names do. */

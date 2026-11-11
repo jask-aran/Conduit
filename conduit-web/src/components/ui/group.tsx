@@ -49,8 +49,10 @@ export function Group(props: {
   }
 }
 
-export const Columns = (props: { kind?: "setting" | "card" | "browser"; children: JSX.Element }) =>
+export const Columns = (props: { kind?: "setting" | "card" | "browser" | "lists"; children: JSX.Element }) =>
   <div class="ui-columns" data-group={props.kind ?? "setting"}>{props.children}</div>;
+/** One list of `Columns kind="lists"`: whole groups, one under the other. */
+export const Column = (props: { children: JSX.Element }) => <div class="ui-column">{props.children}</div>;
 
 export function GroupHeading(props: { id?: string; count?: number | string | null; children: JSX.Element }) {
   return <h2 id={props.id} class="ui-group-heading">{props.children}<Show when={props.count != null}><Count value={props.count!} /></Show></h2>;

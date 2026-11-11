@@ -3,7 +3,7 @@ import { createEffect, createMemo, createResource, createSignal, For, lazy, on, 
 import { holdBack } from "@/components/ui/back";
 import { formatShortcutBinding } from "../shortcuts/shortcut-normalize";
 import { BotIcon, ChartColumnIcon, LaptopIcon, Mic2Icon, NetworkIcon, SmartphoneIcon, SparklesIcon } from "lucide-solid";
-import { CloudIcon, HandIcon, MicOffIcon, RepeatIcon } from "lucide-solid";
+import { CloudIcon, MicOffIcon } from "lucide-solid";
 import { AboutSettingsFooter } from "./about-settings";
 import { TitleBarSettings } from "./title-bar-settings";
 import { DevicesSettingsTile } from "./devices-settings";
@@ -24,7 +24,7 @@ import { api, readShared } from "../api/client";
 import { formatMicrophoneError, hasAudioSignal, microphoneName, rememberMicrophones, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
 import { installedClientKind } from "../platform/installed-client";
 import { hexStatus, type HexStatus } from "../platform/hex-local";
-import { clearDictationHistory, dictationHistory, type DictationRecord } from "../chat/voice-dictation-history";
+
 import { isPhoneVoice, shortcutFromKeyboardEvent } from "../chat/voice-dictation";
 import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
 import { isWarmMicrophoneActive, stopWarmMicrophone } from "../chat/voice-dictation-client";
@@ -72,7 +72,7 @@ import { Select } from "@/components/ui/menus";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
 import { Dialog, OverlayDialog } from "@/components/ui/dialog";
 import { catchLoopback, loopbackPort } from "../platform/loopback";
-import { OverlayPage, OverlayRail, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, SettingCredential, SettingStep, SettingRecorder, Keycap, Row, Group, Note, Loading, LeadInput } from "@/components/ui";
+import { OverlayPage, OverlayRail, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, SettingCredential, SettingStep, SettingRecorder, Keycap, Row, Group, Columns, Column, SettingViews, Note, Loading, LeadInput } from "@/components/ui";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { touchOnly } from "@/components/ui/layout";
 import { COMPOSER_KINDS, composerKind, saveComposerKind } from "../platform/native-composer";
@@ -159,7 +159,6 @@ const ACCOUNT_SOURCES: Record<NonNullable<PiAuthProvider["auth"]["source"]> | "n
   stored: "connected", environment: "key from the server", managed: "agent settings", none: "not connected",
 };
 const HEX_STATES: Record<HexStatus["state"], string> = { ready: "Found", idle: "Found, not listening", stopped: "Not running", absent: "Not found" };
-const DICTATION_SOURCES: Record<DictationRecord["source"], string> = { hex: "Hex on this computer", hub: "Private, on the hub", cloud: "Cloud" };
 const SEARCH_TIME_LIMITS: Array<{ ms: number | null; label: string }> = [
   { ms: null, label: "None" }, { ms: 15_000, label: "15 s" }, { ms: 30_000, label: "30 s" }, { ms: 60_000, label: "1 min" }, { ms: 120_000, label: "2 min" },
 ];
@@ -237,6 +236,7 @@ const preserveVoiceServerDraft = (loaded: VoiceServerSettings, previous: VoiceSe
 });
 
 const VoiceLocalCatalogue = lazy(() => import("./voice-local-catalogue"));
+const VoiceHistory = lazy(() => import("./voice-history"));
 
 export function Settings(props: {
   open: boolean;
@@ -520,6 +520,7 @@ export function Settings(props: {
   const [voiceError, setVoiceError] = createSignal("");
   const [voiceBusy, setVoiceBusy] = createSignal(false);
   const [recordingVoiceKeys, setRecordingVoiceKeys] = createSignal(false);
+  const [voiceView, setVoiceView] = createSignal<"settings" | "history">("settings");
   const [voiceKeys, setVoiceKeys] = createSignal("");
   const [voiceLicenseAccepted, setVoiceLicenseAccepted] = createSignal(false);
   const [voiceTestResult, setVoiceTestResult] = createSignal("");
@@ -1561,7 +1562,27 @@ export function Settings(props: {
               </Show>
             </>} /></Show>
           <Show when={section() === "devices"}><DevicesSettingsTile part="network" projects={props.projects} onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} onOpenBrowser={props.onOpenDeviceBrowser} onOpenWorkspace={props.onOpenWorkspace} /></Show>
-          <Show when={section() === "shortcuts"}><ShortcutsSettings manager={props.shortcuts} /></Show>
+          <Show when={section() === "shortcuts"}>
+            <Group title="Dictation" scope="This device">
+              <SettingLine plain label="Dictate" state={voiceDraft().activation === "toggle" ? "press to start and stop" : "hold to talk"}>
+                <Keycap label={`the dictation shortcut, ${voiceDraft().shortcut}`} onClick={() => { setVoiceKeys(""); setRecordingVoiceKeys(true); }}>{voiceDraft().shortcut}</Keycap>
+              </SettingLine>
+              <Show when={recordingVoiceKeys()}>
+                    <SettingRecorder ref={(element) => queueMicrotask(() => element.focus())} label="Record the dictation shortcut" keys={voiceKeys() ? [voiceKeys()] : undefined}
+                      onKeyDown={(event) => {
+                        if (event.key === "Tab") return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (event.key === "Escape") return setRecordingVoiceKeys(false);
+                        if (event.key === "Backspace") return setVoiceKeys("");
+                        const shortcut = shortcutFromKeyboardEvent(event);
+                        if (shortcut) setVoiceKeys(shortcut);
+                      }}
+                      onSave={() => { updateVoiceDraft({ shortcut: voiceKeys() }); setRecordingVoiceKeys(false); }} onCancel={() => setRecordingVoiceKeys(false)} />
+</Show>
+            </Group>
+            <ShortcutsSettings manager={props.shortcuts} />
+          </Show>
           <Show when={section() === "workspaces"}>
             <Show when={!props.templatesLoading} fallback={<Loading>Loading workspace settings…</Loading>}><Show when={workspaceProjects().find((workspace) => workspace.id === workspaceId())} fallback={<Note>This workspace is not available.</Note>}>{(workspace) => <Group title={workspace().name}><Note>{workspace().workingRoot}</Note><Note>Override: {workspaceDefaultLabel(workspace()).startsWith("Inherit") ? "None" : workspaceDefaultLabel(workspace())}</Note><SettingLine label="Default profile"><Select id={`workspace-default-profile-${workspace().id}`} aria-label={`${workspace().name} default profile`} value={workspace().defaultTemplateId || ""} onChange={(event) => void saveWorkspace(workspace(), event.currentTarget.value || null)}>
                 <option value="">Inherit global ({props.templates.find((item) => item.id === props.defaultTemplateId)?.label || "General"})</option>
@@ -1639,7 +1660,11 @@ export function Settings(props: {
           <Show when={section() === "voice"}>
             <Show when={voiceStatus() === "ready" && voiceServerSettings()} fallback={<Show when={voiceStatus() === "error"} fallback={<Loading>Loading voice settings…</Loading>}><Note tone="error"><span>{voiceError() || "Voice settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadVoiceSettings()}>Retry</Button></Note></Show>}>
               <>
-                <Group title="Transcription" scope="The hub">
+                <SettingViews><Segmented arrows label="Voice" value={voiceView()} onChange={setVoiceView} options={[{ value: "settings", label: "Settings" }, { value: "history", label: "History" }]} /></SettingViews>
+                <Show when={voiceView() === "settings"} fallback={<VoiceHistory />}>
+                <Columns kind="lists">
+                <Column>
+                <Group title="The hub" scope="Every device">
                   <SettingLine plain label="Source">
                     <Segmented arrows label="Transcription source" value={voiceServerSettings()!.mode} disabled={voiceBusy()} onChange={(mode) => updateVoiceServer({ mode })} options={[
                       { value: "off", label: "Off", icon: <MicOffIcon /> },
@@ -1697,7 +1722,6 @@ export function Settings(props: {
                     </SettingLine>
                   </Show>
                 </Group>
-
                 <Show when={hexHere()}>{(hex) => <Group title="Hex" scope="This computer">
                   <SettingLine plain label="Hex app" state={hex().version ? `version ${hex().version}` : undefined} title="The Hex dictation app on this computer. Conduit uses its models and settings as they are.">
                     <SettingValue>{HEX_STATES[hex().state]}</SettingValue>
@@ -1707,8 +1731,20 @@ export function Settings(props: {
                     <Switch label="Dictate with Hex" checked={voiceDraft().useHex} onChange={(useHex) => updateVoiceDraft({ useHex })} />
                   </SettingLine>
                 </Group>}</Show>
-
-                <Group title="Input" scope="This device">
+                </Column>
+                <Column>
+                <Group title="Dictation" scope="This device">
+                  <SettingLine plain label="Shortcut" title="Change it in Shortcuts">
+                    <Keycap label={`the dictation shortcut, ${voiceDraft().shortcut}. Change it in Shortcuts`} onClick={() => { setVoiceKeys(""); setRecordingVoiceKeys(true); openSection("shortcuts"); }}>{voiceDraft().shortcut}</Keycap>
+                  </SettingLine>
+                  <SettingLine label="The shortcut">
+                    <Select id="voice-activation" value={voiceDraft().activation} onChange={(event) => updateVoiceDraft({ activation: event.currentTarget.value as VoiceDictationSettings["activation"] })}>
+                      <option value="push_to_talk">Is held</option><option value="toggle">Starts and stops</option>
+                    </Select>
+                  </SettingLine>
+                  <SettingLine label="Send when done"><Switch label="Send when done" checked={voiceDraft().autoSend} onChange={(autoSend) => updateVoiceDraft({ autoSend })} /></SettingLine>
+                </Group>
+                <Group title="Microphone" scope="This device">
                   <Show when={isPhoneVoice()}>
                     <SettingLine label="Prefer speakerphone" title="Listen through the phone's own microphone, not a Bluetooth headset's, so music keeps playing in your headphones.">
                       <Switch label="Prefer speakerphone" disabled={audioInputBusy()} checked={voiceDraft().preferSpeakerphone} onChange={(preferSpeakerphone) => updateVoiceDraft({ preferSpeakerphone })} />
@@ -1747,54 +1783,18 @@ export function Settings(props: {
                       </SettingLine>
                     </Show>
                   </Show>
+                  <SettingLine label="Sound" title="Raw is the microphone as it is. Processed adds the browser's echo and noise handling.">
+                    <Select id="voice-capture" disabled={audioInputBusy()} value={voiceDraft().captureProfile} onChange={(event) => updateVoiceDraft({ captureProfile: event.currentTarget.value as VoiceDictationSettings["captureProfile"] })}>
+                      <option value="raw">Raw</option><option value="processed">Processed</option>
+                    </Select>
+                  </SettingLine>
                   <SettingLine plain label="Keep mic warm" state={<><Show when={warmMicrophoneActive()}>live</Show></>}>
                       <Show when={warmMicrophoneActive()}><Button variant="ghost" size="sm" onClick={stopWarmMicrophone}>Release</Button></Show>
                       <Switch label="Keep mic warm" checked={voiceDraft().warmMicrophone} onChange={(warmMicrophone) => updateVoiceDraft({ warmMicrophone })} />
                   </SettingLine>
                 </Group>
-
-                <Group title="Dictation" scope="Every device">
-                  <SettingLine plain label="Capture">
-                    <Segmented arrows label="Capture profile" value={voiceDraft().captureProfile} disabled={audioInputBusy()} onChange={(captureProfile) => updateVoiceDraft({ captureProfile })} options={[
-                      { value: "raw", label: "Raw" },
-                      { value: "processed", label: "Processed" },
-                    ]} />
-                  </SettingLine>
-                  <SettingLine plain label="Shortcut" title="Hold or press to dictate">
-                    <Keycap label={`the dictation shortcut, ${voiceDraft().shortcut}`} onClick={() => { setVoiceKeys(""); setRecordingVoiceKeys(true); }}>{voiceDraft().shortcut}</Keycap>
-                  </SettingLine>
-                  <Show when={recordingVoiceKeys()}>
-                    <SettingRecorder ref={(element) => queueMicrotask(() => element.focus())} label="Record the dictation shortcut" keys={voiceKeys() ? [voiceKeys()] : undefined}
-                      onKeyDown={(event) => {
-                        if (event.key === "Tab") return;
-                        event.preventDefault();
-                        event.stopPropagation();
-                        if (event.key === "Escape") return setRecordingVoiceKeys(false);
-                        if (event.key === "Backspace") return setVoiceKeys("");
-                        const shortcut = shortcutFromKeyboardEvent(event);
-                        if (shortcut) setVoiceKeys(shortcut);
-                      }}
-                      onSave={() => { updateVoiceDraft({ shortcut: voiceKeys() }); setRecordingVoiceKeys(false); }} onCancel={() => setRecordingVoiceKeys(false)} />
-                  </Show>
-                  <SettingLine plain label="Activation">
-                    <Segmented arrows label="Activation" value={voiceDraft().activation} onChange={(activation) => updateVoiceDraft({ activation })} options={[
-                      { value: "push_to_talk", label: "Hold", icon: <HandIcon /> },
-                      { value: "toggle", label: "Toggle", icon: <RepeatIcon /> },
-                    ]} />
-                  </SettingLine>
-                  <SettingLine label="Send when done"><Switch label="Send when done" checked={voiceDraft().autoSend} onChange={(autoSend) => updateVoiceDraft({ autoSend })} /></SettingLine>
-                </Group>
-                <Show when={dictationHistory().length}>
-                  <Group title="Recent" scope="This device">
-                    <For each={dictationHistory()}>{(record) => <SettingLine plain label={DICTATION_SOURCES[record.source]}
-                      state={`${new Date(record.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · ${record.text}`}
-                      title={`${record.text}\n\n${DICTATION_SOURCES[record.source]}${record.model ? ` · ${record.model}` : ""} · ${record.seconds} s · ${new Date(record.at).toLocaleString()}`}>
-                      <Button variant="ghost" size="icon-sm" aria-label="Copy this dictation" title="Copy" onClick={() => void navigator.clipboard.writeText(record.text).catch(() => {})}><Icons.Copy /></Button>
-                    </SettingLine>}</For>
-                    <SettingLine plain label="History" state="text only, kept on this device" title="The last 20 dictations made on this device. No audio is kept.">
-                      <Button variant="ghost" size="sm" onClick={clearDictationHistory}>Clear</Button>
-                    </SettingLine>
-                  </Group>
+                </Column>
+                </Columns>
                 </Show>
 
                 <Show when={voiceError()}><Note tone="error">{voiceError()}</Note></Show>

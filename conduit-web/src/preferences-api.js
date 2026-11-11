@@ -20,7 +20,6 @@ export const UI_PREFERENCES = /** @type {const} */ ({
   userMessageCollapse: { type: "choice", values: ["off", "6", "10", "15", "25"] },
   chatSort: { type: "choice", values: ["latest", "created"] },
   shortcutOverrides: { type: "shortcuts" },
-  voicePreferences: { type: "voice" },
 });
 
 export const UI_PREFERENCE_KEYS = Object.keys(UI_PREFERENCES);
@@ -36,11 +35,6 @@ const validShortcutOverrides = (value) => {
         && typeof stroke.key === "string" && stroke.key.length <= 40
         && stringList(stroke.modifiers, 4))));
 };
-const validVoicePreferences = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value)
-  && typeof value.shortcut === "string" && value.shortcut.length <= 100
-  && ["push_to_talk", "toggle"].includes(value.activation)
-  && typeof value.autoSend === "boolean"
-  && ["raw", "processed"].includes(value.captureProfile);
 
 const VALID = {
   boolean: (value) => typeof value === "boolean",
@@ -48,7 +42,6 @@ const VALID = {
   strings: (value, { limit }) => stringList(value, limit),
   choice: (value, { values }) => values.includes(value),
   shortcuts: validShortcutOverrides,
-  voice: validVoicePreferences,
 };
 const READ = {
   boolean: (value) => (typeof value === "boolean" ? value : null),
@@ -57,7 +50,6 @@ const READ = {
     ? [...new Set(value.filter((item) => typeof item === "string" && item.length <= 200))].slice(0, limit) : null),
   choice: (value, { values }) => (values.includes(value) ? value : null),
   shortcuts: (value) => (validShortcutOverrides(value) ? structuredClone(value) : null),
-  voice: (value) => (validVoicePreferences(value) ? structuredClone(value) : null),
 };
 
 // Keys that are not UI preferences are not its business.

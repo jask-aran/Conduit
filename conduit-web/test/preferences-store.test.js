@@ -34,7 +34,6 @@ test("preferences store persists general settings", async () => {
     shortcutOverrides: {
       "open-command-palette": [{ strokes: [{ code: "KeyK", key: "K", modifiers: ["primary"] }] }],
     },
-    voicePreferences: { shortcut: "Ctrl+Shift+D", activation: "toggle", autoSend: true, captureProfile: "processed" },
   });
   const restored = new PreferencesStore(file, { defaultTemplateId: "chat" }, {
     knownTemplateIds: ["chat", "workspace"],
@@ -55,6 +54,5 @@ test("preferences store persists general settings", async () => {
   assert.equal(restored.get().panelMotion, "reflow");
   assert.equal(restored.get().userMessageCollapse, "25");
   assert.equal(restored.get().chatSort, "created");
-  assert.deepEqual(restored.get().voicePreferences, { shortcut: "Ctrl+Shift+D", activation: "toggle", autoSend: true, captureProfile: "processed" });
   await fs.rm(root, { recursive: true, force: true });
 });

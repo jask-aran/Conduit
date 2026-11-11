@@ -120,15 +120,6 @@ export function saveVoiceDictationSettings(settings, storage = globalThis.localS
     otherAudioLevel: normalizeOtherAudioLevel(settings.otherAudioLevel),
   };
   storage?.setItem(VOICE_DICTATION_STORAGE_KEY, JSON.stringify(normalized));
-  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("conduit:ui-preference-change", { detail: {
-    key: "voicePreferences",
-    value: {
-      shortcut: normalized.shortcut,
-      activation: normalized.activation,
-      autoSend: normalized.autoSend,
-      captureProfile: normalized.captureProfile,
-    },
-  } }));
   return normalized;
 }
 

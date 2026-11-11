@@ -70,6 +70,7 @@ import { createDictationStream } from "./server/dictation-stream.js";
 import { VoiceRuntime } from "./server/voice-runtime.js";
 import { VoiceModelManager } from "./server/voice-model-manager.js";
 import { VoiceRecordingStore, VOICE_ARCHIVE_SHUTDOWN_TIMEOUT_MS } from "./server/voice-recording-store.js";
+import { VoiceHistory } from "./server/voice-history.js";
 import { registerAttachmentRoutes } from "./server/routes/attachments.js";
 import { registerAuthRoutes } from "./server/routes/auth.js";
 import { registerPiAuthRoutes } from "./server/routes/pi-auth.js";
@@ -685,7 +686,7 @@ registerPiAuthRoutes(app, {
 registerSearchRoutes(app, {
   searchSettings,
 });
-registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceModel });
+registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceModel, voiceHistory: new VoiceHistory({ filePath: path.join(config.dataRoot, "voice", "history.json") }) });
 
 registerPtyRoutes(app, { projects, terminals, nodeHub });
 registerTerminalPasteRoutes(app, { terminalPastes });

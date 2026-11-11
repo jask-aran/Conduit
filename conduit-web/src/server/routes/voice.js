@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import express from "express";
 import { createVoiceTranscriber } from "../voice-transcription.js";
 
@@ -20,7 +21,7 @@ function noStore(response) {
   response.set("Cache-Control", "no-store");
 }
 
-export function registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceModel }) {
+export function registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceModel, voiceHistory }) {
   const transcribe = voiceTranscriber(voiceRuntime);
   const settingsView = async () => voiceSettings.publicView({ local: await voiceModel.publicView() });
 
@@ -78,5 +79,28 @@ export function registerVoiceRoutes(app, { voiceSettings, voiceRuntime, voiceMod
     const removed = await voiceModel.uninstall(String(request.body?.modelId || ""));
     noStore(response);
     response.json({ removed, settings: await settingsView() });
+  });
+
+  // The sign-in a dictation came from, named as the sign-ins list names it; the key never carries what authenticates.
+  const clientOf = (request) => {
+    const session = request.conduitAuth?.session;
+    if (!session) return null;
+    return { id: crypto.createHash("sha256").update(session.tokenHash).digest("base64url").slice(0, 16), kind: session.kind, userAgent: session.userAgent || null };
+  };
+
+  app.get("/v0/voice/history", async (request, response) => {
+    const here = clientOf(request)?.id;
+    noStore(response);
+    response.json({ entries: (await voiceHistory.load()).map((entry) => ({ ...entry, here: Boolean(here) && entry.client?.id === here })) });
+  });
+
+  app.post("/v0/voice/history", async (request, response) => {
+    await voiceHistory.add(request.body || {}, clientOf(request));
+    response.status(204).end();
+  });
+
+  app.delete("/v0/voice/history", async (_request, response) => {
+    await voiceHistory.clear();
+    response.status(204).end();
   });
 }

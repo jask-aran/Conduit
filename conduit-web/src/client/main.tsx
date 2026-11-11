@@ -62,7 +62,7 @@ import { watchStrayFrost } from "./platform/stray-frost";
 import { applyStreamFade } from "./preferences/stream-fade";
 import { installFocusShown } from "./preferences/focus-shown";
 import type { VoiceDictationSettings } from "./chat/voice-dictation-types";
-import { loadVoiceDictationSettings, saveVoiceDictationSettings, VOICE_DICTATION_STORAGE_KEY } from "./chat/voice-dictation";
+import { loadVoiceDictationSettings, saveVoiceDictationSettings } from "./chat/voice-dictation";
 import { listAudioInputDevices, onMicrophoneOpened, rememberMicrophones } from "./chat/voice-audio";
 import { Transcript } from "./chat/transcript";
 import { hasTranscriptFind, openTranscriptFind } from "./chat/transcript-find";
@@ -4838,20 +4838,6 @@ function App() {
       sidebarPins: {
         local: () => [],
         apply: (value) => { if (Array.isArray(value)) setSidebarPins(value.filter((item): item is string => typeof item === "string")); },
-      },
-      voicePreferences: {
-        local: () => {
-          const { shortcut, activation, autoSend, captureProfile } = loadVoiceDictationSettings();
-          return { shortcut, activation, autoSend, captureProfile };
-        },
-        apply: (value) => {
-          if (!value || typeof value !== "object" || Array.isArray(value)) return;
-          // Read now: the copy taken at startup would put back whatever
-          // microphone was chosen then (the device stays on this client only).
-          const next = { ...loadVoiceDictationSettings(), ...value } as VoiceDictationSettings;
-          localStorage.setItem(VOICE_DICTATION_STORAGE_KEY, JSON.stringify(next));
-          setVoiceSettings(next);
-        },
       },
     } satisfies { [K in UiPreferenceKey]: ClientPreference<K> };
     const preferenceKeys = Object.keys(clientPreferences) as UiPreferenceKey[];
