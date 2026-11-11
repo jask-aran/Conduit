@@ -2,10 +2,8 @@ import type { Project } from "../api/contracts";
 import { activeOrigin } from "../platform/servers";
 
 /*
- * The last catalogue this device saw, per server, so a cold open can draw the
- * dashboard before the server has answered and correct it when it does. Only
- * what the sidebar and dashboard list: names and chat titles, the same things
- * already on screen to whoever holds the device. Cleared on sign-out.
+ * Holds only what is already on screen to whoever holds the device (names and chat titles), and is cleared on
+ * sign-out.
  */
 type Catalogue = { projects: Project[] };
 const PREFIX = "conduit.catalogue:";
@@ -19,7 +17,7 @@ export function readCachedCatalogue(): Catalogue | null {
 }
 
 export function writeCachedCatalogue(value: Catalogue) {
-  try { localStorage.setItem(key(), JSON.stringify(value)); } catch { /* the next open waits, as before */ }
+  try { localStorage.setItem(key(), JSON.stringify(value)); } catch { /* the next open waits for the server */ }
 }
 
 export function clearCachedCatalogue() {

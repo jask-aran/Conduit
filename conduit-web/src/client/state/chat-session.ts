@@ -10,18 +10,9 @@ import { createPermissionSettings } from "./permission-settings";
 import type { RuntimeStore } from "./runtime";
 import { createServiceLevelSettings } from "./service-level-settings";
 
-/**
- * One chat's worth of state: the `createActiveChat` store and every store it
- * drives (models, permissions, service levels, attachments), what the chat
- * can do (its harness manifest and reported capabilities), its profile and
- * switching it, and its composer's status and file input.
- *
- * Each pane that shows a chat has one (docs/design/panes-and-rail.md, stage
- * 5). The drafts store is shared: it is keyed by chat.
- */
+/** One per pane that shows a chat; the drafts store is shared, keyed by chat. */
 export function createChatSession(options: {
   catalogue: ChatCatalogue;
-  /** The open chat as the catalogue lists it, for its harness manifest. */
   selectedChat: Accessor<ChatSummary | null | undefined>;
   projects: Accessor<Project[]>;
   runtime: RuntimeStore;
@@ -55,16 +46,8 @@ export function createChatSession(options: {
   const activeProfile = createMemo(() => options.profiles().find((item) => item.id === chat.templateId())
     || options.profiles().find((item) => item.id === options.defaultTemplateId()) || null);
   /**
-   * Whether a capability is on for this chat.
-   *
-   * Two sources describe a session: the harness manifest carried by its
-   * profile, which says what this harness can ever do, and the capabilities the
-   * chat itself reported, which arrive with a live record and refine it. Either
-   * one saying no is enough. Reading them separately is what let a control
-   * survive a chat switch -- a signal belonging to the session before this one
-   * is still a signal, and it lit up a control the new session could not
-   * honour. Capability-gated UI asks here rather than reaching for either
-   * source, so there is one place to be right as more of it appears.
+   * Capability-gated UI asks `capability`, never the manifest or the reported capabilities alone: either one saying
+   * no is enough, and reading just one let a control survive a chat switch.
    */
   // With no chat yet, as on the dashboard, the composer is the chosen profile's.
   const manifest = createMemo(() => manifestForChat(options.harnessCapabilities(), options.selectedChat())
@@ -76,8 +59,7 @@ export function createChatSession(options: {
   const switchProfile = async (id: string) => {
     const chatId = chat.loadedId();
     if (!chatId) return;
-    // Chosen for a new chat, it is the place's from now on (a project, a workspace, Chat itself): the next new chat
-    // there opens with it.
+    // Chosen for a new chat, it becomes the place's default for the next new chat there.
     const remember = chat.status() === "draft";
     const payload = await api<ChatSummary>(`/v0/chats/${encodeURIComponent(chatId)}`, {
       method: "PATCH",
@@ -85,9 +67,8 @@ export function createChatSession(options: {
     });
     const project = options.projects().find((item) => item.id === payload.projectId);
     if (!project) throw new Error("The selected profile returned a chat outside the current catalogue");
-    // A profile changes the harness and every capability-scoped value below
-    // it. Re-enter the normal selection lifecycle instead of maintaining a
-    // second, incomplete list of stores to refresh here.
+    // A profile changes the harness and every capability-scoped value, so the normal selection lifecycle runs
+    // rather than a second list of stores to refresh.
     options.catalogue.patchChat(chatId, payload);
     if (remember && project.defaultTemplateId !== id) void options.saveWorkspaceDefault(project.id, id).catch(() => {});
     await chat.initialize(payload, project, undefined, { warm: true });
@@ -95,7 +76,6 @@ export function createChatSession(options: {
   return {
     chat, models, permissions, serviceLevels, attachments,
     activeProfile, manifest, capability, history, switchProfile,
-    /** The composer's hidden file input, which its attach button opens. */
     setAttachInput: (element: HTMLInputElement) => { attachInput = element; },
     openAttachments: () => attachInput?.click(),
   };

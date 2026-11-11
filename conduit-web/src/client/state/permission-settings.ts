@@ -5,11 +5,6 @@ import { createLatest } from "./latest";
 
 type ErrorHandler = (error: unknown) => void;
 
-/**
- * One of a chat's options its harness offers (permission profiles, service levels): select reads them for a chat,
- * choose sets one. path: the chat's resource for them; list: the options in its answer; field: the name a choice is
- * sent under; usable: whether an option can be chosen.
- */
 export function createChatOption<Option extends { id: string }, State extends { selected: string }>(onError: ErrorHandler, base: string,
   path: string, list: (state: State) => unknown, field: string, usable: (option: Option) => boolean = () => true) {
   const [options, setOptions] = createSignal<Option[]>([]);
@@ -21,10 +16,7 @@ export function createChatOption<Option extends { id: string }, State extends { 
     const changed = activeChatId !== chatId;
     activeChatId = chatId;
     const current = request.next();
-    // Drop the previous chat's options before asking for this one's. They belong
-    // to a session with its own harness, and leaving them up for the length of
-    // a request put another harness's permission profiles in front of someone
-    // -- offering a choice this chat cannot make.
+    // The previous chat's options belong to another harness and would offer a choice this chat cannot make.
     if (changed) { setOptions([]); setSelected(""); }
     try {
       const state = await apiWhenServed<State>(`${base}/${encodeURIComponent(chatId)}/${path}`);
@@ -33,7 +25,6 @@ export function createChatOption<Option extends { id: string }, State extends { 
       setSelected(state.selected || "");
     } catch (error) {
       if (!current()) return;
-      // Showing nothing is the honest answer when we could not find out.
       setOptions([]);
       setSelected("");
       onError(error);
@@ -67,10 +58,8 @@ export function createPermissionSettings(onError: ErrorHandler, base = "/v0/chat
     "permission-profiles", (state) => state.modes, "permissionMode", (profile) => profile.allowed);
 
   /**
-   * The harness changed mode itself -- Claude Code does when an approval turns
-   * on accepting edits, or a plan is approved -- and its process says which it
-   * is in now. Read untracked, so following it never answers a choice of the
-   * user's with the mode it is replacing.
+   * The harness changed mode itself (Claude Code does when a plan is approved). Untracked, so following it never
+   * answers the user's choice with the mode it is replacing.
    */
   const follow = (id: string, permissionMode?: string) => untrack(() => {
     if (id !== chatId() || !permissionMode || permissionMode === selected()) return;

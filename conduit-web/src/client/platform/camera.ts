@@ -7,10 +7,8 @@ const nativeCamera = registerPlugin<{
 }>("ConduitCamera");
 
 /**
- * The composer's camera card in the app: CameraX's own preview and capture (ConduitCameraPlugin), drawn natively so
- * the picture is the camera pipeline's, not the WebView's. null where there is no native camera card (a browser: the
- * page's Viewfinder instead). Otherwise what it came back with: a photo, "full" (hand over to the platform's camera
- * app), "failed", or "closed".
+ * Drawn natively so the picture is the camera pipeline's, not the WebView's. "full" means hand over to the platform's
+ * camera app; null means use the page's Viewfinder.
  */
 export async function openNativeCamera(): Promise<File | "full" | "failed" | "closed" | null> {
   if (!Capacitor.isNativePlatform() || !Capacitor.isPluginAvailable("ConduitCamera")) return null;

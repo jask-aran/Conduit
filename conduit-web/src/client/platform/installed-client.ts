@@ -1,17 +1,5 @@
 import { createSignal } from "solid-js";
-/**
- * One question, asked once: is this an installed client talking to a Conduit
- * server somewhere else?
- *
- * A browser is served by the server it talks to, so it has a same-origin
- * session cookie, a login redirect and a service worker. An installed client
- * has none of those: it holds a bearer token in the platform's secure store,
- * addresses a server the user chose, and takes its updates from its own
- * channel. Android and Windows differ in how they store that token and how
- * they update -- they do not differ in any of the behaviour above, so every
- * call site asks `isInstalledClient()` and only this file knows which shell
- * it is running in.
- */
+/** Every call site asks `isInstalledClient()`; only this file knows which shell it is running in. */
 import { Capacitor } from "@capacitor/core";
 import type { DownloadsPayload } from "../api/contracts.ts";
 
@@ -32,18 +20,8 @@ export const installedClientKind: InstalledClientKind = detect();
 export const isInstalledClient = () => installedClientKind !== "browser";
 
 /**
- * A browser that was installed to the home screen, which is a different thing
- * from an installed client.
- *
- * It has no shell and no secure store -- it is a page, with a page's cookie,
- * storage and service worker, all belonging to the one origin that served it.
- * That is the whole difficulty: a tab can be sent to another address and come
- * back, but this cannot. Navigating away from a standalone window either
- * leaves the app or opens a browser on top of it, and either way the person
- * has been ejected from the thing they opened.
- *
- * So it is asked about separately from `isInstalledClient`, and only ever to
- * say that a route cannot be changed from here, never to offer the move.
+ * A home-screen browser is a page bound to the origin that served it, and navigating away ejects the person from it,
+ * so this only ever says that a route cannot be changed from here.
  */
 export const isStandaloneBrowser = (): boolean => {
   if (installedClientKind !== "browser" || typeof matchMedia !== "function") return false;
@@ -53,10 +31,9 @@ export const isStandaloneBrowser = (): boolean => {
     || (navigator as Navigator & { standalone?: boolean }).standalone === true;
 };
 
-/** Whether this client can move to another address at all, by any means. */
 export const canReachOtherOrigins = () => isInstalledClient() || !isStandaloneBrowser();
 
-/** Where the bearer token lives. Never `localStorage`, on any installed shell. */
+/** Never `localStorage`, on any installed shell. */
 export interface SecureTokenStore {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
@@ -79,10 +56,6 @@ const androidStore = (): SecureTokenStore => ({
   },
 });
 
-// The desktop shell answers these from the OS credential store -- Windows
-// Credential Manager, keyed to the signed-in user -- so nothing is kept in a
-// file the webview could read back. The web half never learns which store it
-// is talking to, exactly as on Android.
 const desktopStore = (): SecureTokenStore => ({
   async get(key) {
     const { invoke } = await import("@tauri-apps/api/core");
@@ -102,21 +75,16 @@ const desktopStore = (): SecureTokenStore => ({
 const browserStore = (): SecureTokenStore => ({
   async get() { return null; },
   async set() { /* a browser authenticates with its session cookie */ },
-  async remove() { /* nothing was stored */ },
+  async remove() {},
 });
 
 export const secureTokenStore: SecureTokenStore = installedClientKind === "desktop"
   ? desktopStore()
   : installedClientKind === "android" ? androidStore() : browserStore();
 
-/** What the desktop shell decides before the client has loaded. */
 /**
- * Android replaces its shell by handing the APK to the system, which asks
- * before installing anything. That confirmation cannot be suppressed for an
- * app installed outside the Play Store, and should not be: it is the only
- * thing standing between a download and code running on the phone. So the
- * APK is downloaded ahead of time (`ConduitUpdaterPlugin`), and taking the
- * update only opens the installer on it.
+ * Android's install confirmation cannot be suppressed outside the Play Store, so the APK is downloaded ahead of time
+ * and taking the update only opens the installer on it.
  */
 interface UpdaterPlugin {
   download(options: { url: string; version: string; unmeteredOnly: boolean }): Promise<{ ready: boolean }>;
@@ -129,9 +97,8 @@ const updater = () => androidUpdater ??= import("@capacitor/core").then(({ regis
 let readyAndroidVersion: string | null = null;
 
 /**
- * The APK newer than this app, if there is one. A released app takes GitHub's latest release. The development app
- * takes the newest development APK the server it uses publishes (scripts/build-android-dev.sh), by the build stamp in
- * its version: so a native change reaches the phone as an update here rather than a side-load.
+ * A released app takes GitHub's latest release; the development app takes the newest development APK its server
+ * publishes, by the build stamp in its version, so a native change reaches the phone as an update.
  */
 async function androidRelease(): Promise<{ version: string; apkUrl: string } | null> {
   const { App } = await import("@capacitor/app");
@@ -143,7 +110,7 @@ async function androidRelease(): Promise<{ version: string; apkUrl: string } | n
   }
   const [{ api }, { httpUrl }] = await Promise.all([import("../api/client.ts"), import("../api/transport.js")]);
   const own = await api<DownloadsPayload>("/v0/downloads").catch(() => null);
-  // An app built without a stamp (before this) is older than any stamped build.
+  // An app built without a stamp is older than any stamped build.
   const stamp = (version: string) => version.match(/-dev\.(\d{14})\./)?.[1] ?? "";
   if (!own?.apkUrl || !own.apkVersion || stamp(own.apkVersion) <= stamp(app.version)) return null;
   return { version: own.apkVersion, apkUrl: new URL(httpUrl(own.apkUrl), location.href).href };
@@ -158,10 +125,7 @@ export const androidShell = installedClientKind !== "android" ? null : {
       return null;
     }
   },
-  /**
-   * Download the newer release now; install only when the person takes it.
-   * A quiet (background) check waits for an unmetered network.
-   */
+  /** A quiet (background) check waits for an unmetered network. */
   async prepareUpdate(onProgress?: (update: UpdateProgress) => void, quiet = false): Promise<PreparedDesktopUpdate> {
     if (readyAndroidVersion) return { kind: "ready", version: readyAndroidVersion };
     const release = await androidRelease();
@@ -179,7 +143,6 @@ export const androidShell = installedClientKind !== "android" ? null : {
       void listener.remove();
     }
   },
-  /** Opens the system installer, which asks before replacing the app. */
   async installPreparedUpdate(): Promise<boolean> {
     if (!readyAndroidVersion) return false;
     const { needsPermission } = await (await updater()).plugin.install({ version: readyAndroidVersion });
@@ -197,8 +160,7 @@ export interface UpdateProgress {
 
 export type PreparedDesktopUpdate = { kind: "current" } | { kind: "ready"; version: string };
 
-// App remounts when an installed client changes servers. Keep the verified
-// download outside that tree, so switching servers does not discard it.
+// App remounts when an installed client changes servers; the verified download lives outside it to survive that.
 let readyDesktopUpdate: import("@tauri-apps/plugin-updater").Update | null = null;
 let desktopUpdatePreparation: Promise<PreparedDesktopUpdate> | null = null;
 
@@ -211,32 +173,22 @@ export interface DesktopShellSettings {
   keepRunningInTray: boolean;
   launchAtLogin: boolean;
   startHidden: boolean;
-  /** Run the node role in the background so a Conduit server can act on this computer. */
   serveAsDevice: boolean;
-  /** What sits above the app: Windows' caption, nothing, or Conduit's own bar (desktop_settings.rs `TitleBar`). */
   titleBar: DesktopTitleBar;
 }
 export type DesktopTitleBar = "native" | "none" | "conduit";
-/** The title bar in use, as the shell last said: read once at start and after each save. Conduit's (the default) until
- *  known, so the usual window does not draw without its bar first. */
+/** Conduit's until the shell says, so the usual window does not draw without its bar first. */
 export const [desktopTitleBar, setDesktopTitleBar] = createSignal<DesktopTitleBar>("conduit");
 
 export interface CompanionRoot { id: string; path: string; read: boolean; write: boolean; shell: boolean }
 export interface CompanionStatus {
-  /** This build carries the device companion at all. */
   available: boolean;
   serving: boolean;
   running: boolean;
   node: { name: string | null; host?: string; pairings: Array<{ mainUrl: string; nodeId: string | null; routes?: string[]; roots: CompanionRoot[]; browse?: boolean; newFolders?: { write: boolean; shell: boolean } }> } | null;
 }
 
-/**
- * The desktop shell's own surface: the window lifecycle it owns, and the tray
- * actions it hands back. Null on every other client, which is what the Settings
- * tile and the tray listener check rather than asking which shell this is.
- */
 export const desktopShell = installedClientKind !== "desktop" ? null : {
-  /** The node role this app runs in the background (src-tauri/src/node_companion.rs). */
   companion: {
     async status(): Promise<CompanionStatus> {
       const { invoke } = await import("@tauri-apps/api/core");
@@ -247,7 +199,6 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
       const { invoke } = await import("@tauri-apps/api/core");
       return invoke<string>("device_companion_pair", { mainUrl, key, nodeId, name, via });
     },
-    /** Asks for a folder with the system picker; null when none was picked. */
     async share(mainUrl: string, write: boolean, shell: boolean): Promise<string | null> {
       const { invoke } = await import("@tauri-apps/api/core");
       return invoke<string | null>("device_companion_share", { mainUrl, write, shell });
@@ -256,12 +207,10 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("device_companion_unshare", { mainUrl, path });
     },
-    /** Let that server browse this computer and share folders it picks (`conduit-node browse`). */
     async browse(mainUrl: string, on: boolean): Promise<void> {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("device_companion_browse", { mainUrl, on });
     },
-    /** What folders shared from here (Mount a folder…, or the hub browsing) may do (`conduit-node new-folders`). */
     async newFolders(mainUrl: string, write: boolean, shell: boolean): Promise<void> {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("device_companion_new_folders", { mainUrl, write, shell });
@@ -277,29 +226,24 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
     setDesktopTitleBar(found.titleBar ?? "conduit");
     return found;
   },
-  // Returns what the shell ended up with: the OS registration for launch-at-
-  // login can refuse, and the caller must show what is true rather than what
-  // was asked for.
+  // The OS can refuse launch-at-login, so the caller shows what the shell ended up with, not what was asked for.
   async saveSettings(settings: DesktopShellSettings): Promise<DesktopShellSettings> {
     const { invoke } = await import("@tauri-apps/api/core");
     const saved = await invoke<DesktopShellSettings>("set_desktop_settings", { settings });
     setDesktopTitleBar(saved.titleBar ?? "conduit");
     return saved;
   },
-  /** The window's own buttons, for a title bar that is not Windows'. */
   window: {
     minimize: async () => (await import("@tauri-apps/api/window")).getCurrentWindow().minimize(),
     toggleMaximize: async () => (await import("@tauri-apps/api/window")).getCurrentWindow().toggleMaximize(),
     close: async () => (await import("@tauri-apps/api/window")).getCurrentWindow().close(),
     isMaximized: async () => (await import("@tauri-apps/api/window")).getCurrentWindow().isMaximized(),
-    /** Called with whether it is maximised, now and each time it is resized. */
     watchMaximized: async (seen: (maximized: boolean) => void) => {
       const current = (await import("@tauri-apps/api/window")).getCurrentWindow();
       seen(await current.isMaximized());
       return current.onResized(async () => seen(await current.isMaximized()));
     },
   },
-  /** Download and verify now; install only after the person takes the update. */
   async prepareUpdate(onProgress?: (update: UpdateProgress) => void, _quiet = false): Promise<PreparedDesktopUpdate> {
     if (readyDesktopUpdate) return { kind: "ready", version: readyDesktopUpdate.version };
     if (desktopUpdatePreparation) return desktopUpdatePreparation;
@@ -315,9 +259,7 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
         const [{ activePath, activeServer, pathsOf }, { invoke }] = await Promise.all([
           import("./servers.ts"), import("@tauri-apps/api/core"),
         ]);
-        // The route in use first, then every other address this server is
-        // known by: whichever reaches it from here is as good as any, and
-        // the one in use can have just gone away.
+        // Every address this server is known by: the route in use can have just gone away.
         const entry = activeServer();
         const routes = [...new Set([activePath(), ...(entry ? pathsOf(entry).map((path) => path.origin) : [])])];
         for (const route of routes) {
@@ -333,10 +275,7 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
           }
         }
       }
-      // The selected server may not distribute development builds. The
-      // endpoint built into this client is still a valid update source, but
-      // when it fails too, its error alone names an address the person never
-      // chose -- so say which of theirs were tried.
+      // The built-in endpoint's error alone names an address the person never chose, so say which of theirs were tried.
       if (!pending && !answered) {
         try {
           pending = await check();
@@ -371,7 +310,6 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
       desktopUpdatePreparation = null;
     }
   },
-  /** The configured NSIS quiet mode installs and relaunches on Windows. */
   async installPreparedUpdate(): Promise<boolean> {
     if (!readyDesktopUpdate) return false;
     const { invoke } = await import("@tauri-apps/api/core");
@@ -388,16 +326,13 @@ export const desktopShell = installedClientKind !== "desktop" ? null : {
     return listen("desktop://check-for-updates", () => handler());
   },
   /**
-   * Hand the shell the whole set of system-wide keys. It is a replacement, not
-   * an addition, so the client's registry stays the only account of what is
-   * bound; the shell either takes all of it or keeps what it had and says which
-   * chord another application owns.
+   * A replacement, not an addition, so the client's registry stays the only account of what is bound; the shell takes
+   * all of it or keeps what it had and says which chord another application owns.
    */
   async setGlobalShortcuts(shortcuts: GlobalShortcut[]): Promise<void> {
     const { invoke } = await import("@tauri-apps/api/core");
     await invoke("set_global_shortcuts", { shortcuts });
   },
-  /** A system-wide key fired: the payload is a command id from the registry. */
   async onCommand(handler: (commandId: string) => void): Promise<() => void> {
     const { listen } = await import("@tauri-apps/api/event");
     return listen<string>("desktop://command", (event) => handler(event.payload));

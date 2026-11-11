@@ -5,20 +5,11 @@ import { buildHttpUrl, normalizeServerOrigin } from "../api/transport";
 import { publishTrustedIdentities } from "./certificate-pins";
 import { dialOrigin, scopeOf, trustedIdentities, type ServerEntry } from "./servers";
 
-/** How often the QR scanner looks at the camera. */
 const QR_LOOK_MS = 200;
 
 /**
- * `conduit-server pair` and "Pair a device" show a QR of a one-time sign-in
- * link, `<server>/v0/auth/handoff?code=…`. A browser that opens it is signed
- * in by the server; the app instead sends the code to `/v0/auth/native-pair`
- * and keeps the token that comes back, as it would after a password.
- *
- * The link's fragment carries the server's identity and network routes
- * (`#conduit=`, base64url JSON). A browser never sends a fragment, so a camera
- * opening the link is unaffected; the app reads it to redeem the code over TLS
- * the identity key vouches for, on the nearest route, so the code never
- * crosses cleartext and the server is saved already knowing who it is.
+ * The identity and routes ride in the link's fragment because a browser never sends one, so a camera opening the
+ * link is unaffected while the app redeems the code over TLS the identity vouches for.
  */
 export interface PairingLink {
   origin: string;
@@ -61,14 +52,6 @@ export function parsePairingLink(text: string): PairingLink | null {
 const RANK = { loopback: 0, private: 1, public: 2 } as const;
 const PROBE_TIMEOUT_MS = 3000;
 
-/**
- * Redeem the code, and say which route it was redeemed on.
- *
- * With an identity, every route is asked at once -- local ones over TLS the
- * identity must vouch for -- and the nearest that answers is used. Without
- * one (an old link, or a client whose shell cannot verify), the link's own
- * address is used as it always was.
- */
 export async function redeemPairing(link: PairingLink): Promise<{ token: string; origin: string }> {
   let origin = link.origin;
   let dial = link.origin;
@@ -101,7 +84,6 @@ export async function redeemPairing(link: PairingLink): Promise<{ token: string;
 
 export const canScanQr = () => Boolean(navigator.mediaDevices?.getUserMedia);
 
-/** The camera, full screen, until it sees a pairing link. */
 export function QrScanner(props: { onLink: (link: PairingLink) => void; onClose: () => void }) {
   let video!: HTMLVideoElement;
   const [message, setMessage] = createSignal("Point the camera at the code from conduit-server pair");

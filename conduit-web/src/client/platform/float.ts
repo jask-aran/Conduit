@@ -10,24 +10,17 @@ export interface FloatStatus {
   enabled: boolean;
   overlayPermission: boolean;
   micPermission: boolean;
-  /** Hold to talk: a hold on Float records at once (off by default; a tap opens the radial either way). */
   holdToTalk: boolean;
-  /** Show each slot's name beside it in Float's radial. */
   slotNames: boolean;
-  /** Float stays out of sight until the side key calls it. */
   sideKeyOnly: boolean;
-  /** The side key takes a screenshot as it opens Float. */
   sideKeyScreenshot: boolean;
-  /** The side key starts dictating (to sideKeyTarget); a second press sends. */
   sideKeyDictates: boolean;
   sideKeyTarget: FloatHoldTarget;
-  /** Float screen context, the Accessibility service: screenshots with no prompt, the screen's text, and the frost. */
+  /** The Accessibility service: screenshots with no prompt, the screen's text, and the frost. */
   screenContext: boolean;
-  /** Conduit is the phone's digital assistant: a long press on home hands Float the screen. */
   assistant: boolean;
-  /** Samsung's side key press-and-hold to the assistant: "unset" until set up once, "none" off Samsung. */
+  /** "none" off Samsung. */
   sideKey: "set" | "unset" | "none";
-  /** What a hold on Float talks to. */
   holdTarget: FloatHoldTarget;
 }
 export type FloatHoldTarget = "jbot" | "chat";
@@ -41,7 +34,6 @@ const nativeFloat = registerPlugin<{
   setSlotNames(options: { slotNames: boolean }): Promise<FloatStatus>;
   setSideKey(options: { sideKeyOnly?: boolean; sideKeyScreenshot?: boolean; sideKeyDictates?: boolean; sideKeyTarget?: FloatHoldTarget }): Promise<FloatStatus>;
   setHold(options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }): Promise<FloatStatus>;
-  /** Every setup step still missing (screen context, assistant, side key), in order, each skippable. */
   setUp(): Promise<FloatStatus>;
   takeOpenSettings(): Promise<{ section: string | null }>;
   addListener(event: "openSettings", handler: () => void): Promise<{ remove(): Promise<void> }>;
@@ -65,7 +57,6 @@ export const conduitFloat = {
   stop: () => enqueue(() => nativeFloat.stop()),
   status: () => enqueue(() => nativeFloat.status()),
   openOverlaySettings: () => enqueue(() => nativeFloat.openOverlaySettings()),
-  /** Every setup step still missing, in order: screen context (with restricted settings), the assistant, the side key. */
   setUp: () => enqueue(() => nativeFloat.setUp()),
   setSlotNames: (slotNames: boolean) => enqueue(() => nativeFloat.setSlotNames({ slotNames })),
   setSideKey: (options: { sideKeyOnly?: boolean; sideKeyScreenshot?: boolean; sideKeyDictates?: boolean; sideKeyTarget?: FloatHoldTarget }) =>
@@ -73,9 +64,8 @@ export const conduitFloat = {
   setHold: (options: { holdToTalk?: boolean; holdTarget?: FloatHoldTarget }) => enqueue(() => nativeFloat.setHold(options)),
 };
 
-// Float's notification to set up screen context opens Settings › This device, where Float is. The request waits
-// natively until the app asks for it: on a cold start the intent arrives before the page is listening. Whatever the
-// installed app calls the section (an older one says "phone"), it means this one.
+// The request waits natively until asked for: on a cold start the intent arrives before the page is listening.
+// Whatever the installed app calls the section, it means this one.
 export function onFloatOpensSettings(open: (section: string) => void) {
   if (installedClientKind !== "android") return;
   const take = () => void nativeFloat.takeOpenSettings().then(({ section }) => { if (section) open("device"); }).catch(() => {});

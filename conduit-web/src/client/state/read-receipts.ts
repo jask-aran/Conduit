@@ -1,16 +1,10 @@
 import { api } from "../api/client";
 import type { ChatSummary } from "../api/contracts";
-/** Just enough catalogue to clear the row locally; both stores satisfy it. */
 type ReadableCatalogue = { patchChat: (chatId: string, patch: Partial<ChatSummary>) => unknown };
 
 /**
- * Say this chat has been read up to the newest completion this client has
- * actually rendered.
- *
- * The body echoes a timestamp the server issued, never a browser clock, so
- * skew cannot reach the comparison and a receipt that is lost, late or
- * duplicated can only re-assert a watermark already passed. That is why a
- * failure is swallowed: the next receipt supersedes it.
+ * The body echoes a server timestamp, never a browser clock, so a lost, late or duplicated receipt can only re-assert
+ * a watermark already passed; that is why a failure is swallowed.
  */
 export function markChatRead(catalogue: ReadableCatalogue, chat: ChatSummary | null | undefined) {
   if (!chat?.id || !chat.unread) return;

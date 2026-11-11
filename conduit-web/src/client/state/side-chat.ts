@@ -6,14 +6,8 @@ import type { DraftsStore } from "./drafts";
 import type { RuntimeStore } from "./runtime";
 
 /**
- * The chat open beside the main one, in the main pane's split
- * (docs/design/panes-and-rail.md, stage 4).
- *
- * A chat session of its own -- transcript, stream, composer, model,
- * attachments and permissions -- on the drafts store the main chat uses,
- * which is keyed by chat. What it does not have is the URL or the
- * catalogue's selection -- the left side owns both -- so its catalogue is a
- * slice of the real one with a selection of its own.
+ * The chat open beside the main one, in the main pane's split. The left side owns the URL and the catalogue's
+ * selection, so its catalogue is a slice of the real one with a selection of its own.
  */
 export function createSideChat(options: {
   runtime: RuntimeStore;
@@ -37,7 +31,6 @@ export function createSideChat(options: {
     refresh: options.refresh,
     patchChat: options.patchChat,
   };
-  /** The open chat as the catalogue lists it, with its place. */
   const selected = () => {
     const id = selectedId();
     if (!id) return null;

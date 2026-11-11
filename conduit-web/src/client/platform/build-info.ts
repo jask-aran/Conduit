@@ -1,15 +1,13 @@
 import { installedClientKind } from "./installed-client.ts";
 
 /**
- * Three things ship separately and can disagree: the interface in this bundle,
- * the server it is talking to, and, on an installed client, the shell the
- * bundle is running inside. Naming one of them is not enough to say which
- * Conduit someone is looking at.
+ * The interface, the server and an installed client's shell ship separately and can disagree, so each is named
+ * separately.
  */
 export interface BuildStamp {
   version: string;
   commit: string;
-  /** The tag, when this build came from a release. Empty otherwise. */
+  /** Empty unless this build came from a release. */
   release: string;
   builtAt: string;
   dirty?: boolean;
@@ -17,17 +15,13 @@ export interface BuildStamp {
 
 declare const __CONDUIT_BUILD__: BuildStamp;
 
-// Defined by Vite at build time. A test importing this module runs without
-// that definition, so it is read defensively rather than assumed.
+// Defined by Vite at build time; a test importing this module runs without it.
 export const clientBuild: BuildStamp = typeof __CONDUIT_BUILD__ === "undefined"
   ? { version: "dev", commit: "unknown", release: "", builtAt: "" }
   : __CONDUIT_BUILD__;
 
 let devClient: Promise<boolean> | null = null;
-/**
- * A development client: the desktop or Android development app (their identifiers end in `.dev`), or a browser
- * whose interface is not a release's (a hub run from a checkout, Vite's dev server). Asked of the shell once.
- */
+/** A `.dev` app identifier, or a browser whose interface is not a release's. */
 export const isDevClient = () => devClient ??= (async () => {
   try {
     if (installedClientKind === "desktop") return (await (await import("@tauri-apps/api/app")).getIdentifier()).endsWith(".dev");
@@ -38,17 +32,12 @@ export const isDevClient = () => devClient ??= (async () => {
   return !clientBuild.release;
 })();
 
-/** How a build is named in one line: the release if it is one, else the commit. */
 export function buildLabel(build: BuildStamp): string {
   const label = build.release || build.version;
   return `${label}${build.release || !label.endsWith(build.commit.slice(0, 7)) ? ` · ${build.commit}` : ""}${build.dirty ? " · modified" : ""}`;
 }
 
-/**
- * The version of the shell around this client -- the installer that was run,
- * not the bundle it carries. Null in a browser, where there is no shell, and
- * null when the shell is too old to answer.
- */
+/** The installer that was run, not the bundle it carries. */
 export async function shellVersion(): Promise<string | null> {
   try {
     if (installedClientKind === "desktop") {
@@ -70,7 +59,6 @@ export interface ServerBuild {
   status: string;
 }
 
-/** What the server says it is. /healthz carries the release it was built from. */
 export async function serverBuild(fetchHealth: () => Promise<Response>): Promise<ServerBuild | null> {
   try {
     const response = await fetchHealth();

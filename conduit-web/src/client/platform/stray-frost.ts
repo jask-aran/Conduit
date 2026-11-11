@@ -2,10 +2,8 @@ import { clientBuild } from "./build-info.ts";
 import { api } from "../api/client";
 
 /**
- * A temporary watch for a frost seen parked below the phone composer's row ("under the nav bar"), which no headless
- * state reproduces. Builds that are not releases, phone layout only: twice a second, any visible frost that sits still with its top
- * below the row is outlined, a note at the top of the screen names it, and the hub keeps a report of it with what was
- * around it (client-reports/stray-frost.jsonl). Remove once found.
+ * A temporary watch for a frost parked below the phone composer's row, which no headless state reproduces. Remove
+ * once found.
  */
 export function watchStrayFrost() {
   if (clientBuild.release || typeof document === "undefined") return;
@@ -31,8 +29,6 @@ export function watchStrayFrost() {
     }
     return false;
   };
-  // Each catch goes to the hub too (<data>/client-reports/stray-frost.jsonl), with what was around it, so a catch on
-  // a phone no one screenshotted is still there to read.
   const report = (element: Element, said: string) => {
     const r = element.getBoundingClientRect();
     const around = (node: Element | null) => node ? { tag: node.tagName.toLowerCase(), class: node.className.toString(), rect: (({ left, top, width, height }) => ({ left, top, width, height }))(node.getBoundingClientRect()) } : null;
@@ -48,7 +44,7 @@ export function watchStrayFrost() {
     };
     void api("/v0/client-reports/stray-frost", { method: "POST", body: JSON.stringify(body) }).catch(() => undefined);
   };
-  // In idle time: reading boxes lays the page out, which mid-move cost a frame.
+  // In idle time: reading boxes lays the page out, which costs a frame mid-move.
   const idle = (run: () => void) => "requestIdleCallback" in window ? requestIdleCallback(run, { timeout: 2000 }) : setTimeout(run);
   setInterval(() => idle(() => {
     const row = document.querySelector(".ui-phone-row");
@@ -58,11 +54,10 @@ export function watchStrayFrost() {
     for (const element of document.querySelectorAll('[data-surface="frost"], .ui-frost')) {
       if (seen.has(element) || element.closest(".ui-phone-row")) continue;
       const r = element.getBoundingClientRect();
-      // Below the screen is scrolled out of view (a long conversation), not parked under the row.
+      // Below the screen is scrolled out of view, not parked under the row.
       if (r.top < floor || r.top >= innerHeight || r.width < 60 || r.height < 8) continue;
       if (!element.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
-      // Content that scrolls under the composer (a thread's or a room's messages, left mid-scroll) is not parked: its
-      // scroller goes on below it.
+      // Content that scrolls under the composer is not parked: its scroller goes on below it.
       if (scrolledPast(element)) continue;
       const at = `${r.left},${r.top}`;
       now.set(element, at);

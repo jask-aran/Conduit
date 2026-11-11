@@ -20,7 +20,6 @@ function terminalStatus(state) {
 }
 
 /**
- * Keep the client live-generation view reactive at the block field level.
  * The shared reducer remains the plain-data authority for the server.
  *
  * @param {{ collectMetrics?: boolean }} [options]
@@ -171,9 +170,7 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
     }
 
     if (!state || state.id !== event.generationId) return result(previous, false);
-    // Only a stated position can be ordered. Anything the socket carries
-    // without one -- an event no adapter case claims -- is not part of the
-    // lifecycle and must not be allowed to move `lastSeq` off a number.
+    // An event without a seq is not part of the lifecycle and must not move `lastSeq` off a number.
     if (typeof event.seq !== "number") return result(previous, true);
     if (event.seq <= state.lastSeq || TERMINAL_STATUSES.has(state.status)) return result(previous, true);
 
@@ -211,11 +208,10 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
             contentIndex: event.contentIndex,
             status: "streaming",
             identity: contentBlockIdentity(event.messageId, event.contentIndex),
-            // A call being written, named as soon as the harness knows which.
             ...(event.name ? { name: event.name, toolKind: event.toolKind } : {}),
             ...(event.subject ? { subject: event.subject } : {}),
             ...(event.toolCallId ? { toolCallId: event.toolCallId } : {}),
-            // Commentary or final answer, as its provider labelled it (DESIGN.md, Turns).
+            // Commentary or final answer, as its provider labelled it.
             ...(event.textPhase ? { phase: event.textPhase } : {}),
           });
           if (!block) break;
@@ -287,9 +283,6 @@ export function createClientActiveGenerationStore({ collectMetrics = false } = {
           });
           break;
         }
-        // A turn retrying, and a turn that failed. The browser held these only
-        // after a reconnect installed the server's snapshot, so a reader who
-        // stayed connected never saw a retry on the generation itself.
         case "retry":
           if (event.active) {
             setPath(["status"], "running");

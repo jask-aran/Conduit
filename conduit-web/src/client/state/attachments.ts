@@ -60,7 +60,7 @@ export function createAttachments(
 
   const upload = async (item: UploadAttachment) => {
     const owner = chatId();
-    // Taken off the queue, an item no upload will take ends here: left queued, it waited for good.
+    // Already off the queue: left queued, it would wait for good.
     if (!owner || !item.file) { update(item.id, { status: "error", error: "No chat to attach to" }); return; }
     // The slot and the epoch are taken before the auth await, so drain() sees
     // this upload as running and a clear() during the await abandons it.
@@ -80,7 +80,6 @@ export function createAttachments(
       return;
     }
     if (epoch !== uploadEpoch) return;
-    // Removed while the auth was read: nothing to send.
     if (!items().some((candidate) => candidate.id === item.id)) { release(); return; }
     const request = new XMLHttpRequest();
     requests.set(item.id, request);
@@ -177,7 +176,6 @@ export function createAttachments(
     return true;
   };
 
-  /** Send a failed upload again, from the file still held for it. */
   const retry = (item: UploadAttachment) => {
     const current = items().find((candidate) => candidate.id === item.id);
     if (!current?.file || current.status !== "error") return;

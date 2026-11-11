@@ -10,55 +10,33 @@ import { liveCommandIs, type LIVE_COMMANDS } from "../../live-session-api.js";
 import { onPathChange } from "../platform/servers";
 
 
-/** Time away after which a socket is replaced on return rather than trusted. */
 export const RESUME_RECONNECT_AFTER_MS = 5_000;
-/** What a caller can say about the agent it needs. */
 export interface AgentRequest {
-  /** Why: the server decides from this whether a process may be started. */
+  /** The server decides from this whether a process may be started. */
   intent?: string;
-  /** Defaults to the open chat and its project. */
   chatId?: string;
   projectId?: string;
   modelOverride?: string;
   thinkingOverride?: string;
-  /** A live record somebody else opened, with the history it brings. */
   record?: LiveRecord;
   detail?: TranscriptDetail;
 }
 
 /**
- * A chat's connection to its agent: the process, the stream, and the reconnect.
- *
- * This is the whole of the lifecycle and nothing else. It does not hold a
- * transcript, a generation or a draft, and it does not decide what the UI says
- * about any of them -- the server publishes a process as it spawns and again
- * when the harness can answer, and the sidebar and composer read that. It used
- * to live inside the chat store alongside all of those, sharing four mutable
- * tokens with them, and every "why is it still spinning" bug came from that
- * sharing.
- *
- * Every way a chat gets an agent arrives at `ensure`: selecting a chat, sending
- * into one, a reconnect, and a harness thread whose record somebody else
- * opened. Concurrent callers for one chat share a single attempt, so a click
- * and a send that land together cannot race into two processes.
+ * A chat's connection to its agent: the process, the stream, and the reconnect. It holds no transcript, generation
+ * or draft. Concurrent `ensure` callers for one chat share a single attempt, so a click and a send that land
+ * together cannot race into two processes.
  */
 export function createAgentSession(deps: {
   runtime: RuntimeStore;
-  /** The chat this session is allowed to act for, and the project that owns it. */
   chatId: () => string | null;
   projectId: () => string;
-  /** What to launch with, when the caller does not override it. */
   model: () => string;
   thinkingLevel: () => string;
-  /** A live record was adopted: capabilities, usage and identity travel with it. */
   onRecord: (record: LiveRecord, chatId: string) => void;
-  /** History that came with an adopted record, for a thread with no Conduit chat. */
   onDetail: (detail: TranscriptDetail, chatId: string) => void;
-  /** One frame from the live stream, for the chat it belongs to. */
   onEvent: (data: string, chatId: string) => void;
-  /** The chat has no agent: none running, or the one it had is gone. */
   onLost: () => void;
-  /** An attach-only request confirmed there is no process. */
   onAbsent: (chatId: string) => void;
   onError: (error: unknown) => void;
 }) {
@@ -66,27 +44,12 @@ export function createAgentSession(deps: {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let reconnectAttempts = 0;
   let reconnectToken = 0;
-  // The launch request in flight, if any. It is abandoned when the session moves
-  // on: a cold start holds a connection for as long as the harness takes to come
-  // up, and opening several chats in a row left enough of them stranded that the
-  // next chat's own requests queued behind chats nobody was looking at any more.
-  // Abandoning it does not stop the launch -- the server finishes warming the
-  // process and the runtime stream reports it -- it only frees the connection.
+  // Abandoned when the session moves on: a cold start holds a connection while the harness comes up, and stranded
+  // ones queue the next chat's requests. Aborting only frees the connection; the server still finishes the launch.
   let launchRequest: AbortController | null = null;
   const launchToken = createLatest();
-  /**
-   * The chat a launch request is in flight for, and nothing else.
-   *
-   * This is deliberately narrower than the connecting flag that used to live
-   * in the chat store: it is set when the request goes out and cleared when it
-   * answers, so it says "we have asked" and cannot outlive the asking. It
-   * covers exactly the round trip between a click and the server publishing
-   * the process it spawned, which is the one stretch where the server has
-   * nothing to report yet and nothing on screen moves. The server's record is
-   * still the truth, and it takes over the moment it arrives.
-   */
+  /** Set when the launch request goes out and cleared when it answers; the server's record takes over after. */
   const [launching, setLaunching] = createSignal<string | null>(null);
-  /** The single in-flight attempt to give a chat an agent, shared by every caller. */
   let pending: { chatId: string; attempt: Promise<LiveRecord | null> } | null = null;
   /** Bumped whenever the session is pointed somewhere else; stale work checks it. */
   let epoch = 0;
@@ -99,16 +62,8 @@ export function createAgentSession(deps: {
     reconnectTimer = null;
   };
 
-  /*
-   * The route to the server changed under a live session.
-   *
-   * The process on the other end did not move -- it is the same server, the
-   * same session, and it is still generating. Only the address reaching it is
-   * different, so the socket is closed and the reconnect this already has
-   * rebuilds it against the new one. The backoff is reset first: this is a
-   * deliberate move rather than a network that failed, and waiting out a
-   * penalty earned by an earlier failure would be a pause nobody caused.
-   */
+  // Only the route changed, so the reconnect rebuilds the socket on the new one; the backoff resets because this
+  // is a deliberate move, not a failure.
   onPathChange(() => {
     const current = socket;
     if (!current) return;
@@ -152,10 +107,7 @@ export function createAgentSession(deps: {
       if (socket !== next || era !== epoch || deps.chatId() !== chatId) return;
       deps.onEvent(String(data), chatId);
     };
-    // Tell the server how fast this reader can actually draw, so paint is paced
-    // to the panel in front of someone rather than to a constant chosen for a
-    // 60Hz one. Nothing depends on it arriving: the server keeps its own
-    // default until it hears otherwise, and clamps whatever it is told.
+    // Optional: the server keeps its own default until told, and clamps what it is told.
     next.addEventListener("open", () => {
       if (socket !== next) return;
       void frameIntervalMs().then((ms) => {
@@ -187,7 +139,6 @@ export function createAgentSession(deps: {
     current.addEventListener("close", () => failed("The live stream closed before it connected."), { once: true });
   });
 
-  /** The record for a process the runtime stream already knows about. */
   const residentRecord = (chatId: string): LiveRecord | null => {
     const resident = deps.runtime.getProcess(chatId);
     if (!resident?.id || resident.status === "stopped" || resident.status === "none") return null;
@@ -203,7 +154,6 @@ export function createAgentSession(deps: {
     };
   };
 
-  /** Ask the server for a process, and take the record it answers with. */
   const launchRecord = (chatId: string, ownerProjectId: string, request: AgentRequest) => {
     launchRequest?.abort();
     const abortable = launchRequest = new AbortController();
@@ -246,17 +196,12 @@ export function createAgentSession(deps: {
 
     const attempt = (async (): Promise<LiveRecord | null> => {
       try {
-        // A record somebody else opened - a harness thread driven from the
-        // Computer - brings its own settled history, because there is no
-        // Conduit chat holding it.
         if (supplied) {
           if (request.detail) deps.onDetail(request.detail, chatId);
           adopt(supplied);
           await connect({ ...supplied, chatId }, chatId, era);
           return current() ? supplied : null;
         }
-        // The runtime stream is the server's process catalogue, so a process it
-        // already knows about needs no request at all.
         const resident = residentRecord(chatId);
         if (resident) {
           adopt(resident);
@@ -279,13 +224,9 @@ export function createAgentSession(deps: {
         await waitForSocket();
         return current() ? record : null;
       } catch (error) {
-        // The session moved on and took the request with it; the launch it
-        // asked for is still the server's business, not an error to report.
         if ((error as Error | null)?.name === "AbortError") return null;
         if (!current()) return null;
-        // Being told there is no process is an answer, not a failure: an "open"
-        // may attach to one but never start one, and the chat is simply not
-        // live. Returning rather than throwing also settles the reconnect
+        // An "open" may attach but never start a process. Returning rather than throwing settles the reconnect
         // timer, so a process the reaper stopped stays stopped.
         if ((error as { error?: string } | null)?.error === "no_live_process") {
           pendingRecord = null;
@@ -302,7 +243,6 @@ export function createAgentSession(deps: {
     finally { if (pending?.attempt === attempt) pending = null; }
   };
 
-  /** For the paths that cannot proceed without one: sending, steering, compacting. */
   const require = async (intent: string) => {
     const record = await ensure({ intent });
     if (!record) throw new Error("Chat switched before the agent was ready");
@@ -313,7 +253,6 @@ export function createAgentSession(deps: {
 
   const isOpen = () => socket?.readyState === WebSocket.OPEN;
 
-  /** Drop the stream without giving up on the process behind it. */
   const detach = () => {
     connectToken.drop();
     cancelReconnect();
@@ -325,18 +264,16 @@ export function createAgentSession(deps: {
 
   const send = (command: LiveCommand) => {
     if (!isOpen()) throw new Error("Not connected to the live session");
-    // A message says which client sent it: its chat's origin, where the agent shows things (server ui-control.js).
+    // The sending client is where the agent shows things.
     const origin = liveCommandIs(command.type, "origin") ? clientId() : "";
     socket!.send(JSON.stringify(origin ? { ...command, client: origin } : command));
   };
 
-  /** Send if the stream is up, otherwise get an agent first. */
   const sendWhenReady = (command: LiveCommand, intent = "open") => {
     if (isOpen()) return send(command);
     void require(intent).then(() => send(command)).catch(deps.onError);
   };
 
-  /** Point the session at a different chat: everything in flight is abandoned. */
   const reset = () => {
     epoch += 1;
     connectToken.drop();
@@ -351,13 +288,8 @@ export function createAgentSession(deps: {
     socket = null;
   };
 
-  /*
-   * Coming back to the page. A socket the OS cut while the app was in the
-   * background still says OPEN -- nothing tells it otherwise until TCP gives
-   * up, minutes later -- so after any real time away it is replaced at once
-   * rather than trusted. Replacing one that was fine costs a handshake; the
-   * log resumes from where this client got to either way.
-   */
+  // A socket the OS cut in the background still says OPEN until TCP gives up minutes later, so after real time
+  // away it is replaced rather than trusted.
   let hiddenAt = 0;
   const resume = (force = false) => {
     if (document.visibilityState === "hidden") { hiddenAt ||= Date.now(); return; }
@@ -371,8 +303,7 @@ export function createAgentSession(deps: {
       const era = epoch;
       void connect(pendingRecord, chatId, era).catch((error) => {
         if (era !== epoch || deps.chatId() !== chatId) return;
-        // The connect cancelled any reconnect, and the socket it meant to replace is the one not trusted after time
-        // away: closed (or, with none, a reconnect asked for), so the backoff keeps trying until the hub answers.
+        // The connect cancelled any reconnect; closing the untrusted socket (or asking for one) restarts the backoff.
         if (socket) socket.close();
         else scheduleReconnect(chatId, era);
         deps.onError(error);
@@ -397,6 +328,5 @@ export function createAgentSession(deps: {
   return { ensure, require, send, sendWhenReady, isOpen, launching, detach, reset, dispose, cancelReconnect };
 }
 
-/** A command for the live stream: one the hub declares (live-session-api.js), with that command's own fields. */
 type LiveCommand = { type: keyof typeof LIVE_COMMANDS } & Record<string, unknown>;
 

@@ -4,13 +4,9 @@ import type { PreferencesPayload } from "../api/contracts";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport.js";
 
-/*
- * The hub account's name (a preference on the hub, `accountName`): Settings › Account sets it; the server switcher's
- * menu shows it with its picture, the name's initials (v2 Avatar). Read when either is opened.
- */
 const [accountName, setAccountName] = createSignal("");
 export { accountName };
-/** Where they live: a place in their words, given to their agent (its USER.md `home`). */
+/** Where they live, in their words, given to their agent. */
 const [accountHome, setAccountHome] = createSignal("");
 export { accountHome };
 
@@ -19,11 +15,11 @@ export const loadAccount = () => readShared<{ accountName?: string; accountHome?
   .then((preferences) => { setAccountName(preferences.accountName || ""); setAccountHome(preferences.accountHome || ""); }).catch(() => {})
   .then(loadPicture);
 
-/** The account's picture: its address (versioned, so a change shows at once), or null for the name's initials. */
+/** Null for the name's initials. */
 const [accountPicture, setAccountPicture] = createSignal<string | null>(null);
 export { accountPicture };
-// Read with the client's own credentials (an installed client signs requests itself, which an <img> address would not),
-// and drawn from a local object URL; the version keeps a change from being served from the cache.
+// Fetched with the client's own credentials (an installed client signs requests itself, which an <img> address would
+// not); the version keeps a change from being served from the cache.
 let shown: string | null = null;
 const show = (url: string | null) => { if (shown) URL.revokeObjectURL(shown); shown = url; setAccountPicture(url); };
 const fetchPicture = async (version: string | null) => {
@@ -33,7 +29,7 @@ const fetchPicture = async (version: string | null) => {
 };
 const loadPicture = () => api<{ picture: string | null }>("/v0/account").then((account) => fetchPicture(account.picture)).catch(() => {});
 
-/** A chosen image, as the picture: its centre square, 256 px, WebP (PNG where the browser cannot write WebP). */
+/** PNG where the browser cannot write WebP. */
 export async function saveAccountPicture(file: File) {
   const bitmap = await createImageBitmap(file);
   const side = Math.min(bitmap.width, bitmap.height);

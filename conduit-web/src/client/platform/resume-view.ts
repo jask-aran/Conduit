@@ -1,9 +1,6 @@
 /**
- * Where the person was, kept across the app rebuilding itself: an interface update (the page reloads into the new
- * build) or a server switch (the app is rebuilt around the other server). Without it either lands on the dashboard
- * with the sidebar shut, which on a phone says neither where they were nor which server they are on.
- *
- * One record, taken once, and only within a minute: a later cold start begins as usual.
+ * Where the person was, kept across an interface update or server switch. Fresh only for a minute, so a later cold
+ * start begins as usual.
  */
 const KEY = "conduit.resume-view";
 const FRESH_MS = 60_000;
@@ -11,7 +8,6 @@ const FRESH_MS = 60_000;
 export interface ResumeView { path: string; sidebar: boolean }
 
 let sidebarOpen: () => boolean = () => false;
-/** The app says how to read whether its sidebar is open (the phone's drawer). */
 export function trackSidebar(read: () => boolean) { sidebarOpen = read; }
 
 export function rememberView(view: Partial<ResumeView> = {}) {
@@ -19,7 +15,7 @@ export function rememberView(view: Partial<ResumeView> = {}) {
   try { localStorage.setItem(KEY, JSON.stringify(record)); } catch { /* no storage: start as usual */ }
 }
 
-/** The remembered view, once, when it is fresh; its path is put in the address bar before the app reads it. */
+/** Its path is put in the address bar before the app reads it. */
 export function takeView(): ResumeView | null {
   let record: (ResumeView & { at: number }) | null = null;
   try {

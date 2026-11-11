@@ -92,13 +92,8 @@ function generationChangeFor(event: StructuredGenerationEvent | FoldedTurnEvent)
 }
 
 /**
- * The slices of the two per-chat stores this one actually uses.
- *
- * Named so that a surface without them -- a harness thread with no Conduit
- * chat behind it -- can supply something real instead of casting an object
- * literal through `as never`. A cast satisfies the compiler and not the code:
- * the drive composer shipped one missing a single method, and the surface died
- * on "pendingIds is not a function" the moment somebody opened it.
+ * Named so a surface with no Conduit chat behind it supplies a real one: an object literal cast through `as never`
+ * satisfies the compiler, not the code.
  */
 export interface ChatModels {
   model: () => string;
@@ -116,7 +111,6 @@ export interface ChatAttachments {
   restore: (attachments: Attachment[]) => void;
 }
 
-/** The slice of the catalogue this store uses: which chat is open, and where. */
 export interface ChatCatalogue {
   selectedId: () => string | null;
   projectId: () => string;
@@ -144,8 +138,8 @@ type ChatCaches = {
   transcripts: Map<string, { revision: string; detail: TranscriptDetail }>;
   turnArtifacts: Map<string, { projectId: string; revision: string; expiresAt: number; request: Promise<TurnArtifactSummary[]> }>;
 };
-// What any pane's chat fetched, for every pane's: each had its own, so a chat hovered in the sidebar (prefetched by
-// pane A's) was fetched again when it opened beside. One set per runtime, so separate apps (tests) share nothing.
+// Shared by every pane, so a chat one pane prefetched is not fetched again by another; one set per runtime, so
+// separate apps (tests) share nothing.
 const sharedChatCaches = new WeakMap<RuntimeStore, ChatCaches>();
 function chatCaches(runtime: RuntimeStore): ChatCaches {
   let caches = sharedChatCaches.get(runtime);
@@ -169,21 +163,16 @@ export function createActiveChat(options: ActiveChatOptions) {
   const [loadingOlder, setLoadingOlder] = createSignal(false);
   const [draft, setDraftSignal] = createSignal("");
   /**
-   * Persisting through the setter rather than an effect is what keeps `reset()`
-   * from wiping the stored draft: it clears `loadedId` before the draft, so the
-   * clear has no owner to write to. Every other caller does have one, so
-   * sending and failing both reach the store correctly.
+   * Persisting through the setter rather than an effect keeps `reset()` from wiping the stored draft: it clears
+   * `loadedId` before the draft, so the clear has no owner to write to.
    */
   const setDraft: typeof setDraftSignal = ((value: Parameters<typeof setDraftSignal>[0]) => {
     const next = setDraftSignal(value);
     const chatId = loadedId();
     if (!chatId) return next;
     const pending = attachments.pendingIds();
-    // Emptying the composer goes through `clear`, not through a save of
-    // nothing. Sending is the common way it empties, and the debounce would
-    // leave the server holding the sent text for another 400ms -- long enough
-    // for a reload to land in the gap and restore a prompt that was already
-    // sent, ready to be sent again.
+    // Emptying goes through `clear`, not a debounced save of nothing: a reload in that gap would restore a prompt
+    // already sent.
     if (!next.trim() && !pending.length) options.drafts?.clear(chatId);
     else options.drafts?.save(chatId, next, pending);
     return next;
@@ -192,15 +181,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     const saved = options.drafts?.draftFor(chatId);
     if (saved?.text && !untrack(draft)) setDraftSignal(saved.text);
   };
-  /*
-   * Ask again for the open chat's draft.
-   *
-   * The drafts load is a request, and a chat can open before it answers --
-   * whereupon `hydrateDraft` finds nothing and nothing ever asks again, so a
-   * draft sitting on the server is simply never shown. This is what the load
-   * calls when it lands. Safe at any moment: it refuses a composer that
-   * already has something in it, so it cannot overwrite typing.
-   */
+  // The drafts load can answer after a chat opened, so it calls this when it lands. It refuses a composer that
+  // already has something in it, so it cannot overwrite typing.
   const rehydrateDraft = () => {
     const chatId = loadedId();
     if (chatId) hydrateDraft(chatId);
@@ -235,18 +217,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     setActiveGenerationRevision((revision) => revision + 1);
   };
   const generationStore = createClientActiveGenerationStore();
-  /*
-   * A chat's agent state is the server's to report: it publishes the process
-   * when it spawns and again when the harness can answer, and both the sidebar
-   * row and the composer read that one record through `activity`. A promise in
-   * this client used to decide it instead, which is how "Starting agent…" came
-   * to cover a catalogue fetch, outlast a warm attach, and mean nothing.
-   *
-   * The one thing the server cannot report is the stretch before it has heard
-   * from us at all. `session.launching()` covers exactly that -- a launch
-   * request in flight, nothing more -- and `activity` prefers anything the
-   * server does say over it.
-   */
   const [navigatingId, setNavigatingId] = createSignal<string | null>(null);
   let navigationRequest: Promise<void> | null = null;
 
@@ -298,8 +268,8 @@ export function createActiveChat(options: ActiveChatOptions) {
 
   const fetchTurnArtifacts = (projectId: string, chatId: string) =>
     api<TurnArtifactSummary[]>(`/v0/projects/${encodeURIComponent(projectId)}/turn-artifact?${new URLSearchParams({ chatId, timeline: "1" })}`, { cache: "no-store" });
-  // A chat's turn summaries, asked for with its transcript (a hover's prefetch, or the open itself): the transcript
-  // asked only once it had mounted, so they arrived ~190 ms after it had faded in, and moved what it showed.
+  // Asked for with the transcript rather than once it mounts, so the summaries do not arrive after it fades in and
+  // move what it shows.
   const warmTurnArtifacts = (projectId: string, chat: ChatSummary) => {
     const revision = transcriptRevision(chat);
     const cached = caches.turnArtifacts.get(chat.id);
@@ -310,7 +280,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     request.catch(() => { if (caches.turnArtifacts.get(chat.id)?.request === request) caches.turnArtifacts.delete(chat.id); });
     while (caches.turnArtifacts.size > 10) caches.turnArtifacts.delete(caches.turnArtifacts.keys().next().value!);
   };
-  /** The transcript's read: the request already under way, taken once (a later read asks afresh), else a new one. */
   const turnArtifactTimeline = (projectId: string, chatId: string) => {
     const cached = caches.turnArtifacts.get(chatId);
     caches.turnArtifacts.delete(chatId);
@@ -323,7 +292,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (transcriptCache.get(chat.id)?.revision !== transcriptRevision(chat)) void loadTranscript(chat).catch(() => {});
     if (chat.projectId) warmTurnArtifacts(chat.projectId, chat);
   };
-  // A stop is finished when the turn says it stopped, settled or is stopping.
   const STOP_TERMINAL_PHASES = new Set(["stopping", "stopped", "settled"]);
 
   const selectedId = catalogue.selectedId;
@@ -333,13 +301,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     opening.socketReady = true;
     finishLiveOpening(opening);
   };
-  /**
-   * This chat's connection to its agent.
-   *
-   * The lifecycle lives in one place that owns nothing else: the process, the
-   * stream and the reconnect. What arrives from it is applied here, and what
-   * the UI says about it comes from the runtime stream, not from either.
-   */
   const session = createAgentSession({
     runtime: options.runtime,
     chatId: () => selectedId(),
@@ -418,37 +379,24 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   /**
-   * Where this client is in the chat's order, and which order that is.
-   *
-   * The server numbers every event that changes what the transcript says, so a
-   * hole in the numbers is a fact rather than something to be inferred from
-   * messages that look duplicated or out of place. Seeing one, this asks to be
-   * caught up from the last number it did see, and drops what arrived out of
-   * order: the replay carries it again, in its place.
+   * The server numbers every event that changes the transcript, so a hole is a fact: seeing one, this asks to be
+   * caught up from the last number seen and drops what arrived out of order, which the replay carries again.
    */
   let logId: string | null = null;
   let logSeq = 0;
 
   const requestLogResume = () => {
     if (!logId || !session.isOpen()) return;
-    // A failed send is not worth reporting: the socket is already closing, and
-    // the reconnect asks the same question again.
     try { session.send({ type: "resume_log", logId, since: logSeq }); } catch { /* asked again on reconnect */ }
   };
 
-  /**
-   * Take the event's place in the order, and say whether to apply it.
-   *
-   * An unnumbered event -- a delta, runtime state, the queue -- is always
-   * applied: it carries no position and losing one costs nothing the next
-   * numbered event does not restate.
-   */
+  // An unnumbered event (a delta, runtime state, the queue) is always applied: the next numbered event restates
+  // anything it loses.
   const acceptInOrder = (event: LiveEvent): boolean => {
     const stamp = (event as { log?: { id?: string; seq?: number } }).log;
     if (!stamp?.id || typeof stamp.seq !== "number") return true;
     if (stamp.id !== logId) { logId = stamp.id; logSeq = stamp.seq; return true; }
-    // Already applied. The replay that answers a hole ends with events this
-    // client had seen, and applying them twice is what it is being spared.
+    // Already applied: the replay that answers a hole ends with events this client had seen.
     if (stamp.seq <= logSeq) return false;
     if (stamp.seq > logSeq + 1) { requestLogResume(); return false; }
     logSeq = stamp.seq;
@@ -497,11 +445,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     }
   });
 
-  /** The only client owner of assistant generation state and terminal handoff. */
   const applyGenerationEvent = (event: StructuredGenerationEvent | FoldedTurnEvent) => {
-    // The turn being stopped draws nothing more; only its end comes through. A
-    // stop that does not yet know its turn holds nothing back, so that turn's
-    // start can arrive and name it.
+    // The turn being stopped draws nothing more but its end. A stop that does not yet know its turn holds nothing
+    // back, so that turn's start can arrive and name it.
     if (stopRequest?.generationId && event.generationId === stopRequest.generationId
       && !(event.type === "status" && STOP_TERMINAL_PHASES.has(String(event.phase)))) return;
     if (!live() || live()!.chatId !== selectedId()) return;
@@ -511,15 +457,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     const previousStatus = previous?.status;
     let result: ReturnType<typeof generationStore.apply> | undefined;
     batch(() => {
-      // The message that started this turn is the last one the client minted,
-      // and until the harness writes it there is nothing else to call it. Tagging it
-      // with the generation is what lets that turn's sync find it again.
       result = generationStore.apply(event);
       if (result.changed && result.state) {
         const state = result.state as ActiveGenerationView;
-        // The row this answer goes in already exists: the server opened it,
-        // where it belongs, the moment the harness named the message. Nothing
-        // here has a position to work out.
         setActiveGeneration(state);
         setActiveGenerationChange(generationChangeFor(event));
       }
@@ -527,19 +467,11 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (!result) return;
     const next = result.state as ActiveGenerationView | null;
     if (!next || !result.accepted) return;
-    // A terminal turn moves into the transcript exactly once. A harness can already
-    // have committed its final message; Codex does not. Both copies carry the
-    // generation id, so this replacement handles either path and the later
-    // backend transcript sync replaces the same range instead of appending.
     const terminal = ["stopped", "complete", "failed"].includes(next.status);
     const wasTerminal = previousStatus ? ["stopped", "complete", "failed"].includes(previousStatus) : false;
     if (terminal && !wasTerminal) {
-      // Nothing is folded into the transcript here. The server has already said
-      // what every message of this turn says, which rows to give up, and what
-      // every tool it ran returned. Assembling a second answer to that out of
-      // the deltas drawn on the way past is what used to race the harness's own
-      // writes -- and what the reader saw as an answer changing after it
-      // settled.
+      // Nothing is folded into the transcript here: the server has already stated every message and tool of this
+      // turn, and a second answer assembled from the deltas races the harness's own writes.
       batch(() => {
         generationStore.clear();
         setActiveGenerationChange(null);
@@ -581,11 +513,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     }
   };
 
-  /*
-   * The outbox (state/outbox.ts): what the person sent while the hub could not be reached. Its messages are this
-   * device's, so a load of the transcript -- which replaces what is held -- puts them back at the end, where they were
-   * sent, until they go.
-   */
+  // Outbox messages are this device's, so a transcript load (which replaces what is held) puts them back at the end
+  // until they go.
   const [outboxRevision, setOutboxRevision] = createSignal(0);
   const outboxChanged = () => setOutboxRevision((revision) => revision + 1);
   const outboxMessage = (entry: OutboxEntry): Message =>
@@ -594,9 +523,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     const waiting = outboxOf(chatId).filter((entry) => !list.some((message) => message.id === entry.messageId));
     return waiting.length ? [...list, ...waiting.map(outboxMessage)] : list;
   };
-  /** The hub is known not to be there: the runtime stream lost it and has not got it back. */
   const hubUnreachable = () => ["reconnecting", "offline"].includes(options.runtime.connectivity());
-  /** A chat opened from what this client held while the hub could not be reached, read again once it can. */
   let enteredOffline: { chat: ChatSummary; project: Project } | null = null;
 
   const applyDetail = (detail: TranscriptDetail, reconcile = false) => {
@@ -614,9 +541,8 @@ export function createActiveChat(options: ActiveChatOptions) {
       setBackendImplementation(detail.backend?.implementation || null);
       // The load holds the log up to here, so this is where the order stands.
       if (detail.log?.id && (detail.log.id !== logId || detail.log.seq > logSeq)) { logId = detail.log.id; logSeq = detail.log.seq; }
-      // The socket says how the turn is going once it attaches; until then the
-      // transcript holds a running turn's finished steps, and this is what
-      // keeps them from reading as a turn that ended without saying how.
+      // Until the socket attaches and says how the turn is going, this keeps a running turn's finished steps from
+      // reading as a turn that ended without saying how.
       if (detail.turnOpen && generation() === "idle") setGeneration("active");
     });
   };
@@ -630,7 +556,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     return detail;
   };
 
-  /* A chat with no live process still has the context its history records. */
   const contextFromHistory = async (chatId: string) => {
     const usage = await api<ContextUsagePayload>(
       `/v0/sessions/${encodeURIComponent(chatId)}/context`).catch(() => null);
@@ -652,7 +577,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (usage.cacheStats) setCacheStats(usage.cacheStats);
   };
 
-  /** Ask again without sending anything: the live process when there is one, else the history. */
   const refreshContext = () => {
     const chatId = selectedId();
     if (!chatId) return;
@@ -687,9 +611,8 @@ export function createActiveChat(options: ActiveChatOptions) {
       applyGenerationEvent(event);
       return;
     }
-    // A retry and a failure are part of the turn as well as the chat: they are
-    // folded into the generation the same way the server folds them, and then
-    // handled below for the things that are not the turn.
+    // A retry and a failure are part of the turn as well as the chat: folded into the generation as the server
+    // folds them, then handled below for the rest.
     if (isFoldedTurnEvent(event)) applyGenerationEvent(event);
     switch (event.type) {
       case "runtime_state":
@@ -723,25 +646,20 @@ export function createActiveChat(options: ActiveChatOptions) {
         void refreshAgents();
         break;
       case "session_checkpoint":
-        // The socket is the one channel the open chat is guaranteed to have,
-        // so the row it carries updates the catalogue exactly like the global
-        // stream's does. Both feed one reducer; duplicates are free.
+        // The socket is the one channel the open chat is guaranteed to have, so its row feeds the catalogue as the
+        // global stream's does; duplicates are free.
         if (event.chat) window.dispatchEvent(new CustomEvent("conduit:chat-changed", { detail: event.chat }));
         if (event.title && event.chatId === selectedId()) setTitle(event.title);
         if (event.chatId === selectedId()) {
           if (event.artifacts) setTurnArtifacts({ chatId: event.chatId, items: event.artifacts });
         }
         break;
-      // The only sync left is the whole of what this chat should hold, sent to
-      // a client that lost its place in the order and cannot be replayed back
-      // into it. A window of the transcript says nothing this client was not
-      // already told, message by message, as it happened.
+      // Only a replacing sync is applied: a window of the transcript says nothing this client was not already told.
       case "transcript_sync":
         if (!event.replace) break;
         {
-          // The snapshot is the latest turns. What this client holds before the
-          // first of them stands -- unless that message is gone too, when the
-          // history itself changed and the snapshot is all there is.
+          // The snapshot is the latest turns: what this client holds before the first of them stands, unless that
+          // message is gone too, when the history itself changed.
           const incoming = asList<Message>(event.messages);
           const current = messages();
           const from = incoming.length ? current.findIndex((message) => message.id === incoming[0]!.id) : -1;
@@ -754,16 +672,13 @@ export function createActiveChat(options: ActiveChatOptions) {
           });
         }
         break;
-      // The server saying what the transcript is: a message exists and where,
-      // a message is finished, a message is gone. This is the whole of how a
-      // row gets its place -- nothing below works one out.
+      // The server places every row; nothing here works out a position.
       case "transcript_op":
         if (isToolOp(event)) setTools((current) => applyToolOp(current, event));
         else setMessages((current) => applyTranscriptOp(current, event));
         break;
-      // Where the chat's order stands. A client that was already here says how
-      // far it got; one arriving fresh has just loaded the transcript and takes
-      // the number as its own.
+      // A client already here says how far it got; one arriving fresh has just loaded the transcript and takes the
+      // number as its own.
       case "log_state":
         if (!event.log?.id) break;
         if (!logId) { logId = event.log.id; logSeq = event.log.seq; break; }
@@ -776,16 +691,12 @@ export function createActiveChat(options: ActiveChatOptions) {
         logSeq = 0;
         break;
       case "history_truncated":
-        // The fork says where the history ends now; this client holds whatever
-        // of it it has loaded, and cuts to the same point. A regenerate ends it
-        // after the prompt it is re-asking, which stays exactly where it is.
+        // A regenerate cuts after the prompt it re-asks, which stays.
         if (event.beforeMessageId) setMessages((current) => truncateAt(current, event.beforeMessageId!, { inclusive: true }));
         else if (event.afterMessageId) setMessages((current) => truncateAt(current, event.afterMessageId!, { inclusive: false }));
         break;
       case "error":
-        // A rejected command is not a failed turn. The scope says which this
-        // is, rather than the browser reading it off two event names that only
-        // one of the four harnesses ever distinguished.
+        // A rejected command is not a failed turn; the scope says which this is.
         if (event.scope === "runtime") {
           stopRequest = null;
           setGeneration("failed");
@@ -819,9 +730,7 @@ export function createActiveChat(options: ActiveChatOptions) {
   }
 
   function consume(event: LiveEvent) {
-    // The server coalesces paint on its own timer and never merges across
-    // blocks, so what arrives is already the batch. Applying it in arrival
-    // order is the whole of the client's job.
+    // The server already coalesces paint and never merges across blocks, so arrival order is the client's whole job.
     applyLiveEvent(event);
   }
 
@@ -837,25 +746,12 @@ export function createActiveChat(options: ActiveChatOptions) {
   };
 
   /**
-   * Everything that is scoped to one chat, in one list.
-   *
-   * These stores each hold one chat's answers and keep them until told to hold
-   * another's. Both ways into a chat -- the boot path and the chat-switch path
-   * -- used to call them by hand, so adding a store meant remembering it twice
-   * and leaving it out of one was invisible: nothing broke, the store simply
-   * went on answering for whichever chat it last heard about. That is how a
-   * a Codex chat's permission profiles came to be offered in another chat. Anything
-   * that belongs to a chat belongs in here, so there is one list to add to and
-   * no second place to forget.
+   * Every store that holds one chat's answers, told together on every way into a chat: one left out goes on
+   * answering for whichever chat it last heard about.
    */
   const chatScopes: Array<(scope: { chat: ChatSummary; project: Project; detail?: TranscriptDetail; launching?: boolean }) => void | Promise<void>> = [
-    // A chat that is about to launch reloads its models when the process is
-    // up. Asking for them here as well raced the launch: the
-    // route answers from the live process the moment one is registered, and a
-    // process registered but not yet serving answers nothing, and the model
-    // request times out waiting for it. The selection itself is applied
-    // synchronously from the transcript detail either way, so the composer
-    // still shows the right model while the agent starts.
+    // A launching chat reloads its models once the process serves: asking now races the launch and times out
+    // against a process registered but not yet serving. The selection still applies at once from the detail.
     ({ chat, project, detail, launching }) => models.select(project.id, chat.id, detail, {
       reloadChat: !launching,
       profile: detail?.profileId || detail?.templateId || chat.profileId || chat.templateId || "",
@@ -871,8 +767,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (chatId) permissions?.follow(chatId, options.runtime.getProcess(chatId)?.permissionMode);
   });
 
-  // The chat's subagents (GET /v0/chats/:chatId/agents): read once its transcript names one, and again each time the
-  // server says they changed (agents_changed). One request at a time; a change during it reads once more after.
   const [agents, setAgents] = createSignal<AgentSummary[]>([]);
   let agentsAsked: string | null = null;
   const readAgents = createSingleFlight(async () => {
@@ -906,10 +800,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     await refreshAgents();
   };
 
-  // A turn running on the open chat that this page has not joined -- the page
-  // opened before the runtime said what runs (a link, a reload, a phone
-  // waking), or the turn began on another client -- is joined, so its stream,
-  // its questions and what it waits for show here as they do where it began.
+  // A turn running on the open chat that this page has not joined (opened before the runtime said what runs, or
+  // begun on another client) is joined, so it shows here as it does where it began.
   createEffect(() => {
     const chatId = selectedId();
     // Not while the hub cannot be reached: the process list is the last one heard, and joining is asked again when it is back.
@@ -924,19 +816,8 @@ export function createActiveChat(options: ActiveChatOptions) {
   const reconcileChatScope = (chat: ChatSummary, project: Project, detail?: TranscriptDetail, launching = false) =>
     Promise.all(chatScopes.map((scope) => scope({ chat, project, detail, launching }))).then(() => {});
 
-  /**
-   * The one way a chat becomes the open chat.
-   *
-   * Creating a chat, restoring one from a URL, and clicking one in the sidebar
-   * all arrive here with the same three questions answered differently: what
-   * history it starts from, whether the address bar moves, and whether its
-   * agent should be warmed. They used to be two functions that each remembered
-   * a different subset of the work, which is how a chat could end up selected
-   * with somebody else's permission modes still on screen.
-   */
-  // An existing live process attaches before the scoped fetches. Chat selection is a document read and this
-  // attach-only request must not start an agent. It takes its model from the transcript detail rather than from the
-  // model store, which has not been told about this chat yet.
+  // An existing live process attaches before the scoped fetches; this must not start an agent. It takes its model
+  // from the transcript detail, since the model store has not been told about this chat yet.
   const warmAgent = (chat: ChatSummary, project: Project, detail: TranscriptDetail | undefined, selection: number) => {
     const draft = chat.status === "draft";
     void ensureAgent({
@@ -964,19 +845,15 @@ export function createActiveChat(options: ActiveChatOptions) {
     detail?: TranscriptDetail;
     history?: "push" | "replace" | "none";
     warm?: boolean;
-    /** Opened while the hub could not be reached: nothing is asked of a harness that cannot answer. */
     offline?: boolean;
-    /** Drawn only (a press on its row, ahead of the tap: preview): not read, nor its agent asked, until adopted. */
     preview?: boolean;
     onCommit?: () => void;
     onShown?: () => void;
   }) => {
     const detail = entry.detail;
-    // Drop any previous chat's stream first: sending reuses an open socket
-    // without re-checking ownership, so a stale one would carry this chat's
-    // prompts into the previous chat's agent.
-    // One update from the chat it was on to this one, drawn once: torn down a setter at a time, each re-rendered
-    // (the old chat emptied, its foot re-measured), ~30ms of a tap.
+    // Drop any previous chat's stream first: sending reuses an open socket without re-checking ownership, so a stale
+    // one would carry this chat's prompts into the previous chat's agent.
+    // One batch from the old chat to this one: torn down a setter at a time, each re-renders (~30ms of a tap).
     const scopeReload = batch(() => {
     reset();
     const selection = selectionToken;
@@ -986,12 +863,9 @@ export function createActiveChat(options: ActiveChatOptions) {
       else if (entry.history === "replace") history.replaceState({}, "", chatPath(chat.id));
       entry.onCommit?.();
     });
-    // Opening is reading, however it was reached -- a click, a pasted URL, the
-    // back button, or re-entering after a profile switch.
+    // Opening is reading, however it was reached (a click, a pasted URL, the back button).
     if (!entry.preview) { markChatRead(catalogue, chat); previewed = null; }
     if (entry.warm) warmAgent(chat, project, detail, selection);
-    // Every store that holds one chat's answers is told which chat, in one
-    // place, so adding one cannot mean remembering it in two.
     const scopeReload = reconcileChatScope(chat, project, detail, entry.warm || entry.offline);
     if (detail) applyDetail(detail);
     else {
@@ -1008,21 +882,15 @@ export function createActiveChat(options: ActiveChatOptions) {
     setPresentation({ kind: "ready", chatId: chat.id });
     return scopeReload;
     });
-    // The chat somebody asked for is on screen: navigation is done. Whether its
-    // agent is warm is a separate question, answered in the sidebar by the
-    // process itself.
+    // The chat is on screen, so navigation is done; whether its agent is warm is a separate question.
     entry.onShown?.();
     await scopeReload;
   };
 
   /**
-   * Enter a resident chat immediately, but do not expose a partial projection.
-   *
-   * The transcript read and the live attach are independent network paths. They
-   * run together while the already-mounted transcript stays hidden. Live frames
-   * are buffered until the persisted transcript is installed, then replayed in
-   * order. The first runtime_state is the attach boundary: the server always
-   * sends it after the optional generation_replay snapshot.
+   * The transcript read and the live attach run together while the transcript stays hidden; live frames buffer until
+   * the transcript is installed, then replay in order. The first runtime_state is the attach boundary: the server
+   * always sends it after the optional generation_replay snapshot.
    */
   const performLiveSelect = async (
     chat: ChatSummary,
@@ -1067,9 +935,8 @@ export function createActiveChat(options: ActiveChatOptions) {
       settleRequest(attachRequest),
     ]);
     if (liveOpening !== opening || selection !== selectionToken || selectedId() !== chat.id) return;
-    // The process can settle between the runtime-list click and the attach. A
-    // second transcript read after that answer is the authoritative settled
-    // state; there is no socket snapshot to wait for in this branch.
+    // The process can settle between the click and the attach; a second transcript read is then the settled state,
+    // with no socket snapshot to wait for.
     const detailResult = transcriptResult.kind === "value" && attachResult.kind === "value" && !attachResult.value
       ? await settleRequest(fetchTranscript(chat)) : transcriptResult;
     if (liveOpening !== opening || selection !== selectionToken || selectedId() !== chat.id) return;
@@ -1089,9 +956,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     }
     const detail = detailResult.value;
     applyDetail(detail);
-    // Each scope selects the target synchronously before its request yields.
-    // Start it before reveal so no visible control belongs to the prior chat;
-    // its network completion does not delay the transcript.
+    // Each scope selects the target synchronously, so starting it before the reveal leaves no visible control on
+    // the prior chat; its network completion does not delay the transcript.
     const scopeReload = reconcileChatScope(chat, project, detail, true);
     opening.transcriptReady = true;
     for (const event of opening.events.splice(0)) consume(event);
@@ -1102,11 +968,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     await scopeReload;
   };
 
-  /**
-   * Open a chat while the hub cannot be reached: the transcript this client last read of it (any, however old), or
-   * none, at once and ready to type into -- what is sent waits in the outbox. No agent is asked for. Once the hub is
-   * back the chat is read again, and a turn running in it is joined as any is.
-   */
   const enterOffline = async (
     chat: ChatSummary,
     project: Project,
@@ -1134,18 +995,13 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (!online || !entered || selectedId() !== entered.chat.id || loadedId() !== entered.chat.id) return;
     enteredOffline = null;
     const selection = selectionToken;
-    // What the open asked of the hub and could not have: the transcript, and the stores that read it from the harness.
-    // Asked again for the chat already open, as rehydrateDraft asks, not a second way into one.
+    // Re-asks only what the open could not get from the hub, for the chat already open, rather than entering it again.
     void loadDetail(entered.chat.id, true, selection).catch(onError);
     void models.reloadChat(entered.chat.id);
     void permissions?.select(entered.chat.id);
     void serviceLevels?.select(entered.chat.id);
   }, { defer: true }));
 
-  /*
-   * The device's copy of the open chat (state/device-transcripts.ts), kept as it loads and as it changes: what is on
-   * screen, written a couple of seconds after it last changed, and at once when another chat takes its place.
-   */
   let deviceCopy: { chatId: string; detail: TranscriptDetail } | null = null;
   let deviceCopyTimer: ReturnType<typeof setTimeout> | undefined;
   const DEVICE_COPY_DELAY_MS = 2_000;
@@ -1210,12 +1066,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     }
   };
 
-  /*
-   * A chat drawn as the finger goes down on its row (a phone's drawer), ahead of the tap: by the time the tap lands it
-   * is on screen, and the drawer only has to slide. Only from what this device holds (a cached transcript, not a live
-   * one), and drawn only: the tap adopts it (the address, the read receipt, the agent, a fresh read); a press that
-   * turns into a scroll goes back (the app selects what it was on).
-   */
+  // A chat drawn as the finger goes down on its row (a phone's drawer), so the tap only has to slide the drawer.
+  // Drawn only: the tap adopts it (address, read receipt, agent, fresh read); a press that becomes a scroll goes back.
   let previewed: string | null = null;
   const preview = (chat: ChatSummary, project: Project) => {
     if (hubUnreachable() || chatIsLive(chat) || navigationRequest || selectedId() === chat.id) return false;
@@ -1261,14 +1113,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     return request;
   };
 
-  /**
-   * Open a chat this client just created, restored from a URL, or re-entered
-   * after switching its profile - the ways in that do not move history.
-   *
-   * It follows the same document rule as a click: show stored history without
-   * starting an agent, and attach only when the runtime stream already reports
-   * a live process.
-   */
   const initialize = (chat: ChatSummary, project: Project, detail?: TranscriptDetail, entry: { warm?: boolean } = {}) =>
     enterChat(chat, project, {
       detail,
@@ -1294,14 +1138,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     };
   };
 
-  /**
-   * Name a message this client is sending, before sending it.
-   *
-   * The id travels with the prompt, so the harness's commit event comes back
-   * carrying the same name and the row already on screen is that message
-   * rather than a stand-in for it. Nothing has to be promoted, matched or
-   * reconciled afterwards.
-   */
+  // The id travels with the prompt, so the harness's commit comes back under it and the row on screen is that
+  // message, with nothing to reconcile afterwards.
   const newMessageId = () => `m_${crypto.randomUUID()}`;
 
   const acceptOutboundMessage = (prepared: ReturnType<typeof prepareOutboundMessage>) => {
@@ -1309,10 +1147,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     clearReviewComments(prepared.chatId);
   };
 
-  /**
-   * Keep a message for when the hub is back (the outbox): in the transcript at once, marked Waiting to send, the
-   * composer emptied, and on this device until it goes. `messageId` is a message already placed, now kept instead.
-   */
   const keepForLater = (prepared: ReturnType<typeof prepareOutboundMessage>, chatId: string, messageId = newMessageId()) => {
     const entry: OutboxEntry = { messageId, kind: streaming() ? "follow_up" : "prompt", message: prepared.message, timestamp: new Date().toISOString() };
     addToOutbox(chatId, entry);
@@ -1324,12 +1158,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     outboxChanged();
   };
 
-  /**
-   * Send what the outbox holds for the open chat, oldest first, once the hub can take it: a prompt to an idle agent,
-   * a follow-up to a working one. Each leaves the outbox before it is handed to the socket -- the server does not
-   * ignore a repeated message id, so a message is sent at most once -- and goes back only when the socket refused it
-   * without sending anything.
-   */
+  // Each message leaves the outbox before it is handed to the socket, since the server does not ignore a repeated
+  // message id, and goes back only when the socket refused it without sending anything.
   let flushingOutbox = false;
   const flushOutbox = async () => {
     const chatId = loadedId();
@@ -1375,7 +1205,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       flushingOutbox = false;
     }
   };
-  // Asked again whenever the hub, the chat or its turn changes; a stream that has just attached asks too (onEvent).
+  // Asked again whenever the hub, the chat or its turn changes.
   createEffect(() => {
     outboxRevision();
     if (options.runtime.connectivity() !== "online" || presentation().kind !== "ready" || !loadedId()) return;
@@ -1383,7 +1213,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     untrack(() => void flushOutbox());
   });
 
-  /** Take back a message still waiting to send: out of the transcript, and into the composer. */
   const cancelOutbox = (messageId: string) => {
     const chatId = loadedId();
     if (!chatId) return;
@@ -1419,14 +1248,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     const local: Message = { id: messageId, role: "user", content: prepared.message, timestamp: new Date().toISOString(), attachments: prepared.sentAttachments, local: true };
 
     if (busy) {
-      // Sending while the agent works queues: the message reaches the model as
-      // soon as the current tool call settles, rather than cutting the turn off
-      // mid-thought. Cutting it off is the other button -- the one on the queued
-      // bubble -- which takes these messages back and interrupts with them.
-      // The id goes with it either way. A queued message the browser had not
-      // named arrived in the transcript only when the session file was read
-      // back, under an id derived from the entry, beside the copy the live turn
-      // had already drawn: the same message, twice, until a reload.
+      // Sending while the agent works queues rather than cutting the turn off; the id goes with it so the transcript
+      // does not show the same message twice.
       const queueMode = mode || (supports("steer") ? "steer" : "follow_up");
       setDraft("");
       try {
@@ -1438,11 +1261,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       return;
     }
 
-    /*
-     * Shown before the server has it: the message joins the transcript and
-     * the draft empties at once, and only then does an agent that is not
-     * running start. A failure to start takes both back.
-     */
+    // Shown before the server has it; a failure to start the agent takes the message and the draft back.
     const previous = messages();
     const editId = editingEntryId();
     const placeLocal = (current: Message[]) => {
@@ -1456,8 +1275,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     setGeneration("submitting");
     currentGeneration = null;
     // Left while its agent was starting: the stream it waited for went with the chat, so the message goes by HTTP
-    // instead of being dropped (a brand-new chat's first message was lost, and the chat with it). The server starts
-    // the agent if it has not, with the composer's choice. An edit forks in place and is not handed over.
+    // instead of being dropped, and the server starts the agent with the composer's choice. An edit forks in place
+    // and is not handed over.
     const ownerProjectId = projectId();
     const model = models.model();
     const thinkingLevel = models.effort();
@@ -1532,9 +1351,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     if (!entryId || !supports("regenerate") || streaming() || stopping()) return;
     const previous = messages();
     if (!previous.some((message) => message.id === entryId)) return;
-    // Show the answers going before the round trip. The prompt itself stays:
-    // regenerate re-asks it, and the server restates it under the name this row
-    // already has, so there is nothing here to take away and put back.
+    // Show the answers going before the round trip. The prompt stays: the server restates it under the name this
+    // row already has.
     const cut = previous.slice(previous.findIndex((message) => message.id === entryId) + 1);
     const current = stillSelected();
     setMessages(truncateAt(previous, entryId, { inclusive: false }));
@@ -1626,13 +1444,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     setHostUiRequests((current) => current.filter((item) => item.id !== response.id));
   };
 
-  // Messages the user sent while the agent was working, not yet taken by the
-  // model. These are local and immediate, so the composer can show them without
-  // waiting for the backend to echo its queue back.
-  // What is still waiting comes from the backend's queue, not from guessing at
-  // local state: it reports a message as queued when it takes it and drops it
-  // when the model actually reads it, which is the moment the bubble should
-  // clear. Runtime and Test stream send queue_update; Codex sends thread/queue/changed.
+  // Queued messages come from the backend's queue rather than local state: it drops one when the model reads it,
+  // which is when the bubble should clear.
   const pendingMessages = createMemo(() => {
     const waiting = [...queue().steering, ...queue().followUp];
     return waiting.map((item, index) => ({
@@ -1645,12 +1458,7 @@ export function createActiveChat(options: ActiveChatOptions) {
     }));
   });
 
-  /**
-   * Take the queued messages back off the backend, returning their text.
-   *
-   * Clear the queue before stopping so a backend cannot deliver those messages
-   * after the user takes them back.
-   */
+  // Cleared on the backend so it cannot deliver these messages after the user takes them back.
   const takeQueued = () => {
     const text = pendingMessages().map((message) => message.content).filter(Boolean).join("\n");
     if (session.isOpen()) session.send({ type: "clear_queue" });
@@ -1658,22 +1466,14 @@ export function createActiveChat(options: ActiveChatOptions) {
     return text;
   };
 
-  /**
-   * Interrupt the turn and send what is queued, as one server-side command.
-   *
-   * The sequence is clear_queue, abort, prompt, and it has to run in that
-   * order. Keeping it on the server avoids racing the backend's terminal
-   * event, so the client sends one message.
-   */
+  // clear_queue, abort, prompt must run in that order; as one server-side command it cannot race the backend's
+  // terminal event.
   const interruptAndSend = () => {
     const prepared = prepareOutboundMessage();
     if (!pendingMessages().length && !prepared.hasContent) return void stop();
-    // The server prompts with the queue it takes back plus this message, joined
-    // the way interruptedPromptInput joins them, so the bubble says what the
-    // model was actually asked.
+    // Joined the way the server's interruptedPromptInput joins them, so the bubble says what the model was asked.
     const interrupting = [...pendingMessages().map((message) => message.content), prepared.message]
       .map((text) => text.trim()).filter(Boolean).join("\n");
-    // Show the replacement prompt while the backend starts it.
     const interruptId = newMessageId();
     const local: Message = { id: interruptId, role: "user", content: interrupting,
       timestamp: new Date().toISOString(), attachments: prepared.sentAttachments, local: true };
@@ -1696,7 +1496,6 @@ export function createActiveChat(options: ActiveChatOptions) {
     }
   };
 
-  /** Put the queued text back in the composer so it can be reworded. */
   const editQueued = () => {
     const text = takeQueued();
     if (text) setDraft((current) => current ? `${current}\n${text}` : text);
@@ -1720,9 +1519,7 @@ export function createActiveChat(options: ActiveChatOptions) {
       return { kind: "runtime_failed", label: "Could not load chat" };
     }
     const process = options.runtime.getProcess(selectedId());
-    // A turn that was stopped says so on its prompt, and the composer reads the
-    // same statement the trace and its tools do -- live, after a reload, and on
-    // every harness, not only the one whose stop arrives as its own event.
+    // A stopped turn says so on its prompt, so the composer reads the same statement as the trace, on every harness.
     const stopped = generation() === "idle" && lastOutcome() === "interrupted";
     const derived = deriveFineActivity({
       generation: stopped ? "interrupted" : generation(),
@@ -1736,12 +1533,8 @@ export function createActiveChat(options: ActiveChatOptions) {
     });
     if (hostUiRequests().length) return { kind: "waiting_for_user",
       label: hostUiRequests()[0]?.kind === "question" ? "Waiting for your answer" : "Waiting for your confirmation" };
-    // We have asked for a process and the server has not answered yet, so it
-    // has nothing to publish and the derived activity is idle by default. The
-    // asking is worth showing: it is the whole of the gap between clicking a
-    // chat and the spawn reaching the runtime stream, and the transcript has
-    // already painted from cache by then. Anything the server does report wins,
-    // because `derived` is consulted first.
+    // A launch request in flight: the server has nothing to publish yet, so the gap between clicking a chat and the
+    // spawn reaching the runtime stream shows here. Anything the server reports wins, as `derived` comes first.
     if (derived.kind === "idle" && !process && selectedId() && session.launching() === selectedId()) {
       return { kind: "starting", label: "Starting agent…" };
     }
@@ -1751,8 +1544,7 @@ export function createActiveChat(options: ActiveChatOptions) {
         return { kind: "request_failed", label: "Request failed · Ready to retry" };
       }
     }
-    // "starting" now means the harness itself is not ready yet -- the server
-    // says so, and says when it stops being true -- so it is worth showing.
+    // "starting" means the harness itself is not ready yet, which the server reports.
     return derived.kind === "starting" ? { kind: "starting", label: "Starting agent…" } : derived;
   });
 
@@ -1769,11 +1561,9 @@ export function createActiveChat(options: ActiveChatOptions) {
     generation, editingEntryId, contextUsage, sessionStats, cacheStats, refreshContext, loadBreakdown, compacting, hostUiRequests, queue, pendingMessages, capabilities, harnessCommands, activeGeneration, activeGenerationChange, turnArtifacts,
     navigatingId, presentation, interactionReady: () => presentation().kind === "ready" && Boolean(loadedId()), streaming, stopping, activity,
     initialize, select, prefetch, preview, adoptPreview, previewing: () => previewed,
-    /** Once this chat's transcript is read (from the prefetch under way, else a read now). */
     whenRead: (chat: ChatSummary) => chatIsLive(chat) ? Promise.reject(new Error("live")) : loadTranscript(chat).then(() => undefined), turnArtifactTimeline, loadDetail, ensureAgent, reset, send, stop, regenerate, rehydrateDraft,
     compact, loadHarnessCommands, loadOlder, edit, cancelEdit, respondHostUi, clearQueue, interruptAndSend, editQueued, discardQueued,
     agents, stopAgent, cancelOutbox,
-    /** Open a chat from what this device holds, the hub being out of reach (a cold start's address): read again once it is back. */
     openOffline: (chat: ChatSummary, project: Project) => enterOffline(chat, project, { history: "none" }),
   };
 }

@@ -6,16 +6,7 @@ export function createCatalogueStore() {
   const [projects, setProjectList] = createSignal<Project[]>([]);
   const [loaded, setLoaded] = createSignal(false);
 
-  /**
-   * Whether the catalogue has been answered for.
-   *
-   * An empty list before the answer arrives and an empty list after it are the
-   * same value and mean opposite things, and without somewhere to say which,
-   * the sidebar spends the whole request stating that the server has nothing
-   * on it. Over a link where that request takes a third of a second or more,
-   * that reads as a server it failed to reach rather than one it has not
-   * finished asking.
-   */
+  // An empty list before the answer and an empty list after it mean opposite things, so `loaded` says which.
   const setProjects = (value: Project[] | ((current: Project[]) => Project[])) => {
     setLoaded(true);
     if (typeof value === "function") setProjectList(value);
@@ -51,12 +42,8 @@ export function createCatalogueStore() {
     setProjectId(project.id);
   };
 
-  // A patch touches one chat, so every other project keeps its identity. The
-  // spread used to run unconditionally, which handed a fresh object to every
-  // project on every patch -- re-reconciling each sidebar and dashboard list
-  // for a title or timestamp that belonged to one chat in one of them.
-  // Not `setProjects`: a patch changes one chat in a catalogue that must
-  // already be here, so it is not the event that says one arrived.
+  // Every untouched project keeps its identity, or each sidebar and dashboard list reconciles again. Not
+  // `setProjects`: a patch is not the event that says the catalogue arrived.
   const patchChat = (chatId: string, patch: Partial<ChatSummary>) => setProjectList((current) => {
     let touched = false;
     const next = current.map((project) => {

@@ -105,19 +105,11 @@ export function createTimelineStore(
   tools: Accessor<ToolItem[]>,
   activeGeneration: Accessor<ActiveGenerationView | null>,
   activeGenerationChange: Accessor<LiveGenerationChange | null> = () => null,
-  /** What the chat does with text said between tool calls (turn-rows.ts `TurnLayout`): chats fold it, the persistent
-   *  agent's threads show it. */
   narration: Accessor<Narration> = () => "fold",
 ) {
   const [rows, setRows] = createStore<TimelineRow[]>([]);
-  /*
-   * The store writes into whatever it holds. Handed the chat's own messages and
-   * tools, a row whose key passed to a different value -- a saved answer's key
-   * taken over by the live answer of the next send -- had that value merged
-   * over the saved message: its id became the live one and its `answers` was
-   * deleted, and the next projection stopped on the transcript contract. So the
-   * store is only ever given its own copies.
-   */
+  // The store writes into whatever it holds, so it is only ever given its own copies: a row key passing to another
+  // value would otherwise merge that value over the chat's own message.
   const owned = <T,>(value: T): T => {
     if (Array.isArray(value)) return value.map(owned) as T;
     if (value && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
@@ -226,13 +218,11 @@ export function createTimelineStore(
   };
 
   let laidOutNarration: Narration = "fold";
-  // Before the render, as the chat it is of changes: the rows drawn are this chat's from the first (an effect drew the
-  // last chat's rows once more, and opened the transcript's tail on them).
+  // A computed, not an effect, so the first render after a chat change never draws the last chat's rows.
   createComputed(() => {
     const inputMessages = messages();
     const inputTools = tools();
     const layout = { narration: narration() };
-    // A chat changing layout is laid out again whole.
     const relaid = layout.narration !== laidOutNarration;
     if (relaid) { laidOutNarration = layout.narration; persistedTurns = []; persistedMessages = null; }
     const inputGeneration = activeGeneration();
@@ -262,8 +252,6 @@ export function createTimelineStore(
       persistedMessages = inputMessages;
       persistedTools = inputTools;
     }
-    // A turn that ended without saying how is stated by the server, so every
-    // finished turn arrives here with its outcome.
     const grouped = groupReports(inputGeneration
       ? projectLiveTurn(persistedRows, inputMessages, inputGeneration, inputTools, layout)
       : persistedRows);

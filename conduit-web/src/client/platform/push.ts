@@ -5,13 +5,11 @@ import { httpUrl } from "../api/transport.js";
 import { installedClientKind } from "./installed-client.ts";
 import { activeServer, servers, switchToServer } from "./servers.ts";
 
-/** How long the distributor has to answer with an endpoint before the saved list is read. */
 const ENDPOINT_TIMEOUT_MS = 30_000;
 
 /**
- * Notifications from the hub on this device (docs/plans/persistent-agent.md, "Reaching you"). One protocol, Web Push,
- * two ways in: the Android app through a UnifiedPush distributor (Google's push service built in, or ntfy and the like
- * where there is no Play services), a browser through its own push service and the service worker. The hub keeps the subscriptions; this remembers which one is this device's, per hub.
+ * Web Push from the hub, through a UnifiedPush distributor on Android or the browser's own push service. The hub
+ * keeps the subscriptions; this remembers which one is this device's, per hub.
  */
 
 type Permission = "granted" | "denied" | "prompt";
@@ -41,13 +39,12 @@ let plugin: PushPlugin | null = null;
 const native = () => plugin ??= registerPlugin<PushPlugin>("ConduitPush");
 
 /**
- * Which way in this device has: none in the desktop app yet (WebView2 has no push service), nor in a page without the
- * worker, nor in an Android app installed before its native half existed (its interface updates live, its code does not).
+ * None in the desktop app (WebView2 has no push service), nor in an Android app whose native code lacks the plugin
+ * (its interface updates live, its code does not).
  */
 export const pushWay = (): PushWay => installedClientKind === "android" ? Capacitor.isPluginAvailable("ConduitPush") ? "android" : null
   : installedClientKind === "browser" && "serviceWorker" in navigator && "PushManager" in window && window.isSecureContext ? "browser" : null;
 
-/** The hub this device registered with: its identity where the app knows it, else the page's own origin. */
 const hubKey = () => activeServer()?.id || location.origin;
 const storageKey = () => `conduit.push.${hubKey()}`;
 const read = (): Saved | null => { try { return JSON.parse(localStorage.getItem(storageKey()) || "null"); } catch { return null; } };
@@ -70,7 +67,6 @@ async function forget() {
   if (saved) await api(`/v0/push/subscriptions/${encodeURIComponent(saved.id)}`, { method: "DELETE" }).catch(() => undefined);
 }
 
-/** Opens a notification's chat: here when it came from this hub, otherwise by switching to the hub that sent it. */
 function open(instance: string | null, path: string | null) {
   if (!path?.startsWith("/") || path.startsWith("//")) return;
   const hub = instance && activeServer()?.id !== instance ? servers().find((entry) => entry.id === instance) : null;
@@ -84,10 +80,7 @@ function open(instance: string | null, path: string | null) {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
-/**
- * Once at start: follow notification taps, and keep the hub's copy of this device's endpoint current (a distributor
- * may hand out a new one at any time, with or without the page open; the hub upserts by endpoint).
- */
+/** A distributor may hand out a new endpoint at any time, with or without the page open; the hub upserts by endpoint. */
 export async function startPush() {
   const way = pushWay();
   let pending: string | null = null;
@@ -117,7 +110,6 @@ async function sync(endpoint: Endpoint) {
   await remember(endpoint.url, { p256dh: endpoint.pubKey, auth: endpoint.auth }, "unifiedpush", saved.label || "Android").catch(() => undefined);
 }
 
-/** The settings row's state and actions for this device on the hub it is using. */
 export function createPushControl() {
   const [on, setOn] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
@@ -129,7 +121,7 @@ export function createPushControl() {
     const saved = read();
     if (!saved) return setOn(false);
     const hub = await api<HubPush>("/v0/push").catch(() => null);
-    // The hub drops a subscription its push service says is gone: then this device is off again.
+    // The hub drops a subscription its push service says is gone.
     if (hub && !hub.subscriptions.some((item) => item.id === saved.id)) { write(null); return setOn(false); }
     setOn(true);
   };
@@ -148,7 +140,7 @@ export function createPushControl() {
     if (permission !== "granted") ({ permission } = await within("asking Android for permission", push.requestPermission(), 120));
     if (permission !== "granted") throw new Error("Notifications are off for Conduit in Android's settings.");
     const instance = hubKey();
-    // The distributor answers on its own time; the endpoint event is the answer, the saved list a fallback.
+    // The distributor answers on its own time; the saved list is a fallback.
     const arrived = new Promise<Endpoint | null>((resolve) => {
       // Settled before addListener hands back its handle, the handle is removed as it arrives.
       let listener: Listener | null = null, settled = false;

@@ -8,15 +8,10 @@ export interface PublishedRelease {
   windowsUrl: string | null;
 }
 
-/** Version numbers only: a tag may be written `v0.7.1`, a manifest `0.7.1`. */
 function parts(version: string): number[] {
   return version.replace(/^v/, "").split(/[.\-+]/).map((part) => Number.parseInt(part, 10)).map((part) => Number.isNaN(part) ? 0 : part);
 }
 
-/**
- * Whether `candidate` is a version to move to. Equal is not newer: an update
- * offered for the version already running is an update that does nothing.
- */
 export function isNewerVersion(candidate: string, current: string): boolean {
   const left = parts(candidate);
   const right = parts(current);
@@ -27,15 +22,6 @@ export function isNewerVersion(candidate: string, current: string): boolean {
   return false;
 }
 
-/**
- * The latest published release, as GitHub describes it. Read anonymously --
- * the repository is public and this is the same document a browser would be
- * shown -- so nothing here carries a Conduit token to a third party.
- */
-/**
- * Where the Download buttons lead: the installers the server publishes itself
- * when it has any (a dev head and its client), else the public release.
- */
 // Asked by each Download button as it mounts: one answer serves them all for ten seconds.
 let downloadsAsked: { at: number; answer: Promise<Pick<PublishedRelease, "windowsUrl" | "apkUrl">> } | null = null;
 export function installerDownloads(): Promise<Pick<PublishedRelease, "windowsUrl" | "apkUrl">> {
@@ -53,8 +39,8 @@ async function askDownloads(): Promise<Pick<PublishedRelease, "windowsUrl" | "ap
   return { windowsUrl: served(own?.windowsUrl) || release?.windowsUrl || null, apkUrl: served(own?.apkUrl) || release?.apkUrl || null };
 }
 
+/** Read anonymously, so no Conduit token goes to a third party. */
 export async function latestRelease(fetchImpl: typeof fetch = fetch): Promise<PublishedRelease | null> {
-  // A question, not a download: answered in seconds or not at all.
   const response = await fetchImpl(RELEASES_API, { headers: { accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(8_000) });
   if (!response.ok) return null;
   const body = await response.json() as { tag_name?: unknown; assets?: unknown };

@@ -4,45 +4,21 @@ import { proveServer } from "./server-proof.ts";
 import { activePath, activeServer, clearActivePath, dialOrigin, pathIsPinned, pathsOf, setActivePath, type ServerEntry, type ServerPath } from "./servers.ts";
 
 /*
- * Which route to take, decided rather than raced -- once connected. Starting and waking race (`rush`), since then the
- * question is whether the route is there at all.
- *
- * The obvious design is to time every address and use the fastest. It is also
- * the wrong one: two routes a few milliseconds apart would trade places on
- * jitter alone, and every trade costs a reconnect. What actually decides this
- * is not speed but *reach* -- loopback means the server is on this machine, a
- * private address means it is on this network, and either is better than going
- * out to the internet and back in a way that no measurement is going to
- * overturn. So the order is fixed and the only question asked of a route is
- * whether it is there.
- *
- * That makes the behaviour predictable, which matters more here than being
- * optimal: a client that is on the LAN uses the LAN, and one that leaves uses
- * the tunnel, and neither decision depends on what the network was doing
- * during one sample.
+ * Routes are ranked by reach (loopback, then private, then public), never by measured speed: routes a few
+ * milliseconds apart would trade places on jitter, and every trade costs a reconnect.
  */
 
-/**
- * The routes worth asking about while one is already working: the ones nearer
- * than it, and nothing else.
- *
- * A route further out is not an improvement, so asking every twenty seconds
- * would be traffic spent to learn nothing. An unknown current route is treated
- * as the worst case, since something is wrong if the route in use is not one
- * of the server's -- and everything is then worth trying.
- */
+/** An unknown current route is treated as the worst case, so every route is worth trying. */
 export function nearerThan(routes: ServerPath[], current: string | null): ServerPath[] {
   const index = routes.findIndex((path) => path.origin === current);
   if (index === 0) return [];
   return index < 0 ? routes : routes.slice(0, index);
 }
 
-/** Consecutive answers before a route is believed, either way. */
 const ADOPT_AFTER = 2;
 const ABANDON_AFTER = 2;
 
 const IDLE_INTERVAL_MS = 20_000;
-/** While the current route is failing, there is a reason to hurry. */
 const SEARCHING_INTERVAL_MS = 5_000;
 const REACH_TIMEOUT_MS = 3_000;
 
@@ -60,22 +36,12 @@ async function reachable(origin: string): Promise<boolean> {
 }
 
 export interface PathSelectorDeps {
-  /**
-   * Whether the client is in the middle of something a reconnect would show.
-   *
-   * A route change is cheap but not invisible: a terminal repaints and a
-   * stream reopens. Doing that underneath a running generation to save a few
-   * milliseconds is a bad trade, so an upgrade waits for a quiet moment. A
-   * route that has *stopped working* does not wait -- staying on it is worse
-   * than any interruption moving off it could cause.
-   */
+  /** An upgrade waits while this is true; leaving a route that stopped working does not. */
   busy: () => boolean;
 }
 
 export function startPathSelection(deps: PathSelectorDeps) {
-  // A browser cannot change route in place: its cookie, storage and worker
-  // belong to the origin that served it. Measuring routes it cannot take would
-  // be traffic spent on a decision it is not allowed to make.
+  // A browser cannot change route in place: its cookie, storage and worker belong to the origin that served it.
   if (!isInstalledClient()) return;
 
   const [searching, setSearching] = createSignal(false);
@@ -89,34 +55,23 @@ export function startPathSelection(deps: PathSelectorDeps) {
     return next;
   };
 
-  /** Reachable, and able to prove it is the server this client paired with. */
   const usable = async (path: ServerPath, entry: ServerEntry) => {
-    // Probed exactly as it would be dialled, https included, so a route is
-    // only adopted if the connection it will really use works.
+    // Probed exactly as it would be dialled, https included.
     const origin = dialOrigin(path.origin, entry);
     if (!await reachable(origin)) return false;
-    // Reach is not identity. Something else answering at this address would
-    // pass the first check and fail this one, which is the whole reason a
-    // route may be adopted without anybody looking at it.
+    // Reach is not identity: something else may answer at this address.
     return (await proveServer(origin, entry.id!, entry.publicKey!)).ok;
   };
 
-  /**
-   * Every route asked at once, answered in the order given. Probing one at a
-   * time made a client with an unreachable LAN address wait out its timeout
-   * before even asking about the next route.
-   */
   const probeAll = (paths: ServerPath[], entry: ServerEntry) =>
     Promise.all(paths.map((path) => usable(path, entry)));
 
-  // How long the route in use has to answer on a wake before another is taken (longer while something would be cut off).
   const KEEP_MS = 1500;
   const KEEP_BUSY_MS = 8000;
   /**
-   * Starting, waking or changing network: the route in use may be gone, and waiting out two failed checks twenty
-   * seconds apart left a phone that had left home on its LAN address for half a minute. Every route is asked at once
-   * and the first to prove itself is taken, unless the one in use answers within KEEP_MS (KEEP_BUSY_MS if moving
-   * would interrupt something). A nearer route that answers later is taken by the passes after.
+   * Starting, waking or changing network: the route in use may be gone, so every route is asked at once and the
+   * first to prove itself is taken, unless the one in use answers within KEEP_MS. A nearer route that answers later
+   * is taken by the passes after.
    */
   const rush = async () => {
     if (running) return;
@@ -129,10 +84,8 @@ export function startPathSelection(deps: PathSelectorDeps) {
       const asked = routes.map((path) => usable(path, entry).then((ok) => ok ? path : Promise.reject()));
       const first = await Promise.any(asked).catch(() => null);
       if (!first) { setSearching(true); return; }
-      // The route in use is kept whenever it still answers, promptly: taking whichever answered first moved a client
-      // that woke (a window shown again, a phone resumed) to another route and back on the passes after, cutting off
-      // what was in flight each time ("The route to the server changed"). A nearer route is still taken by the
-      // passes; a route that answers late, or not at all, is left at once.
+      // A route in use that still answers promptly is kept: taking whichever answered first flaps between routes on
+      // the passes after, cutting off what was in flight each time.
       if (first.origin !== current && current) {
         const index = routes.findIndex((path) => path.origin === current);
         const prompt = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), deps.busy() ? KEEP_BUSY_MS : KEEP_MS));
@@ -158,8 +111,7 @@ export function startPathSelection(deps: PathSelectorDeps) {
     try {
       const routes = pathsOf(entry);
       const current = activePath();
-      // Counts for routes that were forgotten or absorbed would otherwise wait
-      // around to fast-track the same address if it ever came back.
+      // Stale counts would fast-track a forgotten address if it came back.
       for (const origin of agree.keys()) {
         if (origin !== current && !routes.some((path) => path.origin === origin)) agree.delete(origin);
       }
@@ -175,7 +127,6 @@ export function startPathSelection(deps: PathSelectorDeps) {
       for (const [index, path] of candidates.entries()) {
         if (answers[index]) {
           if (count(path.origin, true) < ADOPT_AFTER) break;
-          // An upgrade is not urgent enough to interrupt anything.
           if (deps.busy()) break;
           agree.clear();
           setActivePath(path.origin);
@@ -193,9 +144,7 @@ export function startPathSelection(deps: PathSelectorDeps) {
       }
       if (count(current, false) > -ABANDON_AFTER) return;
 
-      // The route in use has stopped answering. Anything that works is better
-      // than staying, including one further out, and this does not wait for a
-      // quiet moment -- there is nothing left to protect.
+      // Any working route beats a dead one, further out included, without waiting for a quiet moment.
       setSearching(true);
       const others = routes.filter((path) => path.origin !== current);
       const reachableOthers = await probeAll(others, entry);
@@ -223,9 +172,6 @@ export function startPathSelection(deps: PathSelectorDeps) {
     document.addEventListener("visibilitychange", wake);
     window.addEventListener("online", wake);
   }
-  // Waking up and coming back onto a network are exactly when the answer is
-  // most likely to have changed, and the moment a twenty-second timer is
-  // least likely to catch.
   void rush();
 
   onCleanup(() => {

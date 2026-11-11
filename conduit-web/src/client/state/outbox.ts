@@ -1,24 +1,18 @@
 import { activeOrigin } from "../platform/servers";
 
 /**
- * A message the person sent while the hub could not be reached, kept on this device until it can.
- *
- * It is shown in the transcript as theirs, marked Waiting to send, and goes out in order once the chat's live session
- * is up again, under the id it was given here. Nothing on the server ignores a repeated message id (a prompt sent
- * twice is two turns), so an entry leaves the outbox before it is handed to the socket and is never sent again: at most
- * once, not at least once.
+ * The server does not ignore a repeated message id (a prompt sent twice is two turns), so an entry leaves the outbox
+ * before it is handed to the socket: at most once, not at least once.
  */
 export interface OutboxEntry {
   messageId: string;
-  /** How it was sent: a prompt to an idle agent, or a follow-up to one that was working. Sent as whichever the agent
-   *  then needs. */
+  /** Sent as whichever the agent then needs. */
   kind: "prompt" | "follow_up";
-  /** What goes to the agent (review comments projected in). */
   message: string;
   timestamp: string;
 }
 
-/* Keyed by server as well as chat, as drafts are: an installed client holds several servers under one origin. */
+/* Keyed by server as well as chat: an installed client holds several servers under one origin. */
 const PREFIX = "conduit:outbox:";
 const keyOf = (chatId: string) => `${PREFIX}${activeOrigin() || ""}:${chatId}`;
 
@@ -33,7 +27,6 @@ const validEntry = (value: unknown): value is OutboxEntry => {
     && (entry.kind === "prompt" || entry.kind === "follow_up"));
 };
 
-/** This chat's unsent messages, oldest first. */
 export function outboxOf(chatId: string): OutboxEntry[] {
   const store = storage();
   if (!store || !chatId) return [];
@@ -56,7 +49,7 @@ export function addToOutbox(chatId: string, entry: OutboxEntry) {
   write(chatId, [...outboxOf(chatId).filter((held) => held.messageId !== entry.messageId), entry]);
 }
 
-/** Take one entry out (to send it, or because it was cancelled). Null when it is no longer there: already taken. */
+/** Null when it is already taken. */
 export function takeFromOutbox(chatId: string, messageId: string): OutboxEntry | null {
   const entries = outboxOf(chatId);
   const entry = entries.find((held) => held.messageId === messageId) ?? null;
@@ -64,13 +57,12 @@ export function takeFromOutbox(chatId: string, messageId: string): OutboxEntry |
   return entry;
 }
 
-/** Put back an entry that never left (the socket refused it before sending anything), at the front, where it was. */
+/** Only for an entry the socket refused before sending anything. */
 export function returnToOutbox(chatId: string, entry: OutboxEntry) {
   write(chatId, [entry, ...outboxOf(chatId).filter((held) => held.messageId !== entry.messageId)]);
 }
 
-/* Which chats are open in some pane: their waiting messages are that chat's to send (over its stream), so the app's
-   background sending for chats nobody has open leaves them alone. */
+/* An open chat sends its own waiting messages over its stream, so background sending leaves them alone. */
 const openChats = new Map<string, number>();
 export function holdOutboxOpen(chatId: string) {
   openChats.set(chatId, (openChats.get(chatId) ?? 0) + 1);
@@ -82,7 +74,6 @@ export function holdOutboxOpen(chatId: string) {
 }
 export const outboxIsOpen = (chatId: string) => openChats.has(chatId);
 
-/** The chats of the active server with messages waiting. */
 export function outboxChats(): string[] {
   const store = storage();
   if (!store) return [];

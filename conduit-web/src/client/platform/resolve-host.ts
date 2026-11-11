@@ -1,6 +1,6 @@
 import { installedClientKind } from "./installed-client.ts";
 
-/** The addresses a host name stands for, from the app's own resolver (a page has none): empty where it cannot ask. */
+/** From the app's own resolver (a page has none): empty where it cannot ask. */
 export async function resolveHost(host: string): Promise<string[]> {
   try {
     if (installedClientKind === "android") {

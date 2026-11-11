@@ -10,25 +10,18 @@ import { RESUME_RECONNECT_AFTER_MS } from "./agent-session";
 import { buildLabel, clientBuild } from "../platform/build-info";
 import type { RUNTIME_EVENTS } from "../../runtime-stream-api.js";
 
-/** How long the runtime stream's answer (its headers, not its frames) is waited for before the attempt counts as lost. */
+/** Applies to the stream's headers, not its frames. */
 const STREAM_ANSWER_TIMEOUT_MS = 10_000;
-/** This client's runtime stream, as the server lists it in /v0/runtime/clients. */
 const [connectionId, setConnectionId] = createSignal("");
 export { connectionId };
 
-/** A paired environment and whether it is there now, as the runtime stream says (the hub's own is never away). */
 export type DeviceState = { id: string; name: string; device: string | null; online: boolean; lastSeenAt: string | null };
 const [deviceStates, setDeviceStates] = createSignal(new Map<string, DeviceState>());
 export { deviceStates };
-/**
- * The device a project's work runs on, when it is away: its files, terminals and the tools of its chats wait for it.
- * Null on the hub, or while it is there.
- */
 export const awayDevice = (project?: { nodeId?: string | null } | null) => {
   const state = project?.nodeId ? deviceStates().get(project.nodeId) : undefined;
   return state && !state.online ? state : null;
 };
-/** "Jask · Windows": a device's environment as people know it. */
 export const deviceLabel = (state: DeviceState) => state.device ? `${state.device} · ${state.name}` : state.name;
 const takeDevices = (list: unknown) => {
   if (!Array.isArray(list)) return;
@@ -36,11 +29,9 @@ const takeDevices = (list: unknown) => {
   const next = new Map((list as DeviceState[]).map((item) => [item.id, item]));
   setDeviceStates(next);
   window.dispatchEvent(new Event("conduit:devices-changed"));
-  // Back: what waited on it (a file tree, a diff) reads again.
   for (const [id, state] of next) if (state.online && before.get(id)?.online === false) window.dispatchEvent(new CustomEvent("conduit:device-online", { detail: id }));
 };
 
-/** An event of the runtime stream: one the hub declares (runtime-stream-api.js), its other fields read as they come. */
 type RuntimeEvent = { type: keyof typeof RUNTIME_EVENTS } & Record<string, unknown>;
 
 export type Connectivity = "connecting" | "online" | "reconnecting" | "offline";
@@ -49,7 +40,6 @@ let heardOnce = false;
 export function createRuntimeStore() {
   const [processes, setProcesses] = createSignal(new Map<string, RuntimeProcess>());
   const [connectivity, setConnectivity] = createSignal<Connectivity>("connecting");
-  // What is shown may be out of date while the stream is away: it is that, said once, not a flag kept beside it.
   const stale = () => connectivity() === "reconnecting" || connectivity() === "offline";
   let source: { close: () => void } | undefined;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
@@ -57,16 +47,11 @@ export function createRuntimeStore() {
   let lastFrameAt = 0;
   let attempts = 0;
   let restartPrepared = false;
-  // The server pings every 15s. A stream that dies without firing an error --
-  // sleep, mobile background, an idle proxy -- goes silent instead, and every
-  // pill would sit there frozen and looking authoritative. Silence is the
-  // signal; `onerror` is only the fast path.
+  // The server pings every 15s. A stream that dies without an error (sleep, mobile background, an idle proxy) goes
+  // silent instead, so silence is the signal and `onerror` only the fast path.
   const SILENCE_MS = 45_000;
-  /*
-   * Every browser tab streamed for itself, and over HTTP/1.1 a browser holds six connections to a server: with six
-   * tabs open, every request in every tab waited for one to close. One tab -- whichever holds the lock -- streams
-   * and relays each frame to the others; when it closes, the next one takes the lock and the stream.
-   */
+  // Over HTTP/1.1 a browser holds six connections to a server, so one tab (whichever holds the lock) streams and
+  // relays each frame to the others.
   const channel = !isInstalledClient() && typeof BroadcastChannel !== "undefined" && navigator.locks
     ? new BroadcastChannel("conduit:runtime-stream") : null;
   let leading = !channel;
@@ -94,18 +79,14 @@ export function createRuntimeStore() {
     });
   };
 
-  /*
-   * A restart is coming. A browser installs the new build and says so; the
-   * server waits for that (or for its limit) before restarting. An installed
-   * client carries its build in the shell and is never waited on.
-   */
+  // The server waits for a browser to install the new build (or for its limit) before restarting; an installed
+  // client carries its build in the shell and is never waited on.
   const prepare = (attempt: unknown, target: unknown) => {
     if (isInstalledClient()) return;
     preparePwaRestart(typeof attempt === "string" ? attempt : "", typeof target === "string" ? target : "",
       (ready) => api("/v0/runtime/restart/ready", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(ready) }).then(() => {}));
   };
 
-  /** The app's own environment, for the devices' map: the node ids its companion is paired as. */
   const locate = (connection: string) => {
     if (!leading || !desktopShell) return;
     void desktopShell.companion.status().then((status) => {
@@ -114,7 +95,6 @@ export function createRuntimeStore() {
     }).catch(() => {});
   };
 
-  /** Who this stream is, for the server's list of connected clients. */
   const streamUrl = () => {
     const query = new URLSearchParams({ client: installedClientKind || "browser", build: buildLabel(clientBuild) });
     if (!isInstalledClient()) query.set("registration", browserRegistrationId());
@@ -129,7 +109,7 @@ export function createRuntimeStore() {
       if (event.type === "ping") {
         if (connectivity() !== "online") { attempts = 0; setConnectivity("online"); replayHeldWrites(); }
       } else if (event.type === "runtime_global_snapshot") {
-        // Back after time away (not the first hearing): what changed meanwhile was not heard, so the app reads it again.
+        // Changes made while away were not heard, so the app reads them again.
         if (heardOnce) window.dispatchEvent(new Event("conduit:runtime-resynced"));
         heardOnce = true;
         replaceAll((event.processes || []) as RuntimeProcess[]);
@@ -140,7 +120,6 @@ export function createRuntimeStore() {
         if (restartPrepared) prepare(event.restartAttempt, event.restartTarget);
         restartAnnounced = { attempt: event.restartAttempt, target: event.restartTarget };
         attempts = 0;
-        // Back (or first heard from): the writes waiting for it go now rather than at their next retry.
         if (connectivity() !== "online") replayHeldWrites();
         setConnectivity("online");
       } else if (event.type === "runtime_process" && event.process) {
@@ -148,12 +127,10 @@ export function createRuntimeStore() {
       } else if (event.type === "runtime_process_removed") {
         remove(event.id as string | undefined, event.chatId as string | undefined);
       } else if (event.type === "agent_changed") {
-        // jbot's work moved on (a unit started, changed phase, ended): the agent view is read again (state/agent.ts).
         window.dispatchEvent(new Event("conduit:agent-changed"));
       } else if (event.type === "chat_changed" && event.chat) {
         window.dispatchEvent(new CustomEvent("conduit:chat-changed", { detail: event.chat }));
       } else if (event.type === "updates_offered" && event.updates) {
-        // The hub has something new to offer (live-update.ts, main.tsx): checked now, not at the next poll.
         window.dispatchEvent(new CustomEvent("conduit:updates-offered", { detail: event.updates }));
       } else if (event.type === "devices_changed") {
         takeDevices(event.devices);
@@ -162,12 +139,10 @@ export function createRuntimeStore() {
       } else if (event.type === "terminal_changed" || event.type === "terminal_removed") {
         window.dispatchEvent(new Event("conduit:ptys-changed"));
       } else if (event.type === "keybindings_changed" && event.overrides && typeof event.overrides === "object") {
-        // keybindings.json edited on the hub (by hand, by an agent): main.tsx gives it to the shortcut manager.
         window.dispatchEvent(new CustomEvent("conduit:keybindings-changed", { detail: event.overrides }));
       } else if (event.type === "browser_changed") {
         window.dispatchEvent(new CustomEvent("conduit:browser-changed", { detail: event }));
       } else if (event.type === "ui_command") {
-        // An agent asking one tab to open, close or focus a pane (agent-ui.ts takes it if it is that tab's).
         window.dispatchEvent(new CustomEvent("conduit:ui-command", { detail: event }));
       } else if (event.type === "pwa_restart_prepared") {
         restartPrepared = true;
@@ -178,14 +153,13 @@ export function createRuntimeStore() {
       // A malformed global update must not take the app down.
     }
   };
-  // The stream has gone (the server restarting, or a blip): said by the tab holding it to every other.
   const lost = () => {
     if (restartPrepared) {
       restartPrepared = false;
       void finishPwaRestart();
     }
   };
-  // What a tab arriving after the stream's own snapshot needs: the state as the leader holds it now.
+  // For a tab arriving after the stream's own snapshot.
   const snapshot = () => JSON.stringify({
     type: "runtime_global_snapshot" satisfies RuntimeEvent["type"],
     processes: [...processes().values()],
@@ -211,7 +185,6 @@ export function createRuntimeStore() {
       (watchdog as unknown as { unref?: () => void }).unref?.();
     }
     setConnectivity(attempts ? "reconnecting" : "connecting");
-    // Another tab streams: ask it for where things stand rather than opening a stream of our own.
     if (!leading) {
       channel!.postMessage({ type: "hello" });
       return;
@@ -222,8 +195,7 @@ export function createRuntimeStore() {
       source = undefined;
       lost();
       attempts += 1;
-      // A blip is the usual cause, so the first retries come quickly:
-      // 250ms, doubling to 8s, and offline after about fifteen seconds.
+      // A blip is the usual cause, so the first retries come quickly.
       const offline = attempts >= 8;
       channel?.postMessage({ type: "lost", offline });
       setConnectivity(offline ? "offline" : "reconnecting");
@@ -234,9 +206,7 @@ export function createRuntimeStore() {
       const controller = new AbortController();
       const next = { close: () => controller.abort() };
       source = next;
-      // The stream itself is never timed out, but its answer is: a hub that does not answer at all (a phone back from
-      // the background on a route that went away) held this at "connecting" until the silence watchdog, and
-      // "connecting" reads as reachable. Given up, it fails as any lost stream does and the backoff takes over.
+      // Without this, a hub that never answers holds "connecting", which reads as reachable, until the watchdog.
       let unanswered = false;
       const answerTimer = setTimeout(() => { unanswered = true; controller.abort(); }, STREAM_ANSWER_TIMEOUT_MS);
       void authorizedFetch(streamUrl(), {
@@ -269,18 +239,10 @@ export function createRuntimeStore() {
     }
   };
 
-  /*
-   * The route to the server changed. The stream is carrying this server's own
-   * events, so it is not wrong -- it is merely arriving by an address nobody
-   * is using any more, and a stream left on a path that may be about to stop
-   * answering is a client that looks alive and reports nothing. Replaced at
-   * once rather than waited out by the watchdog.
-   */
+  // A stream left on an abandoned route may stop answering silently.
   onPathChange(() => connect());
 
-  // Waking up is exactly when a stream is most likely to be dead without
-  // having said so: after any real time away it is replaced rather than
-  // trusted, which used to take the 45s of silence above to notice.
+  // After real time away a stream is likely dead without having said so, so it is replaced rather than trusted.
   let hiddenAt = 0;
   const resume = (force = false) => {
     if (document.visibilityState === "hidden") { hiddenAt ||= Date.now(); return; }
@@ -341,9 +303,7 @@ export function createRuntimeStore() {
     connectivity,
     stale,
     getProcess: (chatId?: string | null) => chatId ? processes().get(chatId) || null : null,
-    // A stop the server has already accepted. Waiting for the stream to say so
-    // leaves a window where this catalogue still offers a process that is on
-    // its way out, and attaching to one of those yields no agent at all.
+    // For a stop the server accepted: until the stream says so, attaching to the dying process yields no agent.
     forget: (chatId: string) => remove(undefined, chatId),
     retry: connect,
   };

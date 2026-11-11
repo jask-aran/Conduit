@@ -9,11 +9,6 @@ type ErrorHandler = (error: unknown) => void;
 type ThinkingLevelRecoveryHandler = (details: { from: string; to: string }) => void;
 type ModelFallbackHandler = (details: { from: string; to: string }) => void;
 
-/**
- * Say that a profile's remembered model has gone and something else is standing
- * in. Shared with the launch composer, which has no chat behind it and so gets
- * the same news from its own catalogue fetch.
- */
 export const notifyModelFallback = ({ from, to }: { from: string; to: string }) => {
   toast.warning(`${from} is unavailable. Using ${to}.`, {
     id: "model-memory-fallback",
@@ -56,8 +51,6 @@ export function createModelSettings(
     setEnabledModels(enabled);
     setSettingsDefaultModel(fallback);
   };
-  // The catalogue is the enabled scope, its models and default the settings'
-  // own (pi-model-catalog.js list and getSettings): all a composer needs.
   const applyCatalog = (catalog: ModelState) => {
     const enabled = asList<ModelOption>(catalog.models).map((item) => item.spec);
     setEnabledModels(enabled);
@@ -65,12 +58,7 @@ export function createModelSettings(
     setNotice(catalog.requiresAuthentication ? "Authenticate this harness, then run /login." : "");
   };
 
-  /*
-   * Every model the harness has (535 through OpenRouter, ~115 KB) is for
-   * choosing the scope: the palette's model page and Settings. It is asked
-   * for when one of them first reads it, not on every open, and asked again
-   * with each reload after that.
-   */
+  // Every model the harness has can be hundreds of KB, so it is fetched only once something reads it.
   let allFor = "";
   const loadAll = async (projectId: string) => {
     try {
@@ -130,9 +118,6 @@ export function createModelSettings(
         onThinkingLevelRecovered({ from: pendingThinkingLevel, to: nextEffort });
       }
       pendingThinkingLevels.delete(chatId);
-      // The profile's remembered model has gone and the catalogue default is
-      // standing in. The toast carries a fixed id, so repeated reloads replace
-      // one notice rather than stacking up.
       if (catalog.modelFallback) onModelFallback(catalog.modelFallback);
       setNotice(catalog.requiresAuthentication
         ? "Authenticate this harness to use models."
@@ -150,21 +135,13 @@ export function createModelSettings(
   ) => {
     const changedProject = activeProjectId !== projectId;
     const changedChat = activeChatId !== chatId;
-    // Switching a chat's profile keeps its id and changes everything a model
-    // means: the catalogue and the remembered selection belong to the profile,
-    // not to the chat. Watching the harness instead missed every switch between
-    // profiles that share one - Assistant to Coding kept whichever model was
-    // last picked in another profile, because nothing below was asked again.
+    // The catalogue and the remembered selection belong to the profile, not the chat or the harness: profiles can
+    // share a harness.
     const changedProfile = Boolean(profile) && activeProfile() !== profile;
     activeProjectId = projectId;
     activeChatId = chatId;
     if (profile) setActiveProfile(profile);
-    // A model belongs to the profile, not to the chat, so a profile change
-    // drops the old selection whether or not the chat changed with it. Keeping
-    // it meant the next launch asked for a model the new profile has never
-    // heard of -- a Codex spec sent to an Assistant chat -- and the launch was refused
-    // outright. Anything genuinely still true is put back by the selection
-    // below or the catalogue fetch behind it.
+    // A kept selection would launch with a model the new profile does not know, and the launch is refused.
     if (changedProfile) {
       setModels([]);
       setModel("");
@@ -178,8 +155,7 @@ export function createModelSettings(
     }
     applyChatSelection(selection);
     if (changedProject) void reload(projectId);
-    // A catalogue that just changed hands is fetched now rather than behind the
-    // launch: what the launch is allowed to ask for depends on it.
+    // What the launch may ask for depends on the new profile's catalogue.
     return shouldReloadChat || changedProfile ? reloadChat(chatId) : Promise.resolve();
   };
 

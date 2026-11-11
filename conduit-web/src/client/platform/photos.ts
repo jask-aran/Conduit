@@ -6,9 +6,7 @@ const nativePhotos = registerPlugin<{
   }>;
 }>("ConduitPhotos");
 
-/** Opens the native photo picker and reads its cached files for attachments.
- * Returns null when the caller must use a file input instead.
- */
+/** Null when the caller must use a file input instead. */
 export async function pickPhotos(max = 10): Promise<File[] | null> {
   if (!Capacitor.isNativePlatform() || !Capacitor.isPluginAvailable("ConduitPhotos")) return null;
   const { files } = await nativePhotos.pick({ max });
