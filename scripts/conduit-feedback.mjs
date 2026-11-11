@@ -9,7 +9,8 @@
 // everything else stays in the folder until `take <id>`.
 //
 // An item is a thread: `reply <id> [n] <words>` answers the person (about comment n, or the item as a whole) in
-// <id>/thread.jsonl, where the tool reads it; what they write back there ends the same name's next `wait`.
+// <id>/thread.jsonl, where the tool reads it; what they write back there ends the same name's next `wait`, and so
+// does a comment added to a live item.
 import fs from "node:fs/promises";
 import { existsSync, rmSync, watch } from "node:fs";
 import os from "node:os";
@@ -39,6 +40,9 @@ async function items() {
 }
 const claim = (entry, name) => fs.writeFile(path.join(folder, entry.id, "taken.json"), `${JSON.stringify({ at: new Date().toISOString(), pid: process.pid, ...(name ? { name } : {}) })}\n`, { flag: "wx" })
   .then(() => true, (error) => { if (error.code === "EEXIST") return false; throw error; });
+/** How much of an item its session has been handed: what the person wrote back, and (a live item grows) its comments. */
+const handedSoFar = (dir) => fs.readFile(path.join(dir, "agent-read.json"), "utf8").then(JSON.parse, () => ({}));
+const noteHanded = (dir, read) => fs.writeFile(path.join(dir, "agent-read.json"), `${JSON.stringify(read)}\n`);
 
 async function take(name) {
   for (const entry of await items()) {
@@ -55,11 +59,11 @@ async function writtenBack(name) {
     if (entry.state !== "taken") continue;
     const dir = path.join(folder, entry.id);
     if (JSON.parse(await fs.readFile(path.join(dir, "taken.json"), "utf8")).name !== name) continue;
-    const said = (await thread(entry.id)).filter((message) => message.from === "person");
-    const read = await fs.readFile(path.join(dir, "agent-read.json"), "utf8").then((text) => JSON.parse(text).person, () => 0);
-    if (said.length <= read) continue;
-    await fs.writeFile(path.join(dir, "agent-read.json"), `${JSON.stringify({ person: said.length })}\n`);
-    return { entry, said: said.slice(read) };
+    const said = (await thread(entry.id)).filter((message) => message.from === "person"), comments = JSON.parse(await fs.readFile(entry.item, "utf8")).comments;
+    const read = await handedSoFar(dir), person = read.person ?? 0, seen = read.comments ?? comments.length;
+    if (said.length <= person && comments.length <= seen) continue;
+    await noteHanded(dir, { person: said.length, comments: comments.length });
+    return { entry, said: said.slice(person), added: comments.slice(seen) };
   }
   return null;
 }
@@ -94,10 +98,16 @@ if (command === "wait") {
     });
   }
   if (taken.said) {
-    console.log(`The person wrote back on ${taken.entry.item}:`);
+    if (taken.added.length) console.log(`The person added to ${taken.entry.item} (read each there, with its picture):`);
+    for (const comment of taken.added) console.log(`  comment ${comment.n} (${comment.name}): ${comment.comment}`);
+    if (taken.said.length) console.log(`The person wrote back on ${taken.entry.item}:`);
     for (const message of taken.said) console.log(`  ${message.n ? `about comment ${message.n}` : "about the item"}: ${message.text}`);
     console.log(`Answer with: node ${script} reply ${taken.entry.id} [n] "<words>"`);
-  } else hand(taken);
+  } else {
+    // From here on only what is new is handed over.
+    await noteHanded(path.join(folder, taken.id), { person: 0, comments: JSON.parse(await fs.readFile(taken.item, "utf8")).comments.length });
+    hand(taken);
+  }
   console.log(`To keep taking the person's feedback, run \`node ${script} wait${argument ? ` ${JSON.stringify(argument)}` : ""}\` in the background again now.`);
 } else if (command === "serve") {
   const { createServer } = await import("node:http");

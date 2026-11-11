@@ -31,13 +31,14 @@ export type FeedbackThread = { id: string; state: "waiting" | "taken" | "handled
   comments: { n: number; name: string; comment: string }[]; messages: { at: string; from: "agent" | "person"; n: number | null; text: string }[] };
 
 /** What Send carries besides the pictures. `comments` and `screenshot` are the tool's; `client` is the tool's facts (url, viewport, userAgent) with the host's own over them. */
-export type FeedbackSend = { comments: unknown[]; screenshot: Record<string, unknown>; client: Record<string, unknown>; to: string | null };
+export type FeedbackSend = { comments: unknown[]; screenshot: Record<string, unknown>; client: Record<string, unknown>; to: string | null; live?: boolean };
 
 export interface FeedbackTransport {
   /** "This moment": the receiver keeps what it knows now, under the id the item is later sent to. */
   mark(client: string): Promise<{ id: string }>;
   /** A PNG for a mark: the whole screenshot, or selection `n`'s own area of it. */
   picture(mark: string, png: Blob, n?: number): Promise<void>;
+  /** A `live` send leaves the mark open: the next to it adds its comments to the same item. */
   send(mark: string, item: FeedbackSend): Promise<{ id: string; handed: FeedbackHanded }>;
   /** A sent item's thread; `seen`: the person is reading it now. */
   thread(id: string, seen?: boolean): Promise<FeedbackThread>;
@@ -56,9 +57,10 @@ export interface FeedbackTransport {
  *             Nothing comes back, and the tool asks the receiver for nothing but to take it.
  *   batched   a collaborator's: Send delivers the whole item at once, to the listening session or to the folder, and
  *             it is then a thread the agent answers and the person writes back on.
- * (To come: live, where each comment goes as it is made, for working on one thing together.)
+ *   live      a collaborator's, on something worked on together: each comment goes as it is Done, to one item that
+ *             grows, and is a thread from then on. Where the host says batched the person may still choose it.
  */
-export type FeedbackDelivery = "one-way" | "batched";
+export type FeedbackDelivery = "one-way" | "batched" | "live";
 
 export interface FeedbackHost {
   /** Unset: batched. */

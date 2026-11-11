@@ -12,6 +12,9 @@ import { randomBytes } from "node:crypto";
  * person writes back (here) are lines of <id>/thread.jsonl, each about one comment (`n`) or the item as a whole. That
  * is the same whether a session was listening when the item was sent or one takes it days later.
  *
+ * A live item (Send with `live`) is written at its first comment and grows: each later Send to the same mark adds its
+ * comments and their pictures, and the mark is kept for the next.
+ *
  * It runs with no hub: Node's own modules only, and everything of its host through the options. Conduit's hub wraps it
  * (feedback.js: what the hub knew at the mark, its routes); `conduit-feedback serve` runs it alone for any project.
  *
@@ -95,6 +98,21 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
     const exact = Boolean(shot && viewport.width && Math.abs(shot.width / shot.height - viewport.width / viewport.height) < 0.01);
     const scale = exact ? shot.width / viewport.width : null;
     const sentAt = new Date().toISOString();
+    const final = path.join(folder, id);
+    const put = async (dir, value) => { await fs.writeFile(path.join(dir, ".item.json"), `${JSON.stringify(value, null, 2)}\n`); await fs.rename(path.join(dir, ".item.json"), path.join(dir, "item.json")); };
+    if (kept.live) {
+      // More of a live item: its new comments and their pictures, the item rewritten whole so a reader never sees half of it.
+      const grown = await read(path.join(final, "item.json"));
+      if (!grown) throw gone();
+      const added = body.comments.slice(0, 50).map((entry) => comment(entry, scale, shot ? kept.areas : new Map()));
+      if (shot) { await fs.writeFile(path.join(final, "screenshot.png"), kept.screenshot); for (const entry of added) if (kept.areas.has(entry.n)) await fs.writeFile(path.join(final, `selection-${entry.n}.png`), kept.areas.get(entry.n)); }
+      grown.comments.push(...added);
+      if (shot && !grown.screenshot.file) grown.screenshot = { file: "screenshot.png", width: shot.width, height: shot.height, surface: shot.surface ?? "unknown", of: shot.of === "screenshot" ? "screenshot" : "page", outlined: true, pageOnly: exact, ...(scale ? { scale } : {}) };
+      await put(final, grown);
+      kept.areas.clear();
+      log({ type: "feedback", id, comments: grown.comments.length, added: added.length, screenshot: Boolean(shot), to: grown.handed?.to?.name ?? null });
+      return { id, path: path.join(final, "item.json"), handed: grown.handed };
+    }
     // Every item lands in the folder; one handed to a session that is listening is also that session's next item.
     const to = body.to ? (await waiting()).find((waiter) => waiter.name === String(body.to)) ?? null : null;
     const handed = { to: to && { name: to.name } };
@@ -108,10 +126,12 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
         "A comment with `drawings` is what the person drew on the page for it, any number together (a pen line, an arrow whose head is its last point, a box, `text` written at its one point), `points` in the same pixels as `rect`; what it describes is then the pieces under them, and an arrow's head or a box says where among them. They are in the pictures as drawn. On a `screenshot` comment the pieces are what the live page had there, which may not be what the screenshot shows.",
         "A group's `members` are each described the same way. `rect` is in CSS pixels of the client's viewport; `screenshotRect` is the same box in screenshot.png, present only when the picture is the page alone.",
         "screenshot.png shows what `screenshot.of` says (the `screenshot` the person drew on, or the live `page` at Send) with the selections made on it outlined and numbered as `n`. A comment's `picture.file` is that selection alone, cut from the one it was made on: `picture.area` is the part of the page it shows, the area the person dragged round when `dragged`, else its marks with a margin. Look at it first.",
+        ...(body.live ? ["This item is live: the person adds comments while you work, and `wait` hands you each as it comes. `screenshot.png` is the latest taken; a comment's own picture is as it was when the comment was made."] : []),
         ...about,
         ...(answered ? [`To answer the person: \`${done(id).replace(/ done .*/, "")} reply ${id} [n] "<words>"\`, n being the comment answered (none: the item as a whole). They read it in the tool beside that comment and may write back; \`wait\` hands you what they say.`] : ["This is one-way feedback: the person is not shown an answer."]),
         `When the item is dealt with: ${done(id)}`,
       ],
+      ...(body.live ? { live: true } : {}),
       markedAt: kept.markedAt,
       sentAt,
       handed,
@@ -122,13 +142,12 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
       ...kept.snapshot,
     };
     const staging = path.join(folder, `.${id}.partial`);
-    const final = path.join(folder, id);
     await fs.mkdir(staging, { recursive: true, mode: 0o700 });
     if (shot) await fs.writeFile(path.join(staging, "screenshot.png"), kept.screenshot);
     if (shot) for (const [n, bytes] of kept.areas) await fs.writeFile(path.join(staging, `selection-${n}.png`), bytes);
     await fs.writeFile(path.join(staging, "item.json"), `${JSON.stringify(item, null, 2)}\n`);
     await fs.rename(staging, final);
-    marks.delete(id);
+    if (body.live) { kept.live = true; kept.areas.clear(); } else marks.delete(id);
     log({ type: "feedback", id, comments: item.comments.length, screenshot: Boolean(shot), to: to?.name ?? null });
     return { id, path: path.join(final, "item.json"), handed };
   }
