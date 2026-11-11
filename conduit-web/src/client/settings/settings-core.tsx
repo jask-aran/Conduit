@@ -37,7 +37,7 @@ import { saveTranscriptScale, TRANSCRIPT_SCALE_OPTIONS, transcriptScale, type Tr
 import { MOTION_SCALE_OPTIONS, motionScale, saveMotionScale, type MotionScale } from "../preferences/motion-scale";
 import { saveTerminalFont, TERMINAL_FONT_OPTIONS, terminalFont, type TerminalFont } from "../preferences/terminal-font";
 import { saveStreamFade, saveStreamMathFade, STREAM_FADE_OPTIONS, streamFadeMs, streamMathFade } from "../preferences/stream-fade";
-import type { PiAuthAttempt, PiAuthAttemptPayload, PiAuthProvider, PiAuthProvidersPayload, Project, Template, VoiceExecutionCatalogueView, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
+import type { PiAuthAttempt, PiAuthAttemptPayload, PiAuthProvider, PiAuthProvidersPayload, Project, Template, VoiceExecutionProfile, VoiceLocalSelection, VoiceServerSettings } from "../api/contracts";
 import type { ModelSettings } from "../state/model-settings";
 import { MAX_SIDEBAR_CHAT_LIMIT, MIN_SIDEBAR_CHAT_LIMIT } from "../navigation/sidebar-preferences";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
@@ -168,8 +168,6 @@ const voiceSelectionFromProfile = (profile: VoiceExecutionProfile): VoiceLocalSe
   execution: profile.execution,
   segmentation: profile.segmentation,
 });
-const voiceArtifactsForModel = (catalogue: VoiceExecutionCatalogueView, modelId: string) => catalogue.artifacts.filter((artifact) => artifact.modelId === modelId);
-const voiceProfilesForArtifact = (catalogue: VoiceExecutionCatalogueView, artifactId: string) => catalogue.profiles.filter((profile) => profile.artifactId === artifactId);
 const selectionMatchesProfile = (selection: VoiceLocalSelection, profile: VoiceExecutionProfile) => selection.modelId === profile.modelId
   && selection.artifactId === profile.artifactId
   && selection.execution === profile.execution
@@ -1099,11 +1097,6 @@ export function Settings(props: {
         || catalogue.profiles.find((candidate) => candidate.modelId === settings.localModelId);
     return profile ? voiceSelectionFromProfile(profile) : settings.localSelection || null;
   });
-  const selectedVoiceCatalogueModel = createMemo(() => {
-    const catalogue = voiceCatalogue();
-    const selection = selectedVoiceSelection();
-    return catalogue && selection ? catalogue.models.find((model) => model.id === selection.modelId) || null : null;
-  });
   const selectedVoiceArtifact = createMemo(() => {
     const catalogue = voiceCatalogue();
     const selection = selectedVoiceSelection();
@@ -1111,15 +1104,6 @@ export function Settings(props: {
   });
   const selectedVoiceInstallModelId = createMemo(() => selectedVoiceArtifact()?.legacyModelId || voiceServerSettings()?.localModelId || "");
   const selectedLocalVoiceModel = createMemo(() => voiceServerSettings()?.local?.models.find((model) => model.id === selectedVoiceInstallModelId()));
-  const selectedVoiceArtifactStatus = createMemo(() => {
-    const artifact = selectedVoiceArtifact();
-    return artifact ? voiceServerSettings()?.local?.artifactStatuses?.find((candidate) => candidate.artifactId === artifact.id) || null : null;
-  });
-  const selectedVoiceProfiles = createMemo(() => {
-    const catalogue = voiceCatalogue();
-    const artifact = selectedVoiceArtifact();
-    return catalogue && artifact ? voiceProfilesForArtifact(catalogue, artifact.id) : [];
-  });
   const selectedVoiceAdapter = createMemo(() => {
     const settings = voiceServerSettings();
     return settings?.adapters.find((adapter) => adapter.id === settings.adapter) || null;
@@ -1140,33 +1124,11 @@ export function Settings(props: {
     }));
     setVoiceLicenseAccepted(false);
   };
-  const profileForArtifact = (catalogue: VoiceExecutionCatalogueView, artifactId: string, current: VoiceLocalSelection | null) => {
-    const artifact = catalogue.artifacts.find((candidate) => candidate.id === artifactId);
-    if (!artifact) return null;
-    const profiles = voiceProfilesForArtifact(catalogue, artifact.id);
-    return profiles.find((candidate) => candidate.execution === current?.execution && candidate.segmentation === current?.segmentation)
-      || profiles.find((candidate) => candidate.execution === current?.execution)
-      || profiles.find((candidate) => candidate.execution === "stop")
-      || profiles[0]
-      || null;
-  };
-  const selectLocalFamily = (modelId: string) => {
+  // A managed model is one artifact with one stop profile; the hub saves the selection in the catalogue's terms.
+  const selectLocalModel = (id: string) => {
     const catalogue = voiceCatalogue();
-    const current = selectedVoiceSelection();
-    if (!catalogue) return;
-    const artifact = voiceArtifactsForModel(catalogue, modelId).find((candidate) => candidate.id === current?.artifactId)
-      || voiceArtifactsForModel(catalogue, modelId)[0];
-    const profile = artifact && profileForArtifact(catalogue, artifact.id, current);
-    if (profile) selectLocalProfile(profile);
-  };
-  const selectLocalVariant = (artifactId: string) => {
-    const catalogue = voiceCatalogue();
-    const current = selectedVoiceSelection();
-    const profile = catalogue && profileForArtifact(catalogue, artifactId, current);
-    if (profile) selectLocalProfile(profile);
-  };
-  const selectLocalTiming = (profileId: string) => {
-    const profile = selectedVoiceProfiles().find((candidate) => candidate.id === profileId);
+    const artifact = catalogue?.artifacts.find((candidate) => candidate.legacyModelId === id);
+    const profile = artifact && catalogue!.profiles.find((candidate) => candidate.artifactId === artifact.id);
     if (profile) selectLocalProfile(profile);
   };
   const persistVoiceServer = async (settings: VoiceServerSettings, secret = "") => {
@@ -1682,22 +1644,15 @@ export function Settings(props: {
                       { value: "remote", label: "Cloud", icon: <CloudIcon /> },
                     ]} />
                   </SettingLine>
-                  <Show when={voiceServerSettings()!.mode === "local" && voiceCatalogue()}>{(catalogue) => <VoiceLocalCatalogue
-                    catalogue={catalogue()}
-                    selection={selectedVoiceSelection()}
-                    selectedModel={selectedVoiceCatalogueModel()}
-                    selectedArtifact={selectedVoiceArtifact()}
-                    artifactStatus={selectedVoiceArtifactStatus()}
-                    artifactStatuses={voiceServerSettings()!.local?.artifactStatuses || []}
-                    selectedLocalModel={selectedLocalVoiceModel() || null}
-                    profiles={selectedVoiceProfiles()}
+                  <Show when={voiceServerSettings()!.mode === "local" && voiceServerSettings()!.local}>{(local) => <VoiceLocalCatalogue
+                    models={local().models}
+                    model={selectedLocalVoiceModel() || null}
+                    engine={local().engine || null}
                     busy={voiceBusy()}
-                    installingModelId={voiceServerSettings()!.local?.installingModelId || null}
-                    installProgress={voiceServerSettings()!.local?.progress || null}
+                    installingModelId={local().installingModelId}
+                    installProgress={local().progress}
                     licenseAccepted={voiceLicenseAccepted()}
-                    onFamilyChange={selectLocalFamily}
-                    onVariantChange={selectLocalVariant}
-                    onTimingChange={selectLocalTiming}
+                    onModelChange={selectLocalModel}
                     onLicenseChange={setVoiceLicenseAccepted}
                     onInstall={() => void installVoiceModel(selectedVoiceInstallModelId())}
                     onCancelInstall={() => void cancelVoiceInstall()}

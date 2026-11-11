@@ -701,6 +701,7 @@ export interface VoiceServerSettings {
   local: {
     catalogue?: VoiceExecutionCatalogueView;
     artifactStatuses?: VoiceArtifactStatus[];
+    engine?: { label: string; version: string; installed: boolean };
     installingModelId: string | null;
     activeModelId: string | null;
     progress: { phase: string; current: string; completedBytes: number; totalBytes: number } | null;

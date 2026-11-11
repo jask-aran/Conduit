@@ -48,10 +48,10 @@ test("first-class cloud providers pin endpoints, models, and credential scope", 
     await assert.rejects(fixture.store.update({
       mode: "remote", provider: "deepgram", model: "nova-3", auth: { type: "bearer" },
     }), { code: "voice_secret_invalid" });
-    await fixture.store.selectLocalModel("parakeet-unified-en-q8");
+    await fixture.store.selectLocalModel("parakeet-tdt-v2-q8");
     const local = await fixture.store.effective();
     assert.equal(local.mode, "local");
-    assert.equal(local.localModelId, "parakeet-unified-en-q8");
+    assert.equal(local.localModelId, "parakeet-tdt-v2-q8");
   } finally { await fs.rm(fixture.root, { recursive: true, force: true }); }
 });
 
@@ -62,12 +62,12 @@ test("local and off modes round-trip without deleting the saved cloud provider",
       mode: "remote", provider: "openai", model: "gpt-transcribe",
       auth: { type: "bearer", headerName: "Authorization", secret: "openai-secret" },
     });
-    await fixture.store.update({ mode: "local", localModelId: "parakeet-unified-en-q8" });
+    await fixture.store.update({ mode: "local", localModelId: "parakeet-tdt-v2-q8" });
     let view = await fixture.store.publicView();
     assert.equal(view.mode, "local");
-    assert.equal(view.localModelId, "parakeet-unified-en-q8");
+    assert.equal(view.localModelId, "parakeet-tdt-v2-q8");
     assert.equal(view.auth.configured, true);
-    await fixture.store.update({ mode: "off", localModelId: "parakeet-unified-en-q8" });
+    await fixture.store.update({ mode: "off", localModelId: "parakeet-tdt-v2-q8" });
     view = await fixture.store.publicView();
     assert.equal(view.mode, "off");
     assert.equal(view.auth.configured, true);

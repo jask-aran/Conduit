@@ -1,6 +1,7 @@
+import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import backend from "./voice-backends/hex.js";
+import backend, { HEX_VERSION, hexHome } from "./voice-backends/hex.js";
 import { LOCAL_VOICE_MODELS, VOICE_EXECUTION_CATALOG, publicVoiceExecutionCatalog } from "./voice-execution-catalog.js";
 
 const MIB = 1024 * 1024;
@@ -24,6 +25,8 @@ export class VoiceModelManager {
   constructor({ root, catalog = VOICE_EXECUTION_CATALOG, runtimeLoader = null, idleTtlMs = DEFAULT_VOICE_MODEL_IDLE_TTL_MS } = {}) {
     if (!root) throw new Error("VoiceModelManager requires a root directory");
     this.root = path.resolve(root);
+    // Hex's program and data folder sit beside the models folder.
+    this.home = path.dirname(this.root);
     this.catalog = catalog;
     this.runtimeLoader = runtimeLoader;
     this.idleTtlMs = Number.isFinite(Number(idleTtlMs)) ? Math.max(0, Number(idleTtlMs)) : DEFAULT_VOICE_MODEL_IDLE_TTL_MS;
@@ -114,6 +117,7 @@ export class VoiceModelManager {
     return {
       catalogue: publicVoiceExecutionCatalog(this.catalog),
       artifactStatuses,
+      engine: { label: backend.label, version: HEX_VERSION, installed: existsSync(hexHome(this.home).binary) },
       installingModelId: this.installingModelId,
       progress: this.installPromise ? { ...this.progress } : null,
       activeModelId: this.activeModelId,
@@ -154,8 +158,7 @@ export class VoiceModelManager {
     const stats = await fs.statfs(this.root);
     if (Number(stats.bavail) * Number(stats.bsize) < model.minimumFreeBytes) throw modelError("voice_model_disk_space", `At least ${Math.ceil(model.minimumFreeBytes / MIB)} MiB of free space is required for ${model.label}`, 409);
     // Hex fetches and verifies the model into its own data folder; the manifest here only records that it did.
-    await backend.prepare(model, { onProgress: (phase) => { this.progress.phase = phase; } });
-    if (signal.aborted) throw new DOMException("Installation cancelled", "AbortError");
+    await backend.install(model, this.home, { signal, onProgress: (progress) => { this.progress = { ...this.progress, current: model.label, ...progress }; } });
     const staging = this.stagingRoot(model.id);
     await fs.mkdir(staging, { recursive: true, mode: 0o700 });
     const finalManifest = { schemaVersion: 3, modelId: model.id, engine: model.engine, installedAt: new Date().toISOString() };
@@ -215,7 +218,7 @@ export class VoiceModelManager {
   async startRuntime(model) {
     if (!await this.installedManifest(model.id)) throw modelError("voice_model_not_installed", `Install ${model.label} from Voice settings first`, 409);
     await this.stopActive();
-    const runtime = this.runtimeLoader ? await this.runtimeLoader(model) : await backend.createSession(model);
+    const runtime = this.runtimeLoader ? await this.runtimeLoader(model) : await backend.createSession(model, this.home);
     this.transcriber = runtime;
     this.activeModelId = model.id;
     return this.runtimeDescriptor(runtime, model);
@@ -285,6 +288,7 @@ export class VoiceModelManager {
       await this.stopActive();
     }
     const removed = Boolean(await this.installedManifest(model.id));
+    await backend.uninstall(model, this.home);
     await fs.rm(this.modelRoot(model.id), { recursive: true, force: true });
     await fs.rm(this.stagingRoot(model.id), { recursive: true, force: true });
     this.lastErrors.delete(model.id);
