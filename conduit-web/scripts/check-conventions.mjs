@@ -166,8 +166,9 @@ try {
 
 // 10. Size limits on tests and documents. Both were added faster than they were kept true, so one that is needed
 //     replaces more than it adds. Fixed ceilings: LIMITS below. Figures that only fall: budgets.json (the tests' total
-//     lines, and the repo's Markdown lines and files outside templates/).
-const LIMITS = { tests: 300, testFiles: 100, testFileLines: 300 };
+//     lines, and the repo's Markdown lines and files outside templates/). sourceLines is every .ts, .tsx, .js and .css
+//     line under src/.
+const LIMITS = { tests: 300, testFiles: 100, testFileLines: 300, sourceLines: 115_000 };
 const budgetFile = path.join(root, "budgets.json");
 const testFiles = walk(path.join(root, "test")).filter((f) => /\.m?[jt]sx?$/.test(f));
 const lineCount = (file) => { const text = fs.readFileSync(file, "utf8"); return text.split("\n").length - (text.endsWith("\n") ? 1 : 0); };
@@ -178,6 +179,8 @@ for (const file of testFiles) {
   const lines = lineCount(file);
   if (lines > LIMITS.testFileLines) report(file, "", 0, "test file length", `${lines} lines, limit ${LIMITS.testFileLines}; cut tests that do not assert durable behaviour`);
 }
+const sourceLines = files.filter((f) => /\.(tsx?|js|css)$/.test(f)).reduce((n, f) => n + lineCount(f), 0);
+if (sourceLines > LIMITS.sourceLines) problems.push(`src/  source lines: ${sourceLines} lines, limit ${LIMITS.sourceLines}; remove code before adding more`);
 const counts = { testLines: testFiles.reduce((n, f) => n + lineCount(f), 0) };
 try {
   const repo = path.resolve(root, "..");
