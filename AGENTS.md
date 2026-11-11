@@ -43,6 +43,6 @@ Write concise code: say each thing once, and leave out speculative options, wrap
 the code.
 
 ## Build outputs
-A requested Windows or Android build may replace its own output without asking: `C:\Users\<user>\conduit-desktop-target\`,
-`C:\Users\<user>\conduit-desktop-target-dev\`, `conduit-web/android/app/build/outputs/` and `~/conduit-dev.apk`.
+A requested Windows or Android build may replace its own output without asking: `%LOCALAPPDATA%\conduit-build\desktop-target\`,
+`%LOCALAPPDATA%\conduit-build\desktop-target-dev\`, `conduit-web/android/app/build/outputs/` and `~/conduit-dev.apk`.
 Every other rule about writing outside the project still applies.

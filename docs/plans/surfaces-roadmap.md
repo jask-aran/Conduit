@@ -29,10 +29,6 @@ notes behind them are in git history. Tick an item by deleting it.
 
 ### Later or lower priority
 
-- [ ] 19. Memory view with scope and provenance. Prototype 2026-11-02 on jbot's page, a Remembered group over its
-  Memory files: each list line of SOUL (only what it added), USER, MEMORY and 14 days of diary, newest learned first;
-  where it is kept and how long ago, with what reads it and who wrote it from which chat on hover; its chat opens
-  from the row; forget asks twice and removes that exact line (`GET /v0/agent/memory`, `POST .../memory/forget`).
 - [ ] Render tools (generative UI): a model calls `render_table`, `render_chart` or `render_choice` with structured data
   and Conduit draws it as a native transcript block from library components; a Conduit-owned tool, over MCP for Codex
   and Claude Code. No model-written HTML. From the deleted component-system plan, never built.
