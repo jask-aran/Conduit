@@ -2,7 +2,7 @@ import { FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote
 import { row, token, type Page } from "../model";
 import { noop } from "../demos";
 
-const bar = (more: Partial<Parameters<typeof FeedbackBar>[0]> = {}) => <FeedbackBar view="page" screenshots onView={noop} tool="select" onTool={noop} onNote={noop} ink="plain" onInk={noop} onUndo={noop} status="Press or drag" keys={["Alt", "Shift", "F"]} onRetake={noop} onHand={noop} canSend onSend={noop} onClose={noop} {...more} />;
+const bar = (more: Partial<Parameters<typeof FeedbackBar>[0]> = {}) => <FeedbackBar view="page" screenshots onView={noop} tool="select" onTool={noop} onNote={noop} ink="plain" onInk={noop} weight="medium" onWeight={noop} onUndo={noop} status="Press or drag" keys={["Alt", "Shift", "F"]} onRetake={noop} onHand={noop} canSend onSend={noop} onClose={noop} {...more} />;
 const note = (more: Partial<Parameters<typeof FeedbackNote>[0]> = {}) => <FeedbackNote open={false} tag="1" name="IconButton" source="conduit-web/src/components/ui/actions.tsx:21"
   value="Match the other rail icons' stroke." onOpen={noop} onInput={noop} onRemove={noop} {...more} />;
 const notes = () => <FeedbackNotes>{note()}{note({ tag: "2", name: "2 pieces: Row ×2", source: undefined, value: "" })}{note({ tag: "3", name: "General note", source: "About nothing on the page in particular.", value: "The page feels crowded.", open: true })}</FeedbackNotes>;
@@ -40,9 +40,9 @@ export const feedbackPage: Page = {
     { selector: ".ui-feedback-mark[data-kind='chosen']", name: "Chosen mark", does: "outlines a selection, numbered; heavier while its note is open", from: "FeedbackMark kind chosen" },
     { selector: ".ui-feedback-mark[data-kind='member']", name: "Member", does: "one piece of a group, dashed inside the group's mark", from: "FeedbackMark kind member" },
     { selector: ".ui-feedback-mark[data-kind='cursor']", name: "Cursor mark", does: "what a press would choose, named for its piece", from: "FeedbackMark kind cursor" },
-    { selector: ".ui-feedback-drawing", name: "Drawing", does: "what the person drew for one comment, any number together: a pen line, an arrow, a box, words; numbered by a drawn mark", from: "FeedbackDrawing, FeedbackText, FeedbackMark kind drawn" },
+    { selector: ".ui-feedback-drawing", name: "Drawing", does: "what the person drew for one comment, any number together: a pen line, a highlight, an arrow, a box, words; numbered by a drawn mark", from: "FeedbackDrawing, FeedbackText, FeedbackMark kind drawn" },
     { selector: ".ui-feedback-note", name: "Note", does: "one comment: beside what it is about while it is written, then in the stack with its words on a line and its picture", from: "FeedbackNotes > FeedbackNote > Card, CardPreview, TextArea" },
-    { selector: ".ui-feedback-bar", name: "Bar", does: "the mode (use the app, annotate the live page, annotate a screenshot), the annotating tools, the ink and Undo, the listening session, Send", from: "FeedbackBar > Segmented, IconButton, Button" },
+    { selector: ".ui-feedback-bar", name: "Bar", does: "the mode (use the app, annotate the live page, annotate a screenshot), the annotating tools, the ink and line picker and Undo, the listening session, Send", from: "FeedbackBar > Segmented, Popover, IconButton, Button" },
   ] },
   examples: [
     row("marks", "cursor, chosen, a group with its members, a drag's marquee", scene(() => <>
@@ -61,6 +61,16 @@ export const feedbackPage: Page = {
       <FeedbackDrawing kind="box" points={[[300, 50], [420, 130]]} ink="red" current />
       <FeedbackMark kind="drawn" tag="3" box={{ left: 300, top: 50, width: 120, height: 80 }} />
     </>), { surfaces: ["ground"] }),
+    row("highlight and line weights", "a highlighter stroke, and the pen thin, medium and thick", scene(() => <>
+      <FeedbackDrawing kind="highlight" points={[[30, 60], [80, 58], [140, 62], [200, 60]]} ink="amber" />
+      <FeedbackDrawing kind="pen" weight="thin" points={[[30, 110], [200, 110]]} />
+      <FeedbackDrawing kind="pen" points={[[30, 140], [200, 140]]} />
+      <FeedbackDrawing kind="pen" weight="thick" points={[[30, 170], [200, 170]]} ink="red" />
+    </>), { surfaces: ["ground"] }),
+    row("selected text", "a run of text over two lines, each line marked, numbered on its first", scene(() => <>
+      <FeedbackMark kind="quote" tag="1" current box={{ left: 120, top: 60, width: 220, height: 18 }} />
+      <FeedbackMark kind="quote" box={{ left: 30, top: 80, width: 160, height: 18 }} />
+    </>), { surfaces: ["ground"] }),
     row("notes", "the stack: shut notes show their words on a line, the open one is written in; a general note is about no piece", scene(() => <>{notes()}</>), { surfaces: ["ground"] }),
     row("bar", "selecting with nothing to send yet and no session listening", scene(() => <>{bar({ canSend: false })}</>), { surfaces: ["ground"] }),
     row("bar, on a screenshot", "no Select: a screenshot is drawn and written on; the camera takes it again", scene(() => <>{bar({ view: "screenshot", tool: "pen", status: "Drag to draw", canSend: false })}</>), { surfaces: ["ground"] }),
@@ -76,11 +86,12 @@ export const feedbackPage: Page = {
   tokens: [{ title: "Its lines and layer", tokens: [
     token("--ring", "A mark's line"),
     token("--primary", "A chosen mark's line, its number's fill, a drawing's line"),
-    token("--stroke", "A drawing's line width; its arrow head is six of them"),
+    token("--stroke", "A drawing's medium line width (thin is --stroke-thin, thick two of it); its arrow head is six of them, a highlighter eight"),
+    token("--opacity-faint", "How see-through a highlighter's line is"),
     token("--glyph-shadow", "The shadow that keeps a drawing readable on any ground"),
     token("--accent", "The wash inside a chosen mark"),
     token("--layer-feedback", "Over everything, notifications included"),
     token("--measure-md", "Note width"),
   ] }],
-  api: ["FeedbackLayer", "FeedbackMark", "FeedbackDrawing", "FeedbackText", "FeedbackNotes", "FeedbackNote", "FeedbackBar", "Card", "CardPreview", "TextArea", "Segmented", "IconButton", "Button"],
+  api: ["FeedbackLayer", "FeedbackMark", "FeedbackDrawing", "FeedbackText", "FeedbackNotes", "FeedbackNote", "FeedbackBar", "Card", "CardPreview", "TextArea", "Segmented", "Popover", "IconButton", "Button"],
 };

@@ -70,7 +70,8 @@ export async function cropAreas(capture: Capture, areas: (Area | null)[]): Promi
 }
 
 type Point = readonly [x: number, y: number];
-export type Drawn = { kind: "pen" | "arrow" | "box" | "text"; points: readonly Point[]; text?: string; colour?: string };
+/** `width` and `opacity`: its line as the layer draws it, where that is not the layer's own. */
+export type Drawn = { kind: "pen" | "highlight" | "arrow" | "box" | "text"; points: readonly Point[]; text?: string; colour?: string; width?: number; opacity?: number };
 /** An arrow's head is this many line widths long, as the layer draws it. */
 const HEAD = 6;
 
@@ -88,16 +89,19 @@ export async function previewOf(capture: Capture, area: Area, marks: { outline?:
   if (marks.outline) context.strokeRect(marks.outline.left, marks.outline.top, marks.outline.width, marks.outline.height);
   for (const drawing of marks.drawings) {
     context.strokeStyle = context.fillStyle = drawing.colour ?? look.stroke;
+    context.lineWidth = drawing.width ?? look.width;
+    context.globalAlpha = drawing.opacity ?? 1;
+    context.lineCap = drawing.kind === "highlight" ? "butt" : "round";
     const from = drawing.points[0]!, to = drawing.points[drawing.points.length - 1]!;
     if (drawing.kind === "text") context.fillText(drawing.text ?? "", from[0], from[1]);
     else if (drawing.kind === "box") context.strokeRect(Math.min(from[0], to[0]), Math.min(from[1], to[1]), Math.abs(to[0] - from[0]), Math.abs(to[1] - from[1]));
     else {
       context.beginPath();
       context.moveTo(from[0], from[1]);
-      for (const point of drawing.kind === "pen" ? drawing.points.slice(1) : [to]) context.lineTo(point[0], point[1]);
+      for (const point of drawing.kind === "arrow" ? [to] : drawing.points.slice(1)) context.lineTo(point[0], point[1]);
       context.stroke();
       if (drawing.kind === "arrow") {
-        const angle = Math.atan2(to[1] - from[1], to[0] - from[0]), length = HEAD * look.width;
+        const angle = Math.atan2(to[1] - from[1], to[0] - from[0]), length = HEAD * context.lineWidth;
         context.beginPath();
         context.moveTo(to[0], to[1]);
         for (const turn of [-0.46, 0.46]) context.lineTo(to[0] - length * Math.cos(angle + turn), to[1] - length * Math.sin(angle + turn));

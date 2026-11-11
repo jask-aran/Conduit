@@ -64,7 +64,7 @@ export interface FeedbackTransport {
 export type FeedbackDelivery = "one-way" | "batched" | "live";
 
 /** A tool of the rail. */
-export type FeedbackToolName = "select" | "pen" | "arrow" | "box" | "text" | "erase" | "note";
+export type FeedbackToolName = "select" | "quote" | "pen" | "highlight" | "arrow" | "box" | "text" | "erase" | "note";
 
 /**
  * What the tool is in one place it is put: a host declares only what belongs there, and nothing else is offered, by
@@ -79,11 +79,11 @@ export type FeedbackCapabilities = {
   screenshot: boolean;
   /** Showing the sessions that are listening and handing an item to one. Live needs it, and one listening: a comment that goes as it is Done goes to someone. */
   listeners: boolean;
-  /** Choosing what a drawing is drawn in. */
+  /** Choosing what a drawing is drawn in, and how thick. */
   inks: boolean;
 };
 /** What a host that declares nothing gets: a collaborator's batched markup with every tool. */
-export const FEEDBACK_CAPABILITIES: FeedbackCapabilities = { deliveries: ["batched"], tools: ["select", "pen", "arrow", "box", "text", "erase", "note"], screenshot: true, listeners: true, inks: true };
+export const FEEDBACK_CAPABILITIES: FeedbackCapabilities = { deliveries: ["batched"], tools: ["select", "quote", "pen", "highlight", "arrow", "box", "text", "erase", "note"], screenshot: true, listeners: true, inks: true };
 
 export interface FeedbackHost {
   /** What differs from FEEDBACK_CAPABILITIES here. */

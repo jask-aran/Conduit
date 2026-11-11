@@ -106,6 +106,8 @@ import {
   StickyNoteIcon,
   TypeIcon,
   EraserIcon,
+  HighlighterIcon,
+  TextCursorIcon,
 } from "lucide-solid";
 
 export const Runtime = ActivityIcon;
@@ -176,6 +178,8 @@ export const DrawArrow = MoveUpRightIcon;
 export const DrawBox = SquareIcon;
 export const DrawText = TypeIcon;
 export const Erase = EraserIcon;
+export const Highlight = HighlighterIcon;
+export const SelectText = TextCursorIcon;
 export const Note = StickyNoteIcon;
 export const More = EllipsisIcon;
 export const MoveToFolder = FolderInputIcon;
