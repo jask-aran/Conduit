@@ -306,9 +306,9 @@ test wrong fails here. A transcript bug gets a failing test here first.
 - `test/codex-transcript-pipeline.test.js` -- Codex, faked at its JSON-RPC
   wire.
 - `test/opencode-transcript-pipeline.test.js` -- OpenCode, faked at its HTTP
-  routes and event stream as 2.0.14 sends them; also what a reload reads.
+  routes and event stream; also what a reload reads.
 - `test/claude-code-transcript-pipeline.test.js` -- Claude Code, faked at the
-  Agent SDK as 2.1.282 sends it: approvals, `AskUserQuestion`, a stop,
+  Agent SDK: approvals, `AskUserQuestion`, a stop,
   resuming; also what a reload reads.
 - `test/codex-end-to-end.test.js` -- a real Conduit process, chat and socket
   against the fake app-server in `test/helpers/conduit-harness.js`; slower and
@@ -389,10 +389,9 @@ adb reverse tcp:4310 tcp:4310   # then "Use the server on this computer" and the
 
 - `sg` is shadowed by ast-grep, hence the path. `hw.keyboard = no` in
   `config.ini` forces the soft keyboard.
-- `conduit-kbd36` matches the phone (Android 16, 1440x3120 at 600dpi, CSS
-  384x832 at DPR 3.75) except its WebView: 133 against the phone's 153, and
-  Chromium differs between them (`interactive-widget=overlays-content` is
-  honoured only on 133). Check before concluding anything about browser
+- `conduit-kbd36` matches the phone's screen but not its WebView version, and
+  Chromium behaviour differs between versions (`interactive-widget=overlays-content`
+  is one case). Check both versions before concluding anything about browser
   behaviour.
 - Sign the shell in with the password. A minted session can't: `mint-session`
   issues `script` sessions and `validateNativeSession`

@@ -192,8 +192,8 @@ For implementation, see [server selection](../conduit-web/src/client/platform/se
 A `v*` tag runs the [release workflow](../.github/workflows/release.yml) for the
 server, Windows and Android clients. Supply `docs/releases/<tag>.md`.
 Use CI artifacts from a tag as release candidates; local development builds
-are not release candidates. Follow [contribution rules](../CONTRIBUTING.md)
-and [release verification](TESTING.md).
+are not release candidates. Run `npm test` in `conduit-web/` before tagging,
+and follow [release verification](TESTING.md).
 
 **Pushing `main` changes the live installer before any release tag:** the install
 URL serves `scripts/install.sh` from `main`. Test installer changes locally with

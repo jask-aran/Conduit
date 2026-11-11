@@ -1,5 +1,7 @@
 {
   "testLines": 8928,
-  "markdownLines": 1427,
-  "markdownFiles": 10
+  "markdownLines": 1344,
+  "markdownFiles": 10,
+  "tests": 255,
+  "testFiles": 89
 }

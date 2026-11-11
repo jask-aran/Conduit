@@ -167,7 +167,6 @@ One model for every surface -- enter, move, act, leave -- so no surface grows ke
 - **Every key is a command in the registry**, declared with the context it works in, so it shows in the leader and Settings › Shortcuts and can be rebound; only text editing (typing, Backspace, the caret) is not. New global chords go in the settings shortcut manager.
 - **A modal is exclusive**: app chords do not fire under Settings or a dialog; the modal's own chord closes it.
 - **The leader** acts within the current region, innermost first, and lists only keys that would do something. A leader key means one thing at every level, or the menu says which runs. Numbers inside a region mean positions, never other regions.
-- **Held focus.** A region reached by a go-to chord shows a thin `--region-focus` line along its bottom edge, the rest dimming briefly; it stays while focus is in it or nowhere, and goes when focus reaches another region another way. A click or Tab never lights one. Not on a phone.
 
 # Transcript
 

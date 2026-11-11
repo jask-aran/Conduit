@@ -1,7 +1,9 @@
 # Conduit
 
 ## Before you start
-- Committing → read `CONTRIBUTING.md`.
+- Committing → other agents may share this checkout. Leave changes that are not yours alone (never reset, revert or
+  stash them) and commit only your own files.
+- Cutting a release → read "Release" in `docs/DEPLOYMENT.md`.
 - Building or changing any UI → read `DESIGN.md`.
 - Touching the HTTP API, auth, process residency or the live-session WebSocket protocol → read "Changing the code"
   in `README.md`; `conduit-web/src/server/routes/` and `conduit-web/src/chat-backend-contract.d.ts` are the reference.

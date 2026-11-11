@@ -84,7 +84,7 @@ Open <http://127.0.0.1:4310>. Connect a model provider in **Settings › Service
 | `scripts/` | Authentication, deployment and release tools |
 | `docs/` | Operations and testing guides, brand and images |
 
-Start with [install, clients and operations](docs/DEPLOYMENT.md), [testing](docs/TESTING.md) and [contributing](CONTRIBUTING.md).
+Start with [install, clients and operations](docs/DEPLOYMENT.md) and [testing](docs/TESTING.md).
 
 ## Changing the code
 
