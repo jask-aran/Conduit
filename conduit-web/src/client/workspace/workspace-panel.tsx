@@ -31,18 +31,6 @@ import type { DirectoryListing, FileSlotId, PanelTab, SplitView, WorkspaceSettin
 import { readToolDrag, TOOL_DRAG_TYPE, WORKSPACE_TOOL_ICONS, WORKSPACE_TOOL_LABELS } from "./workspace-rail";
 import type { FileEntry } from "./file-documents";
 
-/*
- * The workspace panel, the dock: the chrome around the four workspace views
- * (Files, Source Control, Chat review, Terminal), one at a time -- its header,
- * its width, opening and closing, phone focus and shortcuts -- and the
- * navigation between the views. On a desktop the rail beside it chooses the
- * view, and a view moved into the main pane is drawn in its split (through a
- * portal, so its state stays here), as is a file or a terminal opened beside;
- * a phone keeps the tabs in its header. Each view and its state live in
- * their own files, so a view can be shown outside the dock
- * (docs/design/panes-and-rail.md).
- */
-
 const PANEL_TABS = ["files", "chat", "terminal", "diff", "jbot"] satisfies PanelTab[];
 
 function panelTab(value: string): PanelTab | null {
@@ -50,12 +38,11 @@ function panelTab(value: string): PanelTab | null {
   return value === "files" || value === "diff" || value === "chat" || value === "terminal" || value === "jbot" ? value : null;
 }
 
-// In the unit (layout-geometry): its least, its most and its first width; the gap is --space-md, the chat's margin.
+// In the unit: its least, its most and its first width; the gap is --space-md, the chat's margin.
 const MIN_WORKSPACE_PANE_UNITS = 18.75, MAX_WORKSPACE_PANE_UNITS = 38.75, DEFAULT_WORKSPACE_PANE_UNITS = 26.25, DOCK_GAP_UNITS = 0.5;
 
 export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; onFocusRequestComplete?: () => void; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; onTabChange?: (tab: PanelTab) => void; splitView?: Accessor<SplitView | null>; splitHost?: Accessor<HTMLElement | undefined>; onOpenBeside?: (view: SplitView) => void; onMoveToDock?: (view: SplitView) => void; onCloseSplit?: (focus?: boolean) => void; bindSplit?: (release: (toDock: boolean) => Promise<boolean>) => () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing>; onOpenFile?: (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => void; openFiles?: Accessor<Map<string, "focused" | "shown">>; documentShown?: Accessor<boolean>; minWidth?: Accessor<number>; widthRequest?: Accessor<{ width: number; nonce: number } | null>; overlay?: Accessor<boolean>; documentHost?: (element: HTMLElement | undefined) => void;
-  /** jbot's tool: the jbot chat with its panel (drawn by the app, which holds its session).
-   *  It stays in the dock: no Maximise, no moving to a pane. */
+  /** Drawn by the app, which holds its session. It stays in the dock: no Maximise, no moving to a pane. */
   jbotView?: () => JSX.Element }) {
   const { confirm: confirmDialog } = createDecisionScope(props.projectId);
   let panelRoot: HTMLElement | undefined;
@@ -73,13 +60,12 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     return panelTab(value) ?? "files";
   };
   const [tab, setTab] = createSignal<PanelTab>(storedTab());
-  // The comment a chip asked to reveal, carried down to whichever view shows it.
   const [reviewReveal, setReviewReveal] = createSignal<ReviewNavigationRequest | null>(null);
   const [width, setWidth] = createSignal(Math.max(unitPx(MIN_WORKSPACE_PANE_UNITS), Math.min(unitPx(MAX_WORKSPACE_PANE_UNITS), Number(readGeometrySetting("width")) || unitPx(DEFAULT_WORKSPACE_PANE_UNITS))));
   const [shellWidth, setShellWidth] = createSignal(props.open() ? width() : 0);
   const [shellGap, setShellGap] = createSignal(props.open() && !isMobileLayout() ? unitPx(DOCK_GAP_UNITS) : 0);
-  // A pane's document in the dock keeps the width it is open at while the dock slides open or shut (shell.css
-  // .ui-dock-document): the dock's width eases, and a transcript re-laid out at each frame's width dropped frames.
+  // A pane's document in the dock keeps the width it is open at while the dock's width eases:
+  // a transcript re-laid out at each frame's width drops frames.
   const [documentWidth, setDocumentWidth] = createSignal(shellWidth());
   createEffect(() => { const next = shellWidth(); if (next > 0.5) setDocumentWidth(next); });
   const [terminalFocusRequest, setTerminalFocusRequest] = createSignal(0);
@@ -90,7 +76,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   const tabVisible = (candidate: PanelTab) => (candidate !== "diff" || props.sourceControlEnabled()) && tab() === candidate;
   // A view is in the dock or in the main pane's split, never both.
   const inSplit = (candidate: PanelTab) => props.splitView?.() === candidate && Boolean(props.splitHost?.()) && (candidate !== "diff" || props.sourceControlEnabled());
-  // The file opened beside is Files' second slot, shown in the split.
   const fileBeside = () => props.splitView?.() === "file" && Boolean(props.splitHost?.());
   const dockShows = (candidate: PanelTab) => tabVisible(candidate) && !inSplit(candidate);
   const shown = (candidate: PanelTab) => (props.open() && dockShows(candidate)) || inSplit(candidate);
@@ -103,7 +88,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   });
   const chat = createChatReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, historyAvailable: () => Boolean(props.historyAvailable?.()),
     visible: () => shown("chat"), gitFiles: () => sourceControl.diff()?.files ?? [], settings, settingsScope: panelScope() });
-  // Where panes can hold a file viewer, Files is the navigator and opens files there (6d-2).
   const openFileDocument = (path: string, beside: boolean, edit: boolean, reveal?: ReviewNavigationRequest) => {
     if (!props.onOpenFile) return false;
     props.onOpenFile({ projectId: props.projectId(), path }, { beside, edit, reveal });
@@ -116,7 +100,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     filesShown: () => shown("files") || fileBeside(), diffShown: () => shown("diff") });
   // The second slot lives only while the split holds it: anything else there
   // lets it go, and it going (closed, removed, another chat's files) closes
-  // the split. Leaving asks first when it has an edit (bindSplit).
+  // the split. Leaving asks first when it has an edit.
   createEffect(() => {
     const view = props.splitView?.();
     const path = files.openPaths().secondary;
@@ -233,8 +217,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     setPaneTab(next);
     focusTabDefault(next);
   };
-  // A key the leader lists must do something here: Source Control only with
-  // a repository, the split only while the panel is wide enough to split.
   const workspaceShortcutAvailable = () => !document.querySelector(
     '[role="dialog"][data-state="open"]',
   );
@@ -265,9 +247,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   ];
   onCleanup(() => releaseShortcutHandlers.forEach((release) => release()));
 
-  // Moving between views: a file to its review, a review back to the working
-  // file, and a comment chip or turn artifact to whichever view shows it.
-  // Beside, the review opens in the main pane's split rather than the dock.
   const openSourceControlReview = async (scope: DiffScope, path: string, beside = false) => {
     if (!(await files.confirmDiscard(path, "Discard unsaved changes and review this file?"))) return;
     sourceControl.showReview(scope);
@@ -283,8 +262,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     const path = files.openPaths()[slot];
     if (path) { files.setFocusedSlot(slot); void openSourceControlReview(staged ? "staged" : "changes", path, beside); }
   };
-  // The leader's Open beside: the file or change the keyboard is on.
-  // The focused row, in the dock or in the tool's split in the main pane.
   const focusedBeside = () => {
     const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const row = focused && (panelRoot?.contains(focused) || props.splitHost?.()?.contains(focused)) ? focused : null;
@@ -348,25 +325,22 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   onCleanup(() => window.removeEventListener(TURN_ARTIFACT_NAVIGATION_EVENT, resolveTurnArtifactNavigation));
 
   // Over the panes, the dock takes no room from them, so nothing beneath it moves.
-  // Asked when a motion begins and held for all of it: a dock that went over the panes mid-drag dropped the motion's
-  // end, and the transcript kept the width it had pinned for it.
+  // Asked when a motion begins and held for all of it, or a dock going over the panes mid-drag drops the motion's end
+  // and the transcript keeps the width it pinned for it.
   const begun = new Set<number>();
   const panelMotion = (detail: Parameters<typeof dispatchPanelGeometryMotion>[0]) => {
     if (detail.phase === "begin" ? props.overlay?.() : !begun.has(detail.id)) return;
     if (detail.phase === "begin") begun.add(detail.id); else if (detail.phase === "end") begun.delete(detail.id);
     dispatchPanelGeometryMotion(detail);
   };
-  // The panel takes room from the main pane only down to its minimum.
   const room = () => {
     if (props.overlay?.()) return Infinity;
     const main = document.querySelector<HTMLElement>('[data-slot="sidebar-inset"]');
     if (!main || isMobileLayout()) return Infinity;
-    // Every pane gives way down to its document's minimum.
     const panes = [...document.querySelectorAll<HTMLElement>(".chat-main, [data-pane-slot]")];
     const slack = panes.reduce((sum, pane) => sum + pane.getBoundingClientRect().width - (parseFloat(getComputedStyle(pane).minWidth) || minMainPaneWidth()), 0);
     return slack + (props.open() ? shellWidth() + shellGap() : 0) - unitPx(DOCK_GAP_UNITS);
   };
-  // Whatever the dock shows declares its minimum (a docked chat a pane's); a tool, the dock's own.
   const minWidth = () => props.minWidth?.() ?? unitPx(MIN_WORKSPACE_PANE_UNITS);
   const clampWidth = (next: number) => Math.max(minWidth(), Math.min(Math.floor(window.innerWidth * 0.65), room(), next));
   createEffect(on(minWidth, () => { if (props.open()) animatePanelGeometry(true); }, { defer: true }));
@@ -382,11 +356,8 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   }, { defer: true }));
   onCleanup(() => stopSwitchWait());
   createEffect(on(() => props.widthRequest?.(), (request) => { if (request) queueMicrotask(() => commitWidth(request.width)); }, { defer: true }));
-  // Every atomic width commit has to announce itself. The transcript learns its
-  // own width only from geometry motion, so a commit that skips the event
-  // leaves it laid out for the panel's previous size until something unrelated
-  // nudges it. The drag has its own begin/change/end; this is for the commits
-  // that land in one step -- keyboard resize and the project-change reset.
+  // The transcript learns its own width only from geometry motion, so a commit that lands in one step
+  // (keyboard resize, the project-change reset) announces itself too.
   const commitWidth = (next: number) => {
     const value = clampWidth(next);
     const startSize = shellWidth() + shellGap();
@@ -553,8 +524,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     if (file && open) files.openFile(file.path);
   }));
 
-  // A view's header, in the dock or the split: its name, its modes, and moving
-  // it between the two. The header is its drag handle.
   const viewLabel = (view: SplitView) => view === "file" ? files.openPaths().secondary?.split("/").pop() || "File"
     : view.startsWith("shell:") ? "Terminal" : tabLabel(view as PanelTab);
   const closeSplitView = (view: SplitView) => {
@@ -565,7 +534,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     props.onCloseSplit?.();
   };
   const toolHeader = (tool: Accessor<SplitView>, where: "dock" | "split") => (
-    // The dock follows places (6d-1): its header says which one it shows.
     <PaneHeader kind="tool" fit frost={tool() === "jbot"} draggable={!isMobileLayout() && tool() !== "jbot"}
       onDragStart={(event) => { event.dataTransfer?.setData(TOOL_DRAG_TYPE, JSON.stringify({ tool: tool(), from: where })); if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"; document.body.dataset.toolDrag = where; }}
       onDragEnd={() => delete document.body.dataset.toolDrag}
@@ -605,7 +573,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     : view.startsWith("shell:") ? <TerminalView computer={props.settingsScope?.() === "computer"} projectId={props.projectId()} projectName={props.projectName()}
       workingRoot={props.workingRoot()} terminalId={view.slice("shell:".length)} focusRequest={0} connectivity={props.connectivity} />
     : toolView(view as PanelTab, "split");
-  // A view dragged from the split onto the dock docks.
   const dockDrop = {
     onDragOver: (event: DragEvent) => { if (document.body.dataset.toolDrag === "split" && event.dataTransfer?.types.includes(TOOL_DRAG_TYPE)) event.preventDefault(); },
     onDrop: (event: DragEvent) => { const drag = readToolDrag(event); if (drag?.from === "split") { event.preventDefault(); props.onMoveToDock?.(drag.tool); } },
@@ -621,10 +588,9 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     {toolHeader(tab, "dock")}
     <ToolContent>
       <For each={PANEL_TABS.filter((tool) => tool !== "jbot")}>{(tool) => <Show when={dockShows(tool)}>{toolView(tool, "dock")}</Show>}</For>
-      {/* jbot's stays drawn once opened, its chat where it was: put away and back (Ctrl+J) costs nothing. */}
+      {/* jbot's stays drawn once opened, its chat where it was: put away and back costs nothing. */}
       <Show when={jbotKept()}><ToolKept shown={dockShows("jbot")}>{toolView("jbot", "dock")}</ToolKept></Show>
     </ToolContent>
-    {/* A pane's document moved into the dock draws here, over the tools. */}
     <DockDocument ref={(element) => { props.documentHost?.(element); onCleanup(() => props.documentHost?.(undefined)); }} />
     <Show when={requests.loading()}><Loading kind="pane"><Spinner /><span>Loading workspace</span></Loading></Show>
     </DockSurface>

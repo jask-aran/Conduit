@@ -99,7 +99,6 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
     ];
     let merge: MergeView | undefined;
     let view: EditorView;
-    // Side-by-side keeps a document per side; inline has its own reader below.
     const docFor = (side: "original" | "modified"): Text | undefined => merge && (side === "original" ? merge.a : merge.b).state.doc;
     const chunksNow = () => (merge ? getChunks(merge.b.state)?.chunks : undefined) ?? [];
     // A comment on one side of a diff carries the passage it replaced, or was
@@ -194,8 +193,6 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
       inlineSource = `${data.original}\u0000${data.modified}`;
       view = new EditorView({ parent: host, doc: inline.doc, extensions: inlineExtensions(inline) });
     }
-    // Long stretches of untouched context fold away, as they did when the merge
-    // view collapsed them, and a click on the placeholder brings them back.
     const foldContext = (target: EditorView, rows: InlineDiff["rows"]) => {
       const doc = target.state.doc;
       const effects = unchangedRuns(rows).flatMap((run) => {

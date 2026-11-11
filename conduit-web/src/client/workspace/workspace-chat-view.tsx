@@ -38,11 +38,7 @@ function historyEntryTime(entry: HistoryNode["entry"]): string {
   return Number.isNaN(at.getTime()) ? "" : at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
-/**
- * The longest chain of tool entries starting at this node. Sequential tool
- * calls are nested one per level rather than listed as siblings, so the run is
- * found by walking down; a fork or a non-tool entry ends it.
- */
+/** Sequential tool calls nest one per level rather than as siblings, so the run is found by walking down. */
 function historyToolRun(node: HistoryNode): HistoryNode[] {
   if (node.entry.kind !== "tool" || node.entry.hidden) return [];
   const run = [node];
@@ -59,14 +55,6 @@ function historyToolRun(node: HistoryNode): HistoryNode[] {
   return run;
 }
 
-/**
- * A run of tool calls, folded into one line the reader can open.
- *
- * The button in the header is the blunt instrument: it flips every run at once
- * and forgets whatever was opened by hand, which is what makes it read as
- * "collapse all" rather than as a setting arguing with each row. This is the
- * fine one -- open this run, leave the rest alone.
- */
 function HistoryToolRun(props: {
   run: HistoryNode[]; activePath: Set<string>; leafId: string | null; connected: boolean;
   open: boolean; onToggle: () => void;
@@ -126,11 +114,6 @@ function HistoryNodes(props: { nodes: HistoryNode[]; activePath: Set<string>; le
   </Show>}</For>;
 }
 
-/**
- * Chat review's state for the open chat: its history tree and its agent
- * changes. Both follow the chat rather than the project, because they are
- * projections of it.
- */
 export function createChatReview(options: {
   projectId: Accessor<string>;
   chatId: Accessor<string | null>;
@@ -160,14 +143,7 @@ export function createChatReview(options: {
     if (!next.delete(id)) next.add(id);
     return next;
   });
-  /**
-   * Collapse all, or expand all.
-   *
-   * It takes everything with it rather than reading what the reader has opened
-   * one run at a time: a button that had to work out whether "collapse all"
-   * meant anything from the current mix would sometimes do nothing when
-   * pressed, which is worse than blunt.
-   */
+  /** Takes every run with it rather than reading the current mix, so a press never does nothing. */
   const toggleCollapseTools = () => {
     const next = !collapseTools();
     setCollapseTools(next);
@@ -236,10 +212,7 @@ export function createChatReview(options: {
     historyLoad = { chatId, token, promise };
     return promise;
   };
-  // A tree belongs to one chat. The effect that reloads the panel watches the
-  // project and the tabs but not the chat, so stepping from a chat to its
-  // project's dashboard -- same project, no chat -- left the previous chat's
-  // history sitting on screen under a heading that no longer described it.
+  // A tree belongs to one chat, and the effect that reloads the panel does not watch the chat.
   createEffect(on(options.chatId, (chatId, previous) => {
     if (previous !== undefined && chatId === previous) return;
     if (!chatId) {
@@ -277,11 +250,7 @@ export function createChatReview(options: {
     selectMode("changes");
     openReviewScope(review.scope() === "turn" ? "turn" : "chat", undefined, review.checkpointId());
   };
-  // A review belongs to one project and chat. Moving to either a different
-  // project or a different chat drops what is on screen before reloading, and
-  // a context with no chat at all leaves the view blank. The one exception is
-  // stepping from a chat to its own project's dashboard, which keeps showing
-  // the chat that was just open.
+  // Stepping from a chat to its own project's dashboard keeps showing the chat that was just open.
   createEffect(on(
     () => [options.projectId(), options.chatId(), mode(), options.visible()] as const,
     ([projectId, chatId, currentMode, visible], previous) => {
@@ -317,7 +286,6 @@ export function createChatReview(options: {
 }
 export type ChatReview = ReturnType<typeof createChatReview>;
 
-/** Chat review's modes, a segmented switch in the header of whatever holds the view. */
 export function ChatModes(props: { control: ChatReview; historyAvailable: boolean }) {
   const choose = (next: ChatMode) => {
     if (next === "history") { props.control.selectMode("history"); void props.control.loadHistory(); }

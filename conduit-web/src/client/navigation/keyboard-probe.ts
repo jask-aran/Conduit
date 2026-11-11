@@ -1,33 +1,12 @@
 /*
- * A readout of every number that decides how tall the window is.
- *
- * The keyboard has now been diagnosed wrong three times from reading the code
- * -- the viewport tag is a request rather than a rule, Capacitor's padding is
- * gated, the plugin's units turned out to be right after all -- and each
- * wrong answer cost a build and a device test. None of those could have
- * survived one look at the actual numbers, so this exists to show them.
- *
- * Off by default and on by name: it is a diagnostic, not a feature, and it
- * covers the corner of the screen it is drawn in. It stays, though. A phone is
- * the only place several of these numbers are ever true -- the emulator's
- * WebView honours `interactive-widget=overlays-content` where a current one
- * does not, and no recording of a screen can say what the page believed at the
- * time -- so this is the only instrument that works where the bugs are.
+ * Off by default: a diagnostic. A phone is the only place several of these numbers are ever true (the emulator's
+ * WebView honours `interactive-widget=overlays-content` where a current one does not), so it stays.
  */
 const STORAGE_KEY = "conduit:keyboard-probe";
 
 let panel: HTMLElement | null = null;
 let numbers = "";
 
-/*
- * The last handful of things that happened, newest last.
- *
- * The numbers say where the window ended up; they cannot say whether the
- * event that should have moved it ever arrived. Two of the open questions are
- * exactly that shape -- whether `keyboardWillShow` fires on the runs where
- * nothing moves, and whether something takes focus away just before the
- * keyboard closes on a scroll -- and neither is answerable from a height.
- */
 const EVENT_LIMIT = 9;
 const events: string[] = [];
 let firstAt = 0;
@@ -35,17 +14,6 @@ let firstAt = 0;
 let lastKey = "";
 let repeats = 0;
 
-/*
- * What the last keyboard travel actually looked like, rather than its last
- * nine rows.
- *
- * A tail of a decelerating curve is the least informative part of it: the
- * values barely change and the frames that matter have already scrolled off.
- * What decides whether the composer looks stuck to the keyboard is the whole
- * run -- how many frames arrived, over how long, and whether any two of them
- * were far enough apart to be seen as a stutter. Three numbers, and they fit
- * on one line.
- */
 let runFrames = 0;
 let runStart = 0;
 let runLast = 0;
@@ -76,18 +44,13 @@ export function noteKeyboardFrame(final: boolean): void {
     runMoving = true;
     return;
   }
-  /*
-   * The shell settles twice: the animation's own end, and the insets that
-   * arrive behind it saying the same thing. Without this the second one
-   * starts a run of its own, finishes it in the same breath and overwrites
-   * the travel that just happened with `1f / 0ms`.
-   */
+  // The shell settles twice (the animation's end, then insets saying the same); without this the second
+  // overwrites the travel that just happened with `1f / 0ms`.
   if (!runMoving) return;
   const span = Math.round(now - runStart);
   const fps = span > 0 ? Math.round((runFrames / span) * 1000) : 0;
-  // Only a travel that went below both of its own ends went somewhere it
-  // should not have. A shell that is shortening is meant to end below where
-  // it started, and reporting that as an overshoot cried wolf on every open.
+  // Only a travel that went below both of its own ends went somewhere it should not have: a shortening shell is
+  // meant to end below where it started.
   const wrongWay = runMin < Math.min(runFirst, runEnd) - 1 ? ` UNDER ${runMin}` : "";
   const overshot = runMax > Math.max(runFirst, runEnd) + 1 ? ` OVER ${runMax}` : "";
   runSummary = `${runFrames}f / ${span}ms / ${fps}fps / gap ${Math.round(runGap)}ms`
@@ -127,7 +90,6 @@ export function keyboardProbeOn(): boolean {
   try { return localStorage.getItem(STORAGE_KEY) === "1"; } catch { return false; }
 }
 
-/** Returns the state it left the probe in, so the caller can say so. */
 export function toggleKeyboardProbe(): boolean {
   const next = !keyboardProbeOn();
   try { localStorage.setItem(STORAGE_KEY, next ? "1" : "0"); } catch { /* nothing to remember it with */ }
@@ -149,12 +111,6 @@ function draw(): void {
 
 export function reportKeyboardProbe(lines: Record<string, unknown>): void {
   if (!keyboardProbeOn()) return;
-  /*
-   * The height each frame landed on, kept as a range rather than a list.
-   * A travel that leaves the window shorter than either end of it went the
-   * wrong way first, which is the jump at the start of a close, and a single
-   * number says so where nine rows of a ring buffer had already lost it.
-   */
   const applied = Number(lines.applied);
   if (runStart && Number.isFinite(applied)) {
     if (!runFirst) { runFirst = applied; runMin = applied; runMax = applied; }

@@ -96,7 +96,6 @@ export function CommandHintBar(props: {
       fixedHint("Select model", "Enter"),
       fixedHint("Close", "Esc"),
     ];
-    // Actions first; the keys that move through the tree sit at the end.
     if (props.context === "chat") return [
       commandHint(COMMAND_IDS.toggleChatEdit, "Edit"),
       commandHint(COMMAND_IDS.renameHighlightedChat, "Rename"),
@@ -133,7 +132,6 @@ export function CommandHintBar(props: {
     return undefined;
   };
 
-  // The view's actions first, then the keys that move through it, at the end; an action is its hint's button too.
   const keyHint = (hint: Hint): KeyHint => [hint.keys || [], hint.label, hintAction(hint)];
   return <OverlayHints count={props.selectedCount !== null ? `${props.selectedCount} selected` : undefined}
     start={primary().map(keyHint)} end={secondary().map(keyHint)} />;

@@ -70,11 +70,7 @@ function PatchView(props: { content: string }) {
   </div></Show><PatchLines lines={lines().slice(page() * 400, (page() + 1) * 400)} /></>;
 }
 
-/**
- * Source Control's state for one project: Git status, its mode, the commit
- * being written, and its review. It outlives the view, so switching away and
- * back keeps a half-written message and the file under review.
- */
+/** It outlives the view, so switching away and back keeps a half-written message and the file under review. */
 export function createSourceControl(options: { projectId: Accessor<string>; enabled: Accessor<boolean>; chatId: Accessor<string | null>; requests: RequestScope; settings: WorkspaceSettings; settingsScope: string }) {
   const { confirm: confirmDialog } = createDecisionScope(options.projectId);
   const { requests, settings } = options;
@@ -216,7 +212,6 @@ export function createSourceControl(options: { projectId: Accessor<string>; enab
     setChangesOpen,
     inspectCommit,
     openReviewScope,
-    /** Back to the stored mode, with no commit open: a new chat or project. */
     restore: () => {
       setMode(storedMode());
       setCommitDetail(null);
@@ -236,7 +231,6 @@ export function createSourceControl(options: { projectId: Accessor<string>; enab
 }
 export type SourceControl = ReturnType<typeof createSourceControl>;
 
-/** Source Control's modes, a segmented switch in the header of whatever holds the view. */
 export function SourceControlModes(props: { control: SourceControl }) {
   return <Segmented arrows label="Source Control" value={props.control.mode()} onChange={props.control.selectMode} options={[
     { value: "changes", label: "Changes", icon: <Icons.Check />, title: "Changes" },

@@ -23,25 +23,15 @@ const CONTEXT_LABELS: Record<string, string> = {
   terminal: "Terminal",
   "workspace-panel": "Workspace panel",
 };
-// A dashboard says which it is: the Conduit dashboard, a project or a workspace.
 const contextLabel = (context: ShortcutContext) => (context === "dashboard" ? splitPage() : undefined) ?? CONTEXT_LABELS[context]
   ?? context.replace(/[-.]/g, " ").replace(/^\w/, (first) => first.toUpperCase());
 
 type Row = { commandId: string; label: string; keys: string[] };
-// Numbers first, in order, then letters, then the rest.
 const rank = (key: string) => /^\d$/.test(key) ? 0 : /^[a-z]$/i.test(key) ? 1 : 2;
 
 /**
- * The leader menu: what the leader (Ctrl+G) can do from where you are.
- *
- * A step back to look, so it dims the page -- all but the region it is
- * about, which stays lit so where focus is reads at a glance -- and shows one
- * small card at the foot of the screen. The path of regions around focus is the heading, outermost first;
- * the list is the innermost region with keys, and ←/→ or Tab -- or a click on
- * the path -- moves it out to the others. A key an inner region claims is not
- * listed again further out, since the inner one is what it would run. By
- * default the menu waits for a pause (the Leader menu setting), so a leader
- * key someone knows never flashes it up.
+ * A key an inner region claims is not listed again further out, since the inner one is what it would run. By default
+ * the menu waits for a pause, so a leader key someone knows never flashes it up.
  */
 export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
   const [revision, setRevision] = createSignal(0);
@@ -54,9 +44,6 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
     return current && current.firstStroke.code === "KeyG" ? current : null;
   });
 
-  // Shown after the pause, at once, or never; browsing the levels shows it
-  // straight away, since that is looking. It leaves the way it came, faded
-  // and dropped back, holding what it showed while it goes.
   const [visible, setVisible] = createSignal(false);
   const [leaving, setLeaving] = createSignal(false);
   const [last, setLast] = createSignal<PendingShortcutSequence | null>(null);
@@ -103,9 +90,6 @@ export function LeaderPalette(props: { shortcuts: ShortcutManager }) {
       return keys.length ? [{ commandId, label: getCommandDefinition(commandId).label, keys }] : [];
     }).sort((left, right) => rank(left.keys[0]!) - rank(right.keys[0]!) || left.keys[0]!.localeCompare(right.keys[0]!, undefined, { numeric: true }));
   });
-  // The region the menu is about stays lit: the one on the path from focus
-  // named by the level shown, cut out of the dim with its own corners. The
-  // outermost level is the whole app, so nothing is cut out.
   const hole = createMemo(() => {
     const current = shown();
     const context = current?.levels[current.shown]?.context;

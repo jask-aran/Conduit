@@ -15,13 +15,6 @@ import { settledOrbRate, ThinkingOrb } from "../chat/thinking-orb";
 import { inlineDollarClose } from "../chat/inline-dollar";
 import { elapsed } from "../chat/tool-card";
 
-/*
- * Chat search's preview column: the highlighted chat's last prompt, the start
- * of what it answered, and how that turn ended, so chats that share a title
- * can be told apart without opening them. It reads the chat's latest page,
- * a moment after the cursor settles, and keeps what it read for the rest of
- * the search.
- */
 type Target = { chat: ChatSummary; project: Project };
 type ChatGlance = { prompt: string; answer: string; answerMath: string | null; outcome: "Done" | "Interrupted" | "Failed" | null; took: string; work: string };
 
@@ -31,13 +24,11 @@ const WORK_WORDS: Record<ToolKind, [string, string]> = {
 };
 const cache = new Map<string, ChatGlance>();
 
-/* Markdown's marks, dropped for a few quiet lines. */
 const plain = (text = "") => text.replace(/```[\s\S]*?```/g, " ").replace(/[#>*_`~|]+/g, "").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\s+/g, " ").trim();
 const rawOf = (message?: Message) => message?.content || (message?.blocks || []).map((block) => (block as { type?: string; text?: string }).type === "text" ? (block as { text?: string }).text || "" : "").join(" ");
 const textOf = (message?: Message) => plain(rawOf(message));
 
-/* An answer's formulas, split out before plain() strips the marks TeX is made
-   of. A formula left open (a stopped answer) ends the preview there. */
+/* Formulas are split out before plain() strips the marks TeX is made of. A formula left open ends the preview there. */
 type Piece = { text: string; math?: "inline" | "display" };
 const MATH_OPEN = /\$\$|\\\[|\\\(|\$/g;
 function pieces(raw: string, budget = 700): Piece[] {
@@ -74,8 +65,6 @@ function pieces(raw: string, budget = 700): Piece[] {
 
 const escapeHtml = (value: string) => value.replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char]!);
 
-/* The answer as HTML with its formulas drawn, or null when it has none.
-   KaTeX loads only once a highlighted answer holds a formula. */
 async function mathAnswer(raw: string): Promise<string | null> {
   const parts = pieces(raw);
   if (!parts.some((part) => part.math)) return null;
@@ -127,8 +116,6 @@ const dateOf = (value?: string | null) => {
 const isWorkspace = (project: Project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
 const stampOf = (chat: ChatSummary) => chatSortStamp(chat, "latest") || "";
 
-/* A folder or workspace under the cursor: what it is, where it lives, how
-   its chats stand, and the latest few. All from the catalogue already held. */
 function FolderPreview(props: { project: Project; active: (chat: ChatSummary) => boolean }) {
   const chats = () => [...props.project.sessions].filter((chat) => chat.status !== "draft").sort((a, b) => Date.parse(stampOf(b) || "0") - Date.parse(stampOf(a) || "0"));
   const loose = () => props.project.slug === "chat";
@@ -155,7 +142,6 @@ function FolderPreview(props: { project: Project; active: (chat: ChatSummary) =>
 }
 
 export function ChatPreview(props: { target: Target | null; folder?: Project | null; active?: (chat: ChatSummary) => boolean }) {
-  // The cursor has to rest a moment before a chat is read.
   const [settled, setSettled] = createSignal<Target | null>(null);
   createEffect(() => {
     const target = props.target;

@@ -1,6 +1,4 @@
 import type { UI_VIEWS } from "../../ui-api.js";
-// Shapes the workspace views share: the tree and file endpoints, Git state,
-// and a chat's history tree.
 
 export interface TreeEntry { name: string; path: string; type: "directory" | "file" | "other"; }
 export interface DirectoryListing { entries: TreeEntry[]; truncated: boolean; cursor?: string | null; total?: number | null; oversize?: boolean; }
@@ -16,15 +14,8 @@ export interface DiffPayload { repository: boolean; branch?: string; upstream?: 
 export interface GitCommitDetail { hash: string; content: string; }
 /** The dock's tools; jbot's works on no project (the jbot chat with its panel). */
 export type PanelTab = "files" | "diff" | "chat" | "terminal" | "jbot";
-/**
- * What the main pane's split holds: a tool moved out of the dock, the file
- * opened beside ("file", the path is Files' second slot), or one terminal
- * opened beside ("shell:<id>"), or a second chat ("chat:<id>") or page
- * ("page:dashboard", "page:project:<id>"), which the main pane draws itself,
- * or nothing yet ("home": an empty pane, showing what can be opened in it).
- */
 export type SplitView = PanelTab | "file" | "home" | `shell:${string}` | `chat:${string}` | `page:${string}` | `files:${string}` | `term:${string}` | `browser:${string}`;
-/** SplitView's kinds are the UI API's declared views' (ui-api.js), each way: a kind on one side only fails here. */
+/** SplitView's kinds are the UI API's declared views', each way: a kind on one side only fails here. */
 type SplitViewKind = SplitView extends infer V ? V extends `${infer K}:${string}` ? K : V : never;
 type DeclaredViewKind = (typeof UI_VIEWS)[number]["kind"];
 const viewKindsAgree: [SplitViewKind] extends [DeclaredViewKind] ? [DeclaredViewKind] extends [SplitViewKind] ? true : never : never = true;
@@ -32,9 +23,8 @@ void viewKindsAgree;
 export const isPanelTab = (value: unknown): value is PanelTab => value === "files" || value === "diff" || value === "chat" || value === "terminal" || value === "jbot";
 export const isSplitView = (value: unknown): value is SplitView => isPanelTab(value) || value === "file" || value === "home" || (typeof value === "string" && /^(shell|chat|page|files|term|browser):./.test(value));
 export type ChatMode = "history" | "changes";
-// `discarded`: the harness kept this step in its tree but builds every later
-// request without it -- an answer it was interrupted writing. The row is shown
-// struck through so the history reads as what the agent actually has.
+// `discarded`: the harness kept this step in its tree but builds every later request without it
+// (an answer it was interrupted writing).
 export interface HistoryEntry { id: string; parentId: string | null; timestamp: string; type: string; display: string; kind: "user" | "assistant" | "tool" | "summary" | "system"; hidden: boolean; discarded?: boolean; forkable: boolean; regeneratable: boolean; }
 export interface HistoryNode { entry: HistoryEntry; children: HistoryNode[]; label?: string; }
 export interface HistoryTree { mode: "linear" | "tree"; tree: HistoryNode[]; leafId: string | null; }
@@ -44,11 +34,8 @@ export type FileSlotId = "primary" | "secondary";
 export type OpenFiles = { primary: string | null; secondary: string | null };
 export type UploadTarget = { kind: "directory"; path: string } | { kind: "replacement"; path: string };
 
-/** How a view reads the panel's stored settings (workspace-panel-storage). */
 export interface WorkspaceSettings {
-  /** A panel-wide setting. */
   panel: (name: string) => string | null;
-  /** A geometry setting (panel-wide too). */
   geometry: (name: string) => string | null;
   /** Where the open files are remembered: per project on the Computer page, per chat otherwise. */
   fileScope: () => string;

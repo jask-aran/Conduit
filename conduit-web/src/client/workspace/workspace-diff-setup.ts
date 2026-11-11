@@ -3,12 +3,7 @@ import { Prec, RangeSetBuilder, StateEffect, StateField, type EditorState, type 
 import { Decoration, EditorView, gutter, GutterMarker } from "@codemirror/view";
 import { inlineRowNumber, type InlineRow } from "./workspace-inline-diff";
 
-/**
- * Everything a comparison looks like, carried by the extension rather than by
- * the container it is mounted in. A CodeMirror theme travels with the editor,
- * so a diff embedded in a dialog, a panel, or anywhere else reads the same
- * without its host restating a single rule.
- */
+/** A CodeMirror theme travels with the editor, so a diff reads the same in any host without its host restating a rule. */
 export const workspaceDiffTheme = EditorView.theme({
   ".cm-content": { caretColor: "transparent !important" },
   ".cm-cursor": { display: "none" },
@@ -40,7 +35,6 @@ export const workspaceDiffTheme = EditorView.theme({
   ".cm-diff-added-gutter": { background: "var(--change-added)" },
 });
 
-/** Replaces the rows an inline comparison is standing on. */
 export const setInlineRows = StateEffect.define<readonly InlineRow[]>();
 
 const inlineRows = StateField.define<readonly InlineRow[]>({
@@ -51,7 +45,6 @@ const inlineRows = StateField.define<readonly InlineRow[]>({
   },
 });
 
-/** The rows of the inline comparison a state is showing, if it is one. */
 export const inlineRowsOf = (state: EditorState): readonly InlineRow[] | null => state.field(inlineRows, false) ?? null;
 
 class ChangeMarker extends GutterMarker {
@@ -79,11 +72,6 @@ export const inlineLineNumbers = {
   formatNumber: (line: number, state: EditorState) => inlineRowNumber((state.field(inlineRows, false) ?? [])[line - 1]),
 };
 
-/**
- * An inline comparison: one document holding both sides, each line marked and
- * numbered as the side it came from. Selection, search and copy work on the
- * removed lines because they are lines, not widgets.
- */
 export function workspaceInlineDiff(rows: readonly InlineRow[], styled = true): Extension {
   return [
     ...(styled ? [workspaceDiffTheme] : []),
@@ -104,14 +92,12 @@ export function workspaceInlineDiff(rows: readonly InlineRow[], styled = true): 
   ];
 }
 
-/** How every comparison in the workspace reads its chunks. */
 export const workspaceDiffOptions = {
   highlightChanges: true,
   gutter: true,
   diffConfig: { scanLimit: 500, timeout: 40 },
 } as const;
 
-/** A side-by-side comparison, styled the same way on both sides. */
 export function workspaceMergeView(config: DirectMergeConfig): MergeView {
   const styled = (side: DirectMergeConfig["a"]) => ({ ...side, extensions: [workspaceDiffTheme, side?.extensions ?? []] });
   return new MergeView({ ...workspaceDiffOptions, ...config, a: styled(config.a), b: styled(config.b) });

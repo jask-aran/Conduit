@@ -36,16 +36,12 @@ const TONES: Record<string, StatusTone> = {
 
 const SPINNING = new Set(["starting", "stopping", "working", "compacting"]);
 
-/** A chat's process and activity as a StatusDot, for its row. */
 export function RuntimeIndicator(props: { process?: RuntimeProcess | null; stale?: boolean; unread?: boolean; fallback?: JSX.Element }) {
   const visible = () => Boolean(visibleRuntimeActivity(props.process));
   const activity = () => runtimeActivity(props.process) || "idle";
   const label = () => activityLabel(activity(), activityDetail(props.process));
-  // Live and unread are independent facts, so the slot goes to whichever is
-  // still happening. A process that is working, starting or waiting on the
-  // user owns it; an idle one does not, because a warm process outlives every
-  // turn and would hide the answer it just finished. Idle and read falls back
-  // to the resident pill.
+  // An idle process does not take the slot from unread: a warm process outlives every turn and would hide the
+  // answer it just finished.
   const busy = () => visible() && activity() !== "idle";
   return <Show when={!busy() && props.unread} fallback={<Show when={visible()} fallback={props.fallback}>
       <StatusDot label={props.stale ? `${label()} (may be stale)` : label()} title={props.stale ? `${label()} · reconnecting` : label()}
@@ -55,7 +51,6 @@ export function RuntimeIndicator(props: { process?: RuntimeProcess | null; stale
   </Show>;
 }
 
-/** A collapsed parent only signals child responses that need attention. */
 export function ProjectActivityIndicator(props: { sessions: ChatSummary[] }) {
   return <Show when={props.sessions.some((session) => session.unread)}><StatusDot label="Contains unread responses" tone="unread" /></Show>;
 }

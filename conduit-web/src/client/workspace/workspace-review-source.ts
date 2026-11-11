@@ -25,7 +25,6 @@ interface Checkpoint { id: string; createdAt: string; sequence: number; messageI
 interface TurnFiles extends Checkpoint { files: { path: string; status: string; available: boolean }[]; }
 interface GitFile { path: string; status: string; stagedCounts?: { added: number; removed: number } | null; workingCounts?: { added: number; removed: number } | null; headCounts?: { added: number; removed: number } | null; }
 
-/** One comparison owner for every entry point. Checkpoint identity survives new turns. */
 export type { Checkpoint };
 
 export function createWorkspaceReview(props: { projectId: Accessor<string>; chatId: Accessor<string | null>; gitFiles: Accessor<GitFile[]>; scopes: DiffScope[]; scopeKey: string }) {
@@ -55,7 +54,6 @@ export function createWorkspaceReview(props: { projectId: Accessor<string>; chat
       review.select(null);
     });
   };
-  /** Drops everything tied to the previous project or chat so nothing stale renders. */
   const reset = () => {
     cancel();
     batch(() => {
@@ -169,12 +167,6 @@ export function createWorkspaceReview(props: { projectId: Accessor<string>; chat
       if (request === controller) { request = undefined; setLoading(false); }
     }
   };
-  /**
-   * Moves along the timeline from `from`, in steps of `offset`, until a turn
-   * that actually changed something turns up. Turns with no changes are dead
-   * ends for the reviewer, so they are stepped over rather than shown; if the
-   * walk runs off the end of the timeline the current turn is left alone.
-   */
   const stepTurn = async (offset: number, from: number) => {
     const current = scope();
     const chatId = props.chatId();

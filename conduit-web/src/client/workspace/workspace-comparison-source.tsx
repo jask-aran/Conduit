@@ -17,11 +17,7 @@ const turnTime = (value: string) => {
   return moment.toDateString() === new Date().toDateString() ? time : `${moment.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
 };
 
-/**
- * What a review compares, above its diff: the scope, the turn when the scope
- * is a chat's, and the endpoints. Source Control and Chat review each pass
- * their own review and scopes, so the two never share a selection.
- */
+/** Source Control and Chat review each pass their own review and scopes, so the two never share a selection. */
 export function ComparisonSourceControls(props: { source: WorkspaceReviewController; open: ReviewOpener; scopes: typeof diffScopes; chatAvailable: boolean }) {
   const source = () => props.source;
   return <ComparisonSource>

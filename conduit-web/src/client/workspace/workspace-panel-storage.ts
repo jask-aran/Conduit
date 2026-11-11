@@ -43,7 +43,6 @@ function stateKey(scopeId: string): string {
   return `${WORKSPACE_PANEL_STORAGE_PREFIX}${scopeId}:${STATE_NAME}`;
 }
 
-/** The scope a stored panel state belongs to, or null for any other key. */
 function stateScope(key: string): string | null {
   const suffix = `:${STATE_NAME}`;
   if (!key.startsWith(WORKSPACE_PANEL_STORAGE_PREFIX) || !key.endsWith(suffix)) return null;
@@ -147,7 +146,6 @@ export function createWorkspacePanelStorage(storage: WorkspacePanelStorageBacken
     removeRaw(stateKey(scopeId));
   };
 
-  /** Load every stored scope, drop the ones no longer valid, and keep the 100 most recently written. */
   const pruneWorkspacePanelStorage = (validScopeIds: Iterable<string>): void => {
     const validScopes = new Set(validScopeIds);
     validScopes.add(WORKSPACE_PANEL_GLOBAL_SCOPE);

@@ -1,5 +1,3 @@
-/* The workspace's app-level rules; its tools' layouts are the library's (FilesPane, SourceView, ChangeNav). */
-
 /* A desktop too narrow for the main pane beside the sidebar scrolls the window's root sideways (AppShell holds its room). */
 @media (--conduit-wide-layout) {
   #root { overflow: auto hidden; }

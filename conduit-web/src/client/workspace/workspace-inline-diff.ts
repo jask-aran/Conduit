@@ -3,7 +3,6 @@ import { Text } from "@codemirror/state";
 
 export type InlineRowKind = "context" | "removed" | "added";
 
-/** What one line of an inline comparison stands for. */
 export interface InlineRow {
   kind: InlineRowKind;
   /** 1-based line in the original document, for context and removed rows. */
@@ -27,11 +26,8 @@ export interface InlineDiffConfig {
 }
 
 /**
- * Lays a comparison out as one document holding both sides: removed lines,
- * then the lines that replaced them, then the context around both. Because
- * every line is real text rather than a widget, a selection can run straight
- * through a change, the gutter can number both sides, and search and copy
- * reach the removed half the same as any other line.
+ * Every line is real text rather than a widget, so a selection runs through a change,
+ * the gutter numbers both sides, and search and copy reach the removed half.
  */
 export function buildInlineDiff(original: string, modified: string, config?: InlineDiffConfig): InlineDiff {
   const a = Text.of(original.split("\n"));
@@ -80,13 +76,11 @@ export function buildInlineDiff(original: string, modified: string, config?: Inl
   };
 }
 
-/** The number the gutter shows for a row: each side counts in its own document. */
 export function inlineRowNumber(row: InlineRow | undefined): string {
   if (!row) return "";
   return String(row.kind === "removed" ? row.original ?? "" : row.modified ?? "");
 }
 
-/** Finds the row standing for a line of one side, as a 1-based document line. */
 export function inlineDocLine(rows: readonly InlineRow[], side: "original" | "modified", line: number): number | null {
   const index = rows.findIndex((row) => side === "original"
     ? row.kind !== "added" && row.original === line
@@ -94,10 +88,7 @@ export function inlineDocLine(rows: readonly InlineRow[], side: "original" | "mo
   return index < 0 ? null : index + 1;
 }
 
-/**
- * Runs of context long enough to be worth folding away, as 1-based inclusive
- * document lines, keeping `margin` lines of context on each side of a change.
- */
+/** 1-based inclusive document lines, keeping `margin` lines of context on each side of a change. */
 export function unchangedRuns(rows: readonly InlineRow[], options: { margin?: number; minSize?: number } = {}): { from: number; to: number }[] {
   const margin = options.margin ?? 3;
   const minSize = options.minSize ?? 8;

@@ -36,13 +36,9 @@ const ComputerExplorer = lazy(() => import("../dashboard/computer-dashboard").th
 
 type WorkspaceMode = "linked" | "created" | "cloned";
 type SidebarArea = "conduit" | "computer";
-/** The machine choice that makes a folder of this computer available first (the desktop app only). */
 const THIS_COMPUTER = "this-computer";
-/** The gap between one shown chat's prefetch and the next, on a phone's drawer. */
 const WARM_STEP_MS = 120;
-/** How long the drawer's list holds still before it counts as rested and warms what came into view. */
 const SCROLL_REST_MS = 150;
-/** How long a new workspace's path holds still before the hub is asked to preview it. */
 const PREVIEW_DEBOUNCE_MS = 180;
 type ProjectInput = { mode: string; name?: string; path?: string; nodeId?: string; directoryName?: string; cloneUrl?: string; cloneParentPath?: string; cloneDirectoryName?: string };
 type WorkspacePreview = { key: string; path: string; ownership: string };
@@ -64,13 +60,7 @@ type DeleteTarget = { type: "chat"; chat: ChatSummary; project: Project }
   | { type: "chats"; targets: ChatTarget[] };
 const COLLAPSED_PROJECTS_KEY = "conduit.sidebar.collapsed-projects";
 
-/**
- * What the app is doing about its own version.
- *
- * Nothing at all when there is nothing to say: an empty row would be one more
- * thing between the list and the server it belongs to. "Ready" is the only
- * state carrying an action, because it is the only one waiting on a person.
- */
+// Nothing at all when there is nothing to say: an empty row would sit between the list and the server it belongs to.
 function UpdateNotice(props: { state?: UpdateState; onTake?: () => void }) {
   const state = () => props.state ?? { kind: "idle" as const };
   const words = () => {
@@ -116,20 +106,15 @@ function storedCollapsedProjects(): Set<string> {
 }
 
 export function Sidebar(props: {
-  /** The server switcher and update are in Conduit's title bar (desktop), so the foot is not drawn. */
   serverInTitleBar?: boolean;
   projects: Project[];
   catalogueLoaded: boolean;
   projectId: string;
   selectedId: string | null;
-  /** With two chats side by side: the one with the keyboard, current in place of the selection, and the other, marked open. */
   focusedId?: string | null;
   openIds?: string[];
-  /** Where a chat is open: its pane's letter and whether it is that pane's showing tab (PaneMark). */
   placeOf?: (id: string) => { pane: string; shown: boolean } | undefined;
-  /** Open a chat beside the main pane's (Alt+click, or its menu); absent where there is no split. */
   onOpenChatBeside?: (chat: ChatSummary, project: Project) => void;
-  /** Open an empty pane beside the one with the keyboard; absent where there are no panes (a phone). */
   onNewPane?: () => void;
   navigatingId?: string | null;
   dashboard: boolean;
@@ -144,10 +129,8 @@ export function Sidebar(props: {
   onWorkspaceSuggestionsNeeded: () => void;
   onNewChat: (project: Project) => Promise<void>;
   onPrefetchChat: (chat: ChatSummary) => void;
-  /** A finger down on a chat's row (a phone's): its chat drawn ahead of the tap; released, or taken by a scroll. */
   onPreviewChat?: (chat: ChatSummary, project: Project) => void;
   onPreviewRelease?: (cancelled: boolean) => void;
-  /** The same, for jbot's row: its chat drawn ahead of the tap. */
   onPreviewJbot?: () => void;
   onOpenChat: (chat: ChatSummary, project: Project) => Promise<void>;
   onOpenProject: (project: Project) => Promise<void>;
@@ -170,21 +153,16 @@ export function Sidebar(props: {
   onOpenAgent: () => void;
   onOpenComputer: () => void;
   onOpenHarness: (id: string) => void;
-  /** A client environment's page; `environment`: the one shown. */
   onOpenEnvironment: (id: string) => void;
-  /** A terminal in a client environment's home, filling the window. */
   onOpenEnvironmentTerminal: (id: string) => void;
   environment?: string;
   selectedHarness?: string;
-  // A file or tool covers pane A: its route stays selected but is not shown.
   routeCovered?: boolean;
   onOpenTerminalView: () => void;
   onOpenWorkspaceIdentity: (project: Project) => void;
   onOpenSettings: (section?: string, workspaceId?: string | null) => void;
   onOpenPalette: (page?: string | null, initialQuery?: string | null) => void;
-  /** Esc from the top of the sidebar: back to the main pane. */
   onFocusMainPane: () => void;
-  /** A page opened from the sidebar is entered: its composer, else the pane. */
   onEnterMainPane: () => void;
   onUpdatePwa: () => void;
   pwaUpdating: boolean;
@@ -197,14 +175,12 @@ export function Sidebar(props: {
   chatLimit: number;
   mobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
-  /** A phone's drawer shut onto what a row opens: held aside until the page shows it whole, then slid back. */
   onMobileShutOnto?: (opening: Promise<unknown>) => void;
   command?: SidebarCommand | null;
 }) {
   onMount(() => { void refreshAgent(); });
   const [collapsed, setCollapsed] = createSignal(localStorage.getItem("conduit.sidebar") === "collapsed");
   const [visualCollapsed, setVisualCollapsed] = createSignal(collapsed());
-  // The edge moves at once (reduced motion, a preference from elsewhere) instead of with the panel's motion.
   const [instant, setInstant] = createSignal(false);
   const paneWidth = () => sidebarRoot?.getBoundingClientRect().width ?? 0;
   const [collapsedProjectIds, setCollapsedProjectIds] = createSignal(storedCollapsedProjects());
@@ -223,9 +199,8 @@ export function Sidebar(props: {
   let publishingSidebarPreference = false;
   let mobileReturnFocus: HTMLElement | null = null;
   let mobileWasOpen = false;
-  // The phone drawer turns inert (and back) only at rest, never as it starts to move: inert restyles every row in it
-  // (~1200 elements), which cost the slide its first frames on a phone. drawerSettled is the drawer's state at rest: it
-  // stays inert while opening until it has landed (then takes touches and focus), and live while shutting until off screen.
+  // The phone drawer turns inert (and back) only at rest: inert restyles every row in it, which costs the slide its
+  // first frames on a phone.
   const [drawerSettled, setDrawerSettled] = createSignal(false);
   let stopDrawerWait = () => {};
   let stopFocusBackWait = () => {};
@@ -237,9 +212,8 @@ export function Sidebar(props: {
     if (!open) window.clearTimeout(warmTimer);
   };
   /*
-   * A phone finds out which chat is wanted only at the tap, too late to fetch it then (a pointer's hover is ahead of
-   * its click). So once the drawer lands, the chats it shows are read ahead, one every beat so none waits on the
-   * rest, and those scrolled into view after; the chat's cache keeps what is still current, so nothing is read twice.
+   * A phone finds out which chat is wanted only at the tap, too late to fetch it then. So once the drawer lands, the
+   * chats it shows are read ahead, one every beat so none waits on the rest, and those scrolled into view after.
    */
   let warmTimer = 0;
   let warmed = new Set<string>();
@@ -305,9 +279,8 @@ export function Sidebar(props: {
     // conventions-ok: mints the motion's id, which dispatchPanelGeometryMotion carries to the transcript
     const id = ++sidebarMotionId;
     sidebarEdgeMotionId = id;
-    // Keep the v0.4.7 sidebar contract: the real shell follows its CSS width
-    // transition, while the transcript motion shell tracks that edge once per
-    // display frame. This keeps the composer in the same geometry path.
+    // The shell follows its CSS width transition while the transcript motion shell tracks that edge once per display
+    // frame, keeping the composer in the same geometry path.
     dispatchPanelGeometryMotion({
       phase: "begin",
       id,
@@ -500,7 +473,7 @@ export function Sidebar(props: {
     if (retained.length !== selectedChatIds().size) setSelectedChatIds(new Set(retained));
   });
   // The open chat's folder opens when that chat is opened (or first found in one), not again: re-run on the drawer
-  // shutting or a list refresh, it undid the person's own closing of that folder.
+  // shutting or a list refresh, it would undo the person's own closing of that folder.
   const selectedOwner = createMemo(() => {
     const selectedId = props.selectedId;
     const owner = selectedId ? props.projects.find((project) => project.sessions.some((chat) => chat.id === selectedId)) : undefined;
@@ -517,8 +490,8 @@ export function Sidebar(props: {
       publishUiPreference("collapsedProjectIds", [...next]);
       return next;
     });
-    // Not into a phone's closed drawer: measured at another height (the keyboard up, a page's own), it left the list
-    // scrolled under its head when the drawer next opened.
+    // Not into a phone's closed drawer: measured at another height (the keyboard up, a page's own), it would leave the
+    // list scrolled under its head when the drawer next opened.
     if (isMobileLayout() && !props.mobileOpen) return;
     queueMicrotask(() => {
       const row = document.querySelector<HTMLElement>(`[data-chat-id="${CSS.escape(selectedId)}"]`);
@@ -538,7 +511,6 @@ export function Sidebar(props: {
       warmed = new Set();
       mobileReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       if (!phoneLayout()) queueMicrotask(() => focusFirst(sidebarRoot));
-      // A chat opened while it was shut is shown as it opens (its folder was opened then).
       else if (props.selectedId) {
         const id = props.selectedId;
         queueMicrotask(() => document.querySelector<HTMLElement>(`[data-chat-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" }));
@@ -586,11 +558,6 @@ export function Sidebar(props: {
     if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h ago`;
     return `${Math.floor(seconds / 86_400)}d ago`;
   };
-  /*
-   * The machines workspaces and terminals are on: every environment the server can work on (its own and the paired
-   * ones), named as their device and client ("Desktop · Ubuntu"). Asked while the Computer view shows, and again now
-   * and then: a client pairing or a folder mounted changes the list under it.
-   */
   type Machine = { id: string; label: string; hub: boolean; online: boolean; folders: number; browse: boolean; terminal: boolean };
   const [machines, setMachines] = createSignal<Machine[] | null>(null);
   const [hubName, setHubName] = createSignal("the hub");
@@ -601,14 +568,12 @@ export function Sidebar(props: {
         online: node.online, folders: node.roots.length, browse: Boolean(node.browse), terminal: Boolean(node.local || node.terminal) }))));
     })
     .catch(() => {});
-  // This app's own node, when it is paired with this hub; and the system's picker, open or dismissed, choosing on it.
   const [ownNode, setOwnNode] = createSignal<string | null>(null);
   const [picking, setPicking] = createSignal<"" | "open" | "dismissed">("");
   const readOwnNode = () => {
     if (desktopShell) void desktopShell.companion.status().then((status) => setOwnNode(pairingWith(status, (machines() || []).map((machine) => machine.id))?.nodeId || null)).catch(() => {});
   };
   createEffect(() => { if (machines()) readOwnNode(); });
-  /** The machines a workspace can go on, as the menu offers them: the hub, each client, this computer (the app's own). */
   const machineChoices = createMemo(() => {
     const list = (machines() || []).map((machine) => {
       const own = machine.id === ownNode();
@@ -622,7 +587,6 @@ export function Sidebar(props: {
   });
   const chosenMachine = () => machineChoices().find((choice) => choice.value === workspaceOn()) || machineChoices()[0];
   const machineMark = (choice?: { hub: boolean; own: boolean }) => choice?.hub ? <Icons.Server /> : <Icons.Monitor />;
-  /** This computer's folder, by the system's picker: shared, then straight to its details (it is not browsed as well). */
   const pickOnThisComputer = () => {
     setPicking("open");
     setComputerPickerError("");
@@ -642,27 +606,22 @@ export function Sidebar(props: {
   createEffect(() => {
     if (area() !== "computer") return;
     readMachines();
-    // A client coming or going is told on the runtime stream; its section follows at once.
     window.addEventListener("conduit:devices-changed", readMachines);
     onCleanup(() => window.removeEventListener("conduit:devices-changed", readMachines));
   });
   const hubMachine = () => machines()?.find((machine) => machine.hub)?.id ?? "";
-  /** A client's section while it is away: since when, as the stream last saw it. */
   const awayNote = (machine: Machine) => {
     if (machine.hub || machine.online) return undefined;
     const since = deviceStates().get(machine.id)?.lastSeenAt;
     return since ? `Offline since ${new Date(since).toLocaleString(undefined, { hour: "numeric", minute: "2-digit", ...(Date.now() - Date.parse(since) > 86_400_000 ? { day: "numeric", month: "short" } : {}) })}` : "Offline";
   };
-  // A workspace is placed on one machine; a terminal is in a workspace, a device's home, or the server's own.
   const machineOfProject = (project: Project) => project.nodeId || hubMachine();
   const machineOfTerminal = (terminal: Pty) => terminal.projectId.startsWith("device:") ? terminal.projectId.slice("device:".length)
     : terminal.projectId === "computer" || terminal.projectId.startsWith("computer:") ? hubMachine()
     : machineOfProject(props.projects.find((project) => project.id === terminal.projectId) || ({ nodeId: null } as Project));
-  // The hub's machine always, then any other holding a workspace or a terminal.
   const byMachine = createMemo(() => (machines() || []).map((machine) => ({ machine,
     workspaces: workspaces().filter((project) => machineOfProject(project) === machine.id),
     terminals: terminals().filter((terminal) => machineOfTerminal(terminal) === machine.id) }))
-    // Every environment on the network, with workspaces or not, here or away: the hub first, then those online.
     .sort((a, b) => Number(b.machine.hub) - Number(a.machine.hub) || Number(b.machine.online) - Number(a.machine.online)));
   // A device's home terminal names its device after its folder ("~ on Desktop"); its section already does.
   const terminalScope = (terminal: Pty) => props.projects.find((project) => project.id === terminal.projectId)?.name || ((terminal.projectId === "computer" || terminal.projectId.startsWith("computer:") || terminal.projectId.startsWith("device:")) ? (terminal.cwd || "Computer").replace(/ on .+$/, "") : "Unknown workspace");
@@ -688,18 +647,14 @@ export function Sidebar(props: {
     });
   };
   const closeMobile = () => props.onMobileOpenChange(false);
-  // A row opening a page: the drawer stays aside until that page is drawn, then slides back over it (main.tsx).
-  // A touch held on a row on a phone draws what it opens ahead of the tap (the library's pressAhead).
   const pressToPreview = (preview: () => void, current: () => boolean | undefined = () => false) =>
     pressAhead({ press: preview, release: (cancelled) => props.onPreviewRelease?.(cancelled), when: () => phoneLayout() && !current() });
   const openOnto = (opening: Promise<unknown>) => {
     if (props.onMobileShutOnto) props.onMobileShutOnto(opening); else closeMobile();
     void opening.then(enterPane);
   };
-  // Opening a page from the sidebar -- by click or Enter, and even the page
-  // already open -- enters it: focus goes to its composer, else the pane.
-  // Actions with a target of their own (a dialog, the palette, a terminal)
-  // do not.
+  // Opening a page from the sidebar, even the page already open, enters it. Actions with a target of their own (a
+  // dialog, the palette, a terminal) do not.
   const enterPane = () => props.onEnterMainPane();
   const startNewChat = (project?: Project) => {
     closeMobile();
@@ -707,13 +662,8 @@ export function Sidebar(props: {
     if (target) void props.onNewChat(target).then(enterPane);
   };
 
-  /** Live process map wins while SSE is online; fall back to the catalogue's live snapshot when offline. */
-  // Only the runtime stream says whether a chat has an agent. The chat summary
-  // carries a copy of that from whenever the list was last fetched, and falling
-  // back to it while the stream reconnected put pills on chats whose processes
-  // had been gone for minutes -- and left them there until a reload refetched
-  // the list. The stream's own last-known state is kept across a reconnect and
-  // marked stale, which is the honest version of the same answer.
+  // Only the runtime stream says whether a chat has an agent: the chat summary's copy is as old as the last fetch, and
+  // the stream's last-known state is kept across a reconnect, marked stale.
   const processFor = (chat: ChatSummary): RuntimeProcess | null => props.runtime.getProcess(chat.id);
 
   const railChats = () => [...props.projects.flatMap((project) => project.sessions
@@ -727,14 +677,10 @@ export function Sidebar(props: {
     .slice(0, 5);
   const railFolders = () => folders().slice(0, 5);
   const railWorkspaces = () => workspaces().slice(0, 5);
-  // A project page keeps a draft chat open behind its composer, so the
-  // selection alone cannot say which row the reader is on -- without the route,
-  // the project row went dark and New chat lit up in its place.
+  // A project page keeps a draft chat open behind its composer, so the selection alone cannot say which row the
+  // reader is on.
   const shownId = () => props.routeCovered ? null : props.selectedId;
   const onProjectPage = (project: Project) => !props.routeCovered && props.projectId === project.id && (props.project || props.selectedId == null);
-  // A folder or workspace holding the open chat is drawn as current with it,
-  // collapsed or not, wherever its row appears -- so where you are reads up
-  // the tree.
   const holdsCurrentChat = (project: Project) => shownId() != null && project.sessions.some((chat) => chat.id === shownId());
   const railProjectIsActive = (project: Project) => !props.routeCovered && (project.id === props.projectId || project.sessions.some((chat) => chat.id === props.selectedId));
   const railProjectIsLive = (project: Project) => project.sessions.some((chat) => Boolean(processFor(chat)));
@@ -744,7 +690,6 @@ export function Sidebar(props: {
   const openNewDialog = (kind: "folder" | "workspace") => {
     if (kind === "workspace") {
       props.onWorkspaceSuggestionsNeeded();
-      // A dialog left on a client's folders opens on the hub's again.
       if (workspaceOn()) { setComputerPicker(null); setPath(""); }
       setWorkspaceOn("");
       setPicking("");
@@ -925,15 +870,8 @@ export function Sidebar(props: {
   };
 
   /**
-   * Long-press opens the menu then synthesizes a click; swallow that click.
-   *
-   * The synthesized one arrives while the menu is still open, so the guard only
-   * has to cover that window. Disarming it when the menu closes is the whole
-   * point: while the only thing that cleared the flag was the next click, every
-   * other way of leaving the menu -- picking an item, pressing Escape, clicking
-   * away -- left it armed, and the row then ignored the first real click it got
-   * afterwards. Clearing is deferred a turn so the click that dismissed the
-   * menu, which is dispatched after the close, is still swallowed.
+   * Long-press opens the menu then synthesizes a click while it is still open; swallow that click. Cleared a turn after
+   * the menu closes, so the click that dismissed it is still swallowed and the next real one is not.
    */
   const menuOpenGuards = new WeakMap<object, { suppressClick: boolean }>();
   const guardFor = (key: object) => {
@@ -978,8 +916,8 @@ export function Sidebar(props: {
       onContextMenu={() => { if (!selected()) clearSelection(); }}
       onClick={(event: MouseEvent) => {
         if (guard.suppressClick) { guard.suppressClick = false; return; }
-        // Shift selects for bulk actions (Ctrl too, once a selection is under
-        // way); Ctrl alone opens the chat as a tab (main.tsx, openChatHere).
+        // Shift selects for bulk actions (Ctrl too, once a selection is under way); Ctrl alone opens the chat as a
+        // tab.
         if (event.shiftKey || ((event.ctrlKey || event.metaKey) && selectedChatIds().size > 0)) {
           event.preventDefault();
           toggleChatSelection(menuProps.chat.id);
@@ -1024,7 +962,6 @@ export function Sidebar(props: {
     const guard = guardFor(blockProps.project);
     const isWorkspace = () => blockProps.project.origin === "linked" || blockProps.project.origin === "created" || blockProps.project.origin === "cloned" || blockProps.project.kind === "workspace";
     const cloning = () => blockProps.project.state === "cloning";
-    // A folder's chats slide rather than appear (NavFolder); a closed folder keeps nothing in the document.
     return <NavFolder open={open()} row={<ContextMenu placement={menuPlacement()} onOpenChange={guardOpen(guard)}>
         <ContextMenuTrigger as={NavFolderRow} open={open()} current={onProjectPage(blockProps.project)} within={holdsCurrentChat(blockProps.project)}
           icon={<Show when={isWorkspace()} fallback={<Icons.Folder />}><WorkspaceGlyph appearance={blockProps.project.workspaceAppearance} /></Show>}
@@ -1093,8 +1030,6 @@ export function Sidebar(props: {
   // A terminal on a machine that is away is not running there now as far as anyone can see; closing it still works
   // (the hub stops it when its machine is back).
   const terminalAway = (terminal: Pty) => deviceStates().get(machineOfTerminal(terminal))?.online === false;
-  /** The hub's own page: its harnesses and its files. A dot when a harness needs attention (signing in). */
-  // Right-click: its page, or a terminal there filling the window (the hub's is /terminal, as it was).
   const hubRow = () => <ContextMenu placement={menuPlacement()}>
     <ContextMenuTrigger density="nav" element="button" as={Row} lead={<Icons.Server />} draggable="true" data-doc-view="page:computer" current={(props.computer || Boolean(props.selectedHarness) || props.terminal) && !props.environment}
       meta="Hub" end={harnesses().some((harness) => harness.status === "authentication_required") ? <StatusDot label="A harness needs signing in" tone="warn" /> : undefined}
@@ -1104,14 +1039,12 @@ export function Sidebar(props: {
       <MenuRow icon={<Icons.Terminal />} onSelect={() => { closeMobile(); props.onOpenTerminalView(); }}>Terminal View</MenuRow>
     </ContextMenuContent>
   </ContextMenu>;
-  /** A client environment's own page: its files, its workspaces, a terminal there. */
   const environmentRow = (machine: Machine) => <ContextMenu placement={menuPlacement()}>
     <ContextMenuTrigger density="nav" element="button" as={Row} lead={<Icons.Monitor />} draggable="true" data-doc-view={`page:environment:${encodeURIComponent(machine.id)}`}
       current={props.environment === machine.id} meta={machine.online ? undefined : "Offline"}
       onClick={() => { closeMobile(); props.onOpenEnvironment(machine.id); enterPane(); }}>{machine.label.split(" · ").at(-1)}</ContextMenuTrigger>
     <ContextMenuContent>
       <MenuRow icon={<Icons.Monitor />} onSelect={() => { closeMobile(); props.onOpenEnvironment(machine.id); enterPane(); }}>Open</MenuRow>
-      {/* A shell in its home: only where it lets commands run (a folder shared with them, the node's own rule). */}
       <MenuRow icon={<Icons.Terminal />} disabled={!machine.online || !machine.terminal} onSelect={() => { closeMobile(); props.onOpenEnvironmentTerminal(machine.id); }}>Terminal View</MenuRow>
     </ContextMenuContent>
   </ContextMenu>;
@@ -1164,7 +1097,6 @@ export function Sidebar(props: {
     onAddServer={() => { closeMobile(); props.onAddServer?.(); }}
     onLogout={() => props.onLogout?.()} />;
 
-  // The two halves: Chat (projects and chats, the hub's) and Work (workspaces, terminals and harnesses, by machine).
   const areas = [{ value: "conduit" as const, label: "Chat", icon: <Icons.Dashboard /> }, { value: "computer" as const, label: "Work", icon: <Icons.Monitor /> }];
   return <>
     <Show when={phoneLayout()} fallback={<Show when={props.mobileOpen}><Backdrop layer="drawer" label="Dismiss sidebar" onDismiss={closeMobile} /></Show>}>
@@ -1172,7 +1104,6 @@ export function Sidebar(props: {
     </Show>
     <NavPane ref={(element) => { sidebarRoot = element; }} listRef={(element) => {
         sidebarList = element;
-        // Scrolled, it warms what has come into view once the list rests (a phone's; warmShown checks).
         let rest = 0;
         element.addEventListener("scroll", () => { window.clearTimeout(rest); rest = window.setTimeout(warmShown, SCROLL_REST_MS); }, { passive: true });
       }} data-region="sidebar"
@@ -1180,10 +1111,8 @@ export function Sidebar(props: {
       collapsed={!phoneLayout() && collapsed()} folded={!phoneLayout() && visualCollapsed()} instant={instant()} drawer={phoneLayout() ? (props.mobileOpen ? "open" : "shut") : undefined}
       aria-hidden={phoneLayout() && !drawerSettled() ? true : undefined} inert={phoneLayout() && !drawerSettled() ? true : undefined}
       head={<>
-        {/* A phone's open sidebar has no toggle: a swipe or the backdrop closes it. */}
         <Show when={!phoneLayout()}><Button variant="ghost" size="icon-sm" aria-label="Toggle Sidebar" aria-expanded={!collapsed()} onClick={toggleSidebar}><Icons.Sidebar /></Button></Show>
         <NavBrand name="Conduit" aria-label="Conduit" onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }} />
-        {/* A phone's way to jbot, in the head by the section switch: a press draws its chat ahead of the tap, as a row's does. */}
         <Show when={agentView()?.enabled && phoneLayout()}>
           <PillButton label={agentName()} icon={<Icons.Agent />} haptic="select"
             button={{ ...pressToPreview(() => props.onPreviewJbot?.(), () => props.agent), "aria-current": props.agent ? "page" : undefined,
@@ -1193,24 +1122,8 @@ export function Sidebar(props: {
           <Segmented pill icons label="Sidebar section" value={area()} onChange={setArea} options={areas} />
         </Show>
       </>}
-      // Conduit's title bar holds the server switcher and the update (desktop): the sidebar has no foot then.
       foot={phoneLayout() || props.serverInTitleBar ? undefined : <>
-        {/*
-          * Above the server row rather than inside the menu, because the menu
-          * is shut whenever this matters. A build waiting to be taken can
-          * wait for minutes, and an install runs while somebody is looking
-          * elsewhere -- so it gets a place rather than a notification.
-          *
-          * Settings opens with no section named, which on a phone is the list
-          * of sections. Naming "models" here made that list unreachable and
-          * landed every client on the same tab.
-          *
-          * Checking for an update does not close the drawer, unlike every
-          * other item in that menu. It reports itself in this row, and
-          * closing the sidebar on the way out put the row behind the thread
-          * -- so the one thing the person asked to watch was the one thing
-          * they could not see.
-          */}
+        {/* Above the server row rather than inside its menu, because the menu is shut whenever this matters. */}
         <UpdateNotice state={props.updateState} onTake={props.onTakeUpdate} />
         {serverSwitcher()}
       </>}>
@@ -1231,7 +1144,6 @@ export function Sidebar(props: {
         </Show>
         <Show when={area() === "conduit"}>
           <RailAction label="Conduit Dashboard" current={props.dashboard} onClick={() => { setArea("conduit"); closeMobile(); props.onOpenDashboard(); enterPane(); }}><Icons.Dashboard /></RailAction>
-          {/* jbot lives on the workspace rail on a desktop (Ctrl+J); the sidebar keeps it on a phone, for now. */}
           <Show when={agentView()?.enabled && phoneLayout()}><RailAction label={agentName()} current={props.agent} onClick={() => { setArea("conduit"); openOnto(Promise.resolve(props.onOpenAgent())); }}><AgentAvatar /></RailAction></Show>
           <RailAction label="New project" onClick={() => openNewDialog("folder")}><Icons.NewFolder /></RailAction>
           <Show when={props.onNewPane}><RailAction label="New pane" onClick={() => props.onNewPane?.()}><Icons.Split /></RailAction></Show>
@@ -1266,7 +1178,6 @@ export function Sidebar(props: {
       </Show>
       <Show when={area() === "computer"}>
         <Row density="nav" element="button" lead={<Icons.NewFolder />} onClick={() => openNewDialog("workspace")}>New workspace</Row>
-        {/* By machine once the server has said which it has; until then, as one list. */}
         <Show when={machines()?.length} fallback={<>
           {hubRow()}
           <ProjectGroup label="Workspaces" projects={workspaces()} workspace emptyLabel="No workspaces" />
@@ -1276,7 +1187,6 @@ export function Sidebar(props: {
           </Group>
         </>}>
           <For each={byMachine()}>{(group) => <Group kind="nav" title={group.machine.id === ownNode() ? `${group.machine.label} · this app` : group.machine.label} away={awayNote(group.machine)}>
-            {/* The hub's machine is a client like any other, and the hub besides: its page (its harnesses, its files) first. */}
             <Show when={group.machine.hub} fallback={environmentRow(group.machine)}>{hubRow()}</Show>
             <For each={group.workspaces}>{(project) => <ProjectBlock project={project} workspace />}</For>
             <For each={group.terminals}>{(terminal) => <TerminalRow terminal={terminal} />}</For>
@@ -1302,7 +1212,6 @@ export function Sidebar(props: {
       <CardForm onSubmit={submitNew}><CardBody>
         <Show when={newKind() === "workspace" && workspaceStep() === "explore"}><ComputerExplorer dialog selectOnly={Boolean(workspaceOn())}
           machine={(machines()?.length ?? 0) > 1 || desktopShell ? <DropdownMenu>
-            {/* Where it goes: the hub's own machine or a client's, browsed alike; a client's only inside what it lets the hub see. */}
             <DropdownMenu.Trigger as={BrowserMachine} type="button" aria-label={`Machine: ${chosenMachine()?.label || ""}`} title={chosenMachine()?.label}>
               {machineMark(chosenMachine())}<span>{chosenMachine()?.label}</span><Icons.ChevronDown />
             </DropdownMenu.Trigger>
@@ -1327,7 +1236,6 @@ export function Sidebar(props: {
           <DialogField label={<>{mode() === "managed" ? "Display name" : "Display name (optional)"}</>}><DialogInput id="folder-name" value={name()} disabled={submitting()} placeholder={mode() === "managed" ? "Research" : "My project"} onInput={(event) => setName(event.currentTarget.value)} /></DialogField>
           <Show when={mode() === "created"}><DialogField label={<>New folder name</>}><DialogInput id="workspace-directory-name" value={directoryName()} disabled={submitting()} placeholder="my-project" onInput={(event) => setDirectoryName(event.currentTarget.value)} /></DialogField></Show>
           <Show when={mode() === "cloned"}><DialogField label={<>Folder name (optional)</>}><DialogInput id="clone-directory-name" value={cloneDirectoryName()} disabled={submitting()} placeholder="Defaults to the repository name" onInput={(event) => setCloneDirectoryName(event.currentTarget.value)} /></DialogField></Show>
-          {/* Where it will be: the folder, and whose (a client's, shared with the hub; or the hub's own, as the preview says). */}
           <Show when={newKind() === "workspace" && workspaceOn()}><CardBody><CardRead>{path()}</CardRead>
             <Show when={!tooBroad()} fallback={<Note kind="card" tone="error">That folder is too broad: choose a folder inside it.</Note>}>
               <Note kind="card">On {chosenMachine()?.label}. {hubName()} gets edits and commands in this folder; chats in it run their tools there.</Note>

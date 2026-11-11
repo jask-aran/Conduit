@@ -17,15 +17,7 @@ import * as Icons from "@/components/ui/icons";
 import { isMobileLayout } from "./mobile-layout";
 import { ServerFacts } from "../platform/server-facts.tsx";
 
-/*
- * Pair a device from a client that is already signed in: the same one-time,
- * five-minute link `conduit-server pair` prints, as a QR. A phone's camera
- * opens it signed in; the app's Scan QR code redeems it for a token.
- *
- * The link is built on the route another device is likeliest to reach --
- * anywhere before this network, and never this machine's loopback, which
- * means nothing to a phone.
- */
+// The link is built on the route another device is likeliest to reach, never loopback, which means nothing to a phone.
 const reach = (path: ServerPath) => path.scope === "loopback" ? 0 : path.scope === "private" ? 1 : 2;
 
 export function ConnectDialog(props: { open: boolean; onOpenChange: (open: boolean) => void; addServer: JSX.Element }) {
@@ -83,14 +75,11 @@ export function ConnectDialog(props: { open: boolean; onOpenChange: (open: boole
       <Show when={!phone}><CardQR svg={svg()} expired={expired()} /></Show>
       <CardCaption title={route()!.origin}>{shortOrigin(route()!.origin)}</CardCaption>
       <Show when={error()}><Note kind="card" tone="error">{error()}</Note></Show>
-      {/* The route in the words the menus use; the app takes the nearest
-          route that proves it is this server. */}
       <CardDetails>
         <ServerFacts via={route()!} viaLabel="Opens on">
           <Fact label="Code" value={expired() ? "Expired" : svg() ? `Single use · ${Math.floor(left() / 60)}:${String(left() % 60).padStart(2, "0")}` : "…"} />
         </ServerFacts>
       </CardDetails>
-      {/* The link itself, to read or copy: what the QR holds, for a device that cannot scan it. */}
       <ConnectionCopy label="Pair link" value={link()} disabled={expired()} />
       <Actions>
         <Show when={phone}><DialogButton variant="ghost" size="sm" aria-expanded={qrShown()} onClick={() => setQrShown(!qrShown())}><Icons.QrCode />{qrShown() ? "Hide QR" : "Show QR"}</DialogButton></Show>

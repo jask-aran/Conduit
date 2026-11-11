@@ -3,17 +3,13 @@ import { toast } from "@/components/ui/notifications";
 import { ownsWorkspaceRequest, type WorkspaceRequest } from "./request-ownership";
 import type { DiffPayload, DirectoryListing } from "./workspace-types";
 
-// Foreground failures surface as toasts; background refreshes stay silent so a
-// failing file cannot spam the corner every poll.
 export const reportError = (message: string) => { if (message) toast.error(message); };
 export const copyText = (value?: string) => { if (value) void navigator.clipboard.writeText(value); };
 export const wasAborted = (cause: unknown) => (cause as { name?: string })?.name === "AbortError";
 
 /**
- * One project's requests. Each operation keeps only its latest request; a
- * response is applied only while it still owns its operation and the project
- * has not changed underneath it (request-ownership). Resetting the scope
- * aborts everything in flight, which is what moving to another project does.
+ * Each operation keeps only its latest request; a response is applied only while it still
+ * owns its operation and the project has not changed underneath it.
  */
 export function createRequestScope(projectId: Accessor<string>) {
   let generation = 0;
@@ -65,13 +61,10 @@ export function createRequestScope(projectId: Accessor<string>) {
     finish,
     owns,
     reset,
-    /** Runs whenever the scope is reset, for state that belongs to a request in flight. */
     onReset: (listener: () => void) => { resetListeners.push(listener); },
     hasPending,
-    /** Whether any operation whose name starts with `prefix` is still running. */
     hasPendingPrefix: (prefix: string) => [...requests.keys()].some((operation) => operation.startsWith(prefix) && hasPending(operation)),
     isRunning: (operation: string) => requests.has(operation),
-    /** A foreground request is in flight: the panel shows it is loading. */
     loading: () => [...pending().values()].some((entry) => entry.foreground),
   };
 }
@@ -97,7 +90,6 @@ export function cachedWorkspace(projectId: string) {
   return cached;
 }
 
-/** The cached entry without marking it recently used. */
 export const peekCachedWorkspace = (projectId: string) => workspaceCache.get(projectId);
 
 export function cacheWorkspace(projectId: string, patch: Partial<WorkspaceCacheEntry>) {

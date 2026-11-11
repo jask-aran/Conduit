@@ -11,26 +11,17 @@ import { changesWaiting, heldWrites } from "../api/client";
 import { proveServer } from "../platform/server-proof";
 import { installerDownloads, type PublishedRelease } from "../platform/github-release";
 
-/** Not an address: the row that hands the choice back to the client. */
 const AUTOMATIC = "automatic";
 import { canReachOtherOrigins, isInstalledClient, isStandaloneBrowser } from "../platform/installed-client.ts";
 import { activePath, activeOrigin, activeServer, clearActivePath, dialOrigin, pathIsPinned, pathsOf, serverPathLabel, servers, setActivePath, switchToServer, type ServerEntry } from "../platform/servers.ts";
 
-/** An origin as somebody would say it aloud: no scheme, no default port. */
 export const shortOrigin = (origin: string) => origin.replace(/^https?:\/\//, "");
 
 const PROBE_TIMEOUT_MS = 4000;
 const PROBE_INTERVAL_MS = 5000;
-/** How long after the menu closes a focus landing on its trigger is given back to what had it before. */
 const FOCUS_GIVE_BACK_MS = 1000;
 
-/**
- * How long this server takes to answer, or null when it did not.
- *
- * `/healthz` needs no session, so a server this client has never signed in to
- * still reports whether it is reachable -- which is the question a list of
- * addresses mostly has to answer.
- */
+// `/healthz` needs no session, so a server this client has never signed in to still reports whether it is reachable.
 async function probe(origin: string): Promise<number | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
@@ -45,23 +36,18 @@ async function probe(origin: string): Promise<number | null> {
   }
 }
 
-// A browser page cannot measure another origin: Conduit grants cross-origin
-// access to the two installed shells only, so the request is refused before it
-// is timed. It reports on the server it was served by, and says nothing it
-// cannot know about the rest.
+// A browser page cannot measure another origin: Conduit grants cross-origin access to the installed shells only.
 const canProbe = (origin: string) => isInstalledClient() || origin === location.origin;
 
 export function ServerSwitcher(props: {
   connectivity: string;
   compact?: boolean;
-  /** The control on one line (a desktop rail's foot). */
   inline?: boolean;
   pwaUpdating: boolean;
   onOpenSettings: (section?: string) => void;
   onUpdatePwa: () => void;
   onAddServer: () => void;
   onLogout: () => void;
-  /** The installers, for a phone's browser: its sidebar has no footer to hold them. */
   downloads?: boolean;
 }) {
   const [release, setRelease] = createSignal<Pick<PublishedRelease, "windowsUrl" | "apkUrl"> | null>(null);
@@ -74,9 +60,8 @@ export function ServerSwitcher(props: {
   const [routeError, setRouteError] = createSignal("");
   let timer: ReturnType<typeof setInterval> | undefined;
 
-  // Every address of every server, not just the one each is filed under: the
-  // question the menu answers is "which of these is quickest from here", and a
-  // path that cannot be reached from this network has to be able to say so.
+  // Every address of every server, not just the one each is filed under: a path that cannot be reached from this
+  // network has to be able to say so.
   const allPaths = () => servers().flatMap((entry) => pathsOf(entry).map((path) => ({ origin: path.origin, entry })));
 
   const measure = async () => {
@@ -88,12 +73,8 @@ export function ServerSwitcher(props: {
     setProbing(false);
   };
 
-  // Only while the menu is open. A timer that pings every known address
-  // forever is traffic nobody asked for, over links that may be metered.
-  // The row is only a handle for its menu, not a place to stand. A click does
-  // not focus it, and when the menu closes focus goes back to wherever it was
-  // before -- the menu library focuses its trigger once it has closed,
-  // whatever it is told, so that focus is passed straight on.
+  // Probes run only while the menu is open: links may be metered.
+  // The menu library focuses its trigger once it has closed, whatever it is told, so that focus is passed back on.
   let focusBefore: Element | null = null;
   let giveBack: Element | null | undefined;
   const onOpenChange = (open: boolean) => {
@@ -122,7 +103,6 @@ export function ServerSwitcher(props: {
     const value = origin ? latency()[origin] : undefined;
     return typeof value === "number" ? ` · ${value} ms` : "";
   };
-  // Writes kept on this device until the hub takes them (api/client.ts's held writes).
   const waitingLabel = () => heldWrites() ? ` · ${changesWaiting(heldWrites())}` : "";
   const triggerDetail = () => `${connectionLabel()}${waitingLabel()}${activeLatency()}`;
 
@@ -130,16 +110,9 @@ export function ServerSwitcher(props: {
     if (!canProbe(origin)) return "";
     const value = latency()[origin];
     if (value === undefined) return probing() ? "…" : "";
-    // An unreachable row says so by being struck through (`unreachable`).
     return value === null ? "" : `${value} ms`;
   };
 
-  /*
-   * Measured from here and found not to answer: a choice that cannot be
-   * picked from this client, dimmed and struck through like any other. A
-   * pinned route that has stopped answering reads the same way, with
-   * Automatic above it as the way out.
-   */
   const unreachable = (origin: string) => latency()[origin] === null;
 
   const activeServerPaths = () => {
@@ -152,28 +125,16 @@ export function ServerSwitcher(props: {
   };
 
   /*
-   * An installed client changes route in place. A browser navigates, for the
-   * same reason it navigates between servers: its cookie, its storage and its
-   * worker belong to the origin that served it, so another address is another
-   * installation of this app however much it is the same machine behind it.
-   * Offering the route anyway is the point -- the addresses were collapsed
-   * into one server, and without this a browser would lose the only way it had
-   * to reach the others.
-   *
-   * The address is made to prove itself first. Choosing a route is what sends
-   * this client's token somewhere new, so "is that really the server" has to
-   * be answered before the move rather than discovered by making it.
+   * A browser navigates rather than changing route in place: its cookie, storage and worker belong to the origin that
+   * served it. An installed client proves the address first, since choosing a route sends its token somewhere new.
    */
-  /** The route the client settled on, which is what "Automatic" resolved to. */
   const inUse = () => activeServerPaths().find((path) => path.origin === activePath());
 
   const chooseRoute = async (origin: string) => {
     const entry = activeServer();
     if (!entry) return;
     if (!isInstalledClient()) {
-      // A standalone window cannot be sent anywhere and brought back. Nothing
-      // offers this there, so reaching it means something went wrong; saying
-      // nothing is better than ejecting somebody out of the app.
+      // A standalone window cannot be sent anywhere and brought back.
       if (isStandaloneBrowser()) return;
       if (origin !== AUTOMATIC && origin !== location.origin) location.assign(origin);
       return;
@@ -252,7 +213,6 @@ export function ServerSwitcher(props: {
         </Show>
       </MenuSection>
       <MenuSection title="Account">
-        {/* Who is signed in: the account's picture (its name's initials) and name; it is set in Settings › Account. */}
         <MenuRow icon={<Avatar name={accountName()} src={accountPicture()} />} onSelect={() => props.onOpenSettings("account")}>{accountName() || "Add your name"}</MenuRow>
         <MenuRow icon={<Icons.QrCode />} onSelect={() => setTimeout(() => props.onAddServer())}>Connect a device or server</MenuRow>
         <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Manage settings</MenuRow>

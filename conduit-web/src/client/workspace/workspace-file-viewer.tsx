@@ -18,19 +18,12 @@ import type { DiffPayload, GitChangedFile, WorkspaceVersion } from "./workspace-
 const WorkspaceComparison = lazy(() => import("./workspace-comparison"));
 const POLL_INTERVAL_MS = 1_500;
 const TOLD_POLL_INTERVAL_MS = 10_000;
-// A device away is waited for (conduit:device-online), and asked about this often meanwhile (as workspace-poll.ts).
+// A device away is waited for (conduit:device-online), and asked about this often meanwhile.
 const DEVICE_AWAY_POLL_MS = 30_000;
 const entryKey = (entry: FileEntry) => `${entry.projectId}:${entry.path}`;
 const hasUnstaged = (file?: GitChangedFile) => Boolean(file && (file.status === "??" || file.status[1] !== " "));
 const hasStaged = (file?: GitChangedFile) => Boolean(file && file.status[0] !== " " && file.status[0] !== "?");
 
-/**
- * A pane's file viewer (docs/design/panes-and-rail.md, 6d-2): one file, or
- * two side by side -- denser than a pane each. Each entry is an editor slot
- * of its own, with its own load, draft and save, or the file's unstaged or
- * staged changes (6d-3); the viewer keeps them fresh against the
- * workspace's version, as the dock's Files does for its slot.
- */
 export default function FileViewer(props: {
   entries: FileEntry[];
   /** The entry the navigator's next file replaces. */
@@ -39,29 +32,20 @@ export default function FileViewer(props: {
   onToggleWrap: (index: number) => void;
   commentChatId: string | null;
   onFocusEntry: (index: number) => void;
-  /** Open the file again beside itself, in this pane. */
   onSplit: () => void;
   onCloseEntry: (index: number) => void;
   onSetMode: (index: number, mode: FileEntry["mode"]) => void;
-  /** Each side's tabs, which head it in place of the file's name (6c). */
   tabs?: (index: number) => JSX.Element;
-  /** The pane's own actions, at the end of the last side's header. */
   emptySide?: JSX.Element;
-  /** An empty second side shows (the split, before a file fills it). */
   splitEmpty?: boolean;
-  /** The empty column sits first (its file was dragged away), the file second. */
   emptyFirst?: boolean;
-  /** The first side's share of the width, with two. */
   share?: number;
   onShare?: (share: number) => void;
   paneActions?: () => JSX.Element;
-  /** A side's own items in its ⋯ (close it, close its other tabs, move it to a pane). */
   sideMenu?: (index: number) => JSX.Element;
-  /** Two sides trade places, from the ⇄ on the rule between them. */
   onSwapSides?: () => void;
   onLoaded?: (index: number, file: FileSummary | null) => void;
   ref: (index: number, handle: FileSlotHandle | undefined) => void;
-  /** A review comment to scroll to, when it is on one of the entries. */
   reveal?: { entry: FileEntry; request: ReviewNavigationRequest } | null;
 }) {
   const { confirm: confirmDialog } = createDecisionScope(() => props.entries.map(entryKey).join("|"));
@@ -70,8 +54,6 @@ export default function FileViewer(props: {
   const noteVisibility = () => setVisible(document.visibilityState === "visible");
   document.addEventListener("visibilitychange", noteVisibility);
   onCleanup(() => document.removeEventListener("visibilitychange", noteVisibility));
-  // Each file's Git status, where its place is a Git workspace: the mark in
-  // its header and which changes it can show.
   const [statuses, setStatuses] = createSignal<Record<string, GitChangedFile | undefined>>({});
   // The place's status list, once per place: a path-filtered read returns only its patch.
   const loadStatus = async (projectId: string) => {
@@ -86,8 +68,6 @@ export default function FileViewer(props: {
     });
   };
   createEffect(() => { for (const projectId of new Set(props.entries.map((entry) => entry.projectId))) void loadStatus(projectId); });
-  // One version probe per place the entries are in; a change to an entry's
-  // path reloads that entry, which keeps a draft it has.
   createEffect(() => {
     if (!visible()) return;
     const places = new Map<string, string[]>();
@@ -99,8 +79,6 @@ export default function FileViewer(props: {
     const listeners: Array<(event: Event) => void> = [];
     for (const [projectId, paths] of places) {
       let version: number | null = null;
-      // As the panel's poll (workspace-poll.ts): at once when the server says
-      // this place changed, and slower while it says it will.
       let told = false;
       let away = false;
       let probing = false;
@@ -160,7 +138,6 @@ export default function FileViewer(props: {
       reportError((cause as Error).message);
     }
   };
-  // Two sides share the width by a rule between them, dragged.
   const sides = () => props.entries.length + (props.splitEmpty ? 1 : 0);
   const share = () => Math.min(0.8, Math.max(0.2, props.share ?? 0.5));
   const dragDivider = (): EdgeDrag => {
@@ -212,7 +189,6 @@ export default function FileViewer(props: {
   </Viewer>;
 }
 
-/** A file's unstaged or staged changes, drawn by the review's comparison (6d-3). */
 function ChangesEntry(props: {
   entry: FileEntry;
   mode: "changes" | "staged";

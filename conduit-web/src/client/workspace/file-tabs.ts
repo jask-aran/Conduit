@@ -1,11 +1,7 @@
 import { fileEntryKey, formatFileView, parseFileView, type FileEntry } from "./file-documents.ts";
 import { isSplitView } from "./workspace-types.ts";
 
-/**
- * A file viewer side's tabs (docs/design/panes-and-rail.md): the files it
- * holds in strip order, and their keys most recently shown first. Kept free
- * of signals so the rules are testable (test/file-tabs.test.js).
- */
+/** `entries` in strip order, `used` most recently shown first. Kept free of signals so the rules are testable. */
 export type FileTabs = { entries: FileEntry[]; used: string[] };
 export const FILE_TAB_CAP = 5;
 
@@ -27,11 +23,6 @@ export function fileTabsFromParams(params: URLSearchParams): Record<string, File
 export const fileTabParam = (position: number, side: number, tabs: FileTabs | null | undefined) =>
   tabs && tabs.entries.length > 1 ? `${position}.${side}:${formatFileView(tabs.entries).slice("files:".length)}` : null;
 
-/**
- * A side now showing `entry`: one already a tab is shown in place; otherwise
- * it replaces the file the side showed before (`previous`) unless that is
- * kept (Ctrl), else joins the end. Past the cap the least recently shown goes.
- */
 export function reconcileSide(tabs: FileTabs | undefined, entry: FileEntry, previous: FileEntry | undefined, kept: boolean): FileTabs {
   let entries = [...(tabs?.entries ?? [])];
   const entryKey = fileEntryKey(entry);
@@ -52,17 +43,14 @@ export function reconcileSide(tabs: FileTabs | undefined, entry: FileEntry, prev
   return { entries, used };
 }
 
-/** A tab forgotten from its side. */
 export const withoutTab = (tabs: FileTabs, key: string): FileTabs =>
   ({ entries: tabs.entries.filter((entry) => fileEntryKey(entry) !== key), used: tabs.used.filter((item) => item !== key) });
 
-/** The tab a side shows when its showing `key` closes: the one it used last. */
 export const nextShownTab = (tabs: FileTabs | null | undefined, key: string) => {
   const hidden = tabs?.used.find((item) => item !== key);
   return hidden ? tabs!.entries.find((entry) => fileEntryKey(entry) === hidden) : undefined;
 };
 
-/** A record's value moved from one key to another (a side closing shifts the next one down). */
 export function moveKey<T>(current: Record<string, T>, from: string, to: string): Record<string, T> {
   const next = { ...current };
   if (from in current) next[to] = current[from]!; else delete next[to];
@@ -70,7 +58,6 @@ export function moveKey<T>(current: Record<string, T>, from: string, to: string)
   return next;
 }
 
-/** Two keys' values traded (two sides or two panes swapping). */
 export function swapRecordKeys<T>(current: Record<string, T>, a: string, b: string): Record<string, T> {
   const next = { ...current };
   delete next[a];
@@ -92,7 +79,6 @@ export function dropZoneAt(fraction: number, { edges, viewer }: { edges: boolean
   return { zone: !edges ? "middle" : fraction < edge ? "left" : fraction > 1 - edge ? "right" : "middle", edge };
 }
 
-/** The wash is the target itself: an edge's band, else the pane between them. */
 export function dropWash(box: { left: number; right: number; width: number }, zone: DropZone, edge: number, edges: boolean) {
   const band = edges ? box.width * edge : 0;
   return zone === "left" ? { left: box.left, width: band } : zone === "right" ? { left: box.right - band, width: band } : { left: box.left + band, width: box.width - band * 2 };

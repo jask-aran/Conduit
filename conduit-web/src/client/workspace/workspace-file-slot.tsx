@@ -159,14 +159,9 @@ export default function WorkspaceFileSlot(props: {
   closable: boolean;
   busy: boolean;
   wrap: boolean;
-  /** Before the close button: the file viewer's split. */
   headerSuffix?: JSX.Element;
-  /** A file viewer's tabs for this side (6c): they name the file, and close it. */
   headerTabs?: JSX.Element;
-  /** At the header's end: the pane's own actions, on a viewer's last side. */
   headerEnd?: JSX.Element;
-  /** The suffix's actions again, for the header's overflow menu when it is too narrow for them. */
-  /** More items for the header's ⋯, given which folded actions it lists. */
   headerMenuItems?: (folded: (action: string) => boolean) => JSX.Element;
   empty?: string;
   onToggleWrap: () => void;
@@ -484,12 +479,7 @@ export default function WorkspaceFileSlot(props: {
   const editable = () => Boolean(preview() && !preview()!.readOnly && !preview()!.truncated);
   const hasChanges = () => Boolean(props.gitFile && (props.gitFile.status === "??" || props.gitFile.status[1] !== " "));
   const hasStaged = () => Boolean(props.gitFile && props.gitFile.status[0] !== " " && props.gitFile.status[0] !== "?");
-  /*
-   * A file viewer's header folds its actions one at a time (data-fold, first to
-   * fold first) into its ⋯, which PaneHeader measures (kind file)
-   * and reports with a "headerfold" event; the ⋯ lists only what has folded,
-   * besides copying and wrapping, which live there.
-   */
+  /* PaneHeader folds the actions one at a time (data-fold, first to fold first) and reports them with a "headerfold" event. */
   const [folded, setFolded] = createSignal<string[]>([]);
   const isFolded = (action: string) => folded().includes(action);
   const watchFolds = (element: HTMLElement) => queueMicrotask(() => {
@@ -533,7 +523,6 @@ export default function WorkspaceFileSlot(props: {
     </Show>
     {fileActions()}
     <FileSuffix>{props.headerSuffix}</FileSuffix>
-    {/* A header too narrow for its actions keeps them here, and the file's name in view. */}
     {moreMenu(true)}
     <Show when={props.closable && !props.headerTabs}><IconButton kind="file" type="button" close aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><Icons.Close /></IconButton></Show>
     {props.headerEnd}

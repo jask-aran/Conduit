@@ -113,7 +113,6 @@ const PREVIEW_COUNT = 5;
 const RECENT_COUNT = 5;
 const PREVIEW_KEY = "conduit.chat-search.preview";
 type ChatView = "all" | "attention" | "progress" | "unread";
-/* An activity view is a chip, typed as is:… or chosen from the rail. */
 const VIEW_TOKENS: Record<string, ChatView> = { unread: "unread", running: "progress", progress: "progress", attention: "attention" };
 const VIEW_LABELS: Record<ChatView, string> = { all: "", unread: "is:unread", progress: "is:running", attention: "is:attention" };
 const readPreviewOpen = () => { try { return localStorage.getItem(PREVIEW_KEY) !== "closed"; } catch { return true; } };
@@ -137,7 +136,6 @@ export function CommandMenu(props: {
   runtime: RuntimeStore;
   actions: PaletteActions;
   onChooseModel: (spec: string) => void;
-  /** The model in use, drawn as where you are. */
   currentModel?: string;
   scopeModels: ModelOption[];
   enabledModelSpecs: string[];
@@ -366,8 +364,6 @@ export function CommandMenu(props: {
         for (const command of preview) push({ type: "command", key: `preview:${command.id}`, index: index++, command, parentId: project.id });
         if (children.length > preview.length) push({ type: "browse-all", key: `browse:${project.id}`, index: index++, project, count: children.length });
       };
-      // The chats outside any folder are a place of their own, between Recent
-      // and the folders: one row that expands like a folder but is not one.
       if (chatRoot) { push({ type: "heading", key: "loose-heading", label: "" }); addFolder(chatRoot); }
       push({ type: "heading", key: "folders-heading", label: "Folders" });
       for (const project of projects.filter((project) => project.slug !== "chat" && !isWorkspace(project))) addFolder(project);
@@ -383,7 +379,6 @@ export function CommandMenu(props: {
       }) || [];
       if (chatPage()) ranked.sort((left, right) => right.score - left.score
         || compareChatsBySort(left.command!.chat!, right.command!.chat!, chatSort()));
-      // Each group once, in the order of its best match.
       const groupOf = (row: typeof ranked[number]) => chatPage() ? "Results" : row.command ? paletteGroupOf(row.command) : row.group;
       const firstSeen = new Map<string, number>();
       ranked.forEach((row, at) => { if (!firstSeen.has(groupOf(row))) firstSeen.set(groupOf(row), at); });
@@ -427,9 +422,8 @@ export function CommandMenu(props: {
   });
 
   /*
-   * The rows drawn: a rebuild (a folder toggled, a chat's state changing) makes every row anew, and drawing each
-   * again cost a toggle 30-80ms. A row whose content is the same keeps the object drawn for it, so only rows that
-   * changed are drawn again; its place in the list is read from indexOf, which follows each rebuild.
+   * A rebuild makes every row anew, and drawing each again is slow. A row whose content is the same keeps the object
+   * drawn for it, so only rows that changed are drawn again; its place is read from indexOf, which follows each rebuild.
    */
   let kept = new Map<string, Row>();
   const sameRow = (a: Row, b: Row) => {
@@ -493,7 +487,6 @@ export function CommandMenu(props: {
   });
   createEffect(() => { void chatView(); void chatSort(); setActive(0); });
   createEffect(() => {
-    // The first row brings its group label into view with it.
     if (props.open && active() === 0 && listbox) listbox.scrollTop = 0;
     else if (props.open) document.getElementById(optionId(active()))?.scrollIntoView({ block: "nearest" });
   });
@@ -530,8 +523,6 @@ export function CommandMenu(props: {
     if (searchHere) focusInput();
     else requestAnimationFrame(() => { if (listbox) listbox.scrollTop = 0; listbox?.focus(); });
   };
-  // Stepping out returns to the row it left from; from the input (Backspace
-  // on the chip) typing carries on there.
   const backScope = (toList = true) => {
     const previous = scopeReturn();
     setScopeReturn(null);
@@ -586,7 +577,7 @@ export function CommandMenu(props: {
     setEditingValue(target.chat.title || "");
   };
   /*
-   * One mutation at a time (Codex review): a rename, move or delete holds `busy` until it settles, so a second choice
+   * One mutation at a time: a rename, move or delete holds `busy` until it settles, so a second choice
    * cannot start another; and its completion acts only on the launch and the step it was started from, so a slow one
    * finishing after chat search closed, reopened or moved on changes nothing there.
    */
@@ -678,10 +669,8 @@ export function CommandMenu(props: {
     runCommand(command);
   };
 
-  // Where chat search's own keys act: the list, and (for chords) the search field above it.
   const inList = () => Boolean(listbox?.contains(document.activeElement));
   const inSearch = () => document.activeElement === input || inList();
-  // `/` from the list: on a folder in the full list, search inside that folder; anywhere else, the search field.
   const searchFromList = () => {
     const row = selectable()[active()];
     const project = row?.type === "folder" || row?.type === "browse-all" ? row.project : row?.type === "command" ? row.command.project : null;
@@ -816,11 +805,7 @@ export function CommandMenu(props: {
     });
   }
 
-  /*
-   * The list grammar: ↑↓, Home/End, Page Up/Down, ←→ through folders, Enter, Escape, Backspace, Tab into a page and
-   * typing to search. These are how the list moves, so they stay here. Chat search's own keys (Ctrl+P, Ctrl+Enter,
-   * `/`, and Space and C while selecting) are commands in the registry, registered above, and run before this does.
-   */
+  // Chat search's own keys are commands in the registry and run before this list grammar does.
   const keydown = (event: KeyboardEvent) => {
     if (event.isComposing || event.keyCode === 229) return;
     const inList = event.currentTarget === listbox;
@@ -905,7 +890,6 @@ export function CommandMenu(props: {
 
   const changeOpen = (open: boolean) => { if (!open) close(); else props.onOpenChange(true); };
 
-  // The rows in their groups: a heading opens a Section; an untitled one is a break between groups.
   const sections = createMemo(() => {
     const out: { key: string; label: string; rows: SelectableRow[] }[] = [];
     for (const row of rows()) {
@@ -914,10 +898,7 @@ export function CommandMenu(props: {
     }
     return out.filter((section) => section.rows.length);
   });
-  /*
-   * The sections drawn: each a run of blocks, a row and (a folder's) the rows under it. Drawn by key, so what a
-   * toggle rebuilds keeps its place -- a folder's Expand above all, which slides its chats open and shut.
-   */
+  // Drawn by key, so what a toggle rebuilds keeps its place: a folder's Expand slides its chats open and shut.
   type Block = { key: string; row: SelectableRow; children: SelectableRow[] };
   const sectionsByKey = createMemo(() => new Map(sections().map((section) => {
     const blocks: Block[] = [];
@@ -929,7 +910,6 @@ export function CommandMenu(props: {
     return [section.key, { label: section.label, blocks }] as const;
   })));
   const queryText = () => parsedQuery().text;
-  // The cursor is lit only where it acts (see listFocused); the pointer moves it, and a press keeps focus where it is.
   const lit = (row: SelectableRow) => active() === indexOf(row)
     && (!chatPage() || listFocused() || pointerCursor() || searching() || selectionMode() || moveMode());
   const rowProps = (row: SelectableRow) => ({
@@ -986,7 +966,6 @@ export function CommandMenu(props: {
     </Item>;
   };
 
-  // On a phone the keys mean nothing: the hints give way to a bar of the view's actions.
   const phoneActions = (): OverlayAction[] => {
     if (!chatPage() || moveMode()) return [];
     if (selectionMode()) return [
@@ -1026,7 +1005,6 @@ export function CommandMenu(props: {
         placeholder={moveMode() ? "Choose destination…" : chatPage() ? chatScope().kind === "project" ? `Search ${scopeName()} chats…` : "Search chats, projects, workspaces…" : modelSelectorPage() ? "Find models…" : pageMeta()?.placeholder || "Run a command…"}
         value={moveMode() ? "" : parsedQuery().text}
         onInput={(value) => {
-          // A finished is:… token becomes the activity chip.
           const view = chatPage() ? /(^|\s)is:(\w+)\s$/i.exec(value) : null;
           if (view && VIEW_TOKENS[view[2]!.toLowerCase()]) { setChatView(VIEW_TOKENS[view[2]!.toLowerCase()]!); value = value.slice(0, view.index); input.value = value; }
           setQuery(serializeChatQuery(parsedQuery().filters, value));
@@ -1061,7 +1039,6 @@ export function CommandMenu(props: {
                   const block = () => section()?.blocks.find((item) => item.key === blockKey);
                   return <>
                     <Show when={block()?.row} keyed>{renderRow}</Show>
-                    {/* A folder's chats open under it (Expand), and shut the same way. */}
                     <Show when={block()?.row.type === "folder"}><Expand open={Boolean(block()?.children.length)}><For each={block()?.children ?? []}>{renderRow}</For></Expand></Show>
                   </>;
                 }}</For>

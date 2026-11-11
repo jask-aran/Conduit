@@ -6,7 +6,6 @@ import { keyboardTravel } from "@/components/ui/motion";
 import { followViewport } from "@/components/ui/viewport";
 import { PHONE_LAYOUT_QUERY } from "@/components/ui/layout";
 
-/** Shared phone-shell query. Narrow desktop windows keep desktop navigation. */
 export const MOBILE_LAYOUT_QUERY = PHONE_LAYOUT_QUERY;
 
 export function isMobileLayout(): boolean {
@@ -15,43 +14,21 @@ export function isMobileLayout(): boolean {
 
 export type MobileOverlayKind = "sidebar" | "workspace";
 
-/** Marks the document for CSS overscroll locks while a phone overlay is open. */
 export function setMobileOverlayKind(kind: MobileOverlayKind | null): void {
   if (typeof document === "undefined") return;
   if (kind) document.documentElement.setAttribute("data-mobile-overlay", kind);
   else document.documentElement.removeAttribute("data-mobile-overlay");
 }
 
-/**
- * Pin the app shell to the visual viewport so the composer stays above the
- * software keyboard on phones (iOS pans via offsetTop; Android often resizes).
- * Returns an disposer for onCleanup. The variables themselves are the
- * library's (components/ui/viewport.ts, followViewport); what is here is
- * telling it about the keyboard.
- *
- * `visualViewport` alone is not enough on a phone, in either client and for
- * two unrelated reasons. The page asks for
- * `interactive-widget=resizes-content`, which is a request: a browser may
- * leave both viewports alone and let the keyboard overlay the page, and
- * Capacitor's SystemBars pads the WebView's parent only behind two gates (a
- * recent WebView with `viewport-fit=cover`, or Android 15 and up). Off either
- * path nothing resizes, `visualViewport.height` stays the full screen, and
- * the transcript sits behind the keyboard with nothing able to say otherwise.
- *
- * So the keyboard is measured rather than inferred, from whichever layer
- * knows: Chromium's VirtualKeyboard API in a browser, the Capacitor plugin in
- * the Android shell. Where neither exists -- iOS, which pans instead of
- * resizing -- `visualViewport` and `--vv-offset-top` are already the answer.
+/*
+ * `visualViewport` alone is not enough on a phone: `interactive-widget` is a request a browser may ignore, and
+ * Capacitor's SystemBars pads the WebView only behind gates. So the keyboard is measured: VirtualKeyboard in a browser,
+ * the plugin in the Android shell; on iOS, which pans instead of resizing, `visualViewport` is already the answer.
  */
 export function bindVisualViewportShell(): () => void {
   const root = document.documentElement;
   const vv = window.visualViewport;
-  /*
-   * Watched only so the probe can say what arrived and in what order. The two
-   * questions left are whether the shell's keyboard event fires at all on the
-   * runs where nothing moves, and whether focus leaves the composer just
-   * before a scroll closes the keyboard -- neither visible in a height.
-   */
+  // Watched only so the probe can say what arrived and in what order.
   const named = (name: string) => () => logKeyboardEvent(name, Math.round(vv?.height ?? window.innerHeight));
   const onVvResize = named("vv-resize");
   const onWinResize = named("win-resize");
@@ -71,18 +48,8 @@ export function bindVisualViewportShell(): () => void {
   const shell = followViewport({ onReading: reportKeyboardProbe });
   const { sync, readRestBottom } = shell;
 
-  /*
-   * Chromium's own answer, for every client that is not the Android shell.
-   *
-   * `interactive-widget=resizes-content` in the page's viewport tag asks the
-   * browser to shorten the window itself, and it does not always: a phone
-   * browser is free to leave both viewports alone and let the keyboard sit on
-   * top, which is a transcript that never moves for the same reason as in the
-   * WebView, arrived at differently. `overlaysContent` stops asking. It says
-   * this app will do its own resizing, and in exchange `geometrychange`
-   * reports exactly how much room the keyboard is taking -- the same number
-   * the shell hands over on Android, from the layer that actually knows.
-   */
+  // `overlaysContent` stops asking the browser to resize (it may not); `geometrychange` then reports exactly how much
+  // room the keyboard takes.
   const virtualKeyboard = (navigator as Navigator & {
     virtualKeyboard?: EventTarget & { overlaysContent: boolean; boundingRect: DOMRect };
   }).virtualKeyboard;
@@ -111,67 +78,23 @@ export function bindVisualViewportShell(): () => void {
   }
 
   /*
-   * The Android shell's answer, and the only one that is a curve rather than
-   * a stream of positions.
-   *
-   * `@capacitor/keyboard` reported the keyboard once, after it had finished
-   * moving, so a shell sized from it snapped to where the keyboard was about
-   * to be and then waited for it. Worse, it took the frames in between away
-   * from everyone else: its own animation callback sits on the root view with
-   * `DISPATCH_MODE_STOP`, so nothing below could follow the keyboard even
-   * knowing how. It is gone, and `ConduitKeyboardPlugin` replaces it.
-   *
-   * What that plugin sends is the whole travel at its start -- where the
-   * keyboard is going, how long it will take, and the system's own
-   * interpolator sampled into a table -- rather than a height per frame. A
-   * height per frame can only ever be as smooth as the bridge carrying it,
-   * and the bridge delivered six of them across a 285ms animation. Drawn from
-   * the description instead, the shell produces a height on every frame the
-   * display renders, on exactly the curve the keyboard is using, and no frame
-   * waits on a message to arrive.
-   *
-   * The per-frame events still arrive and are still listened to, because the
-   * animation is the system's to change or cancel: they correct the drawing
-   * if the two ever disagree, and `ime-end` is what settles it.
+   * The plugin sends the whole travel at its start (target, duration, the system's interpolator sampled) rather than a
+   * height per frame, which the bridge delivers only a few times per travel. The per-frame events still correct the
+   * drawing, since the animation is the system's to change or cancel, and `ime-end` settles it.
    */
   let dropKeyboard: (() => void) | null = null;
   let disposed = false;
   if (installedClientKind === "android") {
     let drawing = 0;
-    /*
-     * Whether a travel has been described and not yet reported finished.
-     *
-     * Separate from whether a frame is scheduled, because the two stop at
-     * different times: the drawing reaches the end of its duration while
-     * per-frame events are still arriving behind it, late, carrying positions
-     * the keyboard has already left. Accepted then, they drag the shell back
-     * down the curve it has just finished climbing -- which is a composer that
-     * settles, jumps, and settles again. Until the travel is reported over,
-     * the drawing is the only account of it that is listened to.
-     */
+    // Separate from whether a frame is scheduled: per-frame events arriving late after the drawing ends would drag the
+    // shell back down the curve it just finished climbing.
     let travelling = false;
-    /*
-     * When the travel being drawn is taken to have started, and how long it
-     * runs. Held out here because the per-frame events correct the first of
-     * them: the description is written in `onStart` and read here whenever the
-     * bridge delivers it, so the clock starts late by however long that took
-     * and the shell runs that far behind the keyboard for the whole travel.
-     * Each frame the shell reports carries the system's own progress through
-     * the animation, which says where the clock should have been.
-     */
+    // `began` is corrected by the per-frame events: the description crosses the bridge late, and each frame carries
+    // the system's own progress.
     let began = 0;
     let travelDuration = 0;
-    /*
-     * The shape of the last travel the platform described in full.
-     *
-     * A hide still slides down the screen when `getDurationMillis` answers
-     * -1, so the travel is drawn with the shape of the one before it rather
-     * than handed back to the per-frame events, which arrive about six times
-     * across a travel and read as a stutter. A show and the hide that follows
-     * it are the same curve run in opposite directions, so the one just seen
-     * is the closest description available of the one that will not describe
-     * itself.
-     */
+    // A hide whose `getDurationMillis` is -1 still slides, so it is drawn with the shape of the last described travel:
+    // a show and its hide are the same curve run in opposite directions.
     let lastDurationMs = 250;
     let travel: ReturnType<typeof travelWithoutLayout> | null = null;
     let lastCurve: number[] = [0, 1];
@@ -179,7 +102,6 @@ export function bindVisualViewportShell(): () => void {
       if (drawing) cancelAnimationFrame(drawing);
       drawing = 0;
     };
-    /** The sampled curve, read between its points. */
     const along = (curve: number[], t: number) => {
       const span = (curve.length - 1) * Math.min(1, Math.max(0, t));
       const step = Math.min(curve.length - 2, Math.floor(span));
@@ -199,8 +121,8 @@ export function bindVisualViewportShell(): () => void {
         ): Promise<{ remove(): void }>;
         safeArea?(): Promise<{ top: number; right: number; bottom: number; left: number }>;
       }>("ConduitKeyboard");
-      // Asked for, not only told: a page that starts after the insets were applied (a cold start, coming back after
-      // its renderer was reclaimed) had none, and the composer sat under the gesture bar. An older app has no answer.
+      // Asked for, not only told: a page that starts after the insets were applied (a cold start, a reclaimed renderer)
+      // has none, and the composer would sit under the gesture bar. An older app has no answer.
       void plugin.safeArea?.().then((area) => {
         const style = document.documentElement.style;
         style.setProperty("--safe-area-inset-top", `${area.top}px`);
@@ -211,14 +133,8 @@ export function bindVisualViewportShell(): () => void {
         sync();
       }).catch(() => {});
       const animation = await plugin.addListener("keyboardAnimation", (info) => {
-        /*
-         * `getDurationMillis` answers -1 when the platform will not say how
-         * long the travel takes -- Gboard does this when the back button
-         * dismisses it, where the emulator's keyboard gives a real duration --
-         * and dividing by that runs the clock backwards, pins the curve at its
-         * first point and leaves the shell holding the keyboard's old position
-         * while the keyboard leaves without it.
-         */
+        // `getDurationMillis` answers -1 when the platform will not say (Gboard dismissed by back), and dividing by
+        // that would run the clock backwards.
         const described = info.durationMs > 0 && Array.isArray(info.curve) && info.curve.length >= 2;
         if (described) {
           lastDurationMs = info.durationMs;
@@ -233,10 +149,10 @@ export function bindVisualViewportShell(): () => void {
           `${Math.round(info.from)}->${Math.round(info.to)} ${Math.round(durationMs)}ms`);
         stopDrawing();
         travelling = true;
-        // Rooms given meanwhile (the composer's field going) glide on the keyboard's time (motion.ts).
+        // Rooms given meanwhile (the composer's field going) glide on the keyboard's time.
         const travelLeft = durationMs - (info.startedAt ? Math.min(durationMs, Math.max(0, Date.now() - info.startedAt)) : 0);
-        // With the native composer up, the travel has no layout in it (keyboard-travel.ts), and carries the rooms too:
-        // it measures before they are told.
+        // With the native composer up, the travel has no layout in it, and carries the rooms too: it measures before
+        // they are told.
         travel?.cancel();
         travel = null;
         if (travelsWithoutLayout()) {
@@ -256,21 +172,8 @@ export function bindVisualViewportShell(): () => void {
         drawing = requestAnimationFrame(draw);
       });
       const geometry = await plugin.addListener("keyboardGeometry", (info) => {
-        /*
-         * The drawing is the system's curve reproduced, so while it is running
-         * it is the better account of where the keyboard is -- it has a value
-         * for every frame and these arrive a handful of times. They are the
-         * authority on where along that curve the keyboard has got to, though,
-         * and the clock drawing it started when the description crossed the
-         * bridge rather than when the animation did.
-         *
-         * So the clock is wound back towards where the system says it should
-         * be, and only ever forwards through the travel: a shell that jumped
-         * back down the curve to meet a late frame is the stutter this whole
-         * arrangement exists to remove. A few milliseconds a frame closes a
-         * bridge's worth of lag inside a dozen frames without any of them
-         * being visible as a step.
-         */
+        // The clock is only wound forward, a few ms a frame, towards where the system says it should be: jumping back
+        // down the curve to meet a late frame is a visible stutter.
         // A travel without layout lands itself; the system's end only says where.
         if (travel?.running) {
           if (!info.animating) { travelling = false; travel.settle(info.height); logKeyboardEvent("ime-end", Math.round(info.height)); }
@@ -308,22 +211,11 @@ export function bindVisualViewportShell(): () => void {
         shell.source = "viewport";
         sync();
       };
-      /*
-       * The resting inset is written by the shell whenever the bars change,
-       * which is not only when a keyboard moves: the navigation bar itself
-       * can be swapped between gestures and three buttons while the app is
-       * open, and on a cold start it is written once before any keyboard has
-       * ever travelled. Reading it only at the ends of a travel left the
-       * composer with no room for the navigation bar until the first time
-       * somebody typed. Watching the attribute the shell writes catches both.
-       */
+      // The shell rewrites the resting inset whenever the bars change (a gesture/three-button swap, a cold start), not
+      // only when a keyboard moves.
       readRestBottom();
       restObserver.observe(root, { attributes: true, attributeFilter: ["style"] });
-      // Only now is the keyboard's position actually being reported. Claiming
-      // it up front meant a shell whose plugin failed to register went on
-      // believing `innerHeight` was the window -- the full screen, keyboard
-      // and all, with the composer behind it -- and never fell back to the
-      // viewport the comment promised.
+      // Claimed only now, so a shell whose plugin failed to register falls back to the viewport.
       shell.source = "insets";
       sync();
       if (disposed) dropKeyboard();

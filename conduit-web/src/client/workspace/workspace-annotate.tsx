@@ -4,7 +4,6 @@ import { Decoration, EditorView, hoverTooltip } from "@codemirror/view";
 import { createEffect, createSignal, Show } from "solid-js";
 import type { ReviewCommentSide } from "../chat/review-comments";
 
-/** A character range described as whole lines plus the columns it ran between. */
 export interface AnnotationSpan {
   side: ReviewCommentSide;
   from: number;
@@ -17,7 +16,6 @@ export interface AnnotationSpan {
 }
 
 export interface AnnotationSelection extends AnnotationSpan {
-  /** The other side of a comparison, when the selection came from one. */
   counterpart?: AnnotationSpan;
   left: number;
   top: number;
@@ -54,7 +52,6 @@ export function annotationSpan(doc: Text, side: ReviewCommentSide, from: number,
   };
 }
 
-/** Resolves a comment's line and column pair against a document. */
 export function commentRange(view: EditorView, item: Pick<CommentHighlight, "from" | "to" | "startColumn" | "endColumn">) {
   const doc = view.state.doc;
   const start = doc.line(Math.max(1, Math.min(item.from, doc.lines)));
@@ -94,7 +91,6 @@ export function commentHighlightsExtension(items: readonly CommentHighlight[], l
 
 const POPUP_WIDTH = 300;
 
-/** Where a popup should sit so it clears the selection: just past its end. */
 export function selectionEnd(view: EditorView) {
   const range = view.state.selection.main;
   return view.coordsAtPos(range.to) ?? view.coordsAtPos(range.head) ?? view.coordsAtPos(range.from);
@@ -103,13 +99,8 @@ export function selectionEnd(view: EditorView) {
 export function annotationExtension(options: {
   side: ReviewCommentSide;
   onSelect: (selection: AnnotationSelection | null) => void;
-  /** Pairs the selection with the same passage on the other side of a comparison. */
   counterpart?: (side: ReviewCommentSide, from: number, to: number) => AnnotationSpan | undefined;
-  /**
-   * Describes the selection in terms the view uses, such as an inline
-   * comparison's per-side rows. Returns `undefined` to fall back to the
-   * editor's own line numbers.
-   */
+  /** Returns `undefined` to fall back to the editor's own line numbers. */
   read?: (view: EditorView) => AnnotationReading | null | undefined;
 }): Extension {
   const publish = (view: EditorView, reading: AnnotationReading | null) => {
@@ -121,7 +112,6 @@ export function annotationExtension(options: {
     options.onSelect({
       ...reading.span,
       counterpart: reading.counterpart,
-      // The box sits past the end of the selection, and inside the view.
       left: Math.max(4, host ? Math.min(left, host.width - POPUP_WIDTH) : left),
       top: reading.bottom - (host?.top ?? 0),
     });

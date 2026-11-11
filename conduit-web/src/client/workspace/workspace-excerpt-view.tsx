@@ -10,13 +10,7 @@ import { workspaceLanguageForFilename } from "./workspace-languages";
 import { CodeExcerpt, codeExcerptSetup } from "@/components/ui/code-excerpt";
 import { reviewCommentClass } from "@/components/ui/editor";
 
-/**
- * A window onto the lines a review comment was written against, rendered by the
- * same CodeMirror setup as the file viewer so an excerpt reads exactly as it did
- * where it was captured, gutter numbers and all. A comment taken on a comparison
- * carries the other side with it, and is rendered by the same inline diff the
- * comparison itself uses.
- */
+/** Rendered by the same CodeMirror setup as the file viewer so an excerpt reads exactly as it did where it was captured. */
 export default function WorkspaceExcerptView(props: {
   path: string;
   text: string;

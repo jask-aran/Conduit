@@ -8,15 +8,7 @@ import { COMMAND_IDS, commandLabel } from "../commands/command-registry";
 import { isMobileLayout } from "./mobile-layout";
 import { isConduitManagedProject } from "./sidebar-preferences";
 
-/*
- * The menus a chat and a place (a project or a workspace) open, wherever their rows are (the sidebar, the
- * dashboards): the same rows in the same order, the caller binding what each does.
- */
-
-/**
- * A submenu of places to move to, each with its glyph. current: the one already chosen, checked (a single chat's);
- * without it the rows are plain actions (several chats, a place's chats). held: places that cannot be chosen.
- */
+/** Without current the rows are plain actions (several chats, a place's chats); with it the current place is checked. */
 export function MoveTo(props: { label: string; places: Project[]; current?: string; held?: (place: Project) => boolean; disabled?: boolean; onMove: (place: Project) => void }) {
   const pick = (id: string) => { const place = props.places.find((item) => item.id === id); if (place) props.onMove(place); };
   return <MenuSub phone={isMobileLayout()}>
@@ -32,11 +24,9 @@ export function MoveTo(props: { label: string; places: Project[]; current?: stri
   </MenuSub>;
 }
 
-/** Pin to the sidebar, or unpin. */
 const PinRow = (props: { pinned: boolean; onToggle: () => void }) =>
   <MenuRow icon={props.pinned ? <Icons.PinOff /> : <Icons.Pin />} onSelect={props.onToggle}>{props.pinned ? "Unpin" : "Pin to sidebar"}</MenuRow>;
 
-/** A chat's menu. pin: absent where a chat cannot be pinned; openBeside, stop: absent where they do not apply. */
 export function ChatMenuItems(props: {
   project: Project; places: Project[];
   onRename: () => void; onMove: (place: Project) => void; onCopy: () => void; onOpenBeside?: () => void; onOpenTerminal: () => void;
@@ -58,11 +48,9 @@ export function ChatMenuItems(props: {
   </>;
 }
 
-/** What removing a place does, by what it is. */
 export const deletePlaceLabel = (project: Project) => project.deletesFilesOnRemove === false ? "Unlink workspace"
   : isWorkspace(project) ? "Delete workspace" : "Delete folder";
 
-/** A place's menu: a project's or a workspace's. While a clone is under way it says so and offers nothing. */
 export function PlaceMenuItems(props: {
   project: Project; places: Project[];
   onNewChat: () => void; onOpenMaximized?: () => void; onRename: () => void; pin?: { pinned: boolean; onToggle: () => void };
@@ -85,13 +73,11 @@ export function PlaceMenuItems(props: {
   </Show>;
 }
 
-/** What a chat's and a place's menu do, for a host that hands every row the same (the dashboards). pinned: undefined where it cannot be pinned. */
 export type ItemActions = {
   places: () => Project[];
   renameChat: (chat: ChatSummary, project: Project) => void;
   moveChat: (chat: ChatSummary, from: Project, to: Project) => void;
   copyChat: (chat: ChatSummary) => void;
-  /** Open the chat beside the current pane. */
   openBeside?: (chat: ChatSummary, project: Project) => void;
   openTerminal: (chat: ChatSummary, project: Project) => void;
   running: (chat: ChatSummary) => boolean;

@@ -30,7 +30,6 @@ import { keepThisComputerConnected } from "./platform/this-computer.ts";
 import { startPush } from "./platform/push.ts";
 // Keeps Float told of the hub path in use (and its sign-in), from startup rather than only once Settings has loaded.
 import { onFloatOpensSettings } from "./platform/float";
-// The clients that stage a downloaded update and install it on request.
 const updateShell = desktopShell ?? androidShell;
 import { PanelTopIcon } from "lucide-solid";
 import { NotificationToaster, toast } from "@/components/ui/notifications";
@@ -156,7 +155,6 @@ import {
   TRANSCRIPT_WIDTH_STORAGE_KEY,
 } from "./chat/transcript-appearance";
 import "./styles.css";
-// The library's styles (components v2): inert until a piece the app draws with it carries its .ui- classes.
 import "@/components/ui/styles";
 
 const DESKTOP_UPDATE_ROUTE_KEY = "conduit:desktop-update-route";
@@ -189,11 +187,8 @@ applyTranscriptAppearance({
 
 type SettingsSection = "ui" | "shortcuts" | "models" | "prompts" | "device" | "devices" | "workspaces" | "voice" | "search";
 /**
- * Idle says nothing and shows nothing. "ready" is a build installed and
- * waiting for a quiet moment, which is a state that can last minutes and has
- * to survive being ignored. "working" carries its own words because the three
- * clients have different ones -- a download percentage, an APK handed to the
- * system installer, a worker taking over.
+ * "working" carries its own words because the three clients have different ones: a download percentage, an APK
+ * handed to the system installer, a worker taking over.
  */
 export type UpdateState =
   | { kind: "idle" }
@@ -218,14 +213,10 @@ const HarnessDashboard = lazy(() => import("./dashboard/harness-dashboard"));
 const TerminalPane = lazy(() => import("./remotes/terminal-pane").then((module) => ({ default: module.TerminalPane })));
 const TerminalRoute = lazy(() => import("./remotes/terminal-route").then((module) => ({ default: module.TerminalRoute })));
 const Settings = lazy(() => import("./settings/settings").then((module) => ({ default: module.Settings })));
-// Loaded when a Browser pane first opens: nothing else needs it.
 const BrowserPane = lazy(() => import("./browser/browser-pane").then((module) => ({ default: module.BrowserPane })));
 const prefetchProjectDashboard = (project: Project) => void import("./project/dashboard").then((module) => module.prefetchProjectDashboard(project)).catch(() => {});
 const prefetchWorkspaceTerminal = () => void import("./workspace/workspace-panel");
 
-// The desktop client is often installed on the machine the server runs on, and
-// that address is one nobody should have to type. It is offered only when the
-// probe answers as Conduit, so the button never points at nothing.
 const ConnectDialog = lazy(() => import("./navigation/pair-dialog").then((module) => ({ default: module.ConnectDialog })));
 const LOCAL_SERVER_ORIGIN = "http://127.0.0.1:4310";
 // The least an address check and a look on the network last, so one that ends at once still reads as a look.
@@ -234,13 +225,8 @@ const NETWORK_LOOK_MIN_MS = 1200;
 const ADDRESS_CHECK_DEBOUNCE_MS = 600;
 
 /**
- * Address, then password. The two steps are separate because the first one is
- * the only chance to say "that is not a Conduit server" before asking for a
- * password, and because a browser can only ever do the first: it has no way to
- * reach another origin, so there it records an address and nothing more.
- *
- * Nothing is remembered until the server has actually answered. A half-added
- * entry that was never signed in to is a row that can only fail.
+ * Nothing is remembered until the server has answered: an entry never signed in to is a row that can only fail. A
+ * browser cannot reach another origin, so there it records an address and nothing more.
  */
 export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: string) => void; onOpened?: () => void }) {
   const recordOnly = !isInstalledClient();
@@ -257,15 +243,8 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
   const hostOf = (origin: string) => origin.replace(/^https?:\/\//, "");
 
   /*
-   * An address is looked for as it is typed: a moment after typing stops (or
-   * at once on Enter) the field says it is looking, then what answered. The
-   * look lasts at least a beat, so a fast answer still reads as a search
-   * rather than a flicker.
-   *
-   * The app asks /healthz and learns the server's name. A browser cannot read
-   * another server's reply (Conduit answers cross-origin only for its shells),
-   * so it can only learn that something answered there; what it offers then
-   * is to open it in a tab of its own, where that server signs you in.
+   * A browser cannot read another server's reply (Conduit answers cross-origin only for its shells), so it learns
+   * only that something answered there, and offers to open it in a tab of its own.
    */
   const checkRun = createLatest();
   let checkTimer: ReturnType<typeof setTimeout> | undefined;
@@ -302,7 +281,6 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     setError("");
     if (/[.:]|localhost/.test(value.trim()) && !(!recordOnly && parsePairingLink(value))) checkTimer = setTimeout(() => void checkAddress(), ADDRESS_CHECK_DEBOUNCE_MS);
   };
-  // A browser's last step: remember the server, then open it beside this one.
   const openFound = (origin: string) => {
     addServer(origin);
     void publishServerDirectory(servers());
@@ -318,8 +296,7 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     try {
       const { token, origin } = await redeemPairing(link);
       addServer(origin);
-      // Saved knowing who it is: the identity came from the paired device's
-      // trusted setup, and the routes are the ones it offered.
+      // The identity is trusted: it came from the paired device's setup.
       if (link.identity) {
         learnIdentity(origin, { id: link.identity.id, publicKey: link.identity.publicKey, tls: true,
           paths: (link.routes ?? []).map((route) => ({ origin: route, scope: scopeOf(route) })) });
@@ -336,7 +313,6 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
   const submit = async (event: SubmitEvent) => {
     event.preventDefault();
     setError("");
-    // A pasted pairing link pairs; the address it carries is the server.
     const link = !recordOnly && !verifiedOrigin() ? parsePairingLink(address()) : null;
     if (link) return void pair(link);
     if (!verifiedOrigin()) return void checkAddress();
@@ -364,11 +340,8 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
   };
 
   /*
-   * What is offered before anything is typed: this computer's server, and
-   * what is on this network. Looked for when the form opens, and again when
-   * Change server leaves the server it opened on: signed out, it opens on that
-   * one, and while it is held it is neither offered nor listed, so a look
-   * taken only then finds nothing once it has been let go.
+   * Looked for again when Change server leaves the server it opened on: while that one is held it is neither offered
+   * nor listed, so a look taken only at open finds nothing once it is let go.
    */
   const lookRun = createLatest();
   const look = () => {
@@ -382,12 +355,8 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
 
   const lookForLocalServer = (current: () => boolean) => {
     if (verifiedOrigin() || servers().some((entry) => entry.origin === LOCAL_SERVER_ORIGIN)) return;
-    // A browser cannot ask: Conduit answers a cross-origin request only for
-    // the two shells it ships, so the probe would be refused rather than
-    // answered. It offers the address anyway, as something to fill in rather
-    // than something confirmed -- being wrong costs a row that says
-    // Unreachable, and being silent costs the address nobody should have to
-    // type.
+    // A browser cannot ask (Conduit answers cross-origin only for its shells), so it offers the address unconfirmed:
+    // being wrong costs a row that says Unreachable.
     if (recordOnly) return setLocalServer(LOCAL_SERVER_ORIGIN);
     void fetch(buildHttpUrl("/healthz", LOCAL_SERVER_ORIGIN), { cache: "no-store" })
       .then((response) => response.ok ? response.json() as Promise<{ ok?: boolean }> : null)
@@ -396,22 +365,15 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
   };
 
   /*
-   * What is on this network.
-   *
-   * A server already held is not offered as though it were new, and that is
-   * matched on identity rather than address: the same machine found at
-   * 192.168.0.128 having been added by its tunnel name is a route this client
-   * already has, not a server it is missing.
+   * A server already held is matched on identity rather than address: the same machine found at a LAN address after
+   * being added by its tunnel name is a route this client already has.
    */
   const lookOnNetwork = (current: () => boolean) => {
     if (!canDiscoverServers()) return;
     const heldOrigins = new Set(servers().map((entry) => entry.origin));
     const heldIds = new Set(servers().map((entry) => entry.id).filter(Boolean));
     setSearching(true);
-    // The look lasts at least a beat, so one that ends at once still reads as a look rather than a flicker.
     const beat = new Promise((resolve) => setTimeout(resolve, NETWORK_LOOK_MIN_MS));
-    // Rows arrive as servers resolve and keep their place: a server seen
-    // again at another address updates its row rather than moving it.
     void discoverServers({
       onFound: (server) => {
         if (!current()) return;
@@ -424,14 +386,8 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
   };
 
   /*
-   * Take a found address as far as the password, and no further.
-   *
-   * Proved first, against the key that came with it. That is a weaker claim
-   * than proving a server this client already knows -- both halves came from
-   * the same advertisement -- but it is the one that matters here: it says the
-   * thing answering at this address is the thing that published the record,
-   * rather than a record pointing at somebody else's machine. Who the server
-   * is, the person settles by signing in to it.
+   * Proved against the key that came with it: both came from the same advertisement, so this shows only that the
+   * thing answering is what published the record. Who the server is, the person settles by signing in.
    */
   const chooseFound = async (server: FoundServer) => {
     // A check like any other: typing while the proofs run, or another pick, supersedes it.
@@ -439,8 +395,6 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     const latest = checkRun.next();
     setError("");
     setAddress(server.origin);
-    // Every address it was found at, asked at once; the first that proves
-    // itself is the one kept. An unreachable interface costs nothing then.
     const proofs = await Promise.all(server.candidates.map((origin) => proveServer(origin, server.id, server.publicKey)));
     if (!latest()) return;
     const proved = server.candidates.find((_, index) => proofs[index]?.ok);
@@ -452,9 +406,8 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     const proof = proofs.find((item) => item.reason !== "unreachable") ?? { ok: false, reason: "unreachable" as const };
     if (proof.reason === "unreachable") return setError("That server did not answer. It may have gone since it was found.");
     if (proof.reason === "mismatch") return setError("That address did not prove it is the server that advertised it.");
-    // Unverifiable: this client cannot check an Ed25519 signature at all. The
-    // address is filled in rather than accepted, so it goes through the same
-    // health check as one that was typed.
+    // This client cannot check an Ed25519 signature: the address is filled in rather than accepted, so it gets the
+    // same health check as a typed one.
   };
 
   const useLocalServer = () => {
@@ -468,23 +421,15 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
     setVerifiedOrigin(origin);
   };
 
-  // What the look found; a server already confirmed (signing in again) is found without one.
   const status = () => check() ?? (verifiedOrigin() ? { state: "found" as const, title: hostOf(verifiedOrigin()!) } : null);
   const step = () => !verifiedOrigin() ? "find" : recordOnly ? "open" : "password";
   const plainAddress = () => { try { return normalizeServerOrigin(address()); } catch { return ""; } };
 
-  /*
-   * The address first, as it is what every way in ends at; under it, a step at a time (ConnectionSteps): what the
-   * look found, then either the ways to find a server (Connect, a QR, this computer, this network) or, once one
-   * answered, its password. The steps trade places in the same room, which eases to the size each needs.
-   */
   return <ConnectionForm onSubmit={submit}>
     <Show when={!props.adding}><Heading kind="connection" mark={<HarnessMark id="conduit" />}>Connect to your server</Heading></Show>
-    {/* In the Connect card the column is titled Add server: the field needs no label of its own. */}
     {(() => { const field = <ConnectionAddress id="native-server-address" aria-label="Server address" state={check()?.state}
       placeholder={props.adding ? (recordOnly ? "Server address" : "Address or pair link") : recordOnly ? "https://conduit.your-tailnet.ts.net" : "Address, or a link from conduit-server pair"} value={address()} onInput={(event) => typeAddress(event.currentTarget.value)}
       disabled={submitting() || (!props.adding && Boolean(verifiedOrigin()))} />;
-      // One row: the field, a code scanned into it, go. Once a server answered, the password's own arrow is the go.
       const entry = <ConnectionEntry>{field}
         <Show when={step() === "find"}>
           <Show when={!recordOnly && canScanQr()}><ConnectionScan onClick={() => setScanning(true)} disabled={submitting()} /></Show>
@@ -506,13 +451,8 @@ export function ServerConnectForm(props: { adding?: boolean; onDone: (origin: st
         <Show when={recordOnly && check()?.state === "missing" && /^http:/.test(plainAddress())}>
           <ConnectionButton type="button" variant="ghost" onClick={() => openFound(normalizeServerOrigin(address()))}><Icons.ExternalLink />Open anyway</ConnectionButton>
         </Show>
-        {/*
-          * One list of what can be had without typing: this computer's server, then what is on this network. A
-          * browser, which cannot look (no mDNS in a page, no plaintext LAN address from an HTTPS document), is told
-          * so on the sign-in screen rather than shown a search that never ends.
-          */}
+        {/* A browser cannot look (no mDNS in a page, no plaintext LAN address from HTTPS): it is told so instead. */}
         <Show when={canDiscoverServers() || localServer()} fallback={props.adding ? null : <Note kind="card">Finding servers on this network needs the Conduit app.</Note>}>
-          {/* The look plays on the list's own line, and says there what it came to when that is nothing. */}
           <ConnectionGroup>On this network<Show when={searching()}><ConnectionSpinner /></Show>
             <Show when={!searching() && !found().length && !localServer()}><small>No servers found</small></Show></ConnectionGroup>
           <Show when={found().length || localServer()}>
@@ -553,32 +493,17 @@ function NativeServerSetup(props: { onAuthenticated: () => void }) {
 }
 
 /**
- * Which server this client is on, and whether it can get in.
- *
- * Changing server remounts `App` rather than reloading the window. A reload
- * re-parses the whole bundle to arrive at the same place, and the assets are
- * on disk: nothing about the new server is in them. Disposing the tree runs
- * every `onCleanup` there is, which closes the streams, sockets and terminals
- * belonging to the server being left -- so this is a cold start in the only
- * sense that matters, minus the part that costs.
- *
- * Holding a token is taken as being signed in, without asking. The check cost
- * a round trip in front of a blank window -- a fifth of a second over a tunnel
- * -- to learn something the next request reveals anyway: every response goes
- * through `authorizedFetch`, and a 401 lands here as `NATIVE_AUTH_REQUIRED`.
+ * Changing server remounts `App` rather than reloading: disposing the tree runs every `onCleanup`, closing the left
+ * server's streams, sockets and terminals. Holding a token counts as signed in without asking: a 401 from
+ * `authorizedFetch` lands here as `NATIVE_AUTH_REQUIRED`.
  */
-/** Take down index.html's launch screen, once whatever replaces it is drawn. */
 const launchMark = document.querySelector(".launch-mark");
 const dismissLaunchMark = () => launchMark?.remove();
-/** Put the launch screen back over a server switch: dark until that server's app is drawn and fades in. */
 const showLaunchMark = () => { if (launchMark && !launchMark.isConnected) document.body.append(launchMark); };
-/** The server the interface is fetched from: the active route's address. */
 const liveUpdateOrigin = () => { const path = activePath(); return path ? dialOrigin(path) : null; };
 
 function NativeRoot() {
   const [state, setState] = createSignal<"loading" | "login" | "app">("loading");
-  // The server the app is drawn for. A switch is not drawn on the interface it left: the launch screen covers it while
-  // the new server's interface is taken (a reload into it), and only then is the app drawn and faded in.
   const [shown, setShown] = createSignal<string | null>(null);
   onMount(() => {
     const requireLogin = () => setState("login");
@@ -607,9 +532,7 @@ function NativeRoot() {
       })
       .catch(() => { if (activeOrigin() === origin) setState("login"); });
   });
-  // Sign-in has no arrival to wait for; it fades in on its own.
   createEffect(() => { if (state() === "login") dismissLaunchMark(); });
-  // The launch screen covers the wait for the token.
   return <Show when={state() !== "loading"}>
     <Show when={state() === "app" ? shown() ?? undefined : undefined} keyed fallback={<NativeServerSetup onAuthenticated={() => { setShown(activeOrigin()); setState("app"); }} />}>
       {(_origin: string) => <App />}
@@ -617,14 +540,10 @@ function NativeRoot() {
   </Show>;
 }
 
-/** Pane A, or the slot of a pane beside it (docs/design/panes-and-rail.md, 6b). */
 type PaneKey = "main" | number;
-/** A pane beside pane A: its chat session, its host element, and a page's unsent chat. */
 type PaneSlot = { index: number; session: SideChat; host: () => HTMLElement | undefined; setHost: (element: HTMLElement | undefined) => void; draft: { id: string; projectId: string } | null };
 
-// The first open is shown by then even if its panes never report laid out and still.
 const ARRIVAL_FALLBACK_MS = 2500;
-// Pane openings animate only once the first load has had this long.
 const PANES_SETTLE_MS = 1500;
 const DRAFT_DROP_FALLBACK_MS = 200;
 const ENTER_RETRY_MS = 100;
@@ -650,7 +569,6 @@ function App() {
     leader: LEADER_STROKE,
     validate: import.meta.env.DEV,
   });
-  // The hub's keybindings.json, changed outside Conduit: the shortcuts as it now has them, each binding as stored.
   window.addEventListener("conduit:keybindings-changed", (event) => {
     const overrides = (event as CustomEvent<Record<string, unknown>>).detail || {};
     shortcutManager.replaceOverrides(Object.fromEntries(Object.entries(overrides).flatMap(([commandId, bindings]) => {
@@ -674,9 +592,7 @@ function App() {
   };
   const [templates, setTemplates] = createSignal<Template[]>([]);
   const [externalProfiles, setExternalProfiles] = createSignal<Template[]>([]);
-  // Keyed by implementation, because that is what a manifest is registered
-  // under and what every chat carries. A profile elects a harness; the harness
-  // is what declares what it can do.
+  // Keyed by implementation: a manifest is registered under it and every chat carries it.
   const [harnessCapabilities, setHarnessCapabilities] = createSignal<Record<string, HarnessManifestView>>({});
   const [templatesLoading, setTemplatesLoading] = createSignal(true);
   const [workspaceSuggestions, setWorkspaceSuggestions] = createSignal<WorkspaceSuggestion[]>([]);
@@ -684,9 +600,8 @@ function App() {
   const [defaultTemplateId, setDefaultTemplateId] = createSignal("assistant");
   const [voiceSettings, setVoiceSettings] = createSignal<VoiceDictationSettings>(loadVoiceDictationSettings());
   const updateVoiceSettings = (next: VoiceDictationSettings) => setVoiceSettings(saveVoiceDictationSettings(next));
-  // Remembers the speakerphone (Prefer speakerphone) and re-finds a chosen microphone whose id moved. It reads the
-  // microphones without opening one (at startup that takes the phone's audio and pauses the person's music), and again
-  // whenever dictation has the microphone open, when the device names them freely.
+  // Reads the microphones without opening one: at startup opening one takes the phone's audio and pauses the
+  // person's music.
   const reconcileMicrophones = () => {
     void listAudioInputDevices({ openForNames: false }).then((devices) => {
       const patch = rememberMicrophones(voiceSettings(), devices);
@@ -697,7 +612,6 @@ function App() {
   onCleanup(onMicrophoneOpened(reconcileMicrophones));
   const [maxAttachmentBytes, setMaxAttachmentBytes] = createSignal(DEFAULT_MAX_ATTACHMENT_BYTES);
   const [meteorField, setMeteorField] = createSignal(selectedMeteorField());
-  // One shower behind every pane that shows a chat or a page (each Sheet's backdrop is a window onto it).
   const meteors = createMeteorField();
   const [sidebarChatLimit, setSidebarChatLimit] = createSignal(selectedSidebarChatLimit());
   const chatSort = useChatSort();
@@ -705,7 +619,6 @@ function App() {
   const [sidebarPins, setSidebarPins] = createSignal<string[]>([]);
   const [settingsLoaded, setSettingsLoaded] = createSignal(false);
   const [settingsSection, setSettingsSection] = createSignal<SettingsSection>("ui");
-  /** Whether a caller asked for that section, or merely opened Settings. */
   const [settingsNamedSection, setSettingsNamedSection] = createSignal(false);
   const [settingsWorkspaceId, setSettingsWorkspaceId] = createSignal<string | null>(null);
   const [workspaceIdentityId, setWorkspaceIdentityId] = createSignal<string | null>(null);
@@ -725,14 +638,6 @@ function App() {
     setWorkspaceExpandedState(next);
   };
   const [workspaceViewRequest, setWorkspaceViewRequest] = createSignal<{ tab: WorkspaceView; terminalId?: string; nonce: number } | null>(null);
-  // The tool the dock shows, as the dock reports it, so the rail can mark it
-  // before the dock's chunk has loaded.
-  // What the panes beside pane A hold, by slot -- a tool moved out of the
-  // dock, a file or terminal opened beside, a chat or a page -- their order
-  // left to right, and the shares of the main pane they take; per device.
-  // Where the layout comes from (5f): a URL naming panes restores exactly
-  // those; the app opened at its start page restores this device's last
-  // layout; any other URL -- an old link, someone else's share -- pane A alone.
   applyTabFrost();
   applyStreamFade();
   watchStrayFrost();
@@ -740,7 +645,6 @@ function App() {
   const launchUrl = new URL(location.href);
   const urlNamesPanes = launchUrl.searchParams.has("pane") || launchUrl.searchParams.has("a");
   const atStart = launchUrl.pathname === "/" && !launchUrl.search;
-  // Pane slots: two for the row beside pane A, three more for panes in the dock.
   const SLOT_IDS = [0, 1, 2, 3, 4];
   const MAX_DOCKED = 3;
   const storedViews = (urlNamesPanes ? launchUrl.searchParams.getAll("pane").slice(0, 2)
@@ -748,22 +652,17 @@ function App() {
     .map((value) => isSplitView(value) ? value : null);
   const storedDocked = (urlNamesPanes ? launchUrl.searchParams.getAll("dock") : atStart ? (readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-docked") || "").split("\n") : []).filter(isSplitView).slice(0, MAX_DOCKED);
   const initialViews: (SplitView | null)[] = [...(storedViews[0] ? [storedViews[0], storedViews[1] ?? null] : [storedViews[1] ?? null, null]), ...[0, 1, 2].map((index) => storedDocked[index] ?? null)];
-  // Pane A shows its route's chat or page, or, over it, any other view.
   const storedPaneA = urlNamesPanes ? launchUrl.searchParams.get("a") : atStart ? readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-a") : null;
   const [paneAOverride, setPaneAOverrideState] = createSignal<SplitView | null>(isSplitView(storedPaneA) && !/^(chat|page):/.test(storedPaneA) ? storedPaneA : null);
   const setPaneAOverride = (view: SplitView | null) => { setPaneAOverrideState(view); writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-a", view ?? ""); };
   const [slotViews, setSlotViews] = createSignal(initialViews);
   const [slotOrder, setSlotOrder] = createSignal<number[]>(SLOT_IDS.filter((slot) => initialViews[slot]));
-  // Panes moved into the dock: their slots keep their documents and sessions,
-  // drawn in the dock rather than the row. The dock shows one at a time, or a tool.
   const [dockedSlots, setDockedSlots] = createSignal<number[]>([2, 3, 4].filter((slot) => initialViews[slot]));
   const [dockSlot, setDockSlot] = createSignal<number | null>(null);
   const isDocked = (slot: PaneKey) => slot !== "main" && dockedSlots().includes(slot);
-  // What the dock holds: panes docked by hand, then those the row has no room for.
   const dockContents = () => [...dockedSlots(), ...foldedSlots()];
   const inDock = (slot: PaneKey) => slot !== "main" && dockContents().includes(slot);
   const [dockDocHost, setDockDocHost] = createSignal<HTMLElement>();
-  // The dock beside the panes, taking its room, or over them; per device.
   const [dockOverlay, setDockOverlayState] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "dock-overlay") === "true");
   const toggleDockOverlay = () => { const next = !dockOverlay(); setDockOverlayState(next); writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "dock-overlay", String(next)); };
   const [splitRatio, setSplitRatio] = createSignal(Math.max(0.2, Math.min(0.8, Number(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratio")) || 0.5)));
@@ -781,35 +680,22 @@ function App() {
     return stored === "diff" || stored === "chat" || stored === "terminal" ? stored : stored === "artifacts" ? "chat" : "files";
   })());
   const [workspaceFocusRequest, setWorkspaceFocusRequest] = createSignal(0);
-  // Back where the person was after an interface update or a server switch (resume-view.ts): the path is restored
-  // before the route is read, and the sidebar as it was.
   const resumed = takeView();
   const [mobileSidebarOpen, setMobileSidebarOpen] = createSignal(resumed?.sidebar === true);
   trackSidebar(mobileSidebarOpen);
   const initialRouteId = pathChatId();
-  // Asked for before anything else on the way in: every route waits on it,
-  // and behind the browser's six connections to a server it queued for a
-  // whole round trip behind reads nothing waits on. A route cannot finish
-  // loading if it fails during a long outage, so it keeps retrying.
+  // Asked first: every route waits on it, and behind the browser's six connections per server it queued a round
+  // trip. A route cannot finish loading if it fails during an outage, so it keeps retrying.
   const catalogueFresh = apiWhenServed<ProjectsPayload>("/v0/projects", true)
     .then((payload) => { writeCachedCatalogue(payload); return payload; });
-  // The dashboard is drawn from the last catalogue this device saw, if it has
-  // one, and corrected when the server answers: a cold open no longer waits
-  // a round trip (or a fresh TLS handshake) to show what it showed last time.
-  // A chat's address names its project, which a stale cache may not have yet;
-  // then that route waits for the server. Other routes always wait.
+  // A chat's address names its project, which a stale cache may not have yet; then that route waits for the server.
   const cachedCatalogue = location.pathname === "/" || initialRouteId ? readCachedCatalogue() : null;
   const catalogueRequest = cachedCatalogue ? Promise.resolve(cachedCatalogue) : catalogueFresh;
-  // A chat opened by its address is the other thing a first open waits on,
-  // so it is asked for in the same breath, ahead of the queue.
   const selectedChatRequest = initialRouteId ? Promise.all([
     apiWhenServed<ChatSummary>(`/v0/chats/${encodeURIComponent(initialRouteId)}`, true),
     apiWhenServed<TranscriptDetail>(`/v0/sessions/${encodeURIComponent(initialRouteId)}`, true),
   ]) : null;
   selectedChatRequest?.catch(() => {});
-  // What its composer and turn summaries ask for once they mount, a round
-  // trip or two later: asked now, with the chat, and the project's once the
-  // chat says which it is.
   if (initialRouteId) {
     const chatPath = `/v0/chats/${encodeURIComponent(initialRouteId)}`;
     readAhead([`${chatPath}/models`, `${chatPath}/permission-profiles`, `${chatPath}/service-levels`, `${chatPath}/attachments`]);
@@ -819,9 +705,8 @@ function App() {
       readAhead([`/v0/projects/${projectId}/turn-artifact?${new URLSearchParams({ chatId: initialRouteId, timeline: "1" })}`], "no-store");
     }, () => {});
   }
-  // Its transcript is drawn by a renderer loaded on demand, in a chain each
-  // link of which was only found once the one before it ran: two round trips
-  // after the transcript itself had arrived. Asked for now, all at once.
+  // The transcript renderer loads in a chain each link of which is found only once the one before runs: asked for
+  // all at once here.
   if (initialRouteId) {
     void import("./chat/markdown").catch(() => {});
     void import("./chat/incremark-markdown").catch(() => {});
@@ -830,46 +715,28 @@ function App() {
   const initialTerminalRoute = location.pathname === "/terminal";
   const initialComputerRoute = location.pathname === "/computer" || location.pathname.startsWith("/computer/harness/") || location.pathname.startsWith("/computer/environment/");
   const initialDashboardRoute = location.pathname === "/";
-  // /agent keeps its dashboard destination; /jbot is the messages document.
   if (location.pathname === "/agent") history.replaceState(history.state, "", `/jbot/page${location.search}${location.hash}`);
   const initialAgentRoute = pathJbotPage() === "agent";
-  // An unknown home thread first loads through the room, then opens its raw thread (below).
   const initialJbotRoute = pathJbotPage() === "jbot" || (location.pathname === JBOT_THREAD_PATH && !initialRouteId);
   const [routeKind, setRouteKind] = createSignal<"chat" | "project" | "dashboard" | "terminal" | "computer" | "agent" | "jbot">(
     initialJbotRoute ? "jbot" : initialAgentRoute ? "agent" : initialComputerRoute ? "computer" : initialTerminalRoute ? "terminal" : initialDashboardRoute ? "dashboard" : initialProjectRouteId ? "project" : "chat",
   );
   const [computerHarness, setComputerHarness] = createSignal(decodeURIComponent(location.pathname.match(/^\/computer\/harness\/([^/]+)/)?.[1] || ""));
-  // A client environment's page (Work, under its machine), in place of the hub's: its node id.
   const [computerEnvironment, setComputerEnvironment] = createSignal(decodeURIComponent(location.pathname.match(/^\/computer\/environment\/([^/]+)/)?.[1] || ""));
   const [terminalRouteId, setTerminalRouteId] = createSignal<string>();
   const [terminalCanReturn, setTerminalCanReturn] = createSignal(false);
-  // jbot's page works in its folder: the dock's tools and the panes beside it are its workspace's.
   const workspacePanelScope = createMemo(() => routeKind() === "computer" ? "computer"
     : (routeKind() === "agent" || routeKind() === "jbot") ? (agentView()?.projectId ? `project:${agentView()!.projectId}` : null)
     : ["chat", "project", "dashboard"].includes(routeKind()) && catalogue.projectId() ? `project:${catalogue.projectId()}`
-      // No project in view: the dock still opens, on jbot's own folder.
       : ["chat", "project", "dashboard"].includes(routeKind()) && agentView()?.projectId ? `project:${agentView()!.projectId}`
       : null);
   const [routeBootstrap, setRouteBootstrap] = createSignal<"loading" | "ready" | "error">("loading");
   const [routeBootstrapError, setRouteBootstrapError] = createSignal("");
-  // The first open. Nothing but the frame shows until the route is ready and
-  // laid out; then the composer is simply there and everything around it
-  // fades in, once, rather than each part appearing as its data lands. Laid out
-  // means the lazy parts that shape the page are in it: the workspace panel,
-  // when it was left open, narrows the main pane and moves the composer, and a
-  // project or Computer route draws its own dashboard. Their chunks are asked
-  // for now, beside the route's data, rather than once the route is ready. A
-  // route that never settles is shown anyway after a moment.
-  // Whether the first open has been shown. Decoration waits for it: the
-  // meteor field cost a phone a tenth of a second of the open it decorates.
+  // Decoration waits for the first open: the meteor field costs a phone a tenth of a second of the open it decorates.
   const [arrived, setArrived] = createSignal(false);
-  // Whether it has begun to show: the meteors arrive with the regions, under
-  // the launch screen's fade (their forecast is worked out while loading, so
-  // mounting them is a dozen spans).
   const [revealing, setRevealing] = createSignal(false);
-  // A phone's sidebar is off-screen at the first open, and its rows -- each
-  // with its own menu -- were a large part of what that open built. They are
-  // filled in once it has been shown, or at once if the sidebar is opened.
+  // A phone's sidebar is off-screen at the first open, and its rows, each with its own menu, are a large part of
+  // what that open builds.
   const sidebarFilled = () => arrived() || !isMobileLayout() || mobileSidebarOpen();
   {
     const layoutReady = Promise.all([
@@ -888,11 +755,8 @@ function App() {
     };
     root.dataset.arrival = "waiting";
     const fallback = setTimeout(arrive, ARRIVAL_FALLBACK_MS);
-    // Two frames: the lazy parts render as their chunks resolve, and the page
-    // lays out once before it is shown.
-    // Every pane is part of it: the reveal waits for the chats beside pane A
-    // to load too, then for the layout to hold still -- a long transcript
-    // renders in passes, and shown mid-way its bubbles move under the fade.
+    // A long transcript renders in passes, and shown mid-way its bubbles move under the fade: the reveal waits for
+    // every pane's chat and then for the layout to hold still.
     const panesLoaded = () => shownSlots().every((slot) => { const id = slotChatId(slot); return !id || paneSlot(slot).session.chat.loadedId() === id; });
     const waitForStill = () => new Promise<void>((resolve) => {
       let last = "";
@@ -906,13 +770,9 @@ function App() {
       requestAnimationFrame(check);
     });
     createEffect(() => {
-      // Only a transcript renders in passes. A dashboard or project page is
-      // laid out in one, and three still frames on a phone still busy with
-      // the rest of the open were close to half a second of nothing.
-      // The agent's page draws its messages from their own read and the lazy markdown renderer: shown before both,
-      // its bubbles were empty and then filled, moving the column under the fade.
-      // A hub with no agent shows its empty page at once; one whose agent is not known yet waits for it (or the fallback).
-      // Its composer is the home thread's: shown before that thread is loaded, its model read "Model" and then changed.
+      // Only a transcript renders in passes; three still frames on a busy phone are close to half a second of nothing.
+      // The agent's page waits for its messages, the markdown renderer and its home thread, or its bubbles fill and
+      // its composer's model changes under the fade.
       if ((routeKind() === "agent" || routeKind() === "jbot") && (agentView() == null || (agentView()!.enabled && (routeKind() === "agent"
         ? !agentDashboardLaidOut()
         : !agentPageLaidOut() || Boolean(agentView()!.home?.chatId) && chat.loadedId() !== agentView()!.home!.chatId)))) return;
@@ -929,12 +789,10 @@ function App() {
   let diagnosticContext: () => ErrorDiagnosticContext = () => ({ route: location.pathname });
   let askChatForError: (diagnostic: ErrorDiagnostic) => Promise<void> = async () => {};
   let suppressDiagnosticActions = false;
-  // Set once the runtime store exists (below); until then nothing is known to be away.
   let hubAway = () => false;
   const showPlainError = (error: unknown) => toast.error(error instanceof Error ? error.message : String(error || "Request failed"));
   const showError = (error: unknown) => {
-    // A request the hub never answered, while the hub is known to be away: the composer already says it cannot be
-    // reached, once, and each read that failed behind that saying so again was noise.
+    // The hub is known to be away: the composer already says it cannot be reached, once.
     if (isUnreachableError(error) && hubAway()) return;
     if (suppressDiagnosticActions) return showPlainError(error);
     const diagnostic = createErrorDiagnostic(error, diagnosticContext());
@@ -949,16 +807,6 @@ function App() {
     if ((error as { error?: unknown } | null)?.error === "chat_not_found") return;
     showError(error);
   };
-  /*
-   * What the app is doing about its own version, said out loud.
-   *
-   * Updating used to be visible only as a spinner inside a menu nobody has
-   * open, and a toast whose button reloaded so fast it read as doing nothing.
-   * Neither survives the moment it happens in. This is durable: it sits above
-   * the server footer for as long as it is true, so a build waiting to be
-   * taken, or an install in progress, is a thing on screen rather than an
-   * event you had to be watching for.
-   */
   const [updateState, setUpdateState] = createSignal<UpdateState>({ kind: "idle" });
   // Progress arrives per downloaded chunk, several a frame: the row redraws only when what it says changes.
   const sayProgress = (label: string, onCancel?: () => void) => {
@@ -967,27 +815,17 @@ function App() {
     setUpdateState({ kind: "working", label, onCancel });
   };
   const pwaUpdating = () => { const state = updateState().kind; return state === "checking" || state === "working"; };
-  /*
-   * "Nothing to install" is an answer, and it was only ever given in a toast.
-   * Somebody who pressed Check for updates is owed a conclusion in the place
-   * they pressed it, and then owed their sidebar back.
-   */
   let settleTimer = 0;
   const saySettled = (kind: "current" | "updated") => {
     setUpdateState({ kind });
     clearTimeout(settleTimer);
-    // Long enough to be read by somebody who pressed the button and then looked
-    // away: a check can sit silent for several seconds while the worker is
-    // asked, and a four-second answer landed while the menu was still open.
+    // Long enough to be read by somebody who pressed the button and looked away while the worker was asked.
     settleTimer = window.setTimeout(() => setUpdateState((state) => state.kind === kind ? { kind: "idle" } : state), UPDATE_SETTLED_HOLD_MS);
   };
   const sayUpToDate = () => saySettled("current");
   /*
-   * Taking the waiting build. "Updating" is a promise that the page is about
-   * to go, so it must not outlive the attempt: a build that was announced and
-   * then activated on its own is no longer waiting, `applyPwaUpdate` declines,
-   * and the strip would otherwise sit on "Updating Conduit..." forever with
-   * the one state that has no timer and no button.
+   * "Updating" must not outlive the attempt: a build that activated on its own is no longer waiting,
+   * `applyPwaUpdate` declines, and the strip would sit on "Updating Conduit..." forever.
    */
   const takePwaUpdate = async (fromButton = false) => {
     if (updateShell) {
@@ -1013,7 +851,6 @@ function App() {
       } else sayUpToDate();
     }
   };
-  // The new interface, pressed for: said at once (the window reloads into it), and said if it does not.
   const takeStagedInterface = async () => {
     setUpdateState({ kind: "working", label: "Opening the new interface…" });
     try {
@@ -1049,10 +886,6 @@ function App() {
     if (!quiet) stalled = () => new Promise<never>((_, reject) => { giveUp = () => reject(new Error(`The update check stopped while ${step}.`)); touch(); });
     const bounded = <T,>(work: Promise<T>) => Promise.race([work, stalled()]);
     try {
-      // A development Android client takes the connected server's interface:
-      // a few MB from a server it is already talking to, then a reload.
-      // Each step says what it is doing, and a download can be stopped: one over a slow route sat on "Updating" with
-      // no way out.
       const cancel = () => { cancelled = true; void cancelUpdateDownload(); giveUp(); };
       const megabytes = (bytes: number) => `${(bytes / 1_048_576).toFixed(1)} MB`;
       if (!quiet) {
@@ -1068,18 +901,13 @@ function App() {
           const outcome = await bounded(live);
           if (outcome === "cancelled") { setUpdateState({ kind: "idle" }); return; }
           if (outcome === "unreachable") { setUpdateState({ kind: "idle" }); toast.error("Could not reach the server to update."); return; }
-          // Applied: the page reloads from the new interface, which ends this check. One that does not reload is stuck.
           if (outcome === "applying") { step = "reloading the new interface"; setUpdateState({ kind: "working", label: "Opening the new interface…" }); await bounded(new Promise(() => {})); }
-          // The interface is current; a native change comes as a new APK, which this server may also have published.
           setUpdateState({ kind: "checking" });
         }
       }
-      // The answer is in the sidebar row; a newer version downloads there with
-      // its progress, and the row offers it once it is ready.
       step = "looking for a newer app";
       if (!quiet) setUpdateState({ kind: "working", label: "Looking for a newer app…", onCancel: cancel });
       const result = await bounded(shell.prepareUpdate((progress) => {
-        // A background check that found one says so while it downloads, quietly: no spinner over the page, no Cancel.
         if (quiet) {
           if (manualCheck) return;
           const share = progress.total ? Math.round((progress.downloaded / progress.total) * 100) : 0;
@@ -1112,10 +940,8 @@ function App() {
     }
     setPwaUpdating(true);
     try {
-      // Stays "checking" until it resolves: a true return is followed by the
-      // reload, so there is no install to narrate.
-      // An unreachable server can leave the worker's fetch hanging; give up
-      // rather than spin forever (a new build gets its two minutes to install).
+      // A true return is followed by the reload. An unreachable server can leave the worker's fetch hanging, so it
+      // gives up after the two minutes a new build gets to install.
       const updated = await Promise.race([forcePwaUpdate(), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Could not check for updates. Try again when the server is reachable.")), UPDATE_CHECK_TIMEOUT_MS))]);
       if (!updated) sayUpToDate();
     } catch (error) {
@@ -1134,16 +960,8 @@ function App() {
     }
   };
   const runtime = createRuntimeStore();
-  /*
-   * Take the nearest route to this server that is there and can prove it is
-   * this server, and stop taking one that is not.
-   *
-   * "Busy" is a generation running or a harness waiting on one. A route change
-   * repaints a terminal and reopens a stream, which is a poor trade against a
-   * few milliseconds while somebody is watching output arrive -- so an upgrade
-   * waits for a quiet moment. Losing a route does not wait, and nothing here
-   * decides that.
-   */
+  // An upgrade waits until nothing is busy: a route change repaints a terminal and reopens a stream while somebody
+  // watches output arrive.
   startPathSelection({
     busy: () => [...runtime.processes().values()].some((process) => process.active || process.waiting),
   });
@@ -1152,26 +970,19 @@ function App() {
     if (runtime.connectivity() !== "online") return;
     if (hasConnected) void checkForPwaUpdate().catch(() => {});
     hasConnected = true;
-    // Asked while the app was still connecting, it failed and the sidebar lost jbot's row until the next poll.
+    // Asked while the app is still connecting, it fails and the sidebar loses jbot's row until the next poll.
     void refreshAgent();
   });
-  // The composer takes the server as there until a connection has failed.
-  // The first open is shown before the stream's first frame, and saying
-  // "Server unavailable" for that moment was a flash of something untrue.
+  // The first open is shown before the stream's first frame, so the server counts as there until a connection fails.
   const serverReachable = () => !["reconnecting", "offline"].includes(runtime.connectivity());
   hubAway = () => runtime.connectivity() !== "online";
   const drafts = createDrafts(showError);
   /*
-   * The waiting messages (state/outbox.ts) of chats nobody has open, sent once the hub is back -- an open chat sends
-   * its own over its stream. By HTTP (POST /v0/chats/:id/prompt, which starts the chat's agent if it has none), one at
-   * a time per chat, and only to an agent that is not working: the next waits until the turn the last one started has
-   * been seen to run and end. Each leaves the outbox before it goes. One the hub refused goes back only if the chat is
-   * gone (then it is dropped); one whose fate is unknown (the request failed on the way) is never sent twice and goes
-   * into the chat's draft instead, for the person to send or not.
+   * The waiting messages of chats nobody has open (an open chat sends its own over its stream), one at a time per chat:
+   * the next waits until the turn the last started has been seen to run and end. One whose fate is unknown is never
+   * sent twice; it goes into the chat's draft instead.
    */
   const sentElsewhere = new Map<string, { at: number; seen: boolean }>();
-  // One pass at a time; a process change during one (its POST waits as long as the agent takes to start) makes one
-  // more pass after it, so a chat that went quiet meanwhile is not left waiting for the next unrelated change.
   const sendWaitingElsewhere = createSingleFlight(async () => {
     if (runtime.connectivity() !== "online") return;
     for (const chatId of outboxChats()) {
@@ -1245,14 +1056,6 @@ function App() {
     const ordinary = templates().filter((item) => item.defaultable !== false);
     return [...ordinary, ...externalProfiles()];
   });
-  /**
-   * The profiles a chat in a place can use: on a client, only harnesses that run there (the server says which: the
-   * Conduit runtime, whose tools reach the device, and what the device runs itself). Conduit's own profiles name no
-   * harness of their own.
-   */
-  // jbot's threads keep the one profile it is made with: no profile to choose.
-  // A jbot thread's approvals: the agent's asks for it, answered here (POST /v0/agent/asks/:id).
-  // Any chat's: a profile with connectors (the Assistant) asks before a write as jbot's threads do.
   const approvalsFor = (chatId: string | null) => chatId ? {
     asks: () => (agentView()?.asks ?? []).filter((ask) => ask.chatId === chatId),
     answer: async (id: string, choice: "allow" | "always" | "deny") => {
@@ -1267,7 +1070,6 @@ function App() {
     const allowed = project?.capabilities && !project.capabilities.device.local ? project.capabilities.harnesses : null;
     return allowed ? profiles().filter((profile) => allowed.includes(profile.implementation || "conduit-runtime")) : profiles();
   };
-  // The main pane's chat, and everything it drives (state/chat-session.ts).
   const session = createChatSession({
     catalogue,
     selectedChat: () => catalogue.selected()?.chat,
@@ -1293,7 +1095,6 @@ function App() {
     }),
   });
   const { chat, models, permissions, serviceLevels, attachments, activeProfile } = session;
-  // Panes B and C: a slot each, with its own chat session (6b).
   const paneSlots: PaneSlot[] = SLOT_IDS.map((index) => {
     const [host, setHost] = createSignal<HTMLElement>();
     return {
@@ -1305,19 +1106,14 @@ function App() {
     };
   });
   const paneSlot = (slot: number) => paneSlots[slot]!;
-  // jbot's dock tool holds its own session (its home thread, for its composer), as a pane does.
   const jbotSession = createSideChat({
     runtime, projects: catalogue.projects, refresh: catalogue.refresh, patchChat: catalogue.patchChat, drafts, maxAttachmentBytes,
     harnessCapabilities, profiles, onError: showError, defaultTemplateId, saveWorkspaceDefault,
   });
-  // Not awaited: a round trip in front of first paint is a poor price for a
-  // race that asking again closes. A chat that opened before this landed is
-  // told to look once more, and a composer with something in it is left alone.
+  // Not awaited: a round trip in front of first paint is a poor price for a race that asking again closes.
   void drafts.load().then(() => chat.rehydrateDraft());
 
-  // Any client, however the new build came (a worker, a live update, a new
-  // app): the bundle's own name changed since this device last ran it. On a
-  // phone it is said when the sidebar first opens, where the row is seen.
+  // On a phone it is said when the sidebar first opens, where the row is seen.
   if (arrivedByNewBuild()) {
     if (!isMobileLayout() || mobileSidebarOpen()) saySettled("updated");
     else {
@@ -1326,51 +1122,28 @@ function App() {
     }
   }
 
-  /*
-   * When a new build is allowed to replace this page.
-   *
-   * With nothing typed there is nothing to interrupt, so it is taken at once
-   * and the reload is invisible. With something in the composer the build is
-   * left waiting and the person is told, and the effect below takes it the
-   * moment the composer empties -- which is sending, discarding, or clearing
-   * it by hand, without any of those three having to know this exists.
-   */
+  // With something in the composer a new build waits, and the effect below takes it the moment the composer empties,
+  // without sending, discarding or clearing having to know this exists.
   if (import.meta.env.PROD && !nativeApp) {
-    /*
-     * Anything the reload would destroy.
-     *
-     * Text is the obvious one. An attachment is the one that actually cannot
-     * be recovered: the file being uploaded is a local `File` that no server
-     * draft holds, so a reload mid-upload loses the thing itself rather than a
-     * copy of it. And a draft write still in the air has to land before the
-     * document goes, or the page comes back to a state neither copy agrees on.
-     */
+    // An uploading attachment is a local `File` no server draft holds, and a draft write still in the air has to land
+    // before the document goes, or the page comes back to a state neither copy agrees on.
     const composerDirty = () => Boolean(chat.draft().trim())
       || attachments.items().length > 0
       || !drafts.settled();
-    // Said by the document that arrived, because the one that asked for it is
-    // gone. Without this a hand-pressed check that found something looked like
-    // a reload for no reason -- the update was the reason.
+    // Said by the document that arrived, because the one that asked for it is gone.
     if (claimPwaUpdateArrival()) saySettled("updated");
     startPwaUpdates({
       hold: composerDirty,
-      // No toast. It said a version was ready in a thing that disappears, and
-      // its button reloaded so quickly that it read as having done nothing.
       onUpdateReady: () => setUpdateState({ kind: "ready" }),
     });
-    // Tracks the composer, not the update: `pwaUpdateWaiting` is a plain read.
-    // That is the right way round -- the update arriving while the composer is
-    // empty is already handled by `hold`, and what this waits for is the
-    // composer emptying afterwards.
+    // Tracks the composer, not the update (`pwaUpdateWaiting` is a plain read): an update arriving while the composer
+    // is empty is already handled by `hold`.
     createEffect(() => {
       if (composerDirty() || !pwaUpdateWaiting()) return;
       void takePwaUpdate();
     });
   }
   const selectedProject = createMemo(() => catalogue.projects().find((project) => project.id === catalogue.projectId()));
-  // The project the dock opens: the agent's own workspace on its page (its SOUL.md, its memory), else the selected one.
-  // The project the dock's tools work on (Files, Source Control, Chat review, Terminal): with no project in view, jbot's
-  // own folder, so the dock and its tools are there everywhere.
   const agentProject = () => catalogue.projects().find((project) => project.id === agentView()?.projectId);
   const dockHome = createMemo(() => ((routeKind() === "agent" || routeKind() === "jbot") ? undefined : selectedProject()) ?? agentProject());
   const chatManifest = session.manifest;
@@ -1380,19 +1153,9 @@ function App() {
   const withheldLiveChat = createMemo(() => chat.presentation().kind !== "ready");
   // jbot's threads always exist: never the new-chat welcome, even before anything happens in one.
   const emptyChat = createMemo(() => !withheldLiveChat() && chat.loadedId() === catalogue.selectedId() && !agentThread(chat.loadedId()) && !chat.messages().length && !chat.tools().length && !isChatContentActivity(chat.activity()));
-  // A send leaves the empty layout at once, not when the agent has started
-  // and the message is in the transcript: the composer goes to the foot and
-  // holds the message there, beside "Starting agent…", until it lands.
+  // A send leaves the empty layout at once, not when the agent has started and the message is in the transcript.
   const sendingOut = () => ["submitting", "active"].includes(chat.generation());
   const emptyLayout = createMemo(() => emptyChat() && !sendingOut());
-  /*
-   * A new chat holds its composer in the middle of the pane; the first send
-   * moves it to the foot of the transcript, straight away. It travels there
-   * rather than cutting: where it sat is noted while the chat is empty, and
-   * when a send ends the empty layout it starts from that spot and settles
-   * into its place.
-   * Leaving an empty chat any other way -- opening another chat -- just cuts.
-   */
   let chatComposerStack: HTMLDivElement | undefined;
   let emptyComposerTop: number | null = null;
   const noteEmptyComposer = () => {
@@ -1414,18 +1177,8 @@ function App() {
     chatComposerStack.animate([{ transform: `translateY(${offset}px)` }, { transform: "none" }],
       { duration: duration("--duration-travel"), easing: easing("--ease-arrive") });
   }));
-  /*
-   * Sending from a dashboard. The send goes at once; then the dashboard
-   * around the composer leaves, quick and accelerating, and the chat arrives
-   * as soon as it has gone: its composer starts where the dashboard's sat and
-   * settles into its place at the foot, and the rest of the pane fades in.
-   * The agent starting is not waited on: the send has already left the empty
-   * layout (emptyLayout), so the composer makes one move and waits at the
-   * foot, holding the message until it lands in the transcript. The sidebar
-   * and workspace panel are not changing place, so they stay. The composer
-   * moved is the inner wrap, so the stack's own rect -- which the empty-chat
-   * travel measures -- is never read mid-flight. Focus goes with the composer.
-   */
+  // The composer moved is the inner wrap, so the stack's own rect, which the empty-chat travel measures, is never read
+  // mid-flight.
   const leaveDashboard = (): Promise<DOMRect | null> => {
     const wrap = document.querySelector<HTMLElement>('.chat-main :is(.ui-composer-slot, .ui-phone-composer)');
     if (!wrap || reducedMotion()) return Promise.resolve(null);
@@ -1476,12 +1229,8 @@ function App() {
     };
   };
 
-  // A render effect, not an ordinary one: these settings come from
-  // localStorage, which is synchronous, but an effect runs after the DOM is
-  // committed. Reading them there meant the panel painted closed and the shell
-  // painted unexpanded, then both snapped into place on the next frame for
-  // anyone who had left the panel open. Resolving during render puts the stored
-  // geometry in the first paint instead.
+  // A render effect, not an ordinary one: an effect runs after the DOM is committed, so the panel would paint closed
+  // and then snap open. Resolving during render puts the stored geometry in the first paint.
   createRenderEffect(() => {
     const scope = workspacePanelScope();
     if (!scope) return;
@@ -1515,14 +1264,11 @@ function App() {
     writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "open", String(next));
   };
 
-  /** Phone overlays are exclusive: opening one closes the other. */
   const setMobileSidebar = (open: boolean) => {
     if (open && panelOpen() && isMobileLayout()) setPanelOpenForChat(false);
     setMobileSidebarOpen(open);
   };
 
-  // The phone's drawer swipe (components/ui/drawer-swipe.ts): the sidebar from the left edge, the workspace panel from
-  // the right.
   onMount(() => onCleanup(drawerSwipe({
     phone: isMobileLayout,
     open: mobileSidebarOpen,
@@ -1531,7 +1277,7 @@ function App() {
   })));
 
   // A draft whose first message is on its way (its agent still starting) is not abandoned by leaving it: the message
-  // is handed over (active-chat.ts, send) and the chat becomes a real one.
+  // is handed over and the chat becomes a real one.
   const currentDraftId = () => chat.status() === "draft" && chat.generation() !== "submitting" ? catalogue.selectedId() : null;
 
   // A draft is still selected after it is discarded until something else is,
@@ -1547,13 +1293,10 @@ function App() {
     dropScope(id);
   };
 
-  // Remove an abandoned draft from the local UI and begin stopping its process
-  // in the same event turn. The server remains responsible for serialized
-  // process teardown and durable deletion.
   const discardDraftImmediately = (id: string | null) => {
     if (!id) return;
-    // Only the folder that lists it changes (every folder made anew re-rendered the whole sidebar), and once the chat
-    // opening in its place is drawn: its row going re-renders that folder, ~7ms that were part of the open.
+    // Only the folder that lists it changes, and once the chat opening in its place is drawn: its row going re-renders
+    // that folder, ~7ms of the open.
     const drop = () => catalogue.setProjects((current) => current.map((project) => project.sessions.some((session) => session.id === id)
       ? { ...project, sessions: project.sessions.filter((session) => session.id !== id) } : project));
     if ("requestIdleCallback" in window) requestIdleCallback(drop, { timeout: 1000 }); else setTimeout(drop, DRAFT_DROP_FALLBACK_MS);
@@ -1569,13 +1312,9 @@ function App() {
     if (!preserveDraft) abandonCurrentDraft();
   };
 
-  // The store holds one profile's models at a time, and a new chat is often
-  // started from somewhere else entirely - a dashboard, or the chat you were
-  // just reading on another profile. Seeding the launch from it then asks the
-  // new profile for a model it has never heard of and the launch is refused,
-  // so the selection only travels when it is this profile's to give.
-  // The server keeps an untouched draft warm when its page lets go of it, and
-  // may hand that same chat back here: it is ours again, to discard again.
+  // The store holds one profile's models at a time: seeding a launch from another profile's asks for a model it has
+  // never heard of and the launch is refused. The server may hand back an untouched draft it kept warm: it is ours
+  // again, to discard again.
   const createProfileChat = (project: Project, profileId: string, chosen = models) => api<ChatSummary>("/v0/chats", {
     method: "POST",
     body: JSON.stringify({
@@ -1590,9 +1329,6 @@ function App() {
     await chat.initialize({ ...created, templateId: created.templateId || profileId || undefined }, project);
   };
 
-  // A device's folder only has the Conduit runtime (plan decision 5), whatever
-  // the workspace or Conduit default says.
-  // A device's workspace runs the runtime unless it was given a harness the device has.
   const projectProfile = (project: Project) => project.defaultTemplateId || defaultTemplateId() || "assistant";
   const createChat = async (target?: Project, launch: { templateId?: string; runtimeKind?: string } = {}, options: { reportFailure?: boolean } = {}) => {
     const reportFailure = options.reportFailure !== false;
@@ -1621,7 +1357,6 @@ function App() {
         if (fromDashboard) history.pushState({}, "", chatPath(created.id));
         else history.replaceState({}, "", chatPath(created.id));
       });
-      // Show the durable draft without waiting for its scoped controls to load.
       catalogue.setProjects((current) => current.map((item) => {
         if (item.id === ownerProject.id) {
           return { ...item, sessions: [created, ...item.sessions.filter((session) => session.id !== created.id)] };
@@ -1637,12 +1372,7 @@ function App() {
     }
   };
 
-  // New chat without a project of its own lands on the Conduit dashboard with
-  // the composer focused: the dashboard is the new-chat screen.
-  // A new chat starts where its composer already waits: the Conduit dashboard
-  // for a loose chat, and on desktop a project's or workspace's own page. A
-  // phone keeps a place's new chat on a chat page of its own, since a page is
-  // busy to start from there.
+  // A phone keeps a place's new chat on a chat page of its own, since a page is busy to start from there.
   const startNewChat = async (target?: Project) => {
     const project = target || selectedProject();
     if (project && project.slug !== "chat") {
@@ -1696,7 +1426,6 @@ function App() {
   });
 
   const openDashboard = async (historyMode: "push" | "replace" | "none" = "push") => {
-    // Already here: keep the composer's draft and its agent as they are.
     if (routeKind() === "dashboard" && routeBootstrap() === "ready" && historyMode !== "none") {
       setMobileSidebarOpen(false);
       return;
@@ -1717,7 +1446,6 @@ function App() {
       clearTimeout(previewTimer);
       const adopting = previewFrom?.jbot && routeKind() === kind;
       previewFrom = null;
-      // Drawn by the press already: the tap gives it its address and lets the drawer go.
       if (adopting) { if (historyMode === "push") history.pushState({}, "", kind === "agent" ? "/jbot/page" : "/jbot"); shutDrawerOnto(Promise.resolve()); return; }
     }
     if (!(await leaveHarnessThread())) return;
@@ -1732,7 +1460,6 @@ function App() {
   };
   const openAgent = (historyMode: "push" | "none" = "push") => openJbotPage("agent", historyMode);
   const openJbot = (historyMode: "push" | "none" = "push") => openJbotPage("jbot", historyMode);
-  // jbot's thread by its own path: once the agent's view says which chat it is (routes.ts keeps it for next time).
   const openJbotThread = async () => {
     const id = (await refreshAgent())?.home?.chatId;
     if (!id) return openJbot("none");
@@ -1842,12 +1569,6 @@ function App() {
     } catch (error) { showError(error); }
   };
 
-  /*
-   * The Computer page in a pane beside pane A browses on its own: a folder
-   * of its own, sharing the folder cache; what it opens goes where pane A's
-   * Computer page sends it.
-   */
-  /** A client environment's page in a pane, or in the main one (Work › its machine). */
   const renderEnvironment = (nodeId: string, slot: number | "main") => <EnvironmentPage nodeId={nodeId} projects={catalogue.projects()}
     header={(title) => <ChatHeader title={title} tabActions={paneTabActions(slot)} tabs={documentTab(slot, title)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />}
     onOpenWorkspace={(project) => void openProjectHere(project)}
@@ -1882,12 +1603,6 @@ function App() {
       <ComputerDashboard projects={catalogue.projects()} location={location()} loading={loading()} error={error()} onOpenHarnessHere={(id) => setSlotView(slot, `page:harness:${encodeURIComponent(id)}`)} onOpenHarness={(id) => setSlotView(slot, `page:harness:${encodeURIComponent(id)}`)} onBrowse={(path) => void browse(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => { const here = location(); if (here) void createComputerWorkspace(here.project.workingRoot); }} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProjectHere(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={async (path) => { const here = location(); if (here) await openFileDocument({ projectId: here.project.id, path }, { beside: altActivation(), edit: false }); }} />
     </>;
   };
-  /*
-   * A harness page's composer, before and after its draft chat exists (the
-   * main harness page and a pane's both): the page's pickers stand in until
-   * the draft is made on first use, then the draft's chat chooses.
-   * serviceLevels and modelSelectorShortcut are the main page's only.
-   */
   const HarnessDraftComposer = (props: {
     harnessId: () => string;
     session: ChatSession;
@@ -1897,12 +1612,9 @@ function App() {
     modelSelectorShortcut?: boolean;
   }) => {
     const drafted = () => props.draft.made(props.harnessId());
-    // Once there is a draft it is a chat, and chooses as one; the
-    // page's pickers stand in before that, and hand their choice on.
     const choices = (): HarnessChoices => drafted()
       ? { model: props.session.models.model(), thinkingLevel: props.session.models.effort(), permissionMode: props.session.permissions.selected() }
       : props.input.choices;
-    // A draft already made follows the folder.
     createEffect(on(() => props.input.folder.current, (cwd) => {
       if (untrack(drafted)) void props.draft.ensure(props.harnessId(), cwd, untrack(choices));
     }, { defer: true }));
@@ -1913,11 +1625,6 @@ function App() {
       <Composer shortcuts={shortcutManager} chat={props.session.chat} launches supports={(name) => resolveCapability(manifest(), props.session.chat.capabilities(), name, false)} attachments={props.session.attachments} attachmentsSupported={Boolean(manifest()?.attachments)} models={drafted() ? props.session.models : props.input.models} modelsLoading={drafted() ? undefined : props.input.loading} folder={props.input.folder} permissions={manifest()?.permissionModes ? (drafted() ? props.session.permissions : props.input.permissions) : undefined} serviceLevels={props.serviceLevels && manifest()?.serviceLevels?.length ? props.session.serviceLevels : undefined} profiles={harnessProfile(props.harnessId()) ? [harnessProfile(props.harnessId())!] : []} activeProfile={harnessProfile(props.harnessId())} onOpenModelSelector={openModelSelector} modelSelectorShortcut={props.modelSelectorShortcut ? shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector) : undefined} serverOnline={serverReachable()} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={() => void use().then(() => props.session.openAttachments())} onSendDraft={(prompt) => props.draft.send(props.harnessId(), props.input.folder.current, choices(), prompt)} />
     </div>;
   };
-  /*
-   * A harness page in a pane beside pane A: its composer's draft is a hidden
-   * chat on that pane's session, as pane A's is on its own; sending runs the
-   * thread in the same pane, and the pane letting go of it ends that chat.
-   */
   const renderPaneHarness = (pane: PaneSlot, harnessId: string) => {
     const side = pane.session;
     const [scope, setScope] = createSignal<string | null>(null);
@@ -1925,7 +1632,6 @@ function App() {
     const draft = createHarnessDraft({
       chat: side.chat, here, failed: showDraftError,
       open: (opened) => side.open(opened.chat, opened.project),
-      // The thread runs in this pane, as a chat it holds.
       start: (made) => { paneThreads.set(pane.index, made.chatId); return setSlotView(pane.index, `chat:${made.chatId}`); },
     });
     onCleanup(() => { const left = draft.current(); if (left) { if (untrack(side.chat.loadedId) === left.chatId) side.close(); draft.drop(left.chatId); } });
@@ -1933,14 +1639,12 @@ function App() {
       composer={(input) => <HarnessDraftComposer harnessId={() => harnessId} session={side} input={input} draft={draft} />}
       onStartThread={(launch) => draft.send(harnessId, launch.cwd, launch, launch.prompt)} onOpenThread={(thread) => void openHarnessThread(thread)} onOpenChat={(target, project) => void openChatFromPage(target, project)} /></>;
   };
-  // Threads started in a pane beside A run as hidden chats that end when the
-  // pane lets go of them.
   const paneThreads = new Map<number, string>();
-  // Subagents' transcripts: chats of their own the lists do not show, opened from their parent (OPEN_AGENT_EVENT)
-  // and kept here so a pane holding one finds it as it finds a listed chat.
+  // Subagents' transcripts: chats the lists do not show, kept here so a pane holding one finds it as it finds a listed
+  // chat.
   const [hiddenChats, setHiddenChats] = createSignal<ReadonlyMap<string, { chat: ChatSummary; project: Project }>>(new Map());
-  // `environment`: a client environment's page instead of the hub's, set with the rest (never "" first: the view
-  // would read as the hub's for a moment, and following it would open that).
+  // `environment` is set with the rest, never "" first: the view would read as the hub's for a moment, and following
+  // it would open that.
   const openComputer = async (historyMode: "push" | "none" = "push", environment = "") => {
     if (!(await leaveHarnessThread())) return;
     leaveChat(historyMode === "none");
@@ -1953,11 +1657,7 @@ function App() {
     if (!environment && !computerLocation()) void browseComputer();
     if (historyMode === "push") history.pushState({}, "", environment ? `/computer/environment/${encodeURIComponent(environment)}` : "/computer");
   };
-  /** A client environment's page: its files, its workspaces, a terminal there. */
   const openEnvironment = (nodeId: string, historyMode: "push" | "none" = "push") => openComputer(historyMode, nodeId);
-  // A harness's page, scoped to one of the folders it ran in or to all of
-  // them, and under it each thread Conduit does not keep, at an address of its
-  // own.
   const harnessPath = (id: string, cwd?: string | null) => `/computer/harness/${encodeURIComponent(id)}${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ""}`;
   // A thread just started has no id of its own yet, so it is addressed by the
   // chat it runs as.
@@ -1965,9 +1665,7 @@ function App() {
   const [harnessScope, setHarnessScope] = createSignal<string | null>(null);
   const [harnessThread, setHarnessThread] = createSignal<HarnessThreadTarget | null>(null);
   const [trackingThread, setTrackingThread] = createSignal(false);
-  // Where the page is, written in one step: the kind and only the parts that kind has. Each way in used to set
-  // these one by one, so a part of the last place was left standing beside the new one (a harness page once
-  // opened kept the Hub row lit from a chat). An open thread is its own (setHarnessThread, leaveHarnessThread).
+  // Where the page is, written in one step, so no part of the last place is left standing beside the new one.
   type Place = { kind: "chat" | "project" | "dashboard" | "agent" | "jbot" }
     | { kind: "terminal"; terminalId?: string }
     | { kind: "computer"; harness?: string; environment?: string; scope?: string | null };
@@ -1981,14 +1679,9 @@ function App() {
     setRouteBootstrapError("");
     setRouteBootstrap("ready");
   });
-  // An untracked thread runs as a Conduit chat that no list shows, on the same
-  // store and the same page parts as any chat. A reload or a closed tab asks
-  // first while a turn is running.
   const holdUnload = (event: BeforeUnloadEvent) => { if (harnessThread() && chat.streaming()) event.preventDefault(); };
   window.addEventListener("beforeunload", holdUnload);
   onCleanup(() => window.removeEventListener("beforeunload", holdUnload));
-  // Leaving ends that chat, and its process with it -- asking first while a
-  // turn is still running. The thread itself stays with the harness.
   const leaveHarnessThread = async () => {
     const open = harnessThread();
     if (!open) return true;
@@ -2039,12 +1732,10 @@ function App() {
     showHarnessThread(target, historyMode);
     try {
       const opened = await openThreadChat(target.harnessId, target.chatId ? { chatId: target.chatId } : { path: target.path, sessionId: target.id });
-      // Left before it opened: nobody is here to use it.
       if (harnessThread() !== target) {
         if (!opened.tracked) void api(`/v0/sessions/${encodeURIComponent(opened.chat.id)}`, { method: "DELETE" }).catch(() => {});
         return;
       }
-      // Conduit keeps this one already, so it opens as that chat.
       if (opened.tracked) {
         const owner = catalogue.projects().find((item) => item.id === opened.chat.projectId) || opened.project;
         await chat.select(opened.chat, owner, { history: "replace", onCommit: () => {
@@ -2062,23 +1753,13 @@ function App() {
       await openComputerHarness(target.harnessId, "replace", target.path);
     }
   };
-  /*
-   * A harness page's composer belongs to the thread it will start, as a
-   * dashboard's belongs to the chat it will start: a hidden chat in the folder
-   * the thread will run in, so it attaches files and picks a model, a
-   * permission mode and a speed exactly as a chat does. It is made when the
-   * composer is first used -- typed in, attached to, sent -- rather than on
-   * arrival, so looking through folders leaves nothing behind in them; until
-   * then the page's own pickers stand in, and what they chose goes into it. It
-   * moves when the folder changes, taking its text along.
-   */
+  // The draft chat is made when the composer is first used rather than on arrival, so looking through folders leaves
+  // nothing behind in them.
   type HarnessDraft = ReturnType<typeof createHarnessDraft>;
   const createHarnessDraft = (on: {
     chat: ChatSession["chat"];
-    /** The page still shows this harness, with no thread open on it. */
     here: (harnessId: string) => boolean;
     open: (opened: OpenedThread) => Promise<unknown>;
-    /** The draft becomes the thread: where it now shows. */
     start: (made: { harnessId: string; cwd: string; chatId: string }, prompt: string) => unknown;
     failed: (error: unknown) => void;
   }) => {
@@ -2105,7 +1786,6 @@ function App() {
       request = pending;
       return pending;
     };
-    // Sending turns the draft into the thread.
     const send = async (harnessId: string, cwd: string, choices: HarnessChoices, prompt: string) => {
       await ensure(harnessId, cwd, choices);
       const draft = current();
@@ -2116,7 +1796,6 @@ function App() {
     };
     return { current, made, ensure, send, drop, setTyped: (text: string) => { typed = text; } };
   };
-  // The main harness page's: sending opens the thread on a page of its own.
   const harnessDraft = createHarnessDraft({
     chat, failed: showError,
     here: (harnessId) => routeKind() === "computer" && computerHarness() === harnessId && !harnessThread(),
@@ -2129,8 +1808,6 @@ function App() {
       history.pushState({}, "", threadPath(target));
     },
   });
-  // Tracking keeps the chat the thread already runs as, and makes it Conduit's
-  // in the workspace its folder is -- made one first when it is not.
   const trackHarnessThread = async () => {
     const open = harnessThread();
     if (!open?.chatId || trackingThread()) return;
@@ -2183,7 +1860,6 @@ function App() {
     if (historyMode === "push") history.pushState({}, "", "/terminal");
     else if (historyMode === "replace") history.replaceState({}, "", "/terminal");
   };
-  /** A shell on a device itself (Settings › Devices): this server's "computer" one, or a device's in its home. */
   const openDeviceTerminal = async (node: { id: string; local?: boolean }) => {
     try {
       const terminal = await api<Pty>("/v0/ptys", { method: "POST",
@@ -2216,7 +1892,6 @@ function App() {
   // lands; the tap adopts it (openChat), and a press that turns into a scroll goes back to the chat it was on.
   let previewFrom: { chat: ChatSummary; project: Project; jbot?: boolean } | null = null;
   let previewTimer = 0;
-  // What a press may draw over: a chat at rest on a phone with its drawer open (nothing being said or written).
   const previewBase = () => {
     if (previewFrom) return previewFrom;
     if (!isMobileLayout() || !mobileSidebarOpen() || routeKind() !== "chat" || paneAOverride() !== null) return null;
@@ -2226,7 +1901,6 @@ function App() {
     const fromChat = fromProject?.sessions.find((session) => session.id === fromId);
     return fromChat && fromProject ? { chat: fromChat, project: fromProject } : null;
   };
-  /** A press on jbot's row: its chat drawn under the drawer (the route itself, without the address), the tap opening it. */
   const previewJbot = () => {
     clearTimeout(previewTimer);
     const from = previewBase();
@@ -2241,7 +1915,6 @@ function App() {
     const from = base;
     pressing = target.id;
     if (chat.preview(target, project)) { previewFrom = from; return; }
-    // Not here yet: read now (the press's prefetch), drawn if it comes while the finger is still down.
     void chat.whenRead(target).then(() => { if (pressing === target.id && mobileSidebarOpen() && chat.preview(target, project)) previewFrom = from; }).catch(() => {});
   };
   let pressing: string | null = null;
@@ -2289,7 +1962,6 @@ function App() {
     catch (error) { showError(error); return; }
   };
 
-  // A breadcrumb's place: a project or workspace opens its page, loose chats the dashboard.
   const openPlace = async (target?: Project) => { if (target && target.slug !== "chat") void openProject(target); else await openDashboard(); };
   const openProject = async (target: Project, historyMode: "push" | "replace" | "none" = "push") => {
     if (!(await leaveHarnessThread())) return;
@@ -2318,10 +1990,6 @@ function App() {
     event.currentTarget.focus({ preventScroll: true });
   };
   const hasComposer = () => Boolean(document.querySelector("textarea[data-composer-input]:not([disabled])"));
-  // A click on empty space leaves focus on the main pane itself; the next key
-  // decides where it goes. Typing, Enter and Esc go to the composer (the
-  // character typed lands there); on a dashboard ↑/↓ start the cursor in the
-  // chats list, else the first section with rows, and Tab starts the round.
   const paneKeydown = (event: KeyboardEvent) => {
     if (event.target !== event.currentTarget || event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
     const dashboard = routeKind() !== "chat" && routeKind() !== "terminal";
@@ -2353,18 +2021,12 @@ function App() {
     }
     focusComposer();
   };
-  // Shortcut contexts follow DOM focus. This one owner controls only the
-  // persistent bottom line; a menu can take focus without changing it.
   let heldRegion: HTMLElement | null = null;
   let syncFocusedShortcutContext: ((target: EventTarget | null) => void) | undefined;
-  // The region focus last moved into from another (set by the focusin sync), and the one it was in.
   let enteredRegion: HTMLElement | null = null;
   let focusRegion: HTMLElement | null = null;
-  /*
-   * Focus intent: every deliberate move (a go-to, a pane step, a press) is a new one. Deferred focus work (a retry until
-   * a composer is enabled, a swap's settle after its animation) remembers the intent it began under and gives way when
-   * a newer one exists, so it never pulls focus back from where the person went since (Codex review).
-   */
+  // Deferred focus work (a retry until a composer is enabled, a swap's settle) gives way to a newer intent, so it never
+  // pulls focus back from where the person went since.
   const focusIntent = createLatest();
   // What the person last used: a press or a key. Focus in the sidebar after a press is a chat being opened (and
   // focus passing through its row), not the keyboard moving there.
@@ -2378,9 +2040,8 @@ function App() {
   };
   const acknowledgeFocusedRegion = (region: HTMLElement | null) => {
     if (!region || !region.contains(document.activeElement)) return;
-    // Arriving where focus already was is no arrival: no cue (pressing a go-to twice does not flash). The focus events
-    // say whether this move crossed into the region (enteredRegion); the move happened just before this call.
-    // (The region given may hold the data-region element or sit inside it: the main pane's .chat-main holds its chat.)
+    // Arriving where focus already was is no arrival, so pressing a go-to twice does not flash. The region given may
+    // hold the data-region element or sit inside it.
     const already = !enteredRegion || !(region.contains(enteredRegion) || enteredRegion.contains(region));
     enteredRegion = null;
     holdRegion(region);
@@ -2395,7 +2056,6 @@ function App() {
     focusIntent.drop();
     if (!workspacePanelScope()) return;
     if (isMobileLayout()) setMobileSidebarOpen(false);
-    // The dock showing a docked pane: that pane is what it holds, so it takes the keyboard.
     const docked = dockSlot();
     if (docked !== null && inDock(docked)) {
       if (!panelOpen()) setPanelOpenForChat(true);
@@ -2404,9 +2064,6 @@ function App() {
     if (!panelOpen()) setPanelOpenForChat(true);
     setWorkspaceFocusRequest((request) => request + 1);
   };
-  // The go-to jumps. The sidebar is entered at the row for where you are --
-  // the current page, else the folder holding it -- or its first row; the
-  // main pane at its composer; the transcript at its scroller.
   const focusSidebar = () => {
     if (isMobileLayout()) setMobileSidebarOpen(true);
     requestAnimationFrame(() => {
@@ -2423,13 +2080,8 @@ function App() {
       acknowledgeFocusedRegion(sidebar);
     });
   };
-  // Entering the main pane with nothing more specific in mind goes to its
-  // composer -- what is wanted nine times in ten -- else the pane. A composer
-  // still connecting is disabled, so the pane holds focus until it can take
-  // it, unless something else has taken focus by then. The terminal page
-  // focuses its own.
-  // Entering is not itself a new intent (a route settling calls it too): its retries belong to the intent it began
-  // under, and a deliberate move made since (focusMainPane, a go-to, a press) ends them.
+  // A composer still connecting is disabled, so the pane holds focus until it can take it. Entering is not itself a
+  // new intent (a route settling calls it too).
   const enterMainPane = (attempt = 0, from: Element | null = null, intent = focusIntent.join()) => {
     if (attempt === 0) clearTimeout(enterRetry);
     if (!intent()) return;
@@ -2445,14 +2097,11 @@ function App() {
     if (isMobileLayout()) setMobileSidebarOpen(false);
     focusIntent.drop();
     if (splitShown() && cyclePaneFocus()) return;
-    // The main pane has the keyboard now, even where its composer is entered by a retry (Codex review).
     setKeyboardPane("main");
     enterMainPane();
     acknowledgeFocusedRegion(document.querySelector<HTMLElement>(".chat-main"));
   };
-  // A route change that takes the focused element with it leaves focus on the
-  // body, where no key does anything; the new page is entered instead. Never
-  // taken from somewhere it still is, and not on a phone, where focusing the
+  // A route change that takes the focused element leaves focus on the body. Not on a phone, where focusing the
   // composer raises the keyboard.
   const settleFocus = () => {
     if (isMobileLayout()) return;
@@ -2464,8 +2113,6 @@ function App() {
     settleFocus();
     syncFocusedShortcutContext?.(document.activeElement);
   }), { defer: true }));
-  // Ctrl+Shift+1: open a collapsed sidebar and focus it; never close it --
-  // Ctrl+B stays the toggle.
   const goToSidebar = () => {
     focusIntent.drop();
     const collapsed = document.querySelector('[data-region="sidebar"]')?.getAttribute("data-state") === "collapsed";
@@ -2554,11 +2201,7 @@ function App() {
     }
     return failures.map((failure) => failure.id);
   };
-  // The composer's folder button: the open chat, draft or not, moves to the
-  // chosen place and stays open there.
   const chatOwner = () => catalogue.projects().find((project) => project.sessions.some((session) => session.id === chat.loadedId()));
-  // Either pane's chat. Pane B's store is re-entered in its new place, as
-  // pane A's catalogue selection follows it.
   const placeChat = async (destination: Project, target: ChatSession = session) => {
     const id = target.chat.loadedId();
     if (!id) return;
@@ -2660,12 +2303,7 @@ function App() {
     await api(`/v0/workspace-operations/${encodeURIComponent(operationId)}`, { method: "DELETE", replay: false });
   };
 
-  /*
-   * `section` is what was asked for, and asking for nothing is a real answer:
-   * on a phone Settings opens on the list of sections, and only a caller that
-   * names one skips it. Everything used to name "models" by default, so the
-   * list could never be the thing you arrived at.
-   */
+  // Asking for no section is a real answer: on a phone Settings opens on the list of sections.
   const openSettings = (section: string | null = null, workspaceId: string | null = null) => {
     setSettingsSection((section || "ui") as SettingsSection);
     setSettingsNamedSection(Boolean(section));
@@ -2692,7 +2330,6 @@ function App() {
     localStorage.setItem(SIDEBAR_CHAT_LIMIT_STORAGE_KEY, String(value));
     publishUiPreference("sidebarChatLimit", value);
   };
-  // Settings says a failed preference save in its header; elsewhere it is a toast.
   createEffect(() => {
     const state = uiPreferenceSaves.state();
     if (state.kind === "failed" && !untrack(settingsOpen)) showError(new Error(`Preferences not saved: ${state.message}`));
@@ -2755,37 +2392,16 @@ function App() {
     setPanelOpenForChat(true);
   };
   const dockAvailable = () => routeKind() === "computer" ? Boolean(computerLocation()) : ["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && Boolean(dockHome()) && Boolean(workspacePanelScope());
-  /*
-   * The panes beside pane A (docs/design/panes-and-rail.md, 6b): up to two,
-   * B and C, each a slot with its own view, session and host, shown left to
-   * right in `slotOrder`. A slot is in the order exactly when it holds a view.
-   * The panes show while the main pane can hold them at their minimums;
-   * narrower, the dock gives way first (its own clamp), then the last pane
-   * folds, then the split. At most one pane holds a tool: the dock's views
-   * move to it, as they did to the one split.
-   */
   const slotView = (slot: number) => slotViews()[slot] ?? null;
-  // Panes in the row (folded ones included): two at most beside pane A.
   const rowSlots = () => slotOrder().filter((slot) => slotView(slot) && !isDocked(slot));
-  // A free slot for a pane in the row or, `docked`, in the dock -- each has its own room.
   const freeSlot = (docked = false) => (docked ? dockedSlots().length < MAX_DOCKED : rowSlots().length < 2) ? SLOT_IDS.find((slot) => !slotOrder().includes(slot)) ?? null : null;
-  // The dock is as narrow as what it shows may go: a docked pane's document, else a tool.
   const dockMinWidth = () => { const slot = dockSlot(); return slot !== null && inDock(slot) ? viewMinWidth(slotView(slot)) : minSplitPaneWidth(); };
-  /*
-   * Each document declares the narrowest its pane may go: one with a
-   * composer, a chat or a page, the dashboard composer's least; a file viewer
-   * or a tool, the dock's. Panes show while the room holds pane A and each
-   * pane beside at their documents' minimums.
-   */
   const isPaneView = (view: SplitView | null) => Boolean(view && /^(chat|page):/.test(view));
-  // What the agent's dashboard needs for its two columns, as it measures it: a pane
-  // showing it keeps that width, and other panes fold first.
   const [agentPageNeed, setAgentPageNeed] = createSignal(0);
   const viewMinWidth = (view: SplitView | null) => view === "page:jbot" ? minMainPaneWidth()
     : view === "page:agent" ? Math.max(minMainPaneWidth(), agentPageNeed())
     : !view || isPaneView(view) ? minMainPaneWidth() : minSplitPaneWidth();
   const paneMinWidth = (pane: PaneKey) => viewMinWidth(pane === "main" ? paneAView() : slotView(pane));
-  // The open dock keeps its own minimum; panes fold before it is pushed out.
   const viewsFit = (views: (SplitView | null)[]) => layoutWidth() - (panelOpen() && dockAvailable() && !dockOverlay() ? dockMinWidth() + 8 : 0)
     >= views.reduce((sum, view) => sum + viewMinWidth(view) + 16, viewMinWidth(paneAView()));
   const splitFits = (extra: number) => viewsFit(Array(extra).fill("files:"));
@@ -2798,29 +2414,18 @@ function App() {
     }
     return shown;
   }, [], { equals: (a, b) => a.length === b.length && a.every((slot, index) => slot === b[index]) });
-  // The panes drawn in the row. One the window can no longer hold goes to the
-  // dock (foldedSlots), so nothing lingers here to fade.
   const renderSlots = shownSlots;
   const splitShown = () => shownSlots().length > 0;
-  // A tool the dock lends a pane (a whole tool, the legacy file beside, a
-  // terminal) -- not a chat, a page or a file viewer, which panes draw themselves.
   const isToolView = (view: SplitView | null) => Boolean(view && view !== "home" && !isPaneView(view) && !/^(files|term|browser):/.test(view));
   const toolSlot = () => shownSlots().find((slot) => isToolView(slotView(slot))) ?? null;
-  // Pane A can hold the dock's tool too, over its route.
   const toolInPaneA = () => isToolView(paneAOverride());
   const toolView = () => { if (toolInPaneA()) return paneAOverride(); const slot = toolSlot(); return slot === null ? null : slotView(slot); };
   const toolHost = () => { if (toolInPaneA()) return paneAToolHost(); const slot = toolSlot(); return slot === null ? undefined : paneSlot(slot).host(); };
   const splitToolShown = () => { const view = toolView(); return isPanelTab(view) ? view : null; };
-  // Pane A's share and each pane's beside it, by position; per device.
   const weightsFor = (count: number) => count === 3 ? splitRatios3() : count === 2 ? [1 - splitRatio(), splitRatio()] : [1];
-  // While a pane opens or closes, the shares ease through an override.
   const [weightOverride, setWeightOverride] = createSignal<number[] | null>(null);
-  // `width`: the document's own width while its pane eases, laid out once (the width it lands at, or leaves from) and
-  // carried by the pane's moving edge (shell.css [data-moving]).
   const [paneMotion, setPaneMotion] = createSignal<{ slot: PaneKey; phase: "arriving" | "leaving"; collapsed?: boolean; width?: number } | null>(null);
   const paneWeights = () => weightOverride() ?? weightsFor(renderSlots().length + 1);
-  // The file beside is the dock's, so leaving it asks the dock first: an
-  // unsaved edit, or the file moving into the dock's Files.
   let releaseSplitFile: ((toDock: boolean) => Promise<boolean>) | undefined;
   const bindSplit = (release: (toDock: boolean) => Promise<boolean>) => {
     releaseSplitFile = release;
@@ -2832,16 +2437,13 @@ function App() {
     writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-2", views[1] ?? "");
     writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-docked", dockedSlots().map(slotView).filter(Boolean).join("\n"));
   };
-  // Each file viewer's editors, by pane, for its unsaved guard.
   const fileHandles = new Map<PaneKey, (FileSlotHandle | undefined)[]>();
-  // Handles arrive as sides mount; a tab's unsaved dot reads them again.
   const [handlesChanged, setHandlesChanged] = createSignal(0);
   const handlesOf = (pane: PaneKey) => { let list = fileHandles.get(pane); if (!list) fileHandles.set(pane, list = []); return list; };
   // A swap or a close moving a document to another pane is not leaving it.
   let movingDocuments = false;
   const leavesUnsaved = (current: SplitView | null, next: SplitView | null, pane: PaneKey) => !movingDocuments && Boolean(parseFileView(current)) && !next?.startsWith("files:")
     && handlesOf(pane).some((handle) => handle?.hasUnsavedChanges());
-  // A slot's view; null closes the pane. `position` places a new pane in the order.
   const setSlotView = async (slot: number, next: SplitView | null, toDock = false, position?: number) => {
     const previous = slotView(slot);
     if (slotView(slot) === "file" && next !== "file" && releaseSplitFile && !(await releaseSplitFile(toDock))) return false;
@@ -2850,7 +2452,6 @@ function App() {
     batch(() => {
       if (!next && isDocked(slot)) {
         setDockedSlots((current) => current.filter((item) => item !== slot));
-        // Closing the pane the dock shows closes the dock, rather than baring its tools.
         if (dockSlot() === slot) { setDockSlot(null); closePanel(); }
       }
       setSlotViews((current) => current.map((view, index) => index === slot ? next : view));
@@ -2865,8 +2466,6 @@ function App() {
     persistSlots();
     return true;
   };
-  // Any pane's view, and setting it: pane A's chats and pages go by its route,
-  // anything else shows over the route until pane A is sent somewhere (5f).
   const viewOf = (pane: PaneKey) => pane === "main" ? paneAView() : slotView(pane);
   const panesShown = (): PaneKey[] => ["main", ...shownSlots()];
   const setPaneView = async (pane: PaneKey, next: SplitView | null, toDock = false) => {
@@ -2895,22 +2494,10 @@ function App() {
     if (!content?.contains(document.activeElement)) content?.focus({ preventScroll: true });
   });
   const [keyboardPane, setKeyboardPane] = createSignal<PaneKey>("main");
-  // The pane beside A with the keyboard, when it holds a chat or a page.
   const keyboardSlot = () => { const pane = keyboardPane(); return pane !== "main" && (shownSlots().includes(pane) || (dockSlot() === pane && inDock(pane))) && isPaneView(slotView(pane)) ? pane : null; };
   const sideHasKeyboard = () => keyboardSlot() !== null;
   const slotHasKeyboard = (slot: number) => keyboardSlot() === slot;
   const focusPane = (slot: number) => { setKeyboardPane(slot); focusSplit(slot); };
-  /*
-   * Open beside the pane with the keyboard: a new pane just right of it when
-   * the width holds one, or else the pane to its right, or, from the last
-   * pane, that pane itself -- beside it there is nothing further right. A view a pane already shows is gone to there;
-   * a tool goes to the pane that holds one. Whatever a tool displaces goes
-   * back to the dock, which opens on it when that is where the reader was
-   * working. A tool moved from the dock takes the keyboard; a chat or page
-   * opened beside from a list leaves it where it was, so opening several
-   * beside in a row lands each in the same place.
-   */
-  // `again` lets an empty home open in another pane.
   const openBeside = async (view: SplitView, focus = true, again = false): Promise<number | void> => {
     const shown = shownSlots();
     const showing = again ? undefined : shown.find((slot) => slotView(slot) === view);
@@ -2920,7 +2507,6 @@ function App() {
     const position = pane === "main" ? 0 : Math.max(0, shown.indexOf(pane) + 1);
     if (isToolView(view) && toolInPaneA()) { setPaneAOverride(view); if (panelOpen() && dockTool() === view) closePanel(); return; }
     if (!again && switchToTab(view)) return;
-    // A chat with no room for another pane joins the focused pane of chats as a kept tab (6c).
     if (tabbable(view) && panesShown().includes(pane) && activeTabOf(pane) && (shown.length >= 2 || !viewsFit([...shown.map(slotView), view]))) {
       keepNext.add(String(pane));
       if (pane === "main") void openInPaneA(view); else await setSlotView(pane, view);
@@ -2961,8 +2547,6 @@ function App() {
     // layout there (~8 ms over budget), where the frame lays it out anyway.
     const close = async (later = false) => { if ((await setSlotView(slot, null)) && focus) later ? requestAnimationFrame(focusChatPane) : focusChatPane(); };
     if (!element || index < 0 || !animatePanes()) return await close();
-    // The panes left ease into its room at once, its document keeping its width and riding the moving edge out as it
-    // fades over the ease's first half (the pane's ground closes with it).
     setWeightOverride(paneShares());
     setPaneMotion({ slot, phase: "leaving", width: element.getBoundingClientRect().width });
     const fade = documentsOf(element).map((part) => part.animate([{ opacity: 1 }, { opacity: 0 }],
@@ -2976,14 +2560,10 @@ function App() {
       for (const animation of fade) animation.cancel();
     }));
   };
-  // The dock's own close: the pane holding its tool.
   const closeSplit = async (focus = true) => toolInPaneA() ? void setPaneAOverride(null) : (await closeSlot(toolSlot(), focus));
-  // A rail icon opens the dock on its tool, or goes to it in its pane; the
-  // tool the dock already shows closes it.
   const chooseRailTool = async (tool: WorkspaceView) => {
     // Picked by hand: what Ctrl+J would give back is no longer what the dock showed.
     dockBeforeJbot = null;
-    // jbot as a pane (opened beside from the sidebar): focused there, as a tool in a pane is.
     const jbotPane = tool === "jbot" ? shownSlots().find((slot) => slotView(slot) === "page:jbot") : undefined;
     if (jbotPane !== undefined) return focusPane(jbotPane);
     if (splitToolShown() === tool && toolInPaneA()) focusFirst(paneAToolHost()?.querySelector<HTMLElement>(".ui-tool-content"));
@@ -2993,17 +2573,9 @@ function App() {
     else if (tool === "terminal" && altActivation() && canOpenFilePanes()) void openTerminalTool(true);
     else await openWorkspaceView(tool);
   };
-  /*
-   * File viewers (6d-2). The navigator opens a file into the **file pane** --
-   * the pane that last showed a file viewer, wherever the keyboard is -- so
-   * opening files never replaces the chat being typed in; into the viewer's
-   * focused entry when it shows two. With no file pane, or with Alt, it opens
-   * a new pane beside, as a chat opened beside does.
-   */
   const [filePane, setFilePane] = createSignal<PaneKey | null>(null);
   const [fileFocus, setFileFocus] = createSignal<Record<string, number>>({});
   const [fileWrap] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines") === "true");
-  // Each side of a viewer wraps on its own; the setting is where a side starts.
   const [sideWraps, setSideWraps] = createSignal<Record<string, boolean>>({});
   const sideWrap = (pane: PaneKey, side: number) => sideWraps()[`${pane}#${side}`] ?? fileWrap();
   const toggleSideWrap = (pane: PaneKey, side: number) => setSideWraps((current) => ({ ...current, [`${pane}#${side}`]: !sideWrap(pane, side) }));
@@ -3011,11 +2583,6 @@ function App() {
   createEffect(() => { const pane = keyboardPane(); if (parseFileView(viewOf(pane))) setFilePane(pane); });
   const focusFileEntry = (pane: PaneKey, index: number) => setFileFocus((current) => ({ ...current, [String(pane)]: index }));
   const canOpenFilePanes = () => dockAvailable() && !isMobileLayout() && splitFits(1);
-  /*
-   * A shell is a document (6d): a click opens it over the pane already
-   * showing a terminal, or beside when none does; Alt always beside. The pane
-   * draws it; closing the pane leaves the shell running for the navigator.
-   */
   const openTerminalDocument = async (id: string, beside: boolean) => {
     const view: SplitView = `term:${id}`;
     const showing = panesShown().find((pane) => viewOf(pane) === view);
@@ -3024,12 +2591,6 @@ function App() {
     if (pane !== undefined) { if ((await setPaneView(pane, view))) focusAnyPane(pane); return; }
     await openBeside(view, true);
   };
-  /*
-   * The rail's Terminal opens in the dock; Alt (or dragging it from the rail)
-   * opens a shell as a pane instead. That takes a running shell of the place no pane
-   * shows, or starts one; the terminal's own menu manages shells from there.
-   * With no room for a pane it says so; on a phone the dock keeps it.
-   */
   const openTerminalTool = async (beside: boolean) => {
     const showing = panesShown().find((pane) => viewOf(pane)?.startsWith("term:"));
     if (!beside && showing !== undefined) {
@@ -3040,7 +2601,6 @@ function App() {
     const id = await pickShell();
     if (id) await openBeside(`term:${id}`, true);
   };
-  // A running shell of the place no pane shows, else a new one.
   const pickShell = async (): Promise<string | null> => {
     const computer = routeKind() === "computer";
     const projectId = computer ? "computer" : dockProject()?.id;
@@ -3056,22 +2616,10 @@ function App() {
       return id;
     } catch (error) { showError(error); return null; }
   };
-  /*
-   * Drag to a pane (6e): a sidebar row, a page's chat, a file in the
-   * navigator or a rail tool dragged over a pane washes where it will land --
-   * its left or right third a new pane on that side while the width holds
-   * one, its middle the pane's own document (a file joining a viewer holding
-   * one; a chat joining a pane of chats as a tab, 6c). A document a pane
-   * already shows is focused there instead. A background tab drags as its
-   * chat does, leaving its pane's tabs for wherever it lands.
-   */
   const DOC_DRAG_TYPE = "application/x-conduit-doc";
   let draggedView: string | null = null;
-  // A pane's header dragged moves its document (draggedPane).
   let draggedPane: PaneKey | null = null;
-  // A place's label dragged takes all its tabs (draggedGroup).
   let draggedGroup: { pane: PaneKey; ids: string[] } | null = null;
-  // A file tab dragged moves: its side lets it go once it lands (draggedFileTab).
   let draggedFileTab: { pane: PaneKey; side: number; key: string } | null = null;
   const armHeaderDrag = (event: PointerEvent) => {
     const target = event.target instanceof Element ? event.target : null;
@@ -3086,11 +2634,8 @@ function App() {
   };
   document.addEventListener("pointerdown", armHeaderDrag, true);
   onCleanup(() => document.removeEventListener("pointerdown", armHeaderDrag, true));
-  // Over a file viewer, a file dragged onto a column says what it will do in a pill by the pointer, not a wash.
-  // Every drop says what it will do in a pill by the pointer; a wash marks only where a pane target lies.
   type DragHintIcon = "left" | "right" | "column" | "tab" | "swap" | "here";
-  // The pill's words change with the target; its place follows the pointer by transform
-  // alone, written straight to it -- a layout per dragover made it trail the pointer.
+  // The pill's place follows the pointer by transform alone: a layout per dragover makes it trail the pointer.
   const [dragHintContent, setDragHintContent] = createSignal<{ text: string; icon: DragHintIcon } | null>(null, { equals: (a, b) => a?.text === b?.text && a?.icon === b?.icon });
   let dragHintElement: HTMLDivElement | undefined;
   let dragHintAt = { x: 0, y: 0 };
@@ -3148,12 +2693,6 @@ function App() {
     const viewer = draggedPane === null && Boolean(parseFileView(viewOf(pane))?.length);
     const { zone, edge } = dropZoneAt(third, { edges, viewer });
     if (draggedPane !== null && nearEdge(draggedPane, pane, zone)) { setDragHint(null); return void setDocDrop(null); }
-    /*
-     * A file over a file viewer: only its outer fifths are panes (washed); within,
-     * the column under the pointer takes it as its showing tab -- or, beside a lone
-     * column's file (the right half of its body), a new column; an empty column
-     * shows it. Where it came from is no target.
-     */
     const held = draggedPane === null && parseFileView(draggedView) ? parseFileView(viewOf(pane)) : null;
     const fifth = viewer && zone !== "middle" ? zone : null;
     if (held?.length && !fifth && event.target instanceof Element) {
@@ -3174,7 +2713,6 @@ function App() {
       if (beside) return hint(own && (fileTabsOf(pane, own.side)?.entries.length ?? 1) < 2 ? null : { zone: "column", text: "Open in a new column" });
       return hint(own?.side === side ? null : { zone: "side", side, text: "Add as a tab here" });
     }
-    // A place's tabs dropped on their own pane: only its edges, a pane of their own.
     if ((draggedGroup ?? draggedFileTab)?.pane === pane && zone === "middle") { setDragHint(null); return void setDocDrop(null); }
     const named = (view: SplitView | null) => `“${viewName(view)}”`;
     const hint: { text: string; icon: DragHintIcon } = zone !== "middle"
@@ -3186,7 +2724,6 @@ function App() {
       : parseFileView(viewOf(pane))?.length === 0 ? { text: "Open in this pane", icon: "here" }
       : { text: `Open here in place of ${named(viewOf(pane))}`, icon: "here" };
     setDragHint({ x: event.clientX, y: event.clientY, ...hint });
-    // The wash is the target itself: an edge's band, else the pane between them.
     const rect = dropWash(box, zone, edge, edges);
     const current = docDrop();
     if (current?.pane === pane && current.zone === zone) return;
@@ -3195,23 +2732,13 @@ function App() {
   // Any drag's end, wherever it ended: the attach overlay and the split wash it raised go with it (a route change
   // mid-drag sends its leaves nowhere that counts them).
   const endDocDrag = () => { draggedView = null; draggedPane = null; draggedGroup = null; draggedFileTab = null; setDocDrop(null); setDragHint(null); dragDepth = 0; setDropActive(false); setSplitDropActive(false); };
-  /*
-   * A pane's document moved by its header, among the panes already open: onto
-   * another pane's middle the two swap; onto its far edge the document moves
-   * past it, each pane between shifting one place back -- a swap when they are
-   * neighbours; its near edge is where the document already is, so nothing.
-   */
   const movePaneDocument = async (from: PaneKey, target: { pane: PaneKey; zone: "left" | "middle" | "right" }) => {
-    // Focus stays with the place that had it before the drag began.
     const keep = paneBeforePress ?? keyboardPane();
     if (target.zone === "middle") return void await swapPanes(from, false, target.pane, true, keep);
     const panes = panesShown();
     const kept = panes.indexOf(keep);
     let at = panes.indexOf(from);
     const to = panes.indexOf(target.pane);
-    // Neighbour by neighbour, each a swap, by position (a swap of two panes
-    // beside A reorders their keys) -- all within one fade of the panes
-    // involved, the old layout showing until the documents have loaded.
     const involved = panes.slice(Math.min(at, to), Math.max(at, to) + 1).map(paneElement).filter((element): element is HTMLElement => Boolean(element));
     await crossfadeUnder(involved, async () => {
       while (at !== to) {
@@ -3227,12 +2754,6 @@ function App() {
     const panes = panesShown();
     return zone === (panes.indexOf(from) < panes.indexOf(pane) ? "left" : "right");
   };
-  /*
-   * A place's tabs moved together: onto a pane's middle they join its tabs
-   * (taking the pane, if it shows something else); onto an edge they open a
-   * pane there. The pane they leave shows its tab used last; one left with
-   * none closes.
-   */
   const moveTabGroup = async (group: { pane: PaneKey; ids: string[] }, target: { pane: PaneKey; zone: "left" | "middle" | "right" }, recent: string) => {
     const source = tabsOf(group.pane);
     if (!source) return;
@@ -3320,7 +2841,6 @@ function App() {
       const adding = parseFileView(next);
       if (held?.length === 1 && adding && !sameFileEntry(held[0]!, adding[0]!)) await setPaneView(target.pane, formatFileView([held[0]!, adding[0]!]));
       else {
-        // A chat on a pane of chats joins it as a kept tab (6c).
         if (tabbable(next) && activeTabOf(target.pane)) keepNext.add(String(target.pane));
         await setPaneView(target.pane, next);
       }
@@ -3331,7 +2851,6 @@ function App() {
     const index = panesShown().indexOf(target.pane);
     if (target.zone === "right") { if ((await setSlotView(free, next, false, index))) focusPane(free); return; }
     if (index > 0) { if ((await setSlotView(free, next, false, index - 1))) focusPane(free); return; }
-    // Left of pane A: the new document takes pane A, and pane A's moves right.
     if ((await setSlotView(free, next, false, 0))) await swapPanes("main", false, undefined, true, "main");
     focusAnyPane("main");
   };
@@ -3345,17 +2864,10 @@ function App() {
     document.removeEventListener("drop", onDocDrop);
     document.removeEventListener("dragend", endDocDrag);
   });
-  // Not remounted when the shell changes: the terminal switches shells itself.
-  /*
-   * An empty pane's Home: a greeting, the hub and this interface's build, and
-   * what to open in this pane -- a new chat (the dashboard's composer), a
-   * terminal, a workspace, a recent chat. Whatever is picked fills the pane.
-   */
   const renderHome = (pane: PaneKey) => {
     const fill = async (view: SplitView) => { if (await setPaneView(pane, view)) focusAnyPane(pane); };
     const terminal = async () => { const id = await pickShell(); if (id) await fill(`term:${id}`); else toast.info("Open a workspace first: a terminal starts in one."); };
     const greeting = () => { const hour = new Date().getHours(); return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"; };
-    // Projects, as the sidebar lists them: not the chats place, nor a workspace (a linked or created folder).
     const projects = () => catalogue.projects().filter((project) => project.slug !== "chat" && project.origin !== "linked" && project.origin !== "created" && project.origin !== "cloned" && project.kind !== "workspace").slice(0, 5);
     const recent = () => catalogue.projects().flatMap((project) => project.sessions.map((chat) => ({ chat, project })))
       .sort((a, b) => (b.chat.updatedAt ?? "").localeCompare(a.chat.updatedAt ?? "")).slice(0, 5);
@@ -3381,15 +2893,12 @@ function App() {
       </PaneHome>
     </>;
   };
-  /* The hub's browser in a pane (browser/browser-pane.tsx): its tab named by the page's title as it learns it. */
   const [browserTitles, setBrowserTitles] = createSignal<Record<string, string>>({});
   const [termTitles, setTermTitles] = createSignal<Record<string, string>>({});
   const renderBrowserDocument = (pane: PaneKey, id: string) => <SheetFill class="pane-browser">
     <BrowserPane id={id} onTitle={(title) => setBrowserTitles((current) => ({ ...current, [`browser:${id}`]: title }))}
       header={<PaneHeader actions={paneTabActions(pane)}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`browser:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />
   </SheetFill>;
-  /** A terminal in a pane: the pane's tab row above (its tab named for the shell), the terminal's own bar under it. In
-   *  the dock or on a phone it keeps one header, the bar, with the pane's actions and its close. */
   const renderTerminalDocument = (pane: PaneKey, shell: string) => {
     const [record, setRecord] = createSignal<{ projectId: string; cwd?: string | null; title?: string | null } | null | undefined>(undefined);
     void api<PtysPayload>("/v0/ptys")
@@ -3418,12 +2927,6 @@ function App() {
     if (parseFileView(viewOf(pane))) return focusColumn(pane, fileFocus()[String(pane)] ?? 0);
     if (pane === "main") { setKeyboardPane("main"); enterMainPane(); } else focusPane(pane);
   };
-  /*
-   * Focus is a pane's; a file viewer's current column is where in it. This one
-   * setter moves both and puts DOM focus in the column -- its editor once it has
-   * drawn (a tab switch redraws it), else the column, else the viewer -- so
-   * nothing else decides which pane has the keyboard.
-   */
   function focusColumn(pane: PaneKey, side: number) {
     setKeyboardPane(pane);
     focusFileEntry(pane, side);
@@ -3445,7 +2948,6 @@ function App() {
     };
     requestAnimationFrame(land);
   }
-  // A review comment on a file, for the viewer that shows it to scroll to.
   const [fileReveal, setFileReveal] = createSignal<{ entry: FileEntry; request: ReviewNavigationRequest } | null>(null);
   const openFileDocument = async (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => {
     const keepTab = tabActivation();
@@ -3461,13 +2963,10 @@ function App() {
       if (options.edit) { pendingFileEdit = null; handlesOf(pane)[index]?.edit(); }
       return;
     }
-    // Open as a tab already: shown there.
     if (!options.beside) for (const pane of panesShown()) for (const side of [0, 1]) {
       if (fileTabsOf(pane, side)?.entries.some((item) => sameFileEntry(item, entry))) return await showFileTab(pane, side, fileEntryKey(entry));
     }
     const shownFilePane = () => { const pane = filePane(); return pane !== null && panesShown().includes(pane) && parseFileView(viewOf(pane)) ? pane : null; };
-    // Alt: beside a file already open -- the second side of a viewer with
-    // one, the file pane's first -- and only a new pane once they are full.
     if (options.beside) {
       const roomy = [shownFilePane(), ...panesShown()].find((pane) => pane !== null && (parseFileView(viewOf(pane))?.length ?? 2) < 2);
       if (roomy !== undefined && roomy !== null) {
@@ -3489,19 +2988,14 @@ function App() {
     const index = Math.min(fileFocus()[String(pane)] ?? 0, target.length - 1);
     if (handlesOf(pane)[index]?.hasUnsavedChanges() && !(await confirmDialog("Discard unsaved changes and open another file?", { destructive: true, confirmLabel: "Discard", valid: () => formatFileView(target) === viewOf(pane) }))) return;
     handlesOf(pane)[index]?.discardChanges();
-    // Ctrl keeps the file it replaces as a tab (6c).
     if (keepTab) keepFileNext.add(sideKey(pane, index));
     await setPaneView(pane, formatFileView(target.map((item, at) => at === index ? entry : item)));
     focusColumn(pane, index);
   };
-  // The split opens an empty second side, which the next file opened into the viewer fills.
-  // An empty column beside a viewer's one file: at 1 (the split) or 0 (its last tab dragged away).
   const [emptySides, setEmptySides] = createSignal<Record<string, 0 | 1>>({});
   const hasEmptySide = (pane: PaneKey) => emptySides()[String(pane)] !== undefined && parseFileView(viewOf(pane))?.length === 1;
   const emptyFirst = (pane: PaneKey) => hasEmptySide(pane) && emptySides()[String(pane)] === 0;
-  // The empty column is focused as index 1, past the one file, wherever it sits.
   const emptyFocused = (pane: PaneKey) => hasEmptySide(pane) && fileFocus()[String(pane)] === 1;
-  // A file into the empty column: the viewer holds two again, in their places.
   const fillEmptySide = async (pane: PaneKey, entry: FileEntry) => {
     const held = parseFileView(viewOf(pane)) ?? [];
     if (held.length !== 1) return;
@@ -3531,7 +3025,6 @@ function App() {
     const current = parseFileView(viewOf(pane));
     if (current) await setPaneView(pane, formatFileView(current.map((item, at) => at === index ? { projectId: item.projectId, path: item.path, ...(mode ? { mode } : {}) } : item)));
   };
-  // Each side is headed by its tabs (6c); a viewer with none says how to fill it.
   const renderFileViewer = (pane: PaneKey) => {
     const entries = () => parseFileView(viewOf(pane)) ?? [];
     // Focusable itself, so an image or PDF side still takes the keyboard (a click, Ctrl+Shift+2).
@@ -3561,14 +3054,7 @@ function App() {
     </SheetFill>;
   };
 
-  /*
-   * A chat or page in a pane beside A (stages 4, 5, 6b). Pane A keeps the URL
-   * and the catalogue's selection; the pane with the keyboard owns the
-   * composer's keys, dictation and the sidebar's current row, and the other
-   * panes' chats are marked open there.
-   */
   const slotChatId = (slot: number) => { const view = slotView(slot); return view?.startsWith("chat:") ? view.slice("chat:".length) : null; };
-  // A page in a pane: "dashboard", or "project:<id>" (stage 5d).
   const slotPage = (slot: number) => { const view = slotView(slot); return view?.startsWith("page:") ? view.slice("page:".length) : null; };
   const slotPageProject = (slot: number) => {
     const page = slotPage(slot);
@@ -3584,9 +3070,6 @@ function App() {
     setKeyboardPane(pane);
     lastPaneFocus.set(pane, target);
   };
-  // Ctrl+Shift+2 with panes beside A: from elsewhere, back to the pane last
-  // used; from a pane, to the next, round. Each lands where its focus last was.
-  // `step` -1 goes the other way round (Previous pane).
   const cyclePaneFocus = (step = 1) => {
     const panes: PaneKey[] = ["main", ...shownSlots()];
     const from = paneOf(document.activeElement);
@@ -3605,8 +3088,6 @@ function App() {
     return false;
   };
   document.addEventListener("focusin", noteKeyboardSide);
-  // A press on what takes no focus (an image), or into a frame (a PDF), still gives its pane the keyboard.
-  // The pane that had the keyboard before this press: a pane's own swap keeps focus there.
   let paneBeforePress: PaneKey | null = null;
   const notePanePress = (event: PointerEvent) => { paneBeforePress = keyboardPane(); const pane = paneOf(event.target instanceof Element ? event.target : null); if (pane !== null) setKeyboardPane(pane); };
   const noteFrameFocus = () => setTimeout(() => { const frame = document.activeElement; if (frame instanceof HTMLIFrameElement || frame instanceof HTMLEmbedElement || frame instanceof HTMLObjectElement) { const pane = paneOf(frame); if (pane !== null) setKeyboardPane(pane); } });
@@ -3620,7 +3101,6 @@ function App() {
     markChatRead(catalogue, target);
     await openBeside(`chat:${target.id}`, false);
   };
-  // A subagent's transcript, beside the chat that handed it its task (on a phone, in its place).
   const openSubagentChat = async (chatId: string) => {
     try {
       const summary = hiddenChats().get(chatId)?.chat || await api<ChatSummary>(`/v0/chats/${encodeURIComponent(chatId)}`);
@@ -3644,10 +3124,8 @@ function App() {
   const openSubagentFromEvent = (event: Event) => { const chatId = (event as CustomEvent<{ chatId?: string }>).detail?.chatId; if (chatId) void openSubagentChat(chatId); };
   window.addEventListener(OPEN_AGENT_EVENT, openSubagentFromEvent);
   onCleanup(() => window.removeEventListener(OPEN_AGENT_EVENT, openSubagentFromEvent));
-  // The chat a subagent's transcript answers to: its title, and opening it.
   const subagentParent = (chatId: string | null) => {
     const parentId = chatId ? hiddenChats().get(chatId)?.chat.backend?.parentChatId : null;
-    // jbot's own runs answer to its home thread, which is read in the jbot chat.
     if (parentId && parentId === agentView()?.home?.chatId) return { title: agentName(), open: () => void openJbotHere() };
     const parent = parentId ? catalogue.projects().flatMap((project) => project.sessions.map((item) => ({ chat: item, project }))).find((item) => item.chat.id === parentId) || hiddenChats().get(parentId) : null;
     return { title: parent?.chat.title || "another chat", open: parent ? () => void openChatHere(parent.chat, parent.project) : undefined };
@@ -3655,9 +3133,7 @@ function App() {
   // Alt on the click or key that opened a chat, from a page that has no way
   // to say so itself.
   const altActivation = () => { const event = window.event; return (event instanceof MouseEvent || event instanceof KeyboardEvent) && event.altKey; };
-  // Ctrl (Cmd) on the click that opened a chat: as a tab in the focused pane.
   const tabActivation = () => { const event = window.event; return !isMobileLayout() && (event instanceof MouseEvent || event instanceof KeyboardEvent) && (event.ctrlKey || event.metaKey); };
-  // A kept tab in the focused pane of chats; false when that pane shows something else.
   const openChatAsTab = async (target: ChatSummary, project: Project) => {
     const view: SplitView = `chat:${target.id}`;
     if (target.id === mainChatId() || focusPaneShowing(view) || switchToTab(view)) return true;
@@ -3669,8 +3145,6 @@ function App() {
     focusAnyPane(pane);
     return true;
   };
-  // What a pane beside A already shows is gone to there, not opened again in pane A.
-  // A document is open once: one a pane already shows -- pane A included, a page there as a chat -- is gone to.
   const focusPaneShowing = (view: SplitView) => {
     if (keyboardPaneSlot() !== null && viewOf("main") === view) { setKeyboardPane("main"); enterMainPane(); return true; }
     const slot = shownSlots().find((candidate) => slotView(candidate) === view);
@@ -3678,18 +3152,10 @@ function App() {
     focusPane(slot);
     return true;
   };
-  /*
-   * Open where the reader is working: a sidebar row, a chat search result or
-   * a page's chat replaces the document of the pane with the keyboard --
-   * pane A's by the route, another pane's by its view. What a pane already
-   * shows is gone to there instead.
-   */
   const keyboardPaneSlot = () => { const pane = keyboardPane(); return pane !== "main" && shownSlots().includes(pane) ? pane : null; };
   const openInFocusedPane = async (view: SplitView, inPaneA: () => unknown) => {
     if (focusPaneShowing(view) || switchToTab(view)) return;
     const slot = keyboardPaneSlot();
-    // Ctrl keeps what the pane shows as a tab, for a page (jbot, a dashboard, a project) as for a chat
-    // (openChatAsTab): the next view opened there joins its tabs instead of replacing the active one.
     if (tabActivation() && tabbable(view) && activeTabOf(slot ?? "main")) keepNext.add(String(slot ?? "main"));
     // Pane A goes by its route, and the route changing clears what showed
     // over it; only going to the route it already has needs clearing here.
@@ -3707,7 +3173,6 @@ function App() {
     window.addEventListener("pointerdown", note, true);
     window.addEventListener("keydown", note, true);
     const session = paneSlot(slot).session.chat;
-    // A dashboard or project page is ready once its unsent chat is in the composer.
     const drafts = view === "page:dashboard" || view.startsWith("page:project:");
     await waitFor(() => id ? session.loadedId() === id && session.presentation().kind === "ready" && chatDrawn(slot)
       : !drafts || Boolean(paneSlot(slot).draft && session.loadedId() === paneSlot(slot).draft!.id), 3000);
@@ -3728,21 +3193,12 @@ function App() {
   const openAgentHere = () => openInFocusedPane("page:agent", () => openAgent());
   const openJbotHere = () => openInFocusedPane("page:jbot", () => openJbot());
   const openEnvironmentHere = (id: string) => openInFocusedPane(`page:environment:${encodeURIComponent(id)}`, () => openEnvironment(id));
-  /*
-   * A phone's drawer shuts onto what it opened: the page under it changes while the drawer is still aside, and the
-   * drawer slides back on the first frame everything on screen is drawn -- a transcript's rows in view (its tail is
-   * drawn first, createTailWindow; data-drawn), or the page itself -- never with the page arriving in pieces under the
-   * slide. At most a beat (500ms): a slow load slides back and finishes in place.
-   */
-  // The drawer opening on a phone reads jbot's chat ahead too (its row is a tap away), as the chats it shows are.
-  // Its home thread too (the jbot chat's composer is that thread's): looked up and read, so it is there at once.
   const warmJbot = () => {
     prefetchJbotMessages();
     const home = agentView()?.home?.chatId;
     if (home) void agentChat(home).then((target) => chat.prefetch(target.chat)).catch(() => {});
   };
   createEffect(on(mobileSidebarOpen, (open) => { if (open && isMobileLayout() && agentView()?.enabled) warmJbot(); }, { defer: true }));
-  // The main pane drawn (paneDrawn: no chat in it still opening, its lists drawing what is on screen).
   const pageDrawn = () => paneDrawn(document.querySelector(".chat-main"));
   const shutDrawerOnto = (opening: Promise<unknown>, shown: () => boolean = () => true) => {
     void opening.catch(() => {});
@@ -3781,11 +3237,6 @@ function App() {
       }
       if (untrack(side.selectedId) !== id) void side.open(found.chat, found.project).catch(showError);
     }));
-    /*
-     * A page in a pane holds an unsent chat of its own for its composer, as
-     * pane A's dashboard does: made when the page opens, discarded when it
-     * closes unsent, and the pane's chat once it is sent.
-     */
     createEffect(on(() => [slotPage(slot), catalogue.loaded(), templatesLoading(), shownSlots().includes(slot)] as const, ([page, loaded, loading, shown]) => {
       // A page giving way to a chat: the chat is already opening in the session, so the draft goes without closing it.
       if (!page || page === "computer" || page === "agent" || page === "jbot" || page.startsWith("harness:")) return discardPaneDraft(pane, Boolean(untrack(() => slotChatId(slot))));
@@ -3826,30 +3277,14 @@ function App() {
     await side.chat.send();
   };
   const openPageBeside = async (page: "dashboard" | "agent" | "jbot" | "computer" | `project:${string}` | `harness:${string}` | `environment:${string}`) => { if (!isMobileLayout()) await openBeside(`page:${page}`, false); };
-  // The same chat in two panes is one chat: pane A taking it closes the other.
-  // A pane showing the main pane's chat closes.
   createEffect(() => { const id = mainChatId(); if (swappingPanes) return; for (const slot of shownSlots()) if (id && slotChatId(slot) === id) setSlotView(slot, null); });
-  /*
-   * The pane with the keyboard, and its chat: what the palette, the leader's
-   * chat commands, the model selector and the dock act on, as if each pane
-   * were a Conduit tab of its own. Pane A (the main pane) unless a pane
-   * beside it holds a chat and was the last to have focus.
-   */
   const focusedSlot = () => { const slot = keyboardSlot(); return slot !== null && paneSlot(slot).session.selectedId() ? paneSlot(slot) : null; };
   const focusedSession = (): ChatSession => focusedSlot()?.session ?? session;
   const focusedChat = () => focusedSession().chat;
   const focusedModels = () => focusedSession().models;
   const sideFocused = () => focusedSlot() !== null;
   const focusedChatId = () => focusedSlot()?.session.selectedId() ?? catalogue.selectedId();
-  // A sidebar command's target when it is another pane's chat; pane A's is the sidebar's own.
   const focusedTarget = () => focusedSlot()?.session.selected() ?? {};
-  /*
-   * The dock follows places, not panes (6d-1), and its place is read from the
-   * pane with the keyboard -- what that pane shows, never a remembered pane or
-   * the route beneath pane A: a chat's or page's project, a file viewer's
-   * current file's. A terminal or tool has no place, so it leaves the dock
-   * where it was; pane A showing its own route gives the route's place.
-   */
   type PlaceSelection = { project: Project } | NonNullable<ReturnType<ReturnType<typeof paneSlot>["session"]["selected"]>>;
   const placeOf = (pane: PaneKey): PlaceSelection | "route" | null => {
     if (!panesShown().includes(pane)) return null;
@@ -3873,16 +3308,8 @@ function App() {
   const dockSelection = (): PlaceSelection | null => { const place = heldPlace(); return place === "route" ? null : place; };
   const dockProject = () => dockSelection()?.project ?? dockHome();
   const dockScope = () => dockSelection() ? `project:${dockSelection()!.project.id}` : workspacePanelScope();
-  /*
-   * Swapping and closing panes, from each pane's breadcrumb. Pane A swaps with
-   * the pane to its right and the others with the pane to their left. Pane A
-   * holds only chats and pages, so a swap or a close that would put a file or
-   * a tool there is not offered. Between panes beside A the panes themselves
-   * change places; with pane A the documents move, the panes stay.
-   */
   let swappingPanes = false;
   function paneAView(): SplitView | null { return paneAOverride() ?? paneARouteView(); }
-  // Pane A's route as a view, whatever shows over it.
   function paneARouteView(): SplitView | null {
     if (routeKind() === "chat" && catalogue.selectedId()) return `chat:${catalogue.selectedId()}`;
     if (routeKind() === "dashboard") return "page:dashboard";
@@ -3920,11 +3347,6 @@ function App() {
     if (at === 0) return paneAView() ? "main" : null;
     return at > 0 ? shown[at - 1]! : null;
   };
-  /*
-   * Which pane a swap button trades with: the pane that had the keyboard when
-   * it was pressed; pressed in the pane that has it, the neighbour above --
-   * but the middle of three trades with the pane used before it, else its left.
-   */
   let keyboardBeforePress: PaneKey | null = null;
   let previousPane: PaneKey | null = null;
   createEffect(on(keyboardPane, (now, before) => { if (before !== undefined && before !== now) previousPane = before; }));
@@ -3941,18 +3363,9 @@ function App() {
     const check = () => ready() || performance.now() - start > timeout ? resolve() : requestAnimationFrame(check);
     check();
   });
-  /*
-   * The swap's motion. By default both panes' last frames stay up while the
-   * documents change places and load under them, then the two crossfade. With Shift, the
-   * slide being compared: the right pane fades out, the left slides over into
-   * its place unchanged -- no width change, so nothing re-renders while it
-   * moves -- and what was on the right fades in on the left. Either way the
-   * panes keep their widths: a width belongs to the position, not the document.
-   */
   // A chat is drawn once its transcript is in the pane, not merely loaded:
   // it renders a moment after, and a crossfade before then shows it arrive.
   const chatDrawn = (pane: PaneKey) => Boolean(paneElement(pane)?.querySelector(".ui-chat-column"));
-  // A pane's last frame, held over its place while what is under it changes.
   const ghostOf = (element: HTMLElement) => {
     const box = element.getBoundingClientRect();
     const ghost = element.cloneNode(true) as HTMLElement;
@@ -3970,8 +3383,6 @@ function App() {
     });
     return ghost;
   };
-  // The panes' last frames stay up while the documents move and load under
-  // them, then the ghosts fade off them (~100ms).
   const crossfadeUnder = async (elements: HTMLElement[], place: () => Promise<void>) => {
     const still = reducedMotion();
     const ghosts = elements.map(ghostOf);
@@ -3997,9 +3408,6 @@ function App() {
       await left.animate([{ transform: "none" }, { transform: `translateX(${right.getBoundingClientRect().left - left.getBoundingClientRect().left}px)` }], { duration: duration("--duration-fold"), easing: easing("--ease-fold"), fill: "forwards" }).finished;
     }
     await placeRight();
-    // Reordered, the slid pane now lives on the right and the other on the
-    // left; otherwise the right pane now shows what slid over it, and the
-    // left goes home unseen to take what was on the right.
     const incoming = reorder ? right : left;
     incoming.style.opacity = "0";
     for (const element of [left, right]) { element.getAnimations().forEach((animation) => animation.cancel()); element.style.zIndex = ""; }
@@ -4007,9 +3415,6 @@ function App() {
     if (!still) await incoming.animate([{ opacity: 0 }, { opacity: 1 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive") }).finished;
     incoming.style.opacity = "";
   };
-  // `fade: false` places the documents at once, for a caller fading around several swaps. Focus is the pane's, not
-  // the document's: the place that had the keyboard (`keep`) has it after the swap, whatever now shows there;
-  // null leaves focus to the caller.
   const swapPanes = async (pane: PaneKey, slide = false, withPane?: PaneKey, fade = true, keep: PaneKey | null = keyboardPane()) => {
     const partner = withPane ?? swapPartner(pane);
     if (partner === null || swappingPanes) return;
@@ -4059,12 +3464,6 @@ function App() {
       if (fade || slide) settleFocus();
     }
   };
-  /*
-   * Panes the window is too narrow for move to the dock, as a docked pane
-   * does -- a rail icon, shown there on a click -- and come back to the row on
-   * their own once it widens. Nothing marks them: a pane in the row that does
-   * not fit is simply drawn in the dock until it does.
-   */
   const foldedSlots = () => !dockAvailable() || isMobileLayout() ? [] : slotOrder().filter((slot) => slotView(slot) && !isDocked(slot)).slice(0, 2).filter((slot) => !shownSlots().includes(slot));
   const viewName = (view: SplitView | null): string => {
     if (!view) return "";
@@ -4087,18 +3486,8 @@ function App() {
     if (view.startsWith("browser:")) return browserTitles()[view] || "Browser";
     return isPanelTab(view) ? WORKSPACE_TOOL_LABELS[view] : "Pane";
   };
-  /*
-   * Chat tabs (panes-and-rail.md, 6c). A pane showing a chat holds up to
-   * five; its view is the active one, the only one mounted, and switching is
-   * a document switch in place. A plain open replaces the active tab; Ctrl, a
-   * drop on the pane or Alt with no room adds one. Any document is a tab (chat,
-   * page, browser, terminal); a file viewer or an empty pane takes the pane and
-   * its tabs close. Drafts are kept per chat and each pane's
-   * transcript keeps scroll positions, so a tab keeps what a remount would lose.
-   */
   type PaneTabs = { ids: string[]; used: string[] };
   const TAB_CAP = 5;
-  // The address's tabs, or at a bare start the device's, beside its saved panes.
   const launchTabs = () => {
     if (urlNamesPanes || !atStart) return tabsFromParams(launchUrl.searchParams);
     const params = new URLSearchParams();
@@ -4108,19 +3497,14 @@ function App() {
   };
   const [paneTabs, setPaneTabs] = createSignal<Record<string, PaneTabs>>(launchTabs());
   const tabsOf = (pane: PaneKey) => paneTabs()[String(pane)] ?? null;
-  // A pane's tabs are its documents: chats, pages, browsers, terminals and a New tab (Home: what to open there). A file
-  // viewer has its own tabs. A chat's key is its id, as tabs were when only chats were; any other document's is its view.
   const tabbable = (view: string | null | undefined): view is SplitView => Boolean(view && (view === "home" || /^(chat|page|browser|term):/.test(view)));
   const tabKey = (view: SplitView) => view.startsWith("chat:") ? view.slice("chat:".length) : view;
   const tabView = (key: string) => (key === "home" || key.includes(":") ? key : `chat:${key}`) as SplitView;
-  // The place a tab belongs to, which groups it: a chat's project, a project page's project, else the document's kind.
   const tabPlace = (id: string) => id === "home" ? "doc:page" : id.startsWith("page:project:") ? id.slice("page:project:".length)
     : id.includes(":") ? `doc:${id.split(":")[0]}`
-    // A subagent's tab sits under the chat that started it.
     : hiddenChats().get(id)?.chat.status === "subagent" ? `sub:${hiddenChats().get(id)!.chat.backend?.parentChatId ?? ""}`
     : catalogue.projects().find((item) => item.sessions.some((chat) => chat.id === id))?.id ?? "chats";
   const activeTabOf = (pane: PaneKey) => { const view = viewOf(pane); return tabbable(view) ? tabKey(view) : null; };
-  // The next chat opened into these panes is added as a tab rather than replacing the active one.
   const keepNext = new Set<string>();
   function tabsFromParams(params: URLSearchParams): Record<string, PaneTabs> {
     const order = params.getAll("pane").filter(isSplitView).map((_, index) => index);
@@ -4155,22 +3539,18 @@ function App() {
       if (!tabbable(view)) { delete next[key]; continue; }
       const id = tabKey(view);
       // jbot's home thread is the messages page's (page:jbot), never a chat tab of its own: leaving the page for a chat,
-      // the route turns to the chat a moment before the selection does, and that moment took a tab's place.
+      // the route turns to the chat a moment before the selection does, and that moment would take a tab's place.
       if (id === untrack(() => agentView()?.home?.chatId)) continue;
       const tabs = next[key] ?? { ids: [], used: [] };
       if (tabs.ids.includes(id)) { if (tabs.used[0] !== id) next[key] = { ...tabs, used: [id, ...tabs.used.filter((item) => item !== id)] }; continue; }
       let ids = [...tabs.ids];
       let used = tabs.used.filter((item) => ids.includes(item));
-      // A plain open replaces the active tab; only Ctrl (keepNext) adds one.
       const adding = keepNext.delete(key);
       const replaced = adding ? undefined : used.find((item) => ids.includes(item));
       if (replaced) {
         ids = ids.filter((item) => item !== replaced);
         used = used.filter((item) => item !== replaced);
       }
-      // Tabs from one place stay together: beside the active tab when it is
-      // from there, else at the end of that place's run, else after the
-      // active tab's run.
       const place = tabPlace(id);
       const lastOf = (placeId: string) => ids.reduce((last, item, index) => tabPlace(item) === placeId ? index : last, -1);
       const current = used.find((item) => ids.includes(item));
@@ -4186,7 +3566,6 @@ function App() {
         used = used.filter((item) => item !== drop);
       }
       next[key] = { ids, used };
-      // A document is a tab in one pane at a time (a New tab is each pane's own).
       for (const [other, list] of Object.entries(next)) {
         if (other === key || id === "home" || !list.ids.includes(id)) continue;
         next[other] = { ids: list.ids.filter((item) => item !== id), used: list.used.filter((item) => item !== id) };
@@ -4197,10 +3576,6 @@ function App() {
   };
   createEffect(on(() => [paneAView(), slotOrder().map((slot) => `${slot}=${slotView(slot)}`).join()] as const, () => { if (!swappingPanes) reconcileTabs(); }));
   createEffect(on(() => tabParams().join("|"), (value) => writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-tabs", value), { defer: true }));
-  // Stepping round the focused pane's tabs, in the row's order, and the
-  // panes (the shortcuts Next/Previous tab and pane).
-  // A file viewer's step skips the file showing on its other side.
-  // A viewer's tabs in the order they read: its first column's, then its second's.
   const fileTabsToStep = () => {
     const pane: PaneKey = keyboardPaneSlot() ?? "main";
     const shown = parseFileView(viewOf(pane)) ?? [];
@@ -4221,7 +3596,6 @@ function App() {
     const at = found.list.ids.indexOf(activeTabOf(found.pane)!);
     void switchTab(found.pane, found.list.ids[(at + step + found.list.ids.length) % found.list.ids.length]!);
   };
-  // False only on the way to pane A with no focus of its own to go back to.
   const stepPane = (step: number) => { if (!cyclePaneFocus(step)) focusAnyPane("main"); };
 
   const switchTab = async (pane: PaneKey, id: string) => {
@@ -4243,7 +3617,6 @@ function App() {
       return list ? { ...current, [String(pane)]: { ids: list.ids.filter((item) => item !== id), used: list.used.filter((item) => item !== id) } } : current;
     });
   };
-  // A document open as a background tab anywhere is gone to, not opened again.
   const switchToTab = (view: SplitView) => {
     if (!tabbable(view)) return false;
     const id = tabKey(view);
@@ -4252,7 +3625,6 @@ function App() {
     void switchTab(pane, id);
     return true;
   };
-  // Documents moving between pane A and a pane beside it take their tabs.
   const swapKeys = <T,>(current: Record<string, T>, a: PaneKey, b: PaneKey) => {
     const next = { ...current };
     const first = current[String(a)];
@@ -4275,14 +3647,6 @@ function App() {
       if (first) lastShownFiles.set(sideKey(b, side), first);
     }
   });
-  /*
-   * File tabs (6c): a file viewer shows one or two files side by side (its
-   * view's entries), and each side holds up to five as its own tabs, which
-   * head it in place of the file's name. A file opened into a side replaces
-   * the one there; Ctrl keeps that one as a tab. Closing a side's showing tab
-   * shows the tab it used last, else the side goes; the last leaves the viewer
-   * empty. Tab lists go by `<pane>#<side>`.
-   */
   const sideKey = (pane: PaneKey, side: number) => `${pane}#${side}`;
   const launchFileTabs = () => {
     if (urlNamesPanes || !atStart) return fileTabsFromParams(launchUrl.searchParams);
@@ -4293,7 +3657,6 @@ function App() {
   };
   const [fileTabs, setFileTabs] = createSignal<Record<string, FileTabs>>(launchFileTabs());
   const fileTabsOf = (pane: PaneKey, side: number) => fileTabs()[sideKey(pane, side)] ?? null;
-  // What each side showed when last reconciled: what leaves it was replaced.
   const lastShownFiles = new Map<string, FileEntry>();
   const keepFileNext = new Set<string>();
   const fileTabParams = () => {
@@ -4319,7 +3682,6 @@ function App() {
   }
   createEffect(on(() => fileTabParams().join("\n"), (value) => writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-file-tabs", value), { defer: true }));
   const shownFileSide = (pane: PaneKey) => { const shown = parseFileView(viewOf(pane)) ?? []; return Math.max(0, Math.min(fileFocus()[String(pane)] ?? 0, shown.length - 1)); };
-  // A side's tabs moved to another side (a side closing shifts the next one down).
   const moveSideTabs = (from: string, to: string) => {
     setFileTabs((current) => moveKey(current, from, to));
     const shown = lastShownFiles.get(from);
@@ -4356,7 +3718,6 @@ function App() {
       await setPaneView(pane, formatFileView(shown.map((item, at) => at === side ? replacement : item)));
     } else {
       handlesOf(pane)[side] = undefined;
-      // The side goes; a second side becomes the first.
       if (side === 0 && shown.length === 2) moveSideTabs(sideKey(pane, 1), sideKey(pane, 0));
       else { setFileTabs((current) => { const next = { ...current }; delete next[sideKey(pane, side)]; return next; }); lastShownFiles.delete(sideKey(pane, side)); }
       await setPaneView(pane, formatFileView(shown.filter((_, at) => at !== side)));
@@ -4364,7 +3725,6 @@ function App() {
     }
     movingDocuments = false;
   };
-  // The files the viewers show, for the navigator to mark: "focused" in the viewer with the keyboard.
   const openFileKeys = createMemo(() => {
     const keys = new Map<string, "focused" | "shown">();
     for (const pane of panesShown()) (parseFileView(viewOf(pane)) ?? []).forEach((entry, side) => {
@@ -4373,7 +3733,6 @@ function App() {
     });
     return keys;
   }, new Map(), { equals: (a, b) => a.size === b.size && [...a].every(([key, value]) => b.get(key) === value) });
-  // Two sides trade places, their tabs, wrapping and focus with them.
   const swapSides = async (pane: PaneKey) => {
     const shown = parseFileView(viewOf(pane)) ?? [];
     if (shown.length !== 2) return;
@@ -4386,7 +3745,6 @@ function App() {
     await setPaneView(pane, formatFileView([shown[1]!, shown[0]!]));
     focusFileEntry(pane, 1 - shownFileSide(pane));
   };
-  // A side goes with all its tabs; the last leaves the viewer empty.
   const closeSide = async (pane: PaneKey, side: number) => {
     const shown = parseFileView(viewOf(pane)) ?? [];
     if (!shown[side]) return;
@@ -4400,8 +3758,6 @@ function App() {
     focusFileEntry(pane, 0);
     movingDocuments = false;
   };
-  // A tab dragged away: a hidden one is forgotten, a showing one gives way to its
-  // column's last used; a column's last leaves it empty -- a move never closes one.
   const leaveSide = async (pane: PaneKey, side: number, key: string) => {
     const shown = parseFileView(viewOf(pane)) ?? [];
     const others = (fileTabsOf(pane, side)?.entries ?? []).filter((entry) => fileEntryKey(entry) !== key);
@@ -4423,7 +3779,6 @@ function App() {
     if (!shown) return;
     setFileTabs((current) => ({ ...current, [sideKey(pane, side)]: { entries: [shown], used: [fileEntryKey(shown)] } }));
   };
-  // A side, tabs and all, lifted into a pane of its own beside this one.
   const moveSideToPane = async (pane: PaneKey, side: number) => {
     const shown = parseFileView(viewOf(pane)) ?? [];
     const entry = shown[side];
@@ -4453,7 +3808,6 @@ function App() {
       title: (key) => key.slice(key.indexOf(":") + 1).split("/").pop() || key,
       hint: (key) => `${placeLabelOf(key.slice(0, key.indexOf(":")))} / ${key.slice(key.indexOf(":") + 1)}`,
       icon: (key) => <FileTypeIcon name={key.slice(key.indexOf(":") + 1)} />,
-      // Lit on the side with the keyboard; the other side's showing file in the text colour.
       lit: () => { const shown = parseFileView(viewOf(pane)) ?? []; return shownFileSide(pane) === side && shown[side] && !emptyFocused(pane) ? fileEntryKey(shown[side]!) : null; },
       shown: (key) => { const shown = parseFileView(viewOf(pane)) ?? []; return Boolean(shown[side] && fileEntryKey(shown[side]!) === key); },
       used: () => fileTabsOf(pane, side)?.used ?? [],
@@ -4466,17 +3820,9 @@ function App() {
     });
     return <PaneTabRow side={String(side)}>{row()}</PaneTabRow>;
   };
-  /*
-   * A pane's tab row, for chats and files alike (6c): tabs keep their order
-   * and width, so switching changes only which is lit; runs from one place
-   * share its caps label; what does not fit folds, from the end, into a menu
-   * at the row's end -- never the lit tab, and a place's label only with all
-   * its tabs. A tab `shown` but not lit is a file on the viewer's other side.
-   */
   type TabStripOptions = {
     keys: () => string[] | null;
     place: (key: string) => string;
-    // Without a place label the tabs are one run, unlabelled (a file viewer's).
     placeLabel?: (key: string) => string;
     title: (key: string) => string;
     hint?: (key: string) => string;
@@ -4489,10 +3835,8 @@ function App() {
     select: (key: string) => void;
     close: (key: string) => void;
     dragView?: (key: string) => string;
-    // The lit tab drags too (a file's; a chat's header moves its pane instead).
     dragLit?: boolean;
     groupDrag?: (keys: string[]) => Record<string, string>;
-    // A + after the tabs: a New tab in this pane.
     add?: () => void;
   };
   const createTabStrip = (options: TabStripOptions) => {
@@ -4511,7 +3855,6 @@ function App() {
       <For each={groups()}>{(run) => {
         const current = () => run.keys.includes(options.lit() ?? "");
         const label = () => options.placeLabel?.(run.keys[0]!) ?? "";
-        // The place's label goes to the tab of it used last.
         const recent = () => options.used().find((key) => run.keys.includes(key)) ?? run.keys[0]!;
         return <TabPlace current={current()} label={options.placeLabel ? label() : undefined} onLabel={() => { if (!current()) options.select(recent()); }}
           labelProps={options.groupDrag ? { draggable: "true", "data-doc-view": options.dragView?.(recent()), ...options.groupDrag(run.keys) } as JSX.ButtonHTMLAttributes<HTMLButtonElement> : undefined}>
@@ -4560,13 +3903,9 @@ function App() {
     });
     return { get tabs() { return row(); } };
   };
-  // A tab's close on a pane's only document: the pane stays, empty (Home). An empty pane's close closes the pane.
-  // A document other than a chat is its pane's one tab: its title and its close.
-  // With other documents kept beside it, the pane's tab row instead.
   const documentTab = (pane: PaneKey, title?: string) => isMobileLayout() ? undefined
     : <Show when={(tabsOf(pane)?.ids.length ?? 0) > 1} fallback={<PaneTabs><PaneTab lit title={title ?? viewName(viewOf(pane))} onClose={() => void closeDocument(pane)} />
         <Show when={viewOf(pane) !== "home"}><IconButton kind="pane" label="New tab" onClick={() => void newTab(pane)}><Icons.Add /></IconButton></Show></PaneTabs>}>{paneTabRow(pane).tabs}</Show>;
-  /** A New tab in this pane, kept beside what it shows (gone to if the pane has one). */
   const newTab = async (pane: PaneKey) => {
     if (isMobileLayout()) return;
     if (tabsOf(pane)?.ids.includes("home")) return void switchTab(pane, "home");
@@ -4586,9 +3925,6 @@ function App() {
     if (!held) return;
     requestAnimationFrame(() => easePaneWeights(normalized(weightsFor(panesShown().length)), () => setWeightOverride(null)));
   };
-  // An empty pane beside the one with the keyboard, its Home offering what to open there.
-  // The desktop window's title bar (Settings › Desktop): Windows' caption, none (the app's empty chrome drags the
-  // window and the tool rail holds its buttons), or Conduit's own bar across the top.
   const [windowMaximized, setWindowMaximized] = createSignal(false);
   if (desktopShell) {
     void desktopShell.settings().catch(() => {});
@@ -4599,7 +3935,6 @@ function App() {
     if (mode === "native") delete document.documentElement.dataset.titleBar; else document.documentElement.dataset.titleBar = mode;
     setWindowDrags(mode !== "native");
   });
-  // Live chats (a harness process held for them, until reclaimed) and of those, the ones with a turn under way.
   // A new chat is started warm, before anything is said in it: not a chat the person has going until it has a message.
   const liveChats = createMemo(() => {
     const chats = new Map(catalogue.projects().flatMap((project) => project.sessions.map((chat) => [chat.id, chat] as const)));
@@ -4626,7 +3961,6 @@ function App() {
   };
   const windowControls = (kind: "bar" | "rail") => desktopShell && <WindowControls kind={kind} maximized={windowMaximized()}
     onMinimize={() => void desktopShell!.window.minimize()} onMaximize={() => void desktopShell!.window.toggleMaximize()} onClose={() => void desktopShell!.window.close()} />;
-  // The hub's browser: focused where it is shown, else opened beside (in place of a pane when there is no room).
   const openBrowser = () => {
     if (paneAOverride() === "browser:hub") return focusAnyPane("main");
     void openBeside("browser:hub");
@@ -4635,16 +3969,11 @@ function App() {
     if (shownSlots().length >= 2 || !viewsFit([...shownSlots().map(slotView), "home"])) return void toast.info("There is no room for another pane.");
     void openBeside("home", true, true);
   };
-  // Pane A's close hands it the next pane's chat or page.
   const closePane = async (pane: PaneKey) => {
     if (pane !== "main") return await closeSlot(pane);
     const element = paneElement("main");
     if (!element || shownSlots()[0] === undefined || !animatePanes()) return await closePaneA();
-    // As any pane closes: pane A fades out and the others ease into its room;
-    // then, unseen, it takes the next pane's document at that pane's width and
-    // fades in once it has loaded.
     setWeightOverride(paneShares());
-    // It fades as the others ease into its room, its document keeping its width against its moving (right) edge.
     setPaneMotion({ slot: "main", phase: "leaving", width: element.getBoundingClientRect().width });
     const leaving = element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration("--duration-fold") * 0.55, easing: easing("--ease-leave"), fill: "forwards" });
     void Promise.resolve().then(() => {
@@ -4656,9 +3985,6 @@ function App() {
         const view = slotView(next);
         const beside = paneSlot(next).host();
         if (!view || !beside) { await closePaneA(); setWeightOverride(null); setPaneMotion(null); return; }
-        // The next pane stays showing while pane A, collapsed, loads its
-        // document; then the two crossfade -- the pane's last frame, held
-        // over its place, out as pane A comes in there.
         swappingPanes = true;
         swapTabs("main", next);
         try {
@@ -4697,16 +4023,11 @@ function App() {
     setPaneAOverride(null);
     void Promise.resolve(openInPaneA(view)).finally(() => { swappingPanes = false; reconcileTabs(); });
   };
-  /*
-   * Agents see and arrange this tab's panes (agent-ui.ts, the `ui` tool): each pane's document as its view and title,
-   * the one with the keyboard; open (in pane A, a pane given, or beside), close, focus -- the same moves a person makes.
-   */
   createAgentUiBridge({
     connection: connectionId,
     route: () => routeKind(),
     panes: () => panesShown().map((pane) => { const view = viewOf(pane); return { pane, view, title: view ? viewName(view) : "Empty pane", focused: keyboardPane() === pane }; }),
     actions: (() => {
-      // The pane a command means: the one it names, else the one with the keyboard; it must be open unless it is to be.
       const paneOf = (command: AgentUiCommand, mustShow = true) => {
         const shown = panesShown();
         const pane = command.pane ?? keyboardPane();
@@ -4723,11 +4044,10 @@ function App() {
         open: async (command) => {
           const { shown, pane } = paneOf(command, false);
           const view = command.view;
-          // The hub has checked it against the declared views (ui-api.js); this is the client's own check of its form.
+          // The hub has checked it against the declared views; this is the client's own check of its form.
           if (!view || !isSplitView(view)) throw new Error(`Not something a pane can show: ${String(view)}.`);
           if (command.beside || !(isPaneView(view) || view === "page:dashboard")) {
             const slot = await openBeside(view, true);
-            // Where it landed: a pane in the row, or the dock when the window has no room for another beside.
             await new Promise((resolve) => requestAnimationFrame(resolve));
             const at = panesShown().find((candidate) => viewOf(candidate) === view);
             if (at !== undefined) return `Opened ${viewName(view)} in pane ${String(at)}.`;
@@ -4741,7 +4061,6 @@ function App() {
       };
     })(),
   });
-  // A pane beside A, in the row or (docked) in the dock.
   const renderSlot = (slot: number, position: () => number, docked: boolean) => {
       const pane = paneSlot(slot);
       const side = pane.session;
@@ -4792,10 +4111,6 @@ function App() {
         <Show when={slotChatId(slot)}>
           <SheetFill>
             {attachInput()}
-            {/* With no chat in the session yet the pane says it is loading;
-                after that it switches in place, as pane A does -- the surface
-                stays (and keeps focus), its transcript withheld while a live
-                chat opens rather than showing an empty chat's welcome. */}
             <Show when={side.chat.loadedId()} fallback={<Empty role="status">Loading chat…</Empty>}>
             <ChatSurface session={side} opening={side.chat.presentation().kind !== "ready" || side.chat.loadedId() !== slotChatId(slot)} project={side.selected()?.project}
               {...paneTabRow(slot)} keyboardOwner={owns} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
@@ -4808,15 +4123,9 @@ function App() {
         </Show>
       </Sheet>;
   };
-  /*
-   * Any pane's document can move into the dock: it keeps its slot and session,
-   * drawn in the dock instead of the row, with an icon of its own on the rail.
-   * Pane A always shows something, so it docks only while another pane can
-   * take its place, and only into a free slot.
-   */
+  // Pane A always shows something, so it docks only while another pane can take its place.
   const canDock = (pane: PaneKey) => !isMobileLayout() && dockAvailable() && !isDocked(pane)
     && dockedSlots().length < MAX_DOCKED && (pane !== "main" || (shownSlots()[0] !== undefined && Boolean(paneAView())));
-  // A pane just docked opens at its document's minimum the first time it shows.
   const freshlyDocked = new Set<number>();
   const [dockWidthRequest, setDockWidthRequest] = createSignal<{ width: number; nonce: number } | null>(null);
   const showDocked = (slot: number) => {
@@ -4843,12 +4152,10 @@ function App() {
       setDockedSlots((current) => [...current, free]);
     });
     movingDocuments = false;
-    // Its tabs go with it.
     swapTabs("main", free);
     await closePaneA();
     persistSlots();
   };
-  // Back out of the dock into the row, at the end, folding if there is no room.
   const undockPane = (slot: number, focus = true) => {
     if (rowSlots().length >= 2) { toast.info("There is no room for another pane."); return false; }
     batch(() => {
@@ -4868,10 +4175,6 @@ function App() {
     if (panelOpen() && dockSlot() === slot) return closePanel();
     showDocked(slot);
   };
-  /*
-   * Ctrl+J (and the rail's jbot): jbot from anywhere, in the dock, taking it over from whatever it showed; put away the
-   * same way, the dock goes back to what it showed (a tool, a docked pane, or shut). jbot already in a pane: focused.
-   */
   let dockBeforeJbot: { open: boolean; slot: number | null; tool: WorkspaceView } | null = null;
   const jbotShownInDock = () => panelOpen() && dockSlot() === null && dockTool() === "jbot";
   const putJbotAway = async () => {
@@ -4892,7 +4195,6 @@ function App() {
     focusWorkspacePanel();
   };
   const toggleJbot = async () => jbotShownInDock() ? putJbotAway() : showJbot();
-  // The UI feedback tool (feedback/feedback-tool.tsx), a development client's: its chord opens it selecting, then switches between selecting and using the app.
   const [devClient] = createResource(isDevClient);
   const [feedbackMode, setFeedbackMode] = createSignal<"select" | "use" | null>(null);
   const toggleFeedback = () => setFeedbackMode(feedbackMode() === "select" ? "use" : "select");
@@ -4909,13 +4211,7 @@ function App() {
       <Show when={pane !== "main" || shownSlots()[0] !== undefined}><IconButton kind="pane" aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><Icons.Close /></IconButton></Show>
     </Actions>
   </Show>;
-  /*
-   * The URL carries every pane (5f). The path stays pane A's route; `a` is a
-   * view pane A shows over it, each `pane` a pane beside A in order, and
-   * `focus` the position of the pane with the keyboard. Widths and the dock
-   * stay per device. Every address the app writes goes through here, so a
-   * route change carries the panes and Back restores them.
-   */
+  // Every address the app writes goes through here, so a route change carries the panes and Back restores them.
   const PANE_PARAMS = ["a", "pane", "dock", "tabs", "ftabs", "focus"];
   const withPanes = (address: string | URL) => {
     const url = new URL(address, location.href);
@@ -4929,7 +4225,6 @@ function App() {
     if (focus > 0) url.searchParams.set("focus", String(focus));
     return `${url.pathname}${url.search}${url.hash}`;
   };
-  // Where pane A is, without the panes: what route comparisons read.
   const routeAddress = () => { const url = new URL(location.href); for (const name of PANE_PARAMS) url.searchParams.delete(name); return `${url.pathname}${url.search}`; };
   const nativePushState = history.pushState.bind(history);
   const nativeReplaceState = history.replaceState.bind(history);
@@ -4940,8 +4235,6 @@ function App() {
     const next = withPanes(location.href);
     if (next !== `${location.pathname}${location.search}${location.hash}`) nativeReplaceState(history.state, "", next);
   }, { defer: true }));
-  // Pane A sent somewhere by its route -- a new chat, a link -- leaves what
-  // showed over it; a swap or close moving a document there does not.
   let paneARoute: string | null = null;
   // Back or forward restoring an address sets pane A's route and what shows
   // over it together; the route changing then is not pane A being sent away.
@@ -4950,13 +4243,11 @@ function App() {
     // Only a settled route counts: a project or chat still resolving (as on
     // the first open, the catalogue arriving) is not pane A being sent away.
     const settling = (routeKind() === "project" && !selectedProject()) || (routeKind() === "chat" && !catalogue.selectedId() && !catalogue.loaded());
-    // What names pane A's route: the chat, the project, or just the page.
     const key = routeBootstrap() === "ready" && !settling ? `${routeKind()}:${routeKind() === "chat" ? catalogue.selectedId() : routeKind() === "project" ? selectedProject()?.id : ""}:${harnessThread() ? "thread" : ""}` : null;
     if (key === null) return;
     if (paneARoute !== null && key !== paneARoute && !swappingPanes && !restoringPanes && untrack(paneAOverride)) setPaneAOverride(null);
     paneARoute = key;
   });
-  // Back and forward: the panes the address names.
   const applyPanesFromUrl = () => {
     const params = new URLSearchParams(location.search);
     const views = params.getAll("pane").filter(isSplitView).slice(0, 2);
@@ -4974,20 +4265,12 @@ function App() {
     });
     persistSlots();
   };
-  // The pane the address says has the keyboard, once the panes are drawn.
   const launchFocus = Number(launchUrl.searchParams.get("focus")) || 0;
   if (launchFocus > 0) createEffect(on(() => shownSlots().length, (count) => { const slot = shownSlots()[launchFocus - 1]; if (count && slot !== undefined) setKeyboardPane(slot); }));
-  // The chats the panes show other than the one with the keyboard, marked open in the sidebar.
-  /*
-   * Where each chat is open, for the sidebar's PaneMark: the pane's letter in reading order -- A, the panes beside it,
-   * then the dock's -- and whether it is the pane's showing tab. A chat is open once (DESIGN.md › Focus and opening).
-   */
   const paneOrder = createMemo((): PaneKey[] => {
     const docked = [...dockedSlots(), ...foldedSlots()].filter((slot) => slotView(slot) && !shownSlots().includes(slot));
     return ["main", ...shownSlots(), ...docked];
   });
-  // A pane's letter for its header: only while there are several (one pane needs no name).
-  // jbot in the dock is a tool there, as Files is: no letter, and the panes are lettered without it.
   const paneLetter = (pane: PaneKey) => { const order = paneOrder().filter((slot) => slot === "main" || !(inDock(slot) && slotView(slot) === "page:jbot")); const at = order.indexOf(pane); return order.length > 1 && at >= 0 ? String.fromCharCode(65 + at) : undefined; };
   const chatPlaces = createMemo(() => {
     const places = new Map<string, { pane: string; shown: boolean }>();
@@ -5011,11 +4294,8 @@ function App() {
   // announce every change of the room they take from pane A.
   let splitMotionId = 0;
   let splitSize = 0;
-  // Open from a drag's or ease's begin to its end: the weights effect below
-  // stays out of the way meanwhile. Firing on every frame's new weights, it
-  // started a motion of its own each frame -- every transcript measured,
-  // pinned and relaid out with its anchor, and the drag's own changes, now
-  // under a stale id, ignored.
+  // Open from a drag's or ease's begin to its end: the weights effect below stays out of the way meanwhile, or it
+  // starts a motion of its own each frame, relaying out every transcript.
   let splitMotionOpen = false;
   const announceSplit = (phase: "begin" | "change" | "end", size: number, panes?: { element: HTMLElement; width: number }[]) => {
     splitMotionOpen = phase !== "end";
@@ -5033,18 +4313,10 @@ function App() {
       splitSize = next;
     });
   }, { defer: true }));
-  // The edge on the left of the pane at `position` shares the room of that
-  // pane and the one before it between them.
-  /*
-   * A pane opening: the panes there ease to the widths they will have, then
-   * it fades in; closing, the reverse (closeSlot). Not on first load, a phone,
-   * Back, a swap, or with reduced motion.
-   */
   let panesSettled = false;
   window.setTimeout(() => { panesSettled = true; }, PANES_SETTLE_MS);
-  // The slots shown as the arrival effect below last saw them, and the documents held meanwhile (renderSlot): a pane
-  // easing open is unseen until it lands, and mounting a chat inside the click that opened it -- its components, then its
-  // first layout and render -- held the panes still ~45 ms before they moved.
+  // A pane easing open is unseen until it lands: mounting a chat inside the click that opened it holds the panes still
+  // ~45 ms before they move.
   let shownAsSeen = untrack(shownSlots);
   const shownAsSeenAtLoad = shownAsSeen;
   const heldSlots = new Map<number, { release: () => void; focus?: () => void }>();
@@ -5052,13 +4324,9 @@ function App() {
     && !reducedMotion();
   const normalized = (weights: number[]) => { const total = weights.reduce((sum, weight) => sum + weight, 0) || 1; return weights.map((weight) => weight / total); };
   const paneShares = () => normalized(panesShown().map((pane) => paneElement(pane)?.getBoundingClientRect().width ?? 0));
-  // The panes' shares easing (body.panes-settling for the terminal's fit; the shell eases the sheets).
   const [panesSettling, setPanesSettling] = createSignal(false);
-  // What a pane holds besides its drag edge and its ground: the documents that keep one width while it eases.
   const documentsOf = (element: HTMLElement) => [...element.children]
     .filter((child): child is HTMLElement => child instanceof HTMLElement && !child.matches(".ui-resize-edge, .ui-sheet-backdrop"));
-  // The width a pane arriving at `index` of the row lands at, from the shares it eases to: the room the row's panes
-  // have now (with whatever margin the arriving one has yet), less the gutter it lands with.
   const landingWidth = (target: number[], index: number, arriving: HTMLElement | undefined) => {
     const panes = panesShown().map((pane) => paneElement(pane)).filter((element): element is HTMLElement => Boolean(element));
     const room = panes.reduce((sum, element) => sum + element.getBoundingClientRect().width, 0)
@@ -5072,7 +4340,6 @@ function App() {
     document.body.classList.add("panes-settling"); setPanesSettling(true);
     batch(() => {
       setWeightOverride(to);
-      // Its margin eases with it, so nothing jumps when it comes or goes.
       const motion = paneMotion();
       if (motion) setPaneMotion({ ...motion, collapsed: motion.phase === "leaving" });
     });
@@ -5101,9 +4368,8 @@ function App() {
     start.splice(index + 1, 0, 0);
     const target = normalized(weightsFor(now.length + 1));
     setWeightOverride(normalized(start));
-    // Its document is laid out once, at the width it lands at, and rides the pane's moving edge in, fading in over
-    // the ease's later part: mounted a frame before anything moves (its long task moves nothing), and the ease waits
-    // a moment for a chat to have loaded, so nothing renders mid-motion.
+    // Mounted a frame before anything moves (its long task moves nothing), and the ease waits a moment for a chat to
+    // have loaded, so nothing renders mid-motion.
     setPaneMotion({ slot, phase: "arriving", collapsed: true, width: landingWidth(target, index + 1, paneSlot(slot).host()) });
     requestAnimationFrame(() => {
       heldSlots.get(slot)?.release();
@@ -5123,8 +4389,6 @@ function App() {
       });
     });
   }, { defer: true }));
-  // A share preset from the rail (Equalise is the even one): the panes ease to
-  // it, each still held at its document's minimum.
   const applyPaneLayout = (weights: number[]) => {
     const count = shownSlots().length + 1;
     if (weights.length !== count) return;
@@ -5155,9 +4419,6 @@ function App() {
     const paneAt = (index: number) => index === 0 ? document.querySelector<HTMLElement>(".chat-main") : index <= shown.length ? paneSlot(shown[index - 1]!).host() : undefined;
     const panes = Array.from({ length: shown.length + 1 }, (_, index) => paneAt(index));
     if (panes.some((pane) => !pane)) return;
-    // Dragging an edge takes room from the pane beside it down to its
-    // document's minimum, then from the next one on, and gives it to the pane
-    // on the other side.
     const widths = panes.map((pane) => pane!.getBoundingClientRect().width);
     const minimums = panes.map((pane) => parseFloat(getComputedStyle(pane!).minWidth) || minSplitPaneWidth());
     const weights = paneWeights();
@@ -5192,7 +4453,6 @@ function App() {
       },
     };
   };
-  // A view dragged from the dock onto the main pane lands in its split.
   const dockDragging = (event: DragEvent) => document.body.dataset.toolDrag === "dock" && Boolean(event.dataTransfer?.types.includes(TOOL_DRAG_TYPE)) && !isMobileLayout();
   // Only the Terminal is maximised in the dock (its header alone offers it): showing anything else there restores it.
   createEffect(() => { if (workspaceExpanded() && !(dockSlot() === null && dockTool() === "terminal")) setWorkspaceExpanded(false); });
@@ -5402,13 +4662,9 @@ function App() {
     }
   };
 
-  // The tray's New chat is the same command the palette and the sidebar run.
-  // The shell dispatches it rather than opening anything itself, so there is
-  // one new-chat path however it was asked for.
+  // The shell dispatches the tray's New chat rather than opening anything itself, so there is one new-chat path.
   onMount(() => {
     if (!updateShell) return;
-    // Stage a signed update while the window remains usable. The button and
-    // tray command can still ask for an immediate check at any time.
     const firstCheck = window.setTimeout(() => void prepareDesktopUpdate(true), FIRST_DESKTOP_UPDATE_CHECK_MS);
     // The hub pushes the installer it offers (runtime stream): a new one is downloaded as soon as it is there. The
     // hourly check is only for a hub that does not push (a release's, whose updates come from GitHub).
@@ -5434,10 +4690,8 @@ function App() {
     });
   });
 
-  // The system-wide keys follow the registry: whatever is bound now is what the
-  // shell holds, and rebinding one in Settings re-sends the whole set. A chord
-  // another application already owns is reported and changes nothing, which is
-  // the shell's guarantee, not something to re-check here.
+  // A chord another application already owns is reported and changes nothing: the shell's guarantee, not re-checked
+  // here.
   onMount(() => {
     if (!desktopShell) return;
     const shell = desktopShell;
@@ -5455,9 +4709,6 @@ function App() {
     onCleanup(shortcutManager.subscribe(publish));
   });
 
-  // The keyboard tour (client/tour/keyboard-tour.tsx): started from the palette or Settings › Shortcuts, Settings
-  // closing as it starts so the page it teaches is in view; offered once, by a toast, after the person first uses a
-  // go-to chord or the leader (never on load). What it cannot see in the page it asks here.
   createEffect(on(keyboardTourActive, (running) => { if (running) setSettingsOpen(false); }, { defer: true }));
   onCleanup(watchForTourOffer(shortcutManager, () => toast("Conduit has a keyboard tour", {
     description: "Learn the regions, lists, the leader and panes by pressing the keys.",
@@ -5478,8 +4729,6 @@ function App() {
       queueUiPreferenceSave(detail.key, detail.value!);
     };
     window.addEventListener(UI_PREFERENCE_CHANGE_EVENT, persistUiPreference);
-    // One reducer for every channel that hands over a chat row: the global
-    // stream, and the open chat's own socket.
     const watching = (chatId: string) => chatId === catalogue.selectedId()
       && routeKind() === "chat" && document.visibilityState === "visible";
     const unlisted = new Set<string>();
@@ -5487,10 +4736,8 @@ function App() {
       const changed = (event as CustomEvent<ChatSummary>).detail;
       if (!changed?.id) return;
       const read = watching(changed.id);
-      // A chat made somewhere else (Float, another device): the list is read again to take it in, where it belongs.
-      // A second later, so a chat this app made itself (it lists its own) costs no second read.
-      // Only a chat the list would hold (a run's or an agent's chat, a draft never is), and once for each: one the list
-      // still leaves out (untracked, archived) is not asked for again at its every change.
+      // A second later, so a chat this app made itself (it lists its own) costs no second read. Once for each: one the
+      // list still leaves out (untracked, archived) is not asked for again at its every change.
       const listed = () => catalogue.projects().some((project) => project.sessions.some((session) => session.id === changed.id));
       if (!listed()) {
         if (read) markChatRead(catalogue, changed);
@@ -5506,11 +4753,9 @@ function App() {
       if (document.visibilityState !== "visible" || routeKind() !== "chat") return;
       markChatRead(catalogue, catalogue.selected()?.chat);
     };
-    // One read at a time, however many ask: the list as it is now.
     let relisting: Promise<unknown> | null = null;
     const relist = () => { relisting ??= catalogue.refresh().catch(() => {}).finally(() => { relisting = null; }); };
     window.addEventListener("conduit:chat-changed", applyChangedChat);
-    // Back from time away (the app in the background, Float used meanwhile): the chats made meanwhile.
     window.addEventListener("conduit:runtime-resynced", relist);
     onCleanup(() => window.removeEventListener("conduit:runtime-resynced", relist));
     document.addEventListener("visibilitychange", readOnFocus);
@@ -5530,14 +4775,11 @@ function App() {
         return [];
       }
     };
-    // A URL override is a deliberate per-tab experiment, and server preferences
-    // arrive after first paint. Applying one here would silently undo the
-    // override. Storage still mirrors the server; only the applied value is
-    // held back.
+    // A URL override is a deliberate per-tab experiment, and server preferences arrive after first paint: applying one
+    // would silently undo it. Storage still mirrors the server; only the applied value is held back.
     const overrideParams = new URLSearchParams(location.search);
     const overridden = (key: UiPreferenceKey) => overrideParams.has(key);
-    // Every UI preference, one row each (ClientPreference): a key the hub declares (UI_PREFERENCES) without a row here
-    // is a type error. A row with no `apply` is only announced: its owner listens for the change itself.
+    // A row with no `apply` is only announced: its owner listens for the change itself.
     const clientPreferences = {
       sidebarChatLimit: {
         storage: SIDEBAR_CHAT_LIMIT_STORAGE_KEY, local: selectedSidebarChatLimit,
@@ -5612,20 +4854,11 @@ function App() {
     } satisfies { [K in UiPreferenceKey]: ClientPreference<K> };
     const preferenceKeys = Object.keys(clientPreferences) as UiPreferenceKey[];
     const preferenceRow = <K extends UiPreferenceKey>(key: K) => clientPreferences[key] as ClientPreference<K>;
-    // Read as the page mounts, before the hub answers: this device's own values.
     const localPreferences = Object.fromEntries(preferenceKeys.map((key) => [key, preferenceRow(key).local()])) as UiPreferences;
     const applyPreference = <K extends UiPreferenceKey>(key: K, value: UiPreferences[K]) => {
       const { storage, store, apply } = preferenceRow(key);
-      // Hydration replays every preference the server holds, and almost all of
-      // them are already on screen: localStorage seeded each signal, and the
-      // reading-surface presets were stamped, before the first paint. Replaying
-      // one is not free -- the transcript reads a width or collapse change as a
-      // reason to drop every cached block size and measure the whole thread
-      // again -- so a value that has not moved is not announced at all.
-      //
-      // Only keys with a storage key can be compared, and those are exactly the
-      // ones seeded from storage. The rest (pins, shortcut overrides, voice)
-      // fall through and are applied as before.
+      // A value that has not moved is not announced: the transcript reads a width or collapse change as a reason to
+      // drop every cached block size and measure the whole thread again. Only keys seeded from storage can be compared.
       if (storage) {
         const stored = store ? store(value) : Array.isArray(value) ? JSON.stringify(value) : String(value);
         if (localStorage.getItem(storage) === stored) return;
@@ -5638,17 +4871,9 @@ function App() {
       .catch(() => null);
     void readShared<PreferencesPayload>("/v0/preferences").then(async (serverPreferences) => {
       setSidebarPins(Array.isArray(serverPreferences.sidebarPins) ? serverPreferences.sidebarPins : []);
-      // Every server keeps the directory, and every client that reaches one
-      // both reads it and tops it up. Two addresses for the same machine share
-      // it outright; two machines learn each other the first time one client
-      // has been to both. Either way an address is typed once, anywhere.
       const directory = mergeServerDirectory(serverPreferences.knownServers || []);
       void publishServerDirectory(directory, serverPreferences.knownServers);
-      // Ask the server it just signed in to who it is and where else it
-      // answers. This connection is authenticated, which is the only kind that
-      // may be believed about identity: an open endpoint saying "I am the
-      // server you hold a token for" is the thing worth being unable to say.
-      // A server too old to answer leaves the list exactly as it was.
+      // Asked over this authenticated connection, the only kind that may be believed about identity.
       void serverIdentityRequest.then((identity) => {
         if (!identity) return;
         const origin = activeOrigin();
@@ -5698,10 +4923,8 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.focusSidebar, "application", goToSidebar),
       shortcutManager.registerHandler(COMMAND_IDS.maximizeWorkspacePanel, "application", maximizeWorkspacePanel),
       shortcutManager.registerHandler(COMMAND_IDS.stashPrompt, "chat", stashPrompt),
-      // Stop the turn of the pane that has the keyboard (its own chord: Escape only steps back).
       ...(["chat", "dashboard"] as const).map((context) => shortcutManager.registerHandler(COMMAND_IDS.stopResponse, context,
         () => { const { chat } = focusedSession(); if (chat.streaming()) void chat.stop(); }, { when: () => focusedSession().chat.streaming() })),
-      // The go-to jumps, from every region the leader can start in.
       ...getCommandDefinition(COMMAND_IDS.focusComposer).contexts.map((context) =>
         shortcutManager.registerHandler(COMMAND_IDS.focusComposer, context, focusComposer, { when: hasComposer })),
       ...getCommandDefinition(COMMAND_IDS.focusWorkspacePanel).contexts.map((context) =>
@@ -5718,23 +4941,16 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "application", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "chat", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "workspace-panel", toggleChatWorkspaceFocus),
-      // Moving acts on the tool that has the keyboard: the dock's, or the split's.
       shortcutManager.registerHandler(COMMAND_IDS.workspaceMoveToMain, "workspace-panel", () => openBeside(dockTool()), { when: () => !isMobileLayout() && panelOpen() && !document.activeElement?.closest(".main-split") }),
       shortcutManager.registerHandler(COMMAND_IDS.workspaceMoveToDock, "workspace-panel", async () => { const pane = paneOf(document.activeElement); const view = toolView(); if (pane !== null && !isToolView(viewOf(pane)) && canDock(pane)) await dockPane(pane); else if (view) await moveToDock(view); }, { when: () => splitShown() && Boolean(document.activeElement?.closest(".main-split")) }),
       ...(["chat"] as const).map((context) => shortcutManager.registerHandler(COMMAND_IDS.workspaceMoveToDock, context, async () => { const pane = paneOf(document.activeElement); if (pane !== null) await dockPane(pane); }, { when: () => { const pane = paneOf(document.activeElement); return pane !== null && canDock(pane); } })),
-      // A dashboard is the chat's sibling region and keeps what the main pane
-      // could do there before regions had names.
       shortcutManager.registerHandler(COMMAND_IDS.stashPrompt, "dashboard", stashPrompt),
-      // Each page declares its sections; the leader offers the ones it has.
       ...([["dashboardComposer", "composer"], ["dashboardChats", "chats"], ["dashboardProjects", "projects"], ["dashboardWorkspaces", "workspaces"], ["dashboardTerminals", "terminals"], ["dashboardChanges", "changes"], ["dashboardFiles", "files"]] as const)
         .map(([id, section]) => shortcutManager.registerHandler(COMMAND_IDS[id], "dashboard", () => { focusSplitSection(section); }, { when: () => splitSections().has(section) })),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "dashboard", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
-      // Keyboard paths where there were none (docs/plans/keyboard-model.md › Gaps 7-8): each leader key does what a
-      // pane header's, a tab's, the tool rail's or the sidebar heading's button does, on the pane with the keyboard.
       ...(() => {
         const panesAt = ["chat", "dashboard", "workspace-panel"] as const;
         const here = () => isMobileLayout() ? null : paneOf(document.activeElement);
-        // A file viewer's tab is its focused column's file; any other pane's, its tab row's lit tab, else its one tab.
         const closeTabHere = async (pane: PaneKey) => {
           const files = parseFileView(viewOf(pane));
           if (files?.length) { const side = shownFileSide(pane); return await closeFileTab(pane, side, fileEntryKey(files[side]!)); }
@@ -5742,12 +4958,10 @@ function App() {
           if (active && (tabsOf(pane)?.ids.length ?? 0) > 1 && tabsOf(pane)!.ids.includes(active)) return await closeTab(pane, active);
           await closeDocument(pane);
         };
-        // A chat with no tab row has no tab to close (its pane's close is Shift+X).
         const hasTab = (pane: PaneKey) => Boolean(parseFileView(viewOf(pane))?.length || tabsOf(pane)?.ids.length || !viewOf(pane)?.startsWith("chat:"));
         const canClosePane = (pane: PaneKey) => inDock(pane) || (splitShown() && (pane !== "main" || shownSlots()[0] !== undefined));
         const canSwap = (pane: PaneKey) => splitShown() && !inDock(pane) && swapPartner(pane) !== null;
         const layouts = () => PANE_LAYOUTS[splitShown() ? shownSlots().length + 1 : 1];
-        // The preset after the one nearest the panes' shares now.
         const nextLayout = () => {
           const presets = layouts()!.map(normalized);
           const shares = paneShares();
@@ -5767,14 +4981,12 @@ function App() {
           shortcutManager.registerHandler(COMMAND_IDS.toggleDockOverlay, "workspace-panel", toggleDockOverlay, { when: () => !isMobileLayout() && dockAvailable() }),
           ...([COMMAND_IDS.dockedPane1, COMMAND_IDS.dockedPane2, COMMAND_IDS.dockedPane3] as const).map((id, index) =>
             shortcutManager.registerHandler(id, "workspace-panel", () => { const slot = railDocked()[index]; if (slot !== undefined) chooseDocked(slot, false); }, { when: () => !isMobileLayout() && railDocked()[index] !== undefined })),
-          // M from a docked pane: back out of the dock into the row, as its header's Move to a pane does.
           shortcutManager.registerHandler(COMMAND_IDS.workspaceMoveToMain, "workspace-panel", () => { const pane = here(); if (pane !== null) undockPane(pane as number); }, { when: () => { const pane = here(); return pane !== null && isDocked(pane) && rowSlots().length < 2; } }),
           shortcutManager.registerHandler(COMMAND_IDS.sidebarNewChat, "sidebar", () => { setMobileSidebarOpen(false); void startNewChat(); }),
           shortcutManager.registerHandler(COMMAND_IDS.sidebarNewFolder, "sidebar", () => runSidebar("new-folder")),
           shortcutManager.registerHandler(COMMAND_IDS.sidebarSearchChats, "sidebar", toggleSearchPalette),
         ];
       })(),
-      // Find in chat (keyboard model, gap 6): Ctrl+F opens the find bar of the transcript in the pane with the keyboard.
       // Not claimed from an editor with its own find, nor from the find bar's own field: pressed again there, the
       // browser's find opens.
       ...((here: () => HTMLElement | null) => (["chat", "dashboard"] as const).map((context) => shortcutManager.registerHandler(COMMAND_IDS.findInChat, context, () => { openTranscriptFind(here()); }, {
@@ -5788,10 +5000,7 @@ function App() {
     ];
     const uninstallShortcuts = shortcutManager.install(window);
     window.addEventListener("keydown", dismissOpenLayer, { capture: true });
-    // The Escape ladder's last rung (docs/plans/keyboard-model.md › Leave): an Escape nothing nearer took, in a region
-    // with no Escape of its own (the transcript, the file viewer, the dock), hands focus home: the composer of the pane
-    // it is in, or the main pane's from the dock. Bubble phase, so menus, fields and editors answer first. Terminals
-    // keep Escape for their program; overlays close themselves.
+    // Bubble phase, so menus, fields and editors answer first. Terminals keep Escape for their program.
     const escapeHome = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.key !== "Escape" || event.repeat || paletteOpen() || settingsOpen()) return;
       const target = event.target instanceof Element ? event.target : null;
@@ -5806,9 +5015,6 @@ function App() {
       composer.focus({ preventScroll: true });
     };
     window.addEventListener("keydown", escapeHome);
-    // The regions around focus, innermost first, each an active context: focus
-    // in the composer makes composer, chat and application active in that
-    // order (SHORTCUT_REGION_PARENTS). A closed workspace panel is not a place.
     let releaseFocusedContexts: Array<() => void> = [];
     syncFocusedShortcutContext = (target: EventTarget | null) => {
       for (const release of releaseFocusedContexts) release();
@@ -5819,10 +5025,8 @@ function App() {
         if (isShortcutRegion(name) && (name !== "workspace-panel" || panelOpen() || node.classList.contains("main-split"))) regions.push({ name, element: node });
       }
       releaseFocusedContexts = regions.map((region) => shortcutManager.activateContext(region.name));
-      // The held line follows focus into any region, however it came (a click, Tab, a chord); only a keyboard go-to
-      // also draws it out (the region cue, acknowledgeFocusedRegion). The sidebar is the exception: a click there opens
-      // a chat, it is not the keyboard moving to the sidebar (focus passes through its row on the way to the pane), so
-      // the line stays where it was. Focus outside a region keeps the last owner until another receives focus.
+      // The sidebar is the exception: a click there opens a chat and focus only passes through its row on the way to
+      // the pane, so the line stays where it was.
       const outermost = regions.at(-1);
       if (!outermost || !(outermost.element instanceof HTMLElement)) return;
       if (outermost.element !== focusRegion) { enteredRegion = outermost.element; focusRegion = outermost.element; }
@@ -5831,7 +5035,6 @@ function App() {
     };
     const onFocusIn = (event: FocusEvent) => syncFocusedShortcutContext?.(event.target);
     window.addEventListener("focusin", onFocusIn);
-    // A press is the person's own choice of where to be: deferred focus work started before it gives way (focusIntent).
     const notePress = () => { focusIntent.drop(); lastInput = "pointer"; };
     const noteKey = () => { lastInput = "key"; };
     window.addEventListener("keydown", noteKey, true);
@@ -5866,8 +5069,6 @@ function App() {
       restoringPanes = true;
       applyPanesFromUrl();
       void (async () => {
-        // Back off an untracked thread still at work asks first, as any other
-        // way off it does; staying puts its address back.
         const open = harnessThread();
         if (open && routeAddress() !== threadPath(open) && !(await leaveHarnessThread())) {
           history.pushState({}, "", threadPath(open));
@@ -5932,8 +5133,6 @@ function App() {
     };
     window.addEventListener("popstate", onPopState);
     onCleanup(() => window.removeEventListener("popstate", onPopState));
-    // Everything read on the way in waits out a server that is still starting
-    // (apiWhenServed), rather than failing once and leaving the page loading.
     const templateRequest = apiWhenServed<{ templates: Template[]; defaultTemplateId?: string }>("/v0/templates")
       .catch(() => ({ templates: [], defaultTemplateId: "assistant" }))
       .then((payload) => {
@@ -5965,9 +5164,6 @@ function App() {
     // route; what loaded then fills the catalogue but does not take the page back.
     const bootPath = location.pathname;
     const navigated = () => location.pathname !== bootPath;
-    // A chat's address opened while the hub cannot be reached (the runtime stream says so within seconds): with the
-    // catalogue this device saw last, the chat opens from its device copy rather than waiting on the hub, which its
-    // requests go on doing; the open chat is read again once the hub is back.
     let hubAwayOnBoot: (away: "away") => void = () => {};
     const awayOnBoot = new Promise<"away">((resolve) => { hubAwayOnBoot = resolve; });
     if (initialRouteId && cachedCatalogue) createEffect(() => {
@@ -5981,9 +5177,8 @@ function App() {
       const projects = asList<Project>(cataloguePayload.projects).map((project) => ({ ...project, sessions: asList<ChatSummary>(project.sessions) }));
       pruneWorkspacePanelStorage(workspacePanelScopes(projects));
       catalogue.setProjects(projects);
-      // Usually the server says what the cache did; then there is nothing to
-      // redraw, and replacing every row with an equal one was a phone's
-      // tenth of a second.
+      // Usually the server says what the cache did; replacing every row with an equal one costs a phone a tenth of a
+      // second.
       if (cachedCatalogue) void catalogueFresh.then((fresh) => {
         if (JSON.stringify(fresh) === JSON.stringify(cachedCatalogue)) return;
         catalogue.setProjects(asList<Project>(fresh.projects).map((project) => ({ ...project, sessions: asList<ChatSummary>(project.sessions) })));
@@ -5998,7 +5193,6 @@ function App() {
         showRoute({ kind: "chat" });
         return;
       }
-      // Not in the catalogue this device saw: only the hub can say which chat it is.
       const reached = selectedChat === "away" ? await selectedChatRequest : selectedChat;
       if (reached) {
         const [target, detail] = reached;
@@ -6042,7 +5236,6 @@ function App() {
         return;
       }
       const message = (error as Error).message;
-      // Any route still waiting says why, rather than loading for ever.
       if (routeBootstrap() === "loading" && !navigated()) {
         setRouteBootstrapError(message);
         setRouteBootstrap("error");
@@ -6068,18 +5261,6 @@ function App() {
     onDrop: (event: DragEvent) => { event.preventDefault(); dragDepth = 0; setDropActive(false); const files = filesFromDataTransfer(event.dataTransfer); if (files.length) attachments.addFiles(files); },
   };
 
-  /*
-   * One chat's surface -- its header, transcript and composer -- drawn from
-   * its session, for whichever pane shows it (docs/design/panes-and-rail.md,
-   * stage 5). What differs by pane comes in as props: the actions only the
-   * main chat has yet, and the side's swap and close.
-   */
-  /*
-   * The pages either pane can show, drawn from the pane's session: its
-   * composer is the page's unsent chat, and sending makes it that pane's chat
-   * (docs/design/panes-and-rail.md, stage 5d).
-   */
-  // onSendDraft: a page whose composer starts a chat; without it the session's loaded chat is sent to (jbot's page).
   const PageComposer = (props: { session: ChatSession; place?: ReturnType<typeof chatPlace>; workspace?: Project; keyboardOwner: () => boolean; onSendDraft?: (prompt: string) => Promise<void>; contextControl?: JSX.Element }) => {
     const current = props.session;
     return <Composer shortcuts={shortcutManager} contextControl={props.contextControl}
@@ -6133,9 +5314,8 @@ function App() {
     const current = tool ? jbotSession : slot === "main" ? session : paneSlot(slot).session;
     const owns = tool ? () => Boolean(document.activeElement?.closest("[data-region='workspace-panel']"))
       : slot === "main" ? () => !sideHasKeyboard() : () => slotHasKeyboard(slot);
-    // The page's composer is the home thread's, every feature of a chat's: the thread is loaded here, never shown.
-    // Kept loaded while the page shows: opening the page again (its sidebar row) clears the session's chat, as any
-    // route to a page does, and the composer went with it.
+    // Kept loaded while the page shows: opening the page again clears the session's chat, as any route to a page does,
+    // and the composer would go with it.
     let loading: string | null = null;
     let active = true;
     onCleanup(() => { active = false; });
@@ -6149,18 +5329,14 @@ function App() {
       }).catch(showError).finally(() => { loading = null; });
     }));
     const openFile = (path: string) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { beside: altActivation(), edit: false }); };
-    // A phone's pill and the composer's chip open jbot's panel (JbotPanelControl, from the room).
     const jbotPill = () => { const control = useContext(JbotPanelControl); return <HeaderPill opens label={agentName()}
       count={control?.needs && control.needs.count() ? { value: control.needs.count(), label: `${control.needs.count()} need you`, open: control.needs.open(), onClick: control.needs.toggle } : undefined}
       icon={<HarnessMark id="conduit" />} aria-expanded={control?.open()} aria-label={`${agentName()}'s panel`} onClick={() => control?.toggle()} />; };
-    // In the dock (tall and narrow) jbot takes a phone's presentation: its pill, its actions as frost pills.
     const docked = () => !tool && !isMobileLayout() && inDock(slot as PaneKey);
-    // Its actions are the pill's own buttons (a phone header's), not a pane's strip set in a pill.
     const dockActions = () => <>
       <HeaderButton label="Move to a pane" icon={<Icons.Split />} onClick={() => void undockPane(slot as number)} />
       <HeaderButton label={`Put ${agentName()} away`} icon={<Icons.Close />} onClick={() => void putJbotAway()} />
     </>;
-    // As the dock's tool it has the tool's header (WorkspacePanel's), none of its own.
     return <JbotRoom header={(title) => tool ? undefined : agentHeader(slot as PaneKey)(title, jbotPill(), docked() ? dockActions() : undefined)}
       presentation={tool ? "narrow" : docked() ? "phone" : undefined}
       panelActions={(done) => <JbotWays onOpenSettings={() => openSettings("agent")} onDone={done} />}
@@ -6196,7 +5372,6 @@ function App() {
       if (maximized) setWorkspaceExpanded(true);
     });
   };
-  // What a chat's and a place's menu do on the dashboards; the sidebar binds the same menus to its own dialogs.
   const itemMenus: ItemActions = {
     places: () => catalogue.projects(),
     renameChat: (chat, project) => runSidebar("rename-chat", { chat, project }),
@@ -6258,13 +5433,10 @@ function App() {
       onRename={() => runSidebar("rename-folder", props.target ?? {})} onDelete={() => runSidebar("delete-project", props.target ?? {})}
       onOpenSettings={openSettings} onSaveAppearance={saveWorkspaceAppearance} onRefresh={refresh} onCancelClone={cancelClone} onDestroyWorkspace={(confirmation) => destroyWorkspace(props.project, confirmation)} onError={showError} />
   </>;
-  // A workspace's other agents: two chats editing the same files.
   const workspaceNotice = (project: Project | undefined, chatId: string | null) => <Show when={project?.kind === "workspace" && [...runtime.processes().values()].some((process) => process.chatId !== chatId && process.active)}><Notice icon={<Icons.Warning />} title="Another chat is working in this Workspace">Both agents can edit the same files. Conduit does not lock the Workspace or create worktrees automatically.</Notice></Show>;
   const ChatSurface = (props: {
     session: ChatSession;
-    /** Its chat is still arriving (reattaching): the transcript waits and the composer shows its field alone. */
     opening?: boolean;
-    /** Nothing said yet (the composer centred), or the first send waiting on its agent (ChatView). */
     empty?: boolean;
     sending?: boolean;
     project?: Project;
@@ -6282,10 +5454,8 @@ function App() {
   }) => {
     const current = props.session;
     const surfaceChat = current.chat;
-    // A subagent's transcript is read: it says whose it is, and has no composer.
     const subagent = () => surfaceChat.status() === "subagent";
     const parent = () => subagentParent(surfaceChat.loadedId());
-    // Opened by its link, nothing has read whose it is yet.
     createEffect(() => { const id = surfaceChat.loadedId(); if (id && subagent() && !hiddenChats().has(id)) void agentChat(id).catch(() => {}); });
     return <>
       <ChatHeader project={props.project} onOpenPlace={openPlace} parent={subagent() ? parent() : undefined} title={surfaceChat.title() || (surfaceChat.status() === "draft" ? "New chat" : "Untitled chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs} />
@@ -6320,7 +5490,6 @@ function App() {
       onStopProcess={(target) => stopChatProcess(target.id)}
       onOpenTerminal={async (target, project) => { await openChat(target, project); if (!harnessThread() && catalogue.selectedId() === target.id) await openWorkspaceView("terminal"); }}
       onOpenPty={async (terminal) => {
-        // A device's own terminal, in its home: no workspace holds it, so it opens as /terminal does.
         if (terminal.projectId.startsWith("computer:") || terminal.projectId.startsWith("device:")) {
           await openTerminalRoute("push", terminal.id);
           return;
@@ -6360,13 +5529,10 @@ function App() {
       }} />
     } /></Show>
     <Show when={desktopShell && desktopTitleBar() === "conduit"}>
-      {/* Conduit's own bar (Settings › Desktop › Title bar): everything here is a trial; what is kept is decided in use. */}
       <TitleBar
         lead={<>
           <Show when={titleBarShows("server")}><ServerSwitcher inline connectivity={runtime.connectivity()} pwaUpdating={pwaUpdating()} onOpenSettings={openSettings} onUpdatePwa={() => void runPwaUpdate()}
             onAddServer={() => setAddingServer(true)} onLogout={() => void logout()} /></Show>
-          {/* Beside the server it is an update from: under way, a spinner and how far (Cancel while it can be); then Update. */}
-          {/* A new app (installed, with its own interface) or a new interface from the hub (a reload): either is Update. */}
           <Show when={titleBarShows("update") && (updateState().kind === "ready" || (interfaceReady() && updateState().kind === "idle"))}>
             <Button variant="secondary" size="sm" title={updateState().kind === "ready" ? "A new version of Conduit is ready: restart into it" : "A new interface is ready: reload into it"}
               onClick={() => void (updateState().kind === "ready" ? takePwaUpdate(true) : takeStagedInterface())}><Icons.Download />Update</Button>
@@ -6422,7 +5588,6 @@ function App() {
     <AppShell class="workspace-layout" settling={panesSettling()} drawer={mobileSidebarOpen() ? "open" : "shut"} ref={(element) => { meteors.observe(element); const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
     <Sheet as="main" lead under={workspaceExpanded()} pane={paneLetter("main")} data-moving={paneMotion()?.slot === "main" ? paneMotion()!.phase : undefined} backdrop={<Show when={!paneAOverride() && routeBootstrap() === "ready" && ["chat", "dashboard", "project", "agent", "jbot"].includes(routeKind()) && meteorField() && (revealing() || arrived())}><meteors.Window /></Show>} data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class="chat-main" style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0, ...(paneMotion()!.width ? { "--pane-document-width": `${paneMotion()!.width}px` } : {}) } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
       <Show when={splitDropActive()}><DropWash within /></Show>
-      {/* Pane A holding a file viewer or a tool, over its route (5f). */}
       <Show when={parseFileView(paneAOverride())}>{renderFileViewer("main")}</Show>
       <Show when={paneAOverride()?.startsWith("term:") ? paneAOverride()!.slice("term:".length) : undefined} keyed>{(shell) => renderTerminalDocument("main", shell)}</Show>
       <Show when={paneAOverride()?.startsWith("browser:") ? paneAOverride()!.slice("browser:".length) : undefined} keyed>{(id) => renderBrowserDocument("main", id)}</Show>
@@ -6437,11 +5602,8 @@ function App() {
               const project = chatOwner() || catalogue.projects().find((item) => item.slug === "chat");
               const id = chat.loadedId();
               if (!project || !id) return;
-              // Sending is what ends a draft -- the server flips the status
-              // on the prompt itself -- so the row goes in active. Listing it
-              // as a draft hid it behind the New chat row until the first
-              // turn checkpointed, which on a long or interrupted answer left
-              // the sidebar saying "No chats" over an open conversation.
+              // The server flips the status on the prompt itself, so the row goes in active: as a draft it hides
+              // behind the New chat row until the first turn checkpoints.
               catalogue.setProjects((current) => current.map((item) => item.id === project.id
                 ? { ...item, sessions: [{ id, projectId: project.id, status: "active", title: chat.title() || "New chat", templateId: chat.templateId() || undefined }, ...item.sessions.filter((session) => session.id !== id)] }
                 : item));
@@ -6467,8 +5629,6 @@ function App() {
             return <>
               <Show when={dropActive()}><DropOverlay>Drop files to attach</DropOverlay></Show>
               <ChatHeader project={workspace()} placeLabel={label()} onOpenPlace={() => openComputerHarness(thread().harnessId, "push", thread().path)} title={chat.title() || thread().title || "Untitled thread"} badge={<OutsideThreadChip harness={label()} folder={thread().path} workspace={Boolean(workspace())} busy={trackingThread()} onTrack={() => void trackHarnessThread()} />} profile={activeProfile()} runtime={chat.runtimeIdentity()} live={chat.live() as unknown as Record<string, unknown>} chat={chat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => openComputerHarness(thread().harnessId, "push", thread().path)} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => void shareHarnessThread()} />
-              {/* The same conversation a chat page has; only moving it to another
-                  place is missing, since the thread's folder is where it ran. */}
               <Conversation chat={chat} busy={openingLiveChat()} empty={routeKind() === "chat" && emptyLayout()} sending={routeKind() === "chat" && emptyChat() && !emptyLayout()} opening={routeKind() === "chat" && withheldLiveChat()} stackRef={(element) => { chatComposerStack = element; }}
                 transcript={<Transcript chat={chat} supports={chatCapability} agentThread={agentThread(chat.loadedId())} profileLabel={label()} projectId={catalogue.projectId()} approvals={approvalsFor(chat.loadedId())} />}
                 composer={<Composer shortcuts={shortcutManager} chat={chat} supports={chatCapability} attachments={attachments} attachmentsSupported={chatCapability("attachments", true)} models={models} permissions={chatCapability("permissionModes") ? permissions : undefined} serviceLevels={chatManifest()?.serviceLevels?.length ? serviceLevels : undefined} profiles={profiles()} activeProfile={activeProfile()} onOpenModelSelector={openModelSelector} modelSelectorShortcut={shortcutManager.formatEffectiveBinding(COMMAND_IDS.openModelSelector)} serverOnline={serverReachable()} voiceSettings={voiceSettings()} onChooseProfile={() => {}} onOpenSettings={openSettings} onOpenAttachments={session.openAttachments} />} />
@@ -6487,11 +5647,8 @@ function App() {
               const project = selectedProject();
               const id = chat.loadedId();
               if (!project || !id) return;
-              // Sending is what ends a draft -- the server flips the status
-              // on the prompt itself -- so the row goes in active. Listing it
-              // as a draft hid it behind the New chat row until the first
-              // turn checkpointed, which on a long or interrupted answer left
-              // the sidebar saying "No chats" over an open conversation.
+              // The server flips the status on the prompt itself, so the row goes in active: as a draft it hides
+              // behind the New chat row until the first turn checkpoints.
               catalogue.setProjects((current) => current.map((item) => item.id === project.id
                 ? { ...item, sessions: [{ id, projectId: project.id, status: "active", title: chat.title() || "New chat", templateId: chat.templateId() || undefined }, ...item.sessions.filter((session) => session.id !== id)] }
                 : item));
@@ -6519,7 +5676,6 @@ function App() {
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
       docked={dockContents().filter((slot) => slotView(slot)).map((slot) => ({ slot, view: slotView(slot)!, name: isDocked(slot) ? viewName(slotView(slot)) : `${viewName(slotView(slot))} (no room; returns when there is)` }))} currentDocked={panelOpen() ? dockSlot() : null} onChooseDocked={chooseDocked} dockOverlay={dockOverlay()} onToggleDockOverlay={toggleDockOverlay}
       jbot={agentView()?.enabled ? { name: agentName(), needs: agentNeeds(), current: jbotShownInDock(),
-        // With something waiting, jbot opens on Needs you (already open: Needs you, rather than putting jbot away).
         onOpen: () => { if (agentNeeds()) { wantNeeds(); if (jbotShownInDock()) return; } void chooseRailTool("jbot"); } } : undefined}
       feedback={devClient() ? { open: feedbackMode() !== null, onToggle: () => setFeedbackMode(feedbackMode() ? null : "select") } : undefined}
       current={panelOpen() && dockSlot() === null ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />
@@ -6537,20 +5693,12 @@ function App() {
   </>;
 }
 
-/*
- * Arm the shell with what this client already verified, before anything is
- * dialled. The set is re-sent after every `/v0/server`, but a cold start
- * happens before the first of those, and a pin that arrives after the
- * connection it was for is no pin at all.
- */
+// Before anything is dialled: a pin that arrives after the connection it was for is no pin at all.
 void publishTrustedIdentities(trustedIdentities());
 
 const mount = document.getElementById("root")!;
-// A part of the app loaded on demand -- its code and the stylesheet that
-// lays it out -- could not be fetched: the server restarted under the open
-// page (the old file names are gone) or is still down. Shown without its
-// styles it was a broken page (the workspace rail stuck out beside a phone
-// layout), so wait for the server and reload into the build it now serves.
+// A chunk that cannot be fetched means the server restarted under the page (the old file names are gone) or is down:
+// shown without its styles the page is broken, so wait for the server and reload into the build it now serves.
 const CHUNK_RELOAD_RETRY_MS = 1000;
 let reloadingForChunk = false;
 window.addEventListener("vite:preloadError", (event) => {
@@ -6563,8 +5711,6 @@ window.addEventListener("vite:preloadError", (event) => {
   tryReload();
 });
 
-// A development Android client takes the interface its server serves, in
-// the background (platform/live-update.ts).
 void startLiveUpdate(liveUpdateOrigin).catch(() => {});
 void startPush().catch(() => {});
 void keepThisComputerConnected().catch(() => {});

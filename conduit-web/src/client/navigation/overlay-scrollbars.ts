@@ -12,15 +12,12 @@ export function scrollbarGeometry(view: number, content: number, position: numbe
   return { range, size, travel, offset: range ? Math.max(0, Math.min(range, position)) / range * travel : 0 };
 }
 
-/** One mouse-only overlay, shared by all ordinary overflow containers. */
 export function bindOverlayScrollbars() {
   if (!("showPopover" in HTMLElement.prototype)) return () => {};
   const media = matchMedia("(hover: hover) and (pointer: fine) and (forced-colors: none)");
   /*
-   * Touch has no scrollbar at all: the list under the finger shows where it is.
-   * Its native one is still hidden, since on a phone that is a classic one: it
-   * takes a column of the scrollport, so a list that grows past the viewport --
-   * opening a folder is enough -- would shift every row sideways.
+   * Touch gets no overlay, but its native scrollbar is still hidden: on a phone that is a classic one, and a list
+   * growing past the viewport would shift every row sideways.
    */
   const touch = matchMedia("(pointer: coarse)");
   const phoneLayout = matchMedia(MOBILE_LAYOUT_QUERY);
@@ -109,8 +106,6 @@ export function bindOverlayScrollbars() {
     thumb.style.width = m.vertical ? `${thickness}px` : `${m.size}px`;
     thumb.style.height = m.vertical ? `${m.size}px` : `${thickness}px`;
     thumb.style.transform = `translate${m.vertical ? "Y" : "X"}(${m.offset}px)`;
-    // Only the visible control follows layout/scroll changes. No idle polling,
-    // transcript observers, or per-scroll-container components.
     frame = requestAnimationFrame(paint);
   }
 

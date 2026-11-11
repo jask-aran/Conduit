@@ -1,36 +1,12 @@
-/**
- * The sidebar's cursor, from the keyboard (DESIGN.md, Keyboard).
- *
- * The cursor is the focused row: its wash is the focus wash, so moving the
- * cursor is moving focus between the rows that are showing. ↑/↓ step, Home/End
- * go to the ends, → opens a folder and then steps into it, ← steps out to the
- * folder and then closes it, and Esc steps out a level at a time until it
- * leaves for the main pane. Shift+↑/↓ selects chats as a range -- selecting is
- * only more washed rows. The Menu key or Shift+F10 opens the row's menu.
- *
- * ↑ from the first row reaches the Conduit / Computer switch at the top, on
- * its chosen side: ←/→ move between its sides, Enter or Space picks one, and
- * ↓ comes back to the rows -- as a dashboard heading's switch does.
- *
- * Pointer and keyboard move the one cursor. A pointer moving over a row takes
- * focus there while the sidebar has it, so arrowing carries on from where the
- * pointer is; arrowing away from a still pointer takes the rows out of hover
- * until it moves again, so the row under it does not keep a second wash --
- * as does any arrival from the keyboard, such as the go-to chord. Leaving the
- * window keeps the cursor where it was (data-held): the browser drops
- * :focus-visible while the window is away, though focus has not moved.
- *
- * The rows are one Tab stop (roving focus): the row the cursor was last on,
- * else the current page's row, else the folder holding it, else the first row
- * -- the order the go-to chord enters by. The other rows are out of the tab
- * order. That is settled just before a Tab moves focus (and on entering the
- * list), not as rows arrive, so a stream of new rows costs nothing.
+/*
+ * Leaving the window keeps the cursor where it was (data-held): the browser drops :focus-visible while the window is
+ * away, though focus has not moved. Tab stops are settled just before a Tab moves focus, so a stream of new rows costs
+ * nothing.
  */
 
 // The rows the cursor stops on. A project is its link: the chevron beside it
 // is what → and ← press.
 const STOPS = ".ui-icon-button[data-icon-button=rail], .ui-row[data-density=nav]:not(.ui-nav-folder), .ui-nav-link";
-// The Conduit / Computer switch in the header, above the rows.
 const SWITCH = ".ui-nav-head .ui-seg button";
 
 type SidebarCursorOptions = {
@@ -39,7 +15,6 @@ type SidebarCursorOptions = {
   hasSelection: () => boolean;
   select: (chatIds: string[]) => void;
   clearSelection: () => void;
-  /** Esc from the top of the sidebar: back to the main pane. */
   onLeave: () => void;
 };
 
@@ -51,7 +26,6 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
   const { root, list } = options;
   let anchor: HTMLElement | null = null;
   let pointerFocus = false;
-  // The row the cursor was last on: where Tab comes back to.
   let remembered: HTMLElement | null = null;
 
   const stops = () => [...list.querySelectorAll<HTMLElement>(STOPS)].filter(visible);
@@ -83,7 +57,6 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
     for (const stop of list.querySelectorAll<HTMLElement>(STOPS)) if (visible(stop)) return stop;
     return null;
   };
-  // One row in the tab order; writes only the rows whose tabIndex changes.
   const syncTabStops = () => {
     const chosen = rovingStop();
     for (const stop of list.querySelectorAll<HTMLElement>(STOPS)) {
@@ -133,7 +106,7 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
       if (!next) return;
       if (event.shiftKey) {
         // A range starts again where the cursor is when nothing is selected any more (Escape cleared it elsewhere) or its
-        // anchor is gone from the list (Codex review).
+        // anchor is gone from the list.
         if (!options.hasSelection() || !anchor || !all.includes(anchor)) anchor = current;
         selectThrough(anchor, next, all);
       } else {
@@ -203,7 +176,7 @@ export function installSidebarCursor(options: SidebarCursorOptions): () => void 
   };
 
   // The row holding the held stop is marked too, for the stylesheet, in place
-  // of `.ui-row[data-density=nav]:has([data-held])` (see preferences/focus-shown.ts).
+  // of `.ui-row[data-density=nav]:has([data-held])`.
   const release = () => {
     root.querySelector("[data-held]")?.removeAttribute("data-held");
     root.querySelector("[data-held-within]")?.removeAttribute("data-held-within");

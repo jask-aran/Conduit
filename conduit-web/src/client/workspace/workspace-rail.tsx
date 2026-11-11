@@ -8,7 +8,6 @@ import { isSplitView, type PanelTab, type SplitView } from "./workspace-types";
 export const WORKSPACE_TOOL_LABELS: Record<PanelTab, string> = { files: "Files", diff: "Source Control", chat: "Chat review", terminal: "Terminal", jbot: "jbot" };
 export const WORKSPACE_TOOL_ICONS = { files: Icons.Folder, diff: Icons.GitCompareArrows, chat: Icons.Chat, terminal: Icons.Terminal, jbot: Icons.Agent } satisfies Record<PanelTab, unknown>;
 
-/** A view dragged by its header, between the dock and the main pane's split. */
 export const TOOL_DRAG_TYPE = "application/x-conduit-tool";
 export function readToolDrag(event: DragEvent): { tool: SplitView; from: "dock" | "split" } | null {
   try {
@@ -19,59 +18,32 @@ export function readToolDrag(event: DragEvent): { tool: SplitView; from: "dock" 
   }
 }
 
-// Share presets for the panes, by how many are open; the first is even.
 export const PANE_LAYOUTS: Record<number, number[][]> = {
   2: [[1, 1], [1, 2], [2, 1], [1, 3], [3, 1]],
   3: [[1, 1, 1], [2, 1, 1], [1, 2, 1], [1, 1, 2]],
 };
 const RAIL_TOOLS = ["files", "diff", "chat", "terminal"] satisfies PanelTab[];
 
-/**
- * The right edge's rail, on the frame as the sidebar's collapsed rail is: one
- * icon per workspace tool, opening the dock on it. The tool the open dock
- * shows is current; pressing it again closes the dock. A tool moved into the
- * main pane's split is marked open and its icon goes to it. Desktop only -- a
- * phone keeps the dock's own tabs. Not a region of its own: its icons are
- * reached from the dock, so it stays out of the tab order as the header's
- * icons do. A view dragged from the split onto it docks.
- *
- * Below the tools, set apart by a hairline, are the browser, chat search and the
- * command palette: actions rather than dock views, here so no pane's header carries
- * the app's own controls. They stay when a page has no tools to show.
- *
- * At the foot, while panes are open beside pane A: Equalise, sharing the
- * panes' room evenly, and Layouts, a menu of share presets for that many.
- * Panes in the dock -- docked by hand, or there because the window has no
- * room for them -- each have an icon under the tools.
- */
+/** Not a region of its own: its icons are reached from the dock, so it stays out of the tab order as the header's icons do. */
 export function WorkspaceRail(props: {
-  /** Whether the page has a place whose tools the dock can show. */
   tools: boolean;
   onOpenSearch: () => void;
   onOpenPalette: () => void;
-  /** The hub's browser, opened beside or focused. */
   onOpenBrowser: () => void;
-  /** The window's own buttons, at the top, when the desktop window has no title bar. */
   windowControls?: JSX.Element;
   current: PanelTab | null;
   inSplit: PanelTab | null;
   sourceControlEnabled: boolean;
   onChoose: (tool: PanelTab) => void;
   onDock: (view: SplitView) => void;
-  /** How many panes are open, pane A included. */
   panes: number;
   onLayout: (weights: number[]) => void;
-  /** Panes moved into the dock, each its own icon; Alt or a drag takes one back to a pane. */
   docked: { slot: number; view: string; name: string }[];
   currentDocked: number | null;
   onChooseDocked: (slot: number, alt: boolean) => void;
-  /** The dock drawn over the panes rather than beside them. */
   dockOverlay: boolean;
   onToggleDockOverlay: () => void;
-  /** jbot, a tool among the others: opened in the dock, current while the dock shows it; it stays in the dock (no Alt
-   *  or drag into a pane). */
   jbot?: { name: string; current: boolean; needs: number; onOpen: () => void };
-  /** The UI feedback tool (a development client's): pressed while it is open. */
   feedback?: { open: boolean; onToggle: () => void };
 }) {
   const foot = () => <>

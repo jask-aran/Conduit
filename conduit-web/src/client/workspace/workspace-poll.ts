@@ -7,21 +7,11 @@ import type { SourceControl } from "./workspace-source-control";
 import type { WorkspaceVersion } from "./workspace-types";
 
 const FILE_POLL_INTERVAL_MS = 1_500;
-// While the server's watch tells each change as it happens (runtime.ts,
-// `conduit:workspace-changed`), asking is only the fallback for a lost stream.
+// While the server's watch tells each change as it happens, asking is only the fallback for a lost stream.
 const TOLD_POLL_INTERVAL_MS = 10_000;
 // A device away is waited for (conduit:device-online), and asked about this often meanwhile.
 const DEVICE_AWAY_POLL_MS = 30_000;
 
-/**
- * Asks the server what changed in the project while a view that shows it is
- * open, and refreshes only that: the loaded folders and open files a change
- * touched, and Git status while it is on screen. Asks at once when the server
- * says the project changed, and otherwise every 1.5 s, or every 10 s while the
- * server tells changes itself. Failures back off, and two in a row mark the
- * views "Not updating" until a retry. A workspace whose device is away is not
- * asked again until a device comes back (or half a minute).
- */
 export function createWorkspacePoll(options: {
   projectId: Accessor<string>;
   requests: RequestScope;
@@ -30,7 +20,6 @@ export function createWorkspacePoll(options: {
   sourceControlEnabled: Accessor<boolean>;
   /** The Computer page brings its own first listing and does not poll. */
   hasInitialDirectory: boolean;
-  /** A view that shows the project is open. */
   shown: Accessor<boolean>;
   filesShown: Accessor<boolean>;
   diffShown: Accessor<boolean>;
@@ -53,7 +42,6 @@ export function createWorkspacePoll(options: {
   });
 
   let polling = false;
-  // Told of a change while a poll was already out: ask again once it is back.
   let askAgain = false;
   let told = false;
   let failures = 0;

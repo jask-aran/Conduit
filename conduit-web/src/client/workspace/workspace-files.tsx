@@ -22,10 +22,9 @@ import type { DirectoryListing, FileSlotId, FileWriteResult, GitChangedFile, Mov
 import { prefetchDirect, workspaceFileResponse } from "./direct-files";
 import "./workspace.css";
 
-// In the unit (layout-geometry): the width at which Files lays its tree beside the file, and the tree's own widths.
+// In the unit: the width at which Files lays its tree beside the file, and the tree's own widths.
 const WIDE_FILES_MIN_UNITS = 56.25, WIDE_FILES_EXPANDED_UNITS = 40.625;
 const DEFAULT_TREE_UNITS = 12, MIN_TREE_UNITS = 10, MAX_TREE_UNITS = 25;
-/** How long after the last letter typed in the tree its typeahead starts over. */
 const TYPEAHEAD_RESET_MS = 500;
 
 function directoryListingsEqual(left: DirectoryListing | undefined, right: DirectoryListing): boolean {
@@ -48,19 +47,10 @@ function storedPaths(scopeId: string, name: string) {
   }
 }
 
-/**
- * Files' state for one project: the tree as loaded so far, the two open file
- * slots -- the view's own, and the file opened beside it in the main pane's
- * split (`secondary`) -- and the navigator's geometry. It outlives the view, so a hidden Files
- * view keeps its drafts, and the change poll can refresh what is open.
- */
+/** It outlives the view, so a hidden Files view keeps its drafts, and the change poll can refresh what is open. */
 export function createFiles(options: {
   projectId: Accessor<string>; requests: RequestScope; settings: WorkspaceSettings; settingsScope: string;
-  /**
-   * Where a file opens instead of the view's own slot: a pane's file viewer
-   * (docs/design/panes-and-rail.md, 6d-2). Answers false where there is none
-   * (a phone, a desktop too narrow for a pane), and the slot opens it.
-   */
+  /** Answers false where there is no pane for it (a phone, a desktop too narrow), and the slot opens it. */
   openElsewhere?: (path: string, beside: boolean, edit: boolean) => boolean;
 }) {
   const { confirm: confirmDialog, prompt: promptDialog } = createDecisionScope(options.projectId);
@@ -83,7 +73,6 @@ export function createFiles(options: {
   const [treeWidth, setTreeWidth] = createSignal(Math.max(unitPx(MIN_TREE_UNITS), Math.min(unitPx(MAX_TREE_UNITS), Number(settings.geometry("tree-width")) || unitPx(DEFAULT_TREE_UNITS))));
   const [treeCollapsed, setTreeCollapsed] = createSignal(settings.geometry("tree-collapsed") === "true");
   const [navigatorOpen, setNavigatorOpen] = createSignal(false);
-  // The view's elements, for focus and scroll that outlast a single render.
   const elements: { host?: HTMLElement; tree?: HTMLElement; filter?: HTMLInputElement; upload?: HTMLInputElement } = {};
   let treeScrollRaf = 0;
   onCleanup(() => { if (treeScrollRaf) cancelAnimationFrame(treeScrollRaf); });
@@ -167,8 +156,6 @@ export function createFiles(options: {
   };
   const hideFileNavigator = () => filesWide() ? toggleTreeCollapsed() : setNavigatorOpen(false);
   const showFileNavigator = () => filesWide() ? toggleTreeCollapsed() : setNavigatorOpen(true);
-  // The tree opens into the view's own slot; the file beside is opened only
-  // by asking for it.
   // The file the next load opens in edit mode: set by every open, so an open
   // without edit retires an earlier edit's that never loaded.
   let pendingEdit: string | null = null;
@@ -426,7 +413,7 @@ export function createFiles(options: {
   };
   const changedFile = (file: string | null, changedPath: string) => Boolean(file
     && (file === changedPath || file.startsWith(`${changedPath}/`)));
-  /** Reload the loaded directories and open files a change touched; `null` means anything may have. */
+  /** `null` means anything may have changed. */
   const refreshChanged = async (changedPaths: string[] | null) => {
     const visibleDirectories = ["", ...expanded()].filter((directory) => directory === "" || Boolean(directories()[directory]));
     const directoriesToRefresh = changedPaths === null
@@ -437,7 +424,6 @@ export function createFiles(options: {
       : [...slotHandles.entries()]
         .filter(([slot]) => changedPaths.some((changedPath) => changedFile(openPaths()[slot], changedPath)))
         .map(([, handle]) => handle);
-    // The directories and the open files a change touched, all at once: each is its own request.
     const [changed] = await Promise.all([Promise.all(directoriesToRefresh.map((directory) => loadDirectory(directory, true))),
       Promise.all(slotsToRefresh.map((handle) => handle.reload()))]);
     return changed.some(Boolean);
@@ -589,13 +575,11 @@ export function createFiles(options: {
     toggleTreeCollapsed,
     toggleKeptVisible,
     collapseTree,
-    /** The paths whose changes the poll asks about: the root, open folders and open files. */
     visiblePaths: () => [...new Set([
       "",
       ...expanded(),
       ...Object.values(openPaths()).filter((path): path is string => Boolean(path)),
     ])],
-    /** Anything loaded that a change could make stale. */
     hasContent: () => Boolean(Object.keys(directories()).length || openSlotHandles().length),
     /** Ask before a navigation replaces this file's unsaved edit; false if the reader keeps it. */
     confirmDiscard: async (path: string, message: string) => {
@@ -607,19 +591,16 @@ export function createFiles(options: {
       }
       return true;
     },
-    /** The navigator's geometry as stored, for a new project. */
     restoreGeometry: () => {
       setTreeWidth(Math.max(unitPx(MIN_TREE_UNITS), Math.min(unitPx(MAX_TREE_UNITS), Number(settings.geometry("tree-width")) || unitPx(DEFAULT_TREE_UNITS))));
       setTreeCollapsed(settings.geometry("tree-collapsed") === "true");
       setShowHidden(settings.geometry("show-hidden") === "true");
     },
-    /** The open files and kept-visible paths as stored, for a new chat or project. */
     restoreOpenFiles: () => {
       setKeptVisible(storedPaths(options.projectId(), "kept-visible"));
       setOpenPaths(storedOpenFiles());
       setFocusedSlot("primary");
     },
-    /** The tree as it was last seen in this project, while it reloads. */
     restoreFromCache: (cached: WorkspaceCacheEntry | null, initialDirectory?: DirectoryListing) => {
       batch(() => {
         setDirectories(initialDirectory ? { ...cached?.directories, "": initialDirectory } : cached?.directories || {});
@@ -631,10 +612,7 @@ export function createFiles(options: {
         if (elements.tree) elements.tree.scrollTop = cached?.treeScrollTop || 0;
       });
     },
-    /**
-     * Focus where Files starts: the filter, else the open file when a narrow
-     * view has folded the navigator away. False when neither is showing.
-     */
+    /** False when neither the filter nor the open file is showing. */
     focusDefault: () => {
       const shown = (element: Element | null | undefined): element is HTMLElement => element instanceof HTMLElement && element.checkVisibility({ visibilityProperty: true });
       const file = [...(elements.host?.querySelectorAll(".cm-content") ?? [])].find(shown);
@@ -649,7 +627,6 @@ export type Files = ReturnType<typeof createFiles>;
 
 export function FilesView(props: {
   control: Files;
-  /** The panel is expanded, which lowers the width at which the tree sits beside the file. */
   expanded: boolean;
   projectId: string;
   workingRoot: string;
@@ -661,13 +638,10 @@ export function FilesView(props: {
   onRetryPoll: () => void;
   onSaved: () => void;
   onShowDiff: (slot: FileSlotId, staged: boolean, beside?: boolean) => void;
-  /** Open a file in the other side of the main pane; absent where there is none. */
   onOpenBeside?: (path: string) => void;
   onBrowseDirectory?: (path: string) => void;
   onBrowseParent?: () => void;
-  /** Files opens in panes' file viewers: the view is the navigator alone -- the tree and its search. */
   navigatorOnly?: boolean;
-  /** A file a pane's viewer shows: its row is bold, heavier in the viewer with the keyboard. */
   openInPane?: (path: string) => "focused" | "shown" | undefined;
 }) {
   const c = props.control;
@@ -690,7 +664,7 @@ export function FilesView(props: {
         item.focus();
       }
     };
-    // The tree's list grammar. Alt+Enter, open beside, is the panel's Open beside command (command-registry.ts).
+    // Alt+Enter, open beside, is the panel's Open beside command.
     if (event.key === "ArrowDown") focus(Math.min(items.length - 1, index + 1));
     else if (event.key === "ArrowUp") focus(Math.max(0, index - 1));
     else if (event.key === "Home") focus(0);
@@ -732,9 +706,6 @@ export function FilesView(props: {
     };
   };
 
-  // One definition per quick action, rendered three ways: the horizontal
-  // toolbar under the tree, the overflow menu it spills into, and the vertical
-  // rail shown while the navigator is collapsed.
   interface TreeAction { id: string; label: () => string; title: () => string; icon: () => JSX.Element; disabled?: () => boolean; pressed?: () => boolean; run: () => void }
   const treeActions: TreeAction[] = [
     { id: "new-file", label: () => "New file", title: () => "Create a file in the workspace root", icon: () => <FilePlusIcon />, disabled: c.uploading, run: () => void c.createFile() },
@@ -862,12 +833,8 @@ export function FilesView(props: {
           const updateWideState = (width: number) =>
             c.setFilesWide(!isMobileLayout() && width >= unitPx(props.expanded ? WIDE_FILES_EXPANDED_UNITS : WIDE_FILES_MIN_UNITS));
           updateWideState(element.clientWidth);
-          // The entry already carries the new size. Reading clientWidth back
-          // inside the callback instead forces a synchronous layout, and a
-          // panel drag resizes this element every frame: traced at one forced
-          // layout per frame for the whole drag, 1.9ms of a 6.94ms budget.
-          // The pane has no border or padding, so the content box is
-          // the same number clientWidth was reporting.
+          // Reading clientWidth here forces a synchronous layout every frame of a panel drag. The pane has no
+          // border or padding, so the entry's content box is the same number.
           filesResizeObserver = new ResizeObserver((entries) => {
             const box = entries[entries.length - 1]?.contentBoxSize?.[0];
             updateWideState(box ? box.inlineSize : element.clientWidth);
@@ -966,10 +933,6 @@ export function FilesView(props: {
       </FilesPane>;
 }
 
-/**
- * The file opened beside: Files' second slot, drawn in the main pane's split
- * rather than beside the first inside the view (docs/design/panes-and-rail.md).
- */
 export function FileBesideView(props: {
   control: Files;
   projectId: string;

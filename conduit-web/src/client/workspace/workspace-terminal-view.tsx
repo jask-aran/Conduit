@@ -4,10 +4,6 @@ import { TerminalPane } from "../remotes/terminal-pane";
 import type { Connectivity } from "../state/runtime";
 import "./workspace.css";
 
-/**
- * A place's shells. On the Computer page the terminal belongs to the machine,
- * rooted at the folder being browsed, rather than to a project.
- */
 export function TerminalView(props: {
   computer: boolean;
   projectId: string;
@@ -16,7 +12,6 @@ export function TerminalView(props: {
   terminalId?: string;
   focusRequest: number;
   connectivity?: Accessor<Connectivity>;
-  /** Open one of the place's terminals in the other side of the main pane. */
   onOpenBeside?: (terminalId: string) => void;
 }) {
   return <SheetFill>

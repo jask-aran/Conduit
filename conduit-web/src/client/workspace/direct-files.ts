@@ -4,11 +4,8 @@ import { httpUrl } from "../api/transport";
 import { isInstalledClient } from "../platform/installed-client.ts";
 
 /**
- * A workspace's files read the shortest way (plan: "files take the shortest way"). The hub grants the read and says
- * where the workspace's node answers: its own machine's loopback, its networks', its tailnet's. The nearest of those
- * that answers as that node is used -- this machine for a workspace on it, the LAN or Tailscale for one nearby -- and
- * anything else, or any failure, goes through the hub as before. A page in a browser can use only a node's https route
- * (its tailnet name, where Tailscale gives it a certificate), and is let in by the origin the grant names.
+ * A workspace's files read from the nearest route the hub's grant names that answers as the workspace's node;
+ * anything else, or any failure, goes through the hub.
  */
 type Route = { url: string; reach: "loopback" | "private" | "tailnet" };
 // `bound`: the node binds its proof to the address it was reached at, and nothing less is taken from it.
@@ -39,7 +36,6 @@ async function grantFor(projectId: string): Promise<Grant | null> {
   return asked;
 }
 
-/** Whether this workspace's files can be read from its node itself from here (a grant, and a route that answered). */
 export async function directAvailable(projectId: string): Promise<boolean> {
   const grant = await grantFor(projectId);
   return Boolean(grant && await directRoute(grant));
@@ -79,10 +75,8 @@ export function forgetRoute(grant: Grant) {
 }
 
 /**
- * Every address asked at once, the nearest that proves it is this node taken as soon as the nearer ones have not: a
- * challenge only the node can answer with the hub's key for this grant (nodes/direct.js), bound to the address it
- * was reached at -- so something on this machine passing the challenge on to the node from its own port is caught,
- * and the grant is never handed to whatever else answers there.
+ * The proof is bound to the address the node was reached at, so something on this machine passing the challenge on
+ * to the node from its own port is caught, and the grant is never handed to whatever else answers there.
  */
 async function nearest(grant: Grant): Promise<string | null> {
   const challenge = newChallenge();
@@ -101,7 +95,7 @@ async function nearest(grant: Grant): Promise<string | null> {
 
 const newChallenge = () => [...crypto.getRandomValues(new Uint8Array(16))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 
-/** The node's answer to `challenge` bound to `url`'s host and port, as it saw them (nodes/direct.js `boundProofOf`). */
+/** The node's answer to `challenge` bound to `url`'s host and port, as it saw them. */
 function boundProof(key: string, challenge: string, url: string) {
   const { protocol, hostname, port } = new URL(url);
   return proofOf(key, `${challenge}|${hostname.toLowerCase()}:${port || (protocol === "https:" || protocol === "wss:" ? "443" : "80")}`);
@@ -258,12 +252,10 @@ async function fromNode(projectId: string, query: string, init: RequestInit): Pr
   return null;
 }
 
-/** `GET /v0/projects/:id/file?…` as a Response, the shortest way. */
 export async function workspaceFileResponse(projectId: string, query: string, init: RequestInit = {}) {
   return await fromNode(projectId, query, init) ?? authorizedFetch(httpUrl(hubPath(projectId, query)), init);
 }
 
-/** The same, as `api` reads it: the body, or the error it names thrown, whichever way answered. */
 export async function workspaceFileJson<T>(projectId: string, query: string, init: RequestInit = {}): Promise<T> {
   const response = await fromNode(projectId, query, init);
   if (!response) return api<T>(hubPath(projectId, query), init);
