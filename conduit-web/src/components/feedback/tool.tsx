@@ -1,13 +1,13 @@
-import { createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import { Portal } from "solid-js/web";
-import { drawingBox, FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote, type FeedbackBox, type FeedbackDrawingKind, type FeedbackPoint, type FeedbackPointer } from "@/components/ui/feedback";
+import { drawingBox, FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote, FeedbackNotes, type FeedbackBox, type FeedbackDrawingKind, type FeedbackPoint, type FeedbackPointer } from "@/components/ui/feedback";
 import { captureScreen, cropAreas, endCapture, type Capture } from "./capture";
 import type { FeedbackHost, FeedbackListener } from "./host";
 import { createPieces } from "./pieces";
 
 /** `reach`: how far a drag went past what it locked onto, each side (px); the dragged area is the pieces' box grown by it. */
-/** `general`: a note about nothing on the page in particular; it has no elements and no mark. */
+/** `general`: a note about nothing on the page in particular; it has no elements and no mark. An item has as many as are written. */
 type Selection = { id: number; elements: Element[]; comment: string; reach?: FeedbackBox; drawing?: Drawing; general?: true };
 const GENERAL = "General note";
 /** `from`: where its pieces' box was when it was drawn, so it can follow them. */
@@ -18,6 +18,7 @@ const DRAWN: Record<FeedbackDrawingKind, string> = { pen: "Pen", arrow: "Arrow",
 const PEN_STEP = 2;
 const SENT_POINTS = 64;
 const WAITING_EVERY_MS = 3000;
+const FREEZE_WAIT_MS = 2000;
 const HAND_KEY = "ui-feedback.hand";
 type Waiter = FeedbackListener;
 /** Whether the tool's layer has the pointer, or the app under it. */
@@ -25,10 +26,17 @@ export type FeedbackMode = "select" | "use";
 type Mode = FeedbackMode;
 const DRAG_SLOP = 5;
 const CROP_MARGIN = 24;
-const NOTE_GAP = 10;
 
+// What the app has taken off the page (a row it redrew) is marked where it last was, not at the corner a gone element measures as.
+const lastRect = new WeakMap<Element, DOMRect>();
+const rectOf = (element: Element) => {
+  if (!element.isConnected) return lastRect.get(element) ?? element.getBoundingClientRect();
+  const rect = element.getBoundingClientRect();
+  lastRect.set(element, rect);
+  return rect;
+};
 const boxOf = (elements: Element[]): FeedbackBox => {
-  const rects = elements.map((element) => element.getBoundingClientRect());
+  const rects = elements.map(rectOf);
   const left = Math.min(...rects.map((rect) => rect.left)), top = Math.min(...rects.map((rect) => rect.top));
   return { left, top, width: Math.max(...rects.map((rect) => rect.right)) - left, height: Math.max(...rects.map((rect) => rect.bottom)) - top };
 };
@@ -37,7 +45,9 @@ const sameBox = (a: FeedbackBox | null, b: FeedbackBox | null) => a === b || Boo
 /** `keys`: the chord that opens the tool, as the bar shows it. */
 export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (mode: Mode) => void; onClose: () => void; keys?: () => string[] }) {
   const host = props.host, transport = host.transport;
-  const { describe, nameOf, pieceRoot, piecesWithin, sourceOf, under } = createPieces(host.names, host.anchors);
+  const { again, describe, nameOf, pieceRoot, piecesWithin, placeOf, sourceOf, under } = createPieces(host.names, host.anchors);
+  const places = new WeakMap<Element, ReturnType<typeof placeOf>>();
+  const placed = (elements: Element[]) => { for (const element of elements) if (!places.has(element)) places.set(element, placeOf(element)); return elements; };
   const [selections, setSelections] = createStore<Selection[]>([]);
   const [openId, setOpenId] = createSignal<number | null>(null);
   const [cursor, setCursor] = createSignal<Element | null>(null);
@@ -58,9 +68,26 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const nextAgent = () => { const all = waiters.latest ?? []; setAgentName(all[(all.findIndex((waiter) => waiter.name === agent()?.name) + 1) % all.length]?.name ?? null); };
   const [sending, setSending] = createSignal(false);
   const [capturing, setCapturing] = createSignal(false);
+  // A shell that takes the page's picture with nothing asked: the page is frozen as it was when the tool took the pointer,
+  // so what does not last (a toast, a state mid-change) can be marked. `undefined` while the picture is being taken.
+  const [frozen, setFrozen] = createSignal<string | null | undefined>(host.capturePage ? undefined : null);
+  const thaw = () => { const url = frozen(); if (url) URL.revokeObjectURL(url); setFrozen(null); };
+  const freeze = async () => {
+    if (!host.capturePage) return;
+    thaw();
+    setFrozen(undefined);
+    // Two frames: the tool's own marks are off the page before its picture is taken.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    // A shell that does not answer leaves the page live; the tool is not held up by it.
+    const blob = await Promise.race([host.capturePage().catch(() => null), new Promise<null>((resolve) => setTimeout(resolve, FREEZE_WAIT_MS, null))]);
+    if (props.mode !== "select" || frozen() !== undefined) return;
+    setFrozen(blob?.size ? URL.createObjectURL(blob) : null);
+  };
+  createEffect(on(() => props.mode, (mode) => { if (mode === "select") void freeze(); else thaw(); }));
+  onCleanup(thaw);
+  const [barLift, setBarLift] = createSignal(0);
   // Boxes are read once a frame: what is marked scrolls, resizes and animates under the marks.
   const [frame, setFrame] = createSignal(0);
-  const [noteAt, setNoteAt] = createSignal<{ left: number; top: number } | null>(null);
   let layer: HTMLDivElement | undefined;
   let noteField: HTMLTextAreaElement | undefined;
   let nextId = 1;
@@ -71,7 +98,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   // The mark: the hub keeps what it knows now, under an id the item is sent to.
   const marked = transport.mark(host.clientId()).catch(() => null);
 
-  const select = () => props.mode === "select" && !sending();
+  const select = () => props.mode === "select" && !sending() && frozen() !== undefined;
   const open = () => selections.find((selection) => selection.id === openId()) ?? null;
   const own = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest(".ui-feedback-note, .ui-feedback-bar, .ui-feedback-tag[data-press]"));
   const chosenBy = (element: Element) => selections.find((selection) => !selection.drawing && selection.elements.includes(element)) ?? null;
@@ -104,7 +131,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     const id = nextId++;
     const around = boxOf(elements);
     const reach = drag && { left: around.left - drag.left, top: around.top - drag.top, width: drag.width - around.width, height: drag.height - around.height };
-    setSelections(selections.length, { id, elements, comment: "", reach });
+    setSelections(selections.length, { id, elements: placed(elements), comment: "", reach });
     openNote(id);
   };
   /** A drawing too small to see is a slip of the hand. */
@@ -117,12 +144,12 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     const found = [...new Set(over.filter((element): element is Element => Boolean(element)))].filter((element, _, all) => !all.some((other) => other !== element && element.contains(other)));
     const elements = found.length ? found : [under(around.left + around.width / 2, around.top + around.height / 2) ?? document.body];
     const from = boxOf(elements), id = nextId++;
-    setSelections(selections.length, { id, elements, comment: "", drawing: { kind, points, from: { left: from.left, top: from.top } } });
+    setSelections(selections.length, { id, elements: placed(elements), comment: "", drawing: { kind, points, from: { left: from.left, top: from.top } } });
     openNote(id);
   };
   const remove = (id: number) => { setSelections((all) => all.filter((selection) => selection.id !== id)); if (openId() === id) setOpenId(null); };
   const toggleIn = (selection: Selection, element: Element) => setSelections((candidate) => candidate.id === selection.id, "elements", (elements) =>
-    elements.includes(element) ? (elements.length > 1 ? elements.filter((kept) => kept !== element) : elements) : [...elements, element]);
+    elements.includes(element) ? (elements.length > 1 ? elements.filter((kept) => kept !== element) : elements) : placed([...elements, element]));
 
   const choose = (shift: boolean) => {
     const target = cursor();
@@ -148,10 +175,10 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       setMarquee({ left: Math.min(press.x, event.clientX), top: Math.min(press.y, event.clientY), width: Math.abs(event.clientX - press.x), height: Math.abs(event.clientY - press.y) });
     } else aim();
   };
-  /** The one general note: made, or opened again. */
+  /** Another general note; one still empty is opened instead. */
   const note = () => {
-    const made = selections.find((selection) => selection.general);
-    if (made) return openNote(openId() === made.id ? null : made.id);
+    const empty = selections.find((selection) => selection.general && !selection.comment.trim());
+    if (empty) return openNote(empty.id);
     const id = nextId++;
     setSelections(selections.length, { id, elements: [], comment: "", general: true });
     openNote(id);
@@ -177,7 +204,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     if (!drag) return choose(shift);
     const current = open();
     if (!gathered.length) return;
-    if (shift && current) setSelections((candidate) => candidate.id === current.id, "elements", (elements) => [...new Set([...elements, ...gathered])]);
+    if (shift && current) setSelections((candidate) => candidate.id === current.id, "elements", (elements) => placed([...new Set([...elements, ...gathered])]));
     else add(gathered, drag);
   };
   /** A finger leaves no pointer behind to mark, and a press the system took over (a scroll, a call) chose nothing. */
@@ -196,7 +223,8 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     else if (event.type === "pointerdown") onPointerDown(event as PointerEvent);
     else if (event.type === "pointerup") { onPointerUp(); onPointerGone(event as PointerEvent); }
     else if (event.type === "pointercancel") onPointerGone(event as PointerEvent);
-    else if (event.type === "wheel") scrollUnder(event as WheelEvent);
+    // A frozen page stays as it was: its picture would not follow a scroll.
+    else if (event.type === "wheel" && !frozen()) scrollUnder(event as WheelEvent);
   };
   const scrollUnder = (event: WheelEvent) => {
     for (let node = under(event.clientX, event.clientY); node; node = node.parentElement) {
@@ -228,7 +256,6 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     else if (event.key === "ArrowUp") { handled(); widen += 1; aim(); }
     else if (event.key === "ArrowDown") { handled(); widen = Math.max(0, widen - 1); aim(); }
     else if (event.key === "Enter") { handled(); choose(event.shiftKey); }
-    else if ((event.key === "Backspace" || event.key === "Delete") && openId() !== null) { handled(); remove(openId()!); }
   };
 
   const POINTER_EVENTS = ["pointermove", "pointerdown", "pointerup", "pointercancel", "mousedown", "mouseup", "click", "dblclick", "contextmenu", "wheel", "touchstart", "touchmove", "touchend", "touchcancel"] as const;
@@ -238,22 +265,18 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     for (const type of ["focusin", "focusout"] as const) window.addEventListener(type, quietFocus, { capture: true });
     let handle = requestAnimationFrame(function tick() {
       setFrame((value) => value + 1);
-      const selection = open(), note = layer?.querySelector<HTMLElement>(".ui-feedback-note");
-      if (selection?.general && note) {
-        // A general note is about no place: it sits over the bar, in the middle.
-        const bar = layer!.querySelector<HTMLElement>(".ui-feedback-bar")?.getBoundingClientRect();
-        const next = { left: Math.max(NOTE_GAP, (innerWidth - note.offsetWidth) / 2), top: Math.max(NOTE_GAP, (bar?.top ?? innerHeight) - note.offsetHeight - NOTE_GAP) };
-        if (noteAt()?.left !== next.left || noteAt()?.top !== next.top) setNoteAt(next);
-      } else if (selection && note) {
-        const marks = extent(selection), width = note.offsetWidth, height = note.offsetHeight;
-        const fits = (left: number) => left >= NOTE_GAP && left + width <= innerWidth - NOTE_GAP;
-        const right = marks.left + marks.width + NOTE_GAP, leftSide = marks.left - width - NOTE_GAP;
-        const beside = fits(right) ? right : fits(leftSide) ? leftSide : null;
-        const clampX = (value: number) => Math.max(NOTE_GAP, Math.min(value, innerWidth - width - NOTE_GAP)), clampY = (value: number) => Math.max(NOTE_GAP, Math.min(value, innerHeight - height - NOTE_GAP));
-        const below = marks.top + marks.height + NOTE_GAP;
-        const next = beside !== null ? { left: beside, top: clampY(marks.top) } : { left: clampX(marks.left), top: below + height <= innerHeight - NOTE_GAP ? below : clampY(marks.top - height - NOTE_GAP) };
-        if (noteAt()?.left !== next.left || noteAt()?.top !== next.top) setNoteAt(next);
-      }
+      // What the app redrew is found again where it was.
+      for (const selection of selections) selection.elements.forEach((element, at) => {
+        if (element.isConnected) return;
+        const place = places.get(element), found = place && again(place);
+        if (!found || selection.elements.includes(found)) return;
+        places.set(found, place);
+        setSelections((candidate) => candidate.id === selection.id, "elements", at, found);
+      });
+      // The notes stand over the bar where the window has no room for both side by side.
+      const bar = layer?.querySelector(".ui-feedback-bar")?.getBoundingClientRect(), notes = layer?.querySelector(".ui-feedback-notes")?.getBoundingClientRect();
+      const lift = bar && notes && bar.right > notes.left ? bar.height : 0;
+      if (lift !== barLift()) setBarLift(lift);
       handle = requestAnimationFrame(tick);
     });
     onCleanup(() => cancelAnimationFrame(handle));
@@ -271,8 +294,9 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
 
   const canSend = () => selections.some((selection) => selection.comment.trim());
   const status = createMemo(() => {
-    if (!selections.length) return props.mode === "use" ? "Using the app" : pointerTool() === "select" ? "Press or drag" : "Drag to draw";
-    return `${selections.length} ${selections.length === 1 ? "selection" : "selections"}`;
+    if (props.mode === "use") return "Using the app";
+    const does = pointerTool() === "select" ? "press or drag" : "drag to draw";
+    return frozen() ? `Frozen: ${does}` : does[0]!.toUpperCase() + does.slice(1);
   });
 
   async function send() {
@@ -292,9 +316,9 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
         const right = Math.min(innerWidth, Math.max(around.left + around.width, around.left - reach.left + around.width + reach.width) + CROP_MARGIN), bottom = Math.min(innerHeight, Math.max(around.top + around.height, around.top - reach.top + around.height + reach.height) + CROP_MARGIN);
         const every = drawing ? Math.max(1, Math.ceil(drawing.points.length / SENT_POINTS)) : 1;
         const sent = drawing && { kind: drawing.kind, points: drawing.points.filter((_, at) => at % every === 0 || at === drawing.points.length - 1).map((point) => [Math.round(point[0] + shift.x), Math.round(point[1] + shift.y)]) };
-        return { n: index + 1, ...(sent ? { drawing: sent } : {}), dragged: Boolean(selection.reach), area: { left: Math.round(left), top: Math.round(top), width: Math.round(right - left), height: Math.round(bottom - top) }, comment: selection.comment.trim(), kind: members.length > 1 ? "group" as const : "component" as const, name: titleOf(selection),
-          rect: { left: Math.round(around.left), top: Math.round(around.top), width: Math.round(around.width), height: Math.round(around.height) },
-          ...(members.length > 1 ? { members } : members[0]) };
+        // The selection's own box is the last word on where it is: a piece the app took off the page measures as nothing.
+        return { ...(members.length > 1 ? { members } : members[0]), n: index + 1, ...(sent ? { drawing: sent } : {}), dragged: Boolean(selection.reach), area: { left: Math.round(left), top: Math.round(top), width: Math.round(right - left), height: Math.round(bottom - top) }, comment: selection.comment.trim(), kind: members.length > 1 ? "group" as const : "component" as const, name: titleOf(selection),
+          rect: { left: Math.round(around.left), top: Math.round(around.top), width: Math.round(around.width), height: Math.round(around.height) } };
       });
       let capture: Capture | null = null, captureError: string | null = null;
       // Words alone need no picture: an item of general notes only goes without one, and nothing is asked of the person.
@@ -326,7 +350,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   }
 
   return <Portal>
-    <FeedbackLayer ref={(element) => { layer = element; }} select={select()}>
+    <FeedbackLayer ref={(element) => { layer = element; }} select={select()} frozen={props.mode === "select" ? frozen() ?? undefined : undefined} hidden={props.mode === "select" && frozen() === undefined}>
       <For each={selections}>{(selection, index) => <Show when={!selection.general}>
         <Show when={selection.drawing} fallback={<FeedbackMark kind="chosen" box={box(selection.elements)} tag={String(index() + 1)} current={openId() === selection.id} onOpen={() => openNote(selection.id)} />}>{(drawing) => <>
           <FeedbackDrawing kind={drawing().kind} points={drawing().points} shift={shiftOf(selection)} current={openId() === selection.id} />
@@ -341,14 +365,14 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
         <Show when={aimed().length > 1}><For each={aimed()}>{(element) => <FeedbackMark kind="member" box={box([element])} />}</For></Show>
         <Show when={aimed().length}><FeedbackMark kind="cursor" box={box(aimed())} name={nameOf(aimed())} /></Show>
       </>}</Show>
-      <Show when={!capturing() && open()} keyed>{(selection) =>
-        <FeedbackNote ref={(element) => { noteField = element; }} style={noteAt() ? { left: `${noteAt()!.left}px`, top: `${noteAt()!.top}px` } : { opacity: 0 }}
-          tag={String(selections.indexOf(selection) + 1)} name={titleOf(selection)} source={selection.elements.length === 1 ? sourceOf(selection.elements[0]!) : selection.general ? "About nothing on the page in particular." : undefined}
-          value={selection.comment} onInput={(value) => setSelections((candidate) => candidate.id === selection.id, produce((draft) => { draft.comment = value; }))}
-          onDone={() => openNote(null)} onRemove={() => remove(selection.id)} />}
+      <Show when={!capturing() && selections.length}>
+        <FeedbackNotes lift={barLift()}><For each={selections}>{(selection, index) =>
+          <FeedbackNote ref={(element) => { noteField = element; }} open={openId() === selection.id} tag={String(index() + 1)} name={titleOf(selection)} source={selection.elements.length === 1 ? sourceOf(selection.elements[0]!) : selection.general ? "About nothing on the page in particular." : undefined}
+            value={selection.comment} onOpen={() => openNote(selection.id)} onInput={(value) => setSelections((candidate) => candidate.id === selection.id, produce((draft) => { draft.comment = value; }))} onRemove={() => remove(selection.id)} />}
+        </For></FeedbackNotes>
       </Show>
       <Show when={!capturing()}>
-        <FeedbackBar mode={props.mode === "use" ? "use" : pointerTool()} tool={pointerTool()} onMode={(mode: FeedbackPointer) => { setCursor(null); setStroke(null); if (mode !== "use") setPointerTool(mode); props.onMode(mode === "use" ? "use" : "select"); }} status={touchOnly ? undefined : status()} keys={touchOnly ? undefined : props.keys?.()} screenshot={screenshot()} onScreenshot={canCapture ? setScreenshot : undefined} onNote={note} noted={selections.some((selection) => selection.general)} hand={hand()} onHand={keepHand} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
+        <FeedbackBar mode={props.mode === "use" ? "use" : pointerTool()} tool={pointerTool()} onMode={(mode: FeedbackPointer) => { setCursor(null); setStroke(null); if (mode !== "use") setPointerTool(mode); props.onMode(mode === "use" ? "use" : "select"); }} status={status()} compact={touchOnly} keys={touchOnly ? undefined : props.keys?.()} screenshot={screenshot()} onScreenshot={canCapture ? setScreenshot : undefined} onNote={note} hand={hand()} onHand={keepHand} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
           canSend={canSend()} sending={sending()} onSend={() => void send()} onClose={props.onClose} />
       </Show>
     </FeedbackLayer>

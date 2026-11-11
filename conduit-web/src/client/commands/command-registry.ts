@@ -115,6 +115,9 @@ export const COMMAND_IDS = {
   toggleFeedback: "feedback.toggle",
 } as const;
 
+/** The feedback tool opens over whatever is up: a dialog or a menu can be what is marked. */
+export const FEEDBACK_CONTEXTS = ["application", "settings", "palette.root", "palette.page", "model-selector", "confirmation", "chat-search.browse"] as const;
+
 const command = (
   definition: Omit<ShortcutCommandDefinition, "defaultBindings" | "configurable"> & {
     defaultBindings?: ShortcutBinding[];
@@ -213,7 +216,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     group: "commands",
     icon: "chat",
     keywords: ["select", "comment", "screenshot"],
-    contexts: ["application"],
+    contexts: [...FEEDBACK_CONTEXTS],
     defaultBindings: [binding(stroke("KeyF", "F", ["alt", "shift"]))],
     palette: true,
   }),

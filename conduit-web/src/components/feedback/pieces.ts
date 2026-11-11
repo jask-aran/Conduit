@@ -13,7 +13,6 @@ export function createPieces(names: PieceNames, anchorNames: readonly string[] =
   const unnamed = !Object.keys(names.classes).length;
   const region = anchorNames[0];
 
-
   /** The piece an element is the root of, the outermost when it is drawn through others (TreeRow, not Row); null for a part or plain markup. */
   function pieceOf(element: Element): string | null {
     const said = element.getAttribute("data-piece");
@@ -157,7 +156,26 @@ export function createPieces(names: PieceNames, anchorNames: readonly string[] =
     return `${elements.length} pieces: ${[...counts].map(([name, count]) => count > 1 ? `${name} ×${count}` : name).join(", ")}`;
   }
 
+  /** Where an element is, so what the app draws in its place when it redraws (a list's row) can be found: by the same steps down from the body when what is there looks the same (its neighbour, moved up into a removed row's place, does not), else by its anchors among its old neighbours. */
+  type Place = { tag: string; marks: string; steps: number[]; looks: string };
+  const looksOf = (element: Element) => `${element.getAttribute("class")} ${(element.textContent ?? "").trim().slice(0, 80)}`;
+  const placeOf = (element: Element): Place => {
+    const steps: number[] = [];
+    for (let node = element; node.parentElement && node !== document.body; node = node.parentElement) steps.unshift([...node.parentElement.children].indexOf(node));
+    return { tag: element.tagName, marks: anchorNames.filter((name) => element.hasAttribute(name)).map((name) => `[${name}="${CSS.escape(element.getAttribute(name) ?? "")}"]`).join(""), steps, looks: looksOf(element) };
+  };
+  const again = (place: Place): Element | null => {
+    let holder: Element | undefined = document.body;
+    for (const step of place.steps.slice(0, -1)) holder = holder?.children[step];
+    if (!holder || holder.closest(OWN)) return null;
+    const there = holder.children[place.steps[place.steps.length - 1] ?? -1];
+    if (there && there.tagName === place.tag && looksOf(there) === place.looks) return there;
+    // The list was put in another order: the one with its anchors, among its old neighbours.
+    const marked = place.marks ? [...holder.children].filter((child) => child.matches(place.tag + place.marks)) : [];
+    return marked.length === 1 ? marked[0]! : null;
+  };
+
   const sourceOf = (element: Element) => { const piece = pieceOf(element); return piece ? names.pieces[piece]?.source : undefined; };
 
-  return { pieceOf, pieceRoot, under, piecesWithin, describe, nameOf, sourceOf };
+  return { pieceOf, pieceRoot, under, piecesWithin, describe, nameOf, sourceOf, placeOf, again };
 }

@@ -11,9 +11,12 @@ export type FeedbackBox = { left: number; top: number; width: number; height: nu
 const TAG_ROOM = 20;
 const place = (box: FeedbackBox): JSX.CSSProperties => ({ left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px` });
 
-export const FeedbackLayer = (props: { select: boolean; ref?: (element: HTMLDivElement) => void; children: JSX.Element }) =>
+/** `frozen`: a picture of the page as it was when the tool took the pointer, shown over the page (which goes on changing under it). */
+export const FeedbackLayer = (props: { select: boolean; frozen?: string; hidden?: boolean; ref?: (element: HTMLDivElement) => void; children: JSX.Element }) =>
   // data-mobile-swipe-ignore: a finger's drag on the layer gathers or draws; the drawers do not answer it (edge-swipe.ts).
-  <div ref={props.ref} class="ui-feedback-layer" data-select={props.select ? "" : undefined} data-mobile-swipe-ignore={props.select ? "" : undefined}>{props.children}</div>;
+  <div ref={props.ref} class="ui-feedback-layer" data-select={props.select ? "" : undefined} data-hidden={props.hidden ? "" : undefined} data-mobile-swipe-ignore={props.select ? "" : undefined}>
+    <Show when={props.frozen}><img class="ui-feedback-frozen" src={props.frozen} alt="" /></Show>{props.children}
+  </div>;
 
 export const FeedbackMark = (props: { box: FeedbackBox; kind: "cursor" | "chosen" | "member" | "marquee" | "drawn"; tag?: string; name?: string; current?: boolean; onOpen?: () => void }) =>
   <div class="ui-feedback-mark" data-kind={props.kind} data-current={props.current ? "" : undefined} style={place(props.box)}>
@@ -45,12 +48,16 @@ export function FeedbackDrawing(props: { kind: FeedbackDrawingKind; points: read
   </svg>;
 }
 
-export function FeedbackNote(props: { ref?: (element: HTMLTextAreaElement) => void; style?: JSX.CSSProperties; tag: string; name: string; source?: string; value: string;
-  onInput: (value: string) => void; onDone: () => void; onRemove: () => void; onKeyDown?: (event: KeyboardEvent) => void }) {
-  return <div class="ui-feedback-note" style={props.style}>
-    <Card size="compact" label={`Comment ${props.tag}`} title={<><b class="ui-feedback-number">{props.tag}</b>{props.name}</>} detail={props.source} close={props.onDone} closeLabel="Done"
-      actions={<><Button variant="ghost" size="sm" onClick={props.onRemove}>Remove</Button><Button variant="primary" outline size="sm" onClick={props.onDone}>Done</Button></>}>
-      <TextArea ref={props.ref} rows={2} placeholder="What should change?" value={props.value} onInput={(event) => props.onInput(event.currentTarget.value)} onKeyDown={props.onKeyDown} />
+/** Every comment of the item, the newest at the foot, in the corner; `lift` is the bar's height when the stack has to stand over it. */
+export const FeedbackNotes = (props: { lift?: number; children: JSX.Element }) =>
+  <div class="ui-feedback-notes" data-lifted={props.lift ? "" : undefined} style={{ "--feedback-bar-height": `${props.lift ?? 0}px` }}>{props.children}</div>;
+
+/** One comment: open, its words are written; shut, it shows them on a line and a press opens it. */
+export function FeedbackNote(props: { ref?: (element: HTMLTextAreaElement) => void; open: boolean; tag: string; name: string; source?: string; value: string;
+  onOpen: () => void; onInput: (value: string) => void; onRemove: () => void }) {
+  return <div class="ui-feedback-note" data-open={props.open ? "" : undefined} onClick={(event) => { if (!props.open && !(event.target as Element).closest("button")) props.onOpen(); }}>
+    <Card size="compact" role="group" label={`Comment ${props.tag}`} title={<><b class="ui-feedback-number">{props.tag}</b>{props.name}</>} detail={props.open ? props.source : props.value.trim() || "No comment yet"} close={props.onRemove} closeLabel="Remove">
+      <Show when={props.open}><TextArea ref={props.ref} rows={2} placeholder="What should change?" value={props.value} onInput={(event) => props.onInput(event.currentTarget.value)} /></Show>
     </Card>
   </div>;
 }
@@ -62,23 +69,26 @@ const TOOLS: ReadonlyArray<{ value: FeedbackToolKind; label: string; icon: () =>
   { value: "arrow", label: "Arrow (A)", icon: () => <Icons.DrawArrow /> }, { value: "box", label: "Box (B)", icon: () => <Icons.DrawBox /> },
 ];
 
-/** The tool's bar, at the foot, in four groups: what the pointer marks with (`tool`: the one kept while the app is in
- *  use); who has the pointer (Use app; `keys` is the chord that switches); what goes with the item (a general note,
- *  the screenshot where the client can take one, the listening session it is handed to); Send and close. */
-export function FeedbackBar(props: { mode: FeedbackPointer; tool?: FeedbackToolKind; onMode: (mode: FeedbackPointer) => void; status?: string; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; screenshot?: boolean; onScreenshot?: (on: boolean) => void; onNote?: () => void; noted?: boolean;
+/** The tool's bar, at the foot, in four groups: who has the pointer (Use app; `keys` is the chord that switches); what
+ *  it marks with (`tool`: the one kept while the app is in use); what goes with the item (a general note, the screenshot
+ *  where the client can take one, the listening session it is handed to: `agent`, none when no session listens); Send
+ *  and close. `compact`: icons alone, for a phone's width. */
+export function FeedbackBar(props: { mode: FeedbackPointer; tool?: FeedbackToolKind; onMode: (mode: FeedbackPointer) => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; screenshot?: boolean; onScreenshot?: (on: boolean) => void; onNote?: () => void;
   canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void }) {
   const using = () => props.mode === "use";
   const tool = (): FeedbackToolKind => props.mode === "use" ? props.tool ?? "select" : props.mode;
   return <Frost lift="raised" class="ui-feedback-bar" role="toolbar" aria-label="UI feedback">
-    <Segmented label="Mark with" icons size="sm" value={tool()} onChange={props.onMode} disabled={using()} options={TOOLS.map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} />
     <IconButton label={`Use the app${props.keys?.length ? ` (${props.keys.join(" ")})` : ""}`} aria-pressed={using()} onClick={() => props.onMode(using() ? tool() : "use")}><Icons.UseApp /></IconButton>
-    <Show when={props.status}><span class="ui-feedback-status">{props.status}</span></Show>
+    <Segmented label="Mark with" icons size="sm" value={tool()} onChange={props.onMode} disabled={using()} options={TOOLS.map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} />
+    <Show when={props.status && !props.compact}><span class="ui-feedback-status">{props.status}</span></Show>
     <span class="ui-feedback-with">
-      <Show when={props.onNote}><IconButton label="General note (N)" aria-pressed={Boolean(props.noted)} onClick={props.onNote}><Icons.Note /></IconButton></Show>
+      <Show when={props.onNote}><IconButton label="Add a general note (N)" onClick={props.onNote}><Icons.Note /></IconButton></Show>
       <Show when={props.onScreenshot}><IconButton label="Include a screenshot" aria-pressed={Boolean(props.screenshot)} onClick={() => props.onScreenshot!(!props.screenshot)}><Icons.Camera /></IconButton></Show>
-      <Show when={props.onHand && props.agent}>
-        <IconButton label={`Hand to ${props.agent}`} aria-pressed={Boolean(props.hand)} onClick={() => props.onHand!(!props.hand)}><Icons.Agent /></IconButton>
-        <Show when={props.hand}><Show when={props.onNextAgent} fallback={<span class="ui-feedback-status">{props.agent}</span>}><Button variant="ghost" size="sm" title="The next waiting session" onClick={props.onNextAgent}>{props.agent}</Button></Show></Show>
+      <Show when={props.onHand}>
+        <IconButton label={props.agent ? `Hand to ${props.agent}` : "No session is listening"} disabled={!props.agent} aria-pressed={Boolean(props.agent && props.hand)} onClick={() => props.onHand!(!props.hand)}><Icons.Agent /></IconButton>
+        <Show when={props.agent} fallback={<Show when={!props.compact}><span class="ui-feedback-status">No listener</span></Show>}>
+          <Show when={props.hand}><Show when={props.onNextAgent} fallback={<span class="ui-feedback-status">{props.agent}</span>}><Button variant="ghost" size="sm" title="The next waiting session" onClick={props.onNextAgent}>{props.agent}</Button></Show></Show>
+        </Show>
       </Show>
     </span>
     <Button variant="primary" outline size="sm" disabled={!props.canSend || props.sending} onClick={props.onSend}><Show when={props.sending} fallback="Send"><Spinner /></Show></Button>

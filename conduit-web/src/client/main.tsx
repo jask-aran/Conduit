@@ -68,7 +68,7 @@ import { Transcript } from "./chat/transcript";
 import { hasTranscriptFind, openTranscriptFind } from "./chat/transcript-find";
 import { landTranscriptCursor } from "./chat/transcript-cursor";
 import { isChatContentActivity } from "./chat/transcript-source";
-import { COMMAND_IDS, commandRegistry, getCommandDefinition, LEADER_STROKE } from "./commands/command-registry";
+import { COMMAND_IDS, commandRegistry, FEEDBACK_CONTEXTS, getCommandDefinition, LEADER_STROKE } from "./commands/command-registry";
 import { CommandMenu } from "./navigation/command-menu";
 import { LeaderPalette } from "./navigation/leader-palette";
 import { KeyboardTour, keyboardTourActive, startKeyboardTour, watchForTourOffer } from "./tour/keyboard-tour";
@@ -4898,7 +4898,7 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.openSettings, "application", () => openSettings()),
       shortcutManager.registerHandler(COMMAND_IDS.biggerInterface, "application", () => void stepUiScale(1)),
       shortcutManager.registerHandler(COMMAND_IDS.toggleJbot, "application", () => void toggleJbot(), { when: () => Boolean(agentView()?.enabled) }),
-      shortcutManager.registerHandler(COMMAND_IDS.toggleFeedback, "application", toggleFeedback, { when: () => Boolean(devClient()) }),
+      ...FEEDBACK_CONTEXTS.map((context) => shortcutManager.registerHandler(COMMAND_IDS.toggleFeedback, context, toggleFeedback, { when: () => Boolean(devClient()) })),
       shortcutManager.registerHandler(COMMAND_IDS.smallerInterface, "application", () => void stepUiScale(-1)),
       shortcutManager.registerHandler(COMMAND_IDS.resetInterfaceSize, "application", () => void stepUiScale(0)),
       shortcutManager.registerHandler(COMMAND_IDS.openModelSelector, "application", openModelSelector),
@@ -5456,7 +5456,7 @@ function App() {
 
   return <>
     <NotificationToaster />
-    <Show when={feedbackMode()}>{(mode) => <FeedbackTool mode={mode()} onMode={setFeedbackMode} onClose={() => setFeedbackMode(null)} client={clientId} keys={() => shortcutManager.formatEffectiveBinding(COMMAND_IDS.toggleFeedback)?.split(" ") ?? []} />}</Show>
+    <Show when={feedbackMode()}><FeedbackTool mode={feedbackMode() ?? "use"} onMode={setFeedbackMode} onClose={() => setFeedbackMode(null)} client={clientId} keys={() => shortcutManager.formatEffectiveBinding(COMMAND_IDS.toggleFeedback)?.split(" ") ?? []} /></Show>
     <DecisionDialogs />
     {/* conventions-ok: a hidden file input the attach control opens; the library has no file-picker piece */}
     <input ref={session.setAttachInput} type="file" multiple hidden aria-hidden="true" onChange={(event) => { if (event.currentTarget.files) attachments.addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
