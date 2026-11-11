@@ -107,6 +107,8 @@ import {
   TypeIcon,
   EraserIcon,
   HighlighterIcon,
+  ShapesIcon,
+  SlashIcon,
   TextCursorIcon,
 } from "lucide-solid";
 
@@ -176,6 +178,8 @@ export const Pointer = MousePointer2Icon;
 export const UseApp = HandIcon;
 export const DrawArrow = MoveUpRightIcon;
 export const DrawBox = SquareIcon;
+export const DrawLine = SlashIcon;
+export const Shapes = ShapesIcon;
 export const DrawText = TypeIcon;
 export const Erase = EraserIcon;
 export const Highlight = HighlighterIcon;

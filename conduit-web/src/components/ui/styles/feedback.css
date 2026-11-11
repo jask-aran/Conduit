@@ -18,11 +18,17 @@
 /* Selected text: each line washed and underlined, as a selection reads. */
 .ui-feedback-mark[data-kind="quote"] { border-width: 0 0 var(--stroke); border-color: var(--primary); border-radius: 0; background: var(--accent); }
 .ui-feedback-drawing { position: fixed; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; fill: none; stroke: var(--feedback-ink, var(--primary)); stroke-width: var(--feedback-weight); stroke-linecap: round; stroke-linejoin: round; filter: var(--glyph-shadow); }
-.ui-feedback-drawing[data-weight="thin"] { --feedback-weight: var(--stroke-thin); }
-.ui-feedback-drawing[data-weight="medium"] { --feedback-weight: var(--stroke); }
-.ui-feedback-drawing[data-weight="thick"] { --feedback-weight: calc(2 * var(--stroke)); }
+/* A line's size as it will be drawn, in the ink it will be drawn in. */
+.ui-feedback-weight { display: block; width: var(--icon-sm); height: var(--feedback-weight); border-radius: var(--feedback-weight); background: var(--feedback-ink, currentColor); }
+/* Its true size, without the widest making the rail taller than the others leave it. */
+.ui-feedback-weight[data-kind="highlight"] { height: calc(6 * var(--feedback-weight)); margin-block: calc(-2.5 * var(--feedback-weight)); border-radius: 0; opacity: var(--opacity-faint); }
+.ui-feedback-custom > input { width: var(--control-sm); height: var(--control-xs); padding: var(--space-2xs); cursor: pointer; }
+.ui-feedback-custom[data-on] > input { border-color: var(--primary); }
+:is(.ui-feedback-drawing, .ui-feedback-weight)[data-weight="thin"] { --feedback-weight: var(--stroke-thin); }
+:is(.ui-feedback-drawing, .ui-feedback-weight)[data-weight="medium"] { --feedback-weight: var(--stroke); }
+:is(.ui-feedback-drawing, .ui-feedback-weight)[data-weight="thick"] { --feedback-weight: calc(2 * var(--stroke)); }
 /* A highlighter marks over what it is on: wide and see-through, with no shadow to muddy it. */
-.ui-feedback-drawing[data-kind="highlight"] { stroke-width: calc(8 * var(--feedback-weight)); stroke-opacity: var(--opacity-faint); stroke-linecap: butt; filter: none; }
+.ui-feedback-drawing[data-kind="highlight"] { stroke-width: calc(6 * var(--feedback-weight)); stroke-opacity: var(--opacity-faint); stroke-linecap: butt; filter: none; }
 .ui-feedback-drawing marker > path { fill: var(--feedback-ink, var(--primary)); stroke: none; }
 .ui-feedback-text { position: fixed; field-sizing: content; min-width: var(--control-2xs); border: 0; outline: none; background: none; padding: 0; color: var(--feedback-ink, var(--primary)); font: var(--weight-strong) var(--text-body)/var(--control-2xs) var(--font-sans); filter: var(--glyph-shadow); pointer-events: none; }
 .ui-feedback-text::placeholder { color: inherit; opacity: 0.5; }
@@ -53,14 +59,15 @@
 .ui-feedback-note .ui-card > h3 { display: flex; align-items: center; gap: var(--space-sm); font-family: var(--font-data); font-size: var(--text-row); }
 .ui-feedback-note .ui-card > p { overflow: hidden; font-family: var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
 
-.ui-feedback-bar { position: fixed; bottom: var(--space-lg); right: var(--space-lg); left: var(--space-lg); display: flex; flex-wrap: wrap; justify-content: center; width: fit-content; margin-inline: auto; align-items: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: var(--space-xs); color: var(--foreground); font-size: var(--text-caption);
+/* The bar, and over it what the held tool draws with. Only the rails take the pointer. */
+.ui-feedback-rails { position: fixed; bottom: var(--space-lg); right: var(--space-lg); left: var(--space-lg); display: flex; flex-direction: column; align-items: center; gap: var(--space-xs); pointer-events: none; }
+.ui-feedback-bar { display: flex; flex-wrap: wrap; justify-content: center; max-width: 100%; align-items: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: var(--space-xs); color: var(--foreground); font-size: var(--text-caption);
   /* Thinner than the one frost: the bar sits over the interface being looked at. conventions-ok: the tool's own surface */
   --frost-fill: color-mix(in oklch, var(--foreground), transparent 92%); }
 /* A phone: every control on one row. */
-.ui-feedback-bar[data-compact] { right: var(--space-2xs); left: var(--space-2xs); gap: 0; }
+.ui-feedback-rails[data-compact] { right: var(--space-2xs); left: var(--space-2xs); }
+.ui-feedback-rails[data-compact] > .ui-feedback-bar { gap: 0; }
 /* Its controls keep their width; only the status gives way. */
 .ui-feedback-bar > :not(.ui-feedback-status) { flex: none; }
 .ui-feedback-status { min-width: 0; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
-/* The ink picker's popover is portalled out of the layer and stands over it. */
-.ui-menu.ui-feedback-pick:not(.ui-menu-panel) { z-index: calc(var(--layer-feedback) + 1); }
 .ui-feedback-with { display: flex; align-items: center; gap: var(--space-2xs); }

@@ -1,7 +1,6 @@
-import { createUniqueId, For, Show, type JSX } from "solid-js";
+import { createSignal, createUniqueId, For, Show, type JSX } from "solid-js";
 // Through the barrel, so the tool's chunk takes these from the app's own and the build splits nothing new out of it.
-import { Button, Card, CardPreview, CloseButton, Frost, IconButton, Icons, Section, Segmented, Spinner, Swatch, TextArea } from "./index";
-import { Popover, PopoverContent, PopoverTrigger } from "./menus";
+import { Button, Card, CardPreview, CloseButton, Frost, IconButton, Icons, Input, Segmented, Spinner, Swatch, TextArea } from "./index";
 import "./styles/feedback.css";
 
 /* Not in the library's barrel: the tool imports this file when it is opened, so the app's first load does not carry it
@@ -28,13 +27,17 @@ export const FeedbackMark = (props: { box: FeedbackBox; kind: "cursor" | "chosen
 export type FeedbackPoint = readonly [x: number, y: number];
 /** What a drawing is drawn in. The first is the layer's own line. */
 export const FEEDBACK_INKS = { plain: { label: "Plain", colour: "var(--primary)" }, red: { label: "Red", colour: "var(--destructive)" }, amber: { label: "Amber", colour: "var(--status-warn)" }, green: { label: "Green", colour: "var(--status-success)" }, blue: { label: "Blue", colour: "var(--status-unread)" } } as const;
-export type FeedbackInk = keyof typeof FEEDBACK_INKS;
-const inked = (ink?: FeedbackInk): JSX.CSSProperties => ({ "--feedback-ink": FEEDBACK_INKS[ink ?? "plain"].colour });
+/** One of those, or a colour of the person's own choosing. */
+export type FeedbackInk = keyof typeof FEEDBACK_INKS | `#${string}`;
+export const feedbackInkColour = (ink: FeedbackInk = "plain") => ink in FEEDBACK_INKS ? FEEDBACK_INKS[ink as keyof typeof FEEDBACK_INKS].colour : ink;
+const inked = (ink?: FeedbackInk): JSX.CSSProperties => ({ "--feedback-ink": feedbackInkColour(ink) });
 /** How thick a drawing's line is; a highlighter's is wider on its own scale. */
 export const FEEDBACK_WEIGHTS = { thin: { label: "Thin" }, medium: { label: "Medium" }, thick: { label: "Thick" } } as const;
 export type FeedbackWeight = keyof typeof FEEDBACK_WEIGHTS;
 /** `highlight`: a wide see-through line, drawn as the pen's is. */
-export type FeedbackDrawingKind = "pen" | "highlight" | "arrow" | "box";
+export type FeedbackDrawingKind = "pen" | "highlight" | FeedbackShape;
+/** What the Shape tool draws from the press to the release. */
+export type FeedbackShape = "line" | "arrow" | "box";
 export const drawingBox = (points: readonly FeedbackPoint[]): FeedbackBox => {
   const xs = points.map((point) => point[0]), ys = points.map((point) => point[1]);
   const left = Math.min(...xs), top = Math.min(...ys);
@@ -47,7 +50,7 @@ export function FeedbackDrawing(props: { kind: FeedbackDrawingKind; points: read
   const ends = () => [props.points[0]!, props.points[props.points.length - 1]!] as const;
   const path = () => {
     if (props.kind === "pen" || props.kind === "highlight") return line(props.points);
-    if (props.kind === "arrow") return line(ends());
+    if (props.kind === "arrow" || props.kind === "line") return line(ends());
     const box = drawingBox(ends());
     return `M${box.left} ${box.top}h${box.width}v${box.height}h${-box.width}z`;
   };
@@ -84,12 +87,15 @@ export function FeedbackNote(props: { ref?: (element: HTMLTextAreaElement) => vo
 }
 
 /** `quote`: a run of text on the live page, chosen as text is selected. */
-export type FeedbackToolKind = "select" | "quote" | FeedbackDrawingKind | "text" | "erase";
+export type FeedbackToolKind = "select" | "quote" | "pen" | "highlight" | "shape" | "text" | "erase";
 /** `wide`: left off the compact bar, which has no room for it (its key still works). */
+const OPTIONED: readonly string[] = ["pen", "highlight", "shape", "text"];
+const SHAPES: Array<{ value: FeedbackShape; label: string; icon: JSX.Element }> = [{ value: "line", label: "Line (L)", icon: <Icons.DrawLine /> }, { value: "arrow", label: "Arrow (A)", icon: <Icons.DrawArrow /> }, { value: "box", label: "Box (B)", icon: <Icons.DrawBox /> }];
+const PRESETS = Object.keys(FEEDBACK_INKS) as Array<keyof typeof FEEDBACK_INKS>;
 const TOOLS: ReadonlyArray<{ value: FeedbackToolKind | "note"; label: string; icon: () => JSX.Element; wide?: true }> = [
   { value: "select", label: "Select (V)", icon: () => <Icons.Pointer /> }, { value: "quote", label: "Select text (Q)", icon: () => <Icons.SelectText />, wide: true },
-  { value: "pen", label: "Pen (P)", icon: () => <Icons.Edit /> }, { value: "highlight", label: "Highlighter (H)", icon: () => <Icons.Highlight />, wide: true },
-  { value: "arrow", label: "Arrow (A)", icon: () => <Icons.DrawArrow /> }, { value: "box", label: "Box (B)", icon: () => <Icons.DrawBox /> }, { value: "text", label: "Text (T)", icon: () => <Icons.DrawText /> },
+  { value: "pen", label: "Pen (P)", icon: () => <Icons.Edit /> }, { value: "highlight", label: "Highlighter (H)", icon: () => <Icons.Highlight /> },
+  { value: "shape", label: "Shape: line, arrow or box (S)", icon: () => <Icons.Shapes /> }, { value: "text", label: "Text (T)", icon: () => <Icons.DrawText /> },
   { value: "erase", label: "Eraser (E)", icon: () => <Icons.Erase /> }, { value: "note", label: "General note (N)", icon: () => <Icons.Note /> },
 ];
 /** Use the app, or annotate: the live page, or a screenshot of it. */
@@ -102,14 +108,30 @@ export type FeedbackView = "use" | "page" | "screenshot";
  *  for a phone's width. `tools`: the ones this host offers (all, unsaid). `thread`: the item is sent and its thread is followed, so the bar is only what was said of it (`status`) and close.
  *  `replies`: answers unread on an item sent earlier, and the way to them. `live`: each comment goes as it is Done, so there is no Send (undefined:
  *  not offered; no `onLive`: no longer to be changed); `standing` is then where the growing item stands. */
-export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; onView: (view: FeedbackView) => void; tools?: readonly (FeedbackToolKind | "note")[]; tool: FeedbackToolKind; onTool: (tool: FeedbackToolKind) => void; onNote: () => void; live?: boolean; onLive?: (on: boolean) => void; standing?: string; thread?: boolean; replies?: number; onReplies?: () => void; ink?: FeedbackInk; onInk?: (ink: FeedbackInk) => void; weight?: FeedbackWeight; onWeight?: (weight: FeedbackWeight) => void; picking?: boolean; onPicking?: (open: boolean) => void; onUndo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
+export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; onView: (view: FeedbackView) => void; tools?: readonly (FeedbackToolKind | "note")[]; tool: FeedbackToolKind; onTool: (tool: FeedbackToolKind) => void; onNote: () => void; live?: boolean; onLive?: (on: boolean) => void; standing?: string; thread?: boolean; replies?: number; onReplies?: () => void; ink?: FeedbackInk; onInk?: (ink: FeedbackInk) => void; weight?: FeedbackWeight; onWeight?: (weight: FeedbackWeight) => void; shape?: FeedbackShape; onShape?: (shape: FeedbackShape) => void; onUndo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
   canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void }) {
   const using = () => props.view === "use";
   const views = (): Array<{ value: FeedbackView; label: string; icon: JSX.Element }> => [
     { value: "use", label: `Use the app${props.keys?.length ? ` (${props.keys.join(" ")})` : ""}`, icon: <Icons.UseApp /> }, { value: "page", label: "Annotate the live page", icon: <Icons.Feedback /> },
     ...(props.screenshots ? [{ value: "screenshot" as const, label: "Annotate a screenshot", icon: <Icons.Image /> }] : []),
   ];
-  return <Frost lift="raised" class="ui-feedback-bar" data-compact={props.compact ? "" : undefined} role="toolbar" aria-label="UI feedback">
+  // What the chosen tool draws with stands over the bar while that tool is held, so the bar itself stays the tools.
+  const inks = () => OPTIONED.includes(props.tool) ? props.onInk : undefined, lined = () => props.tool !== "text" && inks() ? props.onWeight : undefined;
+  const [own, setOwn] = createSignal<FeedbackInk>(props.ink?.startsWith("#") ? props.ink : "#ff3b9a");
+  const options = () => !props.thread && !using() && (OPTIONED.includes(props.tool) || props.tool === "erase") && (inks() || props.onUndo);
+  return <div class="ui-feedback-rails" data-compact={props.compact ? "" : undefined}>
+  <Show when={options()}><Frost lift="raised" class="ui-feedback-bar" role="toolbar" aria-label="Tool options">
+    <Show when={props.tool === "shape" && props.onShape}>{(onShape) => <Segmented label="Shape" icons size="sm" value={props.shape ?? "arrow"} onChange={onShape()} options={SHAPES} />}</Show>
+    <Show when={inks()}>{(onInk) => <>
+      <Segmented label="Ink (C)" icons size="sm" value={props.ink ?? "plain"} onChange={onInk()} options={PRESETS.map((value) => ({ value, label: FEEDBACK_INKS[value].label, icon: <Swatch colour={FEEDBACK_INKS[value].colour} /> }))} />
+      {/* Any other colour: the browser's own picker, which keeps the last one chosen to come back to. */}
+      <label class="ui-feedback-custom" data-on={own() === props.ink ? "" : undefined}><Input aria-label="Any colour" title="Any colour" type="color" value={own()} onClick={() => onInk()(own())} onInput={(event) => { setOwn(event.currentTarget.value as FeedbackInk); onInk()(own()); }} /></label>
+    </>}</Show>
+    <Show when={lined()}>{(onWeight) => <Segmented label="Line" icons size="sm" value={props.weight ?? "medium"} onChange={onWeight()} options={(Object.keys(FEEDBACK_WEIGHTS) as FeedbackWeight[]).map((value) => ({ value, label: FEEDBACK_WEIGHTS[value].label,
+      icon: <span class="ui-feedback-weight" data-weight={value} data-kind={props.tool === "highlight" ? "highlight" : undefined} style={inked(props.ink)} /> }))} />}</Show>
+    <IconButton label="Undo (Ctrl Z)" disabled={!props.onUndo} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton>
+  </Frost></Show>
+  <Frost lift="raised" class="ui-feedback-bar" role="toolbar" aria-label="UI feedback">
     <Show when={!props.thread}>
       {/* With no screenshot to be had there are two modes, and one control says which. */}
       <Show when={props.screenshots} fallback={<IconButton label={views()[0]!.label} aria-pressed={using()} onClick={() => props.onView(using() ? "page" : "use")}><Icons.UseApp /></IconButton>}>
@@ -117,17 +139,6 @@ export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; 
       </Show>
       <Segmented label="Annotate with" icons size="sm" value={props.tool} onChange={(tool) => tool === "note" ? props.onNote() : props.onTool(tool)} disabled={using()}
         options={TOOLS.filter((option) => (!props.tools || props.tools.includes(option.value)) && !(props.compact && option.wide) && (props.view !== "screenshot" || (option.value !== "select" && option.value !== "quote"))).map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} />
-      <Show when={!props.compact}><span class="ui-feedback-with">
-        <Show when={props.onInk}>{(onInk) => { const ink = () => props.ink ?? "plain", weight = () => props.weight ?? "medium";
-          return <Popover open={props.picking} onOpenChange={(open) => props.onPicking?.(open)} placement="top-start">
-            <PopoverTrigger as={IconButton} label={`Ink: ${FEEDBACK_INKS[ink()].label}, ${FEEDBACK_WEIGHTS[weight()].label.toLowerCase()} (C)`} disabled={using()}><Swatch colour={FEEDBACK_INKS[ink()].colour} /></PopoverTrigger>
-            <PopoverContent class="ui-feedback-pick" aria-label="Ink and line">
-              <Section title="Ink"><Segmented label="Ink" icons size="sm" value={ink()} onChange={onInk()} options={(Object.keys(FEEDBACK_INKS) as FeedbackInk[]).map((value) => ({ value, label: FEEDBACK_INKS[value].label, icon: <Swatch colour={FEEDBACK_INKS[value].colour} /> }))} /></Section>
-              <Show when={props.onWeight}>{(onWeight) => <Section title="Line"><Segmented label="Line" size="sm" value={weight()} onChange={onWeight()} options={(Object.keys(FEEDBACK_WEIGHTS) as FeedbackWeight[]).map((value) => ({ value, label: FEEDBACK_WEIGHTS[value].label }))} /></Section>}</Show>
-            </PopoverContent>
-          </Popover>; }}</Show>
-        <IconButton label="Undo (Ctrl Z)" disabled={!props.onUndo || using()} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton>
-      </span></Show>
     </Show>
     <Show when={props.status && (props.thread || !props.compact)}><span class="ui-feedback-status">{props.status}</span></Show>
     <Show when={props.replies && !props.thread}><IconButton label={`${props.replies} unread from the agent, on what was sent before`} count={props.replies} onClick={props.onReplies}><Icons.Inbox /></IconButton></Show>
@@ -149,5 +160,6 @@ export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; 
     </Show>
     </Show>
     <CloseButton size="sm" label="Close feedback" onClick={props.onClose} />
-  </Frost>;
+  </Frost>
+  </div>;
 }

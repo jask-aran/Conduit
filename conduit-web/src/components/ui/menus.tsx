@@ -208,7 +208,7 @@ export function Popover(props: ParentProps<{ open?: boolean; onOpenChange?: (ope
   return <KPopover open={props.open} onOpenChange={(open) => { haptic(open ? "open" : "dismiss"); props.onOpenChange?.(open); }} anchorRef={props.anchorRef} placement={props.placement || "bottom-end"} gutter={gap} fitViewport overflowPadding={padding}>{props.children}</KPopover>;
 }
 export const PopoverTrigger = KPopover.Trigger;
-export function PopoverContent(props: ParentProps<Caps & { "aria-label"?: string; class?: string; wide?: boolean; onPointerDownOutside?: (event: Event & { target: EventTarget | null }) => void; onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void }>) {
+export function PopoverContent(props: ParentProps<Caps & { "aria-label"?: string; wide?: boolean; onPointerDownOutside?: (event: Event & { target: EventTarget | null }) => void; onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void }>) {
   const mount = createFullscreenPortalMount();
   return <KPopover.Portal mount={mount()}><KPopover.Content as={Surface} data-piece="PopoverContent" data-slot="ui-popover-content" {...props} /></KPopover.Portal>;
 }

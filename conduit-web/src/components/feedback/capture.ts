@@ -71,7 +71,7 @@ export async function cropAreas(capture: Capture, areas: (Area | null)[]): Promi
 
 type Point = readonly [x: number, y: number];
 /** `width` and `opacity`: its line as the layer draws it, where that is not the layer's own. */
-export type Drawn = { kind: "pen" | "highlight" | "arrow" | "box" | "text"; points: readonly Point[]; text?: string; colour?: string; width?: number; opacity?: number };
+export type Drawn = { kind: "pen" | "highlight" | "line" | "arrow" | "box" | "text"; points: readonly Point[]; text?: string; colour?: string; width?: number; opacity?: number };
 /** An arrow's head is this many line widths long, as the layer draws it. */
 const HEAD = 6;
 
@@ -98,7 +98,7 @@ export async function previewOf(capture: Capture, area: Area, marks: { outline?:
     else {
       context.beginPath();
       context.moveTo(from[0], from[1]);
-      for (const point of drawing.kind === "arrow" ? [to] : drawing.points.slice(1)) context.lineTo(point[0], point[1]);
+      for (const point of drawing.kind === "arrow" || drawing.kind === "line" ? [to] : drawing.points.slice(1)) context.lineTo(point[0], point[1]);
       context.stroke();
       if (drawing.kind === "arrow") {
         const angle = Math.atan2(to[1] - from[1], to[0] - from[0]), length = HEAD * context.lineWidth;
