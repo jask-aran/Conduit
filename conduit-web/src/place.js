@@ -1,48 +1,24 @@
 import crypto from "node:crypto";
 
-/**
- * Where a workspace's work happens (plan › Architecture, "Making it
- * general"): a device, and a place on it. The hub is a device like any
- * other (decision 24) -- it is listed with the rest, its folders are its
- * node's roots, unscoped chats live on it -- and differs only in transport:
- * its own folders are reached in process (`local`), every other device's
- * over its node's socket. Callers ask what a place can do; only the seams
- * ask how it is reached, through `remoteNode`.
- */
+// The hub is a device like any other and differs only in transport: its own folders are reached in process, every
+// other device's over its node's socket. Callers ask what a place can do; only the seams ask how, through `remoteNode`.
 
-/** The hub's own device and node, named from the server's identity so they stay put. */
+// Named from the server's identity so they stay put.
 export const hubIds = (serverId) => ({ deviceId: `device_${serverId}`, nodeId: `node_${serverId}` });
 
-/** A root of the hub's node: one per folder it holds a workspace in, named from the path. */
 export const headRootId = (folder) => `r_${crypto.createHash("sha256").update(String(folder)).digest("base64url").slice(0, 12)}`;
 
-/**
- * The node a project's place is reached through over the network, or null
- * when it is reached in process: the hub's own folders (a project view says
- * `local`), or a stored record that names no node.
- */
 export const remoteNode = (project) => (project?.nodeId && project.local !== true ? project.nodeId : null);
 
-/** A project's place: `{ device, nodeId, root, path, local }`. */
 export function placeOf(project) {
   return { device: project?.nodeId || null, nodeId: project?.nodeId || null, root: project?.place?.root || null,
     path: project?.place?.path || "", local: !remoteNode(project) };
 }
 
-/**
- * What can be done at a project's place, and on which device:
- * - `harnesses`: implementations a chat there can use. On the hub, what is
- *   installed here; on a device, what it runs (a harness adapter starts it
- *   there) and whatever runs on the hub acting through the device (the
- *   Conduit durable agent).
- * - `checkpoints`: turn snapshots, for Chat review. Never for the shared Chats
- *   folder (a chat in no folder): every such chat and the agent write there,
- *   so a turn's changes there are nobody's in particular. On a device only a Git
- *   workspace with the shell grant: Git names the changed files, where a
- *   plain folder's snapshot reads all of it, over the link, before each turn.
- * - `deleteFiles`: Conduit may delete the folder (never on a device).
- * - `git`: Git can run there (a device runs it as a command: the shell grant).
- * `device` says whose it is: `{ id, name, local, online }`.
+/*
+ * No checkpoints for the shared Chats folder: every such chat and the agent write there, so a turn's changes are
+ * nobody's in particular. On a device only a Git workspace with the shell grant gets them: Git names the changed
+ * files, where a plain folder's snapshot reads all of it, over the link, before each turn.
  */
 export async function capabilitiesOf(project, { hub = null, backends, serverName = "This server" }) {
   const at = placeOf(project);
@@ -54,7 +30,7 @@ export async function capabilitiesOf(project, { hub = null, backends, serverName
   const node = await hub?.get(at.nodeId);
   const live = hub?.live.get(at.nodeId);
   const onDevice = new Set(live?.harnesses || node?.harnesses || []);
-  // Codex's app-server daemon is Unix-only: a Windows node that still offers it (an older one) cannot run it.
+  // Codex's app-server daemon is Unix-only: a Windows node that offers it cannot run it.
   if ((live?.platform || node?.platform) === "win32") onDevice.delete("codex");
   const harnesses = [...backends.adapters.keys()].filter((implementation) => {
     const adapter = backends.adapters.get(implementation);

@@ -3,13 +3,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 /*
- * How the hub holds what it keeps on disk: every file of its state is the owner's alone (0600), in a data folder that
- * is the owner's alone (0700), and is replaced whole or not at all. Keys, tokens and private halves live in these files
- * (voice.json, the search keys, identity.json, auth.json, push.json, a connector's tokens), and so do chats and drafts,
- * so there is one way to write any of them, and no store sets a mode or names a temporary file itself.
- *
- * A write goes to a new file beside the target (made exclusively, so nothing else's is ever written into), is flushed
- * to disk, then renamed over it: a reader sees the old file or the new one, and a crash leaves one of them.
+ * Keys and tokens live in the hub's state files, so there is one way to write any of them and no store sets a mode or
+ * names a temporary file itself. The rename means a reader sees the old file or the new one, and a crash leaves one.
  */
 export async function writePrivateFile(file, content) {
   await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
@@ -29,15 +24,11 @@ export async function writePrivateFile(file, content) {
   }
 }
 
-/** A value as a JSON file: indented to be read by a person unless `compact`. */
 export async function writePrivateJson(file, value, { compact = false } = {}) {
   await writePrivateFile(file, `${compact ? JSON.stringify(value) : JSON.stringify(value, null, 2)}\n`);
 }
 
-/**
- * The data folder made the owner's alone, with the files in it that were written before every write was private (a
- * mode given to a write only counts when it makes the file). Once, as the hub starts.
- */
+// Files are chmodded too: a mode given to a write only counts when it makes the file.
 export async function holdPrivately(dataRoot, folders = ["", "pi", "network"]) {
   await fs.mkdir(dataRoot, { recursive: true, mode: 0o700 });
   await fs.chmod(dataRoot, 0o700);

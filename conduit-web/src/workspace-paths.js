@@ -79,11 +79,7 @@ export function assertSafeWorkspaceRoot(candidate, { home = os.homedir(), dataRo
   return resolved;
 }
 
-/**
- * Resolve a user-supplied directory for linking. Always realpath the candidate so
- * intermediate symlink ancestors cannot textually sit inside the allowlist while
- * resolving outside it at the OS level.
- */
+// Always realpathed, so a symlink ancestor cannot sit textually inside the allowlist while resolving outside it.
 export async function resolveExistingDirectory(candidate, allowlist, policy = {}) {
   const textual = assertAllowedPath(candidate, allowlist, "workspace path");
   let real;

@@ -52,7 +52,7 @@ const contentText = (content) => (Array.isArray(content) ? content : [])
   .map((item) => item?.text || item?.content?.map?.((part) => part?.text || "").join("") || "").join("");
 const STREAM_RETRY_LIMIT = 10;
 // A stopped step is saved as finish "error" with an "aborted" error; it is a stop, not a failure.
-// The rest of OpenCode's finish reasons, in Conduit's words; one it adds later is a stop.
+// A finish reason not listed here is a stop.
 const OPENCODE_STOP_REASONS = Object.freeze({
   "tool-calls": "toolUse", stop: "stop", length: "length", error: "error", "content-filter": "error",
 });
@@ -60,8 +60,6 @@ const stopReasonOf = (row) => row.error?.type === "aborted" ? "aborted"
   : row.finish ? OPENCODE_STOP_REASONS[row.finish] || "stop" : row.time?.completed ? "stop" : null;
 const errorOf = (row) => row.error?.type === "aborted" ? null : row.error?.message || null;
 const toolOutput = (part) => contentText(part?.state?.content) || String(part?.state?.output || part?.state?.error || "");
-// OpenCode's TUI setting of the same name, offered the same way: its client
-// either shows each permission or answers it `once`.
 const PERMISSION_MODES = Object.freeze([
   { id: "prompt", label: "Prompt", description: "Ask before each action OpenCode holds for approval", allowed: true },
   { id: "autoaccept", label: "Auto accept", description: "Allow each action once without asking; questions are still asked", allowed: true },
@@ -75,9 +73,6 @@ const permissionPrompt = (request) => ({
     message: request.message || (request.resources || []).join(", ") || "OpenCode is waiting for approval.",
     options: PERMISSION_DECISIONS.map(([label]) => label) },
 });
-// A form -- the question tool's, or a plugin's -- is one question per field.
-// A hidden field keeps its default and an external one is a link to follow;
-// the rest are asked as OpenCode states them.
 const fieldQuestion = (field) => {
   const listed = Array.isArray(field.options) ? field.options : [];
   const options = field.type === "boolean"
@@ -99,8 +94,7 @@ const formPrompt = (form) => {
     questions: fields.map(fieldQuestion) });
   return { kind: "form", form: { fields: form.fields || [] }, fields, host: { ...host, nativeKind: "form" } };
 };
-// OpenCode's reply is one value per field key. A field whose `when` the other
-// answers rule out is left unanswered, as OpenCode's own form leaves it.
+// A field whose `when` the other answers rule out is left unanswered, as OpenCode's own form leaves it.
 const formAnswer = (pending, response) => {
   const answer = {};
   pending.fields.forEach((field, index) => {
@@ -120,7 +114,6 @@ const formAnswer = (pending, response) => {
   }
   return answer;
 };
-// OpenCode's tools, by what they do: the file tools that only look are reads.
 const OPENCODE_TOOL_KINDS = Object.freeze({
   bash: "command",
   read: "read", glob: "read", grep: "read", list: "read",
@@ -129,34 +122,25 @@ const OPENCODE_TOOL_KINDS = Object.freeze({
   webfetch: "fetch",
 });
 const kindOf = (name) => toolKind(OPENCODE_TOOL_KINDS, name);
-// And the field of each that says what it acted on.
 const OPENCODE_TOOL_SUBJECTS = Object.freeze({
   bash: "command", read: "filePath", edit: "filePath", write: "filePath", multiedit: "filePath", list: "path",
   glob: "pattern", grep: "pattern", websearch: "query", codesearch: "query", webfetch: "url",
 });
 const subjectOf = (name, input) => Object.hasOwn(OPENCODE_TOOL_SUBJECTS, name) && input && typeof input === "object"
   ? toolSubject(input[OPENCODE_TOOL_SUBJECTS[name]]) ?? undefined : undefined;
-// A prompt is saved in OpenCode under the name the browser already drew it
-// with, in the `msg_` form OpenCode requires, so the live row, the chat log and
-// the saved copy are one message. OpenCode's own ids are hex after `msg_`, so a
-// prompt typed in its TUI never reads as one of Conduit's.
+// A prompt is saved under the id the browser drew it with, so the live row, the chat log and the saved copy are one
+// message. OpenCode's own ids are hex after `msg_`, so a prompt typed in its TUI never reads as one of Conduit's.
 const serviceMessageId = (conduitId) => `msg_${conduitId}`;
 const conduitMessageId = (id) => String(id || "").startsWith("msg_m_") ? id.slice(4) : id;
-/**
- * Reasoning the provider did but did not show: a finished part with no text,
- * which OpenCode keeps only as the provider's encrypted copy to send back.
- */
 const hiddenReasoning = (part) => !String(part.text || "").trim()
   && Boolean(part.state?.reasoningEncryptedContent || part.time?.completed || part.time?.end
     || Object.values(part.metadata || {}).some((value) => value?.reasoningEncryptedContent));
-// When a tool ran and finished. OpenCode's current store keeps these on the
-// part (`ran`, `completed`); its earlier one kept them on the part's state.
+// Older OpenCode stores keep these times on the part's state.
 const toolTimes = (part) => {
   const started = iso(part.time?.ran ?? part.time?.created ?? part.state?.time?.start);
   const finished = iso(part.time?.completed ?? part.state?.time?.end);
   return { ...(started ? { timestamp: started } : {}), ...(finished ? { completedAt: finished } : {}) };
 };
-/** The blocks of a saved assistant message, as Conduit states them live and on reload alike. */
 const blocksOf = (row) => (row.content || []).flatMap((part, index) => {
   if (part.type === "text") return [{ kind: "text", contentIndex: index, text: part.text || "" }];
   if (part.type === "reasoning") return [{ kind: "thinking", contentIndex: index, text: part.text || "", redacted: hiddenReasoning(part) }];
@@ -166,16 +150,12 @@ const blocksOf = (row) => (row.content || []).flatMap((part, index) => {
 });
 
 export class OpenCodeAdapter extends EventEmitter {
-  // Starts its harness on a device for a device's workspace (live-session-launcher.js).
   runsOnDevices = true;
 
   constructor({ command = "opencode2", logs = null, nodeHub = null } = {}) {
     super();
     this.command = command;
-    // Paired devices: a chat in a device's workspace uses that device's OpenCode service.
     this.nodeHub = nodeHub;
-    // One service per place it runs -- this machine (key "") or a device by
-    // node id -- each with its connection and its one event stream.
     this.services = new Map();
     this.sessions = new SessionRecords({
       capabilities: OPENCODE_CAPABILITIES,
@@ -188,7 +168,6 @@ export class OpenCodeAdapter extends EventEmitter {
     Object.assign(this, unsupported(OPENCODE_CAPABILITIES, { label: "OpenCode" }));
   }
 
-  /** The service state for a place: `on` is a node id, or nothing for this machine. */
   service(on = null) {
     const key = on || "";
     if (!this.services.has(key)) {
@@ -197,7 +176,7 @@ export class OpenCodeAdapter extends EventEmitter {
     return this.services.get(key);
   }
 
-  /** OpenCode's processes on a device (its node id), or here (none). Any shared folder of a device will do for its service commands. */
+  // Any shared folder of a device will do for its service commands.
   processes(on) { return placeProcesses(this.nodeHub, { nodeId: on || null, place: on ? this.anyPlace(on) : null }); }
 
   async commandOutput(args, on = null) {
@@ -209,12 +188,6 @@ export class OpenCodeAdapter extends EventEmitter {
     }
   }
 
-  /**
-   * OpenCode 2.0.19 prints `stopped` from `service status` while a TUI's own
-   * `serve --service` is live, so the state file it writes is read first. A
-   * service is only started when none is running, and never by a health check.
-   */
-  /** A place on the device to run in: a record's, else its first shell-granted root. */
   anyPlace(on) {
     const record = this.rawRecords().find((item) => item.nodeId === on && item.place);
     if (record) return record.place;
@@ -227,7 +200,7 @@ export class OpenCodeAdapter extends EventEmitter {
     if (service.connection) return service.connection;
     if (service.connectionStart) return service.connectionStart;
     service.connectionStart = (async () => {
-      // One way for every place: the service's state file where it runs, then `service status`, started if need be.
+      // `service status` prints `stopped` while a TUI's own `serve --service` is live, so the state file is read first.
       const where = on ? " on the device" : "";
       const loopback = /^http:\/\/127\.0\.0\.1:\d+$/;
       const processes = this.processes(on);
@@ -250,7 +223,6 @@ export class OpenCodeAdapter extends EventEmitter {
     finally { service.connectionStart = null; }
   }
 
-  /** `fetch`, here or through the device's tunnel. */
   fetch(on, url, init) { return this.processes(on).fetch(url, init); }
 
   async request(method, route, { directory = "", query = {}, body, whole = false, start = true, timeout = 30000, on = null } = {}) {
@@ -284,10 +256,7 @@ export class OpenCodeAdapter extends EventEmitter {
     return whole ? result : result?.data ?? result;
   }
 
-  /**
-   * Its service runs on demand (connect() starts it for a chat), so one not
-   * running yet is not a fault: null, and what detection found stands.
-   */
+  // The service runs on demand, so one not running yet is not a fault: null, and what detection found stands.
   async health() {
     try {
       const info = await this.request("GET", "/info", { start: false, timeout: 3000 });
@@ -376,8 +345,6 @@ export class OpenCodeAdapter extends EventEmitter {
       await this.ensureStream(record.nodeId);
       await this.request("POST", `/session/${encodeURIComponent(record.sessionId)}/prompt`, { on: record.nodeId, body: {
         id: serviceMessageId(clientUserMessageId), text: parseAttachmentEnvelope(message).message,
-        // OpenCode reads a file it is pointed at itself, and keeps its name,
-        // type and contents with the prompt.
         // Paths on this machine: a device's OpenCode cannot open them.
         files: (record.nodeId ? [] : options.attachments || []).filter((item) => item?.path).map((item) => ({ uri: pathToFileURL(item.path).href })),
         agents: [],
@@ -390,11 +357,6 @@ export class OpenCodeAdapter extends EventEmitter {
     }
   }
 
-  /**
-   * One `/api/event` stream serves every session, as it does for OpenCode's
-   * own TUI. It opens before the first prompt and is reopened while a turn is
-   * running; a turn that ran across the gap is caught up from saved messages.
-   */
   ensureStream(on = null) {
     const service = this.service(on);
     if (service.stream) return service.stream.ready;
@@ -448,11 +410,7 @@ export class OpenCodeAdapter extends EventEmitter {
     void this.recoverStream(service);
   }
 
-  /**
-   * Reopen the stream for turns still running. A stream that opens and closes
-   * again counts as a failed attempt, the same as one that never opened: only
-   * a running turn hearing news resets the count (in `dispatch`).
-   */
+  // A stream that opens and closes again counts as a failed attempt; only a running turn hearing news resets the count.
   async recoverStream(service) {
     const running = () => this.rawRecords().filter((record) => record.active && (record.nodeId || null) === service.nodeId);
     if (!running().length || service.stream || service.recovering) return;
@@ -484,11 +442,7 @@ export class OpenCodeAdapter extends EventEmitter {
     this.settle(record, "failed");
   }
 
-  /**
-   * Bring a running turn up to date from saved messages, after a gap in the
-   * stream. A read that fails is tried again: if the turn ended during the
-   * gap, this read is the only way left to hear it.
-   */
+  // A failed read is tried again: if the turn ended during the gap, this read is the only way left to hear it.
   async catchUp(record, attempt = 1) {
     const generation = record.generation;
     const rows = await this.messageRows(record.sessionId, { limit: 100, on: record.nodeId }).catch(() => null);
@@ -553,11 +507,6 @@ export class OpenCodeAdapter extends EventEmitter {
     }
   }
 
-  /**
-   * The live state of an assistant message, opened on first sight: a row in
-   * the record, and a message in the turn being painted, which is what its
-   * deltas are written into. Every route to a message comes through here.
-   */
   liveMessage(record, id, created) {
     let state = record.liveMessages.get(id);
     if (state) return state;
@@ -615,18 +564,13 @@ export class OpenCodeAdapter extends EventEmitter {
       cancelled: phase === "failed" && record.stopping, generationId }));
   }
 
-  /**
-   * A message that calls a tool is interim work, which is said at once rather
-   * than when the step ends: the turn being painted places a running tool by
-   * its `tool_call` block, so without this a step that is only a tool shows
-   * nothing until it finishes.
-   */
+  // Said at once rather than when the step ends: the painted turn places a running tool by its `tool_call` block,
+  // so without this a step that is only a tool shows nothing until it finishes.
   paintToolUse(record, state, row) {
     this.publish(record, { type: "assistant_content", phase: "final", generationId: record.generation?.id || null,
       seq: ++record.generationSeq, messageId: state.id, stopReason: "toolUse", errorMessage: null, blocks: blocksOf(row) });
   }
 
-  /** Close a finished step from its saved message, which is the record. */
   async closeFromSaved(record, state, data) {
     const row = await this.request("GET",
       `/session/${encodeURIComponent(record.sessionId)}/message/${encodeURIComponent(state.id)}`, { on: record.nodeId }).catch(() => null);
@@ -636,7 +580,6 @@ export class OpenCodeAdapter extends EventEmitter {
     this.closeLiveMessage(record, state.row || this.rowFromState(state, data), state);
   }
 
-  /** What the stream showed of a message, for when its saved copy cannot be read. */
   rowFromState(state, { finish = null } = {}) {
     const content = [...state.kinds.entries()].sort(([a], [b]) => a - b).map(([index, kind]) => {
       if (kind !== "tool") return { type: kind, text: state.text.get(index) || "" };
@@ -735,14 +678,7 @@ export class OpenCodeAdapter extends EventEmitter {
       timestamp: iso(row.time?.created), errorMessage: errorOf(row) }));
   }
 
-  /**
-   * OpenCode's pending permissions and forms, as the prompts on screen.
-   *
-   * A permission is a card of words, and keeps the decision each word means to
-   * OpenCode; a form is a question request, and keeps its fields so the
-   * answers go back as values under their keys. In auto accept a permission is
-   * answered `once` instead, as OpenCode's TUI does; a question never is.
-   */
+  // In auto accept a permission is answered `once`, as OpenCode's TUI does; a question never is.
   syncRequests(record, requests) {
     const current = new Set();
     for (const { kind, request } of requests) {
@@ -763,7 +699,6 @@ export class OpenCodeAdapter extends EventEmitter {
     }
   }
 
-  /** One answered here, auto accepted, or gone from OpenCode's lists; only one that was shown is said to be resolved. */
   resolveRequest(record, id) {
     const pending = take(record, id);
     if (pending?.event) this.publish(record, pending.event);
@@ -777,7 +712,7 @@ export class OpenCodeAdapter extends EventEmitter {
 
   settle(record, outcome) {
     if (!record.generation || record.generation.settled) return;
-    // A turn that errors as it is stopped was stopped (turn.js outcomeOf).
+    // A turn that errors as it is stopped was stopped.
     if (outcome === "failed" && record.stopping) outcome = "interrupted";
     // An interrupted or failed turn leaves its last message and tools open;
     // OpenCode never completes them, so they are closed here.
@@ -843,7 +778,6 @@ export class OpenCodeAdapter extends EventEmitter {
     const record = this.get(id);
     if (!record) throw failure("OpenCode session is not running");
     record.permissionMode = mode?.id || String(mode || "");
-    // Switching to auto accept answers what is already waiting, too.
     if (record.permissionMode === "autoaccept") {
       for (const pending of asked(record)) {
         if (pending.kind !== "permission" || pending.auto) continue;
@@ -892,11 +826,8 @@ export class OpenCodeAdapter extends EventEmitter {
     return (await this.messagePage(sessionId, { limit, on })).rows;
   }
 
-  /**
-   * Newest first. A cursor carries its own order, and OpenCode refuses one
-   * sent with `order`. `next` is set on a short last page too, so only a full
-   * page says there may be more.
-   */
+  // OpenCode refuses a cursor sent with `order`. `next` is set on a short last page too, so only a full page says
+  // there may be more.
   async messagePage(sessionId, { limit = 100, cursor = "", on = null } = {}) {
     const result = await this.request("GET", `/session/${encodeURIComponent(sessionId)}/message`, { on,
       query: cursor ? { limit, cursor } : { limit, order: "desc" }, whole: true,
@@ -910,9 +841,7 @@ export class OpenCodeAdapter extends EventEmitter {
     const tools = [];
     let lastUser = null;
     const unfinished = new Set();
-    // How each turn ended, stated on its prompt: a stopped step is saved as an
-    // aborted error, a failed one as an error. A turn whose last step has not
-    // completed is still running, and the live stream will say.
+    // A turn whose last step has not completed is still running, and the live stream will say how it ends.
     const settle = () => {
       const prompt = messages.find((message) => message.id === lastUser);
       const turn = messages.filter((message) => message.answers === lastUser && message.role === "assistant");
@@ -929,8 +858,7 @@ export class OpenCodeAdapter extends EventEmitter {
         messages.push({ id: lastUser, role: "user", content, timestamp: iso(row.time?.created) });
         continue;
       }
-      // A turn that failed before any answer leaves only its ending, with the
-      // error on it (syncMessages shows it so while live).
+      // A turn that failed before any answer leaves only its ending, with the error on it.
       if (row.type === "idle" && errorOf(row) && lastUser
         && !messages.some((message) => message.answers === lastUser && message.role === "assistant")) {
         messages.push({ id: row.id, role: "assistant", content: "", blocks: [], answers: lastUser,
@@ -989,8 +917,7 @@ export class OpenCodeAdapter extends EventEmitter {
 
   async readHistory(options) {
     const { messages } = await this.readTranscript(options);
-    // Each tool call is a step of its own, after the message that made it, as
-    // Pi lists them; a step that only called tools has nothing else to show.
+    // Each tool call is a step of its own, as Pi lists them; a step that only called tools has nothing else to show.
     const entries = messages.flatMap((message) => {
       const text = String(message.content || "").replace(/\s+/g, " ").trim().slice(0, 240);
       const tools = (message.blocks || []).filter((block) => block.kind === "tool_call");
@@ -1013,11 +940,7 @@ export class OpenCodeAdapter extends EventEmitter {
     return { mode: "linear", leafId, tree: child ? [child] : [] };
   }
 
-  /**
-   * What OpenCode's own model list leads with, kept by its TUI (the API has no
-   * route for it): the models starred there, the recent ones, each in its
-   * order, and the variant last used with each model.
-   */
+  // Read from the TUI's state file: the API has no route for it.
   async modelMemory() {
     try {
       const state = JSON.parse(await fs.readFile(path.join(stateRoot(), "opencode", "model.json"), "utf8"));
@@ -1029,9 +952,7 @@ export class OpenCodeAdapter extends EventEmitter {
 
   async listAvailableModels(cwd) {
     const [all, memory] = await Promise.all([this.request("GET", "/model", { directory: cwd }), this.modelMemory()]);
-    // OpenCode can reach hundreds of models; its picker leads with the starred
-    // and recent ones, and so does Conduit's, offering only those. Every model
-    // only while there are none it still has.
+    // OpenCode can reach hundreds of models, so only its starred and recent ones are offered while any remain.
     const led = [...new Set([...memory.favourites, ...memory.recent])]
       .map((spec) => (all || []).find((model) => modelSpec(model) === spec)).filter(Boolean);
     return (led.length ? led : all || []).map((model) => {
@@ -1063,11 +984,7 @@ export class OpenCodeAdapter extends EventEmitter {
   }
   async getModelState(id) { const record = this.get(id); return { model: record?.model || "", thinkingLevel: record?.thinkingLevel || "" }; }
 
-  /**
-   * The context is the last request's: what it sent (cache reads are counted
-   * apart from input) plus what it wrote back, against the model's limit.
-   * Requests not yet counted feed the cache tracker oldest first.
-   */
+  // OpenCode counts cache reads apart from input, so the context is all of the last request's tokens.
   async refreshContext(id) {
     const record = this.get(id);
     if (!record) return null;
@@ -1098,7 +1015,6 @@ export class OpenCodeAdapter extends EventEmitter {
     return contextUsage;
   }
 
-  /** An old thread's context from OpenCode's own messages; no live process needed. */
   async contextFromHistory({ opaqueSession, project }) {
     const sessionId = typeof opaqueSession === "string" ? opaqueSession : opaqueSession?.threadId || opaqueSession?.sessionId;
     if (!sessionId) return null;
@@ -1114,7 +1030,6 @@ export class OpenCodeAdapter extends EventEmitter {
       cost: requests.reduce((sum, row) => sum + (row.cost || 0), 0) });
   }
 
-  /** A model's context limit from OpenCode's catalogue, asked once per model. */
   async contextLimit(spec, cwd, on = null) {
     this.contextLimits ||= new Map();
     // Per place: a device's OpenCode has its own catalogue.

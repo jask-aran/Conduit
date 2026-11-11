@@ -9,7 +9,7 @@ import { writePrivateFile, writePrivateJson } from "./private-file.js";
 const DEFAULTS = {
   defaultTemplateId: "assistant",
   sessionNameModel: "",
-  // The approval model (Settings › AI › Helper models: Review); "" is the naming model's.
+  // The approval model; "" is the naming model's.
   reviewModel: "",
   accountName: "",
   accountHome: "",
@@ -17,27 +17,14 @@ const DEFAULTS = {
   profileModelDefaults: {},
   terminalShortcuts: [],
   sidebarPins: [],
-  // The UI preferences (preferences-api.js): each unset until chosen.
   ...Object.fromEntries(UI_PREFERENCE_KEYS.map((key) => [key, null])),
   knownServers: [],
 };
 
 const SIDEBAR_PIN_PATTERN = /^(chat|project|terminal):[^\s:][^\s]*$/;
 
-/* The addresses this Conduit knows other Conduits by.
- *
- * A client learns servers one at a time and then has to be told again on every
- * other device it uses. Keeping the directory here means a server that has
- * been told about another one tells every client that connects to it, and a
- * client that knows one the server does not tells the server -- so the first
- * address anyone types is the last time that address has to be typed.
- *
- * It is a convenience, not an authority: nothing here grants access to
- * anything, a client still signs in to each server separately, and a name is
- * just a label. It does mean each server learns where the others are, which is
- * the cost of not maintaining the same list by hand in several places. */
-// The same line the client and the auth middleware draw: plain HTTP is
-// accepted for an address that cannot leave the machine, or the network it is on.
+// Known servers are a convenience, not an authority: nothing here grants access, and a client still signs in to each
+// server separately.
 
 function validServerOrigin(value) {
   if (typeof value !== "string" || value.length > 253) return false;
@@ -90,10 +77,7 @@ export function validSidebarPins(input) {
     && new Set(input).size === input.length;
 }
 
-// The last model somebody chose on a profile, so choosing it once is enough.
-// Keyed by profile rather than by backend: "Assistant" and "Coding" are two
-// answers to the same question, and sharing one entry between them meant
-// picking a model in one silently moved the other.
+// Keyed by profile rather than by backend: two profiles on one backend would otherwise move each other's model.
 const normalizeProfileModelDefaults = (value) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return Object.fromEntries(Object.entries(value).flatMap(([profileId, selection]) => {
@@ -153,10 +137,8 @@ export function normalizePreferences(input = {}, fallback = DEFAULTS, knownTempl
   const sidebarPins = Array.isArray(input.sidebarPins)
     ? normalizeSidebarPins(input.sidebarPins)
     : normalizeSidebarPins(fallback.sidebarPins);
-  // The hub account's name (Settings › Account), whose initials are its picture in the server switcher.
   const accountName = typeof input.accountName === "string" ? input.accountName.trim().slice(0, 60)
     : typeof fallback.accountName === "string" ? fallback.accountName.trim().slice(0, 60) : "";
-  // Where they live (Settings › Account): their agent's USER.md `home`, for weather, travel and "near me".
   const accountHome = typeof input.accountHome === "string" ? input.accountHome.trim().slice(0, 120)
     : typeof fallback.accountHome === "string" ? fallback.accountHome.trim().slice(0, 120) : "";
   return {
@@ -178,8 +160,7 @@ export class PreferencesStore {
     this.filePath = filePath;
     this.knownTemplateIds = knownTemplateIds;
     this.preferences = normalizePreferences(seed, DEFAULTS, knownTemplateIds);
-    // The shortcut overrides' own file (keybindings.js), beside this one: readable, and edited in place by a person or
-    // an agent. They are served in `shortcutOverrides` as before; preferences.json no longer holds them.
+    // The shortcut overrides have their own file so a person or an agent can edit it in place.
     this.keybindingsFile = keybindingsFile || path.join(path.dirname(filePath), "keybindings.json");
     this.keybindingErrors = [];
   }
@@ -188,7 +169,6 @@ export class PreferencesStore {
     return { ...this.preferences };
   }
 
-  /** Where the shortcuts file is and what in it could not be read, for Settings › Shortcuts. */
   keybindings() {
     return { path: this.keybindingsFile, errors: [...this.keybindingErrors] };
   }
@@ -203,18 +183,17 @@ export class PreferencesStore {
       if (error?.code !== "ENOENT") throw error;
     }
     const read = await this.readKeybindings();
-    // Overrides saved before the file: moved into it, and out of preferences.json (the file, when there is one, wins).
+    // Overrides held in preferences.json move into the file; the file, when there is one, wins.
     if (!read && this.preferences.shortcutOverrides) await this.save({ shortcutOverrides: this.preferences.shortcutOverrides });
     else if (stored) await this.save({});
     return this.get();
   }
 
-  /** The file's overrides into the preferences; false when there is no file. A file that is not JSON keeps the last. */
+  // A file that is not JSON keeps the last overrides.
   async readKeybindings({ ownSaves = false } = {}) {
     let text;
     try { text = await fs.readFile(this.keybindingsFile, "utf8"); }
     catch (error) { if (error?.code === "ENOENT") { this.keybindingErrors = []; return false; } throw error; }
-    // The file as Conduit last wrote it: the overrides already in hand, as recorded, are what it says.
     if (ownSaves && text === this.keybindingsWritten) return true;
     const { overrides, errors } = parseKeybindings(text);
     this.keybindingErrors = errors;
@@ -224,10 +203,7 @@ export class PreferencesStore {
     return true;
   }
 
-  /**
-   * Watch the shortcuts file for edits made outside Conduit; `onChange` has the overrides when they changed. The
-   * folder is watched, as a save replaces the file (a rename) and a watch on the file itself would go with it.
-   */
+  // The folder is watched, as a save replaces the file (a rename) and a watch on the file itself would go with it.
   watchKeybindings(onChange) {
     let timer = null;
     let watcher = null;
@@ -254,8 +230,7 @@ export class PreferencesStore {
     this.preferences = normalizePreferences({ ...this.preferences, ...patch }, this.preferences, this.knownTemplateIds);
     // The file is written only when the overrides change: another preference's save leaves a hand edit as it was.
     const keybindings = Object.hasOwn(patch, "shortcutOverrides");
-    // One write at a time, each of the state as it then is: two saves at once shared the temporary file, and the
-    // second rename found it gone.
+    // One write at a time: two saves at once would share the temporary file, and the second rename would find it gone.
     const write = (this.writing || Promise.resolve()).then(async () => {
       if (keybindings && (this.preferences.shortcutOverrides || await exists(this.keybindingsFile))) {
         // Remembered, so the watcher knows its own save: read back, a stroke's key is rebuilt from its code and would

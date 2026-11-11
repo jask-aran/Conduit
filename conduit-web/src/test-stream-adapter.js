@@ -11,40 +11,12 @@ import { reduceActiveGeneration, snapshotActiveGeneration } from "./active-gener
 import { unsupported } from "./harnesses/unsupported.js";
 import { KATEX_COMPENDIUM, KATEX_LIMITS, MARKDOWN_MIX, RICH_MIX, RICH_PROSE } from "./test-stream-replays.js";
 
-/**
- * A backend that answers instantly, forever, at a rate you choose.
- *
- * There is no model here and nothing to install. It exists to put the live
- * path under sustained, *evenly paced* delta pressure so the cost of drawing a
- * turn can be watched on its own: adapter -> chat log -> SocketDelivery ->
- * socket -> client reducer -> turn rows -> paint. Every one of those is the
- * real one. A real harness cannot be used for this because its rate is
- * whatever the provider felt like that second, so a slow frame and a slow
- * provider look identical.
- *
- * Pacing is held against the wall clock rather than by counting timers, so a
- * late tick emits what it owes instead of stretching the run. That is the
- * whole point: if the stream itself drifted, every number read off it would be
- * measuring this file.
- */
-/**
- * What it can do: everything the reference harness can, deterministically.
- *
- * This declared four things and refused the rest, so the profile exercised a
- * narrow slice of Conduit -- prompt, stream, stop -- and every path built for a
- * real harness (steering, forks, regenerate, tools, approvals, compaction) had
- * no coverage here at all. Capabilities are the whole of how a backend's
- * behaviour is decided: the client hides what is not declared and the server
- * refuses it, so declaring them is what turns those paths on.
- *
- * What it does with each is fixed and repeatable, because that is the point of
- * this backend. A tool call returns the same output every time, an approval is
- * asked the same way, a fork cuts at the entry it was given. There is no model
- * to be unpredictable.
+/*
+ * A backend with no model, to put the real live path under evenly paced delta pressure: a real harness's rate is
+ * whatever the provider felt like that second, so a slow frame and a slow provider look identical. Pacing is held
+ * against the wall clock, so a late tick emits what it owes instead of stretching the run.
  */
 export const TEST_STREAM_CAPABILITIES = Object.freeze({
-  // Forks are cuts in its own journal, so one chat can hold more than one
-  // continuation.
   history: "tree",
   fork: true,
   regenerate: true,
@@ -52,41 +24,24 @@ export const TEST_STREAM_CAPABILITIES = Object.freeze({
   followUpQueue: true,
   cancel: true,
   compaction: true,
-  // How much comes back is this harness's decision, and a thinking level is
-  // already a signal a harness interprets however it likes -- so the amount
-  // rides on it, labelled in tokens. Two independent questions, the two
-  // pickers that are already in the composer, and no new settings surface.
+  // The thinking level carries the amount, labelled in tokens, so no new settings surface is needed.
   thinkingLevels: true,
   modelSwitch: true,
   toolUse: true,
   approvals: true,
-  // This harness answers an approval, but it does not offer profiles to answer
-  // under. That is a Codex feature, and claiming it here would mean declaring a
-  // surface with nothing behind it.
   permissionModes: false,
   usage: true,
   replay: true,
   attachments: true,
-  // True here, and only here. Every real harness drops an interrupted partial
-  // because what it writes and what it sends the model next turn are different
-  // things. This backend's journal *is* its transcript and there is no model to
-  // disagree with it, so a stopped answer really does stand. It is also the
-  // only coverage Conduit has of the `discarded: false` close.
+  // True here only: this backend's journal is its transcript and there is no model to disagree with it, so a stopped
+  // answer stands. It is the only coverage Conduit has of the `discarded: false` close.
   interruptKeepsPartial: true,
 });
 
-/**
- * How fast, as the models.
- *
- * `paced-60` is roughly what a fast provider does, and is the control: a frame
- * dropped at 60 tokens/s is not the stream's fault. The rest climb until
- * something gives.
- */
+// `paced-60` is the control: a frame dropped at 60 tokens/s is not the stream's fault.
 export const TEST_STREAM_SPEEDS = Object.freeze([
   { id: "paced-60", label: "60 tok/s · like a real model", tokensPerSecond: 60 },
-  // A real provider's cadence: the same average rate, delivered as chunks
-  // after uneven gaps, one of them a long pause. Even ticks flatter any
-  // reveal; this is the pause-then-paragraph a real turn has, repeatably.
+  // Even ticks flatter any reveal; this is the pause-then-paragraph a real turn has, repeatably.
   { id: "bursty-60", label: "60 tok/s in bursts · like a real provider", tokensPerSecond: 60, gapsMs: [40, 120, 60, 350, 80, 1200, 150, 90] },
   { id: "fast-250", label: "250 tok/s", tokensPerSecond: 250 },
   { id: "fast-1000", label: "1000 tok/s", tokensPerSecond: 1000 },
@@ -100,16 +55,7 @@ const REPLAY_ALIASES = new Map([
   ["replay-katex-compendium", { pace: "paced-60", replay: KATEX_COMPENDIUM }],
 ]);
 
-/**
- * How much, as the thinking levels.
- *
- * A level is a string a harness is free to interpret, and what this one does
- * with it is decide how much to send back -- so the level is written as the
- * amount. Speed and amount are independent questions: a short run says a turn
- * starts and settles cleanly, a long one says it still paints after tens of
- * thousands of tokens, which is where a leak or a growing reconcile shows and
- * a short run never would.
- */
+// A long run is where a leak or a growing reconcile shows, which a short run never would.
 export const TEST_STREAM_AMOUNTS = Object.freeze([
   { id: "400 tokens", tokens: 400 },
   { id: "2000 tokens", tokens: 2000 },
@@ -120,9 +66,8 @@ export const TEST_STREAM_AMOUNTS = Object.freeze([
 export const DEFAULT_SPEED_ID = "fast-250";
 export const DEFAULT_AMOUNT_ID = "2000 tokens";
 const MAX_TOKENS = 100_000;
-// setTimeout cannot be trusted below a couple of milliseconds, so past roughly
-// 500 tokens/s a tick emits several tokens rather than pretending to fire more
-// often than it can. The rate stays honest; only the deltas-per-tick changes.
+// setTimeout cannot be trusted below a couple of milliseconds, so past roughly 500 tokens/s a tick emits several
+// tokens; the rate stays honest, only the deltas-per-tick change.
 const TICK_FLOOR_MS = 2;
 // More than this in one turn is a typo in the prompt rather than a request.
 const MAX_TOOL_RUNS = 8;
@@ -140,39 +85,19 @@ export const speedFor = (id) => TEST_STREAM_SPEEDS.find((speed) => speed.id === 
 export const amountFor = (id) => TEST_STREAM_AMOUNTS.find((amount) => amount.id === id)
   || TEST_STREAM_AMOUNTS.find((amount) => amount.id === DEFAULT_AMOUNT_ID);
 
-/**
- * A one-off amount, taken from the prompt when it names one.
- *
- * Typing "1200t" streams 1200 tokens whatever the level says, for a figure the
- * four presets do not cover. Anything else uses the level, because the prompt
- * is not a question here and refusing it would only mean the tester has to
- * remember the syntax.
- */
 export function amountFromPrompt(message, fallback) {
   const match = /(\d+)\s*t\b/i.exec(String(message || ""));
   if (!match) return fallback;
   return Math.min(MAX_TOKENS, Math.max(1, Number(match[1])));
 }
 
-/**
- * What else the prompt asks for, in the same spirit as the amount.
- *
- * The prompt is not a question here, so it is the one place a tester can steer
- * a run without leaving the composer: "3 tools" runs three tool calls, "approve"
- * makes each of them ask first. Everything is deterministic -- the same prompt
- * produces the same turn, which is what makes this backend worth measuring
- * against.
- */
 function toolRunsFromPrompt(message) {
   const match = /(\d+)\s*tools?\b/i.exec(String(message || ""));
   if (match) return Math.min(MAX_TOOL_RUNS, Math.max(0, Number(match[1])));
   return /\btools?\b/i.test(String(message || "")) ? 1 : 0;
 }
 
-/**
- * "think" opens the turn with a thinking block, so a trace has something to
- * fold; "think 900" sets its length. A number ending in t is the answer's.
- */
+// A number ending in t is the answer's length, not the thinking's.
 const THINKING_TOKENS = 400;
 function thinkingFromPrompt(message) {
   const match = /\bthink(?:ing)?\b(?:\s+(\d+)(?!\d|\s*t\b))?/i.exec(String(message || ""));
@@ -181,9 +106,7 @@ function thinkingFromPrompt(message) {
 }
 
 const narrationFromPrompt = (message) => /\bnarrat/i.test(String(message || ""));
-/** "rich" streams real-looking text: typographic punctuation, Markdown, formulas, code (test-stream-replays.js). */
 const richFromPrompt = (message) => /\brich\b/i.test(String(message || ""));
-/** "markdown", "katex", and "katex limits" replay whole recorded replies (test-stream-replays.js). */
 function replayFromPrompt(message) {
   const text = String(message || "");
   if (/\bkatex(?:\s+|-)limits\b/i.test(text)) return KATEX_LIMITS;
@@ -191,11 +114,9 @@ function replayFromPrompt(message) {
   if (/\bmarkdown\b/i.test(text)) return MARKDOWN_MIX;
   return null;
 }
-/** What a refused call returns to the model. */
 export const TEST_STREAM_DENIED = "Denied: the user did not allow this call.";
 const approvalFromPrompt = (message) => /\bapprove|approval\b/i.test(String(message || ""));
 
-/** The tool a run calls, and what it returns. Fixed, like everything else. */
 export const TEST_STREAM_TOOL = Object.freeze({
   name: "read_file",
   kind: "read",
@@ -204,36 +125,25 @@ export const TEST_STREAM_TOOL = Object.freeze({
   output: "docs/testing.md: approach selection, commands, safety boundaries, evidence.",
 });
 
-// About four characters a token, as a provider's tokenizer cuts prose, with
-// whitespace riding at the front of the token after it.
+// About four characters a token, as a provider's tokenizer cuts prose.
 const replayTokenCache = new Map();
 export function replayTokens(text) {
   if (!replayTokenCache.has(text)) replayTokenCache.set(text, text.match(/\s*\S{1,4}|\s+/g) || []);
   return replayTokenCache.get(text);
 }
 
-/** The nth token of a text played over and over, for a run longer than the text. */
 const loopedToken = (text, index) => { const tokens = replayTokens(text); return tokens[index % tokens.length]; };
 
-/** The nth token of the stream, including the paragraph breaks. */
 export function tokenAt(index) {
   const word = WORDS[index % WORDS.length];
   if (index > 0 && index % 60 === 0) return `\n\n${word} `;
   return `${word} `;
 }
 
-/**
- * The steps a turn will take, decided before it writes a word.
- *
- * Shaped as models were recorded working with tools (Muse, GPT, Gemini, Codex
- * chats on this server): each message opens with its own thinking, then its
- * call, and the long
- * text is the final answer alone. Most calls have no text before them (about
- * one in seven had any), so narration is asked for: "narrate" puts a sentence
- * before each call. Thinking is shared across the messages; the
- * answer is the amount asked for. Deciding it up front is what makes a run
- * repeatable: the same prompt produces the same turn, down to which token the
- * call lands on.
+/*
+ * Shaped as real models work with tools: each message opens with its own thinking, then its call, and the long text is
+ * the final answer alone. Most real calls have no text before them, so narration is opt-in. Planned up front so the
+ * same prompt produces the same turn, down to which token the call lands on.
  */
 const NARRATION = " I'll read docs/testing.md to see what it says first.";
 function planTurn(tokens, toolRuns, thinking = 0, narrate = false) {
@@ -250,7 +160,6 @@ function planTurn(tokens, toolRuns, thinking = 0, narrate = false) {
   return steps;
 }
 
-/** What Conduit keeps about an attachment, as this backend would record it. */
 const attachmentSummary = (attachments) => attachments.map((item) => ({
   id: item.id, name: item.name || item.id, mimeType: item.mimeType || "application/octet-stream",
 }));
@@ -262,11 +171,8 @@ export class TestStreamAdapter extends EventEmitter {
       capabilities: TEST_STREAM_CAPABILITIES,
       backend: { protocol: "native_api", implementation: "test-stream", installationId: "conduit-test-stream" },
       extras: (record) => ({ rate: speedFor(record.model).label, thinkingLevel: record.thinkingLevel, tokens: record.tokens }),
-      // Nothing outside Conduit knows anything about these chats, so the
-      // statements are the transcript, exactly as they are for ChatGPT Web, and
-      // each is durable before it is broadcast: a test chat reloads, survives a
-      // restart and forks like any other. Without a data directory (the unit
-      // tests) the journal is held in memory instead.
+      // Nothing outside Conduit knows these chats, so the statements are the transcript, each durable before it is
+      // broadcast.
       onPublish: (record, event) => {
         if (event.type === "transcript_op") this.appendJournal(record.chatId, event);
       },
@@ -317,8 +223,6 @@ export class TestStreamAdapter extends EventEmitter {
       events: [],
       generationSeq: 0,
       timer: null,
-      // Everything a real harness holds between turns: what is waiting to be
-      // said, what it is waiting to be told, and what it has spent.
       queue: { steering: [], followUp: [] },
       streamed: 0,
       messages: 0,
@@ -331,15 +235,11 @@ export class TestStreamAdapter extends EventEmitter {
     if (!record) throw adapterError("No test stream session", "backend_unavailable", 404);
     if (record.active) throw adapterError("Test stream session is busy", "generation_limit", 409);
     const generationId = crypto.randomUUID();
-    // The browser drew this row before it sent the prompt, so it already has a
-    // name. Inventing one here would state a second row for a message that is
-    // on screen: the same prompt twice, until a reload agreed with neither.
+    // The browser drew this row before it sent the prompt; inventing an id would state a second row for it.
     const userMessageId = options?.clientUserMessageId || crypto.randomUUID();
     const replay = REPLAY_ALIASES.get(record.model)?.replay || replayFromPrompt(message);
     record.tokens = replay ? replayTokens(replay).length : amountFromPrompt(message, amountFor(record.thinkingLevel).tokens);
     beginTurn(record, generationId);
-    // Both rows are named before a byte of the answer exists, so nothing
-    // arriving later needs a place worked out for it.
     this.publish(record, messageOpen({ id: userMessageId, role: "user", generationId,
       content: message, timestamp: new Date().toISOString(),
       ...(options?.attachments?.length ? { attachments: attachmentSummary(options.attachments) } : {}) }));
@@ -348,9 +248,7 @@ export class TestStreamAdapter extends EventEmitter {
       generationId,
       answers: userMessageId,
       prompts: [userMessageId],
-      // A tool's id is the turn's as well as its place in it: tool records are
-      // keyed by id for the whole chat, so a second turn's call_1 would be
-      // folded over the first's.
+      // Tool records are keyed by id for the whole chat, so a second turn's call_1 would be folded over the first's.
       steps: planTurn(record.tokens, toolRunsFromPrompt(message), thinkingFromPrompt(message), narrationFromPrompt(message))
         .map((step) => (step.toolCallId ? { ...step, toolCallId: `${step.toolCallId}_${generationId.slice(0, 8)}` } : step)),
       step: 0,
@@ -365,28 +263,17 @@ export class TestStreamAdapter extends EventEmitter {
       blocks: [],
       contentIndex: 0,
     };
-    // Accepted, and now working. Both transitions are stated because both are
-    // in the contract's lifecycle and a client that missed the second would
-    // show a turn as submitting for as long as it ran.
+    // A client that missed this transition would show the turn as submitting for as long as it ran.
     this.publish(record, { type: "status", generationId, phase: "running", seq: ++record.generationSeq,
       status: "working", activity: "working", detail: null });
     this.openAnswer(record);
-    // A turn can open on its call, as a model that neither thinks nor narrates does -- a tick
-    // later, as a streamed step's first token comes, so a message sent with the prompt is read after it.
+    // A turn that opens on its call makes it a tick later, so a message sent with the prompt is read after it.
     const turn = record.turn;
     if (turn.steps[0].kind === "tool") record.timer = setTimeout(() => { record.timer = null; if (record.turn === turn && !record.stopping) this.runTool(record, turn.steps[0]); }, 0);
     else this.runStream(record);
     return generationId;
   }
 
-  /**
-   * Open the message this turn is about to write into.
-   *
-   * A turn writes more than one whenever it calls a tool: the message that
-   * asked for the tool is finished when the call is made, and what comes after
-   * the result is a message of its own. That is how every real harness records
-   * it, so it is how this one does.
-   */
   openAnswer(record) {
     const turn = record.turn;
     turn.messageId = `assistant-${turn.generationId}-${turn.messages = (turn.messages || 0) + 1}`;
@@ -401,15 +288,8 @@ export class TestStreamAdapter extends EventEmitter {
       seq: ++record.generationSeq, messageId: turn.messageId });
   }
 
-  /**
-   * Emit what the clock says is owed, then sleep until the next token is due.
-   *
-   * The count comes from elapsed time rather than from how many ticks have
-   * fired, so a tick that arrives late catches up in one go and the run still
-   * takes the time it said it would. Without that, every measurement taken
-   * during a slow frame would be reading this scheduler's drift rather than
-   * the renderer's cost.
-   */
+  // The count comes from elapsed time, not ticks fired, so measurements read the renderer's cost rather than this
+  // scheduler's drift.
   runStream(record) {
     const speed = speedFor(record.model);
     const intervalMs = Math.max(TICK_FLOOR_MS, Math.floor(1000 / speed.tokensPerSecond));
@@ -445,7 +325,6 @@ export class TestStreamAdapter extends EventEmitter {
       }
       if (burst) emit(burst);
       if (turn.sent >= target) {
-        // The answer's text is the block after the thinking that preceded it.
         if (blockKind === "thinking") turn.textIndex = turn.contentIndex += 1;
         this.advance(record);
         return;
@@ -455,21 +334,14 @@ export class TestStreamAdapter extends EventEmitter {
     record.timer = setTimeout(tick, nextDelay());
   }
 
-  /**
-   * The step is done. Take a queued message if one is waiting, then go on.
-   *
-   * A step boundary is where a real harness notices its queue: mid-token would
-   * cut a word in half, and waiting for the turn to end would make steering
-   * indistinguishable from a follow-up.
-   */
+  // A step boundary is where a real harness notices its queue: waiting for the turn to end would make steering
+  // indistinguishable from a follow-up.
   advance(record) {
     const turn = record.turn;
     if (!turn) return;
     const finished = turn.steps[turn.step];
     turn.step += 1;
     const next = turn.steps[turn.step];
-    // A harness reads its queue between requests: after a tool it joins the
-    // turn, and once the answer has ended it is the next turn (see finish).
     // Never between thinking and the answer it leads to.
     if (next && finished?.kind !== "thinking" && this.takeQueued(record)) return;
     if (!next) return this.finish(record, "stop");
@@ -477,14 +349,6 @@ export class TestStreamAdapter extends EventEmitter {
     this.runStream(record);
   }
 
-  /**
-   * Call the tool, asking first when the run was told to ask.
-   *
-   * The call is a block of the message that made it, exactly as a real harness
-   * writes it, and the result is a tool record beside the transcript rather
-   * than inside it. Both are stated as ops; the activity events beside them are
-   * the paint that draws the call arriving.
-   */
   runTool(record, step) {
     const turn = record.turn;
     const { generationId, messageId } = turn;
@@ -494,9 +358,7 @@ export class TestStreamAdapter extends EventEmitter {
       step.called = true;
       turn.contentIndex += 1;
       const contentIndex = turn.contentIndex;
-      // The call paints like any other block: its input arrives as text into a
-      // block of kind `tool_call`, which is what the reducers at both ends build
-      // a call out of.
+      // The reducers at both ends build a call out of a `tool_call` block.
       this.publish(record, { type: "assistant_content", generationId, phase: "delta",
         seq: ++record.generationSeq, messageId, contentIndex, blockKind: "tool_call",
         delta: JSON.stringify(input) });
@@ -515,8 +377,6 @@ export class TestStreamAdapter extends EventEmitter {
       seq: ++record.generationSeq, toolCallId, name: TEST_STREAM_TOOL.name,
       output: TEST_STREAM_TOOL.output, isError: false });
     this.publish(record, toolClose({ toolCallId, output: TEST_STREAM_TOOL.output, generationId }));
-    // The message that called the tool is finished with. What answers the
-    // result is the next message of the turn.
     this.closeAnswer(record, "toolUse");
     this.openAnswer(record);
     this.advanceAfterTool(record);
@@ -532,7 +392,6 @@ export class TestStreamAdapter extends EventEmitter {
     this.runStream(record);
   }
 
-  /** Ask before running, and stop until the answer comes back. */
   askApproval(record, step) {
     const requestId = `approval-${step.toolCallId}`;
     this.publish(record, ask(record, requestId, { id: requestId, kind: "confirm",
@@ -553,16 +412,11 @@ export class TestStreamAdapter extends EventEmitter {
     this.publish(record, pending.event);
     this.publishState(record);
     if (!record.turn) return null;
-    // A permission prompt fails closed, the same as the real harnesses: only an
-    // explicit approval runs the step, so an ambiguous or unrecognised response
-    // refuses rather than letting this backend vouch for behaviour the real one
-    // would have denied.
+    // Fails closed, as the real harnesses do: an ambiguous or unrecognised response refuses.
     const approved = response.cancelled || response.dismissed ? false
       : typeof response.confirmed === "boolean" ? response.confirmed
         : ["yes", "approve"].includes(String(response.value ?? "").toLowerCase());
     if (!approved) {
-      // Refused: the call fails with the refusal as its result, and the model,
-      // told, then goes on.
       const { generationId } = record.turn;
       const toolCallId = pending.step.toolCallId;
       this.publish(record, { type: "tool_activity", phase: "end", generationId, seq: ++record.generationSeq,
@@ -578,14 +432,6 @@ export class TestStreamAdapter extends EventEmitter {
     return null;
   }
 
-  /**
-   * Take one queued message, if the turn has reached a place to take it.
-   *
-   * Steering is answered inside the running turn: the message is committed
-   * where the turn had got to, and what comes after it is a new message
-   * answering that. A follow-up waits for the turn to end, which is what the
-   * two queues mean.
-   */
   takeQueued(record) {
     const turn = record.turn;
     if (!turn || !record.queue.steering.length) return false;
@@ -596,14 +442,12 @@ export class TestStreamAdapter extends EventEmitter {
     this.publishQueue(record);
     this.publish(record, messageOpen({ id: queued.messageId, role: "user",
       generationId: turn.generationId, content: queued.message, timestamp: new Date().toISOString() }));
-    // The prompt the turn moves on from is over now.
     for (const promptId of turn.prompts) {
       this.publish(record, turnSettle({ promptId, outcome: "complete", generationId: turn.generationId }));
     }
     turn.answers = queued.messageId;
     turn.prompts = [queued.messageId];
-    // What is left of the answer now answers the steer, and it gets a fresh
-    // budget so a message steered at the end still produces something.
+    // A fresh budget, so a message steered at the end still produces something.
     turn.steps = turn.steps.slice(0, turn.step).concat(planTurn(Math.max(40, Math.round(record.tokens / 4)), 0));
     turn.step = turn.steps.length - 1;
     this.openAnswer(record);
@@ -632,8 +476,7 @@ export class TestStreamAdapter extends EventEmitter {
     return {
       steering: steering.map((item) => item.message),
       followUp: followUp.map((item) => item.message),
-      // The identity is the one handed back when the message was queued, so a
-      // cleared message releases the attachments it was holding.
+      // The identity handed back when the message was queued, so a cleared message releases its attachments.
       discardedAttachmentIdentities: taken.filter((item) => item.attachments.length)
         .map((item) => ({ afterMessageId: item.messageId, ordinal: 0 })),
       discardedMessageIds: taken.map((item) => item.messageId),
@@ -654,13 +497,11 @@ export class TestStreamAdapter extends EventEmitter {
       contextUsage: this.contextUsage(record) });
   }
 
-  /** Finish the message being written, with the reason it stopped. */
   closeAnswer(record, stopReason) {
     const turn = record.turn;
     if (!turn?.messageId) return;
     const blocks = [
       ...(turn.thinking ? [{ kind: "thinking", contentIndex: 0, text: turn.thinking, redacted: false }] : []),
-      // A message that only thought and called has no text, as a model's has none.
       ...(turn.text ? [{ kind: "text", contentIndex: turn.textIndex || 0, text: turn.text }] : []),
       ...turn.blocks,
     ];
@@ -683,16 +524,12 @@ export class TestStreamAdapter extends EventEmitter {
     record.turn = null;
     const outcome = stopReason === "aborted" ? "interrupted" : "complete";
     endTurn(record, outcome);
-    // One user message for the prompt, one more for every steer taken mid-turn,
-    // and one assistant message per answer opened -- a turn that called a tool
-    // opened more than one.
+    // A turn that called a tool opened more than one assistant message.
     record.messages += (turn.userMessages || 1) + (turn.messages || 1);
     for (const pending of takeAll(record)) this.publish(record, pending.event);
     for (const promptId of turn.prompts) this.publish(record, turnSettle({ promptId, generationId: turn.generationId, outcome }));
     this.publish(record, turnEnded(record, outcome, turn.generationId));
     this.publishUsage(record);
-    // A follow-up waited for exactly this moment. It is a prompt of its own,
-    // which is the difference between the two queues.
     // A steer still waiting when the answer ended is ready too.
     const next = (stopReason !== "aborted" && record.queue.steering.shift()) || record.queue.followUp.shift();
     if (next) {
@@ -734,8 +571,7 @@ export class TestStreamAdapter extends EventEmitter {
 
   async setModel(id, model) {
     const record = this.get(id);
-    // Only the speed: how much comes back is the level's business, and changing
-    // one should not silently change the other.
+    // Only the speed: changing one should not silently change the amount.
     if (record) record.model = REPLAY_ALIASES.has(model) ? model : speedFor(model).id;
     return record?.model || DEFAULT_SPEED_ID;
   }
@@ -745,8 +581,7 @@ export class TestStreamAdapter extends EventEmitter {
     if (record) {
       const amount = amountFor(level);
       record.thinkingLevel = amount.id;
-      // A one-off amount named in a prompt applies to that prompt only, so the
-      // level is what the next one goes back to.
+      // A one-off amount named in a prompt applies to that prompt only.
       record.tokens = amount.tokens;
     }
     return record?.thinkingLevel || DEFAULT_AMOUNT_ID;
@@ -762,14 +597,7 @@ export class TestStreamAdapter extends EventEmitter {
 
   getCapabilities() { return TEST_STREAM_CAPABILITIES; }
 
-  /**
-   * What the turn so far looks like, for a browser that has just arrived.
-   *
-   * Reduced from the events this adapter published, with the same reducer the
-   * browser runs -- so a reconnecting client is given the view it would have
-   * built if it had never dropped the socket, and paint stays droppable for
-   * this backend too.
-   */
+  // The same reducer the browser runs, so a reconnecting client gets the view it would have built had it never dropped.
   replay(id) {
     const record = this.get(id);
     return record?.activeGeneration
@@ -802,13 +630,11 @@ export class TestStreamAdapter extends EventEmitter {
 
   publish(record, event) {
     const stamped = this.sessions.publish(record, event);
-    // The turn, folded as it is published. This is the server's copy: what a
-    // paused or reconnecting socket is restated from.
+    // The server's copy: what a paused or reconnecting socket is restated from.
     record.activeGeneration = reduceActiveGeneration(record.activeGeneration, stamped);
     return stamped;
   }
 
-  /** What the turn has spent, counted rather than reported by a provider. */
   contextUsage(record) {
     const tokens = record?.streamed || 0;
     return { tokens, contextWindow: CONTEXT_WINDOW, percentUsed: Math.round((tokens / CONTEXT_WINDOW) * 100) };
@@ -828,14 +654,7 @@ export class TestStreamAdapter extends EventEmitter {
     return this.contextUsage(record);
   }
 
-  /**
-   * Fold the context back down, as a harness with a model would.
-   *
-   * There is no history to summarise here -- the transcript is what it says and
-   * nothing is sent to anyone -- so what compaction means for this backend is
-   * exactly what the reader sees of it elsewhere: the context it has spent goes
-   * back to nothing, with the transcript left alone.
-   */
+  // There is no history to summarise, so compaction only takes the context spent back to nothing.
   async compact(id) {
     const record = this.get(id);
     if (!record) throw adapterError("No test stream session", "backend_unavailable", 404);
@@ -846,13 +665,7 @@ export class TestStreamAdapter extends EventEmitter {
     return { compacted: true };
   }
 
-  /**
-   * Cut the journal at an entry, and say what was asked there.
-   *
-   * A fork and a regenerate are the same cut: the history ends at the entry
-   * given, and the caller decides what to ask next. The prompt's text is
-   * returned so a regenerate can re-ask exactly what was asked before.
-   */
+  // A fork and a regenerate are the same cut; the prompt's text is returned so a regenerate can re-ask it.
   async fork(id, { nodeId } = {}) {
     const record = this.get(id);
     if (!record) throw adapterError("No test stream session", "backend_unavailable", 404);
@@ -860,8 +673,7 @@ export class TestStreamAdapter extends EventEmitter {
     const index = messages.findIndex((message) => message.id === nodeId);
     if (index < 0) throw adapterError("No such entry in this chat", "entry_not_found", 404);
     const source = messages[index];
-    // Everything from the entry on is gone, stated as one op rather than left
-    // for the browser to work out from a shorter transcript.
+    // Stated as one op rather than left for the browser to work out from a shorter transcript.
     this.publish(record, messageDrop({ messageId: nodeId, inclusive: true,
       generationId: record.generation?.id || null }));
     return { opaqueSession: record.chatId, text: source.content || "",
@@ -870,10 +682,7 @@ export class TestStreamAdapter extends EventEmitter {
 
   journalPath(chatId) { return this.dataDir ? path.join(this.dataDir, "journals", `${chatId}.jsonl`) : null; }
 
-  /**
-   * Keep a statement, without the number this process gave it: the sequence
-   * belongs to a log that dies with the process (as ChatGPT Web's journal).
-   */
+  // Without its seq: that belongs to a log that dies with the process.
   appendJournal(chatId, event) {
     const { log: _log, seq: _seq, ...durable } = event;
     const file = this.journalPath(chatId);
@@ -891,11 +700,9 @@ export class TestStreamAdapter extends EventEmitter {
     try { return fs.readFileSync(file, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)); } catch { return []; }
   }
 
-  /** Messages and tools folded out of the journal, as the browser folds the live ops. */
   fold(chatId) {
     const { messages, tools } = applyTranscriptOps({}, this.readJournal(chatId));
-    // A row still marked as arriving is one the process died holding; nothing
-    // is going to finish it now. A tool is kept only while its call is.
+    // A row still marked as arriving is one the process died holding; nothing will finish it now.
     const kept = messages.filter((message) => !message.streaming);
     const calls = new Set(kept.flatMap((message) => (message.blocks || []).map((block) => block.toolCallId).filter(Boolean)));
     return { messages: kept, tools: calls.size ? tools.filter((tool) => calls.has(tool.toolCallId)) : tools };
@@ -905,19 +712,11 @@ export class TestStreamAdapter extends EventEmitter {
 
   async readTranscript({ liveSessionId, chatId }) {
     const record = liveSessionId ? this.get(liveSessionId) : null;
-    // The journal is the whole chat, so there is never an earlier page, and
-    // the read says so rather than leaving the browser to decide.
+    // The journal is the whole chat, so there is never an earlier page.
     return { ...this.fold(chatId || record?.chatId), page: { before: null } };
   }
 
-  /**
-   * The chat as a tree, which is what a forkable history is.
-   *
-   * Linear until something is forked: the shape is the same either way, and
-   * what makes it a tree is that an entry can be cut and asked again.
-   * Every user message says so -- a prompt can be forked from or re-asked --
-   * and an answer can be neither, because re-asking an answer means nothing.
-   */
+  // An answer can be neither forked from nor re-asked: re-asking an answer means nothing.
   async readHistory(options) {
     const { messages } = await this.readTranscript(options);
     let child = null;

@@ -163,8 +163,6 @@ function storedConfig(config) {
   };
 }
 
-// The saved local selection, or the saved model's default, or the catalogue's
-// default when neither names something the catalogue still has.
 function localProfileFor(config, catalog) {
   for (const selection of [
     () => config.localSelection,

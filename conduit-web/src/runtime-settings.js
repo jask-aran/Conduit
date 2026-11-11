@@ -48,7 +48,7 @@ export class RuntimeSettingsStore {
 
   async save(patch = {}) {
     this.settings = normalizeRuntimeSettings({ ...this.settings, ...patch }, this.settings);
-    // One write at a time, each of the state as it then is (two at once shared the temporary file).
+    // One write at a time: two at once would share the temporary file.
     const write = (this.writing || Promise.resolve()).then(async () => {
       await writePrivateJson(this.filePath, this.settings);
     });

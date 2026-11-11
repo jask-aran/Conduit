@@ -5,10 +5,8 @@ const PREVIEW_LENGTH = 180;
 const CHANGE_LIMIT = 50;
 const RECENT_FILE_LIMIT = 8;
 
-// The folder's own files, newest first. Only the top level: a project folder
-// is where an agent writes its results, and a walk of a large tree would cost
-// the dashboard more than the list is worth. Null when the folder could not be
-// read (its device away, say), which is not the same as an empty one.
+// Only the top level: a walk of a large tree would cost the dashboard more than the list is worth. Null when the
+// folder could not be read (its device away, say), which is not the same as an empty one.
 async function listRecentFiles(root) {
   try {
     const { entries } = await listWorkspaceDirectory(root);
@@ -42,8 +40,8 @@ const opaqueThreadId = (chat) => typeof chat.backend?.opaqueSession === "string"
   ? chat.backend.opaqueSession
   : chat.backend?.opaqueSession?.threadId || null;
 
-// A chat's preview, kept while its last message and update stay the same:
-// reading ten transcripts on every open cost more than the rest of the page.
+// Kept while a chat's last message and update stay the same: reading ten transcripts on every open costs more than
+// the rest of the page.
 const previews = new Map();
 const previewKey = (chat) => `${chat.lastMessageAt || ""}|${chat.updatedAt || chat.createdAt || ""}`;
 
@@ -95,7 +93,6 @@ async function recentChatView(chat, project, process, readTranscript, backendSes
 
 export async function buildProjectDashboard({
   project,
-  // Where its files are: this server's path, or a device's folder (workspace-host.js).
   root = project.workingRoot,
   registry,
   processes,
@@ -184,8 +181,6 @@ export async function buildProjectDashboard({
     },
     git,
     changes,
-    // Uncommitted changes when there are any; otherwise what was written to
-    // the folder lately.
     recentFiles: changes.length ? [] : await listRecentFiles(root),
     recentChats,
   };

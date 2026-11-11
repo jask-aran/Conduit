@@ -1,10 +1,6 @@
 /*
- * The events of the runtime stream (GET /v0/runtime/stream), declared once: the hub-wide stream every client holds, not
- * a chat's own. The hub (runtime-hub.js publish and sendTo, which refuse a name not here; server/routes/runtime.js
- * for the ping) and the client (client/state/runtime.ts, whose handler takes only these names) both read this list,
- * so an event one side sends and the other never hears cannot drift in.
- *
- * Each name is mapped to what it tells. Plain data, no imports: the client takes it too.
+ * The hub refuses to send a name not here and the client's handler takes only these, so an event one side sends and
+ * the other never hears cannot drift in. Plain data, no imports: the client takes it too.
  */
 export const RUNTIME_EVENTS = /** @type {const} */ ({
   ping: "the stream is alive (every 15 s); silence is how a client tells a dead one",

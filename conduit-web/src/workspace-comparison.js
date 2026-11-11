@@ -3,8 +3,8 @@ import { resolveInspectorPath } from "./workspace-inspector.js";
 const MAX_BYTES = 1024 * 1024;
 const absent = (id) => !id || /^0+$/.test(id);
 
-// Resolve object IDs before reading content: staged comparisons must never use
-// the working copy, and a missing revision must not hide a Git read failure.
+// Object IDs are resolved before reading content: staged comparisons must never use the working copy, and a missing
+// revision must not hide a Git read failure.
 export async function readWorkspaceComparison(root, filePath, { scope = "changes", signal } = {}) {
   const resolved = await resolveInspectorPath(root, "", { kind: "directory" });
   if (typeof filePath !== "string" || !filePath || filePath.includes("\0") || filePath.includes("\\") || filePath.split("/").some((part) => !part || part === "." || part === "..") || filePath === ".conduit" || filePath.startsWith(".conduit/")) {

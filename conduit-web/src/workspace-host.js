@@ -4,23 +4,13 @@ import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/conte
 import { RemoteExecutionEnv } from "./nodes/remote-env.js";
 import { remoteNode } from "./place.js";
 
-/**
- * Where a workspace's files and Git live, under the workspace inspector.
- *
- * The inspector's rules -- which paths are safe, revisions, conflict checks,
- * Git parsing, caching -- are one body of code (plan decision 22). What
- * differs is only the host it runs on: this server's own disk, or a device
- * reached through its execution environment. Every path a host takes is
- * workspace-relative with `/` separators ("" is the root), so a device
- * resolves it by its own rules -- a Windows device included.
- *
- * Stats come back in one shape: `size`, `mtimeMs`, `birthtimeMs`, `dev`,
- * `ino`, and `isFile()`, `isDirectory()`, `isSymbolicLink()`.
+/*
+ * The inspector's rules are one body of code; only the host differs. Every path a host takes is workspace-relative
+ * with `/` separators ("" is the root), so a device resolves it by its own rules, a Windows device included.
  */
 
 const missing = (error) => (error?.code === "ENOENT" ? null : Promise.reject(error));
 
-/** This server's own disk. `root` is the workspace's absolute path here. */
 export function localHost(root, { runGit }) {
   const expected = path.resolve(root);
   let real = null;
@@ -80,11 +70,8 @@ const statOf = (info) => ({
   isFile: () => info.kind === "file", isDirectory: () => info.kind === "directory", isSymbolicLink: () => info.kind === "symlink",
 });
 
-/**
- * A device's folder, through its execution environment (src/nodes). A device
- * that is offline is said so at once: someone browsing is not a turn that can
- * pause. Git runs as `git` on the device, so it needs the shell grant there.
- */
+// An offline device is said so at once: someone browsing is not a turn that can pause. Git runs as `git` on the
+// device, so it needs the shell grant there.
 export function deviceHost({ hub, nodeId, place, label = "" }) {
   const env = new RemoteExecutionEnv({ hub, nodeId, place, cwd: label });
   const context = (signal) => {
@@ -100,7 +87,6 @@ export function deviceHost({ hub, nodeId, place, label = "" }) {
     throw Object.assign(new Error(result.error.message), { code,
       status: { permission_denied: 403, not_supported: 501 }[result.error.code] });
   };
-  // A path the device reported, as workspace-relative: null when it is not below the folder (or is the folder).
   const relativeOf = (reported) => {
     const base = String(label || "").replace(/[\\/]+$/, "");
     const value = String(reported || "");
@@ -110,12 +96,7 @@ export function deviceHost({ hub, nodeId, place, label = "" }) {
   return {
     local: false,
     key: `node:${nodeId}:${place.root}/${place.path || ""}`,
-    /**
-     * Watch the folder on the device: `onChange(paths)` with workspace-relative
-     * paths, or `null` for "anything may have changed" (an overflow, or a
-     * path outside it); `onLost()` once the watch has stopped (the device
-     * went away). Resolves to the watcher, to close.
-     */
+    // `onChange(null)` means anything may have changed (an overflow, or a path outside the folder).
     async watch(onChange, onLost) {
       const result = await env.watch([{ path: ".", recursive: true, exclude: { names: [".git", "node_modules"] } }], (change) => {
         if (change.error) return onLost();
@@ -190,10 +171,6 @@ export function deviceHost({ hub, nodeId, place, label = "" }) {
   };
 }
 
-/**
- * A project's workspace, for the inspector and turn checkpoints: its path on
- * this server, or its device's folder as a host. The one place that decides.
- */
 export function projectWorkspace(project, hub) {
   return remoteNode(project)
     ? deviceHost({ hub, nodeId: remoteNode(project), place: project.place, label: project.workingRoot })

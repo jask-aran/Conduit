@@ -4,15 +4,8 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { Transform } from "node:stream";
 
-/**
- * A terminal cannot render an image, so a pasted one is spooled to a file and
- * only its path is typed into the PTY. That is exactly what a native terminal
- * does when a file is dragged onto it, so the TUI reading the prompt sees an
- * ordinary bracketed paste of a path and needs no knowledge of Conduit.
- *
- * The spool is deliberately not chat attachment storage: nothing here belongs
- * to a chat, nothing is announced to a harness, and entries are disposable.
- */
+// Only a pasted image's path is typed into the PTY, as a native terminal does when a file is dragged onto it, so the
+// TUI sees an ordinary bracketed paste. Not chat attachment storage: nothing here belongs to a chat.
 const DEFAULT_MAX_PASTE_BYTES = 25 * 1024 * 1024;
 const DEFAULT_RETENTION_MS = 24 * 60 * 60 * 1000;
 
@@ -23,7 +16,7 @@ const SIGNATURES = [
   { type: "image/webp", extension: ".webp", test: (b) => b.subarray(0, 4).toString("ascii") === "RIFF" && b.subarray(8, 12).toString("ascii") === "WEBP" },
 ];
 
-/** The bytes decide the type. A pasted blob carries no name worth trusting. */
+// The bytes decide the type: a pasted blob carries no name worth trusting.
 export function sniffImage(head) {
   return SIGNATURES.find((signature) => signature.test(head)) || null;
 }
@@ -36,10 +29,7 @@ function pasteLimitError(maxBytes) {
   });
 }
 
-/**
- * The head is held back until it is long enough to identify, so a file is only
- * ever created once the bytes are known to be an image Conduit can name.
- */
+// The head is held back until it is long enough to identify, so a file is only created for a known image.
 function limitedStream(maxBytes, onHead) {
   let received = 0;
   let head = Buffer.alloc(0);
@@ -71,10 +61,7 @@ export class TerminalPasteStore {
     this.retentionMs = retentionMs;
   }
 
-  /**
-   * A pasted path is typed into a shell, so the filename must never need
-   * quoting: only a timestamp, a random suffix and a known extension.
-   */
+  // A pasted path is typed into a shell, so the filename must never need quoting.
   filename(extension, at = new Date()) {
     const stamp = at.toISOString().replace(/[:.]/g, "-").slice(0, 19);
     return `paste-${stamp}-${crypto.randomBytes(3).toString("hex")}${extension}`;
@@ -92,8 +79,7 @@ export class TerminalPasteStore {
       });
     });
 
-    // The name cannot be chosen before the type is known, so the bytes land in
-    // a scratch file and are renamed once the signature has been read.
+    // The name cannot be chosen before the type is known, so the bytes land in a scratch file first.
     const scratch = path.join(this.root, `.partial-${crypto.randomUUID()}`);
     try {
       await pipeline(readable, body, (await fsp.open(scratch, "wx")).createWriteStream());
@@ -109,7 +95,6 @@ export class TerminalPasteStore {
     return { name, path: file, size, type: sniffed.type };
   }
 
-  /** Spooled pastes are disposable; age them out so the directory stays bounded. */
   async prune(now = new Date()) {
     const entries = await fsp.readdir(this.root, { withFileTypes: true }).catch(() => []);
     const cutoff = now.getTime() - this.retentionMs;

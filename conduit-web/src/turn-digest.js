@@ -1,16 +1,7 @@
 /*
- * A turn's digest: what was done, in the person's terms rather than the tools' ("checked Gmail and searched the web"),
- * from what each step already records -- its name and kind, its facts (the hub names a connector call's services), a
- * spawn's agent, a file's path. Shared: the browser says a turn with it (jbot's chat, a thread's live status), the hub
- * an agent's activity (subagents.js).
- *
- * 1. Each step is an act on an object (`actOf`), or nothing: plumbing (finding a connector's tool, reading a guide,
- *    the reply itself sent with `message`) is how it worked, not what it did. `own`: the steps are jbot's, so its own
- *    folder and tools are named for what they are to the person ("updated its memory"); elsewhere a file is a file.
- * 2. Acts on one object are one, counted where they count (commands, pages, agents), and ranked by how far they
- *    reached into the person's world: what was sent, changed or asked; their accounts; the web; this machine.
- * 3. Said settled as the top two and how many more (`digestLine`); live, the act under way in its present tense
- *    (`doingOf`), so the live line and the settled one use the same words.
+ * Plumbing (finding a connector's tool, reading a guide, the reply itself) is how a turn worked, not what it did, so
+ * it is no act. Acts rank by how far they reached into the person's world: what was sent, changed or asked; their
+ * accounts; the web; this machine. The live line and the settled one share their words.
  */
 
 const ownFile = (path) => {
@@ -26,10 +17,9 @@ const host = (subject) => { try { return new URL(subject).hostname.replace(/^www
 const toolName = (name) => String(name || "").replace(/mcp__([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)__([\w.-]+)/g, (_, service, tool) => `${service[0].toUpperCase()}${service.slice(1)} ${tool}`);
 const PLUMBING = /(^| )actions$|^action details$|'s guide$|^a program in /;
 const OWN_TOOLS = { memory: "its memory", chats: "your chats", schedule: "its schedules", watch: "its watches" };
-/* A tool by its name, for the moment before it is classified (its kind arrives with its facts). */
+// For the moment before a step is classified: its kind arrives with its facts.
 const NAME_KINDS = { bash: "command", web_search: "search", fetch_content: "fetch", source_check: "fetch" };
 
-/** One step as an act, or null for plumbing. step: { name, kind, subject, facts, input, spawn, agent }. */
 export function actOf(step, failed = false, own = false) {
   const name = step.name || "", facts = step.facts, subject = step.subject || "";
   const known = facts?.kind || step.kind || "other";
@@ -59,7 +49,6 @@ export function actOf(step, failed = false, own = false) {
     return { verb: ["checking", "checked"], object: services, rank: 2 };
   }
   if (own) {
-    // jbot's own tools: its inbox, routines and feeds, the chats it starts.
     if (/(^|_)inbox$/.test(name)) {
       const action = String(step.input?.action || "");
       return act(/^(handle|dismiss|address|reopen)$/.test(action) ? { verb: ["sorting", "sorted"], object: "its inbox", rank: 2 }
@@ -87,8 +76,6 @@ export function actOf(step, failed = false, own = false) {
   }
 }
 
-/** Steps' acts, one per verb and object, counted, most far-reaching first (then in the order they happened).
- *  steps: [{ step, failed }]. */
 export function digestActs(steps, own = false) {
   const acts = new Map();
   let at = 0;
@@ -107,7 +94,6 @@ export function digestActs(steps, own = false) {
 }
 
 const said = (act) => `${act.verb[1]} ${act.count > 1 && act.many ? `${act.count} ${act.many}` : act.object}`;
-/** Settled: "checked Gmail and searched the web", "…, and 2 more"; "" when nothing was done to tell. */
 export function digestLine(acts) {
   if (!acts.length) return "";
   const [first, second] = acts;
@@ -115,7 +101,6 @@ export function digestLine(acts) {
   return second ? `${said(first)} and ${said(second)}${more > 0 ? `, and ${more} more` : ""}` : said(first);
 }
 
-/** Live: the step under way said in its present tense ("checking Gmail"); plumbing under way is finding the tool. */
 export function doingOf(step, own = false) {
   if (!step.name || step.name === "tool") return "using its tools";
   const act = actOf(step, false, own);

@@ -9,25 +9,19 @@ import { localHost } from "./workspace-host.js";
 
 export const MAX_PREVIEW_BYTES = 25 * 1024 * 1024;
 const GIT_COMMAND_TIMEOUT_MS = 10_000;
-// One cold inspection alone wants six git processes -- status, three numstat
-// diffs, a rev-parse -- so a cap of four made it queue against itself before
-// anything else on the machine had asked for a thing.
+// One cold inspection alone wants six git processes, so a lower cap makes it queue against itself.
 export const MAX_CONCURRENT_GIT_PROCESSES = 8;
 const UNTRACKED_READ_BATCH = 8;
 const MAX_DIRECTORY_ENTRIES = 500;
 const MAX_FILE_SNIFF_BYTES = 4 * 1024;
 const INSPECTION_CACHE_MS = 2_000;
-// Rebuilding the watch walks the tree again (seconds on a large checkout), so
-// it outlives a pause in polling -- a hidden tab, a closed viewer.
+// Rebuilding the watch walks the tree again (seconds on a large checkout), so it outlives a pause in polling.
 const WORKSPACE_WATCH_IDLE_MS = 60_000;
 const MAX_CHANGED_WORKSPACE_PATHS = 1_000;
 const gitSlots = { active: 0, waiters: [] };
 const inspections = new Map();
 const workspaceWatches = new Map();
-// Who hears that a watched workspace changed (server.js tells the clients), by
-// the tags its version readers gave it (their project ids). The first change
-// is told at once, then at most one more each quarter second while changes
-// keep coming, so an install's thousand writes are a few.
+// The first change is told at once, then at most one more each quarter second, so an install's thousand writes are a few.
 const workspaceListeners = new Set();
 const WORKSPACE_TELL_MS = 250;
 
@@ -147,7 +141,7 @@ function prefixText(prefix) {
   }
 }
 
-/** Classify a bounded prefix, using a known extension only when magic is absent. */
+// A known extension is used only when magic is absent.
 export function classifyWorkspaceFile(relativePath, prefix = Buffer.alloc(0)) {
   const lower = prefix.toString("latin1").toLowerCase();
   if (hasBytes(prefix, Buffer.from("%PDF-"))) return { kind: "pdf", mime: "application/pdf" };
@@ -231,7 +225,6 @@ function terminateProcess(child) {
   if (child.pid) void terminate(child, { graceMs: 500, group: true });
 }
 
-/** Run one Git command with a process cap, hard deadline, bounded output, and cancellation. */
 export async function runBoundedGit(root, args, { signal, maxBuffer = 64 * 1024, timeoutMs = GIT_COMMAND_TIMEOUT_MS, onSpawn } = {}) {
   await acquireGitSlot(signal);
   try {
@@ -277,9 +270,8 @@ export async function runBoundedGit(root, args, { signal, maxBuffer = 64 * 1024,
       child.stderr.on("data", (chunk) => { stderr = append(stderr, chunk, "stderr"); });
       child.on("error", (error) => finish(terminalError || error));
       child.on("exit", () => {
-        // A terminated command's stdio can remain open briefly (or be held by a
-        // descendant). Its output is intentionally discarded, so do not hold a
-        // global inspection slot waiting for `close` after cancellation.
+        // A terminated command's stdio can stay open (a descendant may hold it); its output is discarded, so the
+        // slot is not held waiting for `close`.
         if (terminalError) finish(terminalError);
       });
       child.on("close", (code) => {
@@ -312,19 +304,11 @@ function safeSegments(relativePath = "") {
   return segments;
 }
 
-/**
- * The host a workspace's files are on: an absolute path is this server's
- * disk; a host from workspace-host.js (a device's folder) is used as given.
- */
 export function workspaceHost(root) {
   return typeof root === "string" ? localHost(root, { runGit: runBoundedGit }) : root;
 }
 
-/**
- * A workspace-relative path, checked segment by segment: no `..`, no
- * `.conduit`, no symlink anywhere along it. `path` is its absolute path on
- * this server, or null for a device's folder; `host` reads and writes it.
- */
+// Checked segment by segment: no `..`, no `.conduit`, no symlink anywhere along it.
 export async function resolveInspectorPath(root, relativePath = "", { kind = null } = {}) {
   const host = workspaceHost(root);
   await host.checkRoot();
@@ -417,11 +401,8 @@ function scheduleWorkspaceWatchClose(record) {
 }
 
 /*
- * A recursive watch on Linux walks the whole tree synchronously as it starts
- * (3s for this repository's ~22k directories, node_modules included), and
- * every request waits on the event loop meanwhile. Here the walk runs on a
- * worker thread and changes come back as messages. `ready` settles once the
- * watch is live; versions asked before then compare the visible paths.
+ * A recursive watch on Linux walks the whole tree synchronously as it starts (seconds on a large checkout), blocking
+ * every request meanwhile, so the walk runs on a worker thread.
  */
 const WATCH_WORKER_SOURCE = `
 const { parentPort, workerData } = require("node:worker_threads");
@@ -454,9 +435,7 @@ function watchOffThread(root, _options, listener) {
 
 function startWorkspaceWatch(record) {
   if (record.watcher || record.fallback) return;
-  // A device's folder is watched on the device; while it cannot be (offline,
-  // or its watch stopped), the visible paths are polled and the watch is tried
-  // again a little later.
+  // While a device's folder cannot be watched, the visible paths are polled and the watch is tried again later.
   if (!record.host.local) {
     if (!record.host.watch || Date.now() < (record.retryAt || 0)) {
       record.polling = true;
@@ -523,7 +502,6 @@ async function scanWorkspacePaths(record, paths) {
   record.pathStats = next;
 }
 
-/** Return one shared workspace-change version for the currently visible paths. */
 export async function readWorkspaceVersion(root, { paths = [], watchImpl = watchOffThread, tag = null } = {}) {
   const resolved = await resolveInspectorPath(root, "", { kind: "directory" });
   const key = resolved.host.key;
@@ -538,9 +516,8 @@ export async function readWorkspaceVersion(root, { paths = [], watchImpl = watch
   record.closeTimer = null;
   try {
     startWorkspaceWatch(record);
-    // Until the watch is live (a recursive watch of a large tree takes
-    // seconds to walk), the visible paths are compared instead of waiting,
-    // and once more after, for a change made while it came up.
+    // Until the watch is live the visible paths are compared instead of waiting, and once more after, for a change
+    // made while it came up.
     const watcher = record.watcher;
     if (record.fallback || record.polling || !watcher?.checked) {
       const live = watcher?.live;
@@ -552,8 +529,7 @@ export async function readWorkspaceVersion(root, { paths = [], watchImpl = watch
       record.fullRefresh = false;
       record.changedPaths = new Set();
     }
-    // Whether a change is told as it happens (onWorkspaceChange), or only
-    // found by asking again: the reader can ask less often while it is.
+    // While changes are told as they happen, the reader can ask less often.
     const told = Boolean(record.watcher?.checked) && !record.polling && !record.fallback;
     return { version: record.version, changedPaths, told };
   } finally {
@@ -707,14 +683,8 @@ function parseStatus(output) {
     .map((record) => ({ status: record.slice(0, 2), path: record.slice(3) }));
 }
 
-/**
- * Branch, upstream and divergence, from the header `status -b` already prints.
- *
- * Asking git separately cost three more processes -- branch --show-current, a
- * rev-parse for @{upstream} and a rev-list to count -- and the last two ran
- * after everything else rather than alongside it. Git has already worked all of
- * this out by the time it prints the header.
- *
+/*
+ * Read from the header `status -b` already prints, which saves three git processes.
  *   ## main...origin/main [ahead 1, behind 2]
  *   ## main                     (no upstream)
  *   ## HEAD (no branch)         (detached)
@@ -789,12 +759,8 @@ async function inspectOverview(root, { signal, git }) {
   ]);
   const { branch, upstream, ahead, behind } = parseBranchHeader(status);
   const files = parseStatus(status).map((file) => ({ ...file, stagedCounts: stagedCounts.get(file.path) ?? null, workingCounts: workingCounts.get(file.path) ?? null, headCounts: headCounts.get(file.path) ?? null }));
-  // Git numstat excludes untracked files. Bound their total read cost, and do
-  // not traverse grouped folders just to paint a count in the list. These are
-  // read a batch at a time rather than one after another: a hundred round trips
-  // to the disk in series is the slowest part of inspecting a workspace that
-  // has just been cloned or has a large build directory, and none of them
-  // depends on the one before.
+  // Git numstat excludes untracked files, so they are read here, bounded, in batches: a hundred round trips in series
+  // is the slowest part of inspecting a fresh clone, and none depends on the one before.
   let remainingBytes = 4 * 1024 * 1024;
   const candidates = files.filter((file) => file.status === "??" && !file.path.endsWith("/")).slice(0, 100);
   const countLines = async (file) => {
@@ -895,7 +861,7 @@ function inspectionFor(root, key, git, { reuse = false } = {}) {
   return record;
 }
 
-/** Git on the workspace's host; a `runGit` given in (tests) runs at the local path instead. */
+// A `runGit` given in (tests) runs at the local path instead.
 const gitFor = (resolved, runGit) => (runGit === runBoundedGit || !resolved.path
   ? (args, options) => resolved.host.git(args, options)
   : (args, options) => runGit(resolved.path, args, options));

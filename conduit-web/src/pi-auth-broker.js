@@ -38,8 +38,7 @@ function messageFor(errorValue) {
   return errorValue instanceof Error ? errorValue.message : String(errorValue || "Authentication failed");
 }
 
-// What a provider's API key goes with, asked for beside it (Pi's own login prompts for these), stored on the credential's
-// `env`; the server's environment fills any left empty.
+// Stored on the credential's `env`; the server's environment fills any left empty.
 const KEY_FIELDS = {
   "cloudflare-workers-ai": [{ name: "CLOUDFLARE_ACCOUNT_ID", label: "Account ID" }],
   "cloudflare-ai-gateway": [{ name: "CLOUDFLARE_ACCOUNT_ID", label: "Account ID" }, { name: "CLOUDFLARE_GATEWAY_ID", label: "Gateway ID" }],
@@ -56,10 +55,7 @@ export class PiAuthBroker {
     this.attempt = null;
   }
 
-  /**
-   * This installation's device ID, as a provider's sign-in asks for one (Sign in with ChatGPT names the agent host by
-   * it): made on first use beside the auth file, the same on every later sign-in.
-   */
+  // Kept the same on every sign-in: Sign in with ChatGPT names the agent host by it.
   deviceId() {
     const file = path.join(path.dirname(this.authFile || "."), "conduit-device-id");
     try {
@@ -71,7 +67,6 @@ export class PiAuthBroker {
     return id;
   }
 
-  /** What each stored credential is, a sign-in or a key, so its account offers the matching action. */
   async storedKinds() {
     const stored = this.authFile ? await readAuthFile(this.authFile) : {};
     return Object.fromEntries(Object.entries(stored).map(([id, credential]) => [id, credential?.type === "oauth" ? "oauth" : "key"]));

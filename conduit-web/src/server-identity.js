@@ -8,38 +8,12 @@ import { PRIVATE_HOST } from "./network-hosts.js";
 import { writePrivateFile } from "./private-file.js";
 
 /*
- * Who this server is, and where it answers.
- *
- * A client reaching the same machine by two addresses had no way to know it
- * was one server, because nothing it could see said so -- and asking an
- * unauthenticated endpoint "who are you" would let anything on the network
- * claim to be somewhere a token is already held. So the answer is given only
- * over an authenticated connection, which is the point of this file.
- *
- * The id is stable across restarts and means nothing on its own: it is not a
- * secret, not a credential, and grants nothing. It exists so two addresses can
- * be recognised as one server rather than kept apart forever.
- *
- * The key pair is what lets an address be checked at all. A client that has
- * signed in once holds the public half; afterwards it can hand any address a
- * random nonce and ask for it back signed. That is asked before a token is
- * sent rather than after, which is the whole difficulty -- the usual way to
- * check is to authenticate, and authenticating is the thing that would give a
- * stranger the credential.
- *
- * It is weaker than it looks, and the limit is worth stating where somebody
- * will read it. The signature covers `<id>.<nonce>` and says nothing about the
- * address, so it proves the private key exists somewhere reachable, not that
- * the thing that answered holds it. Something on a hostile network can forward
- * the nonce to the real server over any route it has and relay the answer
- * back. A relay is stopped by binding the proof to the channel, and cleartext
- * HTTP has no channel to bind to -- see `docs/pinned-tls-plan.md`.
- *
- * The private half never leaves the machine and is not a login: possessing it
- * proves identity and grants nothing.
+ * The id is not a secret and grants nothing: it lets two addresses be recognised as one server.
+ * The signed nonce proves the private key exists somewhere reachable, not that the thing that answered holds it: it
+ * says nothing about the address, so something on a hostile network can relay it, and cleartext HTTP has no channel to
+ * bind the proof to.
  */
 
-/** What a path costs to establish, and where it can be reached from. */
 export const PATH_SCOPES = Object.freeze({
   loopback: "loopback",
   private: "private",
@@ -53,23 +27,14 @@ export function scopeForHost(hostname) {
   return PATH_SCOPES.public;
 }
 
-/**
- * The addresses this machine holds, as the operating system reports them.
- *
- * Only IPv4, and only the private ranges plus loopback: a public address on an
- * interface is not usable as a path without knowing what sits in front of it,
- * and guessing wrong would hand every client an address that times out. Those
- * arrive the other way, by being used -- see `observe`.
- */
+// Only private ranges plus loopback: a public address on an interface is not usable as a path without knowing what
+// sits in front of it. Those arrive by being used (`observe`).
 export function localPaths(port, interfaces = os.networkInterfaces()) {
   const origins = [`http://127.0.0.1:${port}`];
   for (const list of Object.values(interfaces || {})) {
     for (const entry of list || []) {
       if (entry.internal || entry.family !== "IPv4") continue;
-      // Link-local is what a machine gives itself when nothing handed it an
-      // address. It is a private address by the rules above, and almost never
-      // a path anything can reach -- offering it would put a row in every
-      // client's menu that only ever fails to answer.
+      // Link-local is almost never a path anything can reach: offered, it would only ever fail to answer.
       if (!PRIVATE_HOST.test(entry.address) || entry.address.startsWith("169.254.")) continue;
       const origin = `http://${entry.address}:${port}`;
       if (!origins.includes(origin)) origins.push(origin);
@@ -78,7 +43,6 @@ export function localPaths(port, interfaces = os.networkInterfaces()) {
   return origins;
 }
 
-/** The address a request came in on, as the caller wrote it. */
 export function originOfRequest(request) {
   const host = String(request.headers?.host || "").trim();
   if (!host || /[^a-z0-9.:\-[\]]/i.test(host)) return null;
@@ -95,9 +59,7 @@ export function originOfRequest(request) {
 }
 
 const MAX_OBSERVED = 10;
-/** An observed address nobody has arrived on for this long is no longer offered. */
 const OBSERVED_KEPT_MS = 14 * 86400_000;
-/** How often the observed names are checked against DNS. */
 const OBSERVED_CHECK_MS = 3600_000;
 
 export class ServerIdentity {
@@ -106,16 +68,13 @@ export class ServerIdentity {
     this.configuredName = name;
     this.name = "";
     this.port = port;
-    // False when the server is bound to loopback ("This machine only"): its
-    // private addresses are then not routes anything can take.
+    // False when the server is bound to loopback: its private addresses are then not routes anything can take.
     this.network = network;
     this.now = now;
     this.id = "";
-    /** origin -> last seen, for addresses this server has actually answered on. */
     this.observed = new Map();
-    /** Addresses its owner says it answers on (an internet name through a tunnel): offered before anyone arrives. */
     this.published = [];
-    /** False on a hub nobody shares a network with (a VPS): its private addresses and LAN names are not routes. */
+    // False on a hub nobody shares a network with (a VPS): its private addresses and LAN names are not routes.
     this.lan = true;
     this.writing = null;
   }
@@ -125,12 +84,10 @@ export class ServerIdentity {
     let text = null;
     try { text = await fs.readFile(this.filePath, "utf8"); }
     catch (error) { if (error.code !== "ENOENT") throw error; }
-    // A file that will not parse is treated like a missing one: a new identity
-    // costs a re-pair, a server that cannot start costs everything.
+    // A file that will not parse is treated like a missing one: a new identity costs a re-pair, a server that cannot
+    // start costs everything.
     try { saved = text == null ? null : JSON.parse(text); } catch { saved = null; }
-    // The server owns its name. The configured one (setup's
-    // CONDUIT_SERVER_NAME) only seeds it; afterwards a rename from any client,
-    // saved here, is what every client and the LAN see.
+    // The configured name only seeds it; a saved rename wins.
     this.name = String(saved?.name || this.configuredName || os.hostname() || "Conduit").trim().slice(0, 63) || "Conduit";
     this.id = typeof saved?.id === "string" && /^[0-9a-f]{32}$/.test(saved.id) ? saved.id : crypto.randomBytes(16).toString("hex");
     this.lan = saved?.lan !== false;
@@ -151,15 +108,11 @@ export class ServerIdentity {
     try {
       return crypto.createPrivateKey({ key: Buffer.from(pkcs8, "base64"), format: "der", type: "pkcs8" });
     } catch {
-      // A key that cannot be read is replaced rather than fatal. The cost is
-      // that every paired client has to be told the new public half, which the
-      // next authenticated request does anyway; the alternative is a server
-      // that refuses to start over a file it can regenerate.
+      // Replaced rather than fatal: the next authenticated request tells each client the new public half.
       return null;
     }
   }
 
-  /** Rename for every client. Returns false for a name that cannot be one. */
   async rename(value) {
     const name = String(value ?? "").trim();
     if (!name || name.length > 63 || /[\u0000-\u001f\u007f]/.test(name)) return false;
@@ -168,20 +121,13 @@ export class ServerIdentity {
     return true;
   }
 
-  /** The public half, as a client stores it. */
   publicKeyValue() {
     return this.publicKey.export({ format: "der", type: "spki" }).toString("base64");
   }
 
   /*
-   * Sign a caller's nonce, proving this is the server that issued the public
-   * half somebody is holding.
-   *
-   * Answered without a session, on purpose: the point is to be checkable
-   * *before* a credential is sent. That is safe because the reply proves
-   * possession of a key and reveals nothing else -- the nonce comes from the
-   * caller, so a recorded answer is worthless for the next question, and the
-   * id it names is not a secret.
+   * Answered without a session, on purpose: the point is to be checkable before a credential is sent. The nonce comes
+   * from the caller, so a recorded answer is worthless for the next question.
    */
   prove(nonce) {
     const value = String(nonce || "");
@@ -191,18 +137,8 @@ export class ServerIdentity {
   }
 
   /*
-   * Record an address a client actually reached this server on.
-   *
-   * This is how the public address arrives. The server cannot work out that it
-   * sits behind `localconduit.jask-aran.com` -- nothing on the machine says so
-   * -- but a client that got here through it proves the address works by
-   * arriving, which is better evidence than configuration would be.
-   *
-   * Only ever called for an authenticated request. A Host header is written by
-   * whoever sends it, so an unauthenticated one would let a passer-by put any
-   * name in the list every client then reads. Signed in, the worst case is
-   * somebody with the password writing an address that does not work, which is
-   * a list they could edit anyway, and which every client probes before using.
+   * Only ever called for an authenticated request: a Host header is written by whoever sends it, so an
+   * unauthenticated one would let a passer-by put any name in the list every client then reads.
    */
   observe(request) {
     const origin = originOfRequest(request);
@@ -218,12 +154,7 @@ export class ServerIdentity {
     this.schedule();
   }
 
-  /*
-   * Forget observed addresses that are gone: a name that no longer resolves (its record was deleted, as when the hub
-   * was renamed or a tunnel retired) or one nobody has arrived on for two weeks. Without this a client is offered every
-   * address the hub ever answered on, and keeps probing dead ones. Checked at start and hourly; a DNS failure that is
-   * not "no such name" (offline, a timeout) forgets nothing.
-   */
+  // A DNS failure that is not "no such name" (offline, a timeout) forgets nothing.
   async prune() {
     let changed = false;
     for (const [origin, seenAt] of [...this.observed]) {
@@ -239,7 +170,6 @@ export class ServerIdentity {
     return changed;
   }
 
-  /** Prune now and then hourly; returns the stop. */
   followObserved() {
     void this.prune().catch(() => {});
     const timer = setInterval(() => void this.prune().catch(() => {}), OBSERVED_CHECK_MS);
@@ -247,17 +177,13 @@ export class ServerIdentity {
     return () => clearInterval(timer);
   }
 
-  /*
-   * Every address this server believes it answers on, with what each costs. Set by hand in identity.json:
-   * `published` (origins it always offers: an internet name through a tunnel, a tailnet name) and `lan: false` (a hub
-   * nobody shares a network with offers no private address or LAN name).
-   */
+  // `published` and `lan` are set by hand in identity.json.
   paths() {
     const seen = new Set();
     const rows = [];
     const local = localPaths(this.port).filter((origin) => (this.network && this.lan) || scopeForHost(new URL(origin).hostname) !== PATH_SCOPES.private);
-    // Its LAN names (lan-names-service.js) follow the machine to a new address, where every address above is only
-    // what it holds today: a client that saved one still has a way back after the router hands out another.
+    // LAN names follow the machine to a new address: a client that saved one still has a way back after the router
+    // hands out another.
     const named = this.network && this.lan ? (this.names?.() || []).map((name) => `https://${name}:${this.port}`) : [];
     for (const origin of [...local, ...named, ...this.published, ...this.observed.keys()]) {
       if (seen.has(origin)) continue;
@@ -273,22 +199,18 @@ export class ServerIdentity {
       name: this.name,
       publicKey: this.publicKeyValue(),
       paths: this.paths(),
-      // Every path also answers TLS on the same port, with a leaf this
-      // identity attests (`server-tls.js`). A shell that can verify that dials
-      // its local routes as https; the paths themselves stay addresses.
+      // Every path also answers TLS on the same port, with a leaf this identity attests.
       tls: true,
     };
   }
 
   schedule() {
     if (this.writing) return;
-    // Observing happens on request paths, so the write is coalesced rather than
-    // paid by whoever happened to arrive.
+    // Observing happens on request paths, so the write is coalesced rather than paid by whoever happened to arrive.
     this.writing = setTimeout(() => { this.writing = null; void this.save(); }, 1_000);
     this.writing.unref?.();
   }
 
-  /** The server is stopping: a write still waiting on the coalescing timer happens now. */
   async flush() {
     if (!this.writing) return;
     clearTimeout(this.writing);
@@ -305,9 +227,6 @@ export class ServerIdentity {
       ...(this.lan ? {} : { lan: false }),
       observed: [...this.observed].map(([origin, seenAt]) => ({ origin, seenAt })),
     }, null, 2);
-    // The private half is in here, so the file is the owner's alone. It is not
-    // a login and cannot be used to sign in, but a copy of it would let
-    // something else answer "yes, I am that server".
     await writePrivateFile(this.filePath, `${payload}\n`);
   }
 }

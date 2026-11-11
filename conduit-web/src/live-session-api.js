@@ -1,12 +1,8 @@
 /*
- * The commands a client sends over a live session's stream (WS /v0/live-sessions/:id/stream), declared once. The hub
- * (server/live-session-stream.js) and the client (client/state/agent-session.ts) both read this list, so which
- * commands carry the sending client, which a read-only child accepts and which run at once cannot drift.
- *
- *   origin  carries `client`, the tab it was sent from: the chat's origin, where the agent shows things (ui-control.js)
+ * Hub and client both read this list, so a command's traits cannot drift between them.
+ *   origin  carries `client`, the tab it was sent from: where the agent shows things
  *   child   a read-only record (a subagent's chat) accepts it: it changes nothing
  *   urgent  runs at once, outside the chain and the chat's lifecycle, to interrupt what an earlier command started
- *
  * Plain data, no imports: the client takes it too.
  */
 export const LIVE_COMMANDS = /** @type {const} */ ({
@@ -25,14 +21,7 @@ export const LIVE_COMMANDS = /** @type {const} */ ({
   resume_log: { child: true },
 });
 
-/*
- * The events the hub sends a client over that stream, declared once. The hub (harnesses/session-records.js publish,
- * which refuses a name not here) and the client (client/api/live-events.ts, whose normalizer has a case for each
- * and whose LiveEvent may name no other) both read this list. Their shapes on the wire are ChatBackendEvent
- * (chat-backend-contract.d.ts); the client's LiveEvent is the shape after normalizeLiveEvent.
- *
- * Each name is mapped to what it tells.
- */
+// The hub refuses to publish a name not here, and the client's normalizer has a case for each.
 export const LIVE_EVENTS = /** @type {const} */ ({
   assistant_content: "paint: an assistant message arriving",
   tool_activity: "paint: a tool running, and its output as it arrives",

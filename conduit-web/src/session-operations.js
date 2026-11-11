@@ -7,7 +7,6 @@ export async function stopSessionProcesses(backends, session) {
   await Promise.all(matching.map((record) => backends.adapterForRecord(record).close(record.id)));
 }
 
-/** A chat being deleted: its processes stop, and so does work it left running in the background (a harness's own). */
 export async function discardSession(backends, chat, registry = null) {
   // A harness that is not loaded has nothing running here to stop.
   const adapter = (() => { try { return backends.forChat(chat); } catch { return null; } })();
@@ -26,13 +25,7 @@ export async function stopProjectProcesses(backends, projectId) {
     .map((record) => backends.adapterForRecord(record).close(record.id)));
 }
 
-/**
- * Move a Conduit durable agent chat to another project or workspace: a record
- * and metadata change, not a file move of its history. Its folder (logs,
- * attachments) follows it, its conversations work in the target from now on,
- * and its owner becomes the target's device. Chats of other harnesses keep
- * their history in the harness, tied to a folder, so they do not move.
- */
+// Only durable chats move: other harnesses keep their history in the harness, tied to a folder.
 export async function moveDurableChat({ chat, source, target, backends, registry }) {
   if (chat.status === "subagent") throw Object.assign(new Error("subagent_read_only"), { code: "subagent_read_only", status: 409 });
   if (chat.backend?.implementation !== "conduit-runtime") {

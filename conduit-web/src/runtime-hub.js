@@ -1,24 +1,15 @@
 import { randomBytes } from "node:crypto";
 import { isRuntimeEvent } from "./runtime-stream-api.js";
 
-/**
- * Global runtime fan-out: snapshot-first, low-frequency process updates.
- * Subscribers are SSE/WS response streams; a browser disconnect does not stop a live session.
- */
-
 const RESTART_PREPARED_MS = 5 * 60_000;
 
 export class RuntimeHub {
   constructor({ listViews, listDevices } = {}) {
     this.listViews = listViews || (() => []);
-    // Paired environments and whether each is there: workspaces on one come and go with it.
     this.listDevices = listDevices || (() => []);
     this.clients = new Set();
-    /** What this hub offers its clients to update to (server.js): its interface build, its desktop installer. */
     this.updates = null;
-    /** The restart being prepared: who it waits for, and who is ready. */
     this.restart = null;
-    /** Called with each event told to every client (feedback.js keeps the last of them). */
     this.tap = null;
   }
 
@@ -33,28 +24,22 @@ export class RuntimeHub {
     };
   }
 
-  /**
-   * `peer` is what the connection said about itself: its client kind, build
-   * and, for a browser, the id its tabs share for one service-worker
-   * registration. Scoped to this live connection -- not a device registry.
-   */
+  // `peer` is what the connection said about itself, scoped to this live connection: not a device registry.
   attach(client, peer = {}) {
-    // A short id per connection, told to that connection alone, so a client
-    // can find itself in the list. It lasts as long as the stream.
+    // Told to that connection alone, so a client can find itself in the list.
     client.peer = { id: randomBytes(6).toString("hex"), kind: peer.kind || "browser", build: peer.build || "", registration: peer.registration || "", platform: peer.platform || "", agent: peer.agent || "", connectedAt: new Date().toISOString() };
     this.clients.add(client);
     this.send(client, { ...this.snapshot(), connection: client.peer.id });
     return () => this.clients.delete(client);
   }
 
-  /** A new offer, told to every client at once (and in each snapshot after): the push a client checks on. */
   offerUpdates(updates) {
     if (JSON.stringify(updates) === JSON.stringify(this.updates)) return;
     this.updates = updates;
     this.publish({ type: "updates_offered", updates, at: new Date().toISOString() });
   }
 
-  /** @param {{ type: keyof typeof import("./runtime-stream-api.js").RUNTIME_EVENTS }} event one runtime-stream-api.js declares */
+  /** @param {{ type: keyof typeof import("./runtime-stream-api.js").RUNTIME_EVENTS }} event */
   publish(event) {
     if (!event || typeof event !== "object") return;
     if (!isRuntimeEvent(event.type)) throw new TypeError(`Runtime event ${event.type} is not declared (runtime-stream-api.js)`);
@@ -63,10 +48,7 @@ export class RuntimeHub {
     for (const client of this.clients) this.write(client, payload);
   }
 
-  /**
-   * An installed client names the environments its own companion runs as (their node ids), so the devices' map
-   * draws it as that environment, headed, rather than as a device of its own. Shown, never trusted for anything.
-   */
+  // So the devices' map draws an installed client as the environment its companion runs as. Shown, never trusted.
   locate(id, nodes) {
     const client = [...this.clients].find((candidate) => candidate.peer.id === id);
     if (!client) return false;
@@ -74,13 +56,12 @@ export class RuntimeHub {
     return true;
   }
 
-  /** What else is known of a connection once it is asked (the machine it is on, from its address). Shown, never trusted. */
+  // Shown, never trusted.
   note(id, fields) {
     const client = [...this.clients].find((candidate) => candidate.peer.id === id);
     if (client) Object.assign(client.peer, fields);
   }
 
-  /** One connection's event alone (an agent's command to a tab of it); false when it has gone. */
   sendTo(id, event) {
     if (!isRuntimeEvent(event?.type)) throw new TypeError(`Runtime event ${event?.type} is not declared (runtime-stream-api.js)`);
     const client = [...this.clients].find((candidate) => candidate.peer.id === id);
@@ -89,17 +70,12 @@ export class RuntimeHub {
     return true;
   }
 
-  /** The live connections, as Settings and the CLI show them. */
   connections() {
     return [...this.clients].map((client) => ({ ...client.peer }));
   }
 
-  /**
-   * A restart to `target` (the new service worker's hash) is coming. The
-   * browsers connected now are the ones it waits for, each registration once
-   * however many tabs it has open; later arrivals are told but not waited on,
-   * and native clients never hold it.
-   */
+  // Waits for each registration connected now, once however many tabs it has; later arrivals are told but not waited
+  // on, and native clients never hold it.
   prepareRestart({ attempt, target } = {}) {
     if (!attempt || this.preparedRestart()?.attempt === attempt) return this.restartStatus();
     const eligible = new Set(this.connections().filter((peer) => peer.kind === "browser" && peer.registration).map((peer) => peer.registration));
@@ -108,17 +84,13 @@ export class RuntimeHub {
     return this.restartStatus();
   }
 
-  /**
-   * The restart being prepared, while it still can be coming. The restart itself is what ends one (this process
-   * goes); a launcher that prepared and then gave up left it standing, and every tab that connected afterwards was
-   * told to ready itself for a restart that never came. The launcher waits seconds, so minutes later it is not coming.
-   */
+  // A launcher that prepares and gives up leaves it standing; the launcher waits seconds, so minutes later it is not
+  // coming.
   preparedRestart() {
     if (this.restart && Date.now() - this.restart.at > RESTART_PREPARED_MS) this.restart = null;
     return this.restart;
   }
 
-  /** Counts only for the attempt and target it names, from a registration waited on. */
   acknowledgeRestart({ attempt, target, registration } = {}) {
     const restart = this.preparedRestart();
     if (!restart || attempt !== restart.attempt || (target || "") !== restart.target || !restart.eligible.has(registration)) return false;
@@ -126,7 +98,6 @@ export class RuntimeHub {
     return true;
   }
 
-  /** Who is still holding the restart: waited-on registrations that are connected and not ready. */
   restartStatus() {
     const restart = this.preparedRestart();
     if (!restart) return null;

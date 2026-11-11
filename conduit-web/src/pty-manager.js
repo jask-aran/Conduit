@@ -17,8 +17,7 @@ const execFileAsync = promisify(execFileCallback);
 
 const PTY_MAX_SESSIONS = 32;
 export const PTY_MAX_INPUT_BYTES = 4 * 1024 * 1024;
-// How long a terminal that ended is still listed, so a tab left open on it can
-// say it exited. Every client lists only running ones.
+// An ended terminal stays listed so a tab left open on it can say it exited.
 const PTY_ENDED_KEPT_MS = 24 * 60 * 60 * 1000;
 const PTY_TMUX_MIN_VERSION = [3, 3];
 const TMUX_METADATA_SEPARATOR = "__CONDUIT_FIELD__";
@@ -43,7 +42,6 @@ function view(record, metadata = {}) {
     templateId: record.templateId,
     title: record.title,
     cwd: record.cwd || null,
-    // A device's terminal names its node, so a client may attach to it there directly (nodes/node-direct.js).
     nodeId: record.nodeId || null,
     status: record.status,
     createdAt: record.createdAt,
@@ -114,8 +112,6 @@ export class PtyManager extends EventEmitter {
     this.tmuxPath = tmuxPath;
     this.terminalTeardown = terminalTeardown;
     this.run = run;
-    // Set by the server once paired devices exist: terminals in a device's
-    // folder are shells the device keeps (nodes/node-processes.js), not tmux here.
     this.nodeHub = null;
     this.records = new Map();
     this.metadata = new Map();
@@ -145,10 +141,7 @@ export class PtyManager extends EventEmitter {
     }
   }
 
-  /**
-   * End this manager's tmux server -- or, when it has stopped answering, drop
-   * its socket, which otherwise left Conduit able neither to stop nor start.
-   */
+  // A tmux server that has stopped answering has its socket dropped, or Conduit could neither stop nor start one.
   async killTmuxServer() {
     try {
       await this.invokeTmux(["kill-server"], { tolerateMissingServer: true });
@@ -228,13 +221,11 @@ export class PtyManager extends EventEmitter {
   list() { return [...this.records.values()].map((record) => view(record, this.metadata.get(record.id))).sort((a, b) => b.createdAt.localeCompare(a.createdAt)); }
   get(id) { const record = this.records.get(id); return record ? view(record, this.metadata.get(id)) : null; }
 
-  /** The device process behind a running device terminal, for a grant to attach to it directly. */
   deviceShell(id) {
     const record = this.records.get(id);
     return record?.status === "running" && record.nodeId && record.procId ? { nodeId: record.nodeId, procId: record.procId } : null;
   }
 
-  /** A device's shell ended while nothing here followed it (a client had it directly, or none had it open). */
   deviceProcessExited({ nodeId, procId, code = null, signal = null }) {
     const record = [...this.records.values()].find((item) => item.nodeId === nodeId && item.procId === procId);
     if (record) void this.deviceExited(record, { exitCode: code, signal });
@@ -354,7 +345,7 @@ export class PtyManager extends EventEmitter {
     return view(record, this.metadata.get(id));
   }
 
-  /** `owner`: whoever asks, so it can let go of its own lease while the attach is in flight (killAttachment). */
+  // `owner` lets the asker let go of its own lease while the attach is in flight.
   async attach(id, { cols = 80, rows = 24, takeover = false, owner = null } = {}) {
     const record = this.records.get(id);
     if (!record) throw failure("pty_not_found", "Terminal was not found");
@@ -484,7 +475,6 @@ export class PtyManager extends EventEmitter {
     }
   }
 
-  /** A shell on a device: started there, kept there across disconnects and restarts of this server. */
   async createOnDevice({ project, cwd, templateId, title: requestedTitle, cols, rows }) {
     if (!this.nodeHub) throw failure("pty_cwd_unavailable", "Devices are not available on this server");
     const customTitle = requestedTitle == null ? "" : String(requestedTitle).trim();
@@ -518,8 +508,7 @@ export class PtyManager extends EventEmitter {
     this.attachments.set(record.id, lease);
     let shell;
     try {
-      // From the device's first buffered byte: the screen is repainted as tmux would.
-      // Claimed for this client: a client attached on the device directly may hold it (nodes/node-direct.js).
+      // Claimed for this client: a client attached on the device directly may hold it.
       shell = await placeProcesses(this.nodeHub, { nodeId: record.nodeId }).shells.reattach(record.procId, { claim: true, takeover });
     } catch (error) {
       if (this.attachments.get(record.id) === lease) this.attachments.delete(record.id);
@@ -572,7 +561,7 @@ export class PtyManager extends EventEmitter {
     placeProcesses(this.nodeHub, { nodeId: record.nodeId }).shells.kill(record.procId);
   }
 
-  /** End the lease under `id`; with `owner`, only if it is that owner's (remove() may hold the id by then). */
+  // With `owner`, only if it is that owner's: remove() may hold the id by then.
   killAttachment(id, owner) {
     const lease = this.attachments.get(id);
     if (!lease || (owner !== undefined && lease.owner !== owner)) return;

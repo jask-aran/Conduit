@@ -70,7 +70,6 @@ function cloneDirectoryName(value, url) {
   return directory;
 }
 
-/** Run an external clone command with cancellation, a hard deadline, and bounded diagnostics. */
 export function runCommand(command, args, { cwd, signal, timeoutMs = CLONE_COMMAND_TIMEOUT_MS, maxOutputBytes = CLONE_COMMAND_MAX_OUTPUT_BYTES, onOutput, env } = {}) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(cloneError("clone_aborted", "Clone was cancelled"));
@@ -134,7 +133,7 @@ export class ProjectStore {
     this.cloneReservationRoot = path.join(path.dirname(this.catalogFile), "clone-reservations");
     this.cloneReservations = new Map();
     this.cloneOperations = new Map();
-    // How each clone that has ended, ended: what a page following one reads when it asks after the end.
+    // Kept so a page following a clone can still read how it ended.
     this.finishedCloneOperations = new Map();
     this.reservedSlugs = new Set();
     // Serialize only catalogue transitions; clone network work executes between
@@ -188,8 +187,6 @@ export class ProjectStore {
 
   projectView(project) {
     const projectPath = this.workingRoot(project);
-    // A stored record names a node only for another device's folder; every
-    // other is the head's own, on the head's node (decision 24).
     const remote = remoteNode(project);
     return {
       id: project.id,
@@ -198,11 +195,8 @@ export class ProjectStore {
       kind: project.kind || "project",
       origin: project.origin || (project.externalPath ? "linked" : "managed"),
       externalPath: project.externalPath || null,
-      // The device's node that holds it, and where on it: `{ root, path }`.
-      // The head's own folders are its node's roots, one per folder.
       nodeId: remote || this.hubNodeId || null,
       place: remote ? { root: project.rootId, path: project.subpath || "" } : { root: headRootId(projectPath), path: "" },
-      // Reached in process (the head's own folder) rather than over a node's socket.
       local: !remote,
       cloneUrl: project.cloneUrl || null,
       state: project.state === "cloning" ? "cloning" : "ready",
@@ -212,9 +206,7 @@ export class ProjectStore {
       createdAt: project.createdAt,
       path: projectPath,
       workingRoot: projectPath,
-      // Where Conduit keeps the chats' own files (logs, attachments): always on
-      // this machine. For a device's workspace that is not its working root,
-      // which is a path on the device.
+      // Always on this machine: for a device's workspace that is not its working root, which is a path on the device.
       chatRoot: remote ? this.managedPath(project.slug) : projectPath,
       deletesFilesOnRemove: (project.origin || "managed") === "managed",
     };
@@ -317,11 +309,7 @@ export class ProjectStore {
     });
   }
 
-  /**
-   * A workspace in a folder a paired node shares: the root by id and a path
-   * inside it. `label` is how the device writes that folder, for people to
-   * read; nothing runs by it. The caller has checked the node shares the root.
-   */
+  // `label` is for people to read; nothing runs by it. The caller has checked the node shares the root.
   async createOnNode({ name, nodeId, rootId, subpath = "", label, defaultTemplateId = null }) {
     return this.runExclusive(async () => {
       const catalog = await this.readCatalog();
@@ -732,8 +720,6 @@ export class ProjectStore {
       operation.state = error.code === "clone_aborted" ? "cancelled" : "failed";
       if (reservation.phase === "published") this.logger.error(`Clone published but could not be finalized: ${reservation.target}`, error);
     } finally {
-      // Kept as it ended: it used to go the moment it ended, so the page following it was answered 404 and never
-      // shown that the clone had failed, or why.
       this.cloneOperations.delete(operation.id);
       this.finishedCloneOperations.set(operation.id, this.cloneOperationView(operation));
       if (this.finishedCloneOperations.size > 100) this.finishedCloneOperations.delete(this.finishedCloneOperations.keys().next().value);

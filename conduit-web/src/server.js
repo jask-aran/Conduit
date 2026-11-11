@@ -129,21 +129,19 @@ const turnCheckpoints = new TurnCheckpointStore(path.join(config.dataRoot, "turn
 void turnCheckpoints.sweep().catch((error) => console.warn("Could not clear old turn checkpoints", error.message));
 const projects = new ProjectStore(config);
 await projects.initialize();
-// Everything below that has to be let go when the server stops is handed to
-// this as it is made, and let go in reverse.
+// What is handed to this as it is made is let go in reverse when the server stops.
 const lifetime = new ServerLifetime();
 const terminals = lifetime.own("terminals", new PtyManager({ filePath: config.remotesFile, terminalTeardown: config.terminalTeardown }), async (owned) => {
   const stopped = await owned.stopAll();
   console.log(`Conduit ${config.terminalTeardown ? "stopped" : "preserved"} ${stopped} terminal session${stopped === 1 ? "" : "s"}`);
 });
 await terminals.load();
-// Bound to loopback ("This machine only" in setup), the server is reached only
-// through this machine -- directly, or by Tailscale, a tunnel or SSH landing
-// here -- so it neither publishes its network addresses nor advertises on one.
+// Bound to loopback, the server is reached only through this machine (directly, or by Tailscale, a tunnel or SSH
+// landing here), so it neither publishes its network addresses nor advertises on one.
 const reachableOnNetwork = !/^(127\.\d+\.\d+\.\d+|localhost|::1|\[::1\])$/.test(config.host);
 const serverIdentity = lifetime.own("server identity", await new ServerIdentity(config.identityFile, { port: config.port, network: reachableOnNetwork }).load(), (owned) => owned.flush());
 serverIdentity.followObserved();
-// The hub's own device and node (decision 24), known before anything reads a project.
+// Known before anything reads a project.
 const hub = hubIds(serverIdentity.id);
 projects.hubNodeId = hub.nodeId;
 const registry = new ChatStore(config.sessionRegistryFile);
@@ -152,14 +150,6 @@ const attachments = new AttachmentStore(registry, { maxBytes: config.maxAttachme
 const terminalPastes = new TerminalPasteStore({ root: config.terminalPasteRoot });
 const runtimeSettings = new RuntimeSettingsStore(config.runtimeSettingsFile, defaultsFromEnv(process.env));
 await runtimeSettings.load();
-/*
- * The certificate this server answers on over TLS, and the identity's word
- * that it is this server's.
- *
- * The leaf carries the identity's attestation of its key, so a shell holding
- * the identity key can accept it on any address. See `server-tls.js` for
- * why the connection has to carry the proof at all.
- */
 const leafStore = new ServerLeaf(config.leafFile);
 const leafFor = () => ({
   commonName: `Conduit ${serverIdentity.id}`,
@@ -183,7 +173,6 @@ const voiceRecordingStore = lifetime.own("voice archive", new VoiceRecordingStor
   console.log(JSON.stringify({ type: "conduit.voice-archive-drain", ...result }));
 }, { timeoutMs: VOICE_ARCHIVE_SHUTDOWN_TIMEOUT_MS + 1_000 });
 const voiceRuntime = new VoiceRuntime({ settings: voiceSettings, modelManager: voiceModel, catalog: VOICE_EXECUTION_CATALOG });
-// The hub's skills (Settings › Skills): shipped with the profiles, or installed here from a registry.
 const skills = await new SkillStore({ root: path.join(config.dataRoot, "skills"), templates: config.piTemplates }).load();
 const contextStore = new ContextStore({
   skills,
@@ -214,15 +203,10 @@ if (startupViolation) {
   console.error(startupViolation.message);
   process.exit(1);
 }
-// One order per chat, shared by everything that publishes into a chat: the
-// harness process, and the command handlers above it.
+// One order per chat, shared by everything that publishes into a chat: the harness process and the command handlers.
 const chatLogs = new ChatLogs({ timings: new TurnTimings(path.join(config.dataRoot, "turn-timings")) });
 const concurrency = new ServerConcurrency();
-// Devices paired with this server, whose shared folders the Conduit runtime can work in.
-// Devices dial over the tailnet (decision 4). A server whose owner lets them
-// in through its public address as well (CONDUIT_NODES_PUBLIC=1, e.g. behind a
-// Cloudflare tunnel) takes them on their pairing key alone.
-// The hub's LAN names (its own certificate's, loaded below): routes for nodes, never its nodes' names.
+// Routes for nodes, never its nodes' names.
 const hubLanNames = () => (lanTls?.names || []).filter((name) => !name.startsWith("*."));
 serverIdentity.names = hubLanNames;
 const networkLanNames = lifetime.own("LAN names", lanNamesService({
@@ -235,15 +219,13 @@ const networkLanNames = lifetime.own("LAN names", lanNamesService({
   },
 }), (owned) => owned.stop());
 const lanNamesForNodes = lanNames({ provider: () => networkLanNames.provider() });
+// With CONDUIT_NODES_PUBLIC=1 devices are taken through the public address too, on their pairing key alone.
 const nodeHub = lifetime.own("nodes", new NodeHub({ dataRoot: config.dataRoot, lanNames: lanNamesForNodes,
   identity: { id: serverIdentity.id, key: serverIdentity.publicKeyValue() },
   routes: () => hubRoutes({ config, lanNames: hubLanNames }),
   ...(process.env.CONDUIT_NODES_PUBLIC === "1" ? { allowRemote: () => true } : {}) }), (owned) => owned.shutdown());
 terminals.nodeHub = nodeHub;
 nodeHub.on("procExit", (event) => terminals.deviceProcessExited(event));
-// Everything a harness manifest needs to probe and build itself. Backends are
-// no longer named here: they come from MANIFESTS, and detection runs in
-// parallel so four three-second timeouts cost three seconds, not twelve.
 const harnessConfig = {
   logs: chatLogs,
   codexCommand: process.env.CONDUIT_CODEX_COMMAND || "codex",
@@ -259,7 +241,6 @@ const harnessConfig = {
   dataRoot: config.dataRoot,
   piAgentDir: config.piAgentDir,
   nodeHub,
-  // The Conduit durable agent's profiles, and their prompts as edited in Settings.
   piTemplates: config.piTemplates,
   contextStore,
 };
@@ -274,33 +255,25 @@ const requireChatgptWeb = () => {
   return chatgptWeb;
 };
 const runtimeHub = lifetime.own("runtime hub", new RuntimeHub({ listViews: () => backends.list(), listDevices: () => nodeHub.availability() }), (owned) => owned.close());
-// keybindings.json edited outside Conduit (by hand, by an agent): every client takes the new shortcuts at once.
 lifetime.own("keybindings watch", preferences.watchKeybindings((overrides) => runtimeHub.publish({ type: "keybindings_changed", overrides })), (stop) => stop());
-// A device coming or going is every client's to know at once: its workspaces and their chats come and go with it.
 {
   let pending = null;
   nodeHub.on("changed", () => { pending ??= setTimeout(() => { pending = null; runtimeHub.publishDevices(); }, 150); });
 }
-// The snapshot hides records that are stopped or on their way out; so must
-// every incremental update, or a teardown emit re-advertises a process the
-// removal already retired and the pill comes back to life.
+// The snapshot hides records that are stopped or on their way out; so must every incremental update, or a teardown
+// emit re-advertises a process the removal already retired.
 const processIsLive = (record) => Boolean(record) && !record.terminating && record.status !== "stopped";
 const publishProcessChange = (view, record, reason) => {
   if (!view) return;
   if (processIsLive(record)) runtimeHub.publishProcess(view, reason || "update");
   else runtimeHub.publishProcessRemoved(view.id, view.chatId);
 };
-// What a workspace's place can do -- which harnesses, checkpoints, Git -- on
-// the hub or a device alike (src/place.js); every refusal asks this.
 backends.capabilities = (project) => capabilitiesOf(project, { hub: nodeHub, backends, serverName: serverIdentity.name });
-// The hub is a device like the others (decision 24): its node holds the
-// folders of every workspace that is not on another device, one root each.
 nodeHub.adoptHub({ ...hub, name: () => serverIdentity.name,
   roots: async () => (await projects.list()).filter((project) => project.local)
     .map((project) => ({ id: project.place.root, label: project.workingRoot, read: true, write: true, shell: true, allow: [] })),
   harnesses: () => [...(backends.local || backends.adapters.keys())] });
 
-// A watched workspace changed: the clients showing it ask what, now, instead of on their next poll.
 onWorkspaceChange((projectIds) => runtimeHub.publish({ type: "workspace_changed", projectIds }));
 terminals.on("created", (record) => runtimeHub.publishTerminal(record, "created"));
 terminals.on("updated", (record) => runtimeHub.publishTerminal(record, "updated"));
@@ -331,8 +304,7 @@ function defaultTemplate() {
   return selected?.defaultable !== false ? selected : config.piTemplate;
 }
 
-// Shared with the launch composer so a chat and the dashboard ask the harness
-// once between them rather than once each.
+// Shared with the launch composer so a chat and the dashboard ask the harness once between them.
 const harnessModels = createHarnessModelCatalogue();
 
 function catalogFor(runtime, template) {
@@ -357,8 +329,7 @@ async function chatModelView(context) {
       });
       const rememberedSpec = models.some((item) => item.spec === remembered?.model) ? remembered.model : "";
       const model = context.chat.backend.model || rememberedSpec || models[0]?.spec || "";
-      // The remembered model is gone and something else is standing in. Say so,
-      // rather than quietly running the chat on a model nobody chose.
+      // Said rather than quietly running the chat on a model nobody chose.
       const modelFallback = !context.chat.backend.model && remembered?.model && !rememberedSpec && model
         ? { from: remembered.model, to: model }
         : null;
@@ -392,12 +363,8 @@ async function chatModelView(context) {
   let thinkingLevel = context.chat.modelThinkingLevels?.[model] || catalogView.defaultThinkingLevel;
   let source = context.chat.backend?.model ? "chat_preference" : "runtime_default";
   let chatOwnsModel = Boolean(context.chat.backend?.model);
-  // A profile remembers the last model chosen on it, so picking one in the
-  // Assistant does not have to be picked again in the next Assistant chat. A
-  // chat that already ran on a model of its own keeps it: this only fills in
-  // the blank a brand new chat starts with. When the remembered model is no
-  // longer in the profile's catalogue the catalogue default stands in, and the
-  // substitution is reported rather than made quietly.
+  // A chat that already ran on a model of its own keeps it: the profile's remembered model only fills in a new chat's
+  // blank, and a substitution for it is reported rather than made quietly.
   const remembered = rememberedModel(preferences, template?.id);
   let modelFallback = null;
   if (!chatOwnsModel && remembered?.model) {
@@ -418,7 +385,6 @@ async function chatModelView(context) {
       adapter.getModelState(resident.id),
     ]);
     const enabled = new Set(catalogView.models.map((item) => item.spec));
-    // The runtime lists model views already (label, levels), not Pi models.
     const liveModels = available;
     models = enabled.size ? liveModels.filter((item) => enabled.has(item.spec)) : liveModels;
     model = state.model || model;
@@ -487,7 +453,7 @@ app.use((req, res, next) => {
   if (req.socket.encrypted) { res.setHeader("Strict-Transport-Security", "max-age=31536000"); return next(); }
   res.redirect(308, `https://${req.headers.host}${req.originalUrl}`);
 });
-// Every response (issue #53): never sniffed into another type, no full URL in a Referer sent off the hub, and over
+// Every response: never sniffed into another type, no full URL in a Referer sent off the hub, and over
 // HTTPS (a LAN name's TLS, or a proxy's that says so) remembered as HTTPS-only, closing the first visit's plain hop.
 // No framing rule: the gallery frames Conduit from another of its own names, and nothing else frames it.
 app.use((req, res, next) => {
@@ -499,13 +465,8 @@ app.use((req, res, next) => {
 app.use(compression());
 app.use(nativeCors);
 
-// A desktop client can only be offered an update over HTTP -- the updater
-// speaks no file:// -- so during development the server that is already
-// running serves the local build's artifacts. It sits ahead of authentication
-// because the updater runs in the shell and carries no session: the artifacts
-// are signed, and a signature is what makes an update safe to install, not the
-// secrecy of the URL it came from. It exists only when the directory is named
-// explicitly, and it serves that one directory.
+// Ahead of authentication because the updater runs in the shell and carries no session: the artifacts are signed,
+// and a signature is what makes an update safe to install, not the secrecy of the URL it came from.
 const desktopUpdateDir = process.env.CONDUIT_DESKTOP_UPDATE_DIR;
 if (desktopUpdateDir) {
   console.warn(`Serving desktop update artifacts from ${desktopUpdateDir} (development only).`);
@@ -516,11 +477,7 @@ if (desktopUpdateDir) {
     setHeaders: (response) => response.setHeader("Cache-Control", "no-store"),
   }));
 }
-// The installers this server hands out itself, newest of each: a server that
-// publishes its own builds (a dev hub and its client) offers those rather
-// than the public release. Empty when it publishes none.
-// The folder is on the Windows drive, where a listing costs ~30 ms, so one
-// listing serves for ten seconds.
+// The folder is on the Windows drive, where a listing costs ~30 ms, so one listing serves for ten seconds.
 let downloadsListed = null;
 app.get("/v0/downloads", async (_request, response) => {
   const newest = async (suffix) => {
@@ -536,19 +493,14 @@ app.get("/v0/downloads", async (_request, response) => {
     downloadsListed = listed;
   }
   const [windows, apk] = await downloadsListed.urls;
-  // A dev APK is named for the version it was stamped with (scripts/build-android-dev.sh): the dev app's updater
-  // compares that with its own.
+  // A dev APK is named for the version it was stamped with: the dev app's updater compares that with its own.
   const apkVersion = apk?.name.match(/^Conduit Dev_(.+)\.apk$/)?.[1] || null;
   response.set("Cache-Control", "no-store").json({ windowsUrl: windows?.url || null, apkUrl: apk?.url || null, apkVersion });
 });
 
-// The interface as one download, for an installed client's live update. Ahead
-// of authentication like the compiled client it is made of, which is already
-// served without a session (auth-middleware.js): it carries nobody's data.
+// Ahead of authentication like the compiled client it is made of: it carries nobody's data.
 const clientBundle = createClientBundle(dist);
-// What this hub offers its clients to update to, pushed on the runtime stream (RuntimeHub.offerUpdates) so a client
-// checks when there is something new rather than polling: the interface it serves and the desktop installer it
-// publishes. Read again every 20 s: a build lands in dist or the update folder without the hub restarting.
+// Read again every 20 s: a build lands in dist or the update folder without the hub restarting.
 const readOffer = async () => {
   const offer = { interface: (await clientBundle.manifest().catch(() => null))?.build || null, desktop: null };
   if (desktopUpdateDir) offer.desktop = JSON.parse(await fs.readFile(path.join(desktopUpdateDir, "latest.json"), "utf8").catch(() => "null"))?.version || null;
@@ -570,17 +522,15 @@ app.get("/client-bundle/:build.zip", async (request, response) => {
   response.end(zip);
 });
 
-// Conduit as an MCP server (mcp-endpoint.js): the hub's token lets a harness in ahead of the sign-in check; a signed-in
-// caller reaches the same endpoint below. Its tools find the UI and the browser on `mcpRuntime`, filled in once made.
+// The hub's token lets a harness in ahead of the sign-in check; a signed-in caller reaches the same endpoint below.
+// `mcpRuntime` is filled in as its parts are made.
 const mcpRuntime = {};
-// Where this server listens, as a harness on this machine reaches it: loopback unless it is bound to one address only.
 const mcpHost = /^(0\.0\.0\.0|::|\[::\]|)$/.test(config.host || "") ? "127.0.0.1" : String(config.host).includes(":") && !String(config.host).startsWith("[") ? `[${config.host}]` : config.host;
 Object.assign(mcpAccess, { url: `http://${mcpHost}:${config.port}/v0/mcp`, token: mcpToken(config.dataRoot) });
 const mcp = createMcpEndpoint({ runtime: mcpRuntime, token: mcpAccess.token });
 app.use(mcp.beforeAuth);
 
-// Direct pages (Services › Browser, experimental): one proxy per origin Conduit is opened at, as a proxied page may be
-// framed only by that origin. Made on first use; a proxied page's origin is a port of this host, which a cookie does not
+// One proxy per origin Conduit is opened at, as a proxied page may be framed only by that origin. Made on first use; a proxied page's origin is a port of this host, which a cookie does not
 // tell apart from Conduit's own, so nothing from one is answered here (below, and on upgrades).
 const browserProxies = new Map();
 const fromProxiedPage = (request) => { const origin = request.headers.origin; return Boolean(origin) && [...browserProxies.values()].some((proxy) => proxy.isProxyOrigin(origin)); };
@@ -631,9 +581,8 @@ app.delete("/v0/chatgpt-web/credential", async (_request, response, next) => {
 registerAuthRoutes(app, { authStore, socketTickets, clientDist: dist, throttleFile: path.join(config.dataRoot, "auth", "login-throttle.json") });
 
 let shuttingDown = false;
-// Where a project's turn checkpoints are taken, or null where it has none (place.js).
 const checkpointWorkspace = async (project) => ((await backends.capabilities(project))?.checkpoints ? projectWorkspace(project, nodeHub) : null);
-/** End the turn's checkpoint as it settles, before the chat is told it settled (the client reads its changes then). */
+// Closed before the chat is told the turn settled: the client reads its changes then.
 async function closeTurnCheckpoint(record, turnId) {
   const unchanged = !record.ranTools;
   record.ranTools = false;
@@ -666,7 +615,6 @@ async function applyBackendName(adapter, record, name) {
     chatId: chat.id, title: chat.title });
   runtimeHub.publish({ type: "chat_changed", chat: chatView(chat), at: new Date().toISOString() });
 }
-// Every adapter checkpoints through its own settled event when it exposes one.
 for (const adapter of backends.instances()) {
   adapter.on?.("settled", ({ record, completed }) => {
     // An ephemeral record -- a probe -- has no chat to checkpoint.
@@ -682,32 +630,24 @@ for (const adapter of backends.instances()) {
       .catch((cause) => console.error("Could not apply backend chat name", cause));
   });
   adapter.on?.("removed", ({ id, chatId }) => runtimeHub.publishProcessRemoved(id, chatId));
-  // A turn starting or ending, on any harness: every other page, pane and device watching the chat joins or lets go.
   if (adapter.sessions) adapter.sessions.onTurn = (record) => publishProcessChange(adapter.view(record), record, "turn");
 }
 registerDraftRoutes(app, { drafts, knownChat: async (chatId) => Boolean(await findChatContext(chatId)) });
 registerContextRoutes(app, { contextStore });
 registerClientReportRoutes(app, { dataRoot: config.dataRoot });
-// Agents drive Conduit's UI (ui-control.js): each open tab's view, and commands to one of them.
 const uiControl = new UiControl({ runtimeHub, nodeHub });
 mcpRuntime.uiControl = uiControl;
-// UI feedback (feedback.js): what the hub knew when an item was started, and the item written for an agent to pick up.
 const feedback = lifetime.own("feedback", createFeedback({ dataRoot: config.dataRoot, config, serverName: serverIdentity.name, runtimeHub, uiControl, chatLogs, listProcesses: () => backends.list() }), (owned) => owned.close());
 registerFeedbackRoutes(app, feedback);
-// The hub's browser (browser-host.js): the page the person and the agents share, through agent-browser.
 const browserHost = lifetime.own("hub browser", new BrowserHost({ dataRoot: config.dataRoot,
-  // Its settings changed or it started again: every Browser pane takes its frame rate again and reconnects if it must.
   onChange: () => runtimeHub.publish({ type: "browser_changed", id: "hub" }) }), (owned) => owned.close());
 mcpAccess.browser = browserHost.mcpServer();
-// The person's own browser on the hub's machine (nodes/person-browser.js), and every device's through its node: conduit_browser's.
 const personBrowser = lifetime.own("person's browser", new PersonBrowser(), (owned) => owned.close());
 const personBrowsers = createPersonBrowsers({ own: personBrowser, nodeHub });
 mcpRuntime.personBrowsers = personBrowsers;
 registerPersonBrowserRoutes(app, { personBrowsers });
-// The browsers clients open: the hub's, and each connected device's that offers one, reached through its node.
 const browsers = createBrowsers({ hub: browserHost, nodeHub, tunnelTo });
 registerBrowserRoutes(app, { browsers, proxy: browserProxyFor });
-// Screens (screens.js): every kind's, as one list for agents (conduit_ui screens) and the rule for acting on one.
 const screens = createScreens({ browsers, uiControl });
 mcpRuntime.screens = screens;
 registerSkillRoutes(app, { skills });
@@ -727,7 +667,6 @@ registerRuntimeRoutes(app, {
   projects,
   serverIdentity,
   onServerRenamed: (name) => lanAdvertisement.rename(name),
-  // Settings › Account's name and home are the person's to their agent: written into its USER.md, where its prompts read them.
   onAccountRenamed: async (patch) => {
     const agent = backends.adapters.get("conduit-runtime")?.runtime.agent;
     // An emptied name leaves the agent's as it was; an emptied home clears it.
@@ -790,7 +729,6 @@ const launchLiveSession = registerLiveSessionRoutes(app, {
   promptChat: (...args) => liveSessionStream.promptChat(...args),
 });
 registerChatRoutes(app, {
-  // A chat made anywhere (Float, another device) is told to every client's chat list as it is made.
   announceChat: (chat) => runtimeHub.publish({ type: "chat_changed", chat, at: new Date().toISOString() }),
   backends,
   nodeHub,
@@ -812,19 +750,16 @@ const hostUi = createHostUi({ backends, registry,
   respondHostUi: (...args) => liveSessionStream.respondHostUi(...args) });
 hostUi.registerRoutes(app);
 lifetime.interval("host UI deadlines", () => hostUi.sweep(), 1000);
-// Bound late: the live-session stream that sends a run's prompt is made below.
+// Bound late: the live-session stream is made below.
 registerRunRoutes(app, {
   backends, chatLogs, config, defaultTemplate, launchLiveSession, projects, registry, runtimeFor,
   submitPrompt: (...args) => liveSessionStream.submitPrompt(...args),
   stopGeneration: (...args) => liveSessionStream.stopGeneration(...args),
 });
-// Push to the person's devices (Web Push: UnifiedPush on Android, push subscriptions in browsers). The hub's own
-// key pair signs every message, so the file is the hub's alone.
+// The hub's own key pair signs every message, so the file is the hub's alone.
 const push = new PushService({ file: path.join(config.dataRoot, "push.json"),
   subject: process.env.CONDUIT_PUSH_SUBJECT || "mailto:conduit@localhost" });
 await push.load();
-// The hub's persistent agent (docs/plans/persistent-agent.md): nothing until it is enabled, then its threads,
-// clocks and events. Its chat tools reach the person's chats through the same paths a browser's do.
 const durableAdapter = backends.adapters.get("conduit-runtime") || null;
 if (durableAdapter) {
   durableAdapter.runtime.uiControl = uiControl;
@@ -842,12 +777,10 @@ if (persistentAgent) {
     submitPrompt: (...args) => liveSessionStream.submitPrompt(...args) });
   persistentAgent.settingsListeners.add(() => seedSchedules(persistentAgent));
   durableAdapter.runtime.agentNotify = agentNotifier({ agent: persistentAgent, push, hubId: () => serverIdentity.id, hubName: () => serverIdentity.name });
-  // The approval model's model (agent/policy.js approverOf): Settings › Helper models › Review, else Naming's.
   durableAdapter.runtime.reviewModel = () => { const preference = preferences.get(); return preference.reviewModel || preference.sessionNameModel || null; };
-  // What jbot and the person say to each other, apart from its thread (agent/messages.js); it outlives a reset.
+  // Kept apart from jbot's thread, so it outlives a reset.
   const messageLog = await new MessageLog(path.join(config.dataRoot, "agent", "messages.jsonl")).load();
   durableAdapter.runtime.messageLog = messageLog;
-  // jbot's email (agent/email.js): its mailbox Worker collected each minute, replies sent through it.
   const emailChannel = await new EmailChannel({ file: path.join(config.dataRoot, "agent", "email.json"), agent: persistentAgent, log: messageLog }).load();
   messageLog.channels.email = emailChannel;
   emailChannel.start();
@@ -855,8 +788,6 @@ if (persistentAgent) {
   void mirrorHomeThread(persistentAgent, messageLog).then((unsubscribe) => lifetime.own("jbot message log", { stop: unsubscribe }, (owned) => owned.stop()))
     .catch((error) => console.error("[agent] message log mirror did not start", error));
   registerAgentRoutes(app, { agent: persistentAgent, backends, hubId: serverIdentity.id, voiceRuntime });
-  // Working on moves as jbot's work does: the hub says the agent view changed (at most each second) when its work log
-  // is written (agent/work-log.js), and when a run under way there says what it is doing now (subagents.js).
   let agentChange = null;
   const agentChanged = () => { agentChange ??= setTimeout(() => { agentChange = null; runtimeHub.publish({ type: "agent_changed", at: new Date().toISOString() }); }, 1000); };
   onWorkChanged(agentChanged);
@@ -869,7 +800,6 @@ if (persistentAgent) {
   lifetime.own("persistent agent connectors", persistentAgent.connectors, (owned) => owned.stop());
   lifetime.own("jbot inbox files", persistentAgent, (owned) => owned.stopFollowing());
   lifetime.own("persistent agent events", { stop: stopEvents }, (owned) => owned.stop());
-  // Its schedules are seeded and the reminders its asks still owe are taken up again (asks.js).
   void persistentAgent.load().then((project) => project && Promise.all([seedSchedules(persistentAgent), armReminders(persistentAgent)]))
     .catch((error) => console.error("[agent] could not load", error));
 }
@@ -886,15 +816,10 @@ registerSessionRoutes(app, {
   projects,
   registry,
 });
-// The service worker decides which build everything else comes from, so a
-// cached copy of it pins the whole client to a build that is no longer there.
-// `no-store` rather than `no-cache` because a CDN in front of this will happily
-// rewrite a revalidating header into a browser TTL of its own -- and a browser
-// that will not re-fetch this file cannot discover a new one.
+// A cached service worker pins the whole client to a build that is no longer there. `no-store` rather than
+// `no-cache` because a CDN in front of this may rewrite a revalidating header into a browser TTL of its own.
 const WORKER_SCRIPTS = /^(sw|service-worker|registerSW|workbox-[^/]+)\.js$/;
 
-// The component gallery (npm run gallery builds dist-gallery), behind sign-in
-// like the rest of the server, so it can be inspected from anywhere.
 const galleryDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist-gallery");
 app.get("/gallery", (request, response, next) => request.path === "/gallery" ? response.redirect("/gallery/") : next());
 app.use("/gallery", express.static(galleryDist, {
@@ -905,9 +830,7 @@ app.use("/gallery", express.static(galleryDist, {
   },
 }));
 
-// A built asset compressed at build time (scripts/precompress.mjs) goes out as
-// it is, to a client that takes the encoding, instead of compressed again on
-// every request. Names are content hashes, so a copy never goes stale.
+// Names are content hashes, so a precompressed copy never goes stale.
 app.get(/^\/assets\/[\w.-]+$/, (request, response, next) => {
   const accepts = String(request.headers["accept-encoding"] || "");
   const encoding = /\bbr\b/.test(accepts) ? "br" : /\bgzip\b/.test(accepts) ? "gzip" : null;
@@ -1016,11 +939,9 @@ app.use((error, _request, response, _next) => {
 });
 
 const server = http.createServer(app);
-// Owned here, before the sockets and streams it carries, so it is released
-// after them: a browser socket gets its "restarting" close before the
-// connection under it goes. The listener and the two servers it hands
-// connections to close together, as the listener counts every connection it
-// handed over and closes only once they do.
+// Owned before the sockets and streams it carries, so it is released after them: a browser socket gets its
+// "restarting" close before the connection under it goes. The listener closes only once every connection it handed
+// over does, so the two servers close with it.
 lifetime.own("listener", null, async () => {
   const closed = new Promise((resolve) => front.close(resolve));
   server.closeIdleConnections?.();
@@ -1034,10 +955,8 @@ lifetime.own("listener", null, async () => {
   await closed;
   clearTimeout(cut);
 });
-// A streamed answer is a frame per few characters, each carrying the same
-// keys and ids (~224 bytes for a 4-byte delta): compressed with the context
-// kept across frames, ~11 bytes. Level 1 at memLevel 7 keeps the cost per
-// socket and per frame small; frames under 64 bytes are sent as they are.
+// A streamed frame repeats the same keys and ids (~224 bytes for a 4-byte delta); with the context kept across frames
+// it compresses to ~11 bytes. Level 1 at memLevel 7 keeps the cost per socket and per frame small.
 const socketDeflate = { threshold: 64, zlibDeflateOptions: { level: 1, memLevel: 7 } };
 const closeOnRestart = (owned) => {
   for (const socket of owned.clients) socket.close(1012, "Conduit is restarting");
@@ -1100,12 +1019,7 @@ const liveSessionStream = createLiveSessionStream({
   },
 });
 
-/*
- * One handler, both listeners. A socket arriving over TLS is the same socket
- * with the same ticket; nothing about which port it came in on changes who is
- * allowed to open it, and a second copy of this is a second place for an
- * authentication check to drift.
- */
+// One handler for both listeners: a second copy would be a second place for an authentication check to drift.
 const handleUpgrade = async (request, socket, head) => {
   const requestUrl = new URL(request.url, "http://localhost");
   const pathname = requestUrl.pathname;
@@ -1145,25 +1059,11 @@ const handleUpgrade = async (request, socket, head) => {
 server.on("upgrade", handleUpgrade);
 
 /*
- * The same server, over a connection that can prove whose it is, on the same
- * port.
- *
- * Neither server listens. `front` reads the first byte of each connection and
- * hands the socket to one of them: a TLS ClientHello always opens with a
- * handshake record (0x16), and no HTTP request starts with that byte, so the
- * choice is exact rather than a guess. One port means one firewall rule, one
- * address per route, and nothing extra to forward through a tunnel.
- *
- * Nothing is told about the https scheme yet. `paths()` still offers only
- * `http` origins until both shells accept a leaf by its embedded attestation,
- * in `onReceivedSslError` and `ServerCertificateErrorDetected`.
- */
-/*
- * A browser on the LAN needs a certificate it already trusts before it will
- * treat the page as a secure context (microphone, service worker). When a
- * publicly trusted certificate for a LAN name is on disk (scripts/lan-cert),
- * a ClientHello naming it gets that certificate; every other name, and the
- * shells that verify the attested leaf, get the leaf as before.
+ * Neither server listens: `front` reads the first byte of each connection and hands it to one. A TLS ClientHello
+ * always opens with a handshake record (0x16) and no HTTP request starts with that byte, so the choice is exact. One
+ * port means one firewall rule and nothing extra to forward through a tunnel.
+ * A browser on the LAN needs a certificate it already trusts before it treats the page as a secure context
+ * (microphone, service worker), so a ClientHello naming a LAN name gets the publicly trusted one; the rest get the leaf.
  */
 const LAN_TLS_CERT = process.env.CONDUIT_LAN_TLS_CERT || path.join(os.homedir(), ".conduit", "tls", "lan-cert.pem");
 const LAN_TLS_KEY = process.env.CONDUIT_LAN_TLS_KEY || path.join(os.homedir(), ".conduit", "tls", "lan-key.pem");
@@ -1196,8 +1096,6 @@ const secureServer = serverLeaf
   : null;
 secureServer?.on("upgrade", handleUpgrade);
 const TLS_HANDSHAKE = 0x16;
-// A connection that never says anything is held only this long before the
-// byte that decides where it goes.
 const FIRST_BYTE_TIMEOUT_MS = 30_000;
 // Every connection the listener holds, for shutdown: upgraded sockets and ones still waiting on their first byte are
 // in neither server's own list, and would hold the listener open until they time out.
@@ -1214,11 +1112,6 @@ const front = net.createServer((socket) => {
     (first[0] === TLS_HANDSHAKE && secureServer ? secureServer : server).emit("connection", socket);
   });
 });
-/*
- * Checked again for expiry: `ensure` hands back the same leaf until it is
- * near the end of its life, and only then is a new one attested and swapped
- * in under the listener. Address changes no longer matter to it.
- */
 const LEAF_CHECK_MS = 60 * 60 * 1000;
 if (secureServer) lifetime.interval("TLS leaf check", async () => {
   try {
@@ -1254,10 +1147,8 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
 }
 
 
-// When the server stalls, say so and by how much. Everything here shares one
-// thread, so a slow open is usually not the work somebody asked for -- it is
-// whatever else was holding the loop. Without this that shows up only as "it
-// randomly slows to a crawl", and the phase timings blame whoever was waiting.
+// Everything here shares one thread, so a slow open is usually whatever else was holding the loop; without this the
+// phase timings blame whoever was waiting.
 let loopCheckAt = Date.now();
 lifetime.interval("event-loop check", () => {
   const drift = Date.now() - loopCheckAt - 500;
@@ -1265,26 +1156,19 @@ lifetime.interval("event-loop check", () => {
   if (drift > 250) console.warn("Event loop stalled", { ms: drift });
 }, 500);
 
-// Pay the model catalogue's cold start at boot, not on somebody's first click.
-// Building it costs seconds the first time, and starting an agent validates its
-// model against it before spawning -- so that cost used to sit in front of the
-// first chat anybody opened. One warm-up, in the background, for the catalogue
-// nearly every chat shares; the rest warm when they are first used.
+// Building the catalogue costs seconds the first time, and starting an agent validates its model against it before
+// spawning, so the one nearly every chat shares is warmed at boot rather than on somebody's first click.
 const warmModelCatalogue = () => catalogFor(runtimeFor({ runtimeKind: "conduit_profile", template: config.piTemplate }), config.piTemplate)
   .list(process.cwd())
   .catch((error) => console.warn("Model catalogue could not be warmed", error.message));
 
 front.listen(config.port, config.host, () => {
   console.log(
-    // The bound port, not the requested one: with CONDUIT_PORT=0 the kernel picks
-    // it, and announcing the request would announce a zero.
+    // The bound port, not the requested one: with CONDUIT_PORT=0 the kernel picks it.
     `Conduit ${config.release} listening on http://${config.host}:${front.address().port}${secureServer ? " (and https)" : ""}`,
   );
-  // Started here rather than at construction because the port is the one the
-  // kernel handed over: with CONDUIT_PORT=0 the requested port is a zero, and
-  // an address nothing listens on is worse than no advertisement at all.
+  // Started here, with the port the kernel handed over: an address nothing listens on is worse than no advertisement.
   lanAdvertisement.start(front.address().port);
-  // The port it really listens on, for the harnesses given the MCP endpoint.
   mcpAccess.url = `http://127.0.0.1:${front.address().port}/v0/mcp`;
   void warmModelCatalogue();
 });

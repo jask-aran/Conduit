@@ -9,8 +9,8 @@ import { clampThinkingLevel, getSupportedThinkingLevels } from "@earendil-works/
 import fs from "node:fs/promises";
 import path from "node:path";
 
-// What a local refresh reads. It re-parses models-store.json (hundreds of KB,
-// on the main thread), so it runs when one of these changed, or a minute on.
+// A local refresh re-parses models-store.json (hundreds of KB, on the main thread), so it runs only when one of these
+// changed, or a minute on.
 const REFRESH_FILES = ["models.json", "models-store.json", "auth.json"];
 const REFRESH_AT_MOST_MS = 60_000;
 const NETWORK_REFRESH_EVERY_MS = 5 * 60_000;
@@ -44,8 +44,7 @@ export class PiModelCatalog {
     authStorage,
     modelRegistry,
     modelPatterns = [],
-    // A profile with models of its own (the scripted Test profile): its patterns, not the person's scoped models,
-    // and these providers registered on its runtime only.
+    // A profile with models of its own (the scripted Test profile): its providers are registered on its runtime only.
     ownModels = false,
     providers = [],
     settingsFactory = (cwd) => SettingsManager.create(cwd, agentDir, { projectTrusted: false }),
@@ -97,9 +96,8 @@ export class PiModelCatalog {
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (force || providers?.length) return run();
-    // Every client's first open asks for this, and each one asked every
-    // provider again (~1 s, ~100 ms of CPU, the store rewritten). One serves
-    // five minutes, unless a sign-in has changed auth.json since.
+    // Every client's first open asks for this, and a refresh asks every provider (~1 s, ~100 ms of CPU, the store
+    // rewritten), so one serves five minutes unless a sign-in has changed auth.json since.
     const authNow = () => fs.stat(this.authFile).then((stat) => `${stat.ino}:${stat.size}:${stat.mtimeMs}`, () => "-");
     const auth = await authNow();
     const last = this.networkRefresh;

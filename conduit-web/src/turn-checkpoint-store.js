@@ -19,24 +19,14 @@ const REFUSED_FOR_MS = 10 * 60_000;
 const DEVICE_STORE = ".git/conduit-turns";
 
 const keyFor = (value) => crypto.createHash("sha256").update(String(value)).digest("hex").slice(0, 32);
-// A workspace-relative path the store may read: `/`-separated, no `.`/`..`.
 const safeRelative = (relativePath) => typeof relativePath === "string" && relativePath && !relativePath.includes("\0")
   && relativePath.split("/").every((part) => part && part !== "." && part !== "..");
 const unavailable = (relativePath, scope, reason, message) => ({ kind: "unavailable", path: relativePath, oldPath: relativePath, scope, status: "M", reason, message });
 
-/**
- * A chat's turn checkpoints: what its workspace held as each turn started and as it settled, so a turn's changes are
- * what it left.
- *
- * The files are kept by Git, in a shadow store: a bare repository of Conduit's own per workspace (under the data root;
- * on a device, inside the repository's `.git`), which the workspace's own repository, index and history never see. A
- * snapshot is `git add -A` and `git write-tree` there with the workspace as the work tree: Git re-reads only files
- * whose stat changed, stores each content once, and honours the workspace's `.gitignore`. A checkpoint is a small
- * record (data root, by chat) naming its tree, which a ref (`refs/turns/<id>`) keeps from collection.
- *
- * A record: `{ version: 2, id, chatId, projectId, workingRoot, turnId, messageId, open, createdAt, sequence,
- * sourceCheckpointId, tree }`; a turn's end: `{ version: 2, id, chatId, workingRoot, closes, same, createdAt,
- * sequence, tree }`.
+/*
+ * Files are kept in a shadow store, a bare repository of Conduit's own that the workspace's repository, index and
+ * history never see. A snapshot is `git add -A` and `git write-tree` with the workspace as the work tree: Git re-reads
+ * only files whose stat changed, stores each content once, and honours `.gitignore`.
  */
 export class TurnCheckpointStore {
   constructor(root) {
@@ -48,11 +38,6 @@ export class TurnCheckpointStore {
     this.refused = new Map();
   }
 
-  /**
-   * Where a chat's workspace is (decision 24: the hub is a device like the others): an absolute path on this server,
-   * or a device's folder as a host (workspace-host.js). `identity` is what a checkpoint records as its `workingRoot`;
-   * `git` runs in the shadow store with the workspace as its work tree.
-   */
   async #open(workingRoot) {
     const host = workspaceHost(workingRoot);
     const local = typeof workingRoot === "string";
@@ -72,7 +57,6 @@ export class TurnCheckpointStore {
     return workspace;
   }
 
-  /** One key's work, one after another: a chat's records, a store's index. */
   async #queued(key, work) {
     const previous = this.queues.get(key) || Promise.resolve();
     const task = previous.then(work);
@@ -82,7 +66,7 @@ export class TurnCheckpointStore {
     finally { if (this.queues.get(key) === queued) this.queues.delete(key); }
   }
 
-  /** The workspace as it is now, as a tree in its store. A file Git cannot read is left out, not the snapshot. */
+  // A file Git cannot read is left out, not the snapshot.
   #snapshot(workspace) {
     return this.#queued(workspace.storeKey, async () => {
       const tooLarge = () => Object.assign(new Error("The workspace is too large to checkpoint"), { code: "checkpoint_too_large" });
@@ -124,7 +108,6 @@ export class TurnCheckpointStore {
     }
   }
 
-  /** Where a turn starts: the workspace as it is just before the prompt goes out (a regenerate's, where its source did). */
   async capture({ chatId, projectId, workingRoot, sourceCheckpointId = null }) {
     return this.#queued(keyFor(chatId), async () => {
       const workspace = await this.#open(workingRoot);
@@ -145,11 +128,7 @@ export class TurnCheckpointStore {
     });
   }
 
-  /**
-   * Where a turn ended: the workspace as the turn settles, kept beside its start (`closes` names it), so the turn's
-   * changes are what it left and not whatever is written there before the next turn starts. The turn is the start
-   * `turnId` was assigned to, else the last one still open. `unchanged` (the turn ran no tools) ends it unread.
-   */
+  // Kept beside its start so the turn's changes are what it left, not whatever is written before the next turn starts.
   async close({ chatId, workingRoot, turnId = null, unchanged = false }) {
     return this.#queued(keyFor(chatId), async () => {
       const workspace = await this.#open(workingRoot);
@@ -241,7 +220,7 @@ export class TurnCheckpointStore {
     return { kind: "text", path: relativePath, oldPath: relativePath, scope, status: !original.held ? "A" : !modified.held ? "D" : "M", original: original.text, modified: modified.text };
   }
 
-  /** Removes checkpoints from before the shadow store (whole file contents as JSON), which nothing reads. */
+  // Checkpoints that hold whole file contents as JSON are a format nothing reads.
   async sweep() {
     for (const name of await fs.readdir(this.root).catch(() => [])) {
       if (name === "git") continue;
@@ -256,7 +235,6 @@ export class TurnCheckpointStore {
     }
   }
 
-  /** The files that differ between two trees: `{ path, status, binary, added, removed }`. */
   async #changes(workspace, from, to) {
     if (from === to) return [];
     const [counts, names] = await Promise.all(["--numstat", "--name-status"].map((form) =>
@@ -270,7 +248,6 @@ export class TurnCheckpointStore {
     });
   }
 
-  /** A turn's line counts, as Git counts them, and the first text file among them; null when no text changed. */
   async #summary(workspace, from, to) {
     if (from === to) return null;
     const key = `${from}\u0000${to}`;
@@ -290,10 +267,6 @@ export class TurnCheckpointStore {
     return summary;
   }
 
-  /**
-   * The chat's turns as it stands: each start checkpoint on the branch the chat is on (a regenerate names the one it
-   * replaces from), the latest one a message has, numbered in order; `endOf` gives where a settled turn ended.
-   */
   #activeCheckpoints(stored) {
     const closers = new Map(stored.filter((checkpoint) => checkpoint.closes).map((checkpoint) => [checkpoint.closes, checkpoint]));
     const endOf = (checkpoint) => closers.get(checkpoint.id) || null;
@@ -319,7 +292,6 @@ export class TurnCheckpointStore {
     };
   }
 
-  /** The two trees a review compares: `target` is a turn's end, the next turn's start, or the workspace as it is. */
   async #comparisonRange(chatId, workspace, baseline, checkpointId) {
     const { checkpoints, endOf } = this.#activeCheckpoints(await this.#checkpoints(chatId, workspace.identity));
     const index = checkpointId ? checkpoints.findIndex((checkpoint) => checkpoint.id === checkpointId) : baseline === "turn" ? checkpoints.length - 1 : 0;
@@ -334,7 +306,6 @@ export class TurnCheckpointStore {
     return path.join(this.root, keyFor(record.chatId), `${record.createdAt.replaceAll(":", "-")}-${record.id}.json`);
   }
 
-  /** Write a record, and name its tree so Git keeps it. */
   async #keep(workspace, record) {
     const file = this.#file(record);
     await fs.mkdir(path.dirname(file), { recursive: true });
@@ -343,7 +314,6 @@ export class TurnCheckpointStore {
     return file;
   }
 
-  /** A chat's records, oldest first; `root` keeps one workspace's. */
   async #checkpoints(chatId, root = null) {
     const directory = path.join(this.root, keyFor(chatId));
     const names = await fs.readdir(directory).catch((error) => error.code === "ENOENT" ? [] : Promise.reject(error));

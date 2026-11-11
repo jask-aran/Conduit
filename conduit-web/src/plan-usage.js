@@ -1,19 +1,12 @@
-/**
- * The account's plan usage, asked of the vendor directly with the login the
- * harness already holds -- as codex-auth and ccusage-style tools do -- so the
- * readout is current even when no live session is declaring it. Tokens are
- * read, never refreshed or written: the harness owns its login, and an
- * expired one just leaves the readout without a plan until the harness runs.
- * Each answer is kept for a minute; they are the account's, not a chat's.
- */
+// Tokens are read, never refreshed or written: the harness owns its login, and an expired one just leaves the
+// readout without a plan until the harness runs.
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { planWindowLabel } from "./cache-stats.js";
 
 const TTL_MS = 60_000;
-// A live harness's own declaration outranks a poll: it says what the request
-// it just made counted against. Polls wait this long after one before asking.
+// A live harness's own declaration outranks a poll: it says what the request it just made counted against.
 const DECLARED_HOLD_MS = 5 * 60_000;
 const cache = new Map();
 
@@ -22,7 +15,6 @@ function cached(key, ask) {
   if (entry?.declaredAt && Date.now() - entry.declaredAt < DECLARED_HOLD_MS) return Promise.resolve(entry.value);
   if (entry && (entry.pending || Date.now() - entry.at < TTL_MS)) return entry.pending || Promise.resolve(entry.value);
   const pending = ask().catch(() => null).then((value) => {
-    // A failed read keeps the last good answer rather than blanking it.
     const current = cache.get(key);
     // A declaration that landed while this poll was out stands.
     if (current?.declaredAt && current.declaredAt > (entry?.declaredAt || 0)) return current.value;
@@ -36,7 +28,6 @@ function cached(key, ask) {
 const readJson = async (file) => JSON.parse(await fs.readFile(file, "utf8"));
 const timeout = () => AbortSignal.timeout(8000);
 
-/** ChatGPT's plan, for a Codex login. */
 async function chatgptPlan(accessToken, accountId) {
   if (!accessToken) return null;
   const response = await fetch("https://chatgpt.com/backend-api/wham/usage", { signal: timeout(), headers: {
@@ -51,7 +42,6 @@ async function chatgptPlan(accessToken, accountId) {
   return windows.length ? { name: body.plan_type || null, windows } : null;
 }
 
-/** The claude.ai plan, for a Claude Code login: the endpoint Claude Code's /usage reads. */
 async function claudePlan(accessToken) {
   if (!accessToken) return null;
   const response = await fetch("https://api.anthropic.com/api/oauth/usage", { signal: timeout(), headers: {
@@ -84,10 +74,6 @@ export function claudePlanUsage() {
   });
 }
 
-/**
- * What a live harness declared about its plan (`codex`, `claude`): its windows
- * replace the same windows from any poll, the rest stand, and polls hold off.
- */
 export function declarePlan(key, plan) {
   if (!plan?.windows?.length) return cache.get(key)?.value ?? null;
   const previous = cache.get(key)?.value;
