@@ -126,7 +126,7 @@ Desktop is a darker frame with inset rounded panes; the frame's margin is also t
 
 # Panes and windows
 
-The panes smoke and the file-tabs test assert these; a change to a rule changes its test.
+The panes smoke asserts these; a change to a rule changes it.
 
 **Documents and room**
 
@@ -157,14 +157,17 @@ The panes smoke and the file-tabs test assert these; a change to a rule changes 
 
 # Keyboard
 
-docs/plans/keyboard-model.md is the full model (enter, move, act, leave; the Escape ladder; modals exclusive; every key a command); where it and this differ, it wins. One model for every surface, so no surface grows keys of its own.
+One model for every surface -- enter, move, act, leave -- so no surface grows keys of its own.
 
 - **Regions.** The app is a tree of regions following focus; shortcuts resolve innermost first, then outward. Go-to chords open and focus a region, never close it; the sidebar and dock toggles stay plain toggles.
-- **The leader** acts within the current region, innermost first, and lists only keys that would do something. Numbers inside a region mean positions, never other regions.
-- **Lists:** ↑/↓ move skipping headings, Home/End, →/← into and out of a level, Shift+↑/↓ extends, the menu key opens the row's menu. ↑ from the top reaches a segmented switch above.
-- **Tab** is one stop per section, landing where the cursor last was; entering a page puts focus in its composer. **Enter** acts. **Esc** steps outward a level at a time and always gets back to the composer. A key on a bare pane goes to the composer or the list.
-- **New global chords** go in the settings shortcut manager; every scoped key is findable in the leader under its region.
-- **Held focus.** A region reached by a go-to chord shows a thin `ring` line along its bottom edge, the rest dimming briefly; it stays while focus is in it or nowhere, and goes when focus reaches another region another way. A click or Tab never lights one. Not on a phone.
+- **Enter.** Every region has one way in from anywhere: a go-to chord, a leader key under its region for anything inside it, a modal's own chord. Arriving lands on the region's anchor: the sidebar on the current page's row, a pane on its last focus else its composer, the dock on its tab's default, Settings on its search, a palette on its input. Entering a page puts focus in its composer.
+- **Move.** Tab moves between groups, arrows inside one. A list (a sidebar section, a dashboard group, a tree, results) is one Tab stop with roving focus, landing on its remembered row; a form tabs control to control. Lists clamp at both ends, never wrap; ↑ from the top hands on to what is above (a heading's controls, a search field, a segmented switch). In a list: ↑/↓ move skipping headings, Home/End, →/← into and out of a level or across a toolbar, the menu key or Shift+F10 opens the row's menu, Shift+↑/↓ extends a selection where rows can be selected, typed letters are typeahead where the list has no field of its own. A key on a bare pane goes to the composer or the list.
+- **Act.** Enter does the row's main thing; its other actions are in its menu, never on bare letters (an edit mode the person turned on may keep letters). Commands with a modifier act from anywhere in their context.
+- **Leave: the Escape ladder.** Escape steps out exactly one level and never acts: a layer opened inside the region closes (menu, popover, slash menu, rename field); else a transient state clears (query, selection, filter, recording, pending leader); else focus goes to its group's anchor; else it leaves the region -- a modal closes, any other region hands focus to the main pane's composer. In the composer Escape does nothing; stopping a turn has its own chord. Terminals keep Escape for the TUI and are left by chord.
+- **Every key is a command in the registry**, declared with the context it works in, so it shows in the leader and Settings › Shortcuts and can be rebound; only text editing (typing, Backspace, the caret) is not. New global chords go in the settings shortcut manager.
+- **A modal is exclusive**: app chords do not fire under Settings or a dialog; the modal's own chord closes it.
+- **The leader** acts within the current region, innermost first, and lists only keys that would do something. A leader key means one thing at every level, or the menu says which runs. Numbers inside a region mean positions, never other regions.
+- **Held focus.** The region holding focus shows a thin `--region-focus` line along its bottom edge, following focus into whichever region it enters, by click, Tab or chord (a click in the sidebar, which only passes focus on to the chat it opens, leaves it where it was). Only a go-to chord also draws it out from its middle. Not on a phone.
 
 # Transcript
 
@@ -228,6 +231,17 @@ What each kind of piece does; how it looks is its gallery family.
 - **Runtime dot.** Colour on the dot only, a label only when it has something to say, a spinner while busy, one per surface, worst state first.
 - **App icons.** Only platform-required assets, derived from `public/favicon.svg`: the release C white on black, every dev build inverted; the Windows caption keeps the icon but no text.
 
+# Context
+
+What every thread Conduit starts is given, as Settings › Prompts and Blocks name it.
+
+- **Block**: one named piece of context. *Text* blocks are editable (a profile's lines, the shared base, a skill, jbot's run rules, each routine's instructions, the person's own); *live* blocks are templates Conduit fills when the model runs, read-only.
+- **Document**: the whole context a role starts a thread with: its text blocks in order, then the live blocks, then -- for a run or a subagent -- the first message. A block edited once changes in every document it is in.
+- **Role**: what a document starts a thread as: each profile, jbot, each routine's run, the default subagent, chat naming.
+- **Slot**: a `{{name}}` Conduit fills. Fixed slots fill system-prompt blocks when a thread starts; a later change reaches the thread as an update notice, never as an edit to its prompt. The current slot (`now`) is never in a system prompt.
+- **Notice**: a whole message Conduit writes into a thread on its own (a wake, a report, an approval result, a steer, the stop, update and time notes). Its wording is a block; a document lists the notices its role receives.
+- **The prefix is append-only**: nothing that changes per turn (an age, the clock) goes in a prompt or a section; what changes arrives later, as a notice.
+
 # Intentional exceptions
 
 - **Phone header pills**: buttons sharing a pill are capsules narrower than tall, concentric with it, so several controls read as one floating object over the transcript.
@@ -235,4 +249,3 @@ What each kind of piece does; how it looks is its gallery family.
 # References
 
 - `docs/design/orb-catalogue/` -- every thinking-orb frame and which state uses it.
-- docs/plans/persistent-agent.md -- what every thread is given (blocks, documents, roles, slots, notices).
