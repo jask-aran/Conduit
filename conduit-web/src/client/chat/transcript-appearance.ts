@@ -17,16 +17,6 @@ export {
 } from "./user-message-collapse";
 export type { UserMessageCollapseMode } from "./user-message-collapse";
 
-/**
- * Reading-surface preferences: how wide the transcript column is, how far wide
- * blocks may bleed past it, and how code blocks collapse.
- *
- * All four are presets rather than free values. The shell scales its whole
- * geometry by density and by container width, so a raw pixel preference would
- * not survive either; a named preset resolves through CSS custom properties and
- * stays correct at every size.
- */
-
 export type TranscriptWidthMode = UiPreferenceChoice<"transcriptWidth">;
 export type TranscriptWideBlocksMode = UiPreferenceChoice<"transcriptWideBlocks">;
 export type CodeBlockWidthMode = UiPreferenceChoice<"codeBlockWidth">;
@@ -108,8 +98,7 @@ export function selectedCodeBlockWidth(storage: Pick<Storage, "getItem"> = local
   const override = param("codeBlockWidth");
   if (isCodeBlockWidthMode(override)) return override;
   const stored = storage.getItem(CODE_BLOCK_WIDTH_STORAGE_KEY);
-  // A code block left wide by default dominates the page, so the reading
-  // column is the default and Wide is the opt-in.
+  // A code block left wide by default dominates the page.
   return isCodeBlockWidthMode(stored) ? stored : "column";
 }
 
@@ -131,17 +120,8 @@ export function isPanelMotionMode(value: unknown): value is PanelMotionMode {
   return typeof value === "string" && PANEL_MOTIONS.has(value);
 }
 
-/**
- * How the transcript answers a workspace-panel drag.
- *
- * "reflow" is the honest layout: the column takes its real width every frame,
- * so text rewraps under the pointer. It costs a full paint of the visible
- * surface per frame, which a formula-heavy answer cannot afford yet.
- * "translate" pins the width and moves the shell on the compositor, committing
- * the real width once on release. Translate is the default until reflow fits
- * the frame budget; the preference exists so the two can be compared on the
- * same transcript without rebuilding.
- */
+/** "reflow" costs a full paint of the visible surface per frame of a workspace-panel drag, more than a formula-heavy
+ *  answer can afford; "translate" moves the shell on the compositor and commits the real width once on release. */
 export function selectedPanelMotion(storage: Pick<Storage, "getItem"> = localStorage): PanelMotionMode {
   const override = param("panelMotion");
   if (isPanelMotionMode(override)) return override;
@@ -227,11 +207,6 @@ export function saveCodeBlockCollapseLines(
   return selected;
 }
 
-/**
- * Stamp the presets onto the document root. CSS resolves everything from there,
- * so changing a preference never re-renders a message.
- */
-/** The agent's app room (its page's messages): as wide as the transcript, or its own width. Defaults to the transcript's. Saved on this device; stamped on the root (data-agent-width). */
 export type AgentMessagesWidthMode = "transcript" | TranscriptWidthMode;
 export const AGENT_MESSAGES_WIDTH_STORAGE_KEY = "conduit:agent-messages-width";
 export const AGENT_MESSAGES_WIDTH_OPTIONS: ReadonlyArray<{ value: AgentMessagesWidthMode; label: string }> = [
@@ -251,6 +226,7 @@ export function saveAgentMessagesWidth(mode: AgentMessagesWidthMode) {
 }
 if (typeof document !== "undefined") document.documentElement.dataset.agentWidth = agentMessagesWidth();
 
+/** CSS resolves everything from the root, so changing a preference never re-renders a message. */
 export function applyTranscriptAppearance(options: {
   width?: TranscriptWidthMode;
   wideBlocks?: TranscriptWideBlocksMode;
@@ -266,14 +242,8 @@ export function applyTranscriptAppearance(options: {
   if (options.collapse) root.dataset.codeCollapse = options.collapse;
 }
 
-/**
- * Reactive view of the collapse preference for the renderer.
- *
- * The signals are module-level singletons behind one listener. Code blocks
- * mount and unmount constantly while a message streams, and giving each card
- * its own window listener would churn subscriptions on the hot path for a
- * preference that changes only when someone opens Settings.
- */
+/* Module-level signals behind one listener: code blocks mount and unmount constantly while a message streams, and a
+   window listener each would churn subscriptions on the hot path. */
 const [collapseMode, setCollapseMode] = createSignal<CodeBlockCollapseMode>(selectedCodeBlockCollapse());
 const [collapseThreshold, setCollapseThreshold] = createSignal(selectedCodeBlockCollapseLines());
 const [userCollapse, setUserCollapse] = createSignal<UserMessageCollapseMode>(selectedUserMessageCollapse());

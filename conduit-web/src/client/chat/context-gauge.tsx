@@ -7,14 +7,11 @@ import type { ActiveChatStore } from "../state/active-chat";
 import type { ContextCategory } from "../api/contracts";
 import { cacheHitPercent, compactTokens, contextBreakdown, contextTokens, contextUsagePercent, contextWindow } from "./context-metrics";
 
-/* One colour per kind of content, the same in every harness. What Conduit has
-   not named takes the next of the spares. */
 const CATEGORY_COLOURS: Record<string, string> = {
   messages: "var(--category-1)", used: "var(--category-1)",
   "system-prompt": "var(--category-2)", tools: "var(--category-3)",
   instructions: "var(--category-4)", other: "var(--category-5)",
 };
-/** When a plan window resets: the time today, else the weekday. */
 const resetText = (iso: string) => {
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return "";
@@ -28,16 +25,9 @@ const colourOf = (category: ContextCategory, index: number) => category.kind ===
   : category.kind === "buffer" ? "color-mix(in oklch, var(--muted-foreground), transparent 55%)"
   : CATEGORY_COLOURS[category.id] ?? SPARES[index % SPARES.length];
 
-/* A live readout of how much room the next message has, so it sits with the
-   composer's other "what will this send cost" controls rather than in the
-   header, which holds identity and one-shot verbs.
-
-   Hovering previews it; a click holds it open, so the session ID can be
-   selected and copied, and a tap is how touch opens it at all. */
 export function ContextGauge(props: { chat: ActiveChatStore; compact?: boolean; canCompact?: boolean }) {
-  /* An adaptor that reports no context usage still gets a gauge: it reads 0%
-     and greys out, which is the honest answer, rather than leaving a hole in
-     the row that moves the controls beside it. */
+  /* An adaptor that reports no context usage still gets a gauge at 0%, greyed, rather than a hole in the row that
+     moves the controls beside it. */
   const reported = () => contextUsagePercent(props.chat.contextUsage());
   const percent = () => {
     const value = reported();
@@ -64,14 +54,12 @@ export function ContextGauge(props: { chat: ActiveChatStore; compact?: boolean; 
   </Popover>;
 }
 
-/** Where the window compacts, as a share of it. */
 const compactShare = (usage: ReturnType<ActiveChatStore["contextUsage"]>) => {
   const at = usage?.compactAt;
   const window = contextWindow(usage);
   return at && window ? Math.min(100, (at / window) * 100) : null;
 };
 
-/** The window as one bar of its parts, in their colours, and where it compacts (named in the reading's totals). */
 export function ContextBar(props: { chat: ActiveChatStore }) {
   const usage = () => props.chat.contextUsage();
   const inWindow = () => contextBreakdown(usage()).filter((category) => category.kind !== "deferred");
@@ -82,7 +70,6 @@ export function ContextBar(props: { chat: ActiveChatStore }) {
   </Show>;
 }
 
-/** What fills the window: the total, the bar, and each part with its share. */
 export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean; canCompact?: boolean }) {
   const reported = () => contextUsagePercent(props.chat.contextUsage());
   const usage = () => props.chat.contextUsage();
@@ -118,12 +105,10 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean;
   };
   const { on: copied, flash: flashCopied } = createFlash();
   const copySession = () => void navigator.clipboard?.writeText(sessionId()).then(flashCopied);
-  // A row that does something: a keyboard reaches it and Enter or Space runs it, as a button.
   const act = (run: () => void, disabled?: boolean) => ({ role: "button" as const, tabIndex: disabled ? -1 : 0, onClick: () => { if (!disabled) run(); },
     onKeyDown: (event: KeyboardEvent) => { if (!disabled && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); run(); } } });
   const [opened, setOpened] = createSignal<string | null>(null);
   const threshold = () => compactShare(usage());
-  // The cache is the session's: one line. Unread, it has no figure, so no line.
   const cacheLine = () => uncached() ? null
     : cache() != null ? { label: eligible() != null ? `Cache hits · ${Math.round(eligible()! * 100)}% of what could be reused` : "Cache hits, of input", value: `${Math.round(cache()!)}%` }
     : eligible() != null ? { label: "Cache, of what could be reused", value: `${Math.round(eligible()! * 100)}%` } : null;
@@ -156,7 +141,6 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean;
       </ReadingParts>
     </Show>
     <Show when={cacheLine()}>{(line) => <ReadingTotal label={line().label} value={line().value} />}</Show>
-    {/* Compaction: where it happens and how often it has, and the one thing to do about it. */}
     <ReadingFoot action={<Button variant="ghost" outline size="sm" disabled={!props.canCompact || busy()} onClick={() => void props.chat.compact()}
       title={props.canCompact ? "Summarise the conversation so far to free the window" : "This harness cannot be asked to compact"}>
       <ShrinkIcon />{props.chat.compacting() ? "Compacting…" : "Compact now"}</Button>}>
@@ -166,7 +150,6 @@ export function ContextBreakdown(props: { chat: ActiveChatStore; bare?: boolean;
     <Show when={!props.bare && (foot() || sessionId())}>
       <ReadingFoot action={<Show when={sessionId()}><Button variant="ghost" size="sm" title={`Copy session ID ${sessionId()}`} onClick={copySession}>{copied() ? "Copied" : `${sessionId().slice(0, 6)}…${sessionId().slice(-4)}`}</Button></Show>}>{foot()}</ReadingFoot>
     </Show>
-    {/* The plan's windows are the account's, not the session's: last, under their own name. */}
     <Show when={plan()}>{(current) =>
       <ReadingStats title={`Plan${current().name ? ` · ${current().name}` : ""}`}>
         <For each={current().windows}>{(window) => <ReadingStat label={window.label} value={`${Math.round(window.usedPercent)}%`} detail={window.resetsAt ? `resets ${resetText(window.resetsAt)}` : undefined} />}</For>

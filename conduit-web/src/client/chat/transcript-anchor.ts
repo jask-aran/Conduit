@@ -1,9 +1,5 @@
-/**
- * Capture where the transcript is anchored so a layout-disturbing commit can be
- * undone. The first row carrying a message id is the stable reference: rows
- * prepended above it, or blocks relaid out around it, both move it by a known
- * delta that can be subtracted straight out of scrollTop.
- */
+/** The first row carrying a message id is the reference: rows prepended above it, or blocks relaid out around it,
+ *  move it by a delta that can be subtracted straight out of scrollTop. */
 export type TranscriptAnchor = {
   element: HTMLElement | null;
   top: number | null;
@@ -24,12 +20,8 @@ export function captureTranscriptAnchor(
   };
 }
 
-/**
- * Re-apply an anchor. Returns the correction in pixels so callers can tell
- * whether the commit actually moved anything. `write` exists so the transcript
- * can route the correction through its programmatic-scroll bookkeeping instead
- * of touching scrollTop behind its own scroll listener.
- */
+/** `write` lets the transcript route the correction through its programmatic-scroll bookkeeping instead of touching
+ *  scrollTop behind its own scroll listener. */
 export function restoreTranscriptAnchor(
   viewport: HTMLElement,
   anchor: TranscriptAnchor,

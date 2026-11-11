@@ -1,17 +1,12 @@
 import { createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js";
 import { DEFAULT_SEED, DEFAULT_SETTINGS, MeteorShower, simulateMeteors, type MeteorEvent } from "@jask-aran/solid-components/meteor-shower";
 
-/*
- * One meteor shower across the whole shell (AppShell's row), seen through every pane that shows it: each pane's
- * Sheet backdrop draws the same timeline, shifted by where the pane sits in the row, so the panes read as windows
- * onto one field behind them. The timeline is the package's DefaultMeteorShower's (its seed, settings and cycle),
- * kept here once so every pane's meteors start together; a pane opened later joins mid-flight.
- */
+/* Each pane's Sheet backdrop draws the same timeline, shifted by where the pane sits in the shell's row, so the panes
+   read as windows onto one field. The timeline is kept here once so every pane's meteors start together. */
 const TIMELINE_SECONDS = 600;
 const INITIAL_ELAPSED_SECONDS = 12;
 const EPSILON = 1e-3;
 
-/** In flight at `elapsed`, and the next one scheduled. */
 const activeWindow = (events: readonly MeteorEvent[], elapsed: number, maxActive: number) => {
   const flying = events.filter((event) => event.startTime <= elapsed && event.startTime + event.duration > elapsed).slice(0, Math.max(0, maxActive));
   const next = events.find((event) => event.startTime > elapsed);
@@ -22,7 +17,6 @@ const retainWindow = (previous: readonly MeteorEvent[], next: readonly MeteorEve
   const kept = new Map(previous.map((event) => [event.id, event]));
   return next.map((event) => { const old = kept.get(event.id); return old && old.startTime === event.startTime && old.duration === event.duration ? old : event; });
 };
-/** When the window next changes: a launch or a landing. */
 const nextChange = (events: readonly MeteorEvent[], elapsed: number, end: number) => {
   let at = end;
   for (const event of events) {
@@ -56,7 +50,6 @@ export function createMeteorField() {
     window.clearTimeout(timer);
     const now = live();
     timer = window.setTimeout(() => {
-      // The cycle ends: begin again at the shell's size now.
       if (live() >= TIMELINE_SECONDS - EPSILON) { start = performance.now(); setViewport(pending); setElapsed(0); setCycle((n) => n + 1); }
       else setElapsed(live());
       schedule();
@@ -64,7 +57,7 @@ export function createMeteorField() {
   };
   let observer: ResizeObserver | undefined;
   let watchers = 0;
-  /** The row the field spans. Its size at the start of a cycle is the field's (a resize waits for the next). */
+  /** Its size at the start of a cycle is the field's (a resize waits for the next). */
   const observe = (element: HTMLElement) => {
     shell = element;
     observer?.disconnect();
@@ -82,7 +75,6 @@ export function createMeteorField() {
   };
   onCleanup(() => { window.clearTimeout(timer); observer?.disconnect(); });
 
-  /** The field as one pane sees it: put in a Sheet's backdrop. */
   const Window = (): JSX.Element => {
     let frame!: HTMLDivElement;
     const [offset, setOffset] = createSignal(0);
@@ -92,8 +84,8 @@ export function createMeteorField() {
       const moved = new ResizeObserver(measure);
       moved.observe(frame.parentElement ?? frame);
       if (shell) moved.observe(shell);
-      // No read now: the observers' first call comes after the layout, before the paint. One here forced the
-      // whole new pane's layout inside the click that opened it.
+      // No read now: the observers' first call comes after layout, before paint; a read here forces the whole new
+      // pane's layout inside the click that opened it.
       onCleanup(() => { moved.disconnect(); if (--watchers === 0) window.clearTimeout(timer); });
     });
     return <div ref={frame} class="solid-meteor-shower" style={{ width: `${shellWidth()}px`, transform: `translateX(${-offset()}px)` }}>

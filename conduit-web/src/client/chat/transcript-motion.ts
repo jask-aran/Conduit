@@ -12,14 +12,11 @@ function transformX(element: HTMLElement) {
 }
 
 function layoutWidth(element: HTMLElement) {
-  // Do not replace this with clientWidth. Windows display scaling produces
-  // fractional CSS widths. Rounding 709.19px to 709px was enough to wrap an
-  // earlier line, add 10px to the thread and move every later block on the
-  // initial pointer-down, before the resize handle had moved.
+  // Not clientWidth: Windows display scaling produces fractional CSS widths, and rounding one down can wrap a line and
+  // move every later block on pointer-down.
   return element.getBoundingClientRect().width;
 }
 
-// Two views side by side in the main pane (docs/design/panes-and-rail.md).
 const sharesMainPane = () => Boolean(document.querySelector(".main-split"));
 
 export function mountTranscriptPanelMotion(
@@ -48,12 +45,8 @@ export function mountTranscriptPanelMotion(
   };
 
   const setWidthPreservingAnchor = (width: number) => {
-    // Reflow is allowed to change line breaks, but it must not move the user's
-    // reading position when blocks above the viewport gain or lose lines. Use
-    // the first block whose top edge is visible: an intersecting block that
-    // began above the viewport can itself grow, so anchoring its top does not
-    // protect the later text the user can see. Disable native anchoring for
-    // this transaction so Chrome and Conduit do not both apply a correction.
+    // Anchor the first block whose top edge is visible: a block that began above the viewport can itself grow. Native
+    // anchoring is off for this transaction so Chrome and Conduit do not both correct.
     const viewport = transcript.querySelector<HTMLElement>(".ui-chat-viewport");
     const viewportTop = viewport?.getBoundingClientRect().top ?? 0;
     const blocks = [...transcript.querySelectorAll<HTMLElement>(".chat-markdown > .incremark > *")];
@@ -103,11 +96,8 @@ export function mountTranscriptPanelMotion(
     if (detail.phase === "begin") {
       cancelRelease();
       activeIds.set(detail.source, detail.id);
-      // Edge path (resize + open/close): pin width, follow shell on change.
-      // targetSize inverse-translate is only for atomic shell commits — it
-      // jumps then slides if the shell is already CSS-easing.
-      // Beside another pane, this pane takes only its share of the change, and
-      // from whichever edge moved: an atomic commit just lays out at the end.
+      // targetSize inverse-translate is only for atomic shell commits: it jumps then slides if the shell is already
+      // CSS-easing. Beside another pane, an atomic commit just lays out at the end.
       if (detail.targetSize != null && sharesMainPane()) {
         activeIds.delete(detail.source);
         return;
@@ -133,8 +123,7 @@ export function mountTranscriptPanelMotion(
         return;
       }
       transformSource = null;
-      // Preserve the exact rendered shell width. The panel begin event must be
-      // geometry-neutral; all visible movement starts with a change event.
+      // The begin event must be geometry-neutral; all visible movement starts with a change event.
       const width = layoutWidth(motionShell);
       const rect = sharesMainPane() ? transcript.getBoundingClientRect() : null;
       const thread = transcript.querySelector<HTMLElement>(".ui-chat-column");
@@ -159,12 +148,8 @@ export function mountTranscriptPanelMotion(
     if (detail.phase === "change") {
       const start = edgeStarts.get(detail.source);
       if (!start) return;
-      // Alone in the main pane, the panel's change is this pane's. Beside
-      // another pane it takes only a share, so the pane is measured: one read
-      // per frame, with the heavy content held at its pinned width. The shell
-      // sits at the pane's left, so whichever edge moved, the content's centre
-      // is off by half the change.
-      // A mover that says what each pane's width now is saves that read.
+      // Beside another pane this pane takes only a share, so it is measured (one read a frame, unless the mover says
+      // each pane's width). The shell sits at the pane's left, so the content's centre is off by half the change.
       const host = start.host && detail.panes?.find((pane) => pane.element === start.host!.element);
       const delta = start.paneWidth == null ? detail.size - start.size
         : host ? start.host!.width - host.width
@@ -182,13 +167,8 @@ export function mountTranscriptPanelMotion(
         setTransform(shift);
         return;
       }
-      // Keep the transcript at its settled shape while a panel edge moves.
-      // The compositor follows the changing center, then one final layout
-      // commit adopts the target width. The "reflow" preference opts back
-      // into taking real width every frame.
-      // Back from compression: the slide assumes the shell is still at the
-      // width it started with, and compression narrowed it. Sliding the
-      // narrowed column clipped it at the pane's left edge until release.
+      // Back from compression: the slide assumes the shell is still at the width it started with, and a narrowed
+      // column would be clipped at the pane's left edge until release.
       if (motionShell.style.width !== `${start.width}px`) setWidthPreservingAnchor(start.width);
       start.shift = -delta / 2;
       let shift = 0;

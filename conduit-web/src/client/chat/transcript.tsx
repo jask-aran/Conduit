@@ -50,25 +50,11 @@ import { fullDateTime } from "./full-date-time";
 import { elapsed } from "./tool-card";
 
 
-/**
- * A user message, folded when it is long enough to push the answer off screen.
- *
- * The fold is a line clamp rather than a character budget, because what costs
- * the reader is screen height, not text length -- one pasted 300-character
- * paragraph is two lines, and twelve short lines is twelve. Whether a message
- * actually exceeds the fold is therefore a measured fact.
- *
- * Measuring every bubble on load would be a forced layout per message, so the
- * cheap arithmetic test runs first: a message that cannot reach the fold even
- * at a pessimistic 24 characters per line is never measured at all, which is
- * almost every message anyone sends.
- */
-/** A message the user sent: the library's Message, given the fold preference, the edit state and its foot. */
 function UserMessage(props: { latest?: boolean; message: Message; text: string; editing: boolean; editable: boolean; since?: number; under: JSX.Element; onEdit: () => void; onCancelSend?: () => void }) {
   const preference = useUserMessageCollapse();
   const [open, setOpen] = createSignal(false);
   // Pessimistic: a line holds at least 24 characters. Under that budget a message cannot fill the fold at any
-  // column width, so it is not given one and never measured.
+  // column width, so it is never measured (a forced layout per message).
   const fold = () => {
     const limit = userMessageCollapseLines(preference.mode());
     if (!limit) return undefined;
@@ -98,9 +84,7 @@ function UserMessage(props: { latest?: boolean; message: Message; text: string; 
   </LibraryMessage>;
 }
 
-/** A turn's changes, opening them in Agent changes. */
 function TurnChanges(props: { artifact: TurnArtifactSummary; chatId: string }) {
-  // A settled turn's changes are its own; an open one's run to the working copy (an older chat's, to the next turn).
   const range = () => props.artifact.targetSequence === props.artifact.sequence ? `Turn ${props.artifact.sequence}`
     : `Turn ${props.artifact.sequence} → ${props.artifact.targetSequence === null ? "Working copy" : `Turn ${props.artifact.targetSequence}`}`;
   return <Changes added={props.artifact.summary!.added} removed={props.artifact.summary!.removed} title={range()}
@@ -108,8 +92,6 @@ function TurnChanges(props: { artifact: TurnArtifactSummary; chatId: string }) {
     onOpen={() => requestTurnArtifactNavigation({ chatId: props.chatId, checkpointId: props.artifact.id, path: props.artifact.summary!.preferredPath })} />;
 }
 
-/** A guess at a row's height (px) from its text, for how many rows a chat opens on (createTailWindow's estimate):
- *  a line of text a column's characters wide, and a row's own furniture (its foot, a bubble's padding). */
 function estimateRowHeight(row: TurnRow, columnChars: number) {
   if (row.type !== "message") return 32;
   const text = row.value.content?.length || 0;
@@ -117,11 +99,8 @@ function estimateRowHeight(row: TurnRow, columnChars: number) {
   return 56 + lines * 24 + (row.value.attachments?.length ? 160 : 0);
 }
 
-/* A message's time leads its foot, muted -- not a line of its own above it. */
-// The library's, made once (time.ts).
 const clock = clockTime;
 
-/** An answer's foot: its time, how it ended if it did not finish, then Copy, Regenerate and its changes. */
 function AnswerFoot(props: { latest?: boolean; message: Message; precedingUserId?: string; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; artifact?: TurnArtifactSummary; traced?: boolean; reveal?: boolean; copied: boolean; onCopy: () => void }) {
   /* A stopped turn says "Interrupted" once, on its first row. A trace above
      says it for the turn; a discarded or unwritten answer says it on its stop
@@ -131,8 +110,6 @@ function AnswerFoot(props: { latest?: boolean; message: Message; precedingUserId
     if (props.message.status === "stopping") return "Stopping…";
     return props.message.content && !props.message.discarded && !props.traced ? "Interrupted" : undefined;
   };
-  /* Nothing to copy from an answer that was never written, or one the agent
-     was not given back. */
   const copyable = () => !props.message.discarded && Boolean(props.message.content || props.message.errorMessage);
   return <MessageFoot motion={props.reveal ? "entering" : undefined} at={props.message.timestamp} eager={props.latest} status={status()}>
       <Show when={copyable()}><CopyButton copied={props.copied} label="Copy Markdown" onCopy={props.onCopy} /></Show>
@@ -141,31 +118,25 @@ function AnswerFoot(props: { latest?: boolean; message: Message; precedingUserId
   </MessageFoot>;
 }
 
-/* The composer is where an edit happens, so starting or leaving one puts the
-   caret there once the draft has been swapped in. */
 const focusComposerSoon = () => requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>("textarea[data-composer-input]:not([disabled])")?.focus({ preventScroll: true }));
 
-/** One of a row's actions as its menu lists them (the transcript cursor's Menu key): what its foot offers. */
 type TurnAction = { label: string; icon: JSX.Element; run: () => void };
 
-/** An approval as the thread draws it (GET /v0/agent `asks`). */
 export type TranscriptAsk = { id: string; toolCallId: string; parentCallId: string | null; run?: string | null; always?: string | null; choices?: ApprovalChoice[]; title: string; service: string | null; lines: ApprovalLine[]; expiresAt: string; status: ApprovalState };
 const APPROVAL_NOTE = "[Approval] ";
-// How long a message in or out reads before it folds ("Show all"): a heartbeat's report is often a page.
+// A heartbeat's report is often a page.
 const ENVELOPE_FOLD = 8;
 const approvalMeta = (text: string) => {
   const body = text.slice(APPROVAL_NOTE.length);
   const ask = /\(ask ([^)]+)\)/.exec(body)?.[1];
   return [body.startsWith("Allowed") ? "an approval allowed" : body.startsWith("Not allowed") ? "an approval declined" : "an approval", ask].filter(Boolean).join(" · ");
 };
-/** Text in a message in or out: the answer's Markdown, settled (it arrives whole). */
 function ChatText(props: { text: string }) {
   return <Answer><Suspense fallback={<div class="markdown-skeleton" />}><ChatMarkdown streaming={false}>{props.text}</ChatMarkdown></Suspense></Answer>;
 }
-/** What the turn sent the person (a `message` tool): a notification as it reached their devices. */
 function SentRow(props: { tool: ToolItem }) {
   const input = () => (props.tool.input && typeof props.tool.input === "object" ? props.tool.input : {}) as { title?: unknown; text?: unknown; urgent?: unknown; notify?: unknown };
-  // `message` writes to the message log (the app room), reaching the phone only when it asks; `notify` is the phone.
+  // `message` writes to the message log, reaching the phone only when it asks; `notify` is the phone.
   const message = () => props.tool.name === "message";
   const pushed = () => message() ? input().notify === "push" || input().notify === "urgent" : true;
   const state = () => props.tool.done === false ? "sending" : props.tool.isError || props.tool.cancelled ? "not sent"
@@ -177,7 +148,6 @@ function SentRow(props: { tool: ToolItem }) {
     <ChatText text={[typeof input().title === "string" && `**${input().title}**`, typeof input().text === "string" && input().text].filter(Boolean).join("\n\n")} />
   </Outbound>;
 }
-/* Waits for how long, as the card's meta: "23 h", "40 min". */
 const waitsFor = (expiresAt: string) => { const minutes = Math.max(0, Math.round((Date.parse(expiresAt) - Date.now()) / 60_000)); return minutes >= 90 ? `${Math.round(minutes / 60)} h left` : `${minutes} min left`; };
 function AskCard(props: { ask: TranscriptAsk; answer: (id: string, choice: ApprovalChoice) => Promise<void> }) {
   const [busy, setBusy] = createSignal(false);
@@ -186,22 +156,16 @@ function AskCard(props: { ask: TranscriptAsk; answer: (id: string, choice: Appro
     onChoose={(choice) => { setBusy(true); void props.answer(props.ask.id, choice).finally(() => setBusy(false)); }} />;
 }
 
-export function Transcript(props: { /** Nothing here is the person's to change (a subagent's thread). */ readOnly?: boolean; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; profileLabel?: string; projectId?: string;
-  /** One of jbot's threads: always there, so an empty one is said to be empty, never welcomed as a new chat. */
+export function Transcript(props: { readOnly?: boolean; chat: TranscriptSource; supports: (capability: BooleanCapability) => boolean; profileLabel?: string; projectId?: string;
   agentThread?: boolean;
-  /** The thread's approvals waiting on the person or lately answered (async: the agent carried on): each drawn under
-   *  the work that asked (its call, or the script it was called from), one not found there at the thread's foot. */
   approvals?: { asks: () => TranscriptAsk[]; answer: (id: string, choice: ApprovalChoice) => Promise<void>; refresh: () => void } }) {
-  // The keyboard (transcript-cursor.ts, transcript-find.ts): each row's actions for its menu, the menu open on a row,
-  // and the find. readerScroll moves the view as the reader's own scroll (set once the scroll handling is mounted).
   const turnActions = new WeakMap<HTMLElement, () => TurnAction[]>();
-  // The turn menu's hidden anchor (the menu positions from the row's foot, not from it).
   let anchor: HTMLElement | undefined;
   const [turnMenu, setTurnMenu] = createSignal<{ row: HTMLElement; actions: TurnAction[] } | null>(null);
   let turnCursor: ReturnType<typeof mountTranscriptCursor> | null = null;
   let readerScroll = (top: number) => { viewport.scrollTop = top; };
-  // A match brought to the middle of what is seen. Its text may be in a block the visibility pass hides (skipped, or
-  // out of layout far above): the block, or its row, is brought on screen first and the match measured once shown.
+  // A match's text may be in a block the visibility pass hides: the block, or its row, is brought on screen first and
+  // the match measured once shown.
   const revealMatch = (match: FindMatch) => {
     let tries = 0;
     const centre = (rect: DOMRect) => {
@@ -253,8 +217,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     expandedItems.set(chatId, items);
     while (expandedItems.size > 10) expandedItems.delete(expandedItems.keys().next().value!);
   };
-  /* How a run is drawn, as Settings says (runForm): its steps, its run header, or not at all (the turn header alone).
-     A turn's one run, as a line, would say what its turn header says: the turn header stands for it. */
+  /* A turn's one run, as a line, would say what its turn header says: the turn header stands for it. */
   const formOf = (row: TurnRow): "steps" | "header" | "hidden" => {
     const form = runForm();
     if (form === "steps") return "steps";
@@ -292,9 +255,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
   ));
   let historyLoad: Promise<void> | null = null;
   let layoutEpoch = 0;
-  // The follow (the library's createTranscriptFollow): held at the latest while the reader is there, the typewriter's
-  // spring carrying it down with live output; the transcript adds its history paging (onStep) and holds it while its
-  // virtualizer or a panel reflow moves the content.
   const follow = createTranscriptFollow({
     viewport: () => viewport,
     spring: () => true,
@@ -308,9 +268,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
   // A phone's composer has Scroll to latest in its own row, so the transcript's stays hidden there.
   const [phoneLayout, setPhoneLayout] = createSignal(isMobileLayout());
   onMount(() => { const media = matchMedia(MOBILE_LAYOUT_QUERY), sync = () => setPhoneLayout(media.matches); media.addEventListener("change", sync); onCleanup(() => media.removeEventListener("change", sync)); });
-  /* The phone's voice composer carries its own scroll-to-latest in its row
-     and hides the floating one: tell it when the latest is out of view, and
-     take its press. */
   // A reset relays out every managed block, so hold the reading position across
   // it rather than letting the height changes settle wherever they land.
   const resetVisibilityPreservingPosition = () => {
@@ -319,17 +276,11 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     transcriptVisibility.reset();
     requestAnimationFrame(() => restoreTranscriptAnchor(viewport, anchor, setViewportScrollTop));
   };
-  // A queued message lives in the composer bubble until the model takes it, so
-  // the transcript does not also show it as a sent turn. An answer still
-  // arriving keeps its row here: the projection below skips drawing it, but
-  // needs to see where it sits to place the live overlay.
+  // A queued message lives in the composer until the model takes it. An answer still arriving keeps its row here: the
+  // projection skips drawing it, but needs to see where it sits to place the live overlay.
   const settledMessages = createMemo(() => props.chat.messages().filter((message) => !message.pending));
-  /* A message sent from this view fades in as the composer's text pill fades
-     out; everything drawn when the chat opens is simply there. */
-  // When each message we sent first showed here: its fade runs from then,
-  // and a row rebuilt for it (the server's copy, a new chat's id) carries on
-  // from the same point instead of starting again.
-  // The library's entrance (Foundations · Motion, gentle).
+  // When each message sent from here first showed: a row rebuilt for it (the server's copy, a new chat's id) carries
+  // on its fade from the same point instead of starting again.
   const ARRIVE_MS = 250;
   const arrivedAt = new Map<string, number>();
   let lastArrivedId: string | null = null;
@@ -337,8 +288,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     if (message.local && !arrivedAt.has(message.id)) { arrivedAt.set(message.id, performance.now()); lastArrivedId = message.id; }
     return arrivalOf(message.id);
   };
-  // The turn under a message just sent fades with it, from the same moment.
-  // How far into its entrance it is (the pieces' `since`), or undefined once it is in.
   const arrivalOf = (id: string | null): number | undefined => {
     const at = id ? arrivedAt.get(id) : undefined;
     if (at == null) return undefined;
@@ -352,30 +301,18 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     props.chat.activeGenerationChange,
     () => "show",
   );
-  // Back to where it was read, above its foot: drawn whole (TranscriptList whole), so that place is there to scroll to.
+  // Reopened above its foot, it is drawn whole so the place it was read is there to scroll to.
   const reopensAbove = () => { const id = props.chat.loadedId(); const saved = id ? scrollPositions.get(id) : undefined; return Boolean(saved && !saved.following); };
   // Declared before the memo below, which runs as it is made.
-  // Rhythm (DESIGN Transcript › Rhythm): how a row relates to the row above it. A message -- the person's, or one the
-  // harness sent on its own -- starts an exchange; the first row of the reply to it is the exchange's; anything after
-  // that is the next step of the same reply.
-  // Reports start no exchange of the person's: they sit a step from what is around them.
   const fromPerson = (row: TurnRow | undefined) => row?.type === "message" && row.value.role === "user" && row.value.run?.woke !== false && !isAgentReport(row.value);
-  // Work is a trace that did something, or reports that landed: lines of work in rows of their own keep the trail's
-  // gap (`work`), and the answer under work stands clear of it (`answer`, twice a step).
-  // How many runs each turn has, from its turn header (read off the turn rows alone, so a streamed word reads none).
+  // Read off the turn rows alone, so a streamed word reads none.
   const runsIn = createMemo(() => {
     const counts = new Map<string, number>();
     for (const row of timeline) if (row.type === "turn" && row.precedingUserId) counts.set(row.precedingUserId, row.value.runs);
     return counts;
   });
-  /*
-   * Provisional rows making way (DESIGN.md, Turns: they never fade between their own states, only out and in as they
-   * make way). A turn header moving on: when a new run starts under the text the header sat over, the header there
-   * fades out in place (removing, --duration-quick) and only then does what came after it show (the new run, the
-   * header under it, text that arrived with them), from where the header was; until it has gone they are held. The
-   * turn's starting row ("Waiting for model") does the same when the turn's first rows take its place. The rows drawn
-   * are the timeline's with those leaving rows put back where they were. A header new in a turn fades in (entering).
-   */
+  /* Provisional rows never fade between their own states, only out and in as they make way: a turn header moving on
+     fades out in place, and what came after it is held until it has gone. The turn's starting row does the same. */
   const leaving = createLeavingRows<{ row: TurnRow; after: string; turn: string; shown: Set<string> }>((a, b) => a.row.key === b.row.key);
   let headers = new Map<string, { row: TurnRow; after?: string }>();
   let shownKeys = new Set<string>();
@@ -423,7 +360,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     for (const item of list) { const at = out.findIndex((row) => row.key === item.after); if (at >= 0) out.splice(at + 1, 0, item.row); }
     return out;
   });
-  // What arrived in a turn after its leaving header (not shown before it left), held until it has gone.
   const held = createMemo(() => {
     const keys = new Set<string>();
     for (const item of leaving.list()) {
@@ -455,8 +391,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     if (row?.type === "message" && row.value.role !== "user" && row.value.interim !== true && isWork(above)) return "answer";
     return "step";
   };
-  // The latest exchange -- the person's last message and the last answer -- keeps its message foot shown; older ones
-  // show theirs on hover (transcript.css).
+  // The latest exchange keeps its message foot shown; older ones show theirs on hover.
   const latestExchange = createMemo(() => {
     let answer: string | undefined, person: string | undefined;
     for (let index = timeline.length - 1; index >= 0 && !(answer && person); index -= 1) {
@@ -482,8 +417,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     const rowOf = new Map<string, string>();
     for (const row of timeline) if (row.type === "trace") for (const segment of row.value.segments) if (segment.kind === "tool") rowOf.set(segment.tool.toolCallId, row.key);
     const unplaced: TranscriptAsk[] = [];
-    // A run's asks: under the agent's reply to its report (which says what waits), or the report until it replies;
-    // nowhere before the report is in (Needs you on the page has them).
+    // A run's asks go under the agent's reply to its report (which says what waits), or the report until it replies.
     let report: string | null = null;
     for (const row of timeline) {
       if (row.type !== "message") continue;
@@ -501,7 +435,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     }
     return { placed, unplaced };
   };
-  // Approvals by the row whose work asked: the call's own id, or the script it was called from.
   const askRows = createMemo(() => {
     const asks = props.approvals?.asks() ?? [];
     const placed = new Map<string, TranscriptAsk[]>();
@@ -518,7 +451,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
   createEffect(on(() => props.approvals && asking() ? props.chat.tools().length + props.chat.messages().length : 0, (count) => { if (count) props.approvals?.refresh(); }, { defer: true }));
   const unplacedAsks = () => askRows().unplaced;
   const empty = createMemo(() => !timeline.length && !isChatContentActivity(props.chat.activity()));
-  // A message of ours the server has not answered with any row of its turn.
   const awaitingTurn = createMemo(() => {
     const last = props.chat.messages().at(-1);
     // Sent from here: the server's copy replacing ours keeps it waiting.
@@ -527,11 +459,8 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     return timeline.at(-1)?.type === "message";
   });
 
-  // The tail's rows are swapped whole -- the starting row for the turn's,
-  // the pending row for its trace -- and a layout read partway through saw
-  // the thread without either, so the browser clamped the scroll up for a
-  // frame. Before any such change reaches the page, the thread keeps at
-  // least the height it had until the frame is laid out.
+  // The tail's rows are swapped whole, and a layout read partway through sees the thread without either, so the
+  // browser clamps the scroll up for a frame: the thread keeps at least its height until the frame is laid out.
   createComputed(on(() => [timeline.length, timeline.at(-1)?.key, awaitingTurn()], () => {
     if (!thread) return;
     thread.style.minHeight = `${thread.offsetHeight}px`;
@@ -540,7 +469,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
 
   let previousUserMessageId: string | null = null;
   const rememberScrollPosition = (chatId: string) => {
-    // At the foot there is nothing to find: it comes back to its foot (and leaving reads no layout, ~5ms of an open).
+    // At the foot there is nothing to find: it comes back to its foot, and leaving reads no layout.
     if (following()) {
       scrollPositions.delete(chatId);
       scrollPositions.set(chatId, { following: true, scrollTop: 0, anchorMessageId: null, anchorOffset: 0 });
@@ -586,7 +515,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
   const viewportMaxScrollTop = follow.maxScrollTop;
   const syncLatestDistance = follow.syncLatestDistance;
   // A turn that has just ended is still the live tail for a moment: its foot and last rows arrive as it settles, and
-  // the spring takes the view down to them. Snapped -- as a chat opened finished is -- they landed in one frame (48px).
+  // the spring takes the view down to them rather than snapping.
   let liveTailUntil = 0;
   const liveTail = () => Boolean(props.chat.activeGeneration()) || performance.now() < liveTailUntil;
   createEffect(on(() => Boolean(props.chat.activeGeneration()), (live, was) => { if (was && !live) liveTailUntil = performance.now() + 1500; }, { defer: true }));
@@ -594,14 +523,8 @@ export function Transcript(props: { /** Nothing here is the person's to change (
   const followLatest = follow.followLatest;
   const requestTypewriterTailFollow = follow.request;
   const settleInitialLayout = (epoch: number) => { if (epoch === layoutEpoch) follow.settle(); };
-  // Highlighting is a settled-content concern, so it runs off the idle queue and
-  // only ever touches cards it has not already done. Coalesced because
-  // onRendered fires on every streaming frame.
-  //
-  // Scoped to the messages that actually re-rendered. Sweeping the whole thread
-  // meant every settle walked every code card in the chat to ask whether it had
-  // already been highlighted -- work proportional to the transcript, repeated
-  // for a change confined to the message at the bottom of it.
+  // Coalesced because onRendered fires on every streaming frame, and scoped to the messages that re-rendered: a sweep
+  // of the whole thread costs in proportion to the transcript.
   let highlightIdle: number | null = null;
   const highlightPending = new Set<HTMLElement>();
   const scheduleHighlight = (root?: HTMLElement) => {
@@ -626,9 +549,8 @@ export function Transcript(props: { /** Nothing here is the person's to change (
   };
   const loadEarlier = () => {
     const maxScrollTop = viewportMaxScrollTop();
-    // Only a page too short to scroll up asks whether it has laid out. This
-    // runs on every tail-follow frame, and a query that finds nothing walks
-    // the whole thread, so a long answer paid for its own length each frame.
+    // Only a page too short to scroll up asks whether it has laid out: this runs every tail-follow frame, and a query
+    // that finds nothing walks the whole thread.
     const settled = maxScrollTop < HISTORY_LOAD_TOP_PX && !thread?.querySelector(".markdown-skeleton");
     if (!shouldLoadEarlierHistory({
       following: following(),
@@ -671,7 +593,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     }).finally(() => {
       viewport.style.overflowAnchor = previousOverflowAnchor;
       historyLoad = null;
-      // Still short after this page, it asks for the next.
       if (filling && loadedMore) requestAnimationFrame(loadEarlier);
     });
   };
@@ -694,7 +615,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     const trailingUserId = trailingUser?.id || null;
     if (loaded !== previousLoaded) {
       liveTailUntil = 0;
-      // Remembered as the reader leaves it at rest (rememberAtRest), not here: by now the next chat is drawn.
+      // Remembered as the reader leaves it at rest, not here: by now the next chat is drawn.
       if (previousLoaded && following()) rememberScrollPosition(previousLoaded);
       previousLoaded = loaded;
       requestAnimationFrame(syncLatestDistance);
@@ -705,9 +626,8 @@ export function Transcript(props: { /** Nothing here is the person's to change (
       void document.fonts.ready.then(() => settleInitialLayout(epoch));
       return;
     }
-    // Sending is an unambiguous request to watch the answer arrive, so a new
-    // trailing user message always retakes the tail -- previously only a chat
-    // switch did, and sending while scrolled up left the view where it was.
+    // Sending is an unambiguous request to watch the answer arrive, so a new trailing user message always retakes the
+    // tail, even scrolled up.
     if (trailingUserId && trailingUserId !== previousUserMessageId) {
       previousUserMessageId = trailingUserId;
       followLatest();
@@ -724,16 +644,12 @@ export function Transcript(props: { /** Nothing here is the person's to change (
       } else if (isCodeBlockCollapseLines(detail?.value) && detail?.key === "codeBlockCollapseLines") {
         resetVisibilityPreservingPosition();
       } else if (detail?.key === "transcriptWidth" || detail?.key === "transcriptWideBlocks") {
-        // A width preset relays out every block, so the cached intrinsic sizes
-        // the virtualizer is holding are all stale. Re-measure from scratch and
-        // keep the reader where they were.
+        // A width preset relays out every block, so the virtualizer's cached intrinsic sizes are all stale.
         resetVisibilityPreservingPosition();
       }
     };
-    // Collapsing a long block can remove a thousand pixels from the thread.
-    // Keep the card the user acted on exactly where it is and re-measure the
-    // virtualizer in the same frame, so the transcript never shows the stale
-    // placeholders that used to appear as blank space for several seconds.
+    // Collapsing a long block can remove a thousand pixels from the thread: the virtualizer is re-measured in the same
+    // frame, or stale placeholders show as blank space.
     const onCodeBlockToggle = (event: Event) => {
       const detail = (event as CustomEvent<{ card?: HTMLElement; previousTop?: number }>).detail;
       const card = detail?.card;
@@ -751,10 +667,8 @@ export function Transcript(props: { /** Nothing here is the person's to change (
         viewport.style.overflowAnchor = previousOverflowAnchor;
       });
     };
-    // A disclosure opened at the tail would otherwise be chased: each frame of
-    // its unfold read as new content, the thread pushed up under the pointer.
-    // Let go of the tail instead, so it opens downward from where it was
-    // clicked, as if the reader had scrolled up to it already open.
+    // A disclosure opened at the tail would otherwise be chased: each frame of its unfold reads as new content, the
+    // thread pushed up under the pointer.
     const onDisclosureToggle = () => {
       if (!following()) return;
       cancelTypewriterTailRejoin(); setTypewriterTailOwner("user", true);
@@ -803,7 +717,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     window.addEventListener("conduit:voice-captions", scheduleLatestButtonAnchor);
     onCleanup(() => window.removeEventListener("conduit:voice-captions", scheduleLatestButtonAnchor));
     const composerStack = transcriptRoot.closest<HTMLElement>(".ui-chat")?.querySelector<HTMLElement>(".ui-composer-dock");
-    // The thread reserves the composer's measured height (components/ui/dock-inset.ts, as a room's messages do).
     const stopClearingDock = composerStack ? clearDock(transcriptRoot, composerStack, () => {
       // Reserve and follow in the same resize delivery, before paint, through the field's room glide.
       if (following()) setViewportScrollTop(viewportMaxScrollTop(), false);
@@ -816,7 +729,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
     };
     composerStack?.addEventListener("transitionend", composerLanded);
     const visualViewport = window.visualViewport;
-    // The follow's own listeners: who moved the view, the keyboard's travel, what it holds growing (createTranscriptFollow).
     follow.attach({ viewport, thread });
     window.addEventListener("resize", scheduleLatestButtonAnchor);
     visualViewport?.addEventListener("resize", scheduleLatestButtonAnchor);
@@ -859,23 +771,15 @@ export function Transcript(props: { /** Nothing here is the person's to change (
   });
 
   return <ChatScroller ref={(element) => { transcriptRoot = element; }} motionRef={(element) => { motionShell = element; }} viewportRef={(element) => { viewport = element; }} data-part="transcript" data-slot="message-scroller" over={<>
-      {/*
-        * `mousedown` is cancelled so pressing this does not take focus off the
-        * composer: on a phone that closes the keyboard, and jumping to the
-        * latest message is exactly what somebody does mid-sentence to check
-        * what they are replying to. The click still lands -- only the focus
-        * change is refused.
-        */}
-      {/* Always mounted, so it fades out as well as in: when pressed, and when
-           somebody scrolls back down themselves. */}
+      {/* `mousedown` is cancelled so pressing this does not take focus off the composer: on a phone that closes the
+          keyboard, mid-sentence. */}
+      {/* Always mounted, so it fades out as well as in. */}
       <RiderButton ref={(element: HTMLButtonElement) => { latestButton = element; scheduleLatestButtonAnchor(); }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
         hidden={phoneLayout() || following() || latestDistance() < TAIL_NEAR_LATEST_PX} onMouseDown={(event) => event.preventDefault()} onClick={() => followLatest()} />
-      {/* Find in chat (Ctrl+F in the pane): its bar over the transcript's top. */}
       <Show when={find.open()}>
         <FindBar query={find.query()} count={find.count()} inputRef={find.setInput} onQuery={find.setQuery} onNext={find.next} onPrevious={find.previous} onEscape={find.escape} onClose={find.close} />
       </Show>
-      {/* The cursor's row's menu (Menu key, Shift+F10): its foot's actions, at its foot. The trigger is only the
-          menu's anchor; the row is where it opens. */}
+      {/* The trigger is only the menu's anchor; the row's foot is where it opens. */}
       <DropdownMenu open={Boolean(turnMenu())} onOpenChange={(open) => {
         if (open) return;
         setTurnMenu(null);
@@ -896,13 +800,10 @@ export function Transcript(props: { /** Nothing here is the person's to change (
           <For each={turnMenu()?.actions ?? []}>{(action) => <MenuRow icon={action.icon} onSelect={action.run}>{action.label}</MenuRow>}</For>
         </MenuContent>
       </DropdownMenu>
-      {/* Editing an earlier message: a way out that is always there, floating
-          over the composer where the edit happens, as the pencil would. */}
       <Show when={props.chat.editingEntryId()}><RiderButton ref={(element: HTMLButtonElement) => { cancelEditButton = element; scheduleLatestButtonAnchor(); }} icon={<Icons.Close />} label="Cancel editing" show="label"
         ride={!following() && latestDistance() >= TAIL_NEAR_LATEST_PX ? "beside" : "centre"} onMouseDown={(event) => event.preventDefault()} onClick={() => { props.chat.cancelEdit(); focusComposerSoon(); }} /></Show>
     </>}>
         <Show when={empty()}><ChatEmpty><Welcome title={props.agentThread ? "Nothing has happened in this thread yet" : "How can I help you today?"} /></ChatEmpty></Show>
-        {/* Its newest rows first, the older ones above in idle time (TranscriptList); it holds its own foot. */}
         <TranscriptList ref={(element) => { thread = element; }} data-slot="message-scroller-content" data-narration="show"
           each={rows()} of={props.chat.loadedId()} whole={reopensAbove} holdsFoot={false}
           estimate={(row, width) => estimateRowHeight(row, Math.max(20, (width || 400) / 8.5))}
@@ -911,7 +812,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
         {(item, index) => {
           const flow = () => flowAt(index());
           if (item.type === "turn") {
-            // The turn's runs above it, read as they change: its work, timed from the person's message.
             const work = createMemo((): TurnTraceData => {
               const runs: Extract<TurnRow, { type: "trace" }>[] = [];
               let startedAt: string | undefined;
@@ -941,7 +841,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
             const chatId = () => props.chat.loadedId();
             const artifact = () => item.answerless && item.precedingUserId ? artifactSummaries().get(item.precedingUserId) : undefined;
             const arrive = arrivalOf(lastArrivedId);
-            // Its menu: what the foot under an answerless turn offers.
             const traceActions = (): TurnAction[] => {
               if (!(item.answerless && !item.goesOn && !item.value.active && !item.afterAnswer && item.value.segments.some((segment) => segment.kind !== "context"))) return [];
               const actions: TurnAction[] = [];
@@ -952,8 +851,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
             };
             return <TranscriptRow ref={(element: HTMLDivElement) => { traceRow = element; turnActions.set(element, traceActions); }} data-slot="message-scroller-item" data-held={held().has(item.key) ? "" : undefined} flow={flow()}><Turn><TurnTrace since={arrive} trace={item.value} loadContext={(entryId) => api<ContextText>(`/v0/sessions/${encodeURIComponent(chatId() ?? "")}/context/${entryId}`)} narrated form={isRun(item) ? formOf(item) : undefined} agents={props.chat.agents?.()} onStopAgent={props.chat.stopAgent ? (id) => void props.chat.stopAgent!(id) : undefined} writing={item.answerless === false} profileLabel={props.profileLabel} initialOpen={itemExpanded(chatId(), item.key)} onOpenChange={(open) => setItemExpanded(chatId(), item.key, open)} toolOpen={(id) => itemExpanded(chatId(), `tool:${id}`)} onToolOpenChange={(id, open) => setItemExpanded(chatId(), `tool:${id}`, open)} onRendered={() => settleAfterMarkdown(traceRow)} />
               <For each={asksAt(item.key)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For>
-              {/* A turn that ended without an answer -- stopped under a tool, or
-                  one that only ran commands -- still offers to try again. */}
               <Show when={item.answerless && !item.goesOn && !item.value.active && !item.afterAnswer && item.value.segments.some((segment) => segment.kind !== "context")}>
                 <MessageFoot at={item.timestamp} eager={index() >= rows().length - 1}>
                   <Show when={props.supports("regenerate") && item.precedingUserId}><LibraryButton variant="ghost" size="icon-xs" aria-label="Regenerate response" onClick={() => void props.chat.regenerate(item.precedingUserId!)}><Icons.Refresh /></LibraryButton></Show>
@@ -976,7 +873,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
               <RunLine icon={<RoutineIcon routine={run().routine} />} label={run().label} number={run().number} id={item.value.agent?.id || undefined} trigger={run().trigger || undefined} time={time()} woke={run().woke}
                 outcome={props.profileLabel ? `Woke ${props.profileLabel}` : undefined} status={run().status === "finished" ? undefined : run().status[0]!.toUpperCase() + run().status.slice(1)}
                 summary={run().summary ?? item.value.content} onOpen={child() ? () => openAgentChat(child()!) : run().conversationId != null ? () => openRun(String(run().conversationId)) : undefined}>
-                {/* What the agent was given, all of it: the report, then what Conduit added to it (nothing hidden). */}
                 {run().woke ? <><ChatText text={item.value.content || ""} /><Show when={item.value.appended}><ConduitAdded text={item.value.appended!} /></Show></> : undefined}
               </RunLine>
             </AgentRows>
@@ -987,8 +883,6 @@ export function Transcript(props: { /** Nothing here is the person's to change (
           }
           if (item.type === "sent") return <TranscriptRow data-slot="message-scroller-item" flow={flow()}><SentRow tool={item.value} /></TranscriptRow>;
           if (item.type === "pending") {
-            // A turn before anything of it shows is the header its trace will
-            // be, starting -- replaced in place when the first step arrives.
             // Only a booting agent is Conduit's wait; after that it is the model's.
             return <TranscriptRow data-slot="message-scroller-item" data-cursor-skip {...motionOf(item.leaving ? "removing" : undefined)} flow={flow()}><Turn><TraceStarting narrated startedAt={item.startedAt} label={props.chat.activity()?.kind === "starting" ? "Starting agent" : "Waiting for model"} /></Turn></TranscriptRow>;
           }
@@ -997,8 +891,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
           const review = createMemo(() => user() ? parseReviewComments(message().content || "") : { text: message().content || "", comments: [] });
           const failed = createMemo(() => !user() && message().stopReason === "error");
           // Once its own generation has said it finished, the row is not live again: the saved message takes it over
-          // before the turn settles, and read from the chat's streaming flag it was live once more for a frame -- an
-          // answer ending in an open formula then lost the closing the finish gave it, and was parsed again whole.
+          // before the turn settles, and the chat's streaming flag would make it live once more for a frame.
           let finished = false;
           const live = createMemo(() => {
             if (item.live != null) return !(finished = !item.live);
@@ -1006,10 +899,8 @@ export function Transcript(props: { /** Nothing here is the person's to change (
             const last = props.chat.messages().at(-1);
             return props.chat.streaming() && !user() && Boolean(last && message().id === last.id);
           });
-          // An answer that streamed here offers its actions, and shows its
-          // time, only once it has finished appearing, and fades them in:
-          // at the tail of a bursty answer the row jumped with every delivery.
-          // One loaded finished shows them at once.
+          // An answer that streamed here shows its foot only once it has finished appearing: at the tail of a bursty
+          // answer the row would jump with every delivery.
           const [streamed, setStreamed] = createSignal(live());
           const [settled, setSettled] = createSignal(false);
           createEffect(() => { if (live()) { setStreamed(true); setSettled(false); } });
@@ -1025,10 +916,8 @@ export function Transcript(props: { /** Nothing here is the person's to change (
           // later update must not shift it.
           const arrive = untrack(() => user() ? arrival(message()) : undefined);
           if (user() && message().origin === "harness") {
-            // A subagent's report opens its transcript, once the chat's agents say which chat that is.
             const child = () => { const ref = message().agent; return ref ? props.chat.agents?.().find((agent) => ref.id ? agent.id === ref.id : String(agent.conversationId) === String(ref.conversationId))?.chatId : null; };
             const open = () => child() ? () => openAgentChat(child()!) : undefined;
-            // A run's report, as the agent was given it; a heartbeat's quiet line (display only, never sent) stays a line.
             return <TranscriptRow ref={row} data-slot="message-scroller-item" data-held={held().has(item.key) ? "" : undefined} data-message-id={message().id} data-report={message().agent?.conversationId ?? message().agent?.id ?? undefined} data-latest={latestExchange().has(message().id) ? "" : undefined} data-revealed={revealed() === message().id ? "" : undefined} onClick={revealFoot(message().id)} flow={flow()}>
               <Show when={message().agent && !message().id.startsWith("beat:")} fallback={<HarnessPrompt onOpen={open()} unseen={message().unseen ? "never sent to the agent" : undefined} icon={message().id.startsWith("beat:") ? <Icons.Heartbeat aria-hidden="true" /> : undefined}>{message().content}</HarnessPrompt>}>
                 <Inbound shut icon={<RoutineIcon routine={message().sender?.routine} />} from={message().sender?.name || message().agent?.id || "Background agent"}
@@ -1043,13 +932,11 @@ export function Transcript(props: { /** Nothing here is the person's to change (
                 <Turn><For each={asksAt(`run:${message().agent!.conversationId}`)}>{(ask) => <AskCard ask={ask} answer={props.approvals!.answer} />}</For></Turn>
               </Show></TranscriptRow>;
           }
-          // Copied: Copy turns to a check, and the answer takes the copied wash, for a moment.
           const { on: copied, flash: flashCopied } = createFlash();
           const copy = async () => {
             if (!await copyWithFeedback(message().content || message().errorMessage || "")) return;
             flashCopied();
           };
-          // Its menu: what its foot offers -- an answer's Copy, Regenerate and changes, the person's Edit from here.
           const rowActions = (): TurnAction[] => {
             const actions: TurnAction[] = [];
             if (user()) {
@@ -1088,8 +975,7 @@ export function Transcript(props: { /** Nothing here is the person's to change (
                 <Show when={actionsShown()}><AnswerFoot latest={latestExchange().has(message().id)} message={message()} precedingUserId={precedingUserId()} chat={props.chat} supports={props.supports} artifact={artifact()} traced={item.traced} reveal={streamed()} copied={copied()} onCopy={() => void copy()} /></Show>
               </Show>
             </Turn>}>
-              {/* The hub telling the agent how an approval was answered: a quiet line, as a report is, not the person's
-                  bubble. Read as the text arrives: a row is built before its message has any. */}
+              {/* Read as the text arrives: a row is built before its message has any. */}
               <Show when={(message().content || "").startsWith(APPROVAL_NOTE)} fallback={<UserMessage latest={latestExchange().has(message().id)} message={message()} text={review().text} editing={props.chat.editingEntryId() === message().id}
                 editable={!message().pending && !message().outbox && !props.readOnly && props.supports("fork")} since={arrive} onEdit={() => { props.chat.edit(message()); focusComposerSoon(); }}
                 onCancelSend={props.chat.cancelOutbox ? () => { props.chat.cancelOutbox!(message().id); focusComposerSoon(); } : undefined}

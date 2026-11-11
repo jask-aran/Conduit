@@ -1,20 +1,9 @@
 import katex from "katex";
 
-/** How long index changes gather before the index is written. */
 const INDEX_WRITE_DELAY_MS = 500;
 
-/**
- * Finished formulas' KaTeX HTML, kept across reloads.
- *
- * A settled formula's rendering never changes, yet every page load rendered
- * each again, a formula a few milliseconds, queued a few per frame -- so a
- * chat of long formulas opened with its math filling in over most of a second.
- * Read synchronously, a chat opened before draws its formulas with the page.
- *
- * Bounded, oldest first out, and keyed by KaTeX's version so a different
- * renderer never reuses another's output. Anything storage refuses is simply
- * not cached.
- */
+/* Read synchronously, so a chat opened before draws its formulas with the page rather than filling them in over most
+   of a second. Keyed by KaTeX's version so a different renderer never reuses another's output. */
 const ROOT = "conduit:katex:";
 const PREFIX = `${ROOT}${katex.version}:`;
 const INDEX = `${PREFIX}index`;

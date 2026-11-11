@@ -5,19 +5,8 @@ import { Button, Line, Lines, Rider, RiderMark, Actions } from "@/components/ui"
 import type { Message } from "../api/contracts";
 import { createLeaving, riderMotion, type CardExit } from "./composer-cards";
 
-/**
- * Messages sent while the agent is working, sitting directly above the composer
- * until the model takes them.
- *
- * One row: what is waiting, and the ways out of that - take it to the model now
- * by stopping the turn, put it back in the composer, or drop it. The actions are
- * icons because the row is a status line, not a dialog; spelling them out cost
- * three lines of the transcript for three rarely-pressed buttons.
- *
- * It is in flow rather than floating, so the composer stack really is as tall as
- * it looks. The transcript reserves that measured height, which is what keeps
- * the card off the output it is about.
- */
+/** In flow rather than floating: the transcript reserves the composer stack's measured height, which keeps the card
+ *  off the output it is about. */
 export function QueuedMessages(props: {
   messages: Message[];
   busy: boolean;
@@ -28,8 +17,6 @@ export function QueuedMessages(props: {
 }) {
   const lines = () => props.messages.map((message) => message.content || "").filter((text) => text.trim());
   const hint = () => props.busy ? "Sent when the current step finishes" : "Sends next";
-  // Taken by the model or put back to edit, it drops into the composer;
-  // discarded, it fades where it is.
   const [exit, setExit] = createSignal<CardExit>("drop");
   createEffect(() => { if (lines().length) setExit("drop"); });
   const shown = createLeaving(lines, (list) => list.length > 0, exit);

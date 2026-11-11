@@ -13,15 +13,6 @@ const EMPTY: Draft = { optionIds: [], freeform: "", note: "" };
 const answered = (draft: Draft) => draft.optionIds.length > 0 || draft.freeform.trim() !== "";
 const typingIn = (target: EventTarget | null) => target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
 
-/**
- * A harness's question tool, one question at a time.
- *
- * The questions are tabs, answered in turn and then reviewed on a Submit page
- * that sends them together. A single question of one answer is sent by
- * choosing that answer; nothing then needs reviewing. The card keeps the
- * keyboard while it is up -- arrows move, a number or Enter chooses, Tab turns
- * the page, Esc dismisses -- and touch has the same through taps and Next.
- */
 export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: string; onStop?: () => void; onRespond: (response: QuestionResponse) => void }) {
   const questions = () => props.request.questions || [];
   const [drafts, setDrafts] = createStore<Record<string, Draft>>(
@@ -39,8 +30,7 @@ export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: str
   let own: HTMLInputElement | HTMLTextAreaElement | undefined;
 
   onMount(() => {
-    // The card stands in for the composer while it is up, so it takes the
-    // keyboard; a half-typed message waits in the composer for its return.
+    // The card stands in for the composer while it is up, so it takes the keyboard.
     root?.focus({ preventScroll: true });
   });
 
@@ -82,7 +72,6 @@ export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: str
       setDrafts(question.id, "optionIds", chosen.includes(option.id) ? chosen.filter((id) => id !== option.id) : [...chosen, option.id]);
       return;
     }
-    // One answer: an offered one replaces anything typed.
     setDrafts(question.id, { optionIds: [option.id], freeform: "" });
     advance();
   };
@@ -153,7 +142,6 @@ export function QuestionCard(props: { request: HostUiRequest; dismissLabel?: str
             const placeholder = freeform().placeholder || (question.options.length ? "Type your own answer" : "Type your answer");
             const input = (event: InputEvent & { currentTarget: HTMLInputElement | HTMLTextAreaElement }) => type(question, event.currentTarget.value);
             const mine = () => setCursor(question.options.length);
-            // A TextArea, held to one line unless the question asks for more; a secret stays a masked input.
             return <Choice n={question.options.length + 1} chosen={Boolean(draft(question).freeform.trim())} active={cursor() === question.options.length} onPoint={mine} onPick={() => own?.focus()}
               own={question.secret
                 ? <ChoiceInput ref={(element) => { own = element; }} placeholder={placeholder} aria-label={placeholder} type="password" inputmode={freeform().numeric ? "decimal" : undefined}

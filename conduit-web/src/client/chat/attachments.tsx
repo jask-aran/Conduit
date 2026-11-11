@@ -29,17 +29,15 @@ export function AttachmentImage(props: { src: string }) {
 }
 
 const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module) => ({ default: module.TextEditor })));
-// The file viewer's icons: its icon theme lives in the workspace's lazy chunk, fetched on the first file shown.
+// The icon theme lives in the workspace's lazy chunk, fetched on the first file shown.
 const WorkspaceFileIcon = lazy(() => import("@/components/ui/file-marks").then((module) => ({ default: module.FileTypeIcon })));
 export const FileMark = (props: { name: string }) => <Suspense fallback={<Icons.File />}><WorkspaceFileIcon name={props.name} /></Suspense>;
 
 type Sent = SentAttachment | UploadAttachment;
 const isImage = (item: Sent) => Boolean(item.type?.startsWith("image/"));
-// Read as text: what says it is, and what a name says is (a log, a config), up to a size worth reading in a card.
 const isText = (item: Sent) => (item.size ?? 0) <= 262_144 && (/^text\/|json|xml|yaml|javascript|typescript|x-sh/.test(item.type || "")
   || /\.(txt|md|log|csv|tsv|json|ya?ml|toml|ini|conf|xml|html?|css|[cm]?[jt]sx?|py|rb|go|rs|java|kt|c|h|cpp|sh|sql|diff|patch)$/i.test(item.name));
 
-/** A file's text, fetched when it is first shown. */
 function AttachmentText(props: { src: string; name: string }) {
   const [text, setText] = createSignal<string | null>(null);
   const [failed, setFailed] = createSignal(false);
@@ -47,15 +45,12 @@ function AttachmentText(props: { src: string; name: string }) {
     if (!response.ok) throw new Error("Could not load the attachment");
     setText(await response.text());
   }).catch(() => setFailed(true)));
-  // The library's editor, read only, as Settings shows a prompt's text. It carries CodeMirror, so it is fetched when a
-  // file is first shown rather than with the chat.
+  // The editor carries CodeMirror, so it is fetched when a file is first shown rather than with the chat.
   return <Show when={text() !== null} fallback={failed() ? "Could not be read" : "Reading…"}>
     <Suspense fallback="Reading…"><TextEditor fill readOnly markdown={/\.(md|markdown)$/i.test(props.name)} label={props.name} value={text()!} /></Suspense>
   </Show>;
 }
 
-/** Attachments already sent, under their prompt in the transcript: a tray of tiles. A press on one shows it whole (a
- *  picture uncropped, a file's text), with the message's others under it to step to. */
 export function AttachmentCards(props: {
   items: Sent[];
   chatId?: string | null;
@@ -70,7 +65,7 @@ export function AttachmentCards(props: {
     }}</For>
   </Attachments>;
   const item = () => props.items.find((candidate) => candidate.id === shown());
-  // The one last shown: the viewer keeps it while it leaves.
+  // The viewer keeps the last one shown while it leaves.
   const last = createMemo<Sent | undefined>((kept) => item() ?? kept);
   const step = (by: number) => { const at = props.items.findIndex((candidate) => candidate.id === shown()); setShown(props.items[(at + by + props.items.length) % props.items.length]!.id); };
   return <Show when={props.items.length}>

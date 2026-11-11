@@ -6,19 +6,11 @@ import { createLeaving, createLeavingList, riderMotion } from "./composer-cards"
 import { api } from "../api/client";
 import { elapsed } from "./tool-card";
 
-/*
- * Subagents, in Conduit's words for every harness: a turn's own pinned under its head (AgentRows), a chat's
- * background ones on its composer, a line each (AgentRider). What each is doing and how it ended come from the chat's agents
- * (GET /v0/chats/:chatId/agents, refetched on agents_changed); a turn's own runs from its tool row, whose output is
- * the child's latest step. Each opens its transcript, a chat of its own, through the app (OPEN_AGENT_EVENT).
- */
 export const OPEN_AGENT_EVENT = "conduit:open-agent";
 export const openAgentChat = (chatId: string) => window.dispatchEvent(new CustomEvent(OPEN_AGENT_EVENT, { detail: { chatId } }));
-/** Open a run of jbot's by its work-log item, or by its conversation once it has left the agents (its chat, made the first time). */
 export const openRun = (id: string) => void api<{ chatId: string }>(`/v0/agent/runs/${encodeURIComponent(id)}/open`, { method: "POST" })
   .then(({ chatId }) => openAgentChat(chatId)).catch(() => {});
 
-/** A clock that ticks each second while something runs. */
 export function useNow(running: () => boolean) {
   const [now, setNow] = createSignal(Date.now());
   createEffect(() => {
@@ -30,7 +22,7 @@ export function useNow(running: () => boolean) {
   return now;
 }
 const pad = (value: number) => String(value).padStart(2, "0");
-/** Whole seconds while it runs (tenths would flicker), the measured time once it has ended. */
+/** Whole seconds while it runs: tenths would flicker. */
 export function span(from: string | null | undefined, to: string | null | undefined, now: number): string | undefined {
   const start = from ? Date.parse(from) : NaN;
   const end = to ? Date.parse(to) : now;
@@ -42,18 +34,16 @@ export function span(from: string | null | undefined, to: string | null | undefi
 const context = (count: number) => count >= 1000 ? `${(count / 1000).toFixed(1)}k context` : `${count} context`;
 const lastLine = (output: unknown) => typeof output === "string" ? output.trimEnd().split("\n").at(-1)?.trim() || undefined : undefined;
 
-/** A tool row that handed an agent its task (the adapter states it, with the agent's reference). */
 export const spawned = (tool: ToolItem) => tool.kind === "agent" && Boolean(tool.agent);
 
 type Row = { id?: string; key: string; title: string; state: AgentState; activity?: string; startedAt?: string | null; endedAt?: string | null; usage?: string; chatId?: string | null; background: boolean };
 
-/** A spawn's row: the chat's agents say how a background one is doing; a turn's own is its tool row's. */
 function rowOf(tool: ToolItem, agents: AgentSummary[]): Row {
   const ref = tool.agent!;
   // By its conversation, its key: a label (bg-3) names another agent on another day.
   const listed = ref.conversationId != null ? agents.find((agent) => String(agent.conversationId) === String(ref.conversationId))
     : agents.find((agent) => agent.id === ref.id);
-  // fg-N is a turn's own (sa-N, older, and bg-N are background): the listing says, once it has arrived.
+  // fg-N is a turn's own (sa-N and bg-N are background): the listing says, once it has arrived.
   const background = listed ? listed.mode === "background" : Boolean(ref.id) && !ref.id!.startsWith("fg-");
   const own: AgentState = !tool.done ? "running" : tool.cancelled ? "stopped" : tool.isError ? "failed" : "finished";
   // A background spawn's call returns at once: until the chat's agents arrive, a spawn that took is still working.
@@ -69,7 +59,6 @@ function rowOf(tool: ToolItem, agents: AgentSummary[]): Row {
 }
 
 const ENDED_LABEL = { finished: "Finished", failed: "Failed", stopped: "Stopped" } as const;
-/** How agents taken together are doing, for a shut line: "2 of 3 running", "Finished", "2 finished · 1 failed". */
 function together(states: AgentState[]): string {
   const count = (state: AgentState) => states.filter((value) => value === state).length;
   const running = count("running");
@@ -77,27 +66,20 @@ function together(states: AgentState[]): string {
   const ended = (["finished", "failed", "stopped"] as const).map((state) => [state, count(state)] as const).filter(([, n]) => n);
   return ended.length === 1 ? ENDED_LABEL[ended[0]![0]] : ended.map(([state, n]) => `${n} ${state}`).join(" · ");
 }
-/** An agent a codemode script spawned: the chat's agents are all there is of it (no call of the turn names it). */
 function rowOfAgent(agent: AgentSummary): Row {
   return { id: agent.id || undefined, key: String(agent.conversationId), background: agent.mode === "background", state: agent.status, chatId: agent.chatId, title: agent.title,
     activity: agent.status === "running" ? agent.activity || undefined : undefined, startedAt: agent.startedAt, endedAt: agent.endedAt,
     usage: agent.status !== "running" && agent.usage.context ? context(agent.usage.context) : undefined };
 }
 
-/** Scroll the transcript the person is in to a row, gently, centred: a report from its spawn line, or back. */
 function scrollToRow(selector: string, last = false) {
   const root = (document.activeElement?.closest(".ui-transcript") ?? document) as ParentNode;
   const found = [...root.querySelectorAll<HTMLElement>(selector)];
   (last ? found.at(-1) : found[0])?.scrollIntoView({ block: "center", behavior: "smooth" });
 }
-/** Back from a report to the line that started its agent; both by the agent's key (its conversation). */
 export const jumpToSpawn = (key: string) => scrollToRow(`[data-spawn~="${CSS.escape(key)}"]`);
 const jumpToReport = (keys: string[]) => scrollToRow(keys.map((key) => `[data-report~="${CSS.escape(key)}"]`).join(", "), true);
 
-/** A turn's agents: its spawn calls', then those its codemode scripts spawned (`scripts`: the turn's script call ids),
- *  drawn alike -- a spawn is a spawn however the model asked for it. A foreground one starts and ends inside the turn,
- *  so it is one live AgentRow; background ones branch off and join later as reports, so the turn keeps only where they
- *  started (AgentSpawn, one line for those started together) -- how they are doing rides on the composer. */
 export function TurnAgents(props: { tools: ToolItem[]; agents: AgentSummary[]; scripts?: string[]; onStop?: (id: string) => void }) {
   const all = createMemo(() => [...props.tools.filter(spawned).map((tool) => rowOf(tool, props.agents)),
     ...(props.scripts?.length ? props.agents.filter((agent) => agent.via && props.scripts!.includes(agent.via)).map(rowOfAgent) : [])]);
@@ -105,7 +87,6 @@ export function TurnAgents(props: { tools: ToolItem[]; agents: AgentSummary[]; s
   const started = createMemo(() => all().filter((row) => row.background && row.id));
   const now = useNow(() => all().some((row) => row.state === "running"));
   const reported = () => started().filter((row) => row.state !== "running").map((row) => row.key);
-  // How the started ones are doing, together: the shut line says whether they are all back.
   const status = () => together(started().map((row) => row.state));
   return <Show when={all().length}>
     <AgentRows>
@@ -125,8 +106,6 @@ export function TurnAgents(props: { tools: ToolItem[]; agents: AgentSummary[]; s
   </Show>;
 }
 
-/** Background agents' reports that reached the thread together (a "reports" row): one AgentReport line, the join
- *  of their Started line, dropping down each agent's line and what it said (`text`, the transcript's renderer). */
 export function TurnReports(props: { reports: Message[]; agents: AgentSummary[]; text: (message: Message) => JSX.Element }) {
   const ids = () => props.reports.map((message) => message.agent!.id!);
   const keyOf = (message: Message) => String(message.agent?.conversationId ?? message.agent?.id ?? "");
@@ -146,13 +125,8 @@ export function TurnReports(props: { reports: Message[]; agents: AgentSummary[];
   </AgentReport></AgentRows>;
 }
 
-/** A chat's agents on its composer, while they work: Foreground, Background and Runs.
- *  A rider is what is under way, not a history -- one that has ended is in the transcript (its Delegated or Started line,
- *  a background one's report). */
 export function RunningAgents(props: { agents: AgentSummary[]; onStop?: (id: string) => void }) {
   const running = createMemo(() => props.agents.filter((agent) => agent.status === "running" && (agent.run || agent.mode === "foreground" || agent.id)));
-  // An agent that ends keeps its row while the row closes its room; the rider, when the last has ended, drops back into
-  // the composer (the riders' motion, its room closing as it goes: composer.css), held as long.
   const list = createLeavingList(running, (agent) => `child:${agent.conversationId}`);
   const rider = createLeaving(running, (agents) => agents.length > 0, undefined, "--duration-gentle");
   const now = useNow(() => running().length > 0);

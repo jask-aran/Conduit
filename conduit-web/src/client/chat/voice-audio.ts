@@ -99,11 +99,8 @@ async function microphoneGranted() {
   }
 }
 
-/**
- * The chosen microphone under its new id, when its old one is gone: Android
- * hands a page new device ids, so the saved one stops matching while the
- * device is still there under the same name. Null when nothing moved.
- */
+/** Android hands a page new device ids, so the saved one stops matching while the device is still there under the
+ *  same name. */
 export function rematchInputDevice(settings: { inputDeviceId: string; inputDeviceLabel?: string }, devices: AudioInputDevice[]): string | null {
   if (!settings.inputDeviceId || !settings.inputDeviceLabel) return null;
   if (devices.some((device) => device.deviceId === settings.inputDeviceId)) return null;
@@ -133,7 +130,6 @@ export function shouldSwapToSpeakerphone(preferSpeakerphone: boolean, speakerpho
   return preferSpeakerphone && speakerphoneId !== "" && openedDeviceId !== speakerphoneId;
 }
 
-/** Refresh names without opening a microphone, including when permission changes. */
 async function refreshMicrophones() {
   try {
     const devices = await listAudioInputDevices({ openForNames: false });
@@ -153,7 +149,6 @@ if (typeof navigator !== "undefined" && navigator.permissions) {
   }).catch(() => { /* Some browsers do not expose microphone permission. */ });
 }
 
-/** Called each time dictation opens the microphone: await the names before choosing the capture stream. */
 const micOpened = new Set<() => void>();
 export const onMicrophoneOpened = (listener: () => void) => { micOpened.add(listener); return () => micOpened.delete(listener); };
 export const microphoneOpened = async () => {
@@ -161,14 +156,12 @@ export const microphoneOpened = async () => {
   for (const listener of micOpened) listener();
 };
 
-/** openForNames: false never opens the microphone (at startup, where opening it takes the phone's audio and pauses
- *  the person's music); the list may then come back without ids or names. */
+/** openForNames: false never opens the microphone: at startup opening it takes the phone's audio and pauses the
+ *  person's music. */
 export async function listAudioInputDevices({ openForNames = true }: { openForNames?: boolean } = {}): Promise<AudioInputDevice[]> {
   let devices = await mediaDevices().enumerateDevices();
-  // A freshly loaded page (a reload after a reconnect, say) is shown the
-  // microphones without ids or names until it has opened one, so a saved
-  // choice reads as missing. With the grant already held, open one for an
-  // instant to see them -- this is all on the device, not the server.
+  // A freshly loaded page is shown the microphones without ids or names until it has opened one, so a saved choice
+  // reads as missing.
   if (openForNames && devices.some((device) => device.kind === "audioinput" && !device.deviceId) && await microphoneGranted()) {
     try {
       const stream = await mediaDevices().getUserMedia({ audio: true });

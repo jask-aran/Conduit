@@ -15,12 +15,6 @@ import { ModelMenuItems } from "./model-selector";
 import { PlaceGlyph, PlaceList, type PlaceOptions } from "./place-picker";
 
 
-/**
- * The desktop composer's +: Attach, the project, and each control the row has folded away
- * for want of room, as a submenu showing its value -- the desktop menus'
- * parent and child pattern (the model selector's), with the same choices the
- * control itself offers. The phone has its own options menu.
- */
 export function ComposerPlusMenu(props: {
   folded: ReadonlySet<ComposerFold>;
   chat: ActiveChatStore;
@@ -82,7 +76,7 @@ export function ComposerPlusMenu(props: {
         <MenuSub>
           <MenuSubTrigger disabled={props.place!.disabled} icon={<PlaceGlyph project={placed()} />} meta={placed()?.name || "None"}>Project</MenuSubTrigger>
           <MenuSubContent>
-            {/* The folder button's own list. Keys stay with its search, not the menu's typeahead. */}
+            {/* Keys stay with its search, not the menu's typeahead. */}
             <div ref={(element) => requestAnimationFrame(() => element.querySelector("input")?.focus())}
               onKeyDown={(event) => { if (event.key !== "Escape") event.stopPropagation(); }}>
               <PlaceList {...props.place!} onDone={() => setOpen(false)} />
@@ -105,7 +99,6 @@ const picked = (back: boolean | undefined, apply: (value: string) => void) => {
   return (value: string) => { apply(value); if (back) parent(); };
 };
 
-/** The profiles to start the chat with; once it has started, only its own. */
 export function ProfileChoices(props: { profiles: Template[]; active?: Template | null; locked: boolean; back?: boolean; onChoose: (id: string) => void }) {
   const choose = picked(props.back, (id) => props.onChoose(id));
   return <MenuSection title="Profile"><MenuRadioGroup value={props.active?.id || ""} onChange={choose}>

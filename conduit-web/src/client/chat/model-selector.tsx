@@ -6,7 +6,6 @@ import { DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, Menu
 import type { ModelOption } from "../api/contracts";
 
 const LEVEL_NAMES: Record<string, string> = { xhigh: "Extra high" };
-/** A thinking level as the pickers name it: the model's own name for it, else the level's. */
 export const thinkingLabel = (value: string, model?: ModelOption) =>
   model?.thinkingLabels?.[value || "off"] || (value ? LEVEL_NAMES[value] || value[0]!.toUpperCase() + value.slice(1) : "Off");
 
@@ -22,11 +21,9 @@ type ModelMenuProps = {
   onManageModels?: () => void;
 };
 
-/** The model menu's contents: the model selector's, and the composer +'s Model submenu. */
 export function ModelMenuItems(props: ModelMenuProps) {
   const selected = createMemo(() => props.models.find((item) => item.spec === props.model));
   const selectableModels = createMemo(() => props.models.filter((item) => !item.outsideScope));
-  // A model with no levels still shows the slider, held on its one setting.
   const levels = createMemo(() => selected()?.thinkingLevels?.length ? selected()!.thinkingLevels! : ["off"]);
   return <>
     <Show when={props.onSearchModels}>
@@ -64,17 +61,14 @@ export function ModelSelector(props: {
   onSearchModels?: () => void;
   searchShortcut?: string | null;
   onManageModels?: () => void;
-  /** What the trigger says beside the model in place of its effort ("" for nothing): a choice that has none. */
   quiet?: string;
-  /** Which of the trigger's edges the menu keeps to: its end where the trigger sits at the end of a line (Settings),
-   *  so the menu stays put as a choice renames the trigger. */
+  /** `bottom-end` where the trigger ends a line, so the menu stays put as a choice renames the trigger. */
   placement?: "bottom-start" | "bottom-end";
 }) {
   const selected = createMemo(() => props.models.find((item) => item.spec === props.model));
   const label = createMemo(() => selected()?.label || props.model);
-  // A catalogue we already hold is the answer while the next one loads: the
-  // agent's own spinner already says something is starting, so swapping this
-  // trigger for a second one just churns the composer.
+  // A catalogue already held stands while the next one loads: the agent's own spinner already says something is
+  // starting, and a second one here churns the composer.
   const pending = createMemo(() => Boolean(props.loading) && !label());
 
   return <DropdownMenu placement={props.placement}>

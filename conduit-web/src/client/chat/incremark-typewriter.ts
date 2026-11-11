@@ -13,7 +13,6 @@ export const TYPEWRITER_MIN_FRAME_INTERVAL_MS = 4;
 export const TYPEWRITER_MAX_FRAME_INTERVAL_MS = 100;
 export const TYPEWRITER_MAX_CHARS_PER_FRAME = 8192;
 export const TYPEWRITER_MAX_BLOCKS_PER_FRAME = 64;
-/** The longest a delivered word may wait to be shown. */
 export const FADE_MAX_WINDOW_MS = 300;
 /** Per delivery, how much of the longest recent gap the window still covers. */
 export const FADE_GAP_DECAY = 0.9;
@@ -43,23 +42,13 @@ export function chooseFrameBudget(frameIntervalMs = TYPEWRITER_DEFAULT_FRAME_INT
 
 export type FadeDelivery = { end: number; deadline: number };
 
-/**
- * How long one delivery may take to show.
- *
- * Spread over the usual gap between deliveries, the next one lands as the last
- * finishes, so a provider that sends chunks every 100ms reads as a continuous
- * stream at no more than one gap of delay. A big delivery still drains at a
- * readable rate. Neither may hold a word past the cap.
- */
+/** Spread over the usual gap between deliveries, the next one lands as the last finishes, so chunks read as a
+ *  continuous stream at no more than one gap of delay. */
 export function fadeWindow(deliveredCharacters: number, gapEmaMs: number | null) {
   return Math.min(FADE_MAX_WINDOW_MS, Math.max(gapEmaMs || 0, deliveredCharacters * FADE_MS_PER_CHARACTER));
 }
 
-/**
- * Characters to release this frame so every delivery is shown by its
- * deadline. Deliveries are met in order: the required rate is the steepest
- * over all of them, so a later one never overtakes an older one.
- */
+/** The required rate is the steepest over all deliveries, so a later one never overtakes an older one. */
 export function chooseFadeStep(
   deliveries: FadeDelivery[],
   displayedCharacters: number,
@@ -81,8 +70,6 @@ export function chooseFadeStep(
 // AST nodes are immutable once produced: every transform in this renderer
 // returns a fresh object rather than editing one in place, so a node's
 // character counts and its prepared form are cached against the node itself.
-// That is what stops a streaming frame from re-walking the whole message for
-// every accepted chunk, which is what made frame cost grow with message length.
 const visibleCharacterCache = new WeakMap<object, number>();
 const totalCharacterCache = new WeakMap<object, number>();
 const preparedNodeCache = new WeakMap<object, any>();
@@ -111,18 +98,14 @@ function totalAstCharacters(node: any): number {
   return total;
 }
 
-/**
- * The core math plugin treats formulas as one visible unit. Nested formulas
- * need the same contract before they enter the generic AST slicer. Keep their
- * source outside `value`; MathNode reads it from this private field.
- */
+/** Nested formulas must be one visible unit before they enter the generic AST slicer, so their source is kept outside
+ *  `value`; MathNode reads it from this private field. */
 export function prepareTypewriterNode(node: any): any {
   if (!node || typeof node !== "object") return node;
   const cached = preparedNodeCache.get(node);
   if (cached !== undefined) return cached;
   const prepared = computePreparedTypewriterNode(node);
   preparedNodeCache.set(node, prepared);
-  // The result is already in prepared form, so re-preparing it is a lookup.
   if (prepared !== node) preparedNodeCache.set(prepared, prepared);
   return prepared;
 }
@@ -154,10 +137,8 @@ function smartMergeAst(baseNode: any, fullSlice: any): any {
   if (fullSlice.value !== undefined) return fullSlice;
   if (!Array.isArray(baseNode.children) || !Array.isArray(fullSlice.children)) return fullSlice;
   if (fullSlice.children.length < baseNode.children.length) return fullSlice;
-  // A block that started from nothing -- a list, quote or table shown at
-  // progress 0 -- has no last child to merge into. Merging anyway put an
-  // empty slot first, so the first item mounted at index 1 and remounted at
-  // index 0 on the next frame.
+  // A block shown at progress 0 has no last child to merge into: merging anyway puts an empty slot first, so the first
+  // item mounts at index 1 and remounts at index 0 on the next frame.
   if (baseNode.children.length === 0) return fullSlice;
   if (fullSlice.children.length === baseNode.children.length) {
     if (baseNode.children.length === 0) return fullSlice;
@@ -197,14 +178,6 @@ export type BufferedIncremarkTypewriterOptions = {
   onDisplayBusyChange?: (busy: boolean) => void;
 };
 
-/**
- * A producer-consumer scheduler for incremental Markdown.
- *
- * Parser updates replace the source queue. The consumer drains complete
- * blocks and bounded partial slices on one rAF schedule: each delivery is
- * shown by its deadline (fadeWindow), its words fading in as they appear, and
- * no frame renders outside the frame budget.
- */
 export class BufferedIncremarkTypewriter {
   private readonly callbacks: BufferedIncremarkTypewriterOptions;
   private sourceBlocks: ParsedBlock[] = [];
@@ -220,14 +193,10 @@ export class BufferedIncremarkTypewriter {
   private deliveryGapMs: number | null = null;
   private lastDeliveryAt: number | null = null;
   private readonly publishedBlocks = new Map<string, DisplayBlock>();
-  // Blocks complete in order, so everything before this index is finished and
-  // can never change again unless setSourceBlocks rewinds it. Keeping the
-  // finished prefix as retained results -- rather than rebuilding, re-walking
-  // and re-summing it on every frame -- is what stops per-frame cost growing
-  // with message length. A long answer draws O(n) frames; when each of those
-  // frames also touched all n blocks the total was quadratic.
+  // Blocks complete in order, so everything before this index is finished and can never change again unless
+  // setSourceBlocks rewinds it; retaining it keeps per-frame cost from growing with message length.
   private completedPrefix = 0;
-  /** The array as handed in, so an unchanged leading run can be recognised. */
+  /** As handed in, so an unchanged leading run can be recognised. */
   private sourceInputs: ParsedBlock[] = [];
   private readonly completedDisplay: DisplayBlock[] = [];
   /** Running sums of visible characters over completedDisplay, for O(1) rewind. */
@@ -239,7 +208,6 @@ export class BufferedIncremarkTypewriter {
 
   setBaselineCharacters(characters: number) {
     const baseline = Math.max(0, Math.trunc(characters));
-    // Asked every delivery; a streamed answer's seeded prefix rarely changes, and each time built the display blocks.
     if (baseline === this.baselineCharacters) return;
     this.baselineCharacters = baseline;
   }
@@ -285,13 +253,11 @@ export class BufferedIncremarkTypewriter {
     const reduced = reducedMotion();
     const span = reduced ? 0 : fadeWindow(delta, this.deliveryGapMs);
     // Never sooner than the delivery before it: a few characters just after a burst have a window of a frame or two,
-    // and as the steepest deadline sets the rate, theirs released the whole burst in one frame (a thousand characters,
-    // the page jumping by them) instead of over its own window.
+    // and as the steepest deadline sets the rate, theirs would release the whole burst in one frame.
     const previous = this.deliveries[this.deliveries.length - 1]?.deadline ?? 0;
     this.deliveries.push({ end: sourceCharacters, deadline: Math.max(now + span, previous) });
   }
 
-  /** The whole of this frame's release: every delivery shown by its deadline. */
   private frameQuota(displayedCharacters: number) {
     let shown = 0;
     while (shown < this.deliveries.length && this.deliveries[shown]!.end <= displayedCharacters) shown += 1;
@@ -323,15 +289,8 @@ export class BufferedIncremarkTypewriter {
     this.setBusy(false);
   }
 
-  /**
-   * Take a parser update.
-   *
-   * A delta changes the tail of the document, so the blocks before it arrive as
-   * the very same objects the previous call was given. Recognising that run and
-   * leaving it alone is what makes this cost the size of the change rather than
-   * the size of the message -- the difference between a long answer costing
-   * O(n) and O(n^2) overall.
-   */
+  /** A delta changes the tail, so the blocks before it arrive as the very same objects as last call; leaving that run
+   *  alone makes this cost the size of the change rather than of the message. */
   private setSourceBlocks(blocks: ParsedBlock[]) {
     let shared = 0;
     const limit = Math.min(blocks.length, this.sourceInputs.length);
@@ -421,7 +380,6 @@ export class BufferedIncremarkTypewriter {
       const current = this.progress.get(block.id) || 0;
       const remaining = Math.max(0, total - current);
       if (remaining <= 0) continue;
-      // The frame's quota bounds the release; within it, show as much as fits.
       const step = Math.min(
         remaining,
         TYPEWRITER_MAX_CHARS_PER_FRAME - processedCharacters,
@@ -471,12 +429,7 @@ export class BufferedIncremarkTypewriter {
     return this.completedVisibleSums[this.completedVisibleSums.length - 1] ?? 0;
   }
 
-  /**
-   * Freeze a finished block's published result.
-   *
-   * Its node cannot change again, so the stabilise decision it would get on
-   * every later frame is the one it gets here, once.
-   */
+  /** Its node cannot change again, so the stabilise decision it would get every later frame is made here, once. */
   private retireCompletedBlock(block: ParsedBlock) {
     const display = this.stabilizeDisplayBlock({
       ...block,
@@ -513,8 +466,8 @@ export class BufferedIncremarkTypewriter {
     return retained + activeCharacters;
   }
 
-  // A code block is shown whole, as a formula is: its text was already on screen as it streamed, in the open
-  // fence's placeholder, and typed out again from no lines it dropped the page by the placeholder's height.
+  // A code block is shown whole, as a formula is: its text was already on screen in the open fence's placeholder, and
+  // typed out again from no lines it would drop the page by the placeholder's height.
   private blockCharacters(block: ParsedBlock) {
     return (block.node as { type?: string } | undefined)?.type === "code" ? 1 : totalAstCharacters(block.node);
   }
@@ -570,11 +523,7 @@ export class BufferedIncremarkTypewriter {
     return next;
   }
 
-  /**
-   * Only the last entry can be new. Everything before it was stabilised and
-   * published when it was retired, and re-deciding it each frame produced the
-   * same answer at a cost that grew with the message.
-   */
+  /** Only the last entry can be new: everything before it was stabilised when it was retired. */
   private stabilizeDisplayBlocks(blocks: DisplayBlock[]) {
     const last = blocks.length - 1;
     if (last < 0) return blocks;

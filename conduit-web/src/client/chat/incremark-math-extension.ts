@@ -1,20 +1,8 @@
 import type { IncremarkPlugin } from "@incremark/core";
 
-/**
- * Conduit's math tokenizers for Incremark.
- *
- * Incremark's own `math` option is left off and these stand in for it, because
- * its inline rule opens on any unescaped `$` and so reads prose money --
- * "$174k because ..." closed by whatever `$` comes next -- as one formula. The
- * rest of the pipeline already refuses that shape: splitStreamingMarkdown will
- * not open a pending formula on a `$` followed by a digit or a space, and
- * projectTableMathSource applies the same test inside table cells. Only the
- * settled parse disagreed, so a paragraph could stream as prose and then
- * collapse into run-together italics once a later `$` closed it.
- *
- * The guard below is that same test and nothing more; the block rule and the
- * rest of the inline rule are Incremark's own.
- */
+/* Incremark's own `math` option is left off because its inline rule opens on any unescaped `$` and reads prose money
+   as one formula. The guard is inlineDollarClose, the test the streaming split and table cells use; the rest is
+   Incremark's own. */
 import { inlineDollarClose } from "./inline-dollar.ts";
 
 type MathExtensionOptions = { tex?: boolean };
@@ -65,11 +53,8 @@ const inlineMathExtension = (tex: boolean) => ({
     return inlineMathStart(source, tex);
   },
   tokenizer(source: string) {
-    // The whole difference from Incremark: prose money is not a formula; see
-    // inline-dollar.ts for where one opens and closes.
-    // `$$…$$` in the middle of a line: display delimiters written inline,
-    // which models do and remark-math reads as an inline formula. At a line's
-    // start the block rule has already taken it.
+    // `$$…$$` mid-line is display delimiters written inline, which models do and remark-math reads as an inline
+    // formula. At a line's start the block rule has already taken it.
     const doubled = INLINE_DOUBLE_DOLLAR.exec(source);
     if (doubled?.index === 0) return { type: "inlineMath", raw: doubled[0], text: doubled[1]!.trim() };
     const close = inlineDollarClose(source, 0);

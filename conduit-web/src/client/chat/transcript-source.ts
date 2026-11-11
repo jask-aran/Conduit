@@ -3,14 +3,7 @@ import type { TurnArtifactSummary } from "../api/live-events";
 import type { AgentSummary, ChatCapabilities, Message, ToolItem } from "../api/contracts";
 import type { ActiveGenerationView, LiveGenerationChange } from "../turn-rows";
 
-/**
- * The slice of a chat store the transcript renders from.
- *
- * `ActiveChatStore` satisfies this structurally. It exists so surfaces without
- * a Conduit chat behind them - an ephemeral harness thread being driven from
- * the Computer, say - can render through the same transcript instead of
- * growing a second, poorer one.
- */
+/** So surfaces without a Conduit chat behind them render through the same transcript instead of a second one. */
 export interface TranscriptSource {
   messages: Accessor<Message[]>;
   tools: Accessor<ToolItem[]>;
@@ -29,27 +22,14 @@ export interface TranscriptSource {
   cancelEdit: () => void;
   regenerate: (userMessageId: string) => Promise<unknown> | void;
   loadOlder: () => Promise<boolean | undefined>;
-  /** The chat's subagents, and a stop for a background one (a Conduit chat's; a harness thread has none). */
   agents?: Accessor<AgentSummary[]>;
   stopAgent?: (id: string) => Promise<unknown> | void;
-  /** Take back a message still waiting to send (a Conduit chat's outbox), into the composer. */
   cancelOutbox?: (messageId: string) => void;
-  /** The chat's turn summaries, from a request its open already started when it has one. */
   turnArtifactTimeline?: (projectId: string, chatId: string) => Promise<TurnArtifactSummary[]>;
 }
 
-/**
- * Whether an activity means work is happening *in* the chat, rather than the
- * backend still coming up.
- *
- * Starting the agent is not content. A chat with no messages is still an empty
- * chat while the harness spins up, and that is exactly when the empty-chat
- * layout -- the welcome line and the centred composer -- belongs on screen.
- * Treating "Starting agent…" as content held that layout back until the
- * backend answered, so a new chat opened bottom-docked and bare and then
- * snapped to centred with a heading once it did. The composer still shows the
- * label and its spinner throughout; that is the only place the wait belongs.
- */
+/** Starting the agent is not content: a chat with no messages keeps the empty-chat layout while the harness spins up,
+ *  and the composer alone shows the wait. */
 export const isChatContentActivity = (
   activity: { kind: string; label: string | null } | null | undefined,
 ): boolean => Boolean(activity?.label) && activity?.kind !== "starting";

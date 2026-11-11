@@ -3,32 +3,21 @@ import { foldFindOf } from "@/components/ui/transcript";
 import { createLatest } from "../state/latest";
 
 /*
- * Find in chat (docs/plans/keyboard-model.md, gap 6): the pane's own find, in place of the browser's.
- *
- * What it searches is the thread's text as drawn. The transcript's virtualization is content-visibility, not
- * unmounting (transcript-visibility.ts): a block far from the screen is skipped by layout and paint, or taken out of
- * layout, but its text nodes stay in the DOM, so every loaded message is searchable and a hit is exactly what gets
- * highlighted -- the message data would count Markdown's syntax and miss what a renderer adds. What a closed fold (a
- * turn's trace, a step's output) has not drawn is searched in memory, from the text the fold says it would draw
- * (registerFoldFind): its hits count where the fold is, and stepping onto one opens the fold and lands on the match it
- * then draws. No network: every harness but OpenCode sends the whole chat; OpenCode's unloaded pages are not searched.
- *
- * Matches are painted with the CSS Custom Highlight API (no DOM is touched; ::highlight rules in styles/find.css),
- * one registry entry for every pane's matches so two panes can each have a find open.
+ * Searches the thread's text as drawn: the transcript's virtualization is content-visibility, not unmounting, so text
+ * nodes stay in the DOM and a hit is exactly what gets highlighted; the message data would count Markdown's syntax and
+ * miss what a renderer adds. What a closed fold has not drawn is searched in memory, from the text the fold says it
+ * would draw. OpenCode's unloaded pages are not searched.
  */
 
-/** A row of the thread (TranscriptRow): what a match belongs to, and what is scrolled to while its text is hidden. */
 const ROW = '[data-slot="message-scroller-item"]';
-/* Not text the reader reads: controls and their labels, times, icons, KaTeX's MathML twin, a skeleton. Rejected as
-   elements, so the walk never enters them. */
+/* Rejected as elements, so the walk never enters them. */
 const SKIP = "button, time, svg, script, style, textarea, input, .katex-mathml, .markdown-skeleton, .ui-message-foot, .ui-disclosure[data-open=false] > .ui-disclosure-body";
-/* A closed fold whose body find reads from memory. A body drawn once and closed again is skipped (SKIP) and read the
-   same way, so what is counted is what opening shows. */
+/* A body drawn once and closed again is skipped (SKIP) and read from memory too, so what is counted is what opening
+   shows. */
 const FOLD = "[data-find-fold]";
 const MAX_MATCHES = 2000;
 
 export type FindMatch = { range: Range; row: HTMLElement };
-/** A match inside a closed fold: its `nth` there, found in the text the fold would draw. */
 type FoldHit = { fold: HTMLElement; nth: number; row: HTMLElement };
 type Entry = FindMatch | FoldHit;
 const inFold = (entry: Entry | undefined): entry is FoldHit => Boolean(entry && "fold" in entry);
@@ -38,14 +27,12 @@ const occurrences = (text: string, needle: string) => {
   for (let at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + needle.length)) count++;
   return count;
 };
-// The closed folds of a row that find reads (not one inside another closed fold, or inside a closed body).
 const rowFolds = (row: HTMLElement) => [...row.querySelectorAll<HTMLElement>(FOLD)].filter((fold) => {
   const up = fold.parentElement?.closest(`${FOLD}, .ui-disclosure[data-open=false] > .ui-disclosure-body`);
   return !up || !row.contains(up);
 });
 
-/** Every match of `query` (case-insensitive) in the thread's rows, in reading order: drawn text, and closed folds'
- *  hits where the folds are. A match never spans two rows. */
+/** A match never spans two rows. */
 export function findMatches(thread: HTMLElement, query: string): Entry[] {
   const needle = query.toLowerCase();
   if (!needle) return [];
@@ -68,7 +55,6 @@ export function findMatches(thread: HTMLElement, query: string): Entry[] {
     const haystack = text.toLowerCase();
     // toLowerCase keeps lengths for everything but a few letters (İ); offsets that drift would point past a node.
     if (nodes.length && haystack.length === text.length) {
-      // The node holding offset `at`, by binary search over the nodes' starts.
       const nodeAt = (at: number, end: boolean) => {
         let low = 0, high = nodes.length - 1;
         while (low < high) {
@@ -116,9 +102,7 @@ function repaint() {
   if (current.length) CSS.highlights.set(CURRENT, new Highlight(...current)); else CSS.highlights.delete(CURRENT);
 }
 
-/* Which transcript a viewport belongs to, so the app's Find command opens the find of the pane with the keyboard. */
 const finders = new WeakMap<HTMLElement, () => void>();
-/** Opens the find bar of the transcript whose viewport this is; false when it has none. */
 export function openTranscriptFind(viewport: HTMLElement | null | undefined) {
   const open = viewport ? finders.get(viewport) : undefined;
   open?.();
@@ -126,10 +110,7 @@ export function openTranscriptFind(viewport: HTMLElement | null | undefined) {
 }
 export const hasTranscriptFind = (viewport: HTMLElement | null | undefined) => Boolean(viewport && finders.has(viewport));
 
-/**
- * One transcript's find: the bar's state (open, query, the count), moving between matches, and the highlights.
- * reveal: brings a match on screen as the reader's own scroll (the transcript owns its scrolling and the tail).
- */
+/** reveal: brings a match on screen as the reader's own scroll (the transcript owns its scrolling and the tail). */
 export function createTranscriptFind(options: { viewport: () => HTMLElement; thread: () => HTMLElement; reveal: (match: FindMatch) => void }) {
   const owner = Symbol("find");
   const [open, setOpen] = createSignal(false);
@@ -137,7 +118,6 @@ export function createTranscriptFind(options: { viewport: () => HTMLElement; thr
   const [total, setTotal] = createSignal(0);
   const [index, setIndex] = createSignal(-1);
   let matches: Entry[] = [];
-  // Where focus was when the bar opened, given back when it closes.
   let returnFocus: HTMLElement | null = null;
   let input: HTMLInputElement | undefined;
   let searchTimer: number | null = null;
@@ -179,7 +159,7 @@ export function createTranscriptFind(options: { viewport: () => HTMLElement; thr
       go(target, true, depth + 1);
     }));
   };
-  /** Searches again. keep: the thread changed under an open find (a stream, a trace opening): stay at the same place. */
+  /** keep: the thread changed under an open find (a stream, a trace opening): stay at the same place. */
   const search = (keep = false) => {
     if (searchTimer != null) { clearTimeout(searchTimer); searchTimer = null; }
     // A fold still opening for the last search's step is not this one's to finish.
@@ -189,8 +169,6 @@ export function createTranscriptFind(options: { viewport: () => HTMLElement; thr
     setTotal(matches.length);
     if (!matches.length) return go(-1, false);
     if (!keep || !previous) return go(nearest());
-    // The same row's first match at or after the old one's start (a fold's: the same fold's same hit), else where the
-    // old index falls.
     const same = matches.findIndex((match) => match.row === previous.row && (inFold(previous)
       ? inFold(match) && match.fold === previous.fold && match.nth === previous.nth
       : !inFold(match) && match.range.compareBoundaryPoints(Range.START_TO_START, previous.range) >= 0));
@@ -219,10 +197,8 @@ export function createTranscriptFind(options: { viewport: () => HTMLElement; thr
   const controller = {
     open,
     query,
-    /** "3 of 12", or nothing to say before a query. */
     count: () => !query() ? undefined : total() ? `${index() + 1} of ${total()}` : "No results",
     setInput: (element: HTMLInputElement) => { input = element; },
-    /** Opens the bar, or takes the caret back to it, its query selected to type over. */
     show() {
       const active = document.activeElement;
       if (!open()) {
@@ -241,7 +217,6 @@ export function createTranscriptFind(options: { viewport: () => HTMLElement; thr
     },
     next: () => { if (!flush() && matches.length) go((index() + 1) % matches.length); },
     previous: () => { if (!flush() && matches.length) go((index() - 1 + matches.length) % matches.length); },
-    /** The Escape ladder: a query clears first, then the bar closes and focus goes back where it was. */
     escape() {
       if (query()) { controller.setQuery(""); return; }
       controller.close();
@@ -256,7 +231,6 @@ export function createTranscriptFind(options: { viewport: () => HTMLElement; thr
       returnFocus = null;
       (back ?? options.viewport()).focus({ preventScroll: true });
     },
-    /** Registers this find as the viewport's, for the app's Find command. */
     register(viewport: HTMLElement) {
       finders.set(viewport, controller.show);
       onCleanup(() => {

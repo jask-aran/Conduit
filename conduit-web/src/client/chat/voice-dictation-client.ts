@@ -74,8 +74,7 @@ interface VoiceDictationOptions {
 }
 
 const MAX_SOCKET_BUFFER_BYTES = 1024 * 1024;
-// Keep the complete five-minute server capture limit until the WebSocket is
-// available. This prevents a slow handshake from becoming an audio-loss path.
+// The server's whole five-minute capture limit, so a slow WebSocket handshake loses no audio.
 const MAX_PENDING_AUDIO_BYTES = 16_000 * 2 * 300;
 const INITIAL_FINALIZATION_TIMEOUT_MS = 60_000;
 const FINALIZATION_NETWORK_GRACE_MS = 5_000;
@@ -392,9 +391,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
     try {
       socket.send(JSON.stringify({ type: "client_diagnostics", clientDiagnostics }));
     } catch {
-      // The transcript is already complete. A closed socket must not turn a
-      // successful dictation into a client error only because diagnostics
-      // could not be handed back to the archive.
+      // The transcript is already complete: undelivered diagnostics must not fail the dictation.
     }
   };
 
@@ -507,8 +504,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
     restoreOtherAudio();
     diagnostics?.stopRequested();
     stopRequested = true;
-    // Stop has ended the capture window. The worklet may still flush its final
-    // packet, but a track ending now is a warm-resource event, not audio loss.
+    // The worklet may still flush its final packet, but a track ending now is not audio loss.
     captureAcceptingAudio = false;
     setState("finishing");
     if (!socket && !permission && !capturePromise) {
@@ -710,8 +706,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
     setState("starting");
     try { ensureAudioContext(); }
     catch { /* beginStart reports unsupported or failed context creation. */ }
-    // Telemetry is optional. Do not wait for its lazy chunk before opening the
-    // microphone and transport path.
+    // Telemetry is optional: do not wait for its lazy chunk before opening the microphone.
     if (state === "starting") void beginStart(acceptedAt).catch(fail);
   };
 

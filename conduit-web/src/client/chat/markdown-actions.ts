@@ -20,18 +20,8 @@ export function createExternalLinkController() {
 }
 
 
-/**
- * Copy, and say so.
- *
- * Copying is frequent enough that a stacking toast would be noise, so the
- * confirmation is local: the control turns to its check for a moment and the
- * region it copied takes the copied wash. Both are attribute flips, which
- * keeps them out of every renderer's reactive graph -- a settled Incremark
- * Advanced message can show the feedback without being re-entered.
- *
- * Resolves true when the clipboard actually accepted the text, so callers can
- * drive their own state from the same result.
- */
+/** Attribute flips keep the feedback out of every renderer's reactive graph, so a settled message shows it without
+ *  being re-entered. */
 export async function copyWithFeedback(
   text: string,
   trigger?: HTMLElement | null,
@@ -43,7 +33,6 @@ export async function copyWithFeedback(
   } catch {
     return false;
   }
-  // The library's copied state, set on the button and on what it copied (CopyButton, the copied wash).
   for (const target of [trigger, region]) {
     if (!target) continue;
     // Restart the wash even if a previous one is still running.

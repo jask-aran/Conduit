@@ -2,21 +2,10 @@ import { duration, easing, reducedMotion } from "@/components/ui/motion";
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
 import type { Motion } from "@/components/ui";
 
-/**
- * How a card that belongs to the composer goes: back down into it when the
- * composer takes it (sent, or put back to edit), faded in place when the reader
- * removes it, or at once when its removal has already been drawn.
- */
 export type CardExit = "drop" | "fade" | "none";
 
-/**
- * Keep what a composer card last showed on screen while it leaves.
- *
- * The data a card draws from empties the moment the composer takes it back, and
- * Solid removes the card with it, so there is nothing left to leave. This holds
- * the last present value for the length of the exit and says it is leaving;
- * the card draws that value as its Rider's motion (riderMotion), and the library plays the exit.
- */
+/** The data a card draws from empties the moment the composer takes it back, and Solid removes the card with it, so
+ *  this holds the last present value for the length of the exit. */
 export function createLeaving<T>(source: () => T, present: (value: T) => boolean, exit: () => CardExit = () => "drop", hold: `--duration-${string}` = "--duration-quick") {
   const [held, setHeld] = createSignal<T>(source());
   const [leaving, setLeaving] = createSignal<Exclude<CardExit, "none"> | null>(null);
@@ -32,11 +21,6 @@ export function createLeaving<T>(source: () => T, present: (value: T) => boolean
   return { value: held, leaving };
 }
 
-/**
- * A list whose items leave as a card does: one gone from `source` is kept, marked leaving, for the length of its exit
- * (`hold`), where it was, so its row can close its room instead of vanishing. Items are named by `key`: `keys` is the
- * list to draw (stable strings, so rows keep their identity), `get` an item's latest value, `leaving` whether it is going.
- */
 export function createLeavingList<T>(source: () => T[], key: (item: T) => string, hold: `--duration-${string}` = "--duration-gentle") {
   const [keys, setKeys] = createSignal<string[]>([]);
   const [values, setValues] = createSignal(new Map<string, T>());
@@ -70,11 +54,7 @@ export function createLeavingList<T>(source: () => T[], key: (item: T) => string
   return { keys, get: (k: string) => values().get(k), leaving: (k: string) => going().has(k) };
 }
 
-/**
- * Rows gone from the data but still drawn while they fade: `leave(ghost)` puts one in `list` for the length of its
- * exit (`hold`, so a slowed Animation speed waits as long as the fade takes). A ghost replaces any already leaving
- * that is the `same` as it.
- */
+/** `hold` is a duration token, not a literal, so a slowed Animation speed waits as long as the fade takes. */
 export function createLeavingRows<T>(same: (a: T, b: T) => boolean = (a, b) => a === b, hold: `--duration-${string}` = "--duration-quick") {
   const [list, setList] = createSignal<T[]>([]);
   const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -87,13 +67,9 @@ export function createLeavingRows<T>(same: (a: T, b: T) => boolean = (a, b) => a
   return { list, leave };
 }
 
-/** A leaving card's Rider motion: dropping back into the composer, or removed (faded in place); else it rises in. */
 export const riderMotion = (leaving: Exclude<CardExit, "none"> | null): Motion => leaving === "drop" ? "leaving" : leaving === "fade" ? "removing" : "entering";
 
-/**
- * Fade one card out in place before it is taken away. The animation is handed
- * back so a removal that fails can put the card back.
- */
+/** The animation is handed back so a removal that fails can put the card back. */
 export async function fadeOut(element: Element | null | undefined, durationMs: number = duration("--duration-quick")): Promise<Animation | null> {
   if (!element || reducedMotion() || typeof (element as HTMLElement).animate !== "function") return null;
   const animation = (element as HTMLElement).animate([{ opacity: 1 }, { opacity: 0 }],

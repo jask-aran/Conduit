@@ -8,8 +8,6 @@ import { WorkspaceGlyph } from "../project/workspace-appearance";
 
 export type PlaceOptions = { projects: Project[]; current?: Project | null; disabled?: boolean; onChoose: (project: Project) => void };
 
-/** A place's own mark when it has one -- a workspace's identity today, any
- *  place's later -- else a folder; with no place at all, the chat mark. */
 export function PlaceGlyph(props: { project?: Project | null }) {
   return <Show when={props.project?.workspaceAppearance || (props.project && isWorkspace(props.project))} fallback={props.project ? <Icons.Folder /> : <HarnessMark id="conduit" />}>
     <WorkspaceGlyph appearance={props.project!.workspaceAppearance} />
@@ -18,13 +16,9 @@ export function PlaceGlyph(props: { project?: Project | null }) {
 
 export const isWorkspace = (project: Project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
 
-/**
- * The searchable list of places: the desktop +'s Project submenu.
- */
 export function PlaceList(props: PlaceOptions & { onDone?: () => void }) {
   const root = createMemo(() => props.projects.find((project) => project.slug === "chat"));
   const placed = () => props.current && props.current.slug !== "chat" ? props.current : null;
-  // Projects before workspaces, and "No folder" first when the chat is in one.
   const places = createMemo(() => [
     ...(placed() && root() ? [root()!] : []),
     ...props.projects
@@ -44,10 +38,6 @@ export function PlaceList(props: PlaceOptions & { onDone?: () => void }) {
 
 export type FolderOptions = { folders: Array<{ path: string; label: string }>; current: string; onChoose: (path: string) => void; onBrowse: () => void };
 
-/**
- * The same button for a harness's own thread, which runs in a folder rather
- * than a place: the folders it has run in, and any other folder by browsing.
- */
 export function FolderPicker(props: FolderOptions) {
   const [open, setOpen] = createSignal(false);
   const name = () => props.folders.find((folder) => folder.path === props.current)?.label || props.current.split("/").at(-1) || props.current;

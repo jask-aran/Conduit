@@ -1,17 +1,6 @@
-/**
- * How far a user message may run before it folds.
- *
- * Deliberately dependency-free, like the code-block card contract it mirrors:
- * the presets and the fallback rules are the part most worth unit-testing, and
- * the project's modules import without file extensions, which the bundler
- * resolves but the test runner does not.
- *
- * The preset is a line count rather than a character budget because what costs
- * the reader is screen height. One pasted 400-character paragraph is two lines;
- * twelve short lines is twelve.
- */
-
-/** "off", or the number of lines a user message may show before it folds. */
+/* Dependency-free so the test runner can import it: the project's modules import without file extensions, which the
+   bundler resolves but the test runner does not. A line count rather than a character budget, because what costs the
+   reader is screen height. */
 export type UserMessageCollapseMode = "off" | "6" | "10" | "15" | "25";
 
 export const USER_MESSAGE_COLLAPSE_STORAGE_KEY = "conduit:user-message-collapse";
@@ -32,7 +21,6 @@ export function isUserMessageCollapseMode(value: unknown): value is UserMessageC
   return typeof value === "string" && MODES.has(value);
 }
 
-/** Lines a user message may show before folding; 0 when folding is off. */
 export function userMessageCollapseLines(mode: UserMessageCollapseMode) {
   return mode === "off" ? 0 : Number(mode);
 }

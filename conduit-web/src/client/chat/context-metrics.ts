@@ -17,11 +17,6 @@ export function contextUsagePercent(usage: ContextUsage | null) {
   return tokens != null && window != null && window > 0 ? (tokens / window) * 100 : null;
 }
 
-/**
- * What fills the window, in any harness: its own categories when it itemises
- * them, otherwise one "Used" against the free space -- so the breakdown always
- * draws, and a harness that learns to itemise only adds rows.
- */
 export function contextBreakdown(usage: ContextUsage | null): ContextCategory[] {
   const reported = usage?.categories?.filter((category) => category.tokens > 0 || category.kind === "free");
   if (reported?.length) return reported;
@@ -34,8 +29,6 @@ export function contextBreakdown(usage: ContextUsage | null): ContextCategory[] 
   ];
 }
 
-/** How much of the input the provider served from its cache: over the session
-    when the harness keeps totals, else for the last request. */
 export function cacheHitPercent(usage: RequestUsage | Partial<SessionTokenUsage> | null | undefined) {
   const read = numberValue(usage?.cacheRead);
   if (read == null) return null;

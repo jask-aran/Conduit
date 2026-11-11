@@ -1,25 +1,10 @@
 import { CODE_BLOCK } from "@/components/ui/shared";
 import { createSignal } from "solid-js";
-/**
- * Syntax highlighting and line numbers.
- *
- * Highlighting a block *while it streams* costs three things, and each is
- * handled here rather than avoided:
- *
- * 1. DOM ownership. A post-hoc pass that rewrites <code> fights the renderer
- *    for nodes it owns and re-appears wiped on the next chunk. So the streaming
- *    path renders highlighted markup as reactive innerHTML -- the renderer
- *    still owns the node, the highlighting is just what it renders.
- * 2. Cost. Re-highlighting a growing block every frame is quadratic over a
- *    stream. StreamingCodeHighlighter recomputes at most every
- *    STREAM_REHIGHLIGHT_MS and only when a line has actually completed.
- * 3. Correctness on partial input. An unterminated string or comment tokenizes
- *    differently from the finished text, so colours would flicker and settle.
- *    Only the text up to the last newline is highlighted; the line still being
- *    written stays plain until it is complete.
- *
- * The grammars are dynamically imported, so they land in their own lazy chunk
- * and cost nothing until a transcript actually contains code.
+/*
+ * While a block streams: a post-hoc pass that rewrites <code> fights the renderer for nodes it owns and is wiped on
+ * the next chunk, so the streaming path renders highlighted markup as the renderer's own output. Re-highlighting a
+ * growing block every frame is quadratic over a stream. An unterminated string or comment tokenizes differently from
+ * the finished text, so the line still being written stays plain.
  */
 
 const LANGUAGE_ALIASES: Record<string, string> = {
@@ -40,23 +25,14 @@ let highlighterPromise: Promise<Highlighter> | null = null;
 let loaded: Highlighter | null = null;
 const [highlighterReady, setHighlighterReady] = createSignal(false);
 
-/**
- * Tracks whether the grammars have arrived. Reading it inside a render makes a
- * block re-highlight itself the moment the lazy chunk lands, so the first code
- * block in a session is not left plain just because it rendered first.
- */
+/** Read inside a render, so a block re-highlights the moment the lazy chunk lands. */
 export { highlighterReady };
 
-/** Start loading without waiting; safe to call on every frame. */
 export function primeHighlighter() {
   if (!loaded) void loadHighlighter().catch(() => {});
 }
 
-/**
- * Load the core engine plus a curated language set. Importing the default
- * bundle would pull ~190 grammars; these are the ones an assistant answer
- * actually produces.
- */
+/** The default bundle would pull ~190 grammars; these are the ones an assistant answer actually produces. */
 function loadHighlighter(): Promise<Highlighter> {
   highlighterPromise ??= (async () => {
     const [{ default: hljs }, ...languages] = await Promise.all([
@@ -100,14 +76,8 @@ export function resolveHighlightLanguage(language: string) {
   return LANGUAGE_ALIASES[normalized] ?? normalized;
 }
 
-/**
- * Rebuild highlighted markup as one element per line.
- *
- * A highlighter's spans freely cross newlines -- a block comment is one span
- * over many lines -- so lines cannot be produced by splitting the HTML. Walk
- * the tree instead and, at each newline, re-open the same chain of enclosing
- * elements inside a fresh line.
- */
+/** A highlighter's spans cross newlines, so lines cannot be produced by splitting the HTML: at each newline the
+ *  chain of enclosing elements is re-opened inside a fresh line. */
 export function splitHighlightedLines(html: string, keepTrailing = false): HTMLElement[] {
   const template = document.createElement("template");
   template.innerHTML = html;
@@ -169,10 +139,6 @@ function needsHighlight(card: HTMLElement) {
   return Boolean(resolveHighlightLanguage(card.dataset.language || "")) && !code.querySelector(`.${CODE_BLOCK.line} *`);
 }
 
-/**
- * Highlight and number every settled code block under `root` that still needs
- * it. Safe to call often -- finished cards are skipped by attribute.
- */
 export async function highlightCodeBlocks(root: ParentNode) {
   const cards = [...root.querySelectorAll<HTMLElement>(".ui-code[data-language]")].filter(needsHighlight);
   if (!cards.length) return;
@@ -210,27 +176,21 @@ function escapeForLines(text: string) {
     .replaceAll(">", "&gt;");
 }
 
-/**
- * The code's text with its newlines intact.
- *
- * Once lines are separate block elements the newlines are gone from the DOM,
- * so textContent alone would hand the reader every line run together.
- */
+/** Once lines are separate block elements the newlines are gone from the DOM, so textContent alone runs them
+ *  together. */
 export function codeElementText(code: Element) {
   const lines = code.querySelectorAll(`.${CODE_BLOCK.line}`);
   if (!lines.length) return code.textContent || "";
   return [...lines].map((line) => line.textContent || "").join("\n");
 }
 
-/** Recompute budget while a fence is still being written. */
 export const STREAM_REHIGHLIGHT_MS = 100;
 
 function lineSpans(html: string, keepTrailing = false) {
   return splitHighlightedLines(html, keepTrailing).map((line) => line.outerHTML);
 }
 
-// Lines with no highlighting, built as strings: the tail is rebuilt every delivery, and a template parse a time was
-// most of what was left of a streaming fence's script.
+// Built as strings: the tail is rebuilt every delivery, and a template parse each time is costly.
 function plainLineSpans(text: string) {
   const lines = text.split("\n");
   if (lines.length > 1 && !lines.at(-1)) lines.pop();
@@ -241,11 +201,8 @@ export function highlightToHtml(text: string, language: string) {
   return highlightPart(text, language).html;
 }
 
-/**
- * The text highlighted, and whether the grammar ends it at its top level -- in no comment, string or other construct
- * still open. Text after such a point highlights the same started afresh as it does continued from the text before
- * (checked character by character across the registered grammars' multi-line constructs).
- */
+/** `atTop`: no comment, string or other construct is still open, so text after this point highlights the same started
+ *  afresh as continued. */
 function highlightPart(text: string, language: string) {
   const hljs = loaded;
   if (!hljs) return { html: escapeForLines(text), atTop: false };
@@ -260,27 +217,18 @@ function highlightPart(text: string, language: string) {
   }
 }
 
-/**
- * Per-block incremental highlighter for the streaming path.
- *
- * Holds the highlighted prefix between frames so a growing block does not pay
- * for its whole length on every chunk, and leaves the in-progress line plain so
- * its colours do not change under the reader as it is completed. Lines up to a
- * point the grammar ends at its top level are final, and each recompute starts
- * there: highlighting the whole prefix every 100ms grew with the file (a
- * 137-line file was most of a streaming fence's script time).
- */
+/** Lines up to a point the grammar ends at its top level are final, and each recompute starts there, so a growing
+ *  block does not pay for its whole length every chunk. */
 export class StreamingCodeHighlighter {
   private prefixLength = -1;
   private prefixLines: string[] = [];
-  /** The text highlighted for good, through the line break after it, and its lines. */
+  /** Through the line break after it. */
   private committed = "";
   private committedLines: string[] = [];
   private lastRunAt = 0;
   private lastLanguage = "";
   private hadGrammars = false;
 
-  /** Start from the lines another highlighter (a closed fence's, for its settled block) has highlighted for good. */
   continueFrom(other: StreamingCodeHighlighter) {
     this.lastLanguage = other.lastLanguage;
     this.hadGrammars = other.hadGrammars;
@@ -288,7 +236,7 @@ export class StreamingCodeHighlighter {
     this.committedLines = other.committedLines;
   }
 
-  /** Each line's markup, one CODE_BLOCK.line apiece: a line unchanged since the last render is the same string. */
+  /** A line unchanged since the last render is the same string. */
   render(text: string, language: string, streaming: boolean): string[] {
     primeHighlighter();
     // The grammars arrive asynchronously, so the first render of a block is
@@ -305,7 +253,6 @@ export class StreamingCodeHighlighter {
       this.lastRunAt = 0;
     }
     if (!streaming) {
-      // Settled: the text is final, so highlight it exactly once -- what follows the lines highlighted for good.
       if (this.prefixLength !== text.length) {
         this.prefixLength = text.length;
         const kept = this.committed && text.startsWith(this.committed) ? this.committedLines : [];

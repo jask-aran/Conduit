@@ -1,14 +1,6 @@
 import { CODE_BLOCK } from "@/components/ui/shared";
-/**
- * Bring an element's content to `html` by editing what is already there.
- *
- * A formula still arriving is re-rendered by KaTeX on every token, and almost
- * all of each new rendering is the same as the last: same spans, same inline
- * styles, a few changed at the tail. Replacing the element's innerHTML threw
- * all of it away, so every token restyled and relaid thousands of new boxes
- * (~12ms for a long aligned block). Walking the new markup against the old and
- * touching only what differs leaves the unchanged boxes clean (~3ms).
- */
+/* A formula still arriving is re-rendered by KaTeX on every token, almost all of it the same as the last; replacing
+   innerHTML would restyle and relay thousands of boxes each token, so only what differs is touched. */
 const template = typeof document === "undefined" ? null : document.createElement("template");
 
 export function morphHtml(element: Element, html: string) {
@@ -20,17 +12,13 @@ export function morphHtml(element: Element, html: string) {
   morphChildren(element, template.content);
 }
 
-// The lines each element was last given, by index: a code block's children are its lines, one element apiece.
+// A code block's children are its lines, one element apiece.
 const renderedLines = new WeakMap<Element, string[]>();
 
-/**
- * Bring a code block's lines to `lines`, touching only the lines whose markup changed. A streaming fence gains a
- * line or two a delivery; parsing and walking all of a long file's lines to find them was most of each delivery's
- * work (a 137-line file: 290ms over a second of it).
- */
+/* A streaming fence gains a line or two a delivery; parsing and walking all of a long file's lines to find them is
+   most of each delivery's work. */
 const PLAIN_LINE = new RegExp(`^<span class="${CODE_BLOCK.line}">([^<]*)</span>$`);
 const ENTITIES: Record<string, string> = { lt: "<", gt: ">", amp: "&", quot: "\"", "#x27": "'", "#39": "'", nbsp: "\u00a0" };
-// The text a plain line's markup stands for, or null for an entity not among those a highlighter or serializer writes.
 const unescapeText = (html: string) => {
   if (!html.includes("&")) return html;
   let known = true;
@@ -48,8 +36,7 @@ export function morphLines(element: Element, lines: string[]) {
   }
   const children = element.childNodes;
   for (let index = 0; index < lines.length; index += 1) {
-    // The strings first: the children match the previous lines one for one, and reading a child for every line of a
-    // long file, every delivery, was most of this.
+    // The strings first: reading a child for every line of a long file, every delivery, is most of the cost.
     if (previous[index] === lines[index]) continue;
     const existing = children[index];
     // A line with no highlighting yet -- the one being written -- has its text set, not parsed.

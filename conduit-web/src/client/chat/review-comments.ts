@@ -4,7 +4,6 @@ import type { ComparisonPayload } from "../workspace/workspace-comparison";
 export type ReviewCommentSide = "original" | "modified";
 export type ReviewCommentScope = ComparisonPayload["scope"] | "file";
 
-/** The same passage on the other side of a comparison. */
 export interface ReviewCommentCounterpart {
   side: ReviewCommentSide;
   from: number;
@@ -12,7 +11,6 @@ export interface ReviewCommentCounterpart {
   startColumn: number;
   endColumn: number;
   excerpt: string;
-  /** True when the selection ran through this side too, rather than it being context. */
   selected?: boolean;
 }
 
@@ -24,13 +22,12 @@ export interface ReviewComment {
   scope: ReviewCommentScope;
   from: number;
   to: number;
-  /** 1-based column the selection starts at, within line `from`. */
+  /** 1-based, within line `from`. */
   startColumn: number;
-  /** 1-based column the selection ends at, within line `to`. */
+  /** 1-based, within line `to`. */
   endColumn: number;
-  /** Every line the selection touched, whole, so the span has context around it. */
+  /** Every line the selection touched, whole. */
   excerpt: string;
-  /** For a comment on a diff, the lines the selection replaced or was replaced by. */
   counterpart?: ReviewCommentCounterpart;
   note: string;
 }
@@ -112,11 +109,6 @@ export function projectReviewComments(text: string, values: readonly ReviewComme
   return [text, ...blocks].filter(Boolean).join("\n\n");
 }
 
-/**
- * Splits an excerpt into the text before the selection, the selection, and the
- * text after it. The excerpt holds whole lines, so the parts outside the span
- * are the context the reader needs to place it.
- */
 export function reviewCommentParts(comment: Pick<ReviewComment, "excerpt" | "startColumn" | "endColumn">): { before: string; selected: string; after: string } {
   const lines = comment.excerpt.split("\n");
   const lastLine = lines.at(-1) ?? "";
@@ -145,7 +137,7 @@ export function parseReviewComments(value: string): { text: string; comments: Pr
   if (start < 0) return { text: value, comments: [] };
   const text = value.slice(0, start).trimEnd();
   const suffix = value.slice(start);
-  // Columns arrived after the first messages were sent, so they stay optional.
+  // Columns stay optional: sent messages without them exist.
   const pattern = /<review_comment path="([^"]*)" lines="(\d+)-(\d+)"(?: columns="(\d+)-(\d+)")? side="(original|modified)" scope="([^"]*)">\n<excerpt>\n([\s\S]*?)\n<\/excerpt>\n(?:<counterpart side="(original|modified)" lines="(\d+)-(\d+)" columns="(\d+)-(\d+)"( selected="true")?>\n([\s\S]*?)\n<\/counterpart>\n)?<note>\n([\s\S]*?)\n<\/note>\n<\/review_comment>/gy;
   const comments: ProjectedReviewComment[] = [];
   let offset = 0;

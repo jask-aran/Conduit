@@ -16,7 +16,6 @@ const isImage = (item: UploadAttachment) => Boolean(item.type?.startsWith("image
 const previewOf = (item: UploadAttachment, chatId?: string | null) =>
   item.objectUrl || (isImage(item) && chatId ? attachmentUrl(chatId, item.id, "?preview=1") : null);
 
-/** One attachment as a Chip: a press shows it (or retries a failed upload that can be), its remove button removes it. */
 function AttachmentChip(props: { item: UploadAttachment; chatId?: string | null; entering: boolean; onOpen: () => void; onRemove: (chip: HTMLElement) => void; onRetry: () => void }) {
   const failed = () => props.item.status === "error";
   const source = previewOf(props.item, props.chatId);
@@ -27,7 +26,6 @@ function AttachmentChip(props: { item: UploadAttachment; chatId?: string | null;
     motion={props.entering ? "entering" : undefined} onOpen={props.onOpen} onRetry={props.onRetry} onRemove={props.onRemove} />;
 }
 
-/** Every attachment for the draft, larger and uncropped, to check or remove. */
 function AttachmentsDialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -58,26 +56,16 @@ function AttachmentsDialog(props: {
   </Dialog>;
 }
 
-/**
- * Every attachment for the message being written, in one strip directly above
- * the composer: never taller than one row of chips, scrolling sideways as more
- * arrive, with the expand button opening them all at a readable size.
- *
- * Chips are keyed by attachment id. An upload's progress replaces its item with
- * a new object, and a list keyed by object would rebuild the chip -- replaying
- * its entrance -- on every update.
- */
+/** Chips are keyed by attachment id: an upload's progress replaces its item with a new object, and a list keyed by
+ *  object would rebuild the chip, replaying its entrance, on every update. */
 export function AttachmentStrip(props: {
   items: UploadAttachment[];
   chatId?: string | null;
   onRemove: (item: UploadAttachment) => unknown;
   onRetry: (item: UploadAttachment) => void;
 }) {
-  // Sent, the strip drops into the composer. The last chip removed by hand
-  // takes the strip with it, faded in place.
   const [exit, setExit] = createSignal<CardExit>("drop");
-  // Removing everything fades the strip at once, not chip by chip as each
-  // removal lands; one that fails brings the strip back with what is left.
+  // Removing everything fades the strip at once, not chip by chip as each removal lands.
   const [clearing, setClearing] = createSignal(false);
   createEffect(() => { if (props.items.length > 0 && !clearing()) setExit("drop"); });
   const shown = createLeaving(() => props.items, (items) => items.length > 0, exit);
@@ -111,8 +99,7 @@ export function AttachmentStrip(props: {
   const remove = async (chip: HTMLElement, item: UploadAttachment) => {
     if (props.items.length === 1) { setExit("fade"); await props.onRemove(item); return; }
     const faded = await fadeOut(chip, 100);
-    // The chip gives its room up now, not when the server confirms, and the
-    // chips after it slide over by transform. A removal that fails puts it back.
+    // The chip gives its room up now, not when the server confirms; a removal that fails puts it back.
     const neighbours = [...(chip.parentElement?.children || [])].filter((node): node is HTMLElement => node !== chip && node instanceof HTMLElement);
     const before = new Map(neighbours.map((node) => [node, node.getBoundingClientRect().left]));
     chip.hidden = true;

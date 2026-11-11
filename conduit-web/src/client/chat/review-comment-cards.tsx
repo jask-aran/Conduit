@@ -12,7 +12,6 @@ import { requestReviewNavigation } from "./review-navigation";
 // The preview pulls in CodeMirror, so it arrives with the dialog, not the chat.
 const WorkspaceExcerptView = lazy(() => import("../workspace/workspace-excerpt-view"));
 
-/** Review comments as References: under a sent message, or (editable) in the composer's rider. */
 export function ReviewCommentCards(props: {
   items: readonly (ReviewComment | ProjectedReviewComment)[];
   label: string;
@@ -29,13 +28,11 @@ export function ReviewCommentCards(props: {
         if (removable && props.onUpdate) props.onUpdate(removable, note());
         setEditing(false);
       };
-      // The box starts small so the excerpt has the room, and grows with the note.
       const grow = (element: HTMLTextAreaElement) => {
         element.style.height = "auto";
         element.style.height = `${element.scrollHeight}px`;
       };
       const lines = item.from === item.to ? `:${item.from}` : `:${item.from}-${item.to}`;
-      // A comparison comment can span added and removed text, so it says so.
       const diff = item.scope !== "file";
       const parts = () => reviewCommentParts(item);
       return <>

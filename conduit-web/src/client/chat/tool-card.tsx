@@ -8,10 +8,8 @@ import { Step, StepDiff, StepOutput, Trail } from "@/components/ui";
 const MAX_PREVIEW = 8_000;
 const commandTools = new Set(["bash", "shell", "exec", "terminal", "run_command"]);
 
-/* What the adapter says a tool acted on, a long one kept from its end, where
-   the file or the last word is. The browser does not guess one from a tool's
-   input: every harness spells its inputs its own way. */
-/** A connector's tool by its service: `mcp__executor__call` reads "Executor call", in a name or anywhere in a subject. */
+/* A long subject is kept from its end, where the file or the last word is. The browser does not guess one from a
+   tool's input: every harness spells its inputs its own way. */
 export const toolName = (name?: string) => name?.replace(/mcp__([A-Za-z0-9]+(?:_[A-Za-z0-9]+)*)__([\w.-]+)/g, (_, service: string, tool: string) => `${service[0]!.toUpperCase()}${service.slice(1)} ${tool}`);
 function summary(tool: ToolItem) {
   const subject = toolName(tool.subject) || "";
@@ -22,8 +20,6 @@ function stringify(value: unknown) {
   return typeof value === "string" ? value : JSON.stringify(value ?? {}, null, 2);
 }
 
-/* A step of the trail names its kind with an icon and a verb -- present while
-   it runs, past once it has -- and what it acted on in mono beside it. */
 export const KIND_ICONS: Record<ToolKind, Component<{ class?: string }>> = {
   command: Icons.Shell, read: Icons.FileText, edit: Icons.WriteFile,
   search: Icons.Search, fetch: Icons.Fetch, script: Icons.Code, agent: Icons.Agent, message: Icons.Notification, other: Icons.Tool,
@@ -33,9 +29,6 @@ export const VERBS: Record<ToolKind, [string, string]> = {
   search: ["Searching", "Searched"], fetch: ["Fetching", "Fetched"], script: ["Scripting tools", "Scripted tools"], agent: ["Delegating", "Delegated"], message: ["Notifying", "Notified"], other: ["Using", "Used"],
 };
 
-/* How long a step took: milliseconds under a second, tenths under ten
-   seconds, whole seconds under a minute, then minutes and seconds. */
-/** A measured time, one format everywhere it is shown: `352ms`, `5.3s`, `1m 02.4s`. */
 export function elapsed(ms: number): string {
   if (ms < 1000) return `${Math.max(0, Math.floor(ms))}ms`;
   const tenths = Math.round(ms / 100);
@@ -43,33 +36,25 @@ export function elapsed(ms: number): string {
   return `${Math.floor(tenths / 600)}m ${((tenths % 600) / 10).toFixed(1).padStart(4, "0")}s`;
 }
 
-/* A step's own time is worth saying once it is a second or more: under that it is every file read and edit, and the
-   column of `2ms`, `8ms` beside them said nothing. */
+/* Under a second is every file read and edit, and a column of `2ms`, `8ms` beside them says nothing. */
 const STEP_TIME_MS = 1000;
 function stepTime(from?: string, to?: string): string {
   const ms = from && to ? Date.parse(to) - Date.parse(from) : NaN;
   return Number.isFinite(ms) && ms >= STEP_TIME_MS ? elapsed(ms) : "";
 }
-/** A step's line, as its adapter said it best (ToolFacts) or else from its subject: what it acted on, its face (a
- *  query or a page is prose, in quotes for a query; a command or a file is code), and what qualifies it. */
 export function stepParts(tool: Pick<ToolItem, "kind" | "subject" | "facts">): { subject: string; face: "code" | "text"; aside?: string } {
-  // A step the adapter put in words (a connector's service, a question) reads as prose too.
   const prose = tool.kind === "search" || tool.kind === "fetch" || tool.kind === "agent" || tool.kind === "message" || Boolean(tool.facts?.verb);
   const subject = tool.facts?.subject ?? summary(tool as ToolItem);
   return { subject: tool.kind === "search" && subject ? `\u201c${subject}\u201d` : subject, face: prose ? "text" : "code", ...(tool.facts?.aside ? { aside: tool.facts.aside } : {}) };
 }
 type Said = Pick<ToolItem, "subject" | "facts"> & { kind?: ToolKind; name?: string };
-/** A step's verb, running or done: the adapter's (ToolFacts) where it said one, else its kind's, a tool of no kind by its name. */
 export function stepVerb(item: Said, running: boolean): string {
   if (item.facts?.verb) return item.facts.verb[running ? 0 : 1];
   const kind = item.kind || "other";
   return `${VERBS[kind][running ? 0 : 1]}${kind === "other" ? ` ${toolName(item.name) || "a tool"}` : ""}`;
 }
-/** The kind a step's icon and counts go by: what it did (ToolFacts) over its tool's kind. */
 export const stepKind = (item: Said): ToolKind => item.facts?.kind || item.kind || "other";
-/** A script's calls as they ran (not those read ahead, not the earlier ones folded away). */
 export const scriptCalls = (tool: ToolItem): ToolCallStep[] => (tool.calls || []).filter((call) => !call.planned && !call.earlier);
-/** A script said as what it called: its first call's line, and how many other things it did. One line a distinct call. */
 export function scriptSaid(tool: ToolItem, running: boolean): { call: ToolCallStep; more: number } | null {
   const calls = scriptCalls(tool);
   if (!calls.length) return null;
@@ -78,7 +63,6 @@ export function scriptSaid(tool: ToolItem, running: boolean): { call: ToolCallSt
   return { call, more: running ? 0 : lines.size - 1 };
 }
 
-/** The same, as one plain line after a verb ("Searched “gassho stays” on shirakawa-go.gr.jp"): a trace's latest line. */
 export function stepText(tool: Pick<ToolItem, "kind" | "subject" | "facts">): string {
   const parts = stepParts(tool);
   return [parts.subject, parts.aside].filter(Boolean).join(" ");
@@ -90,9 +74,7 @@ export function stepDuration(from?: string, to?: string): string {
   return elapsed(ms);
 }
 
-/* For find in chat (registerFoldFind): a step's line as drawn, and what opening it draws -- its diff, its calls'
-   lines, its output's preview -- from the data, so a closed step's text is found without drawing it. Settled steps;
-   a running one's words differ only in tense. */
+/* For find in chat: a step's text from the data, so a closed step's text is found without drawing it. */
 export function toolStepLine(tool: ToolItem): string {
   const said = tool.kind === "script" ? scriptSaid(tool, false) : null;
   const item: Said = said?.call ?? tool;
@@ -108,9 +90,6 @@ export function toolStepBody(tool: ToolItem): string {
   return [diff, calls, !diff || tool.isError ? preview : ""].filter(Boolean).join("\n");
 }
 
-/* A tool step: the library's Step, StepOutput, a code-mode script's calls as a Trail of quiet Steps. `open`,
-   `onToggle` are the trail's; its body is drawn the first time it opens (the Step's opens). Output a reload
-   left on the server is fetched the first time it is opened. */
 export function ToolStep(props: { tool: ToolItem; settled?: boolean; open: boolean; onToggle: () => void; motion?: "entering" }) {
   const [full, setFull] = createSignal(false);
   const status = createMemo(() => props.tool.isError ? "failed" : props.tool.cancelled ? "stopped" : props.tool.done ? "done" : props.settled ? "stopped" : "running");
@@ -120,7 +99,6 @@ export function ToolStep(props: { tool: ToolItem; settled?: boolean; open: boole
     if (full() || text.length <= MAX_PREVIEW) return text;
     return commandTools.has(String(props.tool.name || "").toLowerCase()) ? text.slice(-MAX_PREVIEW) : text.slice(0, MAX_PREVIEW);
   });
-  // A script is said as what it called (scriptSaid): its call's icon, verb and subject, how many more it did.
   const said = createMemo(() => props.tool.kind === "script" ? scriptSaid(props.tool, status() === "running") : null);
   const item = (): Said => said()?.call ?? props.tool;
   const kind = () => stepKind(item());

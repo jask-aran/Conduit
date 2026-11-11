@@ -52,9 +52,7 @@ import { keptParts, watchFit } from "@/components/ui/fit";
 import { createLeaving, riderMotion } from "./composer-cards";
 import { ComposerPlusMenu, PermissionChoices, ProfileChoices, ServiceChoices } from "./composer-plus-menu";
 
-/** How long a take sent on stop hides the draft at most, waiting for its transcript. */
 const TAKE_SEND_GIVE_UP_MS = 20_000;
-/** How long a press on the camera is held to pick photos instead. */
 const CAMERA_HOLD_MS = 450;
 const MobileComposerOptions = lazy(() => import("./mobile-composer-options"));
 
@@ -68,23 +66,18 @@ const EDIT_ACTIONS = [
 
 export function Composer(props: {
   chat: ActiveChatStore;
-  /** In the context gauge's place: what this composer's page reads its particulars from (jbot's chip, in its room). */
   contextControl?: JSX.Element;
   attachments: ComposerAttachments;
   models: ComposerModels;
   modelsLoading?: boolean;
   permissions?: ComposerPermissions;
   serviceLevels?: ServiceLevelSettings;
-  /** Surfaces without a Conduit chat behind them cannot carry attachments. */
   attachmentsSupported?: boolean;
   profiles: Template[];
   activeProfile?: Template | null;
-  /** Absent where no adaptor reports usage; the gauge then reads 0% and greys out. */
   serverOnline: boolean;
   voiceSettings: VoiceDictationSettings;
-  /** With two chats side by side, whether this composer's side has the keyboard, and with it the dictation key. */
   keyboardOwner?: () => boolean;
-  /** The app's shortcut manager, which owns the composer's own chords (Steer). Without it they fall back to their defaults. */
   shortcuts?: ShortcutManager;
   onChooseProfile: (id: string) => void;
   onOpenSettings: (section: string) => void;
@@ -92,15 +85,10 @@ export function Composer(props: {
   modelSelectorShortcut?: string | null;
   onOpenAttachments: () => void;
   onSendDraft?: (text: string) => Promise<void>;
-  /** Sending starts the chat (through `onSendDraft`), so there is none to wait for. */
   launches?: boolean;
-  /** Its chat is still arriving (reattaching): the field alone shows. */
   opening?: boolean;
-  /** The folder button beside attach: where this chat lives. */
   place?: PlaceOptions;
-  /** A harness thread's folder, in the place button's slot. */
   folder?: FolderOptions;
-  /** The workspace a page's unsent chat goes to, when no place is chosen in it (a workspace's page): what the composer says of its machine. */
   workspace?: Project;
   supports?: (capability: BooleanCapability) => boolean;
 }) {
@@ -113,13 +101,9 @@ export function Composer(props: {
   const [dictatedRange, setDictatedRange] = createSignal<{ start: number; end: number } | null>(null);
   const [dictationSelectionOwned, setDictationSelectionOwned] = createSignal(false);
   const [phoneLayout, setPhoneLayout] = createSignal(isMobileLayout());
-  /* Voice-first phone layouts: idle is a row of buttons with no text line;
-     typing (focused, or a draft kept) adds the text row on top; listening
-     shows the orb, the coloured glow and the last lines of the transcript. */
   const [inputFocused, setInputFocused] = createSignal(false);
-  /* In the voice layouts only the keyboard button raises the keyboard. A tap
-     on the text pill places the cursor (where dictation will land) or starts
-     a selection, with inputmode="none" keeping the keyboard down. */
+  /* Only the keyboard button raises the keyboard: a tap on the text pill places the cursor (where dictation will land),
+     with inputmode="none" keeping the keyboard down. */
   const [keyboardWanted, setKeyboardWanted] = createSignal(false);
   const [nativeUp, setNativeUp] = createSignal(false);
   const [sendingTake, setSendingTake] = createSignal<DictationTake | null>(null);
@@ -127,8 +111,6 @@ export function Composer(props: {
   const toggleKeyboard = () => {
     if (startNativeTyping()) return;
     if (keyboardWanted()) { setKeyboardWanted(false); input.blur(); return; }
-    // Focused with the keyboard down and nothing left (a dictation cleared
-    // out): the button closes the edit row and text pill, back to idle.
     if (document.activeElement === input && !hasText()) { input.blur(); return; }
     setKeyboardWanted(true);
     // inputmode is read on focus, so an already focused field is focused anew.
@@ -136,9 +118,8 @@ export function Composer(props: {
     queueMicrotask(() => input.focus({ preventScroll: true }));
   };
   let refocusing = false;
-  // A touch anywhere outside the phone composer while typing closes it, as the native composer's does: the keyboard
-  // goes down and the composer goes idle (or stays typing with a draft). Not a menu or popover opened from it, and the
-  // touch still reaches the page (a drag scrolls the transcript).
+  // A touch outside the phone composer while typing closes it, as the native composer's does; the touch still reaches
+  // the page (a drag scrolls the transcript).
   onMount(() => {
     const outside = (event: PointerEvent) => {
       if (!voiceFirst() || nativeUp() || document.activeElement !== input) return;
@@ -149,11 +130,8 @@ export function Composer(props: {
     document.addEventListener("pointerdown", outside, { capture: true, passive: true });
     onCleanup(() => document.removeEventListener("pointerdown", outside, { capture: true }));
   });
-  // A phone has one composer, voice-first: a field over a bar of buttons.
   const voiceFirst = () => phoneLayout();
   const phoneMode = (focused = inputFocused(), text = hasText()) => !voiceFirst() ? undefined
-    // Finishing and transcribing still look like listening, so stopping goes
-    // straight to the result instead of flashing through the text row.
     // Once stopped, the row settles at once; the transcript lands when it lands.
     : ["starting", "listening"].includes(dictationState()) ? "listening"
     // Sent, or stop-and-send waiting on its transcript: the text pill goes at
@@ -163,18 +141,14 @@ export function Composer(props: {
   const [optionsOpen, setOptionsOpen] = createSignal(false);
   // The text row was zero wide while hidden; measure it again once shown.
   createEffect(on(phoneMode, () => scheduleResize(), { defer: true }));
-  // Dictation failures go through the app's normal toasts.
   // One toast for dictation's failure: pressing the mic again replaces it rather than stacking another.
   createEffect(on(dictationError, (message) => { if (message) toast.error(message, { id: "dictation-error" }); }, { defer: true }));
-  // The transcript's scroll-to-latest and cancel editing ride above the captions.
   const announceCaptions = (element: HTMLElement) => {
     const observer = new ResizeObserver(() => window.dispatchEvent(new CustomEvent("conduit:voice-captions")));
     observer.observe(element);
     onCleanup(() => { observer.disconnect(); queueMicrotask(() => window.dispatchEvent(new CustomEvent("conduit:voice-captions"))); });
   };
-  /* Captions open with the end of what is already in the composer, upright,
-     so the new dictation reads as continuing it. Only the tail is kept: three
-     lines show at most. */
+  /* Only the tail is kept: three lines show at most. */
   const captionLead = () => { const range = dictatedRange(); return range ? props.chat.draft().slice(Math.max(0, range.start - 240), range.start).trimStart() : ""; };
   const dictatedText = () => { const range = dictatedRange(); return range ? props.chat.draft().slice(range.start, range.end) : ""; };
   // A phone has no model chip in its row, so the empty draft names the model --
@@ -183,9 +157,7 @@ export function Composer(props: {
     const model = phoneLayout() && (props.models.models().find((item) => item.spec === props.models.model())?.label || props.models.model());
     return model || "Send a message...";
   };
-  /* Desktop: the row's controls keep their size; those that do not fit fold
-     into the + menu, least used first. Each one's width is kept from when it
-     was last drawn, so a folded control comes back exactly when it fits. */
+  /* Each control's width is kept from when it was last drawn, so a folded control comes back exactly when it fits. */
   const [folded, setFolded] = createSignal<ReadonlySet<ComposerFold>>(new Set());
   const foldWidths = new Map<ComposerFold, number>();
   const foldPresent: Record<ComposerFold, () => boolean> = {
@@ -207,7 +179,6 @@ export function Composer(props: {
     const others = ([...actionsRow.children] as HTMLElement[]).filter((child) => child !== actionsLeft());
     const available = actionsRow.clientWidth - (parseFloat(row.paddingLeft) || 0) - (parseFloat(row.paddingRight) || 0)
       - others.reduce((sum, child) => sum + child.getBoundingClientRect().width + (parseFloat(row.columnGap) || 0), 0);
-    // What stays, last to fold first: the rest fold, least used first.
     const keep = COMPOSER_FOLDS.filter((key) => widths.has(key)).reverse();
     const kept = keptParts(available - fixed, keep.map((key) => widths.get(key)! + gap));
     const next = new Set(keep.slice(kept));
@@ -216,7 +187,6 @@ export function Composer(props: {
   };
   const refit = () => { cancelAnimationFrame(refitFrame); refitFrame = requestAnimationFrame(fit); };
   const shows = (key: ComposerFold) => phoneLayout() || !folded().has(key);
-  // The desktop row's folding, watched from whenever its Toolbar is drawn; a phone's row has none of it.
   const toolbarRef = (element: HTMLDivElement) => { actionsRow = element; watchFit(element, () => { cancelAnimationFrame(refitFrame); fit(); }); refit(); };
   const dictationWaveform = createVoiceWaveformController(MAX_RESPONSIVE_BAR_COUNT);
   let pushToTalkActive = false;
@@ -268,9 +238,8 @@ export function Composer(props: {
     input.style.height = `${Math.min(input.scrollHeight, 192)}px`;
   };
 
-  // Every reason to resize that arrives in one task resizes once: the first
-  // open set the draft, the busy state and the layout in turn, and each
-  // measurement laid out the page it was still building.
+  // Every reason to resize that arrives in one task resizes once: opening sets the draft, the busy state and the
+  // layout in turn, and each measurement would lay out a page still being built.
   let resizeQueued = false;
   const scheduleResize = () => {
     if (resizeQueued) return;
@@ -291,10 +260,8 @@ export function Composer(props: {
     pendingDictationLaunch = { inputFocused, keyboardOpen: keyboardWasOpen(inputFocused), acceptedAt: performance.now() };
   };
 
-  /* Edit actions for the text pill in the voice layouts, where the keyboard
-     is usually down: a cursor placed by finger is nudged a word at a time,
-     and undo is the composer's own because programmatic draft changes
-     (dictation, these actions) never reach the textarea's native stack. */
+  /* Undo is the composer's own because programmatic draft changes (dictation, the edit actions) never reach the
+     textarea's native stack. */
   type DraftSnapshot = { text: string; start: number; end: number };
   const undoStack: DraftSnapshot[] = [];
   let lastSnapshotAt = 0;
@@ -350,12 +317,10 @@ export function Composer(props: {
   // Whenever the text pill has the cursor, empty or not: clearing the draft
   // is exactly when undo is wanted.
   const editing = () => voiceFirst() && inputFocused() && phoneMode() === "typing";
-  // The transcript's scroll-to-latest button moves above the edit actions.
   createEffect(on(editing, () => window.dispatchEvent(new CustomEvent("conduit:voice-captions")), { defer: true }));
 
   let restoringDraft = false;
-  // The slash menu's lookups: each typed change is one; Escape ends the current one, so a lookup that finishes after the
-  // menu was dismissed cannot open it again (Codex review).
+  // Escape ends the current lookup, so one that finishes after the menu was dismissed cannot open it again.
   const slashLookup = createLatest();
   const change = (value: string, manual = true) => {
     if (manual && !restoringDraft) snapshot();
@@ -472,7 +437,6 @@ export function Composer(props: {
           } else if (audioTransferLost(completion)) {
             setDictationError(`Microphone audio was truncated before transcription (${completion.serverAudioBytes} of ${completion.audioBytesSent} bytes reached the server). Check the connection and try again.`);
           }
-          // Otherwise nothing was said: no error.
           return;
         }
         if (take) applyTranscript(take, transcript);
@@ -510,7 +474,6 @@ export function Composer(props: {
   };
   const recordingNow = () => ["starting", "listening"].includes(dictationState());
   const stopTake = () => currentTake?.client.stop();
-  // Ends the take and sends the draft once its transcript lands.
   const stopAndSend = () => {
     const take = currentTake;
     if (!take || !takeIsCurrentChat(take)) return;
@@ -569,9 +532,6 @@ export function Composer(props: {
     else await props.chat.send(mode);
   };
 
-  // The camera button. Tap: the Viewfinder, the camera in a card (its Full camera, or a camera it can't open, hands
-  // over to the platform's own through cameraInput). Hold: the platform's photo picker (photoInput in a browser);
-  // Attach files in the plus menu keeps the whole file picker.
   let cameraInput!: HTMLInputElement;
   let photoInput!: HTMLInputElement;
   const [viewfinder, setViewfinder] = createSignal(false);
@@ -659,8 +619,7 @@ export function Composer(props: {
     });
   };
 
-  // Steer (Ctrl+Shift+Enter by default) is a command; it runs only from this composer's field, with a turn running and
-  // something to send, and not while the slash menu has Enter.
+  // Steer is a registered command; it runs only from this composer's field, and not while the slash menu has Enter.
   const canSteer = () => busy() && hasText() && !slashOpen();
   if (props.shortcuts) {
     const shortcuts = props.shortcuts;
@@ -668,12 +627,11 @@ export function Composer(props: {
       () => void sendMessage("steer"), { when: () => document.activeElement === input && canSteer() }));
     onCleanup(() => releaseSteer.forEach((release) => release()));
   }
-  // The field's own keys: the slash menu, Enter to send and Shift+Enter for a new line, and the prompt history.
   const keydown = (event: KeyboardEvent) => {
     // An input method composing text owns its keys: its Enter confirms a candidate, never sends.
     if (event.isComposing || event.keyCode === 229) return;
     if (event.key === "Escape" && slashOpen()) { event.preventDefault(); slashLookup.drop(); setSlashOpen(false); return; }
-    // Escape never stops a turn: it steps back (keyboard-model.md › Leave); stopping is Ctrl+Shift+Backspace or the button.
+    // Escape never stops a turn: it steps back; stopping is Ctrl+Shift+Backspace or the button.
     if (event.key === "Tab" && slashOpen()) {
       event.preventDefault();
       const selected = slashCommand();
@@ -798,7 +756,6 @@ export function Composer(props: {
       stopTake();
     };
     const voiceToggle = () => { if (!props.keyboardOwner || props.keyboardOwner()) toggleDictation(); };
-    // Keyboard put away with nothing typed: leave the text pill too.
     const keyboardHidden = () => {
       setKeyboardWanted(false);
       if (voiceFirst() && document.activeElement === input && !hasText()) input.blur();
@@ -817,12 +774,11 @@ export function Composer(props: {
     });
   });
 
-  // Where the handoff to the native composer is: starting it, or handing the composer back to the web one after it ended.
   let nativePhase: "idle" | "starting" | "handing back" = "idle";
   let reopenNative = false;
   let nativeClosing = false;
   // A keyboard hide starting with the native composer up takes it out of typing now, before the travel measures where
-  // it ends (keyboard-travel.ts), so the field's going rides the same motion; the closing event after is then a no-op.
+  // it ends, so the field's going rides the same motion; the closing event after is then a no-op.
   onMount(() => {
     const travel = (event: Event) => {
       if (!(event as CustomEvent<{ hiding: boolean }>).detail.hiding || !nativeUp() || nativeClosing) return;
@@ -859,7 +815,6 @@ export function Composer(props: {
     nativePhase = "idle"; nativeClosing = false;
     const action = nativeAction; nativeAction = null;
     if (nativeDisposed || nativeChat !== props.chat.loadedId()) return;
-    // The keyboard pill tapped while the native composer was still handing back: open it again now.
     if (reopenNative) { reopenNative = false; if (!action || action === "keyboard") { startNativeTyping(); return; } }
     if (action === "attach") {
       const trigger = input.closest(".ui-phone-composer")?.querySelector<HTMLButtonElement>('button[aria-label="Message options"]');
@@ -903,10 +858,8 @@ export function Composer(props: {
             else if (name === "latest") scrollToLatest();
             else if (name === "undo" || name === "delete" || name === "left" || name === "right" || name === "select") editActions[name === "select" ? "end" : name]();
             else if (name === "keyboard" && nativeClosing) reopenNative = true;
-            // The rest are the web's to carry out once typing ends. Message options (+) closes the keyboard because its
-            // menu is the web's popover, and the native composer's pills are drawn in a window over the app
-            // (ComposerFrost): nothing the WebView draws can appear above them, so the web takes the composer back
-            // first and opens the menu from its own pill (finishNativeTyping). The camera and the mic go the same way.
+            // The rest are the web's to carry out once typing ends: the native composer's pills are drawn in a window
+            // over the app, and nothing the WebView draws can appear above them.
             else { nativeAction = name; void nativeComposer.end(); }
           }),
         ]);
@@ -918,8 +871,8 @@ export function Composer(props: {
         if (!root) throw new Error("Phone composer is not mounted");
         setNativeUp(true);
         lastNativeText = props.chat.draft();
-        // Into typing only now, in the task that hands the composer to native and hides this one: flipped on the tap,
-        // the web composer's field and edit pills faded in for the frames the listeners took to register.
+        // Into typing only now, in the task that hands the composer to native: flipped on the tap, the web composer's
+        // field and edit pills would fade in for the frames the listeners take to register.
         expectKeyboardTravel(); setInputFocused(true); setKeyboardWanted(true);
         nativeMirror = mirror(root, input, nativeComposer, () => ({ empty: phoneMode(false, false) ?? "idle", text: phoneMode(false, true) ?? "idle" }));
         await nativeMirror.ready;
@@ -953,11 +906,7 @@ export function Composer(props: {
     <TextArea ref={input} rows={1} onPointerDown={(event) => { if (startNativeTyping()) event.preventDefault(); }} data-composer-input="" aria-label="Message the agent" aria-expanded={slashOpen() ? "true" : undefined} data-held={dictationSelectionOwned() && dictatedRange() ? "" : undefined} placeholder={!props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} inputMode={voiceFirst() && !keyboardWanted() ? "none" : undefined} onFocus={() => setInputFocused(true)} onBlur={() => { setInputFocused(false); if (!refocusing) setKeyboardWanted(false); }} />
     <Show when={slashOpen() && slashCommand()}>{(item) => <Completion typed={props.chat.draft()} rest={item().command.slice(props.chat.draft().length)} detail={item().description} />}</Show>
   </>;
-  // State, not composition: below the composer on a desktop (DesktopComposer's under), over it on a phone, where the
-  // keyboard and the home bar have the bottom edge.
   const agents = () => <Show when={props.chat.agents().length}><RunningAgents agents={props.chat.agents()} onStop={(id) => void props.chat.stopAgent(id)} /></Show>;
-  // The hub cannot be reached: a state rider (below a desktop composer, above a phone's, as the agents are), said once
-  // and taking nothing away from the field.
   const unreachable = () => <Show when={!props.serverOnline}>
     <Rider label="Hub unreachable" motion="entering">
       <RiderMark icon={<Icons.Server />} label="Unreachable" />
@@ -974,11 +923,8 @@ export function Composer(props: {
       <AttachmentStrip items={props.attachments.items()} chatId={props.chat.loadedId()} onRemove={(item) => props.attachments.remove(item)} onRetry={(item) => props.attachments.retry(item)} />
     </Show>
   </>;
-  // What the agent is blocked on: on a desktop it takes the composer's place; on a phone it rides over the field.
   const question = () => <Show when={props.chat.hostUiRequests().length}><HostUiRequests requests={props.chat.hostUiRequests()} onRespond={props.chat.respondHostUi} onStop={() => props.chat.stop()} /></Show>;
   const stopButton = () => <LibraryButton variant="ghost" size="icon-sm" aria-label="Stop response" onClick={props.chat.stop}><Show when={props.chat.stopping()} fallback={<StopGlyph />}><Spinner /></Show></LibraryButton>;
-  // Dictating, the voice rides over the composer on its Aura, as a phone's track does; the words go into the field as
-  // they come. The agent's doing reads in the transcript, as on a phone.
   const listening = () => ["starting", "listening"].includes(dictationState());
   const voice = createLeaving(listening, (on) => on, () => "fade");
   const desktop = () => <DesktopComposer takeover={question()} opening={props.opening} under={<>{unreachable()}{agents()}</>}
@@ -1008,8 +954,7 @@ export function Composer(props: {
         </DropdownMenu></div></Show>
       </>}
       end={<LibraryButton variant="ghost" size="icon-sm" data-state={dictationState()} aria-label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} aria-pressed={dictating()} title={`Voice dictation (${props.voiceSettings.shortcut})`} disabled={!props.serverOnline || !interactive()} onPointerDown={captureDictationLaunch} onClick={toggleDictation}><Show when={["starting", "finishing", "waiting", "transcribing"].includes(dictationState())} fallback={<Icons.Microphone />}><Spinner /></Show></LibraryButton>}
-      // One primary slot, so nothing beside it moves: Stop while the agent works; once a draft is typed, Send again
-      // (which queues the message for the agent), and Stop steps in beside it.
+      // One primary slot, so nothing beside it moves.
       aside={<Show when={stoppable() && newDraft()}>{stopButton()}</Show>}
       primary={<Show when={stoppable() && !newDraft()} fallback={<LibraryButton variant="ghost" size="icon-sm" aria-label={busy() ? "Send to the agent" : "Send message"} title={busy() ? "Send — the agent takes it when the current step finishes" : undefined} disabled={!canSend()} onClick={() => sendMessage()}><Icons.Send /></LibraryButton>}>{stopButton()}</Show>} />
   </DesktopComposer>;
@@ -1032,7 +977,6 @@ export function Composer(props: {
     <PillButton folded={!latestAway()} label="Scroll to latest" icon={<Icons.ArrowDown />} button={{ onPointerDown: (event) => event.preventDefault(), onClick: scrollToLatest }} />
     <PillButton stretch aura haptic="press" label={["starting", "listening"].includes(dictationState()) ? "Stop voice dictation" : "Start voice dictation"} icon={<Icons.Microphone />} button={{ "data-state": dictationState(), "aria-pressed": dictating(), title: `Voice dictation (${props.voiceSettings.shortcut})`, disabled: !props.serverOnline || !interactive(), onPointerDown: captureDictationLaunch, onClick: toggleDictation }} />
     <PillButton haptic="press" folded={phoneMode() === "listening" || !(stoppable() && newDraft())} label="Stop response" icon={<Show when={props.chat.stopping()} fallback={<StopGlyph />}><Spinner /></Show>} button={{ onClick: props.chat.stop }} />
-    {/* One slot, one arrow: Stop and send while listening, Send with a draft, Stop while the agent works; folded with none. */}
     <PillButton voice haptic="press" folded={phoneMode() !== "listening" && !hasPayload() && !stoppable()}
       label={phoneMode() === "listening" ? "Stop and send" : stoppable() && !newDraft() ? "Stop response" : busy() ? "Send to the agent" : "Send message"}
       icon={<Show when={phoneMode() !== "listening" && stoppable() && !newDraft()} fallback={<Icons.Send />}><Show when={props.chat.stopping()} fallback={<StopGlyph />}><Spinner /></Show></Show>}

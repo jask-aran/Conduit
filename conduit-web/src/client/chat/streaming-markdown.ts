@@ -16,7 +16,6 @@ export type StreamingMarkdownSplit = {
 
 export type StreamingMarkdownOptions = {
   tableMath?: boolean;
-  /** Keep an incomplete math tail visible only while the provider is streaming. */
   allowUnclosedMath?: boolean;
 };
 
@@ -69,8 +68,6 @@ function scanFences(source: string) {
     }
     // The opening pattern already consumed the whole marker run and the
     // leading indent, so a closing fence is one whose remainder is blank.
-    // Building a RegExp per candidate line re-compiled it for every streamed
-    // update of every fence in the message.
     const closes = marker[0] === open.marker[0]
       && marker.length >= open.marker.length
       && match[2]!.trim() === "";
@@ -229,8 +226,8 @@ type InlineCarry = { codeDelimiter: number; unclosedParen: boolean };
 function findInlineMath(source: string, ranges: SourceRange[], blockMathStart: number | null, skipDoubleDollar = false, allowUnclosedMath = true, carry?: InlineCarry) {
   let codeDelimiter = 0;
   for (let index = 0; index < source.length; index += 1) {
-    // Only a backtick, a backslash or a dollar opens or closes anything: every other character was asked whether it
-    // sat in a fence and was escaped, a few hundred calls a delta, for nothing.
+    // Only a backtick, a backslash or a dollar opens or closes anything; asking every other character costs a few
+    // hundred calls a delta.
     const code = source.charCodeAt(index);
     if (code !== 96 && code !== 92 && code !== 36) continue;
     if (inRange(index, ranges) || (blockMathStart != null && index >= blockMathStart)) continue;
@@ -336,14 +333,10 @@ function closedPrefix(prefix: string) {
     && !findInlineMath(prefix, fences.ranges, null, false, true);
 }
 
-/**
- * Whether text begins with prefix. String#startsWith compares character by character (122us for a 53,000-character
- * answer); an equality of the slice compares memory (1.5us), and a streamed answer asks this of its whole text every
- * delta -- the frame cost that grew with the answer's length.
- */
+/** String#startsWith compares character by character; an equality of the slice compares memory, and a streamed answer
+ *  asks this of its whole text every delta. */
 export const extendsText = (text: string, prefix: string) => text.length >= prefix.length && text.slice(0, prefix.length) === prefix;
 
-// Where the text after the last whitespace-only line starts, or -1: read back from the end, line by line.
 export function lastBlankLineEnd(source: string) {
   let end = source.lastIndexOf("\n");
   while (end > 0) {
@@ -355,12 +348,8 @@ export function lastBlankLineEnd(source: string) {
   return -1;
 }
 
-/**
- * splitStreamingMarkdown for one message as it streams, without reading it all again for every delta: what lies
- * before the last blank line that closes everything before it (closedPrefix) is never scanned again. Each delta
- * read the whole message several times over, so a long answer's every update grew with its length (5ms a delta
- * late in an 8,000-token answer, the CPU 4x slower). A source that does not extend the last one starts again.
- */
+/** What lies before the last blank line that closes everything before it (closedPrefix) is never scanned again, so a
+ *  long answer's every delta does not grow with its length. */
 export function createStreamingMarkdownSplitter() {
   let previous = "";
   let base = 0;

@@ -14,7 +14,6 @@ import { ChatMarkdown } from "./lazy-markdown";
 import { fullDateTime } from "./full-date-time";
 import { digestDoing, digestDone } from "./turn-digest";
 
-/** A context step's text, fetched when it opens (GET /v0/sessions/:id/context/:entryId). */
 export type ContextText = { kind: string; sections: { name: string; text: string }[];
   tools?: { added: string[]; removed: string[]; changed?: string[]; restated?: number; all?: { name: string; description: string }[] }; summary?: string };
 type RowProps = {
@@ -27,8 +26,6 @@ type RowProps = {
   settled?: boolean;
 };
 
-/* Two or more steps of one kind in a row are one line that says how many, the
-   steps under it a click below, like any other line of the trail. */
 const GROUP_WORDS: Record<ToolKind, (count: number) => string> = {
   command: (count) => `Ran ${count} commands`,
   message: (count) => `Sent ${count} notifications`,
@@ -48,14 +45,11 @@ type TrailItem =
   | { type: "context"; message: Message }
   | { type: "hidden" };
 
-// Running too: while its agents work they are the rows that say so, and a "Delegating" line beside them said it twice.
-// It gives way only once its agents are listed (`drawn`, the scripts TurnAgents has rows for): the step and the agent
-// line swap in one frame, where hiding it sooner left the turn empty a moment and pulled the transcript down.
+// It gives way only once its agents are listed (`drawn`): the step and the agent line swap in one frame, where hiding
+// it sooner leaves the turn empty a moment and pulls the transcript down.
 const spawnsOnly = (tool: ToolItem, drawn: Set<string>) => tool.kind === "script" && !tool.isError && drawn.has(tool.toolCallId)
   && (!tool.calls?.length || tool.calls.every((call) => call.earlier || call.name === "subagent"));
-/* The segments as the trail's lines: a run of tools of one kind becomes a
-   group, anything else its own line. A subagent's spawn is not a line: it is
-   pinned under the head (TurnAgents), where the fold does not hide it. */
+/* A subagent's spawn is not a line: it is pinned under the head (TurnAgents), where the fold does not hide it. */
 function trailOf(segments: TraceSegment[], drawn: Set<string> = new Set()): TrailItem[] {
   const items: TrailItem[] = [];
   let run: ToolItem[] = [];
@@ -77,10 +71,8 @@ function trailOf(segments: TraceSegment[], drawn: Set<string> = new Set()): Trai
       items.push({ type: "hidden" });
       continue;
     }
-    // What the model was given besides messages is its own line, where it was given (DESIGN, Messages in and out).
     if (segment.kind === "context") { flush(); items.push({ type: "context", message: segment.message }); continue; }
     if (segment.kind === "tool") {
-      // A script that only spawned subagents is its agent rows (TurnAgents), as a direct spawn is.
       if (spawned(segment.tool) || spawnsOnly(segment.tool, drawn)) continue;
       if (run.length && (run[0]!.kind || "other") !== (segment.tool.kind || "other")) flush();
       run.push(segment.tool);
@@ -98,25 +90,14 @@ function trailOf(segments: TraceSegment[], drawn: Set<string> = new Set()): Trai
 }
 
 /*
- * The header reads status, time, work, then the thinking -- the thinking last,
- * because it is the only part that is ever cut short.
- *
- * Models reason in two shapes, whatever the provider: headed summaries (GPT's
- * reasoning summaries, Gemini's thought summaries -- a bold line, perhaps a
- * paragraph under it) and raw prose (Grok, DeepSeek, Muse). One rule each: the
- * last heading if there is one, otherwise the last sentence, from its start.
- * Muse runs its sentences together without a space, so a sentence ends at
- * . ! or ? followed by a space or a capital.
+ * Models reason as headed summaries (a bold line, perhaps a paragraph under it) or raw prose: the last heading if
+ * there is one, otherwise the last sentence. Some models run sentences together without a space, so a sentence ends
+ * at . ! or ? followed by a space or a capital.
  */
 const HEADING_LINE = /^\s*\*\*(.+?)\*\*\s*$/;
 const SENTENCE_BREAK = /(?<=[.!?])\s*(?=[A-Z])/;
-/*
- * Both read only what a streamed delta added. They were asked of the whole text each delta, every heading matched
- * and every sentence split, for the one shown: a long turn's every update grew with it.
- *
- * A heading is a whole line, so the lines already read are not read again: kept per text it extends, a few texts
- * at a time (a turn's thinking and its answer).
- */
+/* A heading is a whole line, so lines already read are not read again: kept per text it extends, a few texts at a time
+   (a turn's thinking and its answer). */
 const headingScans: Array<{ text: string; read: number; heading: string | null }> = [];
 function lastHeading(text: string): string | null {
   let scan = headingScans.find((entry) => extendsText(text, entry.text));
@@ -125,7 +106,6 @@ function lastHeading(text: string): string | null {
     headingScans.unshift(scan);
     headingScans.length = Math.min(headingScans.length, 4);
   }
-  // Complete lines once; the last, still open, every time.
   const complete = text.lastIndexOf("\n") + 1;
   // Only a line with ** in it can be one: from each ** to the next.
   for (let start = scan.read; start < complete;) {
@@ -155,8 +135,7 @@ function lastSentence(text: string): string {
 function summaryOf(text: string): string {
   return lastHeading(text) ?? lastSentence(text);
 }
-/* A headed summary's sections: each heading with the paragraph under it (text before the first heading goes with
-   it). Null without headings, or for text too long to be a summary (raw reasoning): that is one step, as summaryOf. */
+/* Text too long to be a summary is raw reasoning: one step, as summaryOf. */
 const SUMMARY_LIMIT = 8000;
 function sectionsOf(text: string): { heading: string; body: string }[] | null {
   if (text.length > SUMMARY_LIMIT || !text.includes("**")) return null;
@@ -173,8 +152,6 @@ function sectionsOf(text: string): { heading: string; body: string }[] | null {
   return sections.map((section) => ({ heading: section.heading, body: section.body.trim() }));
 }
 
-/* What each kind of tool reads as, counted. The adapter says which kind a tool
-   is; the browser only counts them. */
 const KIND_WORDS: Record<ToolKind, [string, string]> = {
   command: ["command", "commands"],
   message: ["message", "messages"],
@@ -188,8 +165,6 @@ const KIND_WORDS: Record<ToolKind, [string, string]> = {
 };
 const plural = (count: number, [one, many]: [string, string]) => `${count} ${count === 1 ? one : many}`;
 
-/* Totals per kind, most used first -- every kind named, since there are only
-   six; a narrow header cuts the smallest. */
 /* A call whose name has not arrived yet is not counted: it would read as a
    tool and then turn into a fetch. */
 const unnamed = (tool: ToolItem) => !tool.name || tool.name === "tool";
@@ -200,7 +175,6 @@ function workOf(tools: ToolItem[]): string {
   const count = (kind: ToolKind) => counts.set(kind, (counts.get(kind) || 0) + 1);
   for (const tool of tools) {
     if (unnamed(tool) || (tool.kind === "agent" && !spawned(tool))) continue;
-    // A script is counted by what it called: "2 searches, 1 read", not "4 scripts".
     const calls = tool.kind === "script" ? (tool.calls || []).filter((call) => !call.planned && !call.earlier) : [];
     if (calls.length) for (const call of calls) count(call.facts?.kind || call.kind || "other");
     else count(tool.facts?.kind || tool.kind || "other");
@@ -209,16 +183,7 @@ function workOf(tools: ToolItem[]): string {
     .map(([kind, count]) => plural(count, KIND_WORDS[kind])).join(", ");
 }
 
-/* One verb for what it is doing, or how it ended -- always there, so a clean
-   finish says Done rather than being told apart by what it lacks. Live, a
-   running tool is its kind's verb, several at once are counted, between tools
-   it is thinking, and once the answer streams, writing. What the tool is
-   acting on is the line below's, not this one's. */
-/* And the orb's motion for each: the globe scan for anything on the web, a
-   plait for reading, trailed orbits for editing, and the scramble that
-   clicks back for a command or any tool without an animation of its own.
-   Thinking is the base state; the answer arriving is the sash. A frame of
-   Conduit's own stands in for a library state where one is named. */
+/* The verb is always there, so a clean finish says Done rather than being told apart by what it lacks. */
 type Mark = { orb: OrbState; frame?: ModeFrame };
 const KIND_ORBS: Record<ToolKind, Mark> = {
   command: { orb: "solving" }, read: { orb: "weaving" }, edit: { orb: "working", frame: ORBITS_TRAILED },
@@ -226,8 +191,6 @@ const KIND_ORBS: Record<ToolKind, Mark> = {
 };
 
 function statusOf(trace: TurnTraceData, writing: boolean): Mark & { verb: string } {
-  // Settled, the orb is the sphere: turning for a finish, sputtering for a
-  // turn that did not finish.
   if (!trace.active) {
     const verb = ({ interrupted: "Interrupted", failed: "Failed" } as Record<string, string>)[trace.status] || "Done";
     return { verb, orb: "working", frame: verb === "Done" ? PLAIN_SPHERE : SPUTTERING_SPHERE };
@@ -237,20 +200,15 @@ function statusOf(trace: TurnTraceData, writing: boolean): Mark & { verb: string
   const tool = running[0];
   if (!tool) return writing ? { verb: "Writing", orb: "composing" } : { verb: "Thinking", orb: "working" };
   if (unnamed(tool)) return { verb: "Calling a tool", orb: "solving" };
-  // What it is doing now, in the person's terms (turn-digest.js): "Searching the web", "Checking Gmail"; a script by
-  // the call it is on. The orb is the step's kind's.
   const now = tool.kind === "script" ? scriptSaid(tool, true)?.call ?? tool : tool;
   return { verb: capitalised(digestDoing(trace) ?? "working"), ...KIND_ORBS[stepKind(now)] };
 }
 
-/* What someone (the actor: jbot in its chat) is doing, as the end of "jbot is …": live only. */
 function actorPhrase(trace: TurnTraceData, writing: boolean): string {
-  // What it is doing in the person's terms (turn-digest.js), the same words its settled line uses.
   return digestDoing(trace, true) ?? (writing ? "writing" : "thinking");
 }
 
-/* A tool's line: what it acted on, a search's in quotes, a long path from its
-   end, since the file is the part worth reading. */
+/* A long path is kept from its end, since the file is the part worth reading. */
 function toolLine(tool: ToolItem): string {
   if (tool.facts?.subject) return stepText(tool);
   const subject = tool.subject || "";
@@ -258,17 +216,10 @@ function toolLine(tool: ToolItem): string {
   return subject.length > 80 && (tool.kind === "read" || tool.kind === "edit") ? `\u2026${subject.slice(-79)}` : subject;
 }
 
-/* The second line is the trail's latest line. A tool running is what it is
-   acting on (the verb is on the line above); once it has run it is its past
-   tense, "Ran pwd && ls -la", until the next step replaces it -- so a turn
-   whose reasoning is never shown still says what it has done. Thinking, when
-   there is any, replaces it as it arrives. Settled, the last thinking if
-   there was any, since that is what the turn concluded; otherwise the last
-   step. Discarded text is that one step's loss, not the turn's, so it is
-   passed over. */
+/* Settled, the latest line is the last thinking if there was any, since that is what the turn concluded. Discarded
+   text is that one step's loss, not the turn's, so it is passed over. */
 type Detail = { text: string; markdown: boolean };
 function stepLine(tool: ToolItem, live: boolean): string {
-  // A script is what it called (scriptSaid): running, the call it is on; done, its first call and how many more.
   const said = tool.kind === "script" ? scriptSaid(tool, live && !tool.done) : null;
   const item = said?.call ?? tool;
   const running = live && (said ? said.call.done === false : !tool.done);
@@ -282,8 +233,7 @@ function previewOf(trace: TurnTraceData, writing: boolean): { status: ReturnType
   let thought: Detail | null = null;
   const tools: ToolItem[] = [];
   for (const segment of trace.segments) if (segment.kind === "tool") tools.push(segment.tool);
-  // From the end: the last segment that has a line is the latest, the last thought or error the thought. Only the
-  // one shown is summarised; each delta summarised every text of the turn, front to back, to keep the last.
+  // From the end, so only the one shown is summarised.
   for (let index = trace.segments.length - 1; index >= 0 && !thought; index -= 1) {
     const segment = trace.segments[index]!;
     let detail: Detail | null = null;
@@ -302,9 +252,6 @@ function previewOf(trace: TurnTraceData, writing: boolean): { status: ReturnType
   return { status: statusOf(trace, writing), work: workOf(tools), detail: trace.active ? latest : thought || latest };
 }
 
-/* Live, a count each second at one width: `01s` to `59s`, then `1m 02s`.
-   Settled, the measured time to a tenth: `352ms` under a second, `5.3s`,
-   then `1m 02.4s`. */
 function duration(ms: number, settled: boolean): string {
   const pad = (value: number) => String(value).padStart(2, "0");
   if (!settled) {
@@ -314,8 +261,6 @@ function duration(ms: number, settled: boolean): string {
   return elapsed(ms);
 }
 
-/* A live turn counts up from its prompt each second; a settled one is the time
-   from its prompt to its last reply. Nothing when either end is unknown. */
 function turnTime(trace: () => Pick<TurnTraceData, "active" | "startedAt" | "endedAt">) {
   const [now, setNow] = createSignal(Date.now());
   createEffect(() => {
@@ -332,15 +277,13 @@ function turnTime(trace: () => Pick<TurnTraceData, "active" | "startedAt" | "end
   };
 }
 
-/* The trace is the library's (Trace, Trail, Step and its parts); the model -- the trail's lines, the header's status,
-   work and latest line, the time -- is this file's. */
 function useFold(id: () => string, props: Pick<RowProps, "toolOpen" | "onToolOpenChange">) {
   const initial = Boolean(props.toolOpen?.(id()));
   const [open, setOpen] = createSignal(initial);
   return { open, toggle: () => { const next = !open(); setOpen(next); props.onToolOpenChange?.(id(), next); } };
 }
-/* Built once, its text growing in place: passed as a prop's expression it was built again on every read of the prop,
-   a fresh renderer (and its link dialog) for each delta of a thought, twice. */
+/* Built once, its text growing in place: passed as a prop's expression it is built again on every read of the prop,
+   a fresh renderer for each delta of a thought. */
 const inline = (text: () => string) =>
   <Suspense fallback={text()}><ChatMarkdown inline>{text() || "\u2026"}</ChatMarkdown></Suspense>;
 /* A context piece by the name its block has in Settings › Blocks. */
@@ -348,8 +291,6 @@ const SECTION_LABELS: Record<string, string> = { instructions: "system prompt", 
 const sectionLabel = (name: string) => SECTION_LABELS[name] ?? name.replace(/[-_]+/g, " ");
 export const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 const tokensOf = (chars: number) => chars < 400 ? `${Math.max(1, Math.round(chars / 4))} tok` : `${(chars / 4000).toFixed(1)}k tok`;
-/* What the model was given besides messages: its system prompt, a change to it, a compaction. Says what, and how much;
-   opens to each piece's text, fetched then. */
 function ContextStep(props: RowProps & { message: Message; motion?: "entering" }) {
   const context = () => props.message.context!;
   const fold = useFold(() => props.message.id, props);
@@ -370,8 +311,6 @@ function ContextStep(props: RowProps & { message: Message; motion?: "entering" }
     return [context().kind === "prompt" ? (change.added.length ? `${change.added.length} tools` : "") : names(change.added, "+"), names(change.removed, "\u2212"),
       change.changed?.length ? `${change.changed.length > 2 ? `${change.changed.length} tools` : change.changed.join(", ")} changed` : ""].filter(Boolean).join(" ");
   };
-  // The prompt a thread opened with is its System prompt; sent again after a compaction it is the same prompt; sent
-  // again otherwise, it was edited.
   const verb = () => context().kind === "compaction" ? "Compacted" : context().kind !== "prompt" ? "Context changed"
     : context().opening ? "System prompt" : context().resent ? "System prompt, sent again after compacting" : "System prompt changed";
   const subject = () => context().kind === "compaction" ? "the conversation so far, as a summary" : [pieces().join(", "), tools()].filter(Boolean).join(" \u00b7 ") || (context().sections.some((section) => section.name === "instructions") ? "system prompt" : "");
@@ -384,14 +323,13 @@ function ContextStep(props: RowProps & { message: Message; motion?: "entering" }
   };
   const toolNames = () => { const loaded = text()?.tools; if (!loaded) return undefined;
     return loaded.all?.map((tool) => tool.name).join(", ") || [loaded.added.length ? `Added: ${loaded.added.join(", ")}` : "", loaded.removed.length ? `Removed: ${loaded.removed.join(", ")}` : "", loaded.changed?.length ? `Changed: ${loaded.changed.join(", ")}` : "", loaded.restated ? `${loaded.restated} restated, unchanged` : ""].filter(Boolean).join(" \u00b7 ") || undefined; };
-  // It opens once its text is in, to what it holds: opened to a note, the text landing mid-move jumped what follows.
+  // It opens once its text is in: the text landing mid-move would jump what follows.
   const ready = () => Boolean(text() || failure() || !props.loadContext);
   return <Step icon={context().kind === "compaction" ? <Icons.Compact /> : <Icons.Context />} verb={verb()} subject={subject() || undefined} face="text" aside={chars() ? tokensOf(chars()) : undefined}
     motion={props.motion} opens open={fold.open() && ready()} onToggle={fold.toggle}>
     <StepSections error={failure() || undefined} sections={sections()} tools={toolNames()} />
   </Step>;
 }
-/* What a trail line reads once its trace is open and the line itself opened, for find in chat (registerFoldFind). */
 function trailText(item: TrailItem): string {
   if (item.type === "text") return `${summaryOf(item.segment.text)}\n${item.segment.text}`;
   if (item.type === "tool") return `${toolStepLine(item.tool)}\n${toolStepBody(item.tool)}`;
@@ -405,7 +343,6 @@ function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
   return <Switch>
     <Match when={props.item.type === "context" && props.item}>{(item) => <ContextStep message={(item() as Extract<TrailItem, { type: "context" }>).message} motion={motion()} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} />}</Match>
     <Match when={props.item.type === "text" && props.item.segment.kind === "thinking" && sectionsOf(props.item.segment.text) && props.item}>{(item) => {
-      // A headed reasoning summary: each heading a line of its own, opening to the paragraph under it, if any.
       const segment = () => (item() as Extract<TrailItem, { type: "text" }>).segment;
       const sections = createMemo(() => sectionsOf(segment().text) ?? []);
       return <Index each={sections()}>{(section, index) => {
@@ -445,62 +382,39 @@ function TrailLine(props: RowProps & { item: TrailItem; arriving?: boolean }) {
   </Switch>;
 }
 const LATEST_CHARS = 240;
-/** since: how far into a sent message's entrance the turn arrives, so it fades in with it. */
-/** agents: the chat's (its background ones' state); onStopAgent: stops a background one. */
 export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId: number) => Promise<ContextText>; agents?: AgentSummary[]; onStopAgent?: (id: string) => void; writing?: boolean; profileLabel?: string; initialOpen?: boolean; onOpenChange?: (open: boolean) => void; toolOpen?: (id: string) => boolean; onToolOpenChange?: (id: string, open: boolean) => void; onRendered?: () => void; since?: number;
-  /** One line that goes to the work instead of opening to it (jbot's chat: to the raw home thread): no latest line, no
-   *  trail, no agents under it. */
   onOpen?: () => void;
-  /** A Narrated turn's work between texts (a run), no orb (Folded's alone has one). */
   narrated?: boolean;
-  /** Narrated, how the run is drawn (Settings: Work between texts): its steps (the trail's own lines), its run header
-   *  (one line, what it did), or not at all. */
   form?: "steps" | "header" | "hidden";
-  /** The turn header: the whole turn's work as one line, no latest line under it. opens: it opens to the turn's steps
-   *  (Turn header only, where no run is drawn). */
   turn?: boolean; opens?: boolean;
-  /** Who is working, for a line that says so: live "jbot is searching the web" (no running counts), settled
-   *  "Worked for 15.7s" and what it did (jbot's chat). */
   actor?: string }) {
   const preview = createMemo(() => previewOf(props.trace, Boolean(props.writing)));
   const time = turnTime(() => props.trace);
   const unfinished = () => !props.trace.active && (props.trace.status === "failed" || props.trace.status === "interrupted");
   const [open, setOpen] = createSignal(Boolean(props.initialOpen));
-  // The scripts whose spawned agents the chat lists (drawn by TurnAgents, under the head).
   const drawn = createMemo(() => new Set((props.agents ?? []).flatMap((agent) => agent.via ? [agent.via] : [])));
   const trail = createMemo(() => trailOf(props.trace.segments, drawn()));
   const spawns = createMemo(() => props.trace.segments.flatMap((segment) => segment.kind === "tool" && spawned(segment.tool) ? [segment.tool] : []));
-  // Its codemode scripts' call ids: an agent a script spawned is drawn with the turn's own spawns.
   const scripts = createMemo(() => props.trace.segments.flatMap((segment) => segment.kind === "tool" && segment.tool.kind === "script" ? [segment.tool.toolCallId] : []));
   let opened = 0;
   // One renderer for the line, its text growing in place: a new one each delta draws a blank frame between them.
-  // The line is one line, cut with an ellipsis, so it is given no more than a line's worth: a long sentence's whole
-  // text, replaced each delta, was laid out and painted every frame for the few words it shows.
+  // It is given no more than a line's worth: a long sentence's whole text would be laid out and painted every frame.
   const text = () => { const full = preview().detail?.text ?? ""; return full.length > LATEST_CHARS ? `${full.slice(0, LATEST_CHARS)}\u2026` : full; };
   const thinking = <Suspense fallback={text()}><ChatMarkdown inline>{text() || "…"}</ChatMarkdown></Suspense>;
   const latest = () => { const detail = preview().detail; return detail ? detail.markdown ? thinking : detail.text : undefined; };
-  // Narrated, a run of work between texts is its trail's own lines -- each step its icon, verb, subject and time, as
-  // the Folded disclosure lists them -- with no header over them: the text either side says why (DESIGN.md, Turns).
-  // Narrated, a run of work between texts with one step (and the thinking around it) is its own lines; several fold under one header,
-  // worded as Folded's: live, what it is doing; settled, what it did ("9 edits, 7 searches · 2m 23s"), never Done --
-  // that is how a whole turn ended. Narrated has no orb. (DESIGN.md, Turns.)
+  // A settled run says what it did, never Done: that is how a whole turn ended.
   const narrated = () => Boolean(props.narrated);
   const single = () => narrated() && trail().filter((item) => item.type !== "text" && item.type !== "hidden" && item.type !== "context").length <= 1;
   const settledRun = () => narrated() && !props.trace.active && !unfinished();
   const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
-  // A trace that is only context (a thread's opening system prompt, above its first message) is its lines alone.
   const onlyContext = () => props.trace.segments.length > 0 && props.trace.segments.every((segment) => segment.kind === "context");
   const form = () => props.form ?? "steps";
-  // With an actor (jbot's chat): live, what it is doing in its name; settled, how long it worked; a turn that did not
-  // finish keeps its own word (Interrupted, Failed).
   const acting = () => Boolean(props.actor);
-  // Settled, what it did (turn-digest.ts): its line's words, the time beside them.
   const done = createMemo(() => props.actor && !props.trace.active ? digestDone(props.trace, true) : "");
   const actorStatus = () => props.trace.active ? `${props.actor} is ${actorPhrase(props.trace, Boolean(props.writing))}`
     : props.trace.status === "interrupted" ? `${props.actor} was interrupted` : props.trace.status === "failed" ? `${props.actor} failed`
     : done() ? `${props.actor} ${done()}` : time() ? `${props.actor} worked for ${time()}` : `${props.actor} worked`;
   const agentsRow = () => <TurnAgents tools={spawns()} scripts={scripts()} agents={props.agents ?? []} onStop={props.onStopAgent} />;
-  // Narrated, a run is its steps or its run header, one in place of the other, never one opening under the other.
   if (narrated()) return <Show when={!onlyContext()} fallback={<Trail><Index each={trail()}>{(item) =>
       <TrailLine item={item()} arriving={props.trace.active} settled={!props.trace.active} profileLabel={props.profileLabel} loadContext={props.loadContext} toolOpen={props.toolOpen} onToolOpenChange={props.onToolOpenChange} onRendered={props.onRendered} />}</Index></Trail>}>
     <Switch>
@@ -541,13 +455,9 @@ export function TurnTrace(props: { trace: TurnTraceData; loadContext?: (entryId:
     </Trace></Show>;
 }
 
-/* A turn before anything of it has shown: the header it will become, its orb
-   connecting and its time counting, one line of space held under it for the
-   step that will fill it. The trace takes its place when its first step
-   arrives, in the same spot, at the same height. */
+/* The trace takes its place when its first step arrives, in the same spot, at the same height. */
 export function TraceStarting(props: { startedAt?: string; label?: string; since?: number; narrated?: boolean; line?: boolean; thinking?: boolean }) {
   const time = turnTime(() => ({ active: true, startedAt: props.startedAt }));
-  // Narrated has no orb: what it is doing is a line of the trail, as its work will be.
   if (props.narrated) return <Trail><Step state="running" verb={props.label || "Starting"} time={time() || undefined} motion={props.since != null ? "entering" : undefined} /></Trail>;
   return <Trace motion={props.since != null ? "entering" : undefined} since={props.since} orb={<Orb state={props.thinking ? "working" : "connecting"} />} status={props.label || "Starting"} time={time() || undefined} live={!props.line} />;
 }

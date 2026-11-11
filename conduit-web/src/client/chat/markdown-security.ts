@@ -13,17 +13,8 @@ export function resolveMarkdownUrl(value: unknown): { href: string; external: bo
   }
 }
 
-/**
- * A short, stable name for a source.
- *
- * Answers that cite the web are written by the model, and the one shape they
- * all share is a link whose visible text is the URL itself -- either an
- * explicit [url](url) or a bare autolink. Those are the ones that swamp a
- * paragraph, and they are also the only ones safe to shorten: a link the model
- * gave a real label already reads as prose and is left exactly as written.
- *
- * Returns the host to show, or null when this is not a bare-URL link.
- */
+/** Only a link whose visible text is its URL is safe to shorten: a link the model gave a real label already reads as
+ *  prose. */
 export function citationHost(href: string, labelText: string): string | null {
   const bare = (value: string) => value.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
   const label = bare(labelText);

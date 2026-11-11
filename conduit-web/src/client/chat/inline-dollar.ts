@@ -1,9 +1,6 @@
 /**
- * Where a single-`$` formula opened at `open` closes, or -1 if that `$` does
- * not open one. The settled parser, the streaming split and table cells all
- * ask this, so a span is maths in all three or in none: when they disagreed,
- * one refused `$` shifted every pairing after it and the rest of the line
- * rendered as raw TeX.
+ * The settled parser, the streaming split and table cells all ask this, so a span is maths in all three or in none:
+ * one refused `$` shifts every pairing after it.
  *
  * Prose money is the reason for the rules. `$174k`, `$72.90 / $14.44`,
  * `$38–$71` and `$0.015/vCPU·h, $0.008/GiB` must stay text, while models also

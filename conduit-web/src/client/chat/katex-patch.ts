@@ -2,23 +2,9 @@ import { ANSWER_MARKDOWN } from "@/components/ui/shared";
 import katex from "katex";
 import { streamFadeMs } from "@/client/preferences/stream-fade";
 
-/**
- * Draw a formula still arriving by patching the DOM from KaTeX's own render
- * tree, not from its markup.
- *
- * Each token re-renders the whole formula. Almost all of the new rendering is
- * the old one: the same spans with the same classes, a few inline heights
- * changed, a row or a symbol added at the tail. Replacing innerHTML rebuilt
- * every box; morphing the markup (morph-html.ts) still parsed the whole string
- * and walked the whole DOM through its accessors on every token, which in a
- * headed browser was most of a frame for a long aligned block. KaTeX builds a
- * plain tree before it writes markup, so consecutive partials are compared as
- * plain objects and only what differs is written.
- *
- * `__renderToDomTree` and `__domTree` are KaTeX exports, underscored because
- * their shape is KaTeX's own; the settled formula still goes through
- * renderToString, so a change there costs smoothness, never correctness.
- */
+/* A formula still arriving is patched from KaTeX's render tree, not its markup: morphing markup still parses the whole
+   string and walks the whole DOM every token. `__renderToDomTree` and `__domTree` are KaTeX's own shape; the settled
+   formula still goes through renderToString, so a change there costs smoothness, never correctness. */
 type TreeNode = {
   children?: TreeNode[];
   classes?: string[];
@@ -39,16 +25,8 @@ export function renderMathTree(tex: string, displayMode: boolean): TreeNode | nu
   }
 }
 
-/**
- * Incremark Fade's "fade in when complete": a formula is held while it is
- * open and faded in whole once, when it closes. MathNode marks its first
- * drawing; this takes the class off once the fade has run.
- *
- * Left on, every finished fade was still an animation in effect, and a long
- * answer's hundreds of them made each style pass resolve thousands of KaTeX
- * spans again. It fades opacity, not the words' colour: colour is inherited,
- * so a colour fade restyled every span of the formula on every frame.
- */
+/* The class comes off once the fade has run: left on, every finished fade is still an animation in effect, and a long
+   answer's hundreds of them make each style pass resolve thousands of KaTeX spans again. */
 export const MATH_FADE_CLASS = ANSWER_MARKDOWN.math;
 let faded: Array<[Element, number]> = [];
 let fadedTimer: ReturnType<typeof setTimeout> | null = null;
@@ -69,7 +47,6 @@ export function markFadeIn(element: Element | null | undefined) {
   fadedTimer ??= setTimeout(clearFaded, streamFadeMs() + 50);
 }
 
-/** Bring `host`, last drawn from `previous`, to `next`. */
 export function patchMathTree(host: Element, previous: TreeNode | null, next: TreeNode) {
   if (!previous || host.childNodes.length !== 1) {
     host.replaceChildren(next.toNode());

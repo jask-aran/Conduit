@@ -217,15 +217,8 @@ function findInlineDollarClose(source: string, start: number) {
 export function projectTableMathSource(source: string, options: { convertTexDisplayDelimiters?: boolean; sentinel?: string } = {}): TableMathProjection {
   const sentinel = options.sentinel && !source.includes(options.sentinel) ? options.sentinel : chooseSentinel(source);
   if (!sentinel) return { source, sentinel: null, pipeRepairs: 0 };
-  // Only table rows are ever rewritten, and a line is a table row only if it
-  // contains a pipe, so a pipe-free source projects to itself. Skipping the
-  // split-and-rebuild matters because this runs against the whole accumulated
-  // message on every streamed delta, beside a parser that only ever appends.
-  //
-  // The sentinel is still returned. Callers compare it against the previous
-  // one to decide whether the parser can append, so handing back null here
-  // would fail that check on the first delta that adds a pipe -- and, because
-  // a null sentinel is stored as "", on every delta before it too.
+  // A pipe-free source projects to itself, and this runs against the whole message on every streamed delta. The
+  // sentinel is still returned: callers compare it against the previous one to decide whether the parser can append.
   if (!source.includes("|")) return { source, sentinel, pipeRepairs: 0 };
   const lines = splitLines(source);
   const tableLines = tableLineMask(lines);
@@ -239,12 +232,8 @@ export function projectTableMathSource(source: string, options: { convertTexDisp
   return { source: projected, sentinel, pipeRepairs };
 }
 
-/**
- * projectTableMathSource for one message as it streams: a table ends at a blank line (a row holds a pipe), and each
- * line projects by itself, so what lies before the last blank line is projected once and kept. A message with a
- * table in it was split and rebuilt line by line, whole, for every delta. A different sentinel, or a source that
- * does not extend the last one, starts again.
- */
+/** A table ends at a blank line and each line projects by itself, so what lies before the last blank line is
+ *  projected once and kept. */
 export function createTableMathProjector() {
   let base = 0;
   let prefix = "";

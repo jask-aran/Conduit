@@ -18,7 +18,6 @@ type MathRenderQueueOptions = {
   cancelFrame?: (handle: number) => void;
 };
 
-/** A frame, where there is no requestAnimationFrame. */
 const FRAME_MS = 16;
 
 function defaultRequestFrame(callback: FrameRequestCallback) {
@@ -31,13 +30,7 @@ function defaultCancelFrame(handle: number) {
   else window.clearTimeout(handle);
 }
 
-/**
- * Frame-bounded KaTeX work queue.
- *
- * Live streaming uses a small batch. Complete-message reattach uses a larger
- * batch, but both policies stop on measured elapsed time so one response
- * cannot monopolise a frame.
- */
+/** Both policies stop on measured elapsed time so one response cannot monopolise a frame. */
 export class MathRenderQueue {
   private readonly now: () => number;
   private readonly requestFrame: (callback: FrameRequestCallback) => number;
@@ -99,9 +92,7 @@ export class MathRenderQueue {
     const startedAt = this.now();
     let processedJobs = 0;
     while (this.jobs.length && processedJobs < maxJobs && this.now() - startedAt < frameBudgetMs) {
-      // A settled chat opens at its end, so its formulas are drawn from the
-      // last one up: the ones on screen first, not after every formula above
-      // them. A streaming formula stays in order.
+      // A settled chat opens at its end, so its formulas are drawn from the last one up: the ones on screen first.
       const next = (this.jobs.at(-1)!.policy === "reattach" ? this.jobs.pop() : this.jobs.shift())!;
       if (next.cancelled) continue;
       next.completed = true;

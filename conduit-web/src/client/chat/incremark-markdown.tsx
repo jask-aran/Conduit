@@ -26,7 +26,6 @@ import "./incremark-markdown.css";
 
 type MarkdownNode = any;
 type Definition = { url?: string; title?: string | null };
-/** Quiet frames a message must hold before its source is frozen. */
 const SETTLE_DELAY_FRAMES = 2;
 
 const incremarkParserOptions = { gfm: true, plugins: [conduitMathPlugin({ tex: true })], htmlTree: true, containers: true };
@@ -38,20 +37,14 @@ type RendererContext = {
   mathRenderPolicy: () => MathRenderPolicy;
   onMathBusyChange: (busy: boolean) => void;
   onPendingPlaceholderChange: (delta: number) => void;
-  /** Newly shown words fade in as spans; only the streamed blocks set it. */
   fadeWords?: () => boolean;
-  // Formulas held while open and faded in whole once complete.
   fadeMath?: () => boolean;
-  /** False once the message has settled and its last fade is over. */
   fadeLive?: () => boolean;
   fenceHandoff?: FenceHandoff;
 };
 
-/**
- * An open fence's lines, passed to the code block that replaces it when the fence closes. The two are different
- * cards in different places, and the block built all of a long file's lines again from nothing (a 137-line file:
- * ~700 elements styled and laid out in the frame it settled). The lines are the same, so it takes the fence's own.
- */
+/** The code block that replaces a closed fence takes the fence's own lines rather than building a long file's lines
+ *  again in the frame it settles. */
 type FenceHandoff = { current: { code: HTMLElement; highlighter: StreamingCodeHighlighter; text: string; language: string; released: boolean } | null };
 
 /** Text-node field: characters of this node before it were already on screen. */
@@ -83,15 +76,8 @@ function markOpenMath(node: MarkdownNode): MarkdownNode {
   return node;
 }
 
-/**
- * Mark the text nodes holding characters past what the block last showed.
- *
- * Fade state is a visible-text offset in document order, not the identity of
- * a node: closing `**bold` remounts its words inside `<strong>`, and a word
- * already shown must not fade again because the tree around it changed. Only
- * the spine down to new text is cloned; everything before `shown` is left as
- * the same objects.
- */
+/** Fade state is a visible-text offset, not a node's identity: closing `**bold` remounts its words inside `<strong>`,
+ *  and a word already shown must not fade again because the tree around it changed. */
 function markFreshText(node: MarkdownNode, fade: BlockFade): { node: MarkdownNode; length: number } {
   // Text a recent reveal showed is marked too, so a word remounted while its
   // fade is still running can pick the fade up where it was.
@@ -99,10 +85,8 @@ function markFreshText(node: MarkdownNode, fade: BlockFade): { node: MarkdownNod
   return markFrom(node, from, fade, 0);
 }
 
-// Lengths are counted here, not read from visibleAstCharacters: that cache is
-// keyed on node objects, and the display store merges updates into the same
-// objects, so a growing text node kept its first length and every word after
-// the first few was taken as already shown.
+// Lengths are counted here, not read from visibleAstCharacters: that cache is keyed on node objects, and the display
+// store merges updates into the same objects, so a growing text node would keep its first length.
 function markFrom(node: MarkdownNode, from: number, fade: BlockFade, offset: number): { node: MarkdownNode; length: number } {
   if (!node || typeof node !== "object") return { node, length: 0 };
   if (node.type === "math" || node.type === "inlineMath") return { node, length: 1 };
@@ -146,19 +130,11 @@ function restoreParsedBlock(block: ParsedBlock, sentinel: string | null, origina
   } as ParsedBlock;
 }
 
-/**
- * While streaming, hold back a last line that is so far nothing but Markdown
- * markers.
- *
- * Until a line reaches its first word the parser keeps changing its mind
- * about it: `-` is an empty list item, `- ` a paragraph, `- *` a nested list,
- * and `-` under a paragraph turns that paragraph into a heading. Each reading
- * rebuilt the list item or restyled the line above for a frame. The line is
- * released with its first word, a character or two later.
- */
+/** Until a line reaches its first word the parser keeps changing its mind about it (`-` is an empty list item, `- ` a
+ *  paragraph, `- *` a nested list, `-` under a paragraph a heading), so a marker-only last line is held back. */
 const MARKER_ONLY_LINE = /^[ \t]*[-*+#>=_~`.):|\d][-*+#>=_~`.):|\d \t]*$/;
 
-// Only the last line is read: a pattern anchored at the end but not the start was tried from every offset of the
+// Only the last line is read: a pattern anchored at the end but not the start is tried from every offset of the
 // whole message, every delta.
 function commonPrefixLength(left: string, right: string) {
   const length = Math.min(left.length, right.length);
@@ -218,10 +194,8 @@ const pendingInlineNodeCache = new WeakMap<object, MarkdownNode>();
 
 function appendPendingInlineMath(node: MarkdownNode): MarkdownNode {
   if (!node || typeof node !== "object" || !Array.isArray(node.children)) return node;
-  // A flag on the container, not a child: as the last child it shifted one
-  // index whenever an inline node was appended before it, so every new link,
-  // emphasis or formula remounted it -- dozens of times a paragraph -- and
-  // each remount flipped the settlement count.
+  // A flag on the container, not a child: as the last child it would shift one index whenever an inline node was
+  // appended before it, remounting it and flipping the settlement count.
   if (["paragraph", "heading", "tableCell"].includes(node.type)) {
     return { ...node, [PENDING_INLINE_MATH_NODE]: true };
   }
@@ -249,18 +223,11 @@ function renderBlockNode(node: MarkdownNode) {
 const sameIdList = (previous: string[], next: string[]) =>
   previous.length === next.length && previous.every((id, index) => id === next[index]);
 
-/**
- * Index a keyed block list once per update.
- *
- * These lists are re-read for every row on every streamed frame, so a linear
- * scan per row made each frame quadratic in the number of blocks on screen. The
- * id list keeps value equality, so an update that only changes a block's
- * contents does not re-run the keyed list reconciliation as well.
- */
+/** The id list keeps value equality, so an update that only changes a block's contents does not re-run the keyed
+ *  list reconciliation as well. */
 function createBlockIndex<T extends { id: string }>(blocks: () => T[]) {
-  // A signal per block, set each update: only a block that is a new object notifies its row. One map for the
-  // list, read by every row, re-ran every row's lookup each frame -- a long answer's hundreds of finished blocks
-  // with it, to find each unchanged.
+  // A signal per block: only a block that is a new object notifies its row. One map read by every row would re-run
+  // every row's lookup each frame.
   const entries = new Map<string, { read: () => T; write: (block: T) => void; pass: number }>();
   const [ids, setIds] = createSignal<string[]>([], { equals: sameIdList });
   let pass = 0;
@@ -288,11 +255,8 @@ function ParsedBlockNodes(props: { blocks: () => ParsedBlock[]; context: Rendere
   const list = createBlockIndex(() => props.blocks());
   return <For each={list.ids()}>{(id) => {
     const block = () => list.lookup(id);
-    // Seeded blocks are complete by definition -- a persisted message, or the
-    // finished prefix of a live one -- so no caret placeholder belongs here.
-    // Adding one left three permanent markers in every restored message, and
-    // the settled-message check looks for exactly that marker, so a transcript
-    // loaded from history could never settle.
+    // Seeded blocks are complete, so no caret placeholder belongs here: the settled-message check looks for exactly
+    // that marker, and a restored message would never settle.
     const node = createMemo(() => block()?.node);
     return <Show when={block()}><AstNode node={node} context={props.context} /></Show>;
   }}</For>;
@@ -332,14 +296,8 @@ function preserveAppendOnlyTable(previous: MarkdownNode | undefined, current: Ma
   return preserveAppendOnlyNode(previous, current);
 }
 
-/**
- * Keep every unchanged subtree of `next` as the object it was in `previous`.
- *
- * The parser rebuilds the open block's tree on each update, so without this
- * every formula, link and text node in it is a new object every frame and
- * re-renders -- a long block of formulas re-evaluated every one of them per
- * frame. Only the block being revealed is walked, never the finished ones.
- */
+/** The parser rebuilds the open block's tree on each update, so without this every formula, link and text node in
+ *  it is a new object every frame and re-renders. */
 function shareUnchanged(previous: MarkdownNode, next: MarkdownNode): MarkdownNode {
   if (previous === next || !previous || !next || typeof previous !== "object" || typeof next !== "object") return next;
   if (previous.type !== next.type) return next;
@@ -363,14 +321,10 @@ function shareUnchanged(previous: MarkdownNode, next: MarkdownNode): MarkdownNod
 }
 
 function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: RendererContext; history: Map<string, MarkdownNode>; shown: Map<string, BlockFade>; streaming: () => boolean }) {
-  // The caret belongs to the block text is still arriving in: the last one,
-  // while the message streams. isDisplayComplete is not that -- the
-  // typewriter marks a block complete whenever it has shown everything
-  // received so far, so on a real stream it flipped at every delivery, and
-  // the caret with it.
+  // Not isDisplayComplete: the typewriter marks a block complete whenever it has shown everything received so far,
+  // so on a real stream it flips at every delivery.
   const tail = createMemo(() => props.streaming() ? props.blocks().at(-1)?.id ?? null : null);
-  // Each row asks whether it is the tail through a selector: the tail memo goes stale with every frame's blocks,
-  // and read by every row it had each one checked, a long answer's hundreds, to find the same tail.
+  // A selector: the tail memo goes stale with every frame's blocks, and read by every row it would check each one.
   const isTail = createSelector(tail);
   const structuralType = (block: DisplayBlock) => {
     const sourceNode = block.node as MarkdownNode;
@@ -418,26 +372,18 @@ function DisplayBlockNodes(props: { blocks: () => DisplayBlock[]; context: Rende
     // Memoised on identity: a finished block is the same object every frame,
     // so only the block being revealed recomputes below.
     const block = createMemo(() => list.lookup(id));
-    // displayNode rebuilds the node and appendPendingInlineMath clones its
-    // spine. Without the memo the accessor recomputes both for every JSX
-    // position that reads it, and the clone cache -- keyed on node identity --
-    // never hits, so every frame re-clones every visible block. The memo makes
-    // both run once per update; preserveAppendOnly is idempotent, so the node
-    // the history ends up holding is the same either way.
+    // Without the memo displayNode and appendPendingInlineMath run for every JSX position that reads the node, and
+    // the clone cache, keyed on node identity, never hits.
     const node = createMemo(() => {
       const current = block();
       if (!current) return undefined;
       const display = displayNode(current);
-      // The placeholder reserves the line box for math that is about to appear
-      // at the caret, so it belongs only to a block still being typed. Left on
-      // finished blocks it was a permanent zero-width span in every paragraph,
-      // and the settled-message check -- which looks for exactly this marker --
-      // could therefore never pass.
+      // The placeholder belongs only to a block still being typed: the settled-message check looks for exactly this
+      // marker.
       return isTail(current.id) ? renderBlockNode(display) : display;
     });
-    // Word spans exist only while there is a fade to run. A block no longer being written puts plain text back once
-    // its last word has faded in, so the answer does not keep an element per word -- 6,000 late in a long answer,
-    // laid out and restyled with every frame -- and does not swap them all out in one go when it settles (31ms).
+    // A block no longer being written puts plain text back once its last word has faded in, so the answer does not
+    // keep an element per word, and does not swap them all out in one go when it settles.
     const [faded, setFaded] = createSignal(false);
     const context: RendererContext = { ...props.context, fadeLive: () => !faded() };
     createEffect(() => {
@@ -455,11 +401,8 @@ function LinkNode(props: { node: MarkdownNode | NodeAccessor; context: RendererC
   const node = () => readNode(props.node);
   const reference = () => props.reference?.();
   const target = createMemo(() => resolveMarkdownUrl(reference()?.url || node()?.url));
-  // The citation test walks the link's inline children. It is read from four
-  // attribute positions below, so it is computed once rather than per read.
+  // Read from four attribute positions below, so computed once rather than per read.
   const labelText = createMemo(() => inlineText(node()?.children || []));
-  // A link whose visible text is its own URL is a citation and shows its host;
-  // anything the model gave a real label to renders untouched (citationHost).
   const host = createMemo(() => {
     const resolved = target();
     return resolved ? citationHost(resolved.href, labelText()) : null;
@@ -498,22 +441,14 @@ function getCachedMathHtml(node: MarkdownNode, source: string, settled = false) 
   const key = mathCacheKey(node, source);
   const held = mathHtmlCache.get(key);
   if (held !== undefined || !settled) return held;
-  // Kept from an earlier page load; see math-html-store.ts. A partial never is.
+  // Kept from an earlier page load. A partial never is.
   const stored = readStoredMath(key);
   if (stored !== undefined) rememberMathHtml(key, stored);
   return stored;
 }
 
-/**
- * Store a formula, never a partial.
- *
- * Every streamed delta produces a different candidate string, so a live
- * formula writes one dead entry per delta -- thirty or more for one equation
- * -- and none of them is ever read again. Left uncapped by policy they evicted
- * the finished formulas that re-render on remount, scrollback and settle, so
- * the cache had a hit rate near zero exactly where it was supposed to pay.
- * Writes are therefore gated on the message being complete.
- */
+/** Never a partial: every streamed delta produces a different candidate, and those dead entries would evict the
+ *  finished formulas that re-render on remount, scrollback and settle. */
 function cacheMathHtml(node: MarkdownNode, source: string, html: string) {
   const key = mathCacheKey(node, source);
   rememberMathHtml(key, html);
@@ -547,10 +482,8 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; fadeOnce?: () => b
     busy = next;
     props.onBusyChange?.(next);
   };
-  // A display formula keeps the tallest height it has drawn while it is still
-  // arriving, so a partial that briefly fails cannot shrink the block. Heard
-  // from a ResizeObserver after the frame's own layout: reading the rect after
-  // each render forced a layout of the transcript on every streamed partial.
+  // A display formula keeps the tallest height it has drawn while it is still arriving, so a partial that briefly
+  // fails cannot shrink the block. Heard from a ResizeObserver: reading the rect after each render forces a layout.
   let sizes: ResizeObserver | null = null;
   const samplePreviewHeight = (current: MarkdownNode) => {
     if (current?.type !== "math" || complete() || sizes || !wrapper || typeof ResizeObserver !== "function") return;
@@ -561,7 +494,6 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; fadeOnce?: () => b
     sizes.observe(wrapper);
   };
   let lastCandidate = "";
-  // What a formula still arriving last drew, as KaTeX's tree; see katex-patch.ts.
   let drawnTree: ReturnType<typeof renderMathTree> = null;
   let applied = "";
   const draw = (value: string) => {
@@ -687,16 +619,14 @@ function MathNode(props: { node: MarkdownNode | NodeAccessor; fadeOnce?: () => b
     // budget when a response contains many large formulas.
     if (props.defer?.() && current?.type === "math") {
       // Keep the last valid formula in place while the replacement render is
-      // queued. Clearing the span here makes every streamed partial flash
-      // blank before KaTeX completes, which is most visible on mobile.
+      // queued: clearing the span makes every streamed partial flash blank.
       setBusy(true);
       cancelJob = mathRenderQueue.enqueue(() => renderCurrent(current, source, version), props.policy?.() || "stream");
       return;
     }
     renderCurrent(current, source, version);
   });
-  // A rendering made before the wrapper existed is drawn once it does. Each is
-  // edited into the last rather than replacing it; see morph-html.ts.
+  // A rendering made before the wrapper existed is drawn once it does.
   onMount(() => draw(html()));
   createEffect(() => {
     if (!complete()) return;
@@ -716,26 +646,14 @@ function CodeNode(props: { node: MarkdownNode | NodeAccessor; handoff?: FenceHan
   return <CodeCard text={() => String(node()?.value || "")} language={() => node()?.lang} handoff={props.handoff} />;
 }
 
-/**
- * A code block (the library's CodeBlock), settled or still being written (`pending`, a fence the stream has not
- * closed); its lines are this file's, highlighted and grown in place.
- */
 function CodeCard(props: { text: () => string; language: () => string | undefined; pending?: boolean; streaming?: boolean; handoff?: FenceHandoff }) {
   const language = () => normalizeCodeLanguage(props.language());
-  // Whole lines colour as they complete; the line still being written stays
-  // plain so its colours do not change under the reader.
   const highlighter = new StreamingCodeHighlighter();
-  // A block that closes a fence starts from the lines the fence highlighted for good.
   if (!props.pending && props.handoff?.current) highlighter.continueFrom(props.handoff.current.highlighter);
   const highlighted = createMemo(() => {
     highlighterReady();
     return highlighter.render(props.text(), language(), Boolean(props.streaming));
   });
-  // A growing fence folds on the same rule as a settled one, and at the same
-  // moment it crosses the threshold -- waiting for the closing fence let a
-  // ten-line limit run to fifty before it took effect. Folded, the card is
-  // the only thing still moving on a transcript that has stopped scrolling,
-  // so the expand label counts the hidden lines as they arrive.
   const collapse = useCodeBlockCollapse();
   // Expanding by hand is a decision about this block, so it outlives later
   // preference changes and any re-evaluation of the collapse default.
@@ -766,8 +684,6 @@ function CodeCard(props: { text: () => string; language: () => string | undefine
       offered.language = language();
     }
   });
-  // Folding removes a lot of height at once. Tell the transcript so it can hold
-  // this card still and re-measure, instead of leaving stale placeholders.
   const toggle = () => {
     const card = code.closest<HTMLElement>(".ui-code");
     const previousTop = card?.getBoundingClientRect().top ?? 0;
@@ -780,20 +696,12 @@ function CodeCard(props: { text: () => string; language: () => string | undefine
     flashCopied();
   };
   // The lines are morphed by the renderer rather than rewritten from outside, so a later render cannot wipe the
-  // highlighting, and so a growing block keeps its finished lines: rewritten, every line of a long fence was built
-  // and laid out again each frame it grew (3-4ms of layout a frame for a 137-line file).
+  // highlighting, and a growing block keeps its finished lines rather than laying every line out again each frame.
   return <CodeBlock lang={language()} lines={lines()} fold={codeBlockFold(lines(), collapse.mode(), collapse.threshold())} open={userExpanded()} onToggle={toggle}
     streaming={props.streaming} copied={copied()} onCopy={() => void copy()}>{element()}</CodeBlock>;
 }
 
-/**
- * Register while mounted so settlement can see this without reading the DOM.
- *
- * Everything else that holds a message open -- an unfinished stream, an
- * in-flight display frame, a queued KaTeX render -- is already a signal. This
- * placeholder was the one exception, and polling for it is why settlement used
- * to need a MutationObserver over the whole subtree.
- */
+/** Registered while mounted so settlement can see it without reading the DOM. */
 function PendingCaret(props: { node: NodeAccessor; context: RendererContext }) {
   return <Show when={props.node()?.[PENDING_INLINE_MATH_NODE]}><PendingInlineMathPlaceholder context={props.context} /></Show>;
 }
@@ -835,13 +743,8 @@ function syntheticMathClosingDelimiter(source: string, pending: StreamingPending
   return source.startsWith("\\[", pending.start) ? "\n\\]" : "\n$$";
 }
 
-/**
- * An answer that ended inside a formula -- stopped, or cut off -- would keep its
- * last formula as raw TeX once streaming ends, since only a stream draws an
- * open one. Close it as the stream's preview did: finish what KaTeX needs
- * (open groups, a dangling script), drop a command left half-written if the
- * whole will not render, and add the closing delimiter.
- */
+/** Only a stream draws an open formula, so an answer that ended inside one (stopped, or cut off) is closed as the
+ *  stream's preview did, or its last formula stays raw TeX. */
 function closeTrailingMath(source: string) {
   const pending = splitStreamingMarkdown(source, { tableMath: true, allowUnclosedMath: true }).pending;
   if (!pending || (pending.kind !== "math-block" && pending.kind !== "math-inline")) return source;
@@ -867,23 +770,15 @@ function containsMath(node: MarkdownNode): boolean {
 function TextNode(props: { node: NodeAccessor; context: RendererContext }) {
   const text = () => (props.node()?.value || "").replaceAll("&nbsp;", " ");
   if (!untrack(() => props.context.fadeWords?.())) return <>{text()}</>;
-  // One wrapper per text node, kept when the word spans go. Swapping the spans
-  // straight for a text node changed the paragraph's own child list, and Solid
-  // reconciled it by moving every formula after it out and back in.
+  // One wrapper per text node, kept when the word spans go: swapping the spans straight for a text node changes the
+  // paragraph's own child list, and Solid reconciles it by moving every formula after it out and back in.
   return <span class="stream-text"><Show when={props.context.fadeLive?.()} fallback={text()}><FadingText node={props.node} text={text} /></Show></span>;
 }
 
 /**
- * Words as they are shown, each run shown together a span that fades in once.
- *
- * A run keeps its index as the text grows, so a trailing partial word (`wor`
- * to `world`) grows inside the span already fading rather than restarting it.
- * Words shown in the same frame fade alike, so they share a span: a burst
- * showed eight words a frame, and every frame restyled each of the two hundred
- * spans still fading. A word from before the node's fade offset -- one
- * remounted by a restructure, not newly shown -- is plain text, unless the
- * reveal that showed it is still fading: then it resumes that fade part way
- * through.
+ * A run keeps its index as the text grows, so a trailing partial word (`wor` to `world`) grows inside the span already
+ * fading rather than restarting it. Words shown in the same frame share a span, so a burst does not restyle hundreds
+ * of spans each frame. A word remounted by a restructure resumes its reveal's fade, or is plain text.
  */
 function FadingText(props: { node: NodeAccessor; text: () => string }) {
   // How each word fades: from its start (0), resumed this many ms in, or not at all (null).
@@ -975,18 +870,13 @@ function AstNodeContent(props: { node: NodeAccessor; context: RendererContext })
   }
 }
 
-/**
- * Local Incremark-core adapter. The published Solid package is not usable with
- * the repository's Solid runtime, so this spike exercises the incremental core
- * and keeps Conduit's security and interaction boundary in this adapter.
- */
+/** The published Incremark Solid package is not usable with the repository's Solid runtime, so this adapter drives the
+ *  incremental core and keeps Conduit's security and interaction boundary. */
 export function IncremarkMarkdown(props: ChatMarkdownProps) {
   const parser = createIncremarkParser(incremarkParserOptions);
   const [seededBlocks, setSeededBlocks] = createSignal<ParsedBlock[]>([], { equals: sameBlockList });
-  // A plain signal, not a reconciled store. The typewriter already hands back
-  // the same object for every finished block and a fresh one only for the
-  // block being revealed, so identity says what changed; reconcile re-derived
-  // that by walking every block's whole tree on every frame.
+  // A plain signal, not a reconciled store: the typewriter hands back the same object for every finished block, so
+  // identity says what changed, and reconcile would walk every block's whole tree every frame.
   const [displayBlocks, setDisplayBlocks] = createSignal<DisplayBlock[]>([], { equals: false });
   const [displayBusy, setDisplayBusy] = createSignal(false);
   const [pendingMathRenders, setPendingMathRenders] = createSignal(0);
@@ -1008,15 +898,12 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   let finalised = false;
   // Whether the source effect has run: a message first seen finished is seeded whole rather than revealed.
   let started = false;
-  // Block-by-block reveal and freezing are what this renderer is for a message; only an inline preview, a single
-  // line inside a summary, skips them -- it has no settled state worth protecting, and one would fight the
-  // summary's own sizing.
+  // An inline preview has no settled state worth protecting, and reveal would fight the summary's own sizing.
   const typewriter = !props.inline;
   // The memo deliberately preserves value equality across settlement: settled
   // changing while streaming is already false leaves everything downstream
   // seeing no value change, so nothing takes a terminal render pulse.
   const streaming = createMemo(() => settled() ? false : Boolean(props.streaming));
-  // Nothing is left in flight that could still change the layout.
   const quiet = () => !props.streaming
     && !displayBusy()
     && pendingMathRenders() === 0
@@ -1057,7 +944,7 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   onCleanup(cancelSettlement);
   createEffect(() => { if (settled()) props.onSettled?.(); });
   // The row is reconciled in place, so a settled message can still be handed new text (the stored answer restating
-  // the streamed one after it landed). That text unsettles it, to be taken and settle again: frozen, it was dropped.
+  // the streamed one after it landed): that text unsettles it, or frozen it would be dropped.
   createEffect(on(() => String(props.children || ""), (source) => {
     if (!settled() || source === frozenSource()) return;
     setFrozenSource(null);
@@ -1072,11 +959,8 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
   });
   onCleanup(() => typewriterController.destroy());
 
-  // Offsets end exclusive: a block ending where the open construct starts is
-  // the one before it. Counting the end in, a `$$` line opening right under a
-  // finished formula found that formula's block first, so the new formula was
-  // drawn in its place -- the finished one gone -- until it closed and both
-  // jumped back into their own slots.
+  // Offsets end exclusive: a block ending where the open construct starts is the one before it, or a `$$` line
+  // opening right under a finished formula is drawn in that formula's place.
   const openBlockAt = (blocks: Iterable<ParsedBlock>, offset: number) => {
     let within: ParsedBlock | undefined;
     let touching: ParsedBlock | undefined;
@@ -1106,11 +990,9 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     let update: ReturnType<typeof parser.append> | undefined;
     const updates: Array<ReturnType<typeof parser.append>> = [];
     const extendsPrevious = extendsText(source, previousSource);
-    // A text that changes behind its end -- the final message restating the streamed one a character shorter, an
-    // answer ending inside a formula finished with the formula repaired -- no longer extends the last, and starting
-    // over rebuilt every block of it (a 14,000-token answer: 215 blocks, 200ms). A block's id is its offset, so a
-    // parse from scratch gives every block wholly before the change the same block: those are kept, and only what
-    // follows is taken again.
+    // A text that changes behind its end no longer extends the last. A block's id is its offset, so a parse from
+    // scratch gives every block wholly before the change the same block: those are kept, and only what follows is
+    // taken again.
     const changedAt = !extendsPrevious && previousSource ? commonPrefixLength(source, previousSource) : -1;
     const keepsBlocks = changedAt > 0 && [...completedById.values()].some((block) => block.endOffset <= changedAt);
     if (keepsBlocks) for (const [id, block] of [...completedById]) if (block.endOffset > changedAt) completedById.delete(id);
@@ -1242,20 +1124,16 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       // streaming construct owns its tail. The pending prefix/placeholder is
       // the only representation of that block until the delimiter closes.
       pendingOffset = split.pending?.start ?? null;
-      // Everything from the open construct's start on is its source, however
-      // the parser reads it meanwhile -- a `-` line inside an open formula is a
-      // setext underline to Markdown, and ended a block there, so the rest of
-      // the formula leaked as a paragraph. Only blocks wholly before it show.
+      // Everything from the open construct's start on is its source, however the parser reads it meanwhile (a `-` line
+      // inside an open formula is a setext underline to Markdown). Only blocks wholly before it show.
       const beforeOpen = (block: ParsedBlock) => pendingOffset == null || block.endOffset <= pendingOffset;
       const nextBlocks = [...completedById.values()]
         .filter(beforeOpen)
         .sort((left, right) => left.startOffset - right.startOffset);
       const completedIds = new Set(nextBlocks.map((block) => block.id));
-      // The preview stands in only for the block holding the open construct.
-      // Blocks the parser still holds as pending before it stay: consecutive
-      // `$$ … $$` lines are one paragraph to the parser, so every formula already
-      // closed above the open one is still pending, and dropping them all while
-      // a formula was open made each blink out and back as the next one opened.
+      // The preview stands in only for the block holding the open construct. Blocks the parser still holds as pending
+      // before it stay: consecutive `$$ … $$` lines are one paragraph to the parser, so every formula already closed
+      // above the open one is still pending.
       const nextPendingBlocks = [...pendingUpdateBlocks.values()]
         .filter((block) => !completedIds.has(block.id) && beforeOpen(block))
         .concat(split.pending && pendingPrefixBlock ? [pendingPrefixBlock] : []);
@@ -1282,8 +1160,6 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
       const animated = currentBlocks.filter((block) => !seededById.has(block.id));
       const seededRoot = { type: "root", children: seeded.map((block) => block.node) };
       typewriterController.setBaselineCharacters(visibleAstCharacters(seededRoot));
-      // observeSource already hands the blocks to the scheduler; pushing the
-      // same array again only repeated the diff.
       typewriterController.observeSource(animated);
       if (animated.length === 0 && currentBlocks.length > 0) typewriterController.completeSeeded();
     }
@@ -1308,10 +1184,8 @@ export function IncremarkMarkdown(props: ChatMarkdownProps) {
     onMathBusyChange: (busy) => setPendingMathRenders((count) => Math.max(0, count + (busy ? 1 : -1))),
     onPendingPlaceholderChange: (delta) => setPendingPlaceholders((count) => Math.max(0, count + delta)),
   };
-  // An open fence's placeholder stays until the code block that replaces it is on screen: when the fence closed it
-  // went at once, and the block waited its turn behind the text before it, so the page lost the placeholder's
-  // height for those frames and dropped by it. Released when the reveal reaches the block
-  // or, the answer finished, nothing is left to reveal.
+  // An open fence's placeholder stays until the code block that replaces it is on screen: the block waits its turn
+  // behind the text before it, and the page would lose the placeholder's height for those frames.
   let heldFence: StreamingPending | null = null;
   const shownPending = createMemo<StreamingPending | null>(() => {
     const current = pending();

@@ -14,13 +14,7 @@ function isEscaped(source: string, index: number) {
   return slashCount % 2 === 1;
 }
 
-/**
- * What a partial formula still has open, innermost last: braces,
- * `\left` delimiters and `\begin{...}` environments. Closing them in reverse
- * is what lets a half-written `aligned` block render its finished rows; closing
- * only braces left every environment invalid until its `\end` arrived, so a
- * long display block appeared all at once.
- */
+/** Environments are closed too, not only braces, so a half-written `aligned` block renders its finished rows. */
 function openGroups(source: string) {
   const stack: string[] = [];
   // Where a two-argument command ended: a brace opening right there is its
@@ -105,23 +99,15 @@ function appendMissingCommandArguments(source: string) {
   return `${source}${"{}".repeat(Math.max(0, required - argumentCount))}`;
 }
 
-/**
- * Make a display-only candidate for an incomplete TeX expression.
- * The raw stream is never changed. The candidate is strict-valid or is
- * rejected by the renderer and replaced with the last valid preview.
- */
+/** Display-only: the raw stream is never changed, and a candidate the renderer rejects gives way to the last valid
+ *  preview. */
 export function repairSyntheticMathSource(source: string) {
   let repaired = appendMissingCommandArguments(source);
   if (/(^|[^\\])(?:\^|_)\s*$/.test(repaired)) repaired += "{}";
   return closeOpenGroups(repaired);
 }
 
-/**
- * A partial's tail with what cannot be finished yet taken off: a command still
- * being written (`\ome` of `\omega`, `\begin{alig`), a lone backslash starting
- * one, then a row break with nothing after it. Tried only when the repaired
- * source is rejected, because a finished formula may end in a command.
- */
+/** Tried only when the repaired source is rejected, because a finished formula may end in a command. */
 export function trimUnfinishedMathTail(source: string) {
   return source
     .replace(/\\(?:begin|end)\s*\{[a-zA-Z*]*$|\\[a-zA-Z]+\s*$/, "")
@@ -171,9 +157,7 @@ function replacePendingDisplayMath(node: MarkdownNode, body: string): [MarkdownN
   if (!node || typeof node !== "object") return [node, false];
   if (!Array.isArray(node.children)) return [node, false];
   // Incremark can tokenize an incomplete `$$...` cell as a literal `$` plus
-  // an inlineMath node after the first closing dollar arrives. Treat that
-  // shape as the same pending display expression instead of exposing its raw
-  // delimiters.
+  // an inlineMath node after the first closing dollar arrives.
   const previewBody = (body.endsWith("$") ? body.slice(0, -1) : body).trimEnd();
   for (let index = node.children.length - 1; index >= 0; index -= 1) {
     const child = node.children[index];
@@ -198,8 +182,7 @@ function replacePendingDisplayMath(node: MarkdownNode, body: string): [MarkdownN
         }
         // The core parser may split TeX spacing commands and punctuation into
         // separate text nodes, so the AST text is not always byte-equal to the
-        // source body. The pending split has already identified the active
-        // delimiter. Replace the rest of that local text run atomically.
+        // source body; the pending split has already identified the delimiter.
         if (candidate.startsWith(previewBody) || node.type === "tableCell" || node.type === "tableRow" || node.type === "table") {
           const replacement = [];
           if (prefix) replacement.push({ type: "text", value: prefix });
@@ -219,18 +202,13 @@ function replacePendingDisplayMath(node: MarkdownNode, body: string): [MarkdownN
   return [node, false];
 }
 
-/**
- * Add a display-only math node to the parser's existing pending AST.
- * This keeps the surrounding paragraph or table structure from being
- * reparsed for every preview character.
- */
+/** Patching the parser's pending AST keeps the surrounding paragraph or table from being reparsed every character. */
 export function createSyntheticMathPreviewNode(node: MarkdownNode, pending: SyntheticMathPending): MarkdownNode | null {
   if (!node || typeof node !== "object") return null;
   if (pending.kind === "math-block") {
     const [preview, replaced] = replacePendingDisplayMath(node, pending.body);
-    // A paragraph holding nothing but the formula is the formula: returned
-    // wrapped, the block changed type once the parser saw it as display math,
-    // which remounted it and blanked the formula for a frame.
+    // A paragraph holding nothing but the formula is the formula: returned wrapped, the block would change type once
+    // the parser saw it as display math, remounting it and blanking the formula for a frame.
     if (replaced && preview.type === "paragraph" && preview.children?.length === 1 && preview.children[0].type === "math") {
       return { ...preview.children[0], position: node.position };
     }

@@ -1,3 +1,2 @@
-/* The renderer's own mechanics; how an answer's Markdown looks is the library's Answer (components/ui).
-   A formula or fence still arriving holds its place, unseen, until it can be drawn: partial TeX never shows raw. */
+/* A formula or fence still arriving holds its place, unseen, until it can be drawn: partial TeX never shows raw. */
 .streaming-pending-math-inline { display: inline-block; width: 0; height: 1em; overflow: hidden; vertical-align: baseline; visibility: hidden; pointer-events: none; user-select: none; }

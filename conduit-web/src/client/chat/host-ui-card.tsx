@@ -4,14 +4,6 @@ import { QuestionCard, type QuestionResponse } from "./question-card";
 
 type HostUiResponse = { id: string; cancelled?: boolean; confirmed?: boolean; value?: string } | QuestionResponse;
 
-/*
- * Everything the agent is blocked on is asked the same way: on the composer
- * takeover, as numbered rows with keys. An approval, a choice or a line of
- * text is one question of one answer -- choosing is answering -- so it takes
- * the question's place, motion and keyboard rather than a card of its own
- * stacked above the composer. What the harness asked for goes back in its own
- * shape.
- */
 const asQuestion = (request: HostUiRequest): HostUiRequest => {
   if (request.kind === "question") return request;
   const labels = request.kind === "confirm" ? ["Approve", "Deny"] : request.kind === "select" ? request.options || [] : [];
@@ -23,7 +15,6 @@ const asQuestion = (request: HostUiRequest): HostUiRequest => {
     multiSelect: false, secret: false, required: true,
     options: labels.map((label, index) => ({ id: String(index), label, description: "" })),
     freeform: typed ? { placeholder: request.placeholder, multiline: request.kind === "editor", initial: request.prefill } : false,
-    // A harness asking to go ahead reads as any approval does.
     ...(request.kind === "confirm" ? { approval: { title: request.title || request.message || "Allow this?", lines: request.title && request.message ? [request.message] : [] } } : {}),
   }] };
 };
@@ -37,8 +28,7 @@ const fromAnswer = (request: HostUiRequest, response: QuestionResponse): HostUiR
   return { id: request.id, value: answer.freeform ?? "" };
 };
 
-/* Esc turns an approval down -- a harness reads a dismissed approval as a
-   denial -- so it says so; anything else is dismissed. */
+/* A harness reads a dismissed approval as a denial, so Esc says so. */
 const dismissLabel = (request: HostUiRequest) =>
   request.kind === "confirm" || request.options?.some((option) => /^deny$/i.test(option)) ? "deny" : "dismiss";
 

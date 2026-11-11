@@ -17,7 +17,6 @@ import { PermissionChoices, ProfileChoices, ServiceChoices } from "./composer-pl
 
 
 export function MobileComposerOptions(props: {
-  /** Told when the menu opens and closes (a PhoneComposer dims under it). */
   onOpenChange?: (open: boolean) => void;
   composer: {
     models: ComposerModels;
@@ -45,12 +44,9 @@ export function MobileComposerOptions(props: {
   const context = () => contextUsagePercent(composer.chat.contextUsage());
   const preserveFocus = (event: Event) => event.preventDefault();
 
-  /* The bubble composer's other controls dim while the menu is open, as a
-     parent menu does under its submenu. */
   let root!: HTMLButtonElement;
   createEffect(() => props.onOpenChange?.(open()));
-  /* Closing hands focus back to the trigger; with the text pill open it goes
-     back to the textarea instead, in the same task, so the keyboard stays. */
+  /* With the text pill open, closing focuses the textarea in the same task, so the keyboard stays. */
   let typingAtOpen: HTMLTextAreaElement | null = null;
   const composerTextarea = () => {
     const active = document.activeElement;
@@ -82,7 +78,6 @@ export function MobileComposerOptions(props: {
   return <DropdownMenu modal={false} placement="top-start" open={open()} onOpenChange={(value) => { if (value) typingAtOpen = composerTextarea(); setOpen(value); }}>
       <MenuPillTrigger label="Message options" icon={<Icons.Add />} open={open()} disabled={!composer.serverOnline} keep={() => typingAtOpen !== null} ref={(element) => { root = element; }} />
       <MenuContent keep={() => typingAtOpen !== null} onOpenAutoFocus={preserveFocus} onCloseAutoFocus={(event) => { event.preventDefault(); restoreTyping(); }} onFocusOutside={preserveFocus}>
-        {/* A phone option shows its value, not its name: the section names it. */}
         <MenuSection title={composer.profiles.length ? "Profile" : "Model"} note={context() != null ? `${Math.round(context()!)}% context` : undefined}>
           <Show when={composer.profiles.length}>
             <MenuSub phone>
@@ -150,7 +145,6 @@ function EffortChoices(props: { composer: Options; levels: string[] }) {
   </MenuRadioGroup></MenuSection>;
 }
 
-/** Projects before workspaces, and "No folder" first when the chat is in one. */
 function PlaceChoices(props: { place: PlaceOptions }) {
   const root = () => props.place.projects.find((project) => project.slug === "chat");
   const places = () => props.place.projects.filter((project) => project.slug !== "chat" && project.state !== "cloning")

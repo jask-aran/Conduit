@@ -1,29 +1,15 @@
-/**
- * The code block's rules: its language, its lines, when it folds. The block itself is the library's CodeBlock.
- */
-
 import type { UiPreferenceChoice } from "../preferences/ui-preferences";
 
 export const CODE_BLOCK_COLLAPSE_DEFAULT_LINES = 15;
 
 export type CodeBlockCollapseMode = UiPreferenceChoice<"codeBlockCollapse">;
 
-/**
- * Fired after a card's collapse state flips.
- *
- * Folding a 50-line block removes about a thousand pixels from the thread in
- * one commit. The transcript listens so it can hold the card still and
- * re-measure the virtualizer immediately -- left to the idle scheduler, the
- * stale intrinsic sizes showed as empty placeholders for seconds.
- */
+/** The transcript listens so it can hold the card still and re-measure the virtualizer at once: left to the idle
+ *  scheduler, stale intrinsic sizes show as empty placeholders for seconds. */
 export const CODE_BLOCK_TOGGLE_EVENT = "conduit:code-block-toggle";
 
-/**
- * @param previousTop the card's viewport-relative top measured *before* the
- * state flipped. Shrinking the card lets browser scroll anchoring pick a node
- * below it and adjust scrollTop, so the position has to be captured up front --
- * measuring afterwards only reports where the card already ended up.
- */
+/** `previousTop` is measured before the state flips: shrinking the card lets browser scroll anchoring adjust
+ *  scrollTop, so measuring afterwards only reports where the card already ended up. */
 export function publishCodeBlockToggle(card: HTMLElement, previousTop: number) {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(CODE_BLOCK_TOGGLE_EVENT, { detail: { card, previousTop } }));
@@ -44,14 +30,7 @@ export function countCodeLines(text: string) {
   return lines;
 }
 
-/**
- * Whether a block starts collapsed.
- *
- * The line count is the whole rule, and it applies while the fence is still
- * open. Waiting for the closing fence meant a ten-line limit did nothing until
- * the block had run to whatever length it was going to reach, then folded it
- * all at once; folding at the threshold is what the limit says.
- */
+/** The line count is the whole rule, and it applies while the fence is still open. */
 export function shouldCollapseCodeBlock(
   lines: number,
   mode: CodeBlockCollapseMode,
@@ -62,10 +41,6 @@ export function shouldCollapseCodeBlock(
   return lines > threshold;
 }
 
-/**
- * The lines a block folds to under the preference, or none: long folds a block past the threshold to it, all folds
- * every block of more than a line (to the threshold, or a line less than it has).
- */
 export function codeBlockFold(lines: number, mode: CodeBlockCollapseMode, threshold: number) {
   if (!shouldCollapseCodeBlock(lines, mode, threshold)) return undefined;
   return mode === "all" ? Math.min(threshold, lines - 1) : threshold;
