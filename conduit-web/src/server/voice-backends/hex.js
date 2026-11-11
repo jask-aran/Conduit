@@ -26,7 +26,7 @@ const definition = (modelId, hexId, file, label, description, approximateBytes, 
 });
 
 // Hex's catalogue ids and the file each becomes in its models folder. The first is the default. Chosen by running
-// Hex's models on a six-core CPU hub (docs/plans/hex-transcription.md): the rest were slower without reading better,
+// Hex's models on a six-core CPU hub: the rest were slower without reading better,
 // or are streaming models, whose live text embedded mode cannot give.
 const MODELS = [
   definition("parakeet-tdt-v2", "parakeet_v2", "parakeet-tdt-0.6b-v2-Q8_0.gguf", "Parakeet v2", "English, punctuated, with false starts left out. About 1 s after you stop. Holds 1.2 GB of memory.", 729574912, "English", "en",
