@@ -139,6 +139,19 @@
 .ui-gauge[data-tone="critical"] { color: var(--destructive); }
 @media (prefers-reduced-motion: reduce) { .ui-gauge > circle:last-child { transition: none; } }
 
+.ui-colour { display: grid; gap: var(--space-md); width: var(--measure-xs); }
+/* conventions-ok: a colour field is white to its hue across and to black down, whatever the theme */
+.ui-colour-field { position: relative; aspect-ratio: 3 / 2; border-radius: var(--radius-control); background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(var(--colour-hue) 100% 50%)); cursor: crosshair; touch-action: none; }
+/* conventions-ok: a ring that shows on any colour in the field */
+.ui-colour-thumb { position: absolute; width: var(--control-2xs); height: var(--control-2xs); translate: -50% -50%; border: var(--stroke) solid #fff; border-radius: var(--radius-round); background: var(--colour); box-shadow: 0 0 0 var(--hairline) #000; pointer-events: none; }
+/* conventions-ok: the hues themselves */
+.ui-slider-input[data-hue]::-webkit-slider-runnable-track { background: linear-gradient(to right, hsl(0 100% 50%), hsl(60 100% 50%), hsl(120 100% 50%), hsl(180 100% 50%), hsl(240 100% 50%), hsl(300 100% 50%), hsl(360 100% 50%)); }
+/* conventions-ok: the hues themselves */
+.ui-slider-input[data-hue]::-moz-range-track { background: linear-gradient(to right, hsl(0 100% 50%), hsl(60 100% 50%), hsl(120 100% 50%), hsl(180 100% 50%), hsl(240 100% 50%), hsl(300 100% 50%), hsl(360 100% 50%)); }
+.ui-slider-input[data-hue]::-moz-range-progress { background: transparent; }
+.ui-colour-row { display: flex; align-items: center; gap: var(--space-sm); }
+.ui-colour-row > .ui-swatch { width: var(--control-2xs); height: var(--control-2xs); }
+.ui-colour-row > .ui-input { min-width: 0; flex: 1; font-family: var(--font-data); }
 .ui-swatch { width: var(--icon-dot); height: var(--icon-dot); flex: none; border-radius: var(--radius-round); }
 .ui-swatch[data-fill] { width: 100%; height: 100%; border-radius: inherit; }
 .ui-swatch[data-hollow] { box-shadow: inset 0 0 0 var(--hairline) var(--muted-foreground); }

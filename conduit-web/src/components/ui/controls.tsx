@@ -1,7 +1,7 @@
 import { Frost } from "./frost";
 import { IconButton } from "./actions";
 import * as Icons from "./icons";
-import { createEffect, createSignal, createUniqueId, For, Show, splitProps, type JSX } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, Show, splitProps, untrack, type JSX } from "solid-js";
 
 import { feel, type Haptic, type HapticProp } from "./haptics";
 import { cn } from "@/lib/utils";
@@ -102,6 +102,38 @@ export function Gauge(props: { value: number; tone?: "idle" | "normal" | "warnin
 }
 
 export const Swatch = (props: { colour?: string; hollow?: boolean; fill?: boolean }) => <i class="ui-swatch" data-hollow={props.hollow ? "" : undefined} data-fill={props.fill ? "" : undefined} style={{ background: props.hollow ? undefined : props.colour }} aria-hidden="true" />;
+
+type Hsv = { h: number; s: number; v: number };
+const hexOf = ({ h, s, v }: Hsv) => { const part = (n: number) => { const k = (n + h / 60) % 6; return Math.round(255 * (v - v * s * Math.max(0, Math.min(k, 4 - k, 1)))).toString(16).padStart(2, "0"); }; return `#${part(5)}${part(3)}${part(1)}`; };
+const hsvOf = (hex: string): Hsv | null => {
+  const found = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!found) return null;
+  const [r, g, b] = [0, 2, 4].map((at) => parseInt(found[1]!.slice(at, at + 2), 16) / 255) as [number, number, number], v = Math.max(r, g, b), spread = v - Math.min(r, g, b);
+  const h = !spread ? 0 : v === r ? ((g - b) / spread + 6) % 6 : v === g ? (b - r) / spread + 2 : (r - g) / spread + 4;
+  return { h: h * 60, s: v ? spread / v : 0, v };
+};
+/** Any colour: its shade on a field of its hue, the hue on a track, and its hex to read or type. `value` and what `onChange` gives are `#rrggbb`. */
+export function ColourPicker(props: { label: string; value: string; onChange: (hex: string) => void }) {
+  // Kept as hue, shade and light: a grey's hex has no hue to come back to.
+  const [colour, setColour] = createSignal<Hsv>(hsvOf(props.value) ?? { h: 0, s: 1, v: 1 });
+  createEffect(() => { const given = hsvOf(props.value); if (given && hexOf(untrack(colour)) !== props.value.toLowerCase()) setColour(given); });
+  const hex = () => hexOf(colour());
+  const set = (next: Hsv) => { setColour(next); props.onChange(hexOf(next)); };
+  const part = (n: number) => Math.max(0, Math.min(1, n));
+  const shade = (event: PointerEvent & { currentTarget: HTMLElement }) => { const box = event.currentTarget.getBoundingClientRect(); set({ h: colour().h, s: part((event.clientX - box.left) / box.width), v: 1 - part((event.clientY - box.top) / box.height) }); };
+  const fromScreen = () => void new (window as unknown as { EyeDropper: new () => { open(): Promise<{ sRGBHex: string }> } }).EyeDropper().open().then((picked) => { const next = hsvOf(picked.sRGBHex); if (next) set(next); }, () => {});
+  return <div class="ui-colour" role="group" aria-label={props.label} style={{ "--colour-hue": colour().h, "--colour": hex() }}>
+    <div class="ui-colour-field" onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); shade(event); }} onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) shade(event); }}>
+      <i class="ui-colour-thumb" style={{ left: `${colour().s * 100}%`, top: `${(1 - colour().v) * 100}%` }} />
+    </div>
+    <input class="ui-slider-input" data-hue="" type="range" min="0" max="359" aria-label="Hue" value={colour().h} onInput={(event) => set({ ...colour(), h: Number(event.currentTarget.value) })} />
+    <div class="ui-colour-row">
+      <Swatch colour={hex()} />
+      <Input aria-label="Hex colour" value={hex()} maxlength="7" spellcheck={false} onInput={(event) => { const next = hsvOf(event.currentTarget.value); if (next) set(next); }} />
+      <Show when={"EyeDropper" in window}><IconButton label="Take a colour from the screen" onClick={fromScreen}><Icons.Pipette /></IconButton></Show>
+    </div>
+  </div>;
+}
 
 export function Meter(props: { parts: { value: number; colour: string }[]; mark?: { at: number; label: string; quiet?: boolean } }) {
   return <div class="ui-meter" data-marked={props.mark && !props.mark.quiet ? "" : undefined} title={props.mark?.quiet ? props.mark.label : undefined}>

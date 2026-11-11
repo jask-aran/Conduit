@@ -70,6 +70,7 @@ import {
   MonitorIcon,
   MousePointer2Icon,
   PaletteIcon,
+  PipetteIcon,
   PanelLeftCloseIcon,
   PanelLeftIcon,
   PanelLeftOpenIcon,
@@ -179,6 +180,7 @@ export const UseApp = HandIcon;
 export const DrawArrow = MoveUpRightIcon;
 export const DrawBox = SquareIcon;
 export const DrawLine = SlashIcon;
+export const Pipette = PipetteIcon;
 export const Shapes = ShapesIcon;
 export const DrawText = TypeIcon;
 export const Erase = EraserIcon;

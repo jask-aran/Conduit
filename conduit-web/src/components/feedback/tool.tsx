@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createResource, createSignal, For, Index, onCleanup, onMount, Show, untrack } from "solid-js";
-import { createStore, produce } from "solid-js/store";
+import { createStore, produce, unwrap } from "solid-js/store";
 import { Portal } from "solid-js/web";
 import { drawingBox, FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote, FeedbackNotes, FeedbackText, feedbackInkColour, FEEDBACK_INKS, type FeedbackBox, type FeedbackDrawingKind, type FeedbackInk, type FeedbackPoint, type FeedbackShape, type FeedbackToolKind, type FeedbackWeight } from "@/components/ui/feedback";
 import { captureHeld, captureScreen, cropAreas, previewOf, type Capture } from "./capture";
@@ -352,14 +352,14 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     if (!text) return;
     const holder = range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
     const id = nextId++;
-    setSelections(selections.length, { id, elements: placed([pieceRoot(holder) ?? holder ?? document.body]), comment: "", on: "page", quote: { range, text } });
+    keep(); setSelections(selections.length, { id, elements: placed([pieceRoot(holder) ?? holder ?? document.body]), comment: "", on: "page", quote: { range, text } });
     openNote(id);
   };
   const add = (elements: Element[], drag?: FeedbackBox) => {
     const id = nextId++;
     const held = boxOf(elements);
     const reach = drag && { left: held.left - drag.left, top: held.top - drag.top, width: drag.width - held.width, height: drag.height - held.height };
-    setSelections(selections.length, { id, elements: placed(elements), comment: "", on: showing(), reach });
+    keep(); setSelections(selections.length, { id, elements: placed(elements), comment: "", on: showing(), reach });
     openNote(id);
   };
   const piecesUnder = (drawing: Drawing): Element[] => {
@@ -375,6 +375,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     const over = piecesUnder(drawing), current = open();
     if (current?.drawings && current.on === showing()) {
       const shift = shiftOf(current), elements = placed([...new Set([...current.elements, ...over])]), from = boxOf(elements);
+      keep();
       setSelections((candidate) => candidate.id === current.id, produce((draft) => {
         // What was drawn before is set down where it now shows, so all of it follows the pieces from here.
         for (const earlier of draft.drawings!) earlier.points = earlier.points.map((point) => [point[0] + shift.x, point[1] + shift.y] as const);
@@ -386,17 +387,26 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     }
     const elements = placed(over.length ? over : [under(drawn.left + drawn.width / 2, drawn.top + drawn.height / 2) ?? document.body]);
     const from = boxOf(elements), id = nextId++;
-    setSelections(selections.length, { id, elements, comment: "", on: showing(), drawings: [drawing], from: { left: from.left, top: from.top } });
+    keep(); setSelections(selections.length, { id, elements, comment: "", on: showing(), drawings: [drawing], from: { left: from.left, top: from.top } });
     return id;
   };
+  // What Undo goes back to: the comments not yet sent, as they were before each change to what is marked. Their words are not part of it.
+  const history: Selection[][] = [];
+  const [undoable, setUndoable] = createSignal(0);
+  const fixed = (selection: Selection) => Boolean(selection.sent || selection.whole);
+  const keep = () => {
+    history.push(unwrap(selections).filter((selection) => !fixed(selection)).map((selection) => ({ ...selection, elements: [...selection.elements], drawings: selection.drawings?.map((drawing) => ({ ...drawing })), preview: undefined })));
+    setUndoable(history.length);
+  };
   const remove = (id: number) => {
+    keep();
     const preview = selections.find((selection) => selection.id === id)?.preview;
     if (preview) URL.revokeObjectURL(preview);
     setSelections((all) => all.filter((selection) => selection.id !== id));
     if (openId() === id) setOpenId(null);
   };
   // By its place: what the store hands back is not the same object it was given.
-  const erase = (selection: Selection, at: number) => selection.drawings!.length === 1 ? remove(selection.id) : setSelections((candidate) => candidate.id === selection.id, "drawings", (all) => all!.filter((_, kept) => kept !== at));
+  const erase = (selection: Selection, at: number) => selection.drawings!.length === 1 ? remove(selection.id) : (keep(), setSelections((candidate) => candidate.id === selection.id, "drawings", (all) => all!.filter((_, kept) => kept !== at)));
   /** The eraser takes what it touches of what is drawn on what is looked at; a comment with nothing left drawn goes with it. */
   const eraseAt = (x: number, y: number) => {
     for (const selection of [...selections]) {
@@ -407,9 +417,17 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   };
   /** The last thing drawn for the comment being written, else the last comment. */
   const undo = () => {
-    const current = open(), last = unsent()[unsent().length - 1];
-    if (current?.drawings) erase(current, current.drawings.length - 1);
-    else if (last) remove(last.id);
+    const back = history.pop();
+    setUndoable(history.length);
+    if (!back) return;
+    const now = unwrap(selections), words = new Map(now.map((selection) => [selection.id, selection.comment]));
+    for (const selection of now) if (selection.preview && !fixed(selection)) URL.revokeObjectURL(selection.preview);
+    // What has gone since stays gone to the agent as it went; what is written stays written.
+    const stays = now.filter(fixed), gone = new Set(stays.map((selection) => selection.id));
+    const again = back.filter((selection) => !gone.has(selection.id)).map((selection) => ({ ...selection, comment: words.get(selection.id) ?? selection.comment }));
+    setSelections([...stays, ...again]);
+    if (!selections.some((selection) => selection.id === openId())) { setOpenId(null); setNoteAt(null); }
+    for (const selection of again) void preview(selection.id);
   };
   /** Words left empty are not a drawing; a comment of nothing is not a comment. */
   const textDone = (id: number, at: number) => {
@@ -417,7 +435,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     if (!selection || !drawing || drawing.kind !== "text" || drawing.text?.trim()) return;
     erase(selection, at);
   };
-  const toggleIn = (selection: Selection, element: Element) => setSelections((candidate) => candidate.id === selection.id, "elements", (elements) =>
+  const toggleIn = (selection: Selection, element: Element) => (keep(), setSelections)((candidate) => candidate.id === selection.id, "elements", (elements) =>
     elements.includes(element) ? (elements.length > 1 ? elements.filter((kept) => kept !== element) : elements) : placed([...elements, element]));
 
   const choose = (shift: boolean) => {
@@ -451,7 +469,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     const empty = selections.find((selection) => selection.general && !selection.comment.trim());
     if (empty) return openNote(empty.id);
     const id = nextId++;
-    setSelections(selections.length, { id, elements: [], comment: "", on: "page", general: true });
+    keep(); setSelections(selections.length, { id, elements: [], comment: "", on: "page", general: true });
     openNote(id);
   };
   const onPointerDown = (event: PointerEvent) => {
@@ -504,7 +522,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     if (!drag) return choose(shift);
     const current = open();
     if (!gathered.length) return;
-    if (shift && current && ofPieces(current) && floats(current)) setSelections((candidate) => candidate.id === current.id, "elements", (elements) => placed([...new Set([...elements, ...gathered])]));
+    if (shift && current && ofPieces(current) && floats(current)) { keep(); setSelections((candidate) => candidate.id === current.id, "elements", (elements) => placed([...new Set([...elements, ...gathered])])); }
     else add(gathered, drag);
   };
   /** A finger leaves no pointer behind to mark, and a press the system took over (a scroll, a call) chose nothing. */
@@ -543,6 +561,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     if (own(event.target) && (event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLInputElement)) {
       // The tool's own fields keep their keys; the app's shortcuts do not run on them.
       event.stopImmediatePropagation();
+      if (event.target.closest(".ui-colour")) return;
       if (event.key !== "Escape" && (event.key !== "Enter" || event.shiftKey)) return;
       event.preventDefault();
       // Words on the page are followed by the comment about them; the comment's Enter is Done.
@@ -553,7 +572,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       return;
     }
     const handled = () => { event.preventDefault(); event.stopImmediatePropagation(); };
-    if (select() && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "z" && numbered().length) { handled(); return undo(); }
+    if (select() && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "z" && undoable()) { handled(); return undo(); }
     if (!select() || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.key.toLowerCase() === "n" && offered("note")) { handled(); return note(); }
     if (event.key.toLowerCase() === "c" && can.inks) { handled(); return void setInk(INKS[(INKS.indexOf(ink()) + 1) % INKS.length]!); }
@@ -684,6 +703,8 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       // A collaborator's comments stay up as the item's thread (closing the tool leaves it in the folder, to be come back to); one-way feedback is done.
       if (!answered) return props.onClose();
       setSelections([]);
+      history.length = 0;
+      setUndoable(0);
       follow(result.id, true);
     } catch (error) {
       host.notify("failed", `Feedback was not sent: ${error instanceof Error ? error.message : String(error)}`);
@@ -746,7 +767,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
           </Show>}</For></FeedbackNotes>
         </Show>
         <FeedbackBar view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onTool={(tool) => { setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); }} onNote={note}
-          status={status()} compact={touchOnly} keys={touchOnly ? undefined : props.keys?.()} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} shape={shape()} onShape={setShape} onUndo={numbered().length ? undo : undefined}
+          status={status()} compact={touchOnly} keys={touchOnly ? undefined : props.keys?.()} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} shape={shape()} onShape={setShape} onUndo={undoable() ? undo : undefined}
           replies={unread().reduce((sum, item) => sum + item.unread, 0)} onReplies={() => { const item = unread()[0]; if (item) follow(item.id, true); }}
           live={offersLive ? live() || !offersBatch : undefined} onLive={offersBatch && agent() && !lastSent() ? keepLive : undefined} standing={thread() ? standing() : undefined}
           hand={hand()} onHand={can.listeners ? keepHand : undefined} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}

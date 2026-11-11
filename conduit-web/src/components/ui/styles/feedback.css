@@ -22,8 +22,9 @@
 .ui-feedback-weight { display: block; width: var(--icon-sm); height: var(--feedback-weight); border-radius: var(--feedback-weight); background: var(--feedback-ink, currentColor); }
 /* Its true size, without the widest making the rail taller than the others leave it. */
 .ui-feedback-weight[data-kind="highlight"] { height: calc(6 * var(--feedback-weight)); margin-block: calc(-2.5 * var(--feedback-weight)); border-radius: 0; opacity: var(--opacity-faint); }
-.ui-feedback-custom > input { width: var(--control-sm); height: var(--control-xs); padding: var(--space-2xs); cursor: pointer; }
-.ui-feedback-custom[data-on] > input { border-color: var(--primary); }
+/* conventions-ok: every hue, for the ink that is any colour, until one is chosen */
+.ui-feedback-bar [data-any] > .ui-swatch:not([style*="background"]) { background: conic-gradient(hsl(0 90% 60%), hsl(60 90% 60%), hsl(120 90% 60%), hsl(180 90% 60%), hsl(240 90% 60%), hsl(300 90% 60%), hsl(360 90% 60%)); }
+.ui-feedback-picker { padding: var(--space-md); }
 :is(.ui-feedback-drawing, .ui-feedback-weight)[data-weight="thin"] { --feedback-weight: var(--stroke-thin); }
 :is(.ui-feedback-drawing, .ui-feedback-weight)[data-weight="medium"] { --feedback-weight: var(--stroke); }
 :is(.ui-feedback-drawing, .ui-feedback-weight)[data-weight="thick"] { --feedback-weight: calc(2 * var(--stroke)); }

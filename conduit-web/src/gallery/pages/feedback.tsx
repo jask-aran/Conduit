@@ -1,3 +1,4 @@
+import { ColourPicker } from "@/components/ui/controls";
 import { FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote, FeedbackNotes, FeedbackText } from "@/components/ui/feedback";
 import { row, token, type Page } from "../model";
 import { noop } from "../demos";
@@ -77,6 +78,7 @@ export const feedbackPage: Page = {
     row("note, being written", "beside what it is about, with Done to send it to the stack", scene(() => <>{note({ float: { left: "24px", top: "24px" }, open: true, onDone: noop })}</>), { surfaces: ["ground"] }),
     row("note, sent", "a thread: the comment, what the agent answered, and the field to write back in; the bar says where the item stands", scene(() => <><FeedbackNotes>{note({ open: true, onRemove: undefined, placeholder: "Write back", value: "", said: [{ from: "person", text: "Match the other rail icons' stroke." }, { from: "agent", text: "Done: it is 1.5px now, like the rest." }] })}</FeedbackNotes>{bar({ thread: true, status: "ui-feedback is working on it" })}</>), { surfaces: ["ground"] }),
     row("bar, live", "each comment goes as it is Done: no Send, and where the growing item stands", scene(() => <>{bar({ live: true, onLive: noop, agent: "ui-feedback", hand: true, standing: "ui-feedback is working on it" })}</>), { surfaces: ["ground"] }),
+    row("any colour", "ColourPicker, which stands over the options while the ink that is any colour is held: its shade on a field of its hue, the hue, and its hex to read or type", () => <ColourPicker label="Any colour" value="#22cc88" onChange={noop} />),
     row("bar, drawing", "the held tool's options stand over the bar: the shape, its ink (a preset or any colour) and its line, each size as it will be drawn", scene(() => <>{bar({ tool: "shape", shape: "arrow", ink: "red", status: "Drag to draw", canSend: false })}</>), { surfaces: ["ground"] }),
     row("bar, handing over", "a session listens and the item goes to it; with several waiting its name is a button to the next", scene(() => <>{bar({ hand: true, agent: "ui-feedback", onNextAgent: noop })}</>), { surfaces: ["ground"] }),
     row("bar, compact", "a phone: icons alone, and no Screenshot where the client cannot capture its display", scene(() => <>{bar({ compact: true, screenshots: false, keys: undefined })}</>), { surfaces: ["ground"] }),

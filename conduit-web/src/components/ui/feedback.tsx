@@ -1,6 +1,6 @@
 import { createSignal, createUniqueId, For, Show, type JSX } from "solid-js";
 // Through the barrel, so the tool's chunk takes these from the app's own and the build splits nothing new out of it.
-import { Button, Card, CardPreview, CloseButton, Frost, IconButton, Icons, Input, Segmented, Spinner, Swatch, TextArea } from "./index";
+import { Button, Card, ColourPicker, CardPreview, CloseButton, Frost, IconButton, Icons, Segmented, Spinner, Swatch, TextArea } from "./index";
 import "./styles/feedback.css";
 
 /* Not in the library's barrel: the tool imports this file when it is opened, so the app's first load does not carry it
@@ -118,18 +118,22 @@ export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; 
   // What the chosen tool draws with stands over the bar while that tool is held, so the bar itself stays the tools.
   const inks = () => OPTIONED.includes(props.tool) ? props.onInk : undefined, lined = () => props.tool !== "text" && inks() ? props.onWeight : undefined;
   const [own, setOwn] = createSignal<FeedbackInk>(props.ink?.startsWith("#") ? props.ink : "#ff3b9a");
-  const options = () => !props.thread && !using() && (OPTIONED.includes(props.tool) || props.tool === "erase") && (inks() || props.onUndo);
+  const [picking, setPicking] = createSignal(false);
+  const options = () => !props.thread && !using() && (OPTIONED.includes(props.tool) || props.tool === "erase") && (inks() || props.compact);
   return <div class="ui-feedback-rails" data-compact={props.compact ? "" : undefined}>
+  <Show when={picking() && options() && props.ink?.startsWith("#") && inks()}><Frost lift="raised" class="ui-feedback-bar ui-feedback-picker">
+    <ColourPicker label="Any colour" value={own()} onChange={(hex) => { setOwn(hex as FeedbackInk); props.onInk?.(own()); }} />
+  </Frost></Show>
   <Show when={options()}><Frost lift="raised" class="ui-feedback-bar" role="toolbar" aria-label="Tool options">
     <Show when={props.tool === "shape" && props.onShape}>{(onShape) => <Segmented label="Shape" icons size="sm" value={props.shape ?? "arrow"} onChange={onShape()} options={SHAPES} />}</Show>
     <Show when={inks()}>{(onInk) => <>
       <Segmented label="Ink (C)" icons size="sm" value={props.ink ?? "plain"} onChange={onInk()} options={PRESETS.map((value) => ({ value, label: FEEDBACK_INKS[value].label, icon: <Swatch colour={FEEDBACK_INKS[value].colour} /> }))} />
-      {/* Any other colour: the browser's own picker, which keeps the last one chosen to come back to. */}
-      <label class="ui-feedback-custom" data-on={own() === props.ink ? "" : undefined}><Input aria-label="Any colour" title="Any colour" type="color" value={own()} onClick={() => onInk()(own())} onInput={(event) => { setOwn(event.currentTarget.value as FeedbackInk); onInk()(own()); }} /></label>
+      {/* Any other colour; the last one chosen is kept to come back to. */}
+      <IconButton data-any="" label="Any colour" aria-pressed={own() === props.ink} aria-expanded={picking()} onClick={() => { setPicking(own() !== props.ink || !picking()); onInk()(own()); }}><Swatch colour={own() === props.ink ? own() : undefined} /></IconButton>
     </>}</Show>
     <Show when={lined()}>{(onWeight) => <Segmented label="Line" icons size="sm" value={props.weight ?? "medium"} onChange={onWeight()} options={(Object.keys(FEEDBACK_WEIGHTS) as FeedbackWeight[]).map((value) => ({ value, label: FEEDBACK_WEIGHTS[value].label,
       icon: <span class="ui-feedback-weight" data-weight={value} data-kind={props.tool === "highlight" ? "highlight" : undefined} style={inked(props.ink)} /> }))} />}</Show>
-    <IconButton label="Undo (Ctrl Z)" disabled={!props.onUndo} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton>
+    <Show when={props.compact}><IconButton label="Undo" disabled={!props.onUndo} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton></Show>
   </Frost></Show>
   <Frost lift="raised" class="ui-feedback-bar" role="toolbar" aria-label="UI feedback">
     <Show when={!props.thread}>
@@ -140,6 +144,7 @@ export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; 
       <Segmented label="Annotate with" icons size="sm" value={props.tool} onChange={(tool) => tool === "note" ? props.onNote() : props.onTool(tool)} disabled={using()}
         options={TOOLS.filter((option) => (!props.tools || props.tools.includes(option.value)) && !(props.compact && option.wide) && (props.view !== "screenshot" || (option.value !== "select" && option.value !== "quote"))).map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} />
     </Show>
+    <Show when={!props.thread && !props.compact}><IconButton label="Undo (Ctrl Z)" disabled={!props.onUndo || using()} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton></Show>
     <Show when={props.status && (props.thread || !props.compact)}><span class="ui-feedback-status">{props.status}</span></Show>
     <Show when={props.replies && !props.thread}><IconButton label={`${props.replies} unread from the agent, on what was sent before`} count={props.replies} onClick={props.onReplies}><Icons.Inbox /></IconButton></Show>
     <Show when={!props.thread}>
