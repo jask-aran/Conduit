@@ -41,6 +41,7 @@ export async function openHexDictation(): Promise<DictationSocket> {
   let audioBytes = 0;
   let posting: Promise<void> | null = null;
   let over = false;
+  let finishing = false;
   let listener: DictationSocket["onmessage"] = null;
   const tell = (message: Record<string, unknown>) => listener?.call(socket as WebSocket, { data: JSON.stringify(message) } as MessageEvent);
   const text = (open = "") => [...segments, open].filter(Boolean).join(" ");
@@ -64,6 +65,7 @@ export async function openHexDictation(): Promise<DictationSocket> {
     }
   })().catch(fail).finally(() => { posting = null; });
   const finish = async () => {
+    finishing = true;
     tell({ type: "finalizing", timeoutMs: 130_000 });
     try {
       await post();
@@ -118,7 +120,8 @@ export async function openHexDictation(): Promise<DictationSocket> {
       segments[event.segment ?? segments.length] = String(event.text || "").trim();
       tell({ type: "partial", text: text() });
     } else if (event.type === "error") fail(event.code || event.message);
-    else if (event.type === "cancelled" || event.type === "closed") fail("");
+    // Once stopping, the stream closes by itself and may say so before the finish call answers.
+    else if ((event.type === "cancelled" || event.type === "closed") && !finishing) fail("");
   };
   const stream = await invoke<HexStream>("hex_stream_open", { onEvent });
   return socket;
