@@ -5,7 +5,6 @@
 //   node scripts/check-conventions.mjs           list every problem, exit 1 if any (npm run typecheck)
 //   node scripts/check-conventions.mjs --warn    list every problem, exit 0, save a summary (npm run build)
 //   node scripts/check-conventions.mjs --summary print the saved summary as one line (start-conduit.sh restart)
-//   node scripts/check-conventions.mjs --record  write the budgets (rule 10) as they stand now; refuses a rise
 //
 // A line that must break a rule carries `conventions-ok: <reason>` in a comment on it or the line above.
 import { execFileSync } from "node:child_process";
@@ -192,14 +191,10 @@ try {
 } catch { /* a packaged copy has no git; the other limits still hold */ }
 const budgets = fs.existsSync(budgetFile) ? JSON.parse(fs.readFileSync(budgetFile, "utf8")) : {};
 const over = Object.entries(counts).filter(([name, value]) => name in budgets && value > budgets[name]);
-if (mode === "--record") {
-  if (over.length) { console.error(`budgets: cannot record a rise (${over.map(([name, value]) => `${name} ${value}, budget ${budgets[name]}`).join("; ")})`); process.exit(1); }
-  fs.writeFileSync(budgetFile, `${JSON.stringify(counts, null, 2)}\n`);
-  console.log(`budgets recorded: ${Object.entries(counts).map(([name, value]) => `${name} ${value}`).join(", ")}`);
-  process.exit(0);
-}
 for (const [name, value] of over) problems.push(`budgets.json  budget: ${name} is ${value}, budget ${budgets[name]}; remove more than you add`);
-const under = Object.entries(counts).filter(([name, value]) => !(name in budgets) || value < budgets[name]).map(([name]) => name);
+// A fall is recorded at once, so the room it left cannot be used up again before someone remembers to record it.
+const fallen = Object.entries(counts).filter(([name, value]) => !(name in budgets) || value < budgets[name]);
+if (fallen.length) fs.writeFileSync(budgetFile, `${JSON.stringify({ ...budgets, ...Object.fromEntries(fallen) }, null, 2)}\n`);
 
 for (const problem of problems) console.log(problem);
 const byRule = {};
@@ -208,7 +203,7 @@ const summary = problems.length
   ? `Conventions: ${problems.length} problems (${Object.entries(byRule).map(([r, n]) => `${n} ${r}`).join(", ")}); npm run typecheck lists them`
   : "Conventions: clean";
 console.log(summary);
-if (under.length && mode !== "--warn") console.log(`Budgets lower than recorded (${under.join(", ")}): node scripts/check-conventions.mjs --record`);
+if (fallen.length) console.log(`budgets.json lowered (${fallen.map(([name, value]) => `${name} ${value}`).join(", ")}): commit it with your change`);
 if (mode === "--warn") {
   fs.mkdirSync(path.dirname(summaryFile), { recursive: true });
   fs.writeFileSync(summaryFile, summary + "\n");

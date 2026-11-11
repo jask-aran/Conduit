@@ -19,8 +19,8 @@ prove the change; don't escalate during iterative work.
 rise above what `budgets.json` records: the size limits rule of `scripts/check-conventions.mjs`
 checks it, so `npm run typecheck`, the build, restart and `npm test` all report a
 rise. A change that needs a new test cuts more
-than it adds: tests that pin wording, source text or a stub's shape rather than durable behaviour go first. Record a
-lower budget with `node scripts/check-conventions.mjs --record` (it refuses a higher one).
+than it adds: tests that pin wording, source text or a stub's shape rather than durable behaviour go first. A fall
+lowers `budgets.json` by itself: commit it with the change.
 
 ## Local authentication
 
