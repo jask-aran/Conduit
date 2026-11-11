@@ -36,8 +36,8 @@ Established by running it on the hub (WSL2, Ryzen 5 5600X, CPU), with Hex 3.3.0 
 **Not done for the hub.** A hub with a GPU and the VPS are untested; Hex needs glibc ≥ 2.36 and AVX2. A language
 setting would let Parakeet v3 in. Hex's updater did not run in embedded mode in these tests.
 
-**The desktop client (built 2026-11-11).** Settings › Voice › Input has "Use Hex when available" (per device, off
-by default, shown only when the desktop shell finds a running Hex). With it on, dictation opens Hex's own `/streams`
+**The desktop client (built 2026-11-11).** Settings › Voice has a Hex group on the desktop app: whether Hex was found
+(`hex_status`) and "Dictate with Hex" (per device, off by default). With it on, dictation opens Hex's own `/streams`
 through the shell (`src-tauri/src/hex_local.rs` reads `local-api.json`; the token never reaches the page) and
 `src/client/platform/hex-local.ts` turns Hex's events into the dictation socket's frames. When Hex is not running or
 refuses the stream, that dictation goes to the hub. Hex's `docs/windows.md` says the API is missing on Windows; the

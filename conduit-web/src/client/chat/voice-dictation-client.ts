@@ -1,3 +1,4 @@
+import { recordDictation } from "./voice-dictation-history";
 import { isPhoneVoice, loadVoiceDictationSettings } from "./voice-dictation.js";
 import { installedClientKind } from "../platform/installed-client";
 import { lowerOtherAudio, restoreOtherAudio } from "../platform/audio-ducking";
@@ -671,7 +672,7 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
               ? message.speech.detector as "digital_zero" | "silero" | "heuristic" | "unclassified"
               : null;
             const speechDetected = typeof message.speech?.detected === "boolean" ? message.speech.detected : null;
-            callbacks.onCompleted({
+            const completion: VoiceDictationCompletion = {
               text: String(message.text || ""),
               final: message.final === true,
               finalWithinDeadline: message.finalWithinDeadline === true,
@@ -692,7 +693,9 @@ export function createVoiceDictationClient(callbacks: VoiceDictationCallbacks, o
               precision: typeof message.precision === "string" ? message.precision : null,
               backend: typeof message.backend === "string" ? message.backend : null,
               diagnostics: { client: clientDiagnostics, server: serverDiagnostics },
-            });
+            };
+            recordDictation(completion);
+            callbacks.onCompleted(completion);
             sendCompletedDiagnostics(clientDiagnostics);
             closeSocket();
           } else if (message.type === "error") fail(new Error(String(message.message || "Voice dictation failed")));

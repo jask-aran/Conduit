@@ -96,6 +96,7 @@ pub fn run() {
             interface_bundle::interface_confirm,
             global_shortcuts::set_global_shortcuts,
             hex_local::hex_available,
+            hex_local::hex_status,
             hex_local::hex_stream_open,
             hex_local::hex_stream_audio,
             hex_local::hex_stream_finish,

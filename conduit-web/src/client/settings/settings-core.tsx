@@ -23,7 +23,8 @@ import { toast } from "@/components/ui/notifications";
 import { api, readShared } from "../api/client";
 import { formatMicrophoneError, hasAudioSignal, microphoneName, rememberMicrophones, isUnavailableAudioInputError, listAudioInputDevices, MAX_AUDIO_INPUT_TEST_DURATION_MS, revokeAudioInputRecording, startAudioInputTest as beginAudioInputTest, type AudioInputDevice, type AudioInputTestResult, type AudioInputTestSession, } from "../chat/voice-audio";
 import { installedClientKind } from "../platform/installed-client";
-import { hexAvailable } from "../platform/hex-local";
+import { hexStatus, type HexStatus } from "../platform/hex-local";
+import { clearDictationHistory, dictationHistory, type DictationRecord } from "../chat/voice-dictation-history";
 import { isPhoneVoice, shortcutFromKeyboardEvent } from "../chat/voice-dictation";
 import type { VoiceDictationSettings } from "../chat/voice-dictation-types";
 import { isWarmMicrophoneActive, stopWarmMicrophone } from "../chat/voice-dictation-client";
@@ -157,6 +158,8 @@ const SEARCH_FETCHING: Array<{ key: SearchFetching; label: string; title: string
 const ACCOUNT_SOURCES: Record<NonNullable<PiAuthProvider["auth"]["source"]> | "none", string> = {
   stored: "connected", environment: "key from the server", managed: "agent settings", none: "not connected",
 };
+const HEX_STATES: Record<HexStatus["state"], string> = { ready: "Found", idle: "Found, not listening", stopped: "Not running", absent: "Not found" };
+const DICTATION_SOURCES: Record<DictationRecord["source"], string> = { hex: "Hex on this computer", hub: "Private, on the hub", cloud: "Cloud" };
 const SEARCH_TIME_LIMITS: Array<{ ms: number | null; label: string }> = [
   { ms: null, label: "None" }, { ms: 15_000, label: "15 s" }, { ms: 30_000, label: "30 s" }, { ms: 60_000, label: "1 min" }, { ms: 120_000, label: "2 min" },
 ];
@@ -570,7 +573,7 @@ export function Settings(props: {
     finally { setFloatBusy(false); }
   };
   const [warmMicrophoneActive, setWarmMicrophoneActive] = createSignal(isWarmMicrophoneActive());
-  const [hexHere] = createResource(hexAvailable);
+  const [hexHere, { refetch: refetchHex }] = createResource(hexStatus);
   const [voiceServerEdited, setVoiceServerEdited] = createSignal(false);
   const voiceAutosave = createAutosave<VoiceServerSettings>({
     save: (settings) => persistVoiceServer(settings),
@@ -1640,7 +1643,7 @@ export function Settings(props: {
                   <SettingLine plain label="Source">
                     <Segmented arrows label="Transcription source" value={voiceServerSettings()!.mode} disabled={voiceBusy()} onChange={(mode) => updateVoiceServer({ mode })} options={[
                       { value: "off", label: "Off", icon: <MicOffIcon /> },
-                      { value: "local", label: "Local", icon: <Icons.LocalModel />, title: "This machine" },
+                      { value: "local", label: "Private", icon: <Icons.LocalModel />, title: "Hex on the hub: audio goes no further than your hub" },
                       { value: "remote", label: "Cloud", icon: <CloudIcon /> },
                     ]} />
                   </SettingLine>
@@ -1695,13 +1698,17 @@ export function Settings(props: {
                   </Show>
                 </Group>
 
-                <Group title="Input" scope="This device">
-                  <Show when={hexHere() || voiceDraft().useHex}>
-                    <SettingLine label="Use Hex when available" title="Dictate through the Hex app on this computer, so audio stays here. The hub is used while Hex is not running." state={hexHere() ? undefined : <>not running</>}>
-                      <Switch label="Use Hex when available" checked={voiceDraft().useHex} onChange={(useHex) => updateVoiceDraft({ useHex })} />
-                    </SettingLine>
-                  </Show>
+                <Show when={hexHere()}>{(hex) => <Group title="Hex" scope="This computer">
+                  <SettingLine plain label="Hex app" state={hex().version ? `version ${hex().version}` : undefined} title="The Hex dictation app on this computer. Conduit uses its models and settings as they are.">
+                    <SettingValue>{HEX_STATES[hex().state]}</SettingValue>
+                    <Button variant="ghost" size="icon-sm" aria-label="Look for Hex again" title="Look again" onClick={() => void refetchHex()}><Icons.Refresh /></Button>
+                  </SettingLine>
+                  <SettingLine label="Dictate with Hex" state={voiceDraft().useHex && hex().state !== "ready" ? "using the hub until Hex is listening" : undefined} title="Audio stays on this computer and text appears as you speak. A dictation Hex cannot take goes to the hub.">
+                    <Switch label="Dictate with Hex" checked={voiceDraft().useHex} onChange={(useHex) => updateVoiceDraft({ useHex })} />
+                  </SettingLine>
+                </Group>}</Show>
 
+                <Group title="Input" scope="This device">
                   <Show when={isPhoneVoice()}>
                     <SettingLine label="Prefer speakerphone" title="Listen through the phone's own microphone, not a Bluetooth headset's, so music keeps playing in your headphones.">
                       <Switch label="Prefer speakerphone" disabled={audioInputBusy()} checked={voiceDraft().preferSpeakerphone} onChange={(preferSpeakerphone) => updateVoiceDraft({ preferSpeakerphone })} />
@@ -1777,6 +1784,18 @@ export function Settings(props: {
                   </SettingLine>
                   <SettingLine label="Send when done"><Switch label="Send when done" checked={voiceDraft().autoSend} onChange={(autoSend) => updateVoiceDraft({ autoSend })} /></SettingLine>
                 </Group>
+                <Show when={dictationHistory().length}>
+                  <Group title="Recent" scope="This device">
+                    <For each={dictationHistory()}>{(record) => <SettingLine plain label={DICTATION_SOURCES[record.source]}
+                      state={`${new Date(record.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · ${record.text}`}
+                      title={`${record.text}\n\n${DICTATION_SOURCES[record.source]}${record.model ? ` · ${record.model}` : ""} · ${record.seconds} s · ${new Date(record.at).toLocaleString()}`}>
+                      <Button variant="ghost" size="icon-sm" aria-label="Copy this dictation" title="Copy" onClick={() => void navigator.clipboard.writeText(record.text).catch(() => {})}><Icons.Copy /></Button>
+                    </SettingLine>}</For>
+                    <SettingLine plain label="History" state="text only, kept on this device" title="The last 20 dictations made on this device. No audio is kept.">
+                      <Button variant="ghost" size="sm" onClick={clearDictationHistory}>Clear</Button>
+                    </SettingLine>
+                  </Group>
+                </Show>
 
                 <Show when={voiceError()}><Note tone="error">{voiceError()}</Note></Show>
               </>

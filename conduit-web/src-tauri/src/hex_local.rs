@@ -99,6 +99,27 @@ pub fn hex_available() -> bool {
         .is_some_and(|value| value.get("streams").and_then(Value::as_bool) == Some(true))
 }
 
+/// What Settings shows of the Hex here: `absent` (never run here), `stopped`, `idle` (running, its listening off, so no
+/// live streams) or `ready`.
+#[derive(Serialize)]
+pub struct Status {
+    state: &'static str,
+    version: Option<String>,
+}
+
+#[tauri::command(async)]
+pub fn hex_status() -> Status {
+    if discovery().is_err() {
+        return Status { state: "absent", version: None };
+    }
+    let read = |path: &str| request("GET", path, None, None, Duration::from_secs(2)).ok().and_then(|body| serde_json::from_slice::<Value>(&body).ok());
+    let Some(health) = read("/health") else {
+        return Status { state: "stopped", version: None };
+    };
+    let streams = read("/capabilities").is_some_and(|value| value.get("streams").and_then(Value::as_bool) == Some(true));
+    Status { state: if streams { "ready" } else { "idle" }, version: health.get("version").and_then(Value::as_str).map(str::to_string) }
+}
+
 /// Opens a live stream on the model Hex's own dictation holds. Hex's events (`partial`, `segment`, `final`, `error`,
 /// `cancelled`) arrive on the channel as it sends them, then `{"type":"closed"}`.
 #[tauri::command(async)]

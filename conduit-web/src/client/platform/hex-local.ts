@@ -25,6 +25,20 @@ export async function hexAvailable(): Promise<boolean> {
   }
 }
 
+export interface HexStatus { state: "absent" | "stopped" | "idle" | "ready"; version: string | null }
+
+/** The Hex on this computer, for Settings. Null where there can be none: a browser tab or the Android app. */
+export async function hexStatus(): Promise<HexStatus | null> {
+  if (installedClientKind !== "desktop") return null;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<HexStatus>("hex_status");
+  } catch {
+    // A shell built before the command existed.
+    return { state: await hexAvailable() ? "ready" : "absent", version: null };
+  }
+}
+
 function base64(bytes: Uint8Array) {
   let text = "";
   for (let offset = 0; offset < bytes.length; offset += 0x8000) text += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
