@@ -86,6 +86,7 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
       n: entry.n, comment: String(entry.comment ?? ""), kind: entry.kind === "group" ? "group" : "component", name: String(entry.name ?? ""), rect,
       on: entry.on === "screenshot" ? "screenshot" : "page",
       ...(typeof entry.quote === "string" ? { quote: short(entry.quote, 1000) } : {}),
+      ...(entry.under && typeof entry.under === "object" ? { under: subject(entry.under) } : {}),
       ...(Array.isArray(entry.drawings) ? { drawings: entry.drawings.slice(0, 40).filter((drawing) => ["pen", "highlight", "line", "arrow", "box", "text"].includes(drawing?.kind) && Array.isArray(drawing.points)).map((drawing) => ({
         kind: drawing.kind, ...(typeof drawing.colour === "string" ? { colour: drawing.colour.slice(0, 20) } : {}), ...(["thin", "medium", "thick"].includes(drawing.weight) ? { weight: drawing.weight } : {}), ...(drawing.kind === "text" ? { text: short(String(drawing.text ?? ""), 400) } : {}), points: drawing.points.slice(0, 80).map((point) => [Number(point?.[0]) || 0, Number(point?.[1]) || 0]) })) } : {}),
       ...(areas.has(entry.n) ? { picture: { file: `selection-${entry.n}.png`, area: entry.area ?? null, dragged: Boolean(entry.dragged) } } : {}),
@@ -137,7 +138,7 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
         "A comment with `quote` is about that run of text, which the person selected on the live page; its `rect` is round the text, and what it describes is the piece the text is in.",
         "A group's `members` are each described the same way. `rect` is in CSS pixels of the client's viewport; `screenshotRect` is the same box in screenshot.png, present only when the picture is the page alone.",
         "screenshot.png shows what `screenshot.of` says (the `screenshot` the person drew on, or the live `page` at Send) with the selections made on it outlined and numbered as `n`. A comment's `picture.file` is that selection alone, cut from the one it was made on: `picture.area` is the part of the page it shows, the area the person dragged round when `dragged`, else its marks with a margin. Look at it first.",
-        ...(body.subject ? ["`subject` is what was being marked up, as its host tells it: a document's `text` is as it was at the latest Send, and a comment's `quote` is a run of it."] : []),
+        ...(body.subject ? ["`subject` is what was being marked up, as its host tells it: a document's `text` is as it was at the latest Send, and a comment's `quote` is a run of it. A comment's `under` is what that host says its marks cover: a document's lines (`from` to `to`, numbered from 1) and their `text` as it was when the comment was sent."] : []),
         ...(body.live ? ["This item is live: the person adds comments while you work, and `wait` hands you each as it comes. `screenshot.png` is the latest taken; a comment's own picture is as it was when the comment was made."] : []),
         ...about,
         ...(answered ? [`To answer the person: \`${done(id).replace(/ done .*/, "")} reply ${id} [n] "<words>"\`, n being the comment answered (none: the item as a whole). They read it in the tool beside that comment and may write back; \`wait\` hands you what they say.`] : ["This is one-way feedback: the person is not shown an answer."]),

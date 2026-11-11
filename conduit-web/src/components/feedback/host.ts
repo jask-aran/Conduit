@@ -103,6 +103,8 @@ export interface FeedbackHost {
   client?(): Record<string, unknown> | Promise<Record<string, unknown>>;
   /** What is being marked up, where that is more than the page says of itself: a document's name and text, read at each Send. */
   subject?(): Record<string, string | number | boolean>;
+  /** What a mark covers (its box, in the viewport's pixels), where the host knows more than the pieces there say: a document's lines under a drawing. */
+  under?(box: { left: number; top: number; width: number; height: number }): Record<string, string | number | boolean> | null;
   /** A shell that can take the page's picture itself, with nothing asked; null where it cannot, and the tool uses display capture. */
   capturePage?(): Promise<Blob | null>;
   notify(outcome: "sent" | "failed", message: string): void;

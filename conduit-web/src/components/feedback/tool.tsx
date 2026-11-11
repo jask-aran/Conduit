@@ -680,13 +680,13 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       const comments: Array<Record<string, unknown> & { area: FeedbackBox | null; on?: View }> = listed.map((selection, index) => {
         if (selection.general) return { n: numberOf(index), comment: selection.comment.trim(), kind: "note" as const, name: GENERAL, area: null };
         const members = selection.elements.map(describe);
-        const marks = extent(selection), shift = shiftOf(selection);
+        const marks = extent(selection), shift = shiftOf(selection), under = host.under?.(marks);
         const drawings = selection.drawings?.map((drawing) => {
           const every = Math.max(1, Math.ceil(drawing.points.length / SENT_POINTS));
           return { kind: drawing.kind, colour: drawing.ink, ...(drawing.kind === "text" ? { text: drawing.text ?? "" } : { weight: drawing.weight ?? "medium" }), points: drawing.points.filter((_, at) => at % every === 0 || at === drawing.points.length - 1).map((point) => [Math.round(point[0] + shift.x), Math.round(point[1] + shift.y)]) };
         });
         // The comment's own box is the last word on where it is: a piece the app took off the page measures as nothing.
-        return { ...(members.length > 1 ? { members } : members[0]), n: numberOf(index), on: selection.on, ...(drawings ? { drawings } : {}), ...(selection.quote ? { quote: selection.quote.text } : {}), dragged: Boolean(selection.reach), area: areaOf(selection), comment: selection.comment.trim(), kind: members.length > 1 ? "group" as const : "component" as const, name: titleOf(selection),
+        return { ...(members.length > 1 ? { members } : members[0]), n: numberOf(index), on: selection.on, ...(drawings ? { drawings } : {}), ...(selection.quote ? { quote: selection.quote.text } : {}), ...(under ? { under } : {}), dragged: Boolean(selection.reach), area: areaOf(selection), comment: selection.comment.trim(), kind: members.length > 1 ? "group" as const : "component" as const, name: titleOf(selection),
           rect: { left: Math.round(marks.left), top: Math.round(marks.top), width: Math.round(marks.width), height: Math.round(marks.height) } };
       });
       if (whole?.comment.trim()) comments.push({ n: comments.length + 1, comment: whole.comment.trim(), kind: "note", name: WHOLE, area: null });
@@ -694,7 +694,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       // each comment's own picture is cut from the one it was made on. Words alone need none.
       const marksOn = (on: View) => comments.some((entry) => entry.on === on);
       const shot = picture();
-      const views = ([shot && (marksOn("screenshot") || whole) ? "screenshot" : null, marksOn("page") && !noPicture() && (atOpen || captureHeld()) ? "page" : null] as const).filter((on): on is View => on !== null);
+      const views = ([shot && (marksOn("screenshot") || whole) ? "screenshot" : null, marksOn("page") && !noPicture() && (Boolean(host.capturePage) || captureHeld()) ? "page" : null] as const).filter((on): on is View => on !== null);
       let first: { capture: Capture; of: View } | null = null, captureError: string | null = null;
       for (const of of views) {
         let capture: Capture | null = of === "screenshot" && !marksOn("screenshot") ? shot!.capture : null;

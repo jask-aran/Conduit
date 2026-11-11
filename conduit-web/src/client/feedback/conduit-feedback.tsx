@@ -10,17 +10,20 @@ import { selectedUiScale } from "../preferences/ui-scale";
  * Conduit as the feedback tool's host (components/feedback/host.ts): the library's piece names, the hub's routes, the
  * desktop shell's own page capture, and what an item says about this client. Nothing else of Conduit reaches the tool.
  */
+/** The desktop shell pictures its own page, with nothing asked. */
+export const capturePage: FeedbackHost["capturePage"] = installedClientKind === "desktop" ? async () => {
+  const { invoke } = await import("@tauri-apps/api/core");
+  const bytes = await invoke<ArrayBuffer>("capture_page");
+  return bytes.byteLength ? new Blob([bytes], { type: "image/png" }) : null;
+} : undefined;
+
 const host = (clientId: () => string): FeedbackHost => ({
   names,
   anchors: ["data-region", "data-tool", "data-surface", "data-tab", "data-doc-view", "data-pane"],
   transport: httpTransport(api),
   clientId,
   client: async () => ({ kind: installedClientKind, build: clientBuild, shell: await shellVersion(), interfaceSize: selectedUiScale() }),
-  capturePage: installedClientKind === "desktop" ? async () => {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const bytes = await invoke<ArrayBuffer>("capture_page");
-    return bytes.byteLength ? new Blob([bytes], { type: "image/png" }) : null;
-  } : undefined,
+  capturePage,
   notify: (outcome, message) => outcome === "sent" ? toast.success(message) : toast.error(message),
 });
 

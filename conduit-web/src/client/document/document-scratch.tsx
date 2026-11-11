@@ -5,6 +5,7 @@ import { Button } from "@/components/ui";
 import { toast } from "@/components/ui/notifications";
 import { TextEditor } from "@/components/ui/text-editor";
 import { api } from "../api/client";
+import { capturePage } from "../feedback/conduit-feedback";
 
 /*
  * /document: a scratchpad to try the markup tool's live delivery against a document instead of the interface. It is
@@ -26,6 +27,14 @@ export default function DocumentScratch(props: { onReady: () => void }) {
     clientId: () => client,
     client: () => ({ kind: "document" }),
     subject: () => ({ kind: "document", name: "Scratchpad", format: "markdown", text: text() }),
+    // The lines a mark lies over, as the editor has them drawn (it draws only those near the window, which is where a mark is made).
+    under: (box) => {
+      const lines = [...document.querySelectorAll<HTMLElement>(".ui-text-editor .cm-line")], numbers = [...document.querySelectorAll<HTMLElement>(".ui-text-editor .cm-lineNumbers .cm-gutterElement")];
+      const over = (element: HTMLElement) => { const at = element.getBoundingClientRect(); return at.height > 0 && at.bottom > box.top && at.top < box.top + box.height; };
+      const covered = lines.filter(over), counted = numbers.filter(over).map((element) => Number(element.textContent)).filter(Boolean);
+      return covered.length ? { ...(counted.length ? { from: Math.min(...counted), to: Math.max(...counted) } : {}), text: covered.map((line) => line.textContent ?? "").join("\n") } : null;
+    },
+    capturePage,
     notify: (outcome, message) => outcome === "sent" ? toast.success(message) : toast.error(message),
   };
   onMount(props.onReady);
