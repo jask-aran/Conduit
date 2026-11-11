@@ -28,11 +28,14 @@ $vitePidFile = Join-Path $stateDir "conduit-vite.pid"
 $viteLogFile = Join-Path $stateDir "conduit-vite.log"
 $viteErrorLogFile = Join-Path $stateDir "conduit-vite-error.log"
 $solidComponentsStateFile = Join-Path $stateDir "solid-components-workbench.json"
+# Conduit keeps its state in ~\.conduit\data wherever its code lives; a checkout that wants its own sets
+# CONDUIT_DATA_ROOT.
 $dataRoot = if ([string]::IsNullOrWhiteSpace($env:CONDUIT_DATA_ROOT)) {
-  Join-Path $root "data"
+  Join-Path $userProfile ".conduit\data"
 } else {
   $env:CONDUIT_DATA_ROOT
 }
+$env:CONDUIT_DATA_ROOT = $dataRoot
 $toolchainRoot = Join-Path $dataRoot "toolchains"
 $uvInstallDir = Join-Path $toolchainRoot "uv\$uvVersion"
 $uvCommand = Join-Path $uvInstallDir "uv.exe"
@@ -87,12 +90,15 @@ Set-DefaultEnvironment "CONDUIT_HOST" "0.0.0.0"
 Set-DefaultEnvironment "CONDUIT_PORT" "4310"
 Set-DefaultEnvironment "CONDUIT_VITE_PORT" "5173"
 Set-DefaultEnvironment "CONDUIT_VITE_HOST" "0.0.0.0"
-Set-DefaultEnvironment "CONDUIT_FILES_ROOT" (Join-Path $root "data\chat\files")
-Set-DefaultEnvironment "CONDUIT_CATALOG_FILE" (Join-Path $root "data\conduit.json")
-Set-DefaultEnvironment "CONDUIT_SESSION_REGISTRY_FILE" (Join-Path $root "data\sessions.json")
-Set-DefaultEnvironment "CONDUIT_PI_AGENT_DIR" (Join-Path $root "data\pi")
+Set-DefaultEnvironment "CONDUIT_FILES_ROOT" (Join-Path $dataRoot "chat\files")
+Set-DefaultEnvironment "CONDUIT_CATALOG_FILE" (Join-Path $dataRoot "conduit.json")
+Set-DefaultEnvironment "CONDUIT_SESSION_REGISTRY_FILE" (Join-Path $dataRoot "sessions.json")
+Set-DefaultEnvironment "CONDUIT_PI_AGENT_DIR" (Join-Path $dataRoot "pi")
 Set-DefaultEnvironment "CONDUIT_PI_TEMPLATE" (Join-Path $root "templates\assistant\template.json")
 $healthUrl = "http://127.0.0.1:$($env:CONDUIT_PORT)/healthz"
+$drainTimeoutSeconds = if ($env:CONDUIT_RESTART_DRAIN_TIMEOUT_SECONDS) { $env:CONDUIT_RESTART_DRAIN_TIMEOUT_SECONDS } else { "600" }
+$pwaGraceSeconds = if ($env:CONDUIT_PWA_RESTART_GRACE_SECONDS) { $env:CONDUIT_PWA_RESTART_GRACE_SECONDS } else { "20" }
+$pwaPrepare = $null
 
 function Prepare-Directories {
   try {
@@ -124,9 +130,30 @@ function Invoke-Npm {
   }
 }
 
+function Invoke-WebNode {
+  param([Parameter(Mandatory = $true)] [string[]]$Arguments)
+
+  Push-Location $webDir
+  try {
+    & $nodeCommand @Arguments
+    if ($LASTEXITCODE -ne 0) {
+      throw "node $($Arguments -join ' ') failed with exit code $LASTEXITCODE."
+    }
+  } finally {
+    Pop-Location
+  }
+}
+
 function Require-Dependencies {
   if (-not (Test-Path -LiteralPath (Join-Path $webDir "node_modules\.bin\vite.cmd"))) {
     throw "Conduit dependencies are not installed. Run: .\scripts\win-start-conduit.ps1 setup"
+  }
+  # A lockfile newer than what npm last installed (a pull or merge that added or moved a package): install it, or the
+  # build and server run on the old set and a new dependency is simply missing.
+  $installed = Get-Item -LiteralPath (Join-Path $webDir "node_modules\.package-lock.json") -ErrorAction SilentlyContinue
+  if (-not $installed -or (Get-Item -LiteralPath (Join-Path $webDir "package-lock.json")).LastWriteTimeUtc -gt $installed.LastWriteTimeUtc) {
+    Write-Output "package-lock.json changed since the last install; running npm ci."
+    Invoke-Npm @("ci", "--no-audit", "--no-fund")
   }
   if (-not (Test-Path -LiteralPath (Join-Path $workingFilesDir ".venv\Scripts\python.exe"))) {
     throw "Conduit's managed Python environment is not installed. Run: .\scripts\win-start-conduit.ps1 setup"
@@ -316,6 +343,7 @@ function Build {
   Require-Dependencies
   Write-Output "Building the production Conduit client."
   Invoke-Npm @("run", "build")
+  Invoke-WebNode @("scripts/precompress.mjs")
 }
 
 function Build-IfNeeded {
@@ -342,6 +370,57 @@ function Build-IfNeeded {
     $item -and $item.LastWriteTimeUtc -gt $distTime
   } | Select-Object -First 1
   if ($changed) { Build }
+}
+
+function Get-WorkerHash {
+  $worker = Join-Path $webDir "dist\sw.js"
+  if (Test-Path -LiteralPath $worker) { return (Get-FileHash -LiteralPath $worker -Algorithm SHA256).Hash.ToLowerInvariant() }
+  return ""
+}
+
+function Wait-Generations {
+  # A Conduit that is not answering has nothing to drain.
+  if (-not (Test-Healthy)) { return }
+  if ($drainTimeoutSeconds -notmatch '^[0-9]+$') { throw "CONDUIT_RESTART_DRAIN_TIMEOUT_SECONDS must be a non-negative integer." }
+  $elapsed = 0
+  while ($true) {
+    $count = $null
+    try { $count = (Invoke-RestMethod -Uri $healthUrl -TimeoutSec 2).activeGenerations } catch { }
+    if ($count -isnot [ValueType]) { throw "Could not read active generations; Conduit was not stopped." }
+    if ([int]$count -eq 0) {
+      if ($elapsed -gt 0) { Write-Output "Assistant responses settled." }
+      return
+    }
+    if ($elapsed -eq 0) { Write-Output "Waiting for $count active assistant response(s) to settle. Use restart --force to skip this drain." }
+    if ($elapsed -ge [int]$drainTimeoutSeconds) { throw "Assistant responses did not settle within ${drainTimeoutSeconds}s; Conduit was not stopped." }
+    Start-Sleep -Seconds 1
+    $elapsed += 1
+  }
+}
+
+# A new client build is ready. Connected browsers are told a restart to its worker is coming and install it; the
+# restart waits until every browser the server is waiting on says it has, or the grace, whichever is first. Runs beside
+# the generation drain, and is collected before the restart.
+function Start-ClientRestartPrepare {
+  param([string]$PreviousHash, [switch]$Forced)
+
+  $hash = Get-WorkerHash
+  if ($Forced -or $PreviousHash -eq $hash) { return }
+  if ($pwaGraceSeconds -notmatch '^[0-9]+$') { throw "CONDUIT_PWA_RESTART_GRACE_SECONDS must be a non-negative integer." }
+  if ([int]$pwaGraceSeconds -eq 0 -or -not (Test-Healthy)) { return }
+  # A server older than the readiness handshake has no route for it.
+  try { $handshake = [string](Invoke-WebRequest -UseBasicParsing -Uri $healthUrl -TimeoutSec 2).Headers["x-conduit-pwa-prepare"] } catch { return }
+  if (-not $handshake.StartsWith("2")) { return }
+  Write-Output "Readying connected browsers for the new client (up to ${pwaGraceSeconds}s)."
+  $script:pwaPrepare = Start-Process -FilePath $nodeCommand -ArgumentList @((Join-Path $root "scripts\conduit-auth.mjs"), "prepare-restart", $hash, $pwaGraceSeconds) -NoNewWindow -PassThru
+  $null = $script:pwaPrepare.Handle
+}
+
+function Wait-ClientRestartGrace {
+  if (-not $script:pwaPrepare) { return }
+  $script:pwaPrepare.WaitForExit()
+  if ($script:pwaPrepare.ExitCode -ne 0) { Write-Warning "Could not confirm browsers were ready; restarting anyway." }
+  $script:pwaPrepare = $null
 }
 
 function Setup {
@@ -432,7 +511,8 @@ Commands:
   start                 Start an existing production build.
   dev                   Start the server watcher and Vite hot reload.
   stop                  Stop Vite, Conduit, and resident Pi. Preserve terminal sessions.
-  restart               Rebuild if sources changed, then restart (default).
+  restart [--force]     Rebuild, wait for assistant responses, then restart (default).
+                        --force skips the response drain and client update grace.
   status                Report the managed process and health endpoint.
   logs [server|vite] [-f]
                         Show a managed log (follow with -f).
@@ -472,16 +552,31 @@ try {
     "stop" { Stop-All }
     "restart" {
       Guard-ComponentMode
-      Stop-All
+      $force = $CommandArguments.Count -eq 1 -and $CommandArguments[0] -eq "--force"
+      if ($CommandArguments.Count -gt 0 -and -not $force) {
+        Write-Output "Unknown restart option: $($CommandArguments[0])"
+        Show-Usage
+        exit 2
+      }
+      $previousWorkerHash = Get-WorkerHash
       Build-IfNeeded
+      Start-ClientRestartPrepare -PreviousHash $previousWorkerHash -Forced:$force
+      if (-not $force) { Wait-Generations }
+      Wait-ClientRestartGrace
+      Stop-All
       Start-Server
+      # Last, so the final line still shows it: the build's convention check (scripts/check-conventions.mjs).
+      Invoke-WebNode @("scripts/check-conventions.mjs", "--summary")
     }
     "status" { Show-Status }
     "logs" { Show-Logs }
     "deploy" {
       Guard-ComponentMode
+      $previousWorkerHash = Get-WorkerHash
       Setup
       Build
+      Start-ClientRestartPrepare -PreviousHash $previousWorkerHash
+      Wait-ClientRestartGrace
       Stop-All
       Start-Server
     }
