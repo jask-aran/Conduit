@@ -1,6 +1,7 @@
 /*
  * The pixels on screen, not a second rendering of the document. A shell that can take the page's picture itself does
- * (the host's capturePage); elsewhere it is the webview's display capture, whose stream is kept until the tool closes.
+ * (the host's capturePage); elsewhere it is the webview's display capture, asked for once: its stream is kept while the
+ * page lives, so the tool's next opening takes its picture at once, with nothing asked.
  */
 
 let stream: MediaStream | null = null;
@@ -11,9 +12,10 @@ export type Capture = { blob: Blob; width: number; height: number; surface: stri
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
 
-export async function captureScreen(capturePage?: () => Promise<Blob | null>): Promise<Capture> {
+/** `settle`: wait for the tool's own drawing to leave the shell's picture; not needed when nothing of it was up. */
+export async function captureScreen(capturePage?: () => Promise<Blob | null>, settle = true): Promise<Capture> {
   if (capturePage) {
-    await settled();
+    if (settle) await settled();
     const blob = await capturePage().catch(() => null);
     if (blob?.size) { const image = await createImageBitmap(blob); return { blob, width: image.width, height: image.height, surface: "webview" }; }
   }
@@ -39,22 +41,60 @@ export async function captureScreen(capturePage?: () => Promise<Blob | null>): P
 }
 
 type Area = { left: number; top: number; width: number; height: number };
-/** Each area of the page (CSS px) cut from a capture, when the capture is the page alone (it has the page's shape); else none. */
+/** A capture is the page alone when it has the page's shape; only then is a box on the page a box in it. */
+const pageOnly = (capture: Capture) => Math.abs(capture.width / capture.height - innerWidth / innerHeight) < 0.01;
+const cut = (image: ImageBitmap, area: Area, scale: number) => {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(area.width * scale));
+  canvas.height = Math.max(1, Math.round(area.height * scale));
+  const context = canvas.getContext("2d")!;
+  context.drawImage(image, Math.round(area.left * scale), Math.round(area.top * scale), canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+  return { canvas, context };
+};
+const png = (canvas: HTMLCanvasElement) => new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+
+/** Each area of the page (CSS px) cut from a capture, when the capture is the page alone; else none. */
 export async function cropAreas(capture: Capture, areas: (Area | null)[]): Promise<(Blob | null)[]> {
-  if (Math.abs(capture.width / capture.height - innerWidth / innerHeight) >= 0.01) return [];
+  if (!pageOnly(capture)) return [];
   const scale = capture.width / innerWidth;
   const image = await createImageBitmap(capture.blob);
-  return Promise.all(areas.map((area) => {
-    if (!area) return null;
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(area.width * scale));
-    canvas.height = Math.max(1, Math.round(area.height * scale));
-    canvas.getContext("2d")!.drawImage(image, Math.round(area.left * scale), Math.round(area.top * scale), canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
-    return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-  }));
+  return Promise.all(areas.map((area) => area ? png(cut(image, area, scale).canvas) : null));
 }
 
-export function endCapture() {
-  stream?.getTracks().forEach((track) => track.stop());
-  stream = null;
+type Point = readonly [x: number, y: number];
+export type Drawn = { kind: "pen" | "arrow" | "box" | "text"; points: readonly Point[]; text?: string };
+/** An arrow's head is this many line widths long, as the layer draws it. */
+const HEAD = 6;
+
+/** An area of a capture with what was marked on it drawn in: the picture a note shows of its own comment. `look` is the layer's own line and type. */
+export async function previewOf(capture: Capture, area: Area, marks: { outline?: Area; drawings: readonly Drawn[] }, look: { stroke: string; width: number; font: string }): Promise<Blob | null> {
+  if (!pageOnly(capture)) return null;
+  const scale = capture.width / innerWidth;
+  const { canvas, context } = cut(await createImageBitmap(capture.blob), area, scale);
+  context.setTransform(scale, 0, 0, scale, -area.left * scale, -area.top * scale);
+  context.strokeStyle = context.fillStyle = look.stroke;
+  context.lineWidth = look.width;
+  context.lineCap = context.lineJoin = "round";
+  context.font = look.font;
+  context.textBaseline = "top";
+  if (marks.outline) context.strokeRect(marks.outline.left, marks.outline.top, marks.outline.width, marks.outline.height);
+  for (const drawing of marks.drawings) {
+    const from = drawing.points[0]!, to = drawing.points[drawing.points.length - 1]!;
+    if (drawing.kind === "text") context.fillText(drawing.text ?? "", from[0], from[1]);
+    else if (drawing.kind === "box") context.strokeRect(Math.min(from[0], to[0]), Math.min(from[1], to[1]), Math.abs(to[0] - from[0]), Math.abs(to[1] - from[1]));
+    else {
+      context.beginPath();
+      context.moveTo(from[0], from[1]);
+      for (const point of drawing.kind === "pen" ? drawing.points.slice(1) : [to]) context.lineTo(point[0], point[1]);
+      context.stroke();
+      if (drawing.kind === "arrow") {
+        const angle = Math.atan2(to[1] - from[1], to[0] - from[0]), length = HEAD * look.width;
+        context.beginPath();
+        context.moveTo(to[0], to[1]);
+        for (const turn of [-0.46, 0.46]) context.lineTo(to[0] - length * Math.cos(angle + turn), to[1] - length * Math.sin(angle + turn));
+        context.fill();
+      }
+    }
+  }
+  return png(canvas);
 }

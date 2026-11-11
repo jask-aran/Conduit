@@ -1,6 +1,6 @@
 import { createUniqueId, Show, type JSX } from "solid-js";
 // Through the barrel, so the tool's chunk takes these from the app's own and the build splits nothing new out of it.
-import { Button, Card, CloseButton, Frost, IconButton, Icons, Segmented, Spinner, TextArea } from "./index";
+import { Button, Card, CardPreview, CloseButton, Frost, IconButton, Icons, Segmented, Spinner, TextArea } from "./index";
 import "./styles/feedback.css";
 
 /* Not in the library's barrel: the tool imports this file when it is opened, so the app's first load does not carry it
@@ -48,42 +48,54 @@ export function FeedbackDrawing(props: { kind: FeedbackDrawingKind; points: read
   </svg>;
 }
 
+/** Words written on the page, as a drawing: a field where they are, the size of what it holds; `editable` while its comment is being written. */
+export const FeedbackText = (props: { ref?: (element: HTMLInputElement) => void; at: FeedbackPoint; shift?: { x: number; y: number }; value: string; editable?: boolean; onInput: (value: string, element: HTMLInputElement) => void; onDone: () => void }) =>
+  <input ref={props.ref} class="ui-feedback-text" data-editable={props.editable ? "" : undefined} readOnly={!props.editable} aria-label="Text on the page" placeholder="Text" value={props.value}
+    style={{ left: `${props.at[0]}px`, top: `${props.at[1]}px`, translate: props.shift ? `${props.shift.x}px ${props.shift.y}px` : undefined }} onInput={(event) => props.onInput(event.currentTarget.value, event.currentTarget)} onBlur={props.onDone} />;
+
 /** Every comment of the item, the newest at the foot, in the corner; `lift` is the bar's height when the stack has to stand over it. */
 export const FeedbackNotes = (props: { lift?: number; children: JSX.Element }) =>
   <div class="ui-feedback-notes" data-lifted={props.lift ? "" : undefined} style={{ "--feedback-bar-height": `${props.lift ?? 0}px` }}>{props.children}</div>;
 
-/** One comment: open, its words are written; shut, it shows them on a line and a press opens it. */
-export function FeedbackNote(props: { ref?: (element: HTMLTextAreaElement) => void; open: boolean; tag: string; name: string; source?: string; value: string;
-  onOpen: () => void; onInput: (value: string) => void; onRemove: () => void }) {
-  return <div class="ui-feedback-note" data-open={props.open ? "" : undefined} onClick={(event) => { if (!props.open && !(event.target as Element).closest("button")) props.onOpen(); }}>
-    <Card size="compact" role="group" label={`Comment ${props.tag}`} title={<><b class="ui-feedback-number">{props.tag}</b>{props.name}</>} detail={props.open ? props.source : props.value.trim() || "No comment yet"} close={props.onRemove} closeLabel="Remove">
+/** One comment. `float`: where it sits beside what it is about while it is written, with Done to send it to the stack. In the stack, shut, it shows
+ *  its words on a line and its `picture`, and a press opens it. */
+export function FeedbackNote(props: { ref?: (element: HTMLTextAreaElement) => void; float?: JSX.CSSProperties; open: boolean; tag: string; name: string; source?: string; value: string; picture?: string;
+  onOpen: () => void; onInput: (value: string) => void; onDone?: () => void; onRemove: () => void }) {
+  return <div class="ui-feedback-note" style={props.float} data-float={props.float ? "" : undefined} data-open={props.open ? "" : undefined} onClick={(event) => { if (!props.open && !(event.target as Element).closest("button")) props.onOpen(); }}>
+    <Card size="compact" role="group" label={props.tag ? `Comment ${props.tag}` : props.name} title={<><Show when={props.tag}><b class="ui-feedback-number">{props.tag}</b></Show>{props.name}</>} detail={props.open ? props.source : props.value.trim() || (props.picture ? undefined : "No comment yet")}
+      close={props.float ? props.onDone : props.onRemove} closeLabel={props.float ? "Done" : "Remove"}
+      actions={props.float ? <><Button variant="ghost" size="sm" onClick={props.onRemove}>Remove</Button><Button variant="primary" outline size="sm" onClick={props.onDone}>Done</Button></> : undefined}>
+      <Show when={props.picture && !props.float}><CardPreview><img src={props.picture} alt="" /></CardPreview></Show>
       <Show when={props.open}><TextArea ref={props.ref} rows={2} placeholder="What should change?" value={props.value} onInput={(event) => props.onInput(event.currentTarget.value)} /></Show>
     </Card>
   </div>;
 }
 
-export type FeedbackPointer = "select" | FeedbackDrawingKind | "use";
+export type FeedbackPointer = "select" | FeedbackDrawingKind | "text" | "use";
 type FeedbackToolKind = Exclude<FeedbackPointer, "use">;
 const TOOLS: ReadonlyArray<{ value: FeedbackToolKind; label: string; icon: () => JSX.Element }> = [
   { value: "select", label: "Select (V)", icon: () => <Icons.Pointer /> }, { value: "pen", label: "Pen (P)", icon: () => <Icons.Edit /> },
-  { value: "arrow", label: "Arrow (A)", icon: () => <Icons.DrawArrow /> }, { value: "box", label: "Box (B)", icon: () => <Icons.DrawBox /> },
+  { value: "arrow", label: "Arrow (A)", icon: () => <Icons.DrawArrow /> }, { value: "box", label: "Box (B)", icon: () => <Icons.DrawBox /> }, { value: "text", label: "Text (T)", icon: () => <Icons.DrawText /> },
 ];
 
-/** The tool's bar, at the foot, in four groups: who has the pointer (Use app; `keys` is the chord that switches); what
- *  it marks with (`tool`: the one kept while the app is in use); what goes with the item (a general note, the screenshot
- *  where the client can take one, the listening session it is handed to: `agent`, none when no session listens); Send
- *  and close. `compact`: icons alone, for a phone's width. */
-export function FeedbackBar(props: { mode: FeedbackPointer; tool?: FeedbackToolKind; onMode: (mode: FeedbackPointer) => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; screenshot?: boolean; onScreenshot?: (on: boolean) => void; onNote?: () => void;
+/** The tool's bar, at the foot, in four groups: what is under the pointer (Use app, `keys` the chord that switches; the page's picture or the live
+ *  page, where there is a picture); what it marks with (`tool`: the one kept while the app is in use); what goes with the item (a general note, a new
+ *  picture of the page, the listening session it is handed to: `agent`, none when no session listens); Send and close. `compact`: icons alone, for a
+ *  phone's width. */
+export function FeedbackBar(props: { mode: FeedbackPointer; tool?: FeedbackToolKind; onMode: (mode: FeedbackPointer) => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; picture?: boolean; onPicture?: (on: boolean) => void; onRetake?: () => void; onNote?: () => void;
   canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void }) {
   const using = () => props.mode === "use";
   const tool = (): FeedbackToolKind => props.mode === "use" ? props.tool ?? "select" : props.mode;
   return <Frost lift="raised" class="ui-feedback-bar" role="toolbar" aria-label="UI feedback">
-    <IconButton label={`Use the app${props.keys?.length ? ` (${props.keys.join(" ")})` : ""}`} aria-pressed={using()} onClick={() => props.onMode(using() ? tool() : "use")}><Icons.UseApp /></IconButton>
+    <span class="ui-feedback-with">
+      <IconButton label={`Use the app${props.keys?.length ? ` (${props.keys.join(" ")})` : ""}`} aria-pressed={using()} onClick={() => props.onMode(using() ? tool() : "use")}><Icons.UseApp /></IconButton>
+      <Show when={props.picture !== undefined}><IconButton label="Look at the page's picture, not the live page" disabled={using()} aria-pressed={Boolean(props.picture) && !using()} onClick={() => props.onPicture?.(!props.picture)}><Icons.Image /></IconButton></Show>
+    </span>
     <Segmented label="Mark with" icons size="sm" value={tool()} onChange={props.onMode} disabled={using()} options={TOOLS.map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} />
     <Show when={props.status && !props.compact}><span class="ui-feedback-status">{props.status}</span></Show>
     <span class="ui-feedback-with">
       <Show when={props.onNote}><IconButton label="Add a general note (N)" onClick={props.onNote}><Icons.Note /></IconButton></Show>
-      <Show when={props.onScreenshot}><IconButton label="Include a screenshot" aria-pressed={Boolean(props.screenshot)} onClick={() => props.onScreenshot!(!props.screenshot)}><Icons.Camera /></IconButton></Show>
+      <Show when={props.onRetake}><IconButton label="Take the page's picture again" onClick={props.onRetake}><Icons.Camera /></IconButton></Show>
       <Show when={props.onHand}>
         <IconButton label={props.agent ? `Hand to ${props.agent}` : "No session is listening"} disabled={!props.agent} aria-pressed={Boolean(props.agent && props.hand)} onClick={() => props.onHand!(!props.hand)}><Icons.Agent /></IconButton>
         <Show when={props.agent} fallback={<Show when={!props.compact}><span class="ui-feedback-status">No listener</span></Show>}>
@@ -91,7 +103,9 @@ export function FeedbackBar(props: { mode: FeedbackPointer; tool?: FeedbackToolK
         </Show>
       </Show>
     </span>
-    <Button variant="primary" outline size="sm" disabled={!props.canSend || props.sending} onClick={props.onSend}><Show when={props.sending} fallback="Send"><Spinner /></Show></Button>
+    <Show when={props.compact} fallback={<Button variant="primary" outline size="sm" disabled={!props.canSend || props.sending} onClick={props.onSend}><Show when={props.sending} fallback="Send"><Spinner /></Show></Button>}>
+      <IconButton label="Send" disabled={!props.canSend || props.sending} onClick={props.onSend}><Show when={props.sending} fallback={<Icons.Send />}><Spinner /></Show></IconButton>
+    </Show>
     <CloseButton size="sm" label="Close feedback" onClick={props.onClose} />
   </Frost>;
 }

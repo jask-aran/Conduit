@@ -1,8 +1,9 @@
 /* Over everything, notifications included: a toast or a menu can be what is marked. */
-.ui-feedback-layer { position: fixed; inset: 0; z-index: var(--layer-feedback); pointer-events: none; font-family: var(--font-sans); }
+/* Its line (stroke, stroke-width) is every drawing's, and what a note's picture of a comment is drawn with. */
+.ui-feedback-layer { position: fixed; inset: 0; z-index: var(--layer-feedback); pointer-events: none; font-family: var(--font-sans); stroke: var(--primary); stroke-width: var(--stroke); }
 /* touch-action: a finger's drag gathers or draws; it does not scroll the page under the layer. */
 .ui-feedback-layer[data-select] { pointer-events: auto; cursor: crosshair; touch-action: none; }
-.ui-feedback-layer :is(.ui-feedback-note, .ui-feedback-bar) { pointer-events: auto; cursor: auto; }
+.ui-feedback-layer :is(.ui-feedback-note, .ui-feedback-bar) { pointer-events: auto; cursor: auto; stroke: none; }
 /* While the page's picture is taken, nothing of the tool is in it. */
 .ui-feedback-layer[data-hidden] { visibility: hidden; }
 .ui-feedback-frozen { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -13,8 +14,11 @@
 .ui-feedback-mark[data-kind="member"] { border-style: dashed; border-color: var(--primary); }
 .ui-feedback-mark[data-kind="marquee"] { border-style: dashed; background: var(--accent); }
 .ui-feedback-mark[data-kind="drawn"] { border-color: transparent; }
-.ui-feedback-drawing { position: fixed; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; fill: none; stroke: var(--primary); stroke-width: var(--stroke); stroke-linecap: round; stroke-linejoin: round; filter: var(--glyph-shadow); }
+.ui-feedback-drawing { position: fixed; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; fill: none; stroke-linecap: round; stroke-linejoin: round; filter: var(--glyph-shadow); }
 .ui-feedback-drawing marker > path { fill: var(--primary); stroke: none; }
+.ui-feedback-text { position: fixed; field-sizing: content; min-width: var(--control-2xs); border: 0; outline: none; background: none; padding: 0; color: var(--primary); font: var(--weight-strong) var(--text-body)/var(--control-2xs) var(--font-sans); filter: var(--glyph-shadow); pointer-events: none; }
+.ui-feedback-text::placeholder { color: var(--primary); opacity: 0.5; }
+.ui-feedback-layer .ui-feedback-text[data-editable] { pointer-events: auto; cursor: text; }
 .ui-feedback-tag { position: absolute; bottom: 100%; left: calc(-1 * var(--hairline)); display: flex; max-width: var(--measure-sm); align-items: center; gap: var(--space-xs); overflow: hidden; border-radius: var(--radius-inset); background: var(--frame); color: var(--foreground); font: var(--weight-lift) var(--text-label)/var(--control-2xs) var(--font-data); white-space: nowrap; }
 .ui-feedback-tag[data-inside] { top: 0; bottom: auto; }
 .ui-feedback-layer .ui-feedback-tag[data-press] { pointer-events: auto; cursor: pointer; }
@@ -29,6 +33,9 @@
 .ui-feedback-notes[data-lifted] { bottom: calc(var(--space-lg) + var(--feedback-bar-height) + var(--space-sm)); }
 .ui-feedback-notes > :first-child { margin-top: auto; }
 .ui-feedback-note { flex: none; }
+.ui-feedback-note[data-float] { position: fixed; width: var(--measure-md); max-width: calc(100% - 2 * var(--space-lg)); }
+.ui-feedback-note .ui-card-preview { overflow: hidden; }
+.ui-feedback-note .ui-card-preview > img { display: block; max-width: 100%; max-height: var(--measure-2xs); margin-inline: auto; border-radius: var(--radius-inset); object-fit: contain; }
 .ui-feedback-layer .ui-feedback-note:not([data-open]) { cursor: pointer; }
 .ui-feedback-note .ui-card { width: 100%; }
 .ui-feedback-note .ui-card > h3 { display: flex; align-items: center; gap: var(--space-sm); font-family: var(--font-data); font-size: var(--text-row); }

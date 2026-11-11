@@ -1,8 +1,8 @@
-import { FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote, FeedbackNotes } from "@/components/ui/feedback";
+import { FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote, FeedbackNotes, FeedbackText } from "@/components/ui/feedback";
 import { row, token, type Page } from "../model";
 import { noop } from "../demos";
 
-const bar = (more: Partial<Parameters<typeof FeedbackBar>[0]> = {}) => <FeedbackBar mode="select" onMode={noop} status="Press or drag" keys={["Alt", "Shift", "F"]} onNote={noop} screenshot onScreenshot={noop} onHand={noop} canSend onSend={noop} onClose={noop} {...more} />;
+const bar = (more: Partial<Parameters<typeof FeedbackBar>[0]> = {}) => <FeedbackBar mode="select" onMode={noop} status="Press or drag" keys={["Alt", "Shift", "F"]} onNote={noop} onRetake={noop} onHand={noop} canSend onSend={noop} onClose={noop} {...more} />;
 const note = (more: Partial<Parameters<typeof FeedbackNote>[0]> = {}) => <FeedbackNote open={false} tag="1" name="IconButton" source="conduit-web/src/components/ui/actions.tsx:21"
   value="Match the other rail icons' stroke." onOpen={noop} onInput={noop} onRemove={noop} {...more} />;
 const notes = () => <FeedbackNotes>{note()}{note({ tag: "2", name: "2 pieces: Row ×2", source: undefined, value: "" })}{note({ tag: "3", name: "General note", source: "About nothing on the page in particular.", value: "The page feels crowded.", open: true })}</FeedbackNotes>;
@@ -16,22 +16,23 @@ const whole = scene(() => <>
   <FeedbackMark kind="member" box={{ left: 136, top: 158, width: 76, height: 80 }} />
   <FeedbackMark kind="cursor" name="Row" box={{ left: 40, top: 270, width: 180, height: 30 }} />
   <FeedbackDrawing kind="arrow" points={[[330, 250], [250, 290]]} />
-  <FeedbackMark kind="drawn" tag="3" box={{ left: 250, top: 250, width: 80, height: 40 }} />
-  {notes()}{bar()}
+  <FeedbackText at={[250, 296]} value="too close" onInput={noop} onDone={noop} />
+  <FeedbackMark kind="drawn" tag="3" box={{ left: 250, top: 250, width: 80, height: 62 }} />
+  {note({ float: { left: "240px", top: "56px" }, open: true, onDone: noop })}{notes()}{bar()}
 </>);
 
 export const feedbackPage: Page = {
   title: "Feedback", rail: "Blocks",
-  summary: "The UI feedback tool's drawing (development clients): a layer over the app, a mark round each selection, the person's own pen lines, arrows and boxes, every comment stacked in the corner, and the bar at the foot.",
+  summary: "The UI feedback tool's drawing (development clients): a layer over the app, a mark round each selection, the person's own pen lines, arrows and boxes, words written on it, the note being written beside what it is about, every other comment stacked in the corner, and the bar at the foot.",
   preview: whole,
   usage: `import { FeedbackBar, FeedbackLayer, FeedbackMark, FeedbackNote } from "@/components/ui";
 
 <FeedbackLayer select={selecting()}>
   <FeedbackMark kind="chosen" tag="1" box={boxOf(selection)} current />
   <FeedbackMark kind="cursor" name="IconButton" box={boxOf(underPointer)} />
+  <FeedbackNote float={beside(selection)} open tag="2" name="Row" value={comment()} onOpen={open} onInput={setComment} onDone={done} onRemove={remove} />
   <FeedbackNotes>
-    <FeedbackNote open={openId() === 1} tag="1" name="IconButton" source="conduit-web/src/components/ui/actions.tsx:21"
-      value={comment()} onOpen={open} onInput={setComment} onRemove={remove} />
+    <FeedbackNote open={false} tag="1" name="IconButton" picture={preview()} value={words()} onOpen={open} onInput={setWords} onRemove={remove} />
   </FeedbackNotes>
   <FeedbackBar mode="select" onMode={setMode} status="Press or drag" screenshot onScreenshot={setScreenshot} canSend onSend={send} onClose={close} />
 </FeedbackLayer>`,
@@ -39,9 +40,9 @@ export const feedbackPage: Page = {
     { selector: ".ui-feedback-mark[data-kind='chosen']", name: "Chosen mark", does: "outlines a selection, numbered; heavier while its note is open", from: "FeedbackMark kind chosen" },
     { selector: ".ui-feedback-mark[data-kind='member']", name: "Member", does: "one piece of a group, dashed inside the group's mark", from: "FeedbackMark kind member" },
     { selector: ".ui-feedback-mark[data-kind='cursor']", name: "Cursor mark", does: "what a press would choose, named for its piece", from: "FeedbackMark kind cursor" },
-    { selector: ".ui-feedback-drawing", name: "Drawing", does: "what the person drew: a pen line, an arrow or a box, numbered by a drawn mark", from: "FeedbackDrawing, FeedbackMark kind drawn" },
-    { selector: ".ui-feedback-note", name: "Note", does: "one comment in the stack: its number and piece, its words on a line; open, where the piece is declared and the words to write", from: "FeedbackNotes > FeedbackNote > Card, TextArea" },
-    { selector: ".ui-feedback-bar", name: "Bar", does: "Use app, what the pointer marks with, a note, the screenshot, the listening session, Send", from: "FeedbackBar > Segmented, IconButton, Button" },
+    { selector: ".ui-feedback-drawing", name: "Drawing", does: "what the person drew for one comment, any number together: a pen line, an arrow, a box, words; numbered by a drawn mark", from: "FeedbackDrawing, FeedbackText, FeedbackMark kind drawn" },
+    { selector: ".ui-feedback-note", name: "Note", does: "one comment: beside what it is about while it is written, then in the stack with its words on a line and its picture", from: "FeedbackNotes > FeedbackNote > Card, CardPreview, TextArea" },
+    { selector: ".ui-feedback-bar", name: "Bar", does: "Use app, the picture or the live page, what the pointer marks with, a note, a new picture, the listening session, Send", from: "FeedbackBar > Segmented, IconButton, Button" },
   ] },
   examples: [
     row("marks", "cursor, chosen, a group with its members, a drag's marquee", scene(() => <>
@@ -62,10 +63,11 @@ export const feedbackPage: Page = {
     </>), { surfaces: ["ground"] }),
     row("notes", "the stack: shut notes show their words on a line, the open one is written in; a general note is about no piece", scene(() => <>{notes()}</>), { surfaces: ["ground"] }),
     row("bar", "selecting with nothing to send yet and no session listening", scene(() => <>{bar({ canSend: false })}</>), { surfaces: ["ground"] }),
-    row("bar, frozen", "a shell that takes the page's picture shows it under the marks", scene(() => <>{bar({ status: "Frozen: press or drag", canSend: false })}</>), { surfaces: ["ground"] }),
+    row("bar, with a picture", "the page's picture was taken: it is looked at, or the live page", scene(() => <>{bar({ picture: true, onPicture: noop, status: "Picture: press or drag", canSend: false })}</>), { surfaces: ["ground"] }),
+    row("note, being written", "beside what it is about, with Done to send it to the stack", scene(() => <>{note({ float: { left: "24px", top: "24px" }, open: true, onDone: noop })}</>), { surfaces: ["ground"] }),
     row("bar, drawing", "the pointer draws: Pen, Arrow or Box", scene(() => <>{bar({ mode: "arrow", status: "Drag to draw", canSend: false })}</>), { surfaces: ["ground"] }),
     row("bar, handing over", "a session listens and the item goes to it; with several waiting its name is a button to the next", scene(() => <>{bar({ hand: true, agent: "ui-feedback", onNextAgent: noop })}</>), { surfaces: ["ground"] }),
-    row("bar, compact", "a phone: icons alone, and no screenshot where the client cannot capture its display", scene(() => <>{bar({ compact: true, onScreenshot: undefined, keys: undefined })}</>), { surfaces: ["ground"] }),
+    row("bar, compact", "a phone: icons alone, and no picture where the client cannot capture its display", scene(() => <>{bar({ compact: true, onRetake: undefined, keys: undefined })}</>), { surfaces: ["ground"] }),
     row("bar, using the app", "the pointer goes to the app; the marks stay", scene(() => <>{bar({ mode: "use", tool: "pen", status: "Using the app" })}</>), { surfaces: ["ground"] }),
     row("bar, sending", "Send turns while the item goes", scene(() => <>{bar({ sending: true })}</>), { surfaces: ["ground"] }),
   ],
@@ -78,5 +80,5 @@ export const feedbackPage: Page = {
     token("--layer-feedback", "Over everything, notifications included"),
     token("--measure-md", "Note width"),
   ] }],
-  api: ["FeedbackLayer", "FeedbackMark", "FeedbackDrawing", "FeedbackNotes", "FeedbackNote", "FeedbackBar", "Card", "TextArea", "Segmented", "IconButton", "Button"],
+  api: ["FeedbackLayer", "FeedbackMark", "FeedbackDrawing", "FeedbackText", "FeedbackNotes", "FeedbackNote", "FeedbackBar", "Card", "CardPreview", "TextArea", "Segmented", "IconButton", "Button"],
 };

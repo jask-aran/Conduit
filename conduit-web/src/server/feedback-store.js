@@ -68,7 +68,9 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
     const rect = entry.rect ?? null;
     return {
       n: entry.n, comment: String(entry.comment ?? ""), kind: entry.kind === "group" ? "group" : "component", name: String(entry.name ?? ""), rect,
-      ...(entry.drawing && ["pen", "arrow", "box"].includes(entry.drawing.kind) && Array.isArray(entry.drawing.points) ? { drawing: { kind: entry.drawing.kind, points: entry.drawing.points.slice(0, 80).map((point) => [Number(point?.[0]) || 0, Number(point?.[1]) || 0]) } } : {}),
+      on: entry.on === "picture" ? "picture" : "page",
+      ...(Array.isArray(entry.drawings) ? { drawings: entry.drawings.slice(0, 40).filter((drawing) => ["pen", "arrow", "box", "text"].includes(drawing?.kind) && Array.isArray(drawing.points)).map((drawing) => ({
+        kind: drawing.kind, ...(drawing.kind === "text" ? { text: short(String(drawing.text ?? ""), 400) } : {}), points: drawing.points.slice(0, 80).map((point) => [Number(point?.[0]) || 0, Number(point?.[1]) || 0]) })) } : {}),
       ...(areas.has(entry.n) ? { picture: { file: `selection-${entry.n}.png`, area: entry.area ?? null, dragged: Boolean(entry.dragged) } } : {}),
       ...(rect && scale ? { screenshotRect: Object.fromEntries(Object.entries(rect).map(([key, value]) => [key, Math.round(value * scale)])) } : {}),
       ...(entry.kind === "group" ? { members: (entry.members ?? []).slice(0, 40).map(where) } : where(entry)),
@@ -94,11 +96,11 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
       id,
       summary: `${body.comments.length} ${body.comments.length === 1 ? "comment" : "comments"} on the interface, from the ${client.kind ?? "browser"} client at ${client.url ?? "?"}`,
       read: [
-        "Each entry of `comments` is one thing the person asked for, about one selection of the live interface. One of kind `note` is about no selection: words about the interface as a whole, with no picture of its own.",
+        "Each entry of `comments` is one thing the person asked for, about one selection of the interface. `on` says what it was made on: `picture`, the page as it was when the person opened the tool (kept so what does not last could be marked), or `page`, the live page at Send. One of kind `note` is about no selection: words about the interface as a whole, with no picture of its own.",
         "`source` is where that library piece is declared and `styles` where its CSS rules start; paths are from the repository root. `within` is the pieces it sits in, outermost first. `regionSource` is where the app writes the region it is in; to find the app code that drew this instance, search the app's source for `label` or an attribute in `attributes`.",
-        "A comment with `drawing` is something the person drew on the page (a pen line, an arrow whose head is its last point, a box), its `points` in the same pixels as `rect`; what it describes is then the pieces under the drawing, and the arrow's head or the box says where among them. It is in the pictures as drawn.",
+        "A comment with `drawings` is what the person drew on the page for it, any number together (a pen line, an arrow whose head is its last point, a box, `text` written at its one point), `points` in the same pixels as `rect`; what it describes is then the pieces under them, and an arrow's head or a box says where among them. They are in the pictures as drawn. On a `picture` comment the pieces are what the live page had there, which may not be what the picture shows.",
         "A group's `members` are each described the same way. `rect` is in CSS pixels of the client's viewport; `screenshotRect` is the same box in screenshot.png, present only when the picture is the page alone.",
-        "screenshot.png shows the page at Send with each selection outlined and numbered as `n`. A comment's `picture.file` is that selection alone, cut from it: `picture.area` is the part of the page it shows, the area the person dragged round when `dragged`, else the piece with a margin. Look at it first.",
+        "screenshot.png shows what `screenshot.of` says (the `picture`, or the live `page` at Send) with the selections made on it outlined and numbered as `n`. A comment's `picture.file` is that selection alone, cut from the one it was made on: `picture.area` is the part of the page it shows, the area the person dragged round when `dragged`, else its marks with a margin. Look at it first.",
         ...about,
         `When the item is dealt with: ${done(id)}`,
       ],
@@ -106,7 +108,7 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
       sentAt,
       handed,
       comments: body.comments.slice(0, 50).map((entry) => comment(entry, scale, shot ? kept.areas : new Map())),
-      screenshot: shot ? { file: "screenshot.png", width: shot.width, height: shot.height, surface: shot.surface ?? "unknown", outlined: true, pageOnly: exact, ...(scale ? { scale } : {}) }
+      screenshot: shot ? { file: "screenshot.png", width: shot.width, height: shot.height, surface: shot.surface ?? "unknown", of: shot.of === "picture" ? "picture" : "page", outlined: true, pageOnly: exact, ...(scale ? { scale } : {}) }
         : { file: null, missing: String(body.screenshot?.missing ?? "not sent") },
       client: { id: client.id ?? null, kind: client.kind ?? null, build: client.build ?? null, shell: client.shell ?? null, url: client.url ?? null, viewport, interfaceSize: client.interfaceSize ?? null, userAgent: short(client.userAgent ?? "", 300) },
       ...kept.snapshot,
