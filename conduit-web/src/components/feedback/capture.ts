@@ -1,8 +1,7 @@
 /*
- * The pixels on screen, not a second rendering of the document. The desktop shell takes it itself (capture_page);
- * elsewhere it is the webview's display capture, whose stream is kept until the tool closes.
+ * The pixels on screen, not a second rendering of the document. A shell that can take the page's picture itself does
+ * (the host's capturePage); elsewhere it is the webview's display capture, whose stream is kept until the tool closes.
  */
-import { installedClientKind } from "../platform/installed-client";
 
 let stream: MediaStream | null = null;
 /** After the tool hides its own bar, the compositor's next frames reach the stream. */
@@ -12,20 +11,12 @@ export type Capture = { blob: Blob; width: number; height: number; surface: stri
 
 const settled = () => new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
 
-async function capturePage(): Promise<Capture | null> {
-  if (installedClientKind !== "desktop") return null;
-  await settled();
-  const { invoke } = await import("@tauri-apps/api/core");
-  const bytes = await invoke<ArrayBuffer>("capture_page").catch(() => null);
-  if (!bytes?.byteLength) return null;
-  const blob = new Blob([bytes], { type: "image/png" });
-  const image = await createImageBitmap(blob);
-  return { blob, width: image.width, height: image.height, surface: "webview" };
-}
-
-export async function captureScreen(): Promise<Capture> {
-  const page = await capturePage();
-  if (page) return page;
+export async function captureScreen(capturePage?: () => Promise<Blob | null>): Promise<Capture> {
+  if (capturePage) {
+    await settled();
+    const blob = await capturePage().catch(() => null);
+    if (blob?.size) { const image = await createImageBitmap(blob); return { blob, width: image.width, height: image.height, surface: "webview" }; }
+  }
   if (!navigator.mediaDevices?.getDisplayMedia) throw new Error("This client cannot capture its display");
   if (!stream?.getVideoTracks().some((track) => track.readyState === "live")) {
     // preferCurrentTab: a browser offers this tab alone; a webview has no tab and offers its windows.

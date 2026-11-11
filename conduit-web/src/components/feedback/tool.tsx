@@ -2,13 +2,9 @@ import { createMemo, createResource, createSignal, For, onCleanup, onMount, Show
 import { createStore, produce } from "solid-js/store";
 import { Portal } from "solid-js/web";
 import { drawingBox, FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote, type FeedbackBox, type FeedbackDrawingKind, type FeedbackPoint, type FeedbackPointer } from "@/components/ui/feedback";
-import { toast } from "@/components/ui/notifications";
-import { api } from "../api/client";
-import { clientBuild, shellVersion } from "../platform/build-info";
-import { installedClientKind } from "../platform/installed-client";
-import { selectedUiScale } from "../preferences/ui-scale";
 import { captureScreen, cropAreas, endCapture, type Capture } from "./capture";
-import { describe, nameOf, pieceRoot, piecesWithin, sourceOf, under } from "./pieces";
+import type { FeedbackHost, FeedbackListener } from "./host";
+import { createPieces } from "./pieces";
 
 /** `reach`: how far a drag went past what it locked onto, each side (px); the dragged area is the pieces' box grown by it. */
 type Selection = { id: number; elements: Element[]; comment: string; reach?: FeedbackBox; drawing?: Drawing };
@@ -20,9 +16,11 @@ const DRAWN: Record<FeedbackDrawingKind, string> = { pen: "Pen", arrow: "Arrow",
 const PEN_STEP = 2;
 const SENT_POINTS = 64;
 const WAITING_EVERY_MS = 3000;
-const HAND_KEY = "conduit.feedback.hand";
-type Waiter = { name: string; state: "waiting" | "working" };
-type Mode = "select" | "use";
+const HAND_KEY = "ui-feedback.hand";
+type Waiter = FeedbackListener;
+/** Whether the tool's layer has the pointer, or the app under it. */
+export type FeedbackMode = "select" | "use";
+type Mode = FeedbackMode;
 const DRAG_SLOP = 5;
 const CROP_MARGIN = 24;
 const NOTE_GAP = 10;
@@ -34,7 +32,10 @@ const boxOf = (elements: Element[]): FeedbackBox => {
 };
 const sameBox = (a: FeedbackBox | null, b: FeedbackBox | null) => a === b || Boolean(a && b && a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height);
 
-export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) => void; onClose: () => void; client: () => string; keys: () => string[] }) {
+/** `keys`: the chord that opens the tool, as the bar shows it. */
+export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (mode: Mode) => void; onClose: () => void; keys?: () => string[] }) {
+  const host = props.host, transport = host.transport;
+  const { describe, nameOf, pieceRoot, piecesWithin, sourceOf, under } = createPieces(host.names, host.anchors);
   const [selections, setSelections] = createStore<Selection[]>([]);
   const [openId, setOpenId] = createSignal<number | null>(null);
   const [cursor, setCursor] = createSignal<Element | null>(null);
@@ -45,7 +46,7 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
   const [screenshot, setScreenshot] = createSignal(true);
   const [hand, setHand] = createSignal((() => { try { return localStorage.getItem(HAND_KEY) !== "off"; } catch { return true; } })());
   const keepHand = (on: boolean) => { setHand(on); try { localStorage.setItem(HAND_KEY, on ? "on" : "off"); } catch { /* this session only */ } };
-  const [waiters, { refetch: askWaiters }] = createResource(() => api<{ waiting: Waiter[] }>("/v0/feedback/waiting").then((answer) => answer.waiting, () => [] as Waiter[]));
+  const [waiters, { refetch: askWaiters }] = createResource(() => transport.listening().catch(() => [] as Waiter[]));
   const [agentName, setAgentName] = createSignal<string | null>(null);
   const agent = () => waiters.latest?.find((waiter) => waiter.name === agentName()) ?? waiters.latest?.[0] ?? null;
   const nextAgent = () => { const all = waiters.latest ?? []; setAgentName(all[(all.findIndex((waiter) => waiter.name === agent()?.name) + 1) % all.length]?.name ?? null); };
@@ -62,7 +63,7 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
   let widen = 0;
 
   // The mark: the hub keeps what it knows now, under an id the item is sent to.
-  const marked = api<{ id: string }>("/v0/feedback/marks", { method: "POST", body: JSON.stringify({ client: props.client() }) }).catch(() => null);
+  const marked = transport.mark(host.clientId()).catch(() => null);
 
   const select = () => props.mode === "select" && !sending();
   const open = () => selections.find((selection) => selection.id === openId()) ?? null;
@@ -234,7 +235,7 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
     window.removeEventListener("keydown", onKeyDown, { capture: true });
     for (const type of ["focusin", "focusout"] as const) window.removeEventListener(type, quietFocus, { capture: true });
     endCapture();
-    if (!sent) void marked.then((mark) => mark && api(`/v0/feedback/marks/${mark.id}`, { method: "DELETE" }).catch(() => {}));
+    if (!sent) void marked.then((mark) => mark && transport.drop(mark.id).catch(() => {}));
   });
   let sent = false;
 
@@ -251,7 +252,7 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
     setOpenId(null);
     setCursor(null);
     try {
-      const mark = await marked ?? await api<{ id: string }>("/v0/feedback/marks", { method: "POST", body: JSON.stringify({ client: props.client() }) });
+      const mark = await marked ?? await transport.mark(host.clientId());
       // What each selection is, read before the capture so the boxes are the ones in the picture.
       const comments = selections.map((selection, index) => {
         const members = selection.elements.map(describe);
@@ -268,28 +269,24 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
       let capture: Capture | null = null, captureError: string | null = null;
       if (screenshot()) {
         setCapturing(true);
-        try { capture = await captureScreen(); } catch (error) { captureError = error instanceof Error ? error.message : String(error); }
+        try { capture = await captureScreen(host.capturePage); } catch (error) { captureError = error instanceof Error ? error.message : String(error); }
         setCapturing(false);
         if (capture) {
-          const png = { method: "PUT", headers: { "content-type": "image/png" } };
-          await api(`/v0/feedback/marks/${mark.id}/screenshot`, { ...png, body: capture.blob });
-          for (const [index, blob] of (await cropAreas(capture, comments.map((entry) => entry.area))).entries()) if (blob) await api(`/v0/feedback/marks/${mark.id}/areas/${index + 1}`, { ...png, body: blob });
+          await transport.picture(mark.id, capture.blob);
+          for (const [index, blob] of (await cropAreas(capture, comments.map((entry) => entry.area))).entries()) if (blob) await transport.picture(mark.id, blob, index + 1);
         }
       }
-      const result = await api<{ id: string; path: string; handed: { to: { name: string } | null } }>(`/v0/feedback/marks/${mark.id}/send`, { method: "POST", body: JSON.stringify({
+      const result = await transport.send(mark.id, {
         comments, to: hand() ? agent()?.name ?? null : null,
         screenshot: capture ? { width: capture.width, height: capture.height, surface: capture.surface, outlined: true } : { missing: screenshot() ? captureError ?? "capture failed" : "switched off" },
-        client: {
-          id: props.client(), kind: installedClientKind, build: clientBuild, shell: await shellVersion(), userAgent: navigator.userAgent,
-          url: location.pathname + location.search, viewport: { width: innerWidth, height: innerHeight, devicePixelRatio }, interfaceSize: selectedUiScale(),
-        },
-      }) });
+        client: { id: host.clientId(), userAgent: navigator.userAgent, url: location.pathname + location.search, viewport: { width: innerWidth, height: innerHeight, devicePixelRatio }, ...await host.client?.() },
+      });
       sent = true;
       const where = result.handed.to ? `Feedback saved and handed to ${result.handed.to.name}` : "Feedback saved";
-      toast.success(captureError ? `${where}, without a screenshot: ${captureError}` : where);
+      host.notify("sent", captureError ? `${where}, without a screenshot: ${captureError}` : where);
       props.onClose();
     } catch (error) {
-      toast.error(`Feedback was not sent: ${error instanceof Error ? error.message : String(error)}`);
+      host.notify("failed", `Feedback was not sent: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setCapturing(false);
       setSending(false);
@@ -319,7 +316,7 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
           onDone={() => openNote(null)} onRemove={() => remove(selection.id)} />}
       </Show>
       <Show when={!capturing()}>
-        <FeedbackBar mode={props.mode === "use" ? "use" : pointerTool()} onMode={(mode: FeedbackPointer) => { setCursor(null); setStroke(null); if (mode !== "use") setPointerTool(mode); props.onMode(mode === "use" ? "use" : "select"); }} status={status()} keys={props.keys()} screenshot={screenshot()} onScreenshot={setScreenshot} hand={hand()} onHand={keepHand} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
+        <FeedbackBar mode={props.mode === "use" ? "use" : pointerTool()} onMode={(mode: FeedbackPointer) => { setCursor(null); setStroke(null); if (mode !== "use") setPointerTool(mode); props.onMode(mode === "use" ? "use" : "select"); }} status={status()} keys={props.keys?.()} screenshot={screenshot()} onScreenshot={setScreenshot} hand={hand()} onHand={keepHand} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
           canSend={canSend()} sending={sending()} onSend={() => void send()} onClose={props.onClose} />
       </Show>
     </FeedbackLayer>
