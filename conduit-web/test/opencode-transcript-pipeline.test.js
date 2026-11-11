@@ -115,39 +115,14 @@ function harness() {
 
   const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
   let messageCount = 0;
+  const say = async (command) => { ws.emit("message", JSON.stringify(command)); await settle(); };
   return {
-    saved: saved.rows,
-    service: saved,
-    adapter,
-    record,
-    settle,
-    errors,
+    saved: saved.rows, service: saved, adapter, record, settle, errors,
     asked: () => asked,
-    answer: async (request, option) => {
-      const response = typeof option === "string" ? { value: option } : option;
-      ws.emit("message", JSON.stringify({ type: "extension_ui_response", id: request.id, ...response }));
-      await settle();
-    },
-    send: async (message) => {
-      ws.emit("message", JSON.stringify({ type: "prompt", message, messageId: `m_00000000-0000-4000-8000-00000000000${++messageCount}` }));
-      await settle();
-    },
+    answer: (request, option) => say({ type: "extension_ui_response", id: request.id, ...(typeof option === "string" ? { value: option } : option) }),
+    send: (message) => say({ type: "prompt", message, messageId: `m_00000000-0000-4000-8000-00000000000${++messageCount}` }),
     oc: (type, data = {}) => adapter.dispatch({ type, created: Date.now(), data: { sessionID: "ses_1", ...data } }),
-    streaming: (messageId) => generation?.assistantMessages.find((message) => message.id === messageId)?.blocks
-      .map((block) => `${block.kind}: ${block.text}`) || [],
     screen: () => buildTurnRows(messages, tools, { activeGeneration: generation }),
-    rows: () => {
-      assert.deepEqual(errors, [], "the server reported an error");
-      return buildTurnRows(messages, tools);
-    },
-    /** Folds the chat log's tail over the saved transcript, as GET /v0/sessions/:id does. */
-    history: async () => {
-      const lines = [];
-      for (let node = (await adapter.readHistory({ liveSessionId: record.id })).tree[0]; node; node = node.children[0]) {
-        if (!node.entry.hidden) lines.push(node.entry.display);
-      }
-      return lines;
-    },
     reload: async ({ log = true } = {}) => {
       const projection = await adapter.readTranscript({ liveSessionId: record.id });
       const view = log ? { ...projection, ...applyTranscriptOps(projection, chatLogs.peek("chat-1")?.entries || []) } : projection;
@@ -156,9 +131,7 @@ function harness() {
   };
 }
 
-const shape = (rows) => rows.map((row) => (row.type === "trace"
-  ? `trace(${row.value.status})`
-  : `${row.value.role}: ${row.value.content}`));
+const shape = (rows) => rows.map((row) => (row.type === "trace" ? `trace(${row.value.status})` : `${row.value.role}: ${row.value.content}`));
 
 /** OpenCode saves a step when it ends; the test states what it saved. */
 function saveStep(chat, id, content, finish) {
@@ -176,14 +149,12 @@ async function storyTurn(chat) {
   chat.oc("session.text.started", { assistantMessageID: "msg_a1", ordinal: 0 });
   chat.oc("session.text.delta", { assistantMessageID: "msg_a1", ordinal: 0, delta: "The relay " });
   await chat.settle();
-  const midway = chat.streaming("msg_a1");
   chat.oc("session.text.delta", { assistantMessageID: "msg_a1", ordinal: 0, delta: "hummed." });
   chat.oc("session.text.ended", { assistantMessageID: "msg_a1", ordinal: 0, text: "The relay hummed." });
   saveStep(chat, "msg_a1", [{ type: "reasoning", text: "A relay." }, { type: "text", text: "The relay hummed." }], "stop");
   chat.oc("session.step.ended", { assistantMessageID: "msg_a1", finish: "stop" });
   chat.oc("session.execution.succeeded");
   await chat.settle();
-  return midway;
 }
 
 async function toolTurn(chat) {
@@ -214,18 +185,12 @@ const TWO_TURNS = [
   "assistant: Haikus.",
 ];
 
-test("a reload reads each prompt once, above its answer", async () => {
+test("a reload reads each prompt once, above its answer, and OpenCode's saved copy alone keeps every prompt's words", async () => {
   const chat = harness();
   await storyTurn(chat);
   await toolTurn(chat);
   assert.deepEqual(shape(await chat.reload()), TWO_TURNS);
-});
-
-test("OpenCode's saved copy alone keeps every prompt's words, after the chat log is gone", async () => {
-  const chat = harness();
-  await storyTurn(chat);
-  await toolTurn(chat);
-  assert.deepEqual(shape(await chat.reload({ log: false })), TWO_TURNS);
+  assert.deepEqual(shape(await chat.reload({ log: false })), TWO_TURNS, "after the chat log is gone");
 });
 
 test("a tool shows in the turn's trace while it runs", async () => {

@@ -8,77 +8,56 @@ import crypto from "node:crypto";
 import { EventEmitter } from "node:events";
 import test from "node:test";
 import { ClaudeCodeAdapter } from "../src/claude-code-adapter.js";
-import { reduceActiveGeneration } from "../src/active-generation.js";
 import { ChatLogs } from "../src/server/chat-log.js";
 import { createLiveSessionStream } from "../src/server/live-session-stream.js";
 import { applyTranscriptOps } from "../src/transcript-fold.js";
-import { isStructuredGenerationEvent, normalizeLiveEvent } from "../src/client/api/live-events.ts";
+import { normalizeLiveEvent } from "../src/client/api/live-events.ts";
 import { applyToolOp, applyTranscriptOp, isToolOp } from "../src/client/timeline-order.ts";
 import { buildTurnRows } from "../src/client/turn-rows.ts";
 
 const MODEL = "claude-haiku-4-5-20251001";
-const MODELS = [
-  { value: "default", resolvedModel: MODEL, displayName: "Default (recommended)", description: "" },
-  { value: "haiku", resolvedModel: MODEL, displayName: "Haiku 4.5", description: "" },
-];
+const MODELS = [{ value: "default", resolvedModel: MODEL, displayName: "Default (recommended)", description: "" }];
 
 function claudeCode() {
   const saved = new Map();
   const runs = [];
-  const save = (sessionId, message) => {
-    if (!saved.has(sessionId)) saved.set(sessionId, []);
-    saved.get(sessionId).push({ type: message.type, uuid: message.uuid, session_id: sessionId, message: message.message,
-      parent_tool_use_id: message.parent_tool_use_id ?? null, parent_agent_id: null });
-  };
+  const save = (sessionId, message) => (saved.get(sessionId) ?? saved.set(sessionId, []).get(sessionId)).push({ type: message.type,
+    uuid: message.uuid, session_id: sessionId, message: message.message, parent_tool_use_id: message.parent_tool_use_id ?? null, parent_agent_id: null });
   const query = ({ prompt, options }) => {
     const sessionId = options.resume || options.sessionId;
     const out = [];
     let wake = null;
-    const run = { options, sessionId, prompts: [], interrupts: 0, closed: false, mode: options.permissionMode || "default" };
-    const deliver = () => {
-      if (!wake || (!out.length && !run.closed)) return;
-      const resolve = wake;
-      wake = null;
-      resolve(out.length ? { value: out.shift(), done: false } : { value: undefined, done: true });
-    };
+    const run = { options, sessionId, interrupts: 0, closed: false, mode: options.permissionMode || "default" };
+    const pull = () => (out.length ? { value: out.shift(), done: false } : { value: undefined, done: true });
+    const deliver = () => { if (wake && (out.length || run.closed)) { const resolve = wake; wake = null; resolve(pull()); } };
     run.emit = (message) => {
       const stated = { uuid: crypto.randomUUID(), session_id: sessionId, parent_tool_use_id: null, ...message };
       if (stated.type === "user" || stated.type === "assistant") save(sessionId, stated);
       out.push(stated);
       deliver();
     };
-    void (async () => { for await (const message of prompt) { run.prompts.push(message); save(sessionId, message); } })();
+    void (async () => { for await (const message of prompt) save(sessionId, message); })();
     runs.push(run);
     return {
       [Symbol.asyncIterator]() { return this; },
-      next: () => (out.length ? Promise.resolve({ value: out.shift(), done: false })
-        : run.closed ? Promise.resolve({ value: undefined, done: true }) : new Promise((resolve) => { wake = resolve; })),
+      next: () => (out.length || run.closed ? Promise.resolve(pull()) : new Promise((resolve) => { wake = resolve; })),
       return: async () => ({ value: undefined, done: true }),
       initializationResult: async () => ({ models: MODELS, commands: [], current_permission_mode: run.mode }),
       interrupt: async () => { run.interrupts += 1; return { still_queued: [] }; },
       setPermissionMode: async (mode) => { run.mode = mode; },
-      setModel: async () => {},
-      applyFlagSettings: async () => {},
+      setModel: async () => {}, applyFlagSettings: async () => {},
       close: () => { run.closed = true; deliver(); },
     };
   };
   return {
-    saved,
-    runs,
-    run: () => runs.at(-1),
-    sdk: {
-      query,
-      getSessionInfo: async (id) => (saved.has(id) ? { sessionId: id } : undefined),
-      getSessionMessages: async (id) => saved.get(id) || [],
-      listSessions: async () => [],
-      resolveSettings: async () => ({ effective: {} }),
-    },
+    saved, run: () => runs.at(-1),
+    sdk: { query, getSessionInfo: async (id) => (saved.has(id) ? { sessionId: id } : undefined),
+      getSessionMessages: async (id) => saved.get(id) || [], listSessions: async () => [], resolveSettings: async () => ({ effective: {} }) },
   };
 }
 
 // One model message as Claude Code streams it: stream events around one
 // `assistant` message per block, all under the API's message id.
-const opened = (run, id) => run.emit({ type: "stream_event", event: { type: "message_start", message: { id, model: MODEL } } });
 function block(run, id, index, content) {
   const event = (value) => run.emit({ type: "stream_event", event: { index, ...value } });
   if (content.type === "tool_use") {
@@ -92,25 +71,19 @@ function block(run, id, index, content) {
   run.emit({ type: "assistant", message: { id, model: MODEL, role: "assistant", content: [content], stop_reason: null } });
   event({ type: "content_block_stop" });
 }
-function ended(run, stopReason) {
-  run.emit({ type: "stream_event", event: { type: "message_delta", delta: { stop_reason: stopReason } } });
-  run.emit({ type: "stream_event", event: { type: "message_stop" } });
-}
+const ended = (run, stopReason) => { run.emit({ type: "stream_event", event: { type: "message_delta", delta: { stop_reason: stopReason } } });
+  run.emit({ type: "stream_event", event: { type: "message_stop" } }); };
 const toolResult = (run, toolUseId, content, isError = false) => run.emit({ type: "user",
   message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolUseId, content, ...(isError ? { is_error: true } : {}) }] } });
 const succeeded = (run, result) => run.emit({ type: "result", subtype: "success", is_error: false, stop_reason: "end_turn",
   terminal_reason: "completed", result, errors: undefined });
-function answer(run, id, text) {
-  opened(run, id);
-  block(run, id, 0, { type: "thinking", thinking: "Short and direct.", signature: "sig" });
-  block(run, id, 1, { type: "text", text });
-  ended(run, "end_turn");
+function thought(run, id, thinking, content) {
+  run.emit({ type: "stream_event", event: { type: "message_start", message: { id, model: MODEL } } });
+  for (const [index, item] of [{ type: "thinking", thinking, signature: "sig" }, content].entries()) block(run, id, index, item);
 }
-function calls(run, id, tool) {
-  opened(run, id);
-  block(run, id, 0, { type: "thinking", thinking: "Use the tool.", signature: "sig" });
-  block(run, id, 1, { type: "tool_use", ...tool });
-}
+/** An answer that ends the turn. */
+const answer = (run, id, text) => { thought(run, id, "Short and direct.", { type: "text", text }); ended(run, "end_turn"); succeeded(run, text); };
+const calls = (run, id, tool) => thought(run, id, "Use the tool.", { type: "tool_use", ...tool });
 
 const lifecycle = { run: (_chatId, operation) => operation(), assertAvailable: () => {} };
 const ledger = () => ({
@@ -124,16 +97,11 @@ async function harness() {
   const adapter = new ClaudeCodeAdapter({ command: "", logs: chatLogs, sdk: claude.sdk });
   const project = { id: "project-1", kind: "workspace", slug: "p", path: "/tmp/p", workingRoot: "/tmp/p" };
   const record = await adapter.create({ chatId: "chat-1", project });
-  const chat = { id: "chat-1", title: "Claude Code", status: "active",
-    backend: { implementation: "claude-code", opaqueSession: record.sessionId } };
+  const chat = { id: "chat-1", title: "Claude Code", status: "active", backend: { implementation: "claude-code", opaqueSession: record.sessionId } };
 
-  let messages = [];
-  let tools = [];
-  let generation = null;
+  let [messages, tools, asked] = [[], [], []];
   const errors = [];
-  let asked = [];
-  const ws = new EventEmitter();
-  ws.readyState = 1;
+  const ws = Object.assign(new EventEmitter(), { readyState: 1 });
   ws.send = (frame) => {
     const raw = JSON.parse(frame);
     if (raw.type === "error") { errors.push(raw); return; }
@@ -142,56 +110,32 @@ async function harness() {
       if (isToolOp(wire)) tools = applyToolOp(tools, wire);
       else messages = applyTranscriptOp(messages, wire);
     }
-    if (isStructuredGenerationEvent(wire)) generation = reduceActiveGeneration(generation, wire);
     if (wire.type === "permission_request" && wire.request) asked = [...asked, wire.request];
     if (wire.type === "permission_resolved") asked = asked.filter((request) => request.id !== raw.requestId);
   };
-  const stream = createLiveSessionStream({
+  createLiveSessionStream({
     wss: { handleUpgrade: (_request, _socket, _head, accept) => accept(ws) },
-    attachments: {
-      resolveMany: async () => [], pathFor: () => "", recordMessage: async () => {},
-      decorateMessages: async (_p, _c, list) => list, discardMessages: async () => {},
-    },
+    attachments: { resolveMany: async () => [], pathFor: () => "", recordMessage: async () => {},
+      decorateMessages: async (_p, _c, list) => list, discardMessages: async () => {} },
     registry: { metadata: () => chat, markUserMessage: async () => {}, update: async () => chat },
-    config: {},
-    findChatContext: async () => ({ chat, project }),
-    lifecycle,
-    messageIds: ledger(),
-    chatLogs,
+    config: {}, findChatContext: async () => ({ chat, project }), lifecycle, messageIds: ledger(), chatLogs,
     backends: { get: () => record, forChat: () => adapter, adapterForRecord: () => adapter },
-  });
-  stream.handleUpgrade(record.id, {}, {}, null);
+  }).handleUpgrade(record.id, {}, {}, null);
 
   const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
+  const say = async (command) => { ws.emit("message", JSON.stringify(command)); await settle(); };
   let messageCount = 0;
   return {
-    claude,
-    adapter,
-    record,
-    chat,
-    project,
-    settle,
-    errors,
+    claude, adapter, record, chat, project, settle,
     run: () => claude.run(),
     asked: () => asked,
     tools: () => tools,
-    answer: async (request, option) => {
-      ws.emit("message", JSON.stringify({ type: "extension_ui_response", id: request.id,
-        ...(typeof option === "string" ? { value: option } : option) }));
-      await settle();
-    },
-    send: async (message) => {
-      ws.emit("message", JSON.stringify({ type: "prompt", message, messageId: `m_00000000-0000-4000-8000-00000000000${++messageCount}` }));
-      await settle();
-    },
-    stop: async () => { ws.emit("message", JSON.stringify({ type: "stop_generation" })); await settle(); },
+    answer: (request, option) => say({ type: "extension_ui_response", id: request.id, ...(typeof option === "string" ? { value: option } : option) }),
+    send: (message) => say({ type: "prompt", message, messageId: `m_00000000-0000-4000-8000-00000000000${++messageCount}` }),
+    stop: () => say({ type: "stop_generation" }),
     ask: (toolName, input, options) => claude.run().options.canUseTool(toolName, input,
       { signal: new AbortController().signal, requestId: crypto.randomUUID(), ...options }),
-    screen: () => buildTurnRows(messages, tools, { activeGeneration: generation }),
-    rows: () => {
-      assert.deepEqual(errors, [], "the server reported an error");
-      return buildTurnRows(messages, tools);
-    },
+    rows: () => (assert.deepEqual(errors, [], "the server reported an error"), buildTurnRows(messages, tools)),
     reload: async ({ log = true } = {}) => {
       const projection = await adapter.readTranscript({ opaqueSession: record.sessionId });
       const view = log ? { ...projection, ...applyTranscriptOps(projection, chatLogs.peek("chat-1")?.entries || []) } : projection;
@@ -200,9 +144,7 @@ async function harness() {
   };
 }
 
-const shape = (rows) => rows.map((row) => (row.type === "trace"
-  ? `trace(${row.value.status})`
-  : `${row.value.role}: ${row.value.content}`));
+const shape = (rows) => rows.map((row) => (row.type === "trace" ? `trace(${row.value.status})` : `${row.value.role}: ${row.value.content}`));
 
 /** Recorded: a Write held for approval, whose suggestion is to accept edits for the session. */
 const WRITE = { id: "toolu_01U8yQWhiLayXkmMVH5BqenK", name: "Write", input: { file_path: "/tmp/p/approved.txt", content: "ok" } };
@@ -226,7 +168,6 @@ test("an edit held for approval offers what Claude Code suggests, and accepting 
   ended(chat.run(), "tool_use");
   toolResult(chat.run(), WRITE.id, "File created successfully at: /tmp/p/approved.txt");
   answer(chat.run(), "msg_a2", "written");
-  succeeded(chat.run(), "written");
   await chat.settle();
   assert.equal(chat.adapter.view(chat.record).permissionMode, "acceptEdits");
   assert.deepEqual(shape(chat.rows()), ["user: Create approved.txt containing ok", "trace(complete)", "assistant: written"]);
@@ -244,7 +185,6 @@ test("a denied edit reaches Claude Code as a denial, and the turn goes on to ans
   ended(chat.run(), "tool_use");
   toolResult(chat.run(), denied.id, "The user denied this tool call.", true);
   answer(chat.run(), "msg_d2", "The file was not created.");
-  succeeded(chat.run(), "The file was not created.");
   await chat.settle();
   assert.deepEqual(shape(chat.rows()), ["user: Create denied.txt containing no", "trace(complete)", "assistant: The file was not created."]);
   assert.equal(chat.tools().find((tool) => tool.toolCallId === denied.id)?.isError, true);
@@ -272,7 +212,6 @@ test("AskUserQuestion is asked as a question card, and the answer reaches Claude
   toolResult(chat.run(), QUESTION.id, "Your questions have been answered: \"Tea or coffee?\"=\"Coffee\". You can now continue with these answers in mind.");
   ended(chat.run(), "tool_use");
   answer(chat.run(), "msg_q2", "Coffee.");
-  succeeded(chat.run(), "Coffee.");
   await chat.settle();
   assert.deepEqual(shape(chat.rows()), ["user: Ask me tea or coffee", "trace(complete)", "assistant: Coffee."]);
 });
@@ -309,7 +248,6 @@ test("a chat whose Claude Code has gone resumes the saved session, and a never-p
   const chat = await harness();
   await chat.send("Say hello");
   answer(chat.run(), "msg_r1", "hello");
-  succeeded(chat.run(), "hello");
   await chat.settle();
   await chat.adapter.close(chat.record.id);
   const { live } = await chat.adapter.launch({ chat: chat.chat, project: chat.project });
@@ -320,8 +258,7 @@ test("a chat whose Claude Code has gone resumes the saved session, and a never-p
 
   const fresh = await chat.adapter.create({ chatId: "chat-2", project: chat.project });
   await chat.adapter.close(fresh.id);
-  await chat.adapter.launch({ chat: { id: "chat-2", backend: { implementation: "claude-code", opaqueSession: fresh.sessionId } },
-    project: chat.project });
+  await chat.adapter.launch({ chat: { id: "chat-2", backend: { implementation: "claude-code", opaqueSession: fresh.sessionId } }, project: chat.project });
   assert.equal(chat.run().options.resume, undefined);
   assert.equal(chat.run().options.sessionId, fresh.sessionId);
 });
@@ -340,13 +277,11 @@ test("a background task finishing starts a turn of Claude Code's own, drawn on i
   ended(chat.run(), "tool_use");
   toolResult(chat.run(), BACKGROUND.id, "Command running in background with ID: b9jzzj61o.");
   answer(chat.run(), "msg_b2", "started");
-  succeeded(chat.run(), "started");
   await chat.settle();
   // Nothing from Conduit: the task ends, and Claude Code turns to it.
   chat.run().emit({ type: "system", subtype: "task_notification", task_id: "b9jzzj61o", tool_use_id: BACKGROUND.id,
     status: "completed", summary: SUMMARY });
   answer(chat.run(), "msg_b3", "Background task completed (exit code 0).");
-  succeeded(chat.run(), "Background task completed (exit code 0).");
   await chat.settle();
   assert.deepEqual(shape(chat.rows()), OWN_TURN);
   assert.equal(chat.rows().find((row) => row.value?.content === SUMMARY).value.origin, "harness");

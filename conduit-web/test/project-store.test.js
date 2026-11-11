@@ -23,11 +23,7 @@ test("atomic catalogue replacement preserves the prior catalogue when serializat
 test("managed roots reject replacement symlinks and terminals may recreate only missing managed roots", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-project-managed-root-"));
   const filesRoot = path.join(root, "data/chat/files");
-  const store = new ProjectStore({
-    filesRoot,
-    catalogFile: path.join(root, "data/conduit.json"),
-    piAgentDir: path.join(root, "data/pi"),
-  });
+  const store = new ProjectStore({ filesRoot, catalogFile: path.join(root, "data/conduit.json"), piAgentDir: path.join(root, "data/pi") });
   await store.initialize();
   const project = await store.create({ name: "Managed" });
   const outside = path.join(root, "outside");

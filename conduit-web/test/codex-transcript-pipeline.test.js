@@ -1,6 +1,4 @@
-/**
- * What a Codex chat ends up looking like, driven through the real pipeline.
- */
+/** What a Codex chat ends up looking like, driven through the real pipeline. */
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
@@ -15,13 +13,8 @@ const lifecycle = { run: (_chatId, operation) => operation(), assertAvailable: (
 
 /** Codex names its own items, so Conduit's ledger owns nothing here. */
 const ledger = () => ({
-  owns: () => false,
-  load: async () => ({}),
-  claim: async () => null,
-  bind: async () => null,
-  release: async () => {},
-  resolver: async () => (id) => id,
-  entryIdFor: async (_project, _chat, id) => id,
+  owns: () => false, load: async () => ({}), claim: async () => null, bind: async () => null, release: async () => {},
+  resolver: async () => (id) => id, entryIdFor: async (_project, _chat, id) => id,
 });
 
 function harness() {
@@ -34,9 +27,8 @@ function harness() {
   const held = [];
   const record = adapter.sessions.add({
     id: "live-1", chatId: "chat-1", sessionId: "thread-1", status: "running", activity: "idle",
-    active: false, stopping: false, generation: null, clients: new Set(), events: [],
-    pending: new Map(), steering: [], followUp: [],
-    rpcRequestId: 0, generationSeq: 0, messageIds: new Set(),
+    active: false, stopping: false, generation: null, clients: new Set(), events: [], pending: new Map(),
+    steering: [], followUp: [], rpcRequestId: 0, generationSeq: 0, messageIds: new Set(),
     child: { stdin: { writable: true, write: (line) => {
       const message = JSON.parse(line);
       sent.push(message);
@@ -50,8 +42,7 @@ function harness() {
   let messages = [];
   let tools = [];
   const errors = [];
-  const ws = new EventEmitter();
-  ws.readyState = 1;
+  const ws = Object.assign(new EventEmitter(), { readyState: 1 });
   ws.send = (frame) => {
     const raw = JSON.parse(frame);
     if (raw.type === "error") { errors.push(raw); return; }
@@ -64,10 +55,8 @@ function harness() {
       else messages = applyTranscriptOp(messages, wire);
     }
     if (wire.type === "tool_execution_updated") {
-      tools = mergeToolEvent(tools, {
-        type: "tool_execution_update",
-        toolCallId: wire.toolCallId, name: wire.name, input: wire.input, output: wire.output,
-      }).tools;
+      const { toolCallId, name, input, output } = wire;
+      tools = mergeToolEvent(tools, { type: "tool_execution_update", toolCallId, name, input, output }).tools;
     }
   };
 
@@ -106,9 +95,7 @@ function harness() {
   };
   const send = async (command) => {
     ws.emit("message", JSON.stringify(command));
-    if (["prompt", "interrupt_and_send", "follow_up", "steer"].includes(command.type)) {
-      if (command.type === "prompt" || command.type === "interrupt_and_send") { await read(); await accept(); }
-    }
+    if (command.type === "prompt") { await read(); await accept(); }
     await settle();
   };
   const begin = (command) => { ws.emit("message", JSON.stringify(command)); return read(); };
@@ -117,6 +104,13 @@ function harness() {
   return {
     codex, codex_reject, request, send, begin, dispatch, read, accept, settle, sent, errors, record,
     turnId: () => turnId,
+    /** A prompt Codex accepts and starts; its turn id. */
+    prompt: async (message) => {
+      await send({ type: "prompt", message });
+      codex("turn/started", { turn: { id: turnId } });
+      return turnId;
+    },
+    complete: (turn, status = "completed") => codex("turn/completed", { turn: { id: turn, status } }),
     // Everything the chat's log kept, which is what a browser that lost the
     // socket is replayed when it asks to be caught up.
     replay: () => {
@@ -130,10 +124,7 @@ function harness() {
       }
       return buildTurnRows(replayed, replayedTools);
     },
-    rows: () => {
-      assert.deepEqual(errors, [], "the server reported an error");
-      return buildTurnRows(messages, tools);
-    },
+    rows: () => (assert.deepEqual(errors, [], "the server reported an error"), buildTurnRows(messages, tools)),
     messages: () => messages,
   };
 }
@@ -143,27 +134,16 @@ function agentMessage(codex, turnId, itemId, text, { phase = "final_answer" } = 
   codex("item/completed", { turnId, item: { id: itemId, type: "agentMessage", text, phase } });
 }
 
+function command(codex, turnId, itemId, line, output) {
+  codex("item/started", { turnId, item: { id: itemId, type: "commandExecution", command: line } });
+  codex("item/completed", { turnId, item: { id: itemId, type: "commandExecution", command: line, aggregatedOutput: output, status: "completed" } });
+}
+
 const shape = (rows) => rows.map((row) => (row.type === "trace"
   ? `trace(${row.value.status})${row.value.segments.filter((segment) => segment.discarded).map((segment) => ` ~${segment.text}~`).join("")}`
   : `${row.value.role}: ${row.value.content}`));
 
 const order = (messages) => messages.map((message) => `${message.role}:${(message.content || "").slice(0, 16)}`);
-
-test("a plain turn reads as prompt then answer", async () => {
-  const chat = harness();
-  await chat.send({ type: "prompt", message: "Fix the build" });
-  const turn = chat.turnId();
-  chat.codex("turn/started", { turn: { id: turn } });
-  agentMessage(chat.codex, turn, "a1", "Built.");
-  chat.codex("turn/completed", { turn: { id: turn, status: "completed" } });
-  await chat.settle();
-
-  assert.deepEqual(shape(chat.rows()), [
-    "user: Fix the build",
-    "trace(complete)",
-    "assistant: Built.",
-  ]);
-});
 
 test("an answer that begins before its turn is accepted still sits under its prompt", async () => {
   const chat = harness();
@@ -173,69 +153,58 @@ test("an answer that begins before its turn is accepted still sits under its pro
   agentMessage(chat.codex, "turn-early", "a1", "Built.");
   await chat.settle();
   await chat.accept();
-  chat.codex("turn/completed", { turn: { id: "turn-early", status: "completed" } });
+  chat.complete("turn-early");
   await chat.settle();
 
-  assert.deepEqual(shape(chat.rows()), [
-    "user: Fix the build",
-    "trace(complete)",
-    "assistant: Built.",
-  ]);
+  assert.deepEqual(shape(chat.rows()), ["user: Fix the build", "trace(complete)", "assistant: Built."]);
   assert.deepEqual(order(chat.messages()), ["user:Fix the build", "assistant:Built."]);
 });
 
-test("commentary and the commands it ran collapse into the turn's trace, and the answer stays out of it", async () => {
+test("commentary and the commands it ran collapse into the turn's trace, and a replayed browser gets them back", async () => {
   const chat = harness();
-  await chat.send({ type: "prompt", message: "Fix the build" });
-  const turn = chat.turnId();
-  chat.codex("turn/started", { turn: { id: turn } });
-  chat.codex("item/agentMessage/delta", { turnId: turn, itemId: "a1", delta: "Looking now." });
-  chat.codex("item/completed", { turnId: turn, item: { id: "a1", type: "agentMessage", text: "Looking now.", phase: "commentary" } });
-  chat.codex("item/started", { turnId: turn, item: { id: "e1", type: "commandExecution", command: "npm run build" } });
-  chat.codex("item/completed", { turnId: turn, item: { id: "e1", type: "commandExecution", command: "npm run build", aggregatedOutput: "ok", status: "completed" } });
+  const turn = await chat.prompt("Fix the build");
+  agentMessage(chat.codex, turn, "a1", "Looking now.", { phase: "commentary" });
+  command(chat.codex, turn, "e1", "npm run build", "ok");
   agentMessage(chat.codex, turn, "a2", "Built.");
-  chat.codex("turn/completed", { turn: { id: turn, status: "completed" } });
+  chat.complete(turn);
   await chat.settle();
 
   const rows = chat.rows();
-  assert.deepEqual(shape(rows), [
-    "user: Fix the build",
-    "trace(complete)",
-    "assistant: Built.",
-  ]);
+  assert.deepEqual(shape(rows), ["user: Fix the build", "trace(complete)", "assistant: Built."]);
   // The commentary and the command it ran belong to the turn that produced
   // them, in that order -- not to a neighbouring turn, and not to the answer.
   assert.deepEqual(rows[1].value.segments.map((segment) => segment.kind), ["narration", "tool"]);
   assert.equal(rows[1].value.segments[0].text, "Looking now.");
+  // What the browser that stayed connected has, and what a reconnecting one is
+  // caught up to from the chat's log, are the same transcript, commands included.
+  const replayed = chat.replay();
+  assert.deepEqual(shape(replayed), shape(rows));
+  const trace = replayed.find((row) => row.type === "trace");
+  assert.deepEqual(trace.value.segments.map((segment) => segment.kind), ["narration", "tool"]);
+  assert.equal(trace.value.segments[1].tool.name, "command");
+  assert.equal(trace.value.segments[1].tool.output, "ok");
 });
 
 test("an interrupted answer keeps its text, and the next turn is its own", async () => {
   const chat = harness();
-  await chat.send({ type: "prompt", message: "Tell me a long story" });
-  const turn = chat.turnId();
-  chat.codex("turn/started", { turn: { id: turn } });
+  const turn = await chat.prompt("Tell me a long story");
   chat.codex("item/agentMessage/delta", { turnId: turn, itemId: "a1", delta: "The rain fell upward." });
   await chat.settle();
 
   chat.dispatch({ type: "stop_generation" });
   await chat.settle();
   chat.codex("item/completed", { turnId: turn, item: { id: "a1", type: "agentMessage", text: "The rain fell upward.", phase: "final_answer" } });
-  chat.codex("turn/completed", { turn: { id: turn, status: "completed" } });
+  chat.complete(turn);
   await chat.settle();
 
-  await chat.send({ type: "prompt", message: "now stop" });
-  const second = chat.turnId();
-  chat.codex("turn/started", { turn: { id: second } });
+  const second = await chat.prompt("now stop");
   agentMessage(chat.codex, second, "a2", "Got it — stopping.");
-  chat.codex("turn/completed", { turn: { id: second, status: "completed" } });
+  chat.complete(second);
   await chat.settle();
 
   assert.deepEqual(shape(chat.rows()), [
-    "user: Tell me a long story",
-    "trace(interrupted) ~The rain fell upward.~",
-    "user: now stop",
-    "trace(complete)",
-    "assistant: Got it — stopping.",
+    "user: Tell me a long story", "trace(interrupted) ~The rain fell upward.~",
+    "user: now stop", "trace(complete)", "assistant: Got it — stopping.",
   ]);
   assert.deepEqual(order(chat.messages()), [
     "user:Tell me a long s", "assistant:The rain fell up", "user:now stop", "assistant:Got it — stoppin",
@@ -244,11 +213,8 @@ test("an interrupted answer keeps its text, and the next turn is its own", async
 
 test("a steered message is a message of its own, and the answer answers it", async () => {
   const chat = harness();
-  await chat.send({ type: "prompt", message: "Tell me a long story" });
-  const turn = chat.turnId();
-  chat.codex("turn/started", { turn: { id: turn } });
-  chat.codex("item/agentMessage/delta", { turnId: turn, itemId: "a1", delta: "The rain fell upward." });
-  chat.codex("item/completed", { turnId: turn, item: { id: "a1", type: "agentMessage", text: "The rain fell upward.", phase: "commentary" } });
+  const turn = await chat.prompt("Tell me a long story");
+  agentMessage(chat.codex, turn, "a1", "The rain fell upward.", { phase: "commentary" });
   await chat.settle();
 
   await chat.send({ type: "steer", message: "make it shorter" });
@@ -256,44 +222,33 @@ test("a steered message is a message of its own, and the answer answers it", asy
   assert.ok(steered, "the steer reached Codex");
   chat.codex("item/started", { turnId: turn, item: { id: "u2", clientId: steered.params.clientUserMessageId, type: "userMessage", content: [{ type: "text", text: "make it shorter" }] } });
   agentMessage(chat.codex, turn, "a2", "Rain. Upward.");
-  chat.codex("turn/completed", { turn: { id: turn, status: "completed" } });
+  chat.complete(turn);
   await chat.settle();
 
   assert.deepEqual(shape(chat.rows()), [
-    "user: Tell me a long story",
-    "trace(complete)",
-    "user: make it shorter",
-    "trace(complete)",
-    "assistant: Rain. Upward.",
+    "user: Tell me a long story", "trace(complete)", "user: make it shorter", "trace(complete)", "assistant: Rain. Upward.",
   ]);
 });
 
 test("a follow-up sent while the turn runs waits, and then becomes its own turn", async () => {
   const chat = harness();
-  await chat.send({ type: "prompt", message: "Fix the build" });
-  const turn = chat.turnId();
-  chat.codex("turn/started", { turn: { id: turn } });
+  const turn = await chat.prompt("Fix the build");
   await chat.send({ type: "follow_up", message: "and run the tests" });
   assert.deepEqual(shape(chat.rows()), ["user: Fix the build"]);
 
   agentMessage(chat.codex, turn, "a1", "Built.");
-  chat.codex("turn/completed", { turn: { id: turn, status: "completed" } });
+  chat.complete(turn);
   await chat.read();
   await chat.accept();
-  await chat.settle();
   const second = chat.turnId();
   chat.codex("turn/started", { turn: { id: second } });
   agentMessage(chat.codex, second, "a2", "All green.");
-  chat.codex("turn/completed", { turn: { id: second, status: "completed" } });
+  chat.complete(second);
   await chat.settle();
 
   assert.deepEqual(shape(chat.rows()), [
-    "user: Fix the build",
-    "trace(complete)",
-    "assistant: Built.",
-    "user: and run the tests",
-    "trace(complete)",
-    "assistant: All green.",
+    "user: Fix the build", "trace(complete)", "assistant: Built.",
+    "user: and run the tests", "trace(complete)", "assistant: All green.",
   ]);
 });
 
@@ -311,11 +266,8 @@ test("a prompt Codex refuses takes back the row it stated", async () => {
 
 test("a turn pauses for an approval and carries on into its answer", async () => {
   const chat = harness();
-  await chat.send({ type: "prompt", message: "Clean the tree" });
-  const turn = chat.turnId();
-  chat.codex("turn/started", { turn: { id: turn } });
-  chat.codex("item/agentMessage/delta", { turnId: turn, itemId: "a1", delta: "Removing build." });
-  chat.codex("item/completed", { turnId: turn, item: { id: "a1", type: "agentMessage", text: "Removing build.", phase: "commentary" } });
+  const turn = await chat.prompt("Clean the tree");
+  agentMessage(chat.codex, turn, "a1", "Removing build.", { phase: "commentary" });
   chat.request(7, "item/commandExecution/requestApproval",
     { approvalId: "ap-1", turnId: turn, command: "rm -rf build", reason: "Cleaning the tree" });
   await chat.settle();
@@ -325,24 +277,17 @@ test("a turn pauses for an approval and carries on into its answer", async () =>
   await chat.settle();
   assert.equal(chat.record.activity, "working", "the turn resumes once the prompt clears");
 
-  chat.codex("item/started", { turnId: turn, item: { id: "e1", type: "commandExecution", command: "rm -rf build" } });
-  chat.codex("item/completed", { turnId: turn, item: { id: "e1", type: "commandExecution", command: "rm -rf build", aggregatedOutput: "", status: "completed" } });
+  command(chat.codex, turn, "e1", "rm -rf build", "");
   agentMessage(chat.codex, turn, "a2", "Tree is clean.");
-  chat.codex("turn/completed", { turn: { id: turn, status: "completed" } });
+  chat.complete(turn);
   await chat.settle();
 
-  assert.deepEqual(shape(chat.rows()), [
-    "user: Clean the tree",
-    "trace(complete)",
-    "assistant: Tree is clean.",
-  ]);
+  assert.deepEqual(shape(chat.rows()), ["user: Clean the tree", "trace(complete)", "assistant: Tree is clean."]);
 });
 
 test("a turn Codex reports as failed leaves what it wrote in place", async () => {
   const chat = harness();
-  await chat.send({ type: "prompt", message: "Fix the build" });
-  const turn = chat.turnId();
-  chat.codex("turn/started", { turn: { id: turn } });
+  const turn = await chat.prompt("Fix the build");
   chat.codex("item/agentMessage/delta", { turnId: turn, itemId: "a1", delta: "Half an ans" });
   chat.codex("turn/completed", { turn: { id: turn, status: "failed", error: { message: "upstream refused" } } });
   await chat.settle();
@@ -352,31 +297,3 @@ test("a turn Codex reports as failed leaves what it wrote in place", async () =>
   assert.deepEqual(shape(buildTurnRows(chat.messages(), [])), ["user: Fix the build", "trace(failed) ~Half an ans~"]);
   assert.equal(chat.messages().at(-1).content, "Half an ans");
 });
-
-test("a browser replayed from the chat's order gets the commands back, not just the messages", async () => {
-  const chat = harness();
-  await chat.send({ type: "prompt", message: "Fix the build" });
-  const turn = chat.turnId();
-  chat.codex("turn/started", { turn: { id: turn } });
-  chat.codex("item/agentMessage/delta", { turnId: turn, itemId: "a1", delta: "Looking now." });
-  chat.codex("item/completed", { turnId: turn, item: { id: "a1", type: "agentMessage", text: "Looking now.", phase: "commentary" } });
-  chat.codex("item/started", { turnId: turn, item: { id: "e1", type: "commandExecution", command: "npm run build" } });
-  chat.codex("item/completed", { turnId: turn, item: { id: "e1", type: "commandExecution", command: "npm run build", aggregatedOutput: "ok", status: "completed" } });
-  agentMessage(chat.codex, turn, "a2", "Built.");
-  chat.codex("turn/completed", { turn: { id: turn, status: "completed" } });
-  await chat.settle();
-
-  // What the browser that stayed connected has, and what a reconnecting one is
-  // caught up to, are the same transcript.
-  assert.deepEqual(shape(chat.replay()), shape(chat.rows()));
-  const trace = chat.replay().find((row) => row.type === "trace");
-  assert.deepEqual(trace.value.segments.map((segment) => segment.kind), ["narration", "tool"]);
-  assert.equal(trace.value.segments[1].tool.name, "command");
-  assert.equal(trace.value.segments[1].tool.output, "ok");
-});
-
-/**
- * Codex does not persist the answer it was writing when a turn is interrupted:
- * the thread reports that turn holding the prompt and an empty reasoning stub.
- * So the text on screen is the only copy, and the transcript says as much.
- */

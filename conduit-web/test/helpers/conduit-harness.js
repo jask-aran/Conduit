@@ -5,7 +5,6 @@ import os from "node:os";
 import path from "node:path";
 import { WebSocket } from "ws";
 
-
 export async function waitFor(check, message, { attempts = 160, delayMs = 25 } = {}) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     if (await check()) return;
@@ -31,7 +30,6 @@ const socketPath = path.join(controlDirectory, "app-server-control.sock");
 const pidFile = path.join(controlDirectory, "daemon.pid");
 
 let turnCount = 0;
-let steerCount = 0;
 
 /** The text of a turn's input items, which is what a userMessage echoes back. */
 function inputText(input) {
@@ -49,23 +47,6 @@ function handle(message, send) {
     send({ id: message.id, result: { thread: { id, model, reasoningEffort, turns: [] }, model } });
     return;
   }
-  if (message.method === "thread/read") return send({ id: message.id, result: { thread: { id: message.params.threadId, turns: [] } } });
-  if (message.method === "thread/list") {
-    const elsewhere = process.env.CONDUIT_TEST_ELSEWHERE || os.tmpdir();
-    // The workspace thread echoes the requested cwd so workspace-scoped lookups
-    // find it, except when the request is scoped to the unrelated folder.
-    const workspace = message.params.cwd && message.params.cwd !== elsewhere ? message.params.cwd : process.cwd();
-    const threads = [
-      { id: "foreign-thread", name: "Foreign thread", preview: "Existing Codex work", cwd: workspace, createdAt: 1, updatedAt: 2, status: { type: "idle" }, source: "vscode", gitInfo: { branch: "main" } },
-      { id: "elsewhere-thread", name: "Elsewhere thread", preview: "Work in another folder", cwd: elsewhere, createdAt: 3, updatedAt: 4, status: { type: "idle" }, source: "cli" },
-    ];
-    // Codex filters by cwd server-side; machine-wide listing omits the param.
-    return send({ id: message.id, result: { data: message.params.cwd ? threads.filter((thread) => thread.cwd === message.params.cwd) : threads } });
-  }
-  if (message.method === "model/list") return send({ id: message.id, result: { data: [
-    { id: "codex-test", displayName: "Codex Test", hidden: false, defaultReasoningEffort: "medium", supportedReasoningEfforts: [{ reasoningEffort: "low" }, { reasoningEffort: "medium" }, { reasoningEffort: "high" }] },
-    { id: "codex-other", displayName: "Codex Other", hidden: false, defaultReasoningEffort: "low", supportedReasoningEfforts: [{ reasoningEffort: "low" }, { reasoningEffort: "high" }] },
-  ] } });
   if (message.method === "turn/start") {
     const answer = [message.params.model, message.params.effort, "works"].filter(Boolean).join(" ");
     const turnId = "turn-" + (++turnCount);
@@ -91,15 +72,6 @@ function handle(message, send) {
     send({ method: "turn/completed", params: { turn: { id: turnId, status: "completed" } } });
     return;
   }
-  if (message.method === "turn/steer") {
-    const turnId = message.params.expectedTurnId;
-    send({ id: message.id, result: {} });
-    send({ method: "item/started", params: { turnId, item: { id: "item-steer-" + (++steerCount),
-      clientId: message.params.clientUserMessageId, type: "userMessage",
-      content: [{ type: "text", text: inputText(message.params.input) }] } } });
-    return;
-  }
-  if (message.method === "turn/interrupt") return send({ id: message.id, result: {} });
   // A real server always answers. Dropping an unmodelled request would stall
   // the caller for its full 15s timeout instead of failing a test outright.
   if (message.id != null) return send({ id: message.id, result: {} });
@@ -158,21 +130,21 @@ else if (process.argv.includes("daemon") && process.argv.includes("start")) {
   return command;
 }
 
-function deferredEvent(events, predicate, timeoutMs) {
-  const existing = events.find(predicate);
+function nextEvent(messages, listeners, predicate, timeoutMs) {
+  const existing = messages.find(predicate);
   if (existing) return Promise.resolve(existing);
   return new Promise((resolve, reject) => {
     const deadline = setTimeout(() => {
-      events.listeners.delete(listener);
+      listeners.delete(listener);
       reject(new Error("Timed out waiting for protocol event"));
     }, timeoutMs);
     const listener = (event) => {
       if (!predicate(event)) return;
       clearTimeout(deadline);
-      events.listeners.delete(listener);
+      listeners.delete(listener);
       resolve(event);
     };
-    events.listeners.add(listener);
+    listeners.add(listener);
   });
 }
 
@@ -273,35 +245,14 @@ export async function startConduitHarness({ env = {} } = {}) {
     async liveSessions() {
       return (await (await request("/v0/live-sessions")).json()).sessions;
     },
-    async runtime() {
-      return (await (await request("/v0/runtime")).json()).sessions;
-    },
-    connectStream(liveId, { pauseAfterDelta = null, pauseMs = 0 } = {}) {
+    connectStream(liveId) {
       const messages = [];
-      const frames = [];
-      const events = { listeners: new Set(), find: (predicate) => messages.find(predicate) };
+      const listeners = new Set();
       const socket = new WebSocket(`${origin.replace("http", "ws")}/v0/live-sessions/${liveId}/stream`);
-      let deltaCount = 0;
-      let pauseStartedAt = null;
-      let clientPauseMs = null;
-      let clientPauseRecovered = false;
       socket.on("message", (data) => {
         const event = JSON.parse(String(data));
         messages.push(event);
-        frames.push({ event, receivedAt: performance.now() });
-        if (event.type === "assistant_content" && event.phase === "delta") {
-          deltaCount += 1;
-          if (pauseAfterDelta != null && deltaCount === pauseAfterDelta && pauseMs > 0 && socket._socket) {
-            pauseStartedAt = performance.now();
-            socket._socket.pause();
-            setTimeout(() => {
-              socket._socket.resume();
-              clientPauseMs = performance.now() - pauseStartedAt;
-              clientPauseRecovered = true;
-            }, pauseMs);
-          }
-        }
-        for (const listener of events.listeners) listener(event);
+        for (const listener of listeners) listener(event);
       });
       const opened = new Promise((resolve, reject) => {
         socket.once("open", resolve);
@@ -310,62 +261,11 @@ export async function startConduitHarness({ env = {} } = {}) {
       const stream = {
         socket,
         messages,
-        frames,
-        get clientPauseMs() { return clientPauseMs; },
-        get clientPauseRecovered() { return clientPauseRecovered; },
         opened,
-        next: (predicate = () => true, timeoutMs = 2_000) => deferredEvent(events, predicate, timeoutMs),
+        next: (predicate, timeoutMs = 2_000) => nextEvent(messages, listeners, predicate, timeoutMs),
         close: () => socket.close(),
       };
       streams.add(stream);
-      return stream;
-    },
-    connectRuntimeStream() {
-      const messages = [];
-      const events = { listeners: new Set(), find: (predicate) => messages.find(predicate) };
-      const controller = new AbortController();
-      let opened = false;
-      let resolveOpened;
-      let rejectOpened;
-      const openedPromise = new Promise((resolve, reject) => {
-        resolveOpened = resolve;
-        rejectOpened = reject;
-      });
-      const stream = {
-        messages,
-        opened: openedPromise,
-        next: (predicate = () => true, timeoutMs = 2_000) => deferredEvent(events, predicate, timeoutMs),
-        close: () => controller.abort(),
-      };
-      streams.add(stream);
-      (async () => {
-        try {
-          const response = await fetch(`${origin}/v0/runtime/stream`, { signal: controller.signal });
-          if (!response.ok || !response.body) throw new Error(`Could not open runtime stream: ${response.status}`);
-          opened = true;
-          resolveOpened();
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let pending = "";
-          while (!controller.signal.aborted) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            pending += decoder.decode(value, { stream: true });
-            const frames = pending.split("\n\n");
-            pending = frames.pop();
-            for (const frame of frames) {
-              const data = frame.split("\n").find((line) => line.startsWith("data: "));
-              if (!data) continue;
-              const event = JSON.parse(data.slice(6));
-              messages.push(event);
-              for (const listener of events.listeners) listener(event);
-            }
-          }
-        } catch (error) {
-          if (!opened) rejectOpened(error);
-          else if (!controller.signal.aborted) throw error;
-        }
-      })().catch(() => {});
       return stream;
     },
     async terminate(signal = "SIGTERM") {
@@ -376,14 +276,8 @@ export async function startConduitHarness({ env = {} } = {}) {
       if (child.exitCode == null) {
         child.kill(signal);
         await new Promise((resolve, reject) => {
-          const timeout = setTimeout(
-            () => reject(new Error(`Conduit did not exit after ${signal}: ${output}`)),
-            8_000,
-          );
-          child.once("exit", () => {
-            clearTimeout(timeout);
-            resolve();
-          });
+          const timeout = setTimeout(() => reject(new Error(`Conduit did not exit after ${signal}: ${output}`)), 8_000);
+          child.once("exit", () => { clearTimeout(timeout); resolve(); });
         });
       }
       return { exitCode: child.exitCode, output };
