@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
-# Build a thin server release (no node_modules: install.sh installs them on the target).
-# node-pty ships prebuilt; it uses N-API, so any Node from NODE_MIN up loads it.
+# Build a thin server release for this platform:
+#
+#   scripts/package-server.sh <version> [output-dir]
+#
+# Source, the built client, templates and the lockfile -- no node_modules.
+# install.sh installs dependencies on the target with scripts/release-deps.mjs,
+# so the download is a few MB and npm's cache makes updates cheap. The one
+# native module, node-pty, ships prebuilt (it is the only thing that makes the
+# archive per-platform); it uses N-API, so any Node from NODE_MIN up loads it.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -36,7 +43,7 @@ cp -R "$pty" "$STAGE/prebuilt/node-pty/build/Release"
 rm -rf "$STAGE/prebuilt/node-pty/build/Release/obj.target" "$STAGE/prebuilt/node-pty/build/Release/.deps"
 
 printf '%s\n' "${VERSION#v}" >"$STAGE/VERSION"
-# NODE_MIN is Pi's floor.
+# The Node a private copy would be, and the oldest Node it runs on (Pi's floor).
 node -p 'process.version' >"$STAGE/NODE_VERSION"
 printf '22.19.0\n' >"$STAGE/NODE_MIN"
 

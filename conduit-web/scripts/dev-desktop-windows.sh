@@ -1,14 +1,23 @@
 #!/usr/bin/env bash
-# Run the desktop shell against the Vite dev server, with no installer in the loop. The two halves meet over
-# http://localhost:5173: Vite binds 0.0.0.0 and WSL forwards that port to the Windows side.
+# Run the desktop shell against the Vite dev server, with no installer in the
+# loop at all.
+#
+# The web half is served from WSL and the window is a Windows process, so the
+# two halves meet over http://localhost:5173 -- Vite already binds 0.0.0.0, and
+# WSL forwards that port to the Windows side. Editing the client reloads the
+# window; editing Rust rebuilds it in the debug profile, which is much faster
+# than a release build.
+#
+# Nothing here installs anything, so nothing here cares about version numbers:
+# reinstalling is only needed to test the installer or the updater.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 windows_home=$(cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')
 cargo_tauri="$(wslpath -u "$windows_home")/.cargo/bin/cargo-tauri.exe"
-# Build output lives under %LOCALAPPDATA%, which Windows Search leaves out: under the user folder every .exe shows up
-# in the Start menu as an app.
+# Build output lives under %LOCALAPPDATA%, which Windows Search leaves out: in the user folder every .exe it holds
+# showed up in the Start menu as an app.
 build_home=$(cmd.exe /c 'echo %LOCALAPPDATA%' 2>/dev/null | tr -d '\r')\\conduit-build
 target_dir=${CONDUIT_DESKTOP_TARGET_DIR:-"$build_home\\desktop-target"}
 

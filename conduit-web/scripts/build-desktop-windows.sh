@@ -1,13 +1,32 @@
 #!/usr/bin/env bash
-# Build the Windows desktop client from inside WSL: MSVC and WebView2 exist only on the Windows side, so the Windows
-# toolchain builds the Rust half over \\wsl.localhost and the web half is built here.
+# Build the Windows desktop client from inside WSL.
 #
-# Cargo's target directory lives on the Windows filesystem: across the 9p share every object file is slow to write.
+# The shell targets WebView2 and links with MSVC, neither of which exists on the
+# Linux side, so the Rust half is built by the Windows toolchain reaching into
+# this working tree over \\wsl.localhost. The web half is built here, by the
+# same `npm run build` every other target uses, and Tauri is told not to run it
+# again -- `tauri.prebuilt.conf.json` is that instruction and nothing else.
 #
-#   --version X.Y.Z   build as that version, so an installed copy has something newer to find
-#   --local-updates   point the updater at a Conduit server instead of GitHub
-#   --dev             a separate application (own name, identifier, install, settings, token) that installs alongside
-#                     the release. Implies --local-updates: updating from GitHub would replace it with the release.
+# Cargo's target directory lives on the Windows filesystem. Left in the working
+# tree it would write every object file across the 9p share, which turns a
+# five-minute build into a much longer one.
+#
+# Two options exist for testing the update path without cutting a release:
+#
+#   --version X.Y.Z   build as that version, so an installed copy has something
+#                     newer to find
+#   --local-updates   point this build's updater at the Conduit server running
+#                     on this machine instead of at GitHub
+#   --dev             build a separate application -- its own name, identifier,
+#                     install directory, settings, token and tray entry -- so it
+#                     can be installed alongside the released client. Implies
+#                     --local-updates, since a development client that updated
+#                     itself from GitHub would replace itself with the release.
+#                     Defaults to this project's reachable development server;
+#                     CONDUIT_LOCAL_UPDATE_URL overrides that address.
+#
+# Together they close the loop locally: build --dev --version 0.7.2, install it,
+# then build --dev --version 0.7.3 and press Update app.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -15,6 +34,8 @@ cd "$(dirname "$0")/.."
 build_version=""
 local_updates=""
 dev_client=""
+# A dev client's name: "dev" is Conduit Dev; "durable" is Conduit Durable, the
+# client for the distributed-nodes head on the VPS while that branch is built.
 variant="dev"
 passthrough=()
 while [ $# -gt 0 ]; do
@@ -28,12 +49,21 @@ while [ $# -gt 0 ]; do
 done
 
 windows_home=$(cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')
-# Build output lives under %LOCALAPPDATA%, which Windows Search leaves out: under the user folder every .exe shows up
-# in the Start menu as an app.
+# Build output lives under %LOCALAPPDATA%, which Windows Search leaves out: in the user folder every .exe it holds
+# showed up in the Start menu as an app.
 build_home=$(cmd.exe /c 'echo %LOCALAPPDATA%' 2>/dev/null | tr -d '\r')\\conduit-build
 cargo_tauri="$(wslpath -u "$windows_home")/.cargo/bin/cargo-tauri.exe"
-# A development build compiles into its own directory: the build renames `release\conduit-desktop.exe`, Windows
-# refuses that while `npm run desktop:dev:win` runs the binary from the tree, and the build fails "Access is denied".
+# A development build compiles into a directory of its own.
+#
+# The last step of a build renames `release\conduit-desktop.exe`, and Windows
+# refuses to touch an image a process is running from. `npm run desktop:dev:win`
+# runs the binary straight out of this tree, so a dev session and an artifact
+# build sharing one directory means the build fails with "Access is denied" and
+# the only way forward is to close the window somebody is working in.
+#
+# Separate directories cost one more full compile the first time and a second
+# copy of the build output on disk. Both are cheaper than a build that can only
+# run when nothing is open.
 target_dir=${CONDUIT_DESKTOP_TARGET_DIR:-"$build_home\\desktop-target${dev_client:+-$variant}"}
 
 if [ ! -x "$cargo_tauri" ]; then
@@ -42,7 +72,9 @@ if [ ! -x "$cargo_tauri" ]; then
   exit 1
 fi
 
-# The signing key never enters the repo: an installed client refuses an update the private half did not sign.
+# The updater artifact is signed here, with a key that never enters the repo:
+# the public half is in tauri.conf.json, and an installed client refuses an
+# update that the matching private half did not sign.
 key_path=${CONDUIT_UPDATER_KEY:-"$HOME/.conduit/conduit-updater.key"}
 if [ ! -f "$key_path" ]; then
   echo "No updater signing key at $key_path." >&2
@@ -52,14 +84,18 @@ if [ ! -f "$key_path" ]; then
 fi
 signing_key=$(tr -d '\r\n' < "$key_path")
 
-# The password sits beside the key, not in the environment, so no shell history or process listing carries it.
+# The key is encrypted, so signing needs its password too. It sits beside the
+# key rather than in the environment, so a shell history or a process listing
+# never carries it; CI passes the same value as a second secret.
 password_path=${CONDUIT_UPDATER_KEY_PASSWORD_FILE:-"$key_path.password"}
 if [ -z "${CONDUIT_UPDATER_KEY_PASSWORD:-}" ] && [ -f "$password_path" ]; then
   CONDUIT_UPDATER_KEY_PASSWORD=$(tr -d '\r\n' < "$password_path")
 fi
 
-# powershell.exe here is a shim: killing it orphans cargo-tauri.exe, which holds the target directory's lock, and the
-# next build waits on that lock forever.
+# A build interrupted from this side leaves the Windows half running: the
+# powershell.exe seen here is a shim, so killing it orphans cargo-tauri.exe,
+# which keeps the lock on the target directory. A second build then waits on
+# that lock forever with no explanation, so refuse to start instead.
 stale=$(powershell.exe -NoProfile -Command "(Get-Process cargo-tauri -ErrorAction SilentlyContinue).Id -join ' '" 2>/dev/null | tr -d '\r')
 if [ -n "$stale" ]; then
   echo "A Windows build is already running (cargo-tauri.exe PID: $stale)." >&2
@@ -68,10 +104,22 @@ if [ -n "$stale" ]; then
   exit 1
 fi
 
+# The Windows half is a script file rather than a -Command string so the
+# signing key passes through one layer of quoting instead of three.
+# What this build overrides, written next to the config it overrides so the
+# CLI resolves it the same way. The committed config is never edited: a build
+# that failed halfway would otherwise leave the repository claiming a version
+# or an endpoint nobody chose.
+# A development build names itself, so no version has to be invented and no
+# two builds are ever the same version. It is a prerelease of the patch after
+# the last tag: below that release when it arrives, above the release it was
+# built from, and ordered against other development builds by the timestamp.
+# The commit is carried for reading, not for ordering.
 if [ -n "$dev_client" ] && [ -z "$build_version" ]; then
   build_version=$(CONDUIT_RELEASE_TAG= GITHUB_REF_TYPE= node --input-type=module -e 'import { buildStamp } from "./src/build-info.js"; console.log(buildStamp().version)')
 fi
 
+# Stamp the interface with exactly the version carried by the shell.
 if [ -n "$dev_client" ]; then
   CONDUIT_RELEASE_TAG= GITHUB_REF_TYPE= CONDUIT_BUILD_VERSION="$build_version" npm run build
 elif [ -n "$build_version" ]; then
@@ -81,12 +129,15 @@ else
 fi
 
 if [ -n "$dev_client" ]; then
+  # Conduit Durable updates from the durable head it is the client of.
   default_base="https://conduit-local.jask-aran.com/desktop-updates"
   [ "$variant" = durable ] && default_base="https://conduit-durable.jask-aran.com/desktop-updates"
   update_base=${CONDUIT_LOCAL_UPDATE_URL:-"$default_base"}
 else
   update_base=${CONDUIT_LOCAL_UPDATE_URL:-"http://127.0.0.1:${CONDUIT_PORT:-4310}/desktop-updates"}
 fi
+# The device companion: the node role bundled with Windows' own Node runtime,
+# shipped as an app resource for the shell to run in the background.
 windows_node=$(cmd.exe /c 'where node' 2>/dev/null | tr -d '\r' | head -n 1)
 if [ -z "$windows_node" ]; then
   echo "No node.exe on the Windows side: the desktop app ships it to run its device companion." >&2
@@ -161,8 +212,13 @@ if [ -z "$installer" ]; then
   exit 1
 fi
 
-# The updater artifact is signed here, not by the Windows CLI: an empty password cannot pass through the Windows
-# environment (assigning '' deletes the variable), so the CLI would prompt on a console nothing reads.
+# The updater artifact is built and signed here rather than by the Windows CLI.
+# A key with an empty password cannot say so through the Windows environment --
+# assigning '' to a variable deletes it -- so the CLI finds no password and
+# stops to prompt on a console nothing is reading, after the installer is
+# already written. The archive is only the installer zipped, and the signature
+# is the same minisign signature the CLI would have produced, so doing both on
+# this side is the same artifact without the dead end.
 archive="${installer%.exe}.nsis.zip"
 rm -f "$archive" "$archive.sig"
 # Stored, not compressed: the updater reads the zip crate's Stored method only.
@@ -175,13 +231,18 @@ npx tauri signer sign \
   --app-version "$version" \
   "$archive" > /dev/null
 
-# The URL names the tag, not `latest`, so a manifest always names the build it was signed against.
+# The manifest, written by the same script the release workflow uses. The URL
+# points at the tag rather than at `latest` so a manifest always names the build
+# it was signed against.
 tag=${CONDUIT_RELEASE_TAG:-"v$version"}
 base=${CONDUIT_UPDATER_BASE_URL:-"https://github.com/jask-aran/Conduit/releases/download/$tag"}
+# The manifest has to name the same place the build was told to look.
 if [ -n "$local_updates" ]; then base=$update_base; fi
 node scripts/desktop-update-manifest.mjs \
   "$version" "$base/$(basename "$archive")" "$archive.sig" "$bundle/latest.json" > /dev/null
 
 echo
 echo "Bundle ($bundle):"
+# An update needs all three: the installer a person runs, the archive the
+# updater downloads, and the signature it checks before running anything.
 ls -1 "$bundle"/*.exe "$bundle"/*.nsis.zip "$bundle"/*.sig "$bundle"/latest.json 2>/dev/null || echo "  nothing produced" >&2

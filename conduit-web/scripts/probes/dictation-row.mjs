@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 /**
- * How does the phone composer's button row move as dictation starts and stops?
+ * How does the phone composer's button row move as dictation starts and
+ * stops? A fresh Test-profile chat with history, scrolled up so scroll to
+ * latest is in the row, a phone viewport and a synthetic microphone (a tone,
+ * no real device). Runs start and stop with an empty draft and with a typed
+ * one, logging every frame's row buttons: left/right edge and opacity.
  *
  *   node scripts/probes/dictation-row.mjs --windows
  */

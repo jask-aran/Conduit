@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
-# The Conduit daemon on this computer, and how to manage it. One service runs whichever code `current` points at
-# (a release or a development clone) on the same data and port, so clients never notice which.
+# conduit-server — the Conduit daemon on this computer, and how to manage it.
+#
+# One service runs whichever code `current` points at: a downloaded release,
+# or a development clone (`conduit-server use dev ~/Conduit`). Either way it
+# reads the same ~/.conduit/data and answers on the same port, so the browser,
+# desktop and phone clients never notice which.
+#
+#   ~/.local/share/conduit/versions/<v>   releases, replaced whole
+#   ~/.local/share/conduit/current        the code the service runs
+#   ~/.local/share/conduit/node/<v>       the Node releases run on
+#   ~/.conduit/data                       everything durable
+#   ~/.conduit/conduit.env                host, port, PATH and other settings
+#
+# CONDUIT_PROFILE=sandbox (what `install.sh --sandbox` sets up) gives a second,
+# separate daemon -- ~/.conduit-sandbox, its own port and service -- for trying
+# a fresh install without touching the real one.
 set -euo pipefail
 
 PROFILE="${CONDUIT_PROFILE:-}"
@@ -22,6 +36,9 @@ DEFAULT_PORT=4310; [[ "$PROFILE" == sandbox ]] && DEFAULT_PORT=4321
 CURRENT="$APP_HOME/current"
 TILDE="~"
 
+# ---------------------------------------------------------------- appearance
+# One rail down the left, like the installers people now expect: ┌ opens a
+# command, ◆ is a question being asked, ◇ a step done, └ closes it.
 if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
   B=$'\e[1m'; D=$'\e[2m'; G=$'\e[32m'; R=$'\e[31m'; Y=$'\e[33m'; C=$'\e[36m'; M=$'\e[35m'; N=$'\e[0m'
   BADGE=$'\e[1;30;46m'
@@ -48,6 +65,7 @@ title() {
 outro() { printf '%s%s%s  %s\n\n' "$D" "$S_END" "$N" "$*"; }
 plain() { sed 's/\x1b\[[0-9;]*m//g' <<<"$1"; }
 
+# ---------------------------------------------------------------- the code
 code_kind() { [[ -f "$CURRENT/NODE_VERSION" ]] && echo release || echo dev; }
 code_label() {
   if [[ ! -e "$CURRENT" ]]; then echo "not installed"
@@ -61,6 +79,7 @@ code_label() {
 # node_modules were installed with -- the one on PATH.
 node_bin() {
   if [[ "$(code_kind)" == release ]]; then
+    # The Node install.sh chose: the system's when new enough, else a private copy.
     local chosen; chosen="$(cat "$CURRENT/NODE_BIN" 2>/dev/null || true)"
     if [[ -x "$chosen" ]]; then echo "$chosen"
     elif [[ -x "$APP_HOME/node/$(cat "$CURRENT/NODE_VERSION")/bin/node" ]]; then echo "$APP_HOME/node/$(cat "$CURRENT/NODE_VERSION")/bin/node"
@@ -68,6 +87,7 @@ node_bin() {
   else command -v node || true; fi
 }
 
+# ---------------------------------------------------------------- settings
 load_env() {
   CONDUIT_HOST=127.0.0.1; CONDUIT_PORT=$DEFAULT_PORT
   # shellcheck disable=SC1090
@@ -201,6 +221,7 @@ stop() {
   ok "Stopped"
 }
 
+# A restart waits for answers still being written, up to ten minutes.
 restart() {
   load_env
   local waited=0 turns drain_port="${1:-$CONDUIT_PORT}"
@@ -212,8 +233,12 @@ restart() {
   start
 }
 
-# Only when the running server already serves that worker: a release keeps serving its own files until it
-# restarts, and then there is nothing to install ahead of time.
+# Ready connected browsers for the client this restart brings, as the dev
+# launcher does: they install it now, and the restart waits until each
+# browser registration says so (native clients never hold it), up to 20s.
+# Only when the running server already serves that worker -- a release keeps
+# serving its own files until it restarts, and then there is nothing to
+# install ahead of time.
 prepare_browsers() {
   local sw="$CURRENT/conduit-web/dist/sw.js" target served
   [[ -f "$sw" ]] && healthy || return 0
@@ -225,6 +250,7 @@ prepare_browsers() {
   return 0
 }
 
+# Every live connection, one per line: kind, build, how long. Live only.
 connected_clients() {
   auth api GET /v0/runtime/clients 2>/dev/null | "$(node_bin)" -e '
     try { const { clients = [] } = JSON.parse(require("fs").readFileSync(0, "utf8"));
@@ -260,6 +286,7 @@ logs() {
   else exec tail -n 200 -f "$LOG_FILE"; fi
 }
 
+# ---------------------------------------------------------------- which code
 use() {
   load_env
   local what="${1:-}"
@@ -300,6 +327,7 @@ link_cli() {
   fi
 }
 
+# ---------------------------------------------------------------- setup
 sync_python() {
   local tools="$CONDUIT_DATA_ROOT/toolchains" uv="$CONDUIT_DATA_ROOT/toolchains/uv/$UV_VERSION/uv"
   if [[ ! -x "$uv" ]]; then
@@ -312,10 +340,11 @@ sync_python() {
 }
 
 TTY=/dev/tty
-settle() {
+# A question settles into "◇ question / │ answer" once answered.
+settle() { # settle lines-to-clear "question" "answer"
   printf '\r\e[%dA\e[J%s%s%s  %s\n%s%s  %s%s\n' "$1" "$G" "$S_DONE" "$N" "$2" "$D" "$S_BAR" "$3" "$N" >$TTY
 }
-ask() {
+ask() { # ask "Question" default [validator error] -> REPLY
   while :; do
     printf '%s%s%s  %s  ' "$C" "$S_ASK" "$N" "$1" >$TTY
     IFS= read -r -e -i "${2:-}" REPLY <$TTY 2>$TTY || REPLY=""
@@ -331,7 +360,8 @@ ask() {
 }
 valid_port() { [[ "$1" =~ ^[0-9]{1,5}$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 )); }
 
-# Left unfinished so the next prompt can take the same line.
+# line_secret "Label" "hint" -> REPLY: typed as ▪▪▪ on one line, left unfinished
+# so the next prompt can take the same line.
 line_secret() {
   printf '\r\e[K%s%s%s  %s  %s%s%s' "$C" "$S_ASK" "$N" "$1" "$D" "${2:+$2  }" "$N" >$TTY
   REPLY=""; local ch
@@ -343,7 +373,7 @@ line_secret() {
     esac
   done
 }
-secret() {
+secret() { # secret "Question" -> REPLY, typed as ▪▪▪
   printf '%s%s%s  %s\n%s%s%s  ' "$C" "$S_ASK" "$N" "$1" "$C" "$S_BAR" "$N" >$TTY
   REPLY=""; local ch
   while IFS= read -rsn1 ch <$TTY; do
@@ -356,7 +386,7 @@ secret() {
   printf '\n' >$TTY
   settle 2 "$1" "$(printf "%.0s$S_MASK" $(seq 1 ${#REPLY}))"
 }
-choose() {
+choose() { # choose "Question" "one" "two" … -> REPLY (1-based); ↑↓/jk/digits, enter
   local q="$1"; shift
   local -a opts=("$@"); local n=$# sel=0 i key rest
   trap 'printf "\e[?25h" >/dev/tty 2>/dev/null || true' EXIT
@@ -384,7 +414,7 @@ choose() {
   settle "$((n + 1))" "$q" "$chosen"
   REPLY=$((sel + 1))
 }
-checklist() {
+checklist() { # checklist "Question" "one" "two" … -> REPLY: chosen numbers, space-separated
   local q="$1"; shift
   local -a opts=("$@") on=(); local n=$# sel=0 i key rest
   for i in "${!opts[@]}"; do on[i]=0; done
@@ -418,7 +448,7 @@ checklist() {
   local IFS=","; local summary="${names[*]}"
   printf '%s%s%s  %s  %s%s%s\n' "$G" "$S_DONE" "$N" "$q" "$D" "${summary:-none}" "$N" >$TTY
 }
-spin() {
+spin() { # spin "message" command… — the rail's spinner, then ◇ and the time it took
   local message="$1"; shift
   local log; log="$(mktemp)"; local started=$SECONDS i=0
   local width="$(tput cols 2>/dev/null || printf '%s' "${COLUMNS:-80}")" progress
@@ -435,7 +465,7 @@ spin() {
   if wait "$pid"; then ok "$message ${D}$((SECONDS - started))s${N}"; rm -f "$log"
   else warn "$message"; sed "s/^/${D}${S_BAR}${N}    /" "$log" | tail -12; rm -f "$log"; return 1; fi
 }
-box() {
+box() { # box "Title" line… — a note hung off the rail
   local t="$1"; shift; local w=${#t} l
   for l in "$@"; do l="$(plain "$l")"; (( ${#l} > w )) && w=${#l}; done
   w=$((w + 4))
@@ -491,7 +521,9 @@ set_server_name() {
     }
     console.log(name);
   ' "$value")" || fail "Invalid server name"
-  # The server owns its name: a running one is renamed in place (clients and the LAN follow).
+  # The server owns its name: a running one is renamed in place (clients and
+  # the LAN follow); a stopped one has it written where it reads it, and the
+  # env var seeds a server that has never started.
   local body; body="$("$(node_bin)" -e 'console.log(JSON.stringify({ name: process.argv[1] }))' "$value")"
   if healthy && auth api PUT /v0/server/name "$body" >/dev/null 2>&1; then
     (( prompted )) || ok "Server name: $value"; return
@@ -522,12 +554,17 @@ set_password() {
   printf '\r\e[K' >$TTY; ok "Password ${D}set${N}"
 }
 
+# ---------------------------------------------------------------- reaching it
+# Setup asks how Conduit will be reached -- one list for every machine, since a
+# desktop may sit behind a tunnel and a VPS may be used only over SSH; what it
+# finds (Tailscale signed in, cloudflared) only annotates the choices. The
+# server stays on loopback for every choice but "my network".
 set_env() {
   mkdir -p "$STATE_DIR"
   { grep -v -E "^$1=" "$ENV_FILE" 2>/dev/null || true; printf '%s=%s\n' "$1" "$2"; } >"$ENV_FILE.tmp"
   mv "$ENV_FILE.tmp" "$ENV_FILE"
 }
-ts_state() {
+ts_state() { # missing | stopped | running
   command -v tailscale >/dev/null 2>&1 || { echo missing; return; }
   tailscale status --json 2>/dev/null | grep -q '"BackendState": *"Running"' && echo running || echo stopped
 }
@@ -535,14 +572,18 @@ ts_name() { tailscale status --json 2>/dev/null | sed -n 's/.*"DNSName": *"\([^"
 public_ip() { curl -fsS --max-time 3 https://api.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}'; }
 lan_ip() { (hostname -I 2>/dev/null || ipconfig getifaddr en0 2>/dev/null) | tr ' ' '\n' | grep -E '^(192\.168|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)' | head -1; }
 
-# Only "this network" leaves loopback (wrong for a VPS, whose private addresses are nobody's Wi-Fi): Tailscale,
-# a tunnel and SSH all land on loopback.
+# This computer always reaches Conduit, so it is not offered. What is asked is
+# who else does: devices on this network (which binds 0.0.0.0, publishes the
+# server's LAN routes and advertises it on mDNS -- wrong for a VPS, whose
+# private addresses are not anybody's Wi-Fi), and the ways in from anywhere.
+# Tailscale, a tunnel and SSH all land on loopback, so they need no network.
 choose_access() {
   local ts; ts="$(ts_state)" ts_hint="${D}— your devices, anywhere${N}"
   [[ "$ts" == running ]] && ts_hint="${D}— $(ts_name)${N}"
   [[ "$ts" == missing ]] && ts_hint="${D}— installs it${N}"
   local tunnel_hint="${D}— Cloudflare Tunnel, Caddy, nginx…${N}"
   command -v cloudflared >/dev/null 2>&1 && tunnel_hint="${D}— cloudflared found${N}"
+  # Ticked to begin with: saved choices; a first setup stays on loopback.
   local current=""
   if [[ "${CONDUIT_HOST:-}" != 127.0.0.1 ]]; then current+="1 "; fi
   has_access tailscale && current+="2 "; has_access proxy && current+="3 "; has_access ssh && current+="4 "
@@ -567,6 +608,7 @@ choose_access() {
 }
 has_access() { [[ ",${CONDUIT_ACCESS:-}," == *",$1,"* ]]; }
 
+# Tailscale serve gives the loopback server an HTTPS name on the tailnet.
 connect_tailscale() {
   if [[ "$(ts_state)" == missing ]]; then
     if [[ "$(uname -s)" == Darwin ]]; then
@@ -602,8 +644,9 @@ connect_access() {
 }
 connect() { load_env; title "How Conduit is reached"; choose_access; healthy && restart >/dev/null; connect_access; ready_box; outro ""; }
 
-# The route words are the apps', so the same route reads the same in the terminal and the menu.
-access_urls() {
+# The route words are the apps' (This machine / This network / Tailscale /
+# Internet), so the same route reads the same in the terminal and the menu.
+access_urls() { # url|route|a command to run, if any
   echo "http://localhost:$CONDUIT_PORT|This machine"
   [[ "$CONDUIT_HOST" == 0.0.0.0 && -n "$(lan_ip)" ]] && echo "http://$(lan_ip):$CONDUIT_PORT|This network"
   if has_access tailscale; then local n; n="$(ts_name)"; [[ -n "$n" ]] && echo "https://$n|Tailscale"; fi
@@ -611,6 +654,7 @@ access_urls() {
   has_access ssh && echo "http://localhost:$CONDUIT_PORT|This machine, over SSH after:|ssh -NL $CONDUIT_PORT:localhost:$CONDUIT_PORT $USER@$(public_ip)"
   return 0
 }
+# The server's own name, as every client shows it.
 server_name() {
   local file="${CONDUIT_IDENTITY_FILE:-$CONDUIT_DATA_ROOT/identity.json}"
   [[ -f "$file" ]] && "$(node_bin)" -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).name || "")' "$file" 2>/dev/null && return
@@ -640,9 +684,11 @@ ready_box() {
   return 0
 }
 
+# ---------------------------------------------------------------- releases
 auth() { "$(node_bin)" "$CURRENT/scripts/conduit-auth.mjs" "$@"; }
 json_str() { local v="${1//\\/\\\\}"; v="${v//\"/\\\"}"; printf '"%s"' "$v"; }
 
+# The newest release on this machine's channel, asked of GitHub at most daily.
 latest_release() {
   local cache="$STATE_DIR/latest-release" channel="${CONDUIT_CHANNEL:-stable}"
   if [[ -f "$cache" && -n "$(find "$cache" -mmin -1440 2>/dev/null)" && "$(sed -n 2p "$cache")" == "$channel" ]]; then sed -n 1p "$cache"; return; fi
@@ -655,7 +701,7 @@ latest_release() {
   [[ "$tag" == v* ]] || return 0
   mkdir -p "$STATE_DIR"; printf '%s\n%s\n' "$tag" "$channel" >"$cache"; echo "$tag"
 }
-update_available() {
+update_available() { # prints the newer tag, if this runs a release older than it
   [[ "$(code_kind)" == release ]] || return 0
   [[ "$(cat "$CURRENT/VERSION")" == *local* ]] && return 0
   local latest here; latest="$(latest_release)"; here="v$(cat "$CURRENT/VERSION")"
@@ -682,6 +728,7 @@ update() {
   rm -f "$STATE_DIR/latest-release"
 }
 
+# ---------------------------------------------------------------- open, sessions
 opener() {
   if grep -qi microsoft /proc/version 2>/dev/null; then
     command -v wslview >/dev/null 2>&1 && { echo wslview; return; }
@@ -705,12 +752,16 @@ open_cmd() {
   ok "Opened ${C}$base${N} ${D}signed in${N}"
 }
 
-# A phone's camera opens the link signed in; the app's "Scan QR code" redeems the same code for a token of its own.
+# A QR of a one-time, five-minute sign-in link. A phone's camera opens it in
+# the browser, signed in; the app's "Scan QR code" redeems the same code for a
+# token of its own (POST /v0/auth/native-pair).
 pair() {
   load_env
   healthy || fail "Conduit is not running. $NAME start"
-  # The fragment (never sent by a browser) carries the server's identity and routes, so the app redeems the code
-  # over TLS it vouches for.
+  # The address another device is likeliest to reach, from the routes the
+  # server has seen (a tunnel shows up there), before the one setup chose.
+  # The fragment (never sent by a browser) carries the server's identity and
+  # network routes, so the app redeems the code over TLS it vouches for.
   local described base bundle
   described="$(auth api GET /v0/server 2>/dev/null | "$(node_bin)" -e '
     try { const { id, publicKey, paths = [] } = JSON.parse(require("fs").readFileSync(0, "utf8"));
@@ -769,6 +820,7 @@ sessions_cmd() {
   outro "${D}$NAME sessions revoke <id>|all${N}"
 }
 
+# ---------------------------------------------------------------- data
 backup() {
   load_env
   local lean=0 file=""
@@ -801,6 +853,7 @@ restore() {
   outro ""
 }
 
+# ---------------------------------------------------------------- settings, projects
 config_cmd() {
   load_env
   case "${1:-}" in
@@ -965,6 +1018,7 @@ completion() {
 
 uninstall() {
   load_env
+  # The Tailscale serve entry setup made, if it still points here.
   if has_access tailscale && command -v tailscale >/dev/null 2>&1 \
     && tailscale serve status 2>/dev/null | grep -q "127.0.0.1:$CONDUIT_PORT"; then
     tailscale serve --https=443 off >/dev/null 2>&1 || true

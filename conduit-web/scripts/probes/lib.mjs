@@ -1,6 +1,16 @@
 /**
- * Shared setup for the probes: headless Chromium by default, or `--windows` for the headed Windows Chrome on :9222,
- * which anything about pixels, compositing or frame cost needs (fractional display scaling only exists there).
+ * Shared setup for the investigation probes (docs/testing.md, Layout
+ * stability and Frame budget). Each probe drives the running local server in
+ * one of two browsers:
+ *
+ * - headless Chromium (default), with a freshly minted session;
+ * - `--windows`: the headed Windows Chrome started by
+ *   `node scripts/run-windows-chrome-devtools.mjs start`, over CDP on :9222,
+ *   already logged in. Use it for anything about pixels, compositing or frame
+ *   cost: fractional display scaling only exists there.
+ *
+ * Probes open a page of their own and close it, so nothing of the reader's is
+ * touched; a probe killed mid-run leaves its page open in Windows Chrome.
  */
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -13,6 +23,12 @@ export const origin = process.env.CONDUIT_ORIGIN || "http://127.0.0.1:4310";
 export const cdpOrigin = process.env.CONDUIT_CDP || "http://127.0.0.1:9222";
 export const arg = (name, fallback) => { const at = process.argv.indexOf(name); return at > 0 ? process.argv[at + 1] : fallback; };
 export const flag = (name) => process.argv.includes(name);
+if (flag("--help") || flag("-h")) {
+  const source = await fs.readFile(process.argv[1], "utf8");
+  const head = source.replace(/^#!.*\n/, "").match(/^(?:\/\*[\s\S]*?\*\/|(?:\/\/.*\n)+)/)?.[0] || "";
+  console.log(head.replace(/^\/\*+|\*\/$/g, "").replace(/^ ?(?:\*|\/\/) ?/gm, "").trim());
+  process.exit(0);
+}
 
 export async function loadPlaywright() {
   try { return await import("playwright"); } catch {}
@@ -38,6 +54,10 @@ export async function launchHeadless(chromium) {
   }
 }
 
+/**
+ * A page on the running server. `width`/`height` size the headless viewport,
+ * or try to size the Windows window (the screen caps it; check `innerWidth`).
+ */
 export async function open({ windows = flag("--windows"), width = 1800, height = 1000 } = {}) {
   if (!(await fetch(`${origin}/healthz`).then((response) => response.ok, () => false))) {
     console.error(`No Conduit at ${origin}: bash .devcontainer/start-conduit.sh start`);
@@ -64,7 +84,8 @@ export async function open({ windows = flag("--windows"), width = 1800, height =
   const context = await browser.newContext({ storageState, viewport: { width, height } });
   const page = await context.newPage();
   const cdp = await context.newCDPSession(page);
-  // The server keeps the 20 sessions seen last: a probe that leaves its own behind pushes real devices' sign-ins out.
+  // The server keeps the 20 sessions seen last: a probe that left its own
+  // behind pushed real devices' sign-ins out, a run at a time.
   const close = async () => {
     await context.request.post(`${origin}/v0/auth/logout`).catch(() => {});
     await browser.close().catch(() => {});
@@ -73,6 +94,7 @@ export async function open({ windows = flag("--windows"), width = 1800, height =
   return { browser, context, page, cdp, windows, close };
 }
 
+/** The ids of the most recent chats, for probes that need some to open. */
 export async function recentChats(page, count = 2) {
   if (!page.url().startsWith(origin)) await page.goto(origin);
   return page.evaluate(async (count) => {
@@ -81,11 +103,13 @@ export async function recentChats(page, count = 2) {
   }, count);
 }
 
+/** Load `address` (a path, or a full URL) and give it time to settle. */
 export async function visit(page, address, settle = 4000) {
   await page.goto(address.startsWith("http") ? address : `${origin}${address}`);
   await page.waitForTimeout(settle);
 }
 
+/** The whole viewport as PNG bytes, straight from the compositor. */
 export async function capture(cdp, page, clip) {
   const area = clip ?? await page.evaluate(() => ({ x: 0, y: 0, width: innerWidth, height: innerHeight }));
   const { data } = await cdp.send("Page.captureScreenshot", { format: "png", clip: { ...area, scale: 1 } });

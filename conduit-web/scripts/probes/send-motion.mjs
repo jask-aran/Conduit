@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 /**
- * What moves when a message is sent from the phone composer?
+ * What moves when a message is sent from the phone composer? A fresh Test
+ * profile chat (no model call) with some history, a phone viewport, the
+ * voice layout, animations slowed: records every frame's text pill, sent
+ * bubble and scroll position, and saves a frame strip.
  *
  *   node scripts/probes/send-motion.mjs --windows [--rate 0.2] [--out dir]
  */
@@ -42,6 +45,7 @@ for (const prompt of ["400t", "400t"]) {
 await page.evaluate(() => document.querySelector(".composer-keyboard-trigger")?.click());
 await textarea.fill("Hello, this is a message being sent 300t");
 await page.waitForTimeout(600);
+// Scrolled up into the transcript, the way a send usually starts.
 const up = Number(arg("--up", "0"));
 if (up) { await page.evaluate((up) => { const v = document.querySelector(".ui-chat-viewport"); v.dispatchEvent(new WheelEvent("wheel", { deltaY: -up, bubbles: true })); v.scrollTop -= up; }, up); await page.waitForTimeout(600); }
 await cdp.send("Animation.enable");

@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 /**
- * Does anything move after the first open's fade starts?
+ * Does anything move after the first open's fade starts? Reloads a page and
+ * takes screenshots as fast as the compositor gives them for a few seconds,
+ * alongside a timeline of attribute changes, animations and transitions (KaTeX
+ * internals left out). Compare consecutive frames, or flip through them, to
+ * find the moment something shifts and what changed then.
  *
  *   node scripts/probes/reload-settle.mjs --windows --out <dir> [--url <path>] [--seconds 4.5] [--right-half]
  */

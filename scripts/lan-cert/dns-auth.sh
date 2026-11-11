@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# certbot manual-auth-hook.
+# certbot manual-auth-hook: publish the challenge, then wait until a public
+# resolver sees it.
 set -euo pipefail
 zone="${LAN_CERT_ZONE:-${CERTBOT_DOMAIN#*.}}"
 record="_acme-challenge.$CERTBOT_DOMAIN"

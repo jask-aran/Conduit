@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# A development APK stamped with this tree's dev version, published where the dev server hands out its own builds, so
-# a native change reaches a phone as an in-app update. It carries the interface the dev server serves (dist), so a
-# fresh install starts current rather than at whenever `cap sync` last ran.
+# A development APK stamped with this tree's dev version, published where the dev server hands out its own builds
+# (CONDUIT_DESKTOP_UPDATE_DIR, as start-conduit.sh finds it). The dev app's updater offers the newest one by that stamp,
+# so a native change reaches a phone as an in-app update rather than a side-load. The interface it carries is the one the
+# dev server serves (dist, built by start-conduit.sh restart), so a fresh install starts current: built without it, every
+# dev APK carried the interface of whenever `cap sync` last ran, and a phone showed that until a live update came
+# through.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ -f dist/index.html ] || { echo "No dist/: run .devcontainer/start-conduit.sh restart first" >&2; exit 1; }

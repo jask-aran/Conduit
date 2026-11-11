@@ -1,5 +1,8 @@
-// PhoneComposer's motion invariants, frame by frame. Run with the gallery served (npm run gallery) and open in headed
-// Chrome on CDP :9222, from conduit-web: node scripts/motion-check/phone.mjs.
+// PhoneComposer's motion invariants, frame by frame: the phone preview's real transitions and every pair of the gallery card's states, both layouts.
+// Run with the gallery served (npm run gallery) and open in headed Chrome on CDP :9222 (node ../scripts/run-windows-chrome-devtools.mjs start),
+// from conduit-web: node scripts/motion-check/phone.mjs. It plays each move at 1x (restoring the gallery's speed setting after) and prints
+// one line per move: ✓, or ✗ with the invariant it broke (styles/foundations.css, Motion: snap, squeezed, layers, one spot,
+// frost under a fade; and PhoneComposer's state table: each part ends as data-show says, starts on the first frames, in step, then settles).
 const { chromium } = await import(new URL("../../../.smoke-tools/node_modules/playwright/index.mjs", import.meta.url).href);
 const b = await chromium.connectOverCDP("http://127.0.0.1:9222");
 const page = b.contexts()[0].pages().find((p) => p.url().includes(":5180/gallery.html"));
@@ -11,6 +14,7 @@ process.on("exit", () => {});
 const restore = async () => { await page.evaluate((v) => { if (v) localStorage.setItem("gallery:speed", v); }, userSpeed); await page.reload(); };
 try {
 const frame = page.frames().find((f) => f.url().includes("frame=phone"));
+// The per-frame probe, installed in a document: watches one .ui-phone-composer for 800ms after act().
 const PROBE = `window.__probe = (root, act) => new Promise((res) => {
   const pc = root, bad = new Set(), last = new Map(), first = new Map();
   const parts = () => [...pc.querySelectorAll(".ui-phone-row > .ui-pill"), pc.querySelector(".ui-phone-field")];
@@ -73,6 +77,7 @@ const PROBE = `window.__probe = (root, act) => new Promise((res) => {
   requestAnimationFrame(tick);
 });`;
 await frame.evaluate(PROBE); await page.evaluate(PROBE);
+// Preview: drive the app's real controls.
 const P = {
   click: (l) => `document.querySelector('.ui-phone-composer button[aria-label="${l}"]').click()`,
   keyboard: () => `document.querySelector('.ui-phone-composer :is(button[aria-label="Close the keyboard"], button[aria-label="Type a message"])').click()`,
@@ -99,6 +104,7 @@ await step("idle → listening (2)", P.click("Start voice dictation")); await pa
 await step("listening → stop (2)", P.click("Stop voice dictation")); await page.waitForTimeout(800);
 await step("idle/typing → listening (3)", P.click("Start voice dictation")); await page.waitForTimeout(1500);
 await step("listening → stop (3)", P.click("Stop voice dictation"));
+// Gallery card: every pair of its states.
 await page.evaluate(() => [...document.querySelectorAll(".g-rail .ui-row[data-density=nav]")].find((e) => e.textContent.trim() === "PhoneComposer")?.click()); await page.waitForTimeout(700); await page.evaluate(PROBE);
 const states = ["Idle", "Scrolled up", "Typing", "Typing a draft", "Editing", "Menu open", "Listening"];
 for (const layout of [0, 1]) for (const a of states) for (const z of states) { if (a === z) continue;

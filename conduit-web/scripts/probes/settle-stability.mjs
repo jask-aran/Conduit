@@ -1,6 +1,19 @@
 #!/usr/bin/env node
 /**
- * Does a turn hold still as it settles? Each scenario streams a Test-profile turn in a fresh chat.
+ * Does a turn hold still as it settles? Each scenario starts a fresh chat on the Test profile --
+ * deterministic, no model call -- streams a turn, tags the answer and its trace
+ * while they are live, and asserts once everything has settled that:
+ *
+ * - the tagged nodes are the ones still mounted (nothing rebuilt them);
+ * - a trace opened mid-stream is still open;
+ * - the answer's text was not rewritten, only extended;
+ * - once settled, nothing in the turn is added, removed or moved for two
+ *   seconds, and its action row shows once;
+ * - a queued message never shows queued and sent at once, no answer is drawn
+ *   above its prompt, no earlier turn still says it is working once a later
+ *   prompt is taken, and what settles is what a reload shows.
+ *
+ * Prints ok/FAIL per scenario and exits 1 on any failure.
  *
  *   node scripts/probes/settle-stability.mjs [--only settle,stop-answer,deny-tool,stop-approval,queued,queued-tool,history]
  */
@@ -23,6 +36,7 @@ const stopButton = () => page.locator("[aria-label='Stop response']:visible").fi
 const send = async (text) => { await composer().click(); await composer().fill(text); await page.keyboard.press("Enter"); };
 const settled = () => page.waitForFunction(() => !document.querySelector("[aria-label='Stop response']"), null, { timeout: 60_000 });
 
+/** Mark the live answer and trace of the last turn, and remember what they said. */
 const tag = () => page.evaluate(() => {
   const answer = [...document.querySelectorAll(".ui-answer")].at(-1);
   const trace = [...document.querySelectorAll(".ui-trace-fold:has(> .ui-trace[aria-expanded])")].at(-1);
@@ -31,6 +45,7 @@ const tag = () => page.evaluate(() => {
   return { answer: Boolean(answer), trace: Boolean(trace), text: answer?.textContent || "", open: trace?.dataset.open === "true" };
 });
 
+/** After settle: what survived, and whether anything churns for two seconds. */
 const inspect = () => page.evaluate(() => new Promise((finish) => {
   const answer = document.querySelector("[data-probe='answer']");
   const trace = document.querySelector("[data-probe='trace']");
@@ -41,7 +56,8 @@ const inspect = () => page.evaluate(() => new Promise((finish) => {
   const kinds = {};
   const observer = new MutationObserver((records) => {
     for (const record of records) for (const [sign, list] of [["+", record.addedNodes], ["-", record.removedNodes]]) for (const node of list) if (node.nodeType === 1) {
-      // The word fade unwraps its spans when it ends, and the message foot replaces its placeholder: both by design.
+      // By design: the word fade unwraps its spans once it ends (text unchanged),
+      // and the action row replaces its placeholder once the answer has appeared.
       if (node.classList.contains("ui-answer-word") || node.classList.contains("ui-message-foot")) continue;
       churn += 1;
       const key = `${sign}${node.tagName.toLowerCase()}.${String(node.className || "").split(" ")[0]} in ${record.target.className ? String(record.target.className).split(" ")[0] : record.target.tagName}`;
@@ -67,6 +83,11 @@ const inspect = () => page.evaluate(() => new Promise((finish) => {
 
 const waitForAnswer = () => page.waitForFunction(() => ([...document.querySelectorAll(".ui-answer")].at(-1)?.textContent || "").length > 200);
 
+/**
+ * Every frame from a queued send until the chat is quiet: no answer above its
+ * prompt, never the message in both the queue and the transcript, and once a
+ * later prompt is taken no earlier turn still says it is working.
+ */
 async function watchQueue(text) {
   const counts = await page.evaluate((text) => new Promise((finish) => {
     const bad = { above: 0, both: 0, stale: 0 };
@@ -79,7 +100,8 @@ async function watchQueue(text) {
       const sent = users.find((node) => node.textContent.trim().startsWith(text));
       if (sent) {
         const at = nodes.indexOf(sent);
-        // Answers above the sent message may only shrink (one closing into the trace).
+        // Answers above the sent message may only shrink (one closing into the
+        // trace); a new one there is an answer drawn above its prompt.
         const above = nodes.slice(0, at).filter((node) => node.classList.contains("ui-answer")).length;
         if (aboveFirst == null) aboveFirst = above;
         else if (above > aboveFirst) bad.above += 1;
@@ -120,11 +142,13 @@ async function chat(model) {
 }
 
 const scenarios = {
+  /** Thinking, two tools and a long answer, with the trace opened while it runs. */
   async settle() {
     await send("think 2 tools 1500t");
     await page.locator(".ui-trace-fold .ui-trace[aria-expanded]").last().waitFor();
     await page.locator(".ui-trace-fold .ui-trace[aria-expanded]").last().click();
-    // Text before the last tool moves into the trace when its message closes, so wait for the last tool first.
+    // The answer is what follows the last tool; text before a tool is the turn
+    // talking as it works, and moves into the trace when its message closes.
     await page.waitForFunction(() => /\b2\b/.test([...document.querySelectorAll(".ui-trace-line > span:last-child")].at(-1)?.textContent || ""));
     await page.waitForFunction(() => ([...document.querySelectorAll(".ui-answer")].at(-1)?.textContent || "").length > 200);
     const live = await tag();
@@ -141,6 +165,7 @@ const scenarios = {
       ["one action row", after.actionsInLastTurn === 1, after.actionsInLastTurn],
     ];
   },
+  /** Stop while the answer is being written: the partial stands, in place. */
   async "stop-answer"() {
     await send("think 3000t");
     await page.waitForFunction(() => ([...document.querySelectorAll(".ui-answer")].at(-1)?.textContent || "").length > 200);
@@ -156,6 +181,7 @@ const scenarios = {
       ["nothing moved after settle", !after.moved],
     ];
   },
+  /** Dismiss a tool's approval (a denial): the trace keeps its node and settles still. */
   async "deny-tool"() {
     await send("think 1 tool approve 300t");
     await page.waitForFunction(() => document.querySelector(".ui-trace-fold:has(> .ui-trace[aria-expanded])") && document.querySelector(".question-card, [data-takeover]"), null, { timeout: 30_000 });
@@ -170,6 +196,7 @@ const scenarios = {
       ["nothing moved after settle", !after.moved],
     ];
   },
+  /** Stop is on the approval card: it ends the turn and takes the card away. */
   async "stop-approval"() {
     await send("think 1 tool approve 300t");
     await page.waitForFunction(() => document.querySelector(".question-card"), null, { timeout: 30_000 });
@@ -186,6 +213,10 @@ const scenarios = {
       ["nothing churned after settle", !after.churn, after.churn],
     ];
   },
+  /**
+   * A message sent mid-answer waits for the answer to end and starts the next
+   * turn. The answer it waited for stays an answer.
+   */
   async queued() {
     await send("think 200 1500t");
     await waitForAnswer();
@@ -201,6 +232,7 @@ const scenarios = {
       ["settled as a reload shows it", shapes.live === shapes.reloaded, `${shapes.live} vs ${shapes.reloaded}`],
     ];
   },
+  /** A message sent while a turn runs tools joins that turn after the tool. */
   async "queued-tool"() {
     await send("think 200 2 tools 1500t");
     await page.locator(".ui-trace-fold:has(> .ui-trace[aria-expanded])").last().waitFor();
@@ -209,6 +241,11 @@ const scenarios = {
     const shapes = await settledShape();
     return [...frames, ["settled as a reload shows it", shapes.live === shapes.reloaded, `${shapes.live} vs ${shapes.reloaded}`]];
   },
+  /**
+   * Regenerate, edit, stop, and edit the stopped prompt after a reload: after
+   * each, the transcript is what a reload shows and the app never reaches its
+   * error screen.
+   */
   async history() {
     const checks = [];
     const step = async (label, act) => {
@@ -225,7 +262,8 @@ const scenarios = {
     await step("regenerate last", () => page.locator("[aria-label='Regenerate response']").last().click());
     await step("edit first", async () => { await page.locator("[aria-label='Edit from here']").first().click(); await composer().fill("2 tools 200t"); await page.keyboard.press("Enter"); });
     await step("stop", async () => { await send("think 100 3000t"); await waitForAnswer(); await stopButton().click(); });
-    // Recycling the process makes the edit below attach a socket after this client has already cut its rows.
+    // The process goes, as an idle one is recycled, so the edit below is what
+    // attaches a socket -- after this client has already cut its rows.
     await step("process recycled", () => page.evaluate(async () => {
       const chatId = location.pathname.split("/").pop();
       const live = (await (await fetch("/v0/live-sessions")).json()).sessions.find((item) => item.chatId === chatId);
@@ -238,6 +276,8 @@ const scenarios = {
 
 const only = arg("--only", "")?.split(",").filter(Boolean);
 let failed = 0;
+// A turn that ends without stating how is now stated by the server, which
+// logs the breach in its own journal ("transcript contract: ..."), not here.
 for (const [name, run] of Object.entries(scenarios)) {
   if (only?.length && !only.includes(name)) continue;
   let id = null;
