@@ -4,6 +4,7 @@
 //
 // `serve [port]` is the receiver for a project with no hub (conduit-web/src/server/feedback-store.js on its own): the
 // feedback tool's routes on this machine only, writing ./.feedback, so wait/take/done work there as they do here.
+// `serve [port] one-way` takes feedback from people owed no answer: it serves no thread and takes nothing written back.
 // An item is taken by one waiter (taken.json, written exclusively). `wait` takes only what was handed to its name;
 // everything else stays in the folder until `take <id>`.
 //
@@ -102,7 +103,7 @@ if (command === "wait") {
   const { createServer } = await import("node:http");
   const { createFeedbackStore, handleFeedback } = await import(new URL("../conduit-web/src/server/feedback-store.js", import.meta.url).href);
   await fs.mkdir(folder, { recursive: true, mode: 0o700 });
-  const store = createFeedbackStore({ folder, done: (id) => `node ${script} done ${id}`, log: (entry) => console.log(JSON.stringify(entry)) });
+  const store = createFeedbackStore({ folder, answered: ![argument, ...rest].includes("one-way"), done: (id) => `node ${script} done ${id}`, log: (entry) => console.log(JSON.stringify(entry)) });
   // A page on this machine only: any site open in the browser can reach a local port, so another origin is refused.
   const here = (origin) => { try { return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(origin).hostname); } catch { return false; } };
   const port = Number(argument) || 4390;
@@ -140,6 +141,6 @@ if (command === "wait") {
     if (waiter && alive(waiter.id)) console.log(`waiter   ${waiter.name}  (${waiter.cwd}, since ${waiter.since})`);
   }
 } else {
-  console.log("Usage: conduit-feedback wait [name] | take <id> | reply <id> [n] <words> | done <id> | list | serve [port]");
+  console.log("Usage: conduit-feedback wait [name] | take <id> | reply <id> [n] <words> | done <id> | list | serve [port] [one-way]");
   process.exit(command ? 1 : 0);
 }

@@ -19,6 +19,7 @@ import { randomBytes } from "node:crypto";
  *   snapshot   ({ client, markedAt }) => fields added to the item, read when the item is started, not at Send
  *   about      lines for the item's `read`, saying what those fields are
  *   done       (id) => the command that marks an item handled, as the item states it
+ *   answered   false for one-way feedback (from people owed no answer): no thread is served or taken, and an item does not invite a reply
  *   log        (entry) => told of each item written
  */
 const MARKS = 12;
@@ -29,7 +30,7 @@ const MARK_MS = 6 * 60 * 60_000;
 const WORKING_MS = 60 * 60_000;
 const short = (value, length) => { const text = typeof value === "string" ? value : JSON.stringify(value) ?? ""; return text.length > length ? `${text.slice(0, length)}… (${text.length} characters)` : text; };
 
-export function createFeedbackStore({ folder, snapshot = async () => ({}), about = [], done = (id) => `node scripts/conduit-feedback.mjs done ${id}`, log = () => {} }) {
+export function createFeedbackStore({ folder, snapshot = async () => ({}), about = [], done = (id) => `node scripts/conduit-feedback.mjs done ${id}`, answered = true, log = () => {} }) {
   const marks = new Map();
 
   /**
@@ -108,7 +109,7 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
         "A group's `members` are each described the same way. `rect` is in CSS pixels of the client's viewport; `screenshotRect` is the same box in screenshot.png, present only when the picture is the page alone.",
         "screenshot.png shows what `screenshot.of` says (the `screenshot` the person drew on, or the live `page` at Send) with the selections made on it outlined and numbered as `n`. A comment's `picture.file` is that selection alone, cut from the one it was made on: `picture.area` is the part of the page it shows, the area the person dragged round when `dragged`, else its marks with a margin. Look at it first.",
         ...about,
-        `To answer the person: \`${done(id).replace(/ done .*/, "")} reply ${id} [n] "<words>"\`, n being the comment answered (none: the item as a whole). They read it in the tool beside that comment and may write back; \`wait\` hands you what they say.`,
+        ...(answered ? [`To answer the person: \`${done(id).replace(/ done .*/, "")} reply ${id} [n] "<words>"\`, n being the comment answered (none: the item as a whole). They read it in the tool beside that comment and may write back; \`wait\` hands you what they say.`] : ["This is one-way feedback: the person is not shown an answer."]),
         `When the item is dealt with: ${done(id)}`,
       ],
       markedAt: kept.markedAt,
@@ -147,7 +148,7 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
 
   /** An item as the person follows it: where it stands, its comments in brief, and what has been said. `seen`: the person has now read it. */
   async function thread(id, { seen = false } = {}) {
-    if (!/^[\w-]+$/.test(String(id))) throw gone();
+    if (!answered || !/^[\w-]+$/.test(String(id))) throw gone();
     const dir = path.join(folder, id), item = await read(path.join(dir, "item.json"));
     if (!item) throw gone();
     const messages = await lines(dir), taken = await read(path.join(dir, "taken.json")), handled = Boolean(await read(path.join(dir, "handled.json")));
@@ -169,6 +170,7 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
   /** The latest items that are not finished or have an answer unread, newest first. */
   async function threads() {
     const found = [];
+    if (!answered) return found;
     for (const id of (await fs.readdir(folder).catch(() => [])).filter((name) => !name.startsWith(".")).sort().reverse().slice(0, THREADS)) {
       const one = await thread(id).catch(() => null);
       if (one && (one.unread || one.state !== "handled")) found.push({ id, sentAt: one.sentAt, state: one.state, by: one.by, unread: one.unread, comments: one.comments.length });

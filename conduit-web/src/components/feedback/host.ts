@@ -50,7 +50,19 @@ export interface FeedbackTransport {
   listening(): Promise<FeedbackListener[]>;
 }
 
+/**
+ * How what is marked up reaches whoever answers, which is a matter of who the person is to them:
+ *   one-way   feedback from someone who is owed no answer (a visitor, a tester): Send delivers the item and that is all.
+ *             Nothing comes back, and the tool asks the receiver for nothing but to take it.
+ *   batched   a collaborator's: Send delivers the whole item at once, to the listening session or to the folder, and
+ *             it is then a thread the agent answers and the person writes back on.
+ * (To come: live, where each comment goes as it is made, for working on one thing together.)
+ */
+export type FeedbackDelivery = "one-way" | "batched";
+
 export interface FeedbackHost {
+  /** Unset: batched. */
+  delivery?: FeedbackDelivery;
   names: PieceNames;
   /** Attributes the app marks its regions with, the outermost kind first (Conduit: data-region, data-pane…). An item's paths start from them. */
   anchors?: string[];

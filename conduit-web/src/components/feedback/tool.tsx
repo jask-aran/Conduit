@@ -118,7 +118,8 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const [thread, setThread] = createSignal<FeedbackThread | null>(null);
   const [replyTo, setReplyTo] = createSignal<number | null | undefined>(undefined);
   const [reply, setReply] = createSignal("");
-  const [earlier, { refetch: askEarlier }] = createResource(() => transport.threads().catch(() => []));
+  const answered = host.delivery !== "one-way";
+  const [earlier, { refetch: askEarlier }] = createResource(() => answered ? transport.threads().catch(() => []) : []);
   const unread = () => (earlier.latest ?? []).filter((item) => item.unread);
   let following: ReturnType<typeof setInterval> | undefined;
   const follow = (id: string) => {
@@ -473,7 +474,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       handle = requestAnimationFrame(tick);
     });
     onCleanup(() => cancelAnimationFrame(handle));
-    const asking = setInterval(() => { void askWaiters(); if (!thread()) void askEarlier(); }, WAITING_EVERY_MS);
+    const asking = setInterval(() => { void askWaiters(); if (answered && !thread()) void askEarlier(); }, WAITING_EVERY_MS);
     onCleanup(() => clearInterval(asking));
   });
   onCleanup(() => {
@@ -541,7 +542,8 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       sent = true;
       const where = result.handed.to ? `Feedback saved and handed to ${result.handed.to.name}` : "Feedback saved";
       host.notify("sent", captureError ? `${where}, without a screenshot: ${captureError}` : where);
-      // The comments stay up as the item's thread; closing the tool leaves it in the folder, to be come back to.
+      // A collaborator's comments stay up as the item's thread (closing the tool leaves it in the folder, to be come back to); one-way feedback is done.
+      if (!answered) return props.onClose();
       setSelections([]);
       follow(result.id);
     } catch (error) {
