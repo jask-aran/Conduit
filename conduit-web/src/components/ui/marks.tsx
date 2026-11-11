@@ -14,6 +14,8 @@ export const MARKS: Record<string, Mark> = {
   fx: { src: "/brand/fx-mark.svg", tint: true },
   opencode: { src: "/brand/opencode-mark.svg", tint: true },
   pi: { src: "/brand/pi-mark.svg", tint: true },
+  // Hex's own app icon (github.com/anomalyco/hex, MIT), as it ships.
+  hex: { src: "/brand/hex-app-icon.png" },
 };
 
 const FALLBACK = BLOSSOM;

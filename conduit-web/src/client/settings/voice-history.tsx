@@ -1,6 +1,6 @@
 import { createMemo, createResource, createSignal, For, Show } from "solid-js";
 import { CloudIcon } from "lucide-solid";
-import { Button, Fact, Icons, Loading, Note, OverlayFacts, Row, Segmented, SettingList } from "@/components/ui";
+import { Button, Fact, HarnessMark, Icons, Loading, Note, OverlayFacts, Row, Segmented, SettingList } from "@/components/ui";
 import { DashDay, GroupSwitches } from "@/components/ui/dashboard";
 import { Select } from "@/components/ui/menus";
 import { clearDictationHistory, dictationHistory, type DictationRecord } from "../chat/voice-dictation-history";
@@ -11,7 +11,7 @@ const SERVICES: Record<DictationRecord["service"], { name: string; audio: string
   hub: { name: "Private, on the hub", audio: "The hub" },
   cloud: { name: "Cloud", audio: "The hub, then its cloud provider" },
 };
-const glyph = (service: DictationRecord["service"]) => service === "hex" ? <Icons.Monitor /> : service === "hub" ? <Icons.Server /> : <CloudIcon />;
+const glyph = (service: DictationRecord["service"]) => service === "hex" ? <HarnessMark id="hex" /> : service === "hub" ? <Icons.Server /> : <CloudIcon />;
 const from = (record: DictationRecord) => record.client ? clientName(record.client) : "An unknown device";
 const dayOf = (at: string) => {
   const day = new Date(at), today = new Date(), yesterday = new Date(Date.now() - 86_400_000);

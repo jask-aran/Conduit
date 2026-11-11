@@ -72,7 +72,7 @@ import { Select } from "@/components/ui/menus";
 import { combineSaveStates, createAutosave, type SaveState } from "./autosave";
 import { Dialog, OverlayDialog } from "@/components/ui/dialog";
 import { catchLoopback, loopbackPort } from "../platform/loopback";
-import { OverlayPage, OverlayRail, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, SettingCredential, SettingStep, SettingRecorder, Keycap, Row, Group, Columns, Column, SettingViews, Note, Loading, LeadInput } from "@/components/ui";
+import { OverlayPage, OverlayRail, SettingLine, SettingValue, SettingLink, SettingDetails, SettingWide, SettingCredential, SettingStep, SettingRecorder, Keycap, HarnessMark, Row, Group, Columns, Column, SettingViews, Note, Loading, LeadInput } from "@/components/ui";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { touchOnly } from "@/components/ui/layout";
 import { COMPOSER_KINDS, composerKind, saveComposerKind } from "../platform/native-composer";
@@ -1723,7 +1723,7 @@ export function Settings(props: {
                   </Show>
                 </Group>
                 <Show when={hexHere()}>{(hex) => <Group title="Hex" scope="This computer">
-                  <SettingLine plain label="Hex app" state={hex().version ? `version ${hex().version}` : undefined} title="The Hex dictation app on this computer. Conduit uses its models and settings as they are.">
+                  <SettingLine plain label={<><HarnessMark id="hex" />Hex app</>} state={hex().version ? `version ${hex().version}` : undefined} title="The Hex dictation app on this computer. Conduit uses its models and settings as they are.">
                     <SettingValue>{HEX_STATES[hex().state]}</SettingValue>
                     <Button variant="ghost" size="icon-sm" aria-label="Look for Hex again" title="Look again" onClick={() => void refetchHex()}><Icons.Refresh /></Button>
                   </SettingLine>
