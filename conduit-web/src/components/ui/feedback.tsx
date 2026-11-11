@@ -11,7 +11,7 @@ export type FeedbackBox = { left: number; top: number; width: number; height: nu
 const TAG_ROOM = 20;
 const place = (box: FeedbackBox): JSX.CSSProperties => ({ left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px` });
 
-/** `frozen`: a picture of the page as it was when the tool took the pointer, shown over the page (which goes on changing under it). */
+/** `frozen`: a screenshot of the page, shown over the page (which goes on changing under it). */
 export const FeedbackLayer = (props: { select: boolean; frozen?: string; hidden?: boolean; ref?: (element: HTMLDivElement) => void; children: JSX.Element }) =>
   // data-mobile-swipe-ignore: a finger's drag on the layer gathers or draws; the drawers do not answer it (edge-swipe.ts).
   <div ref={props.ref} class="ui-feedback-layer" data-select={props.select ? "" : undefined} data-hidden={props.hidden ? "" : undefined} data-mobile-swipe-ignore={props.select ? "" : undefined}>
@@ -71,31 +71,36 @@ export function FeedbackNote(props: { ref?: (element: HTMLTextAreaElement) => vo
   </div>;
 }
 
-export type FeedbackPointer = "select" | FeedbackDrawingKind | "text" | "use";
-type FeedbackToolKind = Exclude<FeedbackPointer, "use">;
-const TOOLS: ReadonlyArray<{ value: FeedbackToolKind; label: string; icon: () => JSX.Element }> = [
+export type FeedbackToolKind = "select" | FeedbackDrawingKind | "text";
+const TOOLS: ReadonlyArray<{ value: FeedbackToolKind | "note"; label: string; icon: () => JSX.Element }> = [
   { value: "select", label: "Select (V)", icon: () => <Icons.Pointer /> }, { value: "pen", label: "Pen (P)", icon: () => <Icons.Edit /> },
   { value: "arrow", label: "Arrow (A)", icon: () => <Icons.DrawArrow /> }, { value: "box", label: "Box (B)", icon: () => <Icons.DrawBox /> }, { value: "text", label: "Text (T)", icon: () => <Icons.DrawText /> },
+  { value: "note", label: "General note (N)", icon: () => <Icons.Note /> },
 ];
+/** Use the app, or annotate: the live page, or a screenshot of it. */
+export type FeedbackView = "use" | "page" | "screenshot";
 
-/** The tool's bar, at the foot, in four groups: what is under the pointer (Use app, `keys` the chord that switches; the page's picture or the live
- *  page, where there is a picture); what it marks with (`tool`: the one kept while the app is in use); what goes with the item (a general note, a new
- *  picture of the page, the listening session it is handed to: `agent`, none when no session listens); Send and close. `compact`: icons alone, for a
- *  phone's width. */
-export function FeedbackBar(props: { mode: FeedbackPointer; tool?: FeedbackToolKind; onMode: (mode: FeedbackPointer) => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; picture?: boolean; onPicture?: (on: boolean) => void; onRetake?: () => void; onNote?: () => void;
+/** The tool's bar, at the foot: its mode (`view`; `keys` is the chord that goes to the app and back; Screenshot only where the client can take one);
+ *  the annotating tools, with a general note among them and no Select on a screenshot, which has nothing under it to select; a new screenshot while
+ *  one is looked at; the listening session the item is handed to (`agent`, none when no session listens); Send and close. `compact`: icons alone,
+ *  for a phone's width. */
+export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; onView: (view: FeedbackView) => void; tool: FeedbackToolKind; onTool: (tool: FeedbackToolKind) => void; onNote: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
   canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void }) {
-  const using = () => props.mode === "use";
-  const tool = (): FeedbackToolKind => props.mode === "use" ? props.tool ?? "select" : props.mode;
-  return <Frost lift="raised" class="ui-feedback-bar" role="toolbar" aria-label="UI feedback">
-    <span class="ui-feedback-with">
-      <IconButton label={`Use the app${props.keys?.length ? ` (${props.keys.join(" ")})` : ""}`} aria-pressed={using()} onClick={() => props.onMode(using() ? tool() : "use")}><Icons.UseApp /></IconButton>
-      <Show when={props.picture !== undefined}><IconButton label="Look at the page's picture, not the live page" disabled={using()} aria-pressed={Boolean(props.picture) && !using()} onClick={() => props.onPicture?.(!props.picture)}><Icons.Image /></IconButton></Show>
-    </span>
-    <Segmented label="Mark with" icons size="sm" value={tool()} onChange={props.onMode} disabled={using()} options={TOOLS.map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} />
+  const using = () => props.view === "use";
+  const views = (): Array<{ value: FeedbackView; label: string; icon: JSX.Element }> => [
+    { value: "use", label: `Use the app${props.keys?.length ? ` (${props.keys.join(" ")})` : ""}`, icon: <Icons.UseApp /> }, { value: "page", label: "Annotate the live page", icon: <Icons.Feedback /> },
+    ...(props.screenshots ? [{ value: "screenshot" as const, label: "Annotate a screenshot", icon: <Icons.Image /> }] : []),
+  ];
+  return <Frost lift="raised" class="ui-feedback-bar" data-compact={props.compact ? "" : undefined} role="toolbar" aria-label="UI feedback">
+    {/* With no screenshot to be had there are two modes, and one control says which. */}
+    <Show when={props.screenshots} fallback={<IconButton label={views()[0]!.label} aria-pressed={using()} onClick={() => props.onView(using() ? "page" : "use")}><Icons.UseApp /></IconButton>}>
+      <Segmented label="Mode" icons size="sm" value={props.view} onChange={props.onView} options={views()} />
+    </Show>
+    <Segmented label="Annotate with" icons size="sm" value={props.tool} onChange={(tool) => tool === "note" ? props.onNote() : props.onTool(tool)} disabled={using()}
+      options={TOOLS.filter((option) => option.value !== "select" || props.view !== "screenshot").map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} />
     <Show when={props.status && !props.compact}><span class="ui-feedback-status">{props.status}</span></Show>
     <span class="ui-feedback-with">
-      <Show when={props.onNote}><IconButton label="Add a general note (N)" onClick={props.onNote}><Icons.Note /></IconButton></Show>
-      <Show when={props.onRetake}><IconButton label="Take the page's picture again" onClick={props.onRetake}><Icons.Camera /></IconButton></Show>
+      <Show when={props.onRetake && props.view === "screenshot"}><IconButton label="Take the screenshot again" onClick={props.onRetake}><Icons.Camera /></IconButton></Show>
       <Show when={props.onHand}>
         <IconButton label={props.agent ? `Hand to ${props.agent}` : "No session is listening"} disabled={!props.agent} aria-pressed={Boolean(props.agent && props.hand)} onClick={() => props.onHand!(!props.hand)}><Icons.Agent /></IconButton>
         <Show when={props.agent} fallback={<Show when={!props.compact}><span class="ui-feedback-status">No listener</span></Show>}>

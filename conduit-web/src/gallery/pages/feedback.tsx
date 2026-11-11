@@ -2,7 +2,7 @@ import { FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote
 import { row, token, type Page } from "../model";
 import { noop } from "../demos";
 
-const bar = (more: Partial<Parameters<typeof FeedbackBar>[0]> = {}) => <FeedbackBar mode="select" onMode={noop} status="Press or drag" keys={["Alt", "Shift", "F"]} onNote={noop} onRetake={noop} onHand={noop} canSend onSend={noop} onClose={noop} {...more} />;
+const bar = (more: Partial<Parameters<typeof FeedbackBar>[0]> = {}) => <FeedbackBar view="page" screenshots onView={noop} tool="select" onTool={noop} onNote={noop} status="Press or drag" keys={["Alt", "Shift", "F"]} onRetake={noop} onHand={noop} canSend onSend={noop} onClose={noop} {...more} />;
 const note = (more: Partial<Parameters<typeof FeedbackNote>[0]> = {}) => <FeedbackNote open={false} tag="1" name="IconButton" source="conduit-web/src/components/ui/actions.tsx:21"
   value="Match the other rail icons' stroke." onOpen={noop} onInput={noop} onRemove={noop} {...more} />;
 const notes = () => <FeedbackNotes>{note()}{note({ tag: "2", name: "2 pieces: Row ×2", source: undefined, value: "" })}{note({ tag: "3", name: "General note", source: "About nothing on the page in particular.", value: "The page feels crowded.", open: true })}</FeedbackNotes>;
@@ -34,7 +34,7 @@ export const feedbackPage: Page = {
   <FeedbackNotes>
     <FeedbackNote open={false} tag="1" name="IconButton" picture={preview()} value={words()} onOpen={open} onInput={setWords} onRemove={remove} />
   </FeedbackNotes>
-  <FeedbackBar mode="select" onMode={setMode} status="Press or drag" screenshot onScreenshot={setScreenshot} canSend onSend={send} onClose={close} />
+  <FeedbackBar view={view()} screenshots onView={setView} tool={tool()} onTool={setTool} onNote={addNote} status="Press or drag" canSend onSend={send} onClose={close} />
 </FeedbackLayer>`,
   anatomy: { scene: whole, parts: [
     { selector: ".ui-feedback-mark[data-kind='chosen']", name: "Chosen mark", does: "outlines a selection, numbered; heavier while its note is open", from: "FeedbackMark kind chosen" },
@@ -42,7 +42,7 @@ export const feedbackPage: Page = {
     { selector: ".ui-feedback-mark[data-kind='cursor']", name: "Cursor mark", does: "what a press would choose, named for its piece", from: "FeedbackMark kind cursor" },
     { selector: ".ui-feedback-drawing", name: "Drawing", does: "what the person drew for one comment, any number together: a pen line, an arrow, a box, words; numbered by a drawn mark", from: "FeedbackDrawing, FeedbackText, FeedbackMark kind drawn" },
     { selector: ".ui-feedback-note", name: "Note", does: "one comment: beside what it is about while it is written, then in the stack with its words on a line and its picture", from: "FeedbackNotes > FeedbackNote > Card, CardPreview, TextArea" },
-    { selector: ".ui-feedback-bar", name: "Bar", does: "Use app, the picture or the live page, what the pointer marks with, a note, a new picture, the listening session, Send", from: "FeedbackBar > Segmented, IconButton, Button" },
+    { selector: ".ui-feedback-bar", name: "Bar", does: "the mode (use the app, annotate the live page, annotate a screenshot), the annotating tools, the listening session, Send", from: "FeedbackBar > Segmented, IconButton, Button" },
   ] },
   examples: [
     row("marks", "cursor, chosen, a group with its members, a drag's marquee", scene(() => <>
@@ -63,12 +63,12 @@ export const feedbackPage: Page = {
     </>), { surfaces: ["ground"] }),
     row("notes", "the stack: shut notes show their words on a line, the open one is written in; a general note is about no piece", scene(() => <>{notes()}</>), { surfaces: ["ground"] }),
     row("bar", "selecting with nothing to send yet and no session listening", scene(() => <>{bar({ canSend: false })}</>), { surfaces: ["ground"] }),
-    row("bar, with a picture", "the page's picture was taken: it is looked at, or the live page", scene(() => <>{bar({ picture: true, onPicture: noop, status: "Picture: press or drag", canSend: false })}</>), { surfaces: ["ground"] }),
+    row("bar, on a screenshot", "no Select: a screenshot is drawn and written on; the camera takes it again", scene(() => <>{bar({ view: "screenshot", tool: "pen", status: "Drag to draw", canSend: false })}</>), { surfaces: ["ground"] }),
     row("note, being written", "beside what it is about, with Done to send it to the stack", scene(() => <>{note({ float: { left: "24px", top: "24px" }, open: true, onDone: noop })}</>), { surfaces: ["ground"] }),
-    row("bar, drawing", "the pointer draws: Pen, Arrow or Box", scene(() => <>{bar({ mode: "arrow", status: "Drag to draw", canSend: false })}</>), { surfaces: ["ground"] }),
+    row("bar, drawing", "the pointer draws: Pen, Arrow or Box", scene(() => <>{bar({ tool: "arrow", status: "Drag to draw", canSend: false })}</>), { surfaces: ["ground"] }),
     row("bar, handing over", "a session listens and the item goes to it; with several waiting its name is a button to the next", scene(() => <>{bar({ hand: true, agent: "ui-feedback", onNextAgent: noop })}</>), { surfaces: ["ground"] }),
-    row("bar, compact", "a phone: icons alone, and no picture where the client cannot capture its display", scene(() => <>{bar({ compact: true, onRetake: undefined, keys: undefined })}</>), { surfaces: ["ground"] }),
-    row("bar, using the app", "the pointer goes to the app; the marks stay", scene(() => <>{bar({ mode: "use", tool: "pen", status: "Using the app" })}</>), { surfaces: ["ground"] }),
+    row("bar, compact", "a phone: icons alone, and no Screenshot where the client cannot capture its display", scene(() => <>{bar({ compact: true, screenshots: false, keys: undefined })}</>), { surfaces: ["ground"] }),
+    row("bar, using the app", "the pointer goes to the app; the marks stay", scene(() => <>{bar({ view: "use", tool: "pen", status: "Using the app" })}</>), { surfaces: ["ground"] }),
     row("bar, sending", "Send turns while the item goes", scene(() => <>{bar({ sending: true })}</>), { surfaces: ["ground"] }),
   ],
   tokens: [{ title: "Its lines and layer", tokens: [

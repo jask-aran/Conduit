@@ -44,6 +44,8 @@
 .ui-feedback-bar { position: fixed; bottom: var(--space-lg); right: var(--space-lg); left: var(--space-lg); display: flex; flex-wrap: wrap; justify-content: center; width: fit-content; margin-inline: auto; align-items: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: var(--space-xs); color: var(--foreground); font-size: var(--text-caption);
   /* Thinner than the one frost: the bar sits over the interface being looked at. conventions-ok: the tool's own surface */
   --frost-fill: color-mix(in oklch, var(--foreground), transparent 92%); }
+/* A phone: every control on one row. */
+.ui-feedback-bar[data-compact] { right: var(--space-xs); left: var(--space-xs); gap: var(--space-2xs); }
 /* Its controls keep their width; only the status gives way. */
 .ui-feedback-bar > :not(.ui-feedback-status) { flex: none; }
 .ui-feedback-status { min-width: 0; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }

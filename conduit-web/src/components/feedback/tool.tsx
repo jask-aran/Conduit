@@ -1,13 +1,13 @@
 import { createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import { Portal } from "solid-js/web";
-import { drawingBox, FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote, FeedbackNotes, FeedbackText, type FeedbackBox, type FeedbackDrawingKind, type FeedbackPoint, type FeedbackPointer } from "@/components/ui/feedback";
-import { captureScreen, cropAreas, previewOf, type Capture } from "./capture";
+import { drawingBox, FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote, FeedbackNotes, FeedbackText, type FeedbackBox, type FeedbackDrawingKind, type FeedbackPoint, type FeedbackToolKind } from "@/components/ui/feedback";
+import { captureHeld, captureScreen, cropAreas, previewOf, type Capture } from "./capture";
 import type { FeedbackHost, FeedbackListener } from "./host";
 import { createPieces } from "./pieces";
 
-/** What a comment was made on: the page's picture, taken as the tool opened, or the live page. Its marks show on that one. */
-type View = "picture" | "page";
+/** What a comment was made on: a screenshot of the page, or the live page. Its marks show on that one. */
+type View = "screenshot" | "page";
 /** `text`: words put on the page at its one point; `size`: what they measure, once written. */
 type Drawing = { kind: FeedbackDrawingKind | "text"; points: FeedbackPoint[]; text?: string; size?: { width: number; height: number } };
 /**
@@ -18,8 +18,8 @@ type Drawing = { kind: FeedbackDrawingKind | "text"; points: FeedbackPoint[]; te
  */
 type Selection = { id: number; elements: Element[]; comment: string; on: View; reach?: FeedbackBox; drawings?: Drawing[]; from?: { left: number; top: number }; general?: true; whole?: true; preview?: string };
 const GENERAL = "General note";
-const WHOLE = "Whole page";
-type Tool = Exclude<FeedbackPointer, "use">;
+const WHOLE = "Screenshot";
+type Tool = FeedbackToolKind;
 const DRAW_KEYS: Record<string, Tool> = { v: "select", p: "pen", a: "arrow", b: "box", t: "text" };
 const DRAWN: Record<Drawing["kind"], string> = { pen: "Pen", arrow: "Arrow", box: "Box", text: "Text" };
 /** A pen's line keeps a point each time the pointer has gone this far (px); an item is sent at most this many. */
@@ -82,9 +82,11 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const nextAgent = () => { const all = waiters.latest ?? []; setAgentName(all[(all.findIndex((waiter) => waiter.name === agent()?.name) + 1) % all.length]?.name ?? null); };
   const [sending, setSending] = createSignal(false);
   const [capturing, setCapturing] = createSignal(false);
-  // The page's picture, taken as the tool opens: what does not last (a toast, an answer mid-stream) stays to be marked.
+  // The screenshot. Where taking one asks nothing (a shell that takes its own; a browser that was already asked on this page) it is taken
+  // as the tool opens, so what does not last (a toast, an answer mid-stream) stays to be marked; elsewhere when Screenshot is first chosen.
   const [picture, setPicture] = createSignal<{ url: string; capture: Capture } | null>(null);
-  const [taking, setTaking] = createSignal(canCapture);
+  const atOpen = Boolean(host.capturePage) || captureHeld();
+  const [taking, setTaking] = createSignal(atOpen);
   /** Why there is no picture to be had, when there is none. */
   const [noPicture, setNoPicture] = createSignal<string | null>(canCapture ? null : "this client cannot capture its display");
   const [view, setView] = createSignal<View>("page");
@@ -106,7 +108,18 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   // The mark: the hub keeps what it knows now, under an id the item is sent to.
   const marked = transport.mark(host.clientId()).catch(() => null);
 
-  /** The page's picture, with nothing of the tool in it; it is then what is looked at, and a comment of its own. */
+  /** A screenshot has nothing under it to select: it is drawn and written on. */
+  const show = (next: View) => { setView(next); if (next === "screenshot" && pointerTool() === "select") setPointerTool("pen"); };
+  /** The bar's three: the app has the pointer, or the live page is annotated, or the screenshot is (taken now if there is none). */
+  const look = (next: "use" | View) => {
+    setCursor(null);
+    setStroke(null);
+    openNote(null);
+    props.onMode(next === "use" ? "use" : "select");
+    if (next === "screenshot" && !picture()) void take();
+    else if (next !== "use") show(next);
+  };
+  /** The screenshot, with nothing of the tool in it; it is then what is looked at, and a comment of its own. */
   const take = async () => {
     if (!canCapture) return;
     setTaking(true);
@@ -117,8 +130,8 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     if (old) URL.revokeObjectURL(old.url);
     setPicture(capture && { url: URL.createObjectURL(capture.blob), capture });
     if (capture) {
-      setView("picture");
-      if (!selections.some((selection) => selection.whole)) setSelections((all) => [{ id: nextId++, elements: [], comment: "", on: "picture", whole: true }, ...all]);
+      show("screenshot");
+      if (!selections.some((selection) => selection.whole)) setSelections((all) => [{ id: nextId++, elements: [], comment: "", on: "screenshot", whole: true }, ...all]);
     } else setView("page");
     setTaking(false);
   };
@@ -135,7 +148,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   /** How far a comment's pieces have gone since it was drawn on the live page; a picture's do not move. */
   const shiftOf = (selection: Selection) => {
     frame();
-    if (!selection.from || selection.on === "picture" || !selection.elements.every((element) => element.isConnected)) return { x: 0, y: 0 };
+    if (!selection.from || selection.on === "screenshot" || !selection.elements.every((element) => element.isConnected)) return { x: 0, y: 0 };
     const now = boxOf(selection.elements);
     return { x: now.left - selection.from.left, y: now.top - selection.from.top };
   };
@@ -167,7 +180,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   /** A comment made on the picture shows, shut, that part of the picture with its marks drawn in. */
   const preview = async (id: number) => {
     const selection = selections.find((candidate) => candidate.id === id), shot = picture();
-    if (!selection || !shot || !layer || selection.on !== "picture" || !floats(selection)) return;
+    if (!selection || !shot || !layer || selection.on !== "screenshot" || !floats(selection)) return;
     const line = getComputedStyle(layer), type = getComputedStyle(layer.querySelector(".ui-feedback-text") ?? layer);
     const blob = await previewOf(shot.capture, areaOf(selection), { outline: selection.drawings ? undefined : extent(selection), drawings: selection.drawings ?? [] },
       { stroke: line.stroke, width: parseFloat(line.strokeWidth) || 1, font: `${type.fontWeight} ${type.fontSize} ${type.fontFamily}` }).catch(() => null);
@@ -347,7 +360,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     if (!select() || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.key.toLowerCase() === "n") { handled(); return note(); }
     const picked = DRAW_KEYS[event.key.toLowerCase()];
-    if (picked) { handled(); setCursor(null); return void setPointerTool(picked); }
+    if (picked) { handled(); setCursor(null); if (picked !== "select" || view() === "page") setPointerTool(picked); return; }
     if (event.key === "Escape") { handled(); if (openId() !== null) openNote(null); else props.onClose(); }
     else if (event.key === "ArrowUp") { handled(); widen += 1; aim(); }
     else if (event.key === "ArrowDown") { handled(); widen = Math.max(0, widen - 1); aim(); }
@@ -356,7 +369,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
 
   const POINTER_EVENTS = ["pointermove", "pointerdown", "pointerup", "pointercancel", "mousedown", "mouseup", "click", "dblclick", "contextmenu", "wheel", "touchstart", "touchmove", "touchend", "touchcancel"] as const;
   onMount(() => {
-    void take();
+    if (atOpen) void take();
     for (const type of POINTER_EVENTS) window.addEventListener(type, swallow, { capture: true, passive: false });
     window.addEventListener("keydown", onKeyDown, { capture: true });
     for (const type of ["focusin", "focusout"] as const) window.addEventListener(type, quietFocus, { capture: true });
@@ -405,7 +418,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const status = createMemo(() => {
     if (props.mode === "use") return "Using the app";
     const does = pointerTool() === "select" ? "press or drag" : pointerTool() === "text" ? "press to write" : "drag to draw";
-    return picture() ? `${view() === "picture" ? "Picture" : "Live page"}: ${does}` : does[0]!.toUpperCase() + does.slice(1);
+    return does[0]!.toUpperCase() + does.slice(1);
   });
 
   async function send() {
@@ -434,10 +447,10 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       // each comment's own picture is cut from the one it was made on. Words alone need none.
       const marksOn = (on: View) => comments.some((entry) => entry.on === on);
       const shot = picture();
-      const views = ([shot && (marksOn("picture") || whole) ? "picture" : null, marksOn("page") && !noPicture() ? "page" : null] as const).filter((on): on is View => on !== null);
+      const views = ([shot && (marksOn("screenshot") || whole) ? "screenshot" : null, marksOn("page") && !noPicture() ? "page" : null] as const).filter((on): on is View => on !== null);
       let first: { capture: Capture; of: View } | null = null, captureError: string | null = null;
       for (const of of views) {
-        let capture: Capture | null = of === "picture" && !marksOn("picture") ? shot!.capture : null;
+        let capture: Capture | null = of === "screenshot" && !marksOn("screenshot") ? shot!.capture : null;
         if (!capture) {
           setShooting(of);
           setCapturing(true);
@@ -468,10 +481,10 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   }
 
   const write = (selection: Selection) => (value: string) => setSelections((candidate) => candidate.id === selection.id, produce((draft) => { draft.comment = value; }));
-  const sourceLine = (selection: Selection) => selection.whole ? "The page as it was when the tool opened." : selection.general ? "About nothing on the page in particular." : selection.elements.length === 1 ? sourceOf(selection.elements[0]!) : undefined;
+  const sourceLine = (selection: Selection) => selection.whole ? "The whole page, as it was when this was taken." : selection.general ? "About nothing on the page in particular." : selection.elements.length === 1 ? sourceOf(selection.elements[0]!) : undefined;
 
   return <Portal>
-    <FeedbackLayer ref={(element) => { layer = element; }} select={select()} frozen={showing() === "picture" ? picture()?.url : undefined} hidden={taking()}>
+    <FeedbackLayer ref={(element) => { layer = element; }} select={select()} frozen={showing() === "screenshot" ? picture()?.url : undefined} hidden={taking()}>
       <For each={selections}>{(selection) => <Show when={floats(selection) && selection.on === showing()}>
         <Show when={selection.drawings} fallback={<FeedbackMark kind="chosen" box={box(selection.elements)} tag={tagOf(selection)} current={openId() === selection.id} onOpen={() => openNote(selection.id)} />}>{(drawings) => <>
           <For each={drawings()}>{(drawing, at) => drawing.kind === "text"
@@ -497,12 +510,12 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
         <Show when={selections.some((selection) => !floats(selection) || selection.id !== openId())}>
           <FeedbackNotes lift={barLift()}><For each={selections}>{(selection) => <Show when={!floats(selection) || selection.id !== openId()}>
             <FeedbackNote ref={(element) => { noteField = element; }} open={openId() === selection.id} tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)} picture={selection.whole ? picture()?.url : selection.preview}
-              value={selection.comment} onOpen={() => { if (floats(selection) && props.mode === "select") setView(selection.on); openNote(selection.id); }} onInput={write(selection)} onRemove={() => remove(selection.id)} />
+              value={selection.comment} onOpen={() => { if (floats(selection) && props.mode === "select") show(selection.on); openNote(selection.id); }} onInput={write(selection)} onRemove={() => remove(selection.id)} />
           </Show>}</For></FeedbackNotes>
         </Show>
-        <FeedbackBar mode={props.mode === "use" ? "use" : pointerTool()} tool={pointerTool()} onMode={(mode: FeedbackPointer) => { setCursor(null); setStroke(null); if (mode !== "use") setPointerTool(mode); props.onMode(mode === "use" ? "use" : "select"); }} status={status()} compact={touchOnly} keys={touchOnly ? undefined : props.keys?.()}
-          picture={picture() ? view() === "picture" : undefined} onPicture={(on) => { openNote(null); setView(on ? "picture" : "page"); }} onRetake={canCapture ? () => { openNote(null); void take(); } : undefined}
-          onNote={note} hand={hand()} onHand={keepHand} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
+        <FeedbackBar view={props.mode === "use" ? "use" : view()} screenshots={canCapture} onView={look} tool={pointerTool()} onTool={(tool) => { setCursor(null); setStroke(null); setPointerTool(tool); }} onNote={note}
+          status={status()} compact={touchOnly} keys={touchOnly ? undefined : props.keys?.()} onRetake={() => { openNote(null); void take(); }}
+          hand={hand()} onHand={keepHand} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
           canSend={canSend()} sending={sending()} onSend={() => void send()} onClose={props.onClose} />
       </Show>
     </FeedbackLayer>

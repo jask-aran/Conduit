@@ -1,12 +1,18 @@
 /*
  * The pixels on screen, not a second rendering of the document. A shell that can take the page's picture itself does
- * (the host's capturePage); elsewhere it is the webview's display capture, asked for once: its stream is kept while the
- * page lives, so the tool's next opening takes its picture at once, with nothing asked.
+ * (the host's capturePage); elsewhere it is the webview's display capture, asked for when a screenshot is first wanted:
+ * its stream is kept while the page lives, so from then on one is taken with nothing asked.
  */
 
 let stream: MediaStream | null = null;
 /** After the tool hides its own bar, the compositor's next frames reach the stream. */
 const SETTLE_MS = 250;
+
+const live = () => Boolean(stream?.getVideoTracks().some((track) => track.readyState === "live"));
+/** Whether display capture was already granted on this page, so a screenshot now asks nothing. */
+export const captureHeld = live;
+/** Every pixel of the window: a stream left to itself may come at less. */
+const whole = () => ({ width: { ideal: Math.round(innerWidth * devicePixelRatio) }, height: { ideal: Math.round(innerHeight * devicePixelRatio) } });
 
 export type Capture = { blob: Blob; width: number; height: number; surface: string };
 
@@ -20,14 +26,16 @@ export async function captureScreen(capturePage?: () => Promise<Blob | null>, se
     if (blob?.size) { const image = await createImageBitmap(blob); return { blob, width: image.width, height: image.height, surface: "webview" }; }
   }
   if (!navigator.mediaDevices?.getDisplayMedia) throw new Error("This client cannot capture its display");
-  if (!stream?.getVideoTracks().some((track) => track.readyState === "live")) {
+  if (!live()) {
     // preferCurrentTab: a browser offers this tab alone; a webview has no tab and offers its windows.
-    stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "window" }, audio: false, preferCurrentTab: true, selfBrowserSurface: "include" } as DisplayMediaStreamOptions);
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: "window", ...whole() }, audio: false, preferCurrentTab: true, selfBrowserSurface: "include" } as DisplayMediaStreamOptions);
   }
-  const track = stream.getVideoTracks()[0]!;
+  const track = stream!.getVideoTracks()[0]!;
+  // The window may have been resized since the stream was granted.
+  await track.applyConstraints(whole()).catch(() => {});
   const video = document.createElement("video");
   video.muted = true;
-  video.srcObject = stream;
+  video.srcObject = stream!;
   await video.play();
   await settled();
   const canvas = document.createElement("canvas");
