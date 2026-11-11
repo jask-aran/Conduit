@@ -3,8 +3,8 @@
 ## Before you start
 - Committing, or creating, restructuring or closing a GitHub issue → read `CONTRIBUTING.md`.
 - Building or changing any UI → read `DESIGN.md`.
-- Touching the HTTP API, auth, process residency or the live-session WebSocket protocol → read
-  `conduit-web/README.md`.
+- Touching the HTTP API, auth, process residency or the live-session WebSocket protocol → read "Changing the code"
+  in `README.md`; `conduit-web/src/server/routes/` and `conduit-web/src/chat-backend-contract.d.ts` are the reference.
 - Client builds, deployment, several servers or data recovery → read `docs/DEPLOYMENT.md`.
 - Any check beyond the table below → read `docs/TESTING.md`.
 - Taking my UI feedback → run `node scripts/conduit-feedback.mjs wait "<what you are working on>"` in the background.
