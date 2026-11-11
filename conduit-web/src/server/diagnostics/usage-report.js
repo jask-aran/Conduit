@@ -53,7 +53,6 @@ function foldUsageAgent(db) {
   return doc;
 }
 
-/** Keep-warm's policy, numbers and ids only. */
 function pickPolicy(policy) {
   const rates = policy.rates && typeof policy.rates === "object" ? { hit: usageNumber(policy.rates.hit), miss: usageNumber(policy.rates.miss) } : null;
   return { model: typeof policy.model === "string" && /^[A-Za-z0-9_./:-]+$/.test(policy.model) ? policy.model : "unknown",
@@ -62,7 +61,7 @@ function pickPolicy(policy) {
     reason: ["cache lifetime unknown", "no saving at this model's prices", "too few past wakes"].includes(policy.reason) ? policy.reason : null };
 }
 
-/** Content-free usage totals. Read the live database once; never copy or modify it. */
+/** Content-free. Reads the live database once; never copies or modifies it. */
 export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
   const requested = Number(hours);
   hours = Math.min(720, Math.max(1, Number.isNaN(requested) ? 24 : requested));
@@ -71,7 +70,6 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
   const requests = { total: 0, byModel: [], afterGap: [], misses: [] };
   let context = null;
   const changes = { toolSets: { added: 0, addedTokens: 0, addedTools: 0, full: 0, fullTokens: 0, fullTools: 0 }, system: { count: 0, tokens: 0 } };
-  // Misses by cause, and the prompt tokens each cause sent again uncached.
   const causes = {};
   const keepWarm = { policy: null, pings: 0, pingHits: 0, pingCost: 0, lapses: 0, keptHits: 0, keptMisses: 0, coldMisses: 0, coldHits: 0, saved: 0, net: 0 };
   const approvals = {
@@ -81,7 +79,7 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
   };
   let db;
   try {
-    // Check existence first: a new hub can have approval files without a runtime DB.
+    // A new hub can have approval files without a runtime DB.
     let exists = true;
     try { await fs.access(path.join(dataRoot, "runtime", "conduit-runtime.sqlite")); }
     catch (error) { if (error.code !== "ENOENT") throw error; exists = false; }
@@ -115,7 +113,6 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
     let logStart = null;
     for await (const record of usageLogRecords(path.join(dataRoot, "runtime", "prefix-watch.jsonl"))) {
       logStart ??= Date.parse(record.t) || null;
-      // Keep-warm's own lines (keep-warm.js): the policy it chose, and each ping with what it read and cost.
       if (record.keepWarmPolicy && typeof record.keepWarmPolicy === "object") keepWarm.policy = { at: record.t, ...pickPolicy(record.keepWarmPolicy) };
       if (Number.isFinite(record.keepWarm) && typeof record.key === "string") pings.push({ at: Date.parse(record.t), key: record.key,
         input: usageNumber(record.input), cacheRead: usageNumber(record.cacheRead), cost: usageNumber(record.cost) });
@@ -125,10 +122,9 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
       const cid = sessions.get(record.key) ?? [...sessions].find(([key]) => key.startsWith(record.key))?.[1];
       if (cid == null) continue;
       if (!watched.has(cid)) watched.set(cid, []);
-      // Drop divergence content immediately; only the category can leave this module.
+      // Only the category can leave this module.
       const cause = ["head", "tools", "system", "history"].includes(record.diverged?.cause) ? record.diverged.cause : "changed";
       watched.get(cid).push({ at, why: record.diverged == null ? "provider" : cause });
-      // What Conduit and pi-durable appended mid-conversation, and whether it kept the cache (an append always does).
       if (inWindow(at) && record.changes && typeof record.changes === "object") {
         for (const set of Array.isArray(record.changes.toolSets) ? record.changes.toolSets : []) {
           const kind = set?.full ? "full" : "added";
@@ -166,7 +162,7 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
       const record = JSON.parse(row.record);
       const modelMessage = Array.isArray(record.model) ? record.model[0] || {} : {};
       const message = Array.isArray(record.model) ? modelMessage : record.message || {};
-      // The reference counts jbot's model records even when they have no usage.
+      // jbot's model records count even when they have no usage.
       if (jbot.has(cid) && inWindow(usageNumber(modelMessage.timestamp))) {
         approvals.jbotCost += usageNumber(modelMessage.usage?.cost?.total);
         approvals.jbotRequests++;
@@ -198,15 +194,13 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
         own.requests++;
         own.misses += Number(miss);
       }
-      // The provider's cache lifetime as seen: the longest pause a cache survived (a keep-warm ping in it does not
-      // count) and the shortest one it did not, a miss the prefix log puts on the provider.
+      // A pause with a keep-warm ping in it says nothing about the provider's cache lifetime.
       const pinged = prior && (pingsOf.get(cid) || []).some((ping) => ping.at > prior.at && ping.at < at);
       if (prior && prior.total > 2048 && gapMinutes > 5 && !pinged) {
         const why = miss ? watched.get(cid)?.findLast((entry) => entry.at <= at + 1000)?.why : null;
         if (!miss) group.survivedMinutes = Math.max(group.survivedMinutes ?? 0, gapMinutes);
         else if (why === "provider") group.lapsedMinutes = Math.min(group.lapsedMinutes ?? Infinity, gapMinutes);
       }
-      // A wake of the home thread after its cache would have lapsed: kept warm by a ping since its last request, or not.
       if (cid === String(home) && prior && at - prior.at > ttlMs) {
         const kept = (pingsOf.get(cid) || []).some((ping) => ping.at > prior.at && ping.at < at);
         keepWarm.lapses++;
@@ -215,9 +209,7 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
         if (kept && !miss && rates) keepWarm.saved += cacheRead * Math.max(0, usageNumber(rates.miss) - usageNumber(rates.hit)) / 1e6;
       }
       if (miss) {
-        // Match the reference's last eligible log entry in file order, with a 1 s tolerance.
         const near = watched.get(cid)?.findLast((entry) => entry.at <= at + 1000);
-        // Before the prefix log began there is nothing to read the cause from.
         const why = near?.why || (logStart == null || at < logStart ? "before-log" : "unlogged");
         causes[why] ||= { misses: 0, tokens: 0 };
         causes[why].misses++;
@@ -228,7 +220,6 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
       }
     }
     keepWarm.net = keepWarm.saved - keepWarm.pingCost;
-    // What the home thread's last request carried (keep-warm's saved copy): sizes by part and per tool, no content.
     const homeKey = [...sessions].find(([, cid]) => cid === String(home))?.[0];
     if (homeKey) {
       const saved = await fs.readFile(path.join(dataRoot, "runtime", "prefix-watch-payloads", `${homeKey.replace(/[^A-Za-z0-9_.-]/g, "_")}.json`), "utf8").then(JSON.parse, () => null);
@@ -236,8 +227,8 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
       if (params) {
         const tokens = (value) => Math.round(JSON.stringify(value ?? "").length / 4);
         const items = Array.isArray(params.input) ? params.input : [];
-        // Tools travel as `tools`, or (Responses with tool search, as pi sends a ChatGPT sign-in) as `additional_tools`
-        // items in the conversation: a whole set again each time the tool list changes.
+        // With Responses tool search (a ChatGPT sign-in), tools travel as `additional_tools` items in the conversation:
+        // a whole set again each time the tool list changes.
         const sets = items.filter((item) => item?.type === "additional_tools");
         const toolList = sets.length ? sets.at(-1).tools : params.tools;
         const system = items.find((item) => item?.role === "developer" || item?.role === "system");
@@ -256,8 +247,6 @@ export async function usageReport({ dataRoot, hours = 24, now = Date.now() }) {
     requests.afterGap = gaps.filter((bucket) => bucket.requests);
   } finally { db?.close(); }
 
-  // Skills (skill-tool.js): per skill, how often a conversation loaded it, and of the conversations that began its
-  // work, how many had loaded it first. Names only.
   const skillRows = new Map();
   for await (const record of usageLogRecords(path.join(dataRoot, "runtime", "skill-use.jsonl"))) {
     if (!inWindow(Date.parse(record.t)) || typeof record.skill !== "string") continue;

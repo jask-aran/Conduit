@@ -1,4 +1,3 @@
-/** Runtime context text uses the session routes' authentication and chat lookup. */
 export function registerSessionContextRoutes(app, { backends, findChatContext }) {
   app.get("/v0/sessions/:id/context/:entryId", async (request, response) => {
     const context = await findChatContext(request.params.id);

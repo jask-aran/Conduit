@@ -2,14 +2,6 @@ import express from "express";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-/*
- * The hub account's picture (Settings › Account): one image the person chose, kept as the client made it (a square,
- * small, WebP or PNG) at data/account/picture. Behind the hub's sign-in like every /v0 route.
- *   GET    /v0/account/picture  the image (404: none; the app draws the name's initials instead)
- *   PUT    /v0/account/picture  body: the image (image/webp | image/png | image/jpeg), at most 512 KB
- *   DELETE /v0/account/picture  back to the initials
- * GET /v0/account says whether there is one and its version (for the image's address, so a change shows at once).
- */
 const TYPES = new Set(["image/webp", "image/png", "image/jpeg"]);
 const MAX = 512 * 1024;
 

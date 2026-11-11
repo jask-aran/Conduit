@@ -3,12 +3,8 @@ import os from "node:os";
 import { execFile, execFileSync } from "node:child_process";
 
 /*
- * A machine's readout (roadmap #14, Settings › Devices): CPU, memory, the data folder's disk, network and the busiest
- * processes, as the server's machine has them now. One per hub today; a node can serve the same later.
- *
- * Rates (CPU, network, a process's CPU) are the difference from the previous reading, as top's are: the first one
- * samples twice, a short while apart. On Linux everything comes from /proc; elsewhere CPU and memory from Node, the
- * processes from `ps` on macOS, and what a platform cannot say is null rather than guessed.
+ * Rates are the difference from the previous reading, as top's are: the first one samples twice, a short while apart.
+ * What a platform cannot say is null rather than guessed.
  */
 const TICKS = 100; // USER_HZ: /proc's clock ticks per second on every Linux Conduit runs on.
 // Resident memory is counted in pages; arm64 machines may use 16K or 64K ones.
@@ -40,7 +36,6 @@ async function linuxMemoryAvailable() {
   return kb ? Number(kb) * 1024 : null;
 }
 
-/** Each process's CPU ticks so far, its name and resident memory, from /proc/<pid>/stat. */
 async function linuxProcesses() {
   const bytes = page();
   const entries = await fs.promises.readdir("/proc").catch(() => []);

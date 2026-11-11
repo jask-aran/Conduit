@@ -7,11 +7,7 @@ function invalid(code) {
   return Object.assign(new Error(code), { status: 400, code });
 }
 
-/**
- * The hub's push subscriptions and their delivery. One file holds the hub's VAPID key pair and every subscription, so it
- * is written whole and private. An endpoint is a capability (whoever holds it can push to that device), so `list()`
- * shows only its host; a push service's 404 or 410 means the device is gone and its subscription is dropped.
- */
+/** An endpoint is a capability (whoever holds it can push to that device), so `list()` shows only its host. */
 export class PushService {
   constructor({ file, subject, fetch = globalThis.fetch, now = Date.now }) {
     this.file = file;
@@ -39,7 +35,6 @@ export class PushService {
         this.state = { vapid: generateVapidKeys(), subscriptions: [] };
         await this.save();
       }
-      // A file from before answer tokens has no key yet: it gets one, kept beside the VAPID keys.
       if (!this.state.answerKey) {
         this.state.answerKey = crypto.randomBytes(32).toString("base64url");
         await this.save();
@@ -49,10 +44,7 @@ export class PushService {
 
   publicKey() { return this.state.vapid.publicKey; }
 
-  /**
-   * The token an approval's notification answers it with (POST /v0/push/answer/:token): derived from the ask's id and
-   * the hub's answer key, so it still works after a restart. The ask's own status makes an answer single-use.
-   */
+  /** Derived, not stored, so it still works after a restart; the ask's own status makes an answer single-use. */
   answerToken(askId) { return crypto.createHmac("sha256", this.state.answerKey).update(`answer:${askId}`).digest("base64url"); }
 
   list() {
@@ -112,7 +104,6 @@ export class PushService {
           }
           const response = await this.fetch(sub.endpoint, { method: "POST", headers, body: encrypt(sub.keys, Buffer.from(JSON.stringify(message))), signal: AbortSignal.timeout(10000), redirect: "manual" });
           status = response.status;
-          // Delivery uses the status only; release an unread or stalled body.
           await response.body?.cancel().catch(() => {});
           if (status >= 200 && status < 300) {
             sub.lastOkAt = new Date(this.now()).toISOString();
@@ -128,8 +119,7 @@ export class PushService {
         return { id: sub.id, ok: false, status };
       }));
       const removed = new Set(results.filter((result) => result.removed).map((result) => result.id));
-      // A device whose push service says it is gone (an app reinstalled, data cleared) stops getting anything until it
-      // turns notifications on again: say so, by label only (the endpoint is a capability).
+      // By label only: the endpoint is a capability.
       for (const sub of this.state.subscriptions) if (removed.has(sub.id)) console.warn(`[push] ${sub.label || sub.kind || "a device"} is gone (its push service said ${results.find((result) => result.id === sub.id)?.status}); removed`);
       this.state.subscriptions = this.state.subscriptions.filter((sub) => !removed.has(sub.id));
       await this.save();

@@ -22,46 +22,6 @@ import { closeWork, listWork, noteWork, openWork, WorkLog } from "../../agent/wo
 import { workOps } from "../../durable-adapter.js";
 import { hostsOf } from "../../harnesses/host-requests.js";
 
-/**
- * The hub's persistent agent over HTTP (docs/plans/persistent-agent.md).
- *
- * GET  /v0/agent                     the agent, its threads and its attention list
- * POST /v0/agent                     give this hub its agent { name? }
- * PATCH /v0/agent                    its settings (name, dial, budgetUsdPerDay, timezone, brief, heartbeat)
- * POST /v0/agent/asks/:id            decide an approval { choice }
- * GET  /v0/agent/policy              the standing approval policy and whether it is the starter
- * PUT  /v0/agent/policy              save approval rules { may?, always?, limits?, exact? }
- * GET  /v0/agent/approvals           approval audit records, newest first (?limit=)
- * POST /v0/agent/threads             a side thread { title? }
- * POST /v0/agent/wake                a run now { task, title? }
- * POST /v0/agent/feeds               add a feed { title, everyMinutes, source, level? } (feeds.js)
- * PATCH /v0/agent/feeds/:id          change its { title?, everyMinutes?, source?, level? }, keeping what it has seen
- * DELETE /v0/agent/feeds/:id         remove a feed
- * POST /v0/agent/schedules/:id/run   run one now, off its clock (testing): a routine's tasks gather and its run fires
- *                                    whatever its gate (not a gate of never), even in quiet hours; a feed checks; the rest wake a run
- * POST /v0/agent/tasks/:id/retry       run a task the runtime parked (restart limit) again from its checkpoint
- * GET  /v0/agent/messages           the jbot message log, newest last (?before=<id>&limit=), and the runs among it
- * DELETE /v0/agent/watches/:id     remove a watch or webhook
- * POST /v0/agent/test-report        a report with no run behind it, asking jbot to say hi (to watch a report's turn)
- * POST /v0/agent/runs/:id/open      a run of the log's: its transcript as a chat to open { chatId }
- * GET  /v0/agent/work               each reply's work: the ops of the turn it ended (?ids=<log message ids>&full=1)
- * POST /v0/agent/messages           the person says something in the app { text }: logged first, then given to the home thread
- * POST /v0/agent/voice-message      a PCM WAV recording: transcribed, logged via voice, then given to the same home thread
- * POST /v0/agent/inbox              add context as the signed-in person { title, headline, body?, level, kind?, for? }
- * PATCH /v0/agent/inbox/:id         { action: handle|reopen|address|dismiss, outcome?, for? }
- * DELETE /v0/agent/inbox/:id        hard delete, person only
- * POST /v0/agent/feedback           feedback about a jbot app message { messageId, text }; returns { id }
- * POST /v0/agent/reset              start over: a new home thread, empty inbox; settings, memory and feeds stay
- * POST /v0/agent/proposals/:id/{accept,reject}
- * DELETE /v0/agent/notices/:id      a notice read (it leaves the attention list)
- * DELETE /v0/agent/rules/:id        remove a saved approval rule
- * GET  /v0/agent/connectors         connector status
- * GET  /v0/agent/connectors/:id/tools  what a connected one offers (name, description, read-only)
- * POST /v0/agent/connectors/:id/connect  start OAuth
- * GET  /v0/agent/connectors/:id/callback  finish OAuth (no session; state is the secret)
- * DELETE /v0/agent/connectors/:id    disconnect
- * POST /v0/agent/hooks/:token        a webhook: wakes it with the request's body (no session; the token is the secret)
- */
 export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime }) {
   const transcribeVoice = voiceTranscriber(voiceRuntime);
   const enabled = (response) => {
@@ -90,15 +50,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     response.json({ records: await readApprovals(path.join(agent.runtime.dataRoot, "agent", "approvals"), request.query.limit) });
   });
 
-  /**
-   * What is under way and what needs the person. Working: its runs still going
-   * and its clocks. Needs you: a question or approval waiting in one of its
-   * threads, memory its runs proposed, and notices (a budget reached).
-   */
-  /*
-   * Work the runtime parked after too many restarts (pi-durable's restart limit): nothing runs it again until someone
-   * asks, so it is said here, with Retry (POST /v0/agent/tasks/:id/retry).
-   */
+  // Parked work never runs again until someone asks, so it is listed with Retry.
   const TASK_WORDS = { "conduit.subagent-reporter": "A run's report", "conduit.agent-routine": "A routine", "pi.generation": "A model turn", "pi.tool": "A tool call" };
   const parkedTasks = async () => {
     const harness = await agent.runtime.open();
@@ -109,11 +61,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       text: `${TASK_WORDS[task.record.kind] || "A task"} stopped after restarting ${task.record.restarts ?? "too many"} times`,
     }));
   };
-  /*
-   * Working on and Recent: the work log's items (work-log.js), never the agents a unit uses. An open one says what it
-   * is doing (its phase), how many of its agents are working, and what the one working now is doing (the turn
-   * digest's words, subagents.js); a closed one how it ended.
-   */
   const workView = async (harness, item) => {
     const open = !item.endedAt;
     let agents = null, activity = null;
@@ -130,7 +77,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
   const attention = async (view, state) => {
     const harness = await agent.runtime.open();
     const work = listWork(await harness.snapshot(WorkLog, agent.context).catch(() => null));
-    // The home thread's own turn, in the turn digest's words (the adapter keeps them on its live session).
     const home = view.home?.chatId ? backends.getByChatId(view.home.chatId) : null;
     const threads = [view.home?.chatId, ...view.sides.map((side) => side.chatId)].filter(Boolean);
     const waiting = threads.flatMap((chatId) => hostsOf(backends.getByChatId(chatId))
@@ -285,7 +231,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
   });
 
   const voiceRequests = new Map();
-  // Global session authentication runs before agent routes. JSON middleware leaves audio/wav untouched.
+  // JSON middleware leaves audio/wav untouched.
   app.post("/v0/agent/voice-message", (request, response, next) => {
     if (!enabled(response)) return;
     if (!agent.active()) return response.status(409).json({ error: "agent_off" });
@@ -317,7 +263,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       if (Number.isInteger(error.status) && error.status >= 400 && error.status < 600) {
         return response.status(error.status).json({ error: error.code || "voice_failed", message: error.message });
       }
-      // A transcription provider's own failure: said plainly to the bubble, which shows it.
       console.error("[agent] voice message failed", error?.message || error);
       response.status(502).json({ error: "voice_failed", message: `Transcription failed: ${String(error?.message || error).slice(0, 120)}` });
     }
@@ -369,16 +314,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     response.status(202).json({ collecting: true });
   });
 
-  /*
-   * The runs jbot's home thread has had (a heartbeat, a brief, an event's watch, a routine): each its quiet line or the
-   * report it woke jbot with, read from the thread once and then only what was added since, so the log can say each
-   * one happened. Reads are chained, so two at once never index an entry twice.
-   */
-  /*
-   * The jbot chat's run rows: the work log's items that reported or ended, as rows of the log where they came back.
-   * Before the log there was only the home thread's report entries: read once (`seedWork`) into closed items, so the
-   * log carries what came before it; the entries are never read again.
-   */
+  // The home thread's report entries are read once (`seedWork`) into closed work-log items, never again.
   const runIndex = { conversationId: null, last: 0, runs: [] };
   const entriesRuns = async (conversationId) => {
     Object.assign(runIndex, { conversationId, last: 0, runs: [] });
@@ -391,7 +327,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       for (const entry of page.items) {
         runIndex.last = Math.max(runIndex.last, entry.id);
         const data = entry.data || {};
-        // A background agent jbot sent from its chat (no run): its report, a row of its own where it came back.
         if (entry.kind === "conduit.subagent-report" && !data.run && data.conversationId != null) {
           const id = String(data.messageId || `run:${entry.id}`).replace(/:again$/, "");
           if (runIndex.runs.some((run) => run.id === id)) continue;
@@ -402,7 +337,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
             conversationId: data.conversationId, subagentId: data.subagentId ?? null, agent: true });
           continue;
         }
-        // A run its routine, watch or webhook keeps out of the log (log: false) is left out.
         if (!data.run || data.run.log === false || (entry.kind !== "conduit.run-quiet" && entry.kind !== "conduit.subagent-report")) continue;
         runIndex.runs.push({ id: data.messageId || `run:${entry.id}`, at: data.run.endedAt || data.timestamp || new Date(entry.createdAt || Date.now()).toISOString(),
           title: data.title || data.run.label || "Run", label: data.run.label || data.title || "Run", number: data.run.number ?? null, routine: data.run.routine || null,
@@ -438,7 +372,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     await seedWork(conversationId).catch(() => {});
     const harness = await agent.runtime.open();
     return listWork(await harness.snapshot(WorkLog, agent.context).catch(() => null))
-      // What ran (a run, a fork, an agent) or was told to jbot; a routine that only gathered is not a row here.
       .filter((item) => item.log !== false && (item.conversationId != null || item.outcome?.reportedAt) && (item.outcome?.reportedAt || item.endedAt))
       .map((item) => ({ id: item.id, at: item.outcome?.reportedAt || item.endedAt, title: item.title, label: item.title, number: item.number ?? null,
         routine: item.kind, trigger: item.trigger ?? null, startedAt: item.startedAt, endedAt: item.endedAt, status: item.outcome?.status ?? null,
@@ -447,11 +380,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       .sort((a, b) => a.at.localeCompare(b.at));
   };
 
-  /*
-   * A test report: what a run reports, submitted to the home thread as a run's report is and followed the same way
-   * (wakeChat), with no run behind it and no clock. jbot is asked to send the person a notification saying hi, so a
-   * report's turn can be watched end to end without waiting on a heartbeat.
-   */
   app.post("/v0/agent/test-report", async (_request, response) => {
     if (!enabled(response)) return;
     const { conversationId } = await agent.home();
@@ -478,8 +406,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     response.json({ ok: true });
   });
 
-  // A run's own transcript, as a chat to open (made the first time it is asked for): { chatId }. By its work-log item, or
-  // by its conversation (the home thread's run rows, once the run has left the roster).
   app.post("/v0/agent/runs/:id/open", async (request, response) => {
     const harness = await agent.runtime.open();
     const doc = await harness.snapshot(WorkLog, agent.context).catch(() => null);
@@ -495,7 +421,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     const log = agent.runtime.messageLog;
     const limit = Math.min(200, Math.max(1, Number(request.query.limit) || 50));
     const messages = log ? log.list({ before: request.query.before ? String(request.query.before) : null, limit }) : [];
-    // The runs since the first message read, and before the next page's, when an older page is read.
     const home = (await agent.state().catch(() => null))?.home?.conversationId;
     const since = messages[0]?.at ?? "";
     const until = request.query.before ? messages.at(-1)?.at ?? "" : null;
@@ -503,9 +428,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     response.json({ messages, runs });
   });
 
-  // A message's work: each of jbot's replies (ids, its log messages) as the ops of the turn it ended, since the message
-  // before it in its thread; each of the person's that steered a running turn, that turn up to it. Lean unless full
-  // (workOps).
   app.get("/v0/agent/work", async (request, response, next) => {
     const log = agent.runtime.messageLog;
     const ids = String(request.query.ids || "").split(",").filter(Boolean).slice(0, 200);
@@ -572,7 +494,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     response.status(run ? 202 : 409).json(run ? { id: run.id, conversationId: run.child } : { error: "agent_over_budget" });
   });
 
-  // The person adds a feed directly: they are who jbot's feeds would ask.
   let addClocked = null;
   app.post("/v0/agent/feeds", async (request, response) => {
     if (!enabled(response)) return;
@@ -647,7 +568,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     });
     response.status(run ? 202 : 409).json(run ? { id: run.id, conversationId: run.child } : { error: "agent_over_budget" });
   });
-  // A task the runtime parked after too many restarts (pi-durable's restart limit) runs again from its checkpoint.
   app.post("/v0/agent/tasks/:id/retry", async (request, response) => {
     if (!enabled(response)) return;
     const id = Number(request.params.id);
@@ -656,11 +576,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     await harness.retryTask(id, agent.context);
     response.json({ retried: id });
   });
-  /**
-   * Start over: a new home thread, and an empty inbox, attention list and work log. Its settings, memory files, feeds
-   * (with what they have seen), schedules and saved approval rules stay; their clocks move to the new thread. The old home thread is
-   * the caller's to delete (DELETE /v0/sessions/:id); its runs' chats go here.
-   */
+  /** The old home thread is the caller's to delete (DELETE /v0/sessions/:id). */
   app.post("/v0/agent/reset", async (request, response) => {
     if (!enabled(response)) return;
     const previous = (await agent.state()).home;
@@ -672,7 +588,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
       delete tainted[previous?.conversationId];
       Object.assign(doc, { home: null, inbox: {}, asks: {}, notices: [], proposals: {}, tainted });
     });
-    // Working on and Recent start empty, numbered from one; nothing from before is read into them again.
     await (await agent.runtime.open()).commit(async (tx) => Object.assign(await tx.doc(WorkLog), { items: {}, counters: {}, seeded: true }), agent.context);
     const home = await agent.home();
     await seedSchedules(agent);
@@ -694,7 +609,6 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     response.status(204).end();
   });
 
-  // The memory view: every line with its scope and provenance, and forgetting one exactly as it was shown.
   app.get("/v0/agent/memory", async (request, response) => {
     if (!enabled(response)) return;
     response.json({ entries: await memoryEntries(agent, { days: Math.min(60, Math.max(1, Number(request.query.days) || 14)) }) });

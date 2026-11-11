@@ -45,7 +45,6 @@ function npmCommand() {
 
 let installing = null;
 
-/** Make the voice packages importable, downloading them the first time. */
 export async function ensureVoicePackages({ onPhase } = {}) {
   if (present()) return;
   const dir = runtimeDir();
@@ -68,7 +67,6 @@ export async function ensureVoicePackages({ onPhase } = {}) {
   await link(dir);
 }
 
-/** import() for a voice package, linking an already-downloaded runtime in. */
 export async function importVoicePackage(name) {
   if (!present()) {
     const dir = runtimeDir();

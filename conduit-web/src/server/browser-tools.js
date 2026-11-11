@@ -2,19 +2,12 @@ import { Type } from "@earendil-works/pi-ai";
 import { callingChat } from "./conduit-mcp.js";
 
 /*
- * The hub browser's tools as an agent is given them, whatever engine they come from (browser-host.js `tools()`):
- *
- * - without the options every one of them repeats. An engine's tools each carry its launch options (a certificate, a
- *   proxy, an engine choice): the hub launched the browser, so they are noise that hid what each tool takes and filled
- *   the prompt's room for declarations with the same lines over again;
- * - saying what came of an action. A fill or a key press answered with launch bookkeeping and nothing about the page,
- *   so an agent could not tell an action that did nothing from one that worked. After a tool that acts, the result
- *   ends with where the browser now is, and whether the person is watching it.
+ * The launch options every engine tool repeats are dropped: the hub launched the browser, so they are noise. A tool that
+ * acts ends its result with where the browser now is, so an agent can tell an action that did nothing from one that worked.
  */
 const SHARED = 0.8;
 const READS = /_(snapshot|screenshot|get_[a-z_]+|wait_[a-z_]+|tab_list|find[a-z_]*|is_[a-z_]+|console|errors|cookies[a-z_]*)$/;
 
-/** A result's text without the engine's bookkeeping: `{ data: { lifecycle … } }` is not about the page. */
 function plain(part) {
   if (part?.type !== "text" || !part.text.trimStart().startsWith("{")) return part;
   try {
@@ -46,7 +39,6 @@ export function hubBrowserTools(runtime, tools) {
         const output = (result.output || []).map(plain);
         if (!acts || result.isError) return { ...result, output };
         const [title, url] = await Promise.all([said("_get_title", api), said("_get_url", api)]);
-        // Whether the person is watching: only said when they are not, and only of the tab they are talking from.
         const chat = await callingChat(runtime, api, context).catch(() => null);
         const tabs = runtime.uiControl ? await runtime.uiControl.look().catch(() => []) : [];
         const tab = runtime.uiControl && chat ? await runtime.uiControl.targetFor(chat, tabs).catch(() => null) : null;

@@ -7,7 +7,6 @@ import { defineDoc, defineTool, wrapTool } from "@earendil-works/pi-durable";
 const result = (text, isError = false) => ({ output: [{ type: "text", text }], ...(isError ? { isError: true } : {}) });
 const MAX_FILE = 64 * 1024;
 
-/** Per conversation: the skills it loaded, and for each skill whose work it began, whether it had loaded it first. */
 export const SkillUse = defineDoc({
   checkpointWhen: () => false, kind: "conduit.skills",
   version: 1,
@@ -17,14 +16,10 @@ export const SkillUse = defineDoc({
   initial: () => ({ loaded: {}, began: {} }),
 });
 
-/** A line of runtime/skill-use.jsonl (diagnostics read it): no content, names and whether the skill was loaded. */
+/** No content: names and whether the skill was loaded. */
 const logUse = (runtime, record) => fs.appendFile(path.join(runtime.dataRoot, "runtime", "skill-use.jsonl"),
   `${JSON.stringify({ t: new Date().toISOString(), ...record })}\n`).catch(() => {});
 
-/**
- * A skill's `nudge` (front matter): the calls that begin its kind of work. Each entry is a tool name, or `tool: text`
- * for a call of that tool whose arguments contain the text (`codemode: executor`, `routine: save`).
- */
 function nudgeMatches(nudge, toolName, args) {
   if (!Array.isArray(nudge)) return false;
   let shown;
@@ -38,7 +33,6 @@ function nudgeMatches(nudge, toolName, args) {
   });
 }
 
-/** A skill folder's files, relative, for the model to ask for by name (SKILL.md itself left out). */
 async function filesOf(folder, at = "") {
   const out = [];
   for (const entry of await fs.readdir(path.join(folder, at), { withFileTypes: true }).catch(() => [])) {
@@ -65,11 +59,7 @@ async function skillText(skill) {
   return files.length ? `${body}\n\n---\nFiles in this skill (read with skill and file): ${files.join(", ")}` : body;
 }
 
-/**
- * `skill`: progressive disclosure for the skills a context document lists (context-store.js lists each as a line).
- * The body loads only when the model calls it, read on the hub, so a chat working on another device gets it too; a
- * file beside it (a reference, a script to read) loads by its relative path, and nothing outside the skill's folder.
- */
+/** Read on the hub, so a chat working on another device gets it too. */
 export const SkillTool = (runtime) => defineTool({
   name: "skill",
   description: "Load a skill: the instructions for a kind of work, listed under Skills in your instructions. Call it with the "
@@ -103,11 +93,6 @@ export const SkillTool = (runtime) => defineTool({
   },
 });
 
-/**
- * The nudge, as pi-durable wraps (an extension's `wraps`): the first call in a conversation that begins a skill's work
- * (its `nudge`) is recorded with whether the skill was loaded first, and when it was not, the call's result ends with
- * a line saying which skill covers it. Auto skills put their body before the result until it is loaded recently.
- */
 export function skillNudges(runtime, toolNames) {
   return toolNames.map((name) => wrapTool({ name }, (tool) => ({ ...tool, execute: async (args, api, context) => {
     const outcome = await tool.execute(args, api, context);

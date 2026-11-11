@@ -23,11 +23,7 @@ import {
   moveDurableChat,
 } from "../../session-operations.js";
 
-/**
- * Where a path on a device falls among the folders it makes available: the root whose path holds it, and the parts
- * under that root. Either separator is taken (a browser joins Windows paths with "/"); a Windows root matches
- * whatever the case. Null when no root holds it.
- */
+/** Either separator is taken (a browser joins Windows paths with "/"); a Windows root matches whatever the case. */
 function placeOnDevice(roots, devicePath) {
   const parts = (value) => String(value || "").split(/[\\/]+/).filter(Boolean);
   const wanted = parts(devicePath);
@@ -73,7 +69,7 @@ const WORKSPACE_APPEARANCE_ICON_IDS = new Set([
   "puzzle", "rocket", "route", "server-cog", "shield-check", "sparkles",
   "star", "terminal", "workflow", "zap",
 ]);
-// Identity hues (components/ui/palettes.ts IDENTITY_HUES), and the Catppuccin names saved before hues.
+// IDENTITY_HUES (components/ui/palettes.ts), plus the Catppuccin names saved before hues.
 const WORKSPACE_APPEARANCE_COLOR_IDS = new Set([
   "rose", "coral", "pink", "violet", "red", "orange", "yellow",
   "green", "teal", "cyan", "azure", "blue", "indigo",
@@ -141,8 +137,6 @@ export function registerProjectRoutes(app, {
     if (project) await projects.validate(project);
     return project;
   };
-  // Where the inspector works for a project: this server's path, or the
-  // device's folder through its environment (plan decision 22).
   const rootOf = (project) => projectWorkspace(project, nodeHub);
   const readComputerLocation = async (project) => {
     const [gitRoot, listing] = await Promise.all([
@@ -156,17 +150,11 @@ export function registerProjectRoutes(app, {
     response.json(await readComputerLocation(project));
   });
 
-  /*
-   * A device's folders as Computer shows the server's, for choosing where a workspace goes: only inside the folders
-   * it makes available (their grants are set on the device), so its first is home and nothing above a root is
-   * listed. Same shape as /v0/computer, its project standing for the place.
-   */
   app.get("/v0/nodes/:id/computer", async (request, response) => {
     const node = nodeHub && (await nodeHub.list()).find((item) => item.id === request.params.id);
     if (!node) return response.status(404).json({ error: "node_not_found" });
     if (!node.online) return response.status(503).json({ error: "device_offline", message: `${node.name} is offline` });
     if (node.browse) {
-      // It lets this server browse it: any folder its user can list, by name and kind.
       const seen = await nodeHub.computer(node.id, "list", String(request.query.path || ""));
       const name = seen.path.split(/[\\/]/).filter(Boolean).at(-1) || seen.path;
       const project = { id: `device:${node.id}`, slug: `device-${node.id}`, name, workingRoot: seen.path, nodeId: node.id, kind: "workspace", sessions: [] };
@@ -288,13 +276,10 @@ export function registerProjectRoutes(app, {
         return response.status(201).json(created);
       }
       if (mode === "node") {
-        // A folder a paired node shares: a root by id, and optionally a folder inside it.
         const nodeId = String(request.body?.nodeId || "");
         if (!nodeHub || !await nodeHub.get(nodeId)) return response.status(404).json({ error: "node_not_found" });
-        // A root by id and a path inside it, or (from New workspace) the device's own path to the folder.
         const listed = (await nodeHub.list()).find((item) => item.id === nodeId);
         let located = request.body?.rootId ? null : placeOnDevice(listed?.roots || [], String(request.body?.path || ""));
-        // Outside what it shares, on a device that lets this server browse it: it is asked to share the folder first.
         if (!request.body?.rootId && !located && listed?.browse && request.body?.path) {
           located = placeOnDevice(await nodeHub.computer(nodeId, "share", String(request.body.path)), String(request.body.path));
         }
@@ -379,7 +364,6 @@ export function registerProjectRoutes(app, {
     response.json(await readWorkspaceVersion(rootOf(project), { paths: workspaceVersionPaths(request.query.paths), tag: request.params.id }));
   });
 
-  // A grant to read this workspace's files from its node itself, the shortest way (nodes/direct.js).
   app.get("/v0/projects/:id/direct", async (request, response) => {
     const project = await inspectionContext(request.params.id);
     if (!project) return response.status(404).json({ error: "project_not_found" });
@@ -417,7 +401,6 @@ export function registerProjectRoutes(app, {
       response.setHeader("Cache-Control", "private, no-cache");
       response.setHeader("Content-Disposition", `${inline ? "inline" : "attachment"}; filename*=UTF-8''${downloadName}`);
       if (resolved.path) return response.sendFile(path.basename(resolved.path), { root: path.dirname(resolved.path), dotfiles: "allow" });
-      // A device's file comes through the device, whole.
       if (metadata.size > config.maxAttachmentBytes) return response.status(413).json({ error: "file_too_large" });
       return response.end(await resolved.host.read(resolved.relativePath));
     }
@@ -502,7 +485,6 @@ export function registerProjectRoutes(app, {
     const chatId = typeof request.query.chatId === "string" ? request.query.chatId : "";
     const chat = registry.metadata(chatId);
     if (!chat || chat.projectId !== project.id) return response.json(null);
-    // Turn checkpoints snapshot the workspace where it is; a place that cannot (a device without Git there) has none.
     const can = await backends.capabilities?.(project);
     if (can && !can.checkpoints) return response.json(null);
     if (request.query.timeline === "1") {
@@ -546,8 +528,7 @@ export function registerProjectRoutes(app, {
     }));
   });
 
-  // Every Conduit chat of one place moves to another; chats of other harnesses
-  // stay (their history is the harness's, tied to the folder) and are listed.
+  // Chats of other harnesses stay: their history is the harness's, tied to the folder.
   app.post("/v0/projects/:id/move-sessions", async (request, response) => {
     const source = await projects.get(request.params.id);
     const target = await projects.get(request.body?.projectId || "");

@@ -1,11 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-/**
- * POST /v0/client-reports/:kind   a client's own report of something it caught going wrong (a stray frost, for now):
- * appended as one JSON line to <data>/client-reports/<kind>.jsonl with who sent it and when, for a developer to read.
- * Only known kinds, small bodies, and the file trimmed to its last 200 reports.
- */
 const KINDS = new Set(["stray-frost"]);
 const KEEP = 200;
 

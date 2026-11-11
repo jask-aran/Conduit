@@ -9,27 +9,8 @@ import { defineTool } from "@earendil-works/pi-durable";
 import { ModelRegistry } from "@earendil-works/pi-coding-agent";
 
 /**
- * Pi extensions, run by the Conduit runtime.
- *
- * A Pi extension is a function handed Pi's extension API. This hands it an API
- * that keeps what means something outside Pi's terminal: its tools, run as
- * pi-durable tools; its slash commands, run when a chat's message names one;
- * `exec`; and `sendMessage`/`sendUserMessage`, which queue a prompt to the
- * conversation the tool or command runs for. Widgets, shortcuts, status and
- * theme are no-ops. An extension loads once; each tool call or command brings
- * its own chat (an AsyncLocalStorage store), so the context it is handed --
- * working directory, model, the Conduit durable agent's model registry, and
- * `ui` -- is that chat's. `ui.select/confirm/input/editor` put a card up in the
- * chat and wait for the answer; `ui.notify` is a toast in it, when it is open.
- *
- * It also keeps what an extension files for itself with `appendEntry` (Pi
- * keeps those in the session): in `entries`, a file, read back to it at load
- * as a session's entries through its `session_start` handlers. pi-web-access
- * finds an earlier search's results that way, so paging one survives a
- * restart; without the start it also dropped its background fetches.
- *
- * `replaySafe` names the tools that may simply run again after a restart
- * (reads and searches); any other is reported to the model as interrupted.
+ * Pi extensions run by the Conduit runtime. An extension loads once and is shared by every chat; each tool call or
+ * command brings its own chat through an AsyncLocalStorage store, so the context it is handed is that chat's.
  */
 const quiet = new Proxy({}, { get: () => () => undefined });
 
@@ -59,10 +40,8 @@ function piApi(tools, { commands, calls, handlers, append }) {
 }
 
 /**
- * Variables an extension reads from process.env as it runs, set only while
- * it runs: they are the extension's, and anything this server spawns
- * meanwhile would otherwise inherit them for good. Overlapping calls share
- * one setting; the last to finish puts back what was there.
+ * Set only while an extension runs, or anything this server spawns would inherit them for good. Overlapping calls
+ * share one setting; the last to finish restores it.
  */
 function scopedEnv(variables) {
   let depth = 0;
@@ -82,8 +61,7 @@ function scopedEnv(variables) {
   };
 }
 
-// What an extension files for itself, kept a day and at most this many: Pi
-// keeps them for the session's life, and every chat here shares one load.
+// Bounded because every chat here shares one load, where Pi keeps entries only for a session's life.
 const ENTRIES_KEPT = 1000;
 const ENTRY_DAYS_MS = 24 * 60 * 60 * 1000;
 
@@ -102,7 +80,7 @@ async function entryStore(file) {
   }
   let writing = Promise.resolve();
   const write = (work) => { writing = writing.then(work, work).catch((error) => console.warn("[conduit-runtime] extension entries not kept:", error?.message || error)); };
-  // What was kept, pruned, as of now: an entry filed before this write lands is appended after it.
+  // Snapshot now: an entry filed before this write lands is appended after it.
   const kept = entries.map((entry) => `${JSON.stringify(entry)}\n`).join("");
   if (file) write(async () => {
     await fs.mkdir(path.dirname(file), { recursive: true });
@@ -133,7 +111,6 @@ export async function loadPiExtensionTools(entry, { models, replaySafe = [], env
   const store = await entryStore(entriesFile);
   await scoped(() => factory(piApi(tools, { commands, calls, handlers, append: (customType, data) => store.append(customType, data) })));
   const registry = new ModelRegistry(models);
-  // One session, as far as the extension can tell, holding what it filed before.
   const session = { getBranch: () => store.entries(), getEntries: () => store.entries(), getSessionId: () => "conduit" };
   for (const [event, handler] of handlers) {
     if (event !== "session_start") continue;
@@ -142,9 +119,8 @@ export async function loadPiExtensionTools(entry, { models, replaySafe = [], env
     try { await scoped(() => handler({ type: "session_start" }, ctx)); }
     catch (error) { console.warn("[conduit-runtime] extension session_start failed:", error?.message || error); }
   }
-  // `hasUI` says the user is at a terminal running this: true for a command they typed. A tool says false, as
-  // before, since tools read it as leave to open UI of their own (pi-web-access's curator opens a browser on this
-  // server's machine); the dialogs still work for a tool that asks.
+  // `hasUI` is false for a tool: tools read it as leave to open UI of their own (pi-web-access's curator opens a
+  // browser on this server's machine). The dialogs still work for a tool that asks.
   const callContext = (agent, call, context, hasUI) => {
     const ask = async (kind, fields) => {
       context.abortSignal?.throwIfAborted();
@@ -205,7 +181,7 @@ export async function loadPiExtensionTools(entry, { models, replaySafe = [], env
   return loaded;
 }
 
-// The package exports these functions from this module, but not its public index.
+// The package exports these from this module but not from its public index.
 export async function loadPiPrompts(options) {
   const { loadPromptTemplates, expandPromptTemplate } = await import(new URL("./core/prompt-templates.js", import.meta.resolve("@earendil-works/pi-coding-agent")));
   return loadPromptTemplates(options).templates.map((prompt) => ({

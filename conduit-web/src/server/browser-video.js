@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 const QUIET_MS = 12;
 const REPEAT_MS = 60;
 
-/** One encoder per viewer. A blocked pipe drops input rather than retaining old pictures. */
+/** A blocked pipe drops input rather than retaining old pictures. */
 export function browserVideo({ binary, codec, fps, send, fallback }) {
   let encoder = null;
   let size = null;

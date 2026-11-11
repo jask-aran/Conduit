@@ -1,22 +1,13 @@
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
 
-/**
- * Shared server synchronization mechanics. Domain policy stays in the caller:
- * this object only serializes work or applies a deadline.
- */
 const fromPromise = (work) => Effect.tryPromise({
   try: () => Promise.resolve().then(work),
-  // Preserve Conduit's existing rejected Error values and their code/status
-  // fields across the Promise/Effect boundary.
+  // Keeps rejected Errors and their code/status fields across the Promise/Effect boundary.
   catch: (error) => error,
 });
 
-/**
- * `promise`, or after `ms` whatever `fallback` gives: a value, or a function
- * that returns one or throws. Unlike a race against a timer, the timer goes
- * when the promise wins, so a settled wait does not hold the process open.
- */
+/** Unlike a race against a timer, the timer goes when the promise wins, so a settled wait does not hold the process open. */
 export const within = (promise, ms, fallback) => Effect.runPromise(fromPromise(() => promise).pipe(
   Effect.timeoutOrElse({
     duration: Math.max(0, Math.trunc(Number(ms) || 0)),
@@ -41,9 +32,8 @@ export class ServerConcurrency {
   }
 
   /**
-   * Serialize only admission and synchronous kickoff. Every adapter claims its
-   * generation slot before its first await; the backend RPC itself must not
-   * hold a global mutex.
+   * Serializes only admission and synchronous kickoff: every adapter claims its generation slot before its first
+   * await, and the backend RPC itself must not hold a global mutex.
    */
   runGenerationStart(work) {
     return startWithMutex(this.generationMutex, work);
@@ -73,10 +63,6 @@ export class ServerConcurrency {
   }
 }
 
-/**
- * `work` for each item, at most `limit` at once, the results in the items' order: independent reads (a file each)
- * that one after another left the disk idle while each was parsed.
- */
 export async function mapLimit(items, limit, work) {
   const list = [...items];
   const results = new Array(list.length);

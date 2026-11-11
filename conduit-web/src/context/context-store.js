@@ -9,16 +9,11 @@ import { writePrivateFile, writePrivateJson } from "../private-file.js";
 
 const safeId = /^[a-z][a-z0-9-]{0,63}$/;
 const fail = (message, status = 400, extra = {}) => Object.assign(new Error(message), { status, ...extra });
-/** The index's opening: skills are listed, not pasted; the `skill` tool loads one (server/skill-tool.js). */
 export const SKILLS_INTRO = "# Skills\n\nSkills are the instructions for kinds of work: each line below says when one applies. When one fits "
   + "what you are about to do, call `skill` with its name first and follow what it says. It is one quick call, and it beats "
   + "working from memory. A skill may name files of its own; `skill` reads those too.";
 
-/*
- * What Conduit fills in when the model runs: blocks too, but templates -- the tags the model reads them in and the
- * slots ({{…}}) Conduit fills each turn. `tag` is the section's own tag (pi-durable wraps a section in it); the
- * template is written out whole so the page shows exactly the shape the model gets.
- */
+// Each template is written out whole so the page shows exactly the shape the model gets.
 const live = {
   "live-skills": { label: "Skills", description: "The skills this role can load: one line each, built from Settings › Skills and the role's skills. `skill` loads one.",
     template: `${SKILLS_INTRO}\n\n- **{{name}}**: {{description}}` },
@@ -39,14 +34,13 @@ const live = {
   "live-subagent-task": { label: "Task", description: "The task the parent hands it, whole: goal, context, constraints, what to report.",
     template: "{{the task, as the parent wrote it}}" },
 };
-/** The {{variables}} a jbot or run block can use (routines.js promptVars), with what each is. */
 const VARS = [
   ["person.name", "The person's name (USER.md's name field)"], ["person.home", "Where they live (USER.md's home field)"],
   ["assistant.name", "jbot's name (Settings › jbot)"], ["timezone", "Their time zone"], ["now", "The current date and time; never filled in a system prompt"],
 ];
 /**
- * A block's text with its fixed variables filled (never `now`: a system prompt does not change by the minute). A
- * paragraph that needs one nobody has set (no home in USER.md, no jbot on this hub) is left out, not sent with a hole.
+ * Never `now`: a system prompt does not change by the minute. A paragraph that needs a variable nobody has set is left
+ * out, not sent with a hole.
  */
 const FIXED = VARS.map(([name]) => name).filter((name) => name !== "now");
 export function fillVars(text, vars) {
@@ -68,7 +62,6 @@ const NOTICE_SPECS = {
   "steer": [["assistant.name", "The assistant's name"], ["message", "The message"]],
   "stop": [], "update": [["changes", "The fixed slots that changed"]], "time": [["now", "The current date and time"]],
 };
-/** Each notice's name and what it is, as Settings says them. */
 const NOTICE_ABOUT = {
   "wake-run": ["Run wake", "A run's first message when a check-back, a feed, Run now or a task jbot started wakes it."],
   "wake-event": ["Event wake", "What an event run is told happened (a device online, a chat finished), after its task."],
@@ -85,20 +78,16 @@ const NOTICE_ABOUT = {
   "time": ["Time note", "Before the person's message in a jbot thread not told the time in 30 minutes, or on a new day."],
 };
 const NOTICE_APPENDIX = { "wake-routine": "Conduit appends the routine's task blocks.", "wake-webhook": "Conduit appends the fenced webhook body." };
-/** A skill as a block's name: "web-research" reads "Web research skill". */
 const skillLabel = (name) => `${name.replace(/[-_]+/g, " ").replace(/^./, (letter) => letter.toUpperCase())} skill`;
 const skillName = (text, folder) => /^name:\s*(.+)$/m.exec(text)?.[1]?.trim().replace(/^["']|["']$/g, "") || path.basename(folder);
 const skillDescription = (text) => /^description:\s*(.+)$/m.exec(text)?.[1]?.trim().replace(/^["']|["']$/g, "") || "";
-/** Whether a skill is offered to subagents and runs too: unless its front matter says `subagents: false`. */
 const forSubagents = (text) => { try { return splitFrontMatter(text).data?.subagents !== false; } catch { return true; } };
 
 export class ContextStore {
   constructor({ root, templates, agent, webPath, seedDir, chatNamingPath, subagentPath, skills = null }) {
-    // skills: the hub's SkillStore (Settings › Skills): installed skills' blocks, and which skills are off.
     Object.assign(this, { root: path.resolve(root), templates, agent, webPath, seedDir, chatNamingPath, subagentPath, skills });
     this.listeners = new Set();
   }
-  /** Told after a block or document changes (Settings › Prompts), so live threads take the new prompt at once. */
   onChange(listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   changed() { for (const listener of this.listeners) { try { listener(); } catch (error) { console.warn("[context] change listener failed", error); } } }
 
@@ -122,7 +111,7 @@ export class ContextStore {
       const text = await fs.readFile(path.join(folder, "SKILL.md"), "utf8");
       if (!blocks.has(id)) add(id, skillLabel(skillName(text, folder)), "shipped", { file: path.join(folder, "SKILL.md"), skill: folder, subagents: forSubagents(text) });
     }
-    // Skills installed on the hub (Settings › Skills), after the shipped ones; a shipped id keeps its own.
+    // After the shipped skills, so a shipped id keeps its own.
     for (const { id: skillId, folder } of this.skills?.installedFolders() || []) {
       const id = `skill-${skillId}`;
       const text = await fs.readFile(path.join(folder, "SKILL.md"), "utf8").catch(() => null);
@@ -156,7 +145,6 @@ export class ContextStore {
       id, label, role: { kind, id: roleId, label }, blocks: blocks.filter((key) => !isSkill(key)),
       skills: blocks.filter(isSkill), live: [...(kind !== "service" ? ["live-skills"] : []), ...sections], first, notices,
     });
-    // A profile's default: its own skills, then every skill installed on the hub (a saved document keeps its list).
     const installed = [...catalog.values()].filter((item) => item.installed).map((item) => item.id);
     const templateBlocks = (t) => [...new Set([t.id, ...(t.basePrompt ? ["base"] : []), ...(t.skills || []).map((folder) => `skill-${path.basename(folder)}`), ...installed])];
     const templateLive = (t, isAgent = false) => ["live-working-folder", ...((t.extensions || []).some((x) => x.includes("pi-web-access")) ? ["web-tools"] : []), ...((t.extensions || []).some((x) => /codemode-only\.js$/.test(x)) || t.connectors || isAgent ? ["live-codemode-tools", "live-connector-instructions"] : []), ...(isAgent ? ["live-jbot-files", "live-inbox", "live-approval-rules"] : [])];
@@ -164,7 +152,6 @@ export class ContextStore {
       if (t.id === "agent") add("agent", "agent", "agent", catalog.get("agent").label, templateBlocks(t), templateLive(t, true), [], ["report-run", "report-brief", "report-subagent", "approval-allowed", "approval-denied", "update", "time", "stop"].map((x) => `notice-${x}`));
       else if (!t.internal) add(`profile:${t.id}`, "profile", t.id, t.label, templateBlocks(t), templateLive(t), [], [...(t.connectors ? ["notice-approval-allowed", "notice-approval-denied"] : []), "notice-report-subagent", "notice-stop"]);
     }
-    // Subagents and runs do the legwork: they get every skill not marked `subagents: false`, after their own blocks.
     const legwork = [...new Set([...this.templates.flatMap((t) => (t.skills || []).map((folder) => `skill-${path.basename(folder)}`)), ...installed])]
       .filter((id) => catalog.get(id)?.subagents !== false);
     const agentTemplate = this.templates.find((t) => t.id === "agent");
@@ -196,7 +183,6 @@ export class ContextStore {
     if (item.routine) return item.defaultBody;
     return item.file ? fs.readFile(item.file, "utf8") : null;
   }
-  /** A live block as it stands now, in its section's tag as the model gets it; its template where it changes each thread. */
   async previewLive(id) {
     const wrap = (text) => live[id].tag ? `<${live[id].tag}>\n${text}\n</${live[id].tag}>` : text;
     if (id === "live-skills") return this.skillIndex([...(await this.catalog()).values()].filter((item) => item.skill).map((item) => item.id));
@@ -295,7 +281,6 @@ export class ContextStore {
     if (item.routine || item.runRules) return this.save(id, { content: def });
     await fs.rm(path.join(this.root, `${id}.md`), { force: true }); return this.get(id);
   }
-  /** The skills `skill` can load: every enabled skill, shipped or installed, by name, with its folder and SKILL.md text. */
   async skillsAvailable() {
     const out = [];
     for (const item of (await this.catalog()).values()) {
@@ -310,13 +295,11 @@ export class ContextStore {
     return out;
   }
 
-  /** A text block's current text, for a section Conduit places itself (the web tools). */
   async text(id) {
     const item = (await this.catalog()).get(id);
     if (!item || item.kind !== "text") throw fail("Unknown text block", 404);
     return fillVars(await this.content(item), await this.vars());
   }
-  /** The variables as they stand, or none where this hub has no jbot to say them. */
   async vars() { const agent = this.agent(); return agent ? promptVars(agent).catch(() => ({})) : {}; }
   async notice(name, vars = {}) {
     const item = (await this.catalog()).get(`notice-${name}`);
@@ -353,9 +336,7 @@ export class ContextStore {
     // Every document's blocks take the variables, not jbot's alone: a shared block reads the same wherever it is placed.
     vars ||= await this.vars();
     const sections = [];
-    // A block a saved document names but that has since gone (a routine deleted, a block removed) is left out, not
-    // fatal: a role must still start. Every block's file read at once; the sections are still laid out in order.
-    // A skill turned off in Settings › Skills is left out wherever it is placed.
+    // A block a saved document names but that has since gone is left out, not fatal: a role must still start.
     const blocks = doc.blocks.map((key) => ({ key, item: catalog.get(key) })).filter(({ item }) => item && item.kind === "text");
     const contents = await Promise.all(blocks.map(({ item }) => this.content(item)));
     for (const [index, { key, item }] of blocks.entries()) {
@@ -371,7 +352,6 @@ export class ContextStore {
     }
     return { doc, sections };
   }
-  /** One index, in the system instructions after the role's text blocks; preserve the old separators. */
   async skillIndex(ids, { id, vars, catalog } = {}) {
     catalog ||= await this.catalog();
     const entries = [];

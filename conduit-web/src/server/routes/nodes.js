@@ -1,20 +1,12 @@
 /**
- * Devices paired with this server (the node role, plan milestone 3).
- *
- * A device (a PC, a phone) groups nodes (its Windows host, a WSL distro),
- * each paired on its own with a key returned once, inside the command that
- * starts the node role there; main keeps only the key's hash. The list is
- * devices with their nodes: connected or not, and what each shares.
+ * A device (a PC, a phone) groups nodes (its Windows host, a WSL distro), each paired on its own with a key returned
+ * once; the hub keeps only the key's hash.
  */
 import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
 import { createMachineReadout } from "../machine-readout.js";
 import { servedMagicDnsOrigin } from "../../tailscale-share.js";
 
-/**
- * Every way a device may dial this hub wherever it is, best first: its MagicDNS name when Tailscale serves it, its LAN
- * names over HTTPS (a real certificate; `lanNames()`, the hub's own, not the nodes'), and its public address when
- * devices may use it. Told to nodes as they connect (node-hub.js) and handed out at pairing.
- */
+/** Every way a device may dial this hub, best first. */
 export async function hubRoutes({ config, lanNames = () => [] }) {
   const publicUrl = process.env.CONDUIT_NODES_PUBLIC === "1" && process.env.CONDUIT_PUBLIC_URL
     ? (/^https?:\/\//.test(process.env.CONDUIT_PUBLIC_URL) ? process.env.CONDUIT_PUBLIC_URL : `https://${process.env.CONDUIT_PUBLIC_URL}`) : null;
@@ -24,8 +16,7 @@ export async function hubRoutes({ config, lanNames = () => [] }) {
 }
 
 export function registerNodeRoutes(app, { nodeHub, config, lanNameMatches = () => false, lanNames = () => [] }) {
-  // A device's machine readout (Settings › Devices): the hub's own read here; another's asked of its node, which an
-  // older Conduit there does not know (then 501, and the page says to update it).
+  // An older node does not serve the machine readout: 501, and the page says to update it.
   const readHub = createMachineReadout({ root: config.dataRoot });
   app.get("/v0/nodes/:id/machine", async (request, response) => {
     if (nodeHub.hub?.nodeId === request.params.id) return response.json(await readHub());
@@ -43,16 +34,14 @@ export function registerNodeRoutes(app, { nodeHub, config, lanNameMatches = () =
   app.post("/v0/nodes", async (request, response) => {
     const { node, device, key } = await nodeHub.pair({ name: request.body?.name,
       deviceId: request.body?.deviceId || null, deviceName: request.body?.deviceName || null });
-    // Devices reach main over the tailnet or this LAN (decision 4, widened 2026-10-23): hubRoutes, above, and the
-    // LAN address this request came in by; else this machine, for a node on the same one.
     const known = await hubRoutes({ config, lanNames });
     const tailnet = known.filter((route) => new URL(route).hostname.endsWith(".ts.net"));
-    // The LAN address this request came in by, for a device on this network but not the tailnet: the LAN name over
-    // HTTPS (its certificate is a real one), or a private address over the plain HTTP the same port answers.
+    // For a device on this network but not the tailnet: the LAN name over HTTPS, or a private address over the plain
+    // HTTP the same port answers.
     const host = String(request.hostname || "");
     const lan = lanNameMatches(host) ? `https://${request.headers.host}`
       : /^(10|192\.168|172\.(1[6-9]|2\d|3[01]))\./.test(host) ? `http://${host}:${config.port}` : null;
-    // Every way a device may dial, best first; the first is the pairing's name.
+    // The first route is the pairing's name.
     const routes = [...new Set([request.body?.mainUrl, ...tailnet, lan, ...known].filter(Boolean).map(String))];
     if (!routes.length) routes.push(`http://127.0.0.1:${config.port}`);
     const main = routes[0];

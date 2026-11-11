@@ -1,11 +1,4 @@
-/*
- * GET    /v0/person-browsers                         each environment that can offer the person's own browser, with
- *                                                    its state: the browsers paired there, a pairing under way
- * POST   /v0/person-browsers/:id/pair                a one-time code for that environment's browser extension
- * POST   /v0/person-browsers/:id/launch              start a browser there that has the extension (its window opens)
- * DELETE /v0/person-browsers/:id/browsers/:browser   unpair one
- * `:id` is the environment's node id. Settings › Devices; agents use conduit_browser (person-browser-tool.js).
- */
+// `:id` is the environment's node id.
 export function registerPersonBrowserRoutes(app, { personBrowsers }) {
   const failed = (response, error) => response.status(error.status || 502).json({ error: "person_browser_unavailable", message: error.message });
   app.get("/v0/person-browsers", async (_request, response) => {

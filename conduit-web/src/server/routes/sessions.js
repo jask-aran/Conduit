@@ -24,29 +24,14 @@ export function registerSessionRoutes(app, {
   projects,
   registry,
 }) {
-  /**
-   * What the server believes this chat holds, not only what the harness wrote.
-   *
-   * Only for the end of the transcript: an older page is history the log has
-   * nothing to say about, and folding the tail's statements into it would put
-   * them in the wrong place.
-   */
-  // Only the newest page is overlaid with the live log; an older page is
-  // asked for with a cursor even when it turns out to be the last.
-  // It also says how far into the log it reaches, read in the same tick as the
-  // fold, so the browser takes that as its place rather than starting from
-  // zero and being replayed every statement it was just handed.
+  // Only the newest page is overlaid with the live log: folded into an older page, the tail's statements would land in
+  // the wrong place. Its log position is read in the same tick as the fold, so the browser is not replayed what it holds.
   const upToDate = (context, projection, page, requestedBefore = "") => {
     if (page?.before || requestedBefore) return projection;
     const log = chatLogs?.peek(context.chat.id);
     return { ...projection, ...applyTranscriptOps(projection, log?.entries || []), ...(log ? { log: log.state() } : {}) };
   };
-  /*
-   * Whether a turn is still running in this chat. The transcript holds the
-   * steps of a running turn that have finished, and its prompt has no outcome
-   * until the turn ends; the browser draws the turn from the socket once it
-   * attaches, and until then this is what says the turn has not ended yet.
-   */
+  // Until the browser's socket attaches, this is what says a running turn has not ended: its prompt has no outcome yet.
   const turnOpen = (chatId) => {
     // A compaction outside a turn is not one: the transcript has no prompt waiting on it.
     const record = backends.getByChatId(chatId);
@@ -97,10 +82,6 @@ export function registerSessionRoutes(app, {
     return sections.join("\n\n").trim();
   }
 
-  /*
-   * The context a chat last had, for one with no live process to ask: read
-   * from the harness's stored history. A live process answers for itself.
-   */
   app.get("/v0/sessions/:id/context", async (request, response) => {
     const context = await findChatContext(request.params.id);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
@@ -114,7 +95,6 @@ export function registerSessionRoutes(app, {
     response.json(usage || {});
   });
 
-  // The full breakdown for a thread whose harness can only give it running.
   app.post("/v0/sessions/:id/context/breakdown", async (request, response) => {
     const context = await findChatContext(request.params.id);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
@@ -223,9 +203,7 @@ export function registerSessionRoutes(app, {
       return lifecycle.withProjects([context.project.id], async () => {
         await discardSession(backends, context.chat, registry);
         await registry.remove(context.chat.id, context.project);
-        // The draft goes with the chat. Nothing else ever removes one, so a
-        // chat deleted with something unsent left its text and its
-        // attachments held for as long as the store kept them.
+        // The draft goes with the chat; nothing else ever removes one.
         await drafts.dropChat(context.chat.id);
         await chatLogs?.timings?.forget(context.chat.id);
         return true;

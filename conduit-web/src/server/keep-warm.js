@@ -1,14 +1,10 @@
 import { DatabaseSync } from "node:sqlite";
 
 /*
- * Keep-warm (DurableRuntime.keepWarm): jbot's home thread's prompt cache is kept from lapsing between wakes by sending
- * its last request again at 90% of the model's cache lifetime, read from cache. Whether that pays depends on how long
- * jbot really sleeps: a ping costs a cached read of the prompt, a wake after the cache lapsed pays a full read. The
- * policy takes the home thread's own gaps between requests (heartbeats that ended without waking it never show) and
- * picks the number of pings after a request that would have cost least over them.
+ * A ping costs a cached read of the prompt and a wake after the cache lapsed a full read, so the policy picks the number
+ * of pings after a request that would have cost least over the home thread's past gaps.
  */
 
-/** Cache lifetimes for providers whose catalogue declares none, as observed or documented. */
 const ASSUMED_TTL_SECONDS = {
   // Sign in with ChatGPT and API keys alike: GPT-5.6 and later keep "long" retention 30 minutes.
   openai: 1800,
@@ -16,10 +12,6 @@ const ASSUMED_TTL_SECONDS = {
 const MOST_PINGS = 48;
 const FEWEST_GAPS = 5;
 
-/**
- * The model's cache lifetime for a retention tier: declared by its catalogue entry; otherwise how long it reliably
- * lived ("observed", reliableLifetime), or what is assumed for its provider, whichever is longer.
- */
 function cacheLifetime(model, retention = "long", observedMs = 0) {
   const declared = model?.promptCache?.[retention] ?? model?.promptCache?.short;
   if (declared > 0) return { ms: declared * 1000, source: "declared" };
@@ -29,13 +21,11 @@ function cacheLifetime(model, retention = "long", observedMs = 0) {
 }
 
 /**
- * How many pings follow a real request. Per token of prompt: a ping and a wake that finds the cache cost the cached
- * rate, a wake after it lapsed the full one (its write rate where the provider charges writes). With `pings` pings the
- * cache lives until pings * interval + ttl; each past gap is priced under every choice, and the cheapest wins.
+ * Per token of prompt: a ping and a wake that finds the cache cost the cached rate, a wake after it lapsed the full one
+ * (its write rate where the provider charges writes). With `pings` pings the cache lives until pings * interval + ttl.
  */
 export function keepWarmPolicy({ model, retention = "long", gaps: past, survivedMs = 0 }) {
-  // How long the cache reliably lives, from every thread's pauses (survivedMs), else this thread's own; gaps with a ping
-  // in them are not the provider's.
+  // Gaps with a ping in them are not the provider's.
   const ttl = cacheLifetime(model, retention, survivedMs || reliableLifetime(past.filter((gap) => !gap.pinged)));
   const gaps = past.map((gap) => gap.ms);
   const hit = Number(model?.cost?.cacheRead) || 0;
@@ -54,10 +44,7 @@ export function keepWarmPolicy({ model, retention = "long", gaps: past, survived
     ...(gaps.length < FEWEST_GAPS ? { reason: "too few past wakes" } : {}) };
 }
 
-/**
- * The gaps between a conversation's requests over the last `days`, from the runtime DB, read-only: `{ ms, hit }`, hit
- * when the request after it read at least half the one before from cache (prompts under 2048 tokens are not cached).
- */
+// Prompts under 2048 tokens are not cached.
 export function requestGaps(file, conversationId, days = 14, pinged = []) {
   let db;
   try {
@@ -86,11 +73,8 @@ const RELIABLE = 0.75;
 const FEWEST_PAUSES = 5;
 
 /**
- * How long a cache reliably lives, from pauses `{ ms, hit }`: the longest one it survived such that, of all the pauses
- * up to it, at least RELIABLE kept it. A provider's cache does not end at a fixed time -- on OpenAI three in four
- * pauses under 80 minutes kept it and one in three past that -- so the longest pause survived is luck, and pings timed
- * from it all arrived after the cache had gone. Pauses under ten minutes say nothing about the lifetime and are left
- * out; with too few, the longest survived is all there is.
+ * A provider's cache does not end at a fixed time, so the longest pause survived is luck and pings timed from it arrive
+ * after the cache has gone. Pauses under ten minutes say nothing about the lifetime.
  */
 function reliableLifetime(pauses) {
   const long = pauses.filter((pause) => pause.ms >= 600_000).sort((a, b) => a.ms - b.ms);
@@ -103,10 +87,6 @@ function reliableLifetime(pauses) {
   return lifetime;
 }
 
-/**
- * How long (ms) a cache on this provider and model reliably lived over the last `days` (reliableLifetime), from every
- * thread, not only the one kept warm. Gaps with a ping in them (`pinged`: times, on `pingedConversation`) are left out.
- */
 export function survivedLifetime(file, model, days = 14, pingedConversation = null, pinged = []) {
   let db;
   try {

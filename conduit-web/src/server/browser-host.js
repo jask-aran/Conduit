@@ -10,19 +10,6 @@ import { McpClient, StdioTransport, toLlmContent } from "@earendil-works/pi-mcp"
 import { BACKGROUND_CONTEXT, withAbortSignal } from "@earendil-works/chord/context";
 import { environmentName } from "../device-api.js";
 
-/*
- * The browser document, version 1 (roadmap #7): a Chrome on the hub that the person and Conduit's agents share, one
- * page by its id (`browser:hub`). Its engine is Vercel's agent-browser (Apache-2.0): a native daemon over CDP whose
- * session streams its viewport over a WebSocket (JPEG frames, the page's URL) and takes mouse, key and touch input --
- * its "pair browsing". The person sees and drives it through a pane (the stream, proxied here behind Conduit's
- * sign-in); an agent through agent-browser's own MCP server on the same session (AGENT_BROWSER_SESSION): Conduit's
- * agents load its tools into codemode (`tools()`), other harnesses are given the server itself (`mcpServer()`), so
- * the engine can be swapped for another (Browser Use, a cloud browser) without a tool of Conduit's own in between.
- *
- * agent-browser is vendored (a dependency: its native binaries come in the package); CONDUIT_AGENT_BROWSER names
- * another, and one on the PATH is the last resort. It finds an installed Chrome, Playwright's included, or
- * `agent-browser install` fetches one. The session starts on first use and stays open, across restarts of Conduit.
- */
 // The hub's own session; a device runs its own (`conduit-device`), so a device that is also a hub keeps them apart.
 const HUB_SESSION = "conduit-hub";
 const IDS = new Set(["hub"]);
@@ -41,7 +28,6 @@ const freePort = () => new Promise((resolve, reject) => {
   server.listen(0, "127.0.0.1", () => { const { port } = server.address(); server.close(() => resolve(port)); });
 });
 
-/** The vendored binary for this machine (agent-browser ships one per platform in its package). */
 const vendored = () => {
   const name = `agent-browser-${process.platform}-${process.arch}${process.platform === "win32" ? ".exe" : ""}`;
   const file = fileURLToPath(new URL(`../../node_modules/agent-browser/bin/${name}`, import.meta.url));
@@ -59,7 +45,6 @@ const POINTER_ACTIONS = {
   mouse_wheel: ["scroll", "Scroll"], scroll: ["scroll", "Scroll"],
 };
 
-/** Services › Browser: its stream's frame rate (each viewer's, live) and JPEG quality (the browser's, from its start). */
 const DEFAULTS = { fps: 24, quality: 60, codec: "h264", direct: false };
 const CODECS = ["h264", "h265", "jpeg"];
 const FFMPEG = (() => {
@@ -70,7 +55,6 @@ const FFMPEG = (() => {
 const FPS = [10, 24, 30, 60];
 const QUALITY = [30, 60, 85];
 
-/** Both browser routes encode on this hub; agent-browser still receives only its own stream options. */
 function relay(sockets, request, socket, head, fps, reach, observe = () => {}) {
   sockets.handleUpgrade(request, socket, head, (client) => {
     const query = new URL(request.url, "http://localhost").searchParams;
@@ -133,7 +117,7 @@ function relay(sockets, request, socket, head, fps, reach, observe = () => {}) {
 export class BrowserHost {
   constructor({ binary = process.env.CONDUIT_AGENT_BROWSER || null, dataRoot = null, session = HUB_SESSION, onChange = () => {} } = {}) {
     this.session = session;
-    // Its own profile on the hub: sites signed in to stay signed in across restarts; clearing its data is a new one.
+    // Its own profile keeps sites signed in across restarts.
     this.profile = dataRoot ? path.join(dataRoot, "browser", "profile") : null;
     this.settingsFile = dataRoot ? path.join(dataRoot, "browser", "settings.json") : null;
     this.settings = { ...DEFAULTS };
@@ -151,7 +135,6 @@ export class BrowserHost {
   get available() { return Boolean(this.binary); }
   has(id) { return IDS.has(id); }
 
-  /** One agent-browser command on the shared session; its printed answer. */
   run(args, { timeout = 30_000 } = {}) {
     if (!this.binary) return Promise.reject(Object.assign(new Error("agent-browser is not installed on this hub"), { status: 503, code: "browser_unavailable" }));
     return new Promise((resolve, reject) => execFile(this.binary, ["--session", this.session, ...args], {
@@ -162,14 +145,10 @@ export class BrowserHost {
       : resolve(stdout.trim())));
   }
 
-  /**
-   * The session and its stream's loopback port. Asking launches the browser if it is not running (on a blank page),
-   * and finds it as it was if it is: the daemon outlives a restart of this server, and the page with it.
-   */
+  /** The daemon outlives a restart of this server, and the page with it. */
   start() {
     return this.starting ??= (async () => {
       let status = await this.run(["stream", "status"], { timeout: 60_000 }).catch((error) => {
-        // agent-browser is here but found no Chrome: say what fixes it.
         throw /chrome|browser.*not found|executable/i.test(error.message)
           ? Object.assign(new Error(`The hub has no Chrome for its browser. On the hub, run: ${this.binary} install`), { status: 503 }) : error;
       });
@@ -192,7 +171,6 @@ export class BrowserHost {
     return { id: "hub", available: true, running: true, url, title, fps: this.settings.fps };
   }
 
-  /** What the pane's bar does: go to an address, back, forward, reload; and its size, as the page's viewport. */
   async act(action, value) {
     await this.start();
     if (action === "open") return this.run(["open", String(value)], { timeout: 60_000 });
@@ -206,7 +184,6 @@ export class BrowserHost {
     throw Object.assign(new Error(`Unknown browser action ${action}`), { status: 400 });
   }
 
-  /** The pane's stream: the session's own, through this server (its sign-in already checked), frames out, input in. */
   handleUpgrade(id, request, socket, head) {
     relay(this.sockets, request, socket, head, this.settings.fps, async (pass) => {
       await this.start();
@@ -238,7 +215,7 @@ export class BrowserHost {
     }
   }
 
-  /** Resolve without scrolling or focusing. A slow/missing box must never prevent the actual tool call. */
+  /** A slow or missing box must never prevent the actual tool call. */
   async pointerPlan(name, args) {
     const action = POINTER_ACTIONS[name.replace(/^agent_browser_/, "")];
     // Other sessions/namespaces are not the hub's page. Direct MCP harnesses bypass this wrapper entirely.
@@ -270,21 +247,18 @@ export class BrowserHost {
     } catch { return null; } finally { clearTimeout(timer); }
   }
 
-  /** What the session starts with, whoever starts it (the pane, an agent's MCP server): its profile, its stream. */
   env() {
-    // Muted: the pane carries no sound, and a page left playing (a video in a closed tab) would sound on the hub's
-    // machine -- through WSLg, as Windows' "Remote Audio" -- with no way to stop it from Conduit.
+    // Muted: the pane carries no sound, and a page left playing would sound on the hub's machine with no way to stop it
+    // from Conduit.
     const args = [process.env.AGENT_BROWSER_ARGS, "--mute-audio"].filter(Boolean).join("\n");
     return { AGENT_BROWSER_SESSION: this.session, AGENT_BROWSER_STREAM_QUALITY: String(this.settings.quality), AGENT_BROWSER_ARGS: args,
       ...(this.profile ? { AGENT_BROWSER_PROFILE: this.profile } : {}) };
   }
 
-  /** agent-browser's MCP server for a harness to start: on the shared session (and its profile), the core tools. */
   mcpServer() {
     return this.binary ? { command: this.binary, args: ["mcp"], env: this.env() } : null;
   }
 
-  /** Services › Browser's settings, and what it shows of the browser. */
   async describe() {
     const version = this.binary ? await new Promise((resolve) => execFile(this.binary, ["--version"], { timeout: 5000 }, (error, stdout) => resolve(error ? null : stdout.trim().replace(/^agent-browser\s*/, "")))) : null;
     return { ...(await this.status()), engine: "Chrome", version, runsOn: "hub", profile: Boolean(this.profile), settings: this.settings, video: Boolean(FFMPEG), choices: { fps: FPS, quality: QUALITY, codec: CODECS } };
@@ -294,7 +268,6 @@ export class BrowserHost {
     const next = { ...this.settings };
     if (patch?.fps !== undefined) { if (!FPS.includes(Number(patch.fps))) throw Object.assign(new Error("Frame rate is one of " + FPS.join(", ")), { status: 400 }); next.fps = Number(patch.fps); }
     if (patch?.quality !== undefined) { if (!QUALITY.includes(Number(patch.quality))) throw Object.assign(new Error("Quality is one of " + QUALITY.join(", ")), { status: 400 }); next.quality = Number(patch.quality); }
-    // Experimental: pages shown directly, proxied through the hub, rather than the shared browser's picture.
     if (patch?.direct !== undefined) next.direct = patch.direct === true;
     if (patch?.codec !== undefined) { if (!CODECS.includes(patch.codec)) throw Object.assign(new Error("Picture codec is one of " + CODECS.join(", ")), { status: 400 }); next.codec = patch.codec; }
     const restart = next.quality !== this.settings.quality;
@@ -309,7 +282,6 @@ export class BrowserHost {
     return this.describe();
   }
 
-  /** Closed and started again, back on the page it showed (its profile keeps what it was signed in to). */
   async restart({ clear = false } = {}) {
     const url = this.starting ? await this.run(["get", "url"]).catch(() => null) : null;
     await this.run(["close"]).catch(() => {});
@@ -321,10 +293,6 @@ export class BrowserHost {
     return this.describe();
   }
 
-  /**
-   * agent-browser's MCP tools as Conduit's agents call them (from codemode: `tools.agent_browser_open(...)`), through
-   * one long-lived stdio server on the shared session; started again if it goes.
-   */
   async tools() {
     if (!this.binary) return [];
     const client = await this.client();
@@ -360,7 +328,6 @@ export class BrowserHost {
     })().catch((error) => { this.mcp = null; throw error; });
   }
 
-  /** This server going: its streams and MCP client close; the browser stays open, found again as it was. */
   close() {
     this.sockets.close();
     void this.mcp?.then((client) => client.close()).catch(() => {});
@@ -368,11 +335,6 @@ export class BrowserHost {
 }
 
 
-/**
- * A device's browser (roadmap #9), as the hub reaches it: the same calls as the hub's own BrowserHost, answered by the
- * device's node (node-agent.js, its `browser` target), and its stream piped from the device's loopback port through a
- * tunnel on the node's connection -- so any client signed in to the hub sees and drives it.
- */
 class RemoteBrowser {
   constructor({ nodeHub, nodeId, tunnelTo }) {
     this.nodeHub = nodeHub;
@@ -399,7 +361,6 @@ class RemoteBrowser {
   handleUpgrade(_id, request, socket, head) {
     relay(this.sockets, request, socket, head, DEFAULTS.fps, async (pass) => {
       const { port } = await this.call("stream");
-      // The device's loopback stream travels through its existing node tunnel.
       return new WebSocket(`ws://127.0.0.1:${port}/${pass.size ? `?${pass}` : ""}`, { createConnection: () => this.tunnelTo(this.nodeHub, this.nodeId, { port }) });
     });
   }
@@ -407,7 +368,6 @@ class RemoteBrowser {
   close() { this.sockets.close(); }
 }
 
-/** The browsers clients can open: the hub's (`hub`), and each connected device's that offers one (its node id). */
 export function createBrowsers({ hub, nodeHub, tunnelTo }) {
   const remote = new Map();
   return {

@@ -1,35 +1,17 @@
 import { isChatId } from "../chat-store.js";
 
-// How long a headless run waits on an approval or question nobody answers.
 const RUN_HOST_UI_TIMEOUT_MS = 10 * 60_000;
 
 /**
- * A harness's questions and approval requests, answerable from anywhere.
- *
- * Every adapter states what it is waiting on as `hostUiRequests` in its process
- * view, and those views already reach every page on the global runtime
- * channel. This lists them across chats and answers one by id over HTTP, through
- * the same lock and adapter mapping as the composer's card, so a dashboard, a
- * notification or a headless caller can answer what used to need the chat open.
- *
- * A run has nobody watching by default, so a request in one is given a
- * deadline: unanswered, it is cancelled, as a dismissed card would be. The
- * deadline is a timer in the session's own scope, cleared when the request is
- * answered and gone with the session if it ends first.
+ * A run has nobody watching, so a request in one is given a deadline: unanswered, it is cancelled, as a dismissed card
+ * would be.
  */
 export function createHostUi({ backends, registry, respondHostUi }) {
-  // record -> request ids already given a deadline
   const timed = new WeakMap();
 
-  // Every live record with the view its adapter gives it, which is where a
-  // harness says what it waits on.
   const views = () => backends.rawRecords().map((record) => ({ record, view: backends.view(record) }));
 
-  /**
-   * Give each request a run is waiting on its deadline, and drop the deadline
-   * of one that has been answered. Swept rather than told: harnesses differ in
-   * whether asking announces a process change, and a sweep reads them alike.
-   */
+  /** Swept rather than told: harnesses differ in whether asking announces a process change. */
   function sweep() {
     for (const { record, view } of views()) watch(view, record);
   }
@@ -57,7 +39,6 @@ export function createHostUi({ backends, registry, respondHostUi }) {
     }
   }
 
-  /** Everything any agent is waiting on, with where it is. */
   function pending() {
     return views().flatMap(({ view }) => {
       if (!view.chatId || !view.hostUiRequests?.length) return [];

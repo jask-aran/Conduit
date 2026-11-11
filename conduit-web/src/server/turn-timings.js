@@ -1,18 +1,5 @@
-/**
- * How long each turn took, measured by Conduit as every harness's events pass
- * through the one place they all do (session-records.js `publish`), rather
- * than read from each harness's own reporting, which is partial and differs by
- * harness. A message's timestamp is when it began, so a turn's time used to be
- * its prompt to its answer's first word: an 18 s turn read 56 ms.
- *
- * Per turn: when it began (its prompt opened or the generation started,
- * whichever came first), its first output of any kind and its first answer
- * text, its last output, when it ended and how; what it streamed, in
- * characters and an estimate of tokens by one rule for every harness (four
- * characters each); and each tool call's span. Stated on the prompt when the
- * turn ends (`turn.time`, folded like `turn.settle`), and kept per chat on
- * disk so a transcript read later carries it (`decorate`).
- */
+// Measured as every harness's events are published, not read from each harness's own reporting, which is partial and
+// differs by harness.
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -33,7 +20,6 @@ function summary(turn) {
   return {
     startedAt: turn.startedAt, firstOutputAt: turn.firstOutputAt, firstAnswerAt: turn.firstAnswerAt,
     lastOutputAt: turn.lastOutputAt, endedAt: turn.endedAt,
-    // Time to first output (thinking counts), to the first word of the answer, and the whole turn.
     ttftMs: span(turn.startedAt, turn.firstOutputAt), ttfaMs: span(turn.startedAt, turn.firstAnswerAt),
     durationMs: span(turn.startedAt, turn.endedAt),
     thinkingChars: turn.thinkingChars, answerChars: turn.answerChars, tokens, tokensEstimated: true,
@@ -45,9 +31,7 @@ function summary(turn) {
 export class TurnTimings {
   constructor(root) {
     this.root = root;
-    // The turn under way in each chat.
     this.live = new Map();
-    // Each chat's kept timings, by prompt id, as read or written last.
     this.held = new Map();
     this.writes = new Map();
   }
@@ -63,7 +47,7 @@ export class TurnTimings {
     try {
       const stored = JSON.parse(await fs.readFile(this.fileFor(chatId), "utf8"));
       for (const [promptId, timing] of Object.entries(stored.turns || {})) held.set(promptId, timing);
-    } catch { /* none kept yet */ }
+    } catch {}
     // A read racing a write keeps what the write put in.
     const current = this.held.get(chatId);
     if (current) return current;
@@ -83,7 +67,6 @@ export class TurnTimings {
     return next;
   }
 
-  /** A chat deleted takes its timings with it. */
   async forget(chatId) {
     this.live.delete(chatId);
     this.held.delete(chatId);
@@ -92,7 +75,6 @@ export class TurnTimings {
     await fs.rm(this.fileFor(chatId), { force: true });
   }
 
-  /** The kept timing on each prompt that has one. */
   async decorate(chatId, messages = []) {
     if (!chatId || !messages.some((message) => message?.role === "user")) return messages;
     const held = await this.read(chatId);
@@ -101,10 +83,6 @@ export class TurnTimings {
       ? { ...message, timing: held.get(message.id) } : message));
   }
 
-  /**
-   * Note one event as it is published. Returns the statement to publish when
-   * a turn ends (`turn.time`), else null.
-   */
   observe(record, event) {
     const chatId = record?.chatId;
     if (!chatId || record.ephemeral || !event?.type) return null;
@@ -152,8 +130,7 @@ export class TurnTimings {
         turn.firstAnswerAt ??= now;
       }
     } else if (event.type === "transcript_op" && event.op === "message.close" && event.content && event.messageId !== turn.promptId && !turn.streamed.has(event.messageId)) {
-      // An answer that arrived whole, with nothing painted before it: its
-      // output came now.
+      // An answer that arrived whole, with nothing painted before it: its output came now.
       turn.streamed.add(event.messageId);
       turn.firstOutputAt ??= now;
       turn.firstAnswerAt ??= now;

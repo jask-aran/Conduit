@@ -14,7 +14,7 @@ import { createLoginPageRenderer } from "../../auth-login-page.js";
 
 export function registerAuthRoutes(app, { authStore, socketTickets, clientDist, throttleFile = null }) {
   const renderLoginPage = createLoginPageRenderer(clientDist);
-  // Per client, under a ceiling across all, kept across restarts (auth-middleware.js); a refusal costs no hashing.
+  // Per client, under a ceiling across all, kept across restarts; a refusal costs no hashing.
   const throttle = createLoginThrottle({ file: throttleFile });
   const refuse = (request, response) => {
     const retryAt = throttle.retryAt(loginThrottleKey(request));
@@ -67,7 +67,6 @@ export function registerAuthRoutes(app, { authStore, socketTickets, clientDist, 
     response.redirect(303, after);
   });
 
-  // A one-time code from `conduit-server open` becomes a browser session.
   app.get("/v0/auth/handoff", async (request, response) => {
     const after = safeRedirectTarget(request.query.after);
     if (!await authStore.consumeHandoff(String(request.query.code || "")).catch(() => false)) {
@@ -78,15 +77,12 @@ export function registerAuthRoutes(app, { authStore, socketTickets, clientDist, 
     response.set("Cache-Control", "no-store").redirect(303, after);
   });
 
-  // A signed-in client's "Pair a device": a code for the QR it shows.
   app.post("/v0/auth/pairing", async (_request, response) => {
     const ttlMs = 300_000;
     const code = await authStore.createHandoff({ ttlMs });
     response.set("Cache-Control", "no-store").json({ code, expiresAt: new Date(Date.now() + ttlMs).toISOString() });
   });
 
-  // The app's half of pairing: the code from the QR becomes a token, as a
-  // password would at native-login.
   app.post("/v0/auth/native-pair", async (request, response) => {
     if (!isNativeRequest(request)) return response.status(403).json({ error: "native_origin_required" });
     if (!isTrustworthyRequest(request)) return response.status(400).json({ error: "https_required", message: "Pairing requires HTTPS unless the client is on this machine or this network." });
@@ -129,11 +125,7 @@ export function registerAuthRoutes(app, { authStore, socketTickets, clientDist, 
     });
   });
 
-  /*
-   * The hub's sign-ins (Settings › System › Server): each session by an opaque id (a hash of its token's hash, so the
-   * list never carries what authenticates), its kind and client, when it began and was last used, and whether it is
-   * the asking client's own. Scripts' sessions are listed apart. Ending one is any signed-in client's to do.
-   */
+  // A hash of the token's hash, so the list never carries what authenticates.
   const sessionId = (session) => crypto.createHash("sha256").update(session.tokenHash).digest("base64url").slice(0, 16);
   app.get("/v0/auth/sessions", (request, response) => {
     const context = request.conduitAuth;
@@ -153,7 +145,6 @@ export function registerAuthRoutes(app, { authStore, socketTickets, clientDist, 
     await authStore.removeSessionsByPrefix(target.tokenHash);
     response.json({ ok: true });
   });
-  /** A new password: the current one first (throttled as a sign-in is), then every other session ends. */
   app.post("/v0/auth/password", async (request, response) => {
     const context = request.conduitAuth;
     if (!context) return response.status(401).json({ error: "unauthorized" });

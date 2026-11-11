@@ -19,8 +19,7 @@ const DEFAULT_LIMITS = Object.freeze({
   maxSegments: 16,
 });
 
-// Coalesce eight 20 ms transport packets before each native feed. Keep the
-// feed size separate from model decode options and bound the queued audio.
+// Eight 20 ms transport packets per native feed, kept separate from model decode options.
 const TRANSCRIBE_CPP_FEED_QUANTUM_MS = 160;
 const TRANSCRIBE_CPP_LIVE_QUEUE_LIMIT_MS = 5_000;
 const VOICE_SAMPLE_RATE = 16_000;
@@ -79,10 +78,8 @@ function sameTranscriptText(left, right) {
 }
 
 /**
- * Owns the transcript truth for one accepted PCM timeline. Runtime output is
- * treated as a proposal: tentative revisions can be replaced, stable
- * segments cannot, and the session final is derived from the accepted stable
- * segments rather than copied over them.
+ * Runtime output is a proposal: tentative revisions can be replaced, stable segments cannot, and the session final
+ * is derived from the accepted stable segments rather than copied over them.
  */
 export function createTranscriptTruth(sessionId, { onEvent = null } = {}) {
   const id = String(sessionId || "");
@@ -264,13 +261,8 @@ function appendProgressiveSegment(left, right, overlapSamples = 0) {
   return appendText(left, right);
 }
 
-// Merge an incoming finalized transcript into the accumulated text. Endpoints
-// stream token deltas that differ from their final text only by whitespace
-// (local runtimes can emit word-boundary tokens with a leading space
-// and then a trimmed, collapsed `transcript.text.done`), so a plain append
-// would print the transcript twice. When the two texts are whitespace-equal or
-// one is a normalized prefix of the other, take the authoritative candidate
-// instead of appending; distinct segments still merge with `joinTranscript`.
+// Endpoints stream token deltas that differ from their final text only by whitespace, so a plain append would print
+// the transcript twice; distinct segments still merge with `joinTranscript`.
 function mergeTranscript(left, right) {
   if (!left) return right;
   if (!right) return left;
@@ -282,9 +274,8 @@ function mergeTranscript(left, right) {
   return joinTranscript(left, right);
 }
 
-// Batch ASR models can invent text over a 2s+ pause and drop the speech that
-// follows. Split the buffered PCM at long silent runs before transcription so
-// each segment is a self-contained utterance, then join the segment texts.
+// Batch ASR models can invent text over a 2s+ pause and drop the speech that follows, so the PCM is split at long
+// silent runs and each segment transcribed alone.
 const SEGMENT_WINDOW_SAMPLES = 160; // 10ms at 16 kHz
 const SEGMENT_SILENCE_RMS = 0.008; // -42 dBFS
 const SEGMENT_SILENCE_MS = 2_000;
@@ -1734,11 +1725,6 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
     let pendingStreamChunks = [];
     let settleAdapter;
     const adapterAvailable = new Promise((resolve) => { settleAdapter = resolve; });
-    // The session's phase: "open" while it takes audio, "stopping" once the
-    // audio is closed and it waits for the runtime and then its final, and
-    // "ended" once end() has run. Which adapter is attached (none while the
-    // runtime loads, the live stream, or the batch fallback) is separate from
-    // the phase and lives in adapter/adapterReady.
     /** @type {"open" | "stopping" | "ended"} */
     let phase = "open";
     let stoppedAt = 0;
@@ -2208,13 +2194,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
       });
       return vadObservationPromise;
     };
-    // Every way a session finishes (completed, failed, client gone) comes
-    // through here, so the teardown, the recording and its saved metadata
-    // happen once. The caller passes what differs: what goes to the archive,
-    // the events to send (none once the client has gone), and the metadata
-    // the saved recording is updated with once the archive and the silence
-    // observation settle. Returns that update's promise, or null when the
-    // session had already ended.
+    // Every way a session finishes comes through here, so the teardown, the recording and its saved metadata happen once.
     const end = (reason, { error = null, transcript = "", updates = {}, events = null, savedUpdates }) => {
       if (phase === "ended") return null;
       phase = "ended";
@@ -2482,8 +2462,7 @@ export function createDictationStream({ wss, voiceRuntime, recordingStore = null
         fail(error);
       }
     };
-    // Accept PCM immediately. Cold model load continues in the background; the
-    // server retains frames until the adapter is attached, then drains them.
+    // Accept PCM before the cold model loads; frames are held until the adapter is attached.
     send({ type: "ready", sampleRate: 16_000, encoding: "pcm_s16le" });
     durationTimer = setTimeout(() => stop("duration_limit"), limits.maxDurationMs);
     durationTimer.unref?.();

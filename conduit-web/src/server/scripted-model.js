@@ -6,8 +6,6 @@ import { parseAttachmentEnvelope } from "../attachment-envelope.js";
 import { KATEX_COMPENDIUM, KATEX_LIMITS, MARKDOWN_MIX, RICH_MIX, RICH_PROSE } from "../test-stream-replays.js";
 import { createAssistantMessageEventStream, createFauxCore, createProvider, fauxAssistantMessage, fauxText, fauxThinking, fauxToolCall } from "@earendil-works/pi-ai";
 
-/** The model is how text arrives: steady, or in bursts after uneven gaps with one long pause (as a real provider
- *  sends it), averaging the same pace. The thinking level is the pace (SPEEDS); the turn is the prompt's words. */
 const SHAPES = {
   steady: { name: "Scripted · steady" },
   bursty: { name: "Scripted · bursty", gapsMs: [40, 120, 60, 350, 80, 1200, 150, 90] },
@@ -16,7 +14,6 @@ const SPEEDS = { off: 20, minimal: 40, low: 60, medium: 120, high: 250, xhigh: 1
 const definitions = Object.entries(SHAPES).map(([id, shape]) => ({ id, name: shape.name, reasoning: true }));
 export const SCRIPTED_MODELS = definitions.map((model) => `conduit-test/${model.id}`);
 const THOUGHT = "Working through the request step by step, checking what each part needs before answering. ";
-/** A text repeated to about `chars` characters. */
 const stretch = (text, chars) => { let out = text; while (out.length < chars) out += text; return out.slice(0, Math.max(chars, 1)); };
 const zeroUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
@@ -50,9 +47,7 @@ const reportText = (prompt) => /^(?:(?:sa|bg)-\d+\b|that was your .+ run's repor
   || /\n---\nThat was your .+ run's report\b/i.test(prompt);
 const noticeText = (prompt) => !prompt || /^(?:\[Approval\]|The user stopped your previous response|It is |Since this thread began:)/i.test(prompt);
 const finalAnswer = (message) => message.role === "assistant" && !(message.content || []).some((part) => part.type === "toolCall");
-/** Which agent sent the report at `index`: it holds only the child's answer, "ping" or "pingN", the word its task asked
- *  for, and the id is in the result of the call that started it -- the last background subagent call (ping), or the
- *  Nth of the last script that asked for pingN. */
+/** A report holds only the child's answer ("ping" or "pingN"); its id is in the result of the call that started it. */
 function reporter(messages, index) {
   const before = messages.slice(0, index);
   const word = promptOf(messages[index]).match(/^ping(\d*)[.!]?$/i);
@@ -82,10 +77,9 @@ function scriptedStep(context) {
   const system = [context.systemPrompt || "", getCurrentSystemPrompt(messages)].join("\n");
   const child = /you are a subagent working for another agent/i.test(system);
   if (child) {
-    // "First take N slow steps": that many 2-second shell calls before answering, so its row is seen working.
+    // 2-second shell calls before answering, so its row is seen working.
     const steps = Number(prompt.match(/first take (\d+) slow steps/i)?.[1] || 0);
     const taken = messages.slice(at + 1).filter((message) => message.role === "assistant").flatMap((message) => message.content || []).filter((part) => part.type === "toolCall").length;
-    // ", narrating": a line of commentary before each step, as the parent's narrate.
     const said = /narrating/i.test(prompt) ? [fauxText(`Step ${taken + 1} of ${steps}: a slow shell step.`)] : [];
     if (taken < steps) return fauxAssistantMessage([...said, fauxToolCall("bash", { command: `sleep 2 && echo step ${taken + 1}` }, { id: `scripted-${randomUUID()}` })], { stopReason: "toolUse" });
     const single = prompt.match(/reply with the single word\s+([^\s.!]+)/i);
@@ -136,7 +130,6 @@ function scriptedStep(context) {
   if (has(/\bbash\b/i)) add("bash", "bash", { command: "echo scripted" }, /\bbash\b/i, "I'll run a quick shell check.");
   if (has(/\bfail\b/i)) add("fail", "read", { path: ".conduit-scripted-missing-file" }, /\bfail\b/i, "Let me check the settings file too.");
   if (has(/\bscript\b/i)) add("script", "codemode", { code: `await tools.read({path: ${JSON.stringify(file)}}); await tools.bash({command: "echo scripted"});` }, /\bscript\b/i, "I'll read and check in one script.");
-  // "slow": each subagent takes three 2-second steps first.
   const slow = has(/\bslow\b/i) ? ` First take 3 slow steps${has(/\bnarrate\b/i) ? ", narrating" : ""}.` : "";
   if (slow) selected.push("slow");
   if (has(/\bspawn\b/i)) add("spawn", "subagent", { task: `Look over the project and reply with the single word pong.${slow}`, name: "Project review" }, /\bspawn\b/i, "I'll hand the project to an agent to look over, and wait for it.");
@@ -165,7 +158,6 @@ function scriptedStep(context) {
     blocks.push(fauxToolCall(call.name, call.args, { id: `scripted-${randomUUID()}` }));
     return fauxAssistantMessage(blocks, { stopReason: "toolUse" });
   }
-  // Content, as Render test's replays: a recorded reply streamed whole, or realistic text to the length asked.
   const replay = has(/\bkatex(?:\s+|-)limits\b/i) ? KATEX_LIMITS : has(/\bkatex\b/i) ? KATEX_COMPENDIUM : has(/\bmarkdown\b/i) ? MARKDOWN_MIX : null;
   const news = heard.length ? `While that ran, ${heard.join("; ")}.\n\n` : "";
   if (replay || rich) {
@@ -183,8 +175,6 @@ function scriptedStep(context) {
 
 export function scriptedProvider() {
   const core = createFauxCore({ api: "conduit-test", provider: "conduit-test", models: definitions });
-  // Every thinking level offered, extra high and max included (the slider is the pace).
-  // Each level is named by its pace (thinkingLabels: the model's own names for its levels, as the pickers show them).
   for (const model of core.models) Object.assign(model, { thinkingLevelMap: { xhigh: "xhigh", max: "max" },
     thinkingLabels: Object.fromEntries(Object.entries(SPEEDS).map(([level, pace]) => [level, `${pace} tok/s`])) });
   const stream = (model, context, options) => {
@@ -209,8 +199,8 @@ export function scriptedProvider() {
     const source = request.stream(model, context, options);
     const output = createAssistantMessageEventStream();
     (async () => {
-      // Bursty: the core writes at the pace; its deltas are held and let out together after each uneven gap, so the
-      // average stays the pace (a fast core paced by the gaps alone let a long reply out in a few huge bursts).
+      // The core writes at the pace and its deltas are held and let out after each uneven gap, so the average stays the
+      // pace; gaps alone would let a long reply out in a few huge bursts.
       let gap = 0, held = [], due = Date.now() + (speed.gapsMs?.[0] ?? 0);
       const flush = () => { for (const item of held) output.push(item); held = []; due = Date.now() + speed.gapsMs[++gap % speed.gapsMs.length]; };
       for await (const event of source) {

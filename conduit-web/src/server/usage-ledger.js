@@ -4,27 +4,9 @@ import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { UsageDoc } from "@earendil-works/pi-durable";
 
 /*
- * The usage ledger (Settings › System › Usage, roadmap #15): what Conduit's own agents spent, per local day, in tokens
- * and API-equivalent dollars. Append-only: data/usage/ledger.jsonl, a line per change, never rewritten.
- *
- * Source: pi-durable's `pi.usage`, each conversation's running totals per `provider/model` (every reply, failed
- * attempts, compaction summaries) and per tool (a nested model call's spend, such as codemode's models.classify).
- * The ledger knows the last totals it saw per conversation and appends only the difference. The totals only grow (a
- * fork starts at zero), so the difference is exactly what was spent since: nothing counts twice, and a line lost to
- * a crash is caught at that conversation's next change. `tools.subagent` is left out: it repeats the child
- * conversation's own model spend, counted there.
- *
- * API-equivalent cost, fixed when spent: the dollars pi-ai priced the call at, from its model catalogue's list price
- * for that provider and model (subscription providers such as openai-codex and github-copilot carry the API's prices;
- * what it lists at zero is free tiers and flat token plans). Later price changes never touch a line already written:
- * the dollars are stored, not the rates. Only Conduit's own agents (pi-durable) are counted; other harnesses (Codex,
- * Claude Code, ChatGPT Web) keep their own accounts.
- *
- * Lines (`v`: [input, output, cacheRead, cacheWrite, cost]):
- *   { t: "base", c, k, v }          totals already spent when first seen (the ledger's start, or a total that fell)
- *   { t: "spend", d, c, k, v }      spent on day `d` (YYYY-MM-DD, the hub's local day) by conversation `c`, key `k`
- *   { t: "reply", d, tools? }       a reply, with the tools it called by name
- * Loading replays them: `base` and `spend` rebuild the last totals seen, `spend` and `reply` the days.
+ * Append-only, never rewritten. pi-durable's usage totals only grow, so the ledger appends the difference from the last
+ * totals it saw: nothing counts twice, and a line lost to a crash is caught at that conversation's next change. The
+ * dollars are stored, not the rates, so a later price change never touches a line already written.
  */
 const day = (at = new Date()) => `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, "0")}-${String(at.getDate()).padStart(2, "0")}`;
 const vector = (usage) => [...["input", "output", "cacheRead", "cacheWrite"].map((field) => Number(usage?.[field]) || 0), Number(usage?.cost?.total) || 0];
@@ -50,7 +32,6 @@ export class UsageLedger {
   async load() {
     const text = await fs.promises.readFile(this.file, "utf8").catch((error) => error.code === "ENOENT" ? null : Promise.reject(error));
     if (text !== null) {
-      // Cut off mid-line: what follows starts on a line of its own.
       if (text && !text.endsWith("\n")) await fs.promises.appendFile(this.file, "\n");
       for (const line of text.split("\n")) {
         if (!line) continue;
@@ -60,14 +41,13 @@ export class UsageLedger {
         this.apply(item);
       }
     } else {
-      // New: what was spent before now is not today's. Every conversation's totals so far are the starting point.
+      // What was spent before the ledger existed is not today's.
       this.append({ t: "start", at: this.now().toISOString() });
       let cursor;
       do {
         const page = await this.harness.storage.scanConversations({}, 200, cursor, BACKGROUND_CONTEXT);
         for (const { id } of page.items) {
           for (const [key, value] of this.totals(await this.harness.snapshot(UsageDoc, id, BACKGROUND_CONTEXT))) {
-            // Nothing spent needs no line: a conversation with none starts from zero.
             if (value.some(Boolean)) this.append({ t: "base", c: String(id), k: key, v: value });
           }
         }
@@ -86,7 +66,6 @@ export class UsageLedger {
     return this.flush();
   }
 
-  /** A line's effect on what is known: the totals seen, and the days. */
   apply(item) {
     if (item.t === "start") this.since ||= item.at;
     else if (item.t === "base") this.seenOf(item.c).set(item.k, item.v);
@@ -125,7 +104,7 @@ export class UsageLedger {
     return this.seen.get(conversationId);
   }
 
-  /** A `pi.usage` state as [key, vector] pairs: its models, and its tools other than `subagent`. */
+  // `subagent` repeats the child conversation's own model spend, counted there.
   totals(state) {
     return [...Object.entries(state?.models || {}).map(([key, usage]) => [key, vector(usage)]),
       ...Object.entries(state?.tools || {}).filter(([name]) => name !== "subagent").map(([name, usage]) => [`tool:${name}`, vector(usage)])];
@@ -162,7 +141,6 @@ export class UsageLedger {
 
   day() { return day(this.now()); }
 
-  /** The last `count` days (today included, oldest first), each with its totals; days with nothing are kept. */
   view(count = 30) {
     const out = [];
     const end = this.now();

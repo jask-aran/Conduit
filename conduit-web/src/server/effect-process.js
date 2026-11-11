@@ -1,18 +1,8 @@
 import * as Effect from "effect/Effect";
 
 /**
- * Ending a child process, once, the same way everywhere.
- *
- * Every owner of a subprocess used to write its own SIGTERM, wait and SIGKILL,
- * with its own grace, its own idea of whether the whole process group goes,
- * and in two places no SIGKILL at all. A child that ignored SIGTERM then
- * outlived the server. This is the one escalation: ask, wait `graceMs`, then
- * insist, and resolve once the child has actually gone (or `killWaitMs` after
- * insisting, for a child the kernel has not reaped yet).
- *
- * `group` signals the child's process group, for children spawned `detached`
- * that start their own descendants (git, installers). `waitMs` first gives a
- * child already asked to exit some other way (a shutdown request) that long.
+ * `group` signals the child's process group, for children spawned `detached` that start their own descendants.
+ * `waitMs` first gives a child already asked to exit some other way (a shutdown request) that long.
  */
 const exited = (child) => child.exitCode != null || child.signalCode != null;
 

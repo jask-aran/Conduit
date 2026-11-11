@@ -1,21 +1,13 @@
 import { timingSafeEqual } from "node:crypto";
 import { decide } from "../../agent/asks.js";
 
-/**
- * Web Push subscriptions and delivery.
- *
- * GET    /v0/push                       the public key and subscriptions
- * POST   /v0/push/subscriptions         add or update a subscription
- * DELETE /v0/push/subscriptions/:id     remove a subscription
- * POST   /v0/push/test                  send a test notification
- */
 export function registerPushRoutes(app, { push, hubId, agent }) {
   app.post("/v0/push/answer/:token", async (request, response, next) => {
     try {
       const { choice } = request.body || {};
       if (choice !== "allow" && choice !== "always" && choice !== "deny") return response.status(400).end();
       if (!agent) return response.status(404).end();
-      // The token is the ask's (push.answerToken); deciding it once is what makes it single-use (decide answers 409 after).
+      // Deciding the ask once is what makes the token single-use.
       const token = Buffer.from(String(request.params.token));
       const matches = (id) => { const mine = Buffer.from(push.answerToken(id)); return mine.length === token.length && timingSafeEqual(mine, token); };
       const askId = Object.keys((await agent.state()).asks || {}).find(matches);

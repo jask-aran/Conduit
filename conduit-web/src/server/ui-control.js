@@ -10,13 +10,8 @@ const ARG_TYPES = { string: (options) => Type.String(options), boolean: (options
   pane: (options) => Type.Union([Type.Literal("main"), Type.Number()], options) };
 
 /*
- * Agents drive Conduit's UI (roadmap #11): what each open tab of Conduit shows, as it tells us (client agent-ui.ts),
- * and commands sent to one tab over its runtime stream, answered over HTTP. The `conduit_ui` tool (UiTool) is how
- * agents use it, one of the conduit MCP server's (conduit-mcp.js).
- *
- * A tab is `connection/tab`: tabs of one browser share a stream (its connection), each with its own id. With none
- * named, an agent's command goes to its chat's origin (the tab the person last wrote to it from), else a tab showing
- * the chat, else the tab the person is using: the one with focus, else one in view, else the latest to say.
+ * Agents drive Conduit's UI: each tab reports what it shows, and commands go to one tab over its runtime stream,
+ * answered over HTTP. A tab is `connection/tab`, since tabs of one browser share a stream.
  */
 const ANSWER_MS = 10_000;
 
@@ -29,16 +24,11 @@ export class UiControl {
     this.origins = new Map();
   }
 
-  /** A chat's origin: the client its latest message was sent from, as the send says it. */
   sentFrom(chatId, client) {
     if (!chatId || typeof client !== "string" || !/^[\w-]{1,64}\/[\w-]{1,16}$/.test(client)) return;
     this.origins.set(chatId, client);
   }
 
-  /**
-   * The tab a chat's command goes to with none named: its origin, else a tab showing the chat, else the one in use.
-   * A chat whose origin has closed is not left pointing at it.
-   */
   async targetFor(chatId, tabs = null) {
     tabs ||= await this.look();
     const origin = chatId && this.origins.get(chatId);
@@ -47,7 +37,6 @@ export class UiControl {
       || tabs[0] || null;
   }
 
-  /** A tab's view, as it says it. Kept while its connection lasts. */
   report(connection, body) {
     if (!this.hub.connections().some((peer) => peer.id === connection)) return false;
     const tab = String(body?.tab || "").slice(0, 16);
@@ -60,11 +49,7 @@ export class UiControl {
     return true;
   }
 
-  /**
-   * Every open tab: its client (which app it is, and the devices it says it is on: an installed app names its own
-   * companion's environments, runtime-hub.js locate) and its panes, the one in use first. A client's device is its
-   * own word: enough to aim at, never a grant, which a device gives itself.
-   */
+  /** A client's devices are its own word: enough to aim at, never a grant. */
   async look() {
     const named = new Map((await reachableDevices(this.nodeHub).catch(() => [])).map((device) => [device.nodeId, device.name]));
     const peers = new Map(this.hub.connections().map((peer) => [peer.id, peer]));
@@ -77,7 +62,6 @@ export class UiControl {
     });
   }
 
-  /** Send a command to a tab (`client`, or the calling chat's: targetFor) and wait for what came of it. */
   async command(command, client = null, chatId = null) {
     const tabs = await this.look();
     const target = client ? tabs.find((tab) => tab.client === client) : await this.targetFor(chatId, tabs);
@@ -97,7 +81,6 @@ export class UiControl {
     return { client: target.client, result };
   }
 
-  /** A tab's answer to a command it was sent. */
   answer(connection, id, body) {
     const waiting = this.pending.get(id);
     if (!waiting || waiting.connection !== connection) return false;
@@ -110,7 +93,6 @@ export class UiControl {
 
 const rank = (view) => (view.focused ? 2e13 : 0) + (view.visible ? 1e13 : 0) + view.at;
 
-/** The `conduit_ui` tool's description of a look: one line per tab, then its panes. */
 function describeLook(tabs, yours = null) {
   if (!tabs.length) return "Conduit is not open anywhere right now.";
   return tabs.map((tab, index) => [
@@ -119,17 +101,12 @@ function describeLook(tabs, yours = null) {
   ].join("\n")).join("\n");
 }
 
-/**
- * The `conduit_ui` tool: an agent sees what the person has open in Conduit and arranges it, as they would. Every profile's
- * chats have it; a subagent's child does not (no one is watching it work).
- */
 export function UiTool(runtime) {
   const actions = agentUiActions();
   const args = Object.keys(UI_ARGS).filter((name) => actions.some((action) => UI_ACTIONS[action].args.includes(name)));
   const text = (value, isError = false) => ({ output: [{ type: "text", text: value }], ...(isError ? { isError: true } : {}) });
   return defineTool({
     name: "conduit_ui",
-    // Built from the UI API (ui-api.js): the actions and views declared for agents, and only those.
     description: `See and arrange what the person has open in Conduit. ${actions.map((name) => `${name}: ${UI_ACTIONS[name].says}.`).join(" ")} `
       + `Views: ${agentUiViews()}. Commands go to the tab the person is talking to you from, with nothing more said: `
       + "open needs no look or screens first, and client only to reach another tab. Arrange their screen only when they asked, or when it plainly helps them follow your work.",
@@ -148,7 +125,7 @@ export function UiTool(runtime) {
       if (action === "screens") return runtime.screens ? text(describeScreens(await runtime.screens.list())) : text("Screens cannot be reached from here.", true);
       if (action === "look") { const tabs = await control.look(); return text(describeLook(tabs, chatId ? (await control.targetFor(chatId, tabs))?.client : null)); }
       try {
-        // Already there: nothing is sent, so a page the person is watching is not redrawn for each step of your work.
+        // Nothing is sent when already shown, so a page the person watches is not redrawn for each step.
         if (action === "open" && view && pane === undefined && !beside) {
           const tabs = await control.look();
           const target = client ? tabs.find((tab) => tab.client === client) : await control.targetFor(chatId, tabs);

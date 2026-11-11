@@ -6,17 +6,10 @@ import { ServerConcurrency } from "./effect-concurrency.js";
 import { liveCommandIs } from "../live-session-api.js";
 import { hostsOf } from "../harnesses/host-requests.js";
 
-/**
- * An id a client chose for the message it is sending.
- *
- * Accepted only in Conduit's own shape, so a client cannot name a message
- * something that already means something else -- an existing message, or an id
- * derived from a session entry.
- */
+/** Only Conduit's own shape, so a client cannot reuse an existing message id or one derived from a session entry. */
 const CLIENT_MESSAGE_ID = /^m_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const offeredMessageId = (value) => (typeof value === "string" && CLIENT_MESSAGE_ID.test(value) ? value : null);
 
-/** How long an untracked thread's process outlives its last page. */
 const UNDRIVEN_THREAD_GRACE_MS = 15_000;
 
 export function interruptedPromptInput(taken, message, attachmentIds = []) {
@@ -34,13 +27,7 @@ export function interruptedPromptInput(taken, message, attachmentIds = []) {
   };
 }
 
-/**
- * One event, one path out.
- *
- * Every frame this stream sends a browser is an event in the contract's words
- * (live-session-api.js LIVE_EVENTS), stringified: the adapter translated it
- * before it was published, so nothing is translated here.
- */
+/** Events arrive already in the contract's words (the adapter translated them), so nothing is translated here. */
 function sendClientEvent(ws, event) {
   if (!event || ws.readyState !== 1) return false;
   ws.send(JSON.stringify(event));
@@ -52,8 +39,7 @@ export function createLiveSessionStream({
   attachments,
   registry,
   turnCheckpoints,
-  // Where a project's checkpoints are taken: its path here, its device's
-  // folder (workspace-host.js), or null where the place takes none.
+  // Null where the project's place takes no checkpoints.
   checkpointWorkspace = async (project) => project.workingRoot,
   findChatContext,
   chatModelView,
@@ -63,7 +49,6 @@ export function createLiveSessionStream({
   maxGeneratingProcesses = () => 0,
   lifecycle,
   autoNameSession = async () => {},
-  // A send's client (`connection/tab`): the chat's origin, where its agent shows things (ui-control.js).
   sentFrom = () => {},
 }) {
   if (!lifecycle) throw new TypeError("Live session stream requires a chat lifecycle");
@@ -85,14 +70,6 @@ export function createLiveSessionStream({
       return work();
     });
 
-  /**
-   * The chat's order.
-   *
-   * Every chat has one, because every adapter states its transcript through it.
-   * What does not is a record with no chat to keep an order for: an ephemeral
-   * one behind a driven thread, a probe, a throwaway daemon started to answer a
-   * question about models.
-   */
   const logFor = (record) => (record?.chatId && !record.ephemeral
     ? chatLogs?.get(record.chatId) || null : null);
 
@@ -106,28 +83,14 @@ export function createLiveSessionStream({
     if (!context) throw new Error("Chat no longer exists");
     const selectedAttachments = await attachments.resolveMany(context.project, context.chat.id, command.attachmentIds);
     const prompt = message;
-    // The harness owns transcript text. Conduit sends native attachment inputs
-    // and keeps only metadata that the harness cannot retain.
     const files = selectedAttachments.map((item) => ({
       ...item, path: attachments.pathFor(context.project, context.chat.id, item),
     }));
     return { context, prompt, message, attachments: files };
   }
 
-  /**
-   * Publish what the backend has actually recorded for the latest turn.
-   *
-   * A turn that ends early leaves Conduit's live model holding a version of the
-   * turn it assembled from deltas. Reading the backend's own transcript and
-   * publishing that is how the client stops having to be right on its own.
-   */
-  // The answer to a client that has lost its place in the chat's order and
-  // cannot be replayed back into it: the latest turns, as the record has them,
-  // replacing what it holds from the first of them on.
-  // A read that races the log must not spin: `resume_log` has already sent
-  // `log_reset`, so a snapshot has to follow. Three attempts cover a quiet
-  // moment; the last publishes even if the log moved, rather than leaving the
-  // client with a reset and nothing to fold.
+  // `resume_log` has already sent `log_reset`, so a snapshot must follow: the last attempt publishes even if the
+  // log moved, rather than leave the client with a reset and nothing to fold.
   const SNAPSHOT_TURNS = 10;
   const SNAPSHOT_ATTEMPTS = 3;
 
@@ -146,14 +109,11 @@ export function createLiveSessionStream({
         projection.messages ||= [];
         projection.tools ||= [];
         projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages, { fromStart: false });
-        // A read outside the event loop can straddle a numbered transcript
-        // change. Retry while attempts remain; the last publish stands.
         if (log && log.state().seq !== logSeq && attempt < SNAPSHOT_ATTEMPTS - 1) continue;
         adapter.publish(record, { type: "transcript_sync", generationId: null, replace: true, ...projection });
         return;
       }
     } catch (error) {
-      // A sync is a repair, never the only path to correctness.
       console.warn("Could not sync transcript", error.message);
     }
   }
@@ -161,8 +121,7 @@ export function createLiveSessionStream({
   async function sendPrompt(record, prepared, options) {
     const { sourceCheckpointId = null, messageId = null, ...promptOptions } = options || {};
     const namingOwner = manifestForImplementation(record.adapterImplementation)?.nameGeneration;
-    // A headless run is not named unless it asked to be: nobody reads a list
-    // it is not in, and naming costs a model call.
+    // A headless run is in no list, and naming costs a model call.
     const run = prepared.context.chat.run;
     const needsName = namingOwner === "conduit" && !prepared.context.chat.title
       && !namingChats.has(prepared.context.chat.id) && (!run || run.autoName === true);
@@ -177,7 +136,6 @@ export function createLiveSessionStream({
         chatId: prepared.context.chat.id,
         projectId: prepared.context.project.id,
         workingRoot: at,
-        // A regenerate or an edit starts from where the turn it replaces did.
         sourceCheckpointId,
       });
     } catch (error) {
@@ -191,8 +149,7 @@ export function createLiveSessionStream({
         { reuseSlot: promptOptions.streamingBehavior === "steer" || promptOptions.streamingBehavior === "followUp" });
     } catch (error) { throw error; }
     const generationId = typeof accepted === "string" ? accepted : accepted?.generationId;
-    // The send ledger: what makes these files the message's (drawn on it, after a reload too) and not the composer's
-    // still -- lost with classic Pi's removal, so a reopened chat put its first prompt's image back in the composer.
+    // Without this, a reopened chat puts the message's files back in the composer.
     await attachments.recordMessage(prepared.context.project, prepared.context.chat.id,
       (typeof accepted === "object" ? accepted?.attachmentIdentity : null) || (messageId ? { messageId } : null), prepared.attachments);
     if (checkpoint && generationId) {
@@ -231,48 +188,24 @@ export function createLiveSessionStream({
     if (thinkingLevel && thinkingLevel !== current.thinkingLevel) await adapter.setThinkingLevel(record.id, thinkingLevel);
   }
 
-  /** The prompt `preparing` (its chat and attachments, only read) once the composer's model is checked and set as
-   *  well: the two are independent, so neither waits on the other. */
   async function withComposerModel(record, command, preparing) {
     const [, prepared] = await Promise.all([applyComposerModel(record, command), preparing]);
     return prepared;
   }
 
-  /**
-   * Say where the history now ends.
-   *
-   * A fork abandons the message it was pointed at and everything after it, and
-   * the client is told that directly rather than being left to work it out from
-   * a transcript that may not exist yet.
-   */
   function announceTruncation(record, messageId, { keep = false } = {}) {
     if (!messageId) return;
     const adapter = adapterFor(record);
-    // A regenerate ends the history *after* the prompt it is re-asking, not
-    // before it: the prompt stands, and only what it produced is abandoned.
+    // A regenerate keeps the prompt it re-asks and abandons only what it produced.
     adapter.publish(record, keep
       ? { type: "history_truncated", afterMessageId: messageId }
       : { type: "history_truncated", beforeMessageId: messageId });
-    // The same fact in the chat's order, so the cut has a place in the sequence
-    // a client rebuilds from rather than only a message of its own.
     if (logFor(record)) {
       adapter.publish(record, messageDrop({ messageId, keep, inclusive: !keep }));
     }
   }
 
-  /**
-   * Repoint the chat at the branch the fork created.
-   *
-   * It used to read the whole forked transcript back and republish it. The
-   * truncation above states what changed, and a fork keeps the ids of the
-   * entries it retains, so there is nothing left to re-sync.
-   *
-   * Which file the chat now points at is the server's business. This also
-   * published a `history_forked` carrying the updated row, but the one field a
-   * fork changes is `opaqueSession`, and `chatView` strips it -- so the row
-   * went out identical to the one the browser already had, and no client ever
-   * read the event.
-   */
+  /** No re-sync: the truncation states what changed, and a fork keeps the ids of the entries it retains. */
   async function syncForkedChat(record, forked) {
     const context = await findChatContext(record.chatId);
     if (!context) throw new Error("Chat no longer exists");
@@ -312,7 +245,7 @@ export function createLiveSessionStream({
       const streamingBehavior = command.streamingBehavior === "steer" || command.streamingBehavior === "followUp"
         ? command.streamingBehavior
         : null;
-      // The person's own typing, from their client: the entry says so (the approval model trusts only such words).
+      // The approval model trusts only words authored by the person.
       return sendPrompt(record, prepared, { streamingBehavior, messageId: offeredMessageId(command.messageId), author: "person" });
     }
     if (command.type === "follow_up" || command.type === "steer") {
@@ -331,11 +264,9 @@ export function createLiveSessionStream({
       const capabilities = adapter.getCapabilities();
       return capabilities.steer || capabilities.followUpQueue ? clearQueuedMessages(record, adapter) : null;
     }
-    // Clear the queue before cancellation, then send the replacement prompt.
     if (command.type === "interrupt_and_send") {
-      // Clearing comes first and must succeed: aborting with the queue still in
-      // place makes the backend deliver it anyway, so a half-run sequence
-      // duplicates the message rather than steering with it.
+      // Clearing must succeed first: aborting with the queue in place makes the backend deliver it anyway,
+      // duplicating the message.
       let taken = { steering: [], followUp: [] };
       const capabilities = adapter.getCapabilities();
       if (capabilities.steer || capabilities.followUpQueue) {
@@ -358,8 +289,6 @@ export function createLiveSessionStream({
     }
     if (command.type === "stop_generation") {
       const stoppedGenerationId = command.generationId || record.activeGeneration?.id || null;
-      // A stop clears the queue before it cancels the turn. The client puts
-      // the reader's own queued words back in the composer.
       const capabilities = adapter.getCapabilities();
       if (capabilities.steer || capabilities.followUpQueue) {
         await clearQueuedMessages(record, adapter).catch((error) => console.warn("Could not clear the queue before stopping", error.message));
@@ -394,8 +323,7 @@ export function createLiveSessionStream({
       return sendPrompt(record, prepared, { sourceCheckpointId, messageId });
     }
     if (command.type === "extension_ui_response") {
-      // Awaited: a harness that answers over the network can refuse, and a
-      // refusal belongs to this command, not to the process.
+      // Awaited: a harness answering over the network can refuse, and the refusal belongs to this command.
       await adapter.respondHostUi(record.id, command);
       return null;
     }
@@ -406,13 +334,6 @@ export function createLiveSessionStream({
     });
   }
 
-  /**
-   * Send a prompt to a chat's live agent from the server itself.
-   *
-   * The same path a browser's prompt takes -- the chat's lock, its model, the
-   * generation cap -- for a
-   * caller with no socket: a headless run.
-   */
   async function submitPrompt(chatId, message, { model = "", thinkingLevel = "", notice = false } = {}) {
     if (registry.metadata(chatId)?.status === "subagent") throw Object.assign(new Error("subagent_read_only"), { code: "subagent_read_only", status: 409 });
     return lifecycle.run(chatId, async () => {
@@ -436,9 +357,7 @@ export function createLiveSessionStream({
     const adapter = adapterFor(record);
     const send = (event) => sendClientEvent(ws, event);
     const log = logFor(record);
-    // Establish the order before replay. A fresh browser starts at zero, so a
-    // retained suffix begins with a visible gap and asks the log for its
-    // missing prefix instead of adopting that suffix as complete.
+    // Seq 0 before the replay, so a retained suffix shows as a gap the client asks the log to fill, not as complete.
     if (log) send({ type: "log_state", log: { ...log.state(), seq: 0 } });
     send(adapter.attach(id, ws));
     if (record.status === "running" && !record.contextUsage?.contextWindow) adapter.refreshContext(record.id).catch(() => {});
@@ -452,16 +371,9 @@ export function createLiveSessionStream({
       cacheStats: record.cacheStats || null,
     });
     send(record.lastCheckpoint);
-    // Where the order actually stands. A client that already held this log
-    // compares against the seq: 0 frame above and asks for what it missed; a
-    // suffix in the attach replay is a hole against zero rather than a number
-    // it could adopt as complete.
     if (log) send({ type: "log_state", log: log.state() });
-    // An untracked thread is Conduit's only while a page drives it. Once the
-    // last one has gone -- a reload, a closed tab, a lost connection -- and
-    // none is back within the grace, its process closes; the page's own
-    // close cannot be relied on to leave as it unloads. Tracking clears
-    // `ephemeral`, and a chat's process is residency's to decide.
+    // An untracked thread is Conduit's only while a page drives it; a page's own close cannot be relied on as it
+    // unloads, so the process closes when no page is back within the grace.
     ws.on("close", () => {
       if (!record.ephemeral) return;
       setTimeout(() => {
@@ -469,14 +381,9 @@ export function createLiveSessionStream({
         if (current?.ephemeral && !current.clients?.size) void backends.stop(id).catch(() => {});
       }, UNDRIVEN_THREAD_GRACE_MS).unref?.();
     });
-    // One browser connection is one ordered command stream. Native harness
-    // operations can be asynchronous, but a later clear, steer, or prompt must
-    // not overtake an earlier one while attachment paths or an abort resolve.
+    // A later clear, steer or prompt must not overtake an earlier one while attachment paths or an abort resolve.
     let commands = Promise.resolve();
     ws.on("message", (data) => {
-      // Conduit rejecting a command the browser sent is Conduit's own
-      // statement, not a harness event, so it is written in the contract's
-      // words here.
       const report = (error) => {
         if (ws.readyState === 1) ws.send(JSON.stringify({
           type: "error", scope: "request", generationId: null,
@@ -487,15 +394,10 @@ export function createLiveSessionStream({
       try { command = JSON.parse(String(data)); }
       catch (error) { report(Object.assign(error, { code: "invalid_request" })); return; }
       try { assertChildCommand(record, command); } catch (error) { report(error); return; }
-      // How fast this reader draws, measured by the only party that can see it.
-      // About this one socket; it never joins the ordered command chain.
       if (command.type === "frame_interval") {
         adapter.setFrameInterval?.(record.id, ws, command.ms);
         return;
       }
-      // Catching one client up is answered on its own socket and changes
-      // nothing, so it never joins the ordered command chain. Either the log
-      // still holds what it missed, or it is told to take the transcript again.
       if (command.type === "resume_log") {
         const chatLog = logFor(record);
         const missed = chatLog?.since(command.logId, Number(command.since));
@@ -514,8 +416,7 @@ export function createLiveSessionStream({
         lifecycle.assertAvailable(record.chatId, context.project.id);
         return handleClientCommand(record, command);
       });
-      // Stop bypasses the ordered command chain so it can interrupt work that
-      // an earlier command started. Prompt acceptance normally resolves fast.
+      // Stop bypasses the chain so it can interrupt work an earlier command started.
       if (command.type === "stop_generation") {
         void run().catch(report);
         return;
@@ -526,17 +427,12 @@ export function createLiveSessionStream({
     });
   });
 
-  /** Stop a chat's running turn, as the browser's Stop does. */
   async function stopGeneration(chatId) {
     const record = backends.getByChatId(chatId);
     if (!record) return null;
     return handleClientCommand(record, { type: "stop_generation" });
   }
 
-  /**
-   * Answer a harness's question or approval request from anywhere: the same
-   * chat lock and adapter mapping the composer's card goes through.
-   */
   async function respondHostUi(chatId, response) {
     return lifecycle.run(chatId, async () => {
       const record = backends.getByChatId(chatId);
@@ -545,11 +441,7 @@ export function createLiveSessionStream({
     });
   }
 
-  /**
-   * A chat's prompt from outside its stream, under the same chat lock and command handling as the socket's: the
-   * browser's first message when the person left the chat before its agent had started (POST /v0/chats/:id/prompt),
-   * so the message is sent rather than dropped with the stream it was waiting for.
-   */
+  /** The browser's first message when the person left the chat before its agent started, so it is not dropped. */
   async function promptChat(chatId, command) {
     return lifecycle.run(chatId, async () => {
       const context = await findChatContext(chatId);

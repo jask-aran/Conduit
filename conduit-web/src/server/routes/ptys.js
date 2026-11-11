@@ -2,8 +2,7 @@ import { remoteNode } from "../../place.js";
 import { computerContext, resolveComputerContext } from "../../computer-context.js";
 
 async function terminalContext(projects, id, cwd, nodeHub) {
-  // A device's own terminal, in its home, outside any workspace: as "computer"
-  // is this server's. Where any of its folders is shared with commands.
+  // A device's own terminal, in its home, outside any workspace, as "computer" is this server's.
   if (id.startsWith("device:")) {
     const nodeId = id.slice("device:".length);
     const node = (await nodeHub?.list())?.find((item) => item.id === nodeId);
@@ -56,7 +55,6 @@ export function registerPtyRoutes(app, { projects, terminals, nodeHub = null }) 
     response.status(201).json(await terminals.create({ project, cwd, templateId: String(request.body?.templateId || "shell"), title: request.body?.title, cols: request.body?.cols, rows: request.body?.rows }));
   });
 
-  // A grant to attach to a device's terminal on the device itself, the shortest way (nodes/node-direct.js).
   app.get("/v0/ptys/:id/direct", async (request, response) => {
     const shell = terminals.deviceShell(request.params.id);
     if (!shell) return response.status(404).json({ error: terminals.get(request.params.id) ? "direct_not_on_node" : "pty_not_found" });

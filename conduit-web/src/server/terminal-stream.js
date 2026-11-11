@@ -15,13 +15,11 @@ function boundedDimension(value, fallback) {
 }
 
 export function createTerminalStream({ terminals, perMessageDeflate = false }) {
-  // Keep terminal payload limits isolated from chat/dictation WebSockets. ws
-  // rejects oversized terminal frames before buffering them for application code.
+  // Its own server so ws rejects oversized terminal frames before buffering them, apart from chat/dictation limits.
   const wss = new WebSocketServer({ noServer: true, maxPayload: PTY_MAX_INPUT_BYTES, perMessageDeflate });
   let shuttingDown = false;
 
-  // One browser owns one terminal id at a time. There is deliberately no
-  // global lease: unrelated tmux sessions may stream concurrently.
+  // Deliberately no global lease: unrelated tmux sessions may stream concurrently.
   const terminalClients = new Map();
 
   const sendOutput = (ws, bytes) => {
@@ -76,8 +74,7 @@ export function createTerminalStream({ terminals, perMessageDeflate = false }) {
     startWebSocketKeepalive(ws);
     const requestUrl = new URL(request.url || "/", "http://localhost");
     const takeover = requestUrl.searchParams.get("takeover") === "1";
-    // Reserve synchronously before terminals.attach() does asynchronous tmux
-    // work. This is transport-level defense in depth for the manager lease.
+    // Reserved synchronously, before terminals.attach() does asynchronous tmux work.
     const current = terminalClients.get(id);
     if (current && !takeover) {
       const error = Object.assign(new Error("Terminal is attached in another Conduit client"), { code: "pty_in_use" });
@@ -122,8 +119,7 @@ export function createTerminalStream({ terminals, perMessageDeflate = false }) {
       if (!attachment) return;
       try {
         if (isBinary) {
-          // Preserve producer/output ordering around input that may immediately
-          // change the screen. The browser remains a thin byte-stream client.
+          // Keeps output ordered around input that may immediately change the screen.
           output.flushAll();
           attachment.write(data);
           return;
@@ -137,9 +133,7 @@ export function createTerminalStream({ terminals, perMessageDeflate = false }) {
       }
     });
 
-    // maxPayload violations surface as WebSocket errors before close. Dispose
-    // the disposable tmux attachment and release the lease without affecting
-    // the durable tmux session.
+    // maxPayload violations surface as WebSocket errors before close.
     ws.on("error", () => {
       detachClient(id, ws);
       disposeAttachment();
@@ -160,7 +154,7 @@ export function createTerminalStream({ terminals, perMessageDeflate = false }) {
           return;
         }
         removeData = attachment.onData((value) => output.append(id, Buffer.from(value)));
-        // A device's terminal taken over by a client attached on the device directly (nodes/node-direct.js).
+        // A device's terminal taken over by a client attached on the device directly.
         removeTaken = attachment.onTaken?.(() => {
           output.flushAll();
           detachClient(id, ws);
@@ -178,8 +172,7 @@ export function createTerminalStream({ terminals, perMessageDeflate = false }) {
               ws.send(JSON.stringify({ type: "control", writable: false }));
               ws.close(1000, "Terminal exited");
             } else {
-              // Only the disposable tmux client died; keep the tmux session and
-              // let the browser reconnect to a fresh attachment.
+              // Only the tmux client died: the browser reconnects to a fresh attachment.
               ws.close(1011, "Terminal attachment ended");
             }
           }).catch(() => ws.close(1011, "Terminal attachment failed"));
@@ -188,9 +181,8 @@ export function createTerminalStream({ terminals, perMessageDeflate = false }) {
         sendStatus(ws, terminals.get(id));
         ws.send(JSON.stringify({ type: "control", writable: true }));
       } catch (error) {
-        // A failed attach holds no lease, so this socket has nothing to dispose. Its later close must
-        // not reach killAttachment(id), which would end whatever lease holds the id by then. (A failure
-        // after the attach is the socket's own attachment, and goes the usual way.)
+        // A failed attach holds no lease: its later close must not reach killAttachment(id), which would end
+        // whatever lease holds the id by then.
         if (attachment) disposeAttachment();
         else disposed = true;
         detachClient(id, ws);

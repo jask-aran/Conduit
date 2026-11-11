@@ -8,9 +8,7 @@ export function registerDraftRoutes(app, { drafts, knownChat }) {
   app.get("/v0/drafts", (_request, response) => response.json(drafts.snapshot()));
 
   app.put("/v0/chats/:id/draft", draftBody, async (request, response) => {
-    // A save can be in the air when its chat is deleted, and this route once
-    // took any non-empty id -- so the late write recreated a draft for a
-    // chat that no longer existed, holding its attachments with it.
+    // A save can be in the air when its chat is deleted; the late write would recreate its draft and hold its attachments.
     if (!await knownChat(request.params.id)) return response.status(404).json({ error: "chat_not_found" });
     const saved = await drafts.saveDraft(request.params.id, {
       text: request.body?.text,

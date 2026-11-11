@@ -7,7 +7,6 @@ const hash = (value) => crypto.createHash("sha256").update(value).digest("base64
 const keyPair = () => crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" });
 const pemKey = (key) => key.export({ type: "pkcs8", format: "pem" });
 
-// DER lengths, sequences and the OIDs used by this DNS-only PKCS#10 request.
 function der(tag, ...parts) {
   const body = Buffer.concat(parts.map((part) => Buffer.from(part)));
   let length = Buffer.from([body.length]);

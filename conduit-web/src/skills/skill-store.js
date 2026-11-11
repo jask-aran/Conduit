@@ -1,11 +1,6 @@
 /**
- * The hub's skills (Settings › Skills): the ones Conduit ships with its profiles (a template's `skills` folders) and the
- * ones installed here, each a folder with a SKILL.md under `root`. Any of them can be turned off. Installed skills come
- * from a registry -- skills.sh today, the directory `npx skills` searches and installs from -- by the same download the
- * CLI makes, written into this folder rather than an agent's; uploads and other registries come later.
- *
- * Every skill is a prompt block (context-store.js `skill-<id>`): a skill that is off is left out where a prompt is
- * assembled, and an installed one joins each profile's default document.
+ * Every skill is a prompt block (`skill-<id>`): a skill that is off is left out where a prompt is assembled, and an
+ * installed one joins each profile's default document.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -16,7 +11,6 @@ const SAFE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const MAX_FILES = 200;
 const MAX_BYTES = 5 * 1024 * 1024;
 
-/** A SKILL.md's front matter: its name and description. */
 function skillFrontMatter(text) {
   const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text || "");
   const field = (name) => {
@@ -36,7 +30,6 @@ export class SkillStore {
   constructor({ root, templates = [], fetch: fetcher = globalThis.fetch } = {}) {
     this.root = root;
     this.templates = templates;
-    // A registry the hub cannot reach is said as that, not as the network library's "fetch failed".
     this.fetch = (url, options) => fetcher(url, options).catch((error) => {
       throw Object.assign(new Error(`The hub could not reach ${new URL(url).host} (${error.cause?.code || error.name || "network error"})`), { status: 502 });
     });
@@ -66,12 +59,10 @@ export class SkillStore {
 
   enabled(id) { return !this.state.disabled.includes(id); }
 
-  /** Installed skills' folders, for the prompt catalog: `{ id, folder }`, whether on or off. */
   installedFolders() {
     return Object.keys(this.state.installed).filter((id) => SAFE_ID.test(id)).map((id) => ({ id, folder: path.join(this.root, id) }));
   }
 
-  /** Every skill: shipped then installed, with what the page shows of each. */
   async list() {
     const shipped = new Map();
     for (const template of this.templates) for (const folder of template.skills || []) {
@@ -98,7 +89,6 @@ export class SkillStore {
     await this.save();
   }
 
-  /** The registry's search (the one `npx skills find` makes). */
   async search(query, limit = 20) {
     const q = String(query || "").trim().slice(0, 100);
     if (q.length < 2) return [];
@@ -110,7 +100,6 @@ export class SkillStore {
       .map((item) => ({ source: item.source, skillId: item.skillId, name: item.name || item.skillId, installs: item.installs ?? null, installed: installed.has(`${item.source}/${item.skillId}`) }));
   }
 
-  /** Download one skill (the files `npx skills add <source> --skill <id>` would write) into its own folder here. */
   async install(source, skillId) {
     if (!/^[\w.-]+\/[\w.-]+$/.test(source || "") || !/^[\w.-]{1,100}$/.test(skillId || "")) throw Object.assign(new Error("Choose a skill from the registry"), { status: 400 });
     const [owner, repo] = source.split("/");
@@ -135,7 +124,6 @@ export class SkillStore {
   }
 
   async place(source, skillId, files) {
-    // Its id: the skill's own, unless that is taken by a shipped or another installed one.
     const taken = new Set((await this.list()).map((skill) => skill.id));
     const existing = Object.entries(this.state.installed).find(([, item]) => item.source === source && item.skillId === skillId)?.[0];
     const base = idFor(skillId) || "skill";

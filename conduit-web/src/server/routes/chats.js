@@ -23,8 +23,6 @@ export function projectBackendSessions({ chats, sessions, projectId, implementat
   };
 }
 
-// A harness can be adopted from only if it enumerates threads on this machine
-// and is actually installed. Returns the manifest so callers can stamp identity.
 const discoverableFrom = (backends) => (implementation) => {
   const manifest = backends.manifestFor?.(implementation);
   if (!manifest || manifest.discovery === "none") return null;
@@ -66,8 +64,8 @@ export function registerChatRoutes(app, {
     return child;
   };
 
-  // Work submitted to a conversation from the server (a background run's report to the agent's home thread) is
-  // followed by its chat, as `reattach` does at startup, so it reaches the chat's log and anyone who opens it.
+  // Work submitted to a conversation from the server is followed by its chat, as `reattach` does at startup, so it
+  // reaches the chat's log and anyone who opens it.
   if (durable) durable.runtime.wakeChat = (conversationId) => void (async () => {
     const harness = await durable.runtime.open();
     const chatId = (await harness.snapshot(ConduitIds, conversationId, durable.context))?.chatId;
@@ -249,9 +247,6 @@ export function registerChatRoutes(app, {
     });
   });
 
-  // Tracking an untracked thread keeps its chat and everything in it, and only
-  // makes it Conduit's: it stops being hidden and belongs to the workspace its
-  // folder is, which the caller has made one if it was not.
   app.post("/v0/chats/:chatId/track", async (request, response) => {
     const context = await findChatContext(request.params.chatId);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
@@ -266,12 +261,10 @@ export function registerChatRoutes(app, {
     response.json(chatView(registry.metadata(context.chat.id)));
   });
 
-  // Profiles say which harness they elect; harnesses say what they can do.
   app.get("/v0/profiles", (_request, response) => response.json({
     profiles: agentProfiles(config.piTemplates, { available: new Set([...(backends.local || backends.adapters.keys())]) }),
     harnesses: harnessCapabilities(),
   }));
-  // Settings › System › Usage: Conduit's agents' spend per day (usage-ledger.js), the last `days` (default 30).
   app.get("/v0/usage", async (request, response) => {
     const runtime = backends.adapters.get("conduit-runtime")?.runtime;
     if (!runtime) return response.status(404).json({ error: "runtime_unavailable" });
@@ -280,14 +273,11 @@ export function registerChatRoutes(app, {
     const days = Math.min(366, Math.max(1, Number.parseInt(String(request.query.days || "30"), 10) || 30));
     response.json(runtime.usage.view(days));
   });
-  // Settings › AI › Tools: each Conduit profile's tools, their source and whether they ask. Read-only.
   app.get("/v0/profiles/tools", async (_request, response) => {
     const runtime = backends.adapters.get("conduit-runtime")?.runtime;
     if (!runtime) return response.status(404).json({ error: "runtime_unavailable" });
     response.json({ profiles: await runtime.toolsView() });
   });
-  // A place is a project or workspace, or -- for an untracked thread's chat --
-  // any folder on the Computer.
   const placeFor = async (id) => {
     const project = await projects.get(id || "chat");
     if (!project) return resolveComputerContext(String(id || "")).catch(() => null);
@@ -320,12 +310,9 @@ export function registerChatRoutes(app, {
     if (!project) return response.status(404).json({ error: "project_not_found" });
     await lifecycle.withProjects([project.id], async () => {
       await projects.validate(project);
-      // What the workspace's place runs (src/place.js): on the head, what is
-      // installed here; on a device, its own harnesses and the durable agent.
       const can = await backends.capabilities?.(project);
       const offered = (implementation) => !can || can.harnesses.includes(implementation);
       const selectedProfile = request.body?.profileId ? profileFor(request.body.profileId) : null;
-      // A profile that is not an agent's is a Conduit template: the durable agent.
       const implementation = selectedProfile?.agent.implementation || "conduit-runtime";
       if (!offered(implementation)) {
         return response.status(409).json({ error: "harness_not_here",
@@ -348,9 +335,6 @@ export function registerChatRoutes(app, {
         : defaultTemplate();
       if (!template) return response.status(400).json({ error: "unknown_template", templateId: requestedTemplateId, message: `Unknown profile: ${requestedTemplateId}` });
       if (template.defaultable === false) return response.status(400).json({ error: "special_template", templateId: template.id });
-      // The durable agent runs in process: there is no process to warm.
-      // `roaming`: a chat with no home device, whose tools pick one per call
-      // (decision 21; the persistent agent's shape). Only from this server's own folders.
       const roaming = request.body?.roaming === true && project.local;
       const chat = await registry.create(project, {
         templateId: template.id,
@@ -367,7 +351,6 @@ export function registerChatRoutes(app, {
     response.json(chatView(context.chat));
   });
 
-  // Start a durable chat's context again, optionally from a handoff note (backend only, for now).
   app.post("/v0/chats/:chatId/reset", async (request, response) => {
     const context = await findChatContext(request.params.chatId);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
@@ -378,7 +361,6 @@ export function registerChatRoutes(app, {
     response.json({ ok: true });
   });
 
-  // The subagents a durable chat delegated to, and one's transcript (backend only, for now).
   app.get("/v0/chats/:chatId/subagents{/:conversationId}", async (request, response) => {
     const context = await findChatContext(request.params.chatId);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
@@ -617,11 +599,7 @@ export function registerChatRoutes(app, {
     const resident = backends.getByChatId(context.chat.id);
     if (resident) {
       const adapter = backends.forChat(context.chat);
-      // Changing model is a live setting, not a relaunch. It used to restart
-      // the agent whenever the new model resolved to a different search
-      // overlay, because the overlay was materialised into the process at
-      // launch; the harness does its own web access now, so there is nothing
-      // to rebuild and nothing to restart.
+      // Changing model is a live setting, not a relaunch.
       if (spec && spec !== current.model) await adapter.setModel(resident.id, spec);
       if (thinkingLevel) await adapter.setThinkingLevel(resident.id, thinkingLevel);
     }

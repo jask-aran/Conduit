@@ -354,8 +354,8 @@ export class VoiceModelManager {
       if (this.startPromise === startPromise) {
         this.startPromise = null;
         this.startingModelId = null;
-        // Armed once the start is over: armed while it stood, the timer declined, and a model loaded by an unpinned
-        // use (the settings test, a dictation that ended while it loaded) stayed resident.
+        // Armed once the start is over: armed while it stands, the timer declines, and a model loaded by an unpinned
+        // use (the settings test, a dictation that ended while it loaded) stays resident.
         this.armIdleTimer();
       }
     }

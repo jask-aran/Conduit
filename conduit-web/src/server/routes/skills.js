@@ -1,7 +1,3 @@
-/**
- * Settings › Skills (skill-store.js): the hub's skills, turning one on or off, searching the registry, installing from
- * it and removing an installed one.
- */
 export function registerSkillRoutes(app, { skills }) {
   const fail = (response, next) => (error) => error.status ? response.status(error.status).json({ error: error.message }) : next(error);
   app.get("/v0/skills", async (_request, response, next) => {

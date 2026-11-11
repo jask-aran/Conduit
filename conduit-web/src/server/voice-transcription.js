@@ -42,7 +42,6 @@ function readWav(audio) {
   return pcm;
 }
 
-/** File input for the same runtime, credentials, local BatchPort and cloud adapters as live dictation. */
 export function createVoiceTranscriber(voiceRuntime) {
   let active = 0;
   return async (audio) => {

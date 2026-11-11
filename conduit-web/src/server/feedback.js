@@ -5,29 +5,8 @@ import { format } from "node:util";
 import express from "express";
 
 /*
- * UI feedback (client/feedback/feedback-tool.tsx): the person marks up Conduit's own interface on a development
- * client and sends it to whoever works on Conduit.
- *
- * The mark: when a feedback item is started the client says "this moment", and the hub keeps what it knew then --
- * its recent log lines and events (kept here in short rings, since nothing else holds them), the live processes, the
- * connections, the client's panes and the tail of each chat it shows -- so the item carries the state the comment is
- * about, not the state at Send.
- *
- * The item: Send writes <data>/feedback/<id>/item.json, screenshot.png and a selection-<n>.png for each selection, built in a folder beside it and renamed
- * into place, so a reader never sees half of one. `node scripts/conduit-feedback.mjs wait` hands the next item to
- * an agent session; `done <id>` marks it handled.
- *
- * Handing over: a session that is waiting says so with a file in <data>/feedback/.waiting (its process id, a name).
- * The tool lists those, and Send names the one the item is for (`handed.to`); that session's `wait` ends with it.
- * With nobody named the next session to wait takes it; an item the person chose not to hand over is held until
- * `conduit-feedback take <id>`.
- *
- *   POST   /v0/feedback/marks                  { client }            -> { id }
- *   PUT    /v0/feedback/marks/:id/screenshot   image/png
- *   PUT    /v0/feedback/marks/:id/areas/:n     image/png: selection n's own area, cut from the screenshot
- *   POST   /v0/feedback/marks/:id/send         { comments, screenshot, client } -> { id, path }
- *   DELETE /v0/feedback/marks/:id              a mark nothing was sent to
- *   GET    /v0/feedback/waiting                -> { waiting: [{ id, name, cwd, since }] }, the sessions waiting now
+ * The hub keeps what it knew when an item was started, so the item carries the state the comment is about, not the
+ * state at Send. An item is built in a folder beside its own and renamed into place, so a reader never sees half of one.
  */
 const RING = 200;
 const CHAT_TAIL = 40;
@@ -35,7 +14,6 @@ const MARKS = 12;
 const MARK_MS = 6 * 60 * 60_000;
 const short = (value, length) => { const text = typeof value === "string" ? value : JSON.stringify(value) ?? ""; return text.length > length ? `${text.slice(0, length)}… (${text.length} characters)` : text; };
 
-/** A record event in one line's worth: what it was and to what, its text cut short. */
 function brief(event) {
   const message = event.message || {};
   return {
@@ -55,20 +33,17 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
   const marks = new Map();
   const keep = (ring, entry) => { ring.push(entry); if (ring.length > RING) ring.splice(0, ring.length - RING); };
 
-  // The hub's log is its stdout; the last lines of it are kept here as they are written.
+  // The hub's log is its stdout, which nothing else holds: its last lines are kept here as they are written.
   const restore = ["log", "info", "warn", "error"].map((level) => {
     const original = console[level];
     console[level] = (...args) => { keep(logs, { at: new Date().toISOString(), level, line: short(format(...args), 600) }); original.apply(console, args); };
     return () => { console[level] = original; };
   });
-  // Every record a chat's log numbers, and every event told to all clients, in the order they happened.
   chatLogs.tap = (chatId, event) => keep(events, { at: new Date().toISOString(), chatId, ...brief(event) });
-  // A runtime event: its plain fields (which chat, which project, why), and a process's state when it carries one.
   runtimeHub.tap = (event) => keep(events, { at: new Date().toISOString(), runtime: event.type,
     ...Object.fromEntries(Object.entries(event).filter(([key, value]) => key !== "type" && key !== "at" && ["string", "number", "boolean"].includes(typeof value)).slice(0, 8).map(([key, value]) => [key, short(value, 120)])),
     ...(event.process ? { chatId: event.process.chatId, status: event.process.status, activity: event.process.activity } : {}) });
 
-  /** The sessions waiting for an item now: each one's file, while its process lives. A file left by one that was killed goes. */
   async function waiting() {
     const dir = path.join(folder, ".waiting");
     const found = [];
@@ -106,7 +81,6 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
     return { id };
   }
 
-  /** One comment as the item states it: where the code is first, then what was on the page. */
   function comment(entry, scale, areas) {
     const where = (described) => ({
       component: described.component ?? null, source: described.source ?? null, styles: described.styles ?? [],
@@ -135,7 +109,6 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
     const exact = Boolean(shot && viewport.width && Math.abs(shot.width / shot.height - viewport.width / viewport.height) < 0.01);
     const scale = exact ? shot.width / viewport.width : null;
     const sentAt = new Date().toISOString();
-    // Who it is for: the waiting session the person named, anyone when that one has gone, nobody when it is not handed over.
     const to = body.hand === false ? null : (await waiting()).find((waiter) => waiter.id === String(body.to ?? "")) ?? null;
     const handed = { held: body.hand === false, to: to && { id: to.id, name: to.name } };
     const item = {
@@ -172,11 +145,9 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
     return { id, path: path.join(final, "item.json"), handed };
   }
 
-  /** A picture for a mark: the whole screenshot, or selection `n`'s area of it. */
   function picture(id, bytes, n) {
     const kept = marks.get(id);
     if (!kept) throw Object.assign(new Error("That feedback mark has gone; start the item again"), { status: 404, code: "feedback_mark_gone" });
-    // A PNG, by its signature.
     if (!Buffer.isBuffer(bytes) || bytes.length < 8 || bytes.readUInt32BE(0) !== 0x89504e47) throw Object.assign(new Error("A screenshot is a PNG"), { status: 415, code: "feedback_screenshot_invalid" });
     if (n === undefined) kept.screenshot = bytes;
     else if (Number.isInteger(n) && n >= 1 && n <= 50) kept.areas.set(n, bytes);

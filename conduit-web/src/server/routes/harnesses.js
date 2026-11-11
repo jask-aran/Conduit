@@ -5,20 +5,15 @@ import { computerContext, resolveComputerContext } from "../../computer-context.
 import { groupThreadsByFolder, trackedByThread } from "../../harness-threads.js";
 import { MANIFESTS } from "../../harnesses/index.js";
 
-// The Conduit durable agent is built in rather than a detected harness, so it
-// is omitted from this catalogue route.
 const HARNESS_MANIFESTS = MANIFESTS.filter((manifest) => !manifest.builtIn);
 const SUPPORTED = new Set(HARNESS_MANIFESTS.map((manifest) => manifest.id));
 
-// `discovery` says how far a harness can see: "machine" lists every thread it
-// knows about, "none" has no history to offer. The dashboard renders from this
-// rather than special-casing an implementation.
 export function harnessCatalog(backends) {
   return HARNESS_MANIFESTS.map((manifest) => ({
     id: manifest.id,
     label: manifest.label,
     profileLabel: manifest.profileLabel || manifest.label,
-    // Installed here; one that only runs on devices is registered without being here.
+    // A harness that only runs on devices is registered without being installed here.
     available: (backends.local || backends.adapters).has(manifest.id),
     sessions: manifest.discovery !== "none",
     drive: manifest.drive,
@@ -28,8 +23,7 @@ export function harnessCatalog(backends) {
 
 const isDirectory = (target) => fs.stat(target).then((stat) => stat.isDirectory(), () => false);
 
-// A folder named by the client is untrusted: resolve it once, and report a
-// missing or unreadable path as a bad request rather than a server fault.
+// A missing or unreadable client-named folder is a bad request, not a server fault.
 const resolveFolder = async (target) => {
   try { return await computerContext(target); }
   catch (cause) {
@@ -45,9 +39,7 @@ const opaqueSessionId = (chat) => typeof chat.backend?.opaqueSession === "string
 
 export function registerHarnessRoutes(app, { backends, harnessModels, preferences, projects, registry }) {
 
-  // Listing permission modes without a chat costs a throwaway harness process,
-  // so the answer is cached per folder and refreshed in the background exactly
-  // as the model catalogue is.
+  // Listing permission modes without a chat costs a throwaway harness process, so the answer is cached per folder.
   const permissionCatalogs = new Map();
   const permissionCatalogRequests = new Map();
   const refreshPermissionModes = (implementation, cwd, adapter) => {
@@ -61,8 +53,7 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
     return request;
   };
 
-  // A health check can spawn the harness's CLI (OpenCode's `service status`
-  // when its service is down, ~100 ms), so an answer serves for 15 seconds.
+  // A health check can spawn the harness's CLI (OpenCode's `service status`, ~100 ms), so an answer serves 15 s.
   const healthAnswers = new Map();
   const healthOf = (id, adapter) => {
     const kept = healthAnswers.get(id);
@@ -72,15 +63,12 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
     return health;
   };
 
-  // `?refresh=1` re-probes, so installing a harness does not need a restart.
   app.get("/v0/harnesses", async (request, response) => {
     if (request.query.refresh) {
       healthAnswers.clear();
       await backends.refreshDetection?.();
     }
     const harnesses = await Promise.all(harnessCatalog(backends).map(async (item) => {
-      // Detection already answered installed / version / signed-in for every
-      // harness; only a backend that can report live health refines it.
       const probe = backends.detection?.get(item.id) || null;
       const row = probe ? { ...item, status: probe.status, version: probe.version } : item;
       const adapter = item.available ? backends.adapters.get(item.id) : null;
@@ -114,8 +102,7 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
     response.json({ tracked: tracked.map(chatView), sessions: sessions.filter((session) => !trackedIds.has(session.id)), replayFidelity: "full" });
   });
 
-  // Machine-wide thread discovery. Folders come from the threads themselves,
-  // so this deliberately does not require - or create - a Conduit project.
+  // Folders come from the threads themselves, so this neither requires nor creates a Conduit project.
   app.get("/v0/harnesses/:implementation/threads", async (request, response) => {
     const implementation = request.params.implementation;
     if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
@@ -146,8 +133,7 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
     const models = await harnessModels.list(implementation, cwd, adapter, { require: remembered?.model || "" });
     const rememberedSpec = models.some((item) => item.spec === remembered?.model) ? remembered.model : "";
     const model = rememberedSpec || models[0]?.spec || "";
-    // The profile's model is gone and this is a stand-in, which the composer
-    // says out loud rather than opening on a model nobody chose.
+    // The composer says so rather than silently opening on a model nobody chose.
     const modelFallback = remembered?.model && !rememberedSpec && model
       ? { from: remembered.model, to: model }
       : null;
@@ -170,9 +156,7 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
     });
   });
 
-  // The launch composer has no chat to PATCH, so a model chosen there would
-  // otherwise only stick once a message created one. The choice is the
-  // decision: it is remembered for the profile the moment it is made.
+  // The launch composer has no chat to PATCH, so its choice is remembered for the profile when made.
   app.patch("/v0/harnesses/:implementation/models", async (request, response) => {
     const implementation = request.params.implementation;
     if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
@@ -195,10 +179,6 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
     response.json({ model, thinkingLevel });
   });
 
-  // The same answer `/v0/chats/:chatId/permission-profiles` gives, for a chat
-  // that does not exist yet: the launch composer offers the choice up front so
-  // the first message starts under the mode somebody picked, rather than under
-  // whatever the harness defaults to.
   app.get("/v0/harnesses/:implementation/permission-modes", async (request, response) => {
     const implementation = request.params.implementation;
     if (!SUPPORTED.has(implementation) || !(backends.local || backends.adapters).has(implementation)) {
@@ -218,15 +198,7 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
     response.json({ modes, selected });
   });
 
-  /*
-   * Open a thread that is not in Conduit, or start one.
-   *
-   * It runs as a Conduit chat that no list shows, so everything a tracked chat
-   * does -- attachments, steering, editing, forking, checkpoints -- works the
-   * same way here. Tracking it only stops hiding it; leaving deletes it and the
-   * thread stays with the harness. A thread Conduit already tracks opens as
-   * that chat instead, and one already open is opened again, not duplicated.
-   */
+  // An untracked thread runs as a Conduit chat no list shows, so everything a tracked chat does works the same here.
   app.post("/v0/harnesses/:implementation/threads/open", async (request, response) => {
     const implementation = request.params.implementation;
     const manifest = backends.manifestFor?.(implementation);
@@ -252,7 +224,6 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
         || every.find((chat) => opaqueSessionId(chat) === sessionId);
       if (known) return reply(known, !known.untracked);
     }
-    // The folder's own place when Conduit has one, compared as real paths.
     const registered = await Promise.all((await projects.list()).map(async (project) =>
       ({ project, root: await fs.realpath(project.workingRoot).catch(() => null) })));
     const workspace = registered.find((entry) => entry.root === folder.workingRoot)?.project;
@@ -268,8 +239,6 @@ export function registerHarnessRoutes(app, { backends, harnessModels, preference
         lastMessageAt: session.updatedAt || timestamp, lastReadAt: timestamp });
       return reply(registry.metadata(chat.id));
     }
-    // A new thread carries what the harness's page chose for it, as a new
-    // chat carries what its composer chose.
     const model = String(request.body?.model || "").trim();
     const thinkingLevel = String(request.body?.thinkingLevel || "").trim();
     const requestedMode = String(request.body?.permissionMode || "").trim();

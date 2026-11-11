@@ -66,11 +66,7 @@ export function lanNamesService({ dataRoot, tlsDir = path.join(os.homedir(), ".c
       certificates: await certificates(), hubAddress: await hubAddress(), cf: await cliStatus(),
     };
   }
-  /*
-   * The hub's own LAN name: the domain itself, or `<hubLabel>.<domain>` when the domain's bare name is taken by
-   * something else (the hub's internet route through a tunnel: conduit-local.jask-aran.com outside, and
-   * lan.conduit-local.jask-aran.com on the LAN).
-   */
+  // `<hubLabel>.<domain>` when the domain's bare name is taken by something else, such as the hub's route through a tunnel.
   const hubHost = () => config.hubLabel ? `${config.hubLabel}.${config.domain}` : config.domain;
   async function pointHub() {
     if (!config?.hubName) return;

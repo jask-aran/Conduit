@@ -7,18 +7,12 @@ const text = (content) => typeof content === "string" ? content
   : Array.isArray(content) ? content.map((part) => part?.text || "").join("") : "";
 
 /**
- * Agent runs with no chat page behind them.
- *
- * A run is a chat like any other -- the same launch, caps, warm agents, names
- * and transcript -- that nobody opened: it is untracked, so no list of chats
- * shows it, and it is driven and read over HTTP instead of a browser socket.
- * What a run says is what its chat's log says, so a run is read from the same
- * statements every client folds.
+ * A run is an untracked chat, so no list of chats shows it, driven and read
+ * over HTTP instead of a browser socket, from the same log statements every client folds.
  */
 export function registerRunRoutes(app, {
   backends, chatLogs, config, defaultTemplate, launchLiveSession, projects, registry, runtimeFor, stopGeneration, submitPrompt,
 }) {
-  /** Where a run stands, from what its chat has stated. */
   const runView = (chat) => {
     const stated = chatLogs.get(chat.id)?.stated || { messages: [] };
     const promptIndex = stated.messages.findLastIndex((message) => message.role === "user");
@@ -33,7 +27,7 @@ export function registerRunRoutes(app, {
       outcome: prompt?.outcome || null,
       answer: answer ? text(answer.content) : null,
       waiting: requests.length > 0,
-      // What it waits on, answered at POST /v0/chats/:chatId/host-ui/:requestId.
+      // Answered at POST /v0/chats/:chatId/host-ui/:requestId.
       requests,
       createdAt: chat.createdAt, updatedAt: chat.updatedAt,
     };
@@ -51,12 +45,9 @@ export function registerRunRoutes(app, {
     if (!project) throw failure("project_not_found", "Project not found", 404);
     await projects.validate(project);
     const profileId = request.body?.profileId || project.defaultTemplateId || null;
-    // How long an approval or question may wait before it is cancelled.
     const hostUiTimeoutMs = Math.trunc(Number(request.body?.hostUiTimeoutMs) || 0);
     const run = { ...(hostUiTimeoutMs > 0 ? { hostUiTimeoutMs } : {}),
-      // Off unless asked: a run is named only with { autoName: true }.
       ...(request.body?.autoName === true ? { autoName: true } : {}) };
-    // Any profile a chat can use: a harness profile or a Conduit template.
     const harness = profileId && agentProfiles(config.piTemplates, { available: new Set(backends.local || backends.adapters.keys()) })
       .find((profile) => profile.id === profileId && profile.management === "agent");
     let chat;
@@ -87,12 +78,7 @@ export function registerRunRoutes(app, {
     response.json(runView(chat));
   });
 
-  /**
-   * The run as it is written, as server-sent events: each numbered statement
-   * of its chat's log, from `since` on, then live until the turn settles or
-   * the reader leaves. Paint (deltas) is not sent; every message is stated in
-   * full when it closes.
-   */
+  // Deltas are not sent: every message is stated in full when it closes.
   app.get("/v0/runs/:id/events", (request, response) => {
     const chat = runChat(request.params.id);
     if (!chat) return response.status(404).json({ error: "run_not_found" });
@@ -110,7 +96,6 @@ export function registerRunRoutes(app, {
     request.on("close", stop);
   });
 
-  /** Another prompt in the same run, once the last has settled. */
   app.post("/v0/runs/:id/messages", async (request, response) => {
     const chat = runChat(request.params.id);
     if (!chat) return response.status(404).json({ error: "run_not_found" });

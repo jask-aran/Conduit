@@ -5,18 +5,8 @@ import { placeProcesses } from "../nodes/place-processes.js";
 import { environmentName } from "../device-api.js";
 import { callingChat } from "./conduit-mcp.js";
 
-/**
- * Tools that pick their device per call (plan decision 21): for a
- * conversation with no home device, such as the persistent agent, which acts
- * wherever the work is. `devices` lists what it can reach; read, write, edit
- * and bash take an optional `device` and `folder`, and without them run where
- * the conversation does. A device's calls wait while it is offline, and the
- * person can go on without it, as in an owned thread.
- *
- * The same tool names as the coding tools, so a conversation selects one
- * extension or the other, never both.
- */
-/** Every device's environments as agents name them: a device's name, with its environment's when it has several. */
+/** The same tool names as the coding tools, so a conversation selects one extension or the other, never both. */
+
 export async function reachableDevices(nodeHub) {
   if (!nodeHub) return [];
   return (await nodeHub.listDevices()).flatMap((device) => device.nodes.map((node) => ({
@@ -32,7 +22,6 @@ export function DeviceTools(runtime, coding = CodingTools) {
     parameters: Type.Object({}),
     replay: "safe",
     execute: async (_args, api, context) => {
-      // The person's device: the one their client (this chat's origin, ui-control.js) says it is on.
       const tab = runtime.uiControl ? await runtime.uiControl.targetFor(await callingChat(runtime, api, context)).catch(() => null) : null;
       const listed = (await runtime.reachable()).map((device) => ({ device: device.name, online: device.online, here: device.local,
         ...(tab?.devices.includes(device.name) ? { person: true } : {}),
@@ -56,7 +45,6 @@ export function DeviceTools(runtime, coding = CodingTools) {
   return defineExtension({ name: "device-tools", tools: [devices, ...coding.tools.map(placed)] });
 }
 
-/** A device's shared folder as an environment: this server's own disk, or the device's node. */
 export async function deviceEnv(runtime, conversationId, name, folder) {
   const wanted = String(name || "").trim().toLowerCase();
   // Two environments may share a name (one paired again): the one online is meant.

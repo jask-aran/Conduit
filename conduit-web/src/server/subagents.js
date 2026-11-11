@@ -15,9 +15,8 @@ const SubagentRoster = defineDoc({
 const runLabel = (kind) => ({ heartbeat: "Heartbeat", brief: "Morning brief", "morning-brief": "Morning brief",
   "check-back": "Check-back", checkback: "Check-back", webhook: "Webhook", manual: "Run" })[kind]
   || kind.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-// An agent's key is its own and never reused (`key`; older agents' were their label); its label -- bg-3, fg-2 -- is a
-// name only, counted from 1 each local day. A label still running is skipped, so the model never has two agents of one
-// name to address. A run's number (Heartbeat #312) is its work-log item's (work-log.js), wherever it is shown.
+// An agent's key is never reused; its label (bg-3, fg-2) is a name only, counted from 1 each local day. A label still
+// running is skipped, so the model never has two agents of one name to address.
 const today = () => { const at = new Date(); return `${at.getFullYear()}-${at.getMonth() + 1}-${at.getDate()}`; };
 const nextNumber = (roster, counter, taken = () => false) => {
   if (roster.day !== today()) { roster.day = today(); roster.counts = {}; }
@@ -31,12 +30,10 @@ const nextKey = (roster) => `k${roster.serial = (roster.serial || 0) + 1}`;
 const runningLabels = (roster) => new Set([...Object.values(roster.children), ...Object.values(roster.nested || {})]
   .filter((item) => item.status === "running").map((item) => item.id));
 const nextLabel = (roster, prefix) => { const taken = runningLabels(roster); return `${prefix}-${nextNumber(roster, prefix, (n) => taken.has(`${prefix}-${n}`))}`; };
-/** The agent a label names: by its key, else the running one of that label, else the latest. */
 export const findSubagent = (items, id) => {
   const named = items.filter((item) => item.id === id);
   return items.find((item) => item.key === id) || named.find((item) => item.status === "running") || named.at(-1);
 };
-/** A run's unit of work in the log: its routine's item, else its own (`run:<key>`, opened only in jbot's home thread). */
 const workKeyOf = (origin, id) => origin?.routineTaskId ? `routine:${origin.routineTaskId}` : `run:${id}`;
 const nextRun = (origin, trigger = null) => {
   if (!origin?.kind) return null;
@@ -56,50 +53,39 @@ const addUsage = (total, usage) => {
 export const subagentTitle = (task) => String(task || "").trim().split(/\r?\n/)[0].trim().replace(/\s+/g, " ").slice(0, 80);
 const totalUsage = (state) => [...Object.values(state?.models || {}), ...Object.values(state?.tools || {})]
   .reduce((total, usage) => addUsage(total, usage), emptyUsage());
-/** A run that has ended leaves the roster (its work-log item stays); what it spent stays in the chat's totals (`ended`). */
 const leave = (roster, key, usage) => {
   roster.ended = addUsage(roster.ended || emptyUsage(), totalUsage(usage));
   delete roster.children[key];
 };
 const textResult = (text) => ({ output: [{ type: "text", text }] });
 /**
- * What the `subagent` tool lets one conversation start (roadmap #28), generous so that only a runaway meets them:
- * foreground agents at once (a codemode Promise.all included), background agents running at once, model turns per
- * task given to a child, and characters of an answer handed back. `runtime.subagentLimits` overrides any of them.
- * Runs the persistent agent starts (`spawnBackground`) are the app's, not the model's: they meet the turn and output
- * limits but never count toward, or are refused by, the two concurrency limits.
+ * Generous, so only a runaway meets them. Runs `spawnBackground` starts are the app's, not the model's: they meet the
+ * turn and output limits but never count toward, or are refused by, the two concurrency limits.
  */
 export const SUBAGENT_LIMITS = Object.freeze({ concurrent: 16, background: 10, iterations: 400, outputChars: 100000 });
 class SubagentLimitError extends Error {
   constructor(limit, message) { super(message); this.name = "SubagentLimitError"; this.limit = limit; }
 }
-/** An answer cut to `max` characters, saying it was. */
 const capOutput = (text, max) => {
   const value = String(text ?? "");
   if (!(max > 0) || value.length <= max) return value;
   return `${value.slice(0, max)}\n\n[Subagent output limit: showing ${max} of ${value.length} characters.]`;
 };
 const iterationStop = (max) => `The subagent was stopped: it reached the iteration limit (${max} model turns for one task).`;
-/**
- * How much a run's report matters, from its answer's first word (templates/agent/SYSTEM.md): NOTHING (or OpenClaw's
- * HEARTBEAT_OK) is none, then FYI, ATTENTION and URGENT; an answer that says none of them is ATTENTION.
- */
+/** HEARTBEAT_OK is OpenClaw's NOTHING; an answer that names no level is ATTENTION. */
 const reportLevel = (answer) => {
   const word = String(answer || "").trim().match(/^\W*([A-Z_]+)/)?.[1] || "";
   return word === "NOTHING" || word === "HEARTBEAT_OK" ? "none" : word === "FYI" ? "fyi" : word === "URGENT" ? "urgent" : "attention";
 };
-/** A gated run's level: how it ended by tool (quiet, failed), or else its answer's first word. */
 const runLevel = (report, end) => end?.outcome === "quiet" ? "none"
   : end?.outcome === "failed" || report.status === "failed" ? "failed" : reportLevel(report.answer);
 const LEVELS = ["none", "fyi", "attention", "urgent"];
-/** The least a report must matter to reach the person, by their interruption setting. */
 const THRESHOLD = { quiet: "urgent", normal: "attention", chatty: "fyi" };
 export const reaches = (level, dial = "normal") => LEVELS.indexOf(level === "failed" ? "attention" : level) >= LEVELS.indexOf(THRESHOLD[dial] || "attention");
 const aborted = async (task, api, context) => {
   await api.commit(() => ({ status: "terminal", outcome: { status: "aborted" } }), context);
 };
 
-/** A conversation's background subagents, as `{ id, title, child, anchor, status }`. */
 export async function backgroundSubagents(harness, conversationId, context) {
   return Object.values((await harness.snapshot(SubagentRoster, conversationId, context))?.children || {});
 }
@@ -109,15 +95,11 @@ export async function nestedSubagents(harness, conversationId, context) {
   return Object.values((await harness.snapshot(SubagentRoster, conversationId, context))?.nested || {});
 }
 
-/** What the runs that have left the roster spent, kept for the chat's totals (their ledgers are no longer read). */
+/** What the runs that have left the roster spent, kept for the chat's totals: their ledgers are not read once they leave. */
 export async function endedUsage(harness, conversationId, context) {
   return (await harness.snapshot(SubagentRoster, conversationId, context))?.ended || null;
 }
 
-/**
- * Stop a conversation's background subagents (those `which` picks): its chat is going, and a late report would start a
- * turn no one sees; or jbot is reset or switched off, and its runs under way end as stopped.
- */
 export async function stopBackgroundSubagents(harness, conversationId, context, which = () => true) {
   for (const item of (await backgroundSubagents(harness, conversationId, context)).filter(which)) {
     await harness.abortTask(item.anchor, context).catch(() => {});
@@ -125,7 +107,6 @@ export async function stopBackgroundSubagents(harness, conversationId, context, 
   }
 }
 
-/** The HTTP stop and the tool use the same durable anchor cancellation. */
 export async function stopBackgroundSubagent(harness, conversationId, id, context) {
   const item = findSubagent(await backgroundSubagents(harness, conversationId, context), id);
   // A stop tool may have committed its status before it could cancel the durable anchor.
@@ -135,36 +116,15 @@ export async function stopBackgroundSubagent(harness, conversationId, id, contex
   return true;
 }
 
-/**
- * Delegation (plan decision 10, the thread subagent): `subagent` hands a
- * self-contained task to a child conversation that starts as a copy of this
- * one's agent (model, tools, folder or devices) without `subagent`, so it does
- * not delegate again, and without the question card, which no one is watching
- * it on. The call's details name the child, for a reader that wants its work.
- *
- * In the foreground (the default) the child is owned by the call, as
- * pi-durable's own subagent pattern has it: stopping the turn stops the child,
- * the turn is idle only once the child is, and a restart reruns the call, which
- * finds the same child and submission rather than starting another. Its spend
- * comes back as the call's `usage`, so the parent's ledger counts it.
- *
- * In the background (pi-durable's background pattern) the child is owned by an
- * anchor task the parent conversation owns, so the parent's Esc and idle never
- * reach it, and stays to be messaged again until stopped or the parent resets.
- * Each message is delivered by a reporter task the anchor owns, which posts the
- * answer back to the parent (`conduit.subagent-report`, a short
- * harness row in the transcript); request ids keep a restart from sending a
- * message or a report twice. Its spend stays in the child's own ledger, which
- * the chat's totals add (`backgroundSubagents`): pi-durable's ledger is its own.
- */
+// A foreground child is owned by the call, so stopping the turn stops it; a background one by an anchor task the parent
+// conversation owns, so the parent's Esc and idle never reach it. Request ids keep a restart from sending anything twice.
 const ownsWork = async (tx, key, child) => String((await tx.doc(WorkLog)).items[key]?.conversationId) === String(child);
 
 export function Subagents(runtime) {
   const limits = () => ({ ...SUBAGENT_LIMITS, ...runtime.subagentLimits });
-  // Foreground calls running per conversation, by call task id (a replayed call is the same one, so is counted once).
+  // By call task id: a replayed call is the same one, so is counted once.
   const foregroundRuns = new Map();
-  // `onLimit`: the child began more model turns for this task than `iterations` allows; it is stopped, and told once.
-  // Counted while observed, so a restart counts afresh: the limit catches a runaway, it is not an exact budget.
+  // Turns are counted while observed, so a restart counts afresh: the limit catches a runaway, it is not an exact budget.
   const observe = async (parent, child, api, context, foreground = false, onLimit = null) => {
     const signal = context.abortSignal;
     const maxTurns = limits().iterations;
@@ -196,7 +156,6 @@ export function Subagents(runtime) {
       }
       const line = runtime.subagentStep?.(event);
       if (!line) return;
-      // The tools it started, kept while it is observed: what it did, said once it reports (`did`).
       if (event.type === "tool_execution_start") {
         runtime.subagentStarts ||= new Map();
         const starts = runtime.subagentStarts.get(child) || [];
@@ -328,12 +287,10 @@ export function Subagents(runtime) {
         const answerEntry = settled.status === "done" ? (await conversation.entries({ minEntryId: settled.answer,
           maxEntryId: settled.answer }, 1, undefined, context)).items[0] : null;
         const said = limited ? iterationStop(limited) : (answerEntry?.model?.[0]?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("");
-        // How it ended by tool, if it did (nothing_to_report, run_failed: inbox.js), read before its report is decided.
-        // Any subagent can end by them, not only jbot's runs: one asked for in a thread that gives up says why.
+        // Read before its report is decided: any subagent, not only jbot's runs, can end by nothing_to_report or run_failed.
         const end = await api.memo("end", (await api.snapshot(RunEnd, child, context))?.end || null, context);
-        // A run of jbot's whose final text is empty has not reported, whatever it did on the way: it failed, so its
-        // routine's window is not counted as done and is gathered again next time. Unless it ended by saying it had
-        // nothing to report: that is its report, and the routine's window is done.
+        // A gated run whose final text is empty failed, so its routine's window is gathered again next time; one that
+        // ended by saying it had nothing to report has reported.
         const quiet = end?.outcome === "quiet";
         const gaveUp = end?.outcome === "failed";
         const empty = !said.trim() && Boolean(task.input.gate) && !quiet;
@@ -357,7 +314,6 @@ export function Subagents(runtime) {
           }
         }, context);
         if (changed) runtime.subagentsChanged?.(api.conversationId, { conversationId: child, status: report.status });
-        // The agent's runs: what they spent counts toward its day, and what they found goes to its inbox (inbox.js).
         const level = task.input.gate ? runLevel(report, end) : null;
         if (task.input.gate && !task.input.origin?.test) {
           const spent = totalUsage(await api.snapshot(UsageDoc, child, context)).cost.total;
@@ -379,20 +335,17 @@ export function Subagents(runtime) {
           completeRoutine(doc, record.routine, record.outcome, endedAt);
           record.runSucceeded = true;
         }, context);
-        // Told at once: what was asked for (a brief, a task the person started, the heartbeat's decision), what is
-        // urgent, and a run that left something to approve, whose asks show under its report. The rest waits in the
-        // inbox for the heartbeat, or for the person to talk to jbot first.
+        // Told at once: what was asked for, what is urgent, and a run that left something to approve. The rest waits
+        // in the inbox for the heartbeat, or for the person to talk to jbot first.
         const kind = task.input.origin?.kind;
-        // Where its report goes: a routine says (output jbot, inbox or both); before routines, by kind.
         const output = task.input.origin?.output;
         const asked = (output ? output !== "inbox" : ["brief", "manual", "heartbeat"].includes(kind)) && level !== "none";
         const waiting = task.input.gate && !task.input.origin?.test ? await api.memo("waiting", Object.values((await api.snapshot(AgentDoc, context))?.asks || {})
           .filter((ask) => statusAt(ask) === "pending" && String(ask.sourceConversationId) === String(child)).length, context) : 0;
         const heard = !task.input.gate || await api.memo("heard", level !== "none" && (asked || waiting > 0 || level === "urgent"), context);
-        // Its unit of work in the log (work-log.js) says where the report is going as it goes.
         const workKey = workKeyOf(task.input.origin, id);
         const working = (label) => task.input.gate && !task.input.origin?.test ? api.commit((tx) => phaseWork(tx, workKey, label), context) : null;
-        // When it reported, for its item in the work log: before jbot's turn on it, which it sits above.
+        // Taken before jbot's turn on the report, which its work-log item sits above.
         const workAt = await api.memo("workAt", new Date().toISOString(), context);
         // Only what waits: the inbox collects for the heartbeat (and the brief), so a report the person was told at once
         // (the brief itself, a task they started, anything urgent) goes to the home thread alone.
@@ -404,9 +357,6 @@ export function Subagents(runtime) {
               headline: headlineOf(level === "failed" && end?.reason ? end.reason : report.answer) }, Date.parse(at));
           }, context);
         }
-        // A routine's report told to jbot is kept in the context inbox as well, handled as it is told: what the routine
-        // found, with the sources its tasks gathered (an email's message.md), for jbot or any run to open later. What
-        // jbot is told links to it.
         let recorded = null;
         if (task.input.gate && !task.input.origin?.test && task.input.origin?.routineTaskId && output === "jbot" && heard && !stopped && level !== "failed") {
           const at = await api.memo("recordAt", new Date().toISOString(), context);
@@ -457,10 +407,8 @@ export function Subagents(runtime) {
         if (heard && !stopped && !await resetSince(parent, task.input.sinceEntry || 0, context)) {
           const requestId = `subagent-report:${child}:${number}`;
           const handle = await api.conversation(api.conversationId, context);
-          // A run's report comes with the decision it asks of jbot (SYSTEM.md, When a run reports): told bare, jbot
-          // acknowledged it ("Noted. …") instead of choosing. The thread shows both, the addition apart.
-          // What the run left waiting on the person's approval, said by the hub rather than left to the run's own words: a
-          // run that asked and ended often never mentioned it.
+          // What the run left waiting on the person's approval is said by the hub: a run that asked and ended often never
+          // mentions it.
           const waiting = task.input.gate && runtime.agent ? await api.memo("waitingAsks", listAsks(await runtime.agent.state())
             .filter((ask) => ask.status === "pending" && ask.run === String(child)).map((ask) => `• ${ask.title} (ask ${ask.id})`), context) : [];
           const told = recorded ? `${report.answer}\n\nThe whole report, with what it drew on: ${recorded}` : report.answer;
@@ -472,11 +420,8 @@ export function Subagents(runtime) {
           const data = { subagentId: label, conversationId: child, title, status: report.status, messageId: requestId, report: answer, ...(appended ? { appended } : {}),
             ...(item.run ? { run: { ...item.run, startedAt: item.startedAt, endedAt: item.endedAt } } : {}),
             ...(task.input.origin ? { origin: task.input.origin, level } : {}) };
-          // A Stop leaves a chat's background agents working, but meant stop: until the person speaks again a report is kept
-          // -- written to the thread without a turn, for the next turn to read -- whether it waited in the stopped turn
-          // (a Stop withdraws what waits) or came after.
-          // A run of the persistent agent's (`gate`: heartbeat, brief, check-back) is the app's, not the thread's: a Stop
-          // there never quiets it.
+          // A Stop leaves a chat's background agents working, but meant stop: until the person speaks again a report is
+          // written to the thread without a turn. A gated run is the app's, not the thread's: a Stop never quiets it.
           const quiet = await api.memo("quiet", !task.input.gate && await stopPending(runtime, parent, context), context);
           let kept = quiet;
           if (!quiet && task.input.gate) await working(`Reporting to ${runtime.agent?.settings().name || "jbot"}`);
@@ -508,10 +453,8 @@ export function Subagents(runtime) {
             await (await handle.submit({ type: "write", requestId: `${requestId}:kept`, entry: { kind: "conduit.subagent-report",
               data: { ...data, messageId: `${requestId}:kept`, kept: true }, model: [{ role: "user", content, timestamp }] } }, context)).wait(context);
           }
-          // The person's devices hear of it only if jbot decides they should (`message` with notify); approvals push on their own.
         }
-        // Its item in the work log: what it found and whether jbot was told; closed here unless a routine's (the routine
-        // closes its own once its steps after the run are done).
+        // A routine's item is closed by the routine once its steps after the run are done.
         await api.commit(async (tx) => {
           const routineTaskId = task.input.origin?.routineTaskId;
           const failed = level === "failed" || report.status === "failed";
@@ -519,7 +462,7 @@ export function Subagents(runtime) {
           const key = workKey;
           const did = runtime.subagentDid?.(runtime.subagentStarts?.get(child) || []) || null;
           // Roster keys are a chat's own and the work log is shared: only this run's item (a routine's, or the one
-          // opened for this child) is written, where a chat's agent closed a home-thread item of the same key.
+          // opened for this child) is written.
           if (!routineTaskId && !(await ownsWork(tx, key, child))) return;
           await noteWork(tx, key, { woke: Boolean(heard && !stopped), level, summary, reportedAt: workAt, ...(did ? { did } : {}) });
           if (!routineTaskId) await closeWork(tx, key, stopped ? "stopped" : failed ? "failed" : "finished", Date.now());
@@ -578,7 +521,6 @@ export function Subagents(runtime) {
     }),
     replay: "safe",
     execute: async ({ task, name, background = false, action = "spawn", id, mode = "followUp" }, api, context) => {
-      // Its name: the one the model gave it, else the task's first words.
       const titled = () => typeof name === "string" && name.trim() ? name.trim().slice(0, 60) : subagentTitle(task);
       if (action === "list") {
         const roster = await api.snapshot(SubagentRoster, api.conversationId, context);
@@ -595,8 +537,6 @@ export function Subagents(runtime) {
       const childSettings = action !== "spawn" ? null : (await api.memo("childSettings", context)
         ?? await api.memo("childSettings", { value: await runtime.subagentSettings?.(api.conversationId, context) || null }, context)).value;
       if (action === "spawn" && !background) {
-        // A foreground agent has an id too (fg-1, as background ones are bg-1), so every agent is named in one place;
-        // the model never addresses it: its turn waits for the answer.
         const running = foregroundRuns.get(api.conversationId) || new Set();
         foregroundRuns.set(api.conversationId, running);
         const { child, agentId } = await api.commit(async (tx) => {
@@ -664,7 +604,6 @@ export function Subagents(runtime) {
       }
       const item = await api.commit(async (tx) => {
         const roster = await tx.doc(SubagentRoster, api.conversationId);
-        // Background agents at once: a spawn, or a message that sets an idle one working again, waits for room.
         const room = (verb) => {
           const { background } = limits();
           const busy = Object.values(roster.children).filter((value) => value.status === "running").length;
@@ -688,7 +627,6 @@ export function Subagents(runtime) {
           if (childSettings) await configure(tx, child.id, childSettings);
           roster.children[id] = { key: id, id: label, title, sinceEntry, child: child.id, anchor: owner, spawn: api.taskId, number: 0, ...(via ? { via } : {}),
             status: "running", startedAt: new Date().toISOString(), endedAt: null, deliveries: {} };
-          // One jbot sends from its home thread is a unit of its work (work-log.js); a chat's own agents are not.
           if (String((await tx.doc(AgentDoc)).home?.conversationId) === String(api.conversationId)) {
             await openWork(tx, { id: `run:${id}`, kind: "agent", title, origin: { kind: "jbot" }, conversationId: child.id, phase: "Working", label });
           }
@@ -742,16 +680,14 @@ export function Subagents(runtime) {
     },
   });
   /**
-   * Start a background subagent from outside a tool call: the persistent agent's runs (a schedule, an event, a
-   * webhook). In the caller's commit on the parent conversation (`tx.createTask()` defaults to it); `key` makes it
-   * idempotent, as a spawning call's task id does. `gate`: its report is a run's, weighed before it reaches the
-   * parent, and its spend counts toward the agent's day. Returns the roster item, `{ id, child, anchor, ... }`.
+   * Runs in the caller's commit on the parent conversation (`tx.createTask()` defaults to it); `key` makes it
+   * idempotent. `gate`: its report is weighed before it reaches the parent, and its spend counts toward the agent's day.
    */
   runtime.spawnBackground = async (tx, conversationId, { key, task, title = subagentTitle(task), origin = null, trigger = null, gate = false, mode = "followUp", model = null, thinkingLevel = null, instructions = null }) => {
     const roster = await tx.doc(SubagentRoster, conversationId);
     const existing = Object.values(roster.children).find((value) => value.spawn === key);
     if (existing) return JSON.parse(JSON.stringify(existing));
-    // Said once it has been down past the settle window, not while it may still be coming up (Connectors.troubled).
+    // Said once it has been down past the settle window, not while it may still be coming up.
     if (gate && runtime.agent?.connectors.troubled("executor")) {
       const doc = await tx.doc(AgentDoc);
       doc.notices.push({ id: `n-${doc.next++}`, kind: "connector", text: `${title}: Executor isn't connected`, at: new Date().toISOString() });
@@ -764,16 +700,14 @@ export function Subagents(runtime) {
     const owner = await tx.createTask(anchor, { id, sinceEntry }, { ownership: { kind: "conversation" }, background: true });
     const child = await tx.createConversation({ ownership: { kind: "task", taskId: owner } });
     await stripTools(tx, child.id);
-    // Its own system prompt (RUN.md and its routine), in place of the parent's it would otherwise inherit.
+    // In place of the parent's system prompt it would otherwise inherit.
     if (instructions) await configure(tx, child.id, { instructions });
-    // A run may use its own model and effort (the agent's `work` settings); otherwise it has its thread's.
     if (model) {
       const slash = model.indexOf("/");
       await configure(tx, child.id, { model: { provider: model.slice(0, slash), modelId: model.slice(slash + 1) }, ...(thinkingLevel ? { thinkingLevel } : {}) });
     }
     const delivery = await tx.createTask(reporter, { id, child: child.id, title, content: task, mode, number: 1, sinceEntry,
       gate, ...(origin ? { origin } : {}) }, { ownership: { kind: "task", taskId: owner } });
-    // A run of jbot's home thread is a unit of its work (work-log.js); a routine's is its routine's item (routine-task.js).
     if (origin && !origin.routineTaskId && String((await tx.doc(AgentDoc)).home?.conversationId) === String(conversationId)) {
       await openWork(tx, { id: `run:${id}`, kind: origin.kind, title, origin: { kind: origin.kind }, trigger: run?.trigger ?? null,
         conversationId: child.id, phase: "Working", log: origin.log !== false, label });
@@ -788,12 +722,6 @@ export function Subagents(runtime) {
   return extension;
 }
 
-/**
- * The agent's own reset (pi-durable's `control.handoff`): a long-lived
- * conversation ends its context and goes on from a note it writes, which is
- * how the persistent shape stays bounded besides compaction (decision 9).
- * The transcript keeps everything before it.
- */
 export const Handoff = defineExtension({ name: "handoff", tools: [defineTool({
   name: "handoff",
   description: "Start your context again from a note, when what came before is finished and no longer worth carrying. "

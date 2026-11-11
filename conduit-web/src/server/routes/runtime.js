@@ -29,36 +29,16 @@ export function registerRuntimeRoutes(app, {
   onAccountRenamed,
   webToolsError = () => null,
 }) {
-  /*
-   * Who this server is, and where else it answers.
-   *
-   * Authenticated on purpose. An unauthenticated version of this would let
-   * anything on the network say "I am the server you already hold a token
-   * for", which is the whole reason two addresses were kept apart until now.
-   *
-   * The reply is a claim, not an instruction: a client probes a path and
-   * checks the id it gets back before addressing the server by it.
-   */
+  // Authenticated on purpose: unauthenticated, anything on the network could claim to be the server a client holds a
+  // token for.
   app.get("/v0/server", (request, response) => {
     serverIdentity.observe(request);
     response.json(serverIdentity.describe());
   });
 
-  /*
-   * Prove this is the server somebody already paired with.
-   *
-   * Unauthenticated, and that is the point: a client asks this *before* it
-   * sends a token, so that moving to a new address cannot be the thing that
-   * hands a credential to whatever happened to answer there. The caller picks
-   * the nonce, so an answer recorded off the wire is no use for the next
-   * question, and a client that holds no public half for this server learns
-   * nothing it can act on.
-   */
-  // Cheap to answer but free to ask, so each address gets a small budget.
-  // Real clients probe a handful of paths now and then; nothing needs more.
+  // /v0/server/prove is unauthenticated on purpose: a client asks it before sending a token, so a new address cannot
+  // be handed a credential. Free to ask, so each address gets a small budget.
   const proofWindows = new Map();
-  // A rename is the server's, so every client and the LAN see it.
-  // Settings › Devices: this machine's readout (machine-readout.js), read while its folder is open.
   const readMachine = createMachineReadout({ root: config.dataRoot });
   app.get("/v0/server/machine", async (_request, response, next) => {
     response.json(await readMachine());
@@ -88,21 +68,18 @@ export function registerRuntimeRoutes(app, {
 
   const STARTED_AT = new Date(Date.now() - process.uptime() * 1000).toISOString();
   app.get("/healthz", (request, response) => {
-    // "2": prepares restarts through /v0/runtime/restart/*. The launcher does
-    // not try that against a server that does not say so.
+    // The launcher prepares restarts through /v0/runtime/restart/* only against a server that says "2".
     response.setHeader("X-Conduit-Pwa-Prepare", "2");
     const activeGenerations = runtimeHub.snapshot().processes.filter((process) => drainsOnRestart(process)
       && process.turnInFlight).length;
     response.status(isShuttingDown() ? 503 : 200).json({
       ok: !isShuttingDown(),
       status: isShuttingDown() ? "stopping" : "ready",
-      // The name is already on the network (mDNS); a client adding this
-      // server by address shows it once the address answers.
+      // Already public over mDNS.
       name: serverIdentity.name,
       release: config.release,
       startedAt: STARTED_AT,
       activeGenerations,
-      // A capability every agent counts on that did not load (null when it did).
       problems: webToolsError() ? { webTools: webToolsError() } : null,
     });
   });
@@ -172,7 +149,6 @@ export function registerRuntimeRoutes(app, {
   });
 
   app.get("/v0/preferences", (_request, response) => {
-    // The shortcuts file's path and anything in it that could not be read ride along, for Settings › Shortcuts.
     response.json({ ...preferences.get(), keybindings: preferences.keybindings() });
   });
 
@@ -189,7 +165,7 @@ export function registerRuntimeRoutes(app, {
     if (thinkingLevel != null && !new Set(["off", "minimal", "low", "medium", "high", "max", "xhigh"]).has(thinkingLevel)) {
       return response.status(400).json({ error: "invalid_session_name_thinking_level" });
     }
-    // The approval model (Settings › AI › Helper models: Review); "" gives it back to the naming model's.
+    // "" falls back to the naming model.
     const reviewModel = request.body?.reviewModel;
     if (reviewModel != null && (typeof reviewModel !== "string" || (reviewModel.trim() && !/^[^/\s]+\/\S+$/.test(reviewModel.trim())))) {
       return response.status(400).json({ error: "invalid_review_model" });
@@ -229,7 +205,6 @@ export function registerRuntimeRoutes(app, {
       ...(knownServers != null ? { knownServers: normalizeKnownServers(knownServers) } : {}),
       ...uiPreferencePatch(request.body),
     });
-    // The account's name and home are the person's: their agent knows them by them ({{person.name}}, its USER.md).
     if (accountName != null || accountHome != null) await Promise.resolve(onAccountRenamed?.({
       ...(accountName != null ? { name: saved.accountName || "" } : {}), ...(accountHome != null ? { home: saved.accountHome || "" } : {}),
     })).catch((error) => console.warn("[account] agent not told:", error?.message || error));
@@ -240,7 +215,6 @@ export function registerRuntimeRoutes(app, {
     response.json(runtimeHub.snapshot());
   });
 
-  // Who is connected, and what a prepared restart is still waiting for.
   app.get("/v0/runtime/clients", (_request, response) => {
     response.json({ clients: runtimeHub.connections(), restart: runtimeHub.restartStatus() });
   });
@@ -249,7 +223,6 @@ export function registerRuntimeRoutes(app, {
     response.status(runtimeHub.locate(request.params.id, request.body?.nodes) ? 204 : 404).end();
   });
 
-  // A tab of this connection says what it shows (agent-ui.ts), and answers a command it was sent.
   app.post("/v0/runtime/clients/:id/view", (request, response) => {
     response.status(uiControl.report(request.params.id, request.body) ? 204 : 404).end();
   });
@@ -257,7 +230,6 @@ export function registerRuntimeRoutes(app, {
     response.status(uiControl.answer(request.params.id, request.params.command, request.body) ? 204 : 404).end();
   });
 
-  // The launcher: a restart to this service-worker hash is coming.
   app.post("/v0/runtime/restart/prepare", (request, response) => {
     const attempt = String(request.body?.attempt || "");
     const target = String(request.body?.target || "");
@@ -265,7 +237,6 @@ export function registerRuntimeRoutes(app, {
     response.json(runtimeHub.prepareRestart({ attempt, target }));
   });
 
-  // A browser: its registration has that worker installed.
   app.post("/v0/runtime/restart/ready", (request, response) => {
     const accepted = runtimeHub.acknowledgeRestart({
       attempt: String(request.body?.attempt || ""),
@@ -281,22 +252,18 @@ export function registerRuntimeRoutes(app, {
     response.setHeader("Connection", "keep-alive");
     response.flushHeaders?.();
     const client = { kind: "sse", response };
-    // What the connection says it is. Only shown and counted, never trusted
-    // for anything: a stream is already authenticated.
+    // Only shown and counted, never trusted.
     const kind = ["browser", "android", "desktop"].includes(request.query.client) ? request.query.client : "browser";
     const build = typeof request.query.build === "string" ? request.query.build.slice(0, 80) : "";
     const registration = typeof request.query.registration === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(request.query.registration) ? request.query.registration : "";
     const detach = runtimeHub.attach(client, { kind, build, registration, ...clientPlatform(request.headers["user-agent"]) });
-    // Which machine it is on, for grouping it with that machine's other clients: this one, from loopback; any other
-    // by the name Tailscale knows it by (a tailnet address, or a LAN one a peer connects directly from). A browser
-    // cannot say; a public tunnel hides it.
+    // A browser cannot say which machine it is on, so the address decides; a public tunnel hides it.
     const address = clientAddress(request).replace(/^::ffff:/, "");
     if (/^127\./.test(address) || address === "::1") runtimeHub.note(client.peer.id, { machine: "hub" });
     else if (address) {
       void tailnetMachine(address, { tailnet: isTailnetOrLoopback(address) }).then((name) => { if (name) runtimeHub.note(client.peer.id, { machine: name }); });
     }
-    // A real frame, not an SSE comment: the client watches for silence to tell
-    // a live stream from one that died without ever firing an error.
+    // A real frame, not an SSE comment: the client watches for silence to detect a stream that died without an error.
     const heartbeat = setInterval(() => {
       try { response.write(`data: ${JSON.stringify({ type: "ping", at: new Date().toISOString() })}\n\n`); }
       catch { clearInterval(heartbeat); detach(); }
@@ -309,7 +276,6 @@ export function registerRuntimeRoutes(app, {
   });
 }
 
-/** What a connection's user agent says it runs on, for the devices' map: the OS, and a browser's name. */
 function clientPlatform(userAgent = "") {
   const agent = String(userAgent);
   const platform = /Android/i.test(agent) ? "Android" : /iPhone|iPad|iPod/i.test(agent) ? "iOS" : /Windows/i.test(agent) ? "Windows"

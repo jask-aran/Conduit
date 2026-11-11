@@ -38,8 +38,7 @@ async function deliveredNotes(conversation, state, context, consumedStops) {
   return state;
 }
 
-/** All person inputs and notices use one prefix; only a fresh person input consumes a stop note. */
-/** Whether the person stopped the conversation's last turn and has not spoken since (the stop note still waits). */
+/** Only a fresh person input consumes a stop note. */
 export async function stopPending(runtime, conversation, context) {
   const saved = await runtime.harness.snapshot(ConduitNotices, conversation.id, context);
   const state = await deliveredNotes(conversation, JSON.parse(JSON.stringify(saved || initialNotes())), context, new Set());

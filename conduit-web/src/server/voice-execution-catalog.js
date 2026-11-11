@@ -11,9 +11,8 @@ function catalogueError(code, message, details = {}) {
   return Object.assign(new Error(message), { code, status: 500, details });
 }
 
-// Local voice has one runtime, transcribe.cpp. A managed model (its id is what
-// the model manager installs) is one artifact of a catalogue model; each
-// artifact has a stop profile, plus a live one that falls back to it.
+// A managed model is one artifact of a catalogue model; each artifact has a stop profile, plus a live one that falls
+// back to it.
 export const LOCAL_VOICE_MODELS = deepFreeze(backend.models.map((model) => ({ ...model })));
 
 const ARTIFACT_DEFINITIONS = LOCAL_VOICE_MODELS.map((model) => ({ ...model, id: model.artifactId, legacyModelId: model.id }));
@@ -65,7 +64,6 @@ for (const artifact of ARTIFACT_DEFINITIONS) {
   }
 }
 
-// The profile a managed model runs by default: its artifact's own execution.
 function defaultProfileForModel(localModelId, catalog) {
   const artifact = catalog.artifacts.find((candidate) => candidate.legacyModelId === localModelId);
   if (!artifact) return null;
@@ -103,7 +101,6 @@ export function resolveVoiceExecutionProfile(selection, catalog = VOICE_EXECUTIO
   throw catalogueError("voice_profile_ambiguous", "The local voice selection resolves to more than one execution profile", { selection });
 }
 
-/** The selection for a managed model chosen by its manager id (localModelId). */
 export function selectionForLocalModel(localModelId, catalog = VOICE_EXECUTION_CATALOG) {
   const profile = defaultProfileForModel(String(localModelId || ""), catalog);
   if (!profile) throw catalogueError("voice_profile_recovery_required", `No local voice profile exists for ${localModelId}`, { localModelId });

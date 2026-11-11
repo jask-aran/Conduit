@@ -7,14 +7,8 @@ function launchError(code, message, status = 400) {
 }
 
 /**
- * The intents that may start a process.
- *
- * Opening a chat is a document read, so "open" and "select" may attach to a
- * process that already exists but never create one. Only an action that needs
- * an agent may start one. That split lets the reaper stop an idle process
- * without a reconnect, retry, background fetch, or ordinary navigation
- * immediately bringing it back. The policy lives here so every client gets the
- * same lifecycle even if it sends an obsolete intent.
+ * Opening a chat only attaches; only an action that needs an agent starts one, so a reconnect, retry or navigation
+ * does not bring back a process the reaper stopped.
  */
 const SPAWNING_INTENTS = new Set([
   "prompt",
@@ -25,12 +19,7 @@ const SPAWNING_INTENTS = new Set([
 
 export const maySpawnProcess = (intent) => SPAWNING_INTENTS.has(String(intent || "open"));
 
-/**
- * A process that is alive, answering, and doing nothing.
- *
- * Read from the same view every client reads, so it holds for any harness
- * rather than for the one whose internals we happen to know.
- */
+/** Read from the client view so it holds for any harness. */
 const isIdleProcess = (view) => Boolean(view)
   && view.status === "running"
   && view.ready !== false
@@ -45,11 +34,7 @@ const liveProcessEntries = (backends, exceptChatId = null) => backends.rawRecord
 
 const processAge = ({ view }) => new Date(view.updatedAt || view.createdAt || Date.now()).getTime();
 
-/**
- * Reclaim idle live sessions until the machine has the requested headroom.
- * reserve=1 is launch admission; reserve=0 is enforcement after a settings
- * change. One policy serves every harness.
- */
+/** reserve=1 is launch admission; reserve=0 is enforcement after a settings change. */
 async function reclaimLiveProcesses(backends, maxLiveProcesses, {
   exceptChatId = null,
   reserve = 0,
@@ -100,7 +85,6 @@ export function createLiveSessionLauncher({
   templateForChat,
   backends,
 }) {
-  // Chats admitted and still starting: each holds a slot of the budget.
   const starting = new Set();
   async function launchFromContext(context, {
     requestedProject = "",
@@ -112,10 +96,7 @@ export function createLiveSessionLauncher({
   } = {}) {
     lifecycle.assertAvailable(context.chat.id, context.project.id);
     const adapter = backends.forChat(context.chat);
-    // Only what the workspace's place runs (src/place.js): a harness that
-    // cannot act there would run on the head, in whatever a device's path
-    // names here. Every way a chat gets a harness -- created, switched,
-    // adopted, a run -- launches here.
+    // A harness the workspace's place cannot run would run on the hub, against a path that names a device's folder.
     const can = await backends.capabilities?.(context.project);
     if (can && !can.harnesses.includes(context.chat.backend?.implementation || "conduit-runtime")) {
       throw launchError("harness_not_here", `This chat's harness is not available on ${can.device.name}`, 409);
@@ -125,8 +106,7 @@ export function createLiveSessionLauncher({
     }
     const resident = backends.getByChatId(context.chat.id);
     if (resident) {
-      // A draft may have a live session from an earlier launch. Apply the
-      // model selected by this request before using that session.
+      // A draft's session from an earlier launch takes this request's model.
       if (context.chat.status === "draft") {
         const view = backends.view(resident);
         if (model && view.model !== model) await adapter.setModel?.(resident.id, model);
@@ -134,21 +114,11 @@ export function createLiveSessionLauncher({
       }
       return { live: resident, modelRecovery: null };
     }
-    // Selecting a chat may not start anything; sending a message must. That is
-    // the whole of what `warm` says, and `attachOnly` already carries it here:
-    // an "open" does not spawn, a prompt does. Refusing every launch on a
-    // `warm: "none"` harness read the flag as "this chat can never be live",
-    // which left its adapter with no record to publish into and answered a sent
-    // message with "chat switched before the agent was ready".
-    // A subagent's chat is the exception: opening it starts only a read-only watcher on its run's conversation (no
-    // process, outside the live cap), so the run shows live while its parent drives it.
+    // A subagent's chat is the exception: opening it starts only a read-only watcher (no process, outside the cap).
     if (attachOnly && context.chat.status !== "subagent") throw launchError("no_live_process", "This chat has no live agent process", 409);
 
-    // Only admission is machine-wide: reclaiming room and reserving a slot.
-    // Starting the process holds its slot, not the lock, so one cold start does
-    // not hold up every other chat's.
-    // A spare agent, started ahead of being asked for, only takes free room:
-    // it never stops somebody's idle chat to make some.
+    // Only admission holds the machine-wide lock, so one cold start does not hold up every other chat's. A spare
+    // agent only takes free room: it never stops an idle chat to make some.
     await concurrency.runCapacity(() => reclaimLiveProcesses(backends, spare ? 0 : maxLiveProcesses(), {
       exceptChatId: context.chat.id,
       reserve: 1,
@@ -160,12 +130,9 @@ export function createLiveSessionLauncher({
       const held = liveProcessEntries(backends, context.chat.id).length + starting.size;
       if (max > 0 && held >= max) throw launchError("live_process_limit", "No room for a spare agent", 429);
     }).then(() => { starting.add(context.chat.id); }));
-    // From here the chat holds a place under the cap, given back however the start ends: the model lookup below can
-    // fail too, and outside this it kept the place until the server restarted.
+    // The model lookup below can fail too, and the slot must be given back however the start ends.
     try {
-      // A Conduit chat that has not chosen a model starts on its profile's last
-      // one, as its composer shows. A spare agent, started before the first pick,
-      // took the settings default with no effort and kept it as the chat's own.
+      // A chat with no model starts on its profile's last one, as its composer shows.
       if (!model && !context.chat.backend?.model && preferences
         && (context.chat.backend?.implementation || "conduit-runtime") === "conduit-runtime") {
         const remembered = rememberedModel(preferences, templateForChat(context.chat, context.project)?.id);

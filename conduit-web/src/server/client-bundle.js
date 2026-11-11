@@ -3,16 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import zlib from "node:zlib";
 
-/**
- * The interface this server serves, as one zip an installed client can take
- * for its own (live update). The client keeps launching from the copy on the
- * device -- that is the point of bundling it -- and only swaps to a newer one
- * it has already downloaded whole.
- *
- * A build is named by a hash of its index.html, which names every hashed
- * asset, so two different builds never share a name. The zip is made once per
- * build and kept in memory.
- */
+/** A build is named by a hash of its index.html, which names every hashed asset, so two builds never share a name. */
 export function createClientBundle(dist) {
   let cached = null;
 
@@ -20,7 +11,7 @@ export function createClientBundle(dist) {
     const index = await fs.readFile(path.join(dist, "index.html"));
     const build = crypto.createHash("sha256").update(index).digest("hex").slice(0, 16);
     if (cached?.build === build) return cached;
-    // When it was built: a client that switches between servers takes only an interface newer than its own.
+    // A client that switches between servers takes only an interface newer than its own.
     const builtAt = (await fs.stat(path.join(dist, "index.html"))).mtime.toISOString();
     cached = { build, builtAt, zip: null };
     return cached;
@@ -49,13 +40,13 @@ async function listFiles(root, directory = root) {
   for (const item of await fs.readdir(directory, { withFileTypes: true })) {
     const full = path.join(directory, item.name);
     if (item.isDirectory()) files.push(...await listFiles(root, full));
-    // Not the copies precompress.mjs made for the server to send: the app inflates its own.
+    // Not the precompressed copies made for the server to send: the app inflates its own.
     else if (item.isFile() && !/\.(br|gz)$/.test(item.name)) files.push(full);
   }
   return files;
 }
 
-/** A plain zip (deflate, no zip64): the build is a few MB of small files. */
+/** No zip64: the build is a few MB of small files. */
 async function zipDirectory(root) {
   const locals = [];
   const centrals = [];
@@ -68,7 +59,7 @@ async function zipDirectory(root) {
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
     local.writeUInt16LE(20, 4);
-    local.writeUInt16LE(0x0800, 6); // UTF-8 names
+    local.writeUInt16LE(0x0800, 6);
     local.writeUInt16LE(8, 8);
     local.writeUInt32LE(crc, 14);
     local.writeUInt32LE(packed.length, 18);
