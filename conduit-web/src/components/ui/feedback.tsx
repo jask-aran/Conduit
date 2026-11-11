@@ -1,6 +1,6 @@
 import { createUniqueId, Show, type JSX } from "solid-js";
 // Through the barrel, so the tool's chunk takes these from the app's own and the build splits nothing new out of it.
-import { Button, Card, CloseButton, Frost, Keycap, Segmented, Spinner, Switch, TextArea } from "./index";
+import { Button, Card, CloseButton, Frost, IconButton, Icons, Segmented, Spinner, TextArea } from "./index";
 import "./styles/feedback.css";
 
 /* Not in the library's barrel: the tool imports this file when it is opened, so the app's first load does not carry it
@@ -56,19 +56,31 @@ export function FeedbackNote(props: { ref?: (element: HTMLTextAreaElement) => vo
 }
 
 export type FeedbackPointer = "select" | FeedbackDrawingKind | "use";
-const POINTERS: ReadonlyArray<{ value: FeedbackPointer; label: string }> = [{ value: "select", label: "Select" }, { value: "pen", label: "Pen" }, { value: "arrow", label: "Arrow" }, { value: "box", label: "Box" }, { value: "use", label: "Use app" }];
+type FeedbackToolKind = Exclude<FeedbackPointer, "use">;
+const TOOLS: ReadonlyArray<{ value: FeedbackToolKind; label: string; icon: () => JSX.Element }> = [
+  { value: "select", label: "Select (V)", icon: () => <Icons.Pointer /> }, { value: "pen", label: "Pen (P)", icon: () => <Icons.Edit /> },
+  { value: "arrow", label: "Arrow (A)", icon: () => <Icons.DrawArrow /> }, { value: "box", label: "Box (B)", icon: () => <Icons.DrawBox /> },
+];
 
-export function FeedbackBar(props: { mode: FeedbackPointer; onMode: (mode: FeedbackPointer) => void; status: string; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; screenshot?: boolean; onScreenshot?: (on: boolean) => void; onNote?: () => void; noted?: boolean;
+/** The tool's bar, at the foot, in four groups: what the pointer marks with (`tool`: the one kept while the app is in
+ *  use); who has the pointer (Use app; `keys` is the chord that switches); what goes with the item (a general note,
+ *  the screenshot where the client can take one, the listening session it is handed to); Send and close. */
+export function FeedbackBar(props: { mode: FeedbackPointer; tool?: FeedbackToolKind; onMode: (mode: FeedbackPointer) => void; status?: string; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; screenshot?: boolean; onScreenshot?: (on: boolean) => void; onNote?: () => void; noted?: boolean;
   canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void }) {
+  const using = () => props.mode === "use";
+  const tool = (): FeedbackToolKind => props.mode === "use" ? props.tool ?? "select" : props.mode;
   return <Frost lift="raised" class="ui-feedback-bar" role="toolbar" aria-label="UI feedback">
-    <Segmented label="Pointer" value={props.mode} onChange={props.onMode} options={POINTERS} />
-    <span class="ui-feedback-status">{props.status}<Show when={props.keys?.length}><Keycap>{props.keys!.join(" ")}</Keycap></Show></span>
-    <Show when={props.onNote}><Button variant="ghost" size="sm" title="A note about nothing on the page in particular" aria-pressed={props.noted} onClick={props.onNote}>Note</Button></Show>
-    <Show when={props.onScreenshot}><label class="ui-feedback-switch"><span>Screenshot</span><Switch label="Include screenshot" checked={Boolean(props.screenshot)} onChange={props.onScreenshot!} /></label></Show>
-    <Show when={props.onHand && props.agent}><span class="ui-feedback-switch">
-      <Show when={props.onNextAgent} fallback={<span>Hand to {props.agent}</span>}><span>Hand to</span><Button variant="ghost" size="sm" title="The next waiting session" onClick={props.onNextAgent}>{props.agent}</Button></Show>
-      <Switch label="Hand to the listening agent session" checked={Boolean(props.hand)} onChange={props.onHand!} />
-    </span></Show>
+    <Segmented label="Mark with" icons size="sm" value={tool()} onChange={props.onMode} disabled={using()} options={TOOLS.map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} />
+    <IconButton label={`Use the app${props.keys?.length ? ` (${props.keys.join(" ")})` : ""}`} aria-pressed={using()} onClick={() => props.onMode(using() ? tool() : "use")}><Icons.UseApp /></IconButton>
+    <Show when={props.status}><span class="ui-feedback-status">{props.status}</span></Show>
+    <span class="ui-feedback-with">
+      <Show when={props.onNote}><IconButton label="General note (N)" aria-pressed={Boolean(props.noted)} onClick={props.onNote}><Icons.Note /></IconButton></Show>
+      <Show when={props.onScreenshot}><IconButton label="Include a screenshot" aria-pressed={Boolean(props.screenshot)} onClick={() => props.onScreenshot!(!props.screenshot)}><Icons.Camera /></IconButton></Show>
+      <Show when={props.onHand && props.agent}>
+        <IconButton label={`Hand to ${props.agent}`} aria-pressed={Boolean(props.hand)} onClick={() => props.onHand!(!props.hand)}><Icons.Agent /></IconButton>
+        <Show when={props.hand}><Show when={props.onNextAgent} fallback={<span class="ui-feedback-status">{props.agent}</span>}><Button variant="ghost" size="sm" title="The next waiting session" onClick={props.onNextAgent}>{props.agent}</Button></Show></Show>
+      </Show>
+    </span>
     <Button variant="primary" outline size="sm" disabled={!props.canSend || props.sending} onClick={props.onSend}><Show when={props.sending} fallback="Send"><Spinner /></Show></Button>
     <CloseButton size="sm" label="Close feedback" onClick={props.onClose} />
   </Frost>;

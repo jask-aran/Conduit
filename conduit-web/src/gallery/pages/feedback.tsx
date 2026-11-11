@@ -38,7 +38,7 @@ export const feedbackPage: Page = {
     { selector: ".ui-feedback-mark[data-kind='cursor']", name: "Cursor mark", does: "what a press would choose, named for its piece", from: "FeedbackMark kind cursor" },
     { selector: ".ui-feedback-drawing", name: "Drawing", does: "what the person drew: a pen line, an arrow or a box, numbered by a drawn mark", from: "FeedbackDrawing, FeedbackMark kind drawn" },
     { selector: ".ui-feedback-note", name: "Note", does: "a selection's comment, beside it: the piece, where it is declared, the words", from: "FeedbackNote > Card, TextArea" },
-    { selector: ".ui-feedback-bar", name: "Bar", does: "select or use the app, what is marked, the screenshot switch, Send", from: "FeedbackBar > Segmented, Switch, Button" },
+    { selector: ".ui-feedback-bar", name: "Bar", does: "what the pointer marks with, Use app, a note, the screenshot, who it is handed to, Send", from: "FeedbackBar > Segmented, IconButton, Button" },
   ] },
   examples: [
     row("marks", "cursor, chosen, a group with its members, a drag's marquee", scene(() => <>
@@ -58,11 +58,11 @@ export const feedbackPage: Page = {
       <FeedbackMark kind="drawn" tag="3" box={{ left: 300, top: 50, width: 120, height: 80 }} />
     </>), { surfaces: ["ground"] }),
     row("note", "a piece's comment; a group's has no source line", scene(() => <>{note({ style: { left: "24px", top: "24px" } })}</>), { surfaces: ["ground"] }),
-    row("bar", "selecting with nothing to send yet; using the app; sending", scene(() => <>{bar({ status: "Press a piece, or drag across several.", canSend: false })}</>), { surfaces: ["ground"] }),
-    row("bar, drawing", "the pointer draws: Pen, Arrow or Box", scene(() => <>{bar({ mode: "arrow", status: "Drag to draw on the page.", canSend: false })}</>), { surfaces: ["ground"] }),
+    row("bar", "selecting with nothing to send yet; using the app; sending", scene(() => <>{bar({ status: "Press or drag", canSend: false })}</>), { surfaces: ["ground"] }),
+    row("bar, drawing", "the pointer draws: Pen, Arrow or Box", scene(() => <>{bar({ mode: "arrow", status: "Drag to draw", canSend: false })}</>), { surfaces: ["ground"] }),
     row("bar, handing over", "the session the item goes to; with several waiting its name is a button to the next; none waiting", scene(() => <>{bar({ hand: true, onHand: noop, agent: "ui-feedback", onNextAgent: noop })}</>), { surfaces: ["ground"] }),
-    row("bar, a note written and no screenshot", "a client that cannot capture its display (a phone) offers no Screenshot switch", scene(() => <>{bar({ noted: true, onScreenshot: undefined, status: "1 selection" })}</>), { surfaces: ["ground"] }),
-    row("bar, using the app", "the pointer goes to the app; the marks stay", scene(() => <>{bar({ mode: "use", status: "Using the app." })}</>), { surfaces: ["ground"] }),
+    row("bar, a note written and no screenshot", "a phone: no status, and no screenshot where the client cannot capture its display", scene(() => <>{bar({ noted: true, onScreenshot: undefined, status: undefined, keys: undefined })}</>), { surfaces: ["ground"] }),
+    row("bar, using the app", "the pointer goes to the app; the marks stay", scene(() => <>{bar({ mode: "use", tool: "pen", status: "Using the app" })}</>), { surfaces: ["ground"] }),
     row("bar, sending", "Send turns while the item goes", scene(() => <>{bar({ sending: true })}</>), { surfaces: ["ground"] }),
   ],
   tokens: [{ title: "Its lines and layer", tokens: [
@@ -74,5 +74,5 @@ export const feedbackPage: Page = {
     token("--layer-feedback", "Over everything, notifications included"),
     token("--measure-md", "Note width"),
   ] }],
-  api: ["FeedbackLayer", "FeedbackMark", "FeedbackDrawing", "FeedbackNote", "FeedbackBar", "Card", "TextArea", "Segmented", "Switch", "Button"],
+  api: ["FeedbackLayer", "FeedbackMark", "FeedbackDrawing", "FeedbackNote", "FeedbackBar", "Card", "TextArea", "Segmented", "IconButton", "Button"],
 };

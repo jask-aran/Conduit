@@ -271,8 +271,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
 
   const canSend = () => selections.some((selection) => selection.comment.trim());
   const status = createMemo(() => {
-    if (props.mode === "use") return "Using the app.";
-    if (!selections.length) return pointerTool() === "select" ? "Press a piece, drag across several, or write a note." : "Drag to draw on the page.";
+    if (!selections.length) return props.mode === "use" ? "Using the app" : pointerTool() === "select" ? "Press or drag" : "Drag to draw";
     return `${selections.length} ${selections.length === 1 ? "selection" : "selections"}`;
   });
 
@@ -349,7 +348,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
           onDone={() => openNote(null)} onRemove={() => remove(selection.id)} />}
       </Show>
       <Show when={!capturing()}>
-        <FeedbackBar mode={props.mode === "use" ? "use" : pointerTool()} onMode={(mode: FeedbackPointer) => { setCursor(null); setStroke(null); if (mode !== "use") setPointerTool(mode); props.onMode(mode === "use" ? "use" : "select"); }} status={status()} keys={touchOnly ? undefined : props.keys?.()} screenshot={screenshot()} onScreenshot={canCapture ? setScreenshot : undefined} onNote={note} noted={selections.some((selection) => selection.general)} hand={hand()} onHand={keepHand} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
+        <FeedbackBar mode={props.mode === "use" ? "use" : pointerTool()} tool={pointerTool()} onMode={(mode: FeedbackPointer) => { setCursor(null); setStroke(null); if (mode !== "use") setPointerTool(mode); props.onMode(mode === "use" ? "use" : "select"); }} status={touchOnly ? undefined : status()} keys={touchOnly ? undefined : props.keys?.()} screenshot={screenshot()} onScreenshot={canCapture ? setScreenshot : undefined} onNote={note} noted={selections.some((selection) => selection.general)} hand={hand()} onHand={keepHand} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
           canSend={canSend()} sending={sending()} onSend={() => void send()} onClose={props.onClose} />
       </Show>
     </FeedbackLayer>

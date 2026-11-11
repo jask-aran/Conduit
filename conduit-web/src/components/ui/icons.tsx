@@ -100,7 +100,10 @@ import {
   UploadIcon,
   WrapTextIcon,
   WrenchIcon,
-  XIcon
+  XIcon,
+  HandIcon,
+  MoveUpRightIcon,
+  StickyNoteIcon,
 } from "lucide-solid";
 
 export const Runtime = ActivityIcon;
@@ -166,6 +169,10 @@ export const Microphone = MicIcon;
 export const Minimize = Minimize2Icon;
 export const Monitor = MonitorIcon;
 export const Pointer = MousePointer2Icon;
+export const UseApp = HandIcon;
+export const DrawArrow = MoveUpRightIcon;
+export const DrawBox = SquareIcon;
+export const Note = StickyNoteIcon;
 export const More = EllipsisIcon;
 export const MoveToFolder = FolderInputIcon;
 export const NewChat = MessageSquarePlusIcon;

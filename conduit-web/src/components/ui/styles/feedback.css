@@ -26,8 +26,10 @@
 .ui-feedback-note .ui-card > h3 { display: flex; align-items: center; gap: var(--space-sm); font-family: var(--font-data); font-size: var(--text-row); }
 .ui-feedback-note .ui-card > p { overflow: hidden; font-family: var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
 
-.ui-feedback-bar { position: fixed; bottom: var(--space-xl); right: var(--space-xl); left: var(--space-xl); display: flex; flex-wrap: wrap; justify-content: center; width: fit-content; margin-inline: auto; align-items: center; gap: var(--space-lg); border-radius: var(--radius-surface); padding: var(--space-sm) var(--space-sm) var(--space-sm) var(--space-sm); color: var(--foreground); font-size: var(--text-row); }
+.ui-feedback-bar { position: fixed; bottom: var(--space-lg); right: var(--space-lg); left: var(--space-lg); display: flex; flex-wrap: wrap; justify-content: center; width: fit-content; margin-inline: auto; align-items: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: var(--space-xs); color: var(--foreground); font-size: var(--text-caption);
+  /* Thinner than the one frost: the bar sits over the interface being looked at. conventions-ok: the tool's own surface */
+  --frost-fill: color-mix(in oklch, var(--foreground), transparent 92%); }
 /* Its controls keep their width; only the status gives way. */
 .ui-feedback-bar > :not(.ui-feedback-status) { flex: none; }
-.ui-feedback-status { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
-.ui-feedback-switch { display: flex; align-items: center; gap: var(--space-sm); color: var(--muted-foreground); white-space: nowrap; }
+.ui-feedback-status { min-width: 0; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
+.ui-feedback-with { display: flex; align-items: center; gap: var(--space-2xs); }
