@@ -54,8 +54,8 @@ export default function VoiceLocalCatalogue(props: VoiceLocalCatalogueProps) {
       <Show when={installing() && sized()}>{(progress) => <SettingWide><Progress label="Model files" max={progress().totalBytes} value={progress().completedBytes} /></SettingWide>}</Show>
       <Show when={model().error}><Note tone="error">{model().error}</Note></Show>
     </>}</Show>
-    <Show when={props.engine}>{(engine) => <SettingLine plain label="Engine" state={engine().installed ? undefined : "downloads with the first model"} title="Hex runs on the hub and transcribes a recording when it stops.">
-      <SettingValue>{engine().label} {engine().version}</SettingValue>
+    <Show when={props.engine}>{(engine) => <SettingLine plain label="Engine" state={engine().installed ? undefined : "downloads with the first model"} title="Runs on the hub and transcribes a recording when it stops.">
+      <SettingValue>{engine().version}</SettingValue>
     </SettingLine>}</Show>
   </>;
 }

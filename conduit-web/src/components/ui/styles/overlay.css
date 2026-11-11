@@ -81,7 +81,7 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-column { position: relative; min-width: 0; }
 .ui-column + .ui-column::before { position: absolute; top: 0; bottom: 0; left: calc(-0.5 * var(--space-2xl)); border-left: var(--hairline) solid var(--tint); content: ""; }
 .ui-column + .ui-column::after { position: absolute; top: calc(-1 * var(--space-xl)); right: 0; left: 0; border-top: var(--hairline) solid var(--tint); content: ""; }
-.ui-setting-line > span:first-child > .ui-harness-mark { width: var(--icon-sm); height: var(--icon-sm); flex: none; align-self: center; margin-right: var(--space-sm); }
+.ui-setting-line > span:first-child > .ui-harness-mark { width: var(--icon-lg); height: var(--icon-lg); flex: none; align-self: center; margin-right: var(--space-sm); }
 .ui-setting-list > .ui-row > .ui-row-lead > .ui-harness-mark { width: 100%; height: 100%; }
 .ui-setting-views { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-md); padding-bottom: var(--space-lg); }
 .ui-columns:where([data-off]) { opacity: var(--opacity-disabled); }

@@ -1672,7 +1672,7 @@ export function Settings(props: {
               <>
                 <SettingViews aside={<Segmented arrows label="Transcription source" value={voiceServerSettings()!.mode} disabled={voiceBusy()} onChange={(mode) => updateVoiceServer({ mode })} options={[
                   { value: "off", label: "Off" },
-                  { value: "local", label: "Private", title: "Hex on the hub: audio goes no further than your hub" },
+                  { value: "local", label: "Private", title: "Audio goes no further than your hub" },
                   { value: "remote", label: "Cloud" },
                 ]} />}><Segmented arrows label="Voice" value={voiceView()} onChange={setVoiceView} options={[{ value: "settings", label: "Settings" }, { value: "history", label: "History" }]} /></SettingViews>
                 <Show when={voiceView() === "settings"} fallback={<VoiceHistory />}>
