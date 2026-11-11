@@ -167,7 +167,7 @@ One model for every surface -- enter, move, act, leave -- so no surface grows ke
 - **Every key is a command in the registry**, declared with the context it works in, so it shows in the leader and Settings › Shortcuts and can be rebound; only text editing (typing, Backspace, the caret) is not. New global chords go in the settings shortcut manager.
 - **A modal is exclusive**: app chords do not fire under Settings or a dialog; the modal's own chord closes it.
 - **The leader** acts within the current region, innermost first, and lists only keys that would do something. A leader key means one thing at every level, or the menu says which runs. Numbers inside a region mean positions, never other regions.
-- **Held focus.** The region holding focus shows a thin `--region-focus` line along its bottom edge, following focus into whichever region it enters, by click, Tab or chord (a click in the sidebar, which only passes focus on to the chat it opens, leaves it where it was). Only a go-to chord also draws it out from its middle. Not on a phone.
+- **Held focus.** A region reached by a go-to chord shows a thin `--region-focus` line along its bottom edge, the rest dimming briefly; it stays while focus is in it or nowhere, and goes when focus reaches another region another way. A click or Tab never lights one. Not on a phone.
 
 # Transcript
 
@@ -241,6 +241,16 @@ What every thread Conduit starts is given, as Settings › Prompts and Blocks na
 - **Slot**: a `{{name}}` Conduit fills. Fixed slots fill system-prompt blocks when a thread starts; a later change reaches the thread as an update notice, never as an edit to its prompt. The current slot (`now`) is never in a system prompt.
 - **Notice**: a whole message Conduit writes into a thread on its own (a wake, a report, an approval result, a steer, the stop, update and time notes). Its wording is a block; a document lists the notices its role receives.
 - **The prefix is append-only**: nothing that changes per turn (an age, the clock) goes in a prompt or a section; what changes arrives later, as a notice.
+
+# Devices
+
+The network's words, as Settings › System › Network and the agents' tools use them.
+
+- **Client**: one open Conduit tab or app, `connection/tab`.
+- **Device**: a machine on the network, the hub's own among them. It has one or more **environments** (Windows and a WSL distro are two of one machine); the code's word for an environment is a node, and agents name one by its device's name, with its own when the device has several.
+- **Capability**: something an environment can do for the network (`DEVICE_CAPABILITIES`): share folders, run harnesses, be browsed, offer its browser, offer the person's own browser, give a terminal.
+- **Screen**: something on a device that has a picture, takes input and can be acted on, its view id `<kind>:<node>` (`browser:hub`).
+- **Origin**: the client a chat's latest message was sent from; what an agent shows goes there first.
 
 # Intentional exceptions
 
