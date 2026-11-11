@@ -391,13 +391,13 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     return id;
   };
   // What Undo goes back to: the comments not yet sent, as they were before each change to what is marked. Their words are not part of it.
-  const history: Selection[][] = [];
-  const [undoable, setUndoable] = createSignal(0);
+  const history: Selection[][] = [], undone: Selection[][] = [];
+  const [undoable, setUndoable] = createSignal(0), [redoable, setRedoable] = createSignal(0);
   const fixed = (selection: Selection) => Boolean(selection.sent || selection.whole);
-  const keep = () => {
-    history.push(unwrap(selections).filter((selection) => !fixed(selection)).map((selection) => ({ ...selection, elements: [...selection.elements], drawings: selection.drawings?.map((drawing) => ({ ...drawing })), preview: undefined })));
-    setUndoable(history.length);
-  };
+  const asNow = () => unwrap(selections).filter((selection) => !fixed(selection)).map((selection) => ({ ...selection, elements: [...selection.elements], drawings: selection.drawings?.map((drawing) => ({ ...drawing })), preview: undefined }));
+  const counted = () => { setUndoable(history.length); setRedoable(undone.length); };
+  /** Before a change: it can be gone back from, and what was undone before it can no longer be done again. */
+  const keep = () => { history.push(asNow()); undone.length = 0; counted(); };
   const remove = (id: number) => {
     keep();
     const preview = selections.find((selection) => selection.id === id)?.preview;
@@ -416,10 +416,12 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     }
   };
   /** The last thing drawn for the comment being written, else the last comment. */
-  const undo = () => {
-    const back = history.pop();
-    setUndoable(history.length);
+  /** Back to how the comments were, from one pile to the other: Undo from what was, Redo from what was undone. */
+  const step = (from: Selection[][], to: Selection[][]) => {
+    const back = from.pop();
     if (!back) return;
+    to.push(asNow());
+    counted();
     const now = unwrap(selections), words = new Map(now.map((selection) => [selection.id, selection.comment]));
     for (const selection of now) if (selection.preview && !fixed(selection)) URL.revokeObjectURL(selection.preview);
     // What has gone since stays gone to the agent as it went; what is written stays written.
@@ -429,6 +431,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     if (!selections.some((selection) => selection.id === openId())) { setOpenId(null); setNoteAt(null); }
     for (const selection of again) void preview(selection.id);
   };
+  const undo = () => step(history, undone), redo = () => step(undone, history);
   /** Words left empty are not a drawing; a comment of nothing is not a comment. */
   const textDone = (id: number, at: number) => {
     const selection = selections.find((candidate) => candidate.id === id), drawing = selection?.drawings?.[at];
@@ -572,7 +575,10 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       return;
     }
     const handled = () => { event.preventDefault(); event.stopImmediatePropagation(); };
-    if (select() && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "z" && undoable()) { handled(); return undo(); }
+    if (select() && (event.ctrlKey || event.metaKey) && !event.altKey && (event.key.toLowerCase() === "z" || event.key.toLowerCase() === "y")) {
+      const again = event.shiftKey || event.key.toLowerCase() === "y";
+      if (again ? redoable() : undoable()) { handled(); return again ? redo() : undo(); }
+    }
     if (!select() || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.key.toLowerCase() === "n" && offered("note")) { handled(); return note(); }
     if (event.key.toLowerCase() === "c" && can.inks) { handled(); return void setInk(INKS[(INKS.indexOf(ink()) + 1) % INKS.length]!); }
@@ -703,8 +709,8 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       // A collaborator's comments stay up as the item's thread (closing the tool leaves it in the folder, to be come back to); one-way feedback is done.
       if (!answered) return props.onClose();
       setSelections([]);
-      history.length = 0;
-      setUndoable(0);
+      history.length = undone.length = 0;
+      counted();
       follow(result.id, true);
     } catch (error) {
       host.notify("failed", `Feedback was not sent: ${error instanceof Error ? error.message : String(error)}`);
@@ -767,7 +773,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
           </Show>}</For></FeedbackNotes>
         </Show>
         <FeedbackBar view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onTool={(tool) => { setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); }} onNote={note}
-          status={status()} compact={touchOnly} keys={touchOnly ? undefined : props.keys?.()} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} shape={shape()} onShape={setShape} onUndo={undoable() ? undo : undefined}
+          status={status()} compact={touchOnly} keys={touchOnly ? undefined : props.keys?.()} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} shape={shape()} onShape={setShape} onUndo={undoable() ? undo : undefined} onRedo={redoable() ? redo : undefined}
           replies={unread().reduce((sum, item) => sum + item.unread, 0)} onReplies={() => { const item = unread()[0]; if (item) follow(item.id, true); }}
           live={offersLive ? live() || !offersBatch : undefined} onLive={offersBatch && agent() && !lastSent() ? keepLive : undefined} standing={thread() ? standing() : undefined}
           hand={hand()} onHand={can.listeners ? keepHand : undefined} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}

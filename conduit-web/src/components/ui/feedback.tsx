@@ -108,7 +108,7 @@ export type FeedbackView = "use" | "page" | "screenshot";
  *  for a phone's width. `tools`: the ones this host offers (all, unsaid). `thread`: the item is sent and its thread is followed, so the bar is only what was said of it (`status`) and close.
  *  `replies`: answers unread on an item sent earlier, and the way to them. `live`: each comment goes as it is Done, so there is no Send (undefined:
  *  not offered; no `onLive`: no longer to be changed); `standing` is then where the growing item stands. */
-export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; onView: (view: FeedbackView) => void; tools?: readonly (FeedbackToolKind | "note")[]; tool: FeedbackToolKind; onTool: (tool: FeedbackToolKind) => void; onNote: () => void; live?: boolean; onLive?: (on: boolean) => void; standing?: string; thread?: boolean; replies?: number; onReplies?: () => void; ink?: FeedbackInk; onInk?: (ink: FeedbackInk) => void; weight?: FeedbackWeight; onWeight?: (weight: FeedbackWeight) => void; shape?: FeedbackShape; onShape?: (shape: FeedbackShape) => void; onUndo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
+export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; onView: (view: FeedbackView) => void; tools?: readonly (FeedbackToolKind | "note")[]; tool: FeedbackToolKind; onTool: (tool: FeedbackToolKind) => void; onNote: () => void; live?: boolean; onLive?: (on: boolean) => void; standing?: string; thread?: boolean; replies?: number; onReplies?: () => void; ink?: FeedbackInk; onInk?: (ink: FeedbackInk) => void; weight?: FeedbackWeight; onWeight?: (weight: FeedbackWeight) => void; shape?: FeedbackShape; onShape?: (shape: FeedbackShape) => void; onUndo?: () => void; onRedo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
   canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void }) {
   const using = () => props.view === "use";
   const views = (): Array<{ value: FeedbackView; label: string; icon: JSX.Element }> => [
@@ -144,7 +144,10 @@ export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; 
       <Segmented label="Annotate with" icons size="sm" value={props.tool} onChange={(tool) => tool === "note" ? props.onNote() : props.onTool(tool)} disabled={using()}
         options={TOOLS.filter((option) => (!props.tools || props.tools.includes(option.value)) && !(props.compact && option.wide) && (props.view !== "screenshot" || (option.value !== "select" && option.value !== "quote"))).map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} />
     </Show>
-    <Show when={!props.thread && !props.compact}><IconButton label="Undo (Ctrl Z)" disabled={!props.onUndo || using()} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton></Show>
+    <Show when={!props.thread && !props.compact}><span class="ui-feedback-with">
+      <IconButton label="Undo (Ctrl Z)" disabled={!props.onUndo || using()} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton>
+      <IconButton label="Redo (Ctrl Shift Z)" disabled={!props.onRedo || using()} onClick={() => props.onRedo?.()}><Icons.Redo /></IconButton>
+    </span></Show>
     <Show when={props.status && (props.thread || !props.compact)}><span class="ui-feedback-status">{props.status}</span></Show>
     <Show when={props.replies && !props.thread}><IconButton label={`${props.replies} unread from the agent, on what was sent before`} count={props.replies} onClick={props.onReplies}><Icons.Inbox /></IconButton></Show>
     <Show when={!props.thread}>

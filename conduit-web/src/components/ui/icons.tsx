@@ -98,6 +98,7 @@ import {
   Trash2Icon,
   TriangleAlertIcon,
   Undo2Icon,
+  Redo2Icon,
   UploadIcon,
   WrapTextIcon,
   WrenchIcon,
@@ -221,6 +222,7 @@ export const Stop = SquareIcon;
 export const Terminal = TerminalIcon;
 export const Thinking = LightbulbIcon;
 export const Undo = Undo2Icon;
+export const Redo = Redo2Icon;
 export const Upload = UploadIcon;
 export const Warning = TriangleAlertIcon;
 export const Workspace = PanelRightIcon;

@@ -1,6 +1,6 @@
 import { For, Show, type JSX } from "solid-js";
 import { BoxesIcon, SearchIcon } from "lucide-solid";
-import { Button, Field, Input, Swatch } from "./controls";
+import { Button, ColourPicker, Field, Input, Swatch } from "./controls";
 
 type IdentityValue = { mode: "monogram" | "icon"; value: string; color: string };
 type Toggle = (value: boolean | ((current: boolean) => boolean)) => void;
@@ -18,7 +18,7 @@ export function IdentityEditor(props: {
   setMode: (mode: IdentityValue["mode"]) => void; setMonogram: (value: string) => void;
   onIcon: (id: string) => void; onColor: (id: string, colour: string) => void; onSave: () => void;
 }) {
-  const { draft, canSave, selectedIcon, filteredIconOptions, iconQuery, setIconQuery, showIconBrowser, setShowIconBrowser, showCustomColor, setShowCustomColor, customHex, setCustomHex, setCustomColor, setMode, setMonogram } = props;
+  const { draft, canSave, selectedIcon, filteredIconOptions, iconQuery, setIconQuery, showIconBrowser, setShowIconBrowser, showCustomColor, setShowCustomColor, setCustomHex, setCustomColor, setMode, setMonogram } = props;
   return <section class="ui-identity" data-workspace-appearance="editor" aria-label="Workspace identity">
     <Show when={!props.compact}>
       <div class="ui-identity-heading">
@@ -86,8 +86,7 @@ export function IdentityEditor(props: {
       </div>
       <Show when={showCustomColor()}>
         <div class="ui-identity-custom-color">
-          <label class="ui-identity-color-input"><span>Custom colour</span><Input aria-label="Custom colour" type="color" value={props.colorHex} onInput={(event) => setCustomColor(event.currentTarget.value)} /></label>
-          <Input aria-label="Hex colour" value={customHex()} maxlength="7" spellcheck="false" onInput={(event) => setCustomColor(event.currentTarget.value)} />
+          <ColourPicker label="Custom colour" value={props.colorHex} onChange={setCustomColor} />
         </div>
       </Show>
     </div>
