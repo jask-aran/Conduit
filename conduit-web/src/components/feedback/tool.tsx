@@ -1,9 +1,9 @@
-import { createEffect, createMemo, createResource, createSignal, For, Index, onCleanup, onMount, Show, untrack } from "solid-js";
-import { createStore, produce, unwrap } from "solid-js/store";
+import { batch, createEffect, createMemo, createResource, createSignal, For, Index, onCleanup, onMount, Show, untrack } from "solid-js";
+import { createStore, produce, reconcile, unwrap } from "solid-js/store";
 import { Portal } from "solid-js/web";
 import { drawingBox, FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote, FeedbackNotes, FeedbackText, feedbackInkColour, FEEDBACK_INKS, type FeedbackBox, type FeedbackDrawingKind, type FeedbackInk, type FeedbackPoint, type FeedbackShape, type FeedbackToolKind, type FeedbackWeight } from "@/components/ui/feedback";
 import { captureHeld, captureScreen, cropAreas, previewOf, type Capture } from "./capture";
-import { FEEDBACK_CAPABILITIES, type FeedbackHost, type FeedbackListener, type FeedbackThread } from "./host";
+import { FEEDBACK_CAPABILITIES, type FeedbackHost, type FeedbackListener, type FeedbackSent, type FeedbackThread } from "./host";
 import { createPieces } from "./pieces";
 
 /** What a comment was made on: a screenshot of the page, or the live page. Its marks show on that one. */
@@ -200,12 +200,21 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const showing = (): View => shooting() ?? (props.mode === "use" ? "page" : view());
   const [barLift, setBarLift] = createSignal(0);
   // Once sent, the item is a thread: its comments stay up with what the agent answers, and the person writes back.
-  const [thread, setThread] = createSignal<FeedbackThread | null>(null);
+  // Each look at it is merged into what is held, so a comment's card stays the card it was (and its field keeps the words being written).
+  const [held, setHeld] = createStore<{ item: FeedbackThread | null }>({ item: null });
+  const thread = () => held.item;
+  const setThread = (next: FeedbackThread | null) => {
+    if (!next || held.item?.id !== next.id) return setHeld("item", next);
+    const { comments, ...rest } = next;
+    batch(() => { setHeld("item", rest); setHeld("item", "comments", reconcile(comments, { key: "n" })); });
+  };
+  /** The list of what was sent before is looked at, to pick one to come back to. */
+  const [listing, setListing] = createSignal(false);
   const [replyTo, setReplyTo] = createSignal<number | null | undefined>(undefined);
   const [reply, setReply] = createSignal("");
   const answered = can.deliveries[0] !== "one-way";
   const offersLive = can.listeners && (can.deliveries as readonly string[]).includes("live"), offersBatch = !answered || (can.deliveries as readonly string[]).includes("batched");
-  const [earlier, { refetch: askEarlier }] = createResource(() => answered ? transport.threads().catch(() => []) : []);
+  const [earlier, { refetch: askEarlier }] = createResource(() => answered ? transport.threads().catch(() => [] as FeedbackSent[]) : [] as FeedbackSent[]);
   const unread = () => (earlier.latest ?? []).filter((item) => item.unread);
   let following: ReturnType<typeof setInterval> | undefined;
   /** `alone`: the thread is all there is to look at (a batch that was sent, or one come back to); a live item's is followed while more is marked. */
@@ -215,8 +224,16 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     clearInterval(following);
     ask();
     following = setInterval(ask, WAITING_EVERY_MS);
-    if (only) { setAlone(true); props.onMode("use"); }
+    if (only) { setListing(false); setAlone(true); props.onMode("use"); }
   };
+  /** From a thread, or the list of them, back to marking up; the item stays in the list to be come back to. */
+  const leave = () => {
+    clearInterval(following);
+    batch(() => { setThread(null); setAlone(false); setListing(false); setReplyTo(undefined); });
+    props.onMode("select");
+    void askEarlier();
+  };
+  const sentBefore = () => { const all = earlier.latest ?? [], one = unread()[0] ?? (all.length === 1 ? all[0] : undefined); if (one) return follow(one.id, true); setListing(true); props.onMode("use"); };
   // Live: each comment goes as it is Done, to an item that grows. Where the host offers batched too it is the person's choice (kept), fixed once
   // a comment has gone; and it is only so while a session is listening, since a comment that goes at once goes to someone.
   const [wantsLive, setWantsLive] = createSignal(offersLive && (!offersBatch || (() => { try { return (localStorage.getItem(LIVE_KEY) ?? (can.deliveries[0] === "live" ? "on" : "off")) === "on"; } catch { return false; } })()));
@@ -232,7 +249,9 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     setReply("");
     await transport.say(item.id, about, words).then(setThread, (error) => host.notify("failed", `Not said: ${error instanceof Error ? error.message : String(error)}`));
   };
-  const saidOf = (n: number | null) => (thread()?.messages ?? []).filter((message) => message.n === n).map((message) => ({ from: message.from, text: message.text }));
+  const settle = (n: number, resolved: boolean) => { const item = thread(); if (item) void transport.resolve(item.id, n, resolved).then(setThread, (error) => host.notify("failed", `Not ${resolved ? "resolved" : "reopened"}: ${error instanceof Error ? error.message : String(error)}`)); };
+  const saidOf = (n: number | null) => (thread()?.messages ?? []).filter((message) => message.n === n).map((message) => ({ from: message.from, at: message.at, text: message.text ?? (message.resolved ? "Resolved" : "Reopened") }));
+  const resolvedOf = (n: number) => Boolean(thread()?.comments.find((comment) => comment.n === n)?.resolved);
   const standing = () => { const item = thread(); return !item ? "" : item.state === "handled" ? "Handled" : item.state === "taken" ? `${item.by ?? "A session"} is working on it` : item.by ? `Sent to ${item.by}` : "Saved: no session was listening"; };
   // Boxes are read once a frame: what is marked scrolls, resizes and animates under the marks.
   const [frame, setFrame] = createSignal(0);
@@ -627,7 +646,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       handle = requestAnimationFrame(tick);
     });
     onCleanup(() => cancelAnimationFrame(handle));
-    const asking = setInterval(() => { if (can.listeners) void askWaiters(); if (answered && !thread()) void askEarlier(); }, WAITING_EVERY_MS);
+    const asking = setInterval(() => { if (can.listeners) void askWaiters(); if (answered && (!thread() || listing())) void askEarlier(); }, WAITING_EVERY_MS);
     onCleanup(() => clearInterval(asking));
   });
   onCleanup(() => {
@@ -675,7 +694,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       // each comment's own picture is cut from the one it was made on. Words alone need none.
       const marksOn = (on: View) => comments.some((entry) => entry.on === on);
       const shot = picture();
-      const views = ([shot && (marksOn("screenshot") || whole) ? "screenshot" : null, marksOn("page") && !noPicture() && (!one || atOpen || captureHeld()) ? "page" : null] as const).filter((on): on is View => on !== null);
+      const views = ([shot && (marksOn("screenshot") || whole) ? "screenshot" : null, marksOn("page") && !noPicture() && (atOpen || captureHeld()) ? "page" : null] as const).filter((on): on is View => on !== null);
       let first: { capture: Capture; of: View } | null = null, captureError: string | null = null;
       for (const of of views) {
         let capture: Capture | null = of === "screenshot" && !marksOn("screenshot") ? shot!.capture : null;
@@ -691,8 +710,8 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
         for (const [index, blob] of (await cropAreas(capture, comments.map((entry) => entry.on === of ? entry.area : null))).entries()) if (blob) await transport.picture(mark.id, blob, numberOf(index));
       }
       const result = await transport.send(mark.id, {
-        comments, live: Boolean(one), to: one || hand() ? agent()?.name ?? null : null,
-        screenshot: first ? { width: first.capture.width, height: first.capture.height, surface: first.capture.surface, outlined: true, of: first.of } : { missing: views.length ? captureError ?? "capture failed" : marksOn("page") ? noPicture() ?? (one ? "not taken: a live comment's picture is not asked for" : "capture failed") : "text only" },
+        comments, live: Boolean(one), subject: host.subject?.(), to: one || hand() ? agent()?.name ?? null : null,
+        screenshot: first ? { width: first.capture.width, height: first.capture.height, surface: first.capture.surface, outlined: true, of: first.of } : { missing: views.length ? captureError ?? "capture failed" : marksOn("page") ? noPicture() ?? "not taken: this browser asks before a tab is pictured, and Send does not ask (the person takes one by choosing Screenshot)" : "text only" },
         client: { id: host.clientId(), userAgent: navigator.userAgent, url: location.pathname + location.search, viewport: { width: innerWidth, height: innerHeight, devicePixelRatio }, ...await host.client?.() },
       });
       sent = true;
@@ -750,15 +769,20 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
         <Show when={aimed().length > 1}><For each={aimed()}>{(element) => <FeedbackMark kind="member" box={box([element])} />}</For></Show>
         <Show when={aimed().length}><FeedbackMark kind="cursor" box={box(aimed())} name={nameOf(aimed())} /></Show>
       </>}</Show>
+      <Show when={listing()}>
+        <FeedbackNotes lift={barLift()}><For each={earlier.latest}>{(item) => <FeedbackNote open={false} tag="" name={item.first || `${item.comments} comments`} onInput={() => {}} onOpen={() => follow(item.id, true)}
+          value={`${item.unread ? `${item.unread} unread · ` : ""}${item.state === "handled" ? "Handled" : item.state === "taken" ? `${item.by ?? "A session"} is working on it` : item.by ? `Sent to ${item.by}` : "Saved"} · ${item.comments} ${item.comments === 1 ? "comment" : "comments"}`} />}</For></FeedbackNotes>
+        <FeedbackBar thread onBack={leave} view="use" onView={() => {}} tool="select" onTool={() => {}} onNote={() => {}} status="Sent before" canSend={false} onSend={() => {}} onClose={props.onClose} />
+      </Show>
       <Show when={alone() && thread()}>{(item) => <>
         <FeedbackNotes lift={barLift()}>
-          <Show when={saidOf(null).length || replyTo() === null}><FeedbackNote ref={(element) => { noteField = element; }} open={replyTo() === null} tag="" name={item().by ?? "The item"} said={saidOf(null)} placeholder="Write back" value={reply()} onOpen={() => { setReply(""); setReplyTo(null); queueMicrotask(() => noteField?.focus()); }} onInput={setReply} /></Show>
-          <For each={item().comments}>{(comment) => <FeedbackNote ref={(element) => { noteField = element; }} open={replyTo() === comment.n} tag={String(comment.n)} name={comment.name} said={[{ from: "person", text: comment.comment }, ...saidOf(comment.n)]} placeholder="Write back"
-            value={reply()} onOpen={() => { setReply(""); setReplyTo(comment.n); queueMicrotask(() => noteField?.focus()); }} onInput={setReply} />}</For>
+          <Show when={saidOf(null).length || replyTo() === null}><FeedbackNote ref={(element) => { noteField = element; }} open={replyTo() === null} tag="" name={item().by ?? "The item"} said={saidOf(null)} placeholder="Write back" value={reply()} onOpen={() => { setReply(""); setReplyTo(null); queueMicrotask(() => noteField?.focus()); }} onInput={setReply} onSay={() => void answer()} /></Show>
+          <For each={item().comments}>{(comment) => <FeedbackNote ref={(element) => { noteField = element; }} open={replyTo() === comment.n} tag={String(comment.n)} name={comment.name} said={[{ from: "person", at: item().sentAt, text: comment.comment }, ...saidOf(comment.n)]} placeholder="Write back" resolved={comment.resolved}
+            value={reply()} onOpen={() => { setReply(""); setReplyTo(comment.n); queueMicrotask(() => noteField?.focus()); }} onInput={setReply} onSay={() => void answer()} onResolve={(resolved) => settle(comment.n, resolved)} />}</For>
         </FeedbackNotes>
-        <FeedbackBar thread view="use" onView={() => {}} tool="select" onTool={() => {}} onNote={() => {}} status={standing()} canSend={false} onSend={() => {}} onClose={props.onClose} />
+        <FeedbackBar thread onBack={leave} view="use" onView={() => {}} tool="select" onTool={() => {}} onNote={() => {}} status={standing()} canSend={false} onSend={() => {}} onClose={props.onClose} />
       </>}</Show>
-      <Show when={!capturing() && !alone()}>
+      <Show when={!capturing() && !alone() && !listing()}>
         <Show when={floats(open()) && open()} keyed>{(selection) =>
           <FeedbackNote ref={(element) => { noteField = element; }} float={noteAt() ? { left: `${noteAt()!.left}px`, top: `${noteAt()!.top}px` } : { opacity: 0 }} open tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)}
             value={selection.comment} onOpen={() => {}} onInput={write(selection)} onDone={() => openNote(null)} onRemove={() => remove(selection.id)} />}
@@ -769,12 +793,12 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
             <FeedbackNote ref={(element) => { noteField = element; }} open={openId() === selection.id} tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)} picture={selection.whole ? picture()?.url : selection.preview}
               value={selection.comment} onOpen={() => { if (floats(selection) && props.mode === "select") show(selection.on); openNote(selection.id); }} onInput={write(selection)} onRemove={() => remove(selection.id)} />
             </>}>{(n) => <FeedbackNote ref={(element) => { noteField = element; }} open={replyTo() === n()} tag={tagOf(selection)} name={titleOf(selection)} picture={selection.preview} said={[{ from: "person", text: selection.comment }, ...saidOf(n())]} placeholder="Write back"
-              value={reply()} onOpen={() => startReply(n())} onInput={setReply} />}</Show>
+              value={reply()} onOpen={() => startReply(n())} onInput={setReply} resolved={resolvedOf(n())} onSay={() => void answer()} onResolve={(resolved) => settle(n(), resolved)} />}</Show>
           </Show>}</For></FeedbackNotes>
         </Show>
         <FeedbackBar view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onTool={(tool) => { setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); }} onNote={note}
           status={status()} compact={touchOnly} keys={touchOnly ? undefined : props.keys?.()} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} shape={shape()} onShape={setShape} onUndo={undoable() ? undo : undefined} onRedo={redoable() ? redo : undefined}
-          replies={unread().reduce((sum, item) => sum + item.unread, 0)} onReplies={() => { const item = unread()[0]; if (item) follow(item.id, true); }}
+          replies={unread().reduce((sum, item) => sum + item.unread, 0)} sent={thread() ? 0 : earlier.latest?.length} onReplies={sentBefore}
           live={offersLive ? live() || !offersBatch : undefined} onLive={offersBatch && agent() && !lastSent() ? keepLive : undefined} standing={thread() ? standing() : undefined}
           hand={hand()} onHand={can.listeners ? keepHand : undefined} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
           canSend={canSend()} sending={sending()} onSend={() => void send()} onClose={props.onClose} />

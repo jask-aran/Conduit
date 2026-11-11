@@ -12,8 +12,6 @@ import { selectedUiScale } from "../preferences/ui-scale";
  */
 const host = (clientId: () => string): FeedbackHost => ({
   names,
-  // Feedback on Conduit is batched; live is here to be tried until a document has it for its own.
-  capabilities: { deliveries: ["batched", "live"] },
   anchors: ["data-region", "data-tool", "data-surface", "data-tab", "data-doc-view", "data-pane"],
   transport: httpTransport(api),
   clientId,

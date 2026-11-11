@@ -26,12 +26,15 @@ export const NO_NAMES: PieceNames = { pieces: {}, classes: {}, styles: {}, ancho
 export type FeedbackListener = { name: string; state: "waiting" | "working" };
 export type FeedbackHanded = { to: { name: string } | null };
 
-/** An item once sent, as the person follows it: where it stands (`by`: the session it was handed to or that took it), and what was said about each comment (`n`) or the item as a whole. */
-export type FeedbackThread = { id: string; state: "waiting" | "taken" | "handled"; by: string | null; unread: number;
-  comments: { n: number; name: string; comment: string }[]; messages: { at: string; from: "agent" | "person"; n: number | null; text: string }[] };
+/** An item once sent, as the person follows it: where it stands (`by`: the session it was handed to or that took it), and what was said about each comment (`n`) or the item as a whole.
+ *  A message with `resolved` and no `text` is that comment settled (or reopened) by whoever it is `from`. */
+export type FeedbackThread = { id: string; sentAt: string; state: "waiting" | "taken" | "handled"; by: string | null; unread: number;
+  comments: { n: number; name: string; comment: string; resolved?: boolean }[]; messages: { at: string; from: "agent" | "person"; n: number | null; text?: string; resolved?: boolean }[] };
+/** An item in the list of what was sent before; `first` is its first comment's words. */
+export type FeedbackSent = { id: string; sentAt: string; state: FeedbackThread["state"]; by: string | null; unread: number; comments: number; first: string };
 
 /** What Send carries besides the pictures. `comments` and `screenshot` are the tool's; `client` is the tool's facts (url, viewport, userAgent) with the host's own over them. */
-export type FeedbackSend = { comments: unknown[]; screenshot: Record<string, unknown>; client: Record<string, unknown>; to: string | null; live?: boolean };
+export type FeedbackSend = { comments: unknown[]; screenshot: Record<string, unknown>; client: Record<string, unknown>; to: string | null; live?: boolean; subject?: Record<string, string | number | boolean> };
 
 export interface FeedbackTransport {
   /** "This moment": the receiver keeps what it knows now, under the id the item is later sent to. */
@@ -44,8 +47,10 @@ export interface FeedbackTransport {
   thread(id: string, seen?: boolean): Promise<FeedbackThread>;
   /** The person writes back, about comment `n` or the item as a whole. */
   say(id: string, n: number | null, text: string): Promise<FeedbackThread>;
-  /** The latest items not finished or with an answer unread, newest first. */
-  threads(): Promise<{ id: string; state: FeedbackThread["state"]; by: string | null; unread: number }[]>;
+  /** Comment `n` is settled, or reopened. */
+  resolve(id: string, n: number, resolved: boolean): Promise<FeedbackThread>;
+  /** The latest items not finished, with an answer unread or sent in the last day, newest first. */
+  threads(): Promise<FeedbackSent[]>;
   /** A mark nothing was sent to. */
   drop(mark: string): Promise<void>;
   listening(): Promise<FeedbackListener[]>;
@@ -96,6 +101,8 @@ export interface FeedbackHost {
   clientId(): string;
   /** What else an item should say about the client (its kind, its build). */
   client?(): Record<string, unknown> | Promise<Record<string, unknown>>;
+  /** What is being marked up, where that is more than the page says of itself: a document's name and text, read at each Send. */
+  subject?(): Record<string, string | number | boolean>;
   /** A shell that can take the page's picture itself, with nothing asked; null where it cannot, and the tool uses display capture. */
   capturePage?(): Promise<Blob | null>;
   notify(outcome: "sent" | "failed", message: string): void;
@@ -111,7 +118,8 @@ export function httpTransport(request: <T>(path: string, init?: { method?: strin
     drop: (mark) => request(`${base}/marks/${mark}`, { method: "DELETE" }),
     thread: (id, seen) => request(`${base}/items/${id}${seen ? "?seen" : ""}`),
     say: (id, n, text) => request(`${base}/items/${id}/messages`, { method: "POST", body: JSON.stringify({ n, text }) }),
-    threads: () => request<{ items: Awaited<ReturnType<FeedbackTransport["threads"]>> }>(`${base}/items`).then((answer) => answer.items),
+    resolve: (id, n, resolved) => request(`${base}/items/${id}/messages`, { method: "POST", body: JSON.stringify({ n, resolved }) }),
+    threads: () => request<{ items: FeedbackSent[] }>(`${base}/items`).then((answer) => answer.items),
     listening: () => request<{ waiting: FeedbackListener[] }>(`${base}/waiting`).then((answer) => answer.waiting),
   };
 }

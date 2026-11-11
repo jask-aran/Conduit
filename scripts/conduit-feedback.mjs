@@ -10,7 +10,11 @@
 //
 // An item is a thread: `reply <id> [n] <words>` answers the person (about comment n, or the item as a whole) in
 // <id>/thread.jsonl, where the tool reads it; what they write back there ends the same name's next `wait`, and so
-// does a comment added to a live item.
+// does a comment added to a live item. `resolve <id> <n>` settles one comment; the last one settled handles the item.
+//
+// `wait <name> --stay` does not end: it prints one line for each thing that comes, so a session whose harness wakes it
+// on a line of output (Claude Code's Monitor) stays listed the whole time. Plain `wait` ends at the first, for a
+// harness that wakes only when a command ends.
 import fs from "node:fs/promises";
 import { existsSync, rmSync, watch } from "node:fs";
 import os from "node:os";
@@ -67,48 +71,55 @@ async function writtenBack(name) {
   }
   return null;
 }
-const hand = (entry) => {
-  console.log(entry.item);
-  console.log(`Read it (its \`read\` says how), do what it asks, then: node ${script} done ${entry.id}`);
+const handing = (entry) => [entry.item, `Read it (its \`read\` says how), do what it asks, then: node ${script} done ${entry.id}`];
+const hand = (entry) => { for (const line of handing(entry)) console.log(line); };
+/** What every comment of an item is now, by what the thread last said of it. */
+const allResolved = async (id) => {
+  const settled = new Map((await thread(id)).filter((message) => typeof message.resolved === "boolean").map((message) => [message.n, message.resolved]));
+  return JSON.parse(await fs.readFile(path.join(folder, id, "item.json"), "utf8")).comments.every((comment) => settled.get(comment.n) === true);
 };
 
 if (command === "wait") {
   await fs.mkdir(waiting, { recursive: true, mode: 0o700 });
-  const name = argument || path.basename(process.cwd());
+  const stay = [argument, ...rest].includes("--stay");
+  const name = argument && argument !== "--stay" ? argument : path.basename(process.cwd());
   const mine = path.join(waiting, `${process.pid}.json`);
   await fs.writeFile(mine, `${JSON.stringify({ id: String(process.pid), name, cwd: process.cwd(), since: new Date().toISOString() })}\n`);
   const leave = () => { try { rmSync(mine); } catch { /* already gone */ } };
   process.on("exit", leave);
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(signal, () => process.exit(130));
   const next = async () => { const back = await writtenBack(name); return back ?? await take(name); };
-  let taken = await next();
-  if (!taken) {
-    taken = await new Promise((resolve) => {
-      let looking = false;
-      const look = async () => {
-        if (looking) return;
-        looking = true;
-        const found = await next().catch(() => null);
-        looking = false;
-        if (found) { watcher.close(); clearInterval(poll); resolve(found); }
-      };
-      // The rename that publishes an item is the event; the poll covers a filesystem that reports none, and what is written back inside an item.
-      const watcher = watch(folder, () => void look());
-      const poll = setInterval(() => void look(), 2000);
-    });
-  }
-  if (taken.said) {
-    if (taken.added.length) console.log(`The person added to ${taken.entry.item} (read each there, with its picture):`);
-    for (const comment of taken.added) console.log(`  comment ${comment.n} (${comment.name}): ${comment.comment}`);
-    if (taken.said.length) console.log(`The person wrote back on ${taken.entry.item}:`);
-    for (const message of taken.said) console.log(`  ${message.n ? `about comment ${message.n}` : "about the item"}: ${message.text}`);
-    console.log(`Answer with: node ${script} reply ${taken.entry.id} [n] "<words>"`);
-  } else {
-    // From here on only what is new is handed over.
-    await noteHanded(path.join(folder, taken.id), { person: 0, comments: JSON.parse(await fs.readFile(taken.item, "utf8")).comments.length });
-    hand(taken);
-  }
-  console.log(`To keep taking the person's feedback, run \`node ${script} wait${argument ? ` ${JSON.stringify(argument)}` : ""}\` in the background again now.`);
+  const coming = () => new Promise((resolve) => {
+    let looking = false;
+    const look = async () => {
+      if (looking) return;
+      looking = true;
+      const found = await next().catch(() => null);
+      looking = false;
+      if (found) { watcher.close(); clearInterval(poll); resolve(found); }
+    };
+    // The rename that publishes an item is the event; the poll covers a filesystem that reports none, and what is written back inside an item.
+    const watcher = watch(folder, () => void look());
+    const poll = setInterval(() => void look(), 2000);
+  });
+  do {
+    const taken = await next() ?? await coming();
+    let lines;
+    if (taken.said) {
+      lines = [
+        ...(taken.added.length ? [`The person added to ${taken.entry.item} (read each there, with its picture):`, ...taken.added.map((comment) => `  comment ${comment.n} (${comment.name}): ${comment.comment}`)] : []),
+        ...(taken.said.length ? [`The person wrote back on ${taken.entry.item}:`, ...taken.said.map((message) => `  ${message.n ? `about comment ${message.n}` : "about the item"}: ${message.text ?? (message.resolved ? "resolved it" : "reopened it")}`)] : []),
+        `Answer with: node ${script} reply ${taken.entry.id} [n] "<words>"`,
+      ];
+    } else {
+      // From here on only what is new is handed over.
+      await noteHanded(path.join(folder, taken.id), { person: 0, comments: JSON.parse(await fs.readFile(taken.item, "utf8")).comments.length });
+      lines = handing(taken);
+    }
+    // Staying, each thing that comes is one line, which is what wakes the session.
+    if (stay) console.log(lines.map((line) => line.trim().replace(/\s*\n\s*/g, " ")).join("  "));
+    else for (const line of [...lines, `To keep taking the person's feedback, run \`node ${script} wait ${JSON.stringify(name)}\` in the background again now.`]) console.log(line);
+  } while (stay);
 } else if (command === "serve") {
   const { createServer } = await import("node:http");
   const { createFeedbackStore, handleFeedback } = await import(new URL("../conduit-web/src/server/feedback-store.js", import.meta.url).href);
@@ -136,6 +147,14 @@ if (command === "wait") {
   const by = await fs.readFile(path.join(dir, "taken.json"), "utf8").then((text) => JSON.parse(text).name ?? null, () => null);
   await fs.appendFile(path.join(dir, "thread.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), from: "agent", ...(by ? { by } : {}), n, text: rest.join(" ") })}\n`);
   console.log(`Said on ${id}${n ? `, comment ${n}` : ""}`);
+} else if (command === "resolve" && argument && /^\d+$/.test(rest[0] ?? "")) {
+  const id = path.basename(argument), dir = path.join(folder, id), n = Number(rest[0]);
+  if (!await exists(path.join(dir, "item.json"))) { console.error(`No feedback item ${argument} in ${folder}`); process.exit(1); }
+  const by = await fs.readFile(path.join(dir, "taken.json"), "utf8").then((text) => JSON.parse(text).name ?? null, () => null);
+  await fs.appendFile(path.join(dir, "thread.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), from: "agent", ...(by ? { by } : {}), n, resolved: true })}\n`);
+  const all = await allResolved(id);
+  if (all) await fs.writeFile(path.join(dir, "handled.json"), `${JSON.stringify({ at: new Date().toISOString() })}\n`);
+  console.log(`Resolved comment ${n} of ${id}${all ? ": every comment is resolved, so the item is handled" : ""}`);
 } else if (command === "done" && argument) {
   const dir = path.join(folder, path.basename(argument));
   if (!await exists(path.join(dir, "item.json"))) { console.error(`No feedback item ${argument} in ${folder}`); process.exit(1); }
@@ -151,6 +170,6 @@ if (command === "wait") {
     if (waiter && alive(waiter.id)) console.log(`waiter   ${waiter.name}  (${waiter.cwd}, since ${waiter.since})`);
   }
 } else {
-  console.log("Usage: conduit-feedback wait [name] | take <id> | reply <id> [n] <words> | done <id> | list | serve [port] [one-way]");
+  console.log("Usage: conduit-feedback wait [name] [--stay] | take <id> | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]");
   process.exit(command ? 1 : 0);
 }

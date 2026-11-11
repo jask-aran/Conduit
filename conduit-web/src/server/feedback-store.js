@@ -10,7 +10,8 @@ import { randomBytes } from "node:crypto";
  *
  * An item is also a thread: what the agent answers (the script's `reply`, written straight to the folder) and what the
  * person writes back (here) are lines of <id>/thread.jsonl, each about one comment (`n`) or the item as a whole. That
- * is the same whether a session was listening when the item was sent or one takes it days later.
+ * is the same whether a session was listening when the item was sent or one takes it days later. A line with
+ * `resolved` settles its comment (or reopens it) from either side; an item whose every comment is resolved is handled.
  *
  * A live item (Send with `live`) is written at its first comment and grows: each later Send to the same mark adds its
  * comments and their pictures, and the mark is kept for the next.
@@ -31,6 +32,10 @@ const THREADS = 20;
 const MARK_MS = 6 * 60 * 60_000;
 /** A session that took an item this long ago and has not finished it is no longer taken to be at work on it. */
 const WORKING_MS = 60 * 60_000;
+/** A finished item stays in the list of what was sent for this long, to be come back to. */
+const RECENT_MS = 24 * 60 * 60_000;
+/** What is kept of a host's `subject` (characters): a document's text, not a book's. */
+const SUBJECT = 200_000;
 const short = (value, length) => { const text = typeof value === "string" ? value : JSON.stringify(value) ?? ""; return text.length > length ? `${text.slice(0, length)}… (${text.length} characters)` : text; };
 
 export function createFeedbackStore({ folder, snapshot = async () => ({}), about = [], done = (id) => `node scripts/conduit-feedback.mjs done ${id}`, answered = true, log = () => {} }) {
@@ -88,6 +93,8 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
     };
   }
 
+  const subject = (told) => Object.fromEntries(Object.entries(told).slice(0, 12).map(([key, value]) => [key, typeof value === "string" ? short(value, SUBJECT) : typeof value === "number" || typeof value === "boolean" ? value : null]));
+
   async function send(id, body) {
     const kept = marks.get(id);
     if (!kept) throw Object.assign(new Error("That feedback mark has gone; start the item again"), { status: 404, code: "feedback_mark_gone" });
@@ -108,6 +115,7 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
       const added = body.comments.slice(0, 50).map((entry) => comment(entry, scale, shot ? kept.areas : new Map()));
       if (shot) { await fs.writeFile(path.join(final, "screenshot.png"), kept.screenshot); for (const entry of added) if (kept.areas.has(entry.n)) await fs.writeFile(path.join(final, `selection-${entry.n}.png`), kept.areas.get(entry.n)); }
       grown.comments.push(...added);
+      if (body.subject) grown.subject = subject(body.subject);
       if (shot && !grown.screenshot.file) grown.screenshot = { file: "screenshot.png", width: shot.width, height: shot.height, surface: shot.surface ?? "unknown", of: shot.of === "screenshot" ? "screenshot" : "page", outlined: true, pageOnly: exact, ...(scale ? { scale } : {}) };
       await put(final, grown);
       kept.areas.clear();
@@ -128,10 +136,12 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
         "A comment with `quote` is about that run of text, which the person selected on the live page; its `rect` is round the text, and what it describes is the piece the text is in.",
         "A group's `members` are each described the same way. `rect` is in CSS pixels of the client's viewport; `screenshotRect` is the same box in screenshot.png, present only when the picture is the page alone.",
         "screenshot.png shows what `screenshot.of` says (the `screenshot` the person drew on, or the live `page` at Send) with the selections made on it outlined and numbered as `n`. A comment's `picture.file` is that selection alone, cut from the one it was made on: `picture.area` is the part of the page it shows, the area the person dragged round when `dragged`, else its marks with a margin. Look at it first.",
+        ...(body.subject ? ["`subject` is what was being marked up, as its host tells it: a document's `text` is as it was at the latest Send, and a comment's `quote` is a run of it."] : []),
         ...(body.live ? ["This item is live: the person adds comments while you work, and `wait` hands you each as it comes. `screenshot.png` is the latest taken; a comment's own picture is as it was when the comment was made."] : []),
         ...about,
         ...(answered ? [`To answer the person: \`${done(id).replace(/ done .*/, "")} reply ${id} [n] "<words>"\`, n being the comment answered (none: the item as a whole). They read it in the tool beside that comment and may write back; \`wait\` hands you what they say.`] : ["This is one-way feedback: the person is not shown an answer."]),
-        `When the item is dealt with: ${done(id)}`,
+        ...(answered ? [`When one comment is dealt with: \`${done(id).replace(/ done .*/, "")} resolve ${id} <n>\`. The person may resolve or reopen one too, and the item is handled once every comment is resolved.`] : []),
+        `When the whole item is dealt with: ${done(id)}`,
       ],
       ...(body.live ? { live: true } : {}),
       markedAt: kept.markedAt,
@@ -141,6 +151,7 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
       screenshot: shot ? { file: "screenshot.png", width: shot.width, height: shot.height, surface: shot.surface ?? "unknown", of: shot.of === "screenshot" ? "screenshot" : "page", outlined: true, pageOnly: exact, ...(scale ? { scale } : {}) }
         : { file: null, missing: String(body.screenshot?.missing ?? "not sent") },
       client: { id: client.id ?? null, kind: client.kind ?? null, build: client.build ?? null, shell: client.shell ?? null, url: client.url ?? null, viewport, interfaceSize: client.interfaceSize ?? null, userAgent: short(client.userAgent ?? "", 300) },
+      ...(body.subject ? { subject: subject(body.subject) } : {}),
       ...kept.snapshot,
     };
     const staging = path.join(folder, `.${id}.partial`);
@@ -173,14 +184,23 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
     const dir = path.join(folder, id), item = await read(path.join(dir, "item.json"));
     if (!item) throw gone();
     const messages = await lines(dir), taken = await read(path.join(dir, "taken.json")), handled = Boolean(await read(path.join(dir, "handled.json")));
+    const resolved = new Map(messages.filter((message) => typeof message.resolved === "boolean").map((message) => [message.n, message.resolved]));
     const unread = messages.filter((message) => message.from === "agent").length - ((await read(path.join(dir, "person-read.json")))?.agent ?? 0);
     if (seen && unread) await fs.writeFile(path.join(dir, "person-read.json"), `${JSON.stringify({ agent: messages.filter((message) => message.from === "agent").length })}\n`);
     return { id, sentAt: item.sentAt, state: handled ? "handled" : taken ? "taken" : "waiting", by: taken?.name ?? item.handed?.to?.name ?? null, unread: Math.max(0, unread),
-      comments: (item.comments ?? []).map((entry) => ({ n: entry.n, name: entry.name, comment: entry.comment })), messages };
+      comments: (item.comments ?? []).map((entry) => ({ n: entry.n, name: entry.name, comment: entry.comment, resolved: resolved.get(entry.n) === true })), messages };
   }
 
-  /** What the person writes back, about comment `n` or the item as a whole. */
-  async function say(id, { n, text } = {}) {
+  /** What the person writes back, about comment `n` or the item as a whole; or, with `resolved`, comment `n` settled or reopened. */
+  async function say(id, { n, text, resolved } = {}) {
+    if (typeof resolved === "boolean" && Number.isInteger(n)) {
+      const dir = path.join(folder, id), now = await thread(id);
+      await fs.appendFile(path.join(dir, "thread.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), from: "person", n, resolved })}\n`);
+      // The last comment resolved finishes the item; one reopened hands it back to the session that took it.
+      if (!resolved) await fs.rm(path.join(dir, "handled.json"), { force: true });
+      else if (now.comments.every((entry) => entry.resolved || entry.n === n)) await fs.writeFile(path.join(dir, "handled.json"), `${JSON.stringify({ at: new Date().toISOString(), by: "person" })}\n`);
+      return thread(id);
+    }
     const words = String(text ?? "").trim();
     if (!words) throw Object.assign(new Error("Nothing was said"), { status: 400, code: "feedback_message_empty" });
     await thread(id);
@@ -188,13 +208,13 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
     return thread(id);
   }
 
-  /** The latest items that are not finished or have an answer unread, newest first. */
+  /** The latest items that are not finished, have an answer unread or were sent in the last day, newest first. */
   async function threads() {
     const found = [];
     if (!answered) return found;
     for (const id of (await fs.readdir(folder).catch(() => [])).filter((name) => !name.startsWith(".")).sort().reverse().slice(0, THREADS)) {
       const one = await thread(id).catch(() => null);
-      if (one && (one.unread || one.state !== "handled")) found.push({ id, sentAt: one.sentAt, state: one.state, by: one.by, unread: one.unread, comments: one.comments.length });
+      if (one && (one.unread || one.state !== "handled" || Date.now() - Date.parse(one.sentAt) < RECENT_MS)) found.push({ id, sentAt: one.sentAt, state: one.state, by: one.by, unread: one.unread, comments: one.comments.length, first: short(one.comments[0]?.comment ?? "", 120) });
     }
     return found;
   }
