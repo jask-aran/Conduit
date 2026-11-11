@@ -27,8 +27,9 @@ import { randomBytes } from "node:crypto";
  *   log        (entry) => told of each item written
  */
 const MARKS = 12;
-/** How many of the latest items are looked through for one still open. */
+/** How many of the latest items are looked through for one still open, and how many finished ones are listed with those. */
 const THREADS = 20;
+const FINISHED = 6;
 const MARK_MS = 6 * 60 * 60_000;
 /** A session that took an item this long ago and has not finished it is no longer taken to be at work on it. */
 const WORKING_MS = 60 * 60_000;
@@ -211,10 +212,11 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
   /** The latest items that are not finished, have an answer unread or were sent in the last day, newest first. */
   async function threads() {
     const found = [];
+    let finished = 0;
     if (!answered) return found;
     for (const id of (await fs.readdir(folder).catch(() => [])).filter((name) => !name.startsWith(".")).sort().reverse().slice(0, THREADS)) {
       const one = await thread(id).catch(() => null);
-      if (one && (one.unread || one.state !== "handled" || Date.now() - Date.parse(one.sentAt) < RECENT_MS)) found.push({ id, sentAt: one.sentAt, state: one.state, by: one.by, unread: one.unread, comments: one.comments.length, first: short(one.comments[0]?.comment ?? "", 120) });
+      if (one && (one.unread || one.state !== "handled" || (Date.now() - Date.parse(one.sentAt) < RECENT_MS && finished++ < FINISHED))) found.push({ id, sentAt: one.sentAt, state: one.state, by: one.by, unread: one.unread, comments: one.comments.length, first: short(one.comments[0]?.comment ?? "", 120) });
     }
     return found;
   }

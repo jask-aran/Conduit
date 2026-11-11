@@ -249,7 +249,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     setReply("");
     await transport.say(item.id, about, words).then(setThread, (error) => host.notify("failed", `Not said: ${error instanceof Error ? error.message : String(error)}`));
   };
-  const settle = (n: number, resolved: boolean) => { const item = thread(); if (item) void transport.resolve(item.id, n, resolved).then(setThread, (error) => host.notify("failed", `Not ${resolved ? "resolved" : "reopened"}: ${error instanceof Error ? error.message : String(error)}`)); };
+  const settle = (n: number, resolved: boolean) => { const item = thread(); if (resolved) setReplyTo(undefined); if (item) void transport.resolve(item.id, n, resolved).then(setThread, (error) => host.notify("failed", `Not ${resolved ? "resolved" : "reopened"}: ${error instanceof Error ? error.message : String(error)}`)); };
   const saidOf = (n: number | null) => (thread()?.messages ?? []).filter((message) => message.n === n).map((message) => ({ from: message.from, at: message.at, text: message.text ?? (message.resolved ? "Resolved" : "Reopened") }));
   const resolvedOf = (n: number) => Boolean(thread()?.comments.find((comment) => comment.n === n)?.resolved);
   const standing = () => { const item = thread(); return !item ? "" : item.state === "handled" ? "Handled" : item.state === "taken" ? `${item.by ?? "A session"} is working on it` : item.by ? `Sent to ${item.by}` : "Saved: no session was listening"; };
@@ -711,7 +711,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       }
       const result = await transport.send(mark.id, {
         comments, live: Boolean(one), subject: host.subject?.(), to: one || hand() ? agent()?.name ?? null : null,
-        screenshot: first ? { width: first.capture.width, height: first.capture.height, surface: first.capture.surface, outlined: true, of: first.of } : { missing: views.length ? captureError ?? "capture failed" : marksOn("page") ? noPicture() ?? "not taken: this browser asks before a tab is pictured, and Send does not ask (the person takes one by choosing Screenshot)" : "text only" },
+        screenshot: first ? { width: first.capture.width, height: first.capture.height, surface: first.capture.surface, outlined: true, of: first.of } : { missing: views.length ? captureError ?? "capture failed" : marksOn("page") ? noPicture() ?? "not taken: Send does not ask the browser to share its tab" : "text only" },
         client: { id: host.clientId(), userAgent: navigator.userAgent, url: location.pathname + location.search, viewport: { width: innerWidth, height: innerHeight, devicePixelRatio }, ...await host.client?.() },
       });
       sent = true;
