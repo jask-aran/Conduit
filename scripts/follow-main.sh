@@ -45,8 +45,9 @@ changed="$(git diff --name-only "$old" "$new")"
 touches() { grep -qE "$1" <<<"$changed"; }
 
 build() {
-  # Python tools when their lockfile moved; npm's lockfile is the build's own check (start-conduit.sh).
-  if touches '^conduit-web/python/(uv\.lock|pyproject\.toml)$'; then bash scripts/start-conduit.sh setup >>"$LOG" 2>&1 || return 1; fi
+  # Python tools when their lockfile moved or their environment is missing; npm's lockfile is the build's own check
+  # (start-conduit.sh).
+  if touches '^conduit-web/python/(uv\.lock|pyproject\.toml)$' || [[ ! -x conduit-web/python/.venv/bin/python ]]; then bash scripts/start-conduit.sh setup >>"$LOG" 2>&1 || return 1; fi
   bash scripts/start-conduit.sh build >>"$LOG" 2>&1
 }
 healthy() {
