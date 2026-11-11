@@ -1,9 +1,9 @@
-import { createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createResource, createSignal, For, onCleanup, onMount, Show, untrack } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import { Portal } from "solid-js/web";
 import { drawingBox, FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote, FeedbackNotes, FeedbackText, FEEDBACK_INKS, type FeedbackBox, type FeedbackDrawingKind, type FeedbackInk, type FeedbackPoint, type FeedbackToolKind } from "@/components/ui/feedback";
 import { captureHeld, captureScreen, cropAreas, previewOf, type Capture } from "./capture";
-import type { FeedbackHost, FeedbackListener, FeedbackThread } from "./host";
+import { FEEDBACK_CAPABILITIES, type FeedbackHost, type FeedbackListener, type FeedbackThread } from "./host";
 import { createPieces } from "./pieces";
 
 /** What a comment was made on: a screenshot of the page, or the live page. Its marks show on that one. */
@@ -80,7 +80,11 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const [openId, setOpenId] = createSignal<number | null>(null);
   const [cursor, setCursor] = createSignal<Element | null>(null);
   const [marquee, setMarquee] = createSignal<FeedbackBox | null>(null);
-  const [pointerTool, setPointerTool] = createSignal<Tool>("select");
+  // What this host offers; nothing else is reachable, by the bar or by a key.
+  const can = { ...FEEDBACK_CAPABILITIES, ...host.capabilities };
+  const offered = (tool: Tool | "note") => can.tools.includes(tool);
+  const drawingTool = (["pen", "arrow", "box", "text"] as const).find(offered);
+  const [pointerTool, setPointerTool] = createSignal<Tool>(offered("select") ? "select" : drawingTool ?? "select");
   const [stroke, setStroke] = createSignal<{ kind: FeedbackDrawingKind; points: FeedbackPoint[] } | null>(null);
   const [ink, setInk] = createSignal<FeedbackInk>("plain");
   // An ink as the page resolves it, for a note's picture.
@@ -94,10 +98,11 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const touchOnly = matchMedia("(hover: none) and (pointer: coarse)").matches;
   // A phone's webview and browser have no display capture: there the item goes without a picture.
   const canCapture = Boolean(host.capturePage || navigator.mediaDevices?.getDisplayMedia);
+  const screenshots = can.screenshot && canCapture;
   const capturePage = host.capturePage && (() => Promise.race([host.capturePage!(), new Promise<null>((resolve) => setTimeout(resolve, PICTURE_WAIT_MS, null))]));
   const [hand, setHand] = createSignal((() => { try { return localStorage.getItem(HAND_KEY) !== "off"; } catch { return true; } })());
   const keepHand = (on: boolean) => { setHand(on); try { localStorage.setItem(HAND_KEY, on ? "on" : "off"); } catch { /* this session only */ } };
-  const [waiters, { refetch: askWaiters }] = createResource(() => transport.listening().catch(() => [] as Waiter[]));
+  const [waiters, { refetch: askWaiters }] = createResource(() => can.listeners ? transport.listening().catch(() => [] as Waiter[]) : [] as Waiter[]);
   const [agentName, setAgentName] = createSignal<string | null>(null);
   const agent = () => waiters.latest?.find((waiter) => waiter.name === agentName()) ?? waiters.latest?.[0] ?? null;
   const nextAgent = () => { const all = waiters.latest ?? []; setAgentName(all[(all.findIndex((waiter) => waiter.name === agent()?.name) + 1) % all.length]?.name ?? null); };
@@ -106,7 +111,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   // The screenshot. Where taking one asks nothing (a shell that takes its own; a browser that was already asked on this page) it is taken
   // as the tool opens, so what does not last (a toast, an answer mid-stream) stays to be marked; elsewhere when Screenshot is first chosen.
   const [picture, setPicture] = createSignal<{ url: string; capture: Capture } | null>(null);
-  const atOpen = Boolean(host.capturePage) || captureHeld();
+  const atOpen = screenshots && (Boolean(host.capturePage) || captureHeld());
   const [taking, setTaking] = createSignal(atOpen);
   /** Why there is no picture to be had, when there is none. */
   const [noPicture, setNoPicture] = createSignal<string | null>(canCapture ? null : "this client cannot capture its display");
@@ -119,7 +124,8 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const [thread, setThread] = createSignal<FeedbackThread | null>(null);
   const [replyTo, setReplyTo] = createSignal<number | null | undefined>(undefined);
   const [reply, setReply] = createSignal("");
-  const answered = host.delivery !== "one-way";
+  const answered = can.deliveries[0] !== "one-way";
+  const offersLive = can.listeners && (can.deliveries as readonly string[]).includes("live"), offersBatch = !answered || (can.deliveries as readonly string[]).includes("batched");
   const [earlier, { refetch: askEarlier }] = createResource(() => answered ? transport.threads().catch(() => []) : []);
   const unread = () => (earlier.latest ?? []).filter((item) => item.unread);
   let following: ReturnType<typeof setInterval> | undefined;
@@ -132,9 +138,11 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     following = setInterval(ask, WAITING_EVERY_MS);
     if (only) { setAlone(true); props.onMode("use"); }
   };
-  // Live: each comment goes as it is Done, to an item that grows. The person's choice where the host's people are answered; fixed once one has gone.
-  const [live, setLive] = createSignal(answered && (host.delivery === "live" || (() => { try { return localStorage.getItem(LIVE_KEY) === "on"; } catch { return false; } })()));
-  const keepLive = (on: boolean) => { setLive(on); try { localStorage.setItem(LIVE_KEY, on ? "on" : "off"); } catch { /* this session only */ } };
+  // Live: each comment goes as it is Done, to an item that grows. Where the host offers batched too it is the person's choice (kept), fixed once
+  // a comment has gone; and it is only so while a session is listening, since a comment that goes at once goes to someone.
+  const [wantsLive, setWantsLive] = createSignal(offersLive && (!offersBatch || (() => { try { return (localStorage.getItem(LIVE_KEY) ?? (can.deliveries[0] === "live" ? "on" : "off")) === "on"; } catch { return false; } })()));
+  const keepLive = (on: boolean) => { setWantsLive(on); try { localStorage.setItem(LIVE_KEY, on ? "on" : "off"); } catch { /* this session only */ } };
+  const live = () => wantsLive() && (Boolean(agent()) || lastSent() > 0);
   const [lastSent, setLastSent] = createSignal(0);
   let posting: Promise<void> = Promise.resolve();
   const startReply = (n: number | null) => { openNote(null); setReply(""); setReplyTo(n); queueMicrotask(() => noteField?.focus({ preventScroll: true })); };
@@ -162,7 +170,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const marked = transport.mark(host.clientId()).catch(() => null);
 
   /** A screenshot has nothing under it to select: it is drawn and written on. */
-  const show = (next: View) => { setView(next); if (next === "screenshot" && pointerTool() === "select") setPointerTool("pen"); };
+  const show = (next: View) => { setView(next); if (next === "screenshot" && pointerTool() === "select" && drawingTool) setPointerTool(drawingTool); };
   /** The bar's three: the app has the pointer, or the live page is annotated, or the screenshot is (taken now if there is none). */
   const look = (next: "use" | View) => {
     setCursor(null);
@@ -427,7 +435,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (sending()) return;
-    if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && canSend()) { event.preventDefault(); event.stopImmediatePropagation(); return live() ? openNote(null) : void send(); }
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && canSend()) { event.preventDefault(); event.stopImmediatePropagation(); return live() || !offersBatch ? openNote(null) : void send(); }
     if (own(event.target) && (event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLInputElement)) {
       // The tool's own fields keep their keys; the app's shortcuts do not run on them.
       event.stopImmediatePropagation();
@@ -443,10 +451,10 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     const handled = () => { event.preventDefault(); event.stopImmediatePropagation(); };
     if (select() && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "z" && numbered().length) { handled(); return undo(); }
     if (!select() || event.ctrlKey || event.metaKey || event.altKey) return;
-    if (event.key.toLowerCase() === "n") { handled(); return note(); }
-    if (event.key.toLowerCase() === "c") { handled(); return void setInk(INKS[(INKS.indexOf(ink()) + 1) % INKS.length]!); }
+    if (event.key.toLowerCase() === "n" && offered("note")) { handled(); return note(); }
+    if (event.key.toLowerCase() === "c" && can.inks) { handled(); return void setInk(INKS[(INKS.indexOf(ink()) + 1) % INKS.length]!); }
     const picked = DRAW_KEYS[event.key.toLowerCase()];
-    if (picked) { handled(); setCursor(null); if (picked !== "select" || view() === "page") setPointerTool(picked); return; }
+    if (picked && offered(picked)) { handled(); setCursor(null); if (picked !== "select" || view() === "page") setPointerTool(picked); return; }
     if (event.key === "Escape") { handled(); if (openId() !== null) openNote(null); else props.onClose(); }
     else if (event.key === "ArrowUp") { handled(); widen += 1; aim(); }
     else if (event.key === "ArrowDown") { handled(); widen = Math.max(0, widen - 1); aim(); }
@@ -489,7 +497,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       handle = requestAnimationFrame(tick);
     });
     onCleanup(() => cancelAnimationFrame(handle));
-    const asking = setInterval(() => { void askWaiters(); if (answered && !thread()) void askEarlier(); }, WAITING_EVERY_MS);
+    const asking = setInterval(() => { if (can.listeners) void askWaiters(); if (answered && !thread()) void askEarlier(); }, WAITING_EVERY_MS);
     onCleanup(() => clearInterval(asking));
   });
   onCleanup(() => {
@@ -553,7 +561,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
         for (const [index, blob] of (await cropAreas(capture, comments.map((entry) => entry.on === of ? entry.area : null))).entries()) if (blob) await transport.picture(mark.id, blob, numberOf(index));
       }
       const result = await transport.send(mark.id, {
-        comments, live: Boolean(one), to: hand() ? agent()?.name ?? null : null,
+        comments, live: Boolean(one), to: one || hand() ? agent()?.name ?? null : null,
         screenshot: first ? { width: first.capture.width, height: first.capture.height, surface: first.capture.surface, outlined: true, of: first.of } : { missing: views.length ? captureError ?? "capture failed" : marksOn("page") ? noPicture() ?? (one ? "not taken: a live comment's picture is not asked for" : "capture failed") : "text only" },
         client: { id: host.clientId(), userAgent: navigator.userAgent, url: location.pathname + location.search, viewport: { width: innerWidth, height: innerHeight, devicePixelRatio }, ...await host.client?.() },
       });
@@ -581,6 +589,11 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     }
   }
 
+  // A session starts listening, or Live is turned on: what was already Done goes, in its order.
+  createEffect(() => {
+    if (!live()) return;
+    untrack(() => { for (const selection of unsent()) if (selection.id !== openId() && !selection.whole && selection.comment.trim()) { const id = selection.id; posting = posting.then(() => send(id)); } });
+  });
   const write = (selection: Selection) => (value: string) => setSelections((candidate) => candidate.id === selection.id, produce((draft) => { draft.comment = value; }));
   const sourceLine = (selection: Selection) => selection.whole ? "The whole page, as it was when this was taken." : selection.general ? "About nothing on the page in particular." : selection.elements.length === 1 ? sourceOf(selection.elements[0]!) : undefined;
 
@@ -625,11 +638,11 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
               value={reply()} onOpen={() => startReply(n())} onInput={setReply} />}</Show>
           </Show>}</For></FeedbackNotes>
         </Show>
-        <FeedbackBar view={props.mode === "use" ? "use" : view()} screenshots={canCapture} onView={look} tool={pointerTool()} onTool={(tool) => { setCursor(null); setStroke(null); setPointerTool(tool); }} onNote={note}
-          status={status()} compact={touchOnly} keys={touchOnly ? undefined : props.keys?.()} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={setInk} onUndo={numbered().length ? undo : undefined}
+        <FeedbackBar view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onTool={(tool) => { setCursor(null); setStroke(null); setPointerTool(tool); }} onNote={note}
+          status={status()} compact={touchOnly} keys={touchOnly ? undefined : props.keys?.()} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} onUndo={numbered().length ? undo : undefined}
           replies={unread().reduce((sum, item) => sum + item.unread, 0)} onReplies={() => { const item = unread()[0]; if (item) follow(item.id, true); }}
-          live={answered ? live() : undefined} onLive={lastSent() ? undefined : keepLive} standing={thread() ? standing() : undefined}
-          hand={hand()} onHand={keepHand} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
+          live={offersLive ? live() || !offersBatch : undefined} onLive={offersBatch && agent() && !lastSent() ? keepLive : undefined} standing={thread() ? standing() : undefined}
+          hand={hand()} onHand={can.listeners ? keepHand : undefined} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
           canSend={canSend()} sending={sending()} onSend={() => void send()} onClose={props.onClose} />
       </Show>
     </FeedbackLayer>

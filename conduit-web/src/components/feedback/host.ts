@@ -58,13 +58,36 @@ export interface FeedbackTransport {
  *   batched   a collaborator's: Send delivers the whole item at once, to the listening session or to the folder, and
  *             it is then a thread the agent answers and the person writes back on.
  *   live      a collaborator's, on something worked on together: each comment goes as it is Done, to one item that
- *             grows, and is a thread from then on. Where the host says batched the person may still choose it.
+ *             grows, and is a thread from then on. Only while a session is listening; with batched offered too, the
+ *             person chooses, and without a listener it is batched.
  */
 export type FeedbackDelivery = "one-way" | "batched" | "live";
 
+/** A tool of the rail. */
+export type FeedbackToolName = "select" | "pen" | "arrow" | "box" | "text" | "erase" | "note";
+
+/**
+ * What the tool is in one place it is put: a host declares only what belongs there, and nothing else is offered, by
+ * the bar or by a key. (The receiver has its own half: a one-way one is made with `answered: false`.)
+ */
+export type FeedbackCapabilities = {
+  /** How it reaches whoever answers. One-way stands alone; a collaborator's host offers batched, live or both, the first being what it opens on. */
+  deliveries: readonly ["one-way"] | readonly [Exclude<FeedbackDelivery, "one-way">, ...Exclude<FeedbackDelivery, "one-way">[]];
+  /** The rail, in its own order whatever order they are listed in. */
+  tools: readonly FeedbackToolName[];
+  /** Annotating a screenshot, where the client can take one. */
+  screenshot: boolean;
+  /** Showing the sessions that are listening and handing an item to one. Live needs it, and one listening: a comment that goes as it is Done goes to someone. */
+  listeners: boolean;
+  /** Choosing what a drawing is drawn in. */
+  inks: boolean;
+};
+/** What a host that declares nothing gets: a collaborator's batched markup with every tool. */
+export const FEEDBACK_CAPABILITIES: FeedbackCapabilities = { deliveries: ["batched"], tools: ["select", "pen", "arrow", "box", "text", "erase", "note"], screenshot: true, listeners: true, inks: true };
+
 export interface FeedbackHost {
-  /** Unset: batched. */
-  delivery?: FeedbackDelivery;
+  /** What differs from FEEDBACK_CAPABILITIES here. */
+  capabilities?: Partial<FeedbackCapabilities>;
   names: PieceNames;
   /** Attributes the app marks its regions with, the outermost kind first (Conduit: data-region, data-pane…). An item's paths start from them. */
   anchors?: string[];

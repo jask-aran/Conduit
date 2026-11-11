@@ -90,10 +90,10 @@ export type FeedbackView = "use" | "page" | "screenshot";
  *  the annotating tools, with a general note among them and no Select on a screenshot, which has nothing under it to select; the ink the next
  *  drawing is in (a press takes the next) and Undo, both left to the keyboard and the eraser on a phone; a new screenshot while
  *  one is looked at; the listening session the item is handed to (`agent`, none when no session listens); Send and close. `compact`: icons alone,
- *  for a phone's width. `thread`: the item is sent and its thread is followed, so the bar is only what was said of it (`status`) and close.
+ *  for a phone's width. `tools`: the ones this host offers (all, unsaid). `thread`: the item is sent and its thread is followed, so the bar is only what was said of it (`status`) and close.
  *  `replies`: answers unread on an item sent earlier, and the way to them. `live`: each comment goes as it is Done, so there is no Send (undefined:
  *  not offered; no `onLive`: no longer to be changed); `standing` is then where the growing item stands. */
-export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; onView: (view: FeedbackView) => void; tool: FeedbackToolKind; onTool: (tool: FeedbackToolKind) => void; onNote: () => void; live?: boolean; onLive?: (on: boolean) => void; standing?: string; thread?: boolean; replies?: number; onReplies?: () => void; ink?: FeedbackInk; onInk?: (ink: FeedbackInk) => void; onUndo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
+export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; onView: (view: FeedbackView) => void; tools?: readonly (FeedbackToolKind | "note")[]; tool: FeedbackToolKind; onTool: (tool: FeedbackToolKind) => void; onNote: () => void; live?: boolean; onLive?: (on: boolean) => void; standing?: string; thread?: boolean; replies?: number; onReplies?: () => void; ink?: FeedbackInk; onInk?: (ink: FeedbackInk) => void; onUndo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
   canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void }) {
   const using = () => props.view === "use";
   const views = (): Array<{ value: FeedbackView; label: string; icon: JSX.Element }> => [
@@ -107,7 +107,7 @@ export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; 
         <Segmented label="Mode" icons size="sm" value={props.view} onChange={props.onView} options={views()} />
       </Show>
       <Segmented label="Annotate with" icons size="sm" value={props.tool} onChange={(tool) => tool === "note" ? props.onNote() : props.onTool(tool)} disabled={using()}
-        options={TOOLS.filter((option) => option.value !== "select" || props.view !== "screenshot").map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} />
+        options={TOOLS.filter((option) => (!props.tools || props.tools.includes(option.value)) && (option.value !== "select" || props.view !== "screenshot")).map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} />
       <Show when={!props.compact}><span class="ui-feedback-with">
         <Show when={props.onInk}>{(onInk) => { const inks = Object.keys(FEEDBACK_INKS) as FeedbackInk[], now = () => props.ink ?? "plain";
           return <IconButton label={`Ink: ${FEEDBACK_INKS[now()].label} (C)`} disabled={using()} onClick={() => onInk()(inks[(inks.indexOf(now()) + 1) % inks.length]!)}><Swatch colour={FEEDBACK_INKS[now()].colour} /></IconButton>; }}</Show>
@@ -119,7 +119,7 @@ export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; 
     <Show when={!props.thread}>
     <span class="ui-feedback-with">
       <Show when={props.onRetake && props.view === "screenshot"}><IconButton label="Take the screenshot again" onClick={props.onRetake}><Icons.Camera /></IconButton></Show>
-      <Show when={props.live !== undefined && !props.compact}><IconButton label="Live: each comment goes as it is Done" disabled={!props.onLive} aria-pressed={props.live} onClick={() => props.onLive?.(!props.live)}><Icons.Runtime /></IconButton></Show>
+      <Show when={props.live !== undefined && !props.compact}><IconButton label={props.onLive || props.live ? "Live: each comment goes as it is Done" : "Live needs a session listening"} disabled={!props.onLive} aria-pressed={props.live} onClick={() => props.onLive?.(!props.live)}><Icons.Runtime /></IconButton></Show>
       <Show when={props.onHand}>
         <IconButton label={props.agent ? `Hand to ${props.agent}` : "No session is listening"} disabled={!props.agent} aria-pressed={Boolean(props.agent && props.hand)} onClick={() => props.onHand!(!props.hand)}><Icons.Agent /></IconButton>
         <Show when={props.agent} fallback={<Show when={!props.compact}><span class="ui-feedback-status">No listener</span></Show>}>
