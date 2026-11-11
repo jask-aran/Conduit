@@ -86,7 +86,7 @@ Open <http://127.0.0.1:4310>. Connect a model provider in **Settings > Auth**.
 
 Start with the [web runtime and API](conduit-web/README.md), [install, clients and operations](docs/DEPLOYMENT.md), [testing](docs/TESTING.md) and [contributing](CONTRIBUTING.md).
 
-See what shipped recently in [release notes](docs/releases/) and [GitHub Releases](https://github.com/jask-aran/Conduit/releases).
+See what shipped in [GitHub Releases](https://github.com/jask-aran/Conduit/releases).
 
 ## License
 
