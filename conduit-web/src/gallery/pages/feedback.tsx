@@ -2,7 +2,7 @@ import { FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote
 import { row, token, type Page } from "../model";
 import { noop } from "../demos";
 
-const bar = (more: Partial<Parameters<typeof FeedbackBar>[0]> = {}) => <FeedbackBar view="page" screenshots onView={noop} tool="select" onTool={noop} onNote={noop} status="Press or drag" keys={["Alt", "Shift", "F"]} onRetake={noop} onHand={noop} canSend onSend={noop} onClose={noop} {...more} />;
+const bar = (more: Partial<Parameters<typeof FeedbackBar>[0]> = {}) => <FeedbackBar view="page" screenshots onView={noop} tool="select" onTool={noop} onNote={noop} ink="plain" onInk={noop} onUndo={noop} status="Press or drag" keys={["Alt", "Shift", "F"]} onRetake={noop} onHand={noop} canSend onSend={noop} onClose={noop} {...more} />;
 const note = (more: Partial<Parameters<typeof FeedbackNote>[0]> = {}) => <FeedbackNote open={false} tag="1" name="IconButton" source="conduit-web/src/components/ui/actions.tsx:21"
   value="Match the other rail icons' stroke." onOpen={noop} onInput={noop} onRemove={noop} {...more} />;
 const notes = () => <FeedbackNotes>{note()}{note({ tag: "2", name: "2 pieces: Row ×2", source: undefined, value: "" })}{note({ tag: "3", name: "General note", source: "About nothing on the page in particular.", value: "The page feels crowded.", open: true })}</FeedbackNotes>;
@@ -42,7 +42,7 @@ export const feedbackPage: Page = {
     { selector: ".ui-feedback-mark[data-kind='cursor']", name: "Cursor mark", does: "what a press would choose, named for its piece", from: "FeedbackMark kind cursor" },
     { selector: ".ui-feedback-drawing", name: "Drawing", does: "what the person drew for one comment, any number together: a pen line, an arrow, a box, words; numbered by a drawn mark", from: "FeedbackDrawing, FeedbackText, FeedbackMark kind drawn" },
     { selector: ".ui-feedback-note", name: "Note", does: "one comment: beside what it is about while it is written, then in the stack with its words on a line and its picture", from: "FeedbackNotes > FeedbackNote > Card, CardPreview, TextArea" },
-    { selector: ".ui-feedback-bar", name: "Bar", does: "the mode (use the app, annotate the live page, annotate a screenshot), the annotating tools, the listening session, Send", from: "FeedbackBar > Segmented, IconButton, Button" },
+    { selector: ".ui-feedback-bar", name: "Bar", does: "the mode (use the app, annotate the live page, annotate a screenshot), the annotating tools, the ink and Undo, the listening session, Send", from: "FeedbackBar > Segmented, IconButton, Button" },
   ] },
   examples: [
     row("marks", "cursor, chosen, a group with its members, a drag's marquee", scene(() => <>
@@ -53,12 +53,12 @@ export const feedbackPage: Page = {
       <FeedbackMark kind="member" box={{ left: 134, top: 116, width: 90, height: 58 }} />
       <FeedbackMark kind="marquee" box={{ left: 260, top: 40, width: 140, height: 140 }} />
     </>), { surfaces: ["ground"] }),
-    row("drawings", "a pen line, an arrow and a box, each with its number", scene(() => <>
+    row("drawings", "a pen line, an arrow and a box (in red ink), each with its number", scene(() => <>
       <FeedbackDrawing kind="pen" points={[[30, 90], [44, 60], [62, 84], [80, 52], [100, 80], [122, 50], [140, 76]]} />
       <FeedbackMark kind="drawn" tag="1" box={{ left: 30, top: 50, width: 110, height: 40 }} />
       <FeedbackDrawing kind="arrow" points={[[180, 140], [260, 70]]} />
       <FeedbackMark kind="drawn" tag="2" box={{ left: 180, top: 70, width: 80, height: 70 }} />
-      <FeedbackDrawing kind="box" points={[[300, 50], [420, 130]]} current />
+      <FeedbackDrawing kind="box" points={[[300, 50], [420, 130]]} ink="red" current />
       <FeedbackMark kind="drawn" tag="3" box={{ left: 300, top: 50, width: 120, height: 80 }} />
     </>), { surfaces: ["ground"] }),
     row("notes", "the stack: shut notes show their words on a line, the open one is written in; a general note is about no piece", scene(() => <>{notes()}</>), { surfaces: ["ground"] }),

@@ -70,7 +70,7 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
       n: entry.n, comment: String(entry.comment ?? ""), kind: entry.kind === "group" ? "group" : "component", name: String(entry.name ?? ""), rect,
       on: entry.on === "screenshot" ? "screenshot" : "page",
       ...(Array.isArray(entry.drawings) ? { drawings: entry.drawings.slice(0, 40).filter((drawing) => ["pen", "arrow", "box", "text"].includes(drawing?.kind) && Array.isArray(drawing.points)).map((drawing) => ({
-        kind: drawing.kind, ...(drawing.kind === "text" ? { text: short(String(drawing.text ?? ""), 400) } : {}), points: drawing.points.slice(0, 80).map((point) => [Number(point?.[0]) || 0, Number(point?.[1]) || 0]) })) } : {}),
+        kind: drawing.kind, ...(typeof drawing.colour === "string" ? { colour: drawing.colour.slice(0, 20) } : {}), ...(drawing.kind === "text" ? { text: short(String(drawing.text ?? ""), 400) } : {}), points: drawing.points.slice(0, 80).map((point) => [Number(point?.[0]) || 0, Number(point?.[1]) || 0]) })) } : {}),
       ...(areas.has(entry.n) ? { picture: { file: `selection-${entry.n}.png`, area: entry.area ?? null, dragged: Boolean(entry.dragged) } } : {}),
       ...(rect && scale ? { screenshotRect: Object.fromEntries(Object.entries(rect).map(([key, value]) => [key, Math.round(value * scale)])) } : {}),
       ...(entry.kind === "group" ? { members: (entry.members ?? []).slice(0, 40).map(where) } : where(entry)),

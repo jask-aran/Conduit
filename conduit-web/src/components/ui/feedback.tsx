@@ -1,6 +1,6 @@
 import { createUniqueId, Show, type JSX } from "solid-js";
 // Through the barrel, so the tool's chunk takes these from the app's own and the build splits nothing new out of it.
-import { Button, Card, CardPreview, CloseButton, Frost, IconButton, Icons, Segmented, Spinner, TextArea } from "./index";
+import { Button, Card, CardPreview, CloseButton, Frost, IconButton, Icons, Segmented, Spinner, Swatch, TextArea } from "./index";
 import "./styles/feedback.css";
 
 /* Not in the library's barrel: the tool imports this file when it is opened, so the app's first load does not carry it
@@ -24,6 +24,10 @@ export const FeedbackMark = (props: { box: FeedbackBox; kind: "cursor" | "chosen
   </div>;
 
 export type FeedbackPoint = readonly [x: number, y: number];
+/** What a drawing is drawn in. The first is the layer's own line. */
+export const FEEDBACK_INKS = { plain: { label: "Plain", colour: "var(--primary)" }, red: { label: "Red", colour: "var(--destructive)" }, amber: { label: "Amber", colour: "var(--status-warn)" }, green: { label: "Green", colour: "var(--status-success)" }, blue: { label: "Blue", colour: "var(--status-unread)" } } as const;
+export type FeedbackInk = keyof typeof FEEDBACK_INKS;
+const inked = (ink?: FeedbackInk): JSX.CSSProperties => ({ "--feedback-ink": FEEDBACK_INKS[ink ?? "plain"].colour });
 export type FeedbackDrawingKind = "pen" | "arrow" | "box";
 export const drawingBox = (points: readonly FeedbackPoint[]): FeedbackBox => {
   const xs = points.map((point) => point[0]), ys = points.map((point) => point[1]);
@@ -32,7 +36,7 @@ export const drawingBox = (points: readonly FeedbackPoint[]): FeedbackBox => {
 };
 const line = (points: readonly FeedbackPoint[]) => points.map((point, index) => `${index ? "L" : "M"}${point[0]} ${point[1]}`).join("");
 
-export function FeedbackDrawing(props: { kind: FeedbackDrawingKind; points: readonly FeedbackPoint[]; shift?: { x: number; y: number }; current?: boolean }) {
+export function FeedbackDrawing(props: { kind: FeedbackDrawingKind; points: readonly FeedbackPoint[]; ink?: FeedbackInk; shift?: { x: number; y: number }; current?: boolean }) {
   const head = createUniqueId();
   const ends = () => [props.points[0]!, props.points[props.points.length - 1]!] as const;
   const path = () => {
@@ -41,7 +45,7 @@ export function FeedbackDrawing(props: { kind: FeedbackDrawingKind; points: read
     const box = drawingBox(ends());
     return `M${box.left} ${box.top}h${box.width}v${box.height}h${-box.width}z`;
   };
-  return <svg class="ui-feedback-drawing" data-kind={props.kind} data-current={props.current ? "" : undefined} style={props.shift ? { translate: `${props.shift.x}px ${props.shift.y}px` } : undefined} aria-hidden="true">
+  return <svg class="ui-feedback-drawing" data-kind={props.kind} data-current={props.current ? "" : undefined} style={{ ...inked(props.ink), translate: props.shift ? `${props.shift.x}px ${props.shift.y}px` : undefined }} aria-hidden="true">
     {/* The head is sized in line widths (markerUnits is strokeWidth), so it follows the line's token. */}
     <Show when={props.kind === "arrow"}><defs><marker id={head} viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L6 3L0 6z" /></marker></defs></Show>
     <Show when={props.points.length}><path d={path()} marker-end={props.kind === "arrow" ? `url(#${head})` : undefined} /></Show>
@@ -49,9 +53,9 @@ export function FeedbackDrawing(props: { kind: FeedbackDrawingKind; points: read
 }
 
 /** Words written on the page, as a drawing: a field where they are, the size of what it holds; `editable` while its comment is being written. */
-export const FeedbackText = (props: { ref?: (element: HTMLInputElement) => void; at: FeedbackPoint; shift?: { x: number; y: number }; value: string; editable?: boolean; onInput: (value: string, element: HTMLInputElement) => void; onDone: () => void }) =>
+export const FeedbackText = (props: { ref?: (element: HTMLInputElement) => void; at: FeedbackPoint; ink?: FeedbackInk; shift?: { x: number; y: number }; value: string; editable?: boolean; onInput: (value: string, element: HTMLInputElement) => void; onDone: () => void }) =>
   <input ref={props.ref} class="ui-feedback-text" data-editable={props.editable ? "" : undefined} readOnly={!props.editable} aria-label="Text on the page" placeholder="Text" value={props.value}
-    style={{ left: `${props.at[0]}px`, top: `${props.at[1]}px`, translate: props.shift ? `${props.shift.x}px ${props.shift.y}px` : undefined }} onInput={(event) => props.onInput(event.currentTarget.value, event.currentTarget)} onBlur={props.onDone} />;
+    style={{ ...inked(props.ink), left: `${props.at[0]}px`, top: `${props.at[1]}px`, translate: props.shift ? `${props.shift.x}px ${props.shift.y}px` : undefined }} onInput={(event) => props.onInput(event.currentTarget.value, event.currentTarget)} onBlur={props.onDone} />;
 
 /** Every comment of the item, the newest at the foot, in the corner; `lift` is the bar's height when the stack has to stand over it. */
 export const FeedbackNotes = (props: { lift?: number; children: JSX.Element }) =>
@@ -71,20 +75,21 @@ export function FeedbackNote(props: { ref?: (element: HTMLTextAreaElement) => vo
   </div>;
 }
 
-export type FeedbackToolKind = "select" | FeedbackDrawingKind | "text";
+export type FeedbackToolKind = "select" | FeedbackDrawingKind | "text" | "erase";
 const TOOLS: ReadonlyArray<{ value: FeedbackToolKind | "note"; label: string; icon: () => JSX.Element }> = [
   { value: "select", label: "Select (V)", icon: () => <Icons.Pointer /> }, { value: "pen", label: "Pen (P)", icon: () => <Icons.Edit /> },
   { value: "arrow", label: "Arrow (A)", icon: () => <Icons.DrawArrow /> }, { value: "box", label: "Box (B)", icon: () => <Icons.DrawBox /> }, { value: "text", label: "Text (T)", icon: () => <Icons.DrawText /> },
-  { value: "note", label: "General note (N)", icon: () => <Icons.Note /> },
+  { value: "erase", label: "Eraser (E)", icon: () => <Icons.Erase /> }, { value: "note", label: "General note (N)", icon: () => <Icons.Note /> },
 ];
 /** Use the app, or annotate: the live page, or a screenshot of it. */
 export type FeedbackView = "use" | "page" | "screenshot";
 
 /** The tool's bar, at the foot: its mode (`view`; `keys` is the chord that goes to the app and back; Screenshot only where the client can take one);
- *  the annotating tools, with a general note among them and no Select on a screenshot, which has nothing under it to select; a new screenshot while
+ *  the annotating tools, with a general note among them and no Select on a screenshot, which has nothing under it to select; the ink the next
+ *  drawing is in (a press takes the next) and Undo, both left to the keyboard and the eraser on a phone; a new screenshot while
  *  one is looked at; the listening session the item is handed to (`agent`, none when no session listens); Send and close. `compact`: icons alone,
  *  for a phone's width. */
-export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; onView: (view: FeedbackView) => void; tool: FeedbackToolKind; onTool: (tool: FeedbackToolKind) => void; onNote: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
+export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; onView: (view: FeedbackView) => void; tool: FeedbackToolKind; onTool: (tool: FeedbackToolKind) => void; onNote: () => void; ink?: FeedbackInk; onInk?: (ink: FeedbackInk) => void; onUndo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
   canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void }) {
   const using = () => props.view === "use";
   const views = (): Array<{ value: FeedbackView; label: string; icon: JSX.Element }> => [
@@ -98,6 +103,11 @@ export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; 
     </Show>
     <Segmented label="Annotate with" icons size="sm" value={props.tool} onChange={(tool) => tool === "note" ? props.onNote() : props.onTool(tool)} disabled={using()}
       options={TOOLS.filter((option) => option.value !== "select" || props.view !== "screenshot").map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} />
+    <Show when={!props.compact}><span class="ui-feedback-with">
+      <Show when={props.onInk}>{(onInk) => { const inks = Object.keys(FEEDBACK_INKS) as FeedbackInk[], now = () => props.ink ?? "plain";
+        return <IconButton label={`Ink: ${FEEDBACK_INKS[now()].label} (C)`} disabled={using()} onClick={() => onInk()(inks[(inks.indexOf(now()) + 1) % inks.length]!)}><Swatch colour={FEEDBACK_INKS[now()].colour} /></IconButton>; }}</Show>
+      <IconButton label="Undo (Ctrl Z)" disabled={!props.onUndo || using()} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton>
+    </span></Show>
     <Show when={props.status && !props.compact}><span class="ui-feedback-status">{props.status}</span></Show>
     <span class="ui-feedback-with">
       <Show when={props.onRetake && props.view === "screenshot"}><IconButton label="Take the screenshot again" onClick={props.onRetake}><Icons.Camera /></IconButton></Show>

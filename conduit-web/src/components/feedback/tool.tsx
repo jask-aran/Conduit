@@ -1,7 +1,7 @@
 import { createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import { Portal } from "solid-js/web";
-import { drawingBox, FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote, FeedbackNotes, FeedbackText, type FeedbackBox, type FeedbackDrawingKind, type FeedbackPoint, type FeedbackToolKind } from "@/components/ui/feedback";
+import { drawingBox, FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote, FeedbackNotes, FeedbackText, FEEDBACK_INKS, type FeedbackBox, type FeedbackDrawingKind, type FeedbackInk, type FeedbackPoint, type FeedbackToolKind } from "@/components/ui/feedback";
 import { captureHeld, captureScreen, cropAreas, previewOf, type Capture } from "./capture";
 import type { FeedbackHost, FeedbackListener } from "./host";
 import { createPieces } from "./pieces";
@@ -9,7 +9,7 @@ import { createPieces } from "./pieces";
 /** What a comment was made on: a screenshot of the page, or the live page. Its marks show on that one. */
 type View = "screenshot" | "page";
 /** `text`: words put on the page at its one point; `size`: what they measure, once written. */
-type Drawing = { kind: FeedbackDrawingKind | "text"; points: FeedbackPoint[]; text?: string; size?: { width: number; height: number } };
+type Drawing = { kind: FeedbackDrawingKind | "text"; points: FeedbackPoint[]; ink: FeedbackInk; text?: string; size?: { width: number; height: number } };
 /**
  * One comment. `reach`: how far a drag went past what it locked onto, each side (px); the dragged area is the pieces' box grown by it.
  * `drawings`: what was drawn for it, any number; `from`: where its pieces' box was when the last was drawn, so they follow the pieces on the live page.
@@ -20,7 +20,10 @@ type Selection = { id: number; elements: Element[]; comment: string; on: View; r
 const GENERAL = "General note";
 const WHOLE = "Screenshot";
 type Tool = FeedbackToolKind;
-const DRAW_KEYS: Record<string, Tool> = { v: "select", p: "pen", a: "arrow", b: "box", t: "text" };
+const DRAW_KEYS: Record<string, Tool> = { v: "select", p: "pen", a: "arrow", b: "box", t: "text", e: "erase" };
+const INKS = Object.keys(FEEDBACK_INKS) as FeedbackInk[];
+/** The eraser takes a drawing it comes this near (px). */
+const ERASE_REACH = 8;
 const DRAWN: Record<Drawing["kind"], string> = { pen: "Pen", arrow: "Arrow", box: "Box", text: "Text" };
 /** A pen's line keeps a point each time the pointer has gone this far (px); an item is sent at most this many. */
 const PEN_STEP = 2;
@@ -54,6 +57,16 @@ const sameBox = (a: FeedbackBox | null, b: FeedbackBox | null) => a === b || Boo
 const ends = (drawing: Drawing) => [drawing.points[0]!, drawing.points[drawing.points.length - 1]!] as const;
 const drawnBox = (drawing: Drawing): FeedbackBox => drawing.kind === "text" ? { left: drawing.points[0]![0], top: drawing.points[0]![1], width: drawing.size?.width ?? 0, height: drawing.size?.height ?? 0 }
   : drawingBox(drawing.kind === "pen" ? drawing.points : ends(drawing));
+const nearLine = (x: number, y: number, from: FeedbackPoint, to: FeedbackPoint) => {
+  const dx = to[0] - from[0], dy = to[1] - from[1], along = dx || dy ? Math.max(0, Math.min(1, ((x - from[0]) * dx + (y - from[1]) * dy) / (dx * dx + dy * dy))) : 0;
+  return Math.hypot(x - from[0] - along * dx, y - from[1] - along * dy) <= ERASE_REACH;
+};
+/** Whether a point is on a drawing: on a line, or in a box or in words. */
+const touches = (drawing: Drawing, x: number, y: number) => {
+  if (drawing.kind === "pen" || drawing.kind === "arrow") { const line = drawing.kind === "pen" ? drawing.points : ends(drawing); return line.some((point, at) => nearLine(x, y, line[Math.max(0, at - 1)]!, point)); }
+  const box = drawnBox(drawing);
+  return x >= box.left - ERASE_REACH && x <= box.left + box.width + ERASE_REACH && y >= box.top - ERASE_REACH && y <= box.top + box.height + ERASE_REACH;
+};
 const frames = (count: number) => new Promise<void>((resolve) => { const next = (left: number) => left ? requestAnimationFrame(() => next(left - 1)) : resolve(); next(count); });
 
 /** `keys`: the chord that opens the tool, as the bar shows it. */
@@ -68,6 +81,13 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const [marquee, setMarquee] = createSignal<FeedbackBox | null>(null);
   const [pointerTool, setPointerTool] = createSignal<Tool>("select");
   const [stroke, setStroke] = createSignal<{ kind: FeedbackDrawingKind; points: FeedbackPoint[] } | null>(null);
+  const [ink, setInk] = createSignal<FeedbackInk>("plain");
+  // An ink as the page resolves it, for a note's picture.
+  const colours = new Map<FeedbackInk, string>();
+  const colourOf = (name: FeedbackInk) => {
+    if (!colours.has(name) && layer) { const probe = document.createElement("i"); probe.style.color = FEEDBACK_INKS[name].colour; layer.append(probe); colours.set(name, getComputedStyle(probe).color); probe.remove(); }
+    return colours.get(name) ?? "";
+  };
   const aimed = createMemo(() => { const drag = marquee(); return drag ? piecesWithin(drag) : []; });
   // A screen with no keyboard is not shown the chord.
   const touchOnly = matchMedia("(hover: none) and (pointer: coarse)").matches;
@@ -116,11 +136,11 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     setStroke(null);
     openNote(null);
     props.onMode(next === "use" ? "use" : "select");
-    if (next === "screenshot" && !picture()) void take();
+    if (next === "screenshot" && !picture()) void take(true);
     else if (next !== "use") show(next);
   };
   /** The screenshot, with nothing of the tool in it; it is then what is looked at, and a comment of its own. */
-  const take = async () => {
+  const take = async (go: boolean) => {
     if (!canCapture) return;
     setTaking(true);
     await frames(2);
@@ -130,9 +150,9 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     if (old) URL.revokeObjectURL(old.url);
     setPicture(capture && { url: URL.createObjectURL(capture.blob), capture });
     if (capture) {
-      show("screenshot");
+      if (go) show("screenshot");
       if (!selections.some((selection) => selection.whole)) setSelections((all) => [{ id: nextId++, elements: [], comment: "", on: "screenshot", whole: true }, ...all]);
-    } else setView("page");
+    } else if (view() === "screenshot") setView("page");
     setTaking(false);
   };
 
@@ -182,8 +202,8 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     const selection = selections.find((candidate) => candidate.id === id), shot = picture();
     if (!selection || !shot || !layer || selection.on !== "screenshot" || !floats(selection)) return;
     const line = getComputedStyle(layer), type = getComputedStyle(layer.querySelector(".ui-feedback-text") ?? layer);
-    const blob = await previewOf(shot.capture, areaOf(selection), { outline: selection.drawings ? undefined : extent(selection), drawings: selection.drawings ?? [] },
-      { stroke: line.stroke, width: parseFloat(line.strokeWidth) || 1, font: `${type.fontWeight} ${type.fontSize} ${type.fontFamily}` }).catch(() => null);
+    const blob = await previewOf(shot.capture, areaOf(selection), { outline: selection.drawings ? undefined : extent(selection), drawings: (selection.drawings ?? []).map((drawing) => ({ ...drawing, colour: colourOf(drawing.ink) })) },
+      { stroke: colourOf("plain"), width: parseFloat(line.strokeWidth) || 1, font: `${type.fontWeight} ${type.fontSize} ${type.fontFamily}` }).catch(() => null);
     if (blob) setSelections((candidate) => candidate.id === id, "preview", (old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
   };
   /** Opening another note, or none, is Done for the one that was open. */
@@ -234,12 +254,27 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     setSelections((all) => all.filter((selection) => selection.id !== id));
     if (openId() === id) setOpenId(null);
   };
+  // By its place: what the store hands back is not the same object it was given.
+  const erase = (selection: Selection, at: number) => selection.drawings!.length === 1 ? remove(selection.id) : setSelections((candidate) => candidate.id === selection.id, "drawings", (all) => all!.filter((_, kept) => kept !== at));
+  /** The eraser takes what it touches of what is drawn on what is looked at; a comment with nothing left drawn goes with it. */
+  const eraseAt = (x: number, y: number) => {
+    for (const selection of [...selections]) {
+      if (!selection.drawings || selection.on !== showing()) continue;
+      const shift = shiftOf(selection), hit = selection.drawings.findIndex((drawing) => touches(drawing, x - shift.x, y - shift.y));
+      if (hit >= 0) erase(selection, hit);
+    }
+  };
+  /** The last thing drawn for the comment being written, else the last comment. */
+  const undo = () => {
+    const current = open(), last = numbered()[numbered().length - 1];
+    if (current?.drawings) erase(current, current.drawings.length - 1);
+    else if (last) remove(last.id);
+  };
   /** Words left empty are not a drawing; a comment of nothing is not a comment. */
-  const textDone = (id: number, drawing: Drawing) => {
-    const selection = selections.find((candidate) => candidate.id === id);
-    if (!selection || drawing.text?.trim()) return;
-    if (selection.drawings!.length === 1 && !selection.comment.trim()) return remove(id);
-    setSelections((candidate) => candidate.id === id, "drawings", (all) => all!.filter((kept) => kept !== drawing));
+  const textDone = (id: number, at: number) => {
+    const selection = selections.find((candidate) => candidate.id === id), drawing = selection?.drawings?.[at];
+    if (!selection || !drawing || drawing.kind !== "text" || drawing.text?.trim()) return;
+    erase(selection, at);
   };
   const toggleIn = (selection: Selection, element: Element) => setSelections((candidate) => candidate.id === selection.id, "elements", (elements) =>
     elements.includes(element) ? (elements.length > 1 ? elements.filter((kept) => kept !== element) : elements) : placed([...elements, element]));
@@ -258,7 +293,8 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     if (!select() || (own(event.target) && !press)) return;
     if (pointer.x !== event.clientX || pointer.y !== event.clientY) { if (under(event.clientX, event.clientY) !== under(pointer.x, pointer.y)) widen = 0; pointer = { x: event.clientX, y: event.clientY }; }
     const drawn = stroke();
-    if (drawn) {
+    if (pointerTool() === "erase") { setCursor(null); if (press) eraseAt(event.clientX, event.clientY); }
+    else if (drawn) {
       const last = drawn.points[drawn.points.length - 1]!, here: FeedbackPoint = [event.clientX, event.clientY];
       if (drawn.kind !== "pen") setStroke({ kind: drawn.kind, points: [drawn.points[0]!, here] });
       else if (Math.hypot(here[0] - last[0], here[1] - last[1]) >= PEN_STEP) setStroke({ kind: "pen", points: [...drawn.points, here] });
@@ -283,22 +319,29 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     const tool = pointerTool();
     if (tool === "text") {
       // Words go where the press was, written there.
-      const id = draw({ kind: "text", points: [[event.clientX, event.clientY]], text: "" });
+      const id = draw({ kind: "text", points: [[event.clientX, event.clientY]], ink: ink(), text: "" });
       setNoteAt(null);
       setOpenId(id);
-      return queueMicrotask(() => textField?.focus({ preventScroll: true }));
+      return queueMicrotask(() => {
+        textField?.focus({ preventScroll: true });
+        // Its room is known before a word is written, so the comment's note stands clear of it.
+        const size = textField && { width: textField.offsetWidth, height: textField.offsetHeight }, at = (open()?.drawings?.length ?? 0) - 1;
+        if (size && at >= 0) setSelections((candidate) => candidate.id === id, "drawings", at, "size", size);
+      });
     }
+    if (tool === "erase") { setCursor(null); press = { x: event.clientX, y: event.clientY, shift: false }; return eraseAt(event.clientX, event.clientY); }
     if (tool === "select") aim();
     press = { x: event.clientX, y: event.clientY, shift: event.shiftKey };
     if (tool !== "select") { setCursor(null); setStroke({ kind: tool, points: [[event.clientX, event.clientY]] }); }
   };
   const onPointerUp = () => {
     if (!press || !select()) return;
+    if (pointerTool() === "erase") { press = null; return; }
     const drawn = stroke();
     if (drawn) {
       press = null;
       setStroke(null);
-      const id = draw(drawn);
+      const id = draw({ ...drawn, ink: ink() });
       if (id !== null && id !== openId()) openNote(id);
       return;
     }
@@ -356,9 +399,10 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       return;
     }
     const handled = () => { event.preventDefault(); event.stopImmediatePropagation(); };
-    if (select() && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "z" && numbered().length) { handled(); return remove(numbered()[numbered().length - 1]!.id); }
+    if (select() && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "z" && numbered().length) { handled(); return undo(); }
     if (!select() || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.key.toLowerCase() === "n") { handled(); return note(); }
+    if (event.key.toLowerCase() === "c") { handled(); return void setInk(INKS[(INKS.indexOf(ink()) + 1) % INKS.length]!); }
     const picked = DRAW_KEYS[event.key.toLowerCase()];
     if (picked) { handled(); setCursor(null); if (picked !== "select" || view() === "page") setPointerTool(picked); return; }
     if (event.key === "Escape") { handled(); if (openId() !== null) openNote(null); else props.onClose(); }
@@ -369,7 +413,8 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
 
   const POINTER_EVENTS = ["pointermove", "pointerdown", "pointerup", "pointercancel", "mousedown", "mouseup", "click", "dblclick", "contextmenu", "wheel", "touchstart", "touchmove", "touchend", "touchcancel"] as const;
   onMount(() => {
-    if (atOpen) void take();
+    // The moment is kept in case it is wanted; the tool opens on the live page all the same.
+    if (atOpen) void take(false);
     for (const type of POINTER_EVENTS) window.addEventListener(type, swallow, { capture: true, passive: false });
     window.addEventListener("keydown", onKeyDown, { capture: true });
     for (const type of ["focusin", "focusout"] as const) window.addEventListener(type, quietFocus, { capture: true });
@@ -417,7 +462,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const canSend = () => selections.some((selection) => selection.comment.trim());
   const status = createMemo(() => {
     if (props.mode === "use") return "Using the app";
-    const does = pointerTool() === "select" ? "press or drag" : pointerTool() === "text" ? "press to write" : "drag to draw";
+    const does = pointerTool() === "select" ? "press or drag" : pointerTool() === "text" ? "press to write" : pointerTool() === "erase" ? "rub a drawing out" : "drag to draw";
     return does[0]!.toUpperCase() + does.slice(1);
   });
 
@@ -436,7 +481,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
         const marks = extent(selection), shift = shiftOf(selection);
         const drawings = selection.drawings?.map((drawing) => {
           const every = Math.max(1, Math.ceil(drawing.points.length / SENT_POINTS));
-          return { kind: drawing.kind, ...(drawing.kind === "text" ? { text: drawing.text ?? "" } : {}), points: drawing.points.filter((_, at) => at % every === 0 || at === drawing.points.length - 1).map((point) => [Math.round(point[0] + shift.x), Math.round(point[1] + shift.y)]) };
+          return { kind: drawing.kind, colour: drawing.ink, ...(drawing.kind === "text" ? { text: drawing.text ?? "" } : {}), points: drawing.points.filter((_, at) => at % every === 0 || at === drawing.points.length - 1).map((point) => [Math.round(point[0] + shift.x), Math.round(point[1] + shift.y)]) };
         });
         // The comment's own box is the last word on where it is: a piece the app took off the page measures as nothing.
         return { ...(members.length > 1 ? { members } : members[0]), n: index + 1, on: selection.on, ...(drawings ? { drawings } : {}), dragged: Boolean(selection.reach), area: areaOf(selection), comment: selection.comment.trim(), kind: members.length > 1 ? "group" as const : "component" as const, name: titleOf(selection),
@@ -488,15 +533,15 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       <For each={selections}>{(selection) => <Show when={floats(selection) && selection.on === showing()}>
         <Show when={selection.drawings} fallback={<FeedbackMark kind="chosen" box={box(selection.elements)} tag={tagOf(selection)} current={openId() === selection.id} onOpen={() => openNote(selection.id)} />}>{(drawings) => <>
           <For each={drawings()}>{(drawing, at) => drawing.kind === "text"
-            ? <FeedbackText ref={(element) => { textField = element; }} at={drawing.points[0]!} shift={shiftOf(selection)} value={drawing.text ?? ""} editable={openId() === selection.id}
-                onInput={(value, element) => setSelections((candidate) => candidate.id === selection.id, "drawings", at(), produce((draft) => { draft.text = value; draft.size = { width: element.offsetWidth, height: element.offsetHeight }; }))} onDone={() => textDone(selection.id, drawing)} />
-            : <FeedbackDrawing kind={drawing.kind} points={drawing.points} shift={shiftOf(selection)} current={openId() === selection.id} />}</For>
+            ? <FeedbackText ref={(element) => { textField = element; }} at={drawing.points[0]!} ink={drawing.ink} shift={shiftOf(selection)} value={drawing.text ?? ""} editable={openId() === selection.id}
+                onInput={(value, element) => setSelections((candidate) => candidate.id === selection.id, "drawings", at(), produce((draft) => { draft.text = value; draft.size = { width: element.offsetWidth, height: element.offsetHeight }; }))} onDone={() => textDone(selection.id, at())} />
+            : <FeedbackDrawing kind={drawing.kind} points={drawing.points} ink={drawing.ink} shift={shiftOf(selection)} current={openId() === selection.id} />}</For>
           <FeedbackMark kind="drawn" box={extent(selection)} tag={tagOf(selection)} onOpen={() => openNote(selection.id)} />
         </>}</Show>
         <Show when={!selection.drawings && selection.elements.length > 1}><For each={selection.elements}>{(element) => <FeedbackMark kind="member" box={box([element])} />}</For></Show>
       </Show>}</For>
       <Show when={select() && cursor()} keyed>{(element) => <Show when={!sameBox(box([element]), open() && floats(open()) ? box(open()!.elements) : null)}><FeedbackMark kind="cursor" box={box([element])} name={nameOf([element])} /></Show>}</Show>
-      <Show when={stroke()}>{(drawn) => <FeedbackDrawing kind={drawn().kind} points={drawn().points} current />}</Show>
+      <Show when={stroke()}>{(drawn) => <FeedbackDrawing kind={drawn().kind} points={drawn().points} ink={ink()} current />}</Show>
       <Show when={marquee()}>{(drag) => <>
         <FeedbackMark kind="marquee" box={drag()} />
         <Show when={aimed().length > 1}><For each={aimed()}>{(element) => <FeedbackMark kind="member" box={box([element])} />}</For></Show>
@@ -514,7 +559,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
           </Show>}</For></FeedbackNotes>
         </Show>
         <FeedbackBar view={props.mode === "use" ? "use" : view()} screenshots={canCapture} onView={look} tool={pointerTool()} onTool={(tool) => { setCursor(null); setStroke(null); setPointerTool(tool); }} onNote={note}
-          status={status()} compact={touchOnly} keys={touchOnly ? undefined : props.keys?.()} onRetake={() => { openNote(null); void take(); }}
+          status={status()} compact={touchOnly} keys={touchOnly ? undefined : props.keys?.()} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={setInk} onUndo={numbered().length ? undo : undefined}
           hand={hand()} onHand={keepHand} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
           canSend={canSend()} sending={sending()} onSend={() => void send()} onClose={props.onClose} />
       </Show>

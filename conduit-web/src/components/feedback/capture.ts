@@ -70,7 +70,7 @@ export async function cropAreas(capture: Capture, areas: (Area | null)[]): Promi
 }
 
 type Point = readonly [x: number, y: number];
-export type Drawn = { kind: "pen" | "arrow" | "box" | "text"; points: readonly Point[]; text?: string };
+export type Drawn = { kind: "pen" | "arrow" | "box" | "text"; points: readonly Point[]; text?: string; colour?: string };
 /** An arrow's head is this many line widths long, as the layer draws it. */
 const HEAD = 6;
 
@@ -87,6 +87,7 @@ export async function previewOf(capture: Capture, area: Area, marks: { outline?:
   context.textBaseline = "top";
   if (marks.outline) context.strokeRect(marks.outline.left, marks.outline.top, marks.outline.width, marks.outline.height);
   for (const drawing of marks.drawings) {
+    context.strokeStyle = context.fillStyle = drawing.colour ?? look.stroke;
     const from = drawing.points[0]!, to = drawing.points[drawing.points.length - 1]!;
     if (drawing.kind === "text") context.fillText(drawing.text ?? "", from[0], from[1]);
     else if (drawing.kind === "box") context.strokeRect(Math.min(from[0], to[0]), Math.min(from[1], to[1]), Math.abs(to[0] - from[0]), Math.abs(to[1] - from[1]));
