@@ -8,7 +8,6 @@ const day = 86400_000;
 const now = Date.UTC(2030, 0, 15, 12);
 const entry = (key, status = "unhandled") => ({ key, status, title: key, headline: key, level: "fyi", kind: "task" });
 
-// inbox.js: "Prunes what has been handled a week."
 test("handled context stays seven days while unhandled context does not expire", () => {
   const doc = AgentDoc.definition.initial();
   const old = appendEntry(doc, { ...entry("old", "handled"), handledAt: new Date(now - 7 * day - 1).toISOString() }, now - 8 * day);
@@ -67,7 +66,7 @@ test("person inbox routes share edits, return current entries and reject invalid
     const response = await request("patch", body, id);
     assert.equal(response.status, 200);
     assert.equal(response.body.id, id);
-    // The view adds where the entry's text is kept as a file (inbox-files.js).
+    // The view adds where the entry's text is kept as a file.
     const { file, ...shown } = (await agent.view()).inbox.find((entry) => entry.id === id);
     assert.match(file, /^inbox\/\d{4}-\d{2}-\d{2}-i-1-person-note\.md$/);
     assert.deepEqual(shown, response.body);

@@ -1,20 +1,8 @@
 #!/usr/bin/env node
 /**
- * Does the transcript's virtualization ever show the reader something wrong? (docs/testing.md, Frame budget.) It
- * streams one long Test-profile answer and scrolls it the ways a reader and the app do -- the tail follow, a wheel up
- * through it while it streams, a jump to the top with no input (a programmatic scroll), a wheel back down, Scroll to
- * latest, then the settled answer wheeled from top to bottom -- and checks every frame:
- *
- *   blank   a block -- or a row with none, managed whole -- hidden (data-transcript-visibility) while it intersects
- *           the viewport: the reader sees a hole
- *   moved   the first visible block moved on screen by other than the scroll did: something above it changed
- *           height and the page shifted (one that scroll anchoring absorbs is not counted)
- *   down    while the answer is followed, the page moved down: it only ever moves up as the answer grows
- *   wrong   a hidden block's placeholder height differs from its height once shown (measured as it is revealed)
- *
- * Each is reported per phase, with the frames counted. Run it before and after a change to the transcript's
- * virtualization or layout; the counts must not rise. Frame timing is not measured here (it reads layout every
- * frame); turn-profile.mjs is for that.
+ * Does the transcript's virtualization ever show the reader something wrong? Run it before and after a change to the
+ * transcript's virtualization or layout; the counts must not rise. It reads layout every frame, so it cannot time
+ * frames: turn-profile.mjs does.
  *
  *   node scripts/probes/visibility-guard.mjs ["rich 9000t"] [--phone]
  */
@@ -22,14 +10,12 @@ import { flag, open, origin } from "./lib.mjs";
 
 const prompt = process.argv[2] && !process.argv[2].startsWith("--") ? process.argv[2] : "rich 9000t";
 const phone = flag("--phone");
-// Its own headless browser by default (nothing to warm, and no tab of the reader's shares its connections); --windows
-// for the headed Chrome on :9222.
 const { context: ctx, close } = await open({ width: 1280, height: 900 });
 const tmp = await ctx.newPage(); await tmp.goto(origin, { waitUntil: "commit" }); await tmp.waitForTimeout(1200);
 const api = (url, method, body) => tmp.evaluate(async ([url, method, body]) => (await fetch(url, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined })).json().catch(() => null), [url, method, body]);
 const chat = await api("/v0/chats", "POST", { projectId: "test", profileId: "test-stream" }); const id = chat?.id ?? chat?.chat?.id;
 await api(`/v0/chats/${id}/models`, "PATCH", { model: "fast-250" });
-// A tab of its own in the window already open, brought forward (a hidden tab draws no frames), its viewport emulated.
+// Brought forward: a hidden tab draws no frames.
 const page = await ctx.newPage(); await page.bringToFront();
 const s = await ctx.newCDPSession(page);
 await s.send("Emulation.setDeviceMetricsOverride", phone ? { width: 412, height: 860, deviceScaleFactor: 2.625, mobile: true } : { width: 1280, height: 900, deviceScaleFactor: 0, mobile: false });
@@ -37,11 +23,9 @@ if (phone) await s.send("Emulation.setTouchEmulationEnabled", { enabled: true, m
 const results = [];
 try {
   await page.goto(`${origin}/chat/${id}`); await page.waitForTimeout(5000);
-  // The checks, every frame, in the page.
   await page.evaluate(() => {
     const w = window; const viewport = document.querySelector(".ui-chat-viewport");
     w.__guard = { phase: "start", phases: {} };
-    // What the transcript virtualizes: every block of an answer, and each row with none (a prompt, a trace) whole.
     const blocks = () => [...document.querySelectorAll('[data-slot="message-scroller-item"]')].flatMap((row) => {
       const inner = row.querySelectorAll(".chat-markdown > .incremark > *"); return inner.length ? [...inner] : [row]; });
     const placeholders = new WeakMap(); let heights = new Map();
@@ -58,7 +42,6 @@ try {
         const hidden = element.getAttribute("data-transcript-visibility") === "hidden";
         if (hidden) placeholders.set(element, rect.height);
         else if (placeholders.has(element)) {
-          // Only where it shows: a block re-measured out of view (below it) moves nothing the reader sees.
           const was = placeholders.get(element); const delta = Math.abs(rect.height - was); p.revealed++;
           // In view or just above it: a block that grows below the viewport (the streamed tail, re-measured) moves nothing.
           const near = rect.bottom > view.top - 120 && rect.top < view.bottom;
@@ -72,8 +55,7 @@ try {
         if (inView && !hidden && !first) { first = element; firstTop = rect.top; }
       }
       if (blank) { p.blankFrames++; p.blankMax = Math.max(p.blankMax, blank); }
-      // Visible movement no scroll explains: the first visible block moved on screen by other than the scroll did.
-      // A change above it that scroll anchoring absorbs moves nothing on screen and is not counted.
+      // A change above the first visible block that scroll anchoring absorbs moves nothing on screen and is not counted.
       if (first && first === anchor) {
         const screen = firstTop - anchorTop;
         // Following, the page only ever moves up as the answer grows: any move down is a jump the reader sees.

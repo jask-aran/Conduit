@@ -5,7 +5,7 @@ import { isNodeAddress, isTailnetOrLoopback } from "../src/nodes/node-hub.js";
 import { LOOPBACK_HOST, PRIVATE_HOST } from "../src/network-hosts.js";
 import { nodeFixture } from "./helpers/nodes-fixture.js";
 
-// network-hosts.js and distributed nodes decision 4: local/private peers, never public peers.
+// Local/private peers, never public peers.
 test("loopback and private LAN peers are local while public peers are refused", () => {
   for (const address of ["127.0.0.1", "10.1.2.3", "172.16.2.3", "192.168.2.3"]) {
     assert.equal(isNodeAddress(address), true, address);
@@ -17,7 +17,7 @@ test("loopback and private LAN peers are local while public peers are refused", 
   }
 });
 
-// Distributed nodes security review: 100.64/10 is not proof of a Tailscale adapter.
+// 100.64/10 is not proof of a Tailscale adapter.
 test("tailnet peers are recognised but direct routes require the Tailscale adapter", () => {
   const address = "100.80.2.3";
   assert.equal(isTailnetOrLoopback(address), true);
@@ -28,7 +28,7 @@ test("tailnet peers are recognised but direct routes require the Tailscale adapt
   assert.deepEqual(directAddresses({ tailscale0: [nic] }), [{ address, reach: "tailnet" }]);
 });
 
-// node-agent.js routes comment: https anywhere; plain http only on loopback or a LAN.
+// https anywhere; plain http only on loopback or a LAN.
 test("hub route updates keep safe local and TLS routes and discard public plain HTTP", { timeout: 700 }, async (t) => {
   const stored = Promise.withResolvers();
   const node = await nodeFixture(t, { onRoutes: stored.resolve });

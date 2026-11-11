@@ -43,10 +43,8 @@ test("ChatGPT Web maps a streamed turn to neutral events and retains its cursor"
 });
 
 test("ChatGPT Web still reads a journal written before it stated ops", () => {
-  // The legacy path, and only that: a journal this build writes is ops and
-  // nothing else, which the test below asserts line by line. These two shapes
-  // exist so a conversation that predates the ops is not lost, and no live
-  // path may produce them.
+  // These two shapes exist so a conversation that predates the ops is not
+  // lost, and no live path may produce them.
   const adapter = new ChatGptWebAdapter({ dataDir: "." });
   adapter.readJournal = () => [
     { type: "transcript_message", message: { id: "user-1", role: "user", content: "Hi" } },
@@ -74,8 +72,6 @@ test("ChatGPT Web journals the statements that make up its transcript", async ()
     await settled;
     // This backend has nothing to read back, so the ops are the record: the
     // prompt, the answer it opened, and what that answer turned out to say.
-    // Every line is an op -- the legacy shapes the reader above still accepts
-    // are not written by anything here.
     assert.deepEqual([...new Set(journal.map((event) => event.type))], ["transcript_op"]);
     assert.deepEqual(journal.map((event) => `${event.type}:${event.op}`),
       ["transcript_op:message.open", "transcript_op:message.open", "transcript_op:message.drop", "transcript_op:turn.settle"]);
@@ -92,12 +88,11 @@ test("ChatGPT Web journals the statements that make up its transcript", async ()
 });
 
 test("sidecar cleanup without a child is quiet, not a crash", async () => {
-  // Shutdown runs mid-sequence in the server's SIGTERM path: a throw here took
+  // Shutdown runs mid-sequence in the server's SIGTERM path: a throw here takes
   // the terminals, the voice model and the archive drain down with it.
   const adapter = new ChatGptWebAdapter({ dataDir: "." });
   await adapter.shutdownResources();
   const killed = [];
-  // A child that exits when told to, as a real one does.
   const child = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null,
     kill: (signal) => { killed.push(signal); child.signalCode = signal; child.emit("exit", null, signal); } });
   adapter.child = child;

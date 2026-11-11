@@ -1,11 +1,5 @@
 #!/usr/bin/env node
-/**
- * Record the public hero against a private local Conduit data root.
- * Run from any directory: node scripts/record-hero.mjs
- * Requirements: the repository's web dependencies, tmux, ffmpeg and Chromium.
- * The scripted Test profile supplies repeatable transcript and tool activity.
- * The file edit is staged by this script after the turn starts; it is demo data.
- */
+// Record the public hero against a private local Conduit data root.
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";

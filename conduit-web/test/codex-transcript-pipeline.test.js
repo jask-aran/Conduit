@@ -1,17 +1,5 @@
 /**
  * What a Codex chat ends up looking like, driven through the real pipeline.
- *
- * The app-server (faked at its JSON-RPC wire), the real adapter, the real chat
- * log, the real command handling, the real neutral-event normalizers and the
- * real client projection. Nothing here describes what the code does; it
- * describes what should be on screen, and every layer between the wire and the
- * rows has to agree for the assertions to hold.
- *
- * The Pi version of this file is `transcript-pipeline.test.js`. The two
- * harnesses reach the transcript by completely different routes -- Pi over its
- * own stdio protocol with Conduit-minted names, Codex over app-server
- * notifications carrying its own -- so the same scenarios are written twice
- * rather than shared. What has to match is the answer, not the path.
  */
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
@@ -59,7 +47,6 @@ function harness() {
   const chat = { id: "chat-1", title: "Codex", status: "active", backend: { implementation: "codex" } };
   const project = { id: "project-1", kind: "workspace", slug: "p", path: "/tmp/p", workingRoot: "/tmp/p" };
 
-  // The client, as far as the transcript is concerned.
   let messages = [];
   let tools = [];
   const errors = [];
@@ -67,9 +54,6 @@ function harness() {
   ws.readyState = 1;
   ws.send = (frame) => {
     const raw = JSON.parse(frame);
-    // One event, one shape: `error` with the cause nested, whichever scope it
-    // is. A rejected command used to arrive as `client_error` with the message
-    // at the top level, so the two had to be caught and read separately.
     if (raw.type === "error") { errors.push(raw); return; }
     const wire = normalizeLiveEvent(raw);
     // Exactly what the browser does with these: the statements decide what the
@@ -104,17 +88,13 @@ function harness() {
   stream.handleUpgrade(record.id, {}, {}, null);
 
   const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
-  /** A notification from the app-server, over the wire the adapter reads. */
   const codex = (method, params = {}) => adapter.receive(record, JSON.stringify({ method, params }));
   const read = async () => {
     for (let attempt = 0; attempt < 50 && !held.length; attempt += 1) await settle();
     assert.ok(held.length, "Codex was never given the turn");
   };
-  /** A request FROM the app-server, which Conduit has to answer. */
   const request = (id, method, params) => adapter.receive(record, JSON.stringify({ id, method, params }));
   const codex_reject = (id, message) => adapter.receive(record, JSON.stringify({ id, error: { message } }));
-  // The turn id Codex answered the last turn/start with, which is what its
-  // notifications will carry.
   let turnId = null;
   const accept = async () => {
     while (held.length) {
@@ -158,13 +138,11 @@ function harness() {
   };
 }
 
-/** The app-server's shape for a turn that streams one message and ends. */
 function agentMessage(codex, turnId, itemId, text, { phase = "final_answer" } = {}) {
   codex("item/agentMessage/delta", { turnId, itemId, delta: text });
   codex("item/completed", { turnId, item: { id: itemId, type: "agentMessage", text, phase } });
 }
 
-// A trace shows what a stop discarded, struck through, as its last step.
 const shape = (rows) => rows.map((row) => (row.type === "trace"
   ? `trace(${row.value.status})${row.value.segments.filter((segment) => segment.discarded).map((segment) => ` ~${segment.text}~`).join("")}`
   : `${row.value.role}: ${row.value.content}`));
@@ -241,7 +219,6 @@ test("an interrupted answer keeps its text, and the next turn is its own", async
 
   chat.dispatch({ type: "stop_generation" });
   await chat.settle();
-  // Codex reports what it had written, then ends the turn.
   chat.codex("item/completed", { turnId: turn, item: { id: "a1", type: "agentMessage", text: "The rain fell upward.", phase: "final_answer" } });
   chat.codex("turn/completed", { turn: { id: turn, status: "completed" } });
   await chat.settle();
@@ -277,8 +254,6 @@ test("a steered message is a message of its own, and the answer answers it", asy
   await chat.send({ type: "steer", message: "make it shorter" });
   const steered = chat.sent.find((message) => message.method === "turn/steer");
   assert.ok(steered, "the steer reached Codex");
-  // Codex commits the steered message into the running turn under the id it
-  // was handed, then answers it.
   chat.codex("item/started", { turnId: turn, item: { id: "u2", clientId: steered.params.clientUserMessageId, type: "userMessage", content: [{ type: "text", text: "make it shorter" }] } });
   agentMessage(chat.codex, turn, "a2", "Rain. Upward.");
   chat.codex("turn/completed", { turn: { id: turn, status: "completed" } });
@@ -299,7 +274,6 @@ test("a follow-up sent while the turn runs waits, and then becomes its own turn"
   const turn = chat.turnId();
   chat.codex("turn/started", { turn: { id: turn } });
   await chat.send({ type: "follow_up", message: "and run the tests" });
-  // Still queued: nothing of it is in the transcript yet.
   assert.deepEqual(shape(chat.rows()), ["user: Fix the build"]);
 
   agentMessage(chat.codex, turn, "a1", "Built.");
@@ -331,8 +305,6 @@ test("a prompt Codex refuses takes back the row it stated", async () => {
   chat.codex_reject(request.id, "refused");
   await chat.settle();
 
-  // The failure is reported, and the prompt is not left sitting in a
-  // transcript that no turn will ever answer.
   assert.deepEqual(chat.errors.map((event) => event.error?.message), ["refused"]);
   assert.deepEqual(buildTurnRows(chat.messages(), []), []);
 });
@@ -344,7 +316,6 @@ test("a turn pauses for an approval and carries on into its answer", async () =>
   chat.codex("turn/started", { turn: { id: turn } });
   chat.codex("item/agentMessage/delta", { turnId: turn, itemId: "a1", delta: "Removing build." });
   chat.codex("item/completed", { turnId: turn, item: { id: "a1", type: "agentMessage", text: "Removing build.", phase: "commentary" } });
-  // The app-server asks before running the command, over the same wire.
   chat.request(7, "item/commandExecution/requestApproval",
     { approvalId: "ap-1", turnId: turn, command: "rm -rf build", reason: "Cleaning the tree" });
   await chat.settle();
@@ -377,23 +348,11 @@ test("a turn Codex reports as failed leaves what it wrote in place", async () =>
   await chat.settle();
 
   assert.deepEqual(chat.errors.map((event) => event.error?.message), ["upstream refused"]);
-  // The half-answer the reader watched arrive is still there, as the trace's
-  // last, struck-through step. It used to be given up, because only a
-  // completed item counted as having been written -- so a turn that failed
-  // mid-sentence took its text off the screen.
+  // The half-answer stays, as the trace's last, struck-through step.
   assert.deepEqual(shape(buildTurnRows(chat.messages(), [])), ["user: Fix the build", "trace(failed) ~Half an ans~"]);
   assert.equal(chat.messages().at(-1).content, "Half an ans");
 });
 
-/**
- * The regression this whole step exists for.
- *
- * Codex's tool activity never travelled in the chat's order, so a browser that
- * dropped the socket and asked to be caught up was replayed the messages of
- * every turn and none of the commands underneath them: the trace came back
- * empty, and the work the turn had done was gone until a full reload. Stated as
- * ops, the commands are in the order with everything else.
- */
 test("a browser replayed from the chat's order gets the commands back, not just the messages", async () => {
   const chat = harness();
   await chat.send({ type: "prompt", message: "Fix the build" });

@@ -22,7 +22,7 @@ const text = "---\ntitle: Review arrivals\ntrigger: { every: 30 }\ntasks: [{ id:
 const routine = () => parseRoutine(text, "heartbeat");
 const news = (key, status) => ({ key, status, kind: "task", level: "fyi", title: key, headline: key, body: `${key} detail` });
 
-// persistent-agent.md, Structures: one routine file; front matter and body have separate roles.
+// One routine file; front matter and body have separate roles.
 test("a saved routine keeps its trigger, tasks and instructions in its own file", async (t) => {
   const { root } = await agentFixture(t);
   const expected = routine();
@@ -144,7 +144,7 @@ test("a fork can handle only inbox entries supplied in its task blocks", async (
   assert.equal((await agent.state()).inbox[id].status, "handled");
 });
 
-// persistent-agent.md, Slots and Run: fixed variables fill blocks; private context requires opt-in.
+// Fixed variables fill blocks; private context requires opt-in.
 test("run blocks fill user variables, keep unknown slots visible and require private context opt-in", async (t) => {
   const { root, agent } = await agentFixture(t);
   await fs.writeFile(path.join(root, "USER.md"), "---\nname: Mira\nhome: Hobart\n---\nPrivate user notes");

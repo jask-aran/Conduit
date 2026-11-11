@@ -1,14 +1,6 @@
 #!/usr/bin/env node
-/**
- * The node role as the desktop app ships it (plan: "How does the node role
- * run on a desktop?"): `conduit-node` bundled into one file, node-pty beside
- * it with only the target's prebuilt binaries, and a Node runtime to run it.
- * The Tauri shell starts it as `node conduit-node.mjs run` while "Serve this
- * computer" is on; nothing here is a second implementation of the node.
- *
- * Usage: build-node-companion.mjs <node executable> [--platform win32] [--arch x64]
- * Output: conduit-web/src-tauri/companion/ (a bundle resource, not in Git).
- */
+// The node role as the desktop app ships it: `conduit-node` bundled into one file, node-pty with only the target's
+// prebuilt binaries, and a Node runtime to run it.
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -16,7 +8,6 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const web = path.join(root, "conduit-web");
-// esbuild is the web client's build dependency.
 const { build } = await import(pathToFileURL(createRequire(path.join(web, "package.json")).resolve("esbuild")).href);
 const out = path.join(web, "src-tauri", "companion");
 const args = process.argv.slice(2);
@@ -52,8 +43,7 @@ fs.cpSync(path.join(pty, "prebuilds", `${platform}-${arch}`), path.join(ptyOut, 
   recursive: true, filter: (source) => !source.endsWith(".pdb"),
 });
 
-// OpenCode Browse, run by this bundle's Node as its own process (nodes/person-browser.js): its built files and the
-// packages they load, each from where the checkout resolves it.
+// OpenCode Browse runs as its own process under this bundle's Node.
 const browse = path.join(web, "node_modules", "@opencode", "browse");
 const browseOut = path.join(out, "node_modules", "@opencode", "browse");
 const browsePackage = JSON.parse(fs.readFileSync(path.join(browse, "package.json"), "utf8"));

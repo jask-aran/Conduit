@@ -4,7 +4,7 @@ import { once } from "node:events";
 import { placeProcesses } from "../src/nodes/place-processes.js";
 import { nodeFixture } from "./helpers/nodes-fixture.js";
 
-// remote-spawn.js: a device process has child-process streams and reports code or signal.
+// A device process has child-process streams and reports code or signal.
 test("a process on a node streams stdout and stderr and returns its exit code", { timeout: 700 }, async (t) => {
   const { hub, place } = await nodeFixture(t);
   const output = "fixture output π";

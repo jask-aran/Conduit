@@ -1,12 +1,5 @@
 #!/usr/bin/env bash
-# Try the installer from this checkout without publishing anything:
-#
-#   scripts/try-install.sh [--build] [install.sh options]
-#
-# Packages this checkout as a thin release (scripts/package-server.sh), signs
-# it with the local updater key when there is one, and runs this checkout's
-# install.sh against it. --sandbox (passed through) keeps it off the real
-# daemon; --build rebuilds the client first.
+# Try the installer from this checkout without publishing anything.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="${TMPDIR:-/tmp}/conduit-try-install"

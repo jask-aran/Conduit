@@ -114,7 +114,6 @@ async function setPassword() {
     }
     password = first;
   }
-  // Either way in, a password with nothing in it is refused (issue #53: --stdin let an empty one through).
   if (!password || !password.trim()) {
     console.error("Password cannot be empty.");
     process.exitCode = 1;
@@ -192,7 +191,7 @@ try {
     const hash = hashToken(process.argv[3] || "");
     process.exitCode = (store.data.handoffs || []).some((item) => item.codeHash === hash) ? 1 : 0;
   } else if (command === "qr") {
-    // qr <text> -- the code drawn in half blocks, two rows to a line, with the quiet zone.
+    // Half blocks: two rows to a line.
     const { default: QRCode } = await import("../conduit-web/node_modules/qrcode/lib/core/qrcode.js");
     const { modules } = QRCode.create(process.argv[3], { errorCorrectionLevel: "L" });
     const size = modules.size, quiet = 2;
@@ -216,7 +215,6 @@ try {
     if (!id || (id !== "all" && id.length < 4)) throw new Error("revoke <id>|all");
     console.log(await new AuthStore(authFile).removeSessionsByPrefix(id));
   } else if (command === "api") {
-    // api METHOD /path [json] -- one request as a short-lived session, then signed out.
     const [method, route, body] = process.argv.slice(3);
     const store = new AuthStore(authFile);
     const { token } = await store.createSession({ userAgent: "conduit-server CLI" });
@@ -233,10 +231,7 @@ try {
       await store.removeSession(token);
     }
   } else if (command === "prepare-restart") {
-    // prepare-restart <target-hash> [seconds] -- tell connected browsers a
-    // restart to this service worker is coming, then wait until every one the
-    // server is waiting on has installed it, or the limit. One session for
-    // the whole wait, signed out at the end.
+    // One session for the whole wait, signed out at the end.
     const [target = "", seconds = "20"] = process.argv.slice(3);
     const limit = Date.now() + Math.max(0, Number(seconds) || 0) * 1000;
     const store = new AuthStore(authFile);

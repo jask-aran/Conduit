@@ -1,21 +1,6 @@
 #!/usr/bin/env bash
-# follow-main.sh — keep a development clone's server on the tip of origin/main.
-#
-# For a server that runs a clone (`conduit-server use dev <clone>`) and should take every push without anyone
-# touching it: the VPS's dev server, which jbot lives on. Run it on a timer (a systemd user timer every minute: see
-# docs/DEPLOYMENT.md, A server that follows main); each run is a no-op unless origin/main moved.
-#
-# A run fast-forwards the clone, installs what the lockfiles now ask for, builds the client and restarts through the
-# server's own CLI (`conduit-server restart`: it waits for answers in flight and readies connected browsers). Only
-# changes that touch what the server runs restart it; a docs-only push just moves the clone. A build that fails or a
-# server that does not come back is rolled back to the commit that was running, and that origin/main is not tried
-# again until it moves.
-#
-# The clone is never forced forward: local edits or a branch that is not a fast-forward stop the run, logged. The only
-# reset is a rollback, to the commit it was running.
-#
-# Environment: CONDUIT_PROFILE (the server's profile, e.g. dev), CONDUIT_STATE_DIR and CONDUIT_DATA_ROOT (its state and
-# data, as the server CLI uses them), and a PATH whose node is the one the clone's node_modules were installed with.
+# Keep a development clone's server on the tip of origin/main. Run it on a timer; each run is a no-op unless
+# origin/main moved.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

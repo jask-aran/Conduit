@@ -1,12 +1,5 @@
 /**
  * The one place a transcript statement is built, and the one place it is checked.
- *
- * Capabilities are asserted against the manifest at startup and the adapter
- * contract is asserted method by method, but until now the events those methods
- * published went out unread. Three adapters hand-wrote the same object literal,
- * which is how the same statement acquired two spellings of a block and two
- * ways of working out whether an interrupted answer had been thrown away --
- * neither of which failed anything except the transcript on screen.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -29,21 +22,12 @@ test("a malformed statement is refused where it is built, not rendered", () => {
   assert.throws(() => assertTranscriptOp({
     type: "transcript_op", op: "message.drop", messageId: "m1", keep: true, inclusive: true,
   }), /either keeps/);
-  // A close that states no standing is the shape that sent the browser back to
-  // reading answer-or-narration off the turn around it.
   assert.throws(() => assertTranscriptOp({
     type: "transcript_op", op: "message.close", messageId: "m1", content: "hi", blocks: [],
   }), /interim must be stated/);
   assert.throws(() => assertTranscriptOp({ type: "transcript_op", op: "message.rename" }), /unknown op/);
 });
 
-/**
- * Whether the agent kept what the reader watched arrive is one rule.
- *
- * It used to be worked out separately by each adapter, over its own block
- * spelling -- Pi reading `type`, Codex reading `kind`, in the same computation.
- * The op asks the harness the only thing it actually needs to know.
- */
 test("a close decides discarded from the harness capability alone", () => {
   const blocks = [{ kind: "text", text: "Alright — settle in." }];
   assert.equal(messageClose({ messageId: "m1", stopReason: "aborted", blocks }).discarded, true);

@@ -17,9 +17,7 @@ test("Codex notifications map to neutral streaming events", () => {
   adapter.notification(live, "item/agentMessage/delta", { turnId: "turn-1", itemId: "message-1", delta: "Hello" });
   adapter.notification(live, "turn/completed", { turn: { id: "turn-1", status: "completed" } });
   // The turn ends without Codex ever reporting the item it streamed, which is
-  // ordinary: the deltas are the whole of what it said. So the turn settles
-  // that text as its answer rather than giving up the row -- which is what it
-  // used to do, taking the text off the screen when the turn ended.
+  // ordinary: the deltas are the whole of what it said.
   assert.deepEqual(live.events.map(({ type }) => type),
     ["status", "assistant_content", "assistant_content", "assistant_content", "status"]);
   assert.equal(live.events[2].delta, "Hello");
@@ -70,14 +68,6 @@ test("attached images become native localImage input items", async () => {
   ]);
 });
 
-/**
- * A long thread says where the rest of it is, like a long session file does.
- *
- * Every backend but Pi answered `page: { before: null }` from the route, hard
- * coded -- so a Codex thread that had been trimmed to its recent end told the
- * browser that what it had been given was the whole conversation, and there was
- * no way to ask for the rest.
- */
 test("a thread trimmed to its recent end says where the rest of it starts", () => {
   const rows = [];
   for (let turn = 0; turn < 300; turn += 1) {
@@ -93,7 +83,6 @@ test("a thread trimmed to its recent end says where the rest of it starts", () =
   const older = CodexAppServerAdapter.recent(rows, { before: first.page.before });
   assert.equal(rows.indexOf(older.rows.at(-1)) + 1, rows.indexOf(first.rows[0]));
 
-  // A thread that fits says so, and the browser stops asking.
   assert.equal(CodexAppServerAdapter.recent(rows.slice(-4)).page.before, null);
 });
 
@@ -142,7 +131,6 @@ test("a live command hangs off the turn's message so the rollup claims it", () =
   assert.deepEqual(tools.map((event) => [event.phase, event.name]), [["start", "command"], ["end", "command"]]);
 });
 
-// A record whose writes are captured, so the reply Codex receives is assertable.
 function approvalHarness() {
   const adapter = new CodexAppServerAdapter();
   const live = record();
@@ -191,7 +179,6 @@ test("a permission prompt fails closed", () => {
   }
 });
 
-// The defect that motivated this: an unanswered server request stalls the turn.
 test("a server request Conduit does not handle is refused rather than ignored", () => {
   const { adapter, live, written } = approvalHarness();
   adapter.receive(live, JSON.stringify({ id: 11, method: "mcpServer/elicitation/request", params: {} }));

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { capabilitiesOf } from "../src/place.js";
 
-// place.js capabilitiesOf: remote Git and Git checkpoints require the root's shell grant.
+// Remote Git and Git checkpoints require the root's shell grant.
 test("device Git and checkpoints follow the shared root shell grant", async () => {
   const project = { nodeId: "fixture-node", place: { root: "shared", path: "project" }, kind: "workspace" };
   const root = { id: project.place.root, shell: false };

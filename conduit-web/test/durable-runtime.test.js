@@ -41,7 +41,6 @@ async function turn(c, message) {
   await c.stream.next((event) => event.type === "status" && event.phase === "settled" && event.generationId === started.generationId, 4000);
 }
 
-// Sources: docs/TESTING.md, The Test profile; README.md, Live session protocol.
 test("tool results stay in call order and a failed tool still permits a final answer", async (t) => {
   const c = await chat(t);
   await turn(c, "narrate tool bash fail");
@@ -60,7 +59,7 @@ test("tool results stay in call order and a failed tool still permits a final an
   assert.ok(stored.messages.some((message) => message.content === final.content && !message.interim));
 });
 
-// durable-runtime.js: committed turns and tool calls live in SQLite; the chat log is a projection.
+// Committed turns and tool calls live in SQLite; the chat log is a projection.
 test("finished turn messages and tool results survive a server restart", async (t) => {
   const c = await chat(t);
   await turn(c, "tool 1t");

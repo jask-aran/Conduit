@@ -1,12 +1,7 @@
 /**
- * Compress the built client once, beside each file, for the server to send as
- * it is (server.js, the built assets): `.br` and `.gz` next to every text
- * asset of 1 KB or more, kept only where smaller. The server otherwise
- * compressed each file on every request, ~40 ms for the main bundle, and a
- * new build has every client's worker fetch all of them again.
- *
- * Run by the server builds only (start-conduit.sh, package-server.sh): the
- * apps bundle `dist` themselves and have no use for the copies.
+ * Compress the built client once, beside each file, for the server to send as it is: compressing per request costs
+ * ~40 ms for the main bundle, and a new build has every client's worker fetch all of them again. Server builds only:
+ * the apps bundle `dist` themselves.
  *
  *   node scripts/precompress.mjs [--best]   (--best: brotli 11, for releases)
  */

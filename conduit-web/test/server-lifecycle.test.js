@@ -35,14 +35,12 @@ test("opening a chat attaches to a live process but never starts one", async () 
     assert.equal((await cold.json()).error, "no_live_process");
     assert.deepEqual((await (await harness.request("/v0/live-sessions")).json()).sessions, []);
 
-    // Real use may start one.
     const launch = await harness.request("/v0/live-sessions", {
       method: "POST", body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "prompt" }),
     });
     assert.equal(launch.status, 201);
     const live = await launch.json();
 
-    // And now an open attaches to exactly that process instead of a second one.
     const warm = await harness.request("/v0/live-sessions", {
       method: "POST",
       body: JSON.stringify({ chatId: chat.id, projectId: chat.projectId, intent: "open" }),

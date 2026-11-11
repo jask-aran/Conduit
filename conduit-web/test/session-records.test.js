@@ -32,8 +32,6 @@ test("a browser arriving mid-answer is replayed the whole answer, from its begin
   const late = socket();
   sessions.attach(live.id, late);
   const replayed = late.sent.filter((event) => event.phase === "delta").map((event) => event.delta).join("");
-  // The window was the last 500 events, so what a reconnecting browser got was
-  // a slice out of the middle of the answer and nothing that placed the row.
   assert.equal(replayed, written.join(""));
   assert.equal(late.sent.filter((event) => event.op === "message.open").length, 1);
 });
@@ -46,10 +44,7 @@ test("structure survives a buffer long past its limit", () => {
     sessions.publish(live, { ...delta(index), contentIndex: index, blockKind: "text" });
   }
   assert.equal(live.events.length, 4);
-  // The op is still there. It used to be the first thing evicted, because the
-  // buffer dropped by age and a turn with more blocks than slots pushed out the
-  // row its own deltas were painting into -- so a browser arriving late was
-  // sent text for a message it had never been told existed.
+  // The op outlives its paint, or a late browser is sent text for a message it was never told existed.
   assert.equal(live.events[0].op, "message.open");
   // Evicted paint lets go of its merge key, so a new block does not merge into
   // an entry that is no longer in the buffer.

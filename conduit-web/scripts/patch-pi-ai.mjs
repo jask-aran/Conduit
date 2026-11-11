@@ -1,7 +1,6 @@
-// Bridges a gap in pi-ai until it is closed upstream: OpenAI Responses labels every message `commentary` or
-// `final_answer` when the message opens (its output item's `phase`), and pi-ai has it then, but writes it to the
-// text block (`textSignature`) only at text_end. Conduit draws text by that label as it streams (DESIGN.md, Turns),
-// so the label is set when the block starts too. Run on install; idempotent; fails loudly if pi-ai's code moved.
+// pi-ai writes an OpenAI Responses message's `phase` (`commentary` or `final_answer`) to the text block
+// (`textSignature`) only at text_end. Conduit draws text by that label as it streams, so this sets it when the block
+// starts too. Run on install; idempotent; fails loudly if pi-ai's code moved.
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 

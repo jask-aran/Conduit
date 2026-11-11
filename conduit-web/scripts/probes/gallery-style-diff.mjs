@@ -1,8 +1,5 @@
-// Every element's computed style (and ::before/::after) across two gallery builds, every family at both densities plus
-// the phone, phone sidebar and desktop previews, animations held at frame 0. Build each with
+// Every element's computed style across two gallery builds. Build each with
 // `npx vite build --mode gallery --outDir <dir>`, then: node scripts/probes/gallery-style-diff.mjs <dirA> <dirB>
-// --ignore --a,--b leaves custom properties a change meant to rename; --keys lists every differing element's path;
-// --no-class keys elements by tag and place alone, for a change that only moves rules onto other classes.
 // The live mic level, the aura's level, a wave's bars and the servers' origins are left out: they differ run to run.
 import http from "node:http";
 import fs from "node:fs/promises";
@@ -23,13 +20,11 @@ function serve(dir) {
 const [a, b] = process.argv.slice(2).filter((value, index, all) => !value.startsWith("--") && !["--ignore", "--only", "--show"].includes(all[index - 1]));
 if (!a || !b) { console.error("usage: gallery-style-diff.mjs <buildA> <buildB> [--ignore --a,--b] [--keys]"); process.exit(2); }
 const IGNORE = (arg("--ignore", "") ?? "").split(",").filter(Boolean);
-// --only Frost,Card: just those families (desktop only, and no previews, with --desktop).
 const ONLY = (arg("--only", "") ?? "").split(",").filter(Boolean);
 const { chromium } = await loadPlaywright();
 const browser = await launchHeadless(chromium);
 const origins = [await serve(a), await serve(b)];
 
-// Every element: a path key and its full computed style (pseudo ::before/::after too).
 const dumpScript = ([ignore, noClass]) => {
   document.getAnimations().forEach((x) => { try { x.pause(); x.currentTime = 0; } catch {} });
   const out = {};

@@ -11,7 +11,6 @@ import { relayEnvironment, stdioDialer } from "../conduit-web/src/nodes/node-rel
 import { DEFAULT_DENY } from "../conduit-web/src/nodes/secrets.js";
 import { buildManagedToolEnvironment } from "./pi-runtime.mjs";
 
-// The node role's own settings, apart from any main server's data on this device.
 const home = path.resolve(process.env.CONDUIT_NODE_HOME || path.join(os.homedir(), ".conduit-node"));
 const file = path.join(home, "node.json");
 
@@ -65,13 +64,11 @@ Settings live in ${file} (CONDUIT_NODE_HOME moves them);
 a running \`conduit-node run\` takes a change to them as it is made.`);
 }
 
-// Each shared folder has an id its server knows it by; the path stays on this device.
 const rootId = () => `r_${crypto.randomBytes(9).toString("base64url")}`;
 const withIds = (roots) => (roots || []).map((root) => (root.id ? root : { id: rootId(), ...root }));
 
-/** The settings file as written, or null where it is missing or does not parse. */
 const parsed = () => { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; } };
-/** Settings, as version 2: `{ name, pairings: [{ mainUrl, key, roots }] }`; version 1 had one server at the top. */
+/** Version 1 settings had one server at the top level. */
 const read = (settings = parsed()) => {
   if (!settings) return { version: 2, name: null, pairings: [] };
   if (!settings.pairings) {
@@ -81,21 +78,17 @@ const read = (settings = parsed()) => {
   settings.pairings = settings.pairings.map((pairing) => ({ ...pairing, roots: withIds(pairing.roots) }));
   return settings;
 };
-// Whole or not at all: a reader meeting a half-written file would take it for no pairings (read, above).
+// Whole or not at all: a reader meeting a half-written file would take it for no pairings.
 const write = (settings) => {
   fs.mkdirSync(home, { recursive: true, mode: 0o700 });
   const temp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(temp, `${JSON.stringify({ ...settings, version: 2 }, null, 2)}\n`, { mode: 0o600 });
   try { fs.renameSync(temp, file); } catch (error) { fs.rmSync(temp, { force: true }); throw error; }
 };
-/** One change to the file as it is now: the running node writes routes and shares into it too (keepRoutes, keepShare). */
+/** Read first: the running node writes routes and shares into the file too. */
 const save = (change) => { const now = read(); change(now); write(now); };
-/** The same pairing in a fresh read. */
 const fresh = (now, pairing) => now.pairings.find((item) => item.mainUrl === pairing.mainUrl);
-/**
- * Every change to the settings, whoever made it (the CLI, the app, this run's own keepRoutes and keepShare), polled:
- * the file is replaced by rename, which a watch on it would lose. One that does not parse is passed over.
- */
+/** Polled: the file is replaced by rename, which a watch on it would lose. */
 const followSettings = (apply) => fs.watchFile(file, { interval: 1000 }, () => {
   const found = parsed();
   if (found) apply(read(found));
@@ -103,10 +96,7 @@ const followSettings = (apply) => fs.watchFile(file, { interval: 1000 }, () => {
 
 const [command, ...args] = process.argv.slice(2);
 
-/**
- * One run of the node per home: a newer one (the app updated, or opened again) stops any older one still running,
- * whose shares and code may be stale; two would take the pairing from each other on every reconnect.
- */
+/** One run per home: two would take the pairing from each other on every reconnect. */
 function takeOver() {
   const lock = path.join(home, "run.pid");
   let previous = 0;
@@ -118,11 +108,8 @@ function takeOver() {
   process.on("exit", () => { try { if (Number(fs.readFileSync(lock, "utf8")) === process.pid) fs.rmSync(lock); } catch {} });
 }
 /**
- * Whether a pid is still a run of this node (not a process the system gave the number to since), by its command
- * line. Windows was asked only for the image name, so any node.exe that had come to hold a stale pid was stopped:
- * and the lock is always stale there, since stopping a process on Windows runs no exit handler to remove it. Where
- * it cannot be told, the older run is left: the hub lets only the newest hold the pairing, and the older one ends
- * itself when it is replaced.
+ * By command line, not image name: on Windows the lock is always stale (stopping a process runs no exit handler),
+ * so its pid may now be any node.exe. Where it cannot be told, the older run is left: it ends when replaced.
  */
 function isNodeRun(pid) {
   try { process.kill(pid, 0); } catch { return false; }
@@ -134,12 +121,10 @@ function isNodeRun(pid) {
   } catch { return false; }
 }
 
-/** What a new folder may do there: as set by `new-folders`, editing but no commands until then. */
 const newFoldersOf = (pairing) => ({ write: pairing?.newFolders?.write ?? true, shell: pairing?.newFolders?.shell ?? false });
 /** Read when a folder is shared, so a change from the app needs no restart. */
 const newFoldersFor = (mainUrl) => () => newFoldersOf(read().pairings.find((item) => item.mainUrl === mainUrl));
 
-/** What the hub said on connecting -- every way to reach it and its identity -- kept with its pairing (read fresh). */
 const keepRoutes = (mainUrl) => ({ routes: told, hub }) => {
   const now = read();
   const pairing = now.pairings.find((item) => item.mainUrl === mainUrl);
@@ -150,7 +135,7 @@ const keepRoutes = (mainUrl) => ({ routes: told, hub }) => {
   write(now);
 };
 
-/** A folder a browsing server asked for, kept with its pairing as `share` keeps one (read fresh: the CLI may have changed it). */
+/** Read fresh: the CLI may have changed the file. */
 const keepShare = (mainUrl) => (root) => {
   const now = read();
   const pairing = now.pairings.find((item) => item.mainUrl === mainUrl);
@@ -160,7 +145,6 @@ const keepShare = (mainUrl) => (root) => {
 };
 const settings = read();
 
-// `--flag value` options (repeatable ones collected), and the bare arguments.
 function options(list, repeatable = [], valued = []) {
   const found = Object.fromEntries(repeatable.map((name) => [name, []]));
   const bare = [];
@@ -177,7 +161,6 @@ function options(list, repeatable = [], valued = []) {
 
 const origin = (url) => { try { return new URL(url).origin; } catch { console.error(`Not a server URL: ${url}`); process.exit(2); } };
 
-/** The pairing a command means: the named server, or the only one. */
 function pairingFor(server) {
   if (!settings.pairings.length) { console.error("Not paired: run `conduit-node pair <main-url> <key>` first."); process.exit(2); }
   if (server) {
@@ -197,11 +180,10 @@ if (command === "pair") {
   const [mainUrl, key, ...name] = given.bare;
   if (!mainUrl || !key) { printHelp(); process.exit(2); }
   const at = origin(mainUrl);
-  // Pairing a server again replaces its key and keeps what it was shared.
   let pairings;
   save((now) => {
     const previous = now.pairings.find((item) => item.mainUrl === at);
-    // The server's id for this pairing, when known: how an app pointed at that server finds it here.
+    // How an app pointed at that server finds this pairing here.
     const pairing = { mainUrl: at, key, ...(given.node ? { nodeId: given.node } : {}),
       ...(given.via.length ? { routes: given.via.map(origin) } : {}), roots: previous?.roots || [] };
     pairings = now.pairings = [...now.pairings.filter((item) => item.mainUrl !== at), pairing];
@@ -250,7 +232,6 @@ if (command === "pair") {
     // Sharing a folder again changes its grants, not its id: workspaces on it keep working.
     root = { id: previous?.id || rootId(), path: resolved,
       read: true, write: Boolean(given.write), shell: Boolean(given.shell),
-      // Given patterns replace the folder's own; none given keeps them.
       allow: given.allow.length ? given.allow : previous?.allow || [],
       deny: given.deny.length ? given.deny : previous?.deny || [] };
     current.roots = [...current.roots.filter((item) => item.path !== root.path), root];
@@ -299,13 +280,11 @@ if (command === "pair") {
   takeOver();
   if (!settings.pairings.length) console.warn("Not paired yet: waiting for `conduit-node pair <main-url> <key>`.");
   const shellEnv = buildManagedToolEnvironment(process.env);
-  // One connection per server, each with only what was shared with it, and
-  // the environments relayed on it; one reached through a relay is left to it.
   // Taken over on one pairing means another run has them all: this one ends.
   const agents = new Map();
   const stopAll = () => { for (const { agent } of agents.values()) agent.stop(); };
   const replaced = () => { stopAll(); process.exit(0); };
-  // What a connection is made with: a pairing whose key or relays change is connected again, its processes ended.
+  // A pairing whose key or relays change is connected again, its processes ended.
   const madeWith = (pairing) => JSON.stringify([pairing.key, pairing.relays || []]);
   const start = (pairing, name) => {
     if (!pairing.roots.length) console.warn(`Nothing is shared with ${pairing.mainUrl} yet; it will see this device with no folders.`);
@@ -316,8 +295,6 @@ if (command === "pair") {
       relays: (pairing.relays || []).map(({ env, command: relayed }) => relayEnvironment({ env, command: relayed })) }) });
   };
   for (const pairing of settings.pairings) if (!pairing.relayed) start(pairing, settings.name);
-  // A change to the settings, on the connections running: what each pairing shares, on its own connection as it is;
-  // a pairing made, forgotten or changed in how it connects, started, stopped or started again.
   followSettings((now) => {
     const wanted = new Map(now.pairings.filter((pairing) => !pairing.relayed).map((pairing) => [pairing.mainUrl, pairing]));
     for (const [mainUrl, running] of agents) {

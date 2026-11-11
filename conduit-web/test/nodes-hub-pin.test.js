@@ -13,7 +13,7 @@ const identity = () => {
 };
 const publicIdentity = ({ id, key }) => ({ id, key });
 
-// find-hub.js attestedLeaf: a candidate counts only if the kept identity attested its leaf.
+// A candidate counts only if the kept identity attested its leaf.
 test("a pinned hub is accepted and another identity at the same address and name is refused", { timeout: 700 }, async (t) => {
   const hub = identity();
   const stranger = identity();
@@ -32,7 +32,6 @@ test("a pinned hub is accepted and another identity at the same address and name
   assert.equal(await attestedLeaf("127.0.0.1", port, publicIdentity(hub), 50), null);
 });
 
-// BUG: node-agent.js replaces the kept identity without checking it against the pin.
 test("an existing pairing refuses a replacement hub identity", { todo: "routes.hub overwrites the saved identity without a comparison" }, async (t) => {
   const hub = publicIdentity(identity());
   const stored = Promise.withResolvers();

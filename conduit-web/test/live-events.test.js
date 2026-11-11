@@ -31,7 +31,6 @@ test("an op arrives at the client as the server stated it", () => {
     log: { id: "log-1", seq: 7 },
   };
   assert.deepEqual(normalizeLiveEvent(op), op);
-  // An op name nothing applies is not passed through as one.
   assert.deepEqual(normalizeLiveEvent({ ...op, op: "message.rewrite" }),
     { type: "unknown", sourceType: "transcript_op", generationId: "g1", log: { id: "log-1", seq: 7 } });
 });
@@ -40,13 +39,11 @@ test("a generation event is folded only if it carries what the folds read", () =
   const final = { type: "assistant_content", phase: "final", generationId: "g1", seq: 4,
     messageId: "m1", blocks: [], stopReason: "stop" };
   assert.deepEqual(normalizeLiveEvent(final), final, "stated as the server sent it");
-  // Blocks the browser's store maps over. Without them this passed the boundary
-  // and threw inside the fold, which is a crash rather than a dropped event.
+  // Blocks the browser's store maps over. Without them this passes the boundary
+  // and throws inside the fold, which is a crash rather than a dropped event.
   assert.equal(normalizeLiveEvent({ ...final, blocks: undefined }).type, "unknown");
   // A phase neither fold has a case for takes no place in the turn.
   assert.equal(normalizeLiveEvent({ ...final, phase: "midway" }).type, "unknown");
-  // What the session is busy with is not a transition, and no longer travels as
-  // a status with no phase.
   assert.equal(normalizeLiveEvent({ type: "status", generationId: "g1", seq: 5, activity: "waiting_for_user" }).type,
     "unknown");
   const delta = { type: "assistant_content", phase: "delta", generationId: "g1", seq: 5,

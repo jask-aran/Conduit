@@ -1,12 +1,5 @@
 /**
  * What an OpenCode chat ends up looking like, driven through the real pipeline.
- *
- * The OpenCode service is faked where Conduit meets it -- its HTTP routes and
- * its `/api/event` stream, in the shapes OpenCode 2.0.14 was recorded sending --
- * and everything after that is real: the adapter, the chat log, the command
- * handling, the neutral-event normalizers, the live generation fold and the
- * client projection. The Pi and Codex versions of this file are
- * `transcript-pipeline.test.js` and `codex-transcript-pipeline.test.js`.
  */
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
@@ -26,7 +19,6 @@ const ledger = () => ({
   release: async () => {}, resolver: async () => (id) => id, entryIdFor: async (_p, _c, id) => id,
 });
 
-/** The OpenCode service: what it has saved, and the routes Conduit reads it through. */
 function service() {
   const rows = [];
   const permissions = [];
@@ -86,8 +78,6 @@ function harness() {
     session: { id: "ses_1", location: { directory: "/tmp/p" }, model: { providerID: "opencode", id: "muse" } } });
   const chat = { id: "chat-1", title: "OpenCode", status: "active", backend: { implementation: "opencode" } };
 
-  // The browser: the statements decide what the transcript holds, and the paint
-  // is folded into the turn being written, which is what streams on screen.
   let messages = [];
   let tools = [];
   let generation = null;
@@ -132,32 +122,25 @@ function harness() {
     record,
     settle,
     errors,
-    /** The prompts on screen, as the card is handed them. */
     asked: () => asked,
-    /** Click one of a prompt's options, or submit a question card's answers, the way the card does. */
     answer: async (request, option) => {
       const response = typeof option === "string" ? { value: option } : option;
       ws.emit("message", JSON.stringify({ type: "extension_ui_response", id: request.id, ...response }));
       await settle();
     },
-    /** Send a prompt the way the browser does, under the name it already drew it with. */
     send: async (message) => {
       ws.emit("message", JSON.stringify({ type: "prompt", message, messageId: `m_00000000-0000-4000-8000-00000000000${++messageCount}` }));
       await settle();
     },
-    /** An event on OpenCode's `/api/event` stream. */
     oc: (type, data = {}) => adapter.dispatch({ type, created: Date.now(), data: { sessionID: "ses_1", ...data } }),
-    /** What is on screen now, including the answer still being written. */
     streaming: (messageId) => generation?.assistantMessages.find((message) => message.id === messageId)?.blocks
       .map((block) => `${block.kind}: ${block.text}`) || [],
-    /** The rows on screen now, with the turn being written laid over them. */
     screen: () => buildTurnRows(messages, tools, { activeGeneration: generation }),
     rows: () => {
       assert.deepEqual(errors, [], "the server reported an error");
       return buildTurnRows(messages, tools);
     },
-    /** What a reload shows: the saved transcript, with the chat log's tail folded over it, as GET /v0/sessions/:id does. */
-    /** The History pane's steps, oldest first, without the hidden ones. */
+    /** Folds the chat log's tail over the saved transcript, as GET /v0/sessions/:id does. */
     history: async () => {
       const lines = [];
       for (let node = (await adapter.readHistory({ liveSessionId: record.id })).tree[0]; node; node = node.children[0]) {
@@ -183,7 +166,6 @@ function saveStep(chat, id, content, finish) {
     model: { providerID: "opencode", id: "muse" }, time: { created: Date.now(), completed: Date.now() } });
 }
 
-/** The recorded sequence of a turn that thinks, then answers in one step. */
 async function storyTurn(chat) {
   await chat.send("Tell me a short story");
   chat.oc("session.execution.started");
@@ -204,7 +186,6 @@ async function storyTurn(chat) {
   return midway;
 }
 
-/** A turn that reads a file in one step and answers in the next. */
 async function toolTurn(chat) {
   await chat.send("read haiku.txt");
   chat.oc("session.execution.started");

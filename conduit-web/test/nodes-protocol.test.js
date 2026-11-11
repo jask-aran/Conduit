@@ -4,7 +4,7 @@ import path from "node:path";
 import { FileError, ExecutionError } from "@earendil-works/pi-durable/env";
 import { encode, decode, rootFor } from "../src/nodes/protocol.js";
 
-// protocol.js: values are JSON; bytes and environment errors retain their meaning.
+// Values are JSON; bytes and environment errors retain their meaning.
 const roundTrip = (value) => decode(JSON.parse(JSON.stringify(encode(value))), { FileError, ExecutionError });
 
 test("node messages preserve bytes nested in results and event arrays", () => {
@@ -12,7 +12,7 @@ test("node messages preserve bytes nested in results and event arrays", () => {
   assert.deepEqual(roundTrip(message), message);
 });
 
-// rootFor: a path must be inside a root shared with the requested grant.
+// A path must be inside a root shared with the requested grant.
 test("a shared root grants only the selected operations inside its own path", () => {
   const root = { path: path.resolve("fixture-share"), read: true, write: false, shell: false };
   assert.equal(rootFor([root], path.join(root.path, "child"), "read"), root);

@@ -1,17 +1,6 @@
 #!/usr/bin/env node
-// UI feedback items (conduit-web/src/server/feedback.js), for the agent that works on Conduit. The hub writes each
-// item the person sends to <data>/feedback/<id>/item.json (with its pictures beside it); this reads that folder
-// and nothing else, so it needs no session and no running hub.
-//
-//   conduit-feedback wait [name]   Block until an item for this waiter, take it, print the path of its item.json.
-//                                  Run it in the background: its exit is the push. While it waits the feedback
-//                                  tool lists it by name (default: this folder's) as a session to hand an item to.
-//   conduit-feedback take <id>     Take one item whoever it is for (one sent with nobody to hand it to is held).
-//   conduit-feedback done <id>     Mark an item handled.
-//   conduit-feedback list          Every item and where it stands.
-//
+// Reads <data>/feedback and nothing else, so it needs no session and no running hub.
 // An item is taken by one waiter (taken.json, written exclusively), so two sessions waiting get different items.
-// A waiter is a file in <data>/feedback/.waiting named for its process, gone when the process is.
 import fs from "node:fs/promises";
 import { rmSync, watch } from "node:fs";
 import os from "node:os";
@@ -25,7 +14,7 @@ const me = String(process.pid);
 const alive = (pid) => { try { process.kill(Number(pid), 0); return true; } catch (error) { return error.code === "EPERM"; } };
 const script = path.relative(process.cwd(), process.argv[1]) || process.argv[1];
 
-/** Sent items, oldest first (an id starts with when it was started; a folder still being written starts with a dot). */
+/** An id starts with when it was started; a folder still being written starts with a dot. */
 async function items() {
   const names = (await fs.readdir(folder).catch(() => [])).filter((name) => !name.startsWith(".")).sort();
   const found = [];
@@ -39,7 +28,6 @@ async function items() {
 const claim = (entry) => fs.writeFile(path.join(folder, entry.id, "taken.json"), `${JSON.stringify({ at: new Date().toISOString(), pid: process.pid })}\n`, { flag: "wx" })
   .then(() => true, (error) => { if (error.code === "EEXIST") return false; throw error; });
 
-/** The oldest item this waiter may have: one handed to it, to nobody in particular, or to a waiter that has gone. A held one is nobody's until `take`. */
 async function take() {
   for (const entry of await items()) {
     if (entry.state !== "waiting") continue;

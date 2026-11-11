@@ -1,14 +1,7 @@
 /**
  * What a Claude Code chat ends up looking like, driven through the real pipeline.
- *
- * The Agent SDK is faked where Conduit meets it -- `query()` and the session
- * helpers -- replaying the sequences Claude Code 2.1.282 was recorded sending
- * through SDK 0.3.282, and everything after that is real: the adapter, the chat
- * log, the command handling, the normalizers and the client projection. The
- * fake saves a session the way Claude Code does, one entry per prompt, block and
- * tool result, so a reload reads what the live turn wrote. The other harnesses'
- * versions of this file are `transcript-pipeline.test.js`,
- * `codex-transcript-pipeline.test.js` and `opencode-transcript-pipeline.test.js`.
+ * The fake saves a session the way Claude Code does, one entry per prompt, block
+ * and tool result, so a reload reads what the live turn wrote.
  */
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -29,7 +22,6 @@ const MODELS = [
   { value: "haiku", resolvedModel: MODEL, displayName: "Haiku 4.5", description: "" },
 ];
 
-/** Claude Code behind the SDK: the sessions it has saved and the queries it is running. */
 function claudeCode() {
   const saved = new Map();
   const runs = [];
@@ -108,14 +100,12 @@ const toolResult = (run, toolUseId, content, isError = false) => run.emit({ type
   message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolUseId, content, ...(isError ? { is_error: true } : {}) }] } });
 const succeeded = (run, result) => run.emit({ type: "result", subtype: "success", is_error: false, stop_reason: "end_turn",
   terminal_reason: "completed", result, errors: undefined });
-/** A model message that thinks and then answers. */
 function answer(run, id, text) {
   opened(run, id);
   block(run, id, 0, { type: "thinking", thinking: "Short and direct.", signature: "sig" });
   block(run, id, 1, { type: "text", text });
   ended(run, "end_turn");
 }
-/** A model message that thinks and calls one tool. */
 function calls(run, id, tool) {
   opened(run, id);
   block(run, id, 0, { type: "thinking", thinking: "Use the tool.", signature: "sig" });
@@ -137,7 +127,6 @@ async function harness() {
   const chat = { id: "chat-1", title: "Claude Code", status: "active",
     backend: { implementation: "claude-code", opaqueSession: record.sessionId } };
 
-  // The browser, as the OpenCode pipeline test draws it.
   let messages = [];
   let tools = [];
   let generation = null;
@@ -196,7 +185,6 @@ async function harness() {
       await settle();
     },
     stop: async () => { ws.emit("message", JSON.stringify({ type: "stop_generation" })); await settle(); },
-    /** Claude Code asking before a tool runs, as `canUseTool` is called. */
     ask: (toolName, input, options) => claude.run().options.canUseTool(toolName, input,
       { signal: new AbortController().signal, requestId: crypto.randomUUID(), ...options }),
     screen: () => buildTurnRows(messages, tools, { activeGeneration: generation }),
@@ -234,7 +222,6 @@ test("an edit held for approval offers what Claude Code suggests, and accepting 
   await chat.answer(request, "Allow all edits this session");
   assert.deepEqual(await decision, { behavior: "allow", updatedInput: WRITE.input, updatedPermissions: WRITE_ASKS.suggestions });
   assert.deepEqual(chat.asked(), []);
-  // Claude Code applies the suggestion and says it is accepting edits now.
   chat.run().emit({ type: "system", subtype: "status", status: null, permissionMode: "acceptEdits" });
   ended(chat.run(), "tool_use");
   toolResult(chat.run(), WRITE.id, "File created successfully at: /tmp/p/approved.txt");

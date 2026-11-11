@@ -1,6 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
 
-/** Retry with an independent deadline per attempt and abortable jitter. */
 export async function withRetry(attempt, { timeoutMs = 20_000, retries = 2, signal } = {}) {
   let attempts = 0;
   const annotate = (reason, timeout = false) => {

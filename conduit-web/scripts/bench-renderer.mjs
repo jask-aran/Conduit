@@ -1,20 +1,10 @@
 #!/usr/bin/env node
 /**
- * Streaming renderer benchmark.
+ * Streaming renderer benchmark: drives the display scheduler the way IncremarkMarkdown does against synthetic
+ * documents of growing size. Equal digests either side of a change prove it changed cost only.
  *
- * Drives the display scheduler the way IncremarkMarkdown does -- re-parse on
- * every delta, hand the animated blocks over, drain the frames -- against
- * synthetic documents of growing size. Frame cost used to grow with message
- * length; this is what catches that coming back.
- *
- * The digest is a fingerprint of the whole emitted display sequence: every
- * block id, status, progress and display node, in order. Two runs of the same
- * document must produce the same digest, so a change that is meant to be a pure
- * cost change can be proved to be one by comparing digests either side of it.
- *
- * Motion is reduced here on purpose: each delivery is then due at once, so a
- * frame's release does not depend on the clock -- with the fade's deadlines the
- * sequence, and so the digest, would depend on how fast the machine is.
+ * Motion is reduced so each delivery is due at once: with the fade's deadlines the digest would depend on how fast
+ * the machine is.
  */
 import { createHash } from "node:crypto";
 import { createIncremarkParser } from "@incremark/core";

@@ -105,13 +105,12 @@ test("a successful fork replaces the browser transcript before the new prompt", 
   ws.emit("message", JSON.stringify({ type: "fork_and_prompt", entryId: "user-old", message: "replacement" }));
   await new Promise((resolve) => setImmediate(resolve));
 
-  // A fork states where the history now ends and repoints the chat. It no
-  // longer reads the forked transcript back: the branch keeps the entry ids of
-  // everything it retains, so there is nothing for a re-read to correct.
+  // A fork does not read the forked transcript back: the branch keeps the entry
+  // ids of everything it retains, so there is nothing for a re-read to correct.
   assert.equal(operations[0], "fork");
   assert.deepEqual(operations.filter((item) => typeof item === "string"), ["fork", "prompt"]);
   assert.deepEqual(operations.filter((item) => item?.type).map((item) => item.type),
-    // The prompt's own row is the adapter's to state now, not the server's.
+    // The prompt's own row is the adapter's to state, not the server's.
     ["history_truncated", "transcript_op"]);
   assert.deepEqual(operations.find((item) => item?.type === "history_truncated"),
     { type: "history_truncated", beforeMessageId: "user-old" });
@@ -146,9 +145,7 @@ test("an unknown browser command cannot reach a backend escape hatch", async () 
   ws.emit("message", JSON.stringify({ type: "backend_native_command", payload: { destructive: true } }));
   await new Promise((resolve) => setImmediate(resolve));
 
-  // Conduit's own words, sent without passing through a harness translator:
-  // the same rejection used to reach the browser under different error names
-  // across harnesses.
+  // Conduit's own words, sent without passing through a harness translator.
   assert.deepEqual(sent.at(-1), {
     type: "error",
     scope: "request",

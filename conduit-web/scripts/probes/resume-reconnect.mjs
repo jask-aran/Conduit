@@ -1,9 +1,4 @@
-/**
- * How long a page takes to be live again after time in the background: opens
- * the most recent chat, pretends the page was hidden for `--away <ms>` (default
- * 6000), and times from its return to each socket opening and the first frame
- * on it. `--rtt <ms>` (default 80).
- */
+/** How long a page takes to be live again after time in the background. */
 import { arg, open, origin, recentChats } from "./lib.mjs";
 
 const rtt = Number(arg("--rtt", "80"));

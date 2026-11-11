@@ -2,13 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mergeToolEvent } from "../src/client/timeline-order.ts";
 
-// What is left here is the live tool activity that still arrives outside the
-// chat's order. Everything else this file used to cover -- merging a synced
-// turn into one the client had assembled, claiming a row for an answer,
-// settling it afterwards -- was the client working out a transcript for
-// itself. The server states it now, and `transcript-fold.test.js` covers the
-// statements. See `transcript-pipeline.test.js` for what a chat looks like.
-
 test("mergeToolEvent preserves first-seen timestamp and seq on reconnect replay", () => {
   let seq = 0;
   const first = mergeToolEvent([], {

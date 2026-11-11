@@ -11,8 +11,6 @@ import { READY } from "../src/harnesses/probe.js";
 const config = { manager: {}, dataRoot: "/tmp/conduit-manifests-test", codexCommand: "codex", chatgptWebPython: "python3", chatgptWebScript: "x.py", chatgptWebDataDir: "/tmp/x" };
 const allAvailable = () => new Map(MANIFESTS.map((manifest) => [manifest.id, READY("test")]));
 
-// The regression this file exists for: the same backend used to be spelled out
-// in seven places, and nothing failed when one of them fell behind.
 test("registration, catalog and profile selection all agree with the manifests", () => {
   const backends = ChatBackendRegistry.fromManifests(MANIFESTS, allAvailable(), config);
   for (const manifest of MANIFESTS) {

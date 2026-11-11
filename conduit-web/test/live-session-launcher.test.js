@@ -55,11 +55,7 @@ test("native adapter restores its saved model unless a prompt changes it", async
 });
 
 test("a backend that pre-warms nothing still starts when a message is sent", async () => {
-  // `warm` answers what selecting a chat does, not whether the chat can ever be
-  // live. Reading it as the second left a harness with no record for its
-  // adapter to publish into, and a sent message came back as "chat switched
-  // before the agent was ready". Nothing covered it because the mocks here
-  // declared no `warm` at all, so the refusal never fired in a test.
+  // `warm` answers what selecting a chat does, not whether the chat can ever be live.
   const chatId = "w".repeat(24);
   const project = { id: "project_warmless", slug: "warmless", workingRoot: "/tmp/warmless" };
   const chat = {

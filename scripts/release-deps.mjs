@@ -1,18 +1,7 @@
-// Installs a thin release's dependencies from its lockfile, for this machine
-// only. Run by install.sh with the Node Conduit will run on:
-//
-//   node release-deps.mjs <conduit-web dir>
-//
-// 1. The lock is pruned: packages built for another OS or CPU go, and so does
-//    the Claude Code binary the Agent SDK would bring (Conduit drives the
-//    user's own `claude`).
-// 2. `npm ci --omit=dev --omit=optional --ignore-scripts`. Optional packages
-//    are left to step 3 because Pi's own npm-shrinkwrap makes npm fetch every
-//    platform's esbuild otherwise (~100 MB); scripts are off because the one
-//    native build, node-pty, ships prebuilt in the release.
-// 3. The optional packages that fit this machine are fetched from the lock's
-//    URLs, checked against its integrity hashes, and unpacked in place.
-// 4. node-pty's prebuilt binary is put where node-pty looks for it.
+// Installs a thin release's dependencies from its lockfile, for this machine only.
+// The Agent SDK's Claude Code binary is pruned: Conduit drives the user's own `claude`.
+// Optional packages are fetched here, not by npm: Pi's npm-shrinkwrap makes npm fetch every platform's esbuild
+// (~100 MB). Scripts are off because the one native build, node-pty, ships prebuilt in the release.
 import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";

@@ -4,7 +4,7 @@ import { decide } from "../src/agent/asks.js";
 import { connectorWraps } from "../src/agent/policy.js";
 import { agentFixture } from "./helpers/agent-fixture.js";
 
-// policy.js connectorWraps: reads go ahead; writes ask before the outward call.
+// Reads go ahead; writes ask before the outward call.
 test("connector reads run without approval while sending email waits for approval", async (t) => {
   const { agent, api, session } = await agentFixture(t, { youAsk: false, remindMinutes: 0 });
   const execute = t.mock.fn(async () => ({ output: [{ type: "text", text: "Connector result" }] }));
@@ -34,7 +34,7 @@ async function pending(t) {
   return { agent, ask, deliveries };
 }
 
-// asks.js decide: always records exactly the ask's tool and reusable target.
+// Always records exactly the ask's tool and reusable target.
 test("always approval remembers only the approved tool and target", async (t) => {
   const { agent, ask, deliveries } = await pending(t);
   const outcome = await decide(agent, ask.id, "always");

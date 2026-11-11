@@ -71,7 +71,6 @@ function handle(message, send) {
     const turnId = "turn-" + (++turnCount);
     send({ method: "turn/started", params: { turn: { id: turnId } } });
     send({ id: message.id, result: { turn: { id: turnId } } });
-    // The prompt Conduit named, echoed back the way the app-server echoes it.
     send({ method: "item/started", params: { turnId, item: { id: "item-user-" + turnCount,
       clientId: message.params.clientUserMessageId, type: "userMessage",
       content: [{ type: "text", text: inputText(message.params.input) }] } } });
@@ -177,7 +176,6 @@ function deferredEvent(events, predicate, timeoutMs) {
   });
 }
 
-/** A black-box Conduit fixture with the Codex executable replaced by a controllable app-server. */
 export async function startConduitHarness({ env = {} } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-harness-"));
   const codexCommand = await writeFakeCodex(root, createRequire(import.meta.url).resolve("ws"));
@@ -189,10 +187,7 @@ export async function startConduitHarness({ env = {} } = {}) {
       HOME: root,
       CODEX_HOME: path.join(root, ".codex"),
       CONDUIT_HOST: "127.0.0.1",
-      // The server binds a free port and tells us which. Picking one here meant
-      // probing for a free port, closing the probe, and handing the number to a
-      // child that took a second to start: anything else listening on 0 in that
-      // window could be given the same port, and test files run side by side.
+      // The server binds a free port and tells us which: test files run side by side, so a port picked here could be taken first.
       CONDUIT_PORT: "0",
       // Tests do not announce themselves to the network the machine is on:
       // a dozen harness servers publishing the same instance name would be

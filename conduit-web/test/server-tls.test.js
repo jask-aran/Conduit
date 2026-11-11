@@ -45,7 +45,6 @@ test("a stored leaf is kept across restarts and address changes", async () => {
   assert.ok(moved.spki.equals(first.spki));
   assert.equal((await fs.stat(file)).mode & 0o777, 0o600);
 
-  // A leaf another identity attested is not this server's.
   const other = crypto.randomBytes(16).toString("hex");
   const reissued = await new ServerLeaf(file).ensure({ commonName: "Conduit test", hosts: ["127.0.0.1"], ...attested(other, identity) });
   assert.ok(!reissued.spki.equals(first.spki));

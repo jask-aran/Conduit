@@ -1,10 +1,8 @@
 import { generateManifest } from "material-icon-theme";
 
 /**
- * The file and folder icon lookup, worked out at build time rather than in
- * the page. `generateManifest` builds the whole VS Code icon theme, and in the
- * browser that was a quarter-second of the first open spent before a file list
- * could draw. What the lookup reads is a handful of maps, so only those ship.
+ * The file and folder icon lookup, worked out at build time: `generateManifest` in the page costs a quarter-second
+ * before a file list can draw, and the lookup reads only a handful of maps.
  */
 export function buildMaterialIconManifest() {
   const manifest = generateManifest({ files: { associations: { "*.dax": "table" } } });

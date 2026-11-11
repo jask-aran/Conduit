@@ -24,14 +24,6 @@ fs.writeFileSync(path.join(dist, "bundle-report.json"), `${JSON.stringify(report
 console.log(`Bundle: initial JS ${initialJs} B gzip, initial CSS ${initialCss} B gzip, largest lazy JS ${report.largestLazyJsGzip} B gzip.`);
 
 const budgets = {
-  // Voice diagnostics, capture lifecycle, and persistent sidebar state add
-  // bounded client behaviour. Review comments add the chip tray, its editor and
-  // the navigation they dispatch; the excerpt preview that renders them is lazy
-  // and costs the initial payload only its import. Revisit this allowance in the
-  // planned performance review instead of hiding evidence behind a size cap.
-  // Docked panes (any pane moved into the dock, with its rail icon) and the
-  // desktop composer + menu add a few kB. jbot's panel (Tray, Ledge, Glance) and
-  // the v2 transcript took it to ~409 kB in 2026-11. It reached 420,048 B on 2026-11-11 with nothing large added.
   initialJs: Number(process.env.CONDUIT_BUDGET_INITIAL_JS_GZIP || 425_000),
   initialCss: Number(process.env.CONDUIT_BUDGET_INITIAL_CSS_GZIP || 80_000),
   lazyJs: Number(process.env.CONDUIT_BUDGET_LAZY_JS_GZIP || 300_000),
@@ -47,8 +39,6 @@ if (failures.length) {
   process.exitCode = 1;
 }
 
-// PWA shell: production builds must emit installability artifacts and must not
-// teach Workbox to runtime-cache authenticated /v0 surfaces.
 const distEntries = fs.readdirSync(dist);
 const manifestName = distEntries.find((name) => name.endsWith(".webmanifest"));
 const serviceWorkerName = distEntries.find((name) => /^(sw|service-worker)\.js$/.test(name));
@@ -65,9 +55,8 @@ if (!html.includes("manifest")) pwaFailures.push("index.html does not reference 
 }
 if (serviceWorkerName) {
   const swText = fs.readFileSync(path.join(dist, serviceWorkerName), "utf8");
-  // /v0 must stay on the NavigationRoute denylist so API paths never receive
-  // the SPA shell. Strip denylist arrays before rejecting any other /v0 mention
-  // (those would be positive runtime cache routes).
+  // /v0 stays on the NavigationRoute denylist so API paths never receive the SPA shell; any other /v0 mention would be
+  // a runtime cache route.
   if (!/denylist:\[[^\]]*\\\/v0/.test(swText) && !/denylist:\[[^\]]*\/v0/.test(swText)) {
     pwaFailures.push(`${serviceWorkerName} NavigationRoute denylist does not exclude /v0`);
   }
@@ -84,7 +73,7 @@ for (const icon of ["pwa-192x192.png", "pwa-512x512.png", "favicon.svg"]) {
 }
 const cssAssets = assets.filter((asset) => asset.initial && asset.type === "css");
 const cssText = cssAssets.map((asset) => fs.readFileSync(path.join(dist, asset.file), "utf8")).join("\n");
-// The library's frost material (components/ui/styles/frost.css), which menus wear too: both spellings of the blur survive the build.
+// Both spellings of the frost blur must survive the build.
 const frostedLiveRule = cssText.match(/\.ui-frost\{[^}]+\}/);
 const frostedLiveFailures = [];
 if (!frostedLiveRule) {
@@ -111,10 +100,8 @@ if (pwaFailures.length) {
   console.log(`PWA: manifest ${manifestName}, service worker ${serviceWorkerName}, icons present, no /v0 runtime cache.`);
 }
 
-// Overlays use the shared behavioral adapters (DESIGN.md, Surfaces). A
-// hand-rolled Kobalte dialog, or a blur and fill set in a surface's own CSS,
-// is how overlays drifted apart before; shared Dialog and OverlayDialog from
-// components/ui/dialog.tsx and the Menu/Popover primitives are the ways in.
+// A hand-rolled Kobalte dialog drifts apart from the others: Dialog and OverlayDialog (components/ui/dialog.tsx) and
+// the Menu/Popover primitives are the ways in.
 const overlayFailures = [];
 const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? walk(path.join(dir, entry.name)) : [path.join(dir, entry.name)]);
 for (const file of walk(path.resolve("src"))) {
@@ -131,9 +118,8 @@ if (overlayFailures.length) {
   console.log("Overlays: every dialog uses the shared Dialog or OverlayDialog from components/ui/dialog.tsx.");
 }
 
-// The agents' web tools come from pi-web-access, a Pi extension loaded through the bridge (pi-extension-bridge.js).
-// When it stops loading -- an import it needs is not installed where it looks -- every agent runs without
-// web_search, and only a warning said so: load it here, as the runtime does, so the build fails instead.
+// When pi-web-access stops loading, every agent runs without web_search and only a warning says so: load it here, as
+// the runtime does, so the build fails instead.
 {
   const { loadPiExtensionTools } = await import(pathToFileURL(path.resolve("src/server/pi-extension-bridge.js")).href);
   const wanted = ["web_search", "fetch_content", "get_search_content", "source_check"];

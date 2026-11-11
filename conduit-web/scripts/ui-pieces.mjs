@@ -1,11 +1,5 @@
 // The piece names (virtual:ui-pieces): which library piece draws an element, read from the library's source so it
-// cannot fall behind it. The feedback tool (client/feedback) names what is under the pointer with it.
-//
-// A piece is a capitalised component in src/components/ui/*.tsx. Its root is its first JSX element that is not a
-// control-flow wrapper; the root's first `ui-*` class is the piece's own, and every other `ui-*` class it writes is a
-// part of it. A piece whose root has no class of its own (a Kobalte root, another piece as it is) says its name with
-// `data-piece="Name"` on that root. `wraps` is the piece a root is drawn through (TreeRow through Row), so an element
-// carrying both classes is named for the outer one.
+// cannot fall behind it. A piece whose root has no `ui-*` class of its own says its name with `data-piece="Name"`.
 //
 //   node scripts/ui-pieces.mjs    print the pieces with no name in the page, and classes two pieces claim
 import fs from "node:fs";
@@ -41,7 +35,6 @@ const transparent = (element) => {
   if (FLOW.has(tag) || tag.endsWith(".Provider")) return true;
   return tag.includes(".") && !/^Icons\./.test(tag) && !classes(element).length && !element.attributes.some((attribute) => attribute.type === "JSXAttribute" && attribute.name.name === "as");
 };
-/** The element a component's own return draws: through fragments, conditions and transparent wrappers. */
 function rootOf(fn) {
   const returns = [];
   if (fn.body.type !== "BlockStatement") returns.push(fn.body);
@@ -52,7 +45,6 @@ function rootOf(fn) {
   const down = (node) => {
     if (!node) return null;
     if (node.type === "JSXElement") return transparent(node.openingElement) ? firstChild(node) : node.openingElement;
-    // Several elements side by side are no one root.
     if (node.type === "JSXFragment") return node.children.filter((child) => child.type === "JSXElement").length > 1 ? null : firstChild(node);
     if (node.type === "JSXExpressionContainer" || node.type === "ParenthesizedExpression" || node.type === "TSAsExpression") return down(node.expression);
     if (node.type === "ConditionalExpression") return down(node.consequent) ?? down(node.alternate);
@@ -100,7 +92,6 @@ export function buildUiPieces(root) {
         const as = rootElement?.attributes.find((attribute) => attribute.type === "JSXAttribute" && attribute.name.name === "as")?.value?.expression;
         const through = as?.type === "Identifier" ? as.name : /^[A-Z][a-zA-Z0-9]*$/.test(tag) ? tag : null;
         pieces[name] = { file: rel(file), line: candidate.loc.start.line, exported, class: own, said: Boolean(said), wraps: through ? alias.get(through) ?? through : null,
-          // An element of its own to name: a tag, or a Dynamic.
           draws: /^[a-z]|^Dynamic$/.test(tag) };
         if (own) claim(own, name, true);
         // Every other ui-* word it writes is a part of it (a class given to an engine as a string included).
@@ -108,8 +99,6 @@ export function buildUiPieces(root) {
       }
     }
   }
-  // A class is the root of the first piece that claims it so; else a part of the first that writes it.
-  // A piece that says its name from script (a CodeMirror panel built by hand).
   for (const file of fs.readdirSync(ui).filter((entry) => /\.tsx?$/.test(entry)).map((entry) => path.join(ui, entry))) {
     const text = fs.readFileSync(file, "utf8");
     for (const match of text.matchAll(/dataset\.piece = "(\w+)"/g)) pieces[match[1]] ??= { file: rel(file), line: text.slice(0, match.index).split("\n").length, exported: true, class: null, said: true, wraps: null, draws: true };
@@ -121,9 +110,6 @@ export function buildUiPieces(root) {
     if (roots.length > 1) shared.push(`${name}: ${roots.map((entry) => entry.piece).join(", ")}`);
     classMap[name] = roots.length ? { piece: roots[0].piece, ...(roots.length > 1 ? { also: roots.slice(1).map((entry) => entry.piece) } : {}) } : { piece: claimed[0].piece, part: true };
   }
-  // Where each class is styled: in every stylesheet with a rule that begins with it (a piece with kinds is styled per
-  // family: IconButton in dashboard.css, pane.css, nav.css…), the line of the first; the stylesheet named as its
-  // piece's file is comes first. Failing any, the first rule that mentions it.
   const styles = {};
   const stylesDir = path.join(ui, "styles");
   const sheets = fs.readdirSync(stylesDir).filter((entry) => entry.endsWith(".css")).sort().map((entry) => [rel(path.join(stylesDir, entry)), fs.readFileSync(path.join(stylesDir, entry), "utf8")]);
@@ -135,15 +121,12 @@ export function buildUiPieces(root) {
       if (found.length) { styles[name] = found; break; }
     }
   }
-  // The app's anchors: where each `data-region` is written.
   const anchors = {};
   for (const file of sources(path.join(root, "src/client")).concat(sources(path.join(root, "src/components")))) {
     const text = fs.readFileSync(file, "utf8");
     for (const attribute of ANCHORS) for (const match of text.matchAll(new RegExp(`${attribute}="([\\w:-]+)"`, "g")))
       anchors[`${attribute}=${match[1]}`] ??= `${rel(file)}:${text.slice(0, match.index).split("\n").length}`;
   }
-  // No name in the page: an exported piece that draws an element with no class and no data-piece. One drawn through
-  // another piece reads as that piece, which lists it under `through`.
   const unnamed = Object.keys(pieces).filter((name) => pieces[name].exported && pieces[name].draws && !pieces[name].class && !pieces[name].said);
   const through = {};
   for (const [name, piece] of Object.entries(pieces)) if (!piece.class && !piece.said && piece.wraps && pieces[piece.wraps]) (through[piece.wraps] ??= []).push(name);

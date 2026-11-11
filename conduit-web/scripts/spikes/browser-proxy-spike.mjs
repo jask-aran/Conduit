@@ -1,27 +1,17 @@
 #!/usr/bin/env node
 /*
- * Spike for roadmap #8 (browser transport v2), not shipped: can a page be shown by proxying it -- each site on an origin
- * of its own under the hub, framed in Conduit -- with its security headers kept? Three local servers stand in for the
- * real ones, and a headless browser reports what survives:
- *
- *   SITE   127.0.0.1:7200  a site that resists: X-Frame-Options DENY, CSP frame-ancestors 'self' and a script nonce,
- *                          a cookie, an absolute redirect, an absolute same-origin link and fetch, a WebSocket.
- *   PROXY  127.0.0.1:7101  the site's origin under the hub: forwards everything; rewrites framing headers, adds its
- *                          own nonce for an injected script, Location, Set-Cookie and absolute URLs in HTML.
- *   PARENT 127.0.0.1:7000  Conduit: a page framing the proxy, listening for the injected script's messages.
- *
- * Run: node scripts/spikes/browser-proxy-spike.mjs   (Playwright's Chromium; prints one line per check)
+ * Spike: can a page be shown by proxying it -- each site on an origin of its own under the hub, framed in Conduit --
+ * with its security headers kept? Three local servers (SITE, PROXY, PARENT) stand in for the real ones.
  */
 import http from "node:http";
 import crypto from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
 import { createRequire } from "node:module";
-// Playwright as this machine has it (global in the dev container), not a dependency of Conduit.
+// Playwright is global in the dev container, not a dependency of Conduit.
 const { chromium } = createRequire(import.meta.url)("playwright");
 
 const SITE = "http://127.0.0.1:7200", PROXY = "http://127.0.0.1:7101", PARENT = "http://127.0.0.1:7000";
 
-// The site.
 const site = http.createServer((request, response) => {
   if (request.url === "/go") { response.writeHead(302, { Location: `${SITE}/landed` }); return response.end(); }
   if (request.url === "/api") { response.writeHead(200, { "Content-Type": "application/json", "Set-Cookie": "api=1; Path=/; SameSite=Lax" }); return response.end(JSON.stringify({ ok: true, cookie: request.headers.cookie || "" })); }
@@ -41,7 +31,6 @@ try { const s = new WebSocket("${SITE.replace("http", "ws")}/ws"); s.onmessage =
 const siteWs = new WebSocketServer({ server: site, path: "/ws" });
 siteWs.on("connection", (socket) => socket.send("hello from the site"));
 
-// The proxy: the site under an origin of its own.
 const rewriteUrls = (text) => text.split(SITE).join(PROXY).split(SITE.replace("http", "ws")).join(PROXY.replace("http", "ws"));
 const proxy = http.createServer((request, response) => {
   const upstream = http.request(`${SITE}${request.url}`, { method: request.method, headers: { ...request.headers, host: new URL(SITE).host } }, (answer) => {
@@ -82,7 +71,6 @@ proxy.on("upgrade", (request, socket, head) => {
   });
 });
 
-// The parent: Conduit framing it.
 const parent = http.createServer((request, response) => {
   response.writeHead(200, { "Content-Type": "text/html" });
   response.end(`<!doctype html><p id=said>no message</p><iframe id=f src="${request.url === "/direct" ? SITE : PROXY}/" style="width:800px;height:400px"></iframe>
@@ -113,8 +101,8 @@ try {
   // What a page's script builds at runtime is not in the HTML the proxy rewrote.
   const escaped = await page.frame({ url: /7101/ }).evaluate((site) => { const a = document.createElement("a"); a.href = site + "/x"; return a.href; }, SITE);
   report("URLs built by script at runtime escape the proxy (needs a service worker or a runtime patch)", escaped.startsWith(SITE), escaped, ["GAP ", "ok  "]);
-  // Cookies are per host, not per port: Conduit's own session cookie (set by the parent, 127.0.0.1:7000) rides along to
-  // the proxied origin, and the proxy would hand it to the site unless it strips it.
+  // Cookies are per host, not per port: Conduit's own session cookie rides along to the proxied origin, and the proxy
+  // would hand it to the site unless it strips it.
   await page.context().addCookies([{ name: "conduit_session", value: "person-token", url: PARENT, httpOnly: true, sameSite: "Lax" }]);
   await page.goto(`${PARENT}/`); await page.waitForTimeout(1200);
   const seen = await page.frame({ url: /7101/ }).textContent("#fetch");

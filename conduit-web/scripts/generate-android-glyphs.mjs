@@ -81,7 +81,6 @@ const css = await read('src/components/ui/styles/palettes.css');
 const colours = hues.map((hue) => {
   assert(mappings.has(hue), `Missing identity hue: ${hue}`);
   const value = required(css, new RegExp(`--${paletteId}-${mappings.get(hue)}:\\s*([^;]+);`)).trim();
-  // Current identity CSS is already sRGB. Fail if the palette changes to a different colour space.
   assert(/^#[\da-f]{6}$/i.test(value), `Expected sRGB hex for ${hue}: ${value}`);
   return [hue, `0xFF${value.slice(1).toUpperCase()}`];
 });

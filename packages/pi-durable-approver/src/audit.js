@@ -32,7 +32,6 @@ export function jsonlAudit(dir, { keepDays = 30 } = {}) {
   };
 }
 
-/** Read newest files and newest lines first, ignoring malformed lines. */
 export async function readAudit(dir, { limit = 50 } = {}) {
   const records = [];
   if (!(limit > 0)) return records;

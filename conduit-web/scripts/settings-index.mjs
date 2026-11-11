@@ -3,23 +3,12 @@ import path from "node:path";
 
 /*
  * Settings search's index, read from the settings source at build time (virtual:settings-index), so a setting is
- * findable the moment it is written and never through a list kept by hand. A section is the region of settings-core.tsx
- * under `<Show when={section() === "id"}>`. In it:
- *   - every row (SettingLine, Switch, SettingCredential, SettingLink, SettingDetails, RuleList) is an entry
- *     under the Group whose title came last, named by its label: a literal, or every string a label expression can be;
- *   - every Group is an entry too, named by its title;
- *   - an entry's acts are its buttons' words ("Clear data"), and its words what else it says (its title, state,
- *     placeholder and options): search falls back on the words only until the row's own value has been read;
- *   - a table of rows declared outside the markup (`const TOOLS = [{ key, label, title }]`) is entered where it is used.
- * A component a section draws from another settings file (<UsageSettings />, agentSettings.Page) brings that file's
- * entries into the section; one drawn in parts (`<DevicesSettingsTile part="device" />`) brings only the rows under its
- * `props.part === "device"` Shows and those under none. What only the running app knows (provider accounts, shortcut
- * commands, documents) is added there (settings-core.tsx).
+ * findable the moment it is written and never through a list kept by hand. What only the running app knows (provider
+ * accounts, shortcut commands, documents) is added in settings-core.tsx.
  */
 const ROWS = ["SettingLine", "Switch", "SettingCredential", "SettingLink", "SettingDetails", "RuleList"];
 const TAG = new RegExp(`<(${[...ROWS, "Group"].join("|")})\\b`, "g");
 
-/** Where the tag opened at `from` ends (its `>` outside every brace and quote). */
 function tagEnd(source, from) {
   let depth = 0;
   let quote = "";
@@ -34,7 +23,6 @@ function tagEnd(source, from) {
   return source.length;
 }
 
-/** An attribute's strings: its literal, or every quoted string its expression holds (a template's slots dropped). */
 function attribute(tag, name) {
   const at = tag.search(new RegExp(`\\s${name}=`));
   if (at < 0) return [];
@@ -57,12 +45,9 @@ function attribute(tag, name) {
 }
 // A name a person would look for: it starts as a name does (a capital, or one word like skills.sh), and is not a state ("Listening…").
 const readable = (text) => text.length >= 2 && text.length <= 80 && (/^[A-Z]/.test(text) || /^[a-z]\w*\.\w+$/.test(text)) && !/[…:]$/.test(text);
-/** What a stretch of markup says besides its rows' names: option and button text, option tables written in place. */
-/** What a stretch of markup does: its buttons' words, whatever stands before them inside one (a spinner). */
 const actsIn = (markup) => [...markup.matchAll(/([A-Z][^<>{}]{2,40})<\/Button>/g)].map((match) => match[1].trim());
 function saidIn(markup, maps) {
   const said = [];
-  // A table of what its options are called (`const CODEC_LABELS = { h265: "H.265" }`), used here.
   for (const [name, values] of maps ?? []) if (new RegExp(`\\b${name}\\b`).test(markup)) said.push(...values);
   for (const match of markup.matchAll(/<(?:option|SettingValue|MenuRadioItem)\b[^>]*>([^<>{}]{2,60})<\//g)) said.push(match[1].trim());
   for (const match of markup.matchAll(/\blabel: "([^"]{2,60})"/g)) said.push(match[1]);
@@ -74,10 +59,8 @@ function saidIn(markup, maps) {
 const LOCAL = /\nfunction ([A-Z][A-Za-z]+)\([\s\S]*?\n\}/g;
 const DRAWN = /(?:<|\{)([A-Za-z]+)(?=[\s/>(])/g;
 const HELPER = /\n  const ([a-z][A-Za-z]+) = \([^)]*\)(?::[^=\n]+)? => [\s\S]*?(?=\n  (?:const|let|return|function|createEffect|onMount|onCleanup|\/\/|\/\*)[ (])/g;
-// A table declared at the top of a file: rows where its objects carry a key or a title, else a row's options.
 const TABLE = /\nconst ([A-Z][A-Z_]+)(?::[^=]+)?= \[([\s\S]*?)\n\];/g;
 
-/** The file's maps of names (`const SOURCE = { off: "Off", local: "Local" }`): name -> what they say. */
 function mapsOf(source) {
   const maps = new Map();
   for (const [, name, body] of source.matchAll(/\nconst ([A-Z][A-Z_]+)(?::[^=]+)?= \{([^;]*?)\}(?: as const)?;/g)) {
@@ -155,7 +138,6 @@ function entriesOf(source, section, group = null, locals = null, tables = null, 
   return entries;
 }
 
-/** The source as one part of a component drawn in parts sees it: the Shows of every other part blanked. */
 function partOf(source, part) {
   let out = source;
   for (const match of source.matchAll(/<Show when=\{props\.part === "([a-z]+)"/g)) {
@@ -171,7 +153,6 @@ function partOf(source, part) {
   return out;
 }
 
-// A settings file's own imports from its siblings: name -> file (createAgentSettings also answers to `agentSettings.`).
 function importsOf(source) {
   const files = new Map();
   for (const [, names, file] of source.matchAll(/import \{([^}]+)\} from "\.\/([a-z-]+)(?:\.tsx)?";/g)) {
@@ -181,7 +162,6 @@ function importsOf(source) {
   return files;
 }
 
-/** A region's rows, then those of every sibling file a component it draws comes from, followed down (once each). */
 function regionEntries(dir, region, section, files, seen) {
   const entries = entriesOf(region, section);
   const drawn = new Map([...region.matchAll(/<([A-Za-z]+)(?:\.Page)?(?=[\s/>])(?:\s+part="([a-z]+)")?/g)].map((match) => [match[1], match[2]]));

@@ -27,7 +27,7 @@ const mail = (id, { from = "person@example.test", cc, reply } = {}) => Buffer.fr
   ...(cc ? [`Cc: ${cc}`] : []), ...(reply ? [`In-Reply-To: <${reply}@example.test>`] : []), "", `Body of ${id}`,
 ].join("\r\n"));
 
-// persistent-agent.md, Email Replies: a room with anyone else is never written without approval.
+// A room with anyone else is never written without approval.
 test("email to a room with another sender or copied recipient is refused before sending", async (t) => {
   const { log, email, agent, api } = await mailbox(t);
   const sent = t.mock.method(email, "send", async () => { throw new Error("must not send"); });
@@ -45,7 +45,7 @@ test("email to a room with another sender or copied recipient is refused before 
   assert.equal(sent.mock.callCount(), 0);
 });
 
-// email.js, Who wakes jbot: unknown senders wait in the mail room, held, without a model turn and outside the context
+// Unknown senders wait in the mail room, held, without a model turn and outside the context
 // inbox (which is what routines report, not mail to jbot).
 test("unknown email waits in the mail room while the person's email starts a turn", async (t) => {
   const { log, email, agent, prompts } = await mailbox(t);
@@ -62,7 +62,7 @@ test("unknown email waits in the mail room while the person's email starts a tur
   assert.ok(prompts[0][1].includes("Body of person"));
 });
 
-// messages.js: pending delivery after a restart is uncertain and is never resent automatically.
+// Pending delivery after a restart is uncertain and is never resent automatically.
 test("an interrupted email delivery becomes uncertain after reload and is not resent", { timeout: 1500 }, async (t) => {
   const { root, log, email } = await mailbox(t);
   await email.receive(mail("origin"));

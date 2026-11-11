@@ -2,8 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Receipts } from "../src/nodes/receipts.js";
 
-// Design: "How far do we go on knowing whether a cut-off action happened?"
-// receipts.js follow: reconnect replays from the next event missing, without repeating work.
+// Reconnect replays from the next event missing, without repeating work.
 test("a repeated action replays only missing events and its result without running twice", { timeout: 1000 }, async () => {
   const receipts = new Receipts();
   const events = [{ kind: "output", text: "first" }, { kind: "output", text: "second" }];
@@ -25,7 +24,7 @@ test("a repeated action replays only missing events and its result without runni
   assert.deepEqual(replayedResult, result);
 });
 
-// receipts.js drop: the socket went; work goes on until asked again.
+// The socket went; work goes on until asked again.
 test("dropping a listener leaves an action running for a new listener", { timeout: 1000 }, async () => {
   const receipts = new Receipts();
   const started = Promise.withResolvers();

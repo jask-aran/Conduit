@@ -1,10 +1,5 @@
-// Refuse an updater archive an installed client could not open.
-//
-// tauri-plugin-updater depends on the zip crate with default features off, so
-// the only method it can decompress is Stored. A deflated archive downloads
-// fine, verifies its signature fine, and then fails at the last step with
-// "Compression method not supported" -- on someone else's machine, after the
-// release is public. This says so at build time instead.
+// Refuse an updater archive an installed client could not open: tauri-plugin-updater's zip crate has default features
+// off, so it decompresses only Stored, and a deflated archive fails on the user's machine after it verifies.
 //
 // Usage: node scripts/check-updater-archive.mjs <archive.nsis.zip>
 
@@ -21,8 +16,7 @@ const STORED = 0;
 const LOCAL_HEADER = 0x04034b50;
 const bytes = readFileSync(archive);
 
-// Only the local file headers are read: enough to name every entry and the
-// method it was written with, without a zip library to install.
+// Local file headers alone name every entry and its method, without a zip library to install.
 const entries = [];
 for (let at = 0; at + 30 <= bytes.length;) {
   if (bytes.readUInt32LE(at) !== LOCAL_HEADER) break;
@@ -44,8 +38,7 @@ if (!entries.length || failures.length) {
   process.exit(1);
 }
 
-// An installer nested under directories would extract as a tree the updater
-// then cannot find its executable in.
+// An installer nested under directories extracts as a tree the updater cannot find its executable in.
 const nested = entries.filter((entry) => entry.name.includes("/") || entry.name.includes("\\"));
 if (nested.length) {
   console.error(`${basename(archive)}: entries must be stored by bare name -- ${nested.map((entry) => entry.name).join(", ")}`);

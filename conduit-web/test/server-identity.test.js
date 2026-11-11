@@ -43,16 +43,13 @@ test("a proof answers the nonce it was given, and only this server can make one"
   const signed = (value) => Buffer.from(`${identity.id}.${value}`, "utf8");
   assert.equal(crypto.verify(null, signed(nonce), key, Buffer.from(proof.signature, "base64")), true);
 
-  // The same signature is worthless for the next question.
   const other = crypto.randomBytes(24).toString("base64url");
   assert.equal(crypto.verify(null, signed(other), key, Buffer.from(proof.signature, "base64")), false);
 
-  // Another server's answer does not pass for this one's.
   const stranger = await new ServerIdentity(await temporaryFile(), { port: 4310 }).load();
   const impostor = stranger.prove(nonce);
   assert.equal(crypto.verify(null, signed(nonce), key, Buffer.from(impostor.signature, "base64")), false);
 
-  // Nonsense is refused rather than signed.
   for (const value of ["", "short", "x".repeat(200), "not base64url!!", null]) {
     assert.equal(identity.prove(value), null, String(value));
   }

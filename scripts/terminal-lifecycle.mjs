@@ -20,10 +20,8 @@ export function terminalSocketPath(name, env = process.env) {
 }
 
 /**
- * A tmux server that has stopped answering still holds its socket, and tmux
- * then refuses every command with "server exited unexpectedly" -- `kill-server`
- * included. The socket is Conduit's alone, so it is removed instead; the next
- * command starts a fresh server.
+ * An unresponsive tmux server still holds its socket, and tmux refuses every command (`kill-server` included).
+ * The socket is Conduit's alone, so it is removed instead.
  */
 export async function removeUnresponsiveSocket(name, error) {
   if (!/server exited unexpectedly/i.test(String(error?.stderr || error?.message || ""))) return false;

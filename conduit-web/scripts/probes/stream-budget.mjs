@@ -1,16 +1,7 @@
 #!/usr/bin/env node
 /**
- * Frame budget while an answer streams (docs/testing.md, Frame budget). For
- * each renderer it starts a fresh chat in the Test project, sends one prompt,
- * and records a lean trace (devtools.timeline, toplevel) for the whole stream
- * while sampling how the visible answer grows every frame. It reports how
- * evenly the text appeared, main-thread tasks over 6.94ms (144Hz) and 16.7ms,
- * what ran inside the long ones, layouts per task and DOM churn, then deletes
- * the chat. Use --windows: frame cost only means something headed.
- *
- * The default model is Muse Spark on the Assistant profile -- real streaming,
- * ad hoc, never a fixture. MODEL=<spec> uses the test-stream profile instead.
- * Env: RENDERERS=incremark,incremark-fade  PROMPT=...  MATHFADE=1  SHOT=1
+ * Frame budget while an answer streams. Use --windows: frame cost only means something headed.
+ * Env: MODEL=<spec> (test-stream profile)  RENDERERS=incremark,incremark-fade  PROMPT=...  MATHFADE=1  SHOT=1
  *
  *   node scripts/probes/stream-budget.mjs --windows
  */

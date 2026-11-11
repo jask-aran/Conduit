@@ -1,11 +1,5 @@
 /**
  * A Codex chat driven through the real server, and what a browser would draw.
- *
- * `codex-transcript-pipeline.test.js` drives the adapter directly, which is
- * fast and lets a test hold a turn open mid-flight. This one gives up that
- * control to gain the rest of the stack: a real Conduit process, a real chat,
- * a real WebSocket, and a fake app-server daemon talking the real protocol over
- * its control socket. What both agree on is the rows.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -14,7 +8,6 @@ import { normalizeLiveEvent } from "../src/client/api/live-events.ts";
 import { applyToolOp, applyTranscriptOp, isToolOp, mergeToolEvent } from "../src/client/timeline-order.ts";
 import { buildTurnRows } from "../src/client/turn-rows.ts";
 
-/** The browser, as far as the transcript is concerned. */
 function project(frames) {
   let messages = [];
   let tools = [];
@@ -70,7 +63,6 @@ test("a Codex turn reaches the browser as prompt, trace and answer", async (t) =
     "trace(complete)",
     "assistant: codex-test medium works",
   ]);
-  // The command the turn ran belongs to that turn's trace.
   assert.deepEqual(rows[1].value.segments.map((segment) => segment.kind), ["narration", "tool"]);
 });
 
@@ -101,7 +93,6 @@ test("the server states the order, and a second turn does not disturb the first"
   // to work it out from position.
   assert.deepEqual(messages.filter((item) => item.role === "assistant").map((item) => item.answers),
     [messages[0].id, messages[2].id]);
-  // And the chat carries a sequenced log a reconnecting client can count from.
   const logState = stream.messages.find((event) => event.type === "log_state");
   assert.ok(logState?.log?.id, "the chat's order was stated on attach");
 });

@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-// Conduit's conventions, checked. Each rule below is here because agents kept breaking it (evidence from session
-// transcripts and commit history, 2026-10 to 2026-11); the reason sits with the rule. tsc catches types; this
-// catches the rest that a pattern can.
+// Conduit's conventions, checked. Each rule below is here because agents kept breaking it; the reason sits with the
+// rule.
 //
 //   node scripts/check-conventions.mjs           list every problem, exit 1 if any (npm run typecheck)
 //   node scripts/check-conventions.mjs --warn    list every problem, exit 0, save a summary (npm run build)
@@ -54,9 +53,8 @@ const css = files.filter((f) => f.endsWith(".css") && !inDir(f, "src/gallery"));
 const tokenFiles = ["foundations.css", "theme.css", "palettes.css"];
 const serverCode = files.filter((f) => f.endsWith(".js") && inDir(f, "src/server"));
 
-// 1. App markup wearing library classes (DESIGN.md, Components v2). The app calls components; it does not write
-//    their markup with `ui-*` classes or raw controls. 419 `ui-` class additions in 95 commits over six weeks, 153 of
-//    them after the v2 cutover, kept being added and removed again.
+// 1. App markup wearing library classes. The app calls components; it does not write their markup with `ui-*`
+//    classes or raw controls. Such classes kept being added and removed again.
 for (const file of appCode) {
   const text = stripComments(fs.readFileSync(file, "utf8"));
   each(file, text, /\bclass(?:List)?=\{?\s*["'`][^"'`]*\bui-[a-z]/g, (m) =>
@@ -65,9 +63,9 @@ for (const file of appCode) {
     report(file, text, m.index, `raw <${m[1]}>`, "use the components/ui control (DESIGN.md Components v2)"));
 }
 
-// 3. A fixed delay where the UI should wait for an event. The same bug was fixed three times (5618a21f, 41d6b828,
-//    7b951f8f): a literal 150-600 ms timer that a slowed Animation speed outlasts, or that nothing clears. Wait for
-//    the motion to end (whenMotionEnds), use a duration token, or name the constant when it is a real backoff.
+// 3. A fixed delay where the UI should wait for an event: a literal 150-600 ms timer is outlasted by a slowed
+//    Animation speed, or nothing clears it. Wait for the motion to end (whenMotionEnds), use a duration token, or name
+//    the constant when it is a real backoff.
 for (const file of uiCode) {
   const text = stripComments(fs.readFileSync(file, "utf8"));
   for (const m of text.matchAll(/\bsetTimeout\s*\(/g)) {
@@ -85,8 +83,8 @@ for (const file of uiCode) {
   }
 }
 
-// 4. Hand-kept "latest ask wins" counters. 5618a21f replaced seventeen counters compared after an await with
-//    createLatest (client/state/latest.ts); they creep back as `const id = ++counter`.
+// 4. Hand-kept "latest ask wins" counters compared after an await. createLatest (client/state/latest.ts) is that
+//    machine once; counters creep back as `const id = ++counter`.
 for (const file of uiCode.filter((f) => !f.endsWith(path.join("state", "latest.ts")))) {
   const text = stripComments(fs.readFileSync(file, "utf8"));
   each(file, text, /\bconst\s+\w+\s*=\s*\+\+[\w.]+/g, (m) =>
@@ -94,11 +92,10 @@ for (const file of uiCode.filter((f) => !f.endsWith(path.join("state", "latest.t
 }
 
 // 5. Literal values where a token belongs. Outside the token files, sizes, colours, durations and layers come from
-//    tokens. 260 px values and 134 colours were added in three weeks after the cutover removed 1,500+, and the person
-//    had to ask for tokens by name. 0 and 1px pass (whole-pixel lines, DESIGN.md); media and container queries pass.
-// 6. Frost redeclared outside frost.css. "Why am I still seeing three different frosts?" was asked twice (10-10,
-//    10-12); check-bundle.mjs's comment says the build rejects a surface's own blur and fill, but nothing did.
-// 8. Focus rings. DESIGN.md: never focus rings; foundations.css removes outlines globally.
+//    tokens; literals crept back in by the hundred. 0 and 1px pass (whole-pixel lines); media and container queries
+//    pass.
+// 6. Frost redeclared outside frost.css: each surface's own blur and fill made several different frosts.
+// 8. Focus rings: there are never focus rings; foundations.css removes outlines globally.
 for (const file of css) {
   const text = stripComments(fs.readFileSync(file, "utf8"), true);
   const name = path.basename(file);
@@ -132,16 +129,15 @@ for (const file of css) {
 }
 
 // 7. Express handlers wrapped in try/catch that only call next(error). Express 5 passes a rejected handler on by
-//    itself; two sweeps (1e785f30, c2a1abb1) removed 147 such lines and a few survived.
+//    itself.
 for (const file of serverCode) {
   const text = stripComments(fs.readFileSync(file, "utf8"));
   each(file, text, /catch\s*\(\s*(\w+)\s*\)\s*\{\s*(?:return\s+)?next\(\s*\1\s*\);?\s*\}/g, (m) =>
     report(file, text, m.index, "try/catch around next(error)", "remove the try/catch; Express 5 forwards the rejection"));
 }
 
-// 2. Unused locals, imports and parameters. 11dc3eba cleared them to zero (main.tsx alone had 19 unused imports);
-//    they drifted back. tsc finds them with these flags; they stay out of tsconfig.json so a plain type error and
-//    leftover code are reported separately.
+// 2. Unused locals, imports and parameters drift back once cleared. The flags stay out of tsconfig.json so a plain
+//    type error and leftover code are reported separately.
 try {
   execFileSync(path.join(root, "node_modules", ".bin", "tsc"), ["--noEmit", "--noUnusedLocals", "--noUnusedParameters", "--pretty", "false"], { cwd: root, stdio: "pipe" });
 } catch (error) {

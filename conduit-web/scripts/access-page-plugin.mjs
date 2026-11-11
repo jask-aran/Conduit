@@ -2,8 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-/** Generate login HTML with the same Solid components and CSS as the app.
- * writeBundle finishes before PWA closeBundle discovers the final assets. */
+/** writeBundle finishes before PWA closeBundle discovers the final assets. */
 export function accessPagePlugin(configFile) {
   return {
     name: "conduit-access-page",

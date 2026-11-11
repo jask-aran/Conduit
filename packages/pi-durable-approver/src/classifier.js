@@ -1,12 +1,9 @@
 import { isAuthorization, isRisk } from "./table.js";
 
 /*
- * The judge. It is reasoning-blind (Claude Code's auto mode): it sees the person's policy, the person's own words and
- * the held action, never the agent's prose or anything the agent read. The agent may have read a planted
- * instruction; the judge has not, and the action's own text is framed as data, escaped so it cannot close the frame.
- *
- * Two passes: a one-word pass that may only say ALLOW for what is plainly within the rules, and a reasoned pass for
- * everything else. Both share the system prompt's prefix, so the second is mostly a cache read.
+ * The judge never sees the agent's prose or anything the agent read, which may hold a planted instruction; the
+ * action's own text is framed as data, escaped so it cannot close the frame. Both passes share the system prompt's
+ * prefix, so the second is mostly a cache read.
  */
 
 const SYSTEM = `You approve or refuse one action an AI agent wants to take on a person's behalf, judged against the person's own standing rules and words.
@@ -36,7 +33,6 @@ const FIELD_MAX = 2000;
 const data = (value) => JSON.stringify(value, null, 1).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
 const clip = (text, max) => (text.length > max ? `${text.slice(0, max)} [${text.length - max} more characters not shown]` : text);
 
-/** The held action as the judge sees it: long fields clipped, and whether anything was cut. */
 export function actionView(held, canonicalCommands) {
   let truncated = false;
   const trim = (value) => {
@@ -67,7 +63,6 @@ export function promptOf(policy, words, held, canonicalCommands) {
 
 const textOf = (message) => (message?.content || []).filter((part) => part.type === "text").map((part) => part.text).join("").trim();
 
-/** The reasoned verdict's fields, or a thrown error (retried by the caller) when the reply is not one. */
 export function parseVerdict(text) {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
@@ -81,14 +76,9 @@ export function parseVerdict(text) {
   return { risk: value.risk, authorization: value.authorization, always: value.always, reason };
 }
 
-/**
- * One attempt at a rating: the quick pass, then the reasoned one unless the quick pass said ALLOW. `complete` is
- * `api.models.completeSimple` (pi-ai resolves the provider's auth). Throws on a provider error or a malformed reply.
- */
 export async function rate({ complete, model, policy, words, held, canonicalCommands, instructions = SYSTEM, signal }) {
   const { user, truncated } = promptOf(policy, words, held, canonicalCommands);
   const messages = [{ role: "user", content: user, timestamp: Date.now() }];
-  // What the judge spent, both passes, as pi-ai reports it (the host counts it as it counts the agent's own requests).
   const usage = emptyUsage();
   const ask = async (systemPrompt, maxTokens) => {
     const reply = await complete(model, { systemPrompt, messages }, { temperature: 0, maxTokens, signal });
@@ -106,11 +96,9 @@ export async function rate({ complete, model, policy, words, held, canonicalComm
   try { return { ...parseVerdict(full), truncated, passes: 2, usage }; } catch (error) { throw Object.assign(error, { usage }); }
 }
 
-/** pi-ai's Usage, zeroed. */
 export function emptyUsage() {
   return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 }
-/** Add one Usage into another, in place. */
 export function addUsage(into, usage) {
   if (!usage) return into;
   for (const key of ["input", "output", "cacheRead", "cacheWrite", "totalTokens"]) into[key] += Number(usage[key]) || 0;

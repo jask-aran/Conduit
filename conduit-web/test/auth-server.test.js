@@ -9,14 +9,8 @@ import test from "node:test";
 import { AuthStore } from "../src/auth-store.js";
 
 /**
- * The origin the server actually bound, read from the server itself.
- *
- * Choosing a port in advance -- bind zero, close, hand the number to a child
- * -- is a guess with a gap in it: test files run at the same time, and a port
- * that was free a moment ago stays free only until something else is told the
- * same number. Whoever binds first keeps it, and the loser's requests are
- * answered by a server the test never started. The kernel picks instead, and
- * the server says what it picked.
+ * Read from the server itself: test files run at the same time, so a port
+ * chosen in advance can be taken before the child binds it.
  */
 function boundOrigin(child) {
   return new Promise((resolve, reject) => {
@@ -55,7 +49,6 @@ async function spawnServer(env, { password } = {}) {
   await fs.mkdir(workspace);
   const clientDist = path.join(root, "client-dist");
   await fs.mkdir(clientDist);
-  // Login is built from v2; the fixture serves that build beside its tiny SPA.
   // Without a build (a fresh checkout), a stand-in form with the same
   // placeholders keeps the server's auth behaviour testable.
   if (await fs.stat(path.resolve("dist/access/templates.json")).catch(() => null)) {
@@ -106,7 +99,6 @@ test("unauthenticated routes redirect or return 401; only the allowlist is publi
   const server = await spawnServer({}, { password: "fixture-pw" });
   const { origin } = server;
   try {
-    // Allowlist is reachable without a cookie.
     assert.equal((await fetch(`${origin}/healthz`)).status, 200);
     assert.equal((await fetch(`${origin}/login`)).status, 200);
 
@@ -121,7 +113,6 @@ test("unauthenticated routes redirect or return 401; only the allowlist is publi
     });
     assert.equal(chatNavigation.headers.get("location"), "/login?after=%2Fchat%2F42a89c7d-4051-48b8-a5b1-5ac3e2083e56%3Fview%3Dtools");
 
-    // Every protected API path returns 401 JSON without a cookie.
     const protectedRoutes = [
       ["GET", "/v0/capabilities"],
       ["GET", "/v0/projects"],
@@ -146,7 +137,6 @@ test("unauthenticated routes redirect or return 401; only the allowlist is publi
       assert.equal(body.error, "unauthorized");
     }
 
-    // Unauthenticated WebSocket upgrades are destroyed.
     const closed = await new Promise((resolve) => {
       const ws = new WebSocket(`${origin.replace("http", "ws")}/v0/live-sessions/000000000000000000000000/stream`);
       ws.on("error", () => resolve(true));
@@ -410,7 +400,6 @@ test("login redirect target rejects protocol-relative and backslash schemes", as
     });
     const goodBody = await good.json();
     assert.equal(goodBody.redirect, "/chat/abc");
-    // GET /login sanitizes the after before rendering the hidden input.
     const page = await fetch(`${server.origin}/login?after=//evil.com/x`);
     const html = await page.text();
     assert.match(html, /name="after"[^>]*value="\/"/);

@@ -1,18 +1,6 @@
 #!/usr/bin/env bash
 # Install the Conduit server on this computer:
-#
 #   curl -fsSL https://get.jask-aran.com/conduit | bash
-#
-# Downloads the latest release for this platform and the Node it runs on into
-# ~/.local/share/conduit, puts `conduit-server` on PATH, and runs its setup.
-# Nothing needs root. Re-running it offers update, repair, or management.
-# Updates preserve ~/.conduit, including chats, credentials and configuration.
-#
-#   --version v0.7.7   install that release
-#   --sandbox          a separate throwaway daemon (~/.conduit-sandbox, port 4321)
-#   --no-setup         install only
-#   --update           update in place (what `conduit-server update` runs)
-#   CONDUIT_TARBALL=…  install from a local release archive (testing)
 set -euo pipefail
 
 REPOSITORY="${CONDUIT_REPOSITORY:-jask-aran/Conduit}"
@@ -35,7 +23,6 @@ NAME="conduit-server$SUFFIX"
 APP_HOME="${CONDUIT_APP_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/conduit$SUFFIX}"
 BIN_DIR="${CONDUIT_BIN_DIR:-$HOME/.local/bin}"
 
-# The same rail as conduit-server's setup, which it hands over to.
 if [[ -t 1 && "${TERM:-}" != dumb && -z "${NO_COLOR:-}" ]]; then
   B=$'\e[1m'; D=$'\e[2m'; G=$'\e[32m'; R=$'\e[31m'; C=$'\e[36m'; M=$'\e[35m'; N=$'\e[0m'; BADGE=$'\e[1;30;46m'
 else B=""; D=""; G=""; R=""; C=""; M=""; N=""; BADGE=""; fi
@@ -46,7 +33,6 @@ else BAR="|"; START="T"; END="L"; DONE="o"; ERR="x"; FRAMES='-\|/'; fi
 
 fail() { printf '%s%s%s  %s\n%s%s%s\n\n' "$R" "$ERR" "$N" "$*" "$D" "$END" "$N" >&2; exit 1; }
 bar() { printf '%s%s%s\n' "$D" "$BAR" "$N"; }
-# step "message" command... — a spinner while it runs, then ✓ and how long it took.
 step() {
   local message="$1"; shift
   local log; log="$(mktemp)"; local started=$SECONDS
@@ -70,8 +56,6 @@ step() {
   fi
 }
 
-# download "label" url file — a progress bar while it arrives, then ◇ with
-# its size and time. Falls back to step's spinner when the size is unknown.
 human() { awk -v b="$1" 'BEGIN { if (b >= 1048576) printf "%.1f MB", b / 1048576; else printf "%d kB", b / 1024 }'; }
 download() {
   local label="$1" url="$2" out="$3" started=$SECONDS total size pid width=24
@@ -96,7 +80,7 @@ download() {
   else printf '%s%s%s  %s\n' "$R" "$ERR" "$N" "$label"; sed "s/^/${D}${BAR}${N}    /" "$work/curl.err" >&2; printf '%s%s%s\n\n' "$D" "$END" "$N"; exit 1; fi
 }
 ver_ge() { [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1)" == "$2" ]]; }
-choose() { # choose "Question" "one" "two" -> REPLY (1-based); digits then enter
+choose() {
   local q="$1"; shift; local i=1
   printf '%s◆%s  %s\n' "$C" "$N" "$q" >/dev/tty
   for option in "$@"; do printf '%s%s%s  %s%d%s %s\n' "$C" "$BAR" "$N" "$B" "$i" "$N" "$option" >/dev/tty; i=$((i + 1)); done
@@ -190,7 +174,6 @@ else
   fi
   asset="conduit-server-$VERSION-$platform.tar.gz"
   base="${CONDUIT_RELEASE_URL:-https://github.com/$REPOSITORY/releases/download/$VERSION}"
-  # The checksum and signature are small; they come alongside.
   curl -fsSL "$base/$asset.sha256" -o "$work/conduit.sha256" 2>/dev/null &
   curl -fsSL "$base/$asset.sig" -o "$work/conduit.sig" 2>/dev/null &
   download "Conduit $VERSION ${D}$platform${N}" "$base/$asset" "$work/conduit.tar.gz"
@@ -211,8 +194,6 @@ node_version="$(cat "$work/release/NODE_VERSION")"
 
 node_min="$(cat "$work/release/NODE_MIN" 2>/dev/null || echo 22.19.0)"
 
-# Node: the one on PATH when it is new enough, otherwise a private copy of the
-# version the release was built with (asked first when an older one is there).
 node_dir="$APP_HOME/node/$node_version"
 NODE_BIN=""
 system_node="$(command -v node 2>/dev/null || true)"
@@ -274,13 +255,10 @@ if (!crypto.verify(null, Buffer.concat([signature.subarray(10, 74), Buffer.from(
 VERIFY
   "$NODE_BIN" "$work/verify.mjs" "$work/conduit.tar.gz" "$work/conduit.sig" "$SIGNING_KEY"
 }
-# Quiet when it passes; the installer stops with the reason when it does not.
 [[ -n "${CONDUIT_TARBALL:-}" && -f "${CONDUIT_TARBALL}.sig" ]] && cp "${CONDUIT_TARBALL}.sig" "$work/conduit.sig"
 if [[ -f "$work/conduit.sig" ]]; then verify_signature >"$work/sig.err" 2>&1 || fail "The release signature did not verify: $(cat "$work/sig.err")"
 elif [[ -z "${CONDUIT_TARBALL:-}" ]]; then fail "The release has no signature."; fi
 
-# A thin release carries no node_modules: its dependencies come from npm,
-# for this machine only (scripts/release-deps.mjs), after the signature check.
 thin=0; [[ -d "$work/release/conduit-web/node_modules" ]] || thin=1
 # An older conduit-server finds Node only at node/<version>; point that at the
 # chosen one so a release from before NODE_BIN still starts.
@@ -301,9 +279,7 @@ install_release() {
 }
 install_release >/dev/null
 dest="$APP_HOME/versions/$release_version"
-# Going on to setup, the dependencies install in the background while its
-# questions are asked (conduit-server waits on .deps-pending before starting);
-# otherwise here and now.
+# Setup asks questions while dependencies install (conduit-server waits on .deps-pending).
 interactive=0; (( SETUP )) && { : </dev/tty; } 2>/dev/null && [[ -f "$APP_HOME/current/NODE_VERSION" ]] && interactive=1
 if (( thin )); then
   if (( interactive )); then
@@ -317,8 +293,6 @@ fi
 env CONDUIT_PROFILE="$PROFILE" "$APP_HOME/current/scripts/conduit-server" _link
 install_shell_path
 
-# Beside a development clone: the daemon keeps serving the clone unless asked
-# to switch; `conduit-server use release|dev` moves between them later.
 if [[ ! -f "$APP_HOME/current/NODE_VERSION" ]]; then
   clone="$(readlink -f "$APP_HOME/current")"
   if (( ! UPDATE )) && { : </dev/tty; } 2>/dev/null; then

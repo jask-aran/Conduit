@@ -45,7 +45,6 @@ ${fill}    <group android:translateX="${x}" android:translateY="${y}" android:sc
     </group>
 </vector>
 `;
-// Adaptive foreground/splash, plus a vector fallback for supported API 24–25.
 save("android/app/src/main/res/drawable/ic_launcher_foreground.xml", vector(108, 30, 38.12, 0.04103));
 save("android/app/src/main/res/mipmap-anydpi/ic_launcher.xml", vector(24, 5, 7.4, 14 / 1170,
   '    <path android:fillColor="@color/ic_launcher_background" android:pathData="M5.5,0 H18.5 A5.5,5.5 0 0,1 24,5.5 V18.5 A5.5,5.5 0 0,1 18.5,24 H5.5 A5.5,5.5 0 0,1 0,18.5 V5.5 A5.5,5.5 0 0,1 5.5,0 Z" />\n'));

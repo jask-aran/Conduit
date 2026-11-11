@@ -15,8 +15,7 @@ function sourceFiles(directory) {
 export function buildGalleryApi(root) {
   const src = path.resolve(root, "src");
   const ui = path.join(src, "components/ui");
-  // The library, then the behaviour adapters beside it (components/*.tsx: Menu, Select, Dialog… wrapping the
-  // library's pieces); an adapter named as a library piece is keyed "components/<file>#<Name>".
+  // An adapter named as a library piece is keyed "components/<file>#<Name>".
   const adapters = path.join(src, "components");
   const files = [ui, adapters].flatMap((directory) => fs.readdirSync(directory).sort()
     .filter((entry) => /\.tsx?$/.test(entry) && entry !== "index.tsx").map((entry) => path.join(directory, entry)));
@@ -96,7 +95,6 @@ export function buildGalleryApi(root) {
     if (!byName.has(component.name)) byName.set(component.name, []);
     byName.get(component.name).push(component);
   }
-  // Every app source (the client, the server-rendered pages, the adapters), not the library itself or the gallery.
   const gallery = path.join(src, "gallery");
   for (const filename of sourceFiles(src)) {
     if (filename.startsWith(`${ui}${path.sep}`) || filename.startsWith(`${gallery}${path.sep}`) || filename.endsWith(".d.ts")) continue;

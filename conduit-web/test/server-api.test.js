@@ -8,14 +8,8 @@ import path from "node:path";
 import test from "node:test";
 
 /**
- * The origin the server actually bound, read from the server itself.
- *
- * Choosing a port in advance -- bind zero, close, hand the number to a child
- * -- is a guess with a gap in it: test files run at the same time, and a port
- * that was free a moment ago stays free only until something else is told the
- * same number. Whoever binds first keeps it, and the loser's requests are
- * answered by a server the test never started. The kernel picks instead, and
- * the server says what it picked.
+ * Read from the server itself: test files run at the same time, so a port
+ * chosen in advance can be taken before the child binds it.
  */
 function boundOrigin(child) {
   return new Promise((resolve, reject) => {

@@ -7,24 +7,13 @@ import { addUsage, emptyUsage, rate } from "./classifier.js";
 import { DEFAULT_TABLE, outcomeOf } from "./table.js";
 
 /*
- * The gate. It wraps the tools a holder could hold, so it runs inside each call's own
- * durable task: a held action is judged, and carried out, refused or escalated within that call.
- *
- * Order, for one held action:
- *   1. an exact action the person allowed for good: allow;
- *   2. the denial breaker tripped for this conversation: escalate (the agent stops; the person decides);
- *   3. the allow cache (allows only, keyed on the policy's version and the action);
- *   4. the classifier (two passes, reasoning-blind), its rating put through the table;
- *   5. Rule of Two: a turn that read untrusted input never gets an allow for an action that reaches someone or
- *      cannot be undone;
- *   and a judge that fails (down, timed out, malformed) escalates. Nothing here ever turns an error into an allow.
- *
+ * A judge that fails (down, timed out, malformed) escalates; nothing here ever turns an error into an allow.
  * Verdicts are memoised per call (`api.memo`), so a replay after a crash neither asks the model again nor decides
  * differently.
  */
 
-// pi-durable's own shapes (harness/define.js, 1.4): a wrap is `{ tool, wrap }` and an extension a plain object. Made
-// here rather than imported, so the package resolves wherever it is installed or linked from; peerDependency pins them.
+// pi-durable's own shapes, made here rather than imported so the package resolves wherever it is installed or linked
+// from; peerDependency pins them.
 const wrapTool = (tool, wrapper) => ({ tool: tool.name, wrap: wrapper });
 const defineExtension = (extension) => extension;
 
@@ -101,7 +90,6 @@ export function createApprover(options) {
     return { verdict, attempts, model: model?.id, usage: rating.usage };
   }
 
-  /** Carry out an allowed held action: its own resume, or the call itself. */
   async function carryOut(held, run, api, context) {
     if (!held.resume) return run();
     const target = options.tool(held.resume.tool);
@@ -109,7 +97,6 @@ export function createApprover(options) {
     return target.execute(held.resume.arguments, api, context);
   }
 
-  /** A verdict that is not an allow, as the call's result: refused, or put to the person. */
   async function notAllowed(held, verdict, run, api, context) {
     if (verdict.outcome === "deny") {
       if (held.resume?.arguments?.requestId) await decline(held, api, context);
@@ -125,7 +112,7 @@ export function createApprover(options) {
       { held: held.action, verdict, escalation: "pending" }, false);
   }
 
-  // Executor's held request, refused: tell Executor so it does not wait on it. Best effort.
+  // Tells Executor so it does not wait on a refused request. Best effort.
   async function decline(held, api, context) {
     try { await options.tool(held.resume.tool)?.execute({ requestId: held.resume.arguments.requestId, response: { action: "decline" } }, api, context); } catch {}
   }
@@ -167,10 +154,8 @@ export function createApprover(options) {
     }));
   }
 
-  /**
-   * The agent resuming an Executor request itself (as Executor's own instructions tell it to). Only a request the
-   * gate has not decided goes on, and only as the gate decides it: never around a refusal or a pending approval.
-   */
+  // The agent resumes Executor requests itself (Executor's instructions tell it to), so it must never get around a
+  // refusal or a pending approval this way.
   async function resumeByAgent(held, run, api, context) {
     const known = requests.get(held.input.requestId);
     if (known?.outcome === "allow") return text("This request was already approved and carried out. Do not resume it again.", { held: held.action }, false);

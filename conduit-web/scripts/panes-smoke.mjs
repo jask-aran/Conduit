@@ -1,11 +1,7 @@
 #!/usr/bin/env node
 /**
- * Browser smoke test for panes, file viewer tabs, drag targets and focus
- * (docs/design/panes-and-rail.md), against the running local server.
+ * Browser smoke test for panes, file viewer tabs, drag targets and focus, against the running local server.
  * Run from conduit-web/: npm run smoke:panes [-- --project <name>] [--headed]
- * Read-only: files are opened, never edited; each scenario gets a fresh
- * browser context, so the layout saved in localStorage starts empty.
- * The pure tab rules are test/file-tabs.test.js.
  */
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -54,14 +50,13 @@ const browser = await launch(chromium);
 const results = [];
 let project;
 
-// A project whose top level holds enough files for every scenario.
 {
   const context = await browser.newContext({ storageState });
   const response = await context.request.get(`${origin}/v0/projects`);
   const projects = (await response.json()).projects ?? [];
   const wanted = argument("--project");
   for (const candidate of projects) {
-    // The Chats place has no project page Files list; a named one is taken as asked.
+    // The Chats place has no project page Files list.
     if (wanted ? candidate.name !== wanted : candidate.kind === "unstructured") continue;
     const tree = await (await context.request.get(`${origin}/v0/projects/${encodeURIComponent(candidate.id)}/tree?path=`)).json().catch(() => ({}));
     // Files hides dotfiles until asked, so only the visible ones count.
@@ -73,7 +68,7 @@ let project;
 }
 
 async function scenario(name, run) {
-  // A desktop with room for a chat, a split and the dock at the 16px unit (1800 x 900 at the old 12.8px one).
+  // Room for a chat, a split and the dock at the 16px unit.
   const context = await browser.newContext({ storageState, viewport: { width: 2250, height: 1125 } });
   const page = await context.newPage();
   const errors = [];
@@ -99,7 +94,6 @@ async function scenario(name, run) {
   await context.close();
 }
 
-// Helpers over the page.
 const open = async (page) => {
   await page.goto(`${origin}/project/${project.id}`);
   await page.locator('[data-region="workspace-rail"]').waitFor();
@@ -110,7 +104,6 @@ const open = async (page) => {
   await navFiles(page).nth(5).waitFor();
 };
 const navFiles = (page) => page.locator('.workspace-panel [role="treeitem"][data-path]:not([aria-expanded])');
-// n columns, each headed by its tab.
 const twoColumns = (page) => until(page, () => { const columns = [...document.querySelectorAll(".ui-file-viewer > .ui-file")]; return columns.length === 2 && columns.every((column) => column.querySelector(".ui-tab")); });
 const until = async (page, fn, arg, timeout = 4000) => page.waitForFunction(fn, arg, { timeout, polling: 50 }).then(() => true, () => false);
 const columns = (page) => page.evaluate(() => [...document.querySelectorAll(".ui-file-viewer > .ui-file")].map((column) =>
@@ -122,7 +115,7 @@ const focusIn = (page) => page.evaluate(() => {
     : active?.closest("[data-pane-slot]") ? `slot:${active.tagName}.${String(active.className).slice(0, 40)}` : active?.closest(".workspace-panel") ? "dock" : "main";
 });
 const fileName = (page, index) => navFiles(page).nth(index).getAttribute("data-path");
-// A drag's pill and wash mid-drag, from synthetic events (native drags cannot pause).
+// Synthetic events: native drags cannot pause mid-drag.
 const dragProbe = (page, source, target, fx, fy = 0.5) => source.elementHandle().then(async (handle) => {
   const box = await target.boundingBox();
   return page.evaluate(([element, x, y]) => {
@@ -145,7 +138,7 @@ await scenario("opening a file gives its viewer the keyboard and marks it in Fil
   // A cold first load fetches the viewer's chunks: allow it the 6s focus waits.
   check("focus in the viewer", await until(page, () => document.activeElement?.closest(".ui-file-viewer .cm-content") || document.activeElement?.closest(".ui-file-viewer"), undefined, 8000), await focusIn(page));
   check("file bold as focused", await until(page, (path) => document.querySelector(`[data-path="${CSS.escape(path)}"][data-open-file="focused"]`), name));
-  // Somewhere in the main pane with no control under it: a fixed point landed on a row once the layout moved.
+  // Searched for, not fixed: a fixed point lands on a row when the layout moves.
   const blank = await page.evaluate(() => {
     const main = document.querySelector(".chat-main").getBoundingClientRect();
     for (let y = main.top + 80; y < main.bottom; y += 16) for (let x = main.left + 40; x < main.right; x += 40) {

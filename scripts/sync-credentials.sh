@@ -1,29 +1,7 @@
 #!/usr/bin/env bash
-# sync-credentials.sh — make another Conduit server feel identical to this one, over ssh, then restart it there.
-#
-# For the VPS's dev server: the same models in scope, preferences, shortcuts, voice, API keys and jbot, so only the
-# chats and projects differ. New integrations and context are tried here first; run this again after changing them.
-# Changes meant for every jbot go in templates/agent, which the clone already has.
-#
-#   scripts/sync-credentials.sh [--move-email] [ssh-host] [remote state dir] [remote server CLI]
-#   defaults: jask-vps  /root/.conduit-dev  conduit-server-dev
-#
-# Copied (when present here):
-#   settings  preferences.json, keybindings.json, runtime.json, account/ (name, picture), voice.json
-#   models    pi/settings.json (default and scoped models), pi/models.json (custom providers), pi/models-store.json,
-#             pi/web-search.json
-#   keys      the API keys in pi/auth.json, merged into the remote's own file, whose sign-ins stay as they are
-#   jbot      its context overrides (prompt-overrides/) and settings (agent.json),
-#             merged so the remote keeps its own switches: whether jbot, its heartbeat and brief are on (this server's
-#             jbot can be quiet while the remote's runs); SOUL.md, RUN.md and its routines come from the template
-#   web       the ChatGPT web session (chatgpt-web/cookies.json)
-#
-# Never copied: chats, projects and workspaces, what each jbot learns (USER.md, MEMORY.md) and its history (diary, mail,
-# reports, threads), the login password and
-# sessions, server identity, network and push keys, and OAuth sign-ins (pi/auth.json's oauth entries,
-# agent-connectors/): a refresh token used from two machines is rotated by one and dies on the other, so sign in to
-# those on each server. jbot's mailbox (agent/email.json) can be polled by one server only: `--move-email` hands it
-# over, and this server stops reading jbot's mail.
+# Make another Conduit server feel identical to this one, over ssh, then restart it there.
+# OAuth sign-ins are never copied: a refresh token used from two machines is rotated by one and dies on the other.
+# jbot's mailbox can be polled by one server only: `--move-email` hands it over.
 set -euo pipefail
 
 move_email=0
@@ -44,7 +22,6 @@ present=()
 for file in "${FILES[@]}"; do [[ -e "$DATA/$file" ]] && present+=("$file"); done
 
 stage="$(mktemp -d)"; trap 'rm -rf "$stage"' EXIT
-# The API keys, and the few lines that merge them on the other side.
 python3 - "$DATA/pi/auth.json" "$stage/api-keys.json" <<'EOF'
 import json, sys
 try: auth = json.load(open(sys.argv[1]))

@@ -1,4 +1,3 @@
-/** Track denial history separately for each conversation. */
 export function createBreaker({ consecutive = 3, window = 50, windowDenials = 10 } = {}) {
   const histories = new Map();
   return {

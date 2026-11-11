@@ -6,8 +6,6 @@ WEB_DIR="$ROOT/conduit-web"
 WORKING_FILES_DIR="$ROOT/working-files"
 UV_VERSION="0.11.29"
 STATE_DIR="${CONDUIT_STATE_DIR:-$HOME/.conduit}"
-# Conduit keeps its state in ~/.conduit/data wherever its code lives; a
-# checkout that wants its own sets CONDUIT_DATA_ROOT.
 DATA_ROOT="${CONDUIT_DATA_ROOT:-$HOME/.conduit/data}"
 export CONDUIT_DATA_ROOT="$DATA_ROOT"
 TOOLCHAIN_ROOT="$DATA_ROOT/toolchains"
@@ -32,22 +30,13 @@ export CONDUIT_CATALOG_FILE="${CONDUIT_CATALOG_FILE:-$DATA_ROOT/conduit.json}"
 export CONDUIT_SESSION_REGISTRY_FILE="${CONDUIT_SESSION_REGISTRY_FILE:-$DATA_ROOT/sessions.json}"
 export CONDUIT_PI_AGENT_DIR="${CONDUIT_PI_AGENT_DIR:-$DATA_ROOT/pi}"
 export CONDUIT_PI_TEMPLATE="${CONDUIT_PI_TEMPLATE:-$ROOT/templates/assistant/template.json}"
-# Set only when testing a desktop update against a local build: the server then
-# serves that directory at /desktop-updates so the updater has somewhere to
-# look. Unset, the route does not exist.
 # A development desktop client checks this server for its updates, so the
-# directory the Windows build writes into is served whenever it exists. Found
-# rather than configured: remembering an environment variable before every
-# restart is the difference between testing an update and not bothering.
+# directory the Windows build writes into is served whenever it exists.
 if [ -z "${CONDUIT_DESKTOP_UPDATE_DIR:-}" ] && command -v wslpath >/dev/null 2>&1; then
   build_home=$(cmd.exe /c 'echo %LOCALAPPDATA%' 2>/dev/null | tr -d '\r')
   if [ -n "$build_home" ]; then
-    # The development build compiles into a directory of its own, so that it
-    # does not fight a running dev session for the same files. It is the one
-    # this server has any business serving -- the other holds release builds,
-    # which come from a tag and reach a client through GitHub. Preferred, with
-    # the shared directory kept as a fallback for a tree built before the
-    # split. Both live under %LOCALAPPDATA%\conduit-build (scripts/build-desktop-windows.sh).
+    # The -dev directory comes first: the other holds release builds, which
+    # reach a client through GitHub.
     for suffix in "-dev" ""; do
       candidate="$(wslpath -u "${CONDUIT_DESKTOP_TARGET_DIR:-$build_home\\conduit-build\\desktop-target$suffix}" 2>/dev/null)/release/bundle/nsis"
       if [ -d "$candidate" ]; then CONDUIT_DESKTOP_UPDATE_DIR="$candidate"; break; fi
@@ -109,8 +98,7 @@ active_generation_count() {
 }
 
 wait_for_generations() {
-  # A Conduit that is not answering has nothing to drain. A bare `return`
-  # would hand back curl's failure and, under `set -e`, end the restart.
+  # A bare `return` would hand back curl's failure and, under `set -e`, end the restart.
   is_healthy || return 0
   [[ "$DRAIN_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || {
     echo "CONDUIT_RESTART_DRAIN_TIMEOUT_SECONDS must be a non-negative integer." >&2
@@ -168,13 +156,11 @@ managed_pid_from_file() {
 }
 
 # When the conduit-server daemon runs this clone (`conduit-server use dev`),
-# this script builds and the daemon runs: start, stop, status and logs go to
-# it, so there is one server, one port and one set of data either way.
+# start, stop, status and logs go to it, so there is one server either way.
 DAEMON="$ROOT/scripts/conduit-server"
 daemon_runs_this_clone() {
   [[ "$(readlink -f "${XDG_DATA_HOME:-$HOME/.local/share}/conduit/current" 2>/dev/null)" == "$ROOT" ]]
 }
-# What only a development run sets, for the daemon to pick up.
 write_dev_env() {
   {
     [[ -n "${CONDUIT_DESKTOP_UPDATE_DIR:-}" ]] && echo "CONDUIT_DESKTOP_UPDATE_DIR=$CONDUIT_DESKTOP_UPDATE_DIR"
@@ -198,8 +184,7 @@ require_dependencies() {
     echo "Conduit dependencies are not installed. Run: bash .devcontainer/start-conduit.sh setup" >&2
     exit 1
   fi
-  # A lockfile newer than what npm last installed (a pull or merge that added or moved a package): install it, or the
-  # build and server run on the old set and a new dependency is simply missing.
+  # Without this, a pull that adds a package builds and runs without it.
   if [[ "$WEB_DIR/package-lock.json" -nt "$WEB_DIR/node_modules/.package-lock.json" ]]; then
     echo "package-lock.json changed since the last install; running npm ci."
     (cd "$WEB_DIR" && PATH="$WORKING_FILES_DIR/.venv/bin:$PATH" npm ci --no-audit --no-fund) || exit 1
@@ -259,10 +244,6 @@ worker_hash() {
   if [[ -f "$WEB_DIR/dist/sw.js" ]]; then sha256sum "$WEB_DIR/dist/sw.js" | cut -d ' ' -f1; fi
 }
 
-# A new client build is ready. Connected browsers are told a restart to its
-# worker is coming and install it; the restart waits until every browser the
-# server is waiting on says it has (two tabs of one registration are one), or
-# PWA_GRACE_SECONDS, whichever is first. Native clients are never waited on.
 # Runs beside the generation drain, and is collected before the restart.
 prepare_client_restart() {
   local previous_hash="$1"
@@ -274,7 +255,6 @@ prepare_client_restart() {
   }
   (( PWA_GRACE_SECONDS > 0 )) || return 0
   is_healthy || return 0
-  # A server older than the readiness handshake has no route for it.
   if ! curl --silent --fail --max-time 2 --dump-header - --output /dev/null "$HEALTH_URL" \
     | grep -qi '^x-conduit-pwa-prepare: 2'; then return 0; fi
   echo "Readying connected browsers for the new client (up to ${PWA_GRACE_SECONDS}s)."
@@ -448,7 +428,7 @@ case "$COMMAND" in
     wait_for_client_restart_grace
     stop
     start_server false
-    # Last, so `restart | tail -1` still shows it: the build's convention check (scripts/check-conventions.mjs).
+    # Last, so `restart | tail -1` still shows it.
     (cd "$WEB_DIR" && node scripts/check-conventions.mjs --summary)
     ;;
   status) status ;;

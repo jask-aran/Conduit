@@ -1,10 +1,6 @@
 /**
- * A shell command as the simple commands it runs, so a judge or a rule sees each one: split at every way the shell
- * starts another command (; & && || | and newlines), with leading `NAME=value` assignments and `env` stripped (a
- * denylist matched the text after an assignment and missed the command: CVE-2026-48721).
- *
- * Returns null when the command cannot be read safely: substitutions ($( ), backticks, <( ), >( )), unbalanced
- * quotes, a backslash-newline, or heredocs. Null means "judge it as unreadable", never "allow".
+ * Leading `NAME=value` assignments and `env` are stripped because a denylist matching the text after an assignment
+ * misses the command. Null means "judge it as unreadable", never "allow".
  */
 export function canonicalShell(command) {
   if (typeof command !== "string") return null;

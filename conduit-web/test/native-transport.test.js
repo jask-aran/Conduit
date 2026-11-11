@@ -81,7 +81,6 @@ test("servers stay apart unless they have answered as the same id", () => {
     "https://conduit.tailnet.ts.net",
   ]);
 
-  // The server's own address is not repeated as one of its paths.
   assert.equal(entry.paths.some((path) => path.origin === "https://conduit.tailnet.ts.net"), false);
 
   // Scope is read off the address, so it means the same on every client.
@@ -89,7 +88,6 @@ test("servers stay apart unless they have answered as the same id", () => {
   assert.equal(scopeOf("http://192.168.0.128:4310"), "private");
   assert.equal(scopeOf("https://conduit.tailnet.ts.net"), "public");
 
-  // A server with nothing to say leaves the list alone.
   const before = JSON.stringify(servers());
   learnIdentity("https://conduit.tailnet.ts.net", {});
   assert.equal(JSON.stringify(servers()), before);

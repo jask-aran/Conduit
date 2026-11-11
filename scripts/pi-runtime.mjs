@@ -9,7 +9,6 @@ const LEGACY_TEMPLATE_IDS = new Map([
   ["workspace", "assistant"],
   ["codemode", "assistant"],
   ["code-mode", "assistant"],
-  // The Coding profile was retired (2026-11-03): its chats open on the Assistant.
   ["coding", "assistant"],
 ]);
 
@@ -55,15 +54,13 @@ export function loadPiTemplate(file) {
       : formatPosture(tools),
     defaultable: template.defaultable !== false,
     special: template.special === true,
-    // Run by Conduit itself (the persistent agent), never offered as a profile to pick.
+    // Never offered as a profile to pick.
     internal: template.internal === true,
-    // The person's connected accounts (Executor), through codemode, a write asked first (durable-runtime agentFor).
     connectors: template.connectors === true,
-    // Models of its own (the scripted Test profile): its list, not the person's scoped models.
+    // Its own model list, not the person's scoped models.
     ownModels: template.ownModels === true,
     templateFile,
     systemPrompt: path.resolve(directory, template.systemPrompt || "SYSTEM.md"),
-    // The prompt it shares with other templates (the Assistant's and jbot's), drawn under its own.
     ...(typeof template.base === "string" && template.base ? { basePrompt: path.resolve(directory, template.base) } : {}),
     tools,
     models: requireStrings(template.models, "models"),

@@ -1,8 +1,5 @@
-// Checks a release archive against its minisign signature (the .sig the Tauri
-// signer writes: base64 of a minisign signature file) with Node alone, so
-// install.sh needs no minisign on the machine. The key is the Windows
-// updater's; one key signs every artifact a release ships.
-//   node verify-release.mjs <file> <file.sig> <public key, base64 as in .key.pub>
+// Checks a release archive against its minisign signature (the .sig the Tauri signer writes) with Node alone, so
+// install.sh needs no minisign on the machine.
 import crypto from "node:crypto";
 import fs from "node:fs";
 

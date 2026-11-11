@@ -1,10 +1,6 @@
 /**
- * The fold, on its own.
- *
- * This is the one description of what a transcript is, and it runs at both
- * ends: the browser folds the live stream through it, and a backend with no
- * history to re-read folds its own journal through it. So what it does to a
- * statement is worth pinning down here, separately from any harness.
+ * The fold runs at both ends: the browser folds the live stream through it, and
+ * a backend with no history to re-read folds its own journal through it.
  */
 import assert from "node:assert/strict";
 import test from "node:test";

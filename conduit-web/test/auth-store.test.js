@@ -44,7 +44,6 @@ test("findSession rejects a session past the 30-day TTL and prunes it", async ()
   const store = new AuthStore(file);
   await store.setPassword("fixture-pw");
   const { token } = await store.createSession();
-  // Fast-forward lastSeenAt past the TTL.
   await store.load({ force: true });
   store.data.sessions[0].lastSeenAt = new Date(Date.now() - (31 * 24 * 60 * 60 * 1000)).toISOString();
   await store._flush();

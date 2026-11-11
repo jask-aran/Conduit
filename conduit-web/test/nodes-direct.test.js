@@ -7,7 +7,7 @@ const now = 1000;
 const secret = keySecret("fixture-node-key");
 const readGrant = () => ({ place: { root: "fixture-root", path: "project" }, read: true, expires: now + DIRECT_TTL_MS });
 
-// direct.js verifyGrant: a token is accepted only by the node whose secret signed it.
+// A token is accepted only by the node whose secret signed it.
 test("a direct grant does not verify under another node key", () => {
   const grant = readGrant();
   const token = signGrant(secret, grant);
@@ -15,7 +15,7 @@ test("a direct grant does not verify under another node key", () => {
   assert.equal(verifyGrant(keySecret("different-node-key"), token, now), null);
 });
 
-// direct.js verifyGrant: an expired or malformed token is refused.
+// An expired or malformed token is refused.
 test("direct grants expire at their deadline and malformed tokens are refused", () => {
   const grant = readGrant();
   const token = signGrant(secret, grant);
@@ -26,7 +26,7 @@ test("direct grants expire at their deadline and malformed tokens are refused", 
   }
 });
 
-// Design: direct terminals; neither kind of grant passes for the other.
+// Neither kind of grant passes for the other.
 test("a read grant cannot attach a terminal and a terminal grant cannot read files", () => {
   const read = readGrant();
   const pty = { pty: "fixture-terminal", nonce: "fixture-nonce", expires: now + DIRECT_PTY_TTL_MS };
@@ -35,7 +35,7 @@ test("a read grant cannot attach a terminal and a terminal grant cannot read fil
   assert.equal(verifyGrant(secret, signGrant(secret, pty), now, "read"), null);
 });
 
-// Design: direct terminals; direction and frame count prevent moving or replaying a frame.
+// Direction and frame count prevent moving or replaying a frame.
 test("a sealed terminal frame opens once and only in its intended direction", () => {
   const key = channelKey(secret, "fixture-nonce");
   const raw = Buffer.from(key, "base64url");

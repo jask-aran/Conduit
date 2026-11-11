@@ -3,7 +3,6 @@ import { canonicalJson } from "./key.js";
 const canonical = (value) => JSON.parse(canonicalJson(value));
 const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 
-/** Extract a complete held answer, including answers preceded by text. */
 function heldAnswer(text) {
   for (let start = text.indexOf("{"); start !== -1; start = text.indexOf("{", start + 1)) {
     for (const candidate of [text.slice(start), text.slice(start, text.lastIndexOf("}") + 1)]) {
@@ -18,7 +17,6 @@ function heldAnswer(text) {
   return null;
 }
 
-/** Hold Executor gates and agent-originated resume calls. */
 export function executorHolder({ prefix = "mcp__executor__" } = {}) {
   return {
     name: "executor",
@@ -74,7 +72,6 @@ export function executorHolder({ prefix = "mcp__executor__" } = {}) {
   };
 }
 
-/** Hold selected tool names, optionally narrowed by a host predicate. */
 export function namedHolder(tools, { when, reversible } = {}) {
   return {
     name: "named",

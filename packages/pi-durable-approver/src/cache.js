@@ -1,4 +1,3 @@
-/** An in-memory, bounded LRU cache of low/medium-risk allows only. */
 export function createAllowCache({ ttlMs = 1_800_000, max = 500 } = {}) {
   const entries = new Map();
   return {

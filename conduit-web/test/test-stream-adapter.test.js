@@ -32,14 +32,13 @@ test("a chat reads back the transcript it streamed", async () => {
 
   assert.deepEqual(messages.map((message) => message.role), ["user", "assistant"]);
   // Stated on the read, exactly as the socket stated them, because turn-rows
-  // now refuses a message that says neither.
+  // refuses a message that says neither.
   assert.equal(messages[1].answers, messages[0].id);
   assert.equal(messages[1].interim, false);
   assert.ok(messages[1].content.includes("quick brown fox"));
   assert.deepEqual(page, { before: null });
 });
 
-/** The transcript a browser would be holding, from the statements alone. */
 function readerOf(adapter) {
   let messages = [];
   let tools = [];
@@ -81,7 +80,6 @@ test("a fork cuts the chat at the entry it was given", async () => {
   assert.deepEqual(reader.messages().map((message) => message.id), ["u1", reader.messages()[1].id]);
   assert.equal(adapter.readJournal(record.chatId).filter((event) => event.op === "message.drop").length, 1,
     "one cut is one record operation");
-  // And the history it reports is a tree whose prompts can be forked again.
   const history = await adapter.readHistory({ liveSessionId: record.id });
   assert.equal(history.mode, "tree");
   assert.equal(history.tree[0].entry.forkable, true);

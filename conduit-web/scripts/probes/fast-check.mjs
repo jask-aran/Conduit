@@ -1,5 +1,4 @@
 // One fast stream, several checks: DOM churn, every card shape seen while streaming, the settled answer's DOM.
-// Headless (own browser, no cache to warm), fast-1000, waits on conditions, never longer than 60s.
 import fs from "node:fs"; import { createHash } from "node:crypto";
 import { open, origin } from "./lib.mjs";
 const [prompt = "rich 2000t", out = "fast-check"] = process.argv.slice(2);

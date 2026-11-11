@@ -1,7 +1,5 @@
-// Motion invariants for Disclosure, CodeBlock and DesktopComposer (its slot and toolbar), frame by frame, in the gallery.
-// Run with the gallery served (npm run gallery) and open in headed Chrome on CDP :9222 (node ../scripts/run-windows-chrome-devtools.mjs start),
-// from conduit-web: node scripts/motion-check/components.mjs. It plays each move at 1x (restoring the gallery's speed setting after) and prints
-// one line per move: ✓, or ✗ with the invariant it broke (styles/foundations.css, Motion: snap, squeezed, layers, one spot).
+// Motion invariants for Disclosure, CodeBlock and DesktopComposer, frame by frame. Run with the gallery served
+// (npm run gallery) and open in headed Chrome on CDP :9222, from conduit-web: node scripts/motion-check/components.mjs.
 const { chromium } = await import(new URL("../../../.smoke-tools/node_modules/playwright/index.mjs", import.meta.url).href);
 const b = await chromium.connectOverCDP("http://127.0.0.1:9222");
 const page = b.contexts()[0].pages().find((p) => p.url().includes(":5180/gallery.html"));
@@ -39,7 +37,6 @@ const PROBE = `window.__probe2 = (spec) => new Promise((res) => {
 const go = async (fam) => { await page.evaluate((fam) => [...document.querySelectorAll(".g-rail .ui-row[data-density=nav]")].find((e) => e.textContent.trim() === fam)?.click(), fam); await page.waitForTimeout(700); await page.evaluate(PROBE); };
 const report = (name, r) => console.log(r.length ? "✗" : "✓", name, r.join("; "));
 try {
-  // Disclosure (and what folds as one: a Trace, an opening Step): close and open each, watching its body and the rows after it.
   const HEAD = ":scope > :is(.ui-disclosure-header, .ui-trace, button.ui-step)";
   for (const fam of ["Transcript", "Trace"]) {
   await go(fam);
@@ -50,14 +47,12 @@ try {
     return window.__probe2({ parts: () => [d.querySelector(":scope > .ui-disclosure-body"), d.querySelector(HEAD), ...after()], spots: () => [], act: () => d.querySelector(HEAD).click() });
   }, { i, HEAD }));
   }
-  // CodeBlock: open and fold each foldable block, watching the pre and what follows the figure.
   await go("CodeBlock");
   const nc = await page.evaluate(() => [...document.querySelectorAll(".ui-code")].filter((c) => c.querySelector(":scope > .ui-show-more")).length);
   for (let i = 0; i < Math.min(nc, 6); i++) for (const dir of ["open", "fold"]) report(`CodeBlock ${i} ${dir}`, await page.evaluate((i) => {
     const c = [...document.querySelectorAll(".ui-code")].filter((c) => c.querySelector(":scope > .ui-show-more"))[i]; c.scrollIntoView({ block: "center" });
     return window.__probe2({ parts: () => [c.querySelector("pre"), c.querySelector(":scope > .ui-show-more"), ...(c.nextElementSibling ? [c.nextElementSibling] : [])], spots: () => [], act: () => c.querySelector(":scope > .ui-show-more").click() });
   }, i));
-  // DesktopComposer: every pair of the slot's states and of the toolbar's states.
   await go("DesktopComposer");
   for (const set of [["Composer", "Question"], ["Ready", "Working", "Draft in a turn"], ["Off", "Dictating"]]) for (const a of set) for (const z of set) { if (a === z) continue;
     report(`DesktopComposer ${a} → ${z}`, await page.evaluate(async ({ a, z }) => {
