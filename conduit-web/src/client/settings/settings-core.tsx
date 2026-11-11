@@ -1732,6 +1732,8 @@ export function Settings(props: {
                     <SettingValue>{HEX_STATES[hex().state]}</SettingValue>
                     <Button variant="ghost" size="icon-sm" aria-label="Look for Hex again" title="Look again" onClick={() => void refetchHex()}><Icons.Refresh /></Button>
                   </SettingLine>
+                  <Note tone="quiet"><span>Conduit can use Hex by AnomalyCo (creators of opencode), for transcription right on this device, if you have it installed.</span>
+                    <SettingLink href="https://anoma.ly/hex"><Icons.Browser /> Website</SettingLink><SettingLink href="https://github.com/anomalyco/hex"><HarnessMark id="github" /> GitHub</SettingLink></Note>
                   <SettingLine label="Dictate with Hex" state={voiceDraft().useHex && hex().state !== "ready" ? "using the hub until Hex is listening" : undefined} title="Audio stays on this computer and text appears as you speak. A dictation Hex cannot take goes to the hub.">
                     <Switch label="Dictate with Hex" checked={voiceDraft().useHex} onChange={(useHex) => updateVoiceDraft({ useHex })} />
                   </SettingLine>

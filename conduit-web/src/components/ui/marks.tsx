@@ -16,6 +16,7 @@ export const MARKS: Record<string, Mark> = {
   pi: { src: "/brand/pi-mark.svg", tint: true },
   // Hex's own app icon (github.com/anomalyco/hex, MIT), as it ships.
   hex: { src: "/brand/hex-app-icon.png" },
+  github: { src: "/brand/github-mark.svg", tint: true },
 };
 
 const FALLBACK = BLOSSOM;
