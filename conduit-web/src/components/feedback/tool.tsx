@@ -554,7 +554,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       }
       const result = await transport.send(mark.id, {
         comments, live: Boolean(one), to: hand() ? agent()?.name ?? null : null,
-        screenshot: first ? { width: first.capture.width, height: first.capture.height, surface: first.capture.surface, outlined: true, of: first.of } : { missing: views.length ? captureError ?? "capture failed" : marksOn("page") ? noPicture() ?? "capture failed" : "text only" },
+        screenshot: first ? { width: first.capture.width, height: first.capture.height, surface: first.capture.surface, outlined: true, of: first.of } : { missing: views.length ? captureError ?? "capture failed" : marksOn("page") ? noPicture() ?? (one ? "not taken: a live comment's picture is not asked for" : "capture failed") : "text only" },
         client: { id: host.clientId(), userAgent: navigator.userAgent, url: location.pathname + location.search, viewport: { width: innerWidth, height: innerHeight, devicePixelRatio }, ...await host.client?.() },
       });
       sent = true;
