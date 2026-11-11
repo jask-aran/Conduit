@@ -244,8 +244,8 @@ export const SettingStateLink = (props: { onClick: () => void; children: JSX.Ele
   <button type="button" class="ui-setting-state-link" onClick={() => props.onClick()}>{props.children}</button>;
 export const SettingLink = (props: { href: string; children: JSX.Element }) => <a class="ui-setting-link" href={props.href} target="_blank" rel="noreferrer">{props.children}</a>;
 export const SettingDetails = (props: { summary: string; children: JSX.Element }) => <details class="ui-setting-details"><summary>{props.summary}</summary>{props.children}</details>;
-/** The switch between a settings page's views, over them. */
-export const SettingViews = (props: { children: JSX.Element }) => <div class="ui-setting-views">{props.children}</div>;
+/** The switch between a settings page's views, over them, and beside it the one control that governs the page. */
+export const SettingViews = (props: { aside?: JSX.Element; children: JSX.Element }) => <div class="ui-setting-views">{props.children}{props.aside}</div>;
 /** A list inside a settings page: what filters it in a row over it, then rows that keep to its width, one line each. */
 export const SettingList = (props: { head?: JSX.Element; children: JSX.Element }) =>
   <div class="ui-setting-list"><Show when={props.head}><div class="ui-setting-list-head">{props.head}</div></Show>{props.children}</div>;

@@ -3,7 +3,6 @@ import { createEffect, createMemo, createResource, createSignal, For, lazy, on, 
 import { holdBack } from "@/components/ui/back";
 import { formatShortcutBinding } from "../shortcuts/shortcut-normalize";
 import { BotIcon, ChartColumnIcon, LaptopIcon, Mic2Icon, NetworkIcon, SmartphoneIcon, SparklesIcon } from "lucide-solid";
-import { CloudIcon, MicOffIcon } from "lucide-solid";
 import { AboutSettingsFooter } from "./about-settings";
 import { TitleBarSettings } from "./title-bar-settings";
 import { DevicesSettingsTile } from "./devices-settings";
@@ -1024,7 +1023,7 @@ export function Settings(props: {
     }
   };
   createEffect(() => {
-    if (!props.open || section() !== "voice") return;
+    if (!props.open || (section() !== "voice" && section() !== "integrations")) return;
     void loadVoiceSettings();
   });
 
@@ -1523,6 +1522,17 @@ export function Settings(props: {
                 </Show>
               </Show>}><SettingLine plain label="Accounts" state={<>loading…</>}><span /></SettingLine></Show>
             </Group>
+            <Show when={voiceServerSettings()?.mode === "remote" && voiceServerSettings()}>{(voice) => <Group title="Voice transcription">
+              <Show when={voice().provider !== "custom" || voice().auth.type !== "none"}>
+                <SettingCredential label={selectedVoiceProvider()?.authLabel || "Key"} state={<>{voice().auth.configured ? "stored" : "not set"}</>}
+                  busy={voiceBusy()} stored={voice().auth.configured} placeholder={selectedVoiceProvider()?.authLabel || "Key"}
+                  onSave={(secret) => saveVoiceSecret(secret)} onRemove={voice().auth.removable ? () => void removeVoiceCredential() : undefined} />
+              </Show>
+              <SettingLine plain label="Connection" state={<>{voiceTestResult() || (cloudTiming().label === "Live" ? "live" : "after you stop")}</>}>
+                <Button variant="ghost" size="sm" disabled={voiceBusy()} onClick={() => void testVoiceServer()}>{voiceBusy() ? <Spinner /> : null}Test</Button>
+              </SettingLine>
+              <Show when={voiceError()}><Note tone="error">{voiceError()}</Note></Show>
+            </Group>}</Show>
             <Group title="ChatGPT Web">
               <SettingCredential label="Cookies" state={<>{chatGptStatus()?.auth === "configured" ? "connected" : "not connected"}</>}
                 busy={chatGptBusy()} stored={chatGptStatus()?.auth === "configured"} add="Add cookies" placeholder="Cookie header"
@@ -1563,7 +1573,7 @@ export function Settings(props: {
             </>} /></Show>
           <Show when={section() === "devices"}><DevicesSettingsTile part="network" projects={props.projects} onAddWorkspace={props.onAddWorkspace} onOpenTerminal={props.onOpenDeviceTerminal} onOpenBrowser={props.onOpenDeviceBrowser} onOpenWorkspace={props.onOpenWorkspace} /></Show>
           <Show when={section() === "shortcuts"}>
-            <Group title="Dictation" scope="This device">
+            <Show when={!isPhoneVoice()}><Group title="Dictation" scope="This device">
               <SettingLine plain label="Dictate" state={voiceDraft().activation === "toggle" ? "press to start and stop" : "hold to talk"}>
                 <Keycap label={`the dictation shortcut, ${voiceDraft().shortcut}`} onClick={() => { setVoiceKeys(""); setRecordingVoiceKeys(true); }}>{voiceDraft().shortcut}</Keycap>
               </SettingLine>
@@ -1580,7 +1590,7 @@ export function Settings(props: {
                       }}
                       onSave={() => { updateVoiceDraft({ shortcut: voiceKeys() }); setRecordingVoiceKeys(false); }} onCancel={() => setRecordingVoiceKeys(false)} />
 </Show>
-            </Group>
+            </Group></Show>
             <ShortcutsSettings manager={props.shortcuts} />
           </Show>
           <Show when={section() === "workspaces"}>
@@ -1660,18 +1670,16 @@ export function Settings(props: {
           <Show when={section() === "voice"}>
             <Show when={voiceStatus() === "ready" && voiceServerSettings()} fallback={<Show when={voiceStatus() === "error"} fallback={<Loading>Loading voice settings…</Loading>}><Note tone="error"><span>{voiceError() || "Voice settings could not be loaded."}</span><Button variant="secondary" size="sm" onClick={() => void loadVoiceSettings()}>Retry</Button></Note></Show>}>
               <>
-                <SettingViews><Segmented arrows label="Voice" value={voiceView()} onChange={setVoiceView} options={[{ value: "settings", label: "Settings" }, { value: "history", label: "History" }]} /></SettingViews>
+                <SettingViews aside={<Segmented arrows label="Transcription source" value={voiceServerSettings()!.mode} disabled={voiceBusy()} onChange={(mode) => updateVoiceServer({ mode })} options={[
+                  { value: "off", label: "Off" },
+                  { value: "local", label: "Private", title: "Hex on the hub: audio goes no further than your hub" },
+                  { value: "remote", label: "Cloud" },
+                ]} />}><Segmented arrows label="Voice" value={voiceView()} onChange={setVoiceView} options={[{ value: "settings", label: "Settings" }, { value: "history", label: "History" }]} /></SettingViews>
                 <Show when={voiceView() === "settings"} fallback={<VoiceHistory />}>
-                <Columns kind="lists">
+                <Columns kind="lists" off={voiceServerSettings()!.mode === "off"}>
                 <Column>
                 <Group title="The hub" scope="Every device">
-                  <SettingLine plain label="Source">
-                    <Segmented arrows label="Transcription source" value={voiceServerSettings()!.mode} disabled={voiceBusy()} onChange={(mode) => updateVoiceServer({ mode })} options={[
-                      { value: "off", label: "Off", icon: <MicOffIcon /> },
-                      { value: "local", label: "Private", icon: <Icons.LocalModel />, title: "Hex on the hub: audio goes no further than your hub" },
-                      { value: "remote", label: "Cloud", icon: <CloudIcon /> },
-                    ]} />
-                  </SettingLine>
+                  <Show when={voiceServerSettings()!.mode === "off"}><SettingLine plain label="Transcription"><SettingValue>Off</SettingValue></SettingLine></Show>
                   <Show when={voiceServerSettings()!.mode === "local" && voiceServerSettings()!.local}>{(local) => <VoiceLocalCatalogue
                     models={local().models}
                     model={selectedLocalVoiceModel() || null}
@@ -1713,13 +1721,10 @@ export function Settings(props: {
                       </Show>
                     </Show>
                     <Show when={voiceServerSettings()!.provider !== "custom" || voiceServerSettings()!.auth.type !== "none"}>
-                      <SettingCredential label={selectedVoiceProvider()?.authLabel || "Key"} state={<>{voiceServerSettings()!.auth.configured ? "stored" : "not set"}</>}
-                        busy={voiceBusy()} stored={voiceServerSettings()!.auth.configured} placeholder={selectedVoiceProvider()?.authLabel || "Key"}
-                        onSave={(secret) => saveVoiceSecret(secret)} onRemove={voiceServerSettings()!.auth.removable ? () => void removeVoiceCredential() : undefined} />
+                      <SettingLine plain label={selectedVoiceProvider()?.authLabel || "Key"} state={<>{voiceServerSettings()!.auth.configured ? "stored" : "not set"}</>}>
+                        <Button variant="ghost" size="sm" onClick={() => openSection("integrations")}>Integrations<Icons.ChevronRight /></Button>
+                      </SettingLine>
                     </Show>
-                    <SettingLine plain label="Connection" state={<>{voiceTestResult() || (cloudTiming().label === "Live" ? "live" : "after you stop")}</>}>
-                      <Button variant="ghost" size="sm" disabled={voiceBusy()} onClick={() => void testVoiceServer()}>{voiceBusy() ? <Spinner /> : null}Test</Button>
-                    </SettingLine>
                   </Show>
                 </Group>
                 <Show when={hexHere()}>{(hex) => <Group title="Hex" scope="This computer">
@@ -1734,6 +1739,7 @@ export function Settings(props: {
                 </Column>
                 <Column>
                 <Group title="Dictation" scope="This device">
+                  <Show when={!isPhoneVoice()}>
                   <SettingLine plain label="Shortcut" title="Change it in Shortcuts">
                     <Keycap label={`the dictation shortcut, ${voiceDraft().shortcut}. Change it in Shortcuts`} onClick={() => { setVoiceKeys(""); setRecordingVoiceKeys(true); openSection("shortcuts"); }}>{voiceDraft().shortcut}</Keycap>
                   </SettingLine>
@@ -1742,6 +1748,7 @@ export function Settings(props: {
                       <option value="push_to_talk">Is held</option><option value="toggle">Starts and stops</option>
                     </Select>
                   </SettingLine>
+                  </Show>
                   <SettingLine label="Send when done"><Switch label="Send when done" checked={voiceDraft().autoSend} onChange={(autoSend) => updateVoiceDraft({ autoSend })} /></SettingLine>
                 </Group>
                 <Group title="Microphone" scope="This device">
@@ -1750,8 +1757,7 @@ export function Settings(props: {
                       <Switch label="Prefer speakerphone" disabled={audioInputBusy()} checked={voiceDraft().preferSpeakerphone} onChange={(preferSpeakerphone) => updateVoiceDraft({ preferSpeakerphone })} />
                     </SettingLine>
                   </Show>
-                  <Show when={!isPhoneVoice() || !voiceDraft().preferSpeakerphone}>
-                  <SettingLine plain label="Microphone">
+                  <SettingLine plain label="Microphone" state={isPhoneVoice() && voiceDraft().preferSpeakerphone ? "without a speakerphone" : undefined}>
                       <Select ref={voiceInputSelect} id="voice-input-device" aria-label="Microphone" disabled={audioInputBusy()} value={voiceDraft().inputDeviceId} onChange={(event) => { const deviceId = event.currentTarget.value; updateVoiceDraft({ inputDeviceId: deviceId, inputDeviceLabel: audioInputDevices().find((device) => device.deviceId === deviceId)?.label || "" }); }}>
                         <option value="">System default</option>
                         <Show when={voiceDraft().inputDeviceId && !audioInputDevices().some((device) => device.deviceId === voiceDraft().inputDeviceId)}><option value={voiceDraft().inputDeviceId}>Unavailable microphone</option></Show>
@@ -1759,7 +1765,6 @@ export function Settings(props: {
                       </Select>
                       <Button variant="ghost" size="icon-sm" aria-label="Refresh microphones" title="Refresh microphones" disabled={audioInputBusy() || audioInputStatus() === "loading"} onClick={() => void loadAudioInputs()}><Icons.Refresh /></Button>
                   </SettingLine>
-                  </Show>
                   <SettingLine plain label="Test microphone">
                       <Show when={audioInputTest()?.recording && !audioInputBusy()}><Button variant="ghost" size="icon-sm" aria-label={audioInputPlayback() ? "Stop playback" : "Play test recording"} title={audioInputPlayback() ? "Stop playback" : "Play test recording"} onClick={() => audioInputPlayback() ? stopAudioInputPlayback() : void playAudioInputTest()}>{audioInputPlayback() ? <Icons.Stop /> : <Icons.Play />}</Button></Show>
                       <Button variant="ghost" size="sm" disabled={audioInputStatus() === "loading"} onClick={() => audioInputBusy() ? stopAudioInputTest() : void testAudioInput()}>{audioInputBusy() ? "Stop" : "Test"}</Button>
@@ -1770,18 +1775,11 @@ export function Settings(props: {
                   </Show>
                   <Show when={audioInputError() || audioInputTest()?.recordingError || (audioInputStatus() === "error" && "Microphone list could not be loaded.")}>{(message) => <Note tone="error">{message()}</Note>}</Show>
                   <Show when={installedClientKind === "android"}>
-                    <SettingLine plain label="Other audio while listening">
-                      <Segmented arrows label="Other audio while listening" value={voiceDraft().otherAudio} onChange={(otherAudio) => updateVoiceDraft({ otherAudio })} options={[
-                        { value: "keep", label: "Keep" },
-                        { value: "lower", label: "Lower" },
-                        { value: "mute", label: "Mute" },
-                      ]} />
+                    <SettingLine plain label="Other audio" title="What music and other sound does while you dictate">
+                      <Slider label="While listening" value={voiceDraft().otherAudio === "lower" ? String(voiceDraft().otherAudioLevel) : voiceDraft().otherAudio}
+                        onChange={(value) => updateVoiceDraft(value === "mute" || value === "keep" ? { otherAudio: value } : { otherAudio: "lower", otherAudioLevel: Number(value) })}
+                        options={[{ value: "mute", label: "Muted" }, ...Array.from({ length: 16 }, (_, index) => ({ value: String(5 + index * 5), label: `${5 + index * 5}%` })), { value: "keep", label: "Kept" }]} />
                     </SettingLine>
-                    <Show when={voiceDraft().otherAudio === "lower"}>
-                      <SettingLine plain label="Lowered to">
-                        <Slider label="Lowered to" value={String(voiceDraft().otherAudioLevel)} onChange={(value) => updateVoiceDraft({ otherAudioLevel: Number(value) })} options={Array.from({ length: 16 }, (_, index) => { const value = 5 + index * 5; return { value: String(value), label: `${value}%` }; })} />
-                      </SettingLine>
-                    </Show>
                   </Show>
                   <SettingLine label="Sound" title="Raw is the microphone as it is. Processed adds the browser's echo and noise handling.">
                     <Select id="voice-capture" disabled={audioInputBusy()} value={voiceDraft().captureProfile} onChange={(event) => updateVoiceDraft({ captureProfile: event.currentTarget.value as VoiceDictationSettings["captureProfile"] })}>

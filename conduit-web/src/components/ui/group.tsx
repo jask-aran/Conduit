@@ -49,8 +49,8 @@ export function Group(props: {
   }
 }
 
-export const Columns = (props: { kind?: "setting" | "card" | "browser" | "lists"; children: JSX.Element }) =>
-  <div class="ui-columns" data-group={props.kind ?? "setting"}>{props.children}</div>;
+export const Columns = (props: { kind?: "setting" | "card" | "browser" | "lists"; off?: boolean; children: JSX.Element }) =>
+  <div class="ui-columns" data-group={props.kind ?? "setting"} data-off={props.off ? "" : undefined} inert={props.off}>{props.children}</div>;
 /** One list of `Columns kind="lists"`: whole groups, one under the other. */
 export const Column = (props: { children: JSX.Element }) => <div class="ui-column">{props.children}</div>;
 
