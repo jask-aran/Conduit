@@ -12,6 +12,8 @@ import { randomBytes } from "node:crypto";
  * person writes back (here) are lines of <id>/thread.jsonl, each about one comment (`n`) or the item as a whole. That
  * is the same whether a session was listening when the item was sent or one takes it days later. A line with
  * `resolved` settles its comment (or reopens it) from either side; an item whose every comment is resolved is handled.
+ * A line with `working` is the session saying it has been handed that comment (the script's `wait` writes it): the
+ * comment is being worked on until the session's next line about it.
  *
  * A live item (Send with `live`) is written at its first comment and grows: each later Send to the same mark adds its
  * comments and their pictures, and the mark is kept for the next.
@@ -35,6 +37,8 @@ const MARK_MS = 6 * 60 * 60_000;
 const WORKING_MS = 60 * 60_000;
 /** A finished item stays in the list of what was sent for this long, to be come back to. */
 const RECENT_MS = 24 * 60 * 60_000;
+/** A session handed a comment this long ago that has said nothing since is no longer shown as working on it. */
+const ANSWERING_MS = 15 * 60_000;
 /** What is kept of a host's `subject` (characters): a document's text, not a book's. */
 const SUBJECT = 200_000;
 const short = (value, length) => { const text = typeof value === "string" ? value : JSON.stringify(value) ?? ""; return text.length > length ? `${text.slice(0, length)}… (${text.length} characters)` : text; };
@@ -139,7 +143,7 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
         "A group's `members` are each described the same way. `rect` is in CSS pixels of the client's viewport; `screenshotRect` is the same box in screenshot.png, present only when the picture is the page alone.",
         "screenshot.png shows what `screenshot.of` says (the `screenshot` the person drew on, or the live `page` at Send) with the selections made on it outlined and numbered as `n`. A comment's `picture.file` is that selection alone, cut from the one it was made on: `picture.area` is the part of the page it shows, the area the person dragged round when `dragged`, else its marks with a margin. Look at it first.",
         ...(body.subject ? ["`subject` is what was being marked up, as its host tells it: a document's `text` is as it was at the latest Send, and a comment's `quote` is a run of it. A comment's `under` is what that host says its marks cover: a document's lines (`from` to `to`, numbered from 1) and their `text` as it was when the comment was sent."] : []),
-        ...(body.live ? ["This item is live: the person adds comments while you work, and `wait` hands you each as it comes. `screenshot.png` is the latest taken; a comment's own picture is as it was when the comment was made."] : []),
+        ...(body.live ? ["This item grows: the person may add comments while you work, and `wait` hands you each as it comes. `screenshot.png` is the latest taken; a comment's own picture is as it was when the comment was made."] : []),
         ...about,
         ...(answered ? [`To answer the person: \`${done(id).replace(/ done .*/, "")} reply ${id} [n] "<words>"\`, n being the comment answered (none: the item as a whole). They read it in the tool beside that comment and may write back; \`wait\` hands you what they say.`] : ["This is one-way feedback: the person is not shown an answer."]),
         ...(answered ? [`When one comment is dealt with: \`${done(id).replace(/ done .*/, "")} resolve ${id} <n>\`. The person may resolve or reopen one too, and the item is handled once every comment is resolved.`] : []),
@@ -185,12 +189,15 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
     if (!answered || !/^[\w-]+$/.test(String(id))) throw gone();
     const dir = path.join(folder, id), item = await read(path.join(dir, "item.json"));
     if (!item) throw gone();
-    const messages = await lines(dir), taken = await read(path.join(dir, "taken.json")), handled = Boolean(await read(path.join(dir, "handled.json")));
+    const all = await lines(dir), messages = all.filter((message) => !message.working), taken = await read(path.join(dir, "taken.json")), handled = Boolean(await read(path.join(dir, "handled.json")));
+    // Being worked on: the session's last line about it is that it was handed it, not long ago.
+    const lastBy = new Map(all.filter((message) => message.from === "agent").map((message) => [message.n ?? null, message]));
+    const working = (n) => { const last = lastBy.get(n); return Boolean(last?.working && !handled && Date.now() - Date.parse(last.at) < ANSWERING_MS); };
     const resolved = new Map(messages.filter((message) => typeof message.resolved === "boolean").map((message) => [message.n, message.resolved]));
     const unread = messages.filter((message) => message.from === "agent").length - ((await read(path.join(dir, "person-read.json")))?.agent ?? 0);
     if (seen && unread) await fs.writeFile(path.join(dir, "person-read.json"), `${JSON.stringify({ agent: messages.filter((message) => message.from === "agent").length })}\n`);
-    return { id, sentAt: item.sentAt, state: handled ? "handled" : taken ? "taken" : "waiting", by: taken?.name ?? item.handed?.to?.name ?? null, unread: Math.max(0, unread),
-      comments: (item.comments ?? []).map((entry) => ({ n: entry.n, name: entry.name, comment: entry.comment, resolved: resolved.get(entry.n) === true })), messages };
+    return { id, sentAt: item.sentAt, state: handled ? "handled" : taken ? "taken" : "waiting", by: taken?.name ?? item.handed?.to?.name ?? null, unread: Math.max(0, unread), working: working(null),
+      comments: (item.comments ?? []).map((entry) => ({ n: entry.n, name: entry.name, comment: entry.comment, resolved: resolved.get(entry.n) === true, working: resolved.get(entry.n) !== true && working(entry.n) })), messages };
   }
 
   /** What the person writes back, about comment `n` or the item as a whole; or, with `resolved`, comment `n` settled or reopened. */

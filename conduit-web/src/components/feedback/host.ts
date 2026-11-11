@@ -27,9 +27,9 @@ export type FeedbackListener = { name: string; state: "waiting" | "working" };
 export type FeedbackHanded = { to: { name: string } | null };
 
 /** An item once sent, as the person follows it: where it stands (`by`: the session it was handed to or that took it), and what was said about each comment (`n`) or the item as a whole.
- *  A message with `resolved` and no `text` is that comment settled (or reopened) by whoever it is `from`. */
-export type FeedbackThread = { id: string; sentAt: string; state: "waiting" | "taken" | "handled"; by: string | null; unread: number;
-  comments: { n: number; name: string; comment: string; resolved?: boolean }[]; messages: { at: string; from: "agent" | "person"; n: number | null; text?: string; resolved?: boolean }[] };
+ *  A message with `resolved` and no `text` is that comment settled (or reopened) by whoever it is `from`. `working`: the session has been handed it and has not yet answered. */
+export type FeedbackThread = { id: string; sentAt: string; state: "waiting" | "taken" | "handled"; by: string | null; unread: number; working?: boolean;
+  comments: { n: number; name: string; comment: string; resolved?: boolean; working?: boolean }[]; messages: { at: string; from: "agent" | "person"; n: number | null; text?: string; resolved?: boolean }[] };
 /** An item in the list of what was sent before; `first` is its first comment's words. */
 export type FeedbackSent = { id: string; sentAt: string; state: FeedbackThread["state"]; by: string | null; unread: number; comments: number; first: string };
 
@@ -60,11 +60,11 @@ export interface FeedbackTransport {
  * How what is marked up reaches whoever answers, which is a matter of who the person is to them:
  *   one-way   feedback from someone who is owed no answer (a visitor, a tester): Send delivers the item and that is all.
  *             Nothing comes back, and the tool asks the receiver for nothing but to take it.
- *   batched   a collaborator's: Send delivers the whole item at once, to the listening session or to the folder, and
- *             it is then a thread the agent answers and the person writes back on.
- *   live      a collaborator's, on something worked on together: each comment goes as it is Done, to one item that
- *             grows, and is a thread from then on. Only while a session is listening; with batched offered too, the
- *             person chooses, and without a listener it is batched.
+ *   batched   a collaborator's: comments wait until Send, which delivers every one outstanding. What is sent in one
+ *             sitting is one item that grows, and each comment sent is a thread the agent answers and the person
+ *             writes back on.
+ *   live      with batched: each comment has "Send now", which is on while a session is listening, so it goes as it
+ *             is Done; turned off, or with no one listening, it waits for Send like any other.
  */
 export type FeedbackDelivery = "one-way" | "batched" | "live";
 

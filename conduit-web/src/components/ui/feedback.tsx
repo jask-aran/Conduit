@@ -1,6 +1,6 @@
 import { createSignal, createUniqueId, For, Show, type JSX } from "solid-js";
 // Through the barrel, so the tool's chunk takes these from the app's own and the build splits nothing new out of it.
-import { Button, Card, ColourPicker, CardPreview, CloseButton, Frost, IconButton, Icons, Segmented, Spinner, Swatch, TextArea } from "./index";
+import { Button, Card, ColourPicker, CardPreview, CloseButton, Frost, IconButton, Icons, Segmented, Spinner, Swatch, Switch, TextArea } from "./index";
 import { clockTime } from "./time";
 import "./styles/feedback.css";
 
@@ -79,20 +79,34 @@ const saidWhen = (at: string) => {
   return then.toDateString() === new Date().toDateString() ? clockTime(then) : then.toLocaleDateString([], { day: "numeric", month: "short" });
 };
 
-/** One comment. `float`: where it sits beside what it is about while it is written, with Done to send it to the stack. In the stack, shut, it shows
- *  its words on a line and its `picture`, and a press opens it. Once sent it is a thread: `said` is what the person and the agent have written about
- *  it, each with when; the field is the person's answer (`placeholder`, sent by Reply: `onSay`), and it is not removed. `resolved`: settled, so shut
- *  it shows only that; `onResolve` settles or reopens it. */
-export function FeedbackNote(props: { ref?: (element: HTMLTextAreaElement) => void; float?: JSX.CSSProperties; open: boolean; tag: string; name: string; source?: string; value: string; picture?: string; said?: { from: "agent" | "person"; text: string; at?: string }[]; placeholder?: string; resolved?: boolean;
-  onOpen: () => void; onInput: (value: string) => void; onDone?: () => void; onRemove?: () => void; onSay?: () => void; onResolve?: (resolved: boolean) => void }) {
-  const folded = () => Boolean(props.resolved && !props.open);
+type Said = { from: "agent" | "person"; text: string; at?: string };
+const said = (line: Said) => <p class="ui-feedback-said" data-from={line.from}><Show when={line.at}>{(at) => <time dateTime={at()}>{saidWhen(at())}</time>}</Show>{line.text}</p>;
+
+/** One comment. `float`: where it sits beside what it is about while it is written, with Done to send it to the stack; `sendNow` is whether Done also
+ *  sends it (`onSendNow` changes that; none: it cannot be, as with no session listening). In the stack, shut, it shows its words on a line and its
+ *  `picture`, and a press opens it. `state` says where it stands (not sent, sent, being worked on, answered, resolved). Once sent it is a thread:
+ *  `words` is the comment and `said` what the agent and the person have written about it since, each with when. Shut, it shows the comment on a line
+ *  and the latest of those; open, all of it, and the field is the person's answer (`placeholder`, sent by Reply: `onSay`). It is not removed: its
+ *  corner settles it (`onResolve`), and `resolved` it folds to the comment's line until it is opened and reopened. */
+export function FeedbackNote(props: { ref?: (element: HTMLTextAreaElement) => void; float?: JSX.CSSProperties; open: boolean; tag: string; name: string; source?: string; value: string; picture?: string; words?: string; said?: Said[]; state?: { label: string; busy?: boolean };
+  placeholder?: string; resolved?: boolean; sendNow?: boolean; onSendNow?: (on: boolean) => void; onOpen: () => void; onInput: (value: string) => void; onDone?: () => void; onRemove?: () => void; onSay?: () => void; onResolve?: (resolved: boolean) => void }) {
+  const thread = () => props.said !== undefined;
+  const settle = () => props.onResolve && !props.resolved ? () => props.onResolve!(true) : undefined;
   return <div class="ui-feedback-note" style={props.float} data-float={props.float ? "" : undefined} data-open={props.open ? "" : undefined} onClick={(event) => { if (!props.open && !(event.target as Element).closest("button")) props.onOpen(); }}>
-    <Card size="compact" role="group" label={props.tag ? `Comment ${props.tag}` : props.name} title={<><Show when={props.tag}><b class="ui-feedback-number">{props.tag}</b></Show>{props.name}</>} detail={props.said ? (folded() ? "Resolved" : undefined) : props.open ? props.source : props.value.trim() || (props.picture ? undefined : "No comment yet")}
-      close={props.float ? props.onDone : props.onRemove} closeLabel={props.float ? "Done" : "Remove"}
-      actions={props.float ? <><Button variant="ghost" size="sm" onClick={props.onRemove}>Remove</Button><Button variant="primary" outline size="sm" onClick={props.onDone}>Done</Button></>
-        : props.open && props.onSay ? <><Show when={props.onResolve}>{(onResolve) => <Button variant="ghost" size="sm" onClick={() => onResolve()(!props.resolved)}>{props.resolved ? "Reopen" : "Resolve"}</Button>}</Show><Button variant="primary" outline size="sm" disabled={!props.value.trim()} onClick={props.onSay}>Reply</Button></> : undefined}>
-      <Show when={props.picture && !props.float}><CardPreview><img src={props.picture} alt="" /></CardPreview></Show>
-      <For each={folded() ? [] : props.said}>{(line) => <p class="ui-feedback-said" data-from={line.from}><Show when={line.at}>{(at) => <time dateTime={at()}>{saidWhen(at())}</time>}</Show>{line.text}</p>}</For>
+    <Card size="compact" role="group" label={props.tag ? `Comment ${props.tag}` : props.name}
+      title={<><Show when={props.tag}><b class="ui-feedback-number">{props.tag}</b></Show><span class="ui-feedback-name">{props.name}</span><Show when={props.state}>{(state) => <span class="ui-feedback-state"><Show when={state().busy}><Spinner /></Show>{state().label}</span>}</Show></>}
+      detail={thread() ? (props.open ? undefined : props.words) : props.open ? props.source : props.value.trim() || (props.picture ? undefined : "No comment yet")}
+      close={props.float ? props.onDone : thread() ? settle() : props.onRemove} closeLabel={props.float ? "Done" : thread() ? "Resolve" : "Remove"}
+      actions={props.float ? <><Show when={props.sendNow !== undefined}><label class="ui-feedback-now" title={props.onSendNow ? undefined : "Needs a session listening"}>Send now<Switch label="Send this comment as it is Done" checked={Boolean(props.sendNow)} disabled={!props.onSendNow} onChange={props.onSendNow} /></label></Show><Button variant="ghost" size="sm" onClick={props.onRemove}>Remove</Button><Button variant="primary" outline size="sm" onClick={props.onDone}>Done</Button></>
+        : props.open && props.onSay ? <><Show when={props.resolved && props.onResolve}><Button variant="ghost" size="sm" onClick={() => props.onResolve!(false)}>Reopen</Button></Show><Button variant="primary" outline size="sm" disabled={!props.value.trim()} onClick={props.onSay}>Reply</Button></> : undefined}>
+      <Show when={props.picture && !props.float && !thread()}><CardPreview><img src={props.picture} alt="" /></CardPreview></Show>
+      <Show when={thread()}>
+        <Show when={props.open} fallback={<Show when={!props.resolved && props.said![props.said!.length - 1]} keyed>{(latest) => <div class="ui-feedback-latest">{said(latest)}</div>}</Show>}>
+          <Show when={props.picture}><CardPreview><img src={props.picture} alt="" /></CardPreview></Show>
+          <Show when={props.words}><p class="ui-feedback-said" data-from="person">{props.words}</p></Show>
+          <For each={props.said}>{said}</For>
+        </Show>
+      </Show>
       <Show when={props.open}><TextArea ref={props.ref} rows={2} placeholder={props.placeholder ?? "What should change?"} value={props.value} onInput={(event) => props.onInput(event.currentTarget.value)} /></Show>
     </Card>
   </div>;
@@ -118,9 +132,9 @@ export type FeedbackView = "use" | "page" | "screenshot";
  *  the ink and thickness the next drawing is in (`picking`: their popover is open), and Undo, both left to the keyboard and the eraser on a phone; a new screenshot while
  *  one is looked at; the listening session the item is handed to (`agent`, none when no session listens); Send and close. `compact`: icons alone,
  *  for a phone's width. `tools`: the ones this host offers (all, unsaid). `thread`: the item is sent and its thread is followed, so the bar is only what was said of it (`status`) and close.
- *  `onBack` then leaves it for marking up again. `replies`: answers unread on what was sent before, and `sent` how many of those there are to come back to (`onReplies`). `live`: each comment goes as it is Done, so there is no Send (undefined:
- *  not offered; no `onLive`: no longer to be changed); `standing` is then where the growing item stands. */
-export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; onView: (view: FeedbackView) => void; tools?: readonly (FeedbackToolKind | "note")[]; tool: FeedbackToolKind; onTool: (tool: FeedbackToolKind) => void; onNote: () => void; live?: boolean; onLive?: (on: boolean) => void; standing?: string; thread?: boolean; onBack?: () => void; replies?: number; sent?: number; onReplies?: () => void; ink?: FeedbackInk; onInk?: (ink: FeedbackInk) => void; weight?: FeedbackWeight; onWeight?: (weight: FeedbackWeight) => void; shape?: FeedbackShape; onShape?: (shape: FeedbackShape) => void; onUndo?: () => void; onRedo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
+ *  `onBack` then leaves it for marking up again. `replies`: answers unread on what was sent before, and `sent` how many of those there are to come back to (`onReplies`).
+ *  `outstanding`: how many comments Send would deliver; `standing`: where the item they have gone to stands, once some have. */
+export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; onView: (view: FeedbackView) => void; tools?: readonly (FeedbackToolKind | "note")[]; tool: FeedbackToolKind; onTool: (tool: FeedbackToolKind) => void; onNote: () => void; outstanding?: number; standing?: string; thread?: boolean; onBack?: () => void; replies?: number; sent?: number; onReplies?: () => void; ink?: FeedbackInk; onInk?: (ink: FeedbackInk) => void; weight?: FeedbackWeight; onWeight?: (weight: FeedbackWeight) => void; shape?: FeedbackShape; onShape?: (shape: FeedbackShape) => void; onUndo?: () => void; onRedo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
   canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void }) {
   const using = () => props.view === "use";
   const views = (): Array<{ value: FeedbackView; label: string; icon: JSX.Element }> => [
@@ -166,7 +180,6 @@ export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; 
     <Show when={!props.thread}>
     <span class="ui-feedback-with">
       <Show when={props.onRetake && props.view === "screenshot"}><IconButton label="Take the screenshot again" onClick={props.onRetake}><Icons.Camera /></IconButton></Show>
-      <Show when={props.live !== undefined && !props.compact}><IconButton label={props.onLive || props.live ? "Live: each comment goes as it is Done" : "Live needs a session listening"} disabled={!props.onLive} aria-pressed={props.live} onClick={() => props.onLive?.(!props.live)}><Icons.Runtime /></IconButton></Show>
       <Show when={props.onHand}>
         <IconButton label={props.agent ? `Hand to ${props.agent}` : "No session is listening"} disabled={!props.agent} aria-pressed={Boolean(props.agent && props.hand)} onClick={() => props.onHand!(!props.hand)}><Icons.Agent /></IconButton>
         <Show when={props.agent} fallback={<Show when={!props.compact}><span class="ui-feedback-status">No listener</span></Show>}>
@@ -174,10 +187,9 @@ export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; 
         </Show>
       </Show>
     </span>
-    <Show when={!props.live} fallback={<Show when={props.standing}><span class="ui-feedback-status">{props.standing}</span></Show>}>
-      <Show when={props.compact} fallback={<Button variant="primary" outline size="sm" disabled={!props.canSend || props.sending} onClick={props.onSend}><Show when={props.sending} fallback="Send"><Spinner /></Show></Button>}>
-        <IconButton label="Send" disabled={!props.canSend || props.sending} onClick={props.onSend}><Show when={props.sending} fallback={<Icons.Send />}><Spinner /></Show></IconButton>
-      </Show>
+    <Show when={props.standing && !props.compact}><span class="ui-feedback-status">{props.standing}</span></Show>
+    <Show when={props.compact} fallback={<Button variant="primary" outline size="sm" disabled={!props.canSend || props.sending} onClick={props.onSend}><Show when={props.sending} fallback={(props.outstanding ?? 0) > 1 ? `Send ${props.outstanding}` : "Send"}><Spinner /></Show></Button>}>
+      <IconButton label="Send" count={(props.outstanding ?? 0) > 1 ? props.outstanding : undefined} disabled={!props.canSend || props.sending} onClick={props.onSend}><Show when={props.sending} fallback={<Icons.Send />}><Spinner /></Show></IconButton>
     </Show>
     </Show>
     <CloseButton size="sm" label="Close feedback" onClick={props.onClose} />

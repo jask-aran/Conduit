@@ -102,10 +102,13 @@ if (command === "wait") {
     const watcher = watch(folder, () => void look());
     const poll = setInterval(() => void look(), 2000);
   });
+  // What is handed over is being worked on from now, which the person sees on each comment until this session's next line about it.
+  const working = (id, ns) => fs.appendFile(path.join(folder, id, "thread.jsonl"), [...new Set(ns)].map((n) => `${JSON.stringify({ at: new Date().toISOString(), from: "agent", by: name, n, working: true })}\n`).join(""));
   do {
     const taken = await next() ?? await coming();
     let lines;
     if (taken.said) {
+      await working(taken.entry.id, [...taken.added.map((comment) => comment.n), ...taken.said.filter((message) => message.text).map((message) => message.n ?? null)]);
       lines = [
         ...(taken.added.length ? [`The person added to ${taken.entry.item} (read each there, with its picture):`, ...taken.added.map((comment) => `  comment ${comment.n} (${comment.name}): ${comment.comment}`)] : []),
         ...(taken.said.length ? [`The person wrote back on ${taken.entry.item}:`, ...taken.said.map((message) => `  ${message.n ? `about comment ${message.n}` : "about the item"}: ${message.text ?? (message.resolved ? "resolved it" : "reopened it")}`)] : []),
@@ -113,7 +116,9 @@ if (command === "wait") {
       ];
     } else {
       // From here on only what is new is handed over.
-      await noteHanded(path.join(folder, taken.id), { person: 0, comments: JSON.parse(await fs.readFile(taken.item, "utf8")).comments.length });
+      const comments = JSON.parse(await fs.readFile(taken.item, "utf8")).comments;
+      await noteHanded(path.join(folder, taken.id), { person: 0, comments: comments.length });
+      await working(taken.id, comments.map((comment) => comment.n));
       lines = handing(taken);
     }
     // Staying, each thing that comes is one line, which is what wakes the session.
