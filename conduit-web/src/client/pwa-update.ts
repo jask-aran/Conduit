@@ -1,34 +1,16 @@
 /*
- * When a new build takes this page over.
- *
- * The page is one document holding live sockets, a transcript and whatever is
- * half-typed in the composer, and replacing it is not free. It used to happen
- * on its own and twice over: a `controllerchange` listener here reloaded, and
- * `vite-plugin-pwa` under `registerType: "autoUpdate"` attached its own
- * `activated` listener that reloaded as well. A tab that woke from the
- * background and checked for updates could find itself reloaded mid-sentence.
- *
- * So the worker is held rather than the reload. Under `skipWaiting: false` a
- * new build installs and then waits, which matters for more than politeness:
- * once it activates, workbox deletes the precached files the running page
- * still needs, and this client loads Settings, the workspace panel, the
- * terminal and the project dashboard on demand. An old page left running past
- * activation would 404 on the next thing it opened. Waiting keeps both builds
- * whole, so holding the update is genuinely free.
- *
- * One decision, one reload: this module says when, and the reload itself is
- * the library's `controlling` listener, the only one left.
+ * The worker is held, not the reload: under `skipWaiting: false` a new build waits, because once it activates workbox
+ * deletes precached files this page still loads on demand. This module says when; the library's `controlling`
+ * listener does the one reload.
  */
 
 import { createEffect, createSignal, onCleanup } from "solid-js";
 
-/** How long the update check waits for the server; with it gone the fetch can hang for minutes. */
 const UPDATE_CHECK_TIMEOUT_MS = 15_000;
 
 let registeredServiceWorker: ServiceWorkerRegistration | null = null;
 let updateRequest: Promise<boolean> | null = null;
 let resetRequest: Promise<void> | null = null;
-/** Sends SKIP_WAITING to the build that is waiting; the reload follows it. */
 let takeUpdate: (() => Promise<void>) | null = null;
 let waiting = false;
 let announce: (() => void) | null = null;
@@ -44,7 +26,6 @@ const HOLD_LOCK = "conduit:pwa-unsaved-work";
 // stop holding the installed worker once that drain could no longer succeed.
 const PREPARATION_TIMEOUT_MS = 11 * 60_000;
 
-/** Whether a new build is installed and waiting for a quiet moment. */
 export const pwaUpdateWaiting = () => waiting && !preparing;
 
 // A dirty tab holds a shared lock. An update takes an exclusive lock before
@@ -66,39 +47,20 @@ function syncHoldLock() {
   });
 }
 
-/*
- * Whether a check is still deciding if this page is about to be replaced.
- *
- * True from the moment a check starts until it finds nothing, or a found
- * build fails to install. When a build does install it stays true through
- * the reload, so anything that would reconnect only to be torn down a second
- * later -- a terminal coming back from a server restart -- can wait it out
- * behind the screen it is already showing.
- */
+// Stays true through the reload once a build installs, so whatever would reconnect only to be torn down (a terminal
+// back from a server restart) can wait it out.
 const [updateImpending, setUpdateImpending] = createSignal(false);
 export const pwaUpdateImpending = updateImpending;
 
-/*
- * Taking an update ends this document, so nothing here can report that it
- * worked -- the page that would say so is the page being replaced. A tab that
- * blinks and comes back looking identical is indistinguishable from a button
- * that did nothing, which is exactly how it read: "why did it reload if there
- * was no update?" There was one. This is the note the old page leaves for the
- * new one, in session storage because it belongs to this tab and to this
- * reload alone.
- */
+// Taking an update ends this document, so the old page leaves the new one a note that it took one: per tab and per
+// reload, so session storage.
 const TOOK_UPDATE_KEY = "conduit:pwa-took-update";
 
-/** How long the worker gets to take over before the page reloads regardless. */
 const RELOAD_FALLBACK_MS = 4_000;
 
 const LAST_BUILD_KEY = "conduit:last-build";
 
-/**
- * Whether this page runs a different build than this device last ran. The
- * entry script's hashed name is the build; the first run has nothing to
- * compare and says no.
- */
+/** The entry script's hashed name is the build; the first run has nothing to compare and says no. */
 export function arrivedByNewBuild(): boolean {
   const entry = document.querySelector<HTMLScriptElement>('script[type="module"][src]')?.src;
   if (!entry) return false;
@@ -112,7 +74,6 @@ export function arrivedByNewBuild(): boolean {
   }
 }
 
-/** Read once: the new build asks whether it arrived by an update, then forgets. */
 export function claimPwaUpdateArrival(): boolean {
   try {
     if (sessionStorage.getItem(TOOK_UPDATE_KEY) !== "1") return false;
@@ -127,13 +88,7 @@ export function rememberPwaRegistration(registration: ServiceWorkerRegistration 
   registeredServiceWorker = registration || null;
 }
 
-/**
- * Register the worker and decide what happens when a new one is ready.
- *
- * `hold` is asked at the moment a build arrives: false means take it now, and
- * the reload is invisible because there was nothing to interrupt. True means
- * leave it waiting and tell the caller, which then chooses its own moment.
- */
+/** `hold` is asked when a build arrives: false takes it now; true leaves it waiting for the caller's own moment. */
 export function startPwaUpdates({ hold, onUpdateReady }: { hold: () => boolean; onUpdateReady: () => void }) {
   announce = onUpdateReady;
   holdsUpdate = hold;
@@ -206,15 +161,8 @@ async function takeWaitingAcrossTabs(update: () => Promise<void>): Promise<boole
 async function takeWaiting(takeUpdate: () => Promise<void>): Promise<boolean> {
   try { sessionStorage.setItem(TOOK_UPDATE_KEY, "1"); } catch { /* private mode; the notice is not worth failing the update over */ }
   await takeUpdate();
-  /*
-   * The reload is the library's `controlling` listener, and it only fires if
-   * the waiting worker actually takes over. It does not always: a worker that
-   * activated on its own between being announced and being accepted is no
-   * longer waiting, so SKIP_WAITING reaches nobody, nothing ever controls
-   * anew, and the page sits on "Updating Conduit..." with no way out. A hard
-   * reload fixed it by hand, which is the whole of this fallback -- by now the
-   * new build is installed, so an ordinary reload lands on it.
-   */
+  // A worker that activated on its own between being announced and accepted is no longer waiting, so SKIP_WAITING
+  // reaches nobody and `controlling` never fires. The new build is installed by now, so a plain reload lands on it.
   window.setTimeout(() => window.location.reload(), RELOAD_FALLBACK_MS);
   return true;
 }
@@ -239,11 +187,7 @@ export async function checkForPwaUpdate(background = false) {
   }
 }
 
-/**
- * One id per service-worker registration, shared by every tab of this origin,
- * so a restart counts the registration once however many tabs it has. Kept in
- * localStorage, which is per origin exactly as a registration is.
- */
+/** Shared by every tab of this origin, so a restart counts the registration once; localStorage is per origin, as a registration is. */
 export function browserRegistrationId(): string {
   const key = "conduit:sw-registration";
   try {
@@ -260,10 +204,8 @@ export function browserRegistrationId(): string {
 export type RestartReady = (ready: { attempt: string; target: string; registration: string }) => Promise<void>;
 
 /**
- * Once this registration holds the announced build, say so. After `update()`
- * the waiting worker is the script just fetched, and with none waiting the
- * active one is byte-identical to it, so the hash of what the server now
- * serves at that URL is the build this registration is holding.
+ * After `update()` the waiting worker is the script just fetched, and with none waiting the active one is identical
+ * to it, so the hash of what the server now serves at that URL is the build this registration holds.
  */
 async function reportWhenInstalled(attempt: string, target: string, report: RestartReady) {
   await preparation;
@@ -300,7 +242,6 @@ export function preparePwaRestart(attempt = "", target = "", report?: RestartRea
   }, PREPARATION_TIMEOUT_MS);
 }
 
-/** The announced server restart has closed its stream. Take the ready build. */
 export async function finishPwaRestart() {
   if (!preparing) return;
   preparing = false;
@@ -330,13 +271,7 @@ export async function finishPwaRestart() {
   }
 }
 
-/**
- * Wait for a new build to finish installing.
- *
- * Resolved by `onNeedRefresh` rather than by watching the registration, which
- * also guarantees the library has attached the `controlling` listener that
- * does the reload -- it adds that listener in the same breath.
- */
+/** Resolved by `onNeedRefresh`, not by watching the registration: the library attaches the reloading `controlling` listener in the same breath. */
 function untilWaiting(timeoutMs = 10_000) {
   return new Promise<boolean>((resolve) => {
     if (waiting) return resolve(true);
@@ -353,14 +288,6 @@ function untilWaiting(timeoutMs = 10_000) {
   });
 }
 
-/*
- * "Check for updates", pressed by hand.
- *
- * The same lever as the automatic path, minus the asking: somebody who pressed
- * this has said what they want. A false return means there was nothing to
- * install, which is the only answer that comes back -- a true one is followed
- * by the reload.
- */
 async function performPwaUpdate(reloadPage: () => void) {
   if (!("serviceWorker" in navigator)) {
     try { sessionStorage.setItem(TOOK_UPDATE_KEY, "1"); } catch { /* as above */ }
@@ -377,11 +304,8 @@ async function performPwaUpdate(reloadPage: () => void) {
   }
   // Bounded: with the server gone this fetch can hang for minutes.
   await Promise.race([registration.update(), new Promise((_, reject) => setTimeout(() => reject(new Error("Could not reach the server to check for updates.")), UPDATE_CHECK_TIMEOUT_MS))]);
-  // Nothing new was fetched: up to date. A new build precaches the whole
-  // client before it waits, which over a phone connection takes well past a
-  // few seconds -- so a build that is installing gets the time it needs, and
-  // one already waiting from before this page (never announced to it) is
-  // taken directly.
+  // A new build precaches the whole client before it waits, which on a phone takes well past a few seconds; one
+  // already waiting from before this page (never announced to it) is taken directly.
   if (!registration.installing && !registration.waiting) return false;
   if (!waiting && registration.waiting && !registration.installing) {
     return takeWaitingAcrossTabs(async () => registration.waiting?.postMessage({ type: "SKIP_WAITING" }));

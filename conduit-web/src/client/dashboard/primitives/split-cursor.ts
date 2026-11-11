@@ -1,26 +1,3 @@
-/**
- * A dashboard's cursor, from the keyboard, moving as the sidebar's does
- * (navigation/sidebar-cursor.ts). The cursor is the focused row and its wash;
- * no ring.
- *
- * Tab is one stop per section: the composer, then the chats list, then each
- * group of the right column, and round again -- landing where the cursor last
- * was in each. Nothing else on the dashboard is a Tab stop: the composer's
- * icons have their shortcuts, and a group's heading controls are reached from
- * its rows. Leader then C, L, P, W or T goes straight to a section.
- *
- * In a group ↑/↓ step through the rows -- across the chats list's day
- * headings -- and Home/End go to the ends; the folder shelf steps with ←/→ as
- * well. ↑ from the first row goes up into the heading's controls, where ←/→
- * step and ↓ comes back down. Enter opens, the Menu key or Shift+F10 opens the
- * row's menu, and Esc goes back to the composer.
- *
- * Pointer and keyboard move the one cursor: a pointer moving over a row takes
- * focus there while a row has it, and arrowing away from a still pointer
- * takes the rows out of hover until it moves again. Leaving the window keeps
- * the cursor where it was (data-held), since focus there is only waiting.
- */
-
 const ROWS = ":is(.ui-row[data-density=list]:is(button, a), .ui-dash-more, .ui-folder)";
 const GROUP = ".ui-group[data-group=dash]";
 const CONTROLS = ".ui-group-head :is(button, a[href])";
@@ -33,8 +10,7 @@ const visible = (element: Element) => typeof element.checkVisibility === "functi
   ? element.checkVisibility({ visibilityProperty: true })
   : element.getClientRects().length > 0;
 
-// Each installed dashboard's go-to, by its root: a command acts on the dashboard that has the keyboard (Codex review:
-// two dashboards side by side resolved one for the leader's offer and another for the run).
+// By its root, so a command acts on the dashboard that has the keyboard, not another beside it.
 const installed = new Map<HTMLElement, (section: SplitSection) => boolean>();
 const focused = () => document.activeElement?.closest<HTMLElement>(".ui-dash") ?? null;
 
@@ -42,12 +18,10 @@ const focused = () => document.activeElement?.closest<HTMLElement>(".ui-dash") ?
 // (each group's data-section), so the leader offers only what is there.
 const showing = () => { const here = focused(); return here && visible(here) ? here : [...document.querySelectorAll<HTMLElement>(".ui-dash")].find(visible); };
 
-/** What the showing page is, for the leader's path. */
 export function splitPage() {
   return showing()?.dataset.page as SplitPage | undefined;
 }
 
-/** The sections the showing page has. */
 export function splitSections() {
   const root = showing();
   const sections = new Set<SplitSection>();
@@ -57,7 +31,6 @@ export function splitSections() {
   return sections;
 }
 
-/** Leader's go-to: move the showing dashboard's cursor to a section. */
 export function focusSplitSection(section: SplitSection) {
   const root = showing();
   const go = root ? installed.get(root) : undefined;
@@ -70,7 +43,6 @@ export function installSplitCursor(root: HTMLElement): () => void {
 
   const groups = () => [...root.querySelectorAll<HTMLElement>(GROUP)]
     .filter((group) => visible(group) && (rowsIn(group).length || controlsIn(group).length))
-    // The chats list, then the right column, top to bottom.
     .sort((a, b) => rank(a) - rank(b));
   const rank = (group: HTMLElement) => group.dataset.order === "list" ? 1 : 2;
   const rowsIn = (group: Element) => [...group.querySelectorAll<HTMLElement>(ROWS)].filter(visible);
@@ -100,7 +72,6 @@ export function installSplitCursor(root: HTMLElement): () => void {
     // A folded group is entered at its heading.
     return move(remembered?.isConnected && visible(remembered) ? remembered : rowsIn(group)[0] ?? controlsIn(group)[0]);
   };
-  // Tab's round: the composer, then each group.
   const tab = (from: Element | null, back: boolean) => {
     const order: Array<Element | null> = [...(composer() ? [null] : []), ...groups()];
     const at = order.indexOf(from);

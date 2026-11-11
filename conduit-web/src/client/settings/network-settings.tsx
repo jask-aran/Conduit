@@ -8,7 +8,6 @@ import { StatusDot } from "@/components/ui/nav";
 import { SettingLine, SettingLink, SettingValue } from "@/components/ui/overlay";
 
 type Certificate = { names: string[]; validTo: string };
-/** What the hub says of its LAN names (src/network/lan-names-service.js). */
 type LanNames = {
   configured: boolean; domain?: string; via?: "token" | "cf"; tokenSet?: boolean; hubName?: boolean;
   state: "off" | "issuing" | "ready" | "failed"; step?: string; error?: { code: string; message: string };
@@ -18,15 +17,11 @@ type LanNames = {
 const until = (certificate?: Certificate) => certificate
   ? `until ${new Date(certificate.validTo).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : "";
 const PATH = "/v0/network/lan-names";
-/** How often a name being issued is read again. */
 const FOLLOW_INTERVAL_MS = 2000;
 
 /**
- * The network's own settings, kept by the server it is on (plan: Distributed Conduit). LAN names: an https name on
- * this network for every device (`n-….lan.example.com`, under a name of the user's own on Cloudflare), so a browser
- * tab on an https server reaches a device near it directly, as the apps already do over the sealed LAN routes. The
- * server publishes the names and keeps their certificate itself, with a token scoped to that zone's DNS or, where
- * its machine has one signed in, the `cf` CLI.
+ * LAN names give every device an https name, so a browser tab on an https server reaches a device near it directly,
+ * as the apps do over the sealed LAN routes.
  */
 export function NetworkSettings() {
   const [shown, setShown] = createSignal<LanNames | null>(null);

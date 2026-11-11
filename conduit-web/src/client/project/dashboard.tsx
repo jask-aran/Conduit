@@ -31,7 +31,6 @@ import { WorkspaceGlyph } from "./workspace-appearance";
 import { WorkspaceAppearanceEditor } from "./workspace-appearance-editor";
 import { Row } from "@/components/ui/row";
 
-/** How often a clone under way is asked how it is going. */
 const CLONE_POLL_MS = 500;
 
 type WorkspaceView = "files" | "diff" | "terminal";
@@ -87,15 +86,12 @@ export function ProjectDashboard(props: {
   composer: JSX.Element;
   runtime: RuntimeStore;
   onOpenChat: (chat: DashboardChat, project: Project) => Promise<void>;
-  /** What a chat's menu does. */
   menus: ItemActions;
   onPrefetchChat: (chat: DashboardChat) => void;
   onContextAction: (type: string, target: Omit<SidebarCommand, "type" | "nonce">) => void;
   isPinned: (type: "chat" | "project" | "terminal", id: string) => boolean;
   onOpenView: (view: WorkspaceView) => void;
-  /** A file opens as from Files -- a pane's file viewer, Ctrl a kept tab, Alt beside; absent where panes do not fit. */
   onOpenFile?: (path: string) => void;
-  /** A file's view, for dragging it to a pane as from Files. */
   fileView?: (path: string) => string;
   onOpenTerminal: (terminal: Pty) => void;
   onOpenTerminalMaximized: (terminal: Pty) => void;
@@ -139,7 +135,6 @@ export function ProjectDashboard(props: {
   const [outsideFilter, setOutsideFilter] = createSignal("");
   const [threadSide, setThreadSide] = createSignal<ThreadSide>("chats");
   const [unreadOnly, setUnreadOnly] = createSignal(false);
-  // The header's indicators, as the Conduit dashboard's, for this place's chats.
   const activeChats = () => props.project.sessions.filter((chat) => chat.status === "active");
   const running = createMemo(() => activeChats().filter((chat) => props.runtime.getProcess(chat.id)?.active).length);
   const unreadCount = createMemo(() => activeChats().filter((chat) => chat.unread).length);
@@ -148,8 +143,8 @@ export function ProjectDashboard(props: {
   const chatSort = useChatSort();
   const projectId = createMemo(() => props.project.id);
   const isWorkspace = createMemo(() => workspaceProject(props.project));
-  // A folder on another device: its harnesses' own threads are that device's to find (per-device harnesses are
-  // not built), so "Not in Conduit" is left out rather than shown empty.
+  // A folder on another device: its harnesses' own threads are that device's to find, so "Not in Conduit" is left out
+  // rather than shown empty.
   const onDevice = () => props.project.capabilities?.device.local === false;
   const cloning = createMemo(() => props.project.state === "cloning" && Boolean(props.project.cloneOperationId));
 
@@ -224,7 +219,6 @@ export function ProjectDashboard(props: {
     onCleanup(() => { disposed = true; });
   });
 
-  // Threads this workspace's harnesses ran here that no Conduit chat owns.
   createEffect(() => {
     const path = props.project.workingRoot;
     refreshVersion();
@@ -351,7 +345,6 @@ export function ProjectDashboard(props: {
       </MenuSection>
   </>;
 
-  // Running chats stay in place; their dot and activity say they are live.
   const chatRows = () => <Show when={visibleChats().length} fallback={<SplitEmpty>{unreadOnly() ? "Nothing unread." : "Nothing here yet."}</SplitEmpty>}>
     <DayGroups groups={chatGroups()}>{(item) => {
       const process = () => props.runtime.getProcess(item.id);
@@ -423,8 +416,6 @@ export function ProjectDashboard(props: {
     </Show>
   </SplitGroup>;
 
-  // Uncommitted work against HEAD, staged and unstaged together, drawn with
-  // the workspace panel's change rows.
   const changesGroup = () => <SplitGroup id="dashboard-changes" label="Changes" collapsible count={git()?.changedFiles ?? 0} actions={<Show when={git()?.changedFiles}><SplitCounts {...changeTotals()} /></Show>}>
     <Show when={payload()?.changes.length} fallback={<SplitEmpty>{payload() ? "Working tree clean." : "Loading…"}</SplitEmpty>}>
       <For each={payload()!.changes}>{(file) => {

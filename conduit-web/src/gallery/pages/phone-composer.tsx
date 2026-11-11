@@ -5,7 +5,6 @@ import { Captions, PhoneComposer, PHONE_COMPOSER_STATES, type PhonePart, type Vo
 import { speech, queued, icon } from "../demos";
 import { row, token, type Page } from "../model";
 
-/** The phone's composer, as components v2 builds it; each option a value or an accessor (the Motion cell switches them). */
 export type Live<T> = T | (() => T);
 export const read = <T,>(value: Live<T>) => typeof value === "function" ? (value as () => T)() : value;
 export const phoneComposer = (mode: Live<VoiceMode>, opts: { draft?: Live<boolean>; away?: Live<boolean>; editing?: Live<boolean>; under?: Live<boolean>; riders?: boolean; opening?: boolean; layout?: "bar" | "surface" } = {}) => {

@@ -1,6 +1,5 @@
 
-/* Paper Mono (OFL, fonts/PaperMono-OFL.txt): the transcript face when chosen
-   in Settings → Appearance (preferences/transcript-font.ts). */
+/* Paper Mono (OFL, fonts/PaperMono-OFL.txt). */
 @font-face { font-family: "Paper Mono"; src: url("./fonts/PaperMono-Variable.woff2") format("woff2"); font-weight: 100 800; font-style: normal; font-display: swap; }
 :root[data-transcript-font="paper-mono"] { --font-transcript: "Paper Mono", ui-monospace, monospace; }
 
@@ -10,10 +9,7 @@
      is still owed once the keyboard has covered part of it. Everywhere else
      the resting value is the answer. */
   --safe-area-inset-bottom: var(--safe-area-inset-bottom-rest, env(safe-area-inset-bottom, 0px));
-  /* Every full-screen surface on a phone -- frost overlays, Settings, the
-     palette, the workspace picker -- sits inside the status and navigation
-     bars by this, then its own small margin. The shell's insets first:
-     Android's WebView reports env() as 0. */
+  /* The shell's insets first: Android's WebView reports env() as 0. */
   --phone-overlay-padding: calc(var(--space-md) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))) var(--space-md) calc(var(--space-md) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
   /* Type and rem chrome scale from the root. Explicit px does not. Viewport
      geometry stays in real CSS pixels so scroll, fixed overlays, and popovers
@@ -40,13 +36,9 @@ body {
   min-width: 0;
   background: var(--frame);
 }
-/* Understated line-icons: thin, quiet stroke everywhere by default. */
 svg { stroke-width: 1.5; }
-/* An icon's weight is its stroke against its size, so the stroke scales with
-   the icon: 2.4 in Lucide's 24-unit box is a tenth of the icon -- 1.2px at
-   12px, 1.7px at 17px -- and one weight at every size, with no per-size
-   tuning. A current icon is 3 (an eighth). Rules that set a stroke on an
-   icon set it in those units. */
+/* The stroke scales with the icon: 2.4 in Lucide's 24-unit box is a tenth of it, one weight at every size. Rules
+   that set a stroke on an icon set it in those units. */
 svg.lucide { stroke-width: 2.4; }
 
 
@@ -56,7 +48,7 @@ svg.lucide { stroke-width: 2.4; }
 
 [data-transcript-visibility="hidden"] { content-visibility: hidden; }
 /* A long run of hidden blocks far above the reader, out of layout: the run's measured height stands in for it as
-   the answer's top padding (transcript-visibility.ts, collapseAbove). Important: a block's own display rule is more
+   the answer's top padding (collapseAbove). Important: a block's own display rule is more
    specific. */
 [data-transcript-visibility="collapsed"] { display: none !important; }
 
@@ -93,12 +85,10 @@ svg.lucide { stroke-width: 2.4; }
 }
 
 
-/* The phone's overrides of the rules above: what differs on a phone. */
 @media (--conduit-phone-layout) {
 .markdown-skeleton { min-height: 5em; }
 }
 
-/* Native fallback for touch, forced colours, and browsers without popovers. */
 :where(.dark) ::-webkit-scrollbar { width: var(--space-md) !important; height: var(--space-md) !important; }
 :where(.dark) ::-webkit-scrollbar-track, :where(.dark) ::-webkit-scrollbar-corner { background: transparent !important; }
 :where(.dark) ::-webkit-scrollbar-button { display: none !important; width: 0 !important; height: 0 !important; }
@@ -139,31 +129,20 @@ svg.lucide { stroke-width: 2.4; }
   }
 }
 
-/* The first open (main.tsx): until the route is ready and laid out only the
-   frame shows, composer included; then the composer is simply there and every
-   other region fades in around it, once. The last selector takes, inside each
-   pane (pane A and those beside it), each outermost part that does not hold
-   the composer. */
 /* Hidden rather than transparent: the composer has an opacity transition of
    its own, for the question takeover, that would fade it back in. */
 :root[data-arrival="waiting"] :is(.ui-composer-slot, .ui-phone-composer) { visibility: hidden; }
-/* Until then index.html's launch screen stays over everything -- the frame
-   and the Conduit mark, as the Android and PWA splashes show -- and fades as
-   the regions arrive, rather than an empty pane showing in between. */
+/* index.html's launch screen stays over everything and fades as the regions arrive, rather than an empty pane
+   showing in between. */
 :root[data-arrival="arriving"] .launch-mark { animation: ui-leave var(--duration-quick) var(--ease-leave) forwards; }
 @keyframes ui-arrive { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ui-leave { to { opacity: 0; } }
 
-/* Sending from a dashboard (main.tsx): the main pane but its composer
-   leaves, then the chat's arrives around the composer as it travels. */
 /* The fade rules themselves are in `motion-rules.ts`: present only
    while an arrival or route motion runs, since their :has() tax every DOM
    change beneath the panes for as long as they exist. */
 
-/* Where focus is held (main.tsx marks the top-level region): a line along
-   its bottom edge, fading out at the ends so it sits inside any corner. The
-   regions' bottoms line up, so it reads as one baseline with the held region
-   lit. Arriving from the keyboard, region-cue.ts draws the line out. */
+/* The regions' bottoms line up, so the held region's line reads as one baseline with it lit. */
 [data-region]::after {
   content: "";
   position: absolute;
@@ -188,7 +167,6 @@ svg.lucide { stroke-width: 2.4; }
 /* Over the panes, or switching layer, the dock is its surface, not its room in the row. */
 :is(.ui-dock[data-overlay], .ui-dock[data-layer-switch])::after { left: auto; width: calc(var(--workspace-shell-width) - 2 * var(--space-2xl)); }
 .ui-dock[data-overlay]::after { right: calc(var(--space-md) + var(--space-2xl)); }
-/* Arriving from the keyboard (region-cue.ts): the held line draws out from its middle. Nothing else. */
 [data-region][data-arriving]::after { animation: region-line-draw var(--duration-gentle) var(--ease-arrive); }
 @keyframes region-line-draw { from { transform: scaleX(0.15); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { [data-region][data-arriving]::after { animation: none; } }
@@ -202,19 +180,17 @@ svg.lucide { stroke-width: 2.4; }
 
 
 
-/* The file viewer takes focus for its keys: never a ring (DESIGN.md, Interaction). */
+/* The file viewer takes focus for its keys: never a ring. */
 
 .file-viewer-surface:focus { outline: none; }
 
-/* The jbot chat (dashboard/jbot-room.tsx): its messages are all drawn (no transcript-visibility windowing), so the
-   rows the viewport does not reach are skipped from layout and paint, their last size kept; a resize of the dock or a
-   pane beside it then lays out what is on screen, not every message ever said. */
-/* Only a row drawn once (data-drawn, JbotMessages): one never drawn has no size kept, so skipped it shows for a frame
+/* The jbot chat's messages are all drawn (no transcript-visibility windowing), so rows off screen are skipped from
+   layout and paint, or a resize would lay out every message ever said. */
+/* Only a row drawn once (data-drawn): one never drawn has no size kept, so skipped it shows for a frame
    as an empty box of the placeholder size -- a new row at the foot, or an old one first skipped as rows come in. */
 [data-jbot-room] .ui-transcript > .ui-transcript-row[data-drawn] { content-visibility: auto; }
 /* In jbot's chat the orb is not hung in the gutter: its left edge is the transcript's (and the composer's), the
-   trace's lines beside it. So it is drawn on a phone too, where a thread's has no gutter to hang in and is left out
-   (trace.css). */
+   trace's lines beside it. So it is drawn on a phone too, where a thread's has no gutter to hang in and is left out. */
 [data-jbot-room] .ui-trace[data-orb] { padding-inline-start: calc(var(--icon-xl) + var(--row-gap)); }
 /* One left edge at every width: nothing hangs in the gutter (an agent's mark) and no turn steps in for an orb, so the
    orb, the marks and the messages start where the composer does however the pane is sized. */
@@ -225,7 +201,6 @@ svg.lucide { stroke-width: 2.4; }
    sits by its time at the right, as on the composer's rider, not in a column at the middle. */
 .ui-transcript-row[data-agent] .ui-agent-row[data-line] .ui-row-title { flex: 1 1 auto; }
 .ui-transcript-row[data-agent] .ui-agent-row[data-line] .ui-row-context { flex: 0 1 auto; max-width: 50%; margin-left: auto; text-align: right; }
-/* jbot's reply arriving fades in whole at the pace a thread's answer words fade in at. */
 [data-jbot-room] .ui-transcript > .ui-transcript-row[data-entering] { animation-duration: var(--duration-gentle); }
 [data-jbot-room] .ui-transcript > .ui-transcript-row {
   /* Skipping paint clips a row to its box, so the box reaches past the column (its content where it was) by what the
@@ -233,7 +208,7 @@ svg.lucide { stroke-width: 2.4; }
   --row-reach: var(--space-md);
   margin-inline: calc(-1 * var(--row-reach)); padding-inline: var(--row-reach); }
 /* What reaches past the column never makes the log scroll sideways: a phone's column is the screen's width, and a
-   scroller that scrolls sideways keeps the edge swipe from opening the sidebar (edge-swipe.ts, swipeBlocked). */
+   scroller that scrolls sideways keeps the edge swipe from opening the sidebar (swipeBlocked). */
 [data-jbot-room] .ui-chat-viewport { overflow-x: hidden; }
 /* The dock writes its widths (--workspace-shell-width, --workspace-panel-width, --dock-document-width) on its root at
    every frame of a resize; they are read only by the dock and its own parts. Restated here as constants, the change

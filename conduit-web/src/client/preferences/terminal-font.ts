@@ -1,6 +1,3 @@
-/* The terminal's typeface (Settings → Appearance), per device. Meslo only for
-   now; when the app moves to components v2, this is the picker behind its
-   --font-terminal (gallery Type · Faces offers Paper Mono, Inconsolata, system). */
 export type TerminalFont = "meslo";
 
 const KEY = "conduit:terminal-font";

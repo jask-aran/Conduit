@@ -3,7 +3,7 @@ import { Reading, ReadingStat, ReadingStats, SettingLine, SettingValue, Group, N
 import { api } from "../api/client";
 import { createSingleFlight } from "../state/single-flight";
 
-/** GET /v0/server/machine (machine-readout.js): rates are since the previous reading; null where the platform cannot say. */
+/** Rates are since the previous reading; null where the platform cannot say. */
 type Machine = {
   host: string; platform: string; uptime: number; cores: number; load: number[] | null; cpu: number | null;
   memory: { total: number; used: number }; disk: { total: number; used: number; path: string } | null;
@@ -16,10 +16,7 @@ const rate = (value: number) => `${bytes(value)}/s`;
 const percent = (value: number) => `${Math.round(value * 100)}%`;
 const days = (seconds: number) => seconds >= 86400 ? `${Math.floor(seconds / 86400)}d` : seconds >= 3600 ? `${Math.floor(seconds / 3600)}h` : `${Math.floor(seconds / 60)}m`;
 
-/**
- * The server machine's readout, inside its folder on Devices: CPU, memory, disk and network as the Reading's tiles,
- * then the busiest processes as data lines. Read every few seconds while `open`, never while folded.
- */
+/** Read every few seconds while `open`, never while folded. */
 export function MachineReadout(props: { open: boolean; url?: string; title?: string }) {
   const [machine, setMachine] = createSignal<Machine | null>(null);
   const [error, setError] = createSignal("");

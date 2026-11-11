@@ -1,10 +1,4 @@
-/*
- * The gallery never opens the real microphone. getUserMedia hands back a
- * synthetic voice -- a tone whose loudness comes and goes like speech -- so the mic
- * button's listening state, waveform and glow all run with nothing recorded.
- * Every second take is silence -- a flat line, and no words (fake-socket.ts
- * reads silentTake) -- so a stop with nothing said is seen too.
- */
+// Every second take is silence (fake-socket.ts reads silentTake), so a stop with nothing said is seen too.
 let takes = 0;
 export let silentTake = false;
 export function fakeMicrophone() {

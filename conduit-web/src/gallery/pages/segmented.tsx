@@ -1,4 +1,3 @@
-// Props: label, value, options (value, label, icon, count, title), onChange, size (sm or omitted), pill, icons, arrows, disabled, id.
 import { Icons, SettingLine } from "@/components/ui";
 import { createSignal } from "solid-js";
 import { Segmented } from "@/components/ui";

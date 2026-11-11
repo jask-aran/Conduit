@@ -5,11 +5,6 @@ import type { Page, Row } from "./model";
 import { CodeBlock } from "@/components/ui/code";
 import api, { type ApiComponent } from "virtual:gallery-api";
 
-/* A page's sections around its examples, in shadcn's order: Usage (an import and a short snippet, written with the
-   page) before the examples, then API (each component's props, generated from its TypeScript and doc comments by
-   scripts/gallery-api.mjs, so it never drifts) and Used in (where the app imports it, generated too). */
-
-/** Usage: the import and a short snippet, copyable. */
 export function PageUsage(props: { code: string; id?: string }) {
   const [copied, setCopied] = createSignal(false);
   const copy = () => { void navigator.clipboard?.writeText(props.code); setCopied(true); setTimeout(() => setCopied(false), 1200); };
@@ -21,8 +16,7 @@ export function PageUsage(props: { code: string; id?: string }) {
 
 const missing = (name: string): ApiComponent => ({ name, file: "", line: 0, doc: "Not found in components/ui: is it exported?", props: [], usedIn: [] });
 
-/** API: per component, its doc comment, what it extends, and a props table. A name keyed "components/<file>#<Name>"
- *  is the behaviour adapter of that name, where a library piece shares it. */
+/** A name keyed "components/<file>#<Name>" is the behaviour adapter of that name, where a library piece shares it. */
 export function PageApi(props: { names: string[] }) {
   const entries = () => props.names.map((name) => api.components[name] ?? missing(name));
   return <section class="g-page-section">
@@ -46,7 +40,6 @@ export function PageApi(props: { names: string[] }) {
   </section>;
 }
 
-/** Used in: the app files that import any of the page's components. */
 export function PageUsedIn(props: { names: string[] }) {
   const files = () => [...new Set(props.names.flatMap((name) => api.components[name]?.usedIn ?? []))].sort();
   return <section class="g-page-section">
@@ -55,14 +48,10 @@ export function PageUsedIn(props: { names: string[] }) {
   </section>;
 }
 
-/* The template: one function draws every page, so every page has the same sections, in the same order, under the
-   same headings, each in its one presentation. */
-
 const SECTIONS = ["Preview", "Usage", "Anatomy", "Examples", "Motion", "Tokens", "API", "Used in"] as const;
 type Section = typeof SECTIONS[number];
 const anchor = (page: Page, section: Section) => `${page.title}-${section}`.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
-/** The sections a page has, in the template's order. */
 const present = (page: Page): Section[] => SECTIONS.filter((section) => ({
   Preview: page.preview, Usage: page.usage, Anatomy: page.anatomy, Examples: page.examples?.length, Motion: page.motion?.length,
   Tokens: page.tokens?.length, API: page.api?.length, "Used in": page.api?.length,
@@ -72,9 +61,7 @@ function Heading(props: { page: Page; section: Section; note?: string }) {
   return <h3 class="g-heading" id={anchor(props.page, props.section)}>{props.section}{props.note && <small> {props.note}</small>}</h3>;
 }
 
-/** Examples and Motion: one list of rows. Each row: its name, note and code, then its form on each surface it sits
- *  on (Frame, Ground, Frost at the desktop's density; Phone where it differs there), each cell labelled. A cell keeps
- *  its content's width and the cells wrap under one another when the row runs out of room, so nothing squeezes. */
+/** A cell keeps its content's width and the cells wrap when the row runs out of room, so nothing squeezes. */
 function Rows(props: { rows: Row[] }) {
   const columns = (row: Row): ("frame" | "ground" | "frost" | "phone")[] => [
     ...(row.phone === "only" ? [] : row.surfaces ?? ["ground", "frost"] as const),
@@ -99,7 +86,6 @@ const runs = <T extends { density?: boolean }>(groups: T[]) => groups.reduce<T[]
   return all;
 }, []);
 
-/** A page, drawn to the template. */
 export function PageView(props: { page: Page }) {
   const page = () => props.page;
   const has = (section: Section) => present(page()).includes(section);

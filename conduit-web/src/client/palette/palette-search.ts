@@ -1,14 +1,6 @@
 /**
- * Palette ranking (VS Code–style priorities):
- * 1. Exact / prefix label matches beat fuzzy noise
- * 2. Word-boundary and contiguous substring beats scattered fuzzy
- * 3. Matches only in keywords/id score lower and need higher quality
- * 4. Weak fuzzy hits are dropped (a permissive default filter is very noisy)
- *
- * When searching, results are a flat score-sorted list so models and dynamic
- * sources are not trapped under static command groups.
- *
- * Ported verbatim from the React app; framework-agnostic. Keep it pure.
+ * When searching, results are a flat score-sorted list so models and dynamic sources are not trapped under static
+ * command groups. Weak fuzzy hits are dropped: a permissive filter is very noisy.
  */
 
 const SCORE_THRESHOLD = 0.42;
@@ -56,10 +48,7 @@ function contiguousFuzzy(haystack: string, needle: string): number {
   return Math.min(1, normalized * 0.85 + density * 0.15);
 }
 
-/**
- * Score one searchable row. `label` is primary; `haystack` is secondary text
- * (spec, id, keywords joined). Returns 0 to hide.
- */
+/** `haystack` is secondary text (spec, id, keywords joined). Returns 0 to hide. */
 export function scorePaletteMatch({ label, haystack = "", keywords = [], query }: {
   label?: string;
   haystack?: string;
@@ -99,7 +88,6 @@ export function scorePaletteMatch({ label, haystack = "", keywords = [], query }
     return Math.min(KEYWORD_CAP, secondaryFuzzy * 0.75);
   }
 
-  // Multi-word query: require every token to hit label or secondary.
   const parts = q.split(/\s+/).filter(Boolean);
   if (parts.length > 1) {
     const blob = `${labelNorm} ${allSecondary}`;
@@ -159,9 +147,7 @@ export interface RankedRow<C extends MatchableCommand = MatchableCommand, M exte
   group: string;
 }
 
-/**
- * Flat ranked rows for a search query. Empty query returns null (browse mode).
- */
+/** Empty query returns null (browse mode). */
 export function rankPaletteResults<C extends MatchableCommand, M extends MatchableModel>({ commands, models, query, currentModel }: {
   commands: C[];
   models?: M[];

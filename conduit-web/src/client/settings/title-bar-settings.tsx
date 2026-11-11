@@ -7,7 +7,6 @@ import { Columns, Group } from "@/components/ui/group";
 import { Note } from "@/components/ui/state";
 import { createShellSettings } from "./desktop-settings";
 
-/** The desktop app's title bar (Settings › Appearance): which one, and what Conduit's own shows. Nothing elsewhere. */
 export function TitleBarSettings() {
   if (!desktopShell) return null;
   const { settings, error, update } = createShellSettings();
@@ -25,7 +24,6 @@ export function TitleBarSettings() {
           options={[{ value: "native", label: "Windows" }, { value: "none", label: "None" }, { value: "conduit", label: "Conduit" }] satisfies { value: DesktopTitleBar; label: string }[]}
           onChange={(titleBar) => update({ titleBar: titleBar as DesktopTitleBar })} />
       </SettingLine>
-      {/* Conduit's bar: each of its items can go, while what to keep is decided in use. */}
       <Show when={(current().titleBar ?? "conduit") === "conduit"}>
         <Columns>{items(TITLE_BAR_ITEMS.slice(0, half))}{items(TITLE_BAR_ITEMS.slice(half))}</Columns>
       </Show>

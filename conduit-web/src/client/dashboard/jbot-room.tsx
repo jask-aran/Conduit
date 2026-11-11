@@ -9,32 +9,19 @@ import { dropLatestScroller, setLatestScroller, tellLatestAway } from "../chat/l
 import { SplitEmpty } from "./primitives/split";
 import type { TurnTraceData } from "../turn-rows";
 
-/** How long after the jbot chat opens its panel is built, past the dock's slide. */
 const PANEL_BUILD_DELAY_MS = 1500;
 
-/**
- * jbot's room: laid out as a thread is (its scroller, its composer floating over the foot), because it is one: what
- * the person says is the home thread's own message, one for one. Only jbot's side reads differently, as the
- * projection of the thread it is (reports, rooms, messages). jbot's panel (jbot-status.tsx) is beside it or over it.
- */
 export function JbotRoom(props: {
   header: (title: string) => JSX.Element;
-  /** false while its composer is still coming (its home thread loading): the chat is held unseen until it is there. */
+  /** The chat is held unseen until its composer is there. */
   composerReady?: boolean;
-  /** jbot's panel (JbotPanel): beside the chat where there is room; else on a phone a sheet risen over the chat, on a
-   *  desktop faded in just above the composer, the transcript left where it is. */
   panel: (state: { tab: JbotTab; onTab: (tab: JbotTab) => void; done: () => void; needsMount?: () => HTMLElement | undefined }) => JSX.Element;
-  /** The panel's ways on (JbotWays), in its head; done: the panel put away first, where it is over the chat. */
   panelActions?: (done: () => void) => JSX.Element;
   composer?: JSX.Element;
   working?: boolean;
-  /** The home thread's turn while it runs, as its Folded trace (JbotMessages live). */
   live?: TurnTraceData | null;
-  /** What the person just sent in the home thread (JbotMessages sent). */
   sent?: { text: string; at: string } | null;
   threadChanged?: unknown;
-  /** On a desktop: "phone", a phone's header (its pill, its actions frost over the chat) and column; "narrow", the
-   *  column alone (jbot's dock tool, under the tool's header). */
   presentation?: "phone" | "narrow";
 }) {
   const log = useJbotMessages(() => props.threadChanged);
@@ -42,7 +29,6 @@ export function JbotRoom(props: {
   let root: HTMLDivElement | undefined;
   let viewport: HTMLDivElement | undefined;
   let dock: HTMLDivElement | undefined;
-  // Beside the chat it stays as the person left it (shown at first); over the chat it opens only when asked.
   const besideKey = "conduit.jbot.panel-beside";
   const [wide, setWide] = createSignal(false);
   const [beside, setBeside] = createSignal((() => { try { return localStorage.getItem(besideKey) !== "0"; } catch { return true; } })());
@@ -53,7 +39,6 @@ export function JbotRoom(props: {
   const setTab = (next: JbotTab) => { setTabShown(next); try { localStorage.setItem(tabKey, next); } catch { /* a per-viewer convenience */ } };
   // A desktop never raises a sheet (a thumb's): without room beside, the panel fades in just above the composer.
   const desktop = !isMobileLayout();
-  // How far above the chat's foot the composer's top is: where the panel (and Scroll to latest) sit.
   const [above, setAbove] = createSignal<number>();
   // The panel is built after the dock's slide (or when it is first asked for), not with the chat: the jbot chat opens
   // in the dock as it slides open, and the hidden panel's groups cost the slide its frames.
@@ -68,26 +53,20 @@ export function JbotRoom(props: {
     setBeside(next);
     try { localStorage.setItem(besideKey, next ? "1" : "0"); } catch { /* a per-viewer convenience */ }
   };
-  // What waits on the person, apart from the panel wherever the panel is over the chat: on a desktop a card of its own
-  // over the Ledge, while there is any; on a phone a sheet of its own, opened by the count beside jbot's pill.
   const [needsMount, setNeedsMount] = createSignal<HTMLElement>();
   const mountNeeds = (element: HTMLElement) => { setNeedsMount(element); onCleanup(() => { if (needsMount() === element) setNeedsMount(undefined); }); };
   const [needsOpen, setNeedsOpen] = createSignal(false);
   createEffect(() => { if (!agentNeeds() || wide()) setNeedsOpen(false); });
-  // Asked for from outside (the rail's jbot with its count): beside the chat, the panel, which holds it; else Needs you.
   createEffect(() => {
     if (!needsWanted() || !agentNeeds()) return;
     takeNeedsWanted();
     if (wide()) { if (!beside()) toggle(); } else { setOver(false); setNeedsOpen(true); }
   });
   const needs = { count: () => agentNeeds(), open: needsOpen, toggle: () => { setOver(false); setNeedsOpen(!needsOpen()); } };
-  // On a desktop Needs you is a Ledge of its own, stacked above the panel's: shown with the panel (unless put away while
-  // it is open) or alone.
   const [needsShut, setNeedsShut] = createSignal(false);
   createEffect(() => { if (!over()) setNeedsShut(false); });
   const needsShown = () => needsOpen() || (over() && !needsShut());
   const shutNeeds = () => { setNeedsOpen(false); if (over()) setNeedsShut(true); };
-  // Its head: Dismiss all, for the notices that only tell.
   const [dismissing, setDismissing] = createSignal(false);
   const needsActions = () => <Show when={dismissableNotices().length}>
     <Button size="sm" variant="ghost" disabled={dismissing()} onClick={() => { setDismissing(true); void dismissNotices(dismissableNotices().flatMap((row) => row.ids)).finally(() => setDismissing(false)); }}>Dismiss all</Button>
@@ -97,11 +76,7 @@ export function JbotRoom(props: {
     const tick = window.setInterval(() => { if (document.visibilityState === "visible") void refreshAgent(); }, 10_000);
     onCleanup(() => window.clearInterval(tick));
   });
-  // As a thread's transcript, with the same follow (the library's createTranscriptFollow): held at the latest while
-  // the person is there, left where they scrolled to otherwise, the glide to the latest, the keyboard's travel, and
-  // clear of the composer by its measured height.
   const follow = createTranscriptFollow({ viewport: () => viewport });
-  // Scrolled back from the latest: the transcript's own Scroll to latest, riding just above the composer.
   const away = follow.latestAway;
   let latest: HTMLButtonElement | undefined;
   const anchorLatest = () => {
@@ -113,8 +88,6 @@ export function JbotRoom(props: {
     if (bottom !== above()) setAbove(bottom);
   };
   const jumpToLatest = () => follow.followLatest();
-  // A phone's composer has Scroll to latest in its own row (the pill, latest-away.ts), as in a thread: the room tells it
-  // when the latest is out of view and takes its press, and its own floating one stays hidden there.
   if (!desktop) {
     setLatestScroller(jumpToLatest);
     createEffect(() => tellLatestAway(jumpToLatest, away()));
@@ -151,8 +124,7 @@ export function JbotRoom(props: {
             options={JBOT_TABS.map((item) => ({ value: item.value, label: item.label, title: item.label, icon: marks() ? item.icon() : undefined }))} /><JbotDial /></>}
           panel={<Show when={built() || open() || needsOpen()}>{props.panel({ get tab() { return tab(); }, onTab: setTab, done: () => setOver(false),
             get needsMount() { return wide() ? undefined : needsMount; } })}</Show>}>
-        {/* Hidden until what is on screen is drawn, then faded in, as every chat opens (ChatView opening). */}
-        {/* And with its composer: a page drawn without it moved up as it came (the composer is its home thread's). */}
+        {/* With its composer: a page drawn without it moves up as it comes. */}
         <ChatView aria-label={`Messages with ${name()}`} opening={!log.loaded() || props.composerReady === false}>
           <ChatScroller ref={(element) => { root = element; }} viewportRef={(element) => { viewport = element; }} columnRef={attachFollow}
             over={<RiderButton ref={(element: HTMLButtonElement) => { latest = element; }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"

@@ -72,13 +72,9 @@ export function ComputerDashboard(props: {
   onCloneRepository?: () => void;
   /** Choosing a folder only: a device's, where Conduit neither creates folders nor clones (its grants are the device's). */
   selectOnly?: boolean;
-  /** A client's environment page: its files over the node (no harnesses, terminals here or source control yet). */
   device?: boolean;
-  /** The hub's page: its harnesses as tiles above its files, each opening its own page. */
   onOpenHarness?: (id: string) => void;
-  /** Leads the toolbar: which machine is browsed, and the menu of the others (New workspace). */
   machine?: JSX.Element;
-  /** In place of the folder: what the dialog is waiting on instead (the system's picker on this computer). */
   waiting?: JSX.Element;
 }) {
   const [address, setAddress] = createSignal("");

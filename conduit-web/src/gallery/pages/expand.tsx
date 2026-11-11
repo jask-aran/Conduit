@@ -1,10 +1,8 @@
-// Props: open, class, children. Button is the disclosure host; its forms are documented on the Button page.
 import { Show } from "solid-js";
 import { Reading, ReadingTotal } from "@/components/ui";
 import { createSignal, For } from "solid-js";
 import { Expand, Button } from "@/components/ui";
 import { row, token, type Page } from "../model";
-// A folder's row and its rows, toggled: the sidebar's NavFolder and chat search's folders slide the same way.
 function ExpandDemo() {
   const [open, setOpen] = createSignal(true);
   return <div class="g-expand" data-surface="frame">

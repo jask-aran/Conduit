@@ -10,22 +10,6 @@ import { selectedUiScale } from "../preferences/ui-scale";
 import { captureScreen, cropAreas, endCapture, type Capture } from "./capture";
 import { describe, nameOf, pieceRoot, piecesWithin, sourceOf, under } from "./pieces";
 
-/*
- * The UI feedback tool (development clients): mark up Conduit's own interface and send it to whoever works on it.
- * Opening it tells the hub "this moment" (the mark), so the hub keeps what it knew then; each selection locks onto a
- * library piece (or several, as a group) and takes a comment; Send writes one item on the hub
- * (<data>/feedback/<id>, server/feedback.js) that `node scripts/conduit-feedback.mjs wait` hands to an agent.
- *
- * Select: a press chooses the piece under the pointer; a drag gathers every piece inside it as one group; Shift and a
- * press adds a piece to the open selection or takes it out; Up and Down widen to the piece around and back.
- *
- * Pen, Arrow, Box: a drag draws on the page. A drawing is a selection too: it has a number and a comment, names the
- * pieces it is about (an arrow's head, a pen line's path, a box's inside), moves with them, and is in the screenshot as
- * drawn. V, P, A and B pick the pointer.
- *
- * Handing over: the bar names a session that is waiting for feedback (`conduit-feedback wait`), and Send hands the
- * item to it, so the agent the person is working with starts on it with nothing typed. Switched off, the item is held.
- */
 /** `reach`: how far a drag went past what it locked onto, each side (px); the dragged area is the pieces' box grown by it. */
 type Selection = { id: number; elements: Element[]; comment: string; reach?: FeedbackBox; drawing?: Drawing };
 /** `from`: where its pieces' box was when it was drawn, so it can follow them. */
@@ -35,16 +19,12 @@ const DRAWN: Record<FeedbackDrawingKind, string> = { pen: "Pen", arrow: "Arrow",
 /** A pen's line keeps a point each time the pointer has gone this far (px); an item is sent at most this many. */
 const PEN_STEP = 2;
 const SENT_POINTS = 64;
-/** The sessions waiting are asked for this often (ms) while the tool is open. */
 const WAITING_EVERY_MS = 3000;
 const HAND_KEY = "conduit.feedback.hand";
 type Waiter = { id: string; name: string };
 type Mode = "select" | "use";
-/** A press that moves further than this (px) is a drag. */
 const DRAG_SLOP = 5;
-/** A selection's own picture shows this much (px) around it. */
 const CROP_MARGIN = 24;
-/** The note sits this far (px) from what it marks, and from the window's edge. */
 const NOTE_GAP = 10;
 
 const boxOf = (elements: Element[]): FeedbackBox => {
@@ -59,18 +39,14 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
   const [openId, setOpenId] = createSignal<number | null>(null);
   const [cursor, setCursor] = createSignal<Element | null>(null);
   const [marquee, setMarquee] = createSignal<FeedbackBox | null>(null);
-  // What a drag does in select mode: gather pieces, or draw.
   const [pointerTool, setPointerTool] = createSignal<"select" | FeedbackDrawingKind>("select");
   const [stroke, setStroke] = createSignal<{ kind: FeedbackDrawingKind; points: FeedbackPoint[] } | null>(null);
-  // What the drag would lock onto if let go now, shown as it is dragged.
   const aimed = createMemo(() => { const drag = marquee(); return drag ? piecesWithin(drag) : []; });
   const [screenshot, setScreenshot] = createSignal(true);
-  // Handed to a waiting session unless switched off; the choice is kept on this client.
   const [hand, setHand] = createSignal((() => { try { return localStorage.getItem(HAND_KEY) !== "off"; } catch { return true; } })());
   const keepHand = (on: boolean) => { setHand(on); try { localStorage.setItem(HAND_KEY, on ? "on" : "off"); } catch { /* this session only */ } };
   const [waiters, { refetch: askWaiters }] = createResource(() => api<{ waiting: Waiter[] }>("/v0/feedback/waiting").then((answer) => answer.waiting, () => [] as Waiter[]));
   const [agentId, setAgentId] = createSignal<string | null>(null);
-  /** The session the item goes to: the one chosen while it still waits, else the one that began waiting last. */
   const agent = () => waiters.latest?.find((waiter) => waiter.id === agentId()) ?? waiters.latest?.[0] ?? null;
   const nextAgent = () => { const all = waiters.latest ?? []; setAgentId(all[(all.findIndex((waiter) => waiter.id === agent()?.id) + 1) % all.length]?.id ?? null); };
   const [sending, setSending] = createSignal(false);
@@ -83,7 +59,6 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
   let nextId = 1;
   let press: { x: number; y: number; shift: boolean } | null = null;
   let pointer = { x: -1, y: -1 };
-  // How many pieces outward from the one under the pointer the cursor sits (Up and Down).
   let widen = 0;
 
   // The mark: the hub keeps what it knows now, under an id the item is sent to.
@@ -94,14 +69,12 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
   const own = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest(".ui-feedback-note, .ui-feedback-bar, .ui-feedback-tag[data-press]"));
   const chosenBy = (element: Element) => selections.find((selection) => !selection.drawing && selection.elements.includes(element)) ?? null;
   const box = (elements: Element[]) => { frame(); return boxOf(elements); };
-  /** How far a drawing's pieces have moved since it was drawn (a scroll, a resize); nothing once they have left the page. */
   const shiftOf = (selection: Selection) => {
     frame();
     if (!selection.drawing || !selection.elements.every((element) => element.isConnected)) return { x: 0, y: 0 };
     const now = boxOf(selection.elements);
     return { x: now.left - selection.drawing.from.left, y: now.top - selection.drawing.from.top };
   };
-  /** Where a selection is on the page: its drawing as it sits now, or its pieces. */
   const extent = (selection: Selection): FeedbackBox => {
     if (!selection.drawing) return boxOf(selection.elements);
     const drawn = drawingBox(selection.drawing.kind === "pen" ? selection.drawing.points : [selection.drawing.points[0]!, selection.drawing.points[selection.drawing.points.length - 1]!]), shift = shiftOf(selection);
@@ -109,7 +82,6 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
   };
   const titleOf = (selection: Selection) => selection.drawing ? `${DRAWN[selection.drawing.kind]} over ${nameOf(selection.elements)}` : nameOf(selection.elements);
 
-  /** The piece under the pointer, `widen` pieces outward. */
   const aim = () => {
     let target = pieceRoot(under(pointer.x, pointer.y));
     for (let step = 0; target && step < widen; step++) {
@@ -128,11 +100,10 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
     setSelections(selections.length, { id, elements, comment: "", reach });
     openNote(id);
   };
-  /** A finished drawing: a selection of the pieces under it. One too small to see is a slip of the hand. */
+  /** A drawing too small to see is a slip of the hand. */
   const draw = (kind: FeedbackDrawingKind, points: FeedbackPoint[]) => {
     const around = drawingBox(points);
     if (Math.hypot(around.width, around.height) <= DRAG_SLOP) return;
-    // What it is about: the piece an arrow's head is on, the pieces a pen line runs over, what a box would gather.
     const head = points[points.length - 1]!;
     const over = kind === "arrow" ? [pieceRoot(under(head[0], head[1]))] : kind === "pen" ? points.map((point) => pieceRoot(under(point[0], point[1]))) : piecesWithin(around);
     // A piece that holds another of them (the list a line's rows are in) is only where the line passed between them.
@@ -143,7 +114,6 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
     openNote(id);
   };
   const remove = (id: number) => { setSelections((all) => all.filter((selection) => selection.id !== id)); if (openId() === id) setOpenId(null); };
-  /** Shift: a piece joins the open selection, or leaves it (the last one never does). */
   const toggleIn = (selection: Selection, element: Element) => setSelections((candidate) => candidate.id === selection.id, "elements", (elements) =>
     elements.includes(element) ? (elements.length > 1 ? elements.filter((kept) => kept !== element) : elements) : [...elements, element]);
 
@@ -203,7 +173,6 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
     else if (event.type === "pointerup") onPointerUp(event as PointerEvent);
     else if (event.type === "wheel") scrollUnder(event as WheelEvent);
   };
-  /** The wheel still scrolls what is under the layer. */
   const scrollUnder = (event: WheelEvent) => {
     for (let node = under(event.clientX, event.clientY); node; node = node.parentElement) {
       const style = getComputedStyle(node);
@@ -225,7 +194,6 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
       return;
     }
     const handled = () => { event.preventDefault(); event.stopImmediatePropagation(); };
-    // Undo: the last selection made goes.
     if (select() && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "z" && selections.length) { handled(); return remove(selections[selections.length - 1]!.id); }
     if (!select() || event.ctrlKey || event.metaKey || event.altKey) return;
     const picked = DRAW_KEYS[event.key.toLowerCase()];
@@ -246,7 +214,6 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
       setFrame((value) => value + 1);
       const selection = open(), note = layer?.querySelector<HTMLElement>(".ui-feedback-note");
       if (selection && note) {
-        // Beside what it marks: right of it, else left, else under or over it, kept inside the window.
         const marks = extent(selection), width = note.offsetWidth, height = note.offsetHeight;
         const fits = (left: number) => left >= NOTE_GAP && left + width <= innerWidth - NOTE_GAP;
         const right = marks.left + marks.width + NOTE_GAP, leftSide = marks.left - width - NOTE_GAP;
@@ -267,7 +234,6 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
     window.removeEventListener("keydown", onKeyDown, { capture: true });
     for (const type of ["focusin", "focusout"] as const) window.removeEventListener(type, quietFocus, { capture: true });
     endCapture();
-    // A mark nothing was sent to is let go.
     if (!sent) void marked.then((mark) => mark && api(`/v0/feedback/marks/${mark.id}`, { method: "DELETE" }).catch(() => {}));
   });
   let sent = false;
@@ -290,11 +256,9 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
       const comments = selections.map((selection, index) => {
         const members = selection.elements.map(describe);
         const around = extent(selection), drawing = selection.drawing, shift = shiftOf(selection);
-        // The area its own picture shows: what was dragged round, or the piece or drawing with a margin; never less than what is marked.
         const reach = selection.reach ?? { left: CROP_MARGIN, top: CROP_MARGIN, width: 2 * CROP_MARGIN, height: 2 * CROP_MARGIN };
         const left = Math.max(0, Math.min(around.left, around.left - reach.left)), top = Math.max(0, Math.min(around.top, around.top - reach.top));
         const right = Math.min(innerWidth, Math.max(around.left + around.width, around.left - reach.left + around.width + reach.width)), bottom = Math.min(innerHeight, Math.max(around.top + around.height, around.top - reach.top + around.height + reach.height));
-        // A drawing as it sits now: every point of a short line, an even sample of a long one.
         const every = drawing ? Math.max(1, Math.ceil(drawing.points.length / SENT_POINTS)) : 1;
         const sent = drawing && { kind: drawing.kind, points: drawing.points.filter((_, at) => at % every === 0 || at === drawing.points.length - 1).map((point) => [Math.round(point[0] + shift.x), Math.round(point[1] + shift.y)]) };
         return { n: index + 1, ...(sent ? { drawing: sent } : {}), dragged: Boolean(selection.reach), area: { left: Math.round(left), top: Math.round(top), width: Math.round(right - left), height: Math.round(bottom - top) }, comment: selection.comment.trim(), kind: members.length > 1 ? "group" as const : "component" as const, name: titleOf(selection),

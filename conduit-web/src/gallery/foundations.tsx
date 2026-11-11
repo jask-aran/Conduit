@@ -13,16 +13,10 @@ import { row, token, type Page, type Part } from "./model";
 
 import "katex/dist/katex.min.css";
 
-/*
- * Foundations: what every family is built from -- type, colour, space,
- * radius, icons. Nothing here restates a value: each sample is drawn by the
- * library, and the readout beside it is read from the page, so a token
- * changed in foundations.css or in Tune CSS shows here as it does everywhere.
- */
+// Nothing here restates a value: each sample is drawn by the library and its readout is read from the page.
 
 type Read = (scope: HTMLElement) => [string, string][];
 
-/** The readout: re-read when the cell flips density or the tuned CSS changes. */
 function Readout(props: { read: Read }) {
   const [rows, setRows] = createSignal<[string, string][]>([]);
   let el!: HTMLDListElement;
@@ -38,17 +32,11 @@ function Readout(props: { read: Read }) {
   return <dl ref={el} class="g-tokens"><For each={rows()}>{([name, value]) => <><dt>{name}</dt><dd>{value}</dd></>}</For></dl>;
 }
 
-/** The face a role resolves to: the first family of its stack (the one drawn once it loads). */
 const face = (family: string) => family.split(",")[0]!.trim().replace(/^"|"$/g, "");
 const Ground = (props: { children: JSX.Element }) => <div class="g-surface" data-surface="ground"><small>ground</small>{props.children}</div>;
 
-/*
- * The token table: one row per token, its sample and value at desktop beside phone,
- * read off the page (a calc resolved to what it comes to), with what it is for.
- */
 interface TokenRow { name: string; use: string; read: (cell: HTMLElement) => string; sample?: () => JSX.Element }
 interface TokenGroup { title: string; rows: TokenRow[] }
-/** A length token resolved in the cell's density. */
 const length = (name: string) => (cell: HTMLElement) => {
   const raw = getComputedStyle(cell).getPropertyValue(name).trim();
   if (!/calc|var/.test(raw)) return px(raw);
@@ -57,14 +45,12 @@ const length = (name: string) => (cell: HTMLElement) => {
   cell.append(el); const value = getComputedStyle(el).width; el.remove();
   return px(value);
 };
-/** A length a piece's own class sets (the composer's), resolved on a bare element with that class. */
 const classLength = (classes: string, name: string) => (cell: HTMLElement) => {
   const host = document.createElement("div"); host.className = classes; host.style.position = "absolute"; host.style.visibility = "hidden";
   const el = document.createElement("div"); el.style.width = `var(${name})`; host.append(el);
   cell.append(host); const value = getComputedStyle(el).width; host.remove();
   return px(value);
 };
-/** A two-value padding token (block, inline), each resolved in the cell's density. */
 const pad = (name: string) => (cell: HTMLElement) => {
   const el = document.createElement("div"); el.style.position = "absolute"; el.style.padding = `var(${name})`;
   cell.append(el); const style = getComputedStyle(el); const value = `${style.paddingTop} ${style.paddingLeft}`; el.remove();
@@ -155,11 +141,8 @@ const iconScene = () => <div class="g-scene-stack">
 </div>;
 
 const swatch = (name: string) => () => <i class="g-swatch-chip" style={{ background: `var(${name})` }} />;
-/** A token's value as it computes (a number, a shadow). */
 const value = (name: string) => (cell: HTMLElement) => getComputedStyle(cell).getPropertyValue(name).trim();
-/** A card standing off the page at a lift. */
 const lifted = (name: string) => () => <i class="g-lift" style={{ "box-shadow": `var(${name})` }} />;
-/** An icon drawn at a size token. */
 const glyph = (name: string) => () => <FolderIcon style={{ width: `var(${name})`, height: `var(${name})` }} />;
 const bar = (name: string) => () => <i class="g-bar-chip" style={{ width: `var(${name})` }} />;
 const corner = (name: string) => () => <Frost class="g-radius" style={{ "border-radius": `var(${name})` }} />;
@@ -181,7 +164,6 @@ const WEIGHTS: TokenGroup[] = [{ title: "Four weights", rows: [
   tok("--weight-strong", "headings and titles, buttons, values", weight("--weight-strong"), () => <span style={{ "font-weight": "var(--weight-strong)" }}>Strong</span>),
   tok("--weight-current", "where you are; a match lit while typing", weight("--weight-current"), () => <span style={{ "font-weight": "var(--weight-current)" }}>Current</span>),
 ] }];
-/** Two lines of text at a leading step, so its spacing shows. */
 const lines = (name: string) => () => <span style={{ display: "block", "line-height": `var(${name})`, "max-width": "var(--measure-2xs)" }}>Two lines of text at this leading</span>;
 const LEADING: TokenGroup[] = [{ title: "Six leading steps", rows: [
   tok("--leading-none", "one line set solid: a display title, a glyph", value("--leading-none"), lines("--leading-none")),
@@ -193,7 +175,6 @@ const LEADING: TokenGroup[] = [{ title: "Six leading steps", rows: [
 ] }, { title: "Tracking", rows: [
   tok("--label-tracking", "the section label's letter spacing, uppercase (a theme can change the label's face, case and tracking)", value("--label-tracking"), () => <span style={{ "letter-spacing": "var(--label-tracking)", "text-transform": "uppercase", "font-size": "var(--text-label)" }}>Section</span>),
 ] }];
-/** Text at an emphasis step. */
 const faded = (name: string) => () => <span style={{ opacity: `var(${name})` }}>Text</span>;
 const OPACITY: TokenGroup[] = [{ title: "Four steps down from full", rows: [
   tok("--opacity-rest", "a part quieter than its row at rest: a chevron, a detail, a mark", value("--opacity-rest"), faded("--opacity-rest")),
@@ -218,24 +199,17 @@ const COLOURS: TokenGroup[] = [
     tok("--brand-claude-code", "Claude Code brand", colour("--brand-claude-code"), swatch("--brand-claude-code")),
   ] },
 ];
-/*
- * The scale: the user's Interface size and each region's own size per density (foundations.css, Scale), set on every
- * document (the gallery's, each phone frame's at its own mount) and remembered, so the whole gallery can be checked at
- * any setting and the regions tuned against each other. Copy gives the line foundations.css keeps.
- */
 const REGIONS = [["chrome", "Chrome", "headers, panes, files, the dashboard: everything not below"], ["sidebar", "Sidebar", "the sidebar, its rail and its head"],
   ["frost", "Frost", "what floats: menus, popovers, overlays (settings, the palette), cards, toasts"], ["composer", "Composer", "the composer, its riders; the phone's composer row"],
   ["transcript", "Transcript", "what you read: messages, the answer, its traces"]] as const;
 const DENSITIES = ["desktop", "phone"] as const;
 type ScaleToken = "--ui-scale" | `--scale-${(typeof REGIONS)[number][0]}-${(typeof DENSITIES)[number]}`;
 const SCALES: ScaleToken[] = ["--ui-scale", ...REGIONS.flatMap(([region]) => DENSITIES.map((density) => `--scale-${region}-${density}` as const))];
-// A region's size unless one is picked here: foundations.css's own.
 const shipped = (token: ScaleToken) => token === "--ui-scale" ? 1 : Number(getComputedStyle(document.documentElement).getPropertyValue(token).trim()) || 1;
 const storedScale = (token: ScaleToken) => { try { const value = localStorage.getItem(`gallery:${token}`); return value === null ? null : Number(value) || null; } catch { return null; } };
 export function applyScale(doc: Document) {
   for (const token of SCALES) { const value = storedScale(token); if (value === null) doc.documentElement.style.removeProperty(token); else doc.documentElement.style.setProperty(token, String(value)); }
 }
-/** The scales as one signal, shared by the Space page's sliders and the gallery's Settings (Appearance). */
 const [scales, setScales] = createSignal<Record<string, number | null>>(Object.fromEntries(SCALES.map((token) => [token, storedScale(token)])));
 export const scaleOf = (token: ScaleToken) => scales()[token] ?? shipped(token);
 export function setScale(token: ScaleToken, value: number | null) {
@@ -309,18 +283,14 @@ const SPACE: TokenGroup[] = [
   { title: "Measures: six lengths for what has a width of its own", rows: [tok("--measure-xs", "a menu's least width, the composer's tallest field, a chip's name", length("--measure-xs"), bar("--measure-xs")), tok("--measure-sm", "a settings rail, a preview's height", length("--measure-sm"), bar("--measure-sm")), tok("--measure-md", "a setting's control column, a step's output", length("--measure-md"), bar("--measure-md")), tok("--measure-lg", "a toast", length("--measure-lg"), bar("--measure-lg")), tok("--measure-xl", "a card, the leader", length("--measure-xl"), bar("--measure-xl")), tok("--measure-2xl", "an overlay, a wide card, the user's message", length("--measure-2xl"), bar("--measure-2xl"))] },
   { title: "Rows: every list, menu, palette and settings row, and the sidebar's", rows: [tok("--row-min", "a row's height", length("--row-min"), bar("--row-min")), tok("--row-pad", "its padding", pad("--row-pad")), tok("--row-gap", "between icon, label and meta", length("--row-gap"), bar("--row-gap")), tok("--nav-indent", "a sidebar row under another", length("--nav-indent"), bar("--nav-indent")), tok("--nav-label-pad", "a sidebar group's label", pad("--nav-label-pad"))] },
 ];
-/** A piece's own sizes, read from the unit: shown with the piece (Frost, DesktopComposer). */
 export const FROST_SIZES: TokenGroup[] = [
   { title: "Frost", rows: [tok("--frost-inset", "a popover's padding round its rows", length("--frost-inset"), bar("--frost-inset"))] },
 ];
 export const COMPOSER_SIZES: TokenGroup[] = [
   { title: "Composer", rows: [tok("--composer-width", "declared by the pane, not the composer", (cell) => { const el = document.createElement("div"); el.style.position = "absolute"; el.style.width = "var(--composer-width, var(--reading-width))"; cell.append(el); const value = getComputedStyle(el).width; el.remove(); return `${px(value)} (--reading-width unless the pane says)`; }), tok("--cmp-field-min", "the field's least height", classLength("ui-composer-field", "--cmp-field-min")), tok("--cmp-bar-min", "the toolbar's height", classLength("ui-toolbar", "--cmp-bar-min")), tok("--cmp-slot", "a toolbar button", classLength("ui-toolbar", "--cmp-slot"))] },
 ];
-/** A dot crossing a track, again and again, at a token's pace or along its curve. */
 const run = (duration: string, easing: string) => () => <div class="g-run"><span style={{ "animation-duration": duration, "animation-timing-function": easing }} /></div>;
-/** The page's moves, on a sketch of it: sidebar, reading, and the composer that stays put. */
 const LEVELS = Array.from({ length: 11 }, (_, i) => ({ value: (i / 10).toFixed(1), label: (i / 10).toFixed(1) }));
-/* Aura: the field on a pill-shaped and a round surface, its level moved by hand or by a voice, its strength by hand. */
 function AuraDemo() {
   const [level, setLevel] = createSignal(0), [voice, setVoice] = createSignal(false), [strength, setStrength] = createSignal("1.0");
   let t = 0;
@@ -380,11 +350,6 @@ const RADII: TokenGroup[] = [
   ] },
 ];
 
-/*
- * Controls: what sits on any surface. A surface sets --tint (its lines and washes) and
- * --well (the fill under an input or a secondary button); a control reads only those.
- */
-/** A typeface in the library: a specimen, the weights shipped, where it comes from. */
 function Face(props: { family: string; weights?: number[]; sample?: string; source: string }) {
   return <div class="g-face">
     <div class="g-face-specimen" style={{ "font-family": props.family }}>{props.sample ?? "Aa Bb Gg 0123456789"}</div>
@@ -394,11 +359,6 @@ function Face(props: { family: string; weights?: number[]; sample?: string; sour
   </div>;
 }
 
-/*
- * The roles: each a token the library draws with, and a switcher over the faces
- * it may take. foundations.css holds each default (the first option); a pick sets
- * the token on the gallery and its phone frames, and is remembered.
- */
 const SANS = "sans-serif";
 const MONO = "ui-monospace, SFMono-Regular, Consolas, monospace";
 const option = (value: string, label: string, family: string) => ({ value, label, family });
@@ -425,7 +385,6 @@ function applyRole(doc: Document, role: FontRole, value = stored(role)) {
   if (value === role.options[0]!.value) doc.documentElement.style.removeProperty(role.token);
   else doc.documentElement.style.setProperty(role.token, `${family ? family + ", " : ""}${role.fallback}`);
 }
-/** The picks, on a document: the gallery's at mount, each phone frame's at its own. */
 export function applyFaces(doc: Document) { for (const role of ROLES) applyRole(doc, role); }
 
 function Role(props: { role: FontRole }) {
@@ -444,10 +403,7 @@ function Role(props: { role: FontRole }) {
   </div>;
 }
 
-/** A type role: its specimen, drawn by the library, and the element in it that carries the role. */
-/** tokens: what the role reads, so it can be named and tuned. */
-/** sig: what the role computes to, in tokens -- the type lens names text by it. A role made of two (Field: the label's
- *  voice and a caption) has none of its own. where: the app's places that use it. */
+/** sig: what the role computes to, in tokens; the type lens names text by it. A role made of two has none of its own. */
 export type TypeSig = { size: "label" | "caption" | "row" | "body" | "heading" | "display"; weight: "rest" | "lift" | "strong" | "current"; face: "sans" | "mono"; caps?: boolean };
 export interface TypeRole { name: string; tokens: string; rule: string; where: string; sig?: TypeSig; selector: string; sample: () => JSX.Element }
 const onFrost = (children: JSX.Element) => <Menu>{children}</Menu>;
@@ -467,7 +423,6 @@ export const TYPE_ROLES: TypeRole[] = [
   { name: "Caption", tokens: "--text-caption · --weight-rest · muted", rule: "a heading's or card's detail, hints, empty copy", where: "a heading's detail, a row's description (a profile's blurb), hints, empty copy, a Field's value", sig: { size: "caption", weight: "rest", face: "sans" }, selector: ".ui-heading-detail", sample: () => <Card embedded title="A heading" detail="Its detail, muted" /> },
   { name: "Body", tokens: "--text-body · --weight-rest", rule: "messages and what you type: the type unit", where: "messages, the composer, what you type", sig: { size: "body", weight: "rest", face: "sans" }, selector: ".ui-bubble", sample: () => <Bubble>A message</Bubble> },
 ];
-/** What a role computes to, in words: size/leading · weight · face, and its colour as the text colour, a share of it, or muted. */
 function spec(el: Element | null) {
   if (!el) return ["—", ""];
   const style = getComputedStyle(el);
@@ -666,7 +621,6 @@ export const depthPage: Page = {
   tokens: [...DEPTH.map((group) => ({ title: group.title, tokens: group.rows }))],
 };
 
-/** The library's named moves (styles/motion.css): what each does and who makes it, each with a part to send out and back. */
 const MOVES: { move: string; what: string; who: string }[] = [
   { move: "fade", what: "comes and goes where it stands: in over --duration-gentle from its first frame, out over --duration-quick", who: "PillField, the edit pills, a surface composer's waveform" },
   { move: "tuck", what: "keeps its size and slides under its neighbour as it fades, its room going with the fade, so a neighbour that takes the room grows in the same move", who: "every PillButton that comes and goes (Send, Stop, Scroll to latest), and the desktop toolbar's aside" },

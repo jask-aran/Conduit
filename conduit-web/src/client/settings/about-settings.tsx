@@ -15,20 +15,8 @@ const formatBuiltAt = (value: string) => {
 };
 
 /**
- * Which Conduit this is: the server's block (ServerFacts: its name, how it is reached, its build, and the interface's
- * when that differs), then this client: how it runs and the shell's build. They are released separately, so each
- * build that differs has its own line.
- *
- * It is also the only way to see that an update took: the shell's version
- * changes, and the interface's commit changes with it.
- *
- * And how it is running, which decides what the app can do -- an installed
- * browser is fixed to the address it was installed from, so its route list is
- * a set of facts rather than a set of choices. That is a property of this
- * client, so it is said here once instead of on top of the route menu.
- *
- * Nothing here is a setting, so it is not a section: it sits at the foot of
- * the rail, as the connection does at the foot of the app sidebar.
+ * Server and shell are released separately, so each build that differs has its own line; it is the only way to see
+ * that an update took.
  */
 export function AboutSettingsFooter() {
   const [shell, setShell] = createSignal<string | null>(null);

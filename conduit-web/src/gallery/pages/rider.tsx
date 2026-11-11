@@ -8,9 +8,6 @@ import { Replay, Presence } from "../specs";
 import { row, token, type Page } from "../model";
 import { queued, thumb, noop, attachments } from "../demos";
 
-// The real QuestionCard, drawn with components v2, so the cell shows all the live card can: a
-// single question's title, tabs with their ticks, pick-any, an option's preview,
-// one's own answer, a note, the Submit page, the hints, Stop and Submit.
 export const q = (id: string, header: string, prompt: string, options: [string, string, Question["options"][number]["preview"]?][], more: Partial<Question> = {}): Question =>
   ({ id, header, prompt, multiSelect: false, secret: false, required: true, freeform: { placeholder: "Type your own answer" }, ...more,
     options: options.map(([label, description, preview], i) => ({ id: `${id}${i}`, label, description, preview })) });

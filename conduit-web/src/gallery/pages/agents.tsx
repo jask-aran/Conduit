@@ -4,8 +4,6 @@ import { AgentDelegate, AgentReport, AgentReportItem, AgentRider, AgentRiderGrou
 import { orb, queued } from "../demos";
 import { row, type Page } from "../model";
 
-/* Agents: a turn's subagents under its head, and a chat's background agents on its composer. The rows open the
-   subagent's transcript in the app (a chat of its own); here a press does nothing. */
 const ROWS: { id?: string; title: string; state: AgentState; activity?: string; time?: string; usage?: string }[] = [
   { title: "Research gassho house pricing in Shirakawa-go", state: "running", activity: "reading booking.com/hotel/jp/shirakawa-go-gassho", time: "12s" },
   { title: "Check train times from Takayama", state: "finished", time: "34s", usage: "8.2k tokens" },

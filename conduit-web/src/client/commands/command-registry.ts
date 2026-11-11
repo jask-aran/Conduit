@@ -12,10 +12,7 @@ const binding = (...strokes: ReturnType<typeof stroke>[]) => shortcutBinding(...
 export const LEADER_STROKE = stroke("KeyG", "G", ["primary"]);
 const scopedBinding = (code: string, key: string, modifiers: ShortcutModifier[] = []) =>
   binding(LEADER_STROKE, stroke(code, key, modifiers));
-// Go-to shortcuts: one chord per top-level surface, numbered in screen order.
-// They open a closed surface and focus it, and never close one -- Ctrl+B and
-// Ctrl+. stay the toggles. The leader acts within a region; it does not move
-// between them.
+// Go-to chords open a closed surface and never close one: Ctrl+B and Ctrl+. stay the toggles.
 const goTo = (digit: number) => binding(stroke(`Digit${digit}`, String(digit), ["primary", "shift"]));
 const EVERY_REGION = ["application", "chat", "dashboard", "workspace-panel"];
 
@@ -43,7 +40,6 @@ export const COMMAND_IDS = {
   nextPane: "pane.next",
   previousPane: "pane.previous",
   newPane: "pane.new",
-  // Keyboard paths where there were none (docs/plans/keyboard-model.md › Gaps 7-8).
   closeTab: "pane.close-tab",
   closePane: "pane.close",
   swapPanes: "pane.swap",
@@ -273,12 +269,8 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     defaultBindings: [binding(stroke("KeyC", "C", ["primary", "shift"]))],
     palette: true,
   }),
-  // The two system-wide commands. They are separate definitions rather than a
-  // global scope added to their in-window twins, because every binding on a
-  // command in this scope is taken from the OS: giving New chat the scope would
-  // have claimed Ctrl+Shift+C from every other application. The defaults use
-  // Alt+Shift, which no browser or Windows shell shortcut occupies, and either
-  // can be rebound or cleared in Settings like any other.
+  // Separate from their in-window twins because every binding in this scope is taken from the OS: giving New chat the
+  // scope would claim Ctrl+Shift+C from every other application. Alt+Shift is free in browsers and the Windows shell.
   command({
     id: COMMAND_IDS.revealWindow,
     label: "Open Conduit",
@@ -600,8 +592,6 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     defaultBindings: [binding(stroke("BracketLeft", "[", ["alt", "shift"]))],
     allowInExclusiveTarget: true,
   }),
-  // A pane's header and tab row by keyboard: leader keys under the pane's region (a tool or file shown as a pane is
-  // the workspace-panel region, as is a pane in the dock).
   command({
     id: COMMAND_IDS.closeTab,
     label: "Close tab",
@@ -862,7 +852,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     group: "commands",
     icon: "stop",
     keywords: ["abort", "cancel"],
-    // Its own chord: Escape steps back and never acts (docs/plans/keyboard-model.md › Leave).
+    // Its own chord: Escape steps back and never acts.
     contexts: ["palette.root", "chat", "dashboard"],
     defaultBindings: [binding(stroke("Backspace", "Backspace", ["primary", "shift"]))],
     palette: true,
@@ -959,7 +949,6 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
     contexts: ["palette.root"],
     palette: true,
   }),
-  // The guided tour of these keys (client/tour): from the palette and Settings › Shortcuts, no key of its own.
   command({
     id: COMMAND_IDS.keyboardTour,
     label: "Keyboard tour",

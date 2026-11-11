@@ -1,8 +1,6 @@
 /*
- * A picture of this window as it is drawn (the feedback tool's screenshot), so fonts, formulas and frost are the
- * pixels on screen, not a second rendering of the document. The desktop shell takes it itself (capture_page, the page
- * alone, nothing asked). Elsewhere, and on a shell built before that command, it is the webview's own display
- * capture: the system asks which window the first time, and the stream is kept until the tool closes.
+ * The pixels on screen, not a second rendering of the document. The desktop shell takes it itself (capture_page);
+ * elsewhere it is the webview's display capture, whose stream is kept until the tool closes.
  */
 import { installedClientKind } from "../platform/installed-client";
 

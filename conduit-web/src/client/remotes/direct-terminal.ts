@@ -2,12 +2,8 @@ import { api } from "../api/client";
 import { directRoute, forgetRoute, type Grant } from "../workspace/direct-files";
 
 /**
- * A device's terminal attached on the device itself when it is near (nodes/node-direct.js), as its files are read
- * (direct-files.ts): the hub grants the attach, and the nearest route that proves it is the node is used -- this
- * machine, its LAN, its tailnet. The channel is sealed end to end with the key the hub gives with the grant
- * (nodes/direct.js `channelKey`), so a LAN in plain HTTP is as private as the hub's own connection: nobody between
- * this client and the node can read or change what is typed or shown, the grant included. Anything else, or any
- * failure before the terminal answers, goes through the hub as before.
+ * Sealed end to end with the key the hub gives with the grant, so a LAN in plain HTTP is as private as the hub's own
+ * connection. Any failure before the terminal answers goes through the hub.
  */
 type TerminalGrant = Grant & { channel: string };
 const notOnNode = new Set<string>();
@@ -58,10 +54,8 @@ const ivFor = (direction: number, count: number) => {
 };
 
 /**
- * What the terminal pane uses of a WebSocket, sealed: text frames are its JSON, binary frames its bytes, as on the
- * hub's socket; underneath, every frame is AES-GCM under the grant's channel key, counted each way, so one that was
- * changed, replayed or moved does not open and ends the connection. Sealing and opening are WebCrypto's and so
- * asynchronous: each direction is a queue, so frames keep their order.
+ * Every frame is AES-GCM under the grant's channel key, counted each way, so one changed, replayed or moved does not
+ * open and ends the connection. WebCrypto is asynchronous, so each direction is a queue to keep frames in order.
  */
 class SealedSocket {
   onopen: ((event: Event) => void) | null = null;

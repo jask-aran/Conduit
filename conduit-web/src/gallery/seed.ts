@@ -1,8 +1,6 @@
 import { createSignal } from "solid-js";
 import type { ModelOption, Project, Template } from "../client/api/contracts";
 
-/* What the gallery's fake chat has to choose from: invented, never read from a server. */
-
 const levels = ["off", "minimal", "low", "medium", "high", "xhigh"];
 const model = (provider: string, id: string, label: string): ModelOption => ({ provider, id, spec: `${provider}/${id}`, label, thinkingLevels: levels, defaultThinkingLevel: "medium" });
 export const MODELS: ModelOption[] = [

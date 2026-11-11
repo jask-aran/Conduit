@@ -11,7 +11,6 @@ import { Replay, Presence } from "../specs";
 import { Levels, noop, thinking, ContextReadingDemo } from "../demos";
 import { row, token, type Page } from "../model";
 
-/** A menu over a long list starts with a Search all… row that opens the palette (DESIGN Dropdown menu), then the list; the current choice is bold. */
 export function ModelList(props: { keys?: string[]; title?: string }) {
   const [current, setCurrent] = createSignal(MODELS[2]!.spec);
   return <>

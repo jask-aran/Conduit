@@ -1,11 +1,6 @@
 /**
- * The surfaces focus can be in, as a tree: each region and the regions it can
- * sit inside. A surface marks its element `data-region`, and while focus is
- * inside it, its context and every region around it are active -- a chain
- * such as application › chat › composer, worked out from focus. Only one
- * branch is ever active, so listing every region before the regions it sits
- * inside (below) is enough for the innermost to win and the rest to follow
- * in order. A composer sits in a chat or on a dashboard.
+ * Only one branch is ever active, so listing every region before the regions it sits inside (below) is enough for
+ * the innermost to win and the rest to follow in order.
  */
 export const SHORTCUT_REGION_PARENTS = {
   "workspace-panel": ["application"],
@@ -104,16 +99,10 @@ export interface ShortcutConflict {
 }
 
 export interface PendingShortcutSequence {
-  /** The innermost region with a sequence for this first stroke. */
   context: ShortcutContext;
   firstStroke: ShortcutStroke;
-  /** Every command a second stroke could run, across the levels. */
   commandIds: string[];
-  /**
-   * The regions around focus, innermost first, each with the commands its
-   * sequences name -- empty for a region with none. The second stroke is
-   * looked for innermost first, so an inner region's key hides an outer one's.
-   */
+  /** Innermost first: the second stroke is looked for in that order, so an inner region's key hides an outer one's. */
   levels: Array<{ context: ShortcutContext; commandIds: string[] }>;
   /** Which level the leader menu is showing; browsed with ←/→ and Tab. */
   shown: number;

@@ -1,4 +1,3 @@
-// Props: class.
 import { createSignal, Show } from "solid-js";
 import { Button, Card } from "@/components/ui";
 import { Spinner, Loading } from "@/components/ui";

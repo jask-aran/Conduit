@@ -100,8 +100,6 @@ const piecePages: Page[] = [
   codeBlockPage,
   transcriptPage,
 ];
-/* What the app composes from the pieces -- its own menus, its overlays, the phone's chrome -- has pages of its own,
-   under Blocks: each named example row moves out of its piece's page into one of these. */
 const IN_THE_APP: { title: string; summary: string; rows: string[] }[] = [
   { title: "Menus", summary: "The app's menus, each built from Menu, Section and Item: the composer's, the model's, a chat's, the server's, on desktop and on a phone.",
     rows: ["ModelSelector", "ComposerPlusMenu", "ContextGauge › breakdown", "ComposerPlusMenu › Profile", "Sidebar › ChatMenu", "ServerSwitcher",

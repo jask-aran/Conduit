@@ -15,41 +15,27 @@ import { applyTranscriptOps, type TranscriptOp } from "../../transcript-fold.js"
 import type { Message as ChatMessage, ToolItem } from "../api/contracts";
 import { agentView } from "../state/agent";
 
-/** How long a turn's last trace stays after it ends with no reply. */
 const TRACE_HOLD_MS = 4000;
 /** How long the live row outlasts its reason, through a blink out of running. */
 const LIVE_ROW_LINGER_MS = 400;
 
-/**
- * jbot's messages on its page (docs/plans/persistent-agent.md › Talking to the person): the message log's app room,
- * newest at the foot, held there while you read, over the page's composer. What the person says
- * is a bubble; what jbot says is a bubble too, a hairline one (Turn bubble), times always shown; a report (a message with a title) is a card opening in a reader.
- */
 export interface LogMessage {
   id: string; at: string; channel: string; room: string; direction: "in" | "out"; sender: "person" | "jbot";
   title?: string; body: string; notify: "none" | "push" | "urgent"; delivery?: { state: string; error?: string };
   pushed?: { to: string[]; missed: string[] };
-  /** Its entry in its thread: a reply with one has the work of the turn it ended, the person's message that steered a
-   *  running turn has that turn's work up to it (GET /v0/agent/work). */
+  /** A reply's entry has the work of the turn it ended; a steering message's has that turn's work up to it. */
   entryId?: number; conversationId?: number | string;
   native?: { from?: Party | null; to?: Array<Party | string>; date?: string };
 }
 type Party = { name?: string; address?: string };
-/** Where a message was pushed besides the app: the devices it reached, by name. */
 const sentTo = (message: LogMessage) => message.notify === "none" ? undefined
   : message.pushed?.to.length ? `Sent to ${message.pushed.to.join(", ")}` : message.pushed ? "No device took the push" : "Sent to your devices";
 const partyName = (party?: Party | string | null) => typeof party === "string" ? party : party?.name || party?.address || "";
-/** A row of the stream: one message of the app room, the work a reply of it ended (its turn, Folded's trace), or a run of
- *  another room's messages, folded (RoomRow). */
 type StreamRow = { kind: "message"; message: LogMessage } | { kind: "work"; message: LogMessage } | { kind: "room"; room: string; channel: string; messages: LogMessage[] }
   | { kind: "run"; run: LogRun };
-/** A run jbot's home thread had (GET /v0/agent/messages `runs`): the log says it happened, as the thread's run line,
- *  and opens its transcript; what it reported is the reply after it. */
 export interface LogRun { id: string; at: string; title: string; label: string; number: number | null; routine: string | null; trigger: string | null;
   startedAt: string | null; endedAt: string | null; status: string | null; summary: string | null; woke: boolean; conversationId?: number | null;
-  /** What it did, in the turn digest's words. */
   did?: string | null;
-  /** A background agent jbot sent from its chat (no run): its report, or (live) the agent while it works. */
   agent?: boolean; subagentId?: string | null; live?: boolean }
 const runTime = (run: LogRun) => {
   const start = run.startedAt ? Date.parse(run.startedAt) : NaN, end = run.endedAt ? Date.parse(run.endedAt) : NaN;
@@ -60,20 +46,11 @@ const CHANNEL = { email: { word: "email", icon: () => <Icons.Mail aria-hidden="t
 const clock = (at: string) => clockTime(at) ?? "";
 const firstLine = (text: string) => text.split(/\r?\n/).map((line) => line.replace(/^[#>*\s-]+/, "").trim()).find(Boolean) || "";
 
-/** The stream, over the page's composer (the home thread's own); read again whenever the thread moves (`changed`), and
- *  slowly besides, for what arrives without it (another device's message). */
-
-// The last read, kept for the next time the jbot chat is drawn: it opens on what it last showed at once (a phone's
-// drawer warms it, prefetchJbotMessages), then reads afresh.
+// The last read, kept so the jbot chat opens on what it last showed at once, then reads afresh.
 let lastRead: LogMessage[] | null = null;
 let reading: Promise<LogMessage[]> | null = null;
 
-/*
- * A message's work: the turn a reply ended, or the running turn the person's message steered, up to it. Read as its
- * thread's ops (GET /v0/agent/work) and projected as a thread's transcript projects them (buildTurnRows), Folded: the
- * one trace above the message. Read with the log, so a message is drawn with its work at once; lean (no tools' input
- * or output) until the trace is opened, then whole.
- */
+// Read with the log, so a message is drawn with its work at once; lean (no tools' input or output) until opened.
 const works = new Map<string, TurnTraceData | null>();
 const [worksRead, setWorksRead] = createSignal(0);
 function traceOf(ops: TranscriptOp[]): TurnTraceData | null {
@@ -93,11 +70,9 @@ async function readWork(messages: LogMessage[], full = false) {
 }
 const workOf = (message: LogMessage) => { worksRead(); return works.get(message.id) ?? null; };
 
-// The runs among the messages read, with them.
 const [logRuns, setLogRuns] = createSignal<LogRun[]>([]);
 const readMessages = () => reading ??= api<{ messages: LogMessage[]; runs?: LogRun[] }>("/v0/agent/messages?limit=100")
   .then(async (result) => { await readWork(result.messages).catch(() => {}); setLogRuns(result.runs ?? []); return (lastRead = result.messages); }).finally(() => { reading = null; });
-/** Read jbot's messages ahead (and its renderer), so its chat draws at once when it opens. */
 export const prefetchJbotMessages = () => { void readMessages().catch(() => {}); void ChatMarkdown.preload(); };
 
 export function useJbotMessages(changed: () => unknown) {
@@ -115,25 +90,18 @@ export function useJbotMessages(changed: () => unknown) {
 }
 
 export function JbotMessages(props: { messages: LogMessage[]; name: string; working?: boolean;
-  /** The home thread's turn while it runs (its Folded trace): what jbot is doing now. */
   live?: TurnTraceData | null;
   /** What the person just sent in the home thread, drawn at once until the log has it (it reads it a moment later). */
   sent?: { text: string; at: string } | null }) {
   const [reading, setReading] = createSignal<LogMessage | null>(null);
-  // The app room's messages each a row; between two of them, each other room's messages one folded row, however the
-  // rooms interleave.
   // Each refresh reads new message objects; a row that is unchanged keeps its object, so <For> keeps its element and the
-  // keyboard cursor on it (Codex review: a poll replaced every row and stranded focus on a removed one).
+  // keyboard cursor on it.
   let kept = new Map<string, { sig: string; row: StreamRow }>();
   // The open agent units, as the rows need them: what one is doing changes each second and is read where it is drawn.
   const openAgents = createMemo(() => (agentView()?.attention?.working.runs ?? []).filter((unit) => unit.kind === "agent" && unit.startedAt)
     .map((unit) => ({ id: unit.id, title: unit.title, startedAt: unit.startedAt!, conversationId: unit.conversationId, label: unit.label ?? null })),
     [], { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) });
   const rows = createMemo(() => {
-    // Each run a row of its own, where it happened. A background agent jbot sent, until it reports, a row under the
-    // reply of the turn that sent it (at the foot while that turn runs); once it reports, its report's row is where it
-    // came back, over what jbot made of it.
-    // Both from the work log (work-log.js): its open agent items from the agent view, its reported ones from the runs.
     const reported = new Set(logRuns().map((run) => run.id));
     const working = openAgents().filter((unit) => !reported.has(unit.id))
       .map((unit): LogRun => {
@@ -173,10 +141,7 @@ export function JbotMessages(props: { messages: LogMessage[]; name: string; work
     kept = nextKept;
     return stable;
   });
-  // A room's name: its subject, from whichever of its messages carries one.
   const roomName = (room: string) => props.messages.find((message) => message.room === room && message.title)?.title || room;
-  // The person's message starts an exchange; jbot's reply to it is the exchange's; what jbot says next, a step on. A
-  // folded room arrived on its own: a step from what is around it.
   const flowAt = (index: number): TranscriptFlow | undefined => {
     if (index <= 0) return undefined;
     const row = rows()[index]!, above = rows()[index - 1]!;
@@ -186,14 +151,8 @@ export function JbotMessages(props: { messages: LogMessage[]; name: string; work
     if (above.kind === "work") return "answer";
     return above.kind === "message" && above.message.direction === "in" ? "exchange" : "step";
   };
-  // The turn's trace as it runs, then held until the log's next read has its reply: the reply takes its place, so the
-  // trace never goes before what it ended is there.
-  // A turn can end with no reply after it (its word sent with the message tool, or nothing to say): the trace then
-  // goes a moment after the turn ends, rather than waiting on a reply that is not coming.
-  // Only a turn still running is live: the chat's last trace before the new turn has begun (the last turn's, "Done")
-  // and the turn once it has ended are not. Its last live trace is held, as it last read, until the reply is in the
-  // log -- read in the same pass that draws the reply, so the two never show together -- or a moment after it ended
-  // with none.
+  // The last live trace is held until the log has its reply (read in the same pass that draws it, so the two never
+  // show together), or a moment after a turn that ended with none, since a reply may not be coming.
   const fresh = () => props.live?.active ? props.live : null;
   const [held, setHeld] = createSignal<{ trace: TurnTraceData; last?: string } | null>(null);
   const [gone, setGone] = createSignal(false);
@@ -211,9 +170,8 @@ export function JbotMessages(props: { messages: LogMessage[]; name: string; work
     const kept = held();
     return kept && !gone() && props.messages.at(-1)?.id === kept.last ? kept.trace : null;
   };
-  // The live row through a blink: the chat's state can drop out of running for a frame as the hub takes the turn up,
-  // which took the row out and put it back, the log sliding under it. While the person's message is still the last
-  // word (no reply yet), it stays a moment longer than its reason does.
+  // The chat's state can drop out of running for a frame as the hub takes the turn up, so the live row outlasts its
+  // reason by a moment, or the log would slide under it.
   const wanted = () => Boolean(live() || props.working || unsent());
   const [lingering, setLingering] = createSignal(false);
   createEffect(on(wanted, (now, before) => {
@@ -223,9 +181,8 @@ export function JbotMessages(props: { messages: LogMessage[]; name: string; work
     onCleanup(() => clearTimeout(timer));
   }));
   const showLive = () => wanted() || (lingering() && (Boolean(unsent()) || props.messages.at(-1)?.direction === "in"));
-  // The live row making way: a turn with no work to show ends with its reply where the live row was, so the row fades
-  // out there first (removing, --duration-quick) and the reply waits for it (held), as a thread's provisional rows
-  // do. A turn with work keeps the row: it becomes the reply's header in place.
+  // A turn with no work to show ends with its reply where the live row was, so the row fades out first and the reply
+  // waits for it.
   const leaving = createLeavingRows<{ trace: TurnTraceData; reply?: string }>(() => true);
   const leavingTrace = () => leaving.list().at(-1);
   let lastLive: TurnTraceData | null = null;
@@ -239,7 +196,6 @@ export function JbotMessages(props: { messages: LogMessage[]; name: string; work
     if (worked) return;
     leaving.leave(ghost);
   }));
-  // The person's message, until the log has it: the same words, in from them, since a minute before it was sent.
   const unsent = createMemo(() => {
     const sent = props.sent;
     if (!sent?.text.trim()) return null;
@@ -248,24 +204,17 @@ export function JbotMessages(props: { messages: LogMessage[]; name: string; work
   });
   const loadContext = (entryId: number) => api<ContextText>(`/v0/sessions/${encodeURIComponent(agentView()?.home?.chatId ?? "")}/context/${entryId}`);
   // The trace's data read as a prop, so new data (the whole work, once opened) keeps the trace drawn and open.
-  // Every turn header keeps its orb, at rest once settled: the mark of jbot at work, wherever it worked.
-  // One line, "jbot is …" or "jbot worked for …" and what it did: the work itself is the raw home thread, which it opens.
   const openHome = () => { const chat = agentView()?.home?.chatId; if (chat) openAgentChat(chat); };
   const trace = (data: () => TurnTraceData, _message?: LogMessage) => <Turn><TurnTrace trace={data()} actor={props.name} loadContext={loadContext} onOpen={openHome} /></Turn>;
   const one = (message: LogMessage) => message.direction === "in"
     ? <Message at={message.at}>{message.body}</Message>
     : <><Turn bubble>{markdown(message.body)}<MessageFoot at={message.at} status={message.delivery?.state === "failed" ? "Not sent" : undefined}>{feedbackButton(message)}</MessageFoot></Turn>{feedbackField(message)}</>;
-  // An email in its room: from and to as its headers say; its own words, what it quotes folded.
   const email = (message: LogMessage) => {
     const { own, quoted } = splitQuoted(message.body);
     const from = message.direction === "out" ? props.name : partyName(message.native?.from) || "Someone";
     const to = (message.native?.to || []).map(partyName).filter(Boolean).join(", ");
     return <EmailItem from={from} to={to || undefined} time={clock(message.at)} dateTime={message.at} quoted={quoted || undefined}>{markdown(own || message.body)}</EmailItem>;
   };
-  /*
-   * Feedback on what jbot said: the foot's Feedback opens a field under the message; what the person writes goes to the
-   * context inbox for Reflection (POST /v0/agent/feedback), never as a turn. One open at a time; sent ones keep a check.
-   */
   const [feedbackOn, setFeedbackOn] = createSignal<string | null>(null);
   const [feedbackSent, setFeedbackSent] = createSignal<ReadonlySet<string>>(new Set());
   const sendFeedback = async (message: LogMessage, text: string) => {
@@ -290,16 +239,15 @@ export function JbotMessages(props: { messages: LogMessage[]; name: string; work
   let primed = false;
   createEffect(on(rows, (list) => { for (const row of list) if (row.kind === "message" || row.kind === "run") seen.add(row.kind === "run" ? row.run.id : row.message.id); if (list.length) primed = true; }));
   const arriving = (id: string) => untrack(() => primed && !seen.has(id));
-  // Each row is drawn once in full before it may be skipped off screen (styles.css, data-drawn), with the height it was
-  // drawn at as its stand-in: skipped before the browser has kept a size of its own, it is still its own height.
+  // Each row is drawn once in full before it may be skipped off screen (data-drawn), with the height it was drawn at as
+  // its stand-in: skipped before the browser has kept a size of its own, it is still its own height.
   let list: HTMLDivElement | undefined;
   createEffect(on(rows, () => requestAnimationFrame(() => {
     const fresh = [...list?.querySelectorAll<HTMLElement>(":scope > .ui-transcript-row:not([data-drawn])") ?? []];
-    // Its height as laid out, fractions kept: a whole-pixel stand-in moved what is under it by a pixel as it was skipped.
+    // Fractions kept: a whole-pixel stand-in would move what is under it by a pixel as it is skipped.
     const heights = fresh.map((row) => row.getBoundingClientRect().height);
     fresh.forEach((row, index) => { if (!heights[index]) return; row.style.containIntrinsicSize = `auto ${heights[index]}px`; row.dataset.drawn = ""; });
   })));
-  // An agent row, from its item in the work log: working (what it is doing, in the digest's words), else how it ended.
   const now = useNow(() => rows().some((row) => row.kind === "run" && row.run.live));
   const agentRow = (run: LogRun) => {
     // Read where it is drawn, so what it is doing changes in place rather than making a new row.
@@ -309,7 +257,6 @@ export function JbotMessages(props: { messages: LogMessage[]; name: string; work
       time={run.live || run.endedAt ? span(run.startedAt ?? undefined, run.live ? null : run.endedAt, now()) : undefined} onOpen={() => openRun(run.id)} />;
   };
   const transcript = () => <Show when={props.messages.length || props.working} fallback={<Empty kind="dash">Nothing said yet. Say something to {props.name}.</Empty>}>
-        {/* Its newest rows first, the older ones above in idle time as it holds its foot, as a chat's (TranscriptList). */}
         <TranscriptList data-times="shown" each={rows()} of="jbot" ref={(element) => { list = element; }}
           after={<>
             <Show when={leavingTrace()}>{(gone) => <TranscriptRow flow="exchange" {...motionOf("removing")}>{trace(() => gone().trace)}</TranscriptRow>}</Show>

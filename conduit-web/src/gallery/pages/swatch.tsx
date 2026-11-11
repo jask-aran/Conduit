@@ -1,4 +1,3 @@
-// Props: colour, hollow, fill. Button is the colour-choice host; its forms are documented on the Button page.
 import { createSignal, For } from "solid-js";
 import { Reading, ReadingTotal } from "@/components/ui";
 import { Swatch, Button } from "@/components/ui";

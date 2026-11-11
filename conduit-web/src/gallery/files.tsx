@@ -15,15 +15,8 @@ import type { JSX } from "solid-js";
 
 import { row, token, type Page } from "./model";
 
-/*
- * Files and the editor (components/ui/file.tsx, viewer.tsx, editor.tsx): a file's header, body and status bar, the
- * viewer's two sides, and the code surface's find bar, line comments and comparison. PaneHeader fits the header (it sets
- * data-folded on what does not fit, lowest data-fold first), here as in the app.
- */
-
 const SAMPLE = ["export function greet(name: string) {", "  return `Hello, ${name}`;", "}", "", "greet(\"Conduit\");"];
 const Code = () => <pre class="g-file-code">{SAMPLE.map((line, index) => <span><i>{index + 1}</i>{line || " "}{"\n"}</span>)}</pre>;
-// A sample fills its cell up to a width of its own.
 const box = (units: number) => ({ width: "100%", "max-width": `calc(${units} * var(--u-space))` });
 
 function Head(props: { dirty?: boolean; git?: string }) {
@@ -69,7 +62,6 @@ const ComparisonSample = (props: { scope?: string }) => <Comparison style={{ hei
   </ComparisonSource>}><LineCounts kind="bar" removed={1} added={1} /><StatusText>TypeScript · Read-only</StatusText></StatusBar>
 </Comparison>;
 
-// The file browser, composed from its pieces with made-up entries (the app's is ComputerExplorer).
 type Entry = { name: string; folder?: boolean; size?: string; workspace?: boolean };
 const ENTRIES: Entry[] = [{ name: "Conduit", folder: true, workspace: true }, { name: "Documents", folder: true }, { name: "Downloads", folder: true }, { name: "notes.md", size: "2.1 KB" }, { name: "photo.png", size: "840 KB" }];
 const Entries = (props: { details?: boolean; entries?: Entry[] }) => <>{(props.entries ?? ENTRIES).map((entry) => <BrowserEntry type="button" title={entry.name}>

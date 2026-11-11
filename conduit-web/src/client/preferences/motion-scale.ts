@@ -1,9 +1,6 @@
 import { scaleMotion } from "@/components/ui/motion";
 
-/*
- * Animation speed (Settings → Appearance), per device: every motion drawn at its normal length or slowed down, to
- * look at one closely. The library scales the duration tokens (motion.ts scaleMotion); this is the device's choice.
- */
+// The library scales the duration tokens (scaleMotion); this is only the device's choice.
 const KEY = "conduit:motion-scale";
 
 export const MOTION_SCALE_OPTIONS = [1, 2, 4, 10] as const;

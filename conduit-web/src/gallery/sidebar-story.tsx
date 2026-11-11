@@ -3,8 +3,6 @@ import type { ChatSummary, Project } from "../client/api/contracts";
 import { Sidebar } from "../client/navigation/sidebar";
 import { PROJECTS } from "./seed";
 
-/* The app's own sidebar, open as the phone's drawer, over seeded projects and chats. Not wired to a server. */
-
 const at = (hours: number) => new Date(Date.UTC(2026, 9, 10, 20 - hours)).toISOString();
 const chat = (projectId: string, id: string, title: string, hours: number): ChatSummary =>
   ({ id, projectId, title, status: "active", harnessId: "conduit", createdAt: at(hours), updatedAt: at(hours), lastUserMessageAt: at(hours) }) as ChatSummary;

@@ -1,8 +1,4 @@
-/*
- * Nothing in the gallery talks to a server: every request to the app's API
- * answers empty, so a component that loads its own data (the sidebar's
- * server list, settings) mounts blank instead of bouncing to the sign-in page.
- */
+// Every request answers empty, so a component that loads its own data mounts blank instead of bouncing to sign-in.
 export function fakeFetch() {
   const real = window.fetch.bind(window);
   window.fetch = async (input, init) => {

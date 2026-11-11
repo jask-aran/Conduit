@@ -7,7 +7,6 @@ import { documentChain } from "./network";
 
 const TEXT = "# {{assistant.name}}\n\nYou are {{person.name}}'s assistant. Your persona is in `<soul>` below.\n\n## Where you speak\n\n- **The home thread** never ends.\n- **Side threads** are for one project.\n";
 
-/** Settings › Prompts: the document as the title, its chain beside the chosen block's pane. */
 function PromptsBench() {
   const [doc, setDoc] = createSignal("assistant");
   return <div class="g-workbench"><Workbench label="Prompts">
@@ -22,8 +21,6 @@ function PromptsBench() {
       status={<StatusText>40 tok</StatusText>} />} />
   </Workbench></div>;
 }
-/** Settings › Blocks and Skills: every thing of the kind in the side column, the chosen one's name the title, its
- *  facts under the list and its pane alone in the main column. */
 const THINGS = [{ id: "run", name: "Run rules", context: "0.6k tok · changed", group: "jbot's files" }, { id: "base", name: "Shared base", context: "0.5k tok", group: "Shipped" }, { id: "assistant", name: "Assistant", context: "26 tok", group: "Shipped" }];
 function BlocksBench() {
   const [text, setText] = createSignal(TEXT);

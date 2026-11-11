@@ -5,9 +5,7 @@ import { LONG, typeOf } from "../demos";
 import { row, token, type Page } from "../model";
 
 export const SNIPPET = "const total = items.reduce(\n  (sum, item) => sum + item.size, 0);";
-/** Copy says so for a moment, as the app's does. */
 export const useCopied = () => { const [copied, setCopied] = createSignal(false); return [copied, () => { setCopied(true); setTimeout(() => setCopied(false), 1200); }] as const; };
-/** A turn with a fence, live: Copy it, open and fold it, copy the answer. */
 export function codeScene() {
   const [code, copyCode] = useCopied(), [answer, copyAnswer] = useCopied(), [open, setOpen] = createSignal(false);
   return <div class="g-card-scene"><Transcript><Turn>

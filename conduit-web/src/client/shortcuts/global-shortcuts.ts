@@ -10,13 +10,8 @@ export interface GlobalShortcut {
 }
 
 /**
- * What the OS can be asked for, which is less than the window accepts.
- *
- * A system-wide key is taken from every other application at once, so a bare
- * letter is not offered: without a modifier the binding would swallow typing
- * everywhere. Two-stroke sequences are refused for the same reason -- the OS
- * hands over one chord, and holding the first stroke to see whether a second
- * arrives would mean watching every keystroke on the machine.
+ * A system-wide key is taken from every other application, so a bare letter would swallow typing everywhere, and a
+ * two-stroke sequence would mean watching every keystroke on the machine.
  */
 export function globalAccelerator(binding: ShortcutBinding): string | null {
   if (binding.strokes.length !== 1) return null;
@@ -29,18 +24,11 @@ export function globalAccelerator(binding: ShortcutBinding): string | null {
     if (modifier === "alt") return "Alt";
     return "Shift";
   });
-  // The physical key travels as its code, which is what the shell's parser
-  // reads, so a rebound key means the same position on every layout.
+  // The physical key travels as its code, which is what the shell's parser reads.
   return [...parts, stroke.code].join("+");
 }
 
-/**
- * The set the shell should be holding, derived from the same registry and the
- * same overrides the window dispatches from -- there is no second list of keys
- * to keep in step. A binding the OS cannot express is dropped here rather than
- * sent and refused, and the first claim on an accelerator wins so the shell is
- * never asked to register one chord twice.
- */
+/** The first claim on an accelerator wins, so the shell is never asked to register one chord twice. */
 export function globalShortcuts(
   commands: ShortcutCommandDefinition[],
   overrides: ShortcutOverrides,

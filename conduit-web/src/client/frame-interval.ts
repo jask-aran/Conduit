@@ -1,16 +1,7 @@
 /**
- * How long this browser actually takes to draw a frame.
- *
- * The server paces paint so a reader is not sent frames faster than they can
- * be shown, and until now it guessed at the rate: a constant chosen for 60Hz,
- * which is half of what a 144Hz panel draws and twice what some phones do. The
- * browser is the only party that knows, so it measures itself once and tells
- * the server on connect.
- *
- * `requestAnimationFrame` is driven by the compositor, so the gap between two
- * callbacks is the real refresh interval. The median of a short run is taken
- * rather than the mean, because the first frames after a connect are the ones
- * most likely to be late.
+ * The server paces paint by the reader's frame rate, which only the browser knows. The gap between two
+ * `requestAnimationFrame` callbacks is the real refresh interval; the median is taken because the first frames after
+ * a connect are the likeliest to be late.
  */
 const SAMPLES = 8;
 

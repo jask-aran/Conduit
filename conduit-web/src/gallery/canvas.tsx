@@ -16,13 +16,6 @@ import { overlayViews, type OverlayView } from "./pages/overlay";
 import { type Page } from "./model";
 import { PageView } from "./page";
 
-/*
- * Components v2 (components/ui) on the left, a page each, drawn to one template (page.tsx): the foundations,
- * the components, the blocks composed from them. On the right the
- * app's own screens, desktop or phone, drawn with components v2. The tuning
- * box applies CSS everywhere at once and never writes source.
- */
-
 const TUNE_KEY = "conduit:gallery-tune";
 const read = () => { try { return localStorage.getItem(TUNE_KEY) || ""; } catch { return ""; } };
 
@@ -40,11 +33,9 @@ const tuneFrame = (event: Event) => { const doc = (event.currentTarget as HTMLIF
 function Canvas() {
   const [tune, setTune] = createSignal(read());
   const [preview, setPreview] = createSignal<"phone" | "sidebar" | "desktop" | "live">("phone");
-  // gallery.html?live=<chat id>: a phone on that real chat, from the server (live-chat.tsx).
   const liveChat = new URLSearchParams(location.search).get("live");
   const [seen, setSeen] = createSignal(new Set<string>(["phone"]));
   createEffect(() => { const key = preview(); if (!seen().has(key)) setSeen(new Set([...seen(), key])); });
-  // The app's real screens, drawn with components v2 (components/ui/swap.ts); phones in a frame that passes for one.
   const views = [
     { key: "phone", render: () => <iframe class="g-phone" title="Phone" src="gallery.html?frame=phone" onLoad={tuneFrame} /> },
     { key: "live", render: () => <iframe class="g-phone" title="Phone live" src={`http://127.0.0.1:${location.port}/gallery.html?frame=live&chat=${encodeURIComponent(liveChat ?? "")}`} onLoad={tuneFrame} /> },
@@ -57,7 +48,6 @@ function Canvas() {
     </div> },
   ];
   const [tuning, setTuning] = createSignal(false);
-  // One desktop preview; its overlays open over it from buttons, not as copies of it.
   const [overlay, setOverlay] = createSignal<OverlayView | null>(null);
   let desktop: HTMLDivElement | undefined;
   const litComposer = () => {
@@ -73,7 +63,6 @@ function Canvas() {
   const phoneFrame = () => document.querySelector<HTMLIFrameElement>('iframe[title="Phone"]');
   const openOnPhone = (view: OverlayView | null) => { setPhoneOverlay(view); phoneFrame()?.contentWindow?.postMessage({ galleryOverlay: view }, location.origin); };
   addEventListener("message", (event) => { if (event.origin === location.origin && event.data?.galleryOverlayClosed) setPhoneOverlay(null); });
-  // One page at a time, picked from the rail: the foundations, then each component, then the blocks composed from them.
   const families: Page[] = [...foundationPages, ...libraryPages];
   const stored = (() => { try { return localStorage.getItem("gallery:family"); } catch { return null; } })();
   const [current, setCurrent] = createSignal(families.find((family) => family.title === stored)?.title ?? libraryPages[0]!.title);
@@ -115,7 +104,6 @@ function Canvas() {
   });
   return <div class="g-canvas" data-preview={preview()} data-app={app() ? undefined : "hidden"}>
     <TypeLens on={lens()} frames={frames} />
-    {/* The rail is drawn as the sidebar is, with the library's NavGroups and Rows, at the desktop's density. */}
     <nav class="g-rail" aria-label="Families" data-density="desktop">
       <div class="g-rail-head"><strong>Gallery</strong><small>components v2</small></div>
       <For each={rail}>{([label, families]) => <Group kind="nav" title={label}>
@@ -159,7 +147,6 @@ function Canvas() {
   </div>;
 }
 
-/** In the phone frame: the overlay the gallery opened, full screen over the chat; closing tells the gallery. */
 function PhoneOverlay() {
   const [view, setView] = createSignal<OverlayView | null>(null);
   addEventListener("message", (event) => { if (event.origin === location.origin && "galleryOverlay" in (event.data ?? {})) setView(event.data.galleryOverlay); });
@@ -175,7 +162,6 @@ export function mount(frame: string | null) {
   const root = document.getElementById("root")!;
   applyFaces(document);
   applyScale(document);
-  // The phone screens, drawn with components v2, in a frame with a phone's root size and media rules.
   if (frame === "sidebar") { document.body.classList.add("g-solo-body"); render(() => <SidebarScreen />, root); }
   else if (frame === "live") { document.body.classList.add("g-solo-body"); const chat = new URLSearchParams(location.search).get("chat") ?? ""; void import("./live-chat").then(({ LiveChatScreen }) => render(() => <LiveChatScreen chatId={chat} />, root)); }
   else if (frame) { document.body.classList.add("g-solo-body"); render(() => <><ChatScreen /><PhoneOverlay /></>, root); }

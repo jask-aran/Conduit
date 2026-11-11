@@ -11,7 +11,6 @@ import { Reading, ReadingTotal, ReadingParts, ReadingPart, ReadingStats, Reading
 import katex from "katex";
 
 export const thinking = ["off", "minimal", "low", "medium", "high", "xhigh"].map((value) => ({ value, label: value[0]!.toUpperCase() + value.slice(1) }));
-/** The app's slider as its popovers use it: a label, and a value that opens the levels. */
 export function Levels(props: { label?: string; onOpen?: () => void }) {
   const [value, setValue] = createSignal("medium");
   return <Slider label={props.label ?? "Thinking"} options={thinking} value={value()} onChange={setValue} onOpen={props.onOpen ?? (() => {})} />;
@@ -21,7 +20,6 @@ export function SegmentedText() { const [value, setValue] = createSignal("cloud"
 export function SegmentedCount() { const [value, setValue] = createSignal("all"); return <Segmented label="Show" value={value()} onChange={setValue} options={[{ value: "all", label: "All", count: 0 }, { value: "unread", label: "Unread", count: 0 }]} />; }
 export const areas = () => [{ value: "dashboard", label: "Dashboard", icon: <Icons.Dashboard /> }, { value: "computer", label: "Computer", icon: <Icons.Monitor /> }];
 export function SegmentedIcons(props: { pill?: boolean }) { const [value, setValue] = createSignal("dashboard"); return <Segmented icons pill={props.pill} label="Sidebar section" value={value()} onChange={setValue} options={areas()} />; }
-/** A context window's reading (chat/context-gauge.tsx ContextBreakdown): bare, it opens under the chat menu's own row and bar. */
 export const READING_PARTS = [{ label: "Messages", value: "60k · 30.0%", colour: "oklch(0.72 0.15 300)" }, { label: "System prompt", value: "16k · 8.0%", colour: "oklch(0.7 0.02 260)" }, { label: "Tools (3)", value: "12k · 6.0%", colour: "oklch(0.74 0.12 230)", opens: true }, { label: "Free space", value: "112k · 56.0%", hollow: true }];
 export const ContextReadingDemo = (props: { bare?: boolean; open?: boolean }) => <Reading>
   <Show when={!props.bare}><ReadingTotal label={<strong>Context</strong>} value="42% used" /></Show>
@@ -37,10 +35,8 @@ export const ContextReadingDemo = (props: { bare?: boolean; open?: boolean }) =>
   <ReadingStats title="Plan · Plus"><ReadingStat label="5-hour" value="5%" detail="resets 1:47 pm" /><ReadingStat label="Weekly" value="17%" detail="resets Tue" /></ReadingStats>
 </Reading>;
 export const icon = (label: string, glyph: JSX.Element) => ({ label, icon: glyph });
-/* The desktop composer's controls, as components v2 draws them: ghost icon buttons and small ghost pickers. */
 export const ghost = (label: string, glyph: JSX.Element) => <Button variant="ghost" size="icon-sm" aria-label={label} title={label}>{glyph}</Button>;
 export const WAVE = [3, 5, 8, 6, 4, 7, 11, 8, 5, 3, 6, 9, 12, 8, 5, 4, 7, 10, 6, 4, 3, 5, 8, 6];
-/** A speaking voice for the gallery: a level (0-1) every 70ms, as the app's dictation samples it, and its last bars. */
 export const speech = (on: () => boolean) => {
   const [level, setLevel] = createSignal(0), [bars, setBars] = createSignal(Array.from({ length: 80 }, (_, i) => WAVE[i % WAVE.length]! / 12));
   let t = 0;
@@ -54,13 +50,10 @@ export const speech = (on: () => boolean) => {
   return { level, bars };
 };
 export const thumb = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="#6b8afd"/><stop offset="1" stop-color="#d97706"/></linearGradient></defs><rect width="48" height="48" fill="url(#g)"/></svg>');
-/** The app's riders, as components v2 builds them. */
 export const attachments = (motion?: Motion) => <Rider label="Attachments" layout="strip" motion={motion}><Chips><Chip name="photo.png" image={thumb} /><Chip name="notes.txt" detail="2.1 KB" icon={<Icons.FileText />} /><Chip name="lorem_ipsum.txt" detail="412 bytes" icon={<Icons.FileText />} status="uploading" progress={60} /></Chips>
   <Actions kind="rider" stack>{ghost("Show all attachments", <Icons.Maximize />)}{ghost("Remove all attachments", <Icons.Delete />)}</Actions></Rider>;
 export const queued = (motion?: Motion) => <Rider label="Queued" motion={motion}><RiderMark icon={<Icons.Steer />} label="Steering" title="Steering: sent when the current step finishes" /><Lines><Line text="and make the second paragraph shorter" /><Line text="then rename the file to lorem.txt, and add a heading at the top that says what it is" clipped /></Lines>
   <Actions kind="rider">{ghost("Interrupt and send now", <Icons.Send />)}{ghost("Edit", <Icons.Edit />)}{ghost("Discard", <Icons.Close />)}</Actions></Rider>;
-// Overlay: the app's large surfaces, drawn from the library's pieces.
-// The command prompt's ">" is a mark like search's, drawn the same.
 export const glyph = () => <Icons.ChevronRight />;
 export const paletteList = () => <OverlayList>
   <Section title="This chat"><Item icon={<Icons.Attach />} active>Attach files</Item><Item icon={<Icons.FileText />} keys={["Ctrl", "Shift", "S"]}>Stash prompt</Item><Item icon={<Icons.Edit />}>Rename chat</Item><Item icon={<Icons.Copy />}>Copy last response</Item></Section>
@@ -73,7 +66,6 @@ export const chatRows = (query = "") => <OverlayList>
   <Section title="Recent"><Item icon={<SquarePenIcon />} meta="18:29" active><Match text="Untitled chat" query={query} /></Item><Item icon={<HarnessMark id="opencode" />} meta="9 Oct"><Match text="Short Sprint Workout Plan" query={query} /></Item><Item icon={<HarnessMark id="opencode" />} meta="8 Oct"><Match text="Wispah V3 Lodge" query={query} /></Item></Section>
   <Section title="Folders"><Item icon={<Icons.Folder />} meta="3 · 25 Sept" opens>Japan</Item><Item icon={<Icons.Folder />} meta="0" opens>NHP</Item><Item icon={<Icons.Folder />} meta="3 · 26 Sept" opens>Conduit</Item></Section>
 </OverlayList>;
-/* Chat search's preview, drawn by the library's Glance from what the app would read; the orb is the library's Orb. */
 export const orb = (done: boolean) => <Orb state="working" frame={done ? PLAIN_SPHERE : SPUTTERING_SPHERE} tint={done ? undefined : "var(--destructive)"} rate={settledOrbRate(!done)} />;
 export const glanceChat = () => <Glance label="Chat preview"><GlanceHead mark={<HarnessMark id="opencode" />} title="Untitled chat" facts={["OpenCode · Chats · 18:30"]} />
   <GlancePrompt>ask me a question using the question tool</GlancePrompt><GlanceTurn orb={orb(true)} outcome="Done" detail="42s · 1 tool" />
@@ -87,11 +79,6 @@ export const LeaderPath = () => { const [at, setAt] = createSignal(2); const lev
   return <Crumbs label="Where you are" items={levels.map((label, index) => ({ label, current: index === at(), onClick: () => setAt(index) }))} />; };
 export const leaderRows = () => <Section><Item keysFirst keys={["1"]} active>Model</Item><Item keysFirst keys={["2"]}>Thinking level</Item><Item keysFirst keys={["A"]}>Attach files</Item><Item keysFirst keys={["S"]}>Stash prompt</Item><Item keysFirst keys={["V"]}>Toggle voice dictation</Item></Section>;
 export const leaderHints = () => <OverlayHints start={[[["←", "→"], "level"], [["Ctrl+Shift+1"], "Sidebar"], [["Ctrl+Shift+2"], "Main"]]} />;
-/*
- * Settings: a rail of sections, and a page per section showing each kind of line the app's
- * settings hold -- a field (select, input, switch, segmented), a value read, a link out, buttons,
- * a note or details under a line, something at the page's width, a shortcut, waiting.
- */
 export type SettingsSection = "appearance" | "shortcuts" | "models" | "prompts" | "runtime" | "servers" | "voice" | "web";
 export const SETTINGS: { label: string; sections: [SettingsSection, string, () => JSX.Element][] }[] = [
   { label: "Personal", sections: [["appearance", "Appearance", () => <Icons.Monitor />], ["shortcuts", "Shortcuts", () => <Icons.Keyboard />]] },
@@ -131,15 +118,12 @@ export const SETTING_PAGES: Record<SettingsSection, { status?: string; busy?: bo
   </> },
   web: { body: () => <Group title="Search"><SettingLine label="Web search"><SwitchDemo /></SettingLine><SettingLine label="Provider"><SelectTrigger value="Brave" bare /></SettingLine><SettingLine label="Brave" plain><SettingLink href="#">Docs</SettingLink></SettingLine></Group> },
 };
-/** Settings · Shortcuts: a command per line, its chords as keycaps that can be pressed to record another and cleared, and + to add one. */
 export function Shortcuts() {
   const [bound, setBound] = createSignal<Record<string, string[]>>({ "Open command palette": ["Ctrl K"], "Search chats…": ["Ctrl Shift K"], "Settings…": ["Ctrl ,"], "Model selector…": ["Ctrl Shift X"], "Workspace views…": [], "New chat": ["Ctrl Shift C"], "New folder": [], "Stash prompt": ["Ctrl Shift S"], "Toggle sidebar": ["Ctrl B"] });
   const clear = (command: string, chord: string) => setBound((all) => ({ ...all, [command]: all[command]!.filter((key) => key !== chord) }));
-  // Which command is recording, and what it has heard: the + (or a key) opens the recorder line under it.
   const [recording, setRecording] = createSignal<string | null>("Open command palette");
   const [heard, setHeard] = createSignal<string[]>([]);
   const add = (command: string) => <Button variant="ghost" size="icon-xs" aria-label="Add a shortcut" onClick={() => { setHeard([]); setRecording(command); }}><Icons.Add /></Button>;
-  // The gallery's recorder hears real keys: modifiers and one key make a chord; Esc cancels, Backspace clears.
   const listen = (event: KeyboardEvent) => {
     if (!recording()) return;
     if (event.key === "Escape") { setRecording(null); return; }
@@ -160,14 +144,12 @@ export function Shortcuts() {
       <Show when={recording() === command}><SettingRecorder keys={heard()} onCancel={() => setRecording(null)} onSave={() => { setBound((all) => ({ ...all, [command]: [...all[command]!, heard().join(" ")] })); setRecording(null); }} /></Show></>}</For></Group>
   </>;
 }
-/** The Interface size as a setting: the app's Appearance sets it; here it moves the whole gallery. */
 export const SCALE_STEPS = [["0.9", "90%"], ["1", "100%"], ["1.1", "110%"], ["1.25", "125%"]] as const;
 export function ScaleSetting() {
   const options = SCALE_STEPS.map(([value, label]) => ({ value, label }));
   const value = () => SCALE_STEPS.find(([step]) => Number(step) === scaleOf("--ui-scale"))?.[0] ?? "1";
   return <Segmented size="sm" label="Interface size" value={value()} options={options} onChange={(next) => setScale("--ui-scale", Number(next) === 1 ? null : Number(next))} />;
 }
-/** Settings: on a desktop the rail beside the page; on a phone one at a time, the page with Back to the rail. */
 export function Settings(props: { close: () => void; phone?: boolean; start?: SettingsSection | null }) {
   const [section, setSection] = createSignal<SettingsSection | null>(props.start === undefined ? (props.phone ? null : "appearance") : props.start);
   const rail = () => <OverlayRail title="Settings" foot={<OverlayFacts title="About"><Fact label="Interface" value="0.8.1-dev.20261020063706.abb9a10" /><Fact label="Running as" value="Browser tab" /><Fact label="Server" value="0.8.1-dev.20261020063706.abb9a10 · modified" /></OverlayFacts>} onClose={props.phone ? props.close : undefined}>
@@ -180,7 +162,6 @@ export function Settings(props: { close: () => void; phone?: boolean; start?: Se
     <Show when={section()} keyed>{(id) => page(id)}</Show>
   </Overlay>;
 }
-/** Chat search: the list, and beside it the preview, which Ctrl+P hides and shows (remembered, as the app does). */
 export function ChatSearch(props: { close: () => void }) {
   const stored = () => { try { return localStorage.getItem("gallery:search-preview") !== "closed"; } catch { return true; } };
   const [preview, setPreview] = createSignal(stored());
@@ -236,7 +217,6 @@ export function ConnectionDemo() {
     <Show when={cameraError()}><Note kind="card" tone="error">Camera unavailable. Paste the pairing link.</Note></Show>
   </ConnectionForm>;
 }
-/** Forms drawn as what is read: in the transcript's scope (its scale, a row a step under the body). */
 export const LONG = Array.from({ length: 20 }, (_, i) => i % 5 === 0 ? `// step ${i / 5 + 1}` : `  run(${i}, { size: ${i * 64} });`).join("\n");
 export type Lit = { top: string; left: string; width: string; height: string; radius?: string };
 export const noop = () => {};

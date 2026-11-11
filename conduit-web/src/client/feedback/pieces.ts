@@ -1,13 +1,8 @@
 import names from "virtual:ui-pieces";
 
-/*
- * Naming what is on the page (the feedback tool): an element is the root of a library piece when it says so
- * (`data-piece`) or carries a piece's own class; the names, sources and stylesheets come from the library's source
- * (scripts/ui-pieces.mjs), so nothing here lists pieces.
- */
+// The names, sources and stylesheets come from the library's source, so nothing here lists pieces.
 
 const ANCHORS = ["data-region", "data-tool", "data-surface", "data-tab", "data-doc-view", "data-pane"];
-/** The tool's own layer: never what is under the pointer. */
 const OWN = ".ui-feedback-layer";
 
 /** The piece an element is the root of, the outermost when it is drawn through others (TreeRow, not Row); null for a part or plain markup. */
@@ -21,7 +16,6 @@ export function pieceOf(element: Element): string | null {
   return roots.find((root) => !inner.has(root)) ?? roots[0]!;
 }
 
-/** The nearest piece root at or above an element. */
 export function pieceRoot(element: Element | null): Element | null {
   for (let node = element; node && node !== document.documentElement; node = node.parentElement) if (pieceOf(node)) return node;
   return null;
@@ -36,30 +30,20 @@ const drawnAt = (element: Element, x: number, y: number): Element => {
   }
   return element;
 };
-/** What is under a point, the tool's own layer aside. */
 export const under = (x: number, y: number) => { const hit = document.elementsFromPoint(x, y).find((element) => !element.closest(OWN)); return hit ? drawnAt(hit, x, y) : null; };
 
 type Box = { left: number; top: number; width: number; height: number };
 type Edges = { left: number; top: number; right: number; bottom: number };
 /** A piece with this much of what shows of it inside the box is mostly inside, so a drag need not be exact (half: a box 6px short of a 36px button on two sides still has it). */
 const MOSTLY = 0.5;
-/** A piece with this much of it inside the box is wholly inside, near enough. */
 const WHOLLY = 0.9;
-/** A box that runs the height or width of a piece is across it when it has this much of it. */
 const ACROSS = 0.25;
 /** A piece thinner than this (px) is a rule between pieces: a drag across several does not mean it. */
 const HAIRLINE = 4;
 const meet = (a: Edges, b: Edges): Edges => ({ left: Math.max(a.left, b.left), top: Math.max(a.top, b.top), right: Math.min(a.right, b.right), bottom: Math.min(a.bottom, b.bottom) });
 const area = (edges: Edges) => Math.max(0, edges.right - edges.left) * Math.max(0, edges.bottom - edges.top);
 
-/**
- * What a drag locks onto. A piece wholly inside the box is taken as it is. A piece partly inside is looked into
- * first: it is taken itself when it is mostly inside and the box has every piece in it (or it has none), and gives
- * the pieces of it the box has otherwise, so a drag round two of three tiles is the two tiles and a drag a little
- * short of a button is the button. Only what shows counts: what a scroller clips or another layer covers is not
- * there. A box that holds no piece (a drag inside one) is the smallest piece that holds the box, or the pieces of
- * that one it runs across when there are several.
- */
+/** Only what shows counts: what a scroller clips or another layer covers is not there. */
 export function piecesWithin(box: Box): Element[] {
   const drag: Edges = { left: box.left, top: box.top, right: box.left + box.width, bottom: box.top + box.height };
   if (!area(drag)) return [];
@@ -90,11 +74,9 @@ export function piecesWithin(box: Box): Element[] {
   };
   const gathered = solid(walk(document.body, view, drag, gather));
   if (gathered.length) return gathered;
-  // A drag inside a piece: outward from the piece at its middle to the first that holds the box.
   let holder = pieceRoot(under((drag.left + drag.right) / 2, (drag.top + drag.bottom) / 2));
   while (holder && area(meet(holder.getBoundingClientRect(), drag)) < WHOLLY * area(drag)) holder = pieceRoot(holder.parentElement);
   if (!holder) return [];
-  // A box across part of several of its pieces (the right half of three rows) means those: each one the box runs the height or the width of.
   const crossed = solid(walk(holder, view, drag, (inside, showing) => {
     const within = meet(showing, drag);
     return Math.max((within.right - within.left) / (showing.right - showing.left), (within.bottom - within.top) / (showing.bottom - showing.top)) >= WHOLLY && area(within) >= ACROSS * area(showing) && uncovered(inside, showing) ? [inside] : [];
@@ -110,7 +92,6 @@ const step = (element: Element) => {
   return `${element.tagName.toLowerCase()}${element.id ? `#${CSS.escape(element.id)}` : ""}${classes}${marks}`;
 };
 
-/** A CSS path to an element from the nearest anchored ancestor (or the body), with :nth-of-type where a step is not alone. */
 export function domPath(element: Element): string {
   const steps: string[] = [];
   for (let node: Element | null = element; node && node !== document.body && steps.length < 12; node = node.parentElement) {
@@ -124,13 +105,11 @@ export function domPath(element: Element): string {
 
 export type Described = ReturnType<typeof describe>;
 
-/** One element as a feedback item states it: enough for an agent with nothing else to find its code. */
 export function describe(element: Element) {
   const piece = pieceOf(element);
   const info = piece ? names.pieces[piece] : undefined;
   const partOf = piece ? null : [...element.classList].map((name) => names.classes[name]).find((entry) => entry?.part)?.piece ?? null;
   const classes = [...element.classList].filter((name) => names.classes[name]);
-  // The pieces it sits in, outermost first, each once in a row.
   const within: { piece: string; source?: string }[] = [];
   for (let node = element.parentElement; node && node !== document.documentElement; node = node.parentElement) {
     const name = pieceOf(node);
@@ -163,7 +142,6 @@ export function describe(element: Element) {
   };
 }
 
-/** A selection's name on its mark and note: the piece, or for several the pieces counted ("3 pieces: IconButton ×3"). */
 export function nameOf(elements: Element[]): string {
   if (elements.length === 1) return pieceOf(elements[0]!) ?? elements[0]!.tagName.toLowerCase();
   const counts = new Map<string, number>();

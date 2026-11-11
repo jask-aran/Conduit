@@ -7,11 +7,6 @@ import { seededModels, seededProfile } from "./seed";
 import { ChatHeader, Conversation } from "../client/chat/chat-screen";
 import { Transcript } from "../client/chat/transcript";
 
-/* The previews: the app's own chat screen over a seeded chat. */
-
-
-/** A chat screen of the app's own header, transcript and composer over a seeded chat, not wired to a server. */
-/** chat: a real one (live-chat.ts) in place of the seeded chat; the pickers stay seeded. */
 export function ChatScreen(props: { chat?: ReturnType<typeof fakeChat> } = {}) {
   const chat = props.chat ?? fakeChat();
   const models = seededModels();

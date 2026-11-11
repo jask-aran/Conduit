@@ -1,10 +1,4 @@
-/*
- * No server stands behind the gallery, so its sockets are fakes. Dictation's
- * plays a transcriber: ready at once, a phrase arriving word by word while
- * audio flows, and the phrase as the final text when the take stops; a silent
- * take (fake-mic.ts) hears nothing. Any other
- * socket stays connecting forever rather than failing, as a slow server would.
- */
+// Any socket but dictation's stays connecting forever rather than failing, as a slow server would.
 import { silentTake } from "./fake-mic";
 
 const PHRASE = "make the second paragraph a little shorter and keep the first one as it is".split(" ");

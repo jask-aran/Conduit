@@ -15,14 +15,11 @@ import { Note } from "@/components/ui/state";
 import { harnessLabelFor } from "../harness-brand";
 import type { Device, Environment } from "../platform/devices.ts";
 
-/** The hub's list of devices (GET /v0/nodes), as device-api.js declares it: an environment is the code's node. */
 export type { SharedRoot } from "../platform/devices.ts";
 export type Node = Environment;
-/** A client connected to this server now (runtime-hub.js): its kind, build, and what its user agent says it runs on. */
 /** `machine`: where the server saw it connect from -- "hub" (its own machine) or a tailnet machine's name. */
 type Client = { id: string; kind: string; build: string; registration?: string; platform?: string; agent?: string; nodes?: string[]; machine?: string };
 export type { Device };
-/** One client as a page shows it: on the map, and as its card. */
 /** app: the app or browser this page is seen from, when it is this client ("Conduit Dev · this app"). */
 export type Shown = { part: NetworkClient; node?: Node; mine: boolean; app?: string };
 export type ShownDevice = { id: string; name: string; paired: boolean; clients: Shown[] };
@@ -43,18 +40,13 @@ export const isWorkspace = (project: Project) => project.kind === "workspace" ||
 export const mountedOn = (projects: Project[], node: Node) => projects.filter((project) => isWorkspace(project) && (project.nodeId ? project.nodeId === node.id : Boolean(node.local)));
 
 /**
- * One server's network, read every few seconds: its devices, the clients connected to it and (for another server) its
- * projects, shown as devices of clients. The server in use is asked as usual; another only from an installed app, with
- * the sign-in it keeps for that server (a browser can only ask the server it is on: `readable` is false).
+ * Another server is asked only from an installed app, with the sign-in it keeps for that server: a browser can only
+ * ask the server it is on (`readable` is false).
  */
 export function createNetwork(options: {
-  /** The origin of the server whose network this is. */
   origin: () => string;
-  /** The server in use's projects (another server's are asked of it). */
   projects: () => Project[];
-  /** This app's own environment, when its companion is paired with this server. */
   own?: () => string | null;
-  /** Read again with the network. */
   onRefresh?: () => void;
 }) {
   const entry = () => servers().find((item) => item.origin === options.origin()) ?? null;
@@ -90,7 +82,6 @@ export function createNetwork(options: {
   // A server picked: its network, from nothing, so one server's devices never show under another's name.
   createEffect(on(options.origin, () => { setDevices(null); setClients([]); setTheirProjects([]); setError(""); refresh(); }, { defer: true }));
   refresh();
-  // Whether each client is connected changes under the page.
   // A tick while the last reads are still out (a slow hub waits up to api's timeout) follows them, not stacks on them.
   const poll = createSingleFlight(refresh);
   const timer = setInterval(() => void poll(), 5_000);
@@ -103,13 +94,6 @@ export function createNetwork(options: {
   return { entry, active, readable, devices, clients, projects, error, setError, refresh, network, hubDevice, hubNode, server };
 }
 
-/**
- * The devices as a page shows them: every paired device with its environments, and every client connected now. An
- * app whose companion is one of those environments (it says so on connecting) is that environment, headed. Any other
- * client goes to the machine the server saw it connect from: the hub's own device, a paired device of that name, or
- * a device named for that machine. One the server could not place is a device of its own when it is this one, and
- * listed with the other browsers when it is not.
- */
 function networkOf(devices: Device[], clients: Client[], self: string | null, own: string | null, projects: Project[]): ShownDevice[] {
   const names = new Map(devices.flatMap((device) => device.nodes.map((node) => [node.id, node.name] as const)));
   const count = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
@@ -158,7 +142,6 @@ function networkOf(devices: Device[], clients: Client[], self: string | null, ow
   return browsers.clients.length ? [...list, browsers] : list;
 }
 
-/** One environment's declared harnesses, a line each with its status; none declared is said so. */
 export function DeviceHarnesses(props: { node: Node; named?: boolean }) {
   const harnesses = () => props.node.harnesses || [];
   return <Group title={props.named ? `Harnesses · ${props.node.name}` : "Harnesses"}>

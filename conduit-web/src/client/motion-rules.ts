@@ -1,14 +1,7 @@
 /*
- * The first open's fade and a dashboard send's route motion (styles.css says
- * when each runs). Their selectors find each pane's outermost parts that do not
- * hold the composer with :has(), and a :has() under a descendant combinator
- * makes Chromium re-check ancestors on every DOM change beneath the panes --
- * whether or not the root attribute that gates the rule is set. Measured, that
- * was ~12ms of style a keystroke in a file editor and most of a streaming
- * turn's style cost. So the rules exist
- * only while `data-arrival` or `data-route-motion` is on the root: a style
- * element added in the same task the attribute is set (a mutation observer
- * runs before the next frame) and removed when both are gone.
+ * A :has() under a descendant combinator makes Chromium re-check ancestors on every DOM change beneath the panes,
+ * whether or not the root attribute gating the rule is set (~12ms of style a keystroke). So these rules exist only
+ * while `data-arrival` or `data-route-motion` is on the root, added in the same task the attribute is set.
  */
 const MOTION_RULES = `
 :root[data-arrival="waiting"] :is(

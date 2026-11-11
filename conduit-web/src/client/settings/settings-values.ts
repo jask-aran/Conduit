@@ -1,12 +1,6 @@
 import { createSignal } from "solid-js";
 
-/*
- * What each setting is set to, as Settings last drew it: read off the page (a select's shown choice, a segmented
- * switch's lit segment, a switch's On or Off, a read value), never from a list kept by hand. Search finds a setting by
- * it. A section's lines are read whenever it is drawn; a sweep draws every section once out of sight (settings-core's
- * harvest), so a setting can be found by its value before its section was ever opened. Kept across launches for this
- * device, so the first search is instant. Typed text (a name, a key, an address) is never read.
- */
+// Read off the page, never from a list kept by hand. Typed text (a name, a key, an address) is never read.
 export type SeenSetting = { section: string; group: string | null; label: string; value: string };
 
 const STORE = "conduit:settings-values";
@@ -17,12 +11,9 @@ try {
 } catch { /* nothing kept, or not readable: the sweep fills it */ }
 const [revision, setRevision] = createSignal(0);
 let keep = 0;
-/** How long the seen values hold still before they are written to storage. */
 const STORE_DEBOUNCE_MS = 500;
 
-/** Every setting seen so far, with its value. */
 export const seenSettings = () => { revision(); return [...bySection.values()].flat(); };
-/** When every section was last swept (this launch): 0 until one has finished. */
 export let sweptAt = 0;
 export const markSwept = () => { sweptAt = Date.now(); };
 
@@ -33,7 +24,6 @@ const own = (element: Element | null | undefined, without: string) => {
   return (copy.textContent || "").replace(/\s+/g, " ").trim();
 };
 
-/** The settings a drawn page holds: each line's name, its group's title, and what it is set to. */
 export function readSettings(body: Element, section: string): SeenSetting[] {
   const seen: SeenSetting[] = [];
   for (const line of body.querySelectorAll<HTMLElement>(".ui-setting-line")) {
@@ -54,7 +44,7 @@ export function readSettings(body: Element, section: string): SeenSetting[] {
   return seen;
 }
 
-/** Keep what a section's page showed. A page with no lines yet (still loading) keeps what was known. */
+/** A page with no lines yet (still loading) keeps what was known. */
 export function rememberSettings(section: string, seen: SeenSetting[]) {
   if (!seen.length) return;
   const before = JSON.stringify(bySection.get(section) ?? null);

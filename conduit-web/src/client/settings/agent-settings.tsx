@@ -13,11 +13,6 @@ import { EmailSettings } from "./email-settings";
 import { Group } from "@/components/ui/group";
 import { Note } from "@/components/ui/state";
 
-/**
- * The persistent agent's settings (PATCH /v0/agent): who it is, how much it says and spends, and its routine. Saved
- * as edited, as every Settings section is; `autosave` is the section's, for the header's status.
- */
-
 type Settings = NonNullable<AgentView["settings"]>;
 type Draft = { name: string; budget: string };
 
@@ -73,7 +68,6 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
       const allowed = levels(spec);
       setWork({ model: spec, thinkingLevel: keep && allowed.includes(keep) ? keep : allowed.includes("medium") ? "medium" : allowed[0] || "off" });
     };
-    // Off: starts from jbot's own choice, which the person then changes.
     const same = (on: boolean) => {
       if (on) return setWork(null);
       const start = home() ?? { model: options.models()[0]?.spec ?? "", thinkingLevel: "" };
@@ -193,10 +187,7 @@ export function createAgentSettings(options: { models: () => ModelOption[]; onMa
 }
 
 type ApprovalPolicy = { version: string; may: string[]; always: string[]; limits: string[]; exact: string[] };
-/**
- * The person's standing rules for the approval model: what the agent may do, what is
- * always theirs, and limits they set; one rule a line, in plain words. Until saved, the starter rules apply.
- */
+/** Until saved, the starter rules apply. */
 function ApprovalRules(props: { name: string; onOpenBlock?: (id: string) => void; onOpenDocument?: (id: string) => void }) {
   const [policy, setPolicy] = createSignal<ApprovalPolicy | null>(null);
   const [starter, setStarter] = createSignal(false);
@@ -218,8 +209,7 @@ function ApprovalRules(props: { name: string; onOpenBlock?: (id: string) => void
     } catch (failure) { setError((failure as Error).message); }
     finally { setSaving(false); }
   };
-  // A list of rules: its name on a line, then the library's text editor, full width, without its bar or foot and as
-  // tall as its rules (a line each, numbered). A component with a literal label, so settings search finds it.
+  // A component with a literal label, so settings search finds it.
   const RuleList = (props: { key: "may" | "always" | "limits"; label: string; title: string }) =>
     <><SettingLine plain label={props.label} title={props.title} state="one a line" />
       <SettingWide><TextEditor label={props.label} value={draft()[props.key]} markdown={false} bar={false} status={false} fit

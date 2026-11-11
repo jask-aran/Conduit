@@ -85,13 +85,10 @@ const allSectionGroups = [
   { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }, { id: "browser", label: "Hub browser", icon: Icons.Browser }, { id: "integrations", label: "Integrations", icon: Icons.ExternalLink }] },
 ] as const;
 type VisibleSection = typeof allSectionGroups[number]["sections"][number]["id"];
-// A device with no keyboard (a phone) has no keys to set: Shortcuts is not listed there.
 const sectionGroups = touchOnly() ? allSectionGroups.map((group) => ({ ...group, sections: group.sections.filter((item) => item.id !== "shortcuts") })) : allSectionGroups;
 type Section = VisibleSection | "workspaces";
-/** Workbench pages (Prompts, Blocks: a side column beside a pane filling the height) open Settings wider,
- *  as far as the window allows; every other page keeps its width. */
 const WIDE_SECTIONS = new Set<string>(["prompts", "blocks", "skills", "tools"]);
-// A section's name is said once, in the rail's list above; Workspace profile is reached from a workspace, not the rail.
+// Workspace profile is reached from a workspace, not the rail.
 const sectionLabels = { ...Object.fromEntries(allSectionGroups.flatMap((group) => group.sections.map((item) => [item.id, item.label]))), workspaces: "Workspace profile" } as Record<Section, string>;
 const label = (section: Section) => section === "agent" ? agentView()?.settings?.name || sectionLabels.agent : sectionLabels[section];
 interface RuntimeSettings {
@@ -184,8 +181,7 @@ const sameVoiceSelection = (left: VoiceLocalSelection | null | undefined, right:
   && left.artifactId === right.artifactId
   && left.execution === right.execution
   && left.segmentation === right.segmentation);
-// The runtime fields as typed, checked against the ranges the server keeps
-// them in (runtime-settings.js), which it would otherwise clamp to silently.
+// Checked against the ranges the server keeps them in, which it would otherwise clamp to silently.
 type RuntimeDraft = { live: string; generating: string };
 const RUNTIME_LIMITS = { live: [1, 32], generating: [1, 8] } as const;
 // A count chosen from steps, the current one kept among them when it is not one (set elsewhere).
@@ -206,17 +202,11 @@ const gpuRendering = (() => {
 })();
 const SIDEBAR_CHAT_STEPS = [5, 10, 15, 20, 30, 50, 75, 100];
 const RUNTIME_STEPS = { live: [1, 2, 4, 6, 8, 12, 16, 24, 32], generating: [1, 2, 3, 4, 5, 6, 7, 8] } as const;
-/** How long Settings is open before search's index is built in an idle moment. */
 const SEARCH_INDEX_DELAY_MS = 600;
-/** The pause in typing after which search shows the first matching section. */
 const SECTION_SWITCH_PAUSE_MS = 90;
-/** How long an opened result's line stays marked found. */
 const FOUND_MARK_MS = 1600;
-/** The gap between looks for an opened result's line while its section renders. */
 const LOOKUP_RETRY_MS = 50;
-/** How long the page in view holds still before its values are read for search. */
 const READ_SETTLE_MS = 400;
-/** How long Settings is open and idle before the sweep of the other sections starts. */
 const SWEEP_START_MS = 300;
 /** The wait for an idle moment where requestIdleCallback is missing. */
 const IDLE_FALLBACK_MS = 50;
@@ -249,7 +239,6 @@ const VoiceLocalCatalogue = lazy(() => import("./voice-local-catalogue"));
 export function Settings(props: {
   open: boolean;
   initialSection: Section;
-  /** False when Settings was opened without naming a section. */
   sectionWasNamed?: boolean;
   initialWorkspaceId?: string | null;
   onOpenChange: (open: boolean) => void;
@@ -283,14 +272,12 @@ export function Settings(props: {
   sidebarChatLimit: number;
   onSidebarChatLimitChange: (limit: number) => void;
   onOpenModelSelector: () => void;
-  /** Adds a folder a paired device shares as a workspace (Devices). */
   onAddWorkspace: (input: { mode: "node"; nodeId: string; rootId: string }) => Promise<boolean>;
   onOpenDeviceTerminal: (node: { id: string; local?: boolean }) => void;
   onOpenDeviceBrowser?: (nodeId: string) => void;
-  /** A workspace from its device's list: Settings closes and the workspace opens. */
   onOpenWorkspace: (project: Project) => void;
   shortcuts: ShortcutManager;
-  /** Drawn out of sight to read every section's values (settings-values.ts): no dialog, no keys of its own; called when done. */
+  /** Drawn out of sight to read every section's values: no dialog, no keys of its own; called when done. */
   harvest?: () => void;
 }) {
   const [section, setSection] = createSignal<Section>(props.initialSection || "ui");
@@ -302,24 +289,14 @@ export function Settings(props: {
   const [transcriptFontChoice, setTranscriptFontChoice] = createSignal(transcriptFont());
   const [terminalFontChoice, setTerminalFontChoice] = createSignal(terminalFont());
   const [fadeMs, setFadeMs] = createSignal(streamFadeMs());
-  /*
-   * On a phone, Settings is two screens rather than a rail beside a pane.
-   *
-   * The rail was 190px of labelled rows on a desktop and 82px of unlabelled
-   * icons on a phone, which is the same information with the part that said
-   * what it meant removed. There is no room for both a list and what it opens,
-   * so they take turns: the list, then the section, with a way back.
-   */
+  // On a phone there is no room for both the rail and a section, so they take turns.
   const [browsingSections, setBrowsingSections] = createSignal(true);
   const narrow = isMobileLayout;
-  // On a phone the rail and a section take turns, so focus follows: into the section's title, and back to its row.
   const openSection = (id: Section) => {
     setSection(id);
     setBrowsingSections(false);
     if (narrow()) queueMicrotask(() => document.querySelector<HTMLElement>('[role="dialog"][aria-label="Settings"] main h2')?.focus());
   };
-  // Search: every setting with a literal label (virtual:settings-index, read from this source), and each section by
-  // name. A result opens its section and brings its line into view, marked for a moment.
   const [query, setQuery] = createSignal("");
   const [cursor, setCursor] = createSignal(0);
   createEffect(on(query, () => setCursor(0)));
@@ -342,12 +319,9 @@ export function Settings(props: {
   });
   const entries = createMemo(() => {
     if (!searchable()) return [];
-    // A section answers to its name and to the words the command palette knows it by.
     const sections: Entry[] = sectionGroups.flatMap((group) => group.sections.map((item) => ({ section: item.id as Section, group: null, label: label(item.id as Section),
       words: SETTINGS_SECTIONS.find((known) => known.id === item.id)?.keywords.join(" ") })));
     const known = new Set(sections.map((item) => item.section));
-    // What only the running app knows: each command with a shortcut, each account and search provider in use (the rest
-    // are behind Add an account), each document and block.
     const live: Entry[] = [
       ...props.shortcuts.commands.map((command) => ({ section: "shortcuts" as Section, group: "Shortcuts", label: command.label, words: command.contexts.join(" "),
         value: props.shortcuts.effectiveBindings(command.id).map((binding) => formatShortcutBinding(binding, props.shortcuts.environment)).join(" · ") })),
@@ -356,7 +330,6 @@ export function Settings(props: {
       ...(context.data()?.documents ?? []).map((document) => ({ section: "prompts" as Section, group: "Documents", label: document.role.label, words: "prompt document" })),
       ...(context.data()?.blocks ?? []).map((block) => block.skill ? { section: "skills" as Section, group: "Skills", label: block.label, words: "skill" } : { section: "blocks" as Section, group: "Blocks", label: block.label, words: "block" }),
     ];
-    // What each is set to, as its page last showed it; a setting only the page knows (a row written from data) joins too.
     const values = new Map(seenSettings().map((seen) => [`${seen.section}\0${seen.label}`, seen]));
     const named = [...settingsIndex.map((entry) => ({ ...entry, section: entry.section as Section })), ...live];
     const have = new Set(named.map((entry) => `${entry.section}\0${entry.label}`));
@@ -379,8 +352,6 @@ export function Settings(props: {
     const begins = (list: string[], word: string) => list.some((item) => item.startsWith(word));
     const scored: Array<Entry & { score: number }> = [];
     for (const { entry, whole, plain, name, where, set, said } of entries()) {
-      // Every word typed begins a word of the setting. Ranked by the weakest place one was found: its name (best the
-      // name itself, then a name starting so), then where it is, then what it is set to, then what it does.
       let score = plain === typed ? 0 : plain.startsWith(typed) ? 0.5 : 1;
       for (const word of words) {
         const at = begins(name, word) ? 1 : begins(where, word) ? 2 : begins(set, word) ? 2.5 : begins(said, word) ? 3 : -1;
@@ -391,12 +362,9 @@ export function Settings(props: {
     }
     return scored.sort((a, b) => a.score - b.score);
   });
-  // What matched, under the section it is in, in the rail's order: a wide Settings filters its tabs and the open
-  // page to these; a phone, whose rail is a screen of its own, lists them under their sections.
   const matches = createMemo(() => {
     const found = new Map<Section, ReturnType<typeof results>>();
     for (const group of sectionGroups) for (const item of group.sections) {
-      // The section itself, when its own name or keywords matched, leads its list.
       const whole = (result: { group: string | null; label: string }) => result.group === null && result.label === label(item.id as Section);
       const mine = results().filter((result) => result.section === item.id).sort((a, b) => Number(whole(b)) - Number(whole(a)));
       if (mine.length) found.set(item.id as Section, mine);
@@ -404,8 +372,6 @@ export function Settings(props: {
     return found;
   });
   const flat = createMemo(() => [...matches().values()].flat());
-  // A wide Settings, searching: the open section is one that matched, the first if the one open did not. A search
-  // cleared without a tab chosen from it goes back to the section it began on.
   let before: Section | null = null;
   let moved: Section | null = null;
   createEffect(() => {
@@ -422,8 +388,7 @@ export function Settings(props: {
     const timer = window.setTimeout(() => { moved = next; setSection(next); }, SECTION_SWITCH_PAUSE_MS);
     onCleanup(() => clearTimeout(timer));
   });
-  // ...and its page shows only what matched: the lines by name, a group whole when its title matched, the page whole
-  // when the section's own name did. Lines arrive after their data, so the page is filtered again as it changes.
+  // Lines arrive after their data, so the page is filtered again as it changes.
   const filterPage = (body: Element, found: ReturnType<typeof results> | null) => {
     for (const element of body.querySelectorAll("[data-filtered-out], [data-filter-first]")) { element.removeAttribute("data-filtered-out"); element.removeAttribute("data-filter-first"); }
     // The whole page only when the section was found by its own name, not by a word it also answers to.
@@ -445,7 +410,6 @@ export function Settings(props: {
     if (!shown) return;
     for (const child of body.children) if (!groups.some((group) => child === group || child.contains(group))) out.push(child);
     for (const element of out) element.setAttribute("data-filtered-out", "");
-    // The first group left has nothing above it now: no rule over it.
     groups.find((group) => !out.includes(group))?.setAttribute("data-filter-first", "");
   };
   createEffect(() => {
@@ -454,7 +418,6 @@ export function Settings(props: {
     const body = dialogEl()?.querySelector(".ui-overlay-page-body");
     if (!body) return;
     filterPage(body, found);
-    // Nothing anywhere matched: the page shows nothing, as the rail says.
     if (searching && !matches().size) {
       for (const child of body.children) child.setAttribute("data-filtered-out", "");
       onCleanup(() => { for (const element of body.querySelectorAll("[data-filtered-out]")) element.removeAttribute("data-filtered-out"); });
@@ -469,7 +432,6 @@ export function Settings(props: {
   const lookup = createLatest();
   const openResult = (result: { section: Section; label: string; group: string | null }) => {
     openSection(result.section);
-    // A section: into its page. A setting: its line, in view and marked, with focus on its control.
     if (result.group === null && result.label === label(result.section)) { requestAnimationFrame(focusPage); return; }
     // The section renders on the next frames (some after their data): look for the line a few times.
     let tries = 0;
@@ -493,7 +455,6 @@ export function Settings(props: {
     setBrowsingSections(true);
     queueMicrotask(() => document.querySelector<HTMLElement>('[role="dialog"][aria-label="Settings"] [role="tab"][aria-selected="true"]')?.focus());
   };
-  /** The list is a screen of its own only when there is no room for both. */
   const showingIndex = () => narrow() && browsingSections();
   const [runtime, setRuntime] = createSignal<RuntimeSettings | null>(null);
   const [runtimeDraft, setRuntimeDraft] = createSignal<RuntimeDraft>({ live: "", generating: "" });
@@ -519,12 +480,11 @@ export function Settings(props: {
     save: async (id) => { await props.onDefaultTemplateChange(id); return id; },
     onSaved: () => {},
   });
-  // Prompts and Blocks share one load of the context (context-settings.tsx): a block opened from a document's stack
-  // opens in Blocks, and a document a block is used in opens in Prompts.
+  // Prompts and Blocks share one load of the context: a block opened from a document's stack opens in Blocks, and a
+  // document a block is used in opens in Prompts.
   const context = createContextData();
   const [contextDocument, setContextDocument] = createSignal("");
   const [contextBlock, setContextBlock] = createSignal("");
-  // The skill opened in Settings › Skills (its id as the hub lists it; a document names it skill-<id>).
   const [openSkill, setOpenSkill] = createSignal("");
   createEffect(() => { if (props.open && (section() === "prompts" || section() === "blocks")) void context.load(); });
   const [workspaceId, setWorkspaceId] = createSignal<string | null>(null);
@@ -533,7 +493,6 @@ export function Settings(props: {
   // Load, poll, start and answer each write the attempt; the last one asked wins, so an older answer cannot bring
   // back a prompt already answered.
   const attemptWrites = createLatest();
-  // The provider chosen to add (not connected yet), and the search provider chosen to add.
   const [addingAccount, setAddingAccount] = createSignal("");
   const [addingSearch, setAddingSearch] = createSignal("");
   const [authResponse, setAuthResponse] = createSignal("");
@@ -546,7 +505,6 @@ export function Settings(props: {
   const [searchSettings, setSearchSettings] = createSignal<SearchSettings | null>(null);
   const [searchStatus, setSearchStatus] = createSignal<"idle" | "loading" | "ready" | "error">("idle");
   const [searchError, setSearchError] = createSignal("");
-  // A provider's key being entered, in its row; one row at a time.
   const [searchSaving, setSearchSaving] = createSignal(false);
   // Each answer is the whole page; only the latest edit's is shown, so an
   // older answer never undoes a toggle made since.
@@ -568,7 +526,6 @@ export function Settings(props: {
   const [floatBusy, setFloatBusy] = createSignal(false);
   const [floatError, setFloatError] = createSignal("");
   const floatFailure = (error: unknown) => setFloatError(error instanceof Error ? error.message : "Could not update Float.");
-  /** Setup steps Float still lacks: screen context, Conduit as the assistant, then the side key (Samsung). */
   const floatSetupLeft = () => {
     const status = floatStatus();
     if (!status) return 0;
@@ -700,7 +657,6 @@ export function Settings(props: {
     }
     // A secret being entered in its row, or keys being recorded: their own Escape puts the row back, Settings stays.
     if (target?.closest("[data-credential], .ui-setting-recorder")) return;
-    // Keyboard: Escape steps back out before it closes: a search clears, a page hands focus back to its rail row.
     if (target?.matches('[aria-label="Search settings"]') && query()) { event.preventDefault(); event.stopPropagation(); setQuery(""); return; }
     if (!narrow() && target?.closest('[role="dialog"][aria-label="Settings"] main')) {
       event.preventDefault();
@@ -715,12 +671,7 @@ export function Settings(props: {
     event.stopPropagation();
     props.onOpenChange(false);
   };
-  /*
-   * Settings by keyboard: / or Ctrl+F finds (the Find in Settings command, registered with the settings context below;
-   * ↑↓ through the results, Enter opens one); the rail moves with ↑↓ and its row is the cursor; → or Enter goes into
-   * the page, Tab from control to control (each shows its own focus); Escape steps back: page to rail, rail to closed.
-   * The rail's and the results' arrows are list grammar, so they stay with their lists.
-   */
+  // The rail's and the results' arrows are list grammar, so they stay with their lists.
   const dialogEl = () => document.querySelector<HTMLElement>('[role="dialog"][aria-label="Settings"]');
   const focusRail = () => dialogEl()?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
   const focusPage = () => {
@@ -746,7 +697,6 @@ export function Settings(props: {
     event.preventDefault();
     const index = event.key === "Home" ? 0
       : event.key === "End" ? tabs.length - 1
-        // A list clamps at its ends (keyboard-model.md › Move): ↑ on the first row goes up to search.
         : current + (event.key === "ArrowDown" ? 1 : -1);
     if (index < 0) { focusSearch(); return; }
     if (index >= tabs.length) return;
@@ -772,8 +722,7 @@ export function Settings(props: {
     setVoiceDraft({ ...props.voiceSettings });
     const initial = props.initialSection || "ui";
     setSection(initial);
-    // Asked for a section by name -- from a command, or a link out of the app
-    // -- so that is what was wanted, not a list with it somewhere in it.
+    // A section asked for by name is what was wanted, not a list with it somewhere in it.
     setBrowsingSections(!props.sectionWasNamed);
     setWorkspaceId(props.initialWorkspaceId || props.projects.find((project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || ""))?.id || null);
   }));
@@ -794,13 +743,11 @@ export function Settings(props: {
 
   createEffect(() => {
     if (!props.open || props.harvest) return;
-    // A modal: the app's chords do not reach the page under it (docs/plans/keyboard-model.md › Ownership); its own
-    // chord (Ctrl+,) closes it.
+    // A modal: the app's chords do not reach the page under it; its own chord (Ctrl+,) closes it.
     const releaseSettingsContext = props.shortcuts.activateContext("settings", { exclusive: true });
     const releaseClose = props.shortcuts.registerHandler(COMMAND_IDS.openSettings, "settings", () => props.onOpenChange(false));
     const releaseFind = props.shortcuts.registerHandler(COMMAND_IDS.findInSettings, "settings", focusSearch, { when: findAvailable });
     document.addEventListener("keydown", dismissEscape, true);
-    // Back steps out as far as it came in: a search clears, a section goes back to the list of them, the list closes.
     const releaseBack = holdBack(() => {
       if (query()) return void setQuery("");
       if (narrow() && !browsingSections()) return void backToSections();
@@ -834,7 +781,6 @@ export function Settings(props: {
     }
   };
   createEffect(() => { if (props.open && section() === "server") void loadRuntime(); });
-  // The processes running now, each named by its chat; read again every few seconds while the page is open.
   type LiveProcess = { id: string; chatId: string; status: string; activity?: string; generation?: unknown; model?: string; createdAt?: string };
   const [processes, setProcesses] = createSignal<LiveProcess[]>([]);
   const chatTitles = new Map<string, string>();
@@ -990,11 +936,6 @@ export function Settings(props: {
     catch (error) { setAuthError((error as Error).message); }
     finally { setAuthLoading(false); }
   };
-  /**
-   * A provider account's line: how it is connected and its own actions (sign in, a key, remove), its key form in
-   * place of them while open, the fields that go with the key and a sign-in under way below it. One credential, set in Models;
-   * Web search points there for what it runs on.
-   */
   const accountLine = (provider: PiAuthProvider, options: { label?: string; title?: string; pending?: boolean } = {}) => {
     const configured = () => provider.auth.configured;
     const signedIn = () => provider.auth.kind === "oauth";
@@ -1031,7 +972,6 @@ export function Settings(props: {
   };
   createEffect(() => { if (props.open && section() === "search") void loadSearchSettings(); });
 
-  /** A change shown at once and saved straight after; the header says how it stands. */
   const editSearch = (edit: SearchEdit) => {
     const current = searchSettings();
     if (!current) return;
@@ -1039,7 +979,6 @@ export function Settings(props: {
     searchAutosave.edit(edit, "now");
   };
   const searchProvider = (id: string) => searchSettings()?.providers.find((provider) => provider.id === id);
-  // What the route stands on, muted after its name.
   const routeState = () => {
     const first = searchSettings()?.route.first;
     if (!first || first === "auto") return "OpenAI on ChatGPT models, else Exa";
@@ -1102,7 +1041,6 @@ export function Settings(props: {
   createEffect(() => {
     if (!props.open || section() !== "voice") return;
     void loadAudioInputs();
-    // A microphone plugged in, or the list becoming visible, refreshes it.
     const changed = () => void loadAudioInputs();
     navigator.mediaDevices?.addEventListener("devicechange", changed);
     onCleanup(() => navigator.mediaDevices?.removeEventListener("devicechange", changed));
@@ -1118,7 +1056,6 @@ export function Settings(props: {
     onCleanup(() => window.clearInterval(timer));
   });
 
-  // This browser's dictation settings are stored as they change.
   const updateVoiceDraft = (patch: Partial<VoiceDictationSettings>) => {
     if (patch.warmMicrophone === false) stopWarmMicrophone();
     const next = { ...voiceDraft(), ...patch };
@@ -1133,8 +1070,6 @@ export function Settings(props: {
         .catch(floatFailure);
     }
   };
-  // The server's: a choice at once, typing after a pause. A custom endpoint
-  // that is not an https:// URL yet is held back rather than sent.
   const voiceEndpointError = (settings: VoiceServerSettings) => {
     if (settings.mode !== "remote" || settings.provider !== "custom") return "";
     try { return new URL(settings.endpoint).protocol === "https:" ? "" : "An https:// URL"; } catch { return "An https:// URL"; }
@@ -1411,9 +1346,6 @@ export function Settings(props: {
     if ((["live", "generating"] as const).some((key) => runtimeFieldError(draft, key))) return runtimeAutosave.hold();
     runtimeAutosave.edit({ maxLiveProcesses: Number(draft.live), maxGeneratingProcesses: Number(draft.generating) });
   };
-  // Each section saved as it is edited, and how its header says so. Leaving
-  // the section or closing Settings sends what is waiting rather than
-  // dropping it; a failure nobody is looking at any more is said in a toast.
   const agentSettings = createAgentSettings({ models: namingModels, onManageModels: props.onOpenModelSelector,
     onOpenBlock: (id) => { setContextBlock(id); openSection("blocks"); }, onOpenDocument: (id) => { setContextDocument(id); openSection("prompts"); } });
   const autosaved: Partial<Record<Section, { label: string; saves: Array<ReturnType<typeof createAutosave<any>>> }>> = {
@@ -1434,8 +1366,6 @@ export function Settings(props: {
       });
     }));
   }
-  // The header says how the section's edits stand: saving, saved, or not
-  // saved with Retry. Sections that save on their own terms say nothing.
   const saveState = (): { state: SaveState; retry: () => void } | null => {
     const entry = autosaved[section()];
     return entry ? { state: combineSaveStates(entry.saves.map((save) => save.state())), retry: () => entry.saves.forEach((save) => save.retry()) } : null;
@@ -1447,7 +1377,6 @@ export function Settings(props: {
     return kind === "saving" ? { status: "Saving", busy: true } : kind === "saved" ? { status: "Saved" }
       : kind === "failed" ? { status: "Not saved", failed: true, why: (saveState()!.state as { message: string }).message, onRetry: saveState()!.retry } : {};
   };
-  // The sections' pages, drawn by the dialog and, out of sight, by the sweep that reads their values.
   const pages = () => <>
           <Show when={section() === "prompts"}><PromptsSettings context={context} documentId={contextDocument()} onDocument={setContextDocument} onEditBlock={(id) => { setContextBlock(id); openSection("blocks"); }} onOpenSkill={(id) => { setOpenSkill(id.replace(/^skill-/, "")); openSection("skills"); }} models={namingModels} onManageModels={props.onOpenModelSelector} /></Show>
           <Show when={section() === "blocks"}><BlocksSettings context={context} blockId={contextBlock()} onBlock={setContextBlock} onOpenDocument={(id) => { setContextDocument(id); openSection("prompts"); }} /></Show>
@@ -1579,7 +1508,6 @@ export function Settings(props: {
           <Show when={section() === "browser"}><BrowserSettings /></Show>
           <Show when={section() === "integrations"}><>
             <Group title="Model providers">
-              {/* A sign-in under way is a dialog of its steps: open the provider's page, then hand back what it ends on. */}
               <Dialog open={Boolean(authAttempt()?.owned && (authAttempt()!.active || authAttempt()!.error))} onOpenChange={(open) => { if (!open) { if (authAttempt()?.active) void cancelOAuth(); else { attemptWrites.drop(); setAuthAttempt(null); } } }}
                 title={`Sign in to ${authAttempt()?.providerLabel || "the provider"}`} description={authAttempt()?.message} close busy={authLoading()}>
                 <Show when={authAttempt()}>{(current) => <>
@@ -1684,8 +1612,6 @@ export function Settings(props: {
                       <Switch label="Float" checked={floatStatus()?.enabled ?? false} disabled={floatBusy() || !floatStatus()} onChange={(enabled) => void changeFloat(enabled)} />
                     </SettingLine>
                     <Show when={floatStatus()?.enabled}>
-                      {/* One way through what Float still lacks: each step opens its Settings page with a toast saying
-                          what to tap, and Conduit comes back by itself once Android reports it done. */}
                       <Show when={floatSetupLeft() > 0}>
                         <SettingLine plain label="Setup" state={`${floatSetupLeft()} ${floatSetupLeft() === 1 ? "step" : "steps"} left`}
                           title="Goes through each step Float still lacks, any of which can be skipped.">
@@ -1865,7 +1791,6 @@ export function Settings(props: {
                       { value: "processed", label: "Processed" },
                     ]} />
                   </SettingLine>
-                  {/* As on the Shortcuts page: its keys, which open a recorder under the line. */}
                   <SettingLine plain label="Shortcut" title="Hold or press to dictate">
                     <Keycap label={`the dictation shortcut, ${voiceDraft().shortcut}`} onClick={() => { setVoiceKeys(""); setRecordingVoiceKeys(true); }}>{voiceDraft().shortcut}</Keycap>
                   </SettingLine>
@@ -1949,7 +1874,6 @@ export function Settings(props: {
                   <Show when={!settings().cloudflare}><Note>{CLOUDFLARE_NEEDED}</Note></Show>
                 </Group>
                 <Group title="Providers">
-                  {/* Those that can search now, then the one being added; the rest are a search away. */}
                   <For each={settings().providers.filter((provider) => provider.ready || provider.id === addingSearch())}>{(provider) =>
                     <SettingCredential label={provider.label} title={provider.description} state={<>{provider.source ? SEARCH_SOURCE_LABELS[provider.source] : "not set"}</>}
                       busy={searchSaving()} stored={provider.stored} optional={provider.ready} editable={provider.source !== "environment"}
@@ -1981,7 +1905,6 @@ export function Settings(props: {
               </Show>
               <SettingLine plain label="Models" state={<>{props.models.enabledModels().length} enabled</>}><Button variant="ghost" size="sm" onClick={props.onOpenModelSelector}>Manage</Button></SettingLine>
             </Group>
-            {/* Helper models: the small jobs beside a chat, each saying what it falls back to. Only naming has its own today. */}
             <Group title="Helper models">
               <SettingLine plain label="Naming" state={<>{sessionNameModel() ? "Its own model" : "None: new chats stay untitled"}</>}
                 title="Titles each new chat from its first message, with the model chosen here.">
@@ -2015,7 +1938,6 @@ export function Settings(props: {
             </Group>
           </></Show>
   </>;
-  // Every setting's value, for search: the page in view is read as it changes...
   createEffect(() => {
     if (!props.open || props.harvest || showingIndex()) return;
     const shown = section();
@@ -2033,8 +1955,6 @@ export function Settings(props: {
     attach();
     onCleanup(() => { over = true; watcher.disconnect(); clearTimeout(timer); });
   });
-  // ...and the rest are swept once Settings is open and idle: a second Settings, out of sight, draws each section in
-  // turn until its lines settle, reads them, and is gone. Again when what it read is five minutes old.
   const SWEPT: Section[] = ["ui", "account", "models", "agent", "server", "device", "devices", "voice", "search", "browser", "integrations"];
   const [sweeping, setSweeping] = createSignal(false);
   createEffect(() => {
@@ -2055,7 +1975,6 @@ export function Settings(props: {
         await new Promise<void>((resolve) => { if ("requestIdleCallback" in window) window.requestIdleCallback(() => resolve(), { timeout: 600 }); else setTimeout(resolve, IDLE_FALLBACK_MS); });
         if (over) return;
         setSection(id);
-        // Its lines come with its data: wait until their number holds still, a second and a half at most.
         let last = -1;
         for (let tries = 0; tries < 15 && !over; tries++) {
           await pause(100);
@@ -2093,14 +2012,12 @@ export function Settings(props: {
             if (event.key === "Escape" && query()) { event.preventDefault(); event.stopPropagation(); setQuery(""); }
           }} />
         <Show when={query().trim() && !flat().length}><Group kind="nav" title="No setting matches" /></Show>
-        {/* A phone: what matched, under the section it is in; a row opens the section on its line. */}
         <Show when={query().trim() && narrow()}>
           <For each={[...matches()]}>{([id, found]) => <Group kind="nav" title={label(id)}>
             <For each={found}>{(result) => <Row density="nav" element="button" data-result={flat().indexOf(result)} data-focus-shown={flat().indexOf(result) === cursor() ? "" : undefined} tabIndex={-1}
               detail={result.group ?? undefined} meta={result.value || undefined} end={<Icons.ChevronRight />} onClick={() => openResult(result)}>{result.group === null && result.label === label(id) ? `All of ${label(id)}` : result.label}</Row>}</For>
           </Group>}</For>
         </Show>
-        {/* A wide Settings, searching: the tabs that hold a match, each with how many, the open page showing only those. */}
         {/* The rows stay as they are while the search changes: one that does not match is taken out, never the list redrawn. */}
         <Show when={!(query().trim() && narrow())}><For each={sectionGroups}>{(group) => <Show when={!query().trim() || group.sections.some((item) => matches().has(item.id as Section))}><Group kind="nav" title={group.label}>
           <For each={group.sections}>{(item) => <Show when={!query().trim() || matches().has(item.id as Section)}> <Row density="nav" element="button" role="tab" tabIndex={section() === item.id ? 0 : -1} aria-selected={section() === item.id} current={!narrow() && section() === item.id}

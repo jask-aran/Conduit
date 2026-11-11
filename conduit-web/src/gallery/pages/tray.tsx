@@ -2,7 +2,6 @@ import { createSignal, For } from "solid-js";
 import { Button, IconButton, Icons, Ledge, Row, Segmented, Tray } from "@/components/ui";
 import { row, type Page } from "../model";
 
-/* A tray in a phone-shaped box: rows behind it, dimmed while it is up. */
 const scene = (opts: { lead?: boolean; open?: boolean; above?: boolean } = {}) => {
   const [open, setOpen] = createSignal(opts.open ?? true);
   const [tab, setTab] = createSignal("now");

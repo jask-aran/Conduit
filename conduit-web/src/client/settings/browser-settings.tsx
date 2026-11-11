@@ -3,7 +3,6 @@ import { Button, Segmented, SettingDetails, SettingLine, SettingValue, Spinner, 
 import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { api } from "../api/client";
 
-/** GET /v0/browsers/hub/settings (browser-host.js `describe`). */
 type BrowserSettings = {
   available: boolean; running?: boolean; url?: string | null; title?: string | null; engine: string; version: string | null; runsOn: string; profile: boolean;
   video: boolean; settings: { fps: number; quality: number; codec: "h264" | "h265" | "jpeg"; direct?: boolean }; choices: { fps: number[]; quality: number[]; codec: BrowserSettings["settings"]["codec"][] };
@@ -11,11 +10,6 @@ type BrowserSettings = {
 const CODEC_LABELS = { h264: "H.264", h265: "H.265", jpeg: "JPEG" };
 const QUALITY_LABELS: Record<number, string> = { 30: "Low", 60: "Medium", 85: "High" };
 
-/**
- * Services › Browser: the hub's browser that the person and Conduit's agents share (roadmap #16). Where it runs and on
- * what, its stream (frame rate, each viewer's, applied at once; quality, the browser's, which restarts it on the page it
- * showed), and its data: kept across restarts in its own profile, cleared only here.
- */
 export function BrowserSettings() {
   const [found, setFound] = createSignal<BrowserSettings | null>(null);
   const [error, setError] = createSignal("");

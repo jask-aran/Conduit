@@ -1,23 +1,12 @@
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
 import { Button, Frost, type Motion } from "@/components/ui";
 
-/*
- * The gallery's ways of showing a piece: In use (a scene, each place numbered, what it computes
- * to) and a forms table (each form down the side, where it sits across, its code and tokens).
- * Shared by Foundations and the families.
- */
 /** A length as read, to a tenth (layout works in 64ths, so 6.4 reads back 6.39). */
 export const px = (value: string) => value.replace(/(\d+\.\d+)px/g, (_, n: string) => `${Number(Number(n).toFixed(1))}px`);
 
-/*
- * In use: a small scene drawn by the library, each place a foundation shows numbered
- * on it, and what it computes to beside the number -- at desktop and phone.
- */
 /** side: the number above or below what it marks, for a part sharing its line with others; else in the gutter left of the scene. */
 export interface Mark { selector: string; label: string; read: (el: HTMLElement) => string; side?: "above" | "below" }
-/** A box of space drawn over a scene: a container's padding (edge) or the gap between two of its parts. */
 type Band = { x: number; y: number; w: number; h: number; kind: "edge" | "gap"; label: string };
-/** The bands of each container in the scene: its padding all round, and the gap between each pair of its children. */
 const bandsOf = (scene: Element, selectors: string[]): Band[] => {
   const box = scene.getBoundingClientRect();
   const bands: Band[] = [];
@@ -52,7 +41,6 @@ export function InUse(props: { scene: () => JSX.Element; marks: Mark[]; density?
     const measure = () => requestAnimationFrame(() => {
       const box = el.getBoundingClientRect();
       const found = props.marks.map((mark) => el.querySelector<HTMLElement>(mark.selector));
-      // Each number in the gutter left of the scene, level with what it marks, a line out to it; marks on one line queue leftward.
       if (props.spacing) setBands(bandsOf(el, props.spacing));
       const placed: { x: number; y: number; to: number }[] = [];
       setSpots(found.map((node, at) => {
@@ -104,7 +92,6 @@ export const rounding = (el: HTMLElement) => px(style(el).borderTopLeftRadius);
 export const tall = (el: HTMLElement) => px(`${el.getBoundingClientRect().height}px`);
 export const icon = (el: HTMLElement) => `${px(`${el.getBoundingClientRect().width}px`)} · stroke ${style(el).strokeWidth.replace("px", "")}`;
 
-/** A surface cell: the form drawn on the frame, the ground or frost, or at a density (page.tsx's Examples table). */
 export type Where = "frame" | "ground" | "frost";
 export type Column = Where | "desktop" | "phone";
 export const On = (props: { where: Column; children: JSX.Element }) => props.where === "desktop" || props.where === "phone"
@@ -112,12 +99,7 @@ export const On = (props: { where: Column; children: JSX.Element }) => props.whe
   : props.where === "frost" ? <Frost class="g-surface g-form-surface">{props.children}</Frost>
   : <div class="g-surface g-form-surface" data-surface={props.where}>{props.children}</div>;
 
-/** Once the moves under it have played: their own animations and transitions, at whatever rate the page runs them. */
 const settled = async (root: Element) => { await new Promise(requestAnimationFrame); await Promise.allSettled(root.getAnimations({ subtree: true }).map((a) => a.finished)); };
-/**
- * A piece's own moves, played (each piece draws its moves; Foundations · Motion holds the tokens). Arrive draws it
- * again entering; each of `leaves` plays that leaving, then it arrives again.
- */
 export function Replay(props: { leaves?: Motion[]; children: (motion: () => Motion | undefined) => JSX.Element }) {
   const [run, setRun] = createSignal(1), [motion, setMotion] = createSignal<Motion | undefined>(undefined);
   let stage!: HTMLDivElement, away = false;
@@ -134,7 +116,6 @@ export function Replay(props: { leaves?: Motion[]; children: (motion: () => Moti
   </div>;
 }
 
-/** Shows its child while `when`, arriving as it comes and playing its leave (default: back the way it came) before it goes. */
 export function Presence(props: { when: boolean; leave?: Motion; children: (motion: () => Motion) => JSX.Element }) {
   const [shown, setShown] = createSignal(props.when), [motion, setMotion] = createSignal<Motion>("entering");
   createEffect(on(() => props.when, (when) => {

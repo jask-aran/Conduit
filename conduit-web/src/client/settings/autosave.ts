@@ -7,16 +7,11 @@ export type SaveState =
   | { kind: "failed"; message: string };
 
 /**
- * Saving a settings surface as it is edited, with no Save button: a valid
- * edit is sent after a short pause (typing) or at once (a toggle, a choice),
- * one request at a time so an older value can never land after a newer one.
- * "Saved" means the latest edit is stored -- a save that completes while a
- * newer edit is waiting says nothing -- and a failure keeps the edit and
- * waits for Retry. An edit that is not valid yet is held back, not saved.
+ * One request at a time, so an older value can never land after a newer one. "Saved" means the latest edit is
+ * stored: a save that completes while a newer edit waits says nothing.
  */
 export function createAutosave<T>(options: {
   save: (value: T) => Promise<T>;
-  /** The stored value, once the latest edit is saved. */
   onSaved: (saved: T) => void;
   delayMs?: number;
 }) {
@@ -52,7 +47,6 @@ export function createAutosave<T>(options: {
 
   return {
     state,
-    /** A valid value: saved after the pause, or at once. */
     edit(value: T, when: "pause" | "now" = "pause") {
       waiting = { value, edit: ++edits };
       failed = null;
@@ -68,7 +62,6 @@ export function createAutosave<T>(options: {
       clearTimeout(timer);
       setState({ kind: "idle" });
     },
-    /** Send a waiting edit now -- leaving the surface -- and settle once everything sent has. */
     flush: () => send(),
     retry() {
       if (!failed) return;
@@ -77,7 +70,6 @@ export function createAutosave<T>(options: {
       setState({ kind: "saving" });
       void send();
     },
-    /** Something is typed but not yet stored. */
     busy: () => timer !== undefined || state().kind === "saving",
   };
 }

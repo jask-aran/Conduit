@@ -15,13 +15,7 @@ import { SplitDashboard, SplitEmpty, SplitGroup, SplitGroupMore, SplitHeader, Sp
 import { setAgentDashboardLaidOut } from "../state/arrival";
 import { Row } from "@/components/ui/row";
 
-/** How long Forget stays armed for its second press. */
 const FORGET_ARMED_MS = 3000;
-
-/**
- * The agent's dashboard: what needs the person, its work and schedule, its inbox, threads and memory.
- * Messages opens its app room; Open thread opens the home thread underneath.
- */
 
 const MEMORY = [
   { path: "MEMORY.md", label: "Memory", context: "What it keeps between conversations" },
@@ -35,7 +29,6 @@ const FEED_SOURCE: Record<string, string> = { executor: "Executor", script: "Scr
 const clockKind = (schedule: AgentSchedule): ClockKind => schedule.feed ? "feed"
   : schedule.routine === "heartbeat" ? "heartbeat" : schedule.routine === "morning-brief" ? "brief"
     : schedule.routine && !schedule.task ? "feed" : schedule.kind === "once" ? "checkback" : "schedule";
-/** Minutes after midnight of a time of day ("07:30"), or of an instant in a time zone. */
 const minutesOf = (time: string) => { const [hours, minutes] = time.split(":").map(Number); return (hours || 0) * 60 + (minutes || 0); };
 const minutesIn = (at: number, timeZone?: string) => {
   try { return minutesOf(new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at)); }
@@ -51,12 +44,10 @@ function age(value: string | null | undefined, now: number) {
   return at > now && span !== "now" ? `in ${span}` : span;
 }
 
-// Its cadence in words when the hub gives one (rules, or an event alongside a clock: "on held mail; every 12 hours").
 const when = (schedule: AgentSchedule) => schedule.cadence ? schedule.cadence : schedule.kind === "rules" ? "Scheduled" : schedule.kind === "daily" ? `Daily ${schedule.at || ""}`.trim()
   : schedule.kind === "every" ? `Every ${schedule.everyMinutes && schedule.everyMinutes % 60 === 0 ? `${schedule.everyMinutes / 60}h` : `${schedule.everyMinutes}m`}`
   : "Once";
 
-/** jbot's panel's tabs: its page's groups, by what they are about. */
 export type JbotTab = "now" | "routines" | "memory";
 export const JBOT_TABS: Array<{ value: JbotTab; label: string; icon: () => JSX.Element }> = [
   { value: "now", label: "Now", icon: () => <Icons.Runtime /> }, { value: "routines", label: "Routines", icon: () => <Icons.Clock /> },
@@ -64,21 +55,13 @@ export const JBOT_TABS: Array<{ value: JbotTab; label: string; icon: () => JSX.E
 ];
 
 export function AgentPage(props: {
-  /** Drawn as one tab of jbot's panel (beside or over the jbot chat): that tab's groups in one column, no header. */
   panel?: JbotTab;
-  /** In the panel: beside its day's timeline, at the top whatever the tab (jbot's spend). */
   panelTop?: JSX.Element;
-  /** In the panel: Needs you drawn here, not at the panel's top (a card over the Ledge, a phone's own sheet). */
   needsMount?: () => HTMLElement | undefined;
-  /** What the page needs for its two columns, for the pane holding it (SplitDashboard's onNeed). */
   onNeed?: (width: number) => void;
-  /** The page's header in its pane, titled with the agent's name. */
   header?: (title: string) => JSX.Element;
-  /** Opens its home thread: the page shows none of it. */
   onOpenThread?: () => void;
-  /** Opens one of its chats (a thread, a run's transcript, a question's thread), as a dashboard row opens a chat. */
   onOpenChat: (chatId: string, event?: MouseEvent) => void;
-  /** Opens one of its memory files (a path in its folder) in the file viewer. */
   onOpenFile: (path: string) => void;
   onOpenSettings: () => void;
   onOpenMessages?: () => void;
@@ -104,7 +87,6 @@ export function AgentPage(props: {
   const name = agentName;
   const working = () => view()?.attention?.working;
   const needs = () => view()?.attention?.needsYou;
-  // A run is a subagent of the home thread, with a transcript of its own: its chat comes from the home thread's list.
   const runsKey = createMemo(() => `${view()?.home?.chatId ?? ""}|${working()?.runs.length ?? 0}|${working()?.recent[0]?.id ?? ""}`);
   createEffect(on(runsKey, () => {
     const home = untrack(() => view()?.home?.chatId);
@@ -120,7 +102,6 @@ export function AgentPage(props: {
     catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { setBusy(null); }
   };
-  // A report with no run behind it, asking jbot to say hi: a report's turn to watch end to end.
   const testReport = () => void act("test-report", () => api("/v0/agent/test-report", { method: "POST" }));
   const newThread = () => act("thread", async () => {
     const chat = await api<ChatSummary>("/v0/agent/threads", { method: "POST", body: JSON.stringify({}) });
@@ -133,12 +114,9 @@ export function AgentPage(props: {
     setAsking(false); setTask("");
   });
 
-  // In jbot's panel a row is previewed in place first (what a report said, why a call was decided), its own way on
-  // (the file, the run's chat) a press from there; Back returns to the tab.
   type Peek = { title: string; context: string; text: string; file?: string; open?: { label: string; icon: JSX.Element; go: (event?: MouseEvent) => void } };
   const [peek, setPeek] = createSignal<Peek | null>(null);
   createEffect(on(() => props.panel, () => setPeek(null), { defer: true }));
-  // A report's whole text is its file (inbox/…md): read when previewed, its front matter left out.
   const [peekText, setPeekText] = createSignal<string | null>(null);
   createEffect(on(peek, (shown) => {
     setPeekText(null);
@@ -150,8 +128,6 @@ export function AgentPage(props: {
   }));
   const peekView = (shown: Peek) => {
     const text = () => peekText() ?? shown.text;
-    // Drawn as chat search's preview is (Glance): its title the one strong line, its facts in the data face, what it
-    // says at the row's size a tone under the text, not a transcript's answer.
     return <DashPeek onBack={() => setPeek(null)} open={shown.open ? { ...shown.open, go: (event) => { setPeek(null); shown.open!.go(event); } } : undefined}>
       <Glance label={shown.title}>
         <GlanceHead title={shown.title} facts={[shown.context]} />
@@ -166,12 +142,9 @@ export function AgentPage(props: {
   const runRow = (run: AgentRun, live: boolean) => {
     const chatId = () => runChats().get(String(run.conversationId));
     const report = () => inbox().find((entry) => run.inboxId ? entry.id === run.inboxId : run.conversationId != null && entry.conversationId === run.conversationId);
-    // Live, what it is doing (its phase; at work, what its agent is doing, in the digest's words) and its agents rolled
-    // up; done, how it ended. Never its agents one by one.
     const doing = () => run.phase === "Working" && run.activity ? capitalised(run.activity) : run.phase || "Working";
     const crew = () => run.agents && run.agents.total > 0 && run.agents.running ? `${run.agents.running} ${run.agents.running === 1 ? "agent" : "agents"} working` : null;
     const ended = () => run.status === "failed" ? `Failed${run.summary ? `: ${run.summary}` : ""}` : run.status === "stopped" ? "Stopped"
-      // What it did, as a turn's line says it; with no tools to tell, what it found.
       : run.did ? capitalised(run.did) : run.summary || (run.woke ? `Reported to ${name()}` : run.level ? levelWord(run.level) : null);
     const told = () => !live && run.woke && run.status !== "failed" && run.status !== "stopped" ? `Reported to ${name()}` : null;
     const named = () => run.number && run.kind !== "agent" ? `${run.title || "A run"} #${run.number}` : run.title || "A run";
@@ -190,18 +163,13 @@ export function AgentPage(props: {
       meta={age(live ? run.startedAt : run.endedAt, now())} />;
   };
 
-  // What waits on the person, each answered where it stands, never in a thread: an approval's Allow and Don't on its
-  // row, its whole card (what it sends, Always) unfolded by a tap; a notice's whole text the same; the rest by their
-  // own buttons. Only a question opens its chat (it is answered in the composer there).
   const [unfolded, setUnfolded] = createSignal<string | null>(null);
   const unfold = (key: string) => setUnfolded(unfolded() === key ? null : key);
   const decideAsk = (id: string, choice: ApprovalChoice) => act(id, () => api(`/v0/agent/asks/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify({ choice }) }));
   const noticeRows = createMemo(() => foldNotices(needs()?.notices));
   const dismissNotice = (row: AgentNoticeRow) => act(row.key, () => Promise.all(row.ids.map((id) => api(`/v0/agent/notices/${encodeURIComponent(id)}`, { method: "DELETE" }))));
-  // Dismiss all: the notices that only tell (a parked task waits for Retry, a connector for connecting).
   const dismissAll = () => act("clear", () => dismissNotices(dismissableNotices().flatMap((row) => row.ids)));
   const stop = (event: MouseEvent) => event.stopPropagation();
-  // How long an approval waits, as its card's meta (as the thread's card says it): "23 h left", "40 min left".
   const left = (expiresAt: string) => { const minutes = Math.max(0, Math.round((Date.parse(expiresAt) - now()) / 60_000)); return minutes >= 90 ? `${Math.round(minutes / 60)} h left` : `${minutes} min left`; };
 
   // headless: under a Ledge's or Tray's own title (Needs you apart from the panel), which carries Dismiss all.
@@ -251,10 +219,8 @@ export function AgentPage(props: {
     </Show>
   </SplitGroup>;
 
-  // What runs reported: waiting for the heartbeat (or for the person to talk first), then what became of the rest.
   const inbox = createMemo(() => [...(view()?.inbox || [])].sort((a, b) => Number(a.status === "handled") - Number(b.status === "handled")));
   const unhandled = () => inbox().filter((entry) => entry.status === "unhandled").length;
-  // What came in, counted by where it came from ("12 emails · 1 report"), never read out: the thread is where it is told.
   const tally = (entries: AgentInboxEntry[]) => {
     const counts = new Map<string, number>();
     for (const entry of entries) {
@@ -264,12 +230,6 @@ export function AgentPage(props: {
     }
     return [...counts].sort((a, b) => b[1] - a[1]).map(([noun, count]) => `${count} ${count === 1 || noun.endsWith("s") ? noun : `${noun}s`}`).join(" · ");
   };
-  /*
-   * The context inbox, the person's to edit as much as jbot's (POST/PATCH/DELETE /v0/agent/inbox, the same verbs as
-   * conduit_inbox): a row opens the entry's file (inbox/…md in its folder) in the file viewer; its menu marks it handled or reopens it, addresses it to a routine, dismisses
-   * it (handled, outcome dismissed: nothing lost) or deletes it (the person only). The person talks to jbot rather
-   * than filing notes here: the inbox is what routines report.
-   */
   const [readingEntry, setReadingEntry] = createSignal<AgentInboxEntry | null>(null);
   // A function, not a memo: `timed` is declared below, and a memo would read it now.
   const routines = () => timed().filter((rule) => rule.routine).map((rule) => ({ id: rule.routine!, title: rule.title }));
@@ -281,7 +241,6 @@ export function AgentPage(props: {
   const entryContext = (entry: AgentInboxEntry) => entry.status === "handled"
     ? `${entry.title} · ${entry.outcome === "dismissed" ? "dismissed" : "handled"}`
     : `${entry.title} · ${entry.for?.length ? `for ${entry.for.map(routineTitle).join(", ")}` : "for the next heartbeat"}`;
-  // A long group shows its latest few, the rest a press away (SplitGroupMore), never an endless list.
   const [opened, setOpened] = createSignal<ReadonlySet<string>>(new Set());
   const capped = <T,>(id: string, list: () => readonly T[] | undefined, shown = props.panel ? 3 : 5) => ({
     rows: () => { const all = list() || []; return opened().has(id) ? all : all.slice(0, shown); },
@@ -293,7 +252,6 @@ export function AgentPage(props: {
   const inboxShown = capped("inbox", inbox);
   const inboxGroup = () => <SplitGroup id="agent-inbox" order="first" label="Context inbox" count={unhandled() || null} more={inboxShown.more()}>
     <Show when={inbox().length} fallback={<SplitEmpty>Nothing has come in this week.</SplitEmpty>}>
-      {/* One row an entry -- what one poll or run brought in -- counted, not read out. */}
       <For each={inboxShown.rows()}>{(entry) =>
         <ContextMenu><ContextMenuTrigger density="list" as={Row} element="button" onClick={() => props.panel
             ? setPeek({ title: entry.title || tally([entry]), context: `${entryContext(entry)} · ${age(entry.at, now())}`, text: entryText(entry), file: entry.file,
@@ -321,7 +279,6 @@ export function AgentPage(props: {
     </Show>
   </SplitGroup>;
 
-  // jbot's own turn first, in the turn digest's words ("jbot · checking Gmail"), then each unit of work under way.
   const busy_ = () => (working()?.runs.length || 0) + (jbotDoing() ? 1 : 0);
   const jbotRow = () => <Row density="list" element="button" disabled={!props.onOpenThread} onClick={() => props.onOpenThread?.()}
     lead={<StatusDot label="Working" tone="active" spinning />} label={name()} context={capitalised(jbotDoing()!)} />;
@@ -333,7 +290,7 @@ export function AgentPage(props: {
   </SplitGroup></Show>;
 
   /*
-   * Where the heartbeat fires through the day, by its timing rules (schedule.js): a windowed rule wins inside its window
+   * Where the heartbeat fires through the day, by its timing rules: a windowed rule wins inside its window
    * (the narrower of two), an unwindowed one elsewhere; an interval counts from its window's start (midnight unwindowed).
    */
   const beatTicks = (rules: NonNullable<AgentSchedule["rules"]>) => {
@@ -355,8 +312,6 @@ export function AgentPage(props: {
     }
     return [...out].sort((a, b) => a - b);
   };
-  // What runs on its clock, next first: the heartbeat, the brief, feeds filling the inbox, check-backs; over its day.
-  // On first by when they next run, then the ones switched off (dimmed, no clock).
   const timed = createMemo(() => [...(working()?.schedules || [])].sort((a, b) => Number(!!a.off) - Number(!!b.off) || (Date.parse(a.nextAt || "") || Infinity) - (Date.parse(b.nextAt || "") || Infinity)));
   const clocked = () => timed().filter((schedule) => !schedule.off);
   const day = () => {
@@ -378,7 +333,6 @@ export function AgentPage(props: {
   const clockRow = (schedule: AgentSchedule) => {
     const feed = schedule.feed;
     const quiet = () => clockKind(schedule) === "heartbeat" && quietUntil() ? `Quiet until ${quietUntil()}` : undefined;
-    // A routine under way says so, and how its last compaction of the home thread went (done, or why not).
     const thousands = (count: number) => `${Math.round(count / 1000)}k`;
     const compaction = () => {
       const last = schedule.compaction;
@@ -394,7 +348,6 @@ export function AgentPage(props: {
       disabled={busy() !== null || Boolean(schedule.running)}
       onClick={() => act(schedule.id, () => api(`/v0/agent/schedules/${encodeURIComponent(schedule.id)}/run`, { method: "POST" }))}>
       <Show when={schedule.running || busy() === schedule.id} fallback={<Icons.Play />}><Spinner /></Show></IconButton>;
-    // Off: no clock, but it still runs by hand.
     if (schedule.off) return <ClockRow wrap={Boolean(props.panel)} kind={clockKind(schedule)} title={schedule.title} cadence={when(schedule)} status={status()} next="Off" off actions={schedule.routine ? runNow : undefined} />;
     return <ClockRow wrap={Boolean(props.panel)} kind={clockKind(schedule)} title={schedule.title} cadence={when(schedule)} warn={feed?.lastError || undefined}
       status={feed && !schedule.running ? [FEED_SOURCE[feed.source], status()].join(" · ") : [quiet(), status()].filter(Boolean).join(" · ") || undefined} next={age(schedule.nextAt, now())}
@@ -420,7 +373,6 @@ export function AgentPage(props: {
     </SplitGroup>
   </Show>;
 
-  // What it may do without asking: each rule an Always on an approval saved, removable here.
   const rulesGroup = () => <Show when={view()?.rules?.length}>
     <SplitGroup id="agent-rules" order="rest" label="Allowed" count={view()?.rules?.length}>
       <For each={view()?.rules}>{(rule) =>
@@ -431,14 +383,11 @@ export function AgentPage(props: {
     </SplitGroup>
   </Show>;
 
-  // What the approval model decided without asking (GET /v0/agent/approvals): allowed and refused, newest first, so a
-  // rule can be tightened (Settings › Agent › Approvals). Read again on the page's own clock.
   type Decided = { at: string; held: { action: string; recipients?: string[] }; verdict: { outcome: string; reason: string; source: string } };
   const [decided, setDecided] = createSignal<Decided[]>([]);
   const readDecided = () => void api<{ records: Decided[] }>("/v0/agent/approvals?limit=20").then((result) => setDecided(result.records.filter((record) => record.verdict.outcome !== "escalate"))).catch(() => {});
   readDecided();
   createEffect(on(now, readDecided, { defer: true }));
-  // What it decided for the person in the last few days; all it has kept, behind Show all.
   const DECIDED_DAYS = 3;
   const decidedLately = () => decided().filter((record) => now() - Date.parse(record.at) < DECIDED_DAYS * 86_400_000);
   const decidedRows = () => opened().has("decided") ? decided() : decidedLately().slice(0, props.panel ? 3 : 5);
@@ -456,8 +405,6 @@ export function AgentPage(props: {
     </SplitGroup>
   </Show>;
 
-  // What it remembers, line by line (GET /v0/agent/memory): where each line is, what reads it, who wrote it, when and
-  // where; its chat button opens the chat it was learned in; forgetting asks twice. A prototype (roadmap 19).
   type MemoryEntry = { file: string; date: string | null; section: string | null; text: string; line: string; scope: string;
     provenance: { by: string; from: string; chatId: string | null; at: string; accepted: string | null } | null };
   const FILE_LABELS: Record<string, string> = { soul: "Soul", user: "About you", memory: "Memory", diary: "Diary" };
@@ -497,7 +444,6 @@ export function AgentPage(props: {
     </SplitGroup>}
   </Show>;
 
-  // Its memory is files in its folder, read and edited where any file is.
   const memoryGroup = () => <SplitGroup id="agent-memory" order="rest" label="Memory">
     <For each={MEMORY}>{(file) =>
       <Row density="list" element="button" onClick={() => props.onOpenFile(file.path)} lead={<Icons.FileText />} label={file.label} context={file.context} />}
@@ -511,7 +457,6 @@ export function AgentPage(props: {
     </Show>
   </SplitGroup>;
 
-  // Its threads: home, where it talks to the person, then the side threads it or they started.
   const threads = createMemo(() => [...(view()?.sides || [])].sort((left, right) => Date.parse(right.updatedAt || "") - Date.parse(left.updatedAt || "")));
   const threadsShown = capped("threads", threads);
   const threadsGroup = () => <SplitGroup id="agent-threads" order="rest" label="Threads" count={threads().length + (view()?.home ? 1 : 0)} more={threadsShown.more()}
@@ -531,15 +476,12 @@ export function AgentPage(props: {
   };
   const running = () => working()?.runs.length ? `${working()!.runs.length} running` : null;
 
-  // jbot's panel: one tab's groups, a tab's own action first.
-  // What needs the person is in the panel's top, whatever the tab; its threads close Now (no tab of their own).
   const tabGroups = (tab: JbotTab) => tab === "now" ? <>{workingGroup()}{inboxGroup()}{recentGroup()}{decidedGroup()}{threadsGroup()}</>
     : tab === "routines" ? <>{timedGroup()}{watchesGroup()}</>
     : <>{rememberedGroup()}{memoryGroup()}{rulesGroup()}</>;
 
   return <>
     {props.header?.(`${name()}'s page`)}
-    {/* In the panel its day stays at the top, whatever the tab; the tab's groups scroll under it. */}
     <Show when={props.panel}>{(tab) => <Show when={view()?.enabled}>
       <DashPanel band={day()} figure={props.panelTop}
         under={<Show when={agentNeeds() && !props.needsMount}><Dashboard label="Needs you" page="Agent" compact oneColumn stacked list={needsGroup()} /></Show>}>
@@ -562,7 +504,7 @@ export function AgentPage(props: {
           ]} manage={() => <><MenuRow icon={<Icons.Notification />} onSelect={testReport}>Test report</MenuRow>
             <MenuRow icon={<Icons.Settings />} onSelect={props.onOpenSettings}>Settings</MenuRow></>} />}
           notice={error() ? <Note kind="dash" tone="error">{error()}</Note> : undefined}
-          // Its day across both columns: in the side column it was too narrow to read.
+          // Its day across both columns: in the side column it is too narrow to read.
           band={day()}
           stacked
           list={<>{needsGroup()}{workingGroup()}{timedGroup()}{inboxGroup()}</>}
@@ -576,7 +518,6 @@ export function AgentPage(props: {
         <Note kind="card" tone="quiet">{entryContext(entry())} · {age(entry().at, now())}</Note>
       </>}</Show>
     </Dialog>
-    {/* A run now: a task it works on alone, reporting to the home thread. */}
     <Dialog open={asking()} onOpenChange={setAsking} title="Run a task" close="Cancel" busy={busy() === "wake"}
       actions={<Button type="button" disabled={!task().trim() || busy() === "wake"} onClick={() => void runTask()}>Run <Icons.Proceed /></Button>}>
       <TextArea aria-label="Task" rows={4} autofocus value={task()} onInput={(event) => setTask(event.currentTarget.value)}

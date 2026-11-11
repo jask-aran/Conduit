@@ -4,7 +4,6 @@ import { isInstalledClient } from "../platform/installed-client.ts";
 import { createSignal } from "solid-js";
 import { activeOrigin, whenPathMoves } from "../platform/servers.ts";
 
-/** How long a read ahead is kept for a page to take. */
 const READ_AHEAD_MS = 5_000;
 
 export interface ApiRequestMetadata {
@@ -16,31 +15,20 @@ export interface ApiRequestMetadata {
 type Read = { status: number; ok: boolean; text: string };
 
 /**
- * What `api()` takes: a fetch's options, how long to wait for the hub to start answering, and whether a write may wait
- * for the hub.
+ * timeout: a hub that has not started answering rejects as a network failure (a TypeError), so the retry and offline
+ * paths take over. It is patient on purpose: the runtime stream says the hub is unreachable within seconds.
+ * `timeout: false` is for a write that legitimately takes longer (a git push, a harness asked to start).
  *
- * timeout: an attempt with no signal of its own is given up when the hub has not started answering after `timeout` ms
- * (two minutes by default; a slow answer that has started is waited for) and rejects as a network failure would -- a
- * TypeError -- so the retry and offline paths take over rather than an attempt waiting forever on an address nothing
- * answers at. It is patient on purpose: what the person sees about the hub comes from the runtime stream, which says
- * it cannot be reached within seconds, while a request carries on looking. `timeout: false` is for a write that
- * legitimately takes longer (a git push, a harness asked to start); an upload (a body that is not a string) and a
- * request with its own signal are never timed out here.
- *
- * replay: a PUT, PATCH or DELETE that cannot reach the hub is held (on this device) and sent again until it lands; its
- * promise waits for that answer (see `holdWrite`). `replay: false` is for a write whose waiting would be wrong: one that
- * carries a secret, one that is stale by the time the hub is back (stopping a process), or one with its own way of
- * keeping what it saves (a draft).
+ * replay: false for a write whose waiting would be wrong: one carrying a secret, one stale by the time the hub is back
+ * (stopping a process), or one with its own way of keeping what it saves (a draft).
  */
 export type ApiOptions = RequestInit & { timeout?: number | false; replay?: false };
-/** The default limit on the hub starting to answer one attempt. */
 export const API_ANSWER_TIMEOUT_MS = 120_000;
 
 /*
- * A request on a route the client moves off is given up, not waited out: an address with nothing behind it (a hub
- * whose LAN address changed, a phone that left home) holds a request until the OS's connect timeout, and a few of
- * those filled the WebView's connections to that host so everything after them queued. A read is asked again on the
- * new route (and again if it moves again, up to three times); a write is not repeated, since it may have arrived.
+ * A request on a route the client moves off is given up: an address with nothing behind it holds a request until the
+ * OS's connect timeout, and a few of those fill the WebView's connections to that host. A read is asked again on the
+ * new route; a write is not repeated, since it may have arrived.
  */
 const readOf = async (url: string, { timeout, replay: _replay, ...init }: ApiOptions): Promise<Read> => {
   const read = !init.method || ["GET", "HEAD"].includes(init.method.toUpperCase());
@@ -50,8 +38,7 @@ const readOf = async (url: string, { timeout, replay: _replay, ...init }: ApiOpt
     const moved = new AbortController();
     const stop = whenPathMoves(() => moved.abort(new DOMException("The route to the server changed.", "AbortError")));
     // The limit is on the hub starting to answer, not on the answer arriving: a slow link still brings a big
-    // transcript in, where a route with nothing behind it is given up and the read asked again. Each attempt has the
-    // whole of it: a read asked again on a new route is a new request.
+    // transcript in.
     const expiry = limit ? new AbortController() : null;
     const timer = expiry ? setTimeout(() => expiry.abort(), limit) : undefined;
     const signals = [init.signal, moved.signal, expiry?.signal].filter((signal): signal is AbortSignal => Boolean(signal));
@@ -71,18 +58,12 @@ const readOf = async (url: string, { timeout, replay: _replay, ...init }: ApiOpt
   }
 };
 
-// Reads begun before anything asks for them, each taken by the first ask.
 const ahead = new Map<string, Promise<Read>>();
 const readKey = (url: string, cache?: RequestCache) => `${cache || ""} ${url}`;
 
 /**
- * Start reads the page is about to make, so they run alongside what comes
- * before them (the chat a first open waits on, then the page drawing it)
- * instead of after it. Each is taken by the first `api()` GET of the same
- * URL with no options but the same cache mode. One nobody takes within five
- * seconds is dropped, and a write drops those of its resource (the path to
- * its third segment: `/v0/chats/<id>`, `/v0/settings`), so none is older
- * than a change it was asked for after.
+ * Each is taken by the first `api()` GET of the same URL with no options but the same cache mode. A write drops those
+ * of its resource (the path to its third segment), so none is older than a change asked for after.
  */
 export function readAhead(urls: string[], cache?: RequestCache) {
   for (const url of urls) {
@@ -97,15 +78,9 @@ export function readAhead(urls: string[], cache?: RequestCache) {
 
 const resourceOf = (url: string) => (url.split("?")[0] ?? "").split("/").slice(0, 4).join("/");
 
-// Reads several parts of the app make of one document as they mount, by URL.
 const shared = new Map<string, { at: number; read: Promise<unknown> }>();
 
-/**
- * One read of `url` for every part of the app that asks within two seconds
- * of it, each given its own copy: the app's look, the terminal's shortcuts
- * and Settings each read /v0/preferences as they mount. A write to its
- * resource drops it, as it drops read-aheads.
- */
+/** Each caller gets its own copy; a write to its resource drops it, as it drops read-aheads. */
 export function readShared<T>(url: string): Promise<T> {
   let held = shared.get(url);
   if (!held || Date.now() - held.at > 2_000) {
@@ -175,18 +150,11 @@ export async function api<T>(url: string, options: ApiOptions = {}): Promise<T> 
 }
 
 /**
- * A read made on the way in, when the server may still be starting -- the
- * first load after a restart, often a reload the new build asked for. A
- * starting server answers with no connection, or with a 5xx from itself or
- * the proxy in front of it; those are tried again, backing off, for about
- * half a minute before the failure is let through. Route bootstrap can opt
- * into continued retries so a long outage does not leave the page stuck.
- * Anything else fails at once. For GETs only: a write is never repeated
- * behind the caller's back.
+ * A starting server answers with no connection, or a 5xx from itself or its proxy; those are retried. For GETs only:
+ * a write is never repeated behind the caller's back.
  */
 export async function apiWhenServed<T>(url: string, keepRetrying = false): Promise<T> {
-  // A restart is down for a second or two: retried often, so the page is
-  // back as soon as the server is, for about as long in all as before.
+  // A restart is down for a second or two: retried often, so the page is back as soon as the server is.
   const delays = [150, 250, 400, 600, 800, ...Array(30).fill(1000)];
   for (let attempt = 0; ; attempt += 1) {
     try {
@@ -200,25 +168,14 @@ export async function apiWhenServed<T>(url: string, keepRetrying = false): Promi
   }
 }
 
-/**
- * A request that never reached the hub, or that it never answered (a timeout): what fetch rejects with when there is no
- * route, as against an answer the server gave (which carries `apiRequest`) or a bug in the page (also a TypeError, but
- * not about a fetch).
- */
+/** A bug in the page is also a TypeError, but carries no fetch; an answer the server gave carries `apiRequest`. */
 export const isUnreachableError = (error: unknown) => error instanceof TypeError
   && !(error as { apiRequest?: unknown }).apiRequest
   && /fetch|network|load failed|did not answer|connection/i.test(error.message);
 
 /*
- * Writes waiting for the hub.
- *
- * A PUT, PATCH or DELETE that could not reach the hub is not failed: it is kept on this device, keyed by server, in
- * the order it was made, and sent again -- one at a time, oldest first -- after 2 s, doubling to 30 s, and at once when
- * the network, the route or the runtime stream comes back. Its caller's promise waits for the answer and then goes on
- * as any answer does: a value, or the server's own error. A write kept by a page that has since closed is sent all the
- * same when the app next starts, with nobody waiting on it. These methods are the ones that say the same thing however
- * often they arrive, which is what makes sending one again (perhaps after it did arrive) safe; a POST never is, and
- * neither is an upload, whose body is not kept.
+ * Only PUT, PATCH and DELETE are held: they say the same thing however often they arrive, which makes sending one again
+ * safe. A POST never is, nor an upload, whose body is not kept.
  */
 interface HeldWrite { id: string; url: string; method: string; body?: string; headers: [string, string][]; at: string }
 
@@ -235,9 +192,7 @@ function heldOf(origin: string): HeldWrite[] {
   } catch { return []; }
 }
 const [heldCount, setHeldCount] = createSignal(0);
-/** How many of the active server's writes are waiting for it. */
 export const heldWrites = heldCount;
-/** What a count of them is called where it is shown. */
 export const changesWaiting = (count: number) => `${count} ${count === 1 ? "change" : "changes"} waiting to save`;
 function writeHeld(origin: string, list: HeldWrite[]) {
   try {
@@ -247,7 +202,6 @@ function writeHeld(origin: string, list: HeldWrite[]) {
   if (origin === heldOrigin()) setHeldCount(list.length);
 }
 
-/** The write as it would be kept, or null when it is not one to keep. */
 function heldWrite(url: string, options: ApiOptions, headers: Headers): HeldWrite | null {
   const method = String(options.method || "GET").toUpperCase();
   if (!["PUT", "PATCH", "DELETE"].includes(method) || options.replay === false || options.signal) return null;
@@ -315,7 +269,6 @@ async function drainHeld() {
   }
 }
 
-/** Send the waiting writes now rather than at the next retry: the network, the route or the hub is back. */
 export function replayHeldWrites() {
   if (retryTimer) clearTimeout(retryTimer);
   retryTimer = undefined;

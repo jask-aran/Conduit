@@ -35,11 +35,7 @@ export async function clearNativeBearerToken(origin = activeOrigin()) {
   if (isInstalledClient()) await secureTokenStore.remove(tokenKey(origin));
 }
 
-/**
- * The server a request is addressed to, by its entry's origin (the key its token is under). A server answers at more
- * than one address (pathsOf; dialOrigin may make one https), so the address is matched against each server's; one
- * that matches none is the chosen server's.
- */
+/** A server answers at more than one address (dialOrigin may make one https), so each server's are matched. */
 function targetOrigin(input: RequestInfo | URL) {
   const chosen = activeOrigin();
   let address: string;
@@ -53,9 +49,8 @@ function targetOrigin(input: RequestInfo | URL) {
 export async function authorizedFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   if (isInstalledClient()) await trustSettled();
   const headers = new Headers(init.headers);
-  // The server this request goes to, read from its address: its token is sent, and a 401 clears that one. Read from
-  // the server chosen now, a request begun before a switch carried the new server's token to the old one, whose 401
-  // then signed the new one out.
+  // Read from the request's address, not the server chosen now: a request begun before a switch would carry the new
+  // server's token to the old one, whose 401 would sign the new one out.
   const origin = targetOrigin(input);
   const token = await nativeBearerToken(origin);
   if (token) headers.set("Authorization", `Bearer ${token}`);

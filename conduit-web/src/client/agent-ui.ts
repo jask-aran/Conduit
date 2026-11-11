@@ -4,26 +4,17 @@ import { connectionId } from "./state/runtime";
 // Types only: the declaration's words are the hub's to say, and stay out of the client's bundle.
 import type { UI_ACTIONS } from "../ui-api.js";
 
-/** How long the view's changes settle before they are told (a pane opening is several changes). */
 const VIEW_SETTLE_MS = 300;
-/** How long a command's view settles before it is told with the answer. */
 const COMMAND_SETTLE_MS = 250;
 
-/*
- * What this tab shows, told to the server, and what an agent asks of it, done here (roadmap #11; the server side is
- * server/ui-control.js, the agent's `ui` tool). A tab says its panes -- each pane's document and title, which has the
- * keyboard -- whenever they change, and whether it is in front; a command names this tab (tabs share one stream, so
- * each has an id of its own) and is answered with what came of it.
- */
+// A command names this tab: tabs share one stream, so each has an id of its own.
 export type AgentUiPane = { pane: "main" | number; view: string | null; title: string; focused: boolean };
-/** The actions a client does, from the UI API's declaration (ui-api.js): a handler for each, and no other. */
 export type ClientUiAction = { [K in keyof typeof UI_ACTIONS]: (typeof UI_ACTIONS)[K]["by"] extends "client" ? K : never }[keyof typeof UI_ACTIONS];
 export type AgentUiCommand = { action: ClientUiAction; view?: string; pane?: "main" | number; beside?: boolean };
 export type AgentUiHandlers = { [K in ClientUiAction]: (command: AgentUiCommand) => Promise<string> | string };
 
 const TAB = (() => { try { return crypto.randomUUID().slice(0, 8); } catch { return Math.random().toString(36).slice(2, 10); } })();
 
-/** This client as the hub names it (`connection/tab`), sent with each message as its origin; "" before the stream is up. */
 export const clientId = () => connectionId() ? `${connectionId()}/${TAB}` : "";
 
 export function createAgentUiBridge(deps: {

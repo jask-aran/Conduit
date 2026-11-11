@@ -7,7 +7,6 @@ import { px, rounding, fg, Replay } from "../specs";
 import { typeOf } from "../demos";
 import { row, token, type Page } from "../model";
 
-/* Toast: measured in use, each kind and form at each density, and every toast the app raises. */
 export function LiveNotifications() {
   const toasterId = createUniqueId();
   const emitted = new Set<string | number>();

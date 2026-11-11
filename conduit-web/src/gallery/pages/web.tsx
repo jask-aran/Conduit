@@ -1,9 +1,7 @@
-// Web: a page in a pane -- the hub's browser (roadmap #7). The bar, then the live screen in each of its states.
 import { onMount } from "solid-js";
 import { Icons, ToolBar, LeadInput, WebScreen, WebView, IconButton } from "@/components/ui";
 import { row, token, type Page } from "../model";
 
-/** A stand-in frame, drawn as the stream would: a light page with a heading, a field and a link. */
 function paint(canvas: HTMLCanvasElement) {
   canvas.width = 800; canvas.height = 520;
   const context = canvas.getContext("2d")!;

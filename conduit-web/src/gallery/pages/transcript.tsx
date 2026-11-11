@@ -5,7 +5,6 @@ import katex from "katex";
 import { orb, typeOf } from "../demos";
 import { row, token, type Page } from "../model";
 
-/* Transcript: a turn measured, each piece's forms, and a conversation, all from v2 (the orb is the library's Orb, passed in). */
 export const liveOrb = () => <Orb state="working" />;
 export const ANSWER_HTML = `<p>Created <code>lorem_ipsum.txt</code> in this folder, with <a href="#">three paragraphs</a> of lorem ipsum.</p><ul><li>The first is the classic opening.</li><li>The second is now two sentences.</li></ul><blockquote><p>Lorem ipsum dolor sit amet. Consectetur adipiscing elit.</p></blockquote>`;
 export const copyRetry = () => <><Button variant="ghost" size="icon-xs" aria-label="Copy"><Icons.Copy /></Button><Button variant="ghost" size="icon-xs" aria-label="Retry"><Icons.Refresh /></Button></>;
@@ -15,8 +14,6 @@ export const turnScene = () => <div class="g-card-scene"><Transcript><Turn>
   <MessageFoot time="22:16">{copyRetry()}</MessageFoot>
 </Turn></Transcript></div>;
 
-/* One exchange both ways (DESIGN Transcript › Turns, Rhythm): Folded keeps the working-out in one trace, Narrated lets
-   what it said stand between one-line pieces of work. */
 const ask = () => <TranscriptRow><Message time="14:24">what is the timeline store for?</Message></TranscriptRow>;
 const foot = () => <MessageFoot time="14:25">{copyRetry()}</MessageFoot>;
 const finalAnswer = "<p>It turns a chat's messages and the turn being written into the rows the transcript draws, keeping unchanged rows so only what changed is drawn again.</p>";

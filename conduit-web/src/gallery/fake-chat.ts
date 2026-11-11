@@ -2,14 +2,8 @@ import type { Message, ToolItem } from "../client/api/contracts";
 import { createSignal } from "solid-js";
 import type { UploadAttachment } from "../client/state/attachments";
 
-/*
- * Just enough of a chat for the real Composer to mount in the gallery: a
- * draft that types, a send that lands in the screen's own list, and every
- * other read answering "nothing here". Anything not named reads as empty, so
- * a new field on the store degrades to blank rather than breaking the page.
- */
+// Anything not named reads as empty, so a new field on the store degrades to blank rather than breaking the page.
 const at = (minutes: number) => new Date(Date.UTC(2026, 9, 10, 11, minutes)).toISOString();
-/** The transcript the screen opens on. */
 const EARLIER = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.";
 export const SEED: Message[] = [
   // Earlier turns, so the transcript scrolls and scroll-to-latest can show.
@@ -24,7 +18,6 @@ export const SEED: Message[] = [
   { id: "a2", role: "assistant", answers: "u2", interim: false, blocks: [{ kind: "thinking", text: "The second paragraph has four sentences; keep the first two." }, { kind: "tool_call", toolCallId: "t1" }, { kind: "tool_call", toolCallId: "t2" }, { kind: "tool_call", toolCallId: "t3" }] as Message["blocks"], content: "Done. The second paragraph is now two sentences:\n\n> Lorem ipsum dolor sit amet. Consectetur adipiscing elit.\n\n```txt\nlorem_ipsum.txt  412 bytes\n```", timestamp: at(19) },
 ];
 
-/** The tools the seeded turn ran. */
 const TOOLS: ToolItem[] = [
   { toolCallId: "t1", name: "read", kind: "read", subject: "lorem_ipsum.txt", input: { path: "lorem_ipsum.txt" }, output: "Lorem ipsum dolor sit amet. Consectetur adipiscing elit. Sed do eiusmod tempor. Ut enim ad minim veniam.", done: true, timestamp: at(18), completedAt: at(18) },
   { toolCallId: "t2", name: "edit", kind: "edit", subject: "lorem_ipsum.txt", input: { path: "lorem_ipsum.txt" }, output: "1 edit", done: true, timestamp: at(18), completedAt: at(19) },
@@ -38,7 +31,6 @@ const stored = (() => { try { return JSON.parse(localStorage.getItem("gallery:se
 export function fakeChat() {
   const [draft, setDraft] = createSignal("");
   const [messages, setMessages] = createSignal<Message[]>(stored?.messages ?? SEED);
-  // Editing an earlier message: its text into the draft, and the way out the transcript shows over the composer.
   const [editingEntryId, setEditingEntryId] = createSignal<string | null>(null);
   let next = 0;
   const named: Record<string, unknown> = {
@@ -64,7 +56,6 @@ export function fakeChat() {
   return new Proxy(named, { get: (target, key: string) => key in target ? target[key] : () => undefined }) as never;
 }
 
-/** Files attached in the gallery stay in the page: added at once, as if uploaded. */
 export function fakeAttachments() {
   const [items, setItems] = createSignal<UploadAttachment[]>([]);
   let next = 0;

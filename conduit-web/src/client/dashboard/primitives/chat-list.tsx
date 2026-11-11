@@ -11,14 +11,8 @@ import { isMobileLayout } from "../../navigation/mobile-layout";
 import type { Project } from "../../api/contracts";
 import { PlaceGlyph } from "../../chat/place-picker";
 
-// The chats list at the head of every dashboard's left column, so the Conduit,
-// project and workspace dashboards read and behave alike: the list's name (a
-// switch where there is a choice) at the left, then always the filter menu and
-// search at the right, and rows grouped by day and paged.
-
 export const CHAT_PAGE = 40;
 
-/** The day heading a timestamp falls under, as the search overlay groups them. */
 export function dayGroup(value: number, currentTime = Date.now()) {
   if (!value) return "Earlier";
   const today = new Date(currentTime); today.setHours(0, 0, 0, 0);
@@ -61,7 +55,6 @@ export function profileOf(profiles: ProfileLike[], chat: { templateId?: string |
   return (harness && profiles.find((profile) => profile.implementation === harness)?.id) || "";
 }
 
-/** One choice in the Filters menu: a name and its options, one in force. */
 export type ListChoice = {
   label: string;
   value: string;
@@ -79,7 +72,6 @@ function ChoiceGroup(props: { choice: ListChoice }) {
   </MenuSection>;
 }
 
-/** One choice as its own quiet dropdown, naming the option in force. */
 function ChoiceFilter(props: { choice: ListChoice }) {
   const current = () => props.choice.options.find((option) => option.value === props.choice.value) ?? props.choice.options[0];
   return <DropdownMenu modal={false}>
@@ -88,11 +80,6 @@ function ChoiceFilter(props: { choice: ListChoice }) {
   </DropdownMenu>;
 }
 
-/**
- * The heading's filters on its one line, beside the switches: each choice its
- * own dropdown, and as room runs out the last ones fold, in order, into a ⋯
- * menu before search (the children), as foldRow has it.
- */
 export function FilterBar(props: { choices: Array<ListChoice | false | null | undefined>; children?: JSX.Element }) {
   const choices = () => props.choices.filter(Boolean) as ListChoice[];
   const [fit, setFit] = createSignal(Infinity);
@@ -105,8 +92,6 @@ export function FilterBar(props: { choices: Array<ListChoice | false | null | un
   </>;
 }
 
-/** On one column the heading's switches and filters fold into one menu:
- *  each choice a group, the current option bold (no tick). */
 export function FiltersMenu(props: { choices: Array<ListChoice | false | null | undefined>; title?: string; trigger?: JSX.Element }) {
   const choices = () => props.choices.filter(Boolean) as ListChoice[];
   return <DropdownMenu modal={false}>
@@ -146,7 +131,6 @@ export const harnessChoice = (harnesses: Array<{ id: string; label: string }>, v
   ],
 });
 
-/** The chats list's compact heading: the list showing and its count. */
 export function CompactHeading(props: { label: string; count: number; where?: string | false }) {
   return <GroupCompactHeading label={props.label} count={props.count} where={props.where} />;
 }

@@ -1,5 +1,3 @@
-/* How a thread draws the work between what it says (Settings → Appearance → Reasoning & tool use), per device: each
-   run as its steps, each as one line (its run header), or the turn header alone. */
 import { createSignal } from "solid-js";
 
 export type RunForm = "steps" | "headers" | "turn";

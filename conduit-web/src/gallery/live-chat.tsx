@@ -7,13 +7,9 @@ import { createDrafts } from "../client/state/drafts";
 import { createRuntimeStore } from "../client/state/runtime";
 import { ChatScreen } from "./stories";
 
-/*
- * The phone preview on a real chat: the app's own chat store, socket and all, against the server the gallery
- * proxies to (vite.config.js, preview), so a turn streams into the library's pieces exactly as into the app's.
- * gallery.html?frame=live&chat=<id>, opened from 127.0.0.1 so the server's sign-in cookie comes with it.
- */
+// Opened from 127.0.0.1 so the server's sign-in cookie comes with it.
 export function LiveChatScreen(props: { chatId: string }) {
-  // The renderer loaded at once, as the app does opening a chat (main.tsx), so a first line is not drawn while it loads.
+  // The renderer loaded at once, as the app does opening a chat, so a first line is not drawn while it loads.
   void import("../client/chat/markdown").catch(() => {});
   void import("../client/chat/incremark-markdown").catch(() => {});
   const catalogue = createCatalogueStore();

@@ -1,18 +1,3 @@
-/**
- * Command palette registry (Cmd/Ctrl+K).
- *
- * Ported from the React app. Palette owns persistent application actions. Add a
- * static command to `paletteCommands`, or a dynamic list via `paletteSources`.
- * Nested lists (settings sections, chat search targets, and workspace views)
- * live behind page portals so the root browse/search view stays short; children
- * only appear on that page.
- *
- * Command shape:
- *   id, label, group, icon, keywords[], isAvailable(context), run(actions)
- * Optional: description, shortcut, destructive, searchValue, detail, checked,
- *   kind: "page", page (page id for drill-down)
- */
-
 import type { ChatSummary, Project, Template } from "../api/contracts";
 import {
   COMMAND_IDS, getCommandDefinition,
@@ -135,9 +120,6 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
   { id: "danger", heading: "Danger zone" },
 ];
 
-/* Where a general command sits in the palette, by what it is for: what acts on
-   the chat in front of you first, then where to go, what to make, how the
-   window is laid out, and the app itself. */
 const INTENT_GROUPS: Record<string, string> = {
   [COMMAND_IDS.renameChat]: "chat", [COMMAND_IDS.autoNameChat]: "chat", [COMMAND_IDS.moveChat]: "chat",
   [COMMAND_IDS.stopResponse]: "chat", [COMMAND_IDS.stopProcess]: "chat", [COMMAND_IDS.regenerateResponse]: "chat",
@@ -157,8 +139,6 @@ export function paletteGroupOf(command: { id?: string; group?: string; destructi
   return group === "commands" && command.id ? INTENT_GROUPS[command.id] || group : group;
 }
 
-/** Only sections the Solid Settings surface renders. Target's `diagnostics` is
- *  omitted (no Solid surface yet) to avoid a dead drill-down entry. */
 export const SETTINGS_SECTIONS = [
   { id: "account", label: "Account", keywords: ["account", "name", "profile", "picture", "avatar", "me", "time zone", "home", "connectors", "executor", "gmail", "integrations"] },
   { id: "ui", label: "Appearance", keywords: ["interface", "ui", "renderer", "markdown", "sidebar", "chats"] },
@@ -195,7 +175,6 @@ function palettePage(
   };
 }
 
-/** Drill-down pages. Root browse shows a portal; page view shows children only. */
 export const PALETTE_PAGES: Record<string, PalettePage> = {
   settings: palettePage("settings", COMMAND_IDS.openSettings, {
     prefix: "Settings ›",
@@ -281,7 +260,6 @@ function stablePaletteCommand(commandId: string, runtime: PaletteCommandRuntime)
   };
 }
 
-/** Static palette actions. Prefer this list for one-shot app operations. */
 export const paletteCommands: PaletteCommand[] = Object.entries(paletteCommandRuntime)
   .map(([commandId, runtime]) => stablePaletteCommand(commandId, runtime));
 
@@ -391,10 +369,6 @@ interface PaletteSource {
   commands: (context: PaletteContext) => PaletteCommand[];
 }
 
-/**
- * Dynamic palette sources. `page` sources only appear on their drill-down page
- * or when the root search is active. Root-only sources (thinking) always show.
- */
 export const paletteSources: PaletteSource[] = [{
   id: "settings-sections",
   page: "settings",
@@ -493,13 +467,7 @@ function filterAvailable(items: PaletteCommand[], context: PaletteContext): Pale
   return items.filter((command) => !command.isAvailable || command.isAvailable(context));
 }
 
-/**
- * Resolve commands for the palette.
- * - page null: root only (static actions, portals, root sources). Page children
- *   never leak into root search — enter a page portal (or use its shortcut) to
- *   search within it.
- * - page set: only that page's children
- */
+/** Page children never leak into root search: enter a page portal (or use its shortcut) to search within it. */
 export function resolvePaletteCommands(context: PaletteContext, options: { page?: string | null } = {}): PaletteCommand[] {
   const requestedPage = options.page || null;
   // `goto` remains a compatibility alias for older callers. It is not a

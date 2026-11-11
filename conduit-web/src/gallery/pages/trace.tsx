@@ -5,15 +5,13 @@ import { TraceHeader, Trail, Step, Orb, Trace, StepOutput, StepProse, StepSectio
 import { orb } from "../demos";
 import { row, token, type Page } from "../model";
 
-/* Trace: every behaviour, from the library's pieces. A step that opens holds its own open state here (the app's
-   transcript holds it per tool). */
+/* A step that opens holds its own open state here (the app's transcript holds it per tool). */
 export type StepProps = Parameters<typeof Step>[0];
 export const Fold = (props: StepProps & { initial?: boolean }) => { const [open, setOpen] = createSignal(props.initial ?? false); return <Step {...props} open={open()} onToggle={() => setOpen(!open())} />; };
 export const FoldTrace = (props: Omit<Parameters<typeof Trace>[0], "open" | "onToggle"> & { initial?: boolean }) => { const [open, setOpen] = createSignal(props.initial ?? true); return <Trace {...props} open={open()} onToggle={() => setOpen(!open())} />; };
 export const OUTPUT = Array.from({ length: 14 }, (_, i) => `drwxr-xr-x  ${String(i + 2).padStart(2)} jask  staff  ${448 + i * 32}  Oct 16 22:${String(10 + i).padStart(2, "0")}  dir-${i}`).join("\n");
 export function TruncatedOutput() { const [full, setFull] = createSignal(false); const text = () => full() ? OUTPUT : OUTPUT.split("\n").slice(-5).join("\n"); return <StepOutput text={text()} hidden={OUTPUT.length - text().length || OUTPUT.length - OUTPUT.split("\n").slice(-5).join("\n").length} full={full()} onToggleFull={() => setFull(!full())} />; }
 
-/* Its states: every Status a trace can say, the orb it draws, and what its Latest line holds then. */
 export type TraceState = { status: string; orb: () => JSX.Element; when: string; latest: string; tone?: "failed"; live?: boolean };
 export const TRACE_STATES: { group: string; rows: TraceState[] }[] = [
   { group: "Before anything has shown", rows: [
@@ -41,8 +39,6 @@ export const TRACE_STATES: { group: string; rows: TraceState[] }[] = [
 export const TraceStates = () => <table class="g-trace-states"><thead><tr><th>Status</th><th>When</th><th>The trace</th></tr></thead>
   <For each={TRACE_STATES}>{(group) => <tbody><tr><th colspan="3" class="g-trace-group">{group.group}</th></tr>
     <For each={group.rows}>{(row) => <tr><th>{row.status}</th><td>{row.when}</td><td><Read><TraceHeader orb={row.orb()} status={row.status} time={row.live ? "12s" : "1m 00s"} work={row.status.startsWith("Starting") || row.status === "Waiting for model" ? undefined : "1 read, 1 edit"} latest={row.latest || undefined} live={row.live} tone={row.tone} opens={row.status !== "Starting"} /></Read></td></tr>}</For></tbody>}</For></table>;
-/** A turn played, a second a beat: its Status, Work and Latest line follow the app's rules -- a running tool's Latest
- * is what it acts on, a finished one its past tense, thinking its summary; settled, the last thinking. */
 export function LiveTurn() {
   type Beat = { status: string; orb: () => JSX.Element; latest?: string; work?: string; steps: number; running?: boolean };
   const T = "The second paragraph has four sentences";

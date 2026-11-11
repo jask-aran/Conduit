@@ -3,30 +3,14 @@ import { createSignal } from "solid-js";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { formatShortcutStroke } from "../shortcuts/shortcut-normalize";
 
-/*
- * The keyboard tour's steps (docs/plans/keyboard-model.md, in the order a person meets it). Each step lights one
- * region, says what to press, and lists its tasks; a task is seen when one of its detectors fires:
- *
- *   commands  a command the shortcut manager ran (onCommand), by id
- *   focus     focus landed where it says after one of `after` ran: a go-to that really arrived, not just pressed
- *   key       a key pressed where it says (the lists' own keys, which are not commands)
- *   tab       focus moved from one group to another on Tab
- *   leader    the leader's pending sequence changed: opened, a level browsed, closed
- *
- * The keys shown are the person's own bindings, formatted by the manager, so a rebind shows.
- */
+// The keys shown are the person's own bindings, formatted by the manager, so a rebind shows.
 
 export interface TourEnv {
-  /** The dock (workspace panel) can open on this page. */
   hasDock: () => boolean;
-  /** Alt+[ / ] have tabs to step through. */
   canStepTabs: () => boolean;
-  /** Panes are side by side. */
   splitShown: () => boolean;
 }
 
-/** What the leader's pending sequence just did (the controller compares it with the last one it saw). levels: how
- *  many of its levels have keys, when it is open. */
 export type LeaderChange = { opened: boolean; browsed: boolean; closed: boolean; levels: number | null };
 
 /* The levels with keys the leader last showed: one (the usual, a region inside the app) leaves nothing to browse. */
@@ -51,15 +35,11 @@ export interface TourStepDef {
   title: string;
   body: (shortcuts: ShortcutManager) => string;
   tasks: TourTaskDef[];
-  /** Keys it mentions without waiting for them. */
   also?: (shortcuts: ShortcutManager) => { label: string; keys: string[] }[];
-  /** What to do when a task cannot be done here. */
   note?: (env: TourEnv, shortcuts: ShortcutManager) => string | null;
-  /** The region it is about, lit by the Spotlight; null lights nothing. */
   light: (env: TourEnv, done: string[]) => Element | null;
 }
 
-/** Every binding a command has now, as the manager writes it ("Not assigned" when none). */
 export const bound = (shortcuts: ShortcutManager, ...ids: string[]) => {
   const keys = ids.flatMap((id) => shortcuts.effectiveBindings(id).map((_, index) => shortcuts.formatEffectiveBinding(id, index)))
     .filter((key): key is string => Boolean(key));

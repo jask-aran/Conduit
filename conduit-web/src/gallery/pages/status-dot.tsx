@@ -1,4 +1,3 @@
-// Props: label, tone (success, active, warn, danger, muted, unread), spinning, stale; HTML span attributes.
 import { Row, StatusDot } from "@/components/ui";
 import { row, token, type Page } from "../model";
 

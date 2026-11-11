@@ -7,12 +7,7 @@ import { Icons } from "@/components/ui";
 import { api } from "../api/client";
 import { httpUrl } from "../api/transport.js";
 
-/**
- * Settings › jbot › Email: jbot's own address (agent/email.js, agent/email-setup.js). Conduit sets the mailbox up in the
- * person's Cloudflare account from one token they make for it (GET/POST/PATCH/DELETE /v0/agent/email): a Worker that
- * keeps mail in R2 until the hub collects it, and an Email Routing rule sending the address to it. Running setup again
- * for an address another hub has moves it here. The token is used for that request and never kept.
- */
+// The Cloudflare token is used for the setup request and never kept.
 
 type Step = { id: string; label: string; ok: boolean; detail?: string };
 type EmailView = {
@@ -27,7 +22,6 @@ const when = (at?: string | null) => at ? new Date(at).toLocaleString(undefined,
 export function EmailSettings(props: { name: string }) {
   const [view, setView] = createSignal<EmailView | null>(null);
   const [error, setError] = createSignal("");
-  // The setup form: shown when there is no mailbox, or to move or repair one.
   const [form, setForm] = createSignal(false);
   const [token, setToken] = createSignal("");
   const [address, setAddress] = createSignal("");
@@ -84,7 +78,6 @@ export function EmailSettings(props: { name: string }) {
 
   const ready = () => token().trim() && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address().trim()) && list(person()).length > 0;
 
-  // Step one and two of the form: the token, made in Cloudflare with only what the mailbox needs.
   const TokenLines = () => <>
     <SettingLine plain label="A Cloudflare token">
       <Button size="sm" variant="secondary" onClick={() => window.open(view()?.tokenUrl, "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Create in Cloudflare</Button>

@@ -9,15 +9,7 @@ import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { readTourMemory, tourReduce, writeTourMemory, type TourEvent, type TourState } from "./tour-machine";
 import { setLeaderLevels, TOUR_STEPS, type LeaderChange, type TourEnv, type TourTaskDef } from "./tour-steps";
 
-/*
- * The keyboard tour: teaches the keys by having them pressed. One state machine (tour-machine.ts) holds where it is;
- * this hears what the person does -- the shortcut manager's commands (onCommand) and pending leader (subscribe),
- * focus, and the lists' own keys -- only while a step is shown, and turns each into the task it completes. No polling:
- * every change it draws follows one of those events, a resize, or the Spotlight's region resizing.
- *
- * Leaving it: End tour on its card (a button, so Tab reaches it too). Escape is never the tour's: it is one of the
- * keys being taught, and stays the region's. Desktop only: on a phone the card hides and the entries are gone.
- */
+// Escape is never the tour's: it is one of the keys being taught, and stays the region's.
 
 const memory = readTourMemory();
 const [tourState, setTourState] = createSignal<TourState>(memory.state);
@@ -34,16 +26,11 @@ const phoneQuery = typeof matchMedia === "function" ? matchMedia(PHONE_LAYOUT_QU
 const [phone, setPhone] = createSignal(Boolean(phoneQuery?.matches));
 phoneQuery?.addEventListener("change", (event) => setPhone(event.matches));
 
-/** The tour's entries (the palette's command, Settings › Shortcuts' button) show only where keys mean something. */
 export const keyboardTourAvailable = () => !phone();
 export const keyboardTourActive = () => { const state = tourState(); return state.kind === "waiting" || state.kind === "done"; };
-/** Start the tour, or resume it where it was left; once finished, it starts over. */
 export function startKeyboardTour() { if (!phone()) dispatch({ type: "start" }); }
 
-/**
- * Once per device, after the person first uses a go-to chord or the leader (never on load: only a key they pressed
- * brings it), `offer` is called to suggest the tour. Not when the tour was already taken, nor on a phone.
- */
+/** Never on load: only a key the person pressed brings the offer. */
 export function watchForTourOffer(shortcuts: ShortcutManager, offer: () => void): () => void {
   if (offered || tourState().kind !== "idle") return () => {};
   const goTo = new Set<string>([COMMAND_IDS.focusSidebar, COMMAND_IDS.focusMainPane, COMMAND_IDS.focusWorkspacePanel]);
@@ -69,7 +56,6 @@ export function watchForTourOffer(shortcuts: ShortcutManager, offer: () => void)
   return stop;
 }
 
-/* A step whose tasks are all seen shows them ticked for a beat, then moves on. */
 const TOUR_BEAT_MS = 1200;
 /* Overlays that are the step's subject: the tour's dim gives way to theirs (the leader's own Spotlight, a palette's scrim). */
 const OVERLAY_CONTEXTS = ["palette.root", "palette.page", "chat-search.browse", "chat-search.edit", "chat-search.move", "chat-search.rename", "model-selector", "settings"];
@@ -159,7 +145,6 @@ export function KeyboardTour(props: { shortcuts: ShortcutManager; env: TourEnv }
     onCleanup(() => clearTimeout(timer));
   });
 
-  // The region the step is about, lit; nothing while an overlay it teaches is up (it brings its own dim).
   const overlayUp = () => { tick(); return Boolean(props.shortcuts.pendingSequence()) || OVERLAY_CONTEXTS.some((context) => props.shortcuts.isContextActive(context)); };
   const litElement = createMemo(() => { tick(); const def = step(); return def && !overlayUp() ? def.light(props.env, done()) : null; });
   createEffect(() => {
@@ -176,7 +161,6 @@ export function KeyboardTour(props: { shortcuts: ShortcutManager; env: TourEnv }
     const box = element.getBoundingClientRect();
     return { box, rect: { top: `${box.top}px`, left: `${box.left}px`, width: `${box.width}px`, height: `${box.height}px`, radius: getComputedStyle(element).borderRadius } };
   });
-  // The card sits in the corner away from the lit region.
   const placement = () => { const box = lit()?.box; return box && box.left + box.width / 2 > window.innerWidth / 2 ? "start" : "end"; };
 
   const tasks = (): TourTask[] => {

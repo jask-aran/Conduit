@@ -4,12 +4,7 @@ import { api } from "../api/client";
 import { agentView, refreshAgent, type AgentView } from "../state/agent";
 import { AgentPage, type JbotTab } from "./agent-page";
 
-/*
- * jbot's particulars, where a chat keeps its own: how much it speaks up, what it has spent today against its budget,
- * and what it is running, then its page's groups by tab. The jbot chat is a projection of its home thread, not the
- * thread, so the thread's context is not shown (it is the thread's own, a tap away). The composer's chip (a ring of
- * today's spend, in the context gauge's place) and jbot's pill open it.
- */
+// The jbot chat is a projection of its home thread, not the thread, so the thread's context is not shown here.
 
 const DIALS = [
   { value: "quiet", label: "Quiet", title: "Only what is urgent or needs your answer." },
@@ -36,8 +31,6 @@ function useJbotStatus() {
   return { name: () => settings()?.name || "jbot", spent, budget, share, running, dial: shownDial, setDial };
 }
 
-/** The ways on from jbot's panel, in its head by its close: Settings › jbot (and jbot's thread, where its tabs leave
- *  room; the Threads tab's Home is it too). */
 export function JbotWays(props: { onOpenThread?: () => void; onOpenSettings?: () => void; onDone?: () => void }) {
   const go = (action?: () => void) => () => { props.onDone?.(); action?.(); };
   return <>
@@ -46,7 +39,6 @@ export function JbotWays(props: { onOpenThread?: () => void; onOpenSettings?: ()
   </>;
 }
 
-/** How much jbot speaks up, in its panel's head by its tabs: each a mark, its word and meaning on hover. */
 export function JbotDial() {
   const status = useJbotStatus();
   const marks = { quiet: <Icons.Quiet />, normal: <Icons.Notification />, chatty: <Icons.Message /> };
@@ -54,27 +46,18 @@ export function JbotDial() {
     options={DIALS.map(({ value, label, title }) => ({ value, label, icon: marks[value], title: `${label}: ${title}` }))} />;
 }
 
-/** What jbot has spent today against its budget, a ring by its day's timeline. */
 export function JbotSpend() {
   const status = useJbotStatus();
   const tone = () => !status.budget() ? "idle" : status.share() >= 100 ? "critical" : status.share() >= 80 ? "warning" : "normal";
   const words = () => status.budget() ? `${money(status.spent())} of ${money(status.budget())} today` : `${money(status.spent())} today`;
-  // The ring is what is used of the day's budget; the figure says both, spent over budget.
   return <GaugeFigure value={status.share()} tone={tone()} used={money(status.spent())} of={status.budget() ? money(status.budget()) : undefined} label={`Spent ${words()}`} />;
 }
 
-/** The jbot chat's control of jbot's panel: the composer's chip and jbot's pill open and close it. needs: on a phone,
- *  what waits on the person is a sheet of its own, opened by the count beside jbot's pill. */
 export const JbotPanelControl = createContext<{ open: () => boolean; toggle: () => void;
   needs?: { count: () => number; open: () => boolean; toggle: () => void } } | null>(null);
 
-/**
- * jbot's panel, beside the jbot chat or over it (ChatBeside): its day and dial (JbotStatus), then its page's groups by
- * tab (Now, Routines, Memory, Threads). Configuration stays in Settings › jbot.
- */
 export function JbotPanel(props: {
   tab: JbotTab;
-  /** Where Needs you is drawn instead of the panel's top (a card over the Ledge, a phone's own sheet). */
   needsMount?: () => HTMLElement | undefined;
   onTab: (tab: JbotTab) => void;
   onOpenChat: (chatId: string, event?: MouseEvent) => void;
@@ -88,8 +71,6 @@ export function JbotPanel(props: {
   </>;
 }
 
-/** The composer's chip in the jbot chat, in the context gauge's place: a ring of today's spend against the budget,
- *  opening jbot's panel. */
 export function JbotChip() {
   const status = useJbotStatus();
   const control = useContext(JbotPanelControl);

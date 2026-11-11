@@ -13,13 +13,11 @@ import {
   type ServerEntry, type ServerPath,
 } from "../platform/servers.ts";
 
-/** How long a route's /healthz has to answer before it counts as not answering. */
 const HEALTH_TIMEOUT_MS = 4000;
 
 /**
- * What this client can learn of every server it knows, without signing in: each route asked how long it takes and
- * what it runs. `/healthz` needs no session; a browser can only ask its own origin (cross-origin access is granted to
- * the installed shells), so it says nothing about the rest rather than calling them unreachable.
+ * A browser can only ask its own origin (cross-origin access is granted to the installed shells), so it says nothing
+ * about the rest rather than calling them unreachable.
  */
 export function createServerHealth() {
   type Health = { ms: number; release: string; startedAt: string } | null;
@@ -53,7 +51,6 @@ export function createServerHealth() {
 
   const isActive = (entry: ServerEntry) => entry.origin === activeOrigin();
   const inUse = (entry: ServerEntry, path: ServerPath) => isActive(entry) && path.origin === (activePath() || activeOrigin());
-  // What the server says about itself: through the route in use, else the quickest one that answered.
   const of = (entry: ServerEntry) => {
     const answers = pathsOf(entry).map((path) => ({ path, health: health()[path.origin] })).filter((item) => item.health);
     return (answers.find((item) => inUse(entry, item.path)) ?? answers.sort((a, b) => a.health!.ms - b.health!.ms)[0])?.health ?? null;
@@ -65,7 +62,6 @@ export function createServerHealth() {
     if (answer) return `${where} · ${answer.ms}ms`;
     return measured(entry) ? `${where} · Not answering` : where;
   };
-  // The switcher's voice: online, offline, or nothing known.
   const connectivity = (entry: ServerEntry) => of(entry) ? "online" : measured(entry) ? "offline" : "unknown";
   const route = (entry: ServerEntry, path: ServerPath) => {
     const answer = health()[path.origin];
@@ -87,14 +83,7 @@ export type ServerHealth = ReturnType<typeof createServerHealth>;
 // A dev build's stamp carries its build time; the version and commit say which.
 const shortBuild = (build: string) => build ? build.replace(/\.\d{14}\./, " · ") : "Older build";
 
-/**
- * A server as this client knows it: what it runs, its name (renamed only from a client connected to it), whether it is
- * shared with this account's other clients, its identity, the routes this client reaches it by, and forgetting it.
- *
- * A server is one thing with several ways in: the addresses under it are its routes, not other servers. Forgetting
- * reaches the directory as well as this device (the list is shared through whichever server is in use), and the one
- * in use cannot be forgotten: the client would be signed in to a server it no longer lists.
- */
+/** The server in use cannot be forgotten: the client would be signed in to a server it no longer lists. */
 export function ServerFacts(props: { entry: ServerEntry; health: ServerHealth }) {
   const [renameError, setRenameError] = createSignal("");
   const active = () => props.health.isActive(props.entry);
@@ -117,7 +106,6 @@ export function ServerFacts(props: { entry: ServerEntry; health: ServerHealth })
     // The token outlives the address unless it is dropped with it.
     if (isInstalledClient()) await clearNativeBearerToken(props.entry.origin);
   };
-  // What the server is, the same from every client; then how this client reaches it.
   return <>
     <Group title="Server" scope="The hub">
     <Show when={props.health.of(props.entry)}>{(answer) =>
@@ -138,7 +126,7 @@ export function ServerFacts(props: { entry: ServerEntry; health: ServerHealth })
       </SettingLine>
     </Show>
     </Group>
-    {/* How this client reaches it; chosen in the server switcher, which proves the identity first. */}
+    {/* Chosen in the server switcher, which proves the identity first. */}
     <Group title="Connection" scope="This device">
     <For each={pathsOf(props.entry)}>{(path) => <SettingLine label={serverPathLabel(path)} state={path.origin.replace(/^https?:\/\//, "")} plain>
       <SettingValue>{props.health.route(props.entry, path)}</SettingValue>

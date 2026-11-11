@@ -16,11 +16,6 @@ import type { ModelOption } from "../api/contracts";
 import { ModelSelector } from "../chat/model-selector";
 import { Row } from "@/components/ui/row";
 
-/*
- * What every thread Conduit starts is given (GET /v0/context, context-store.js): blocks, named pieces of text, stacked
- * into documents, one document per role -- a profile, jbot, a routine's run, a subagent, chat naming. Prompts shows a
- * document as its stack under the role it starts; Blocks edits one block and says which documents it is in.
- */
 export type BlockDetail = BlockSummary & { content?: string; preview?: string; defaultContent?: string; templateText?: string };
 export type BlockSummary = { id: string; label: string; kind: "text" | "live" | "notice"; source: "shipped" | "installed" | "jbot" | "custom" | "conduit";
   skill?: boolean; templateUpdate?: boolean; description?: string; tag?: string; template?: string; slots?: { name: string; description: string }[]; appendix?: string; modified: boolean; editable: boolean; resettable: boolean; deletable: boolean; chars: number; usedBy: string[] };
@@ -32,7 +27,6 @@ export type DocumentView = { id: string; label: string; role: { kind: RoleKind; 
 export type ContextVar = { name: string; description: string; value?: string; scope?: "fixed" | "current" };
 
 const ROLE_KIND: Record<RoleKind, string> = { profile: "Profile", agent: "Persistent agent", run: "Run", subagent: "Subagent", service: "Service" };
-/** What a role's document starts, said once under its name. */
 const ROLE_STARTS: Record<RoleKind, string> = {
   profile: "starts each of its chats", agent: "starts its home and side threads", run: "starts each run of it",
   subagent: "starts each subagent a chat hands a task", service: "starts each request",
@@ -57,7 +51,6 @@ export function createContextData() {
 }
 export type ContextData = ReturnType<typeof createContextData>;
 
-/** A block's text or, for one Conduit fills in, its template; loaded when chosen, kept until the context reloads. */
 function createBlockDetails(context: ContextData) {
   const cache = new Map<string, Promise<BlockDetail>>();
   createEffect(() => { context.data(); cache.clear(); });
@@ -67,15 +60,10 @@ function createBlockDetails(context: ContextData) {
   };
 }
 
-/** Settings › Prompts: one document, named by its title (which is also how another is chosen), as its stack -- its
- *  blocks in the order the model reads them, then what Conduit adds, then a run's first message -- beside the chosen
- *  block in an editor pane filling the height, the block's actions in the pane's bar and what is known of it in its
- *  foot. */
 export function PromptsSettings(props: { context: ContextData; documentId: string; onDocument: (id: string) => void; onEditBlock: (id: string) => void; onOpenSkill: (id: string) => void; models?: () => ModelOption[]; onManageModels?: () => void }) {
   const [busy, setBusy] = createSignal(false);
   const [failure, setFailure] = createSignal("");
   const [chosen, setChosen] = createSignal("");
-  // A phone's: the chosen block's text is a screen of its own, opened from the chain.
   const [editing, setEditing] = createSignal(false);
   const [detail, setDetail] = createSignal<BlockDetail | null>(null);
   const [liveView, setLiveView] = createSignal<"template" | "now">("template");
@@ -140,7 +128,6 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
   const remove = () => edit((list) => list.splice(at(), 1));
   const own = (id: string) => Boolean(current()?.blocks.includes(id));
   const others = () => texts().filter((block) => !current()?.blocks.includes(block.id));
-  /** Swap or add: an icon in the pane's bar opening a search over the blocks not already in the document. */
   const BlockPicker = (pickProps: { title: string; icon: JSX.Element; onPick: (id: string) => void }) => <Select look="icon" icon={pickProps.icon} search="Search blocks" title={pickProps.title} aria-label={pickProps.title} value="" disabled={busy()} onChange={(event) => pickProps.onPick(event.currentTarget.value)}>
     <option value="">{pickProps.title}</option>
     <For each={others()}>{(block) => <option value={block.id}>{block.label}</option>}</For>
@@ -153,7 +140,6 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
     const list = [...doc.skills]; change(list); void save(doc.blocks, list);
   };
   const skillChoices = () => (props.context.data()?.blocks ?? []).filter((block) => block.skill && !current()?.skills.includes(block.id));
-  // The document's skills: the list, and beside it the chosen one's text, read only (Settings › Skills edits it).
   const [skillDetail, setSkillDetail] = createSignal<BlockDetail | null>(null);
   createEffect(() => { if (!current()?.skills.includes(chosenSkill())) setChosenSkill(current()?.skills[0] ?? ""); });
   createEffect(() => {
@@ -243,10 +229,6 @@ export function PromptsSettings(props: { context: ContextData; documentId: strin
   </Show>;
 }
 
-/** Settings › Blocks: a workbench on one block -- every block in the side column by where it comes from (a click
- *  chooses one), the chosen one's name the page's title, its text in an editor pane filling the height (save, reset,
- *  delete in the pane's bar; tokens and where it comes from in its foot), and under the list the documents it is in
- *  (each opening in Prompts) and the slots it can use. */
 export function BlocksSettings(props: { context: ContextData; blockId: string; onBlock: (id: string) => void; onOpenDocument: (id: string) => void }) {
   const [detail, setDetail] = createSignal<BlockDetail | null>(null);
   const [draft, setDraft] = createSignal("");
@@ -254,7 +236,6 @@ export function BlocksSettings(props: { context: ContextData; blockId: string; o
   const [state, setState] = createSignal<"idle" | "saving" | "saved">("idle");
   const [failure, setFailure] = createSignal("");
   const [liveView, setLiveView] = createSignal<"template" | "now">("template");
-  // A phone's: the text is a screen of its own, opened from the facts.
   const [editing, setEditing] = createSignal(false);
   // Skills are not blocks: they are listed, edited and managed in Settings › Skills.
   const blocks = () => (props.context.data()?.blocks ?? []).filter((block) => !block.skill);

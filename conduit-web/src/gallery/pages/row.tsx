@@ -1,5 +1,3 @@
-// Props: density (nav, list, menu), element (button, a, div), lead, label or children, detail, context, meta, end;
-// indent, current, within, open, selected, quiet; bare (a composition's own parts).
 import { Icons, Item, Menu, Row, Section, StatusDot } from "@/components/ui";
 import { row, token, type Page } from "../model";
 

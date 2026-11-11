@@ -30,7 +30,6 @@ function tokenText(filter: ChatQueryFilter): string {
   return `${filter.kind}:${quoteFilterValue(filter.value)}`;
 }
 
-/** Parse free text and the small set of chat-search filters. */
 export function parseChatQuery(raw: string): ParsedChatQuery {
   const source = String(raw || "");
   const removals: Array<[number, number]> = [];
@@ -59,7 +58,6 @@ export function parseChatQuery(raw: string): ParsedChatQuery {
   return { text: text.replace(/\s+/g, " ").trim(), filters };
 }
 
-/** Serialize filters and free text into the raw value owned by the input. */
 export function serializeChatQuery(filters: ChatQueryFilter[], text: string): string {
   const filter = filters.at(-1);
   return [filter?.value.trim() ? tokenText(filter) : "", String(text || "").trim()].filter(Boolean).join(" ");
@@ -74,7 +72,6 @@ function projectMatches(project: Project, value: string): boolean {
   return [project.id, project.slug, project.name].some((candidate) => normalize(candidate) === target);
 }
 
-/** Resolve the active project constraint against the current catalogue. */
 export function resolveChatQueryScope(parsed: ParsedChatQuery, projects: Project[]): ChatQueryScope {
   const filter = [...parsed.filters].reverse().find((item) => item.kind === "scope" || item.kind === "in");
   if (!filter || (filter.kind === "scope" && normalize(filter.value) === "all")) return { kind: "all" };

@@ -1,9 +1,7 @@
-// One page for the three ways the library shows how much of something there is.
 import { createSignal, Show } from "solid-js";
 import { Button, Gauge, Meter, Progress, Reading, ReadingTotal, Series, SettingLine, SettingValue, SettingWide, Group } from "@/components/ui";
 import { row, token, type Page } from "../model";
 
-/** A month of a hub's spend, as Settings › Usage draws it: quiet days, a busy week, today current. */
 const SPEND = [0, 0, 0.42, 1.8, 0, 0.12, 0, 0, 2.6, 3.1, 0.9, 0, 0, 0, 0.3, 0, 5.4, 4.8, 2.2, 0, 0, 0.6, 0, 0, 1.1, 0, 0, 0.8, 2.05, 1.2]
   .map((value, index) => ({ label: `Oct ${index + 4}`, value, title: `Oct ${index + 4}: $${value.toFixed(2)}`, current: index === 29 }));
 

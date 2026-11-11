@@ -2,14 +2,8 @@ import { createSignal, For, onMount, Show } from "solid-js";
 import { Button, Input, SettingDetails, SettingLine, Group, Note } from "@/components/ui";
 import { api } from "../api/client";
 
-/*
- * System › Server's sign-ins (GET/DELETE /v0/auth/sessions) and its password (POST /v0/auth/password): the hub's, so
- * they sit with the server, not in Personal. Each sign-in by its client and when it was last used; this one is marked
- * and signs out from the account menu, not here. Scripts' own short sessions are counted, not listed.
- */
 type Session = { id: string; kind: "browser" | "native" | "script"; userAgent: string | null; createdAt: string | null; lastSeenAt: string | null; current: boolean };
 
-/** A client, as a person names it: "Chrome on Windows", "Conduit app on Android". */
 export function clientName(session: Pick<Session, "kind" | "userAgent">) {
   const agent = session.userAgent || "";
   const os = /Android/.test(agent) ? "Android" : /iPhone|iPad/.test(agent) ? "iOS" : /Windows/.test(agent) ? "Windows"
@@ -38,7 +32,6 @@ export function SignInsGroup() {
   const people = () => (sessions() ?? []).filter((session) => session.kind !== "script")
     .sort((a, b) => Number(b.current) - Number(a.current) || Date.parse(b.lastSeenAt || "0") - Date.parse(a.lastSeenAt || "0"));
   const scripts = () => (sessions() ?? []).filter((session) => session.kind === "script").length;
-  // Those used in the last day are listed; older ones fold away under them.
   const recent = (session: Session) => session.current || Date.now() - Date.parse(session.lastSeenAt || "0") < 24 * 60 * 60_000;
   const others = () => people().filter((session) => !session.current);
   const older = () => people().filter((session) => !recent(session));

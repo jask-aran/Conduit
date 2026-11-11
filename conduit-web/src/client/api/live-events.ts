@@ -3,7 +3,6 @@ import type { ProtocolMessage } from "../timeline-order";
 import type { LIVE_EVENTS } from "../../live-session-api.js";
 import type { ChatBackendEvent } from "../../chat-backend-contract.js";
 
-/** The events a live session's stream carries, as the hub declares them (live-session-api.js). */
 type LiveEventName = keyof typeof LIVE_EVENTS;
 
 type UnknownRecord = Record<string, unknown>;
@@ -35,33 +34,10 @@ export interface SessionSnapshot {
   capabilities: ChatCapabilities | null;
 }
 
-/**
- * The place an event holds in its chat's order, when it holds one.
- *
- * Only events that change what the transcript says are numbered, so an
- * unstamped event is not a hole -- it is a delta, or state, which the next
- * numbered event restates anyway.
- */
+/** Only events that change what the transcript says are numbered: an unstamped event is a delta or state, not a hole. */
 export interface LogStamp { id: string; seq: number }
 
 interface EventBase { generationId: string | null; log?: LogStamp }
-/**
- * The four events a live generation is built from, in Conduit's words.
- *
- * These were eighteen, in Pi's words, and the browser reached them by
- * translating the contract back into the names Pi's own stream uses -- so a
- * delta was `content_block_delta` here, `assistant_content` on the wire, and
- * `content_block_delta` again inside Pi. Two translations to arrive where it
- * started, and for Codex and ChatGPT Web a translation into a vocabulary
- * neither end speaks.
- *
- * Six of the eighteen could not arrive at all: `content_block_started`,
- * `content_block_completed`, `generation_retry_started`,
- * `generation_retry_ended`, `generation_turn_ended` and `generation_failed`
- * have no adapter case, so they reached the browser as `pi_event` and were
- * dropped. The reducer kept handling them because the test that guards it
- * feeds Pi's internal stream rather than the wire.
- */
 export type StructuredGenerationType =
   | "generation_replay"
   | "assistant_content"
@@ -91,7 +67,6 @@ export type LiveEvent = EventBase & (
   | { type: "queue_state"; queue: QueueState }
   | { type: "permission_request"; request: HostUiRequest | null }
   | { type: "permission_resolved"; requestId: string }
-  // The chat's subagents changed (one started or ended, or a running one's heartbeat): read them again.
   | { type: "agents_changed" }
   // A Pi extension's `ctx.ui.notify`: said once, as a toast, never kept in the transcript.
   | { type: "extension_notice"; message: string; level: "info" | "warning" | "error" }
@@ -132,20 +107,8 @@ const list = (value: unknown) => Array.isArray(value) ? value : [];
 const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : undefined;
 const TRANSCRIPT_OPS = new Set(["message.open", "message.close", "message.drop", "tool.open", "tool.close", "tool.calls", "turn.settle", "turn.time"]);
 /**
- * The phases each generation event is allowed to arrive in.
- *
- * The event itself is passed through -- it is already Conduit's words, and
- * rebuilding it here is what this file stopped doing -- but which words they
- * are is checked, because the phase is the discriminator both folds switch on.
- * An event naming a phase neither end has a case for would otherwise fold into
- * nothing at both ends while still advancing the turn's position, so a new
- * adapter event could be added, reach the browser, change nothing, and look
- * delivered. Rejected here it arrives as `unknown`, which is what it is.
- *
- * A `status` with no phase is not a transition and has no case in either fold,
- * so it is not one of these. Codex used to send one to report that it was
- * waiting on an approval; what the session is busy with travels as
- * `runtime_state`, which the browser has a case for.
+ * The phase is the discriminator both folds switch on: an event naming a phase neither has a case for would fold into
+ * nothing while still advancing the turn's position, so it is rejected here and arrives as `unknown`.
  */
 const GENERATION_PHASES: Record<StructuredGenerationType, Set<string> | null> = {
   generation_replay: null,
@@ -156,17 +119,7 @@ const GENERATION_PHASES: Record<StructuredGenerationType, Set<string> | null> = 
 const STRUCTURED_GENERATION_TYPES = new Set<StructuredGenerationType>(
   Object.keys(GENERATION_PHASES) as StructuredGenerationType[]);
 
-/**
- * What each of those events has to carry to be foldable.
- *
- * Only the fields both folds read without asking: a delta names the block it is
- * adding to, a final states the blocks it ended with, a tool event names the
- * call. A frame missing one of them used to pass through and throw inside the
- * browser's store -- `event.blocks.map` on an undefined -- which is a crash
- * rather than a dropped event. This is a check, not a rebuild: what passes is
- * the event as the server stated it.
- */
-/** The block kinds a live assistant message can carry, per `AssistantBlock`. */
+/** The fields both folds read without asking: a frame missing one would throw inside the store instead of being dropped. */
 const BLOCK_KINDS = new Set(["text", "thinking", "narration", "tool_call"]);
 const GENERATION_REQUIREMENTS: Record<string, (source: UnknownRecord) => boolean> = {
   "assistant_content:start": (source) => typeof source.messageId === "string",
@@ -186,19 +139,8 @@ export function isStructuredGenerationEvent(event: LiveEvent): event is Structur
 }
 
 /**
- * A turn event that is folded as well as acted on.
- *
- * A retry and a failure hold a place in the turn's sequence and both folds have
- * a case for them -- they are what puts `retry` and `error` on the generation
- * the server snapshots and a reconnecting browser is restated from. Unlike the
- * four above they also mean something to the chat around the turn: a retry
- * moves the composer's state, an error raises a message. So they are folded
- * first and then handled, rather than routed to one or the other.
- *
- * The browser used to only handle them. Its copy of the generation therefore
- * had `retry: null` and `error: null` through a turn the server's copy had both
- * on, and the difference only disappeared when a reconnect replaced the whole
- * snapshot.
+ * Folded, then handled: a retry and a failure are on the generation the server snapshots, and they also move the
+ * composer or raise a message. Only handling them leaves this copy of the generation differing from the server's.
  */
 export type FoldedTurnEvent = Extract<LiveEvent, { type: "retry" } | { type: "error" }> & { seq: number };
 
@@ -228,26 +170,14 @@ const retry = (value: unknown): RetryState | null | undefined => {
   };
 };
 
-/**
- * A request the harness is waiting on an answer to, in the contract's words.
- *
- * Stated flat: `permission_request` carries `requestId` and the fields beside
- * it, and `runtime_state` lists the same thing under `id`. The nested
- * `{ request: { method } }` shape was accepted for the old Pi RPC adapter.
- * No current adapter sends it, so the contract accepts only flat requests.
- */
 export function normalizeHostUiRequest(value: unknown): HostUiRequest | null {
   const source = record(value);
   const kind = text(source.kind);
   if (!["confirm", "select", "input", "editor", "question"].includes(kind)) return null;
   const id = text(source.id || source.requestId);
   if (!id) return null;
-  // Checked, then carried. The fields below are the ones something reads
-  // without asking first, so they are given a shape here; everything else the
-  // request was stated with travels with it, and a harness adding a field does
-  // not have to teach this file about it before the dialog can show it.
-  // The envelope is not part of the request: this is handed the whole event,
-  // because the contract states a request flat rather than nested.
+  // Only fields read without asking are shaped; the rest travels with the request, so a harness adding a field needs
+  // no change here. The envelope is stripped because the contract states a request flat.
   const { requestId: _requestId, type: _type, generationId: _generationId, seq: _seq, log: _log, ...rest } = source;
   return {
     ...rest,
@@ -310,12 +240,7 @@ function logStamp(value: unknown): LogStamp | undefined {
   return id && seq !== undefined ? { id, seq } : undefined;
 }
 
-/**
- * Keep the event's place in the order on whatever shape it normalizes into.
- *
- * Every case below builds its own object, so a stamp added to one of them
- * would be dropped by all the others. It is put back here, once.
- */
+/** Every case below builds its own object, so the log stamp is put back here, once. */
 export function normalizeLiveEvent(value: unknown): LiveEvent {
   const stamp = logStamp(record(value).log);
   const normalized = normalizeLiveEventBody(value);
@@ -326,15 +251,7 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
   const source = record(value);
   const sourceType = text(source.type);
   const generationId = optionalText(source.generationId);
-  // One number, one name. The adapters used to publish it as `sequence` while
-  // the log, the reducer and every event type here called it `seq`, and this
-  // line was the bridge between the two.
   const seq = number(source.seq);
-  // A generation event is passed straight through. Below this there used to be
-  // a case per type rebuilding each field, which could only run for an event
-  // with no `seq` -- and every adapter states one, so none of them ever did.
-  // They were the last of the field-by-field rewrites, left behind when the
-  // pass-through was added above them.
   if (STRUCTURED_GENERATION_TYPES.has(sourceType as StructuredGenerationType) && seq !== undefined) {
     const phases = GENERATION_PHASES[sourceType as StructuredGenerationType];
     if (phases && !phases.has(text(source.phase))) return { type: "unknown", sourceType, generationId };
@@ -345,9 +262,7 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
   // The stream's own names only; each has a case, or the default below is a type error.
   const name = sourceType as LiveEventName;
   switch (name) {
-    // Whose fault it was is stated, not guessed from which of two event names
-    // arrived. A rejected command leaves the turn alone; a runtime failure
-    // ends it.
+    // A rejected command leaves the turn alone; a runtime failure ends it.
     case "error": {
       const detail = record(source.error);
       if (!text(detail.code) && !text(source.code)) return { type: "unknown", sourceType, generationId };
@@ -370,22 +285,13 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
     case "usage": return { type: "usage", generationId, contextUsage: contextUsage(source.contextUsage), sessionStats: sessionStats(source.sessionStats), cacheStats: cacheStats(source.cacheStats) };
     case "queue_state": return { type: "queue_state", generationId, queue: queue(source.queue) || { steering: [], followUp: [] } };
     case "compaction": return { type: "compaction", generationId, active: Boolean(source.active) };
-    // `seq` is the turn-local position, and both reducers order by it. Leaving
-    // it off here made a retry and a failure the two lifecycle events a reducer
-    // reading this stream had to refuse.
+    // `seq` is the turn-local position both reducers order by; without it they refuse the event.
     case "retry": return { ...source, type: "retry", generationId, ...(seq === undefined ? {} : { seq }),
       active: Boolean(source.active), retry: source.active ? source.retry ?? {} : null } as LiveEvent;
     case "transcript_sync": return { type: "transcript_sync", generationId, messages: list(source.messages), tools: list(source.tools),
       ...(source.replace ? { replace: true } : {}) };
-    // The server stating the transcript: which messages there are and where,
-    // what each one says, and which tools ran. This is the whole of how a row
-    // gets its place -- nothing downstream works one out.
-    // The op is the statement. It was checked where it was made -- every
-    // builder in `transcript-ops.js` runs `assertTranscriptOp` before the op
-    // leaves -- so rebuilding it here field by field only invented a second
-    // spelling of the same thing, and quietly dropped any field the builders
-    // learned to say until this list was updated to match. What the server
-    // stated is what the client applies.
+    // Applied as stated: the server checked the op where it was made (`assertTranscriptOp`), and rebuilding it here
+    // would drop any field the builders add.
     case "transcript_op": {
       const op = text(source.op);
       if (!TRANSCRIPT_OPS.has(op)) return { type: "unknown", sourceType, generationId };
@@ -396,9 +302,6 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
       return stamp ? { type: "log_state", generationId, log: stamp } : { type: "unknown", sourceType, generationId };
     }
     case "log_reset": return { type: "log_reset", generationId };
-    // One shape. There used to be a second, rebuilt from `lifecycle` when the
-    // event carried no session, for the thinner frame three adapters returned
-    // from `attach` on top of the one the stream sends anyway.
     case "runtime_state": {
       const requests = source.hostUiRequests === undefined ? null : list(source.hostUiRequests).map(normalizeHostUiRequest).filter((item): item is HostUiRequest => Boolean(item));
       return { type: "runtime_state", generationId, session: sessionSnapshot(source.session), contextUsage: contextUsage(source.contextUsage), sessionStats: sessionStats(source.sessionStats), cacheStats: cacheStats(source.cacheStats), queue: queue(source.queue), hostUiRequests: requests };
@@ -414,8 +317,7 @@ function normalizeLiveEventBody(value: unknown): LiveEvent {
         generationId,
         chatId: text(chat.id || source.chatId),
         title: optionalText(chat.title || source.title),
-        // The socket carries the whole chat row. Dropping it made the open
-        // chat's unread state depend on the global SSE stream being alive.
+        // Without it the open chat's unread state would depend on the global SSE stream being alive.
         chat: typeof chat.id === "string" ? chat as unknown as ChatSummary : null,
         artifacts: Array.isArray(source.artifacts) ? source.artifacts.flatMap((value) => {
           const item = record(value);

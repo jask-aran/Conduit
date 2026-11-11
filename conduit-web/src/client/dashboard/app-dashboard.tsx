@@ -22,10 +22,6 @@ import { CHAT_PAGE, DayGroups, FilterBar, groupByDay, ListSearch, CompactHeading
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader } from "./primitives/split";
 import { Row } from "@/components/ui/row";
 
-// The Conduit dashboard is also where New chat lands: the composer, every
-// recent chat under it, and the places work lives on the right -- project
-// folders as a shelf, workspaces and terminals as lists.
-
 const isWorkspace = (project: Project) => project.kind === "workspace" || ["linked", "created", "cloned"].includes(project.origin || "");
 
 function latestActivity(project: Project) {
@@ -55,7 +51,6 @@ export function AppDashboard(props: {
   onPrefetchProject: (project: Project) => void;
   onContextAction: (type: string, target: Omit<SidebarCommand, "type" | "nonce">) => void;
   isPinned: (type: "chat" | "project" | "terminal", id: string) => boolean;
-  /** What a chat's and a place's menu do. */
   menus: ItemActions;
   onOpenTerminal: (terminal: Pty) => void;
   onOpenTerminalMaximized: (terminal: Pty) => void;
@@ -70,9 +65,6 @@ export function AppDashboard(props: {
   const [now, setNow] = createSignal(Date.now());
   const [unreadOnly, setUnreadOnly] = createSignal(false);
   const [limit, setLimit] = createSignal(CHAT_PAGE);
-  // Conduit's chats split by where they live: Conduit is no folder and the
-  // project folders, Computer the workspaces. Threads no Conduit chat owns
-  // stay in each workspace's Not in Conduit. The side is remembered.
   const [side, setSide] = createSignal<"conduit" | "computer">((() => { try { return localStorage.getItem("conduit.dashboard.threads:conduit") === "computer" ? "computer" : "conduit"; } catch { return "conduit"; } })());
   const [place, setPlace] = createSignal("");
   const chooseSide = (value: "conduit" | "computer") => {
@@ -97,7 +89,6 @@ export function AppDashboard(props: {
   const conduitChats = createMemo(() => everyChat().filter(({ project }) => !isWorkspace(project)));
   const computerChats = createMemo(() => everyChat().filter(({ project }) => isWorkspace(project)));
   const allChats = () => computer() ? computerChats() : conduitChats();
-  // The places the current side's chats live in, for its filter.
   const places = createMemo(() => props.projects
     .filter((project) => computer() ? isWorkspace(project) : !isWorkspace(project))
     .filter((project) => project.sessions.some((chat) => chat.status === "active"))
@@ -199,18 +190,15 @@ export function AppDashboard(props: {
     </Show>
   </SplitGroup>;
 
-  // Project folders, drawn as folders rather than rows: they are places, and
-  // it keeps them apart from workspaces, which carry more on a row. The shelf
-  // wraps to two rows at most; Show all opens the rest.
+  // Project folders, drawn as folders rather than rows: they are places, and it keeps them apart from workspaces.
   const [shelfAll, setShelfAll] = createSignal(false);
   const [shelfOver, setShelfOver] = createSignal(false);
   const watchShelf = (shelf: HTMLDivElement) => {
     const measure = () => setShelfOver(shelf.scrollHeight > shelf.clientHeight + 1);
     const observer = new ResizeObserver(measure);
     observer.observe(shelf);
-    // Folders added change what overflows without resizing the shelf. Checked
-    // once a frame: once per folder laid the page out per folder while the
-    // first open was still building it.
+    // Folders added change what overflows without resizing the shelf. Checked once a frame: once per folder would lay
+    // the page out per folder.
     let frame = 0;
     const mutations = new MutationObserver(() => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; measure(); }); });
     mutations.observe(shelf, { childList: true });
@@ -228,7 +216,6 @@ export function AppDashboard(props: {
     </FolderShelf>
   </SplitGroup>;
 
-  // Where a workspace on another device is, and whether that device is there.
   const placeNote = (project: Project) => project.capabilities && !project.capabilities.device.local
     ? ` · ${project.capabilities.device.name}${awayDevice(project) ? " · offline" : ""}` : "";
   const workspacesGroup = () => <SplitGroup id="app-dashboard-workspaces" label="Workspaces" count={props.projects.filter(isWorkspace).length} actions={<GroupAction onClick={() => props.onContextAction("new-workspace", {})}>New</GroupAction>}>

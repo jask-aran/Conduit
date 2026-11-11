@@ -5,14 +5,8 @@ import { createLatest } from "../state/latest";
 import { deviceLabel, deviceStates } from "../state/runtime";
 import { ComputerDashboard } from "./computer-dashboard";
 
-/**
- * One environment's page (a client's: its OS, a WSL distro), as the hub's page is the hub's: its files, browsed
- * where it lets the hub (all of it, or the folders it makes available), its workspaces marked, a folder mounted from
- * here, a terminal in its home. The hub's own page adds its harnesses; a client runs none of its own yet.
- */
 export function EnvironmentPage(props: {
   nodeId: string;
-  /** The page's header in its pane, titled as the environment. */
   header: (title: string) => JSX.Element;
   projects: Project[];
   onOpenWorkspace: (project: Project) => void;
@@ -42,7 +36,6 @@ export function EnvironmentPage(props: {
   const back = (event: Event) => { if ((event as CustomEvent<string>).detail === props.nodeId) void browse(location()?.project.workingRoot); };
   window.addEventListener("conduit:device-online", back);
   onCleanup(() => window.removeEventListener("conduit:device-online", back));
-  // Its own workspaces only: the ones made from its folders.
   const mine = () => props.projects.filter((project) => project.nodeId === props.nodeId);
   return <>
     {props.header(state() ? deviceLabel(state()!) : "Environment")}

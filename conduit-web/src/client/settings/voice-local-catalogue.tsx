@@ -67,9 +67,7 @@ export default function VoiceLocalCatalogue(props: VoiceLocalCatalogueProps) {
     return `${precisionLabel(artifact.precision)} · ${formatLabel(artifact.format)} · ${Math.ceil(artifact.approximateBytes / 1024 / 1024)} MiB · ${artifactStateLabel(statusForArtifact(artifact)?.artifactState)}`;
   };
   const selectedProfile = () => props.profiles.find((profile) => profile.execution === props.selection?.execution && profile.segmentation === props.selection?.segmentation) || null;
-  // Rows in the Transcription tile, like the cloud ones: the choices, then
-  // the model files with the one action they need. The long variant facts
-  // are each option's title, not its label.
+  // The long variant facts are each option's title, not its label.
   const variantShortLabel = (artifact: CatalogueArtifact) => `${precisionLabel(artifact.precision)} · ${Math.ceil(artifact.approximateBytes / 1024 / 1024)} MiB`;
   const filesState = () => props.installingModelId
     ? props.installProgress?.phase === "runtime" ? "Downloading the voice runtime…" : props.installProgress ? `${props.installProgress.phase} · ${Math.round(100 * props.installProgress.completedBytes / Math.max(1, props.installProgress.totalBytes))}%` : "Installing…"

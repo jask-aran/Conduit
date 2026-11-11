@@ -2,7 +2,6 @@ import { For } from "solid-js";
 import { ReportCard, RoomRow, ClockRow, DayStrip, HarnessPrompt, Icons, LevelMark, type ClockKind, Group, GroupHeading, IconButton } from "@/components/ui";
 import { row, type Page } from "../model";
 
-/* Assistant: an agent that keeps going on its own. What runs it on a clock is listed next first over its day. In the app they are the agent's page's groups (dashboard/agent-page.tsx). */
 const CLOCKS: { kind: ClockKind; title: string; cadence: string; status?: string; next: string; warn?: string; remove?: boolean; off?: boolean }[] = [
   { kind: "heartbeat", title: "Heartbeat", cadence: "Every 30m", next: "in 6m" },
   { kind: "feed", title: "Email", cadence: "Every 30m", status: "Executor · 2 new 24m", next: "in 6m", remove: true },

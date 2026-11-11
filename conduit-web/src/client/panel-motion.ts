@@ -7,7 +7,6 @@ export type PanelGeometryMotionDetail = {
   id: number;
   source: PanelGeometryMotionSource;
   size: number;
-  /** When set, transcript uses inverse-translate mode around one layout commit. */
   targetSize?: number;
   duration?: number;
   easing?: string;

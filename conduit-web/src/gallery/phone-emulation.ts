@@ -4,12 +4,7 @@ import { PHONE_LAYOUT_QUERY, NON_PHONE_LAYOUT_QUERY } from "@/components/ui/layo
 const PHONE_AS_WIDTH = PHONE_LAYOUT_QUERY.replace(/ and \(hover: none\) and \(pointer: coarse\)/, "");
 const WIDE_AS_WIDTH = NON_PHONE_LAYOUT_QUERY.split(",")[0]!.trim();
 
-/**
- * Make this frame a phone to the app: matchMedia answers the phone queries by
- * width, and every stylesheet's phone and wide media rules are rewritten the
- * same way, again whenever a stylesheet arrives (Vite injects and replaces
- * them on every edit).
- */
+/** Stylesheets are rewritten again whenever one arrives: Vite injects and replaces them on every edit. */
 export function emulatePhone() {
   const native = window.matchMedia.bind(window);
   const translate = (query: string) => query

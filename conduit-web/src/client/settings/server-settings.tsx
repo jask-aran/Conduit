@@ -14,10 +14,8 @@ import { MachineReadout } from "./machine-readout.tsx";
 import { createNetwork, DeviceHarnesses, isWorkspace } from "./network-state.tsx";
 
 /**
- * The servers this client knows, one at a time: picked at the top (each with its status), then the server's figures --
- * what its network holds, the machine it runs on, its harnesses -- and what this client knows of it. Another server is
- * inspected, not changed: the installed apps ask it with the sign-in they keep for it; a browser can only ask its own,
- * and offers Switch to.
+ * Another server is inspected, not changed: the installed apps ask it with the sign-in they keep for it; a browser
+ * can only ask its own.
  */
 export function ServerSettings(props: { projects: Project[]; runtime?: JSX.Element }) {
   const health = createServerHealth();
@@ -26,7 +24,6 @@ export function ServerSettings(props: { projects: Project[]; runtime?: JSX.Eleme
   const { entry, active, readable, devices, network, hubDevice, hubNode, server, projects } = net;
 
   return <>
-    {/* Which server: each with its status, the one in use first; picking one inspects it, Switch to uses it. */}
     <SettingLine plain label={<DropdownMenu>
         <DropdownMenu.Trigger as={ServerControl} inline name={entry()?.name || "No server"} detail={entry() ? health.status(entry()!) : ""}
           connectivity={entry() ? health.connectivity(entry()!) : "unknown"} aria-label={`Server: ${entry()?.name || "none"}`} />
@@ -46,7 +43,6 @@ export function ServerSettings(props: { projects: Project[]; runtime?: JSX.Eleme
     <Show when={!readable()}><Note tone="quiet">Switch to {entry()?.name} to see its network.</Note></Show>
     <Show when={hubNode()}>{(node) => <Note>{server()} runs on {hubDevice()!.name} · {node().name}</Note>}</Show>
 
-    {/* What the server holds, read at a glance: figures as the gauge's tiles. */}
     <Show when={devices()}><Reading>
       <ReadingStats title="On the network">
         <ReadingStat label="Devices" value={network().length} />
@@ -54,14 +50,12 @@ export function ServerSettings(props: { projects: Project[]; runtime?: JSX.Eleme
         <ReadingStat label="Workspaces" value={projects().filter(isWorkspace).length} />
       </ReadingStats>
     </Reading></Show>
-    {/* The machine it runs on, read while the page shows; only the server this client is on can be asked. */}
+    {/* Only the server this client is on can be asked. */}
     <Show when={active()}><MachineReadout open /></Show>
     <Show when={hubNode()}>{(node) => <DeviceHarnesses node={node()} />}</Show>
-    {/* Its agent processes: how many it keeps, and those running now. The server in use's only. */}
     <Show when={active()}>{props.runtime}</Show>
     <Show when={entry()}>{(known) => <ServerFacts entry={known()} health={health} />}</Show>
     <Show when={net.error()}><Note tone="error">{net.error()}</Note></Show>
-    {/* Who is signed in to it, and its password: the server in use's (another is switched to first). */}
     <Show when={active()}><SignInsGroup /><PasswordGroup /></Show>
   </>;
 }

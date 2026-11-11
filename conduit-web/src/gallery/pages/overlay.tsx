@@ -16,7 +16,6 @@ export const glanceFolder = () => <Glance label="Folder preview"><GlanceHead mar
   <Section><Item icon={<HarnessMark id="claude" />} meta="9 Oct">Short Sprint Workout Plan</Item><Item icon={<HarnessMark id="opencode" />} meta="26 Sept">Gassho House Stays in Japan</Item><Item icon={<HarnessMark id="opencode" />} meta="25 Sept">Varied dog question formats</Item></Section></Glance>;
 export const glanceEmpty = (text: string) => () => <Glance label="Chat preview"><Empty kind="glance">{text}</Empty></Glance>;
 export const chatPreview = glanceChat;
-/* Chat search's tree: a folder open in place (its chevron turns; its search shows under the cursor), its chats in under it, Browse all; picked: an edit's check column. */
 export const chatTree = (edit: boolean) => <>
   <Section title="Recent"><Item role="treeitem" icon={<HarnessMark id="claude" />} meta="9 Oct" picked={edit ? true : undefined} active={edit}>Short Sprint Workout Plan</Item><Item role="treeitem" icon={<HarnessMark id="opencode" />} meta="8 Oct" picked={edit ? false : undefined}>Wispah V3 Lodge</Item></Section>
   <Section title="Folders">
@@ -28,7 +27,6 @@ export const chatTree = (edit: boolean) => <>
   </Section>
 </>;
 export const keys = (...names: string[]) => <span class="g-keys">{names.map((name) => <Keycap>{name}</Keycap>)}</span>;
-/** The app's overlays, assembled: drawn in their gallery cells and over the desktop preview. */
 export type OverlayView = "leader" | "palette" | "search" | "settings";
 export const overlayViews: Record<OverlayView, (props: { close: () => void; class?: string; lit?: Lit; leaderBottom?: string; phone?: boolean }) => JSX.Element> = {
   palette: (props) => <Scrim class={props.class}><Overlay label="Command palette" style={{ "--overlay-height": "480px" }}>
@@ -37,7 +35,6 @@ export const overlayViews: Record<OverlayView, (props: { close: () => void; clas
   settings: (props) => <Scrim class={props.class} placement={props.phone ? "top" : "center"}><Settings close={props.close} phone={props.phone} /></Scrim>,
   leader: (props) => <><Spotlight lit={props.lit} /><div class="g-page-leader" style={props.leaderBottom ? { bottom: props.leaderBottom } : undefined}><Leader path={<LeaderPath />} hints={leaderHints()}>{leaderRows()}</Leader></div></>,
 };
-/** A phone's screen, a chat's transcript on it, an overlay drawn full screen over it. */
 export const PhoneStage = (props: { children: JSX.Element }) => <div class="g-phone-stage"><p>{"Created lorem_ipsum.txt in this folder. The second paragraph is now two sentences: lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(6)}</p>
   <Scrim class="g-stage-scrim">{props.children}</Scrim></div>;
 

@@ -13,7 +13,6 @@ export const send = () => ghost("Send message", <Icons.Send />);
 
 const composerScene = () => <div class="g-composer"><DesktopComposer><ComposerField><TextArea placeholder="Send a message…" /></ComposerField><Toolbar start={toolbarStart()} end={toolbarEnd()} primary={send()} /></DesktopComposer></div>;
 
-// State under the composer: background agents keep their place below while a question takes the composer's.
 function UnderScene() {
   const [asking, setAsking] = createSignal(false);
   const question = () => <Show when={asking()}><Rider label="Question" layout="card" motion="entering">

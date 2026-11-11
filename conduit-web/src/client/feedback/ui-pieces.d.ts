@@ -1,5 +1,5 @@
 declare module "virtual:ui-pieces" {
-  /** The library's pieces as its source states them (scripts/ui-pieces.mjs). Paths are from the repository root. */
+  /** Paths are from the repository root. */
   const names: {
     /** A piece: where it is declared, the piece its root is drawn through, the pieces that draw through it unnamed. */
     pieces: Record<string, { source: string; wraps?: string; through?: string[] }>;

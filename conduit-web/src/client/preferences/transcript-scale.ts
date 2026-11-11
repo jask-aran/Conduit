@@ -1,6 +1,4 @@
-/* The transcript's own size (Settings → Appearance), per device, on top of the Interface size: messages, answers and
-   bubbles, drawn in their region's unit (foundations.css --scale-transcript-desktop/-phone), so the chrome around
-   them keeps its size. */
+/* Drawn in the transcript region's unit (--scale-transcript-desktop/-phone), so the chrome around it keeps its size. */
 const KEY = "conduit:transcript-scale";
 
 export const TRANSCRIPT_SCALE_OPTIONS = [0.9, 1, 1.1, 1.2, 1.3] as const;

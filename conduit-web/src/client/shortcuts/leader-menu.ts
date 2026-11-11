@@ -2,11 +2,7 @@ import { createSignal } from "solid-js";
 import { publishUiPreference, type UiPreferenceChoice } from "../preferences/ui-preferences";
 import { UI_PREFERENCES } from "../../preferences-api.js";
 
-/**
- * When the leader menu shows after the leader, Ctrl+G. By default only after a pause, so
- * someone who knows the key they want never sees it; the menu is for the
- * moment of stepping back to look.
- */
+/** By default only after a pause, so someone who knows the key they want never sees it. */
 export type LeaderMenuMode = UiPreferenceChoice<"leaderMenu">;
 const LEADER_MENU_MODES = new Set<string>(UI_PREFERENCES.leaderMenu.values);
 

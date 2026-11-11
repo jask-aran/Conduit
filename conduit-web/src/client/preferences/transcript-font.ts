@@ -1,5 +1,3 @@
-/* The transcript's typeface (Settings → Appearance), per device: messages,
-   the composer's text and the voice captions. The rest of the UI stays Geist. */
 export type TranscriptFont = "geist" | "paper-mono";
 
 const KEY = "conduit:transcript-font";

@@ -1,5 +1,3 @@
-// Props: ApprovalSummary: title, service, lines (text, or { text?, fields?, code? }), meta. ApprovalCard: those, state (pending, allowed, declined, expired,
-// used), busy, motion, onChoose(allow | always | deny). ServiceIcon: service, fallback.
 import { createSignal } from "solid-js";
 import { ApprovalCard, ApprovalSummary, type ApprovalState, Button, ServiceIcon } from "@/components/ui";
 import { row, token, type Page } from "../model";

@@ -7,24 +7,15 @@ import { webSocketUrl } from "../api/transport.js";
 import { createLatest } from "../state/latest";
 import { BrowserProxyView, proxyBack, proxyForward, proxyReload } from "./browser-proxy-view";
 
-/** How long the agent's pointer stays still before it rests. */
 const POINTER_REST_MS = 2500;
-/** How long a resize settles before the viewport is sent. */
 const VIEWPORT_SETTLE_MS = 400;
 
-/*
- * A Browser pane (`browser:<id>`, roadmap #7): the hub's browser, shared with Conduit's agents (server/browser-host.js,
- * the `browser` tool). Its frames come over the hub's stream and are drawn as they arrive; the pointer, wheel and keys
- * on the screen go back as the page's own input, mapped from the pane to the page; the bar goes to an address, back,
- * forward and reloads; and the page's viewport follows the pane's size.
- */
 type Codec = "h264" | "h265" | "jpeg";
 type PictureSettings = { settings: { codec: Codec; direct?: boolean }; video: boolean };
 type Status = { id: string; available: boolean; running?: boolean; url?: string | null; title?: string | null; fps?: number };
 
 const BUTTONS: Record<number, string> = { 0: "left", 1: "middle", 2: "right" };
 const modifiers = (event: KeyboardEvent | MouseEvent) => (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.metaKey ? 4 : 0) | (event.shiftKey ? 8 : 0);
-/** What was typed as an address: a URL as it is, a bare domain as https, anything else a search. */
 export const addressOf = (typed: string) => {
   const text = typed.trim();
   if (!text) return "";
@@ -37,7 +28,6 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
   const [status, setStatus] = createSignal<Status | null>(null);
   const [address, setAddress] = createSignal("");
   const [live, setLive] = createSignal(false);
-  // Whose browser: the hub's, or a device's (roadmap #9), named while it starts and when its page has no name.
   const [where, setWhere] = createSignal(props.id === "hub" ? "the hub" : "the device");
   const [state, setState] = createSignal<{ text: JSX.Element; tone?: "error" } | null>({ text: `Starting ${props.id === "hub" ? "the hub" : "the device"}'s browser…` });
   let canvas: HTMLCanvasElement | undefined;
@@ -45,10 +35,7 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
   let editing = false;
   let socket: WebSocket | null = null;
   let frame = { width: 0, height: 0 };
-  /*
-   * Where an agent acts on the page (browser-host.js's pointer messages, page CSS px), placed on the screen as the
-   * frame is drawn: whole, centred across, from the top. It rests (fades) once the agent has been still 2.5 s.
-   */
+  // In page CSS px, placed on the screen as the frame is drawn: whole, centred across, from the top.
   const [pointer, setPointer] = createSignal<AgentPointerState | null>(null);
   let pointerKey = 0;
   let resting: ReturnType<typeof setTimeout> | undefined;
@@ -75,8 +62,6 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
   let jpegOnly = false;
   let decoder: VideoDecoder | null = null;
   const connecting = createLatest();
-  // Direct pages (Services › Browser, experimental): the hub's browser only; the page fetched through the hub's proxy and
-  // shown as itself, the bar driving it, with no stream while it is on.
   const [direct, setDirect] = createSignal(false);
   const [directUrl, setDirectUrl] = createSignal("");
   let directFrame: HTMLIFrameElement | undefined;
@@ -85,7 +70,6 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
     { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, value }), timeout: false })
     .then((next) => { setStatus(next); name(next); return next; })
     .catch((error) => setState({ text: error instanceof Error ? error.message : String(error), tone: "error" }));
-  // The tab's name: the page's title, else its host; a blank page is the Browser.
   const name = (found: Pick<Status, "title" | "url">) => {
     let host = "";
     try { host = found.url && found.url !== "about:blank" ? new URL(found.url).host : ""; } catch { /* not a URL */ }
@@ -160,9 +144,8 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
           output: (image) => {
             try {
               if (closed || socket !== next || decoder !== current || !canvas) return;
-              // The canvas is the picture's own size, drawn whole: the page's size (frame) can differ from the picture's
-              // (a screencast scaled to fit, or device pixels), and drawing the page's size cut a small picture into a
-              // corner of a big canvas. The page's size is only for mapping the pointer.
+              // The canvas is the picture's own size: the page's size can differ (a screencast scaled to fit, or device
+              // pixels) and is only for mapping the pointer.
               const width = image.displayWidth;
               const height = image.displayHeight;
               if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
@@ -235,7 +218,7 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
       };
     } catch (error) {
       setState({ text: error instanceof Error ? error.message : String(error), tone: "error" });
-      // Said, and tried again as a dropped stream is: only a close used to retry, so this was where it stopped.
+      // Said, and tried again as a dropped stream is.
       window.setTimeout(() => { if (!closed && isCurrent()) void connect(); }, Math.min(8000, 500 * 2 ** retry++));
     }
   };
@@ -297,7 +280,6 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
       name(found);
       void connect();
     }).catch((error) => setState({ text: error instanceof Error ? error.message : String(error), tone: "error" }));
-    // The page as big as the pane: its viewport follows the screen's size, settled for a moment first.
     let sizing = 0;
     let sized = "";
     let measured: { width: number; height: number } | null = null;
@@ -337,7 +319,7 @@ export function BrowserPane(props: { id: string; header: JSX.Element; onTitle?: 
   onCleanup(() => { closed = true; generation++; pending = null; closeDecoder(); cancelAnimationFrame(moving); socket?.close(); window.removeEventListener("conduit:browser-changed", changed); });
 
   const go = (event: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
-    // Escape steps back one level (keyboard-model.md › Leave): the address reverts and the page takes the keyboard.
+    // Escape steps back one level: the address reverts and the page takes the keyboard.
     if (event.key === "Escape") { event.preventDefault(); editing = false; setAddress(status()?.url && status()!.url !== "about:blank" ? status()!.url! : ""); (screen ?? event.currentTarget).focus({ preventScroll: true }); if (document.activeElement === event.currentTarget) event.currentTarget.blur(); return; }
     if (event.key !== "Enter") return;
     const url = addressOf(event.currentTarget.value);

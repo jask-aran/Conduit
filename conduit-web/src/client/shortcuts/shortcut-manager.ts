@@ -42,9 +42,7 @@ export interface ShortcutManagerOptions {
   commands: ShortcutCommandDefinition[];
   environment: ShortcutEnvironment;
   storage?: ShortcutStorage | null;
-  /** The leader key, which opens the leader menu anywhere, even with nothing in it. */
   leader?: ShortcutStroke;
-  /** Check the commands for duplicate ids and ambiguous defaults (default true; a production build passes false). */
   validate?: boolean;
 }
 
@@ -212,14 +210,12 @@ export class ShortcutManager {
     };
   }
 
-  /** Show another level in the leader menu, as ←/→ would. */
   showPendingLevel(index: number): void {
     if (!this.pending?.levels[index]?.commandIds.length || this.pending.shown === index) return;
     this.pending = { ...this.pending, shown: index };
     this.emit();
   }
 
-  /** Run a command the pending sequence offers, as its second stroke would. */
   runPendingCommand(commandId: string): boolean {
     const pending = this.pending;
     if (!pending) return false;
@@ -239,7 +235,6 @@ export class ShortcutManager {
     return [...this.activeContexts.values()].some((active) => active.context === context);
   }
 
-  /** Hear each command as its key runs it (the keyboard tour watches what the person does): its id, after its handler. */
   onCommand(listener: (commandId: string) => void): () => void {
     this.commandListeners.add(listener);
     return () => { this.commandListeners.delete(listener); };
@@ -271,8 +266,6 @@ export class ShortcutManager {
         return true;
       }
       const pending = this.pending;
-      // ←/→ and Tab browse the levels the leader menu shows; they are never a
-      // second stroke.
       const browsable = pending.levels.map((level, index) => level.commandIds.length ? index : -1).filter((index) => index >= 0);
       const at = browsable.indexOf(pending.shown);
       const browse = event.key === "ArrowLeft" ? Math.max(0, at - 1)
@@ -297,7 +290,7 @@ export class ShortcutManager {
       this.clearPendingSequence();
       if (match) return this.executeMatch(event, match);
       // Not a second stroke: a chord (the go-to keys the leader menu shows) is dispatched as itself rather than lost;
-      // a bare key just ends the sequence (Codex review).
+      // a bare key just ends the sequence.
       if (!(event.ctrlKey || event.metaKey || event.altKey)) return false;
     }
 

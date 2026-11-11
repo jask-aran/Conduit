@@ -5,21 +5,11 @@ import { LiveNote, Note } from "@/components/ui";
 import { api } from "../api/client";
 import { Group } from "@/components/ui/group";
 
-/** An MCP server reaching the person's accounts (GET /v0/agent/connectors), signed in to once for the hub. Today the
- *  hub's agent calls its tools from codemode; anything that is not a read asks first. */
 type Connector = { id: string; label: string; url: string; status: "off" | "connecting" | "on" | "error"; tools: number; error?: string };
 const CONNECTOR_STATE = { off: "Not connected", connecting: "Connecting…", on: "Connected", error: "Not working" } as const;
 
-/** Services › Integrations: what the hub is connected to, each way. Accounts the agents act in (connectors), and
- *  the hub's own tools handed to other harnesses (its MCP server). The tools themselves are listed in AI › Tools. */
 export const IntegrationsSettings = () => <><ConnectorsGroup /><McpAccess /></>;
 
-/**
- * Conduit's tools for other harnesses: the hub's MCP endpoint (conduit_ui, conduit_inbox and browser). Claude Code started by Conduit on the
- * hub is given it; Codex and other MCP clients are added by hand, from what is copied here. The token is copied inside
- * the entry, never shown.
- */
-/** How long a copied entry's confirmation (or a refusal) stays before the line returns to rest. */
 const COPIED_HOLD_MS = 2000;
 function McpAccess() {
   const [access, setAccess] = createSignal<{ url: string; codex: string; browser: boolean } | null>(null);
@@ -39,16 +29,13 @@ function McpAccess() {
   </Group>}</Show>;
 }
 
-/** Connected accounts: Connect signs in in another tab (the system browser in the apps). */
 function ConnectorsGroup() {
   const [connectors, setConnectors] = createSignal<Connector[]>([]);
   const [connecting, setConnecting] = createSignal<string | null>(null);
-  // What went wrong last, by connector ("" for the list itself): said in the row until the next try.
   const [failure, setFailure] = createSignal<Record<string, string>>({});
   const fail = (id: string, error: unknown) => setFailure({ ...failure(), [id]: error instanceof Error ? error.message : String(error) });
   const clear = (id: string) => { const { [id]: _, ...rest } = failure(); setFailure(rest); };
   const loadConnectors = () => api<Connector[]>("/v0/agent/connectors").then((list) => { setConnectors(list); clear(""); }).catch((error) => fail("", error));
-  // Signing in happens in another tab; the row follows it there for a while.
   let watching = 0;
   // A connect answered after the page closed must not start the watch.
   let disposed = false;

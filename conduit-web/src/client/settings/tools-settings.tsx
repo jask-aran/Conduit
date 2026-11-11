@@ -9,8 +9,6 @@ import { tokens } from "./context-settings";
 // The editor brings CodeMirror: loaded when the page opens, never with the app.
 const TextEditor = lazy(() => import("@/components/ui/text-editor").then((module) => ({ default: module.TextEditor })));
 
-/** One tool of a profile (GET /v0/profiles/tools): where it comes from, who calls it, whether it asks first, and what
- *  the model is told of it (text, parameters: its JSON schema). */
 type Schema = { type?: string | string[]; description?: string; properties?: Record<string, Schema>; required?: string[]; enum?: unknown[]; const?: unknown; items?: Schema; anyOf?: Schema[] };
 type ProfileTool = {
   name: string; description: string; text?: string; parameters?: Schema | null; group?: string; source: "built-in" | "extension" | "connector" | "codemode"; extension?: string;
@@ -25,7 +23,6 @@ const SOURCE_SAYS = {
 } as const;
 const ASKS = { never: "Runs", always: "Asks first", sometimes: "Sometimes asks" } as const;
 
-/** A schema's type as a person reads it: string, "a" | "b", string[], object. */
 function typeOf(schema: Schema): string {
   if (schema.const !== undefined) return JSON.stringify(schema.const);
   if (schema.enum) return schema.enum.map((value) => JSON.stringify(value)).join(" | ");
@@ -33,7 +30,6 @@ function typeOf(schema: Schema): string {
   if (schema.type === "array") return `${schema.items ? typeOf(schema.items) : "any"}[]`;
   return Array.isArray(schema.type) ? schema.type.join(" | ") : schema.type || "any";
 }
-/** What the model is told of a tool: its description, then each thing it takes. */
 function told(tool: ProfileTool): string {
   const takes = Object.entries(tool.parameters?.properties ?? {});
   const required = new Set(tool.parameters?.required ?? []);
@@ -42,14 +38,7 @@ function told(tool: ProfileTool): string {
 }
 const shortName = (tool: ProfileTool) => tool.name.replace(/^mcp__.+?__|^agent_browser_|^pi\.codemode\.models\./, "");
 
-/**
- * AI › Tools, read-only: every tool the hub's agents have, on the workbench layout (workbench.tsx). A tool is one
- * thing whichever profiles have it: the side column files them by what they are for (the hub says: durable-runtime.js
- * `toolsView`), each group folded but the chosen tool's; the pane is the tool's own definition, the description and
- * parameters sent to the model with every request (not a skill, not a prompt block); under the list, which profiles
- * have it, who calls it and when it asks. Where a profile's version differs (jbot's file tools take a device), the
- * pane's switch shows each. Nothing here is set: connecting an account is Settings › Integrations.
- */
+/** A tool is one thing whichever profiles have it; where a profile's version differs (jbot's file tools take a device), the pane's switch shows each. */
 type Entry = { name: string; group: string; in: { profile: ProfileTools; tool: ProfileTool }[] };
 const same = (a: ProfileTool, b: ProfileTool) => (a.text ?? a.description) === (b.text ?? b.description) && JSON.stringify(a.parameters ?? null) === JSON.stringify(b.parameters ?? null);
 
@@ -58,9 +47,7 @@ export function ToolsSettings() {
   const [error, setError] = createSignal("");
   const [chosen, setChosen] = createSignal("");
   const [openGroup, setOpenGroup] = createSignal("");
-  // Which profile's version the pane shows, where they differ.
   const [version, setVersion] = createSignal("");
-  // A phone's: the tool's pane is a screen of its own, opened from the list.
   const [reading, setReading] = createSignal(false);
   const load = () => {
     setError("");

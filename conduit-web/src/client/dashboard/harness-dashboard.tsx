@@ -26,12 +26,7 @@ import { CHAT_PAGE, CompactHeading, DayGroups, FilterBar, FiltersMenu, groupByDa
 import { SplitDashboard, SplitEmpty, SplitGroup, SplitHeader } from "./primitives/split";
 import { Row } from "@/components/ui/row";
 
-// A harness's own page: the threads it ran that Conduit does not keep, beside
-// the chats Conduit keeps on it, and the folders it ran them in. It reads as a
-// workspace's page does, on the same split layout.
-
 export type HarnessLaunch = { harnessId: string; cwd: string; prompt: string; model: string; thinkingLevel: string; permissionMode: string };
-/** What the page has chosen for a thread it has not started yet. */
 export type HarnessChoices = { model: string; thinkingLevel: string; permissionMode: string };
 /** `chatId` is the hidden chat the thread runs as while its page is open. */
 export type HarnessThreadTarget = { harnessId: string; path: string; id: string; title: string; chatId?: string };
@@ -54,10 +49,8 @@ export function HarnessDashboard(props: {
   harnessId: string;
   projects: Project[];
   runtime: RuntimeStore;
-  /** The folder the page is scoped to; null for every folder. */
   scope: string | null;
   onScope: (path: string | null) => void;
-  /** Where a thread starts when nothing else says: the Computer's home. */
   home: string;
   composer?: (input: { models: ComposerModels; loading: boolean; permissions: ComposerPermissions; folder: FolderOptions; choices: HarnessChoices; launch: (prompt: string) => Promise<void> }) => JSX.Element;
   onStartThread: (launch: HarnessLaunch) => Promise<void>;
@@ -128,7 +121,6 @@ export function HarnessDashboard(props: {
   type Place = { path: string; label: string; missing?: boolean; project?: Project };
   const discovered = createMemo<Place[]>(() => known().map((group) => ({ path: group.path, label: group.display, missing: group.missing })));
   const workspacePlaces = createMemo<Place[]>(() => workspaces().map((project) => ({ path: project.workingRoot, label: project.name, project })));
-  // Where a new thread can start: anywhere either list names.
   const launchFolders = createMemo(() => {
     const seen = new Set<string>();
     return [...discovered(), ...workspacePlaces()].filter((row) => !row.missing && !seen.has(row.path) && Boolean(seen.add(row.path)));
@@ -143,7 +135,6 @@ export function HarnessDashboard(props: {
       .filter(({ group, thread }) => !needle || [thread.title, thread.preview, group.display, group.path, group.repository?.branch].some((value) => value?.toLocaleLowerCase().includes(needle)))
       .sort((left, right) => sortTime(right.thread) - sortTime(left.thread));
   });
-  // Conduit's own chats on this harness, where they live.
   const kept = createMemo(() => {
     const needle = query().trim().toLocaleLowerCase();
     const at = (chat: ChatSummary) => Date.parse((chatSort() === "created" ? chat.createdAt : chat.lastMessageAt || chat.createdAt) || "") || 0;
@@ -156,9 +147,6 @@ export function HarnessDashboard(props: {
       .sort((left, right) => right.at - left.at);
   });
   const showOutside = () => discovers() && side() === "outside";
-  // The right column follows the list. Conduit's places on the Computer are its
-  // workspaces; the threads it does not keep are wherever the harness says it
-  // ran them. The folder in scope stays in view on either side.
   const folders = createMemo(() => {
     const rows = showOutside() ? discovered() : workspacePlaces();
     const current = scope();
@@ -169,8 +157,6 @@ export function HarnessDashboard(props: {
   const running = createMemo(() => kept().filter(({ chat }) => props.runtime.getProcess(chat.id)?.active).length);
   const total = () => showOutside() ? outside().length : kept().length;
 
-  // The harness keeps the catalogue; the dashboard holds the choice until the
-  // first message starts a thread with it.
   const catalogRequest = createLatest();
   const loadModels = async (cwd: string) => {
     const current = catalogRequest.next();
@@ -339,8 +325,6 @@ export function HarnessDashboard(props: {
       list={threadsGroup()}
       aside={foldersGroup()} />
 
-    {/* Choosing the working folder: where it is now, then a list that starts with Home and Up, its folders, and the
-        recent ones; Use folder takes the one shown. */}
     <Dialog open={Boolean(picker())} onOpenChange={(open) => !open && setPicker(null)} title="Select working folder" close="Cancel" size="wide"
       actions={<Button type="button" disabled={pickerBusy() || !picker()} onClick={() => { const location = picker(); if (!location) return; props.onScope(location.project.workingRoot); setPicker(null); }}>Use folder <Icons.Proceed /></Button>}>
     <Show when={picker()}>{(location) => <>

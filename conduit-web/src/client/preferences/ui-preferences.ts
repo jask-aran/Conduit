@@ -5,7 +5,6 @@ import type { UI_PREFERENCES } from "../../preferences-api.js";
 
 export const UI_PREFERENCE_CHANGE_EVENT = "conduit:ui-preference-change";
 
-/* The UI preferences as the declaration lists them (preferences-api.js), plus the sidebar's pins, saved beside them. */
 type Declared = typeof UI_PREFERENCES;
 type ValueOf<P> = P extends { type: "boolean" } ? boolean
   : P extends { type: "integer" } ? number
@@ -17,11 +16,7 @@ export type UiPreferenceChoice<K extends keyof Declared> = NonNullable<UiPrefere
 
 export type UiPreferenceKey = keyof UiPreferences;
 
-/*
- * How the client keeps one UI preference (main.tsx's table, one row a key): read on this device as the page mounts,
- * mirrored to `storage` when the hub's value arrives, then handed to what shows it. A row with no `storage` is not
- * compared before it is applied; `store` is how a value is written there (JSON for a list, String otherwise).
- */
+// A row with no `storage` is not compared before it is applied.
 export type ClientPreference<K extends UiPreferenceKey> = {
   storage?: string;
   store?: (value: UiPreferences[K]) => string;
@@ -36,11 +31,7 @@ export function publishUiPreference<K extends UiPreferenceKey>(key: K, value: Ui
   return value;
 }
 
-/*
- * Every UI preference reaches the server through one autosave: edits made
- * while a save is out are gathered into the next one, and a failure keeps
- * them all for Retry. Settings shows its state in the section header.
- */
+// One autosave for every UI preference: edits made while a save is out are gathered into the next one.
 let unsaved: Partial<UiPreferences> = {};
 export const uiPreferenceSaves = createRoot(() => createAutosave<Partial<UiPreferences>>({
   save: (patch) => api<unknown>("/v0/preferences", { method: "PATCH", body: JSON.stringify(patch) }).then(() => patch),

@@ -1,9 +1,6 @@
 import { createSignal } from "solid-js";
 
-/**
- * What Conduit's own title bar shows (Settings › Appearance, under Title bar): each item can be hidden, while what to
- * keep is decided in use. Saved on this device; every item shows until hidden.
- */
+/** Every item shows until hidden. */
 export const TITLE_BAR_ITEMS = [
   { id: "server", label: "Server", about: "The hub, its connection and route; opens the server menu." },
   { id: "history", label: "Back and forward", about: "Back and forward through what the panes showed." },

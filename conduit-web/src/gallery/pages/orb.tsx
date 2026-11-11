@@ -4,7 +4,6 @@ import { Transcript, Turn, Trace } from "@/components/ui";
 import { Orb, settledOrbRate, PLAIN_SPHERE, SPUTTERING_SPHERE, ORBITS_TRAILED, Button } from "@/components/ui";
 import { resolvePreset } from "thinking-orbs/engine";
 import { row, token, type Page } from "../model";
-/* Orbs: one Orb, a list of animations, each a speed. */
 type OrbAnimation = { name: string; from: string; state: OrbState; frame?: ModeFrame; tint?: string; rate?: number; use: string };
 const ORB_ANIMATIONS: OrbAnimation[] = [
   { name: "working", from: "thinking-orbs", state: "working", use: "Thinking: a turn with no tool running" },
@@ -22,7 +21,6 @@ const ORB_ANIMATIONS: OrbAnimation[] = [
 ];
 const speedOf = (a: OrbAnimation) => a.frame ? 1 : resolvePreset(a.state, 20).speed;
 const animationSample = (a: OrbAnimation) => <div class="g-orb-sizes">{[16, 20, 32].map((size) => <span style={{ width: `${size}px`, height: `${size}px` }}><Orb state={a.state} frame={a.frame} tint={a.tint} rate={a.rate} /></span>)}</div>;
-/** A change of animation as the Orb plays it: held a moment, then crossfaded, both still moving. */
 function OrbChange() {
   const [pick, setPick] = createSignal(ORB_ANIMATIONS[0]!);
   return <div class="g-orb-change"><span class="g-orb-big"><Orb state={pick().state} frame={pick().frame} tint={pick().tint} rate={pick().rate} /></span><div class="g-orb-picks">{ORB_ANIMATIONS.slice(0, 10).map((a) => <Button variant={pick() === a ? "secondary" : "ghost"} size="sm" onClick={() => setPick(a)}>{a.name}</Button>)}</div></div>;

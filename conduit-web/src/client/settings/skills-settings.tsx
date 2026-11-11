@@ -12,12 +12,11 @@ import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { api } from "../api/client";
 import { createLatest } from "../state/latest";
 
-/** GET /v0/skills (skill-store.js `list`). */
 type Skill = {
   id: string; name: string; description: string; chars: number; missing: boolean; enabled: boolean;
   origin: "shipped" | "installed"; profiles: string[]; source?: string; skillId?: string; installedAt?: string;
 };
-/** GET /v0/skills/search: the registry's (skills.sh, the one `npx skills` searches). */
+/** The registry's: skills.sh, the one `npx skills` searches. */
 type Found = { source: string; skillId: string; name: string; installs: number | null; installed: boolean };
 
 const tokens = (chars: number) => chars < 400 ? `${Math.max(1, Math.round(chars / 4))} tok` : `${(chars / 4000).toFixed(1)}k tok`;
@@ -25,15 +24,8 @@ const count = (value: number) => value >= 1_000_000 ? `${(value / 1_000_000).toF
   : value >= 1000 ? `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)}k` : String(value);
 
 /**
- * AI › Skills: what the hub's agents know how to do beyond their prompt. Shipped with the profiles, or installed here
- * from a registry (skills.sh today; uploads and other registries later). Each is turned on or off for every profile at
- * once; an installed one joins every profile's default document (a document you saved keeps its own list: add it in
- * Prompts). A skill's line in a prompt is its description; its text is read when the model loads it, so its size is said.
- *
- * One workbench: the side column is every skill (installed, then shipped), each with its size, how many documents
- * list it and its switch, and under them the registry's search. Choosing one (`skillId`) shows it in the main pane:
- * the documents that list it, each opening in Prompts, beside its text in an editor. A skill's text is kept as the
- * block `skill-<id>` (context-store.js), which is how a document names it.
+ * An installed skill joins every profile's default document; a saved document keeps its own list. A skill's text is
+ * kept as the block `skill-<id>`, which is how a document names it.
  */
 export function SkillsSettings(props: { context: ContextData; skillId: string; onSkill: (id: string) => void; onOpenDocument: (id: string) => void }) {
   const [skills, setSkills] = createSignal<Skill[] | null>(null);
@@ -53,12 +45,10 @@ export function SkillsSettings(props: { context: ContextData; skillId: string; o
   // Always one open: the first when none is named, or the named one has gone.
   createEffect(() => { const list = skills(); if (list?.length && !opened()) props.onSkill((list.find((skill) => !skill.missing) ?? list[0]!).id); });
 
-  // The opened skill's text: saved and reset through its block.
   const [detail, setDetail] = createSignal<BlockDetail | null>(null);
   const [draft, setDraft] = createSignal("");
   const [saving, setSaving] = createSignal(false);
   const [editing, setEditing] = createSignal(false);
-  // The registry's search, shown at the head of the side column once asked for (the title's +).
   const [finding, setFinding] = createSignal(false);
   const blockPath = () => `/v0/context/blocks/${encodeURIComponent(`skill-${props.skillId}`)}`;
   createEffect(() => {
@@ -105,7 +95,6 @@ export function SkillsSettings(props: { context: ContextData; skillId: string; o
     finally { setBusy(""); }
   };
 
-  // The registry is searched as you type, a moment after the last key.
   const SEARCH_DEBOUNCE_MS = 300;
   let timer: number | undefined;
   const asked = createLatest();

@@ -27,10 +27,7 @@ const PTY_IN_USE_CLOSE_CODE = 4009;
 const PTY_TAKEN_OVER_CLOSE_CODE = 4010;
 const SERVER_RESTART_CLOSE_CODE = 1012;
 const MOBILE_KEYS_STORAGE_KEY = "conduit:terminal-mobile-keys";
-// A Conduit restart closes every terminal socket at once and stays down longer
-// than a handful of sub-second retries can cover. Back off like the runtime
-// stream instead of giving up: quick first attempts for an ordinary blip, then
-// a slow poll that keeps waiting for the server to come back.
+// A Conduit restart stays down longer than a few quick retries cover: back off to a slow poll instead of giving up.
 const RECONNECT_CEILING_MS = 8_000;
 const RECONNECT_IDLE_MS = 10_000;
 const RECONNECT_VISIBLE_ATTEMPTS = 5;
@@ -59,9 +56,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
   const [sessions, setSessions] = createSignal<Pty[]>([]);
   const [error, setError] = createSignal("");
   const [starting, setStarting] = createSignal(false);
-  // Whether this pane has asked the server what is running yet. Until it has,
-  // "start or reattach" is a guess -- and after a reload it is the wrong one,
-  // flashed for as long as the session list takes to arrive.
+  // Until the pane has asked the server what is running, "start or reattach" is a guess, and after a reload a wrong one.
   const [looked, setLooked] = createSignal(false);
   createEffect(() => { if (pty()) setLooked(true); });
   const [sessionBusy, setSessionBusy] = createSignal("");
@@ -76,7 +71,6 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
   const [controlArmed, setControlArmed] = createSignal(false);
   const [altArmed, setAltArmed] = createSignal(false);
   const [shortcuts, setShortcuts] = createSignal<TerminalShortcut[]>([]);
-  // The one shortcut open for editing, or a new one not yet saved.
   const [editingShortcut, setEditingShortcut] = createSignal<TerminalShortcut | null>(null);
   const [shortcutSaving, setShortcutSaving] = createSignal(false);
   const [shortcutError, setShortcutError] = createSignal("");
@@ -133,11 +127,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     clearMobileModifiers();
     inputTerminal(sequence, false);
   };
-  /**
-   * A terminal has nowhere to put an image, so a pasted one is spooled to a
-   * file on the Conduit host and only its path is typed in. From the TUI's
-   * side that is indistinguishable from pasting a path in a native terminal.
-   */
+  /** A terminal has nowhere to put an image, so a pasted one is spooled to a file on the host and its path typed in. */
   const spoolPastedImages: TerminalPasteFiles = async (files) => {
     const paths: string[] = [];
     for (const file of files) {
@@ -283,16 +273,8 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     setConnectionState("idle");
   };
 
-  /*
-   * The route to the server changed under an attached terminal.
-   *
-   * The pty is untouched -- same server, same tmux session, same scrollback --
-   * so this reattaches rather than reporting an interruption. `connect` closes
-   * the old socket through `disposeConnection`, which marks it deliberate, so
-   * no error is shown and no backoff is scheduled for a close nobody suffered.
-   * The renderer is kept and tmux repaints the pane on attach, which is why
-   * the move costs a repaint rather than a blank terminal.
-   */
+  // The pty is untouched by a route change, so this reattaches: `disposeConnection` marks the old close deliberate, so
+  // no error or backoff follows, and tmux repaints the kept renderer on attach.
   onPathChange(() => {
     const record = pty();
     if (!record || record.status !== "running" || props.active === false) return;
@@ -378,8 +360,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     if (direct) connection = direct.socket;
     else {
       let url: URL;
-      // No address for the socket (an installed client's ticket timed out): tried again as a dropped connection is,
-      // where it used to leave the pane on "connecting" with nothing set to retry.
+      // No address for the socket (an installed client's ticket timed out): tried again as a dropped connection is.
       try { url = new URL(await terminalSocketUrl(record.id)); }
       catch { if (isCurrent() && !scheduleReconnect(record, 0)) setConnectionState("offline"); return; }
       if (!isCurrent()) return;
@@ -469,7 +450,6 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
               setConnectionState("stopped");
               void refreshSessions(activeProjectId).catch(() => {});
               notifyPtyChange();
-              // /terminal is meant to always hold a shell; bring one back.
               if (props.autoStart) void restart();
             } else if (message.code === "pty_in_use") {
               setWritable(false);
@@ -667,11 +647,6 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     }
   };
 
-  /*
-   * Every change lands as it is made -- an edit on Done, a removal or a move
-   * straight away -- the same way the sessions menu acts on a click. There is
-   * no draft of the whole list to save or lose.
-   */
   const saveShortcuts = async (next: TerminalShortcut[]) => {
     setShortcutSaving(true);
     setShortcutError("");
@@ -843,11 +818,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     }
   };
 
-  /*
-   * A shell nobody asked for by hand: /terminal arriving with none live, or
-   * replacing one a restart took. Those are the moments the shortcuts marked
-   * "on start" exist for -- a workspace pane's "New terminal" is not one.
-   */
+  // "On start" shortcuts are for a shell nobody asked for by hand; a workspace pane's "New terminal" is not one.
   const spawnOnStart = async () => {
     await shortcutsReady;
     const commands = shortcuts().filter((shortcut) => shortcut.onStart).map((shortcut) => shortcut.command);
@@ -868,12 +839,8 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     await (recovering ? spawnOnStart() : start());
   };
 
-  /*
-   * Each retry passes through "connecting", which has no recovery view of its
-   * own. Showing nothing there uncovered the stale screen underneath for the
-   * length of every attempt, so a restart flashed it on and off. The view on
-   * screen is held until the attempt settles one way or the other.
-   */
+  // "connecting" has no recovery view of its own; showing nothing there would flash the stale screen on every retry,
+  // so the view on screen is held until the attempt settles.
   const recovery = createMemo<TerminalRecoveryView | null>((previous) => {
     const state = connectionState();
     if (state === "connecting" && previous) return previous;
@@ -925,12 +892,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     <MenuRow icon={<Icons.Add />} disabled={shortcuts().length >= 12} onSelect={addShortcut}>Add shortcut</MenuRow>
   </>;
 
-  /*
-   * One indicator for the server and the terminal together. Healthy says
-   * nothing beyond a green dot; every other state names itself, and the
-   * server's condition wins because the terminal cannot be better than the
-   * server it runs on.
-   */
+  // The server's condition wins: the terminal cannot be better than the server it runs on.
   const headerStatus = (): { tone: "success" | "busy" | "warn" | "danger" | "muted"; label: string; title: string } => {
     const server = serverState();
     if (server === "online" && pwaUpdateImpending()) return { tone: "busy", label: "Updating", title: "Conduit is updating. The terminal reattaches on the new build." };
@@ -946,9 +908,7 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     if (state === "live") return { tone: "success", label: "", title: server ? "Server connected · Active" : "Active" };
     return { tone: "muted", label: "", title: server === "online" ? "Server connected" : "Idle" };
   };
-  // Back, and not about to reload into a new build. Reattaching before the
-  // update check finished put the terminal on screen for the few seconds the
-  // new build took to install, then pulled it away again for the reload.
+  // Not about to reload into a new build: reattaching before then shows the terminal only to pull it away for the reload.
   const serverReady = () => serverState() === "online" && !pwaUpdateImpending();
 
   // The runtime stream notices Conduit returning long before a backed-off
@@ -1166,7 +1126,6 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
           <MenuContent>{shortcutRows()}</MenuContent>
         </DropdownMenu>
       </TermShortcuts>
-      {/* The same shortcuts, for a pane too narrow to lay them out inline. */}
       <TermOverflow>
         <DropdownMenu>
           <MenuControl as={IconButton} aria-label="Terminal shortcuts" title="Terminal shortcuts"><Icons.More /></MenuControl>

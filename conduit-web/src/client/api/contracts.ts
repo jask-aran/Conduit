@@ -1,12 +1,10 @@
 import type { ApprovalLine } from "@/components/ui";
 import type { Device } from "../platform/devices";
 export type RuntimeKind = "conduit_profile" | "codex";
-/** The capability flags that are a plain yes or no, so UI can be gated on one. */
 export type BooleanCapability = {
   [K in keyof ChatCapabilities]: ChatCapabilities[K] extends boolean ? K : never
 }[keyof ChatCapabilities];
 
-/** What a chat's backend can do, how a turn ends and what a tool did, as the hub declares them (chat-backend-contract.d.ts). */
 import type { UiPreferences } from "../preferences/ui-preferences";
 import type { ChatCapabilities, ToolKind, TurnOutcome } from "../../chat-backend-contract.js";
 export type { ChatCapabilities };
@@ -69,8 +67,6 @@ export interface ChatSummary {
   liveStatus?: string | null;
   liveActivity?: string | null;
   liveActive?: boolean;
-  /** Client-only: draft created by an explicit New chat action. Lets the sidebar
-      show it while selected, unlike the transient auto-created page-load draft. */
   pinned?: boolean;
 }
 
@@ -99,9 +95,8 @@ export interface Project {
   externalPath?: string;
   /** A folder a paired device shares; its path is that device's. */
   nodeId?: string | null;
-  /** Where its calls run on that node: a shared root by id and a path inside it. */
   place?: { root: string; path: string } | null;
-  /** Whose place it is and what can be done there (server src/place.js): asked instead of `nodeId`. */
+  /** Whose place it is and what can be done there: asked instead of `nodeId`. */
   capabilities?: PlaceCapabilities | null;
   state?: "ready" | "cloning";
   cloneOperationId?: string | null;
@@ -143,9 +138,7 @@ export interface ProjectDashboardPayload {
     hasUnstaged: boolean;
     changedFiles: number;
   } | null;
-  /** Changed files against HEAD, with line counts where Git gives them. */
   changes: Array<{ path: string; status: string; added: number | null; removed: number | null }>;
-  /** Top-level files, newest first; empty for a Git repository. */
   /** Null when the folder could not be read (its device away), not empty. */
   recentFiles: Array<{ name: string; modifiedAt: string }> | null;
   recentChats: DashboardChat[];
@@ -179,12 +172,10 @@ export interface HarnessSummary {
 export interface HarnessThread extends BackendSessionSummary {
   branch?: string | null;
   originUrl?: string | null;
-  /** Set when a Conduit chat has already adopted this thread. */
   tracked: boolean;
   chatId: string | null;
 }
 
-/** Threads grouped by the folder they ran in - the harness's notion of a project. */
 export interface HarnessThreadGroup {
   path: string;
   display: string;
@@ -230,12 +221,6 @@ export interface Attachment {
   error?: string;
 }
 
-/**
- * A block of a message the server has stated, in Conduit's spelling.
- *
- * Not the live generation's block, which is converted from the active backend
- * as the delta channel arrives. A stated transcript is read as stated.
- */
 export interface ContentBlock {
   kind: string;
   toolCallId?: string;
@@ -247,11 +232,7 @@ export interface ContentBlock {
 }
 
 export type { TurnOutcome };
-/**
- * How long a turn took, as Conduit measured it whichever harness answered
- * (server/turn-timings.js). Times are ISO; tokens are estimated from the
- * characters streamed, four to a token.
- */
+/** Tokens are estimated from the characters streamed, four to a token. */
 export interface TurnTiming {
   startedAt: string;
   firstOutputAt: string | null;
@@ -268,32 +249,21 @@ export interface TurnTiming {
   tokensPerSecond: number | null;
   tools: Array<{ name: string; kind: string; startedAt: string; endedAt: string | null; ms: number | null; failed?: boolean; cancelled?: boolean }>;
 }
-/** What a tool did, stated by the harness adapter from its own tool names (the hub declares them). */
 export type { ToolKind };
 /** The subagent a spawn or a report is about: its id (bg-3 in the background, fg-3 for a turn's own; sa-3 in older chats) and its conversation. */
 export interface AgentRef { id: string | null; conversationId: number | string | null }
-/**
- * A run: a subagent Conduit started -- a routine's schedule, the heartbeat, a webhook, a check-back -- not a turn of
- * the thread. Owned by the app, it enters the thread from outside: its report is a prompt to the thread's agent
- * (`woke`), or, when the gate kept it back, a quiet line written without a turn.
- */
+/** A subagent Conduit started (a routine's schedule, the heartbeat, a webhook, a check-back), not a turn of the thread. */
 export interface RunInfo {
-  /** The routine it ran for (the origin's kind): "heartbeat", "brief", "check-back", "webhook", ... */
   routine: string;
-  /** The routine's name as shown: "Heartbeat", "Morning brief". */
   label: string;
-  /** Its number among this thread's runs of that routine: Heartbeat #14. */
   number: number;
-  /** What started it, said short: "Scheduled 09:00", "Hourly", "Webhook", "3 new in inbox". */
   trigger?: string | null;
   /** Its report reached the thread's agent as a prompt; false: quiet, written for the record only. */
   woke: boolean;
   status: "running" | "finished" | "failed" | "stopped";
   startedAt?: string | null;
   endedAt?: string | null;
-  /** The run's own transcript. */
   conversationId?: number | string | null;
-  /** A quiet run's one line: "nothing new", "handled 3 · set 1 check-back". */
   summary?: string | null;
 }
 /** One of a chat's subagents (GET /v0/chats/:chatId/agents): chatId is its transcript, a chat of its own. */
@@ -306,7 +276,6 @@ export interface AgentSummary {
   status: "running" | "finished" | "failed" | "stopped";
   startedAt: string | null;
   endedAt: string | null;
-  /** What it is doing now, while it runs. */
   activity: string | null;
   /** The codemode script call that spawned it, when a script did: its row is drawn under that call. */
   via?: string;
@@ -330,15 +299,12 @@ export interface Message {
     tools?: { added: string[]; removed: string[]; changed?: string[]; restated?: number };
     summary?: { chars: number };
   };
-  /** The verbatim inner text of the model's conduit_note prefix. */
   notes?: string;
-  /** A subagent's report: the agent it is from. */
   agent?: AgentRef;
   /** The live generation this message was frozen out of, until a sync names it. */
   generationId?: string | null;
   role: "user" | "assistant" | "system" | "tool";
   content?: string;
-  /** Raw provider content blocks (text / thinking / toolCall) — source of persisted reasoning. */
   blocks?: ContentBlock[];
   stopReason?: string;
   errorMessage?: string | null;
@@ -351,56 +317,26 @@ export interface Message {
   pending?: boolean;
   /** Added by this client and not yet stated by the server. */
   local?: boolean;
-  /** Sent while the hub could not be reached, and kept on this device until it can (state/outbox.ts): Waiting to send. */
+  /** Sent while the hub could not be reached, and kept on this device until it can: Waiting to send. */
   outbox?: boolean;
   /** A line in the record the model was never given (a heartbeat's quiet line): drawn, and said to be unseen. */
   unseen?: boolean;
-  /**
-   * An answer that is still arriving. It takes its place in the transcript the
-   * moment the harness names it, so everything sent afterwards lands after it,
-   * and the live overlay draws over this row rather than beside it.
-   */
+  /** An answer still arriving holds its place from the moment the harness names it; the live overlay draws over it. */
   streaming?: boolean;
-  /**
-   * The prompt this answer answers, as the server stated it when it named the
-   * message. Turns are grouped by this rather than by reading the transcript
-   * and deciding which prompt a row appears to sit under.
-   */
+  /** The prompt this answer answers, as the server stated it; turns are grouped by it, not by where a row sits. */
   answers?: string | null;
-  /**
-   * How the turn this prompt started ended, stated by the server once it was
-   * over. The trace, its tools and the composer read this, rather than each
-   * working it out from how the turn's messages happen to be shaped.
-   */
   outcome?: TurnOutcome;
-  /** How long the turn this prompt started took, stated with its ending. */
   timing?: TurnTiming;
-  /**
-   * The turn talking as it works, rather than answering: stated by the server
-   * when it finished the message, so the split between the trace and the answer
-   * is not re-derived here from the shape of the turn around it.
-   */
   interim?: boolean;
   /**
-   * Text the reader watched arrive that the harness is not carrying forward.
-   *
-   * An interrupted answer on a backend whose `interruptKeepsPartial` is false:
-   * it was really written and really seen, and the model has no record of it.
-   * It stays in the transcript because removing it would take away something
-   * the reader saw, and it is marked because the conversation does not contain
-   * it -- asking a follow-up about it would reach a model that never wrote it.
+   * Text the reader saw that the harness is not carrying forward (`interruptKeepsPartial` false). It stays because the
+   * reader saw it, and is marked because a follow-up about it would reach a model that never wrote it.
    */
   discarded?: boolean;
   queueMode?: "steer" | "follow_up";
-  /**
-   * A prompt the harness made itself -- a background task finishing -- rather
-   * than the user's words. It opens a turn like any prompt and is drawn as a
-   * notice, not as the user's bubble.
-   */
+  /** A prompt the harness made itself (a background task finishing), drawn as a notice, not as the user's bubble. */
   origin?: "harness";
-  /** A run reporting back: who sent it (its title, the routine it ran for, how it ended). */
   sender?: { name: string; routine?: string; status?: string };
-  /** A run's row: its report as a prompt (`woke`), or its quiet line. */
   run?: RunInfo;
   /** What Conduit added to a prompt it delivered for the agent (the decision it asks for): shown apart, never hidden. */
   appended?: string;
@@ -408,15 +344,7 @@ export interface Message {
   order?: number;
 }
 
-/**
- * A tool call, in Conduit's language -- the same names the ops state it in.
- *
- * `output` is what the tool has returned, and `done` whether that is all of it.
- * They used to be two fields, `partialResult` and `result`, which is the same
- * split a block in flight has and the same answer: one field, plus the state
- * that says whether it is finished. Nothing downstream had to ask which of the
- * two to render; it had to remember to ask.
- */
+/** `output` is what the tool has returned, and `done` whether that is all of it. */
 export interface ToolCallStep {
   name: string;
   kind: ToolKind;
@@ -450,13 +378,10 @@ export interface ToolItem {
   toolCallId: string;
   name?: string;
   kind?: ToolKind;
-  /** What it acted on, in one line, as the adapter states it. */
   subject?: string;
-  /** Its line said better than the subject can, when the adapter knows (transcript-ops `toolOpen` facts). */
+  /** Its line said better than the subject can, when the adapter knows. */
   facts?: ToolFacts;
-  /** The tools a script step called, in order. */
   calls?: ToolCallStep[];
-  /** A subagent's spawn: the agent it handed the task to. */
   agent?: AgentRef;
   input?: unknown;
   output?: unknown;
@@ -471,7 +396,6 @@ export interface ToolItem {
 }
 
 export interface TranscriptDetail extends ChatSummary {
-  /** How far into the chat's log this transcript reaches. */
   log?: { id: string; seq: number };
   model?: string;
   thinkingLevel?: string;
@@ -500,18 +424,13 @@ export interface ModelState {
   models: ModelOption[];
   model: string;
   thinkingLevel: string;
-  /** Conduit-owned per-chat preference. */
   modelThinkingLevels?: Record<string, string>;
   defaultModel?: string;
   defaultThinkingLevel?: string;
   enabledModels?: string[];
   requiresAuthentication?: boolean;
   warnings?: string[];
-  /**
-   * Set when the model a profile remembered is no longer in its catalogue and
-   * something else is standing in, so the surface can say so instead of opening
-   * on a model nobody chose.
-   */
+  /** The model a profile remembered left its catalogue and another stands in, so the surface can say so. */
   modelFallback?: { from: string; to: string };
   source?: string;
 }
@@ -589,15 +508,13 @@ export interface ContextUsage {
   categories?: ContextCategory[] | null;
   /** Whether the categories can be asked for (an old Claude Code thread), or were. */
   breakdown?: "loadable" | "loaded";
-  /** How many times this session has compacted, and the fill at which it will next. */
   compactions?: number;
   compactAt?: number | null;
-  /** The account's plan windows, when the harness declares them. */
   plan?: { name?: string | null; windows: { id: string; label: string; usedPercent: number; resetsAt: string | null }[] } | null;
   lastRequestUsage?: RequestUsage | null;
 }
 
-/** Conduit's own set, the same for every harness (src/context-categories.js). */
+/** Conduit's own set, the same for every harness. */
 export type ContextCategoryId = "system-prompt" | "tools" | "instructions" | "messages" | "other" | "used" | "buffer" | "deferred-tools" | "free";
 
 export interface ContextCategory {
@@ -631,13 +548,10 @@ export interface HostUiRequest {
   placeholder?: string;
   prefill?: string;
   timeoutMs?: number | null;
-  /** A `question` request's questions, answered together. */
   questions?: Question[];
-  /** Whether a note on an answer reaches the model. */
   notes?: boolean;
 }
 
-/** One question of a harness's question tool (`src/harnesses/questions.js`). */
 export interface Question {
   id: string;
   header: string;
@@ -670,9 +584,7 @@ export interface RuntimeProcess {
   chatId: string;
   projectId?: string;
   status?: string;
-  /** False while the harness is alive but cannot answer yet. */
   ready?: boolean;
-  /** True while a request to the harness is outstanding. */
   waiting?: boolean;
   process?: ProcessState;
   generation?: GenerationState | Record<string, unknown>;
@@ -688,7 +600,6 @@ export interface RuntimeProcess {
   retry?: RetryState | null;
   runtime?: RuntimeIdentity;
   capabilities?: ChatCapabilities;
-  /** The permission mode the harness is running in now, for one that states it. */
   permissionMode?: string;
 }
 
@@ -825,7 +736,6 @@ export interface ComputerPrefetchPayload {
   locations: ComputerLocation[];
 }
 
-/** GET /v0/harnesses. */
 export interface HarnessesPayload {
   harnesses: HarnessSummary[];
 }
@@ -853,12 +763,11 @@ export type Pty = {
   paneDead?: boolean;
 };
 
-/** GET /v0/ptys. */
 export interface PtysPayload {
   ptys: Pty[];
 }
 
-/** An environment that can offer the person's own browser (nodes/person-browser.js status), by its node id. */
+/** An environment that can offer the person's own browser, by its node id. */
 export interface PersonBrowserEnvironment {
   id: string;
   name: string;
@@ -875,22 +784,18 @@ export interface PersonBrowserEnvironment {
   error?: string;
 }
 
-/** GET /v0/person-browsers. */
 export interface PersonBrowsersPayload {
   environments: PersonBrowserEnvironment[];
 }
 
-/** GET /v0/projects. */
 export interface ProjectsPayload {
   projects: Project[];
 }
 
-/** GET /v0/nodes. */
 export interface NodesPayload {
   devices: Device[];
 }
 
-/** GET /v0/chats/:id/agents. */
 export interface AgentsPayload {
   agents: AgentSummary[];
 }
@@ -909,10 +814,7 @@ export interface DownloadsPayload {
   apkVersion: string | null;
 }
 
-/**
- * GET and PATCH /v0/preferences: the UI preferences (preferences-api.js) and the account's own kept beside them
- * (preferences-store.js DEFAULTS). GET adds where the shortcuts file is and what in it could not be read.
- */
+/** GET adds where the shortcuts file is and what in it could not be read. */
 export type PreferencesPayload = UiPreferences & {
   accountName: string;
   accountHome: string;
@@ -948,12 +850,10 @@ export interface PiAuthAttempt {
   owned: boolean;
 }
 
-/** GET /v0/pi-auth. */
 export interface PiAuthProvidersPayload {
   providers: PiAuthProvider[];
 }
 
-/** GET /v0/pi-auth/attempt. */
 export interface PiAuthAttemptPayload {
   attempt: PiAuthAttempt | null;
 }

@@ -79,12 +79,10 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
       return [
         command.label, command.description, command.group, ...command.keywords,
         ...command.contexts, ...bindings,
-        // A two-key shortcut starts with the leader.
         ...(effective.some((binding) => binding.strokes.length === 2 && props.manager.leader && sameStroke(binding.strokes[0], props.manager.leader)) ? ["leader"] : []),
       ].join(" ").toLocaleLowerCase().includes(normalized);
     });
   });
-  // Most commands have no keys; "Assigned only" shows the ones that do.
   const [assignedOnly, setAssignedOnly] = createSignal(false);
   // A hundred rows in one go holds the page for several frames: the first group is drawn with the page, the rest one
   // a frame, so the section opens at once and fills in under it.
@@ -246,7 +244,6 @@ export function ShortcutsSettings(props: { manager: ShortcutManager }) {
     return `${conflict.owner} may use this shortcut for ${conflict.action} before Conduit receives it.`;
   };
 
-  // The hub's keybindings.json: where it is, and what in it could not be read (read again when it changes there).
   const [file, setFile] = createSignal<{ path: string; errors: string[] } | null>(null);
   const readFile = () => void api<PreferencesPayload>("/v0/preferences")
     .then((preferences) => setFile(preferences.keybindings || null)).catch(() => {});

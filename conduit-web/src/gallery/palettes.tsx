@@ -2,9 +2,7 @@ import { createSignal, For, onMount } from "solid-js";
 import { IDENTITY_COLOURS, PALETTE_USES, PALETTES, paletteColour, type Palette } from "@/components/ui/palettes";
 import { row, token, type Page } from "./model";
 
-/* Palettes (components/ui/palettes.ts, styles/palettes.css): each named palette once, by its own names; then each use
-   and the palette colour every one of its tokens takes, found by matching computed values, so the gallery holds no
-   copy of the mapping. */
+/* A use's palette colours are found by matching computed values, so the gallery holds no copy of the mapping. */
 
 type Chip = { label: string; token: string; colour: string; from?: string };
 
@@ -32,7 +30,6 @@ function Chips(props: { chips: () => Chip[] }) {
 const paletteChips = (palette: Palette) => () => palette.colours.map((colour) =>
   ({ label: colour.label, token: `--${palette.id}-${colour.id}`, colour: paletteColour(palette, colour.id) }));
 
-/** A use's tokens, each labelled with the palette colour it resolves to. */
 const useChips = (palette: Palette, tokens: string[]) => () => {
   const root = document.documentElement;
   const of = (colour: string) => computed(root, colour);

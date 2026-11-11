@@ -11,14 +11,12 @@ function ProviderSelect() {
     <Show when={open()}><Menu><Section>{["OpenAI", "Anthropic", "Local"].map((provider) => <Item tabIndex={0} checked={value() === provider} onClick={() => { setValue(provider); setOpen(false); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setValue(provider); setOpen(false); } }}>{provider}</Item>)}</Section></Menu></Show>
   </Field>;
 }
-/** The app's Select: native options, the library's trigger and menu. */
 function AdapterSelect() {
   const [width, setWidth] = createSignal("compact");
   return <div class="g-field"><Select aria-label="Transcript width" value={width()} onChange={(event) => setWidth(event.currentTarget.value)}>
     <option value="compact">Compact</option><option value="comfortable">Comfortable</option><option value="wide">Wide</option>
   </Select><Select bare aria-label="Code blocks" value="fold"><option value="fold">Fold long blocks</option><option value="never">Never fold</option></Select></div>;
 }
-/** A long list: its choices under a search. */
 function SearchSelect() {
   const [provider, setProvider] = createSignal("");
   const providers = ["Amazon Bedrock", "Anthropic", "Azure", "Cerebras", "DeepSeek", "Fireworks", "Groq", "Mistral", "OpenAI", "OpenRouter", "Together", "xAI"];

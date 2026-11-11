@@ -13,13 +13,7 @@ const HARNESS_LABELS: Record<string, string> = {
   opencode: "OpenCode",
 };
 
-/**
- * What to call the backend behind a chat.
- *
- * Keyed by the implementation the chat reports, so a surface that shows the
- * runtime names the harness that is actually running rather than assuming the
- * built-in one.
- */
+/** Keyed by the implementation the chat reports, so a surface names the harness actually running, not the built-in one. */
 const IMPLEMENTATION_LABELS: Record<string, string> = {
   "conduit-runtime": "Conduit durable agent",
   codex: "Codex",
@@ -31,5 +25,4 @@ export const harnessLabelFor = (implementation?: string | null) => implementatio
   ? IMPLEMENTATION_LABELS[implementation] || HARNESS_LABELS[implementation] || implementation
   : null;
 
-/** The product label used by harness marks. */
 export const harnessMarkLabelFor = (id?: string) => HARNESS_LABELS[id || "conduit"] || id || "conduit";

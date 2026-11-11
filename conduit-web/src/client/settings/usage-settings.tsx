@@ -2,14 +2,12 @@ import { createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { Button, Segmented, Series, SettingDetails, SettingLine, SettingValue, SettingWide, Group, Loading, Note } from "@/components/ui";
 import { api } from "../api/client";
 import { agentName } from "../state/agent";
-/** The persistent agent's name, as the person called it. */
 const agent = agentName;
 
-/** A day of GET /v0/usage: Conduit's agents' spend, in API-equivalent dollars fixed when spent (usage-ledger.js). */
+/** In API-equivalent dollars fixed when spent. */
 type ModelSpend = { key: string; input: number; output: number; cacheRead: number; cacheWrite: number; cost: number };
 type UsageDay = { date: string; replies: number; tools: Record<string, number>; models: ModelSpend[]; cost: number; tokens: number };
 type Usage = { since: string | null; days: UsageDay[] };
-/** GET /v0/diagnostics/usage: how the hub manages context and approvals, content-free (diagnostics/usage-report.js). */
 type Diagnostics = {
   window: { hours: number };
   requests: { total: number; byModel: { model: string; requests: number; cachedShare: number; misses: number; survivedMinutes?: number | null; lapsedMinutes?: number | null }[];
@@ -46,7 +44,6 @@ const count = (value: number) => value >= 1e6 ? `${(value / 1e6).toFixed(1)}M` :
 const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 const modelLabel = (key: string) => key.startsWith("tool:") ? `${key.slice(5)} (tool)` : key;
 
-/** System › Usage, read-only: dollars per day as a Series, then tokens, replies, by model and tool calls, from the usage ledger. */
 export function UsageSettings() {
   const [range, setRange] = createSignal<number>(30);
   const [usage, setUsage] = createSignal<Usage | null>(null);

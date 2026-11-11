@@ -19,7 +19,6 @@ export type TerminalRenderer = {
   dispose: () => void;
 };
 
-/** Read the terminal palette when a terminal is created. */
 export const CONDUIT_TERMINAL_THEME = () => {
   const style = getComputedStyle(document.documentElement);
   const colour = (name: string) => style.getPropertyValue(name).trim();
@@ -70,11 +69,7 @@ const loadTerminalModules = () => Promise.all([
   import("@xterm/xterm/css/xterm.css"),
 ]);
 
-/**
- * Turns the image files on a paste into the text to type into the PTY. The
- * renderer does not know where they go; the pane spools them and hands back a
- * path, which reaches the TUI as an ordinary bracketed paste.
- */
+/** The pane spools pasted images and hands back a path, which reaches the TUI as an ordinary bracketed paste. */
 export type TerminalPasteFiles = (files: File[]) => Promise<string>;
 
 export type TerminalRendererOptions = { pasteFiles?: TerminalPasteFiles; onClipboardError?: (message: string) => void };
@@ -168,12 +163,7 @@ function observeHostSize(host: HTMLElement, fit: TerminalFit) {
   };
 }
 
-/**
- * An image on the clipboard still carries a text flavour, and that flavour is
- * usually whitespace. A terminal cannot render the image, so pasting the
- * flavour only injects blank lines into whatever is reading the prompt. Text
- * with something in it is the only text worth sending.
- */
+/** An image on the clipboard carries a text flavour that is usually whitespace, which would paste as blank lines. */
 export function pastableText(text: string | null | undefined): string {
   return text && text.trim() ? text : "";
 }
@@ -182,11 +172,7 @@ function imageFiles(items: FileList | null | undefined): File[] {
   return [...(items ?? [])].filter((file) => file.type.startsWith("image/"));
 }
 
-/**
- * Reads whatever the clipboard is offering and reduces it to the text a
- * terminal can accept: real text as-is, an image as the path it was spooled to.
- * Text wins when both are present, which is what every other terminal does.
- */
+/** Text wins when both text and an image are present, as in every other terminal. */
 export async function clipboardPasteText(pasteFiles?: TerminalPasteFiles): Promise<string> {
   if (navigator.clipboard?.read) {
     try {
@@ -213,10 +199,8 @@ function installClipboardShortcuts(host: HTMLElement, terminal: ClipboardTermina
   const clipboardError = (cause: unknown) => options.onClipboardError?.(
     cause instanceof Error ? cause.message : "Clipboard access failed",
   );
-  // The browser's own paste is the only one a non-secure context has, so it
-  // stays enabled and keeps working there. It just must not hand xterm an
-  // image's text flavour, which is whitespace and arrives as blank lines.
-  // Capturing on the host runs this ahead of xterm's handler on the textarea.
+  // The browser's own paste is the only one a non-secure context has, so it stays enabled; it must not hand xterm an
+  // image's whitespace text flavour. Capturing on the host runs this ahead of xterm's handler on the textarea.
   const interceptPaste = (event: ClipboardEvent) => {
     if (pastableText(event.clipboardData?.getData("text/plain"))) return;
     event.preventDefault();
@@ -236,12 +220,8 @@ function installClipboardShortcuts(host: HTMLElement, terminal: ClipboardTermina
     const isApple = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
     const copy = key === "c" && (isApple ? event.metaKey && !event.ctrlKey : event.ctrlKey && (event.shiftKey || terminal.hasSelection?.()));
 
-    // A terminal reached through a browser is almost never running on the
-    // machine the browser is on, so a paste has to mean the browser's
-    // clipboard. TUIs disagree on which modifier pastes -- Ctrl+V, Alt+V,
-    // Cmd+V -- and one left unclaimed reaches the TUI, which then reads the
-    // host's clipboard instead: the wrong machine's, and silently so. Conduit
-    // claims all three.
+    // The terminal is rarely on the browser's machine, so a paste means the browser's clipboard. TUIs disagree on the
+    // modifier, and one left unclaimed reads the host's clipboard silently, so all three are claimed.
     const paste = key === "v" && (event.ctrlKey || event.metaKey || event.altKey);
     const browserPasteGesture = !event.altKey && (isApple ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey);
 
@@ -325,7 +305,7 @@ async function createXtermRenderer(
   };
   host.addEventListener("mousedown", selectWithMouse, { capture: true });
   document.addEventListener("mouseup", copyMouseSelection);
-  // Its frame kept, so a pane's crossfade can copy it (main.tsx, ghostOf).
+  // Its frame kept, so a pane's crossfade can copy it (ghostOf).
   const webgl = new WebglAddon(true);
   const contextLoss = webgl.onContextLoss(() => webgl.dispose());
   try {

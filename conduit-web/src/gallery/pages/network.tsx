@@ -1,4 +1,3 @@
-// Props: hub (NetworkHub: name, device, meta), devices (NetworkDevice: id, name, clients of NetworkClient: id, name, headed desktop | phone | browser, meta, online), label.
 import { ChainBreak, ChainGap, ChainLink, ChainMap, NetworkMap, type NetworkDevice, type NetworkHub } from "@/components/ui";
 import { row, token, type Page } from "../model";
 
@@ -14,7 +13,6 @@ const laptop: NetworkDevice = { id: "laptop", name: "Laptop", clients: [
   { id: "lwsl", name: "Ubuntu", meta: "relayed by Windows", online: false },
 ] };
 
-/* A document's stack under the role it starts (Settings › Prompts). */
 const chain = (run = false) => <ChainMap label="A document">
   <ChainLink index={1} name={run ? "Run rules" : "Assistant"} meta={run ? "jbot's file" : "shipped"} size={run ? "640 tok" : "40 tok"} current onSelect={() => {}} />
   <ChainGap />

@@ -24,39 +24,26 @@ import { Actions } from "@/components/ui/actions";
 
 type AddWorkspace = (input: { mode: "node"; nodeId: string; rootId: string }) => Promise<boolean>;
 
-/** A shared folder's name: the last part of its path (the whole path is its title). */
 const folderName = (label: string) => label.split(/[\\/]/).filter(Boolean).at(-1) || label;
 
 /**
- * The network of the server in use: its map, this device (named here, and where its sharing is set), the network's
- * settings and every other device, each opening to its clients' cards. The server itself, and any other server this
- * client knows, is Settings › Server.
- *
- * A device (a PC, a phone) holds clients: environments (its Windows, a WSL distro) whose node (`conduit-node`) mounts
- * folders on the network as workspaces, and apps or browsers driving Conduit; Windows with the app open on it is one
- * client. The hub's environment mounts the server's own workspaces. A browser is a device of its own.
+ * A device (a PC, a phone) holds clients: environments (its Windows, a WSL distro) whose node mounts folders as
+ * workspaces, and apps or browsers driving Conduit. A browser is a device of its own.
  */
 export function DevicesSettingsTile(props: {
-  /** Which section it draws: "device", this device alone (Settings › This device); "network", the network and the others on it. */
   part: "device" | "network";
   projects: Project[]; onAddWorkspace: AddWorkspace;
-  /** A terminal on the device itself, in its home: this server's "computer" one, or a device's where a folder is shared with commands. */
   onOpenTerminal: (node: { id: string; local?: boolean }) => void;
-  /** Its browser, in a pane beside (roadmap #9): a device that offers one. */
   onOpenBrowser?: (nodeId: string) => void;
   onOpenWorkspace: (project: Project) => void }) {
-  // Notifications on this device from the hub it is using (Web Push; UnifiedPush on Android).
   const notifications = createPushControl();
   onMount(() => void notifications.refresh());
-  // The server in use's network; another server is inspected on the Server page.
   let companion: ReturnType<typeof createCompanion> | null = null;
   const net = createNetwork({ origin: () => activeOrigin() || "", projects: () => props.projects,
     own: () => companion?.pairing()?.nodeId ?? null, onRefresh: () => companion?.read() });
   const { devices, setError, refresh, network, hubDevice, hubNode, server, active, projects } = net;
-  // This app's own client: its companion, paired with this server or not.
   companion = desktopShell ? createCompanion(devices, () => refresh()) : null;
   companion?.read();
-  // How the desktop app runs (tray, sign-in), read from its shell; nothing anywhere else.
   const shell = desktopShell ? createShellSettings() : null;
   const [open, setOpen] = createSignal<Set<string>>(new Set());
 
@@ -74,11 +61,9 @@ export function DevicesSettingsTile(props: {
 
   const status = (shown: Shown) => !shown.node || shown.node.online || shown.part.headed ? "Connected" : shown.node.lastSeenAt
     ? `Offline since ${new Date(shown.node.lastSeenAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` : "Not connected yet";
-  // What a client mounts: the hub's environment the server's own workspaces, any other the ones made from its folders.
   const mounted = (node: Node) => mountedOn(projects(), node);
   const unmounted = (node: Node) => node.local ? [] : node.roots.filter((root) => !projects().some((project) => project.nodeId === node.id && project.place?.root === root.id));
 
-  /** A client of another device, as a card: what it mounts, a terminal there, unpairing it. */
   const card = (shown: Shown) => {
     // Another server's network is inspected, not changed.
     if (!active()) return <ClientCard client={shown.part} status={status(shown)} places={<Show when={shown.node}>{(node) =>
@@ -98,7 +83,6 @@ export function DevicesSettingsTile(props: {
         </Show>
       </>} />;
   };
-  /** A client's workspaces as rows (opening them), then folders it shares that are no workspace yet (mounting them). */
   const places = (node: Node, named: boolean) => <>
     <For each={mounted(node)}>{(project) =>
       <Row density="nav" element="button" lead={<WorkspaceGlyph appearance={project.workspaceAppearance} />} meta={named ? node.name : undefined} onClick={() => props.onOpenWorkspace(project)}>{project.name}</Row>}</For>
@@ -108,11 +92,8 @@ export function DevicesSettingsTile(props: {
   </>;
 
   /**
-   * This device: what the app or tab it is seen from does here (its own switches, set only here) beside what the app
-   * lets the hub do with this computer's folders; then its environments, each with a terminal and the workspaces it
-   * mounts. Mounting a folder is done in the app, not here.
-   * Each takes the device as it is now, not once: the network is read again every few seconds, and a page drawn from
-   * one reading would be drawn again with each (its switches blinked).
+   * Takes the device as it is now, not once: the network is read again every few seconds, and a page drawn from one
+   * reading would be drawn again with each (its switches blinked).
    */
   const here = (device: () => ShownDevice) => {
     const paired = () => companion?.pairing() ?? null;
@@ -149,8 +130,6 @@ export function DevicesSettingsTile(props: {
           </Group>
         </Show>
         <Show when={companion && paired()}>
-          {/* Paired is connected: the workspaces mounted from here work whenever this app runs (in the tray too).
-              Sharing is the other thing: letting the hub go through this computer's folders and mount any of them. */}
           <Group kind="column" title="Folders the hub may use">
             <SettingLine label="Share this computer's folders" title={`${server()} can mount any of this computer's folders as a workspace, with the grants below. Workspaces already mounted from here keep working either way.`}>
               <Switch id="device-browse" label={`Share this computer's folders with ${server()}`} disabled={companion!.busy()} checked={Boolean(paired()?.browse)} onChange={(on) => void companion!.browse(on)} />
@@ -164,7 +143,6 @@ export function DevicesSettingsTile(props: {
           </Group>
         </Show>
       </Columns>
-      {/* A phone with several ways to be notified, and none chosen. */}
       <Show when={notifications.problem()?.distributors?.length}>
         <Actions kind="setting">
           <For each={notifications.problem()!.distributors}>{(distributor) =>
@@ -173,14 +151,12 @@ export function DevicesSettingsTile(props: {
       </Show>
     </>;
   };
-  /** What an environment's line says: that this app is on it, and what it mounts while it is connected, else since when it is away. */
   const says = (shown: Shown) => {
     if (!shown.node?.online) return [shown.mine ? "this app" : "", status(shown)].filter(Boolean).join(" · ");
     const meta = shown.part.meta ?? "";
     const app = shown.app?.split(" · ")[0];
     return (app && meta.startsWith(`${app} · `) ? meta.slice(app.length + 3) : meta) || "No workspaces";
   };
-  /** This device's environments side by side, the one this app is on first: each one's line (a terminal there), then the workspaces it mounts; under them what else is open on the device, and bringing another environment in. */
   const environments = (device: () => ShownDevice) => {
     const own = () => device().clients.filter((shown) => shown.node).sort((a, b) => Number(b.mine) - Number(a.mine));
     // By id: a reading makes each client anew, and a column drawn from the client itself would be drawn again with it.
@@ -212,12 +188,10 @@ export function DevicesSettingsTile(props: {
       <Show when={companion && device().paired && !device().clients.some((shown) => shown.node?.local)}><PairEnvironment device={device()} onPaired={refresh} /></Show>
     </Group>;
   };
-  /** What the device is seen from, beside its name: the app and the environment it runs on ("Conduit Dev on Windows"), or the browser. */
   const seenFrom = (device: ShownDevice) => {
     const mine = device.clients.find((shown) => shown.mine);
     return mine?.node && mine.app ? `${mine.app.split(" · ")[0]} on ${mine.node.name}` : mine?.app;
   };
-  /** This app's own pairing with the server, last: taking it off the network, or bringing it on. */
   const pairing = () => <Show when={companion}>
     <Group title="Pairing">
       <Show when={companion!.pairing()} fallback={
@@ -237,7 +211,6 @@ export function DevicesSettingsTile(props: {
 
     <Show when={props.part === "device" && active() && thisDevice()}>{(device) => <>
       <Group>
-        {/* Its name, large: what the network calls this device, renamed here only; beside it, what it is seen from. */}
         <SettingTitle label="This device's name" value={device().name} detail={seenFrom(device())}
           editable={device().paired} onChange={(name) => rename(device(), name)} />
         {here(device)}
@@ -249,8 +222,8 @@ export function DevicesSettingsTile(props: {
     {/* The network's own settings, the server in use's: another is switched to first. */}
     <Show when={props.part === "network" && active()}><NetworkSettings /></Show>
 
-    {/* Each environment's own browser, paired for agents to work in. On This device only in the desktop app: a tab
-        has no device of its own to pair for (the hub places it by its address), and a phone has no environment. */}
+    {/* On This device only in the desktop app: a tab has no device of its own to pair for (the hub places it by its
+        address), and a phone has no environment. */}
     <Show when={active() && (props.part === "network" || desktopShell)}><PersonBrowsersSettings device={props.part === "device" ? thisDevice()?.name ?? "" : undefined} /></Show>
     <Show when={props.part === "device" && active()}>{pairing()}</Show>
 
@@ -272,10 +245,6 @@ export function DevicesSettingsTile(props: {
   </>;
 }
 
-/**
- * Another environment of this device, one with no app of its own (a WSL distro, a container): the server gives a key
- * once, inside the command to run there.
- */
 function PairEnvironment(props: { device: ShownDevice; onPaired: () => void }) {
   const [name, setName] = createSignal("");
   const [command, setCommand] = createSignal("");
@@ -307,11 +276,6 @@ function PairEnvironment(props: { device: ShownDevice; onPaired: () => void }) {
 }
 
 
-/**
- * This app's own client, in the desktop app only: the background node the shell runs (node_companion.rs), paired with
- * this server in one step -- the server hands out a key, the shell's node takes it -- and the folders it mounts,
- * picked with the system's folder picker. What a folder allows is chosen when it is mounted.
- */
 function createCompanion(devices: () => Device[] | null, refresh: () => void) {
   const shell = desktopShell!;
   const [settings, setSettings] = createSignal<DesktopShellSettings | null>(null);
@@ -342,11 +306,6 @@ function createCompanion(devices: () => Device[] | null, refresh: () => void) {
   return { read, settings, pairing, busy, error, pair, grant, browse, unpair };
 }
 
-/**
- * What a device's environments declare (roadmap #14): the harnesses each runs for this network (found there when it
- * shares a folder with the shell grant) -- ready while it is connected, offline while it is away -- and, while the
- * device's folder is open, each connected environment's machine readout, asked of its node.
- */
 function DeviceDetails(props: { nodes: Node[]; open: boolean }) {
   return <For each={props.nodes}>{(node) => <>
     <DeviceHarnesses node={node} named={props.nodes.length > 1} />

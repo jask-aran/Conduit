@@ -46,9 +46,8 @@ function trackDesktopZoom(): Promise<void> {
 const nearest = (value: number): UiScale => UI_SCALE_OPTIONS.reduce((best, option) => Math.abs(option - value) < Math.abs(best - value) ? option : best);
 
 /**
- * The Interface size is --ui-scale on <html>, which the stylesheet multiplies into every region's unit (foundations.css,
- * Scale), so each region can keep a size of its own against the others; the browser's or the webview's zoom stays the
- * user's own, on top (in the desktop shell, Ctrl+= is still remembered and restored).
+ * --ui-scale is multiplied into every region's unit, so each region can keep a size of its own against the others;
+ * the browser's or the webview's zoom stays the user's own, on top.
  */
 export function applyUiScale(scale: UiScale, restoreZoom = false): UiScale {
   const applied = restoreZoom ? selectedUiScale() : scale;
@@ -70,7 +69,6 @@ export function saveUiScale(scale: UiScale): UiScale {
   return applyUiScale(scale);
 }
 
-/** The Interface size a step bigger (1) or smaller (-1), or back to 100% (0), saved. */
 export function stepUiScale(step: 1 | -1 | 0): UiScale {
   const current = selectedUiScale();
   const at = UI_SCALE_OPTIONS.indexOf(current);
@@ -82,10 +80,8 @@ export function stepUiScale(step: 1 | -1 | 0): UiScale {
 const WHEEL_STEP = 100;
 
 /**
- * Zooming is the Interface size: Ctrl+wheel (and a trackpad pinch) steps it instead of the browser's or the webview's
- * zoom, which scaled the page as a picture and left the setting saying otherwise. The keys' zoom (Ctrl+= and Ctrl+-)
- * is the command registry's (Bigger / Smaller interface). A desktop shell zoomed before this folds that zoom into the
- * Interface size once, and its webview goes back to 100%.
+ * Ctrl+wheel (and a trackpad pinch) steps the Interface size instead of the webview's zoom, which scales the page as a
+ * picture and leaves the setting saying otherwise.
  */
 export function followZoomGestures() {
   if (installedClientKind === "desktop") {

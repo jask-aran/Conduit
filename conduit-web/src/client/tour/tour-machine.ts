@@ -1,16 +1,5 @@
-/*
- * The keyboard tour's state machine: pure, so what the tour does on each event reads off one table.
- *
- *   idle      never started on this device
- *   waiting   step N is shown and waits for the keys it asks for (done: the tasks already seen)
- *   done      step N's tasks are all seen; the card says so, then moves on (or Next does it at once)
- *   ended     left by End tour (finished false) or past the last step (finished true); where it stopped is kept,
- *             so Keyboard tour resumes there, or starts over once finished
- *
- * The events come from the controller (keyboard-tour.tsx), which hears the shortcut manager's commands, focus and
- * keys, and maps them to task ids. `required` on a task event is the step's tasks that can be done here and now
- * (a step with no dock does not wait for the dock).
- */
+// `required` on a task event is the step's tasks that can be done here and now (a step with no dock does not wait
+// for the dock).
 
 export type TourState =
   | { kind: "idle" }

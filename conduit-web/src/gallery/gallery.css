@@ -5,7 +5,6 @@ html, body { background: var(--frame, #050607); color: var(--foreground); }
 .g-canvas { display: grid; flex: 1; min-width: 0; grid-template-columns: auto 1fr auto; height: 100vh; font-family: "Geist Variable", sans-serif; }
 .g-left { min-width: 0; overflow: auto; }
 .g-bar { position: sticky; top: 0; z-index: 200; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); background: var(--frame); padding: 8px 16px; font-size: 12px; }
-/* The rail: the sidebar's language (NavGroups of Rows (nav)), its head the gallery's name. */
 .g-rail { display: flex; flex: none; flex-direction: column; gap: var(--space-xl); width: 184px; overflow: auto; border-right: 1px solid var(--border); padding: var(--space-xl) var(--space-md); }
 .g-rail-head { display: grid; gap: 2px; padding: 0 var(--row-inset); }
 .g-rail-head strong { font-size: var(--text-body); font-weight: var(--weight-strong); }
@@ -17,25 +16,19 @@ html, body { background: var(--frame, #050607); color: var(--foreground); }
 .g-speed { margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 12px; }
 .g-speed > span { color: var(--muted-foreground); margin-right: 4px; }
 .g-tune { display: block; width: calc(100% - 32px); height: 160px; margin: 8px 16px; border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 8px; color: var(--foreground); font: 11px ui-monospace, monospace; }
-/* One grid of equal cells on charcoal, each piece centred in its cell. */
 .g-cell-body { display: grid; place-items: center; }
 .g-heading { margin: 24px 16px 8px; color: var(--muted-foreground); font-size: 12px; font-weight: 600; }
-/* Menus drawn in place, not floating. */
 .g-top { align-items: flex-start; }
 .g-swatch { width: 160px; height: 110px; border-radius: 17.6px; }
 .g-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-/* The preview. */
 .g-right { display: flex; flex-direction: column; align-items: center; gap: 10px; overflow: auto; border-left: 1px solid var(--border); padding: 10px 16px; }
 .g-toggle { display: flex; gap: 4px; }
 .g-phone { display: block; flex: none; width: 414px; height: min(860px, calc(100vh - 60px)); border: 1px solid var(--border); border-radius: 18px; background: var(--background); }
-/* The desktop preview is a chat pane, which declares its composer's width;
-   the frame is as wide as that chat at its composer's full width: the width,
-   the composer stack's 24px sides (the transcript's gutter), the chat pane's
-   9.6px of margins, and this frame's border. */
+/* As wide as the chat at its composer's full width: the transcript's gutter, the chat pane's 9.6px of margins, and
+   this frame's border. */
 .g-desktop-screen { --composer-width: var(--reading-width); --app-height: calc(100vh - 60px); display: flex; flex: none; width: calc(var(--composer-width) + var(--transcript-column-gutter) + 9.6px + 2px); height: calc(100vh - 60px); overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--background); }
 .g-desktop-screen .chat-main { flex: 1; height: 100%; min-height: 0; }
 .g-solo-body #root { height: 100vh; }
-/* One piece on each surface it sits on. */
 .g-surface { position: relative; display: grid; min-width: 200px; place-items: center; border-radius: 14px; padding: 28px 16px 16px; }
 .g-surface[data-surface="ground"] { background: var(--background); box-shadow: inset 0 0 0 1px var(--border); }
 .g-surface > small { position: absolute; top: 7px; left: 10px; color: var(--muted-foreground); font: 9px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .07em; }
@@ -44,23 +37,17 @@ html, body { background: var(--frame, #050607); color: var(--foreground); }
 .g-surface[data-surface="frame"] { background: var(--frame); box-shadow: inset 0 0 0 1px var(--border); }
 .g-heading small { margin-left: 8px; font-weight: 400; opacity: .7; }
 .g-heading:first-of-type { margin-top: 12px; }
-/* The anatomy cell outlines each layer: sections dashed amber, items dotted blue. */
 .g-anatomy .ui-section { outline: 1px dashed #d99a2299; outline-offset: -1px; }
 .g-anatomy .ui-row:where([data-density="menu"]) { outline: 1px dotted #7aa2f799; outline-offset: -2px; }
 .g-submenu { gap: 4px; }
 .g-submenu > .ui-menu:last-child { margin-top: 118px; }
 .g-field > .ui-seg { justify-self: start; }
-/* Library density: the grid takes the toggle; side-by-side cells show both. */
 .g-w12 { width: 12rem; } .g-w16 { width: 17rem; } .g-w18 { width: 18rem; }
-/* The phone built from the library. */
 @keyframes g-live-in { from { transform: translateX(-100%); } }
 .g-sidebar-screen { position: relative; height: 100vh; overflow: hidden; }
-/* The desktop built from the library. */
 .g-toggles { display: flex; gap: 12px; }
-/* The app's phone sidebar header: pill, brand and server sharing the width, the area toggle. */
 .g-view { display: contents; } .g-view[hidden] { display: none; }
 
-/* The library as a tree: each family a section, its cells dense. */
 .g-family-title { margin: 20px 16px 4px; font-size: 15px; font-weight: 650; }
 .g-family-title small, .g-heading small { margin-left: 6px; color: var(--muted-foreground); font-size: 11px; font-weight: 400; }
 /* A wide cell takes two columns only where two fit: spanning two in a one-column grid made an implicit second
@@ -93,19 +80,16 @@ html, body { background: var(--frame, #050607); color: var(--foreground); }
 .g-anatomy :is(.ui-composer-field, .ui-toolbar, .ui-rider) { outline: 1px dashed #d99a2299; outline-offset: -1px; }
 .g-anatomy :is(.ui-toolbar-start, .ui-toolbar-end) { outline: 1px dotted #7aa2f799; outline-offset: -2px; }
 .g-anatomy :is(.ui-lines, .ui-actions:where([data-actions="rider"]), .ui-rider > .ui-rider-mark) { outline: 1px dotted #7aa2f799; outline-offset: 1px; }
-/* A frost-free part, alone: its bounds dashed, on the cell's ground. */
 .g-part { outline: 1px dashed #ffffff33; outline-offset: 2px; border-radius: 4px; }
 .g-overlay-demo { width: 100%; max-width: 640px; }
 .g-overlay-demo .ui-overlay { margin-inline: auto; }
 .g-scrim { width: 100%; border-radius: 10px; padding: 24px 12px; }
 .g-anatomy :is(.ui-overlay-bar, .ui-overlay-list, .ui-overlay-hints, .ui-overlay-rail, .ui-overlay-page, .ui-group:where([data-group="setting"])) { outline: 1px dashed #d99a2299; outline-offset: -1px; }
-/* A page for the leader to sit over: a pane, a composer slot, the dim. */
 .g-page { position: relative; width: 100%; height: 420px; overflow: hidden; border-radius: 10px; background: var(--frame); }
 .g-page-pane { position: absolute; inset: 12px; border-radius: 16px; background: var(--background); }
 .g-page-composer { position: absolute; bottom: 20px; left: calc(50% - 230px); width: 460px; height: 56px; border: 1px solid var(--frost-stroke); border-radius: 17.6px; background: var(--frost-fill); }
 .g-page-leader { position: absolute; bottom: 96px; left: 50%; translate: -50% 0; }
 .g-cell-body:has(> .g-page) { width: 100%; }
-/* The desktop preview's overlays, over the real chat screen. */
 .g-desktop-screen { position: relative; }
 .g-desktop-overlay { position: absolute; inset: 0; z-index: 90; }
 .g-preview-scrim { position: absolute; inset: 0; padding-top: 48px; }
@@ -113,7 +97,6 @@ html, body { background: var(--frame, #050607); color: var(--foreground); }
 .g-desktop-overlay > .g-page-leader { position: absolute; }
 .g-toggles { flex-wrap: wrap; justify-content: center; }
 
-/* Foundations: a sample drawn by the library above what it computes to. */
 .g-entry { width: min(100%, 320px); border-radius: 12px; padding: 8px 12px; }
 .g-radius { width: 72px; height: 48px; }
 .g-face { display: grid; width: 100%; gap: 10px; }
@@ -127,7 +110,6 @@ html, body { background: var(--frame, #050607); color: var(--foreground); }
 .g-role > .g-tokens { justify-self: stretch; }
 .g-wordmark { font: 18px/1 var(--font-wordmark); }
 
-/* Type · Scale: a role per row, desktop beside phone. */
 .g-scale { display: grid; width: 100%; }
 .g-scale-head, .g-scale-row { display: grid; grid-template-columns: 200px 1fr 1fr; align-items: center; gap: 16px; border-bottom: 1px solid var(--border); padding: 10px 4px; }
 .g-scale-head { color: var(--muted-foreground); font-size: 11px; font-weight: 600; }
@@ -145,7 +127,6 @@ html, body { background: var(--frame, #050607); color: var(--foreground); }
 .g-swatch-chip { display: block; width: 44px; height: 28px; border-radius: 6px; box-shadow: inset 0 0 0 1px oklch(1 0 0 / 10%); }
 .g-bar-chip { display: block; min-width: 1px; height: 10px; border-radius: 2px; background: var(--frost-stroke); }
 .g-scale .g-radius { width: 56px; height: 36px; }
-/* Foundations · In use: a scene per density, numbered where each foundation shows. */
 .g-inuse { display: grid; width: 100%; gap: 18px; }
 .g-inuse-scenes { display: flex; flex-wrap: wrap; justify-content: center; gap: 32px; }
 .g-inuse-col { display: grid; gap: 8px; justify-items: center; align-content: start; }
@@ -176,29 +157,24 @@ html, body { background: var(--frame, #050607); color: var(--foreground); }
 .g-phone-stage > p { margin: 0; padding: 56px 16px; color: var(--foreground); font-size: 16px; line-height: 1.55; }
 .g-stage-scrim { position: absolute; inset: 0; }
 .g-stage-scrim > .ui-overlay { height: 100%; }
-/* Forms × surfaces (Controls): each cell a small surface, the sample centred in it. */
 .g-forms .g-scale-row { padding: 6px 4px; }
 .g-form-surface { min-width: 0; min-height: 64px; border-radius: 10px; padding: 12px; }
 .g-keys { display: inline-flex; gap: calc(0.1875 * var(--u-space)); }
-/* An overlay over the phone preview: full screen at the phone density, over its chat. */
 .g-phone-overlay { position: fixed; inset: 0; z-index: 400; display: grid; }
 .g-phone-overlay > .ui-scrim { min-height: 0; }
 .g-contents { display: contents; }
-/* A glance in its column, as the search overlay draws it. */
 .g-glance { width: 300px; padding: 16px; }
 .g-form-code { width: fit-content; margin-top: 4px; border-radius: 4px; background: var(--border); padding: 1px 5px; color: var(--foreground); font: 10.5px/1.4 ui-monospace, monospace; }
 .g-forms .g-scale-head, .g-forms .g-scale-row { grid-template-columns: 300px repeat(2, minmax(0, 1fr)); }
 .g-form-density { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); place-items: center; overflow-x: auto; padding: 8px; font-size: 13px; }
 .g-card-scene { display: grid; width: 500px; max-width: 100%; justify-items: center; }
 .g-inuse-col[data-density="phone"] .g-card-scene { width: 380px; }
-/* Spacing drawn over an In use scene: a container's padding (edge) and the gaps between its parts, each with its size. */
 .g-band { position: absolute; z-index: 3; display: grid; place-items: center; overflow: visible; pointer-events: none; }
 .g-band[data-kind="edge"] { background: oklch(0.7 0.16 350 / 14%); }
 .g-band[data-kind="gap"] { background: oklch(0.75 0.14 150 / 18%); }
 .g-band small { color: #fff; font: 600 9px/1 ui-monospace, monospace; text-shadow: 0 0 3px #000, 0 0 3px #000; white-space: nowrap; }
 .g-qr { width: 160px; height: 160px; align-self: center; }
 .g-scale-row[data-stacked] > .g-scale-name { grid-column: 1 / -1; }
-/* Space · Scale: a slider per coefficient. */
 .g-scale-control { display: grid; width: min(100%, 640px); gap: 12px; }
 .g-scale-control { width: min(100%, 900px); }
 .g-scale-control label { display: grid; grid-template-columns: 200px minmax(0, 1fr); align-items: center; gap: 16px; }
@@ -212,23 +188,18 @@ html, body { background: var(--frame, #050607); color: var(--foreground); }
 .g-scale-control small { color: var(--muted-foreground); }
 .g-scale-control button { border: 1px solid var(--border); border-radius: 6px; background: transparent; padding: 4px 10px; color: inherit; }
 .g-scale-control button:disabled { opacity: .4; }
-/* Transcript: a conversation at a pane's width, and at a phone's. */
 .g-transcript-stage { width: min(100%, 720px); padding: 8px 0; }
 .g-transcript-stage[data-phone] { width: min(100%, 360px); }
 .g-feet { display: grid; width: 100%; gap: 8px; }
 .g-read { display: grid; width: 100%; justify-items: stretch; }
-/* Motion: a dot running a token's pace. */
 .g-run { position: relative; width: 140px; height: 8px; border-radius: 4px; background: var(--tint, rgb(255 255 255 / .06)); }
 .g-run > span { position: absolute; top: 0; left: 0; width: 8px; height: 8px; border-radius: 4px; background: var(--foreground); animation: g-run 1s infinite alternate; }
 @keyframes g-run { to { left: calc(100% - 8px); } }
-/* A piece's moves, replayed on its family's page. */
 .g-replay { display: grid; gap: 12px; min-width: 0; }
 .g-replay-bar { display: flex; gap: 8px; }
 .g-replay-stage { display: grid; min-width: 0; min-height: 48px; align-items: start; }
-/* A phone's submenu panel, over its parent's start. */
 .g-panel-over { position: relative; display: flex; min-height: 300px; align-items: flex-end; padding-bottom: 8px; }
 .g-panel-over-panel { position: absolute; bottom: 0; left: 48px; z-index: 1; }
-/* Foundations · Motion · The page: a sketch of it, its regions fading on the tokens; the composer stays. */
 .g-sketch { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 16px; max-width: 640px; }
 .g-sketch-side { display: grid; align-content: start; }
 .g-sketch-main { display: grid; align-content: start; gap: 16px; }
@@ -238,7 +209,6 @@ html, body { background: var(--frame, #050607); color: var(--foreground); }
 .g-sketch[data-run="open"] :is(.g-sketch-side, .g-sketch-read) { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) both; }
 .g-sketch[data-run="leave"] .g-sketch-read { animation: ui-fade-out var(--duration-quick) var(--ease-leave) both; }
 .g-sketch[data-run="arrive"] .g-sketch-read { animation: ui-fade-in var(--duration-gentle) var(--ease-arrive) both; }
-/* PhoneComposer: a phone's width, with room above the row for its captions and edit pills. */
 .g-phone-composer { display: grid; width: min(380px, 100%); min-width: 0; min-height: 200px; align-content: end; padding-top: 72px; }
 .g-phone-composer > .ui-phone-composer { width: 100%; }
 /* In a card the captions' ground stops at the composer's sides and bottom, not the screen's. */
@@ -266,23 +236,18 @@ html, body { background: var(--frame, #050607); color: var(--foreground); }
 .g-anatomy :is(.ui-trace-line, .ui-trace-latest, .ui-trail) { outline: 1px dashed #d99a2299; outline-offset: 1px; }
 .g-trace-anatomy { width: 560px; }
 .g-inuse-scene > .g-anatomy { justify-self: stretch; padding-block: 20px; }
-/* Something RiderButtons ride over: they float centred at its foot. */
 .g-ride { position: relative; width: 100%; height: calc(2.5 * var(--control-lg)); border: var(--hairline) dashed var(--tint); border-radius: var(--radius-surface); }
-/* Nav: its pieces on the frame, and a pane at its own height. */
 .g-nav-frame { display: flex; width: var(--nav-width); flex-direction: column; background: var(--frame); color: var(--foreground); padding: var(--space-sm) var(--space-md); }
 .g-nav-stage { position: relative; height: 420px; background: var(--frame); }
 .g-nav-stage > .ui-nav-pane { height: 100%; }
-/* Files family: a code sample with its line numbers, and an empty side's quiet title. */
 .g-file-code { margin: 0; padding: var(--space-md) 0; color: var(--foreground); font: var(--text-caption)/1.6 var(--font-data); white-space: pre; }
 .g-file-code i { display: inline-block; width: var(--space-4xl); padding-right: var(--space-md); color: var(--muted-foreground); font-style: normal; text-align: right; }
 .g-file-none { color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-rest); }
-/* Motion · Expand: a folder's rows under a toggle, and what follows them moving with the slide. */
 .g-expand { display: grid; width: min(100%, 320px); gap: 0; padding: 12px; border-radius: 10px; }
 .g-expand > .ui-button { justify-self: start; margin-bottom: 6px; }
 .g-expand-row { margin: 0; padding: 6px 10px 6px 28px; color: var(--foreground); font-size: var(--text-row); }
 .g-expand-after { padding-left: 10px; color: var(--muted-foreground); }
 
-/* Type lens: inspection controls stay separate from library type. */
 .g-lens-layer { position: fixed; inset: 0; pointer-events: none; z-index: 2147483647; }
 .g-lens-legend { position: fixed; left: 12px; bottom: 60px; z-index: 2147483647; width: min(420px, calc(100vw - 24px)); max-height: 45vh; overflow: auto; box-sizing: border-box; border: 1px solid var(--border); border-radius: 8px; background: var(--frame); padding: 10px; color: var(--foreground); font: 12px/1.4 system-ui; box-shadow: 0 4px 16px rgb(0 0 0 / .4); }
 .g-lens-legend p { margin: 0 0 8px; }
@@ -291,14 +256,12 @@ html, body { background: var(--frame, #050607); color: var(--foreground); }
 .g-lens-roles button[aria-pressed="true"] { background: var(--border); border-color: var(--foreground); }
 .g-lens-swatch { width: 8px; height: 8px; flex: none; border-radius: 2px; }
 .g-lens-count { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
-/* Palettes: a palette's colours as a grid of named chips, not a list. */
 .g-cell-body:has(> .g-palette) { width: 100%; }
 .g-palette { display: grid; width: 100%; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px 16px; }
 .g-palette-chip { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 10px; margin: 0; }
 .g-palette-chip figcaption { display: grid; min-width: 0; gap: 2px; }
 .g-palette-chip strong { font-size: 13px; }
 .g-palette-chip small { overflow: hidden; color: var(--muted-foreground); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-/* A page's Usage, API and Used in sections (page.tsx). */
 .g-page-section { display: grid; gap: 12px; margin: 24px 16px; }
 .g-page-section > .g-heading { margin: 0; }
 .g-api { display: grid; gap: 8px; padding: 16px 0; border-top: 1px solid var(--border); }
@@ -312,7 +275,6 @@ html, body { background: var(--frame, #050607); color: var(--foreground); }
 .g-api td code { font-size: 12px; overflow-wrap: anywhere; }
 .g-used-in { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
 .g-api h4 .g-api-adapter { padding: 1px 6px; border: 1px solid var(--border); border-radius: 999px; }
-/* The page template (page.tsx PageView). */
 .g-page-summary { max-width: 72ch; margin: 4px 16px 0; color: var(--muted-foreground); font-size: 14px; line-height: 1.5; }
 .g-page-toc { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 14px 16px 0; font-size: 12px; }
 .g-page-toc > span { color: var(--muted-foreground); }
@@ -321,14 +283,11 @@ html, body { background: var(--frame, #050607); color: var(--foreground); }
 .g-preview { display: grid; }
 .g-preview > .g-surface { overflow-x: auto; }
 .g-preview > .g-surface { display: grid; min-height: 160px; place-items: center; padding: 32px; border-radius: 10px; }
-/* A row whose render is a catalogue (Icons): named items in a grid. */
 .g-icon-grid { display: grid; width: 100%; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 14px; }
 .g-icon-grid > figure { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; margin: 0; }
 .g-icon-grid figcaption { display: grid; min-width: 0; }
 .g-icon-grid code { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .g-icon-grid small { overflow: hidden; color: var(--muted-foreground); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-/* Examples and Motion (page.tsx Rows): a row's name, then its cells, each its content's width, wrapping when the row
-   runs out of room; a form wider than the whole row scrolls in its cell. */
 .g-rows { display: grid; }
 .g-row-item { display: grid; gap: 10px; border-bottom: 1px solid var(--border); padding: 14px 4px; }
 .g-row-cells { display: flex; flex-wrap: wrap; gap: 12px; }
@@ -346,16 +305,13 @@ html, body { background: var(--frame, #050607); color: var(--foreground); }
    at least a narrow column wide, and a page-sized one a pane's. */
 .g-inuse-scene { min-width: min(320px, 70vw); }
 .g-anatomy > .g-page { width: 560px; }
-/* Shell page: the window row at a fraction of its height, on the frame. */
 .g-shell { display: flex; width: 100%; overflow: hidden; border-radius: 10px; background: var(--frame); }
 .g-aside { width: 360px; max-width: 100%; }
 
-/* Transcript › rhythm: each row's room above it drawn as a band, labelled with its relation. */
 .g-flow-scene .ui-transcript-row[data-flow] { position: relative; }
 .g-flow-scene .ui-transcript-row[data-flow]::before { position: absolute; right: 0; bottom: 100%; left: 0; display: flex; align-items: center; justify-content: flex-end; border-block: var(--hairline) dashed var(--tint); background: color-mix(in oklab, var(--tint) 35%, transparent); color: var(--muted-foreground); content: attr(data-flow); font: var(--text-caption)/1 var(--font-data); pointer-events: none; }
 .g-flow-scene .ui-transcript-row[data-flow="attached"]::before { height: var(--flow-attached); }
 .g-flow-scene .ui-transcript-row[data-flow="step"]::before { height: var(--flow-step); }
 .g-flow-scene .ui-transcript-row[data-flow="exchange"]::before { height: var(--flow-exchange); }
 .g-flow-scene .ui-transcript-row[data-flow="turn"]::before { height: var(--flow-turn); }
-/* A workbench needs a height to fill: a settings page's. */
 .g-workbench { display: flex; width: 100%; height: 520px; flex-direction: column; }

@@ -14,7 +14,6 @@ import { px, rounding, edge, bg, Replay } from "../specs";
 import { typeOf, ConnectionDemo, SwitchDemo } from "../demos";
 import { row, token, type Page } from "../model";
 
-/* Card: its parts measured in a prompt, then each form at each density. */
 export const cardScene = () => <div class="g-card-scene"><Card title="Destroy Japan?" detail="Type Japan to confirm." actions={<><Button variant="ghost" outline>Cancel</Button><Button variant="destructive">Destroy</Button></>}><Input placeholder="Japan" /></Card></div>;
 
 export function DialogBehaviorDemo(props: { alert?: boolean; busy?: boolean }) {
@@ -55,11 +54,6 @@ export function ExplorerDemo() {
     onCreateFolder={() => setResult("Create folder")} onCloneRepository={() => setResult("Clone repository")} /><Note kind="card">{result()}</Note></CardBody>;
 }
 
-/*
- * In the app: every dialog the app opens, rebuilt from its real content with v2 alone. Lines
- * that only restate the title are left out (DESIGN.md Dialog). Under each: its file, and what v2
- * still lacks for it, or that it has all of it.
- */
 export const status = (needs?: string) => needs ? `Needs: ${needs}` : "v2 has all of it";
 /** A fresh Cancel each time: one element can only be in one place. */
 export const cancel = () => <Button variant="ghost" outline>Cancel</Button>;

@@ -40,9 +40,6 @@ type SettingsProps = Omit<CoreProps,
   voiceSettings: VoiceDictationSettings;
 };
 
-// Current main owns the single Settings dialog, including the complete Voice
-// section. This shell only supplies rebuild-owned presentation preferences; it
-// never swaps Settings trees and performs no Voice lifecycle translation.
 export function Settings(props: SettingsProps) {
   const [interfaceScale, setInterfaceScale] = createSignal<UiScale>(selectedUiScale());
   const [transcriptWidth, setTranscriptWidth] = createSignal<TranscriptWidthMode>(selectedTranscriptWidth());
@@ -58,9 +55,8 @@ export function Settings(props: SettingsProps) {
   const followScale = () => setInterfaceScale(selectedUiScale());
   addEventListener("conduit:ui-scale", followScale);
   onCleanup(() => removeEventListener("conduit:ui-scale", followScale));
-  // Each save writes localStorage and publishes the change; main.tsx mirrors it
-  // to the server and stamps the document root, so the open transcript reflows
-  // immediately without the dialog reaching into it.
+  // main.tsx mirrors the published change to the server and stamps the root, so the transcript reflows without the
+  // dialog reaching into it.
   const updateTranscriptWidth = (mode: TranscriptWidthMode) => {
     const next = setTranscriptWidth(saveTranscriptWidth(mode));
     applyTranscriptAppearance({ width: next });

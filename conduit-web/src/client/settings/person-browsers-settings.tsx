@@ -9,16 +9,10 @@ import { LiveNote, SettingLine, SettingLink, SettingValue } from "@/components/u
 import { Group } from "@/components/ui/group";
 import { Note } from "@/components/ui/state";
 
-/** How often the browsers are read again while a pairing code is out. */
 const PAIRING_POLL_MS = 2000;
 
-/**
- * The person's own browsers on the network (Settings › Devices): each environment that can offer one, the browsers
- * paired there, and pairing another -- the hub gives a one-time code, entered in the browse extension of the browser
- * on that environment. Agents then drive that browser with conduit_browser (server/person-browser-tool.js).
- */
 export function PersonBrowsersSettings(props: {
-  /** Only this device's environments (Settings › This device); not said: every environment on the network. */
+  /** Not said: every environment on the network. */
   device?: string }) {
   const [environments, setEnvironments] = createSignal<PersonBrowserEnvironment[] | null>(null);
   const [error, setError] = createSignal("");
@@ -37,7 +31,6 @@ export function PersonBrowsersSettings(props: {
       const next = props.device === undefined ? all : all.filter((item) => item.name === props.device || item.name.startsWith(`${props.device} · `));
       if (before?.some((item) => item.pairing) && count(next) > count(before)) setSaid("Browser connected");
       setEnvironments(next);
-      // A code is out: watch for the browser that redeems it.
       window.clearTimeout(timer);
       if (!disposed && next.some((item) => item.pairing)) timer = window.setTimeout(() => void read(), PAIRING_POLL_MS);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "The browsers could not be read."); }
@@ -51,7 +44,6 @@ export function PersonBrowsersSettings(props: {
   const pair = (environment: PersonBrowserEnvironment) => act(() => api(`/v0/person-browsers/${encodeURIComponent(environment.id)}/pair`, { method: "POST" }), "No pairing code was given.");
   const unpair = (environment: PersonBrowserEnvironment, browser: string) => act(() =>
     api(`/v0/person-browsers/${encodeURIComponent(environment.id)}/browsers/${encodeURIComponent(browser)}`, { method: "DELETE" }), "The browser was not unpaired.");
-  // Which code was just copied, for as long as any copy says so: it used to say so until the next one.
   let copiedTimer = 0;
   // Where a browser is paired: on This device its environment alone ("through Ubuntu": the one that carries the
   // agent's commands to it, which need not be the one the browser runs on); on the network, the whole name.
