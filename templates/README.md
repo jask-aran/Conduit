@@ -69,7 +69,7 @@ Two optional front matter fields:
 
 Provider credentials and model settings stay under the configured agent
 settings directory, normally `data/pi`. Web-search routing may use a derived
-model file there. Shell tools prepend `working-files/.venv/bin` (or `Scripts` on
+model file there. Shell tools prepend `conduit-web/python/.venv/bin` (or `Scripts` on
 Windows) to `PATH`; this is done by `buildManagedToolEnvironment`. The
 environment is shared by workspaces and does not write inside them.
 

@@ -17,7 +17,7 @@ import {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const webRoot = path.join(root, "conduit-web");
-const managedServer = path.join(root, ".devcontainer", "start-conduit.sh");
+const managedServer = path.join(root, "scripts", "start-conduit.sh");
 const stateRoot = path.resolve(
   process.env.CONDUIT_STATE_DIR || path.join(os.homedir(), ".conduit"),
 );
@@ -349,7 +349,7 @@ async function promote(bump, dryRun) {
 }
 
 function usage() {
-  console.log(`Usage: bash .devcontainer/solid-components.sh <command>
+  console.log(`Usage: bash scripts/solid-components.sh <command>
 
 Commands:
   dev [repo]                         Run Conduit with source HMR on port 5173.

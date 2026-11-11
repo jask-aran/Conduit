@@ -2,7 +2,7 @@
 
 Run `npm` commands and web scripts from `conduit-web/` unless marked otherwise.
 Checks that need the app use the local server at `http://127.0.0.1:4310`
-(`bash .devcontainer/start-conduit.sh restart` from the repository root after a
+(`bash scripts/start-conduit.sh restart` from the repository root after a
 change). Most checking is done by driving the running server over its HTTP API
 or the app through Windows Chrome DevTools. Pick the cheapest check that can
 prove the change; don't escalate during iterative work.

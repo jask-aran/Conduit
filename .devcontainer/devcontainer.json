@@ -31,6 +31,6 @@
     "CONDUIT_PI_TEMPLATE": "/workspaces/Conduit/templates/assistant/template.json"
   },
   "postCreateCommand": "bash .devcontainer/setup.sh",
-  "postStartCommand": "bash .devcontainer/start-conduit.sh",
+  "postStartCommand": "bash scripts/start-conduit.sh",
   "remoteUser": "node"
 }

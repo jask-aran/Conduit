@@ -305,7 +305,7 @@ export function registerAgentRoutes(app, { agent, backends, hubId, voiceRuntime 
     response.status(result.status).json({ steps: result.steps, email: result.email });
   });
 
-  // jbot's mailbox has mail (workers/jbot-mail): collect it now rather than at the next minute. The Worker proves itself
+  // jbot's mailbox has mail (templates/agent/mailbox/worker.js): collect it now rather than at the next minute. The Worker proves itself
   // with the shared secret; the call carries no mail, so a wrong or replayed one costs a poll at most.
   app.post("/v0/agent/email/wake", (request, response) => {
     const email = agent.runtime.messageLog?.channels.email;

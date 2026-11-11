@@ -21,7 +21,7 @@ conduit-web/dist-gallery/
 conduit-web/playwright-report/
 conduit-web/test-results/
 conduit-web/native/transcribe-rs-worker/target/
-working-files/.venv/
+conduit-web/python/.venv/
 .wp10-rust/
 .hero-data/
 .hero-demo/

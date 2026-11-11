@@ -25,7 +25,7 @@ export CONDUIT_RELEASE_TAG="$VERSION"
 pty="$ROOT/conduit-web/node_modules/node-pty/build/Release"
 [[ -f "$pty/pty.node" ]] || { echo "node-pty is not built here; run npm ci in conduit-web" >&2; exit 1; }
 
-mkdir -p "$STAGE/conduit-web" "$STAGE/working-files" "$STAGE/prebuilt/node-pty/build" "$OUT"
+mkdir -p "$STAGE/conduit-web/python" "$STAGE/prebuilt/node-pty/build" "$OUT"
 node --input-type=module -e '
   import { buildStamp } from "'"$ROOT"'/conduit-web/src/build-info.js";
   import { writeFileSync } from "node:fs";
@@ -37,8 +37,8 @@ cp -R "$ROOT/conduit-web/dist" "$ROOT/conduit-web/package.json" "$ROOT/conduit-w
   | while read -r file; do mkdir -p "$STAGE/conduit-web/$(dirname "$file")"; cp "$file" "$STAGE/conduit-web/$file"; done)
 cp -R "$ROOT/scripts" "$ROOT/templates" "$ROOT/packages" "$STAGE/"
 rm -rf "$STAGE/scripts/package-server.sh" "$STAGE/scripts/probes"
-cp "$ROOT/working-files/pyproject.toml" "$ROOT/working-files/uv.lock" "$STAGE/working-files/"
-cp "$ROOT/working-files/"*.py "$STAGE/working-files/" 2>/dev/null || true
+cp "$ROOT/conduit-web/python/pyproject.toml" "$ROOT/conduit-web/python/uv.lock" "$STAGE/conduit-web/python/"
+cp "$ROOT/conduit-web/python/"*.py "$STAGE/conduit-web/python/" 2>/dev/null || true
 cp -R "$pty" "$STAGE/prebuilt/node-pty/build/Release"
 rm -rf "$STAGE/prebuilt/node-pty/build/Release/obj.target" "$STAGE/prebuilt/node-pty/build/Release/.deps"
 

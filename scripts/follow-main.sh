@@ -46,8 +46,8 @@ touches() { grep -qE "$1" <<<"$changed"; }
 
 build() {
   # Python tools when their lockfile moved; npm's lockfile is the build's own check (start-conduit.sh).
-  if touches '^working-files/(uv\.lock|pyproject\.toml)$'; then bash .devcontainer/start-conduit.sh setup >>"$LOG" 2>&1 || return 1; fi
-  bash .devcontainer/start-conduit.sh build >>"$LOG" 2>&1
+  if touches '^conduit-web/python/(uv\.lock|pyproject\.toml)$'; then bash scripts/start-conduit.sh setup >>"$LOG" 2>&1 || return 1; fi
+  bash scripts/start-conduit.sh build >>"$LOG" 2>&1
 }
 healthy() {
   local port; port="$(sed -n 's/^CONDUIT_PORT=//p' "$STATE_DIR/conduit.env" 2>/dev/null | tail -1)"
@@ -64,7 +64,7 @@ back() {
 
 log "updating ${old:0:8} -> ${new:0:8} ($(git log --format=%s -1 "$new"))"
 git merge -q --ff-only "$new"
-if ! touches '^(conduit-web|scripts|templates|working-files|\.devcontainer)/'; then log "nothing the server runs changed"; exit 0; fi
+if ! touches '^(conduit-web|scripts|templates)/'; then log "nothing the server runs changed"; exit 0; fi
 if ! build; then back "build of ${new:0:8} failed"; exit 1; fi
 if ! server restart >>"$LOG" 2>&1 || ! healthy; then back "${new:0:8} did not come back healthy"; exit 1; fi
 rm -f "$FAILED"

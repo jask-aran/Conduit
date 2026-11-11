@@ -35,7 +35,7 @@ removes more than it adds.
 `npm run typecheck`, the build and `restart` report convention problems (`scripts/check-conventions.mjs`, each rule's
 reason is in it): tell me about any you see, then fix them.
 
-After each bounded change set, run `bash .devcontainer/start-conduit.sh restart` so the server is ready, then hand it
+After each bounded change set, run `bash scripts/start-conduit.sh restart` so the server is ready, then hand it
 to me: I confirm behaviour.
 
 ## Style

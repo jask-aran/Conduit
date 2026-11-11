@@ -1,0 +1,472 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WEB_DIR="$ROOT/conduit-web"
+WORKING_FILES_DIR="$WEB_DIR/python"
+UV_VERSION="0.11.29"
+STATE_DIR="${CONDUIT_STATE_DIR:-$HOME/.conduit}"
+# Conduit keeps its state in ~/.conduit/data wherever its code lives; a
+# checkout that wants its own sets CONDUIT_DATA_ROOT.
+DATA_ROOT="${CONDUIT_DATA_ROOT:-$HOME/.conduit/data}"
+export CONDUIT_DATA_ROOT="$DATA_ROOT"
+TOOLCHAIN_ROOT="$DATA_ROOT/toolchains"
+UV_INSTALL_DIR="$TOOLCHAIN_ROOT/uv/$UV_VERSION"
+UV_COMMAND="$UV_INSTALL_DIR/uv"
+UV_CACHE_DIR="$TOOLCHAIN_ROOT/uv-cache"
+UV_PYTHON_INSTALL_DIR="$TOOLCHAIN_ROOT/python"
+PID_FILE="$STATE_DIR/conduit.pid"
+LOG_FILE="$STATE_DIR/conduit.log"
+VITE_PID_FILE="$STATE_DIR/conduit-vite.pid"
+VITE_LOG_FILE="$STATE_DIR/conduit-vite.log"
+SOLID_COMPONENTS_STATE_FILE="$STATE_DIR/solid-components-workbench.json"
+COMMAND="${1:-restart}"
+if [[ $# -gt 0 ]]; then shift; fi
+
+export CONDUIT_HOST="${CONDUIT_HOST:-0.0.0.0}"
+export CONDUIT_PORT="${CONDUIT_PORT:-4310}"
+export CONDUIT_VITE_PORT="${CONDUIT_VITE_PORT:-5173}"
+export CONDUIT_VITE_HOST="${CONDUIT_VITE_HOST:-0.0.0.0}"
+export CONDUIT_FILES_ROOT="${CONDUIT_FILES_ROOT:-$DATA_ROOT/chat/files}"
+export CONDUIT_CATALOG_FILE="${CONDUIT_CATALOG_FILE:-$DATA_ROOT/conduit.json}"
+export CONDUIT_SESSION_REGISTRY_FILE="${CONDUIT_SESSION_REGISTRY_FILE:-$DATA_ROOT/sessions.json}"
+export CONDUIT_PI_AGENT_DIR="${CONDUIT_PI_AGENT_DIR:-$DATA_ROOT/pi}"
+export CONDUIT_PI_TEMPLATE="${CONDUIT_PI_TEMPLATE:-$ROOT/templates/assistant/template.json}"
+# Set only when testing a desktop update against a local build: the server then
+# serves that directory at /desktop-updates so the updater has somewhere to
+# look. Unset, the route does not exist.
+# A development desktop client checks this server for its updates, so the
+# directory the Windows build writes into is served whenever it exists. Found
+# rather than configured: remembering an environment variable before every
+# restart is the difference between testing an update and not bothering.
+if [ -z "${CONDUIT_DESKTOP_UPDATE_DIR:-}" ] && command -v wslpath >/dev/null 2>&1; then
+  build_home=$(cmd.exe /c 'echo %LOCALAPPDATA%' 2>/dev/null | tr -d '\r')
+  if [ -n "$build_home" ]; then
+    # The development build compiles into a directory of its own, so that it
+    # does not fight a running dev session for the same files. It is the one
+    # this server has any business serving -- the other holds release builds,
+    # which come from a tag and reach a client through GitHub. Preferred, with
+    # the shared directory kept as a fallback for a tree built before the
+    # split. Both live under %LOCALAPPDATA%\conduit-build (scripts/build-desktop-windows.sh).
+    for suffix in "-dev" ""; do
+      candidate="$(wslpath -u "${CONDUIT_DESKTOP_TARGET_DIR:-$build_home\\conduit-build\\desktop-target$suffix}" 2>/dev/null)/release/bundle/nsis"
+      if [ -d "$candidate" ]; then CONDUIT_DESKTOP_UPDATE_DIR="$candidate"; break; fi
+    done
+  fi
+fi
+if [ -n "${CONDUIT_DESKTOP_UPDATE_DIR:-}" ]; then export CONDUIT_DESKTOP_UPDATE_DIR; fi
+HEALTH_URL="http://127.0.0.1:${CONDUIT_PORT}/healthz"
+DRAIN_TIMEOUT_SECONDS="${CONDUIT_RESTART_DRAIN_TIMEOUT_SECONDS:-600}"
+PWA_GRACE_SECONDS="${CONDUIT_PWA_RESTART_GRACE_SECONDS:-20}"
+PWA_PREPARE_PID=0
+
+usage() {
+  cat <<EOF
+Usage: bash scripts/start-conduit.sh <command>
+
+Commands:
+  setup                 Install web and bundled Isolated Pi dependencies.
+  build                 Compile the production client bundle.
+  start                 Start an existing production build.
+  dev                   Start the server watcher and Vite hot reload.
+  stop                  Stop Vite, Conduit, and resident Pi. Preserve terminal sessions.
+  restart [--force]     Rebuild, wait for assistant responses, then restart.
+                        --force skips the response drain and client update grace.
+  status                Report the managed process and health endpoint.
+  logs [server|vite] [-f]
+                        Show a managed log (follow with -f).
+  deploy                Run setup, build, and restart.
+
+restart is the production-like path. dev manages the server on ${CONDUIT_PORT}
+and Vite on ${CONDUIT_VITE_PORT}; it is never used for deployment.
+CONDUIT_TERMINAL_TEARDOWN=1 ends terminal sessions on stop or restart.
+EOF
+}
+
+prepare_dirs() {
+  mkdir -p "$STATE_DIR" "$CONDUIT_FILES_ROOT" "$CONDUIT_PI_AGENT_DIR" || {
+    echo "Conduit cannot create its state directories. Set CONDUIT_STATE_DIR to a writable directory." >&2
+    return 1
+  }
+}
+
+guard_component_mode() {
+  if [[ -f "$SOLID_COMPONENTS_STATE_FILE" && "${CONDUIT_SOLID_COMPONENTS_MANAGED:-}" != "1" ]]; then
+    echo "A local solid-components mode is active." >&2
+    echo "Use: bash scripts/solid-components.sh status" >&2
+    echo "Return to npm with: bash scripts/solid-components.sh registry" >&2
+    exit 1
+  fi
+}
+
+is_healthy() {
+  curl --silent --fail --max-time 2 "$HEALTH_URL" >/dev/null
+}
+
+active_generation_count() {
+  curl --silent --fail --max-time 2 "$HEALTH_URL" \
+    | node -e 'let value=""; process.stdin.on("data", chunk => value += chunk); process.stdin.on("end", () => { const count = JSON.parse(value).activeGenerations; if (!Number.isInteger(count)) process.exit(2); process.stdout.write(String(count)); })'
+}
+
+wait_for_generations() {
+  # A Conduit that is not answering has nothing to drain. A bare `return`
+  # would hand back curl's failure and, under `set -e`, end the restart.
+  is_healthy || return 0
+  [[ "$DRAIN_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || {
+    echo "CONDUIT_RESTART_DRAIN_TIMEOUT_SECONDS must be a non-negative integer." >&2
+    return 1
+  }
+  local elapsed=0 count
+  while true; do
+    count="$(active_generation_count)" || {
+      echo "Could not read active generations; Conduit was not stopped." >&2
+      return 1
+    }
+    if [[ "$count" == "0" ]]; then
+      if (( elapsed > 0 )); then echo "Assistant responses settled."; fi
+      return
+    fi
+    if (( elapsed == 0 )); then
+      echo "Waiting for $count active assistant response(s) to settle. Use restart --force to skip this drain."
+    fi
+    if (( elapsed >= DRAIN_TIMEOUT_SECONDS )); then
+      echo "Assistant responses did not settle within ${DRAIN_TIMEOUT_SECONDS}s; Conduit was not stopped." >&2
+      return 1
+    fi
+    sleep 1
+    ((elapsed += 1))
+  done
+}
+
+process_is_running() {
+  local pid="$1"
+  kill -0 "$pid" 2>/dev/null && ! ps -p "$pid" -o stat= 2>/dev/null | grep -q '^[[:space:]]*Z'
+}
+
+pid_is_server() {
+  local pid="$1"
+  process_is_running "$pid" && ps -p "$pid" -o args= 2>/dev/null | grep -Eq '(^|[[:space:]/])node([[:space:]]|$).*src/server\.js'
+}
+
+pid_is_vite() {
+  local pid="$1"
+  process_is_running "$pid" && ps -p "$pid" -o args= 2>/dev/null | grep -Eq '(^|[[:space:]/])vite([[:space:]]|$)'
+}
+
+managed_pid_from_file() {
+  local file="$1"
+  local checker="$2"
+  [[ -f "$file" ]] || return 1
+  local pid
+  pid="$(<"$file")"
+  if "$checker" "$pid"; then
+    printf '%s\n' "$pid"
+    return 0
+  fi
+  rm -f "$file"
+  return 1
+}
+
+# When the conduit-server daemon runs this clone (`conduit-server use dev`),
+# this script builds and the daemon runs: start, stop, status and logs go to
+# it, so there is one server, one port and one set of data either way.
+DAEMON="$ROOT/scripts/conduit-server"
+daemon_runs_this_clone() {
+  [[ "$(readlink -f "${XDG_DATA_HOME:-$HOME/.local/share}/conduit/current" 2>/dev/null)" == "$ROOT" ]]
+}
+# What only a development run sets, for the daemon to pick up.
+write_dev_env() {
+  {
+    [[ -n "${CONDUIT_DESKTOP_UPDATE_DIR:-}" ]] && echo "CONDUIT_DESKTOP_UPDATE_DIR=$CONDUIT_DESKTOP_UPDATE_DIR"
+    [[ -n "${CONDUIT_PI_TRACE:-}" ]] && echo "CONDUIT_PI_TRACE=$CONDUIT_PI_TRACE"
+    true
+  } >"$STATE_DIR/dev.env"
+}
+daemon_pid() {
+  local pid
+  pid="$(systemctl --user show -p MainPID --value conduit-server 2>/dev/null || true)"
+  [[ -n "$pid" && "$pid" != 0 ]] && echo "$pid"
+}
+managed_pid() {
+  if daemon_runs_this_clone; then daemon_pid; return; fi
+  managed_pid_from_file "$PID_FILE" pid_is_server
+}
+managed_vite_pid() { managed_pid_from_file "$VITE_PID_FILE" pid_is_vite; }
+
+require_dependencies() {
+  if [[ ! -x "$WEB_DIR/node_modules/.bin/vite" ]]; then
+    echo "Conduit dependencies are not installed. Run: bash scripts/start-conduit.sh setup" >&2
+    exit 1
+  fi
+  # A lockfile newer than what npm last installed (a pull or merge that added or moved a package): install it, or the
+  # build and server run on the old set and a new dependency is simply missing.
+  if [[ "$WEB_DIR/package-lock.json" -nt "$WEB_DIR/node_modules/.package-lock.json" ]]; then
+    echo "package-lock.json changed since the last install; running npm ci."
+    (cd "$WEB_DIR" && PATH="$WORKING_FILES_DIR/.venv/bin:$PATH" npm ci --no-audit --no-fund) || exit 1
+  fi
+  if [[ ! -x "$WORKING_FILES_DIR/.venv/bin/python" ]]; then
+    echo "Conduit's managed Python environment is not installed. Run: bash scripts/start-conduit.sh setup" >&2
+    exit 1
+  fi
+}
+
+setup() {
+  prepare_dirs || return
+  if [[ ! -x "$UV_COMMAND" ]]; then
+    command -v curl >/dev/null 2>&1 || {
+      echo "curl is required to install Conduit's managed Python runtime." >&2
+      exit 1
+    }
+    echo "Installing Conduit's pinned uv $UV_VERSION runtime."
+    mkdir -p "$UV_INSTALL_DIR"
+    curl --proto '=https' --tlsv1.2 -LsSf "https://astral.sh/uv/$UV_VERSION/install.sh" \
+      | env UV_UNMANAGED_INSTALL="$UV_INSTALL_DIR" sh
+  fi
+  [[ -x "$UV_COMMAND" ]] || {
+    echo "Conduit's managed uv installation is missing: $UV_COMMAND" >&2
+    exit 1
+  }
+  echo "Installing Conduit's web, bundled Isolated Pi, and managed Python dependencies."
+  env \
+    UV_CACHE_DIR="$UV_CACHE_DIR" \
+    UV_PYTHON_INSTALL_DIR="$UV_PYTHON_INSTALL_DIR" \
+    "$UV_COMMAND" sync \
+      --project "$WORKING_FILES_DIR" \
+      --locked \
+      --no-dev \
+      --no-install-project \
+      --python 3.13 \
+      --managed-python
+  (cd "$WEB_DIR" && PATH="$WORKING_FILES_DIR/.venv/bin:$PATH" npm ci)
+}
+
+build() {
+  require_dependencies
+  echo "Building the production Conduit client."
+  (cd "$WEB_DIR" && npm run build && node scripts/precompress.mjs)
+}
+
+build_if_needed() {
+  require_dependencies
+  if [[ ! -f "$WEB_DIR/dist/index.html" ]] \
+    || find "$WEB_DIR"/index.html "$WEB_DIR"/vite.config.js "$WEB_DIR"/package.json "$WEB_DIR"/package-lock.json "$WEB_DIR"/src \
+      -type f -newer "$WEB_DIR/dist/index.html" -print -quit | grep -q .; then
+    build
+  fi
+}
+
+worker_hash() {
+  if [[ -f "$WEB_DIR/dist/sw.js" ]]; then sha256sum "$WEB_DIR/dist/sw.js" | cut -d ' ' -f1; fi
+}
+
+# A new client build is ready. Connected browsers are told a restart to its
+# worker is coming and install it; the restart waits until every browser the
+# server is waiting on says it has (two tabs of one registration are one), or
+# PWA_GRACE_SECONDS, whichever is first. Native clients are never waited on.
+# Runs beside the generation drain, and is collected before the restart.
+prepare_client_restart() {
+  local previous_hash="$1"
+  local forced="${2:-false}"
+  [[ "$forced" == "false" && "$previous_hash" != "$(worker_hash)" ]] || return 0
+  [[ "$PWA_GRACE_SECONDS" =~ ^[0-9]+$ ]] || {
+    echo "CONDUIT_PWA_RESTART_GRACE_SECONDS must be a non-negative integer." >&2
+    return 1
+  }
+  (( PWA_GRACE_SECONDS > 0 )) || return 0
+  is_healthy || return 0
+  # A server older than the readiness handshake has no route for it.
+  if ! curl --silent --fail --max-time 2 --dump-header - --output /dev/null "$HEALTH_URL" \
+    | grep -qi '^x-conduit-pwa-prepare: 2'; then return 0; fi
+  echo "Readying connected browsers for the new client (up to ${PWA_GRACE_SECONDS}s)."
+  node "$ROOT/scripts/conduit-auth.mjs" prepare-restart "$(worker_hash)" "$PWA_GRACE_SECONDS" &
+  PWA_PREPARE_PID=$!
+}
+
+wait_for_client_restart_grace() {
+  (( PWA_PREPARE_PID > 0 )) || return 0
+  wait "$PWA_PREPARE_PID" || echo "Could not confirm browsers were ready; restarting anyway." >&2
+  PWA_PREPARE_PID=0
+}
+
+start_server() {
+  local watch="${1:-false}"
+  prepare_dirs || return
+  require_dependencies
+  if [[ "$watch" != "true" ]] && daemon_runs_this_clone; then
+    [[ -f "$WEB_DIR/dist/index.html" ]] || build
+    write_dev_env
+    "$DAEMON" start
+    return
+  fi
+  if [[ "$watch" != "true" && ! -f "$WEB_DIR/dist/index.html" ]]; then
+    echo "No production build found. Run: bash scripts/start-conduit.sh build" >&2
+    exit 1
+  fi
+  local pid
+  if pid="$(managed_pid)"; then
+    echo "Conduit is already managed as PID $pid on port ${CONDUIT_PORT}."
+    return
+  fi
+  if [[ "$watch" == "true" ]]; then
+    nohup setsid node --watch "$WEB_DIR/src/server.js" >"$LOG_FILE" 2>&1 </dev/null &
+  else
+    nohup setsid node "$WEB_DIR/src/server.js" >"$LOG_FILE" 2>&1 </dev/null &
+  fi
+  pid=$!
+  printf '%s\n' "$pid" >"$PID_FILE"
+  for _ in {1..30}; do
+    if is_healthy; then
+      echo "Conduit is ready on port ${CONDUIT_PORT} (PID $pid)."
+      echo "Logs: $LOG_FILE"
+      return
+    fi
+    if ! process_is_running "$pid"; then
+      rm -f "$PID_FILE"
+      tail -n 100 "$LOG_FILE" >&2 || true
+      exit 1
+    fi
+    sleep 1
+  done
+  echo "Conduit did not become healthy within 30 seconds." >&2
+  tail -n 100 "$LOG_FILE" >&2 || true
+  exit 1
+}
+
+start_vite() {
+  require_dependencies
+  local pid
+  if pid="$(managed_vite_pid)"; then
+    echo "Vite is already managed as PID $pid on port ${CONDUIT_VITE_PORT}."
+    return
+  fi
+  pushd "$WEB_DIR" >/dev/null
+  nohup setsid "$WEB_DIR/node_modules/.bin/vite" --host "$CONDUIT_VITE_HOST" --port "$CONDUIT_VITE_PORT" >"$VITE_LOG_FILE" 2>&1 </dev/null &
+  pid=$!
+  popd >/dev/null
+  printf '%s\n' "$pid" >"$VITE_PID_FILE"
+  for _ in {1..30}; do
+    if curl --silent --fail --max-time 2 "http://127.0.0.1:${CONDUIT_VITE_PORT}/" >/dev/null; then
+      echo "Vite hot reload is ready on port ${CONDUIT_VITE_PORT} (PID $pid)."
+      echo "Logs: $VITE_LOG_FILE"
+      return
+    fi
+    if ! process_is_running "$pid"; then
+      rm -f "$VITE_PID_FILE"
+      tail -n 100 "$VITE_LOG_FILE" >&2 || true
+      return 1
+    fi
+    sleep 1
+  done
+  echo "Vite did not become ready within 30 seconds." >&2
+  tail -n 100 "$VITE_LOG_FILE" >&2 || true
+  return 1
+}
+
+stop_managed() {
+  local label="$1"
+  local pid="$2"
+  local file="$3"
+  echo "Stopping $label (PID $pid)."
+  kill -TERM "$pid"
+  for _ in {1..40}; do
+    if ! process_is_running "$pid"; then
+      rm -f "$file"
+      return
+    fi
+    sleep 0.5
+  done
+  echo "$label did not stop gracefully; sending SIGKILL." >&2
+  kill -KILL "$pid" 2>/dev/null || true
+  rm -f "$file"
+}
+
+stop() {
+  prepare_dirs || return
+  local pid
+  if pid="$(managed_vite_pid)"; then stop_managed "Vite" "$pid" "$VITE_PID_FILE"; fi
+  if daemon_runs_this_clone && [[ ! -f "$PID_FILE" ]]; then "$DAEMON" stop
+  elif pid="$(managed_pid_from_file "$PID_FILE" pid_is_server)"; then stop_managed "Conduit" "$pid" "$PID_FILE";
+  elif is_healthy; then
+    echo "A healthy Conduit server is running on port ${CONDUIT_PORT}, but this launcher does not manage it." >&2
+    echo "Stop that server before using this launcher." >&2
+    return 1
+  else echo "Conduit is not running."; fi
+  if [[ "${CONDUIT_TERMINAL_TEARDOWN:-0}" == "1" ]]; then
+    node "$ROOT/scripts/terminal-lifecycle.mjs"
+  fi
+}
+
+status() {
+  prepare_dirs || return
+  if daemon_runs_this_clone; then "$DAEMON" status; return; fi
+  local pid
+  if ! pid="$(managed_pid)"; then
+    echo "Conduit is stopped."
+    return 3
+  fi
+  if is_healthy; then
+    echo "Conduit is healthy on port ${CONDUIT_PORT} (PID $pid)."
+    if pid="$(managed_vite_pid)"; then echo "Vite hot reload is running on port ${CONDUIT_VITE_PORT} (PID $pid)."; fi
+    return
+  fi
+  echo "Conduit is running as PID $pid but health checks are failing. Logs: $LOG_FILE" >&2
+  return 1
+}
+
+logs() {
+  prepare_dirs || return
+  if daemon_runs_this_clone && [[ "${1:-}" != "vite" ]]; then exec "$DAEMON" logs; fi
+  local log_file="$LOG_FILE"
+  if [[ "${1:-}" == "vite" ]]; then log_file="$VITE_LOG_FILE"; shift
+  elif [[ "${1:-}" == "server" ]]; then shift; fi
+  touch "$log_file"
+  if [[ $# -eq 0 ]]; then tail -n 100 "$log_file"; else tail "$@" "$log_file"; fi
+}
+
+case "$COMMAND" in
+  setup) guard_component_mode; setup ;;
+  build) guard_component_mode; build ;;
+  start) guard_component_mode; start_server false ;;
+  dev)
+    guard_component_mode
+    stop
+    start_server true
+    if ! start_vite; then stop || true; exit 1; fi
+    ;;
+  stop) stop ;;
+  restart)
+    guard_component_mode
+    previous_worker_hash="$(worker_hash)"
+    build_if_needed
+    force_restart=false
+    if [[ "${1:-}" == "--force" ]]; then force_restart=true; shift
+    elif [[ $# -gt 0 ]]; then echo "Unknown restart option: $1" >&2; usage >&2; exit 2
+    fi
+    [[ $# -eq 0 ]] || { echo "Unknown restart option: $1" >&2; usage >&2; exit 2; }
+    prepare_client_restart "$previous_worker_hash" "$force_restart"
+    if [[ "$force_restart" == "false" ]]; then wait_for_generations; fi
+    wait_for_client_restart_grace
+    stop
+    start_server false
+    # Last, so `restart | tail -1` still shows it: the build's convention check (scripts/check-conventions.mjs).
+    (cd "$WEB_DIR" && node scripts/check-conventions.mjs --summary)
+    ;;
+  status) status ;;
+  logs) logs "$@" ;;
+  deploy)
+    guard_component_mode
+    previous_worker_hash="$(worker_hash)"
+    setup
+    build
+    prepare_client_restart "$previous_worker_hash"
+    wait_for_client_restart_grace
+    stop
+    start_server false
+    ;;
+  help|-h|--help) usage ;;
+  *)
+    echo "Unknown command: $COMMAND" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

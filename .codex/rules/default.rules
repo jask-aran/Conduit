@@ -42,7 +42,7 @@ prefix_rule(
     justification="Run Conduit's browser entry-point regression suite with any focused project, grep, worker, or reporter options",
 )
 prefix_rule(
-    pattern=["bash", ".devcontainer/start-conduit.sh", "restart"],
+    pattern=["bash", "scripts/start-conduit.sh", "restart"],
     decision="allow",
     justification="Restart Conduit's managed WSL-accessible server; other script actions remain under review",
 )

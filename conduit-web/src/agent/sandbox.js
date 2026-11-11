@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { ExecutionError, FileError } from "@earendil-works/pi-durable/env";
 
 const source = fileURLToPath(new URL("./sandbox/landlock.c", import.meta.url));
-const managedBin = fileURLToPath(new URL("../../../working-files/.venv/bin", import.meta.url));
+const managedBin = fileURLToPath(new URL("../../python/.venv/bin", import.meta.url));
 const builds = new Map();
 // Each environment is made per call: what its commands may read is kept across them, by folder and PATH.
 const grantsFor = new Map();

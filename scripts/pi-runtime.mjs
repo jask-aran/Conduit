@@ -123,7 +123,8 @@ export function buildManagedToolEnvironment(
   const pathKey = Object.keys(runtimeEnv).find((key) => key.toLowerCase() === "path") || "PATH";
   const managedBin = path.join(
     path.resolve(root),
-    "working-files",
+    "conduit-web",
+    "python",
     ".venv",
     platform === "win32" ? "Scripts" : "bin",
   );

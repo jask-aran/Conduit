@@ -7,7 +7,7 @@
 # through.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-[ -f dist/index.html ] || { echo "No dist/: run .devcontainer/start-conduit.sh restart first" >&2; exit 1; }
+[ -f dist/index.html ] || { echo "No dist/: run scripts/start-conduit.sh restart first" >&2; exit 1; }
 npx cap copy android >/dev/null
 # The server's precompressed copies: Android's asset merger takes foo.js.gz for a second foo.js.
 find android/app/src/main/assets/public \( -name '*.gz' -o -name '*.br' \) -delete

@@ -294,8 +294,8 @@ use() {
     dev)
       local root; root="$(readlink -f "${2:-$PWD}")"
       [[ -f "$root/conduit-web/src/server.js" ]] || fail "$root is not a Conduit clone."
-      [[ -d "$root/conduit-web/node_modules" ]] || fail "Install its dependencies first: bash .devcontainer/start-conduit.sh setup"
-      [[ -f "$root/conduit-web/dist/index.html" ]] || note "Its client is not built yet: bash .devcontainer/start-conduit.sh build"
+      [[ -d "$root/conduit-web/node_modules" ]] || fail "Install its dependencies first: bash scripts/start-conduit.sh setup"
+      [[ -f "$root/conduit-web/dist/index.html" ]] || note "Its client is not built yet: bash scripts/start-conduit.sh build"
       mkdir -p "$APP_HOME"; ln -sfn "$root" "$CURRENT" ;;
     release|latest)
       local newest; newest="$(ls -1t "$APP_HOME/versions" 2>/dev/null | head -1 || true)"
@@ -309,7 +309,7 @@ use() {
     *) fail "use dev <clone> | release | v<version>" ;;
   esac
   link_cli
-  if [[ "$(code_kind)" == release && ! -x "$CURRENT/working-files/.venv/bin/python" ]]; then
+  if [[ "$(code_kind)" == release && ! -x "$CURRENT/conduit-web/python/.venv/bin/python" ]]; then
     sync_python && ok "Python tools for this release" || warn "Python tools skipped"
   fi
   ok "Now $(code_label)"
@@ -335,7 +335,7 @@ sync_python() {
     curl -fsSL "https://astral.sh/uv/$UV_VERSION/install.sh" | env UV_UNMANAGED_INSTALL="$(dirname "$uv")" sh >/dev/null 2>&1
   fi
   env UV_CACHE_DIR="$tools/uv-cache" UV_PYTHON_INSTALL_DIR="$tools/python" \
-    "$uv" sync --project "$CURRENT/working-files" --locked --no-dev --no-install-project \
+    "$uv" sync --project "$CURRENT/conduit-web/python" --locked --no-dev --no-install-project \
     --python 3.13 --managed-python --quiet
 }
 
@@ -907,7 +907,7 @@ doctor_checks() {
   local node; node="$(node_bin)"
   [[ -x "$node" ]] && echo "ok|Node $("$node" --version)||" || echo "warn|No Node for $(code_label)||"
   command -v "$NAME" >/dev/null 2>&1 || echo "warn|CLI is not on shell PATH|Use $HOME/.local/bin/$NAME or run the installer|"
-  [[ -x "$CURRENT/working-files/.venv/bin/python" ]] && echo "ok|Python tools||" || echo "warn|Python tools missing||python"
+  [[ -x "$CURRENT/conduit-web/python/.venv/bin/python" ]] && echo "ok|Python tools||" || echo "warn|Python tools missing||python"
   [[ -f "$CONDUIT_DATA_ROOT/auth.json" ]] && echo "ok|Login password||" || echo "warn|No login password|$NAME password|"
   if [[ "$(service_kind)" == systemd ]]; then
     [[ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" == yes ]] && echo "ok|Runs after you log out||" || echo "warn|Stops when you log out|lingering is off|linger"

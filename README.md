@@ -68,9 +68,9 @@ Nothing needs root. Manage it with `conduit-server status`, `logs` and
 Install Node.js and npm, then run:
 
 ```bash
-bash .devcontainer/start-conduit.sh setup
+bash scripts/start-conduit.sh setup
 node scripts/conduit-auth.mjs set-password
-bash .devcontainer/start-conduit.sh restart
+bash scripts/start-conduit.sh restart
 ```
 
 Open <http://127.0.0.1:4310>. Connect a model provider in **Settings › Services › Integrations**.

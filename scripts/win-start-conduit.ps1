@@ -12,7 +12,7 @@ $ErrorActionPreference = "Stop"
 $launcherDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $root = Split-Path -Parent $launcherDir
 $webDir = Join-Path $root "conduit-web"
-$workingFilesDir = Join-Path $root "working-files"
+$workingFilesDir = Join-Path $root "conduit-web\python"
 $uvVersion = "0.11.29"
 $userProfile = [Environment]::GetFolderPath("UserProfile")
 $stateDir = if ([string]::IsNullOrWhiteSpace($env:CONDUIT_STATE_DIR)) {
@@ -47,7 +47,7 @@ function Show-ExecutionPolicyGuidance {
   Write-Output "To allow direct execution of local PowerShell scripts for your user, run:"
   Write-Output "  Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned"
   Write-Output "If you do not want to change the policy permanently, run this launcher with:"
-  Write-Output "  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.devcontainer\win-start-conduit.ps1 <command>"
+  Write-Output "  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\win-start-conduit.ps1 <command>"
 }
 
 Show-ExecutionPolicyGuidance
@@ -106,7 +106,7 @@ function Prepare-Directories {
 
 function Guard-ComponentMode {
   if ((Test-Path -LiteralPath $solidComponentsStateFile) -and $env:CONDUIT_SOLID_COMPONENTS_MANAGED -ne "1") {
-    throw "A local solid-components mode is active. Use .devcontainer\solid-components.sh status, or set CONDUIT_SOLID_COMPONENTS_MANAGED=1 for a managed component run."
+    throw "A local solid-components mode is active. Use scripts\solid-components.sh status, or set CONDUIT_SOLID_COMPONENTS_MANAGED=1 for a managed component run."
   }
 }
 
@@ -126,10 +126,10 @@ function Invoke-Npm {
 
 function Require-Dependencies {
   if (-not (Test-Path -LiteralPath (Join-Path $webDir "node_modules\.bin\vite.cmd"))) {
-    throw "Conduit dependencies are not installed. Run: .\.devcontainer\win-start-conduit.ps1 setup"
+    throw "Conduit dependencies are not installed. Run: .\scripts\win-start-conduit.ps1 setup"
   }
   if (-not (Test-Path -LiteralPath (Join-Path $workingFilesDir ".venv\Scripts\python.exe"))) {
-    throw "Conduit's managed Python environment is not installed. Run: .\.devcontainer\win-start-conduit.ps1 setup"
+    throw "Conduit's managed Python environment is not installed. Run: .\scripts\win-start-conduit.ps1 setup"
   }
 }
 
@@ -225,7 +225,7 @@ function Start-Server {
   Prepare-Directories
   Require-Dependencies
   if (-not $Watch -and -not (Test-Path -LiteralPath (Join-Path $webDir "dist\index.html"))) {
-    throw "No production build found. Run: .\.devcontainer\win-start-conduit.ps1 build"
+    throw "No production build found. Run: .\scripts\win-start-conduit.ps1 build"
   }
 
   $existing = Get-ProcessRecord $pidFile "server"
@@ -424,7 +424,7 @@ function Show-Logs {
 
 function Show-Usage {
   @"
-Usage: .\.devcontainer\win-start-conduit.ps1 <command>
+Usage: .\scripts\win-start-conduit.ps1 <command>
 
 Commands:
   setup                 Install web and bundled Isolated Pi dependencies.

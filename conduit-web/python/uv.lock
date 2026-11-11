@@ -42,7 +42,7 @@ wheels = [
 ]
 
 [[package]]
-name = "conduit-working-files"
+name = "conduit-python"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

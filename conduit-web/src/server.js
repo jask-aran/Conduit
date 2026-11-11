@@ -234,9 +234,9 @@ const harnessConfig = {
   fxCommand: process.env.CONDUIT_FX_COMMAND || "fx",
   opencodeCommand: process.env.CONDUIT_OPENCODE_COMMAND || "opencode2",
   chatgptWebPython: process.env.CONDUIT_CHATGPT_WEB_PYTHON
-    || path.join(config.repositoryRoot, "working-files/.venv/bin/python"),
+    || path.join(config.repositoryRoot, "conduit-web/python/.venv/bin/python"),
   chatgptWebScript: process.env.CONDUIT_CHATGPT_WEB_SIDECAR
-    || path.join(config.repositoryRoot, "working-files/chatgpt_web_sidecar.py"),
+    || path.join(config.repositoryRoot, "conduit-web/python/chatgpt_web_sidecar.py"),
   chatgptWebDataDir: path.join(config.dataRoot, "chatgpt-web"),
   testStreamDataDir: path.join(config.dataRoot, "test-stream"),
   dataRoot: config.dataRoot,

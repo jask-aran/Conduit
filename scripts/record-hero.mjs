@@ -37,13 +37,13 @@ async function healthy() {
 await fs.mkdir(runtime, { recursive: true });
 await fs.mkdir(toolsRoot, { recursive: true });
 if (!await fs.stat(path.join(root, "conduit-web/node_modules/.bin/vite")).catch(() => null)) {
-  throw new Error("Install web dependencies with bash .devcontainer/start-conduit.sh setup");
+  throw new Error("Install web dependencies with bash scripts/start-conduit.sh setup");
 }
 if (!await fs.stat(path.join(toolsRoot, "node_modules/playwright/index.mjs")).catch(() => null)) {
   run("npm", ["install", "--prefix", toolsRoot, "--no-save", "--package-lock=false", "playwright"]);
 }
-run("bash", [".devcontainer/start-conduit.sh", "build"]);
-if (!await healthy()) run("bash", [".devcontainer/start-conduit.sh", "start"]);
+run("bash", ["scripts/start-conduit.sh", "build"]);
+if (!await healthy()) run("bash", ["scripts/start-conduit.sh", "start"]);
 if (!await healthy()) throw new Error("Demo server did not answer /healthz on port 4311");
 
 const authFile = path.join(dataRoot, "auth.json");
@@ -263,7 +263,7 @@ run("ffmpeg", ["-y", "-loglevel", "error", "-i", path.join(out, "hero.mp4"), "-i
 const bytes = (await fs.stat(path.join(out, "hero.gif"))).size;
 const duration = Number(run("ffprobe", ["-v", "error", "-show_entries", "format=duration",
   "-of", "default=noprint_wrappers=1:nokey=1", path.join(out, "hero.mp4")]));
-run("bash", [".devcontainer/start-conduit.sh", "stop"]);
+run("bash", ["scripts/start-conduit.sh", "stop"]);
 console.log(JSON.stringify({ duration, gifBytes: bytes, setupSeconds, heroChat: marker.lastHeroChat }));
 if (bytes > 8_000_000) throw new Error("hero.gif is over 8 MB; shorten the recording");
 if (duration < 15 || duration > 20) throw new Error("hero.mp4 must be 15 to 20 seconds");

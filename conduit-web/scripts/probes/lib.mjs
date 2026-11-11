@@ -60,7 +60,7 @@ export async function launchHeadless(chromium) {
  */
 export async function open({ windows = flag("--windows"), width = 1800, height = 1000 } = {}) {
   if (!(await fetch(`${origin}/healthz`).then((response) => response.ok, () => false))) {
-    console.error(`No Conduit at ${origin}: bash .devcontainer/start-conduit.sh start`);
+    console.error(`No Conduit at ${origin}: bash scripts/start-conduit.sh start`);
     process.exit(2);
   }
   const { chromium } = await loadPlaywright();

@@ -58,7 +58,7 @@ The development checkout and installed server release use the same daemon and
 After a checkout change, run from the repository root:
 
 ```bash
-bash .devcontainer/start-conduit.sh restart
+bash scripts/start-conduit.sh restart
 ```
 
 For a separate fresh installation:

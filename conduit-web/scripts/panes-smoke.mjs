@@ -38,7 +38,7 @@ async function launch(chromium) {
 }
 
 if (!(await fetch(`${origin}/healthz`).then((response) => response.ok, () => false))) {
-  console.error(`No Conduit at ${origin}: bash .devcontainer/start-conduit.sh start`);
+  console.error(`No Conduit at ${origin}: bash scripts/start-conduit.sh start`);
   process.exit(2);
 }
 const scratch = await fs.mkdtemp(path.join(os.tmpdir(), "panes-smoke-"));
