@@ -1729,11 +1729,12 @@ export function Settings(props: {
                 </Group>
                 <Show when={hexHere()}>{(hex) => <Group title="Hex" scope="This computer">
                   <SettingLine plain label={<><HarnessMark id="hex" />Hex app</>} state={hex().version ? `version ${hex().version}` : undefined} title="The Hex dictation app on this computer. Conduit uses its models and settings as they are.">
+                    <Button variant="ghost" size="icon-sm" aria-label="Hex website" title="Hex website" onClick={() => window.open("https://anoma.ly/hex", "_blank", "noopener,noreferrer")}><Icons.Browser /></Button>
+                    <Button variant="ghost" size="icon-sm" aria-label="Hex on GitHub" title="Hex on GitHub" onClick={() => window.open("https://github.com/anomalyco/hex", "_blank", "noopener,noreferrer")}><HarnessMark id="github" /></Button>
                     <SettingValue>{HEX_STATES[hex().state]}</SettingValue>
                     <Button variant="ghost" size="icon-sm" aria-label="Look for Hex again" title="Look again" onClick={() => void refetchHex()}><Icons.Refresh /></Button>
                   </SettingLine>
-                  <Note tone="quiet"><span>Conduit can use Hex by AnomalyCo (creators of opencode), for transcription right on this device, if you have it installed.</span>
-                    <SettingLink href="https://anoma.ly/hex"><Icons.Browser /> Website</SettingLink><SettingLink href="https://github.com/anomalyco/hex"><HarnessMark id="github" /> GitHub</SettingLink></Note>
+                  <Note tone="quiet"><span>Conduit can use Hex by AnomalyCo (creators of opencode), for transcription right on this device, if you have it installed.</span></Note>
                   <SettingLine label="Dictate with Hex" state={voiceDraft().useHex && hex().state !== "ready" ? "using the hub until Hex is listening" : undefined} title="Audio stays on this computer and text appears as you speak. A dictation Hex cannot take goes to the hub.">
                     <Switch label="Dictate with Hex" checked={voiceDraft().useHex} onChange={(useHex) => updateVoiceDraft({ useHex })} />
                   </SettingLine>

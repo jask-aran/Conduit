@@ -134,8 +134,7 @@ input.ui-setting-title:focus-visible { border-color: var(--ring); background: va
 .ui-setting-state-link:focus-visible { outline: none; color: var(--foreground); }
 @media (hover: hover) { .ui-setting-state-link:hover { color: var(--foreground); } }
 .ui-setting-link { white-space: nowrap; border-radius: var(--radius-control); padding: var(--space-2xs) var(--space-md); color: var(--muted-foreground); text-decoration: none; }
-.ui-setting-link > :is(svg, .ui-harness-mark) { display: inline-block; width: var(--icon-sm); height: var(--icon-sm); margin-right: var(--space-xs); vertical-align: text-bottom; }
-.ui-setting-link > .ui-harness-mark-tinted { background-color: currentColor; mask: center / contain no-repeat; }
+.ui-setting-control > .ui-button > .ui-harness-mark-tinted { width: var(--icon-sm); height: var(--icon-sm); background-color: currentColor; mask: center / contain no-repeat; }
 .ui-setting-link:is(:focus-visible) { outline: none; color: var(--foreground); }
 .ui-note:where([data-note="setting"]) { margin: 0; padding: 0 var(--space-md) var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-note:where([data-note="setting"])[data-tone="error"] { color: var(--destructive); }
