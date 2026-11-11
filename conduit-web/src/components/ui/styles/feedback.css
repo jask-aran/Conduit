@@ -33,6 +33,10 @@
 .ui-feedback-notes[data-lifted] { bottom: calc(var(--space-lg) + var(--feedback-bar-height) + var(--space-sm)); }
 .ui-feedback-notes > :first-child { margin-top: auto; }
 .ui-feedback-note { flex: none; }
+/* What was said of a sent comment: the person's words plain, the agent's set in from a rule. */
+.ui-feedback-said { margin: 0; color: var(--foreground); font-size: var(--text-caption); overflow-wrap: anywhere; }
+.ui-feedback-said[data-from="agent"] { border-left: var(--stroke) solid var(--primary); padding-left: var(--space-sm); }
+.ui-feedback-said[data-from="person"] { color: var(--muted-foreground); }
 .ui-feedback-note[data-float] { position: fixed; width: var(--measure-md); max-width: calc(100% - 2 * var(--space-lg)); }
 .ui-feedback-note .ui-card-preview { overflow: hidden; }
 .ui-feedback-note .ui-card-preview > img { display: block; max-width: 100%; max-height: var(--measure-2xs); margin-inline: auto; border-radius: var(--radius-inset); object-fit: contain; }

@@ -26,6 +26,10 @@ export const NO_NAMES: PieceNames = { pieces: {}, classes: {}, styles: {}, ancho
 export type FeedbackListener = { name: string; state: "waiting" | "working" };
 export type FeedbackHanded = { to: { name: string } | null };
 
+/** An item once sent, as the person follows it: where it stands (`by`: the session it was handed to or that took it), and what was said about each comment (`n`) or the item as a whole. */
+export type FeedbackThread = { id: string; state: "waiting" | "taken" | "handled"; by: string | null; unread: number;
+  comments: { n: number; name: string; comment: string }[]; messages: { at: string; from: "agent" | "person"; n: number | null; text: string }[] };
+
 /** What Send carries besides the pictures. `comments` and `screenshot` are the tool's; `client` is the tool's facts (url, viewport, userAgent) with the host's own over them. */
 export type FeedbackSend = { comments: unknown[]; screenshot: Record<string, unknown>; client: Record<string, unknown>; to: string | null };
 
@@ -34,7 +38,13 @@ export interface FeedbackTransport {
   mark(client: string): Promise<{ id: string }>;
   /** A PNG for a mark: the whole screenshot, or selection `n`'s own area of it. */
   picture(mark: string, png: Blob, n?: number): Promise<void>;
-  send(mark: string, item: FeedbackSend): Promise<{ handed: FeedbackHanded }>;
+  send(mark: string, item: FeedbackSend): Promise<{ id: string; handed: FeedbackHanded }>;
+  /** A sent item's thread; `seen`: the person is reading it now. */
+  thread(id: string, seen?: boolean): Promise<FeedbackThread>;
+  /** The person writes back, about comment `n` or the item as a whole. */
+  say(id: string, n: number | null, text: string): Promise<FeedbackThread>;
+  /** The latest items not finished or with an answer unread, newest first. */
+  threads(): Promise<{ id: string; state: FeedbackThread["state"]; by: string | null; unread: number }[]>;
   /** A mark nothing was sent to. */
   drop(mark: string): Promise<void>;
   listening(): Promise<FeedbackListener[]>;
@@ -62,6 +72,9 @@ export function httpTransport(request: <T>(path: string, init?: { method?: strin
     picture: (mark, body, n) => request(n === undefined ? `${base}/marks/${mark}/screenshot` : `${base}/marks/${mark}/areas/${n}`, png(body)),
     send: (mark, item) => request(`${base}/marks/${mark}/send`, { method: "POST", body: JSON.stringify(item) }),
     drop: (mark) => request(`${base}/marks/${mark}`, { method: "DELETE" }),
+    thread: (id, seen) => request(`${base}/items/${id}${seen ? "?seen" : ""}`),
+    say: (id, n, text) => request(`${base}/items/${id}/messages`, { method: "POST", body: JSON.stringify({ n, text }) }),
+    threads: () => request<{ items: Awaited<ReturnType<FeedbackTransport["threads"]>> }>(`${base}/items`).then((answer) => answer.items),
     listening: () => request<{ waiting: FeedbackListener[] }>(`${base}/waiting`).then((answer) => answer.waiting),
   };
 }

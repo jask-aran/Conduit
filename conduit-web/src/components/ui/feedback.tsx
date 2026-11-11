@@ -1,4 +1,4 @@
-import { createUniqueId, Show, type JSX } from "solid-js";
+import { createUniqueId, For, Show, type JSX } from "solid-js";
 // Through the barrel, so the tool's chunk takes these from the app's own and the build splits nothing new out of it.
 import { Button, Card, CardPreview, CloseButton, Frost, IconButton, Icons, Segmented, Spinner, Swatch, TextArea } from "./index";
 import "./styles/feedback.css";
@@ -62,15 +62,17 @@ export const FeedbackNotes = (props: { lift?: number; children: JSX.Element }) =
   <div class="ui-feedback-notes" data-lifted={props.lift ? "" : undefined} style={{ "--feedback-bar-height": `${props.lift ?? 0}px` }}>{props.children}</div>;
 
 /** One comment. `float`: where it sits beside what it is about while it is written, with Done to send it to the stack. In the stack, shut, it shows
- *  its words on a line and its `picture`, and a press opens it. */
-export function FeedbackNote(props: { ref?: (element: HTMLTextAreaElement) => void; float?: JSX.CSSProperties; open: boolean; tag: string; name: string; source?: string; value: string; picture?: string;
-  onOpen: () => void; onInput: (value: string) => void; onDone?: () => void; onRemove: () => void }) {
+ *  its words on a line and its `picture`, and a press opens it. Once sent it is a thread: `said` is what the person and the agent have written about
+ *  it, the field is the person's answer (`placeholder`), and it is not removed. */
+export function FeedbackNote(props: { ref?: (element: HTMLTextAreaElement) => void; float?: JSX.CSSProperties; open: boolean; tag: string; name: string; source?: string; value: string; picture?: string; said?: { from: "agent" | "person"; text: string }[]; placeholder?: string;
+  onOpen: () => void; onInput: (value: string) => void; onDone?: () => void; onRemove?: () => void }) {
   return <div class="ui-feedback-note" style={props.float} data-float={props.float ? "" : undefined} data-open={props.open ? "" : undefined} onClick={(event) => { if (!props.open && !(event.target as Element).closest("button")) props.onOpen(); }}>
-    <Card size="compact" role="group" label={props.tag ? `Comment ${props.tag}` : props.name} title={<><Show when={props.tag}><b class="ui-feedback-number">{props.tag}</b></Show>{props.name}</>} detail={props.open ? props.source : props.value.trim() || (props.picture ? undefined : "No comment yet")}
+    <Card size="compact" role="group" label={props.tag ? `Comment ${props.tag}` : props.name} title={<><Show when={props.tag}><b class="ui-feedback-number">{props.tag}</b></Show>{props.name}</>} detail={props.said ? undefined : props.open ? props.source : props.value.trim() || (props.picture ? undefined : "No comment yet")}
       close={props.float ? props.onDone : props.onRemove} closeLabel={props.float ? "Done" : "Remove"}
       actions={props.float ? <><Button variant="ghost" size="sm" onClick={props.onRemove}>Remove</Button><Button variant="primary" outline size="sm" onClick={props.onDone}>Done</Button></> : undefined}>
       <Show when={props.picture && !props.float}><CardPreview><img src={props.picture} alt="" /></CardPreview></Show>
-      <Show when={props.open}><TextArea ref={props.ref} rows={2} placeholder="What should change?" value={props.value} onInput={(event) => props.onInput(event.currentTarget.value)} /></Show>
+      <For each={props.said}>{(line) => <p class="ui-feedback-said" data-from={line.from}>{line.text}</p>}</For>
+      <Show when={props.open}><TextArea ref={props.ref} rows={2} placeholder={props.placeholder ?? "What should change?"} value={props.value} onInput={(event) => props.onInput(event.currentTarget.value)} /></Show>
     </Card>
   </div>;
 }
@@ -88,8 +90,9 @@ export type FeedbackView = "use" | "page" | "screenshot";
  *  the annotating tools, with a general note among them and no Select on a screenshot, which has nothing under it to select; the ink the next
  *  drawing is in (a press takes the next) and Undo, both left to the keyboard and the eraser on a phone; a new screenshot while
  *  one is looked at; the listening session the item is handed to (`agent`, none when no session listens); Send and close. `compact`: icons alone,
- *  for a phone's width. */
-export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; onView: (view: FeedbackView) => void; tool: FeedbackToolKind; onTool: (tool: FeedbackToolKind) => void; onNote: () => void; ink?: FeedbackInk; onInk?: (ink: FeedbackInk) => void; onUndo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
+ *  for a phone's width. `thread`: the item is sent and its thread is followed, so the bar is only what was said of it (`status`) and close.
+ *  `replies`: answers unread on an item sent earlier, and the way to them. */
+export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; onView: (view: FeedbackView) => void; tool: FeedbackToolKind; onTool: (tool: FeedbackToolKind) => void; onNote: () => void; thread?: boolean; replies?: number; onReplies?: () => void; ink?: FeedbackInk; onInk?: (ink: FeedbackInk) => void; onUndo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
   canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void }) {
   const using = () => props.view === "use";
   const views = (): Array<{ value: FeedbackView; label: string; icon: JSX.Element }> => [
@@ -97,18 +100,22 @@ export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; 
     ...(props.screenshots ? [{ value: "screenshot" as const, label: "Annotate a screenshot", icon: <Icons.Image /> }] : []),
   ];
   return <Frost lift="raised" class="ui-feedback-bar" data-compact={props.compact ? "" : undefined} role="toolbar" aria-label="UI feedback">
-    {/* With no screenshot to be had there are two modes, and one control says which. */}
-    <Show when={props.screenshots} fallback={<IconButton label={views()[0]!.label} aria-pressed={using()} onClick={() => props.onView(using() ? "page" : "use")}><Icons.UseApp /></IconButton>}>
-      <Segmented label="Mode" icons size="sm" value={props.view} onChange={props.onView} options={views()} />
+    <Show when={!props.thread}>
+      {/* With no screenshot to be had there are two modes, and one control says which. */}
+      <Show when={props.screenshots} fallback={<IconButton label={views()[0]!.label} aria-pressed={using()} onClick={() => props.onView(using() ? "page" : "use")}><Icons.UseApp /></IconButton>}>
+        <Segmented label="Mode" icons size="sm" value={props.view} onChange={props.onView} options={views()} />
+      </Show>
+      <Segmented label="Annotate with" icons size="sm" value={props.tool} onChange={(tool) => tool === "note" ? props.onNote() : props.onTool(tool)} disabled={using()}
+        options={TOOLS.filter((option) => option.value !== "select" || props.view !== "screenshot").map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} />
+      <Show when={!props.compact}><span class="ui-feedback-with">
+        <Show when={props.onInk}>{(onInk) => { const inks = Object.keys(FEEDBACK_INKS) as FeedbackInk[], now = () => props.ink ?? "plain";
+          return <IconButton label={`Ink: ${FEEDBACK_INKS[now()].label} (C)`} disabled={using()} onClick={() => onInk()(inks[(inks.indexOf(now()) + 1) % inks.length]!)}><Swatch colour={FEEDBACK_INKS[now()].colour} /></IconButton>; }}</Show>
+        <IconButton label="Undo (Ctrl Z)" disabled={!props.onUndo || using()} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton>
+      </span></Show>
     </Show>
-    <Segmented label="Annotate with" icons size="sm" value={props.tool} onChange={(tool) => tool === "note" ? props.onNote() : props.onTool(tool)} disabled={using()}
-      options={TOOLS.filter((option) => option.value !== "select" || props.view !== "screenshot").map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} />
-    <Show when={!props.compact}><span class="ui-feedback-with">
-      <Show when={props.onInk}>{(onInk) => { const inks = Object.keys(FEEDBACK_INKS) as FeedbackInk[], now = () => props.ink ?? "plain";
-        return <IconButton label={`Ink: ${FEEDBACK_INKS[now()].label} (C)`} disabled={using()} onClick={() => onInk()(inks[(inks.indexOf(now()) + 1) % inks.length]!)}><Swatch colour={FEEDBACK_INKS[now()].colour} /></IconButton>; }}</Show>
-      <IconButton label="Undo (Ctrl Z)" disabled={!props.onUndo || using()} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton>
-    </span></Show>
-    <Show when={props.status && !props.compact}><span class="ui-feedback-status">{props.status}</span></Show>
+    <Show when={props.status && (props.thread || !props.compact)}><span class="ui-feedback-status">{props.status}</span></Show>
+    <Show when={props.replies && !props.thread}><IconButton label={`${props.replies} unread from the agent, on what was sent before`} count={props.replies} onClick={props.onReplies}><Icons.Inbox /></IconButton></Show>
+    <Show when={!props.thread}>
     <span class="ui-feedback-with">
       <Show when={props.onRetake && props.view === "screenshot"}><IconButton label="Take the screenshot again" onClick={props.onRetake}><Icons.Camera /></IconButton></Show>
       <Show when={props.onHand}>
@@ -120,6 +127,7 @@ export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; 
     </span>
     <Show when={props.compact} fallback={<Button variant="primary" outline size="sm" disabled={!props.canSend || props.sending} onClick={props.onSend}><Show when={props.sending} fallback="Send"><Spinner /></Show></Button>}>
       <IconButton label="Send" disabled={!props.canSend || props.sending} onClick={props.onSend}><Show when={props.sending} fallback={<Icons.Send />}><Spinner /></Show></IconButton>
+    </Show>
     </Show>
     <CloseButton size="sm" label="Close feedback" onClick={props.onClose} />
   </Frost>;

@@ -6,13 +6,16 @@
 // feedback tool's routes on this machine only, writing ./.feedback, so wait/take/done work there as they do here.
 // An item is taken by one waiter (taken.json, written exclusively). `wait` takes only what was handed to its name;
 // everything else stays in the folder until `take <id>`.
+//
+// An item is a thread: `reply <id> [n] <words>` answers the person (about comment n, or the item as a whole) in
+// <id>/thread.jsonl, where the tool reads it; what they write back there ends the same name's next `wait`.
 import fs from "node:fs/promises";
 import { existsSync, rmSync, watch } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 const local = path.resolve(".feedback");
-const [command, argument] = process.argv.slice(2);
+const [command, argument, ...rest] = process.argv.slice(2);
 const folder = process.env.CONDUIT_FEEDBACK_DIR ? path.resolve(process.env.CONDUIT_FEEDBACK_DIR)
   : process.env.CONDUIT_DATA_ROOT ? path.join(path.resolve(process.env.CONDUIT_DATA_ROOT), "feedback")
   : command === "serve" || existsSync(local) ? local
@@ -44,6 +47,21 @@ async function take(name) {
   }
   return null;
 }
+const thread = async (id) => (await fs.readFile(path.join(folder, id, "thread.jsonl"), "utf8").catch(() => "")).split("\n").filter(Boolean).map((line) => JSON.parse(line));
+/** What the person has written back on an item this name took and has not finished, not yet handed to it. */
+async function writtenBack(name) {
+  for (const entry of await items()) {
+    if (entry.state !== "taken") continue;
+    const dir = path.join(folder, entry.id);
+    if (JSON.parse(await fs.readFile(path.join(dir, "taken.json"), "utf8")).name !== name) continue;
+    const said = (await thread(entry.id)).filter((message) => message.from === "person");
+    const read = await fs.readFile(path.join(dir, "agent-read.json"), "utf8").then((text) => JSON.parse(text).person, () => 0);
+    if (said.length <= read) continue;
+    await fs.writeFile(path.join(dir, "agent-read.json"), `${JSON.stringify({ person: said.length })}\n`);
+    return { entry, said: said.slice(read) };
+  }
+  return null;
+}
 const hand = (entry) => {
   console.log(entry.item);
   console.log(`Read it (its \`read\` says how), do what it asks, then: node ${script} done ${entry.id}`);
@@ -57,23 +75,28 @@ if (command === "wait") {
   const leave = () => { try { rmSync(mine); } catch { /* already gone */ } };
   process.on("exit", leave);
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(signal, () => process.exit(130));
-  let taken = await take(name);
+  const next = async () => { const back = await writtenBack(name); return back ?? await take(name); };
+  let taken = await next();
   if (!taken) {
     taken = await new Promise((resolve) => {
       let looking = false;
       const look = async () => {
         if (looking) return;
         looking = true;
-        const found = await take(name).catch(() => null);
+        const found = await next().catch(() => null);
         looking = false;
         if (found) { watcher.close(); clearInterval(poll); resolve(found); }
       };
-      // The rename that publishes an item is the event; the poll covers a filesystem that reports none.
+      // The rename that publishes an item is the event; the poll covers a filesystem that reports none, and what is written back inside an item.
       const watcher = watch(folder, () => void look());
       const poll = setInterval(() => void look(), 2000);
     });
   }
-  hand(taken);
+  if (taken.said) {
+    console.log(`The person wrote back on ${taken.entry.item}:`);
+    for (const message of taken.said) console.log(`  ${message.n ? `about comment ${message.n}` : "about the item"}: ${message.text}`);
+    console.log(`Answer with: node ${script} reply ${taken.entry.id} [n] "<words>"`);
+  } else hand(taken);
   console.log(`To keep taking the person's feedback, run \`node ${script} wait${argument ? ` ${JSON.stringify(argument)}` : ""}\` in the background again now.`);
 } else if (command === "serve") {
   const { createServer } = await import("node:http");
@@ -95,6 +118,13 @@ if (command === "wait") {
   if (!entry) { console.error(`No feedback item ${argument} in ${folder}`); process.exit(1); }
   if (entry.state === "waiting" && !await claim(entry)) { console.error(`${entry.id} was taken just now`); process.exit(1); }
   hand(entry);
+} else if (command === "reply" && argument && rest.length) {
+  const id = path.basename(argument), dir = path.join(folder, id);
+  if (!await exists(path.join(dir, "item.json"))) { console.error(`No feedback item ${argument} in ${folder}`); process.exit(1); }
+  const n = rest.length > 1 && /^\d+$/.test(rest[0]) ? Number(rest.shift()) : null;
+  const by = await fs.readFile(path.join(dir, "taken.json"), "utf8").then((text) => JSON.parse(text).name ?? null, () => null);
+  await fs.appendFile(path.join(dir, "thread.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), from: "agent", ...(by ? { by } : {}), n, text: rest.join(" ") })}\n`);
+  console.log(`Said on ${id}${n ? `, comment ${n}` : ""}`);
 } else if (command === "done" && argument) {
   const dir = path.join(folder, path.basename(argument));
   if (!await exists(path.join(dir, "item.json"))) { console.error(`No feedback item ${argument} in ${folder}`); process.exit(1); }
@@ -110,6 +140,6 @@ if (command === "wait") {
     if (waiter && alive(waiter.id)) console.log(`waiter   ${waiter.name}  (${waiter.cwd}, since ${waiter.since})`);
   }
 } else {
-  console.log("Usage: conduit-feedback wait [name] | take <id> | done <id> | list | serve [port]");
+  console.log("Usage: conduit-feedback wait [name] | take <id> | reply <id> [n] <words> | done <id> | list | serve [port]");
   process.exit(command ? 1 : 0);
 }

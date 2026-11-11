@@ -8,6 +8,10 @@ import { randomBytes } from "node:crypto";
  * selection-<n>.png), built beside it and renamed into place, so a reader never sees half of one. It also knows which
  * agent sessions are listening (scripts/conduit-feedback.mjs `wait`) and hands an item to one by name.
  *
+ * An item is also a thread: what the agent answers (the script's `reply`, written straight to the folder) and what the
+ * person writes back (here) are lines of <id>/thread.jsonl, each about one comment (`n`) or the item as a whole. That
+ * is the same whether a session was listening when the item was sent or one takes it days later.
+ *
  * It runs with no hub: Node's own modules only, and everything of its host through the options. Conduit's hub wraps it
  * (feedback.js: what the hub knew at the mark, its routes); `conduit-feedback serve` runs it alone for any project.
  *
@@ -18,6 +22,8 @@ import { randomBytes } from "node:crypto";
  *   log        (entry) => told of each item written
  */
 const MARKS = 12;
+/** How many of the latest items are looked through for one still open. */
+const THREADS = 20;
 const MARK_MS = 6 * 60 * 60_000;
 /** A session that took an item this long ago and has not finished it is no longer taken to be at work on it. */
 const WORKING_MS = 60 * 60_000;
@@ -102,6 +108,7 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
         "A group's `members` are each described the same way. `rect` is in CSS pixels of the client's viewport; `screenshotRect` is the same box in screenshot.png, present only when the picture is the page alone.",
         "screenshot.png shows what `screenshot.of` says (the `screenshot` the person drew on, or the live `page` at Send) with the selections made on it outlined and numbered as `n`. A comment's `picture.file` is that selection alone, cut from the one it was made on: `picture.area` is the part of the page it shows, the area the person dragged round when `dragged`, else its marks with a margin. Look at it first.",
         ...about,
+        `To answer the person: \`${done(id).replace(/ done .*/, "")} reply ${id} [n] "<words>"\`, n being the comment answered (none: the item as a whole). They read it in the tool beside that comment and may write back; \`wait\` hands you what they say.`,
         `When the item is dealt with: ${done(id)}`,
       ],
       markedAt: kept.markedAt,
@@ -134,7 +141,42 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
     else throw Object.assign(new Error("No such selection"), { status: 400, code: "feedback_area_invalid" });
   }
 
-  return { mark, send, picture, waiting, drop: (id) => marks.delete(id) };
+  const gone = () => Object.assign(new Error("No such feedback item"), { status: 404, code: "feedback_item_gone" });
+  const read = (file) => fs.readFile(file, "utf8").then(JSON.parse).catch(() => null);
+  const lines = async (dir) => (await fs.readFile(path.join(dir, "thread.jsonl"), "utf8").catch(() => "")).split("\n").filter(Boolean).map((line) => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
+
+  /** An item as the person follows it: where it stands, its comments in brief, and what has been said. `seen`: the person has now read it. */
+  async function thread(id, { seen = false } = {}) {
+    if (!/^[\w-]+$/.test(String(id))) throw gone();
+    const dir = path.join(folder, id), item = await read(path.join(dir, "item.json"));
+    if (!item) throw gone();
+    const messages = await lines(dir), taken = await read(path.join(dir, "taken.json")), handled = Boolean(await read(path.join(dir, "handled.json")));
+    const unread = messages.filter((message) => message.from === "agent").length - ((await read(path.join(dir, "person-read.json")))?.agent ?? 0);
+    if (seen && unread) await fs.writeFile(path.join(dir, "person-read.json"), `${JSON.stringify({ agent: messages.filter((message) => message.from === "agent").length })}\n`);
+    return { id, sentAt: item.sentAt, state: handled ? "handled" : taken ? "taken" : "waiting", by: taken?.name ?? item.handed?.to?.name ?? null, unread: Math.max(0, unread),
+      comments: (item.comments ?? []).map((entry) => ({ n: entry.n, name: entry.name, comment: entry.comment })), messages };
+  }
+
+  /** What the person writes back, about comment `n` or the item as a whole. */
+  async function say(id, { n, text } = {}) {
+    const words = String(text ?? "").trim();
+    if (!words) throw Object.assign(new Error("Nothing was said"), { status: 400, code: "feedback_message_empty" });
+    await thread(id);
+    await fs.appendFile(path.join(folder, id, "thread.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), from: "person", n: Number.isInteger(n) ? n : null, text: short(words, 4000) })}\n`);
+    return thread(id);
+  }
+
+  /** The latest items that are not finished or have an answer unread, newest first. */
+  async function threads() {
+    const found = [];
+    for (const id of (await fs.readdir(folder).catch(() => [])).filter((name) => !name.startsWith(".")).sort().reverse().slice(0, THREADS)) {
+      const one = await thread(id).catch(() => null);
+      if (one && (one.unread || one.state !== "handled")) found.push({ id, sentAt: one.sentAt, state: one.state, by: one.by, unread: one.unread, comments: one.comments.length });
+    }
+    return found;
+  }
+
+  return { mark, send, picture, waiting, thread, say, threads, drop: (id) => marks.delete(id) };
 }
 
 /** The store's routes for a plain Node server (the hub has its own, behind its sign-in): true when the request was one of them. */
@@ -142,6 +184,7 @@ export async function handleFeedback(store, request, response, base = "/v0/feedb
   const url = new URL(request.url, "http://localhost");
   if (!url.pathname.startsWith(`${base}/`)) return false;
   const [, id, what, n] = /^\/marks(?:\/([\w-]+))?(?:\/(\w+))?(?:\/(\d+))?$/.exec(url.pathname.slice(base.length)) ?? [];
+  const [, item, said] = /^\/items\/([\w-]+)(\/messages)?$/.exec(url.pathname.slice(base.length)) ?? [];
   const body = async (limit) => { const parts = []; let size = 0; for await (const part of request) { size += part.length; if (size > limit) throw Object.assign(new Error("Too large"), { status: 413 }); parts.push(part); } return Buffer.concat(parts); };
   const json = async () => JSON.parse((await body(4 << 20)).toString("utf8") || "{}");
   const answer = (status, value) => { response.writeHead(status, value === undefined ? {} : { "content-type": "application/json" }); response.end(value === undefined ? undefined : JSON.stringify(value)); };
@@ -153,6 +196,9 @@ export async function handleFeedback(store, request, response, base = "/v0/feedb
     else if (route === "PUT /marks/:id/areas/:n" && what === "areas") { store.picture(id, await body(32 << 20), Number(n)); answer(204); }
     else if (route === "POST /marks/:id/send") answer(201, await store.send(id, await json()));
     else if (route === "DELETE /marks/:id") { store.drop(id); answer(204); }
+    else if (route === "GET /items") answer(200, { items: await store.threads() });
+    else if (request.method === "GET" && item && !said) answer(200, await store.thread(item, { seen: url.searchParams.has("seen") }));
+    else if (request.method === "POST" && item && said) answer(201, await store.say(item, await json()));
     else answer(404, { error: "No such feedback route" });
   } catch (error) {
     answer(error.status ?? 500, { error: error.message, code: error.code });

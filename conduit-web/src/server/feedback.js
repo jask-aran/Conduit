@@ -74,4 +74,7 @@ export function registerFeedbackRoutes(app, feedback) {
   app.post("/v0/feedback/marks/:id/send", async (request, response) => response.status(201).json(await feedback.send(request.params.id, request.body)));
   app.get("/v0/feedback/waiting", async (_request, response) => response.json({ waiting: await feedback.waiting() }));
   app.delete("/v0/feedback/marks/:id", (request, response) => { feedback.drop(request.params.id); response.status(204).end(); });
+  app.get("/v0/feedback/items", async (_request, response) => response.json({ items: await feedback.threads() }));
+  app.get("/v0/feedback/items/:id", async (request, response) => response.json(await feedback.thread(request.params.id, { seen: "seen" in request.query })));
+  app.post("/v0/feedback/items/:id/messages", async (request, response) => response.status(201).json(await feedback.say(request.params.id, request.body)));
 }
