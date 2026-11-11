@@ -1,6 +1,7 @@
 /* Over everything, notifications included: a toast or a menu can be what is marked. */
 .ui-feedback-layer { position: fixed; inset: 0; z-index: var(--layer-feedback); pointer-events: none; font-family: var(--font-sans); }
-.ui-feedback-layer[data-select] { pointer-events: auto; cursor: crosshair; }
+/* touch-action: a finger's drag gathers or draws; it does not scroll the page under the layer. */
+.ui-feedback-layer[data-select] { pointer-events: auto; cursor: crosshair; touch-action: none; }
 .ui-feedback-layer > :is(.ui-feedback-note, .ui-feedback-bar) { pointer-events: auto; cursor: auto; }
 
 .ui-feedback-mark { position: fixed; box-sizing: border-box; border: var(--hairline) solid var(--ring); border-radius: var(--radius-inset); pointer-events: none; }
@@ -25,6 +26,8 @@
 .ui-feedback-note .ui-card > h3 { display: flex; align-items: center; gap: var(--space-sm); font-family: var(--font-data); font-size: var(--text-row); }
 .ui-feedback-note .ui-card > p { overflow: hidden; font-family: var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
 
-.ui-feedback-bar { position: fixed; bottom: var(--space-xl); left: 50%; display: flex; max-width: calc(100% - 2 * var(--space-xl)); align-items: center; gap: var(--space-lg); border-radius: var(--radius-surface); padding: var(--space-sm) var(--space-sm) var(--space-sm) var(--space-sm); color: var(--foreground); font-size: var(--text-row); translate: -50% 0; }
+.ui-feedback-bar { position: fixed; bottom: var(--space-xl); right: var(--space-xl); left: var(--space-xl); display: flex; flex-wrap: wrap; justify-content: center; width: fit-content; margin-inline: auto; align-items: center; gap: var(--space-lg); border-radius: var(--radius-surface); padding: var(--space-sm) var(--space-sm) var(--space-sm) var(--space-sm); color: var(--foreground); font-size: var(--text-row); }
+/* Its controls keep their width; only the status gives way. */
+.ui-feedback-bar > :not(.ui-feedback-status) { flex: none; }
 .ui-feedback-status { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
 .ui-feedback-switch { display: flex; align-items: center; gap: var(--space-sm); color: var(--muted-foreground); white-space: nowrap; }

@@ -7,7 +7,9 @@ import type { FeedbackHost, FeedbackListener } from "./host";
 import { createPieces } from "./pieces";
 
 /** `reach`: how far a drag went past what it locked onto, each side (px); the dragged area is the pieces' box grown by it. */
-type Selection = { id: number; elements: Element[]; comment: string; reach?: FeedbackBox; drawing?: Drawing };
+/** `general`: a note about nothing on the page in particular; it has no elements and no mark. */
+type Selection = { id: number; elements: Element[]; comment: string; reach?: FeedbackBox; drawing?: Drawing; general?: true };
+const GENERAL = "General note";
 /** `from`: where its pieces' box was when it was drawn, so it can follow them. */
 type Drawing = { kind: FeedbackDrawingKind; points: FeedbackPoint[]; from: { left: number; top: number } };
 const DRAW_KEYS: Record<string, "select" | FeedbackDrawingKind> = { v: "select", p: "pen", a: "arrow", b: "box" };
@@ -44,6 +46,10 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const [stroke, setStroke] = createSignal<{ kind: FeedbackDrawingKind; points: FeedbackPoint[] } | null>(null);
   const aimed = createMemo(() => { const drag = marquee(); return drag ? piecesWithin(drag) : []; });
   const [screenshot, setScreenshot] = createSignal(true);
+  // A phone's webview and browser have no display capture: there the item goes without a picture and the bar offers none.
+  // A screen with no keyboard is not shown the chord.
+  const touchOnly = matchMedia("(hover: none) and (pointer: coarse)").matches;
+  const canCapture = Boolean(host.capturePage || navigator.mediaDevices?.getDisplayMedia);
   const [hand, setHand] = createSignal((() => { try { return localStorage.getItem(HAND_KEY) !== "off"; } catch { return true; } })());
   const keepHand = (on: boolean) => { setHand(on); try { localStorage.setItem(HAND_KEY, on ? "on" : "off"); } catch { /* this session only */ } };
   const [waiters, { refetch: askWaiters }] = createResource(() => transport.listening().catch(() => [] as Waiter[]));
@@ -81,7 +87,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     const drawn = drawingBox(selection.drawing.kind === "pen" ? selection.drawing.points : [selection.drawing.points[0]!, selection.drawing.points[selection.drawing.points.length - 1]!]), shift = shiftOf(selection);
     return { ...drawn, left: drawn.left + shift.x, top: drawn.top + shift.y };
   };
-  const titleOf = (selection: Selection) => selection.drawing ? `${DRAWN[selection.drawing.kind]} over ${nameOf(selection.elements)}` : nameOf(selection.elements);
+  const titleOf = (selection: Selection) => selection.general ? GENERAL : selection.drawing ? `${DRAWN[selection.drawing.kind]} over ${nameOf(selection.elements)}` : nameOf(selection.elements);
 
   const aim = () => {
     let target = pieceRoot(under(pointer.x, pointer.y));
@@ -142,13 +148,24 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       setMarquee({ left: Math.min(press.x, event.clientX), top: Math.min(press.y, event.clientY), width: Math.abs(event.clientX - press.x), height: Math.abs(event.clientY - press.y) });
     } else aim();
   };
+  /** The one general note: made, or opened again. */
+  const note = () => {
+    const made = selections.find((selection) => selection.general);
+    if (made) return openNote(openId() === made.id ? null : made.id);
+    const id = nextId++;
+    setSelections(selections.length, { id, elements: [], comment: "", general: true });
+    openNote(id);
+  };
   const onPointerDown = (event: PointerEvent) => {
     if (!select() || own(event.target) || event.button !== 0) return;
+    // A finger arrives with no move before it: what it is on is found now.
+    pointer = { x: event.clientX, y: event.clientY };
+    if (pointerTool() === "select") aim();
     press = { x: event.clientX, y: event.clientY, shift: event.shiftKey };
     const tool = pointerTool();
     if (tool !== "select") { setCursor(null); setStroke({ kind: tool, points: [[event.clientX, event.clientY]] }); }
   };
-  const onPointerUp = (event: PointerEvent) => {
+  const onPointerUp = () => {
     if (!press || !select()) return;
     const drawn = stroke();
     if (drawn) { press = null; setStroke(null); return draw(drawn.kind, drawn.points); }
@@ -162,16 +179,23 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     if (!gathered.length) return;
     if (shift && current) setSelections((candidate) => candidate.id === current.id, "elements", (elements) => [...new Set([...elements, ...gathered])]);
     else add(gathered, drag);
-    void event;
+  };
+  /** A finger leaves no pointer behind to mark, and a press the system took over (a scroll, a call) chose nothing. */
+  const onPointerGone = (event: PointerEvent) => {
+    if (event.type === "pointercancel") { press = null; setMarquee(null); setStroke(null); }
+    if (event.pointerType !== "mouse") setCursor(null);
   };
   // Nothing under the layer is pressed, and nothing that listens for a press outside itself (a menu, a dialog) hears one.
   const swallow = (event: Event) => {
     if (!select() || own(event.target)) return;
     event.stopImmediatePropagation();
+    // Touch events are only kept from the app (its swipes would answer a drag); the pointer events they come with do the work.
+    if (event.type.startsWith("touch")) return;
     if (event.type !== "pointermove" && event.type !== "wheel") event.preventDefault();
     if (event.type === "pointermove") onPointerMove(event as PointerEvent);
     else if (event.type === "pointerdown") onPointerDown(event as PointerEvent);
-    else if (event.type === "pointerup") onPointerUp(event as PointerEvent);
+    else if (event.type === "pointerup") { onPointerUp(); onPointerGone(event as PointerEvent); }
+    else if (event.type === "pointercancel") onPointerGone(event as PointerEvent);
     else if (event.type === "wheel") scrollUnder(event as WheelEvent);
   };
   const scrollUnder = (event: WheelEvent) => {
@@ -197,6 +221,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     const handled = () => { event.preventDefault(); event.stopImmediatePropagation(); };
     if (select() && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "z" && selections.length) { handled(); return remove(selections[selections.length - 1]!.id); }
     if (!select() || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key.toLowerCase() === "n") { handled(); return note(); }
     const picked = DRAW_KEYS[event.key.toLowerCase()];
     if (picked) { handled(); setCursor(null); return void setPointerTool(picked); }
     if (event.key === "Escape") { handled(); if (openId() !== null) openNote(null); else props.onClose(); }
@@ -206,7 +231,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     else if ((event.key === "Backspace" || event.key === "Delete") && openId() !== null) { handled(); remove(openId()!); }
   };
 
-  const POINTER_EVENTS = ["pointermove", "pointerdown", "pointerup", "mousedown", "mouseup", "click", "dblclick", "contextmenu", "wheel"] as const;
+  const POINTER_EVENTS = ["pointermove", "pointerdown", "pointerup", "pointercancel", "mousedown", "mouseup", "click", "dblclick", "contextmenu", "wheel", "touchstart", "touchmove", "touchend", "touchcancel"] as const;
   onMount(() => {
     for (const type of POINTER_EVENTS) window.addEventListener(type, swallow, { capture: true, passive: false });
     window.addEventListener("keydown", onKeyDown, { capture: true });
@@ -214,7 +239,12 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     let handle = requestAnimationFrame(function tick() {
       setFrame((value) => value + 1);
       const selection = open(), note = layer?.querySelector<HTMLElement>(".ui-feedback-note");
-      if (selection && note) {
+      if (selection?.general && note) {
+        // A general note is about no place: it sits over the bar, in the middle.
+        const bar = layer!.querySelector<HTMLElement>(".ui-feedback-bar")?.getBoundingClientRect();
+        const next = { left: Math.max(NOTE_GAP, (innerWidth - note.offsetWidth) / 2), top: Math.max(NOTE_GAP, (bar?.top ?? innerHeight) - note.offsetHeight - NOTE_GAP) };
+        if (noteAt()?.left !== next.left || noteAt()?.top !== next.top) setNoteAt(next);
+      } else if (selection && note) {
         const marks = extent(selection), width = note.offsetWidth, height = note.offsetHeight;
         const fits = (left: number) => left >= NOTE_GAP && left + width <= innerWidth - NOTE_GAP;
         const right = marks.left + marks.width + NOTE_GAP, leftSide = marks.left - width - NOTE_GAP;
@@ -242,7 +272,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const canSend = () => selections.some((selection) => selection.comment.trim());
   const status = createMemo(() => {
     if (props.mode === "use") return "Using the app.";
-    if (!selections.length) return pointerTool() === "select" ? "Press a piece, or drag across several." : "Drag to draw on the page.";
+    if (!selections.length) return pointerTool() === "select" ? "Press a piece, drag across several, or write a note." : "Drag to draw on the page.";
     return `${selections.length} ${selections.length === 1 ? "selection" : "selections"}`;
   });
 
@@ -255,6 +285,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       const mark = await marked ?? await transport.mark(host.clientId());
       // What each selection is, read before the capture so the boxes are the ones in the picture.
       const comments = selections.map((selection, index) => {
+        if (selection.general) return { n: index + 1, comment: selection.comment.trim(), kind: "note" as const, name: GENERAL, area: null };
         const members = selection.elements.map(describe);
         const around = extent(selection), drawing = selection.drawing, shift = shiftOf(selection);
         const reach = selection.reach ?? { left: 0, top: 0, width: 0, height: 0 };
@@ -267,7 +298,9 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
           ...(members.length > 1 ? { members } : members[0]) };
       });
       let capture: Capture | null = null, captureError: string | null = null;
-      if (screenshot()) {
+      // Words alone need no picture: an item of general notes only goes without one, and nothing is asked of the person.
+      const pictured = canCapture && screenshot() && selections.some((selection) => !selection.general);
+      if (pictured) {
         setCapturing(true);
         try { capture = await captureScreen(host.capturePage); } catch (error) { captureError = error instanceof Error ? error.message : String(error); }
         setCapturing(false);
@@ -278,7 +311,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       }
       const result = await transport.send(mark.id, {
         comments, to: hand() ? agent()?.name ?? null : null,
-        screenshot: capture ? { width: capture.width, height: capture.height, surface: capture.surface, outlined: true } : { missing: screenshot() ? captureError ?? "capture failed" : "switched off" },
+        screenshot: capture ? { width: capture.width, height: capture.height, surface: capture.surface, outlined: true } : { missing: pictured ? captureError ?? "capture failed" : !canCapture ? "this client cannot capture its display" : screenshot() ? "text only" : "switched off" },
         client: { id: host.clientId(), userAgent: navigator.userAgent, url: location.pathname + location.search, viewport: { width: innerWidth, height: innerHeight, devicePixelRatio }, ...await host.client?.() },
       });
       sent = true;
@@ -295,13 +328,13 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
 
   return <Portal>
     <FeedbackLayer ref={(element) => { layer = element; }} select={select()}>
-      <For each={selections}>{(selection, index) => <>
+      <For each={selections}>{(selection, index) => <Show when={!selection.general}>
         <Show when={selection.drawing} fallback={<FeedbackMark kind="chosen" box={box(selection.elements)} tag={String(index() + 1)} current={openId() === selection.id} onOpen={() => openNote(selection.id)} />}>{(drawing) => <>
           <FeedbackDrawing kind={drawing().kind} points={drawing().points} shift={shiftOf(selection)} current={openId() === selection.id} />
           <FeedbackMark kind="drawn" box={extent(selection)} tag={String(index() + 1)} onOpen={() => openNote(selection.id)} />
         </>}</Show>
         <Show when={!selection.drawing && selection.elements.length > 1}><For each={selection.elements}>{(element) => <FeedbackMark kind="member" box={box([element])} />}</For></Show>
-      </>}</For>
+      </Show>}</For>
       <Show when={select() && cursor()} keyed>{(element) => <Show when={!sameBox(box([element]), open() ? box(open()!.elements) : null)}><FeedbackMark kind="cursor" box={box([element])} name={nameOf([element])} /></Show>}</Show>
       <Show when={stroke()}>{(drawn) => <FeedbackDrawing kind={drawn().kind} points={drawn().points} current />}</Show>
       <Show when={marquee()}>{(drag) => <>
@@ -311,12 +344,12 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       </>}</Show>
       <Show when={!capturing() && open()} keyed>{(selection) =>
         <FeedbackNote ref={(element) => { noteField = element; }} style={noteAt() ? { left: `${noteAt()!.left}px`, top: `${noteAt()!.top}px` } : { opacity: 0 }}
-          tag={String(selections.indexOf(selection) + 1)} name={titleOf(selection)} source={selection.elements.length === 1 ? sourceOf(selection.elements[0]!) : undefined}
+          tag={String(selections.indexOf(selection) + 1)} name={titleOf(selection)} source={selection.elements.length === 1 ? sourceOf(selection.elements[0]!) : selection.general ? "About nothing on the page in particular." : undefined}
           value={selection.comment} onInput={(value) => setSelections((candidate) => candidate.id === selection.id, produce((draft) => { draft.comment = value; }))}
           onDone={() => openNote(null)} onRemove={() => remove(selection.id)} />}
       </Show>
       <Show when={!capturing()}>
-        <FeedbackBar mode={props.mode === "use" ? "use" : pointerTool()} onMode={(mode: FeedbackPointer) => { setCursor(null); setStroke(null); if (mode !== "use") setPointerTool(mode); props.onMode(mode === "use" ? "use" : "select"); }} status={status()} keys={props.keys?.()} screenshot={screenshot()} onScreenshot={setScreenshot} hand={hand()} onHand={keepHand} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
+        <FeedbackBar mode={props.mode === "use" ? "use" : pointerTool()} onMode={(mode: FeedbackPointer) => { setCursor(null); setStroke(null); if (mode !== "use") setPointerTool(mode); props.onMode(mode === "use" ? "use" : "select"); }} status={status()} keys={touchOnly ? undefined : props.keys?.()} screenshot={screenshot()} onScreenshot={canCapture ? setScreenshot : undefined} onNote={note} noted={selections.some((selection) => selection.general)} hand={hand()} onHand={keepHand} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
           canSend={canSend()} sending={sending()} onSend={() => void send()} onClose={props.onClose} />
       </Show>
     </FeedbackLayer>

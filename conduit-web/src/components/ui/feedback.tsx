@@ -12,7 +12,8 @@ const TAG_ROOM = 20;
 const place = (box: FeedbackBox): JSX.CSSProperties => ({ left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px` });
 
 export const FeedbackLayer = (props: { select: boolean; ref?: (element: HTMLDivElement) => void; children: JSX.Element }) =>
-  <div ref={props.ref} class="ui-feedback-layer" data-select={props.select ? "" : undefined}>{props.children}</div>;
+  // data-mobile-swipe-ignore: a finger's drag on the layer gathers or draws; the drawers do not answer it (edge-swipe.ts).
+  <div ref={props.ref} class="ui-feedback-layer" data-select={props.select ? "" : undefined} data-mobile-swipe-ignore={props.select ? "" : undefined}>{props.children}</div>;
 
 export const FeedbackMark = (props: { box: FeedbackBox; kind: "cursor" | "chosen" | "member" | "marquee" | "drawn"; tag?: string; name?: string; current?: boolean; onOpen?: () => void }) =>
   <div class="ui-feedback-mark" data-kind={props.kind} data-current={props.current ? "" : undefined} style={place(props.box)}>
@@ -57,12 +58,13 @@ export function FeedbackNote(props: { ref?: (element: HTMLTextAreaElement) => vo
 export type FeedbackPointer = "select" | FeedbackDrawingKind | "use";
 const POINTERS: ReadonlyArray<{ value: FeedbackPointer; label: string }> = [{ value: "select", label: "Select" }, { value: "pen", label: "Pen" }, { value: "arrow", label: "Arrow" }, { value: "box", label: "Box" }, { value: "use", label: "Use app" }];
 
-export function FeedbackBar(props: { mode: FeedbackPointer; onMode: (mode: FeedbackPointer) => void; status: string; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; screenshot: boolean; onScreenshot: (on: boolean) => void;
+export function FeedbackBar(props: { mode: FeedbackPointer; onMode: (mode: FeedbackPointer) => void; status: string; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; screenshot?: boolean; onScreenshot?: (on: boolean) => void; onNote?: () => void; noted?: boolean;
   canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void }) {
   return <Frost lift="raised" class="ui-feedback-bar" role="toolbar" aria-label="UI feedback">
     <Segmented label="Pointer" value={props.mode} onChange={props.onMode} options={POINTERS} />
     <span class="ui-feedback-status">{props.status}<Show when={props.keys?.length}><Keycap>{props.keys!.join(" ")}</Keycap></Show></span>
-    <label class="ui-feedback-switch"><span>Screenshot</span><Switch label="Include screenshot" checked={props.screenshot} onChange={props.onScreenshot} /></label>
+    <Show when={props.onNote}><Button variant="ghost" size="sm" title="A note about nothing on the page in particular" aria-pressed={props.noted} onClick={props.onNote}>Note</Button></Show>
+    <Show when={props.onScreenshot}><label class="ui-feedback-switch"><span>Screenshot</span><Switch label="Include screenshot" checked={Boolean(props.screenshot)} onChange={props.onScreenshot!} /></label></Show>
     <Show when={props.onHand && props.agent}><span class="ui-feedback-switch">
       <Show when={props.onNextAgent} fallback={<span>Hand to {props.agent}</span>}><span>Hand to</span><Button variant="ghost" size="sm" title="The next waiting session" onClick={props.onNextAgent}>{props.agent}</Button></Show>
       <Switch label="Hand to the listening agent session" checked={Boolean(props.hand)} onChange={props.onHand!} />

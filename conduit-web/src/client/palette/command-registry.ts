@@ -7,6 +7,8 @@ import { PHONE_LAYOUT_QUERY } from "../../components/ui/layout.ts";
 
 export interface PaletteContext {
   nativeApp: boolean;
+  /** A development client: the only kind the UI feedback tool is on. */
+  devClient: boolean;
   chatId: string | null;
   project?: Project;
   projects: Project[];
@@ -33,6 +35,7 @@ export interface PaletteActions {
   stashPrompt: () => void;
   toggleDictation: () => void;
   toggleSidebar: () => void;
+  toggleFeedback: () => void;
   toggleWorkspacePanel: () => void;
   maximizeWorkspacePanel: () => void;
   focusComposer: () => void;
@@ -130,7 +133,7 @@ const INTENT_GROUPS: Record<string, string> = {
   [COMMAND_IDS.newChat]: "create", [COMMAND_IDS.newFolder]: "create", [COMMAND_IDS.newWorkspace]: "create",
   [COMMAND_IDS.toggleSidebar]: "view", [COMMAND_IDS.toggleWorkspacePanel]: "view", [COMMAND_IDS.maximizeWorkspacePanel]: "view",
   [COMMAND_IDS.retryConnection]: "app", [COMMAND_IDS.reload]: "app", [COMMAND_IDS.updateApp]: "app",
-  [COMMAND_IDS.resetAppCache]: "app", [COMMAND_IDS.keyboardProbe]: "app", [COMMAND_IDS.composerPath]: "app", [COMMAND_IDS.keyboardTour]: "app",
+  [COMMAND_IDS.resetAppCache]: "app", [COMMAND_IDS.keyboardProbe]: "app", [COMMAND_IDS.composerPath]: "app", [COMMAND_IDS.keyboardTour]: "app", [COMMAND_IDS.toggleFeedback]: "app",
 };
 
 export function paletteGroupOf(command: { id?: string; group?: string; destructive?: boolean }): string {
@@ -210,6 +213,7 @@ const paletteCommandRuntime: Record<string, PaletteCommandRuntime> = {
   [COMMAND_IDS.stashPrompt]: { isAvailable: hasChat, run: (actions) => actions.stashPrompt() },
   [COMMAND_IDS.toggleDictation]: { isAvailable: hasChat, run: (actions) => actions.toggleDictation() },
   [COMMAND_IDS.toggleSidebar]: { isAvailable: () => true, run: (actions) => actions.toggleSidebar() },
+  [COMMAND_IDS.toggleFeedback]: { isAvailable: (context) => context.devClient, run: (actions) => actions.toggleFeedback() },
   [COMMAND_IDS.toggleWorkspacePanel]: { isAvailable: hasChat, run: (actions) => actions.toggleWorkspacePanel() },
   [COMMAND_IDS.maximizeWorkspacePanel]: { isAvailable: hasChat, run: (actions) => actions.maximizeWorkspacePanel() },
   [COMMAND_IDS.focusComposer]: { isAvailable: hasChat, run: (actions) => actions.focusComposer() },

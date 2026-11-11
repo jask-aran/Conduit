@@ -4543,6 +4543,7 @@ function App() {
 
   const paletteContext = createMemo<PaletteContext>(() => ({
     nativeApp,
+    devClient: Boolean(devClient()),
     chatId: focusedChatId(),
     project: dockProject(),
     projects: catalogue.projects(),
@@ -4606,6 +4607,7 @@ function App() {
     stashPrompt,
     toggleDictation: () => window.dispatchEvent(new Event("conduit:toggle-dictation")),
     toggleSidebar: () => runSidebar("toggle-sidebar"),
+    toggleFeedback,
     toggleWorkspacePanel: togglePanel,
     maximizeWorkspacePanel,
     focusComposer,

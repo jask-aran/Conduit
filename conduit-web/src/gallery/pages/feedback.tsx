@@ -2,7 +2,7 @@ import { FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote
 import { row, token, type Page } from "../model";
 import { noop } from "../demos";
 
-const bar = (more: Partial<Parameters<typeof FeedbackBar>[0]> = {}) => <FeedbackBar mode="select" onMode={noop} status="2 selections" keys={["Alt", "Shift", "F"]} screenshot onScreenshot={noop} canSend onSend={noop} onClose={noop} {...more} />;
+const bar = (more: Partial<Parameters<typeof FeedbackBar>[0]> = {}) => <FeedbackBar mode="select" onMode={noop} status="2 selections" keys={["Alt", "Shift", "F"]} onNote={noop} screenshot onScreenshot={noop} canSend onSend={noop} onClose={noop} {...more} />;
 const note = (more: Partial<Parameters<typeof FeedbackNote>[0]> = {}) => <FeedbackNote style={{ left: "240px", top: "56px" }} tag="1" name="IconButton" source="conduit-web/src/components/ui/actions.tsx:21"
   value="Match the other rail icons' stroke." onInput={noop} onDone={noop} onRemove={noop} {...more} />;
 // The layer is fixed to the window in the app; in a scene it is held in the scene's.
@@ -61,6 +61,7 @@ export const feedbackPage: Page = {
     row("bar", "selecting with nothing to send yet; using the app; sending", scene(() => <>{bar({ status: "Press a piece, or drag across several.", canSend: false })}</>), { surfaces: ["ground"] }),
     row("bar, drawing", "the pointer draws: Pen, Arrow or Box", scene(() => <>{bar({ mode: "arrow", status: "Drag to draw on the page.", canSend: false })}</>), { surfaces: ["ground"] }),
     row("bar, handing over", "the session the item goes to; with several waiting its name is a button to the next; none waiting", scene(() => <>{bar({ hand: true, onHand: noop, agent: "ui-feedback", onNextAgent: noop })}</>), { surfaces: ["ground"] }),
+    row("bar, a note written and no screenshot", "a client that cannot capture its display (a phone) offers no Screenshot switch", scene(() => <>{bar({ noted: true, onScreenshot: undefined, status: "1 selection" })}</>), { surfaces: ["ground"] }),
     row("bar, using the app", "the pointer goes to the app; the marks stay", scene(() => <>{bar({ mode: "use", status: "Using the app." })}</>), { surfaces: ["ground"] }),
     row("bar, sending", "Send turns while the item goes", scene(() => <>{bar({ sending: true })}</>), { surfaces: ["ground"] }),
   ],

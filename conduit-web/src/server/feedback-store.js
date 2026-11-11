@@ -64,6 +64,7 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
       within: described.within ?? [], anchors: described.anchors ?? {}, ...(described.regionSource ? { regionSource: described.regionSource } : {}),
       label: described.label ?? "", domPath: described.domPath ?? "", classes: described.classes ?? [], attributes: described.attributes ?? {}, rect: described.rect ?? null, html: short(described.html ?? "", 2400),
     });
+    if (entry.kind === "note") return { n: entry.n, comment: String(entry.comment ?? ""), kind: "note", name: String(entry.name ?? "") };
     const rect = entry.rect ?? null;
     return {
       n: entry.n, comment: String(entry.comment ?? ""), kind: entry.kind === "group" ? "group" : "component", name: String(entry.name ?? ""), rect,
@@ -93,7 +94,7 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
       id,
       summary: `${body.comments.length} ${body.comments.length === 1 ? "comment" : "comments"} on the interface, from the ${client.kind ?? "browser"} client at ${client.url ?? "?"}`,
       read: [
-        "Each entry of `comments` is one thing the person asked for, about one selection of the live interface.",
+        "Each entry of `comments` is one thing the person asked for, about one selection of the live interface. One of kind `note` is about no selection: words about the interface as a whole, with no picture of its own.",
         "`source` is where that library piece is declared and `styles` where its CSS rules start; paths are from the repository root. `within` is the pieces it sits in, outermost first. `regionSource` is where the app writes the region it is in; to find the app code that drew this instance, search the app's source for `label` or an attribute in `attributes`.",
         "A comment with `drawing` is something the person drew on the page (a pen line, an arrow whose head is its last point, a box), its `points` in the same pixels as `rect`; what it describes is then the pieces under the drawing, and the arrow's head or the box says where among them. It is in the pictures as drawn.",
         "A group's `members` are each described the same way. `rect` is in CSS pixels of the client's viewport; `screenshotRect` is the same box in screenshot.png, present only when the picture is the page alone.",
