@@ -63,9 +63,9 @@ export function FeedbackBar(props: { mode: FeedbackPointer; onMode: (mode: Feedb
     <Segmented label="Pointer" value={props.mode} onChange={props.onMode} options={POINTERS} />
     <span class="ui-feedback-status">{props.status}<Show when={props.keys?.length}><Keycap>{props.keys!.join(" ")}</Keycap></Show></span>
     <label class="ui-feedback-switch"><span>Screenshot</span><Switch label="Include screenshot" checked={props.screenshot} onChange={props.onScreenshot} /></label>
-    <Show when={props.onHand}><span class="ui-feedback-switch">
-      <Show when={props.onNextAgent} fallback={<span>{props.agent ? `Hand to ${props.agent}` : "Hand to a session"}</span>}><span>Hand to</span><Button variant="ghost" size="sm" title="The next waiting session" onClick={props.onNextAgent}>{props.agent}</Button></Show>
-      <Switch label="Hand to a waiting agent session" checked={Boolean(props.hand)} onChange={props.onHand!} />
+    <Show when={props.onHand && props.agent}><span class="ui-feedback-switch">
+      <Show when={props.onNextAgent} fallback={<span>Hand to {props.agent}</span>}><span>Hand to</span><Button variant="ghost" size="sm" title="The next waiting session" onClick={props.onNextAgent}>{props.agent}</Button></Show>
+      <Switch label="Hand to the listening agent session" checked={Boolean(props.hand)} onChange={props.onHand!} />
     </span></Show>
     <Button variant="primary" outline size="sm" disabled={!props.canSend || props.sending} onClick={props.onSend}><Show when={props.sending} fallback="Send"><Spinner /></Show></Button>
     <CloseButton size="sm" label="Close feedback" onClick={props.onClose} />

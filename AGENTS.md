@@ -11,6 +11,8 @@
   The feedback tool then lists you by that name, and I hand items to you from it. It ends when one arrives and prints
   the item's path and what to do next: the item says how to read it, `done <id>` marks it handled, and you wait again
   until I say stop.
+- Reviewing UI feedback I already sent → `node scripts/conduit-feedback.mjs list`, then `take <id>` for each one that
+  is `waiting`; every item I send lands in the folder whether or not a session was listening.
 
 Read each one once per session.
 

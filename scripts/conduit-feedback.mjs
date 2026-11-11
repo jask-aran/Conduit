@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Reads <data>/feedback and nothing else, so it needs no session and no running hub.
-// An item is taken by one waiter (taken.json, written exclusively), so two sessions waiting get different items.
+// An item is taken by one waiter (taken.json, written exclusively). `wait` takes only what was handed to its name;
+// everything else stays in the folder until `take <id>`.
 import fs from "node:fs/promises";
 import { rmSync, watch } from "node:fs";
 import os from "node:os";
@@ -10,7 +11,6 @@ const folder = path.join(path.resolve(process.env.CONDUIT_DATA_ROOT || path.join
 const waiting = path.join(folder, ".waiting");
 const [command, argument] = process.argv.slice(2);
 const exists = (file) => fs.stat(file).then(() => true, () => false);
-const me = String(process.pid);
 const alive = (pid) => { try { process.kill(Number(pid), 0); return true; } catch (error) { return error.code === "EPERM"; } };
 const script = path.relative(process.cwd(), process.argv[1]) || process.argv[1];
 
@@ -25,15 +25,14 @@ async function items() {
   }
   return found;
 }
-const claim = (entry) => fs.writeFile(path.join(folder, entry.id, "taken.json"), `${JSON.stringify({ at: new Date().toISOString(), pid: process.pid })}\n`, { flag: "wx" })
+const claim = (entry, name) => fs.writeFile(path.join(folder, entry.id, "taken.json"), `${JSON.stringify({ at: new Date().toISOString(), pid: process.pid, ...(name ? { name } : {}) })}\n`, { flag: "wx" })
   .then(() => true, (error) => { if (error.code === "EEXIST") return false; throw error; });
 
-async function take() {
+async function take(name) {
   for (const entry of await items()) {
     if (entry.state !== "waiting") continue;
-    const handed = JSON.parse(await fs.readFile(entry.item, "utf8")).handed ?? {};
-    if (handed.held || (handed.to && handed.to.id !== me && alive(handed.to.id))) continue;
-    if (await claim(entry)) return entry;
+    if (JSON.parse(await fs.readFile(entry.item, "utf8")).handed?.to?.name !== name) continue;
+    if (await claim(entry, name)) return entry;
   }
   return null;
 }
@@ -44,19 +43,20 @@ const hand = (entry) => {
 
 if (command === "wait") {
   await fs.mkdir(waiting, { recursive: true, mode: 0o700 });
-  const mine = path.join(waiting, `${me}.json`);
-  await fs.writeFile(mine, `${JSON.stringify({ id: me, name: argument || path.basename(process.cwd()), cwd: process.cwd(), since: new Date().toISOString() })}\n`);
+  const name = argument || path.basename(process.cwd());
+  const mine = path.join(waiting, `${process.pid}.json`);
+  await fs.writeFile(mine, `${JSON.stringify({ id: String(process.pid), name, cwd: process.cwd(), since: new Date().toISOString() })}\n`);
   const leave = () => { try { rmSync(mine); } catch { /* already gone */ } };
   process.on("exit", leave);
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(signal, () => process.exit(130));
-  let taken = await take();
+  let taken = await take(name);
   if (!taken) {
     taken = await new Promise((resolve) => {
       let looking = false;
       const look = async () => {
         if (looking) return;
         looking = true;
-        const found = await take().catch(() => null);
+        const found = await take(name).catch(() => null);
         looking = false;
         if (found) { watcher.close(); clearInterval(poll); resolve(found); }
       };
@@ -80,7 +80,7 @@ if (command === "wait") {
 } else if (command === "list") {
   for (const entry of await items()) {
     const handed = entry.state === "waiting" ? JSON.parse(await fs.readFile(entry.item, "utf8")).handed ?? {} : {};
-    console.log(`${(handed.held ? "held" : entry.state).padEnd(8)} ${entry.item}${handed.to ? `  for ${handed.to.name}` : ""}`);
+    console.log(`${entry.state.padEnd(8)} ${entry.item}${handed.to ? `  for ${handed.to.name}` : ""}`);
   }
   for (const name of await fs.readdir(waiting).catch(() => [])) {
     const waiter = JSON.parse(await fs.readFile(path.join(waiting, name), "utf8").catch(() => "null"));

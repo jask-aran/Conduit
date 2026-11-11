@@ -21,7 +21,7 @@ const PEN_STEP = 2;
 const SENT_POINTS = 64;
 const WAITING_EVERY_MS = 3000;
 const HAND_KEY = "conduit.feedback.hand";
-type Waiter = { id: string; name: string };
+type Waiter = { name: string; state: "waiting" | "working" };
 type Mode = "select" | "use";
 const DRAG_SLOP = 5;
 const CROP_MARGIN = 24;
@@ -46,9 +46,9 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
   const [hand, setHand] = createSignal((() => { try { return localStorage.getItem(HAND_KEY) !== "off"; } catch { return true; } })());
   const keepHand = (on: boolean) => { setHand(on); try { localStorage.setItem(HAND_KEY, on ? "on" : "off"); } catch { /* this session only */ } };
   const [waiters, { refetch: askWaiters }] = createResource(() => api<{ waiting: Waiter[] }>("/v0/feedback/waiting").then((answer) => answer.waiting, () => [] as Waiter[]));
-  const [agentId, setAgentId] = createSignal<string | null>(null);
-  const agent = () => waiters.latest?.find((waiter) => waiter.id === agentId()) ?? waiters.latest?.[0] ?? null;
-  const nextAgent = () => { const all = waiters.latest ?? []; setAgentId(all[(all.findIndex((waiter) => waiter.id === agent()?.id) + 1) % all.length]?.id ?? null); };
+  const [agentName, setAgentName] = createSignal<string | null>(null);
+  const agent = () => waiters.latest?.find((waiter) => waiter.name === agentName()) ?? waiters.latest?.[0] ?? null;
+  const nextAgent = () => { const all = waiters.latest ?? []; setAgentName(all[(all.findIndex((waiter) => waiter.name === agent()?.name) + 1) % all.length]?.name ?? null); };
   const [sending, setSending] = createSignal(false);
   const [capturing, setCapturing] = createSignal(false);
   // Boxes are read once a frame: what is marked scrolls, resizes and animates under the marks.
@@ -256,9 +256,9 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
       const comments = selections.map((selection, index) => {
         const members = selection.elements.map(describe);
         const around = extent(selection), drawing = selection.drawing, shift = shiftOf(selection);
-        const reach = selection.reach ?? { left: CROP_MARGIN, top: CROP_MARGIN, width: 2 * CROP_MARGIN, height: 2 * CROP_MARGIN };
-        const left = Math.max(0, Math.min(around.left, around.left - reach.left)), top = Math.max(0, Math.min(around.top, around.top - reach.top));
-        const right = Math.min(innerWidth, Math.max(around.left + around.width, around.left - reach.left + around.width + reach.width)), bottom = Math.min(innerHeight, Math.max(around.top + around.height, around.top - reach.top + around.height + reach.height));
+        const reach = selection.reach ?? { left: 0, top: 0, width: 0, height: 0 };
+        const left = Math.max(0, Math.min(around.left, around.left - reach.left) - CROP_MARGIN), top = Math.max(0, Math.min(around.top, around.top - reach.top) - CROP_MARGIN);
+        const right = Math.min(innerWidth, Math.max(around.left + around.width, around.left - reach.left + around.width + reach.width) + CROP_MARGIN), bottom = Math.min(innerHeight, Math.max(around.top + around.height, around.top - reach.top + around.height + reach.height) + CROP_MARGIN);
         const every = drawing ? Math.max(1, Math.ceil(drawing.points.length / SENT_POINTS)) : 1;
         const sent = drawing && { kind: drawing.kind, points: drawing.points.filter((_, at) => at % every === 0 || at === drawing.points.length - 1).map((point) => [Math.round(point[0] + shift.x), Math.round(point[1] + shift.y)]) };
         return { n: index + 1, ...(sent ? { drawing: sent } : {}), dragged: Boolean(selection.reach), area: { left: Math.round(left), top: Math.round(top), width: Math.round(right - left), height: Math.round(bottom - top) }, comment: selection.comment.trim(), kind: members.length > 1 ? "group" as const : "component" as const, name: titleOf(selection),
@@ -276,8 +276,8 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
           for (const [index, blob] of (await cropAreas(capture, comments.map((entry) => entry.area))).entries()) if (blob) await api(`/v0/feedback/marks/${mark.id}/areas/${index + 1}`, { ...png, body: blob });
         }
       }
-      const result = await api<{ id: string; path: string; handed: { held: boolean; to: Waiter | null } }>(`/v0/feedback/marks/${mark.id}/send`, { method: "POST", body: JSON.stringify({
-        comments, hand: hand(), to: agent()?.id ?? null,
+      const result = await api<{ id: string; path: string; handed: { to: { name: string } | null } }>(`/v0/feedback/marks/${mark.id}/send`, { method: "POST", body: JSON.stringify({
+        comments, to: hand() ? agent()?.name ?? null : null,
         screenshot: capture ? { width: capture.width, height: capture.height, surface: capture.surface, outlined: true } : { missing: screenshot() ? captureError ?? "capture failed" : "switched off" },
         client: {
           id: props.client(), kind: installedClientKind, build: clientBuild, shell: await shellVersion(), userAgent: navigator.userAgent,
@@ -285,7 +285,7 @@ export default function FeedbackTool(props: { mode: Mode; onMode: (mode: Mode) =
         },
       }) });
       sent = true;
-      const where = result.handed.to ? `Feedback sent to ${result.handed.to.name}` : result.handed.held ? "Feedback sent and held" : "Feedback sent: no session is waiting, the next to wait takes it";
+      const where = result.handed.to ? `Feedback saved and handed to ${result.handed.to.name}` : "Feedback saved";
       toast.success(captureError ? `${where}, without a screenshot: ${captureError}` : where);
       props.onClose();
     } catch (error) {

@@ -12,6 +12,8 @@ const RING = 200;
 const CHAT_TAIL = 40;
 const MARKS = 12;
 const MARK_MS = 6 * 60 * 60_000;
+/** A session that took an item this long ago and has not finished it is no longer taken to be at work on it. */
+const WORKING_MS = 60 * 60_000;
 const short = (value, length) => { const text = typeof value === "string" ? value : JSON.stringify(value) ?? ""; return text.length > length ? `${text.slice(0, length)}… (${text.length} characters)` : text; };
 
 function brief(event) {
@@ -44,17 +46,26 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
     ...Object.fromEntries(Object.entries(event).filter(([key, value]) => key !== "type" && key !== "at" && ["string", "number", "boolean"].includes(typeof value)).slice(0, 8).map(([key, value]) => [key, short(value, 120)])),
     ...(event.process ? { chatId: event.process.chatId, status: event.process.status, activity: event.process.activity } : {}) });
 
+  /**
+   * The sessions an item can be handed to, by name: one whose `wait` is running (its file in .waiting, while its
+   * process lives), and one at work on an item it took and has not finished, which will wait again when it has.
+   */
   async function waiting() {
     const dir = path.join(folder, ".waiting");
-    const found = [];
+    const found = new Map();
     for (const name of await fs.readdir(dir).catch(() => [])) {
       const waiter = await fs.readFile(path.join(dir, name), "utf8").then(JSON.parse).catch(() => null);
       let alive = false;
       try { alive = Boolean(waiter?.id) && (process.kill(Number(waiter.id), 0), true); } catch (error) { alive = error.code === "EPERM"; }
-      if (alive) found.push({ id: String(waiter.id), name: short(String(waiter.name ?? ""), 80), cwd: String(waiter.cwd ?? ""), since: String(waiter.since ?? "") });
+      if (alive) found.set(String(waiter.name), { name: short(String(waiter.name ?? ""), 80), state: "waiting", since: String(waiter.since ?? "") });
       else await fs.rm(path.join(dir, name), { force: true });
     }
-    return found.sort((a, b) => b.since.localeCompare(a.since));
+    for (const id of (await fs.readdir(folder).catch(() => [])).filter((name) => !name.startsWith("."))) {
+      const taken = await fs.readFile(path.join(folder, id, "taken.json"), "utf8").then(JSON.parse).catch(() => null);
+      if (!taken?.name || found.has(taken.name) || Date.now() - Date.parse(taken.at) > WORKING_MS) continue;
+      if (await fs.stat(path.join(folder, id, "handled.json")).then(() => false, () => true)) found.set(taken.name, { name: short(String(taken.name), 80), state: "working", since: String(taken.at) });
+    }
+    return [...found.values()].sort((a, b) => b.since.localeCompare(a.since));
   }
 
   async function mark({ client } = {}) {
@@ -109,8 +120,9 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
     const exact = Boolean(shot && viewport.width && Math.abs(shot.width / shot.height - viewport.width / viewport.height) < 0.01);
     const scale = exact ? shot.width / viewport.width : null;
     const sentAt = new Date().toISOString();
-    const to = body.hand === false ? null : (await waiting()).find((waiter) => waiter.id === String(body.to ?? "")) ?? null;
-    const handed = { held: body.hand === false, to: to && { id: to.id, name: to.name } };
+    // Every item lands in the folder; one handed to a session that is listening is also that session's next item.
+    const to = body.to ? (await waiting()).find((waiter) => waiter.name === String(body.to)) ?? null : null;
+    const handed = { to: to && { name: to.name } };
     const item = {
       schema: "conduit.feedback/1",
       id,
