@@ -26,8 +26,9 @@ Run from `conduit-web/`. Pick the single cheapest check that proves the change:
 | A component or styling | `npm run gallery`, then the Windows Chrome DevTools CLI (`node ../scripts/run-windows-chrome-devtools.mjs`) |
 | A release | `npm test` (release only) |
 
-For a low-blast-radius change, skip the check and say "not run". Run checks in the foreground. The test count only
-shrinks (`test/budget.json`), so a change that needs a new test removes more than it adds.
+For a low-blast-radius change, skip the check and say "not run". Run checks in the foreground. Tests and Markdown only
+shrink (`conduit-web/budgets.json`, checked with the conventions), so a change that needs a new test or document
+removes more than it adds.
 
 `npm run typecheck`, the build and `restart` report convention problems (`scripts/check-conventions.mjs`, each rule's
 reason is in it): tell me about any you see, then fix them.

@@ -5,6 +5,7 @@
 //   node scripts/check-conventions.mjs           list every problem, exit 1 if any (npm run typecheck)
 //   node scripts/check-conventions.mjs --warn    list every problem, exit 0, save a summary (npm run build)
 //   node scripts/check-conventions.mjs --summary print the saved summary as one line (start-conduit.sh restart)
+//   node scripts/check-conventions.mjs --record  write the budgets (rule 8) as they stand now; refuses a rise
 //
 // A line that must break a rule carries `conventions-ok: <reason>` in a comment on it or the line above.
 import { execFileSync } from "node:child_process";
@@ -147,6 +148,33 @@ try {
   }
 }
 
+// 8. Budgets that only fall (budgets.json): the tests' count (test()/it() call sites), their lines and their files,
+//    and the repo's Markdown lines outside templates/. Tests and documents were added faster than they were kept
+//    true; one that is needed replaces more than it adds.
+const budgetFile = path.join(root, "budgets.json");
+const testFiles = walk(path.join(root, "test")).filter((f) => /\.m?[jt]sx?$/.test(f));
+const lineCount = (file) => { const text = fs.readFileSync(file, "utf8"); return text.split("\n").length - (text.endsWith("\n") ? 1 : 0); };
+const counts = {
+  tests: testFiles.reduce((n, f) => n + (fs.readFileSync(f, "utf8").match(/(?<![\w.])(?:test|it)(?:\.(?:only|skip|todo))?\s*\(/g) || []).length, 0),
+  testLines: testFiles.reduce((n, f) => n + lineCount(f), 0),
+  testFiles: testFiles.length,
+};
+try {
+  const repo = path.resolve(root, "..");
+  counts.markdownLines = execFileSync("git", ["-C", repo, "ls-files", "*.md", ":!templates"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+    .split("\n").filter((f) => f && fs.existsSync(path.join(repo, f))).reduce((n, f) => n + lineCount(path.join(repo, f)), 0);
+} catch { /* a packaged copy has no git; the other budgets still hold */ }
+const budgets = fs.existsSync(budgetFile) ? JSON.parse(fs.readFileSync(budgetFile, "utf8")) : {};
+const over = Object.entries(counts).filter(([name, value]) => name in budgets && value > budgets[name]);
+if (mode === "--record") {
+  if (over.length) { console.error(`budgets: cannot record a rise (${over.map(([name, value]) => `${name} ${value}, budget ${budgets[name]}`).join("; ")})`); process.exit(1); }
+  fs.writeFileSync(budgetFile, `${JSON.stringify({ ...budgets, ...counts }, null, 2)}\n`);
+  console.log(`budgets recorded: ${Object.entries(counts).map(([name, value]) => `${name} ${value}`).join(", ")}`);
+  process.exit(0);
+}
+for (const [name, value] of over) problems.push(`budgets.json  budget: ${name} is ${value}, budget ${budgets[name]}; remove more than you add`);
+const under = Object.entries(counts).filter(([name, value]) => !(name in budgets) || value < budgets[name]).map(([name]) => name);
+
 for (const problem of problems) console.log(problem);
 const byRule = {};
 for (const p of problems) { const rule = p.split("  ")[1].split(":")[0]; byRule[rule] = (byRule[rule] || 0) + 1; }
@@ -154,6 +182,7 @@ const summary = problems.length
   ? `Conventions: ${problems.length} problems (${Object.entries(byRule).map(([r, n]) => `${n} ${r}`).join(", ")}); npm run typecheck lists them`
   : "Conventions: clean";
 console.log(summary);
+if (under.length && mode !== "--warn") console.log(`Budgets lower than recorded (${under.join(", ")}): node scripts/check-conventions.mjs --record`);
 if (mode === "--warn") {
   fs.mkdirSync(path.dirname(summaryFile), { recursive: true });
   fs.writeFileSync(summaryFile, summary + "\n");
