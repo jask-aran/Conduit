@@ -1,6 +1,7 @@
 # Markup & Conduit Documents
 
-Agreed with the user on 2026-11-12. Milestones 1 and 2 are done; the rest is not started. Delete a part when it lands.
+Agreed with the user on 2026-11-12. Milestones 1 and 2 are done. Milestone 3 is designed (see "Milestone 3, as designed") and no
+code of it is written. Delete a part when it lands.
 
 ## Start here: the brief for the session that builds this
 
@@ -41,9 +42,12 @@ engineer: they read your prose closely and your diffs shallowly, so what you tel
   client id; the editor is made only after the first merge with the hub; it never adds a trailing block; `y-prosemirror`
   is used directly (a small extension in `editor.tsx`), not TipTap's Collaboration extension, whose fork of it was not
   on the approved list.
-- `src/` is at its ceiling of 115,000 lines (convention rule 10): milestone 2 fitted by deleting unused code. Later
-  milestones need the same, or the user's word to raise it. `conduit-web/budgets.json` and the bundle budget
-  (initial JS is within 1.1 kB gzip of 425,000) are as tight.
+- The source ceiling (convention rule 10, `LIMITS.sourceLines`) is 117,000, raised from 115,000 for this work on the
+  user's word (2026-11-12): a ceiling may be raised for planned feature work and comes down after a cleanup. `src/` was
+  at about 114,830 when milestone 3 began. The test and Markdown budgets (`conduit-web/budgets.json`) still only fall,
+  and the bundle budget is tight: initial JS is within 1.1 kB gzip of 425,000, so new pieces stay out of the barrel.
+- The two interface-feedback probes send real items, and a session whose `wait` is running is handed them: lines the
+  listener prints while a probe runs are the probe's, not the user's.
 - Convention rule 9 (`conduit-web/scripts/check-conventions.mjs`) keeps Markup's boundary and the editor's: each
   imports only solid-js, its own folder and the library (the editor also the format and its packages). Extend the rule
   to each new seam rather than working round it.
@@ -111,6 +115,56 @@ At each milestone, report: what the user can now do and how to try it; what beha
 it printed, kept apart from what you did not run; the decisions you made on their behalf; what is still unproven.
 List every change, small ones included, because the user checks the diff against your list. Use the code's real
 names (`MarkupHost`, the mated thread, the margin thread), and say so when something has no name yet.
+
+## Milestone 3, as designed
+
+Not started. Build it in this order and commit each piece. The reasons are here because the design was worked out
+against `tool.tsx`, `markup.tsx` and `markup-store.js` and is not yet in code.
+
+**What Markup's tool is today** (`components/markup/tool.tsx`). One sitting is a store of `selections` (comments being
+written, each with its marks on the page) and one followed item (`held.item`, polled by `follow(id, only)`); `replyTo`
+is a comment's number within that one item. A comment is written in a float `MarkupNote` beside its place, then stands
+in the corner stack (`MarkupNotes`); once sent, its card is the thread. Boxes are read once a frame (`frame()`).
+`addQuote(range)` makes a comment from a DOM Range. `send()` builds the item and calls `host.under(box)`. After a
+reload an item is only in the "sent before" list, with no marks. None of this suits a document, where every open
+thread belongs on the page for every device.
+
+1. **The document's own receiver.** Threads live with the document: `server/documents.js` makes one
+   `createMarkupStore` per document, its folder `~/.conduit/data/documents/<id>.markup/`. Its routes are
+   `/v0/document/<id>/markup/...`: make `registerFeedbackRoutes` (`server/feedback.js`) take a base and a store per
+   request, and give `/v0/document` the 4 MB JSON limit `/v0/markup` has (`server.js`, before the app's own parser).
+   The page's transport is then `httpTransport(api, "/v0/document/test/markup")`. The store gains: an option that
+   points its `.waiting` folder at the hub's (listeners are one registry); `quote` and `under` on each comment of
+   `thread()`; and `open()`, every unfinished item's thread in one answer (a transport method too). In
+   `scripts/conduit-markup.mjs`, `wait` watches the feedback folder and every `documents/*.markup`, and `reply`,
+   `resolve`, `done` and `take` find an item's folder by its id across those.
+2. **Margin threads.** A new `components/markup/margin.tsx`, `MarkupMargin`: it asks `transport.open()` every few
+   seconds and draws every comment as a `MarkupNote` in a margin column beside what it is about, sorted by where that
+   is and pushed down so no two overlap, with reply and resolve as the cards have now. It shows whenever the document
+   is open, the tool closed too. The host says where things are through two new `MarkupHost` members: `anchors(list)`,
+   told each open comment (`key` "<item>/<n>", its `quote` and `under`) so the surface marks them, and `place(key)`,
+   the box of one now. A new capability says where sent comments stand, `corner` or `margin`; with `margin` the tool
+   stops drawing sent cards and following the item in the corner, and tells the page when it has sent. The editor marks
+   anchors with ProseMirror decorations. An anchor is a block id and the quoted text, found again inside that block,
+   falling back to the block when the text has changed. It is not a Yjs relative position: an agent's answer is often
+   to change the quoted text, and an agent can read a block id and a quote. A phone has no margin: decide there
+   (under the block, or the corner stack as now) by looking at it.
+3. **An agent's edit shown as changed, with Revert.** `conduit-markup document replace|insert|delete … --for
+   <item>/<n>` says which comment an edit answers. The hub keeps, in the document's Yjs map `changes`, block id →
+   `{ for, before, after, by, at }` (`before`: the block as it was, none for an inserted one; `after`: the block a
+   deleted one followed; the first `before` is the one kept). The editor tints those blocks. A change is settled
+   (removed) when its comment is resolved: the hub checks on every `open()` read, which covers an agent's resolve (a
+   line appended to the folder, with no hub in the path) as well as the person's. Revert is `POST
+   /v0/document/<id>/changes { thread, op: "revert" }`, which puts each `before` back; the card shows it through a host
+   member (`revert: { can(key), run(key) }`) and a `MarkupNote` prop.
+4. **One bar.** The block kinds leave the document bar's menu (`KINDS` and the `DropdownMenu` in `editor.tsx`) for
+   Markup's rail: a rail of their own above the bar while the app is in use (the options rail shows only while
+   annotating, so the two never stand together), declared by the host as tools (name, label, icon, active, run).
+   "Ask the agent" makes a quote comment from the document's selection, or the caret's block, through `addQuote`.
+   Image and date need block types the format does not have yet: add them then or say why not.
+5. **Proof.** Extend `markup-document.mjs` (a comment's card stands beside its block on a second page; an edit sent
+   `--for` it tints the block; Revert restores the block; resolving clears the tint), add the margin and the rail to
+   the gallery, run the three probes, then commit, restart and report.
 
 ## What it is
 
