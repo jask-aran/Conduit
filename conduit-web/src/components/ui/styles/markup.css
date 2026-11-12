@@ -74,12 +74,13 @@
 .ui-markup-margin > .ui-markup-note:not([data-open]) { cursor: pointer; }
 /* A card is as tall as its thread: its own limit (its holder's height) would be measured against the card itself here. */
 .ui-markup-margin .ui-card { max-height: none; }
-.ui-markup-rails { position: fixed; bottom: var(--space-lg); right: var(--space-lg); left: var(--space-lg); display: flex; flex-direction: column; align-items: center; gap: var(--space-xs); pointer-events: none; }
+/* --markup-frame-*: the insets of what the tool is put over (a document's pane), where that is less than the window. */
+.ui-markup-rails { position: fixed; bottom: var(--space-lg); right: calc(var(--markup-frame-right, 0px) + var(--space-lg)); left: calc(var(--markup-frame-left, 0px) + var(--space-lg)); display: flex; flex-direction: column; align-items: center; gap: var(--space-xs); pointer-events: none; }
 .ui-markup-bar { display: flex; flex-wrap: wrap; justify-content: center; max-width: 100%; align-items: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: var(--space-xs); color: var(--foreground); font-size: var(--text-caption); }
 /* Thinner than the one frost, where the bar sits over an interface being looked at. conventions-ok: the tool's own surface */
 .ui-markup-rails[data-thin] > .ui-markup-bar { --frost-fill: color-mix(in oklch, var(--foreground), transparent 92%); }
 /* A phone: every control on one row. */
-.ui-markup-rails[data-compact] { right: var(--space-2xs); left: var(--space-2xs); }
+.ui-markup-rails[data-compact] { right: calc(var(--markup-frame-right, 0px) + var(--space-2xs)); left: calc(var(--markup-frame-left, 0px) + var(--space-2xs)); }
 .ui-markup-rails[data-compact] > .ui-markup-bar { gap: 0; }
 /* Its controls keep their width; only the status gives way. */
 .ui-markup-bar > :not(.ui-markup-status) { flex: none; }

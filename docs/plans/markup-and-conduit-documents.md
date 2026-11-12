@@ -1,27 +1,61 @@
 # Markup & Conduit Documents
 
-Agreed with the user on 2026-11-12. Milestones 1, 2 and 3 are done. Delete a part when it lands.
+Agreed with the user on 2026-11-12. Milestones 1, 2 and 3 and step (a) of what follows are done. Delete a part when it lands.
 
 ## Start here: the brief for the session that builds this
 
-You are picking up a build part-way. Milestones 1 to 3 are built. Where an artifact lives is settled with the user:
-read "Settled with the user on 2026-11-12" before you build. Read this section, then the rest of this
+You are picking up a build part-way. Milestones 1 to 3 and step (a), papers in panes, are built. Step (b) is next: the
+mated thread as the second view, and connections with their rider. Read "Settled with the user on 2026-11-12" first. Read this section, then the rest of this
 file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background session the user checks in on.
 
-### Where things stand (2026-11-12, end of milestone 3)
+### Where things stand (2026-11-12, end of step (a): papers in panes)
 
-- Local `main` holds all of milestones 1 to 3. `origin/main` is behind it: someone other than the building session
-  pushed at 14:57 on 2026-11-12, up to `d8dcf4f9d` (margin threads). What came after it (the rail, "Ask the agent",
-  the rule that only the person's tick puts a comment away, the 119,000 ceiling, this brief) is local only. Pushing
-  is still the user's call.
-- conduit-local on :4310 runs local `main`. Try it at `/document`.
-- The three probes pass on that build (`markup-document.mjs` 17 checks, `markup-delivery.mjs`, `markup-thread.mjs`).
-  Not run: `npm test`, the headed Chrome on :9222, a real phone, Android, desktop, two people typing in one paragraph.
+- Local `main` holds milestones 1 to 3 and step (a). `origin/main` is behind it: someone other than the building
+  session pushed at 14:57 on 2026-11-12, up to `d8dcf4f9d` (margin threads). Pushing is still the user's call.
+- conduit-local on :4310 runs local `main`. Try it: open the Test project in the sidebar and press "Test document",
+  or the project's menu › New Artifact.
+- Four probes pass on that build, each with `errors: []`: `markup-artifacts.mjs` (10 checks: the pane, the sidebar
+  rows, the creator, rename, a second paper beside, delete), `markup-document.mjs` (17 checks, now on the paper in a
+  pane), `markup-delivery.mjs`, `markup-thread.mjs`. Not run: `npm test`, the headed Chrome on :9222, a real phone,
+  Android, desktop, two people typing in one paragraph. Screenshots were looked at headless only.
 - No Markup listener is running. The user said (2026-11-12) it need not be kept live all the time; start
   `wait --stay` when you want their markup.
-- The user asked for the main build to be done by the session itself, with Opus 5.5 subagents at low or medium effort
-  for bounded pieces (a CLI change, gallery rows, one seam). Give each a file list it may edit and forbid builds and
-  restarts while you run probes.
+- The user asked (2026-11-12) for subagents to build and check in parallel: Opus 5.5 at low or medium effort, each
+  with a file list it may edit, no builds or restarts, and one that only reviews. `client/main.tsx` can be edited by
+  two at once when each uses narrow edits. The review found the worst defect of step (a) before it ran on real data.
+- **The initial JS bundle is 3 bytes under its budget** (424,997 of 425,000 B gzip). Step (a) needed four rounds of
+  moving code into lazy chunks to fit. Anything step (b) adds to the first load (a rider, a header switch) will not
+  fit: ask the user whether to raise the budget or what to cut, before building it.
+
+### Step (a) as built
+
+- `server/documents.js` is the whole of it on the hub. Which papers exist is read from the folders, never kept: at
+  start, and again when a project's files change (`filesChanged`, from `onWorkspaceChange`), each project's folder is
+  listed for `*.paper` (`git ls-files`, so nothing git ignores; a bounded walk where the folder is no repository). A
+  file belongs to the project whose folder holds it most closely, because every managed project's folder stands
+  inside the Chats project's. A file with no id, or with the id of a paper still in another file (a copy), is given
+  its own id, written into it; the older file keeps the id.
+- The file wins: `take` reads it on load, every two seconds while someone has it open, and before each save and each
+  agent's read or edit. A file that cannot be read is left alone and the hub writes nothing until it can be (the live
+  copy goes on; what is typed meanwhile is lost when the mended file is taken). A file that has gone is looked for
+  under another name by id; found nowhere, the paper is closed. Another paper's file at an open paper's path (a
+  checkout) closes the open one. Writes are a temporary file and a rename.
+- Routes: `GET|POST /v0/projects/<id>/artifacts` (list; make with `{ kind, name, folder? }`; `{ path }` gives the
+  artifact a file is), `GET /v0/document/<id>?as=about|markdown|blocks`, `PATCH` (rename), `DELETE`. The hub tells
+  clients `artifacts_changed` with the project's id. A project on another device answers 501.
+- Deleting a paper deletes its file and leaves `.conduit/artifacts/<id>/`, so a file brought back from git is the
+  paper it was. The hub lists every paper's Markup folder in `~/.conduit/data/documents/roots.json` for the CLI, which
+  cannot ask the hub where projects are. `conduit-markup document list <project>` and `document new <name> --project
+  <id>` are the agent's side.
+- Client: `client/document/artifacts.ts` (what the client knows of artifacts), `artifact-pane.tsx` (the pane:
+  editor, margin, Markup's tool, one for each open paper), `artifact-rows.tsx` (the sidebar's rows with their menu,
+  rename and delete), `artifact-creator.tsx` (New Artifact). All four load lazily. In `client/main.tsx`:
+  `renderArtifactDocument`, `openArtifact`, and `artifact` added to `isToolView` and `tabbable` (a view kind missing
+  from `isToolView` is drawn as a dock tool over the pane). A `.paper` opened through `openFileDocument` opens the
+  artifact. `/?a=artifact:<id>` is a paper in the first pane.
+- Markup's bar stays on its pane through `MarkupHost.frame`: the tool keeps the frame's insets from the window on the
+  layer as `--markup-frame-left` and `--markup-frame-right`. `DocumentSheet` and `DocumentEditor` take `bare` (no bar
+  of their own in a pane) and the editor says when the hub is out of reach (`onAway`).
 
 ### Settled with the user on 2026-11-12: where an artifact lives
 
@@ -32,7 +66,9 @@ The code keeps `document` inside the editor and the hub's service; the pane kind
 - **A paper is a file.** `<name>.paper` in its project's folder: the blocks as readable JSON (`conduit-document`),
   with the paper's id inside, so a rename or a move keeps its threads. Its threads, change marks and Yjs state live
   in `<project>/.conduit/artifacts/<id>/`. The hub is the only writer while Conduit runs and writes the file after
-  each save. Conduit does not touch `.gitignore`. An artifact always belongs to a project.
+  each save. `.conduit/` is where a project's chats already keep their files, and Conduit already keeps it out of
+  git through Git's local exclude file (`excludeConduitFromGit` in `attachment-store.js`), never the project's
+  `.gitignore`; making a paper does the same, so threads and history are not committed by a routine commit. An artifact always belongs to a project.
 - **A file changed outside Conduit wins.** When the file differs from what the hub last wrote (a checkout, a hand
   edit, a clone with no `.conduit/`), the hub takes the file as the paper, blocks matched by id. A file it cannot read
   is an error shown, never a guess.
@@ -53,12 +89,11 @@ The code keeps `document` inside the editor and the hub's service; the pane kind
   The user hoped for one mechanism and accepted two arrivals, since the MCP tools make a second way in anyway.
 - **Projects on another node** (Writing, Screenshots, conduitcomposer) follow as their own step; the first build
   covers projects whose folder is on the hub. How the hub writes a file on a node has not been read yet.
-- **`/document`** goes at the end of step (a). A paper in the first pane has its place in the app's address as a chat
-  does; no standalone route for now. The test document becomes `Test document.paper` in the Test project's folder
-  (`~/.conduit/data/chat/files/test`), with its threads; the user's go-ahead for those writes is given.
+- **`/document`** is gone. A paper in the first pane has its place in the app's address (`/?a=artifact:<id>`); no
+  standalone route for now. The test document is `Test document.paper` in the Test project's folder
+  (`~/.conduit/data/chat/files/test`), id `test`, with its threads.
 
-The order, agreed: (a) papers in panes: the file and its `.conduit/artifacts/<id>/`, many papers, the pane kind,
-the sidebar rows, the creator and the verbs; (b) the mated thread as the second view, started by the hub, and
+The order, agreed: (a) done: papers in panes; (b) the mated thread as the second view, started by the hub, and
 connections with their rider; (c) the MCP tools and addressing by `@name`; (d) projects on another node; (e) other
 kinds of artifact.
 
@@ -78,8 +113,9 @@ engineer: they read your prose closely and your diffs shallowly, so what you tel
 - `npm run typecheck` (from `conduit-web/`) is clean, conventions included.
 - Interface feedback still works: `node scripts/probes/markup-delivery.mjs` and `markup-thread.mjs` pass (from
   `conduit-web/`, against conduit-local on :4310). Run them before a Markup change lands, not after.
-- The milestone has a probe of its own beside those, and it passes. `markup-document.mjs` covers the editor at
-  `/document` and the CLI's block commands; it deletes every block it adds. Extend it as the editor grows.
+- The milestone has a probe of its own beside those, and it passes. `markup-document.mjs` covers the editor (the test
+  paper in a pane) and the CLI's block commands; it deletes every block it adds. `markup-artifacts.mjs` covers the
+  pane, the sidebar rows and the verbs. Extend them as the work grows.
 - It is committed, on local `main`, and conduit-local is restarted (`bash scripts/start-conduit.sh restart`), so the
   user can try it. Then you report (see "Reporting") and go on to the next milestone without waiting.
 
@@ -89,11 +125,11 @@ engineer: they read your prose closely and your diffs shallowly, so what you tel
   `components/ui/markup.tsx` is its library pieces. `server/markup-store.js` is the receiver; the hub wraps it in
   `server/feedback.js`. `scripts/conduit-markup.mjs` is the agent's side (`wait --stay`, `reply`, `resolve`, `done`).
 - `src/document-format.js` is the document format and the live socket's frames, shared by the hub and the editor.
-  `server/documents.js` is the hub's document service (`/v0/document/<id>`, its `/blocks` and its `/live` socket), each
-  document kept as Yjs state in `~/.conduit/data/documents/<id>.yjs`. `components/document/` is the editor; its
+  `server/documents.js` is the hub's document service (`/v0/document/<id>`, its `/blocks` and its `/live` socket); where
+  a paper is kept is under "Step (a) as built". `components/document/` is the editor; its
   `host.ts` states its boundary (`DocumentHost`) and what it offers Markup (`DocumentMarks`). `components/ui/document.tsx`
-  is its library piece. `client/document/document-page.tsx` is `/document`: the one test document, id `test`.
-  `conduit-markup document read|replace|insert|delete <id>` is the agent's side. The old `scratch.md` is left where it was.
+  is its library piece. `conduit-markup document list|new|read|replace|insert|delete` is the agent's side. The old
+  `scratch.md` is left where it was (`~/.conduit/data/documents/`).
 - Decisions made in milestone 2, each stated where the code is: blocks are ProseMirror nodes with an `id` attribute
   (`BLOCK_TYPES`); the wire is two binary frames, `have` and `update`, over Yjs alone; an agent's edit is applied by the
   hub as the smallest change, under a Yjs client id of the agent's own, and the document's `authors` map names each
@@ -101,10 +137,10 @@ engineer: they read your prose closely and your diffs shallowly, so what you tel
   is used directly (a small extension in `editor.tsx`), not TipTap's Collaboration extension, whose fork of it was not
   on the approved list.
 - Milestone 3, as built. A document's comments live with it: `server/documents.js` makes one Markup store for each
-  document, in `~/.conduit/data/documents/<id>.markup/`, served under `/v0/document/<id>/markup/...` by the same routes
+  document, in `<project>/.conduit/artifacts/<id>/markup/`, served under `/v0/document/<id>/markup/...` by the same routes
   interface feedback has (`registerMarkupRoutes` in `server/feedback.js`). The listeners are one registry (the feedback
   folder's `.waiting`), so one `wait` is handed interface feedback and every document's comments; the CLI looks for an
-  item in the feedback folder and in every `documents/*.markup`. On `/document` each Send is an item of its own.
+  item in the feedback folder and in every paper's Markup folder. On a paper each Send is an item of its own.
 - The margin is `components/markup/margin.tsx` (`MarkupMargin`), which the page mounts in `DocumentSheet`'s `margin`.
   It asks the store for its open threads (`open()`: every item with a comment the person has not resolved themselves,
   or with an answer unread) every three seconds and draws each comment's card at the height of what it is about. The host says where that is
@@ -266,6 +302,13 @@ document stays possible: a comment may be a mark, not only words.
   once sent, only the blocks under it; a phone has the cards under the text, not beside a block; while annotating, the
   layer has every press, so a card is pressed only while the app is in use.
 - How the artifact creator, the Paper | Thread switch on a phone and the connection's rider feel: build, then the user judges.
+- Rough edges of step (a), none yet judged by the user: in a narrow pane Markup's bar wraps to two rows (the compact
+  bar is chosen by touch, not width); while one paper is being annotated its layer takes presses over the whole
+  window, other panes included, and comments not yet sent stack at the window's right edge; a person with a paper
+  open is not told when its file cannot be read; the Chats group shows no artifacts; a project with papers and no
+  chats still says "No chats" above them; a tab not yet shown that is renamed keeps its old name until shown; the
+  Computer dashboard's own file list still opens a `.paper` in the file viewer; a paper in a folder git ignores is
+  listed only once it has been opened from the file tree.
 - Who an author is: every person's client is recorded as `person` until there is a name to give it.
 - The hub starting a thread touches its session code, which Markup has not needed before.
 - Moving Markup and the editor into the shared components package: parked until the package's scope is decided.

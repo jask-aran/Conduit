@@ -53,13 +53,14 @@ export const deletePlaceLabel = (project: Project) => project.deletesFilesOnRemo
 
 export function PlaceMenuItems(props: {
   project: Project; places: Project[];
-  onNewChat: () => void; onOpenMaximized?: () => void; onRename: () => void; pin?: { pinned: boolean; onToggle: () => void };
+  onNewChat: () => void; onNewArtifact?: () => void; onOpenMaximized?: () => void; onRename: () => void; pin?: { pinned: boolean; onToggle: () => void };
   onIdentity: () => void; onSettings: () => void; onMoveChats: (place: Project) => void; onDelete: () => void;
 }): JSX.Element {
   const workspace = () => isWorkspace(props.project);
   return <Show when={props.project.state !== "cloning"} fallback={<MenuSection><MenuRow disabled icon={<LoaderCircleIcon />}>Clone in progress</MenuRow></MenuSection>}>
     <MenuSection>
       <MenuRow icon={<Icons.NewChat />} onSelect={props.onNewChat}>{commandLabel(COMMAND_IDS.newChat)}</MenuRow>
+      <Show when={props.onNewArtifact}><MenuRow icon={<Icons.WriteFile />} onSelect={() => props.onNewArtifact?.()}>{commandLabel(COMMAND_IDS.newArtifact)}</MenuRow></Show>
       <Show when={workspace() && props.onOpenMaximized}><MenuRow icon={<Icons.Maximize />} onSelect={() => props.onOpenMaximized?.()}>Open maximized Workspace</MenuRow></Show>
       <MenuRow icon={<Icons.Edit />} onSelect={props.onRename}>Rename {workspace() ? "workspace" : "folder"}</MenuRow>
       <Show when={props.pin}>{(pin) => <PinRow pinned={pin().pinned} onToggle={pin().onToggle} />}</Show>

@@ -1,4 +1,4 @@
-// One delivery: on Conduit comments wait for Send and go to one growing item; on /document Done sends while "Send now" is on, each to the document's own store and margin. Card states, folding, the corner's Resolve, the working mark.
+// One delivery: on Conduit comments wait for Send and go to one growing item; on the test paper (/?a=artifact:test) Done sends while "Send now" is on, each to the document's own store and margin. Card states, folding, the corner's Resolve, the working mark.
 import { open } from "./lib.mjs";
 import { spawn, execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -46,7 +46,7 @@ try {
   await page.locator(".ui-markup-note").nth(1).locator("button[aria-label='Resolve']").click(); await page.waitForTimeout(2000);
   console.log("A second resolved from its corner:", await cards());
 
-  await page.goto("http://127.0.0.1:4310/document");
+  await page.goto("http://127.0.0.1:4310/?a=artifact:test");
   await page.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 });
   await page.waitForTimeout(4500);
   const press = (label) => page.locator(`.ui-markup-bar button[aria-label^='${label}'], .ui-markup-bar button[title^='${label}']`).first().click();

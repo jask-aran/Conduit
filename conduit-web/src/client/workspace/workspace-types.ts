@@ -14,14 +14,14 @@ export interface DiffPayload { repository: boolean; branch?: string; upstream?: 
 export interface GitCommitDetail { hash: string; content: string; }
 /** The dock's tools; jbot's works on no project (the jbot chat with its panel). */
 export type PanelTab = "files" | "diff" | "chat" | "terminal" | "jbot";
-export type SplitView = PanelTab | "file" | "home" | `shell:${string}` | `chat:${string}` | `page:${string}` | `files:${string}` | `term:${string}` | `browser:${string}`;
+export type SplitView = PanelTab | "file" | "home" | `shell:${string}` | `chat:${string}` | `page:${string}` | `files:${string}` | `term:${string}` | `browser:${string}` | `artifact:${string}`;
 /** SplitView's kinds are the UI API's declared views', each way: a kind on one side only fails here. */
 type SplitViewKind = SplitView extends infer V ? V extends `${infer K}:${string}` ? K : V : never;
 type DeclaredViewKind = (typeof UI_VIEWS)[number]["kind"];
 const viewKindsAgree: [SplitViewKind] extends [DeclaredViewKind] ? [DeclaredViewKind] extends [SplitViewKind] ? true : never : never = true;
 void viewKindsAgree;
 export const isPanelTab = (value: unknown): value is PanelTab => value === "files" || value === "diff" || value === "chat" || value === "terminal" || value === "jbot";
-export const isSplitView = (value: unknown): value is SplitView => isPanelTab(value) || value === "file" || value === "home" || (typeof value === "string" && /^(shell|chat|page|files|term|browser):./.test(value));
+export const isSplitView = (value: unknown): value is SplitView => isPanelTab(value) || value === "file" || value === "home" || (typeof value === "string" && /^(shell|chat|page|files|term|browser|artifact):./.test(value));
 export type ChatMode = "history" | "changes";
 // `discarded`: the harness kept this step in its tree but builds every later request without it
 // (an answer it was interrupted writing).

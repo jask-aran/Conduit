@@ -641,8 +641,9 @@ const uiControl = new UiControl({ runtimeHub, nodeHub });
 mcpRuntime.uiControl = uiControl;
 const feedback = lifetime.own("feedback", createFeedback({ dataRoot: config.dataRoot, config, serverName: serverIdentity.name, runtimeHub, uiControl, chatLogs, listProcesses: () => backends.list() }), (owned) => owned.close());
 registerMarkupRoutes(app, "/v0/markup", () => feedback);
-const documents = lifetime.own("documents", createDocuments({ dataRoot: config.dataRoot }), (owned) => owned.close());
+const documents = lifetime.own("documents", createDocuments({ dataRoot: config.dataRoot, projects, changed: (projectId) => runtimeHub.publish({ type: "artifacts_changed", projectId }) }), (owned) => owned.close());
 registerDocumentRoutes(app, documents);
+onWorkspaceChange((projectIds) => documents.filesChanged(projectIds));
 registerMarkupRoutes(app, "/v0/document/:document/markup", (request) => documents.markup(request.params.document));
 const browserHost = lifetime.own("hub browser", new BrowserHost({ dataRoot: config.dataRoot,
   onChange: () => runtimeHub.publish({ type: "browser_changed", id: "hub" }) }), (owned) => owned.close());

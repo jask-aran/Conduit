@@ -86,7 +86,8 @@ const marked = (changes: YMap<Change>, told: { anchors: DocumentAnchor[]; moved:
   });
 };
 
-export function DocumentEditor(props: { host: DocumentHost; id: string; name: string; actions?: JSX.Element; margin?: JSX.Element; onReady?: () => void; marks?: (marks: DocumentMarks) => void }) {
+/** `bare`: in a pane, whose header is the document's bar; `onAway` then tells that header when the hub's copy is out of reach. */
+export function DocumentEditor(props: { host: DocumentHost; id: string; name: string; actions?: JSX.Element; margin?: JSX.Element; bare?: boolean; onAway?: (away: boolean) => void; onReady?: () => void; marks?: (marks: DocumentMarks) => void }) {
   const copy = createLiveDocument(props.host, props.id);
   const [column, setColumn] = createSignal<HTMLDivElement>(), [editor, setEditor] = createSignal<Editor>();
   const changes = copy.doc.getMap<Change>(CHANGES), [changed, setChanged] = createSignal<string[]>([]);
@@ -99,6 +100,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   const kind = createEditorTransaction(editor, kindAt);
   // Ready is the hub's copy drawn, or the hub not answering: never a page still waiting.
   createEffect(() => { if (editor() || copy.state() === "away") props.onReady?.(); });
+  createEffect(() => props.onAway?.(copy.state() === "away"));
   // Made once, `active` read where it is drawn: a list made again at each change would have its buttons redrawn under the press (the editor changes as it loses focus to one).
   const tools = DOCUMENT_BLOCKS.filter((offered) => (props.host.blocks ?? DOCUMENT_BLOCKS).includes(offered)).map((name) => {
     const Icon = documentBlockIcons[name];
@@ -137,7 +139,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
       return range;
     },
   });
-  return <DocumentSheet ref={setColumn} name={props.name} state={copy.state() === "away" ? "Reconnecting" : undefined} margin={props.margin} actions={props.actions}>
+  return <DocumentSheet ref={setColumn} name={props.name} state={copy.state() === "away" ? "Reconnecting" : undefined} margin={props.margin} actions={props.actions} bare={props.bare}>
     {/* The editor is made only once the hub's copy is held: made before, its first empty block would be merged in as a block of its own. */}
     <Show when={copy.synced() && column()}>{(element) => {
       const made = createTiptapEditor(() => ({ element: element(), extensions: [...documentExtensions(), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told)], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name } } }));

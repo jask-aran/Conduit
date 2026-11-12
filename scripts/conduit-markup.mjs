@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Reads the markup folder and nothing else, so it needs no session and no running hub. The folder is
 // CONDUIT_MARKUP_DIR, else <CONDUIT_DATA_ROOT>/feedback, else ./.markup where `serve` made one, else Conduit's own.
-// Beside Conduit's feedback folder, each document's comments are items too, in documents/<document-id>.markup.
+// Beside Conduit's feedback folder, each paper's comments are items too, in its project's folder; the hub lists those
+// folders in documents/roots.json.
 //
 // `serve [port]` is the receiver for a project with no hub (conduit-web/src/server/markup-store.js on its own): the
 // markup tool's routes on this machine only, writing ./.markup, so wait/take/done work there as they do here.
@@ -13,8 +14,10 @@
 // <id>/thread.jsonl, where the tool reads it; what they write back there ends the same name's next `wait`, and so
 // does a comment added to a live item. `resolve <id> <n>` settles one comment; the last one settled handles the item.
 //
-// `document <read|replace|insert|delete> <id> …` is the one part that needs the hub running: the hub holds a Conduit
-// document and is the only way to it, so these sign in as `conduit-auth api` does. `read` prints the document as
+// `document <list|new|read|replace|insert|delete> …` is the one part that needs the hub running: the hub holds a paper
+// (a Conduit document, a .paper file in a project's folder) and is the only way to it, so these sign in as
+// `conduit-auth api` does. `list <project>` prints a project's papers, each id first; `new <name> --project <id>`
+// makes one and prints its id. `read` prints the document as
 // Markdown, each block under a comment that gives its id; the others change one block, taking Markdown from their last
 // arguments or from stdin, and print the ids of the blocks written. `--as <name>` says who writes; `--for <item>/<n>`
 // says which comment the edit answers.
@@ -38,12 +41,9 @@ const exists = (file) => fs.stat(file).then(() => true, () => false);
 const alive = (pid) => { try { process.kill(Number(pid), 0); return true; } catch (error) { return error.code === "EPERM"; } };
 const script = path.relative(process.cwd(), process.argv[1]) || process.argv[1];
 
-/** Listed each time: a document's folder appears with its first comment. */
-const roots = async () => {
-  if (path.basename(folder) !== "feedback") return [folder];
-  const documents = path.join(path.dirname(folder), "documents");
-  return [folder, ...(await fs.readdir(documents).catch(() => [])).filter((name) => name.endsWith(".markup")).map((name) => path.join(documents, name))];
-};
+/** Read each time: a paper's folder is listed once the hub has seen the paper. */
+const roots = async () => path.basename(folder) !== "feedback" ? [folder]
+  : [folder, ...await fs.readFile(path.join(path.dirname(folder), "documents", "roots.json"), "utf8").then(JSON.parse, () => [])];
 /** An id starts with when it was started, so id order is time order across roots; a folder still being written starts with a dot. */
 async function items() {
   const found = [];
@@ -182,6 +182,15 @@ if (command === "wait") {
   if (!entry) { console.error(`No markup item ${argument} in ${folder}`); process.exit(1); }
   await fs.writeFile(path.join(entry.dir, "handled.json"), `${JSON.stringify({ at: new Date().toISOString() })}\n`);
   console.log(`Handled ${argument}`);
+} else if (command === "document" && rest[0] && (argument === "list" || argument === "new")) {
+  const { execFileSync } = await import("node:child_process");
+  const flag = (name) => { const at = rest.indexOf(name); return at < 0 ? undefined : rest.splice(at, 2)[1]; };
+  const project = argument === "list" ? rest[0] : flag("--project"), into = flag("--folder");
+  if (!project) { console.error("document new takes --project <id or slug>"); process.exit(1); }
+  try {
+    const answer = JSON.parse(execFileSync(process.execPath, [new URL("./conduit-auth.mjs", import.meta.url).pathname, "api", argument === "list" ? "GET" : "POST", `/v0/projects/${encodeURIComponent(project)}/artifacts`, ...(argument === "list" ? [] : [JSON.stringify({ kind: "paper", name: rest.join(" "), folder: into })])], { encoding: "utf8" }));
+    for (const made of answer.artifacts ?? [answer]) console.log(`${made.id}  ${made.path}`);
+  } catch (error) { process.stderr.write(error.stdout || `${error.message}\n`); process.exit(1); }
 } else if (command === "document" && rest[0] && (argument === "read" || (["replace", "insert", "delete"].includes(argument) && rest[1]))) {
   const { execFileSync } = await import("node:child_process");
   const named = rest.indexOf("--as"), by = named < 0 ? path.basename(process.cwd()) : rest.splice(named, 2)[1];
@@ -203,6 +212,6 @@ if (command === "wait") {
     if (waiter && alive(waiter.id)) console.log(`waiter   ${waiter.name}  (${waiter.cwd}, since ${waiter.since})`);
   }
 } else {
-  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document read <id> | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block>   (--as <name>; --for <item>/<n> names the comment an edit answers; Markdown from stdin when not given)");
+  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document list <project> | document new <name> --project <id> [--folder <path>] | document read <id> | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block>   (--as <name>; --for <item>/<n> names the comment an edit answers; Markdown from stdin when not given)");
   process.exit(command ? 1 : 0);
 }

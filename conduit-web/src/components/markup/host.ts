@@ -132,6 +132,8 @@ export interface MarkupHost {
   under?(box: { left: number; top: number; width: number; height: number }): Record<string, string | number | boolean> | null;
   /** A shell that can take the page's picture itself, with nothing asked; null where it cannot, and the tool uses display capture. */
   capturePage?(): Promise<Blob | null>;
+  /** What the tool is put over, where that is less than the window (a document in one pane): the bar stands at its foot, centred on it. Read once, as the tool opens. */
+  frame?(): Element | null | undefined;
   /** The surface's margin, where its capabilities say sent comments stand there. */
   margin?: MarkupMarginHost;
   /** Tools of the host's own (a document's block kinds), shown in a rail of their own above the bar while the app is in use; read where they are drawn, so `active` follows. */

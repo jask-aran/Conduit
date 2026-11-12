@@ -63,7 +63,7 @@ function limitedReadable(maxBytes) {
   });
 }
 
-async function excludeConduitFromGit(projectPath) {
+export async function excludeConduitFromGit(projectPath) {
   const excludeFile = await new Promise((resolve, reject) => {
     const child = spawn("git", ["rev-parse", "--git-path", "info/exclude"], {
       cwd: projectPath,

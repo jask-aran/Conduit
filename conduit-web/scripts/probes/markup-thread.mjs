@@ -1,4 +1,4 @@
-// The thread card after a batched Send on Conduit (field keeps focus, Reply, times, Resolve, Back, the sent list), then /document live with a staying listener, the comment's card in the margin.
+// The thread card after a batched Send on Conduit (field keeps focus, Reply, times, Resolve, Back, the sent list), then the test paper (/?a=artifact:test) live with a staying listener, the comment's card in the margin.
 import { open } from "./lib.mjs";
 import { spawn, execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -64,7 +64,7 @@ try {
   }
 
   stay = spawn("node", [script, "wait", "doc-probe", "--stay"]); let told = ""; stay.stdout.on("data", (data) => { told += data; });
-  await page.goto("http://127.0.0.1:4310/document");
+  await page.goto("http://127.0.0.1:4310/?a=artifact:test");
   await page.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 });
   await page.waitForTimeout(4500);
   console.log("B bar:", await buttons(), "| launch mark gone:", await js("!document.querySelector('[data-launch-mark], #launch-mark')"));
@@ -78,7 +78,7 @@ try {
   await page.waitForTimeout(5000);
   // A document's comments are in its own store, and their cards in its margin.
   const doc = JSON.parse(await js("fetch('/v0/document/test/markup/open').then(r => r.text())")).items.find((one) => one.comments[0].comment === "Doc probe: tighten this"); mine.push(doc.id);
-  const item = JSON.parse(fs.readFileSync(`${process.env.HOME}/.conduit/data/documents/test.markup/${doc.id}/item.json`, "utf8"));
+  const item = JSON.parse(fs.readFileSync(`${process.env.HOME}/.conduit/data/chat/files/test/.conduit/artifacts/test/markup/${doc.id}/item.json`, "utf8"));
   console.log("B item:", JSON.stringify({ id: doc.id, live: item.live, to: item.handed, quote: item.comments[0].quote, subject: { ...item.subject, text: item.subject?.text?.slice(0, 40) }, shot: item.screenshot }));
   console.log("B listener told:", told.trim().slice(0, 300));
   cli("reply", doc.id, "1", "Tightened.");

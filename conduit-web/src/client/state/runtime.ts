@@ -140,6 +140,8 @@ export function createRuntimeStore() {
         window.dispatchEvent(new Event("conduit:ptys-changed"));
       } else if (event.type === "keybindings_changed" && event.overrides && typeof event.overrides === "object") {
         window.dispatchEvent(new CustomEvent("conduit:keybindings-changed", { detail: event.overrides }));
+      } else if (event.type === "artifacts_changed") {
+        window.dispatchEvent(new CustomEvent("conduit:artifacts-changed", { detail: event.projectId }));
       } else if (event.type === "browser_changed") {
         window.dispatchEvent(new CustomEvent("conduit:browser-changed", { detail: event }));
       } else if (event.type === "ui_command") {

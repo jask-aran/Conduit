@@ -652,6 +652,23 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     onCleanup(() => cancelAnimationFrame(handle));
     const asking = setInterval(() => { if (can.listeners) void askWaiters(); if (cornered && (!thread() || listing())) void askEarlier(); }, WAITING_EVERY_MS);
     onCleanup(() => clearInterval(asking));
+    // The bar is kept on the frame's foot by its insets from the window's edges (markup.css reads them). A frame can move
+    // without changing size (a pane sliding in, two panes swapped), which no observer tells: it is looked at again when
+    // any motion on the page ends, and each frame until it has held still for a while after the tool opens.
+    const framed = host.frame?.();
+    if (framed && layer) {
+      let last = "", still = 0, settling = 0;
+      const place = () => { const box = framed.getBoundingClientRect(), now = `${box.left}px ${innerWidth - box.right}px`; if (now === last) return false; last = now; layer!.style.setProperty("--markup-frame-left", `${box.left}px`); layer!.style.setProperty("--markup-frame-right", `${innerWidth - box.right}px`); return true; };
+      const settle = () => { still = place() ? 0 : still + 1; settling = still < 30 ? requestAnimationFrame(settle) : 0; };
+      const moved = () => { place(); if (!settling) { still = 0; settle(); } };
+      const sized = new ResizeObserver(moved);
+      sized.observe(framed);
+      const ended = () => void place();
+      window.addEventListener("resize", moved);
+      for (const event of ["transitionend", "animationend"]) window.addEventListener(event, ended, true);
+      settle();
+      onCleanup(() => { sized.disconnect(); cancelAnimationFrame(settling); window.removeEventListener("resize", moved); for (const event of ["transitionend", "animationend"]) window.removeEventListener(event, ended, true); });
+    }
   });
   onCleanup(() => {
     for (const type of POINTER_EVENTS) window.removeEventListener(type, swallow, { capture: true });

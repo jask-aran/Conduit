@@ -10,7 +10,7 @@ import { pressAhead, PillButton, Backdrop, Button, NavBrand, NavLead, NavFolder,
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuRow, MenuSection } from "@/components/ui/menus";
 import { isConduitManagedProject } from "./sidebar-preferences";
 import { ServerSwitcher } from "./server-switcher";
-import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, untrack, type JSX } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, For, lazy, on, onCleanup, onMount, Show, Suspense, untrack, type JSX } from "solid-js";
 
 
 import type { ChatSummary, ComputerLocation, HarnessesPayload, HarnessSummary, NodesPayload, Project, PtysPayload, RuntimeProcess, WorkspacePolicy, WorkspaceSuggestion } from "../api/contracts";
@@ -21,6 +21,7 @@ import { BrowserMachine } from "@/components/ui/browser";
 import { api } from "../api/client";
 import { WorkspaceGlyph } from "../project/workspace-appearance";
 import { ChatMenuItems, MoveTo, PlaceMenuItems } from "./item-menus";
+import type { Artifact } from "../document/artifacts";
 import { PlaceGlyph } from "../chat/place-picker";
 import type { Pty } from "../api/contracts";
 import { deviceStates, type RuntimeStore } from "../state/runtime";
@@ -32,6 +33,8 @@ import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT } from "../preferences/
 import { agentName, agentView, refreshAgent } from "../state/agent";
 import { installSidebarCursor } from "./sidebar-cursor";
 
+const ArtifactCreator = lazy(() => import("../document/artifact-creator"));
+const ArtifactRows = lazy(() => import("../document/artifact-rows"));
 const ComputerExplorer = lazy(() => import("../dashboard/computer-dashboard").then((module) => ({ default: module.ComputerExplorer })));
 
 type WorkspaceMode = "linked" | "created" | "cloned";
@@ -115,6 +118,9 @@ export function Sidebar(props: {
   openIds?: string[];
   placeOf?: (id: string) => { pane: string; shown: boolean } | undefined;
   onOpenChatBeside?: (chat: ChatSummary, project: Project) => void;
+  /** What the focused pane shows, for an artifact row's current mark. */
+  focusedView?: string | null;
+  onOpenArtifact: (artifact: Artifact, beside?: boolean) => Promise<void>;
   onNewPane?: () => void;
   navigatingId?: string | null;
   dashboard: boolean;
@@ -414,6 +420,8 @@ export function Sidebar(props: {
   const [renameValue, setRenameValue] = createSignal("");
   const [deleting, setDeleting] = createSignal<DeleteTarget | null>(null);
   const [moving, setMoving] = createSignal<{ chat: ChatSummary; project: Project } | null>(null);
+  // Undefined until first asked for, so the creator's code loads only then.
+  const [creating, setCreating] = createSignal<Project | null>();
   let appliedDefaultWorkspacePath = "";
   let handledCommandNonce: number | null = null;
 
@@ -429,6 +437,7 @@ export function Sidebar(props: {
     handledCommandNonce = command.nonce;
     if (command.type === "new-folder") openNewDialog("folder");
     if (command.type === "new-workspace") openNewDialog("workspace");
+    if (command.type === "new-artifact") { const project = command.project || currentProject(); if (project) setCreating(project); }
     if (command.type === "new-workspace-created" || command.type === "new-workspace-cloned") {
       openNewDialog("workspace");
       selectWorkspaceMode(command.type === "new-workspace-created" ? "created" : "cloned");
@@ -962,6 +971,8 @@ export function Sidebar(props: {
     const guard = guardFor(blockProps.project);
     const isWorkspace = () => blockProps.project.origin === "linked" || blockProps.project.origin === "created" || blockProps.project.origin === "cloned" || blockProps.project.kind === "workspace";
     const cloning = () => blockProps.project.state === "cloning";
+    // Its artifacts are asked of the hub once the project is first open, not for every folded project at start.
+    const opened = createMemo((was: boolean) => was || open(), false);
     return <NavFolder open={open()} row={<ContextMenu placement={menuPlacement()} onOpenChange={guardOpen(guard)}>
         <ContextMenuTrigger as={NavFolderRow} open={open()} current={onProjectPage(blockProps.project)} within={holdsCurrentChat(blockProps.project)}
           icon={<Show when={isWorkspace()} fallback={<Icons.Folder />}><WorkspaceGlyph appearance={blockProps.project.workspaceAppearance} /></Show>}
@@ -978,6 +989,7 @@ export function Sidebar(props: {
         <ContextMenuContent>
           <PlaceMenuItems project={blockProps.project} places={props.projects}
             onNewChat={() => startNewChat(blockProps.project)}
+            onNewArtifact={() => setCreating(blockProps.project)}
             onOpenMaximized={() => { closeMobile(); props.onOpenProjectMaximized(blockProps.project); }}
             onRename={() => requestRenameProject(blockProps.project)}
             pin={isConduitManagedProject(blockProps.project) ? { pinned: isPinned("project", blockProps.project.id), onToggle: () => void togglePin("project", blockProps.project.id) } : undefined}
@@ -989,6 +1001,9 @@ export function Sidebar(props: {
       </ContextMenu>}>
       <For each={sortChats(blockProps.project.sessions, chatSort())}>{(chat) => <ChatMenu chat={chat} project={blockProps.project} indent />}</For>
       <Show when={!blockProps.project.sessions.length}><Note kind="nav">No chats</Note></Show>
+      {/* Its own boundary: the rows' code arriving holds back nothing else. */}
+      <Show when={opened()}><Suspense><ArtifactRows project={blockProps.project.id} current={props.focusedView} placement={menuPlacement()} phone={isMobileLayout()}
+        onOpen={(artifact, beside) => beside ? void props.onOpenArtifact(artifact, true) : openOnto(props.onOpenArtifact(artifact))} /></Suspense></Show>
     </NavFolder>;
   };
 
@@ -1255,6 +1270,10 @@ export function Sidebar(props: {
 
     <Dialog alert open={Boolean(deleting())} title={deleteCopy().title} description={deleteCopy().description} onOpenChange={(open) => { if (!open) setDeleting(null); }}
       actions={<><DialogButton variant="ghost" outline onClick={() => setDeleting(null)}>Cancel</DialogButton><DialogButton variant="destructive" onClick={() => void confirmDelete()}>{deleteButtonLabel()}</DialogButton></>} />
+
+    <Show when={creating() !== undefined}>
+      <ArtifactCreator project={creating() ?? null} onClose={() => setCreating(null)} onMade={(artifact) => openOnto(props.onOpenArtifact(artifact))} />
+    </Show>
 
     <Dialog open={Boolean(moving())} title="Move chat" description="Choose the working folder for this chat and its attachments." onOpenChange={(open) => { if (!open) setMoving(null); }}
       actions={<DialogButton type="button" variant="ghost" outline onClick={() => setMoving(null)}>Cancel</DialogButton>}>

@@ -29,6 +29,7 @@ export interface PaletteContext {
 export interface PaletteActions {
   logout: () => void;
   newChat: (project?: Project | null, launch?: { templateId?: string }) => void;
+  newArtifact: () => void;
   newFolder: () => void;
   newWorkspace: () => void;
   attach: () => void;
@@ -130,7 +131,7 @@ const INTENT_GROUPS: Record<string, string> = {
   [COMMAND_IDS.copyTranscript]: "chat", [COMMAND_IDS.attachFiles]: "chat", [COMMAND_IDS.stashPrompt]: "chat",
   [COMMAND_IDS.toggleDictation]: "chat", [COMMAND_IDS.renameFolder]: "chat",
   [COMMAND_IDS.searchChats]: "navigation", [COMMAND_IDS.openSettings]: "navigation", [COMMAND_IDS.openWorkspaceViews]: "navigation",
-  [COMMAND_IDS.newChat]: "create", [COMMAND_IDS.newFolder]: "create", [COMMAND_IDS.newWorkspace]: "create",
+  [COMMAND_IDS.newChat]: "create", [COMMAND_IDS.newArtifact]: "create", [COMMAND_IDS.newFolder]: "create", [COMMAND_IDS.newWorkspace]: "create",
   [COMMAND_IDS.toggleSidebar]: "view", [COMMAND_IDS.toggleWorkspacePanel]: "view", [COMMAND_IDS.maximizeWorkspacePanel]: "view",
   [COMMAND_IDS.retryConnection]: "app", [COMMAND_IDS.reload]: "app", [COMMAND_IDS.updateApp]: "app",
   [COMMAND_IDS.resetAppCache]: "app", [COMMAND_IDS.keyboardProbe]: "app", [COMMAND_IDS.composerPath]: "app", [COMMAND_IDS.keyboardTour]: "app", [COMMAND_IDS.toggleFeedback]: "app",
@@ -207,6 +208,7 @@ interface PaletteCommandRuntime {
 const paletteCommandRuntime: Record<string, PaletteCommandRuntime> = {
   [COMMAND_IDS.logout]: { isAvailable: () => true, run: (actions) => actions.logout() },
   [COMMAND_IDS.newChat]: { isAvailable: () => true, run: (actions) => actions.newChat() },
+  [COMMAND_IDS.newArtifact]: { isAvailable: (context) => Boolean(context.project), run: (actions) => actions.newArtifact() },
   [COMMAND_IDS.newFolder]: { isAvailable: () => true, run: (actions) => actions.newFolder() },
   [COMMAND_IDS.newWorkspace]: { isAvailable: () => true, run: (actions) => actions.newWorkspace() },
   [COMMAND_IDS.attachFiles]: { isAvailable: hasChat, run: (actions) => actions.attach() },

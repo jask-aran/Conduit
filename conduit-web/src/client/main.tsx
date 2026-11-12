@@ -205,7 +205,7 @@ const FileViewer = lazy(() => import("./workspace/workspace-file-viewer"));
 const FileTypeIcon = lazy(() => import("@/components/ui/file-marks").then((module) => ({ default: module.FileTypeIcon })));
 const ComputerDashboard = lazy(() => import("./dashboard/computer-dashboard").then((module) => ({ default: module.ComputerDashboard })));
 const FeedbackTool = lazy(() => import("./feedback/conduit-feedback"));
-const DocumentPage = lazy(() => import("./document/document-page"));
+const ArtifactPane = lazy(() => import("./document/artifact-pane"));
 const AgentPage = lazy(() => import("./dashboard/agent-page").then((module) => ({ default: module.AgentPage })));
 const JbotRoom = lazy(() => import("./dashboard/jbot-room").then((module) => ({ default: module.JbotRoom })));
 const EnvironmentPage = lazy(() => import("./dashboard/environment-page").then((module) => ({ default: module.EnvironmentPage })));
@@ -2417,7 +2417,7 @@ function App() {
   }, [], { equals: (a, b) => a.length === b.length && a.every((slot, index) => slot === b[index]) });
   const renderSlots = shownSlots;
   const splitShown = () => shownSlots().length > 0;
-  const isToolView = (view: SplitView | null) => Boolean(view && view !== "home" && !isPaneView(view) && !/^(files|term|browser):/.test(view));
+  const isToolView = (view: SplitView | null) => Boolean(view && view !== "home" && !isPaneView(view) && !/^(files|term|browser|artifact):/.test(view));
   const toolSlot = () => shownSlots().find((slot) => isToolView(slotView(slot))) ?? null;
   const toolInPaneA = () => isToolView(paneAOverride());
   const toolView = () => { if (toolInPaneA()) return paneAOverride(); const slot = toolSlot(); return slot === null ? null : slotView(slot); };
@@ -2896,6 +2896,16 @@ function App() {
   };
   const [browserTitles, setBrowserTitles] = createSignal<Record<string, string>>({});
   const [termTitles, setTermTitles] = createSignal<Record<string, string>>({});
+  const [paperNames, setPaperNames] = createSignal<Record<string, string>>({});
+  // A tab is named before its pane is first shown: the hub is asked, once. Shown, the pane says its name, and its new one when it is renamed.
+  const namedPapers = new Set<string>();
+  const namePaper = (view: string) => {
+    if (namedPapers.has(view)) return;
+    namedPapers.add(view);
+    void import("./document/artifacts").then(({ artifactAbout }) => artifactAbout(view.slice("artifact:".length))).then((found) => setPaperNames((current) => ({ ...current, [view]: found.name })), () => {});
+  };
+  const renderArtifactDocument = (pane: PaneKey, id: string) => <ArtifactPane id={id} quiet={feedbackMode() !== null} onName={(name) => setPaperNames((current) => ({ ...current, [`artifact:${id}`]: name }))}
+    header={(extra) => <PaneHeader actions={<>{extra}{paneTabActions(pane)}</>}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`artifact:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />;
   const renderBrowserDocument = (pane: PaneKey, id: string) => <SheetFill class="pane-browser">
     <BrowserPane id={id} onTitle={(title) => setBrowserTitles((current) => ({ ...current, [`browser:${id}`]: title }))}
       header={<PaneHeader actions={paneTabActions(pane)}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`browser:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />
@@ -2951,6 +2961,10 @@ function App() {
   }
   const [fileReveal, setFileReveal] = createSignal<{ entry: FileEntry; request: ReviewNavigationRequest } | null>(null);
   const openFileDocument = async (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => {
+    // A paper is an artifact: its file opens as the paper, never in the file viewer.
+    if (entry.path.endsWith(".paper")) return void await import("./document/artifacts").then(({ artifactAt }) => artifactAt(entry.projectId, entry.path)).then(
+      ({ id }) => openArtifact(id, options.beside),
+      (error) => toast.error(error instanceof Error ? error.message : String(error)));
     const keepTab = tabActivation();
     // Every open sets it, so one without edit retires an earlier edit's that never loaded.
     pendingFileEdit = options.edit ? entry : null;
@@ -3190,6 +3204,10 @@ function App() {
   const openProjectHere = (project: Project) => openInFocusedPane(`page:project:${project.id}`, () => openProject(project));
   const openDashboardHere = () => openInFocusedPane("page:dashboard", () => openDashboard());
   const openComputerHere = () => openInFocusedPane("page:computer", () => openComputer());
+  const openArtifact = async (id: string, beside = false) => {
+    const view = `artifact:${id}` as const;
+    if ((beside || altActivation()) && !isMobileLayout()) await openBeside(view, false); else await openInFocusedPane(view, () => setPaneView("main", view));
+  };
   const openHarnessHere = (id: string) => openInFocusedPane(`page:harness:${encodeURIComponent(id)}`, () => openComputerHarness(id));
   const openAgentHere = () => openInFocusedPane("page:agent", () => openAgent());
   const openJbotHere = () => openInFocusedPane("page:jbot", () => openJbot());
@@ -3485,6 +3503,7 @@ function App() {
     if (files) return files.length ? files.map((entry) => entry.path.split("/").pop()).join(", ") : "File viewer";
     if (view.startsWith("term:")) return termTitles()[view] || "Terminal";
     if (view.startsWith("browser:")) return browserTitles()[view] || "Browser";
+    if (view.startsWith("artifact:")) { namePaper(view); return paperNames()[view] || "Paper"; }
     return isPanelTab(view) ? WORKSPACE_TOOL_LABELS[view] : "Pane";
   };
   type PaneTabs = { ids: string[]; used: string[] };
@@ -3498,7 +3517,7 @@ function App() {
   };
   const [paneTabs, setPaneTabs] = createSignal<Record<string, PaneTabs>>(launchTabs());
   const tabsOf = (pane: PaneKey) => paneTabs()[String(pane)] ?? null;
-  const tabbable = (view: string | null | undefined): view is SplitView => Boolean(view && (view === "home" || /^(chat|page|browser|term):/.test(view)));
+  const tabbable = (view: string | null | undefined): view is SplitView => Boolean(view && (view === "home" || /^(chat|page|browser|term|artifact):/.test(view)));
   const tabKey = (view: SplitView) => view.startsWith("chat:") ? view.slice("chat:".length) : view;
   const tabView = (key: string) => (key === "home" || key.includes(":") ? key : `chat:${key}`) as SplitView;
   const tabPlace = (id: string) => id === "home" ? "doc:page" : id.startsWith("page:project:") ? id.slice("page:project:".length)
@@ -4083,6 +4102,7 @@ function App() {
         <Show when={parseFileView(slotView(slot))}>{renderFileViewer(slot)}</Show>
         <Show when={slotView(slot)?.startsWith("term:") ? slotView(slot)!.slice("term:".length) : undefined} keyed>{(shell) => renderTerminalDocument(slot, shell)}</Show>
         <Show when={slotView(slot)?.startsWith("browser:") ? slotView(slot)!.slice("browser:".length) : undefined} keyed>{(id) => renderBrowserDocument(slot, id)}</Show>
+        <Show when={slotView(slot)?.startsWith("artifact:") ? slotView(slot)!.slice("artifact:".length) : undefined} keyed>{(id) => renderArtifactDocument(slot, id)}</Show>
         <Show when={slotView(slot) === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome(slot)}</SheetFill></Show>
         <Show when={page() === "computer"}>
           <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderPaneComputer(slot)}</SheetFill>
@@ -4602,6 +4622,7 @@ function App() {
   const paletteActions: PaletteActions = {
     logout: () => { void logout(); },
     newChat: (project, launch) => void createChat(project ?? undefined, launch ?? {}),
+    newArtifact: () => runSidebar("new-artifact", { project: dockProject() ?? undefined }),
     newFolder: () => runSidebar("new-folder"),
     newWorkspace: () => runSidebar("new-workspace"),
     attach: () => focusedSession().openAttachments(),
@@ -5465,7 +5486,7 @@ function App() {
         <Show when={workspaceIdentityProject()}>{(project) => <WorkspaceAppearanceEditor compact value={project().workspaceAppearance} saving={workspaceIdentitySaving()} onSave={(appearance) => void saveWorkspaceIdentity(appearance)} />}</Show>
     </Dialog>
     <Show when={routeKind() !== "terminal"}>
-    <Sidebar onPreviewChat={previewChat} onPreviewJbot={previewJbot} onPreviewRelease={releasePreview} projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} placeOf={(id: string) => chatPlaces().get(id)} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} onNewPane={isMobileLayout() ? undefined : openEmptyPane} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneAOverride()} agent={routeKind() === "jbot" && !paneAOverride()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneAOverride()} routeCovered={paneAOverride() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
+    <Sidebar onPreviewChat={previewChat} onPreviewJbot={previewJbot} onPreviewRelease={releasePreview} projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} placeOf={(id: string) => chatPlaces().get(id)} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} focusedView={viewOf(keyboardPane())} onOpenArtifact={(artifact, beside) => openArtifact(artifact.id, beside)} onNewPane={isMobileLayout() ? undefined : openEmptyPane} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneAOverride()} agent={routeKind() === "jbot" && !paneAOverride()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneAOverride()} routeCovered={paneAOverride() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       serverInTitleBar={Boolean(desktopShell) && desktopTitleBar() === "conduit" && titleBarShows("server")}
@@ -5580,6 +5601,7 @@ function App() {
       <Show when={parseFileView(paneAOverride())}>{renderFileViewer("main")}</Show>
       <Show when={paneAOverride()?.startsWith("term:") ? paneAOverride()!.slice("term:".length) : undefined} keyed>{(shell) => renderTerminalDocument("main", shell)}</Show>
       <Show when={paneAOverride()?.startsWith("browser:") ? paneAOverride()!.slice("browser:".length) : undefined} keyed>{(id) => renderBrowserDocument("main", id)}</Show>
+      <Show when={paneAOverride()?.startsWith("artifact:") ? paneAOverride()!.slice("artifact:".length) : undefined} keyed>{(id) => renderArtifactDocument("main", id)}</Show>
       <Show when={paneAOverride() === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome("main")}</SheetFill></Show>
       <Show when={toolInPaneA()}><SheetFill ref={(element) => { setPaneAToolHost(element); onCleanup(() => setPaneAToolHost(undefined)); }} class="pane-a-tool-host" /></Show>
       <Show when={!paneAOverride() && routeBootstrap() === "ready"} fallback={paneAOverride() ? null : <Empty role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
@@ -5705,5 +5727,5 @@ void startPush().catch(() => {});
 void keepThisComputerConnected().catch(() => {});
 
 render(() => <ErrorBoundary fallback={(error) => { dismissLaunchMark(); return <ConnectionRecovery title="Conduit hit a UI error" error={error instanceof Error ? error.message : "Unknown interface error"} onRetry={() => location.reload()} retryLabel="Reload Conduit" />; }}>
-  {location.pathname === "/document" ? <DocumentPage onReady={dismissLaunchMark} /> : nativeApp ? <NativeRoot /> : <App />}
+  {nativeApp ? <NativeRoot /> : <App />}
 </ErrorBoundary>, mount);

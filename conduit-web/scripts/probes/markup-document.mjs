@@ -1,4 +1,4 @@
-// /document: the page shows the hub's test document; a block an agent writes with the CLI shows on the page and opening a page writes none; typing reaches the hub and a second page;
+// The test paper in a pane (/?a=artifact:test): the pane shows the hub's test paper; a block an agent writes with the CLI shows on the page and opening a page writes none; typing reaches the hub and a second page;
 // the rail makes a block another kind and asks the agent about it; a comment's card stands in the margin beside its text on a second page (under the text on a phone-sized one), an edit sent
 // --for it tints its block, Revert puts the block back, a session's resolve leaves the card and the tint, the person's accepts the change; a phone-sized page types without harming the blocks; Markup's bar answers over it. Every block it adds
 // it deletes and the one comment it sends (handed to no session) it finishes.
@@ -15,7 +15,7 @@ try {
   await context.addInitScript(() => { localStorage.setItem("ui-markup.hand", "off"); localStorage.setItem("ui-markup.live", "off"); });
   const errors = [];
   const watch = (target) => target.on("pageerror", (error) => errors.push(String(error.stack ?? error).slice(0, 400)));
-  const visit = async (target) => { watch(target); await target.goto(`${origin}/document`); await target.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 }); };
+  const visit = async (target) => { watch(target); await target.goto(`${origin}/?a=artifact:test`); await target.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 }); };
   const shown = (target) => target.evaluate(() => [...document.querySelectorAll(".ui-document-text > [data-id]")].map((block) => `${block.dataset.id} ${block.textContent}`));
   const until = async (what, test) => { for (let tries = 0; tries < 40; tries += 1) { if (await test()) return console.log(`${what}: true`); await page.waitForTimeout(100); } console.log(`${what}: false`); };
   const before = cli("read", "test");
