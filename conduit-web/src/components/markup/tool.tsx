@@ -1,15 +1,15 @@
 import { batch, createMemo, createResource, createSignal, For, Index, onCleanup, onMount, Show } from "solid-js";
 import { createStore, produce, reconcile, unwrap } from "solid-js/store";
 import { Portal } from "solid-js/web";
-import { drawingBox, FeedbackBar, FeedbackDrawing, FeedbackLayer, FeedbackMark, FeedbackNote, FeedbackNotes, FeedbackText, feedbackInkColour, FEEDBACK_INKS, type FeedbackBox, type FeedbackDrawingKind, type FeedbackInk, type FeedbackPoint, type FeedbackShape, type FeedbackToolKind, type FeedbackWeight } from "@/components/ui/feedback";
+import { drawingBox, MarkupBar, MarkupDrawing, MarkupLayer, MarkupMark, MarkupNote, MarkupNotes, MarkupText, markupInkColour, MARKUP_INKS, type MarkupBox, type MarkupDrawingKind, type MarkupInk, type MarkupPoint, type MarkupShape, type MarkupToolKind, type MarkupWeight } from "@/components/ui/markup";
 import { captureHeld, captureScreen, cropAreas, previewOf, type Capture } from "./capture";
-import { FEEDBACK_CAPABILITIES, type FeedbackHost, type FeedbackListener, type FeedbackSent, type FeedbackThread } from "./host";
+import { MARKUP_CAPABILITIES, type MarkupHost, type MarkupListener, type MarkupSent, type MarkupThread } from "./host";
 import { createPieces } from "./pieces";
 
 /** What a comment was made on: a screenshot of the page, or the live page. Its marks show on that one. */
 type View = "screenshot" | "page";
 /** `text`: words put on the page at its one point; `size`: what they measure, once written. */
-type Drawing = { kind: FeedbackDrawingKind | "text"; points: FeedbackPoint[]; ink: FeedbackInk; weight?: FeedbackWeight; text?: string; size?: { width: number; height: number } };
+type Drawing = { kind: MarkupDrawingKind | "text"; points: MarkupPoint[]; ink: MarkupInk; weight?: MarkupWeight; text?: string; size?: { width: number; height: number } };
 /** A run of text selected on the live page: the range follows the page; `text` is what it said when chosen. */
 type Quote = { range: Range; text: string };
 /**
@@ -19,15 +19,15 @@ type Quote = { range: Range; text: string };
  * `quote`: a run of text selected on the live page; `elements` is then the piece it is in.
  * `preview`: the picture a note shows of it. `sent`: its number in a live item it has gone to; it is then a thread, not to be changed.
  */
-type Selection = { id: number; elements: Element[]; comment: string; on: View; reach?: FeedbackBox; drawings?: Drawing[]; from?: { left: number; top: number }; quote?: Quote; general?: true; whole?: true; preview?: string; sent?: number };
+type Selection = { id: number; elements: Element[]; comment: string; on: View; reach?: MarkupBox; drawings?: Drawing[]; from?: { left: number; top: number }; quote?: Quote; general?: true; whole?: true; preview?: string; sent?: number };
 const GENERAL = "General note";
 const WHOLE = "Screenshot";
-type Tool = FeedbackToolKind;
+type Tool = MarkupToolKind;
 const DRAW_KEYS: Record<string, Tool> = { v: "select", q: "quote", p: "pen", h: "highlight", s: "shape", l: "shape", a: "shape", b: "shape", t: "text", e: "erase" };
-const SHAPE_KEYS: Record<string, FeedbackShape> = { l: "line", a: "arrow", b: "box" };
+const SHAPE_KEYS: Record<string, MarkupShape> = { l: "line", a: "arrow", b: "box" };
 /** The tools that draw in an ink, each keeping its own: a highlighter is not the pen's colour or size. */
 type Inked = "pen" | "highlight" | "shape" | "text";
-const INKS = Object.keys(FEEDBACK_INKS) as FeedbackInk[];
+const INKS = Object.keys(MARKUP_INKS) as MarkupInk[];
 /** The eraser takes a drawing it comes this near (px). */
 const ERASE_REACH = 8;
 const DRAWN: Record<Drawing["kind"], string> = { pen: "Pen", highlight: "Highlight", line: "Line", arrow: "Arrow", box: "Box", text: "Text" };
@@ -40,12 +40,12 @@ const SENT_POINTS = 64;
 const WAITING_EVERY_MS = 3000;
 /** A shell that does not answer with its picture in this long is not waited for. */
 const PICTURE_WAIT_MS = 2000;
-const HAND_KEY = "ui-feedback.hand";
-const LIVE_KEY = "ui-feedback.live";
-type Waiter = FeedbackListener;
+const HAND_KEY = "ui-markup.hand";
+const LIVE_KEY = "ui-markup.live";
+type Waiter = MarkupListener;
 /** Whether the tool's layer has the pointer, or the app under it. */
-export type FeedbackMode = "select" | "use";
-type Mode = FeedbackMode;
+export type MarkupMode = "select" | "use";
+type Mode = MarkupMode;
 const DRAG_SLOP = 5;
 const CROP_MARGIN = 24;
 const NOTE_GAP = 10;
@@ -58,18 +58,18 @@ const rectOf = (element: Element) => {
   lastRect.set(element, rect);
   return rect;
 };
-const around = (boxes: FeedbackBox[]): FeedbackBox => {
+const around = (boxes: MarkupBox[]): MarkupBox => {
   const left = Math.min(...boxes.map((box) => box.left)), top = Math.min(...boxes.map((box) => box.top));
   return { left, top, width: Math.max(...boxes.map((box) => box.left + box.width)) - left, height: Math.max(...boxes.map((box) => box.top + box.height)) - top };
 };
-const boxOf = (elements: Element[]): FeedbackBox => around(elements.map(rectOf));
-const sameBox = (a: FeedbackBox | null, b: FeedbackBox | null) => a === b || Boolean(a && b && a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height);
+const boxOf = (elements: Element[]): MarkupBox => around(elements.map(rectOf));
+const sameBox = (a: MarkupBox | null, b: MarkupBox | null) => a === b || Boolean(a && b && a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height);
 const ends = (drawing: Drawing) => [drawing.points[0]!, drawing.points[drawing.points.length - 1]!] as const;
-const drawnBox = (drawing: Drawing): FeedbackBox => drawing.kind === "text" ? { left: drawing.points[0]![0], top: drawing.points[0]![1], width: drawing.size?.width ?? 0, height: drawing.size?.height ?? 0 }
+const drawnBox = (drawing: Drawing): MarkupBox => drawing.kind === "text" ? { left: drawing.points[0]![0], top: drawing.points[0]![1], width: drawing.size?.width ?? 0, height: drawing.size?.height ?? 0 }
   : drawingBox(lined(drawing) ? drawing.points : ends(drawing));
 /** Drawn through every point, not from its first to its last. */
 const lined = (drawing: { kind: Drawing["kind"] }) => drawing.kind === "pen" || drawing.kind === "highlight";
-const nearLine = (x: number, y: number, from: FeedbackPoint, to: FeedbackPoint) => {
+const nearLine = (x: number, y: number, from: MarkupPoint, to: MarkupPoint) => {
   const dx = to[0] - from[0], dy = to[1] - from[1], along = dx || dy ? Math.max(0, Math.min(1, ((x - from[0]) * dx + (y - from[1]) * dy) / (dx * dx + dy * dy))) : 0;
   return Math.hypot(x - from[0] - along * dx, y - from[1] - along * dy) <= ERASE_REACH;
 };
@@ -107,9 +107,9 @@ const wordAt = (at: { node: Node; offset: number }) => {
 };
 const quoted = (range: Range) => range.toString().replace(/\s+/g, " ").trim().slice(0, QUOTE_CHARS);
 // The text's own lines, not the boxes of the elements it runs through (which a range's own rects include). Kept for when the app redraws the text away.
-const lastLines = new WeakMap<Range, FeedbackBox[]>();
-const linesOf = (range: Range): FeedbackBox[] => {
-  const lines: FeedbackBox[] = [];
+const lastLines = new WeakMap<Range, MarkupBox[]>();
+const linesOf = (range: Range): MarkupBox[] => {
+  const lines: MarkupBox[] = [];
   const walker = document.createTreeWalker(range.commonAncestorContainer, NodeFilter.SHOW_TEXT);
   let node: Node | null = range.startContainer instanceof Text ? range.startContainer : (walker.currentNode = range.startContainer, walker.nextNode());
   for (let count = 0; node && count < QUOTE_NODES; node = walker.nextNode(), count++) {
@@ -127,7 +127,7 @@ const linesOf = (range: Range): FeedbackBox[] => {
 const frames = (count: number) => new Promise<void>((resolve) => { const next = (left: number) => left ? requestAnimationFrame(() => next(left - 1)) : resolve(); next(count); });
 
 /** `keys`: the chord that opens the tool, as the bar shows it. */
-export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (mode: Mode) => void; onClose: () => void; keys?: () => string[] }) {
+export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode: Mode) => void; onClose: () => void; keys?: () => string[] }) {
   const host = props.host, transport = host.transport;
   const { again, describe, nameOf, pieceRoot, piecesWithin, placeOf, sourceOf, under } = createPieces(host.names, host.anchors);
   const places = new WeakMap<Element, ReturnType<typeof placeOf>>();
@@ -135,25 +135,25 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const [selections, setSelections] = createStore<Selection[]>([]);
   const [openId, setOpenId] = createSignal<number | null>(null);
   const [cursor, setCursor] = createSignal<Element | null>(null);
-  const [marquee, setMarquee] = createSignal<FeedbackBox | null>(null);
+  const [marquee, setMarquee] = createSignal<MarkupBox | null>(null);
   // What this host offers; nothing else is reachable, by the bar or by a key.
-  const can = { ...FEEDBACK_CAPABILITIES, ...host.capabilities };
+  const can = { ...MARKUP_CAPABILITIES, ...host.capabilities };
   const offered = (tool: Tool | "note") => can.tools.includes(tool);
   const drawingTool = (["pen", "highlight", "shape", "text"] as const).find(offered);
   const [pointerTool, setPointerTool] = createSignal<Tool>(offered("select") ? "select" : drawingTool ?? "select");
-  const [stroke, setStroke] = createSignal<{ kind: FeedbackDrawingKind; points: FeedbackPoint[] } | null>(null);
-  const [looks, setLooks] = createStore<Record<Inked, { ink: FeedbackInk; weight: FeedbackWeight }>>({ pen: { ink: "plain", weight: "medium" }, highlight: { ink: "amber", weight: "medium" }, shape: { ink: "plain", weight: "medium" }, text: { ink: "plain", weight: "medium" } });
+  const [stroke, setStroke] = createSignal<{ kind: MarkupDrawingKind; points: MarkupPoint[] } | null>(null);
+  const [looks, setLooks] = createStore<Record<Inked, { ink: MarkupInk; weight: MarkupWeight }>>({ pen: { ink: "plain", weight: "medium" }, highlight: { ink: "amber", weight: "medium" }, shape: { ink: "plain", weight: "medium" }, text: { ink: "plain", weight: "medium" } });
   const inkedTool = (): Inked => { const tool = pointerTool(); return tool === "highlight" || tool === "shape" || tool === "text" ? tool : "pen"; };
   const ink = () => looks[inkedTool()].ink, weight = () => looks[inkedTool()].weight;
-  const setInk = (to: FeedbackInk) => setLooks(inkedTool(), "ink", to), setWeight = (to: FeedbackWeight) => setLooks(inkedTool(), "weight", to);
-  const [shape, setShape] = createSignal<FeedbackShape>("arrow");
+  const setInk = (to: MarkupInk) => setLooks(inkedTool(), "ink", to), setWeight = (to: MarkupWeight) => setLooks(inkedTool(), "weight", to);
+  const [shape, setShape] = createSignal<MarkupShape>("arrow");
   /** Text being selected: where the press was and where the pointer is now. */
   const [quoting, setQuoting] = createSignal<Range | null>(null);
   let quoteFrom: { node: Node; offset: number } | null = null;
   // An ink as the page resolves it, for a note's picture.
-  const colours = new Map<FeedbackInk, string>();
-  const colourOf = (name: FeedbackInk) => {
-    if (!colours.has(name) && layer) { const probe = document.createElement("i"); probe.style.color = feedbackInkColour(name); layer.append(probe); colours.set(name, getComputedStyle(probe).color); probe.remove(); }
+  const colours = new Map<MarkupInk, string>();
+  const colourOf = (name: MarkupInk) => {
+    if (!colours.has(name) && layer) { const probe = document.createElement("i"); probe.style.color = markupInkColour(name); layer.append(probe); colours.set(name, getComputedStyle(probe).color); probe.remove(); }
     return colours.get(name) ?? "";
   };
   // A drawing's line as the layer draws it (its width and see-through), for a note's picture.
@@ -162,7 +162,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     const key = `${drawing.kind} ${drawing.weight ?? "medium"}`;
     if (!lines.has(key) && layer) {
       const probe = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      probe.setAttribute("class", "ui-feedback-drawing");
+      probe.setAttribute("class", "ui-markup-drawing");
       probe.dataset.kind = drawing.kind;
       probe.dataset.weight = drawing.weight ?? "medium";
       layer.append(probe);
@@ -201,9 +201,9 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const [barLift, setBarLift] = createSignal(0);
   // Once sent, the item is a thread: its comments stay up with what the agent answers, and the person writes back.
   // Each look at it is merged into what is held, so a comment's card stays the card it was (and its field keeps the words being written).
-  const [held, setHeld] = createStore<{ item: FeedbackThread | null }>({ item: null });
+  const [held, setHeld] = createStore<{ item: MarkupThread | null }>({ item: null });
   const thread = () => held.item;
-  const setThread = (next: FeedbackThread | null) => {
+  const setThread = (next: MarkupThread | null) => {
     if (!next || held.item?.id !== next.id) return setHeld("item", next);
     const { comments, ...rest } = next;
     batch(() => { setHeld("item", rest); setHeld("item", "comments", reconcile(comments, { key: "n" })); });
@@ -214,7 +214,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const [reply, setReply] = createSignal("");
   const answered = can.deliveries[0] !== "one-way";
   const offersLive = can.listeners && (can.deliveries as readonly string[]).includes("live");
-  const [earlier, { refetch: askEarlier }] = createResource(() => answered ? transport.threads().catch(() => [] as FeedbackSent[]) : [] as FeedbackSent[]);
+  const [earlier, { refetch: askEarlier }] = createResource(() => answered ? transport.threads().catch(() => [] as MarkupSent[]) : [] as MarkupSent[]);
   const unread = () => (earlier.latest ?? []).filter((item) => item.unread);
   let following: ReturnType<typeof setInterval> | undefined;
   /** `alone`: the thread is all there is to look at (a batch that was sent, or one come back to); a live item's is followed while more is marked. */
@@ -307,7 +307,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const unsent = () => numbered().filter((selection) => !selection.sent);
   const tagOf = (selection: Selection) => selection.whole ? "" : String(selection.sent ?? lastSent() + unsent().indexOf(selection) + 1);
   const openCard = (selection: Selection) => selection.sent ? startReply(selection.sent) : openNote(selection.id);
-  const own = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest(".ui-feedback-note, .ui-feedback-bar, .ui-feedback-tag[data-press], .ui-feedback-text[data-editable]"));
+  const own = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest(".ui-markup-note, .ui-markup-bar, .ui-markup-tag[data-press], .ui-markup-text[data-editable]"));
   /** A comment about pieces as they are, not about what was drawn or text selected over them. */
   const ofPieces = (selection: Selection) => !selection.drawings && !selection.quote;
   const chosenBy = (element: Element) => selections.find((selection) => ofPieces(selection) && selection.on === showing() && selection.elements.includes(element)) ?? null;
@@ -320,14 +320,14 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     const now = boxOf(selection.elements);
     return { x: now.left - selection.from.left, y: now.top - selection.from.top };
   };
-  const extent = (selection: Selection): FeedbackBox => {
+  const extent = (selection: Selection): MarkupBox => {
     if (selection.quote) { const lines = linesNow(selection.quote); return lines.length ? around(lines) : boxOf(selection.elements); }
     if (!selection.drawings?.length) return boxOf(selection.elements);
     const drawn = around(selection.drawings.map(drawnBox)), shift = shiftOf(selection);
     return { ...drawn, left: drawn.left + shift.x, top: drawn.top + shift.y };
   };
   /** The part of the page a comment's own picture shows: its marks, what a drag went round, and a margin. */
-  const areaOf = (selection: Selection): FeedbackBox => {
+  const areaOf = (selection: Selection): MarkupBox => {
     const marks = extent(selection), reach = selection.reach ?? { left: 0, top: 0, width: 0, height: 0 };
     const left = Math.max(0, Math.min(marks.left, marks.left - reach.left) - CROP_MARGIN), top = Math.max(0, Math.min(marks.top, marks.top - reach.top) - CROP_MARGIN);
     const right = Math.min(innerWidth, Math.max(marks.left + marks.width, marks.left - reach.left + marks.width + reach.width) + CROP_MARGIN), bottom = Math.min(innerHeight, Math.max(marks.top + marks.height, marks.top - reach.top + marks.height + reach.height) + CROP_MARGIN);
@@ -350,7 +350,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const preview = async (id: number) => {
     const selection = selections.find((candidate) => candidate.id === id), shot = picture();
     if (!selection || !shot || !layer || selection.on !== "screenshot" || !floats(selection)) return;
-    const line = getComputedStyle(layer), type = getComputedStyle(layer.querySelector(".ui-feedback-text") ?? layer);
+    const line = getComputedStyle(layer), type = getComputedStyle(layer.querySelector(".ui-markup-text") ?? layer);
     const blob = await previewOf(shot.capture, areaOf(selection), { outline: selection.drawings ? undefined : extent(selection), drawings: (selection.drawings ?? []).map((drawing) => ({ ...drawing, colour: colourOf(drawing.ink), ...lineOf(drawing) })) },
       { stroke: colourOf("plain"), width: parseFloat(line.strokeWidth) || 1, font: `${type.fontWeight} ${type.fontSize} ${type.fontFamily}` }).catch(() => null);
     if (blob) setSelections((candidate) => candidate.id === id, "preview", (old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(blob); });
@@ -375,7 +375,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     keep(); setSelections(selections.length, { id, elements: placed([pieceRoot(holder) ?? holder ?? document.body]), comment: "", on: "page", quote: { range, text } });
     openNote(id);
   };
-  const add = (elements: Element[], drag?: FeedbackBox) => {
+  const add = (elements: Element[], drag?: MarkupBox) => {
     const id = nextId++;
     const held = boxOf(elements);
     const reach = drag && { left: held.left - drag.left, top: held.top - drag.top, width: drag.width - held.width, height: drag.height - held.height };
@@ -478,7 +478,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
     if (pointerTool() === "erase") { setCursor(null); if (press) eraseAt(event.clientX, event.clientY); }
     else if (pointerTool() === "quote") { const to = press && quoteFrom && layer && caretAt(layer, event.clientX, event.clientY); if (to) setQuoting(rangeBetween(quoteFrom!, to)); }
     else if (drawn) {
-      const last = drawn.points[drawn.points.length - 1]!, here: FeedbackPoint = [event.clientX, event.clientY];
+      const last = drawn.points[drawn.points.length - 1]!, here: MarkupPoint = [event.clientX, event.clientY];
       if (!lined(drawn)) setStroke({ kind: drawn.kind, points: [drawn.points[0]!, here] });
       else if (Math.hypot(here[0] - last[0], here[1] - last[1]) >= PEN_STEP) setStroke({ kind: drawn.kind, points: [...drawn.points, here] });
     } else if (pointerTool() !== "select") setCursor(null);
@@ -628,12 +628,12 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
         setSelections((candidate) => candidate.id === selection.id, "elements", at, found);
       });
       // The notes stand over the bar where the window has no room for both side by side.
-      const notes = layer?.querySelector(".ui-feedback-notes")?.getBoundingClientRect();
-      const under = notes ? [...layer!.querySelectorAll(".ui-feedback-bar")].map((rail) => rail.getBoundingClientRect()).filter((rail) => rail.right > notes.left) : [];
+      const notes = layer?.querySelector(".ui-markup-notes")?.getBoundingClientRect();
+      const under = notes ? [...layer!.querySelectorAll(".ui-markup-bar")].map((rail) => rail.getBoundingClientRect()).filter((rail) => rail.right > notes.left) : [];
       const lift = under.length ? Math.max(...under.map((rail) => rail.bottom)) - Math.min(...under.map((rail) => rail.top)) : 0;
       if (lift !== barLift()) setBarLift(lift);
       // The note being written sits beside what it is about: to its right, else its left, else under or over it.
-      const selection = open(), note = layer?.querySelector<HTMLElement>(".ui-feedback-note[data-float]");
+      const selection = open(), note = layer?.querySelector<HTMLElement>(".ui-markup-note[data-float]");
       if (selection && note) {
         const marks = extent(selection), width = note.offsetWidth, height = note.offsetHeight;
         const fits = (left: number) => left >= NOTE_GAP && left + width <= innerWidth - NOTE_GAP;
@@ -686,7 +686,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       const listed = one ? [one] : unsent(), whole = one ? undefined : selections.find((selection) => selection.whole && !selection.sent && selection.comment.trim());
       const numberOf = (index: number) => base + index + 1;
       // What each comment is, read before any capture so the boxes are the ones in the pictures.
-      const comments: Array<Record<string, unknown> & { area: FeedbackBox | null; on?: View }> = listed.map((selection, index) => {
+      const comments: Array<Record<string, unknown> & { area: MarkupBox | null; on?: View }> = listed.map((selection, index) => {
         if (selection.general) return { n: numberOf(index), comment: selection.comment.trim(), kind: "note" as const, name: GENERAL, area: null };
         const members = selection.elements.map(describe);
         const marks = extent(selection), shift = shiftOf(selection), under = host.under?.(marks);
@@ -730,12 +730,12 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
         if (whole) setSelections((candidate) => candidate.id === whole.id, "sent", base + comments.length);
         setLastSent(base + comments.length);
       });
-      if (!one || !answered) { const where = result.handed.to ? `Feedback saved and handed to ${result.handed.to.name}` : "Feedback saved"; host.notify("sent", captureError ? `${where}, without a screenshot: ${captureError}` : where); }
-      // One-way feedback is done once it has gone.
+      if (!one || !answered) { const where = result.handed.to ? `Sent, and handed to ${result.handed.to.name}` : "Sent"; host.notify("sent", captureError ? `${where}, without a screenshot: ${captureError}` : where); }
+      // One-way markup is done once it has gone.
       if (!answered) return props.onClose();
       if (!thread()) follow(result.id, false);
     } catch (error) {
-      host.notify("failed", `Feedback was not sent: ${error instanceof Error ? error.message : String(error)}`);
+      host.notify("failed", `Markup was not sent: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setCapturing(false);
       setShooting(null);
@@ -747,60 +747,60 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
   const sourceLine = (selection: Selection) => selection.whole ? "The whole page, as it was when this was taken." : selection.general ? "About nothing on the page in particular." : selection.quote ? `“${selection.quote.text}”` : selection.elements.length === 1 ? sourceOf(selection.elements[0]!) : undefined;
 
   return <Portal>
-    <FeedbackLayer ref={(element) => { layer = element; }} select={select()} text={pointerTool() === "quote" && showing() === "page"} frozen={showing() === "screenshot" ? picture()?.url : undefined} hidden={taking()}>
+    <MarkupLayer ref={(element) => { layer = element; }} select={select()} text={pointerTool() === "quote" && showing() === "page"} frozen={showing() === "screenshot" ? picture()?.url : undefined} hidden={taking()}>
       <For each={selections}>{(selection) => <Show when={floats(selection) && selection.on === showing()}>
-        <Show when={selection.drawings} fallback={<Show when={selection.quote} fallback={<FeedbackMark kind="chosen" box={box(selection.elements)} tag={tagOf(selection)} current={openId() === selection.id} onOpen={() => openCard(selection)} />}>{(quote) =>
-          <Index each={linesNow(quote())}>{(line, at) => <FeedbackMark kind="quote" box={line()} tag={at ? undefined : tagOf(selection)} current={openId() === selection.id} onOpen={at ? undefined : () => openCard(selection)} />}</Index>}</Show>}>{(drawings) => <>
+        <Show when={selection.drawings} fallback={<Show when={selection.quote} fallback={<MarkupMark kind="chosen" box={box(selection.elements)} tag={tagOf(selection)} current={openId() === selection.id} onOpen={() => openCard(selection)} />}>{(quote) =>
+          <Index each={linesNow(quote())}>{(line, at) => <MarkupMark kind="quote" box={line()} tag={at ? undefined : tagOf(selection)} current={openId() === selection.id} onOpen={at ? undefined : () => openCard(selection)} />}</Index>}</Show>}>{(drawings) => <>
           <For each={drawings()}>{(drawing, at) => drawing.kind === "text"
-            ? <FeedbackText ref={(element) => { textField = element; }} at={drawing.points[0]!} ink={drawing.ink} shift={shiftOf(selection)} value={drawing.text ?? ""} editable={openId() === selection.id}
+            ? <MarkupText ref={(element) => { textField = element; }} at={drawing.points[0]!} ink={drawing.ink} shift={shiftOf(selection)} value={drawing.text ?? ""} editable={openId() === selection.id}
                 onInput={(value, element) => setSelections((candidate) => candidate.id === selection.id, "drawings", at(), produce((draft) => { draft.text = value; draft.size = { width: element.offsetWidth, height: element.offsetHeight }; }))} onDone={() => textDone(selection.id, at())} />
-            : <FeedbackDrawing kind={drawing.kind} points={drawing.points} ink={drawing.ink} weight={drawing.weight} shift={shiftOf(selection)} current={openId() === selection.id} />}</For>
-          <FeedbackMark kind="drawn" box={extent(selection)} tag={tagOf(selection)} onOpen={() => openCard(selection)} />
+            : <MarkupDrawing kind={drawing.kind} points={drawing.points} ink={drawing.ink} weight={drawing.weight} shift={shiftOf(selection)} current={openId() === selection.id} />}</For>
+          <MarkupMark kind="drawn" box={extent(selection)} tag={tagOf(selection)} onOpen={() => openCard(selection)} />
         </>}</Show>
-        <Show when={ofPieces(selection) && selection.elements.length > 1}><For each={selection.elements}>{(element) => <FeedbackMark kind="member" box={box([element])} />}</For></Show>
+        <Show when={ofPieces(selection) && selection.elements.length > 1}><For each={selection.elements}>{(element) => <MarkupMark kind="member" box={box([element])} />}</For></Show>
       </Show>}</For>
-      <Show when={select() && cursor()} keyed>{(element) => <Show when={!sameBox(box([element]), open() && floats(open()) ? box(open()!.elements) : null)}><FeedbackMark kind="cursor" box={box([element])} name={nameOf([element])} /></Show>}</Show>
-      <Show when={stroke()}>{(drawn) => <FeedbackDrawing kind={drawn().kind} points={drawn().points} ink={ink()} weight={weight()} current />}</Show>
-      <Show when={quoting()}>{(range) => <Index each={(frame(), linesOf(range()))}>{(line) => <FeedbackMark kind="quote" box={line()} />}</Index>}</Show>
+      <Show when={select() && cursor()} keyed>{(element) => <Show when={!sameBox(box([element]), open() && floats(open()) ? box(open()!.elements) : null)}><MarkupMark kind="cursor" box={box([element])} name={nameOf([element])} /></Show>}</Show>
+      <Show when={stroke()}>{(drawn) => <MarkupDrawing kind={drawn().kind} points={drawn().points} ink={ink()} weight={weight()} current />}</Show>
+      <Show when={quoting()}>{(range) => <Index each={(frame(), linesOf(range()))}>{(line) => <MarkupMark kind="quote" box={line()} />}</Index>}</Show>
       <Show when={marquee()}>{(drag) => <>
-        <FeedbackMark kind="marquee" box={drag()} />
-        <Show when={aimed().length > 1}><For each={aimed()}>{(element) => <FeedbackMark kind="member" box={box([element])} />}</For></Show>
-        <Show when={aimed().length}><FeedbackMark kind="cursor" box={box(aimed())} name={nameOf(aimed())} /></Show>
+        <MarkupMark kind="marquee" box={drag()} />
+        <Show when={aimed().length > 1}><For each={aimed()}>{(element) => <MarkupMark kind="member" box={box([element])} />}</For></Show>
+        <Show when={aimed().length}><MarkupMark kind="cursor" box={box(aimed())} name={nameOf(aimed())} /></Show>
       </>}</Show>
       <Show when={listing()}>
-        <FeedbackNotes lift={barLift()}><For each={earlier.latest}>{(item) => <FeedbackNote open={false} tag="" name={item.first || `${item.comments} comments`} onInput={() => {}} onOpen={() => follow(item.id, true)}
-          value={`${item.unread ? `${item.unread} unread · ` : ""}${item.state === "handled" ? "Handled" : item.state === "taken" ? `${item.by ?? "A session"} is working on it` : item.by ? `Sent to ${item.by}` : "Saved"} · ${item.comments} ${item.comments === 1 ? "comment" : "comments"}`} />}</For></FeedbackNotes>
-        <FeedbackBar thin={can.thin} thread onBack={leave} view="use" onView={() => {}} tool="select" onTool={() => {}} onNote={() => {}} status="Sent before" canSend={false} onSend={() => {}} onClose={props.onClose} />
+        <MarkupNotes lift={barLift()}><For each={earlier.latest}>{(item) => <MarkupNote open={false} tag="" name={item.first || `${item.comments} comments`} onInput={() => {}} onOpen={() => follow(item.id, true)}
+          value={`${item.unread ? `${item.unread} unread · ` : ""}${item.state === "handled" ? "Handled" : item.state === "taken" ? `${item.by ?? "A session"} is working on it` : item.by ? `Sent to ${item.by}` : "Saved"} · ${item.comments} ${item.comments === 1 ? "comment" : "comments"}`} />}</For></MarkupNotes>
+        <MarkupBar thin={can.thin} thread onBack={leave} view="use" onView={() => {}} tool="select" onTool={() => {}} onNote={() => {}} status="Sent before" canSend={false} onSend={() => {}} onClose={props.onClose} />
       </Show>
       <Show when={alone() && thread()}>{(item) => <>
-        <FeedbackNotes lift={barLift()}>
-          <Show when={saidOf(null).length || replyTo() === null}><FeedbackNote ref={(element) => { noteField = element; }} open={replyTo() === null} tag="" name={item().by ?? "The item"} said={saidOf(null)} state={item().working ? { label: "Working on it", busy: true } : undefined} placeholder="Write back" value={reply()} onOpen={() => { setReply(""); setReplyTo(null); queueMicrotask(() => noteField?.focus()); }} onInput={setReply} onSay={() => void answer()} /></Show>
-          <For each={item().comments}>{(comment) => <FeedbackNote ref={(element) => { noteField = element; }} open={replyTo() === comment.n} tag={String(comment.n)} name={comment.name} words={comment.comment} said={saidOf(comment.n)} state={stateOf(comment.n)} placeholder="Write back" resolved={comment.resolved}
+        <MarkupNotes lift={barLift()}>
+          <Show when={saidOf(null).length || replyTo() === null}><MarkupNote ref={(element) => { noteField = element; }} open={replyTo() === null} tag="" name={item().by ?? "The item"} said={saidOf(null)} state={item().working ? { label: "Working on it", busy: true } : undefined} placeholder="Write back" value={reply()} onOpen={() => { setReply(""); setReplyTo(null); queueMicrotask(() => noteField?.focus()); }} onInput={setReply} onSay={() => void answer()} /></Show>
+          <For each={item().comments}>{(comment) => <MarkupNote ref={(element) => { noteField = element; }} open={replyTo() === comment.n} tag={String(comment.n)} name={comment.name} words={comment.comment} said={saidOf(comment.n)} state={stateOf(comment.n)} placeholder="Write back" resolved={comment.resolved}
             value={reply()} onOpen={() => { setReply(""); setReplyTo(comment.n); queueMicrotask(() => noteField?.focus()); }} onInput={setReply} onSay={() => void answer()} onResolve={(resolved) => settle(comment.n, resolved)} />}</For>
-        </FeedbackNotes>
-        <FeedbackBar thin={can.thin} thread onBack={leave} view="use" onView={() => {}} tool="select" onTool={() => {}} onNote={() => {}} status={standing()} canSend={false} onSend={() => {}} onClose={props.onClose} />
+        </MarkupNotes>
+        <MarkupBar thin={can.thin} thread onBack={leave} view="use" onView={() => {}} tool="select" onTool={() => {}} onNote={() => {}} status={standing()} canSend={false} onSend={() => {}} onClose={props.onClose} />
       </>}</Show>
       <Show when={!capturing() && !alone() && !listing()}>
         <Show when={floats(open()) && open()} keyed>{(selection) =>
-          <FeedbackNote ref={(element) => { noteField = element; }} float={noteAt() ? { left: `${noteAt()!.left}px`, top: `${noteAt()!.top}px` } : { opacity: 0 }} open tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)}
+          <MarkupNote ref={(element) => { noteField = element; }} float={noteAt() ? { left: `${noteAt()!.left}px`, top: `${noteAt()!.top}px` } : { opacity: 0 }} open tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)}
             value={selection.comment} onOpen={() => {}} onInput={write(selection)} onDone={() => openNote(null)} onRemove={() => remove(selection.id)} sendNow={offersLive ? live() : undefined} onSendNow={agent() ? (on) => { keepLive(on); noteField?.focus({ preventScroll: true }); } : undefined} />}
         </Show>
         <Show when={selections.some((selection) => !floats(selection) || selection.id !== openId())}>
-          <FeedbackNotes lift={barLift()}><For each={selections}>{(selection) => <Show when={!floats(selection) || selection.id !== openId()}>
+          <MarkupNotes lift={barLift()}><For each={selections}>{(selection) => <Show when={!floats(selection) || selection.id !== openId()}>
             <Show when={selection.sent} fallback={<>
-            <FeedbackNote ref={(element) => { noteField = element; }} open={openId() === selection.id} tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)} picture={selection.whole ? picture()?.url : selection.preview}
+            <MarkupNote ref={(element) => { noteField = element; }} open={openId() === selection.id} tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)} picture={selection.whole ? picture()?.url : selection.preview}
               value={selection.comment} onOpen={() => { if (floats(selection) && props.mode === "select") show(selection.on); openNote(selection.id); }} onInput={write(selection)} onRemove={() => remove(selection.id)} state={lastSent() || offersLive ? { label: "Not sent" } : undefined} />
-            </>}>{(n) => <FeedbackNote ref={(element) => { noteField = element; }} open={replyTo() === n()} tag={tagOf(selection)} name={titleOf(selection)} picture={selection.preview} words={selection.comment} said={saidOf(n())} state={stateOf(n())} placeholder="Write back"
+            </>}>{(n) => <MarkupNote ref={(element) => { noteField = element; }} open={replyTo() === n()} tag={tagOf(selection)} name={titleOf(selection)} picture={selection.preview} words={selection.comment} said={saidOf(n())} state={stateOf(n())} placeholder="Write back"
               value={reply()} onOpen={() => startReply(n())} onInput={setReply} resolved={resolvedOf(n())} onSay={() => void answer()} onResolve={(resolved) => settle(n(), resolved)} />}</Show>
-          </Show>}</For></FeedbackNotes>
+          </Show>}</For></MarkupNotes>
         </Show>
-        <FeedbackBar thin={can.thin} view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onTool={(tool) => { if (props.mode === "use") look("page"); setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); }} onNote={() => { if (props.mode === "use") look("page"); note(); }}
+        <MarkupBar thin={can.thin} view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onTool={(tool) => { if (props.mode === "use") look("page"); setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); }} onNote={() => { if (props.mode === "use") look("page"); note(); }}
           status={status()} compact={touchOnly} keys={touchOnly ? undefined : props.keys?.()} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} shape={shape()} onShape={setShape} onUndo={undoable() ? undo : undefined} onRedo={redoable() ? redo : undefined}
           replies={unread().reduce((sum, item) => sum + item.unread, 0)} sent={thread() ? 0 : earlier.latest?.length} onReplies={sentBefore}
           outstanding={unsent().filter((selection) => selection.comment.trim()).length} standing={thread() ? standing() : undefined}
           hand={hand()} onHand={can.listeners ? keepHand : undefined} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
           canSend={canSend()} sending={sending()} onSend={() => void send()} onClose={props.onClose} />
       </Show>
-    </FeedbackLayer>
+    </MarkupLayer>
   </Portal>;
 }

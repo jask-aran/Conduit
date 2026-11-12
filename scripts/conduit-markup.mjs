@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// Reads the feedback folder and nothing else, so it needs no session and no running hub. The folder is
-// CONDUIT_FEEDBACK_DIR, else <CONDUIT_DATA_ROOT>/feedback, else ./.feedback where `serve` made one, else Conduit's own.
+// Reads the markup folder and nothing else, so it needs no session and no running hub. The folder is
+// CONDUIT_MARKUP_DIR, else <CONDUIT_DATA_ROOT>/markup, else ./.markup where `serve` made one, else Conduit's own.
 //
-// `serve [port]` is the receiver for a project with no hub (conduit-web/src/server/feedback-store.js on its own): the
-// feedback tool's routes on this machine only, writing ./.feedback, so wait/take/done work there as they do here.
-// `serve [port] one-way` takes feedback from people owed no answer: it serves no thread and takes nothing written back.
+// `serve [port]` is the receiver for a project with no hub (conduit-web/src/server/markup-store.js on its own): the
+// markup tool's routes on this machine only, writing ./.markup, so wait/take/done work there as they do here.
+// `serve [port] one-way` takes markup from people owed no answer: it serves no thread and takes nothing written back.
 // An item is taken by one waiter (taken.json, written exclusively). `wait` takes only what was handed to its name;
 // everything else stays in the folder until `take <id>`.
 //
@@ -20,9 +20,9 @@ import { existsSync, rmSync, watch } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const local = path.resolve(".feedback");
+const local = path.resolve(".markup");
 const [command, argument, ...rest] = process.argv.slice(2);
-const folder = process.env.CONDUIT_FEEDBACK_DIR ? path.resolve(process.env.CONDUIT_FEEDBACK_DIR)
+const folder = process.env.CONDUIT_MARKUP_DIR ? path.resolve(process.env.CONDUIT_MARKUP_DIR)
   : process.env.CONDUIT_DATA_ROOT ? path.join(path.resolve(process.env.CONDUIT_DATA_ROOT), "feedback")
   : command === "serve" || existsSync(local) ? local
   : path.join(os.homedir(), ".conduit", "data", "feedback");
@@ -123,13 +123,13 @@ if (command === "wait") {
     }
     // Staying, each thing that comes is one line, which is what wakes the session.
     if (stay) console.log(lines.map((line) => line.trim().replace(/\s*\n\s*/g, " ")).join("  "));
-    else for (const line of [...lines, `To keep taking the person's feedback, run \`node ${script} wait ${JSON.stringify(name)}\` in the background again now.`]) console.log(line);
+    else for (const line of [...lines, `To keep taking the person's markup, run \`node ${script} wait ${JSON.stringify(name)}\` in the background again now.`]) console.log(line);
   } while (stay);
 } else if (command === "serve") {
   const { createServer } = await import("node:http");
-  const { createFeedbackStore, handleFeedback } = await import(new URL("../conduit-web/src/server/feedback-store.js", import.meta.url).href);
+  const { createMarkupStore, handleMarkup } = await import(new URL("../conduit-web/src/server/markup-store.js", import.meta.url).href);
   await fs.mkdir(folder, { recursive: true, mode: 0o700 });
-  const store = createFeedbackStore({ folder, answered: ![argument, ...rest].includes("one-way"), done: (id) => `node ${script} done ${id}`, log: (entry) => console.log(JSON.stringify(entry)) });
+  const store = createMarkupStore({ folder, answered: ![argument, ...rest].includes("one-way"), done: (id) => `node ${script} done ${id}`, log: (entry) => console.log(JSON.stringify(entry)) });
   // A page on this machine only: any site open in the browser can reach a local port, so another origin is refused.
   const here = (origin) => { try { return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(origin).hostname); } catch { return false; } };
   const port = Number(argument) || 4390;
@@ -138,23 +138,23 @@ if (command === "wait") {
     if (origin && !here(origin)) { response.writeHead(403).end(); return; }
     if (origin) { response.setHeader("access-control-allow-origin", origin); response.setHeader("access-control-allow-methods", "GET, POST, PUT, DELETE"); response.setHeader("access-control-allow-headers", "content-type"); response.setHeader("vary", "origin"); }
     if (request.method === "OPTIONS") { response.writeHead(204).end(); return; }
-    if (!await handleFeedback(store, request, response)) response.writeHead(404).end();
-  }).listen(port, "127.0.0.1", () => console.log(`Feedback receiver on http://127.0.0.1:${port}/v0/feedback, writing ${folder}`));
+    if (!await handleMarkup(store, request, response)) response.writeHead(404).end();
+  }).listen(port, "127.0.0.1", () => console.log(`Markup receiver on http://127.0.0.1:${port}/v0/markup, writing ${folder}`));
 } else if (command === "take" && argument) {
   const entry = (await items()).find((candidate) => candidate.id === path.basename(argument));
-  if (!entry) { console.error(`No feedback item ${argument} in ${folder}`); process.exit(1); }
+  if (!entry) { console.error(`No markup item ${argument} in ${folder}`); process.exit(1); }
   if (entry.state === "waiting" && !await claim(entry)) { console.error(`${entry.id} was taken just now`); process.exit(1); }
   hand(entry);
 } else if (command === "reply" && argument && rest.length) {
   const id = path.basename(argument), dir = path.join(folder, id);
-  if (!await exists(path.join(dir, "item.json"))) { console.error(`No feedback item ${argument} in ${folder}`); process.exit(1); }
+  if (!await exists(path.join(dir, "item.json"))) { console.error(`No markup item ${argument} in ${folder}`); process.exit(1); }
   const n = rest.length > 1 && /^\d+$/.test(rest[0]) ? Number(rest.shift()) : null;
   const by = await fs.readFile(path.join(dir, "taken.json"), "utf8").then((text) => JSON.parse(text).name ?? null, () => null);
   await fs.appendFile(path.join(dir, "thread.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), from: "agent", ...(by ? { by } : {}), n, text: rest.join(" ") })}\n`);
   console.log(`Said on ${id}${n ? `, comment ${n}` : ""}`);
 } else if (command === "resolve" && argument && /^\d+$/.test(rest[0] ?? "")) {
   const id = path.basename(argument), dir = path.join(folder, id), n = Number(rest[0]);
-  if (!await exists(path.join(dir, "item.json"))) { console.error(`No feedback item ${argument} in ${folder}`); process.exit(1); }
+  if (!await exists(path.join(dir, "item.json"))) { console.error(`No markup item ${argument} in ${folder}`); process.exit(1); }
   const by = await fs.readFile(path.join(dir, "taken.json"), "utf8").then((text) => JSON.parse(text).name ?? null, () => null);
   await fs.appendFile(path.join(dir, "thread.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), from: "agent", ...(by ? { by } : {}), n, resolved: true })}\n`);
   const all = await allResolved(id);
@@ -162,7 +162,7 @@ if (command === "wait") {
   console.log(`Resolved comment ${n} of ${id}${all ? ": every comment is resolved, so the item is handled" : ""}`);
 } else if (command === "done" && argument) {
   const dir = path.join(folder, path.basename(argument));
-  if (!await exists(path.join(dir, "item.json"))) { console.error(`No feedback item ${argument} in ${folder}`); process.exit(1); }
+  if (!await exists(path.join(dir, "item.json"))) { console.error(`No markup item ${argument} in ${folder}`); process.exit(1); }
   await fs.writeFile(path.join(dir, "handled.json"), `${JSON.stringify({ at: new Date().toISOString() })}\n`);
   console.log(`Handled ${argument}`);
 } else if (command === "list") {
@@ -175,6 +175,6 @@ if (command === "wait") {
     if (waiter && alive(waiter.id)) console.log(`waiter   ${waiter.name}  (${waiter.cwd}, since ${waiter.since})`);
   }
 } else {
-  console.log("Usage: conduit-feedback wait [name] [--stay] | take <id> | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]");
+  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]");
   process.exit(command ? 1 : 0);
 }

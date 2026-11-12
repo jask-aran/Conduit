@@ -9,11 +9,11 @@
   in `README.md`; `conduit-web/src/server/routes/` and `conduit-web/src/chat-backend-contract.d.ts` are the reference.
 - Client builds, deployment, several servers or data recovery → read `docs/DEPLOYMENT.md`.
 - Any check beyond the table below → read `docs/TESTING.md`.
-- Taking my UI feedback → keep `node scripts/conduit-feedback.mjs wait "<what you are working on>" --stay` running
-  where each line it prints wakes you (Claude Code: the Monitor tool). The feedback tool lists you by that name, and
+- Taking my UI feedback → keep `node scripts/conduit-markup.mjs wait "<what you are working on>" --stay` running
+  where each line it prints wakes you (Claude Code: the Monitor tool). Markup (the tool I mark the interface up with) lists you by that name, and
   each line is an item's path or what I wrote back, with what to do next. Without `--stay` it ends at the first one,
   for a harness that wakes only when a command ends: wait again after each, until I say stop.
-- Reviewing UI feedback I already sent → `node scripts/conduit-feedback.mjs list`, then `take <id>` for each one that
+- Reviewing UI feedback I already sent → `node scripts/conduit-markup.mjs list`, then `take <id>` for each one that
   is `waiting`; every item I send lands in the folder whether or not a session was listening.
 
 Read each one once per session.

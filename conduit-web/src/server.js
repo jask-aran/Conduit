@@ -565,7 +565,7 @@ async function findChatContext(chatId) {
 registerAttachmentRoutes(app, { attachments, findChatContext });
 
 app.use("/v0/context", express.json({ limit: "256kb" }));
-app.use("/v0/feedback", express.json({ limit: "4mb" }));
+app.use("/v0/markup", express.json({ limit: "4mb" }));
 app.use(express.json({ limit: "128kb" }));
 app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 app.use(mcp.afterAuth);

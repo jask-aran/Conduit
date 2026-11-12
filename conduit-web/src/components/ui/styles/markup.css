@@ -1,0 +1,81 @@
+/* Over everything, notifications included: a toast or a menu can be what is marked. */
+/* Its line width is every drawing's, and what a note's picture of a comment is drawn with. */
+.ui-markup-layer { position: fixed; inset: 0; z-index: var(--layer-markup); pointer-events: none; font-family: var(--font-sans); stroke-width: var(--stroke); }
+/* touch-action: a finger's drag gathers or draws; it does not scroll the page under the layer. */
+.ui-markup-layer[data-select] { pointer-events: auto; cursor: crosshair; touch-action: none; }
+.ui-markup-layer[data-select][data-text] { cursor: text; }
+.ui-markup-layer :is(.ui-markup-note, .ui-markup-bar) { pointer-events: auto; cursor: auto; }
+/* While the page's picture is taken, nothing of the tool is in it. */
+.ui-markup-layer[data-hidden] { visibility: hidden; }
+.ui-markup-frozen { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+.ui-markup-mark { position: fixed; box-sizing: border-box; border: var(--hairline) solid var(--ring); border-radius: var(--radius-inset); pointer-events: none; }
+.ui-markup-mark[data-kind="chosen"] { border-color: var(--primary); background: var(--accent); }
+.ui-markup-mark[data-kind="chosen"][data-current] { border-width: var(--stroke); }
+.ui-markup-mark[data-kind="member"] { border-style: dashed; border-color: var(--primary); }
+.ui-markup-mark[data-kind="marquee"] { border-style: dashed; background: var(--accent); }
+.ui-markup-mark[data-kind="drawn"] { border-color: transparent; }
+/* Selected text: each line washed and underlined, as a selection reads. */
+.ui-markup-mark[data-kind="quote"] { border-width: 0 0 var(--stroke); border-color: var(--primary); border-radius: 0; background: var(--accent); }
+.ui-markup-drawing { position: fixed; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; fill: none; stroke: var(--markup-ink, var(--primary)); stroke-width: var(--markup-weight); stroke-linecap: round; stroke-linejoin: round; filter: var(--glyph-shadow); }
+/* A line's size as it will be drawn, in the ink it will be drawn in. */
+.ui-markup-weight { display: block; width: var(--icon-sm); height: var(--markup-weight); border-radius: var(--markup-weight); background: var(--markup-ink, currentColor); }
+/* Its true size, without the widest making the rail taller than the others leave it. */
+.ui-markup-weight[data-kind="highlight"] { height: calc(6 * var(--markup-weight)); margin-block: calc(-2.5 * var(--markup-weight)); border-radius: 0; opacity: var(--opacity-faint); }
+/* conventions-ok: every hue, for the ink that is any colour, until one is chosen */
+.ui-markup-bar [data-any] > .ui-swatch:not([style*="background"]) { background: conic-gradient(hsl(0 90% 60%), hsl(60 90% 60%), hsl(120 90% 60%), hsl(180 90% 60%), hsl(240 90% 60%), hsl(300 90% 60%), hsl(360 90% 60%)); }
+.ui-markup-picker { padding: var(--space-md); }
+:is(.ui-markup-drawing, .ui-markup-weight)[data-weight="thin"] { --markup-weight: var(--stroke-thin); }
+:is(.ui-markup-drawing, .ui-markup-weight)[data-weight="medium"] { --markup-weight: var(--stroke); }
+:is(.ui-markup-drawing, .ui-markup-weight)[data-weight="thick"] { --markup-weight: calc(2 * var(--stroke)); }
+/* A highlighter marks over what it is on: wide and see-through, with no shadow to muddy it. */
+.ui-markup-drawing[data-kind="highlight"] { stroke-width: calc(6 * var(--markup-weight)); stroke-opacity: var(--opacity-faint); stroke-linecap: butt; filter: none; }
+.ui-markup-drawing marker > path { fill: var(--markup-ink, var(--primary)); stroke: none; }
+.ui-markup-text { position: fixed; field-sizing: content; min-width: var(--control-2xs); border: 0; outline: none; background: none; padding: 0; color: var(--markup-ink, var(--primary)); font: var(--weight-strong) var(--text-body)/var(--control-2xs) var(--font-sans); filter: var(--glyph-shadow); pointer-events: none; }
+.ui-markup-text::placeholder { color: inherit; opacity: 0.5; }
+.ui-markup-layer .ui-markup-text[data-editable] { pointer-events: auto; cursor: text; }
+.ui-markup-tag { position: absolute; bottom: 100%; left: calc(-1 * var(--hairline)); display: flex; max-width: var(--measure-sm); align-items: center; gap: var(--space-xs); overflow: hidden; border-radius: var(--radius-inset); background: var(--frame); color: var(--foreground); font: var(--weight-lift) var(--text-label)/var(--control-2xs) var(--font-data); white-space: nowrap; }
+.ui-markup-tag[data-inside] { top: 0; bottom: auto; }
+.ui-markup-layer .ui-markup-tag[data-press] { pointer-events: auto; cursor: pointer; }
+.ui-markup-tag[data-end] { right: calc(-1 * var(--hairline)); left: auto; }
+.ui-markup-tag > b, .ui-markup-number { display: inline-grid; min-width: var(--control-2xs); height: var(--control-2xs); place-items: center; border-radius: var(--radius-inset); background: var(--primary); padding: 0 var(--space-xs); color: var(--primary-foreground); font: var(--weight-strong) var(--text-label)/1 var(--font-data); }
+.ui-markup-tag > span { overflow: hidden; padding-right: var(--space-xs); text-overflow: ellipsis; }
+.ui-markup-tag > span:only-child { padding-left: var(--space-xs); }
+.ui-markup-mark[data-kind="cursor"] > .ui-markup-tag { color: var(--muted-foreground); }
+
+/* The stack is as tall as the window so it can scroll; only its notes take the pointer. */
+.ui-markup-notes { position: fixed; top: var(--space-lg); right: var(--space-lg); bottom: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-xs); width: var(--measure-md); max-width: calc(100% - 2 * var(--space-lg)); overflow-y: auto; scrollbar-width: none; pointer-events: none; }
+.ui-markup-notes[data-lifted] { bottom: calc(var(--space-lg) + var(--markup-bar-height) + var(--space-sm)); }
+.ui-markup-notes > :first-child { margin-top: auto; }
+.ui-markup-note { flex: none; }
+/* What was said of a sent comment: the person's words plain, the agent's set in from a rule. */
+.ui-markup-note .ui-card > .ui-markup-said { margin: 0; overflow: visible; color: var(--foreground); font-family: var(--font-sans); font-size: var(--text-caption); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-markup-note .ui-card > .ui-markup-said[data-from="agent"] { border-left: var(--stroke) solid var(--primary); padding-left: var(--space-sm); }
+.ui-markup-note .ui-card > .ui-markup-said[data-from="person"] { color: var(--muted-foreground); }
+/* Shut, a thread is its comment's line and the latest said of it, cut to two lines; the rest is a press away. */
+.ui-markup-latest > .ui-markup-said { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.ui-markup-latest > .ui-markup-said > time { display: none; }
+.ui-markup-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-markup-state { display: inline-flex; flex: none; align-items: center; gap: var(--space-xs); margin-left: auto; color: var(--muted-foreground); font-family: var(--font-sans); font-size: var(--text-caption); font-weight: var(--weight-regular); }
+.ui-markup-now { display: inline-flex; align-items: center; gap: var(--space-sm); margin-right: auto; color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-markup-said > time { float: right; margin-left: var(--space-sm); color: var(--muted-foreground); opacity: var(--opacity-faint); }
+.ui-markup-note[data-float] { position: fixed; width: var(--measure-md); max-width: calc(100% - 2 * var(--space-lg)); }
+.ui-markup-note .ui-card-preview { overflow: hidden; }
+.ui-markup-note .ui-card-preview > img { display: block; max-width: 100%; max-height: var(--measure-2xs); margin-inline: auto; border-radius: var(--radius-inset); object-fit: contain; }
+.ui-markup-layer .ui-markup-note:not([data-open]) { cursor: pointer; }
+.ui-markup-note .ui-card { width: 100%; }
+.ui-markup-note .ui-card > h3 { display: flex; align-items: center; gap: var(--space-sm); font-family: var(--font-data); font-size: var(--text-row); }
+.ui-markup-note .ui-card > p { overflow: hidden; font-family: var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
+
+/* The bar, and over it what the held tool draws with. Only the rails take the pointer. */
+.ui-markup-rails { position: fixed; bottom: var(--space-lg); right: var(--space-lg); left: var(--space-lg); display: flex; flex-direction: column; align-items: center; gap: var(--space-xs); pointer-events: none; }
+.ui-markup-bar { display: flex; flex-wrap: wrap; justify-content: center; max-width: 100%; align-items: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: var(--space-xs); color: var(--foreground); font-size: var(--text-caption); }
+/* Thinner than the one frost, where the bar sits over an interface being looked at. conventions-ok: the tool's own surface */
+.ui-markup-rails[data-thin] > .ui-markup-bar { --frost-fill: color-mix(in oklch, var(--foreground), transparent 92%); }
+/* A phone: every control on one row. */
+.ui-markup-rails[data-compact] { right: var(--space-2xs); left: var(--space-2xs); }
+.ui-markup-rails[data-compact] > .ui-markup-bar { gap: 0; }
+/* Its controls keep their width; only the status gives way. */
+.ui-markup-bar > :not(.ui-markup-status) { flex: none; }
+.ui-markup-status { min-width: 0; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
+.ui-markup-with { display: flex; align-items: center; gap: var(--space-2xs); }

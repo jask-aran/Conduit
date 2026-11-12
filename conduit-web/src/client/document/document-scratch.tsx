@@ -1,6 +1,6 @@
 import names from "virtual:ui-pieces";
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
-import { FeedbackTool, httpTransport, type FeedbackHost, type FeedbackMode } from "@/components/feedback";
+import { MarkupTool, httpTransport, type MarkupHost, type MarkupMode } from "@/components/markup";
 import { Button } from "@/components/ui";
 import { toast } from "@/components/ui/notifications";
 import { TextEditor } from "@/components/ui/text-editor";
@@ -30,8 +30,8 @@ export default function DocumentScratch(props: { onReady: () => void }) {
   // What a session wrote in the file shows here, unless this page has words not yet saved.
   const look = async () => { const kept = await api<Kept>(PATH); if (unsaved || kept.version === version) return; took(kept); if (kept.text === null) { setText(START); await save(); } else setText(kept.text); };
   onMount(() => { void look().catch(() => {}); const looking = setInterval(() => void look().catch(() => {}), LOOK_EVERY_MS); onCleanup(() => { clearInterval(looking); clearTimeout(saving); }); });
-  const [mode, setMode] = createSignal<FeedbackMode | null>("use");
-  const host: FeedbackHost = {
+  const [mode, setMode] = createSignal<MarkupMode | null>("use");
+  const host: MarkupHost = {
     names,
     capabilities: { deliveries: ["batched", "live"], tools: ["quote", "highlight", "pen", "shape", "text", "erase", "note"], screenshot: false, thin: false },
     transport: httpTransport(api),
@@ -51,6 +51,6 @@ export default function DocumentScratch(props: { onReady: () => void }) {
   onMount(props.onReady);
   return <>
     <TextEditor fill label="Scratchpad" value={text()} onChange={write} head={<Button variant="ghost" size="sm" aria-pressed={mode() !== null} onClick={() => setMode(mode() ? null : "select")}>Mark up</Button>} />
-    <Show when={mode()}>{(now) => <FeedbackTool host={host} mode={now()} onMode={setMode} onClose={() => setMode(null)} />}</Show>
+    <Show when={mode()}>{(now) => <MarkupTool host={host} mode={now()} onMode={setMode} onClose={() => setMode(null)} />}</Show>
   </>;
 }

@@ -48,7 +48,7 @@ const report = (file, text, index, rule, fix) => {
 const each = (file, text, regex, fn) => { for (const m of text.matchAll(regex)) fn(m); };
 
 const appCode = files.filter((f) => /\.tsx$/.test(f) && inDir(f, "src/client"));
-const uiCode = files.filter((f) => /\.tsx?$/.test(f) && (inDir(f, "src/client") || inDir(f, "src/components/ui") || inDir(f, "src/components/feedback")));
+const uiCode = files.filter((f) => /\.tsx?$/.test(f) && (inDir(f, "src/client") || inDir(f, "src/components/ui") || inDir(f, "src/components/markup")));
 // The gallery is dev tooling that lays out specimens; its own CSS is not app styling.
 const css = files.filter((f) => f.endsWith(".css") && !inDir(f, "src/gallery"));
 const tokenFiles = ["foundations.css", "theme.css", "palettes.css"];
@@ -137,20 +137,20 @@ for (const file of serverCode) {
     report(file, text, m.index, "try/catch around next(error)", "remove the try/catch; Express 5 forwards the rejection"));
 }
 
-// 9. The feedback tool's boundary (components/feedback/host.ts). The tool is lifted into other projects, so it
-//    takes everything of the app's through its FeedbackHost: it imports solid-js, its own folder and the library, and
-//    nothing else. The receiver's store likewise runs under `conduit-feedback serve` with no hub: Node's own modules only.
-for (const file of files.filter((f) => /\.tsx?$/.test(f) && inDir(f, "src/components/feedback"))) {
+// 9. Markup's boundary (components/markup/host.ts). The tool is lifted into other projects, so it
+//    takes everything of the app's through its MarkupHost: it imports solid-js, its own folder and the library, and
+//    nothing else. The receiver's store likewise runs under `conduit-markup serve` with no hub: Node's own modules only.
+for (const file of files.filter((f) => /\.tsx?$/.test(f) && inDir(f, "src/components/markup"))) {
   const text = stripComments(fs.readFileSync(file, "utf8"));
   each(file, text, /\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g, (m) => {
     const from = m[1];
-    if (!/^(solid-js(\/.*)?|\.\/[\w-]+|@\/components\/ui(\/.*)?)$/.test(from)) report(file, text, m.index, "feedback boundary", `"${from}" is the app's: pass it through FeedbackHost`);
+    if (!/^(solid-js(\/.*)?|\.\/[\w-]+|@\/components\/ui(\/.*)?)$/.test(from)) report(file, text, m.index, "markup boundary", `"${from}" is the app's: pass it through MarkupHost`);
   });
 }
 {
-  const file = path.join(root, "src/server/feedback-store.js");
+  const file = path.join(root, "src/server/markup-store.js");
   const text = stripComments(fs.readFileSync(file, "utf8"));
-  each(file, text, /\bfrom\s+["']([^"']+)["']/g, (m) => { if (!m[1].startsWith("node:")) report(file, text, m.index, "feedback boundary", `"${m[1]}" is not Node's own: the store runs with no hub`); });
+  each(file, text, /\bfrom\s+["']([^"']+)["']/g, (m) => { if (!m[1].startsWith("node:")) report(file, text, m.index, "markup boundary", `"${m[1]}" is not Node's own: the store runs with no hub`); });
 }
 
 // 2. Unused locals, imports and parameters drift back once cleared. The flags stay out of tsconfig.json so a plain

@@ -63,7 +63,7 @@ function settingsIndexPlugin() {
   };
 }
 
-// The piece names, read from the library (scripts/ui-pieces.mjs): the feedback tool names what is under the pointer with them.
+// The piece names, read from the library (scripts/ui-pieces.mjs): Markup names what is under the pointer with them.
 function uiPiecesPlugin() {
   const id = "virtual:ui-pieces";
   return {

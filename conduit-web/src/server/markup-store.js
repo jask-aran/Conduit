@@ -3,10 +3,10 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 
 /*
- * The feedback receiver: what the feedback tool (components/feedback) sends to. It keeps "this moment" for each item
+ * The markup receiver: what the markup tool (components/markup) sends to. It keeps "this moment" for each item
  * being written (a mark), takes its pictures, and on Send writes one item to <folder>/<id>/ (item.json, screenshot.png,
  * selection-<n>.png), built beside it and renamed into place, so a reader never sees half of one. It also knows which
- * agent sessions are listening (scripts/conduit-feedback.mjs `wait`) and hands an item to one by name.
+ * agent sessions are listening (scripts/conduit-markup.mjs `wait`) and hands an item to one by name.
  *
  * An item is also a thread: what the agent answers (the script's `reply`, written straight to the folder) and what the
  * person writes back (here) are lines of <id>/thread.jsonl, each about one comment (`n`) or the item as a whole. That
@@ -19,13 +19,13 @@ import { randomBytes } from "node:crypto";
  * comments and their pictures, and the mark is kept for the next.
  *
  * It runs with no hub: Node's own modules only, and everything of its host through the options. Conduit's hub wraps it
- * (feedback.js: what the hub knew at the mark, its routes); `conduit-feedback serve` runs it alone for any project.
+ * (markup.js: what the hub knew at the mark, its routes); `conduit-markup serve` runs it alone for any project.
  *
  *   folder     where items are written
  *   snapshot   ({ client, markedAt }) => fields added to the item, read when the item is started, not at Send
  *   about      lines for the item's `read`, saying what those fields are
  *   done       (id) => the command that marks an item handled, as the item states it
- *   answered   false for one-way feedback (from people owed no answer): no thread is served or taken, and an item does not invite a reply
+ *   answered   false for one-way markup (from people owed no answer): no thread is served or taken, and an item does not invite a reply
  *   log        (entry) => told of each item written
  */
 const MARKS = 12;
@@ -43,7 +43,7 @@ const ANSWERING_MS = 15 * 60_000;
 const SUBJECT = 200_000;
 const short = (value, length) => { const text = typeof value === "string" ? value : JSON.stringify(value) ?? ""; return text.length > length ? `${text.slice(0, length)}… (${text.length} characters)` : text; };
 
-export function createFeedbackStore({ folder, snapshot = async () => ({}), about = [], done = (id) => `node scripts/conduit-feedback.mjs done ${id}`, answered = true, log = () => {} }) {
+export function createMarkupStore({ folder, snapshot = async () => ({}), about = [], done = (id) => `node scripts/conduit-markup.mjs done ${id}`, answered = true, log = () => {} }) {
   const marks = new Map();
 
   /**
@@ -103,8 +103,8 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
 
   async function send(id, body) {
     const kept = marks.get(id);
-    if (!kept) throw Object.assign(new Error("That feedback mark has gone; start the item again"), { status: 404, code: "feedback_mark_gone" });
-    if (!Array.isArray(body?.comments) || !body.comments.length) throw Object.assign(new Error("A feedback item needs a comment"), { status: 400, code: "feedback_empty" });
+    if (!kept) throw Object.assign(new Error("That mark has gone; start the item again"), { status: 404, code: "markup_mark_gone" });
+    if (!Array.isArray(body?.comments) || !body.comments.length) throw Object.assign(new Error("A markup item needs a comment"), { status: 400, code: "markup_empty" });
     const client = body.client ?? {};
     const shot = kept.screenshot && body.screenshot?.width ? body.screenshot : null;
     // The picture is the page alone when it has the page's shape (a browser's tab; a window with no frame of its own): then a box on the page is a box in it.
@@ -125,14 +125,14 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
       if (shot && !grown.screenshot.file) grown.screenshot = { file: "screenshot.png", width: shot.width, height: shot.height, surface: shot.surface ?? "unknown", of: shot.of === "screenshot" ? "screenshot" : "page", outlined: true, pageOnly: exact, ...(scale ? { scale } : {}) };
       await put(final, grown);
       kept.areas.clear();
-      log({ type: "feedback", id, comments: grown.comments.length, added: added.length, screenshot: Boolean(shot), to: grown.handed?.to?.name ?? null });
+      log({ type: "markup", id, comments: grown.comments.length, added: added.length, screenshot: Boolean(shot), to: grown.handed?.to?.name ?? null });
       return { id, path: path.join(final, "item.json"), handed: grown.handed };
     }
     // Every item lands in the folder; one handed to a session that is listening is also that session's next item.
     const to = body.to ? (await waiting()).find((waiter) => waiter.name === String(body.to)) ?? null : null;
     const handed = { to: to && { name: to.name } };
     const item = {
-      schema: "conduit.feedback/1",
+      schema: "conduit.markup/1",
       id,
       summary: `${body.comments.length} ${body.comments.length === 1 ? "comment" : "comments"} on the interface, from the ${client.kind ?? "browser"} client at ${client.url ?? "?"}`,
       read: [
@@ -145,7 +145,7 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
         ...(body.subject ? ["`subject` is what was being marked up, as its host tells it: a document's `text` is as it was at the latest Send, and a comment's `quote` is a run of it. Where it has a `file`, that is the document itself: write there what a comment asks for, and the person sees it. A comment's `under` is what that host says its marks cover: a document's lines (`from` to `to`, numbered from 1) and their `text` as it was when the comment was sent."] : []),
         ...(body.live ? ["This item grows: the person may add comments while you work, and `wait` hands you each as it comes. `screenshot.png` is the latest taken; a comment's own picture is as it was when the comment was made."] : []),
         ...about,
-        ...(answered ? [`To answer the person: \`${done(id).replace(/ done .*/, "")} reply ${id} [n] "<words>"\`, n being the comment answered (none: the item as a whole). They read it in the tool beside that comment and may write back; \`wait\` hands you what they say.`] : ["This is one-way feedback: the person is not shown an answer."]),
+        ...(answered ? [`To answer the person: \`${done(id).replace(/ done .*/, "")} reply ${id} [n] "<words>"\`, n being the comment answered (none: the item as a whole). They read it in the tool beside that comment and may write back; \`wait\` hands you what they say.`] : ["This is one-way markup: the person is not shown an answer."]),
         ...(answered ? [`When one comment is dealt with: \`${done(id).replace(/ done .*/, "")} resolve ${id} <n>\`. The person may resolve or reopen one too, and the item is handled once every comment is resolved.`] : []),
         `When the whole item is dealt with: ${done(id)}`,
       ],
@@ -167,20 +167,20 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
     await fs.writeFile(path.join(staging, "item.json"), `${JSON.stringify(item, null, 2)}\n`);
     await fs.rename(staging, final);
     if (body.live) { kept.live = true; kept.areas.clear(); } else marks.delete(id);
-    log({ type: "feedback", id, comments: item.comments.length, screenshot: Boolean(shot), to: to?.name ?? null });
+    log({ type: "markup", id, comments: item.comments.length, screenshot: Boolean(shot), to: to?.name ?? null });
     return { id, path: path.join(final, "item.json"), handed };
   }
 
   function picture(id, bytes, n) {
     const kept = marks.get(id);
-    if (!kept) throw Object.assign(new Error("That feedback mark has gone; start the item again"), { status: 404, code: "feedback_mark_gone" });
-    if (!Buffer.isBuffer(bytes) || bytes.length < 8 || bytes.readUInt32BE(0) !== 0x89504e47) throw Object.assign(new Error("A screenshot is a PNG"), { status: 415, code: "feedback_screenshot_invalid" });
+    if (!kept) throw Object.assign(new Error("That mark has gone; start the item again"), { status: 404, code: "markup_mark_gone" });
+    if (!Buffer.isBuffer(bytes) || bytes.length < 8 || bytes.readUInt32BE(0) !== 0x89504e47) throw Object.assign(new Error("A screenshot is a PNG"), { status: 415, code: "markup_screenshot_invalid" });
     if (n === undefined) kept.screenshot = bytes;
     else if (Number.isInteger(n) && n >= 1 && n <= 50) kept.areas.set(n, bytes);
-    else throw Object.assign(new Error("No such selection"), { status: 400, code: "feedback_area_invalid" });
+    else throw Object.assign(new Error("No such selection"), { status: 400, code: "markup_area_invalid" });
   }
 
-  const gone = () => Object.assign(new Error("No such feedback item"), { status: 404, code: "feedback_item_gone" });
+  const gone = () => Object.assign(new Error("No such markup item"), { status: 404, code: "markup_item_gone" });
   const read = (file) => fs.readFile(file, "utf8").then(JSON.parse).catch(() => null);
   const lines = async (dir) => (await fs.readFile(path.join(dir, "thread.jsonl"), "utf8").catch(() => "")).split("\n").filter(Boolean).map((line) => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
 
@@ -211,7 +211,7 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
       return thread(id);
     }
     const words = String(text ?? "").trim();
-    if (!words) throw Object.assign(new Error("Nothing was said"), { status: 400, code: "feedback_message_empty" });
+    if (!words) throw Object.assign(new Error("Nothing was said"), { status: 400, code: "markup_message_empty" });
     await thread(id);
     await fs.appendFile(path.join(folder, id, "thread.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), from: "person", n: Number.isInteger(n) ? n : null, text: short(words, 4000) })}\n`);
     return thread(id);
@@ -233,7 +233,7 @@ export function createFeedbackStore({ folder, snapshot = async () => ({}), about
 }
 
 /** The store's routes for a plain Node server (the hub has its own, behind its sign-in): true when the request was one of them. */
-export async function handleFeedback(store, request, response, base = "/v0/feedback") {
+export async function handleMarkup(store, request, response, base = "/v0/markup") {
   const url = new URL(request.url, "http://localhost");
   if (!url.pathname.startsWith(`${base}/`)) return false;
   const [, id, what, n] = /^\/marks(?:\/([\w-]+))?(?:\/(\w+))?(?:\/(\d+))?$/.exec(url.pathname.slice(base.length)) ?? [];
@@ -252,7 +252,7 @@ export async function handleFeedback(store, request, response, base = "/v0/feedb
     else if (route === "GET /items") answer(200, { items: await store.threads() });
     else if (request.method === "GET" && item && !said) answer(200, await store.thread(item, { seen: url.searchParams.has("seen") }));
     else if (request.method === "POST" && item && said) answer(201, await store.say(item, await json()));
-    else answer(404, { error: "No such feedback route" });
+    else answer(404, { error: "No such markup route" });
   } catch (error) {
     answer(error.status ?? 500, { error: error.message, code: error.code });
   }

@@ -1,5 +1,5 @@
 /* Imported in cascade order from JS, so each file passes the build's CSS transforms, which skip @import. motion is
- * last, so a move's state is drawn over a family's resting geometry; feedback.css comes with feedback.tsx instead, so
+ * last, so a move's state is drawn over a family's resting geometry; markup.css comes with markup.tsx instead, so
  * it loads with the tool and not with the app. */
 import "./reset.css";
 import "./palettes.css";

@@ -1,11 +1,11 @@
 /*
- * The feedback tool's boundary. The tool (this folder) marks up a running interface and sends what was marked; it
- * knows nothing of the app it runs in. Everything of the app's reaches it through a FeedbackHost, and it imports only
+ * The markup tool's boundary. The tool (this folder) marks up a running interface and sends what was marked; it
+ * knows nothing of the app it runs in. Everything of the app's reaches it through a MarkupHost, and it imports only
  * solid-js and the library (components/ui): no app module, no virtual module, no fetch of its own. That is what lets
- * the folder be lifted into another project, which writes a host and mounts <FeedbackTool>.
+ * the folder be lifted into another project, which writes a host and mounts <MarkupTool>.
  *
- * The other half is the receiver (server/feedback-store.js: the item folder, who is listening). A transport speaks
- * to one; httpTransport is the routes both Conduit's hub and `conduit-feedback serve` answer.
+ * The other half is the receiver (server/markup-store.js: the item folder, who is listening). A transport speaks
+ * to one; httpTransport is the routes both Conduit's hub and `conduit-markup serve` answer.
  */
 
 /** Which piece draws an element, read from the host's own source at build time (Conduit: scripts/ui-pieces.mjs). */
@@ -23,42 +23,42 @@ export type PieceNames = {
 export const NO_NAMES: PieceNames = { pieces: {}, classes: {}, styles: {}, anchors: {} };
 
 /** A session an item can be handed to: its `wait` is running, or it is at work on one it took. */
-export type FeedbackListener = { name: string; state: "waiting" | "working" };
-export type FeedbackHanded = { to: { name: string } | null };
+export type MarkupListener = { name: string; state: "waiting" | "working" };
+export type MarkupHanded = { to: { name: string } | null };
 
 /** An item once sent, as the person follows it: where it stands (`by`: the session it was handed to or that took it), and what was said about each comment (`n`) or the item as a whole.
  *  A message with `resolved` and no `text` is that comment settled (or reopened) by whoever it is `from`. `working`: the session has been handed it and has not yet answered. */
-export type FeedbackThread = { id: string; sentAt: string; state: "waiting" | "taken" | "handled"; by: string | null; unread: number; working?: boolean;
+export type MarkupThread = { id: string; sentAt: string; state: "waiting" | "taken" | "handled"; by: string | null; unread: number; working?: boolean;
   comments: { n: number; name: string; comment: string; resolved?: boolean; working?: boolean }[]; messages: { at: string; from: "agent" | "person"; n: number | null; text?: string; resolved?: boolean }[] };
 /** An item in the list of what was sent before; `first` is its first comment's words. */
-export type FeedbackSent = { id: string; sentAt: string; state: FeedbackThread["state"]; by: string | null; unread: number; comments: number; first: string };
+export type MarkupSent = { id: string; sentAt: string; state: MarkupThread["state"]; by: string | null; unread: number; comments: number; first: string };
 
 /** What Send carries besides the pictures. `comments` and `screenshot` are the tool's; `client` is the tool's facts (url, viewport, userAgent) with the host's own over them. */
-export type FeedbackSend = { comments: unknown[]; screenshot: Record<string, unknown>; client: Record<string, unknown>; to: string | null; live?: boolean; subject?: Record<string, string | number | boolean> };
+export type MarkupSend = { comments: unknown[]; screenshot: Record<string, unknown>; client: Record<string, unknown>; to: string | null; live?: boolean; subject?: Record<string, string | number | boolean> };
 
-export interface FeedbackTransport {
+export interface MarkupTransport {
   /** "This moment": the receiver keeps what it knows now, under the id the item is later sent to. */
   mark(client: string): Promise<{ id: string }>;
   /** A PNG for a mark: the whole screenshot, or selection `n`'s own area of it. */
   picture(mark: string, png: Blob, n?: number): Promise<void>;
   /** A `live` send leaves the mark open: the next to it adds its comments to the same item. */
-  send(mark: string, item: FeedbackSend): Promise<{ id: string; handed: FeedbackHanded }>;
+  send(mark: string, item: MarkupSend): Promise<{ id: string; handed: MarkupHanded }>;
   /** A sent item's thread; `seen`: the person is reading it now. */
-  thread(id: string, seen?: boolean): Promise<FeedbackThread>;
+  thread(id: string, seen?: boolean): Promise<MarkupThread>;
   /** The person writes back, about comment `n` or the item as a whole. */
-  say(id: string, n: number | null, text: string): Promise<FeedbackThread>;
+  say(id: string, n: number | null, text: string): Promise<MarkupThread>;
   /** Comment `n` is settled, or reopened. */
-  resolve(id: string, n: number, resolved: boolean): Promise<FeedbackThread>;
+  resolve(id: string, n: number, resolved: boolean): Promise<MarkupThread>;
   /** The latest items not finished, with an answer unread or sent in the last day, newest first. */
-  threads(): Promise<FeedbackSent[]>;
+  threads(): Promise<MarkupSent[]>;
   /** A mark nothing was sent to. */
   drop(mark: string): Promise<void>;
-  listening(): Promise<FeedbackListener[]>;
+  listening(): Promise<MarkupListener[]>;
 }
 
 /**
  * How what is marked up reaches whoever answers, which is a matter of who the person is to them:
- *   one-way   feedback from someone who is owed no answer (a visitor, a tester): Send delivers the item and that is all.
+ *   one-way   markup from someone who is owed no answer (a visitor, a tester): Send delivers the item and that is all.
  *             Nothing comes back, and the tool asks the receiver for nothing but to take it.
  *   batched   a collaborator's: comments wait until Send, which delivers every one outstanding. What is sent in one
  *             sitting is one item that grows, and each comment sent is a thread the agent answers and the person
@@ -66,20 +66,20 @@ export interface FeedbackTransport {
  *   live      with batched: each comment has "Send now", which is on while a session is listening, so it goes as it
  *             is Done; turned off, or with no one listening, it waits for Send like any other.
  */
-export type FeedbackDelivery = "one-way" | "batched" | "live";
+export type MarkupDelivery = "one-way" | "batched" | "live";
 
 /** A tool of the rail. */
-export type FeedbackToolName = "select" | "quote" | "pen" | "highlight" | "shape" | "text" | "erase" | "note";
+export type MarkupToolName = "select" | "quote" | "pen" | "highlight" | "shape" | "text" | "erase" | "note";
 
 /**
  * What the tool is in one place it is put: a host declares only what belongs there, and nothing else is offered, by
  * the bar or by a key. (The receiver has its own half: a one-way one is made with `answered: false`.)
  */
-export type FeedbackCapabilities = {
+export type MarkupCapabilities = {
   /** How it reaches whoever answers. One-way stands alone; a collaborator's host offers batched, live or both, the first being what it opens on. */
-  deliveries: readonly ["one-way"] | readonly [Exclude<FeedbackDelivery, "one-way">, ...Exclude<FeedbackDelivery, "one-way">[]];
+  deliveries: readonly ["one-way"] | readonly [Exclude<MarkupDelivery, "one-way">, ...Exclude<MarkupDelivery, "one-way">[]];
   /** The rail, in its own order whatever order they are listed in. */
-  tools: readonly FeedbackToolName[];
+  tools: readonly MarkupToolName[];
   /** Annotating a screenshot, where the client can take one. */
   screenshot: boolean;
   /** Showing the sessions that are listening and handing an item to one. Live needs it, and one listening: a comment that goes as it is Done goes to someone. */
@@ -90,15 +90,15 @@ export type FeedbackCapabilities = {
   thin: boolean;
 };
 /** What a host that declares nothing gets: a collaborator's batched markup with every tool. */
-export const FEEDBACK_CAPABILITIES: FeedbackCapabilities = { deliveries: ["batched"], tools: ["select", "quote", "pen", "highlight", "shape", "text", "erase", "note"], screenshot: true, listeners: true, inks: true, thin: true };
+export const MARKUP_CAPABILITIES: MarkupCapabilities = { deliveries: ["batched"], tools: ["select", "quote", "pen", "highlight", "shape", "text", "erase", "note"], screenshot: true, listeners: true, inks: true, thin: true };
 
-export interface FeedbackHost {
-  /** What differs from FEEDBACK_CAPABILITIES here. */
-  capabilities?: Partial<FeedbackCapabilities>;
+export interface MarkupHost {
+  /** What differs from MARKUP_CAPABILITIES here. */
+  capabilities?: Partial<MarkupCapabilities>;
   names: PieceNames;
   /** Attributes the app marks its regions with, the outermost kind first (Conduit: data-region, data-pane…). An item's paths start from them. */
   anchors?: string[];
-  transport: FeedbackTransport;
+  transport: MarkupTransport;
   /** This page, as the receiver knows it. */
   clientId(): string;
   /** What else an item should say about the client (its kind, its build). */
@@ -113,7 +113,7 @@ export interface FeedbackHost {
 }
 
 /** The receiver's routes over the host's own request function (its origin, its credentials); a 204 resolves with nothing. */
-export function httpTransport(request: <T>(path: string, init?: { method?: string; headers?: Record<string, string>; body?: string | Blob }) => Promise<T>, base = "/v0/feedback"): FeedbackTransport {
+export function httpTransport(request: <T>(path: string, init?: { method?: string; headers?: Record<string, string>; body?: string | Blob }) => Promise<T>, base = "/v0/markup"): MarkupTransport {
   const png = (body: Blob) => ({ method: "PUT", headers: { "content-type": "image/png" }, body });
   return {
     mark: (client) => request(`${base}/marks`, { method: "POST", body: JSON.stringify({ client }) }),
@@ -123,7 +123,7 @@ export function httpTransport(request: <T>(path: string, init?: { method?: strin
     thread: (id, seen) => request(`${base}/items/${id}${seen ? "?seen" : ""}`),
     say: (id, n, text) => request(`${base}/items/${id}/messages`, { method: "POST", body: JSON.stringify({ n, text }) }),
     resolve: (id, n, resolved) => request(`${base}/items/${id}/messages`, { method: "POST", body: JSON.stringify({ n, resolved }) }),
-    threads: () => request<{ items: FeedbackSent[] }>(`${base}/items`).then((answer) => answer.items),
-    listening: () => request<{ waiting: FeedbackListener[] }>(`${base}/waiting`).then((answer) => answer.waiting),
+    threads: () => request<{ items: MarkupSent[] }>(`${base}/items`).then((answer) => answer.items),
+    listening: () => request<{ waiting: MarkupListener[] }>(`${base}/waiting`).then((answer) => answer.waiting),
   };
 }
