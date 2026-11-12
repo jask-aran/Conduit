@@ -1,5 +1,6 @@
 // The test paper in a pane (/?a=artifact:test): the pane shows the hub's test paper; a block an agent writes with the CLI shows on the page and opening a page writes none; typing reaches the hub and a second page;
-// the rail makes a block another kind and asks the agent about it; the caret's empty paragraph hints, `/` makes a block a kind, selected text's Bold bolds it; a comment's card stands in the margin beside its text on a second page (under the text on a phone-sized one), an edit sent
+// the title is the paper's name; Alt+Shift+ArrowUp moves a block and it keeps its id; the block handle shows on hover and its menu's Duplicate makes a block with an id of its own;
+// a property set on one page shows on the second and goes again; the rail makes a block another kind and asks the agent about it; the caret's empty paragraph hints, `/` makes a block a kind, selected text's Bold bolds it; a comment's card stands in the margin beside its text on a second page (under the text on a phone-sized one), an edit sent
 // --for it tints its block, Revert puts the block back, a session's resolve leaves the card and the tint, the person's accepts the change; a phone-sized page types without harming the blocks; Markup's bar answers over it. Every block it adds
 // it deletes and the one comment it sends (handed to no session) it finishes.
 import { execFileSync } from "node:child_process";
@@ -22,6 +23,7 @@ try {
   const until = async (what, test) => { for (let tries = 0; tries < 40; tries += 1) { if (await test()) return console.log(`${what}: true`); await page.waitForTimeout(100); } console.log(`${what}: false`); };
   const before = cli("read", "test");
   await visit(page);
+  console.log("the title is the paper's name:", await page.evaluate(() => { const title = document.querySelector(".ui-document-title"), name = document.querySelector(".ui-document-text")?.getAttribute("aria-label"); return Boolean(name) && (title?.value ?? title?.textContent) === name; }));
   console.log("page shows the hub's blocks, in order:", JSON.stringify((await shown(page)).map((line) => line.split(" ")[0])) === JSON.stringify(ids(before)));
 
   added = JSON.parse(cli("insert", "test", ids(before).at(-1), "A line the **agent** wrote.\n\nProbe types here:\n\n---")).blocks;
@@ -35,6 +37,11 @@ try {
   await page.keyboard.press("End"); await page.keyboard.type(" typed on the first page");
   await until("typing reaches the hub", async () => cli("read", "test").includes("Probe types here: typed on the first page"));
   await until("typing shows on a second page", async () => (await shown(second)).some((line) => line.includes("typed on the first page")));
+  const order = () => ids(cli("read", "test")).filter((id) => added.includes(id)).join(" ");
+  await page.keyboard.press("Alt+Shift+ArrowUp");
+  await until("Alt+Shift+ArrowUp moves the caret's block up, keeping its id and its text", async () => order() === [added[1], added[0], ...added.slice(2)].join(" ") && (await shown(second)).includes(`${added[1]} Probe types here: typed on the first page`));
+  await page.keyboard.press("Alt+Shift+ArrowDown");
+  await until("Alt+Shift+ArrowDown moves it back", async () => order() === added.join(" "));
   await page.keyboard.press("Enter"); await page.keyboard.type("# A heading");
   await until("a typed block has an id of its own and a kind", async () => page.evaluate(() => { const made = [...document.querySelectorAll(".ui-document-text > h1[data-id]")].at(-1); return made?.textContent === "A heading"; }));
   added.push(...ids(cli("read", "test")).filter((id) => !ids(before).includes(id) && !added.includes(id)));
@@ -60,6 +67,27 @@ try {
   await format.locator("button[aria-label='Bold']").click();
   await until("Bold makes the selection bold, and its button says so", async () => await page.evaluate(() => [...document.querySelectorAll(".ui-document-text > blockquote strong")].some((bold) => bold.textContent === "Quoted by the probe")) && await format.locator("button[aria-label='Bold']").getAttribute("aria-pressed") === "true");
   added.push(...ids(cli("read", "test")).filter((id) => !ids(before).includes(id) && !added.includes(id)));
+
+  // The block handle, beside the block the mouse is over; its menu's Duplicate writes a copy under it with an id of its own.
+  const typed = await page.locator(`.ui-document-text > [data-id="${added[1]}"]`).boundingBox();
+  await page.mouse.move(typed.x + 8, typed.y + typed.height / 2);
+  await until("the handle shows beside the block pointed at", () => page.evaluate((box) => { const handle = document.querySelector(".ui-document-handle[data-shown]")?.getBoundingClientRect(); return Boolean(handle) && handle.right <= box.x && handle.bottom > box.y && handle.top < box.y + box.height; }, typed));
+  await page.locator(".ui-document-handle[data-shown] [data-grip]").click();
+  await page.getByRole("menuitem", { name: "Duplicate" }).click();
+  await until("Duplicate writes a copy under the block, with an id of its own", () => {
+    const text = cli("read", "test"), now = ids(text), copy = now[now.indexOf(added[1]) + 1];
+    const made = Boolean(copy) && !added.includes(copy) && !ids(before).includes(copy) && Boolean(text.split(`<!-- block ${copy} -->`)[1]?.trim().startsWith("Probe types here: typed on the first page"));
+    if (made) added.push(copy);
+    return made;
+  });
+
+  // A property, written on one page, read on the second, then cleared away.
+  await page.locator(".ui-document-head").hover(); await page.locator(".ui-document-head button", { hasText: "Add a property" }).click();
+  await page.keyboard.type("Probe check"); await page.keyboard.press("Enter"); await page.keyboard.type("set by the probe"); await page.keyboard.press("Enter");
+  const property = (target) => target.evaluate(() => [...document.querySelectorAll(".ui-document-property")].map((row) => `${row.querySelector(".ui-document-property-name").textContent}: ${row.querySelector("input")?.value}`).find((row) => row.startsWith("Probe check")));
+  await until("a property set on one page shows on the second and reaches the hub", async () => await property(second) === "Probe check: set by the probe" && cli("read", "test").includes("Probe check"));
+  await page.locator(".ui-document-property input[aria-label='Probe check']").fill(""); await page.locator(".ui-document-property input[aria-label='Probe check']").blur();
+  await until("a property cleared and left goes, from both pages and the hub", async () => !await property(second) && !await property(page) && !cli("read", "test").includes("Probe check"));
 
   // One comment, made on the first page; what stands for it is read on the second.
   const at = await page.locator(`.ui-document-text > [data-id="${added[0]}"]`).boundingBox();
@@ -104,6 +132,7 @@ try {
   await page.screenshot({ path: "/tmp/markup-probe-document.png" });
   console.log("errors:", JSON.stringify(errors));
 } finally {
+  try { const left = page.locator(".ui-document-property input[aria-label='Probe check']"); if (await left.count()) { await left.fill(""); await left.blur(); await page.waitForTimeout(300); } } catch { /* the page is gone */ }
   for (const id of added) try { cli("delete", "test", id); } catch { /* already gone */ }
   if (item) try { markup("done", item); } catch { /* never sent */ }
   await close();

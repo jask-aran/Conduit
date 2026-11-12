@@ -9,7 +9,7 @@ import { toast } from "@/components/ui/notifications";
 import { api } from "../api/client";
 import { webSocketUrl } from "../api/transport.js";
 import { capturePage } from "../feedback/conduit-feedback";
-import { artifactAbout, artifactKnown, artifactLabel, type Artifact } from "./artifacts";
+import { artifactAbout, artifactKnown, artifactLabel, paperCounted, renameArtifact, type Artifact } from "./artifacts";
 import { connect, connectedTo, disconnect } from "./connections";
 import SitePane from "./site-pane";
 
@@ -70,7 +70,7 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
     <Show when={!props.quiet && found()}><MarkupRibbonRoom ref={(element) => { room = element; }} /></Show>
     <Show when={!about.error} fallback={<Empty role="alert">This {kind()} could not be opened: {String((about.error as Error)?.message || "the hub did not say why").replace(/\.$/, "")}.</Empty>}>
       <Show when={found()?.id} keyed fallback={<Empty role="status">Opening the {kind()}…</Empty>}>{(id) => found()?.kind === "site" ? <SitePane about={() => found()!} host={shared} tool={tool} /> : <>
-        <DocumentEditor host={editing} id={id} name={found()?.name ?? ""} bare onAway={setAway} marks={(offered) => { marks = offered; }} mentions={() => props.quiet ? [] : offer()?.names() ?? []} onMention={ask} onComment={props.quiet ? undefined : ask} margin={<MarkupMargin host={markup} sent={sent()} />} />
+        <DocumentEditor host={editing} id={id} name={found()?.name ?? ""} bare onAway={setAway} marks={(offered) => { marks = offered; }} mentions={() => props.quiet ? [] : offer()?.names() ?? []} onMention={ask} onRename={(name) => renameArtifact(id, name)} count={paperCounted()} onComment={props.quiet ? undefined : ask} margin={<MarkupMargin host={markup} sent={sent()} />} />
         {tool(markup)}
       </>}</Show>
     </Show>

@@ -16,7 +16,7 @@ try {
   await page.goto(`${origin}/?a=artifact:test`);
   await page.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 });
   await wait(1500);
-  console.log("one header over the paper, and no dock tool in its pane:", await page.evaluate(() => document.querySelectorAll(".pane-artifact header").length === 1 && !document.querySelector(".pane-a-tool-host")));
+  console.log("one header over the paper, and no dock tool in its pane:", await page.evaluate(() => document.querySelectorAll(".pane-artifact header:not(.ui-document-head)").length === 1 && !document.querySelector(".pane-a-tool-host")));
   console.log("Markup's bar is centred on the pane:", await centred());
   const test = page.locator('[data-doc-view="artifact:test"]'), project = page.locator('.ui-nav-link:has-text("Test")').first();
   if (!(await test.count())) { await page.locator('button[title="Expand Test"]').click(); await test.waitFor(); }

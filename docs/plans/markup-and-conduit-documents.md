@@ -47,6 +47,36 @@ file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background
   on 2026-11-12). The build is at 426,292 with sites. New panes and dialogs load lazily; a rider and a header switch
   cannot. `src/` is at about 116,400 lines of the 119,000 ceiling.
 
+### After the user first tried papers and sites (2026-11-12, evening)
+
+The user's words: "A lot is still missing before we even add more artifact types" and "Lets focus on getting the paper
+and site really right to start with". No new kind of artifact is next. Built that evening, on local `main`:
+
+- `@` asks on a line with nothing else on it (it opened nothing there, which is what the user hit).
+- The artifact creator is drawn in its tab, not a dialog: the view `artifact:new` (or `artifact:new:<project>`),
+  offered on the new tab screen as "New artifact" and opened by every other way to make one.
+- Markup's bar is a **ribbon** on an artifact (the capability `bar: "ribbon"`; `"foot"` is the interface's): at the head
+  of the pane, always there, no close. On a paper it holds the paper's tools first (block kinds as one menu, the text
+  marks, "Ask the agent"), then Markup's. What is sent from a ribbon is always handed to a thread: the choice to hand
+  to no one is the foot bar's alone, since an artifact always has its thread. A probe that sends a comment from a
+  paper therefore makes the hub say no one listens (`markup-document.mjs` does), or it starts a real model.
+- The paper's editor: a slash menu of block kinds; tools over selected text (marks, link, comment) and over a table
+  (rows, columns); a hint in an empty paragraph; a block handle in the gutter (drag to move, "+", and a menu: move,
+  duplicate, turn into, comment, delete; Alt+Shift+Arrow moves the caret's block); the paper's name as a title that
+  renames it; front matter (properties: the Yjs map `PROPERTIES`, name to text, under the title, first in the file and
+  in the Markdown as `---` lines; `document set <id> <name> [value]` and the tool's `set` for agents); and a count of
+  blocks and words at the foot, switched from a paper's row menu ("Count blocks and words", kept in the browser).
+
+Asked for and not built: a **suggesting mode** beside editing, where what the person types is a suggestion (a comment)
+and not an edit. Not designed yet.
+
+Known and left: a pane narrower than the ribbon wraps it over the text; the block handle is mouse only and is clipped
+in a narrow pane; Yjs has no move, so a block moved while someone else types in it may lose those keystrokes (read
+from the code, not seen); the "+" leaves a typed "/" if its menu is dismissed; "Add a property" shows on hover or
+focus, against DESIGN.md's "nothing hides behind hover"; Alt+Shift+Arrow is the editor's own key, not a command in
+the registry; `markup-document.mjs`'s "in order" check fails on a paper that holds a table (the table's block is
+wrapped, so the probe does not see its id).
+
 ### Step (b) as built
 
 - **The mated thread** is an ordinary chat whose `backend.mated` is its paper's id, made by `mated(id)` in

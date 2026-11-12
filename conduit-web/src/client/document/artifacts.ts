@@ -19,6 +19,11 @@ export const ARTIFACT_KINDS = [
 ] as const satisfies readonly { kind: ArtifactKind; label: string; says: string }[];
 /** What a kind is called. */
 export const artifactLabel = (kind: ArtifactKind) => ARTIFACT_KINDS.find((item) => item.kind === kind)?.label ?? "Artifact";
+/** Whether a paper says how many blocks and words it has, at its foot: this browser's choice, for every paper. */
+const COUNT_KEY = "conduit.paper.count";
+const [counted, setCounted] = createSignal((() => { try { return localStorage.getItem(COUNT_KEY) === "on"; } catch { return false; } })());
+export const paperCounted = counted;
+export const countPapers = (on: boolean) => { setCounted(on); try { localStorage.setItem(COUNT_KEY, on ? "on" : "off"); } catch { /* this session only */ } };
 export const artifactView = (id: string) => `artifact:${id}` as const;
 
 const [lists, setLists] = createSignal<Record<string, Artifact[]>>({});

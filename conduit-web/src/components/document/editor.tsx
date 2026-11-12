@@ -6,8 +6,11 @@ import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } fro
 import { createEditorTransaction, createTiptapEditor } from "solid-tiptap";
 import { redo, undo, ySyncPlugin, yUndoPlugin } from "y-prosemirror";
 import type { Map as YMap, XmlFragment } from "yjs";
-import { DocumentSheet, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons } from "@/components/ui/document";
+import { DocumentCount, DocumentSheet, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons } from "@/components/ui/document";
 import { CHANGES, FRAGMENT, documentExtensions } from "@/document-format.js";
+import { blockKeys } from "./blocks";
+import { createBlockHandle } from "./handle";
+import { PaperHead } from "./head";
 import { DOCUMENT_BLOCKS, type DocumentAnchor, type DocumentBlockKind, type DocumentHost, type DocumentMarks } from "./host";
 import { hinted } from "./hint";
 import { createLiveDocument } from "./live";
@@ -101,8 +104,10 @@ const caretBlock = (view: EditorView) => { const { $from } = view.state.selectio
 export function DocumentEditor(props: { host: DocumentHost; id: string; name: string; actions?: JSX.Element; margin?: JSX.Element; bare?: boolean; onAway?: (away: boolean) => void; onReady?: () => void; marks?: (marks: DocumentMarks) => void;
   /** `mentions`: who `@` offers; picked, the typed `@…` goes and `onMention` is told the caret's block and the name. */
   mentions?: () => string[]; onMention?: (about: Range, name: string) => void;
-  /** `onComment`: the selection tools' Comment, told the text selected. */
-  onComment?: (about: Range) => void }) {
+  /** `onComment`: the selection tools' Comment, told the text selected, and the block handle's, told the block. */
+  onComment?: (about: Range) => void;
+  /** `onRename`: the title renames the document; refused (rejected), it shows the name it had. Without it the title is plain text. `count`: a line under the text says how many blocks and words it holds. */
+  onRename?: (name: string) => Promise<unknown> | void; count?: boolean }) {
   const copy = createLiveDocument(props.host, props.id);
   const [column, setColumn] = createSignal<HTMLDivElement>(), [editor, setEditor] = createSignal<Editor>();
   const changes = copy.doc.getMap<Change>(CHANGES), [changed, setChanged] = createSignal<string[]>([]);
@@ -133,7 +138,14 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     const Icon = documentBlockIcons[name];
     return { name, label: KINDS[name].label, icon: () => <Icon />, get active() { return kind() === name; }, run: () => { const made = editor(); if (made) KINDS[name].make(made.chain().focus()).run(); } };
   });
-  const slash = createSlash(editor, tools);
+  const slash = createSlash(editor, tools), handle = createBlockHandle(editor, tools, () => props.onComment);
+  const counted = createEditorTransaction(editor, (made) => made?.state.doc);
+  const count = createMemo(() => {
+    const doc = counted();
+    if (!props.count || !doc) return null;
+    const words = doc.textBetween(0, doc.content.size, " ", " ").split(/\s+/).filter(Boolean).length, many = (n: number, what: string) => `${n.toLocaleString()} ${what}${n === 1 ? "" : "s"}`;
+    return `${many(doc.childCount, "block")} · ${many(words, "word")}`;
+  });
   // The marks the selection wears, for a bar that is always there; the tools over a selection offer them too.
   const wears = createEditorTransaction(editor, (made) => MARKS.filter(([name]) => made?.isActive(name)).map(([name]) => name).join(" "));
   const worn = MARKS.map(([name, label]) => { const Icon = documentToolIcons[name]; return { name, label, icon: () => <Icon />, get active() { return wears().includes(name); }, run: () => { editor()?.chain().focus().toggleMark(name).run(); } }; });
@@ -160,10 +172,12 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     },
   });
   return <>
-  <DocumentSheet ref={setColumn} name={props.name} state={copy.state() === "away" ? "Reconnecting" : undefined} margin={props.margin} actions={props.actions} bare={props.bare}>
+  <DocumentSheet ref={setColumn} name={props.name} state={copy.state() === "away" ? "Reconnecting" : undefined} margin={props.margin} actions={props.actions} bare={props.bare}
+    head={<Show when={copy.synced()}><PaperHead doc={copy.doc} name={props.name} onRename={props.onRename} onDown={() => editor()?.commands.focus("start")} /></Show>}
+    over={handle.view} onHover={handle.hover} foot={<Show when={count()}>{(line) => <DocumentCount>{line()}</DocumentCount>}</Show>}>
     {/* The editor is made only once the hub's copy is held: made before, its first empty block would be merged in as a block of its own. */}
     <Show when={copy.synced() && column()}>{(element) => {
-      const made = createTiptapEditor(() => ({ element: element(), extensions: [...documentExtensions(), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), slash.extension(), ...(props.onMention ? [mentioning(anchor, setAsked, keys)] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name } } }));
+      const made = createTiptapEditor(() => ({ element: element(), extensions: [...documentExtensions(), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), slash.extension(), blockKeys, ...(props.onMention ? [mentioning(anchor, setAsked, keys)] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name } } }));
       createEffect(() => setEditor(made()));
       return null;
     }}</Show>

@@ -3,7 +3,7 @@ import { defineTool } from "@earendil-works/pi-durable";
 import { callingChat } from "./conduit-mcp.js";
 
 const text = (words, isError = false) => ({ output: [{ type: "text", text: words }], ...(isError ? { isError: true } : {}) });
-const ACTIONS = ["list", "new", "read", "replace", "insert", "delete", "comments", "reply", "resolve"];
+const ACTIONS = ["list", "new", "read", "replace", "insert", "delete", "set", "comments", "reply", "resolve"];
 
 /** Papers for an agent: the hub's document service (server/documents.js) as one tool, with the verbs `conduit-markup` has. */
 export function PaperTool(runtime) {
@@ -13,6 +13,7 @@ export function PaperTool(runtime) {
       + "`paper` is a paper's id; omit it in a paper's own thread, or in a chat connected to one paper. "
       + "list (project: id or slug, default this chat's) and new (name, project) give ids. "
       + "read prints the paper as Markdown, each block under `<!-- block <id> -->`. "
+      + "set (name, text) writes one property of its front matter (the name: value lines read shows first); no text removes it. "
       + "replace (block, markdown: the first block written keeps the id), insert (block: the one to write after, or `start`; markdown) and delete (block) change it at once, for everyone who has it open. "
       + "To answer a comment by changing the paper, pass `for: \"<item>/<n>\"`: the person then sees what changed for that comment and can take it back. "
       + "comments lists what the person asked on the paper that is not settled (item ids, comment numbers, the text each is about). "
@@ -48,6 +49,7 @@ export function PaperTool(runtime) {
         if (!paper) throw new Error(mine.papers.length ? `Say which paper: this chat is connected to ${mine.papers.map((one) => one.id).join(", ")}.` : "Say which paper (`list` gives ids).");
         const by = mine.papers.find((one) => one.id === paper)?.as ?? "agent";
         if (args.action === "read") return text(await documents.read(paper));
+        if (args.action === "set") return text(`Its properties: ${JSON.stringify((await documents.edit(paper, { op: "set", block: args.name, markdown: args.text ?? "", by })).properties)}`);
         if (args.action === "replace" || args.action === "insert" || args.action === "delete") {
           const { blocks } = await documents.edit(paper, { op: args.action, block: args.block, markdown: args.markdown, by, for: args.for });
           return text(args.action === "delete" ? `Deleted ${args.block}.` : `Wrote ${blocks.length === 1 ? "block" : "blocks"} ${blocks.join(", ")}.`);

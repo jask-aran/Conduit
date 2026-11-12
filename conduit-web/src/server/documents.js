@@ -9,7 +9,7 @@ import { WebSocketServer } from "ws";
 import { updateYFragment, yXmlFragmentToProseMirrorRootNode } from "y-prosemirror";
 import * as Y from "yjs";
 import { excludeConduitFromGit } from "../attachment-store.js";
-import { AUTHORS, BLOCK_TYPES, CHANGES, FRAGMENT, FRAME, blockId, documentExtensions, frame } from "../document-format.js";
+import { AUTHORS, BLOCK_TYPES, CHANGES, FRAGMENT, FRAME, PROPERTIES, blockId, documentExtensions, frame } from "../document-format.js";
 import { remoteNode } from "../place.js";
 import { writePrivateFile } from "../private-file.js";
 import { createMarkupStore } from "./markup-store.js";
@@ -160,8 +160,8 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     } finally { doc.clientID = hub; }
   };
 
-  /** A paper's file: each block on a line of its own, so a diff of the file is a diff of blocks. */
-  const written = (id, blocks) => `{"format":"conduit-document","version":1,"id":${JSON.stringify(id)},"blocks":[\n${blocks.map((block) => JSON.stringify(block.toJSON())).join(",\n")}\n]}\n`;
+  /** A paper's file: each block on a line of its own, so a diff of the file is a diff of blocks; its front matter (properties) before them, where it has any. */
+  const written = (id, blocks, properties = {}) => `{"format":"conduit-document","version":1,"id":${JSON.stringify(id)},${Object.keys(properties).length ? `"properties":${JSON.stringify(properties)},` : ""}"blocks":[\n${blocks.map((block) => JSON.stringify(block.toJSON())).join(",\n")}\n]}\n`;
   /** What a file holds. A block with no id, or a second with the same one (a line copied by hand), is given its own. A file that is not a paper is said to be so, never guessed at. */
   const paper = (text, name) => {
     try {
@@ -173,7 +173,8 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
         if (!ids.has(block.attrs.id)) { ids.add(block.attrs.id); return block; }
         return block.type.create({ ...block.attrs, id: blockId() }, block.content, block.marks);
       });
-      return { id: typeof file.id === "string" && ID.test(file.id) ? file.id : null, blocks: blocks.length ? blocks : [empty()] };
+      const properties = Object.fromEntries(Object.entries(file.properties && typeof file.properties === "object" && !Array.isArray(file.properties) ? file.properties : {}).filter(([, value]) => typeof value === "string"));
+      return { id: typeof file.id === "string" && ID.test(file.id) ? file.id : null, blocks: blocks.length ? blocks : [empty()], properties };
     } catch (error) { throw fault(422, `${name}${KINDS.paper} is not a paper Conduit can read: ${error.message}`); }
   };
 
@@ -219,7 +220,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       const text = await disk.read(at), read = kind === "paper" ? paper(text, name) : { id: SITE_ID.exec(text)?.[1] ?? null };
       const other = read.id && known.get(read.id), copy = other && spot(other) !== disk.at(at) && await other.disk.stat(other.path).catch(() => true);
       id = read.id && !copy ? read.id : crypto.randomBytes(8).toString("hex");
-      if (kind === "paper" && id !== read.id) await disk.write(at, written(id, read.blocks));
+      if (kind === "paper" && id !== read.id) await disk.write(at, written(id, read.blocks, read.properties));
       if (kind === "site") await paths(side, (kept) => { for (const was of Object.keys(kept)) if (kept[was] === id) delete kept[was]; kept[at] = id; });
     }
     const links = known.get(id)?.links ?? await fs.readFile(path.join(side, id, "links.json"), "utf8").then(JSON.parse).then((kept) => ({ thread: kept.thread ?? null, connections: [...kept.connections ?? []] }), () => ({ thread: null, connections: [] }));
@@ -315,7 +316,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       const read = paper(text, room.entry.name);
       if (read.id && read.id !== room.id) throw Object.assign(new Error("Another paper's file is at this path"), { other: true });
       // What was written while the folder could not be reached is owed to a file that has not changed since: the kept state is then the paper, and the file takes it.
-      if (!(room.owed && room.owed === hash(text) && room.blocks.length) && (!room.blocks.length || written(room.id, read.blocks) !== written(room.id, blocksOf(room)))) set(room, read.blocks);
+      if (!(room.owed && room.owed === hash(text) && room.blocks.length) && (!room.blocks.length || written(room.id, read.blocks, read.properties) !== written(room.id, blocksOf(room), room.properties.toJSON()))) set(room, read.blocks, undefined, () => { for (const name of room.properties.keys()) if (!(name in read.properties)) room.properties.delete(name); for (const [name, value] of Object.entries(read.properties)) if (room.properties.get(name) !== value) room.properties.set(name, value); });
       room.text = text;
     }
     room.owed = null;
@@ -346,7 +347,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   async function save(room) {
     await look(room);
     if (room.gone) return;
-    const text = written(room.id, blocksOf(room)), { disk, path: at } = room.entry;
+    const text = written(room.id, blocksOf(room), room.properties.toJSON()), { disk, path: at } = room.entry;
     const owed = path.join(room.entry.side, "unwritten");
     if (!room.unread && !room.away && text !== room.text) {
       // A device that goes as it is written to is away: the state is kept, and the file is written when it answers.
@@ -406,7 +407,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   }
   async function load(entry) {
     if (entry.kind === "site") return loadSite(entry);
-    const { id } = entry, doc = new Y.Doc(), room = { id, entry, doc, blocks: doc.getXmlFragment(FRAGMENT), authors: doc.getMap(AUTHORS), changes: doc.getMap(CHANGES), peers: new Set(), agents: new Map(), queue: Promise.resolve() };
+    const { id } = entry, doc = new Y.Doc(), room = { id, entry, doc, blocks: doc.getXmlFragment(FRAGMENT), authors: doc.getMap(AUTHORS), changes: doc.getMap(CHANGES), properties: doc.getMap(PROPERTIES), peers: new Set(), agents: new Map(), queue: Promise.resolve() };
     /** One at a time: a save, a look at the file and a rename never cross. */
     room.work = (job) => (room.queue = room.queue.then(job, job));
     await fs.mkdir(entry.side, { recursive: true });
@@ -565,17 +566,26 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     /** As Markdown, each block under a comment that gives its id; `markdown`: the Markdown alone, to export; `blocks`: the format itself. */
     async read(id, as) {
       const kept = await current(id), blocks = blocksOf(kept);
-      if (as === "blocks") return { format: "conduit-document", version: 1, id, blocks: blocks.map((block) => block.toJSON()), authors: kept.authors.toJSON(), changes: kept.changes.toJSON() };
-      if (as === "markdown") return `${markdown.serialize({ type: "doc", content: blocks.map((block) => block.toJSON()) }).trim()}\n`;
-      return `${blocks.map((block) => `<!-- block ${block.attrs.id} -->\n${markdown.serialize({ type: "doc", content: [block.toJSON()] }).trim()}`).join("\n\n")}\n`;
+      const properties = kept.properties.toJSON(), front = Object.keys(properties).length ? `---\n${Object.entries(properties).map(([name, value]) => `${name}: ${JSON.stringify(value)}`).join("\n")}\n---\n\n` : "";
+      if (as === "blocks") return { format: "conduit-document", version: 1, id, properties, blocks: blocks.map((block) => block.toJSON()), authors: kept.authors.toJSON(), changes: kept.changes.toJSON() };
+      if (as === "markdown") return `${front}${markdown.serialize({ type: "doc", content: blocks.map((block) => block.toJSON()) }).trim()}\n`;
+      return `${front}${blocks.map((block) => `<!-- block ${block.attrs.id} -->\n${markdown.serialize({ type: "doc", content: [block.toJSON()] }).trim()}`).join("\n\n")}\n`;
     },
     /**
      * One block changed: `replace` it with the Markdown's blocks (the first keeps its id), `insert` them after it (after `start`: first), or `delete` it.
+     * `set` writes its front matter instead.
      * `for` ("<item>/<n>") is the comment it answers: what it changes is then kept in the document's changes until that comment is resolved.
      */
     async edit(id, { op, block, markdown: text = "", by, for: about } = {}) {
       const kept = await current(id), now = blocksOf(kept), at = now.findIndex((candidate) => candidate.attrs.id === block);
-      if (!["replace", "insert", "delete"].includes(op)) throw fault(400, "op is replace, insert or delete");
+      // `set`: one property of its front matter (`block` its name, the Markdown its value as plain text; none removes it).
+      if (op === "set") {
+        const name = String(block ?? "").trim(), value = String(text).trim();
+        if (!name || name.length > 60 || /[\n:]/.test(name)) throw fault(400, "A property's name is a few words, with no colon");
+        kept.doc.transact(() => value ? kept.properties.set(name, value.slice(0, 2000)) : kept.properties.delete(name));
+        return { properties: kept.properties.toJSON() };
+      }
+      if (!["replace", "insert", "delete", "set"].includes(op)) throw fault(400, "op is replace, insert, delete or set");
       if (at < 0 && !(op === "insert" && block === "start")) throw fault(404, `No block ${block} in ${id}`);
       const fresh = op === "delete" ? [] : parse(String(text));
       if (op === "replace" && fresh[0]) fresh[0] = fresh[0].type.create({ ...fresh[0].attrs, id: block }, fresh[0].content);

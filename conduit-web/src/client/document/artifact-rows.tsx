@@ -5,7 +5,7 @@ import { Button, Field, Input } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
-import { artifactsOf, artifactsRead, artifactView, deleteArtifact, exportArtifactMarkdown, renameArtifact, type Artifact } from "./artifacts";
+import { artifactsOf, artifactsRead, artifactView, countPapers, deleteArtifact, exportArtifactMarkdown, paperCounted, renameArtifact, type Artifact } from "./artifacts";
 
 /** An artifact's mark in a row: a site is a page, a paper a document. */
 export const ArtifactIcon = (props: { kind: Artifact["kind"] }) => props.kind === "site" ? <Icons.Browser /> : <Icons.FileText />;
@@ -34,7 +34,7 @@ export default function ArtifactRows(props: { project: string; empty?: JSX.Eleme
           <MenuRow icon={<ArtifactIcon kind={artifact.kind} />} onSelect={() => props.onOpen(artifact)}>Open</MenuRow>
           <Show when={!props.phone}><MenuRow icon={<Icons.Split />} onSelect={() => props.onOpen(artifact, true)}>Open beside</MenuRow></Show>
           <MenuRow icon={<Icons.Edit />} onSelect={() => { setName(artifact.name); setRenaming(artifact); }}>Rename</MenuRow>
-          <Show when={artifact.kind === "paper"}><MenuRow icon={<Icons.Download />} onSelect={() => void exportArtifactMarkdown(artifact).catch(failed)}>Export Markdown</MenuRow></Show>
+          <Show when={artifact.kind === "paper"}><><MenuRow icon={<Icons.Download />} onSelect={() => void exportArtifactMarkdown(artifact).catch(failed)}>Export Markdown</MenuRow><MenuRow icon={<Icons.FileText />} picked={paperCounted()} onSelect={() => countPapers(!paperCounted())}>Count blocks and words</MenuRow></></Show>
         </MenuSection>
         <MenuSection>
           <MenuRow destructive icon={<Icons.Delete />} onSelect={() => setDeleting(artifact)}>Delete</MenuRow>
