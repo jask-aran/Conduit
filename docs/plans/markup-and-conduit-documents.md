@@ -10,9 +10,10 @@ file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background
 
 ### Where things stand (2026-11-12, end of milestone 3)
 
-- Local `main` holds all of milestones 1 to 3. `origin/main` is one commit behind it: someone other than the building
-  session pushed at 14:57 on 2026-11-12, up to `d8dcf4f9d` (margin threads). The commit after it (the rail, "Ask the
-  agent", and the rule that only the person's tick puts a comment away) is local only. Pushing is still the user's call.
+- Local `main` holds all of milestones 1 to 3. `origin/main` is behind it: someone other than the building session
+  pushed at 14:57 on 2026-11-12, up to `d8dcf4f9d` (margin threads). What came after it (the rail, "Ask the agent",
+  the rule that only the person's tick puts a comment away, the 119,000 ceiling, this brief) is local only. Pushing
+  is still the user's call.
 - conduit-local on :4310 runs local `main`. Try it at `/document`.
 - The three probes pass on that build (`markup-document.mjs` 17 checks, `markup-delivery.mjs`, `markup-thread.mjs`).
   Not run: `npm test`, the headed Chrome on :9222, a real phone, Android, desktop, two people typing in one paragraph.
