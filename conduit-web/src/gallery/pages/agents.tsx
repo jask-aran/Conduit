@@ -1,5 +1,5 @@
 import { createSignal, For, type JSX } from "solid-js";
-import { AgentDelegate, AgentReport, AgentReportItem, AgentRider, AgentRiderGroup, AgentRow, AgentRows, AgentSpawn, Button, HarnessPrompt, Orb, RoutineIcon, RunLine, Trace, type AgentState } from "@/components/ui";
+import { AgentDelegate, AgentReport, AgentReportItem, AgentRider, AgentRiderGroup, AgentRow, AgentRows, AgentSpawn, Button, HarnessPrompt, Icons, Orb, RoutineIcon, RunLine, Trace, type AgentState } from "@/components/ui";
 
 import { orb, queued } from "../demos";
 import { row, type Page } from "../model";
@@ -52,6 +52,10 @@ export const agentsPage: Page = { title: "Agents", summary: "Work an agent hande
     row("AgentRow states", "a turn's own (no id) and background ones (an id, and Stop while they work); finished, failed, stopped", () => turn(ROWS), { source: "components/ui/agents.tsx", surfaces: ["ground"], phone: true }),
     row("AgentRider", "a chat's background agents on its composer, a line each: mark, id, task, status, time; Stop while it works; past five it scrolls", () => strip(STRIP), { source: "components/ui/agents.tsx", surfaces: ["ground"], phone: true }),
     row("AgentRider · one", "a single agent", () => strip(STRIP.slice(0, 1)), { surfaces: ["ground"] }),
+    row("AgentRider · connection", "a chat connected to a paper rides under Background: the paper's mark in place of a spinner, opening the paper; Disconnect in place of Stop", () =>
+      <div class="g-composer"><AgentRider><AgentRiderGroup label="Background"><AgentRow line id="bg-1" title="Research gassho house pricing" state="running" activity="answering" time="1m 12s" onOpen={() => {}} onStop={() => {}} />
+        <AgentRow line title="Connected to Trip plan" state="running" icon={<Icons.FileText />} activity="Comments come here" stop="Disconnect" onOpen={() => {}} onStop={() => {}} /></AgentRiderGroup></AgentRider></div>,
+      { source: "client/chat/agents.tsx · RunningAgents", surfaces: ["ground"], phone: true }),
     row("AgentSpawn", "where background agents branched off a turn: one quiet line (Started, the ids, the task for one) that drops down what was started, a line each opening its run; Report jumps to the report once it is back. How they are doing rides on the composer", () =>
       <Trace orb={orb(true)} status="Done" time="4s" pinned={<AgentRows><AgentSpawn ids={["sa-1"]} title="Research gassho house pricing" status="Finished" onReport={() => {}}><AgentRow line id="sa-1" title="Research gassho house pricing" state="finished" usage="4.1k context" time="12.4s" onOpen={() => {}} /></AgentSpawn><AgentSpawn ids={["sa-2", "sa-3", "sa-4"]} status="1 of 3 running"><AgentRow line id="sa-2" title="Check Shirakawa-go bus times" state="finished" usage="2.8k context" time="8.0s" onOpen={() => {}} /><AgentRow line id="sa-3" title="Find ryokan with private onsen" state="running" activity="fetch_content booking.com" time="14s" onOpen={() => {}} /><AgentRow line id="sa-4" title="Compare rail pass prices" state="failed" time="3.2s" onOpen={() => {}} /></AgentSpawn></AgentRows>} />,
       { source: "components/ui/agents.tsx", surfaces: ["ground"], phone: true }),

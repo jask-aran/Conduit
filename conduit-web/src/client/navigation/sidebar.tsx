@@ -35,6 +35,7 @@ import { installSidebarCursor } from "./sidebar-cursor";
 
 const ArtifactCreator = lazy(() => import("../document/artifact-creator"));
 const ArtifactRows = lazy(() => import("../document/artifact-rows"));
+const ArtifactConnect = lazy(() => import("../document/artifact-connect"));
 const ComputerExplorer = lazy(() => import("../dashboard/computer-dashboard").then((module) => ({ default: module.ComputerExplorer })));
 
 type WorkspaceMode = "linked" | "created" | "cloned";
@@ -422,6 +423,7 @@ export function Sidebar(props: {
   const [moving, setMoving] = createSignal<{ chat: ChatSummary; project: Project } | null>(null);
   // Undefined until first asked for, so the creator's code loads only then.
   const [creating, setCreating] = createSignal<Project | null>();
+  const [connecting, setConnecting] = createSignal<{ chat: ChatSummary; project: Project } | null>();
   let appliedDefaultWorkspacePath = "";
   let handledCommandNonce: number | null = null;
 
@@ -950,6 +952,7 @@ export function Sidebar(props: {
         onCopy={() => void props.onCopyTranscript(menuProps.chat)}
         onOpenBeside={props.onOpenChatBeside ? () => props.onOpenChatBeside?.(menuProps.chat, menuProps.project) : undefined}
         onOpenTerminal={() => props.onOpenTerminal(menuProps.chat, menuProps.project)}
+        onConnect={menuProps.project.slug === "chat" ? undefined : () => setConnecting({ chat: menuProps.chat, project: menuProps.project })}
         onStop={processFor(menuProps.chat)?.id ? () => void props.onStopProcess(menuProps.chat) : undefined}
         pin={isConduitManagedProject(menuProps.project) ? { pinned: isPinned("chat", menuProps.chat.id), onToggle: () => void togglePin("chat", menuProps.chat.id) } : undefined}
         onDelete={() => setDeleting({ type: "chat", chat: menuProps.chat, project: menuProps.project })} />}>
@@ -1271,6 +1274,7 @@ export function Sidebar(props: {
     <Dialog alert open={Boolean(deleting())} title={deleteCopy().title} description={deleteCopy().description} onOpenChange={(open) => { if (!open) setDeleting(null); }}
       actions={<><DialogButton variant="ghost" outline onClick={() => setDeleting(null)}>Cancel</DialogButton><DialogButton variant="destructive" onClick={() => void confirmDelete()}>{deleteButtonLabel()}</DialogButton></>} />
 
+    <Show when={connecting() !== undefined}><ArtifactConnect chat={connecting() ?? null} onClose={() => setConnecting(null)} /></Show>
     <Show when={creating() !== undefined}>
       <ArtifactCreator project={creating() ?? null} onClose={() => setCreating(null)} onMade={(artifact) => openOnto(props.onOpenArtifact(artifact))} />
     </Show>

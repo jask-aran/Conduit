@@ -68,6 +68,9 @@ try {
   await page.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 });
   await page.waitForTimeout(4500);
   console.log("B bar:", await buttons(), "| launch mark gone:", await js("!document.querySelector('[data-launch-mark], #launch-mark')"));
+  // A paper's first listener is its mated thread, which a real model answers: the probe's own listener is chosen, and nothing is sent until it is.
+  const picked = async (name) => { const next = page.locator('.ui-markup-bar button[title="The next waiting session"]'); for (let tries = 0; tries < 8 && (await next.textContent().catch(() => "")) !== name; tries++) { await next.click(); await page.waitForTimeout(150); } if ((await next.textContent()) !== name) throw new Error(`The bar does not hand to ${name}`); };
+  await picked("doc-probe");
   await page.screenshot({ path: `${out}-doc0.png` });
   await press("Annotate").catch(() => press("Use the app"));
   await page.waitForTimeout(300);

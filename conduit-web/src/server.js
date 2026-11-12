@@ -641,7 +641,11 @@ const uiControl = new UiControl({ runtimeHub, nodeHub });
 mcpRuntime.uiControl = uiControl;
 const feedback = lifetime.own("feedback", createFeedback({ dataRoot: config.dataRoot, config, serverName: serverIdentity.name, runtimeHub, uiControl, chatLogs, listProcesses: () => backends.list() }), (owned) => owned.close());
 registerMarkupRoutes(app, "/v0/markup", () => feedback);
-const documents = lifetime.own("documents", createDocuments({ dataRoot: config.dataRoot, projects, changed: (projectId) => runtimeHub.publish({ type: "artifacts_changed", projectId }) }), (owned) => owned.close());
+// Made at its first use, when everything it names exists: a paper's mated thread and connected chats are the hub's own chats.
+let paperChatHost;
+const paperChats = () => (paperChatHost ??= createChatHost({ registry, projects, backends, chatLogs, findChatContext, launchLiveSession, contextStore, submitPrompt: (...args) => liveSessionStream.submitPrompt(...args) }));
+const documents = lifetime.own("documents", createDocuments({ dataRoot: config.dataRoot, projects, changed: (projectId) => runtimeHub.publish({ type: "artifacts_changed", projectId }),
+  chats: () => ({ open: (asked) => paperChats().openChat(asked), notify: (id, text) => paperChats().deliverApproval(id, text), get: (id) => { const chat = registry.metadata(id); return chat ? chatView(chat) : null; } }) }), (owned) => owned.close());
 registerDocumentRoutes(app, documents);
 onWorkspaceChange((projectIds) => documents.filesChanged(projectIds));
 registerMarkupRoutes(app, "/v0/document/:document/markup", (request) => documents.markup(request.params.document));

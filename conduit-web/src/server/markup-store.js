@@ -29,6 +29,7 @@ import { randomBytes } from "node:crypto";
  *   answered   false for one-way markup (from people owed no answer): no thread is served or taken, and an item does not invite a reply
  *   log        (entry) => told of each item written
  *   listeners  the folder whose .waiting names the sessions listening, where that is another store's: one registry for several stores
+ *   held       async () => the listeners the host holds itself, [{ name }]: it hands them what they are sent (a document's mated thread, a chat connected to it)
  */
 const MARKS = 12;
 /** How many of the latest items are looked through for one still open, and how many finished ones are listed with those. */
@@ -45,7 +46,7 @@ const ANSWERING_MS = 15 * 60_000;
 const SUBJECT = 200_000;
 const short = (value, length) => { const text = typeof value === "string" ? value : JSON.stringify(value) ?? ""; return text.length > length ? `${text.slice(0, length)}… (${text.length} characters)` : text; };
 
-export function createMarkupStore({ folder, snapshot = async () => ({}), on = "the interface", about = [], done = (id) => `node scripts/conduit-markup.mjs done ${id}`, answered = true, log = () => {}, listeners = folder }) {
+export function createMarkupStore({ folder, snapshot = async () => ({}), on = "the interface", about = [], done = (id) => `node scripts/conduit-markup.mjs done ${id}`, answered = true, log = () => {}, listeners = folder, held = async () => [] }) {
   const marks = new Map(), closed = new Map();
 
   /**
@@ -64,10 +65,13 @@ export function createMarkupStore({ folder, snapshot = async () => ({}), on = "t
     }
     for (const id of (await fs.readdir(folder).catch(() => [])).filter((name) => !name.startsWith("."))) {
       const taken = await fs.readFile(path.join(folder, id, "taken.json"), "utf8").then(JSON.parse).catch(() => null);
-      if (!taken?.name || found.has(taken.name) || Date.now() - Date.parse(taken.at) > WORKING_MS) continue;
+      // One the host took for a listener it holds is the host's to list, for as long as it holds that listener.
+      if (!taken?.name || taken.held || found.has(taken.name) || Date.now() - Date.parse(taken.at) > WORKING_MS) continue;
       if (await fs.stat(path.join(folder, id, "handled.json")).then(() => false, () => true)) found.set(taken.name, { name: short(String(taken.name), 80), state: "working", since: String(taken.at) });
     }
-    return [...found.values()].sort((a, b) => b.since.localeCompare(a.since));
+    // What the host holds itself comes first: its first is who a comment goes to unless the person says otherwise.
+    const own = (await held()).map((one) => ({ name: short(String(one.name), 80), state: one.state ?? "waiting", since: String(one.since ?? "") }));
+    return [...own, ...[...found.values()].filter((one) => !own.some((mine) => mine.name === one.name)).sort((a, b) => b.since.localeCompare(a.since))];
   }
 
   async function mark({ client } = {}) {

@@ -28,6 +28,7 @@ import { isMobileLayout, MOBILE_LAYOUT_QUERY } from "../navigation/mobile-layout
 import { KEYBOARD_HIDDEN_EVENT } from "@/components/ui/viewport";
 import { QueuedMessages } from "./queued-messages";
 import { RunningAgents } from "./agents";
+import { connectionsOf, disconnect } from "../document/connections";
 import { AttachmentStrip } from "./attachment-strip";
 import { composerSlashCommands } from "./composer-slash-commands";
 import { fileFromPastedText, insertTextAt, shouldAttachPastedText } from "./large-paste";
@@ -906,7 +907,10 @@ export function Composer(props: {
     <TextArea ref={input} rows={1} onPointerDown={(event) => { if (startNativeTyping()) event.preventDefault(); }} data-composer-input="" aria-label="Message the agent" aria-expanded={slashOpen() ? "true" : undefined} data-held={dictationSelectionOwned() && dictatedRange() ? "" : undefined} placeholder={!props.chat.loadedId() ? "New chat" : interactive() ? placeholder() : "Reconnecting..."} value={props.chat.draft()} disabled={!interactive()} onInput={(event) => change(event.currentTarget.value)} onPaste={paste} onSelect={selectionChanged} onKeyDown={keydown} inputMode={voiceFirst() && !keyboardWanted() ? "none" : undefined} onFocus={() => setInputFocused(true)} onBlur={() => { setInputFocused(false); if (!refocusing) setKeyboardWanted(false); }} />
     <Show when={slashOpen() && slashCommand()}>{(item) => <Completion typed={props.chat.draft()} rest={item().command.slice(props.chat.draft().length)} detail={item().description} />}</Show>
   </>;
-  const agents = () => <Show when={props.chat.agents().length}><RunningAgents agents={props.chat.agents()} onStop={(id) => void props.chat.stopAgent(id)} /></Show>;
+  const connections = () => { const chat = props.chat.loadedId(); return chat ? connectionsOf(chat) : []; };
+  // A saved chat keeps its rider mounted, so a connection's row and room leave as an agent's do.
+  const agents = () => <Show when={props.chat.agents().length || props.chat.loadedId()}><RunningAgents agents={props.chat.agents()} connections={connections()} onStop={(id) => void props.chat.stopAgent(id)}
+    onDisconnect={(paper) => void disconnect(paper, props.chat.loadedId()!).catch((error: Error) => toast.error(error.message))} /></Show>;
   const unreachable = () => <Show when={!props.serverOnline}>
     <Rider label="Hub unreachable" motion="entering">
       <RiderMark icon={<Icons.Server />} label="Unreachable" />

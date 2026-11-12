@@ -30,7 +30,7 @@ const PinRow = (props: { pinned: boolean; onToggle: () => void }) =>
 export function ChatMenuItems(props: {
   project: Project; places: Project[];
   onRename: () => void; onMove: (place: Project) => void; onCopy: () => void; onOpenBeside?: () => void; onOpenTerminal: () => void;
-  onStop?: () => void; pin?: { pinned: boolean; onToggle: () => void }; onDelete: () => void;
+  onStop?: () => void; pin?: { pinned: boolean; onToggle: () => void }; onDelete: () => void; onConnect?: () => void;
 }) {
   return <>
     <MenuSection>
@@ -39,6 +39,7 @@ export function ChatMenuItems(props: {
       <MenuRow icon={<Icons.Copy />} onSelect={props.onCopy}>{commandLabel(COMMAND_IDS.copyTranscript)}</MenuRow>
       <Show when={props.onOpenBeside}><MenuRow icon={<Icons.Split />} onSelect={() => props.onOpenBeside?.()}>Open beside</MenuRow></Show>
       <MenuRow icon={<Icons.Terminal />} onSelect={props.onOpenTerminal}>Open terminal</MenuRow>
+      <Show when={props.onConnect}><MenuRow icon={<Icons.FileText />} onSelect={() => props.onConnect?.()}>Connect to artifact…</MenuRow></Show>
       <Show when={props.onStop}><MenuRow icon={<Icons.Stop />} onSelect={() => props.onStop?.()}>Stop process</MenuRow></Show>
       <Show when={props.pin}>{(pin) => <PinRow pinned={pin().pinned} onToggle={pin().onToggle} />}</Show>
     </MenuSection>

@@ -150,6 +150,8 @@ export class ChatStore {
     return [...this.chats]
       .filter((chat) => includeUntracked || !chat.untracked)
       .filter((chat) => includeHidden || chat.status === "active" || (chat.status !== "subagent" && this.visibleDrafts.has(chat.id)))
+      // A paper's mated thread is the paper's second view (server/documents.js), never a chat of the project's list.
+      .filter((chat) => includeHidden || !chat.backend?.mated)
       // Creation order is stable: rename/title edits bump mtime/updatedAt and must not reshuffle the sidebar.
       .sort((a, b) => {
         const byCreated = String(b.createdAt || "").localeCompare(String(a.createdAt || ""));

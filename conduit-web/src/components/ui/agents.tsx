@@ -39,17 +39,18 @@ export function FoldLine(props: { item?: boolean; folds?: boolean; class?: strin
 export const AgentRows = (props: { label?: string; children: JSX.Element }) =>
   <ul class="ui-agent-rows" aria-label={props.label ?? "Subagents"} onPointerOver={moveCursor}>{props.children}</ul>;
 
+/** `icon` stands in for the mark, for what holds steady rather than works (a connection); `stop` names its stop control (unsaid: Stop). */
 export function AgentRow(props: { id?: string; title: string; state: AgentState; activity?: string; time?: string; usage?: string;
-  at?: string; line?: boolean; onOpen?: () => void; onStop?: () => void; stopRoom?: boolean; motion?: Motion }) {
+  at?: string; line?: boolean; icon?: JSX.Element; stop?: string; onOpen?: () => void; onStop?: () => void; stopRoom?: boolean; motion?: Motion }) {
   const line = () => props.state === "running" ? props.activity || "Starting" : [ENDED[props.state], props.usage, props.at ? props.time : undefined].filter(Boolean).join(" · ");
   return <li class="ui-agent-row" data-state={props.state} data-line={props.line ? "" : undefined} {...motionOf(props.motion)}>
     <Row density="trail" element="button" class="ui-agent-open" disabled={!props.onOpen} aria-label={`Open ${props.id ? `${props.id}, ` : ""}${props.title}`} onClick={() => props.onOpen?.()}
-      lead={<Mark state={props.state} />} label={<span class="ui-agent-head"><Show when={props.id}><code class="ui-agent-id">{props.id}</code></Show><span class="ui-agent-title">{props.title}</span></span>}
+      lead={props.icon ?? <Mark state={props.state} />} label={<span class="ui-agent-head"><Show when={props.id}><code class="ui-agent-id">{props.id}</code></Show><span class="ui-agent-title">{props.title}</span></span>}
       detail={props.line ? undefined : line()} context={props.line ? line() : undefined} meta={props.at ?? props.time} fold={props.onOpen && !props.at ? "quarter" : undefined} />
     {/* On one line the stop keeps its room once it has gone, so every row's time stays in one column; `stopRoom` keeps
         it on a row that has none (a foreground agent beside background ones). */}
     <Show when={props.state === "running" && props.onStop} fallback={props.line && (props.onStop || props.stopRoom) ? <span class="ui-agent-stop" aria-hidden="true" /> : undefined}>
-      <Button variant="ghost" size="icon-sm" class="ui-agent-stop" aria-label={`Stop ${props.id || props.title}`} title="Stop" onClick={() => props.onStop?.()}><StopGlyph /></Button>
+      <Button variant="ghost" size="icon-sm" class="ui-agent-stop" aria-label={`${props.stop ?? "Stop"} ${props.id || props.title}`} title={props.stop ?? "Stop"} onClick={() => props.onStop?.()}><StopGlyph /></Button>
     </Show>
   </li>;
 }

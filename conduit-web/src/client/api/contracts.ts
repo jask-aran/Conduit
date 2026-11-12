@@ -54,7 +54,7 @@ export interface ChatSummary {
   templateId?: string;
   runtime?: RuntimeIdentity;
   profileId?: string | null;
-  backend?: { protocol: string; implementation: string; installationId: string; serviceLevel?: string; parentChatId?: string; subagentId?: string };
+  backend?: { protocol: string; implementation: string; installationId: string; serviceLevel?: string; parentChatId?: string; subagentId?: string; /** The paper this chat is the mated thread of. */ mated?: string };
   createdAt?: string;
   updatedAt?: string;
   lastUserMessageAt?: string | null;

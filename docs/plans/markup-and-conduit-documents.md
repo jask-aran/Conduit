@@ -4,28 +4,68 @@ Agreed with the user on 2026-11-12. Milestones 1, 2 and 3 and step (a) of what f
 
 ## Start here: the brief for the session that builds this
 
-You are picking up a build part-way. Milestones 1 to 3 and step (a), papers in panes, are built. Step (b) is next: the
-mated thread as the second view, and connections with their rider. Read "Settled with the user on 2026-11-12" first. Read this section, then the rest of this
+You are picking up a build part-way. Milestones 1 to 3, step (a), papers in panes, and step (b), the mated thread and
+connections, are built. Step (c) is next: the MCP tools and addressing by `@name`. Read "Settled with the user on
+2026-11-12" first. Read this section, then the rest of this
 file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background session the user checks in on.
 
-### Where things stand (2026-11-12, end of step (a): papers in panes)
+### Where things stand (2026-11-12, end of step (b): the mated thread and connections)
 
-- Local `main` holds milestones 1 to 3 and step (a). `origin/main` is behind it: someone other than the building
-  session pushed at 14:57 on 2026-11-12, up to `d8dcf4f9d` (margin threads). Pushing is still the user's call.
-- conduit-local on :4310 runs local `main`. Try it: open the Test project in the sidebar and press "Test document",
-  or the project's menu › New Artifact.
-- Four probes pass on that build, each with `errors: []`: `markup-artifacts.mjs` (10 checks: the pane, the sidebar
-  rows, the creator, rename, a second paper beside, delete), `markup-document.mjs` (17 checks, now on the paper in a
-  pane), `markup-delivery.mjs`, `markup-thread.mjs`. Not run: `npm test`, the headed Chrome on :9222, a real phone,
-  Android, desktop, two people typing in one paragraph. Screenshots were looked at headless only.
+- Local `main` holds milestones 1 to 3 and steps (a) and (b). `origin/main` is behind it: someone other than the
+  building session pushed at 14:57 on 2026-11-12, up to `d8dcf4f9d` (margin threads). Pushing is still the user's call.
+- conduit-local on :4310 runs local `main`. Try it: open the Test project in the sidebar and press "Test document";
+  the header's Paper | Thread switch; the header's "Connect a chat" menu, or a chat's menu › Connect to artifact….
+- Five probes pass on that build, each with `errors: []`: `markup-threads.mjs` (12 checks: the switch, the hidden
+  thread, a connected chat handed a comment on the scripted profile, the rider, both ways to connect),
+  `markup-artifacts.mjs` (10), `markup-document.mjs` (17), `markup-delivery.mjs`, `markup-thread.mjs`. In eight runs
+  of `markup-threads.mjs` one stopped on a click that timed out; which click was not found. Not run: `npm test`,
+  the headed Chrome on :9222, a real phone, Android, desktop, two people typing in one paragraph, **and a comment
+  answered by a real model in a mated thread** (every check used the scripted `test-stream` profile or a fake chat
+  host). Screenshots were looked at headless only.
 - No Markup listener is running. The user said (2026-11-12) it need not be kept live all the time; start
   `wait --stay` when you want their markup.
 - The user asked (2026-11-12) for subagents to build and check in parallel: Opus 5.5 at low or medium effort, each
   with a file list it may edit, no builds or restarts, and one that only reviews. `client/main.tsx` can be edited by
-  two at once when each uses narrow edits. The review found the worst defect of step (a) before it ran on real data.
-- **The initial JS bundle is 3 bytes under its budget** (424,997 of 425,000 B gzip). Step (a) needed four rounds of
-  moving code into lazy chunks to fit. Anything step (b) adds to the first load (a rider, a header switch) will not
-  fit: ask the user whether to raise the budget or what to cut, before building it.
+  two at once when each uses narrow edits. The review found the worst defects of steps (a) and (b) before either ran
+  on real data.
+- **The initial JS budget is 427,000 B gzip** (was 425,000; the user said "Ok keep going" to a raise of up to 3,000
+  on 2026-11-12). The build is at 426,048. New panes and dialogs load lazily; a rider and a header switch cannot.
+
+### Step (b) as built
+
+- **The mated thread** is an ordinary chat whose `backend.mated` is its paper's id, made by `mated(id)` in
+  `server/documents.js` through `createChatHost().openChat` (`agent/chat-host.js`; `startChat` and it share `make`),
+  on the project's default profile, titled with the paper's name. `ChatStore.list` leaves such chats out unless
+  `includeHidden`, so no list, dashboard, digest or agent tool shows one; it is found by id. The paper's
+  `links.json` (`.conduit/artifacts/<id>/`) holds `{ thread, connections }`. An unstarted thread is a draft, which
+  the client discards and the store drops after a day: `mated` makes another when the one it had is gone.
+- **Who is handed what.** The Markup store takes `held` (listeners its host holds; listed first, so the mated
+  thread, named `conduit`, is who a paper's comment goes to unless the person picks another). A connected chat is a
+  listener by its title (a second of the same title, or one with no title, is `chat <first 8 of its id>`). `hand`
+  takes the item in the listener's name (`taken.json` with `held: true` and the chat's id), tells the chat with
+  `deliverApproval` (a notice that starts its agent, or steers it when busy and the harness can), then marks the
+  comments as being worked on. A chat that cannot be told has not taken the item: it goes back to waiting. An item a
+  `wait` session took first under the same name stays that session's. What the person writes back, or a reopen,
+  reaches the chat that took the item, found by its id whatever it is called now. A resolve tells nobody.
+- Routes: `POST /v0/document/<id>/thread` (the thread's chat, made if need be), `GET /v0/document/<id>/connections`,
+  `PUT|DELETE /v0/document/<id>/connections/<chat>`, `GET /v0/chats/<chat>/connections`. A change tells clients
+  `artifacts_changed`.
+- **One tab, two views** (`client/main.tsx`): `matedThreads` (chat id → paper id, kept in a setting on the device)
+  makes `tabKey` give a thread's view its paper's tab key, so `chat:<mated>` and `artifact:<id>` are one tab named
+  for the paper. `showThread` asks the hub for the thread, puts it in `hiddenChats` and sets the pane's view;
+  `paperModes` is the `Segmented` passed as `modes` to the paper's `PaneHeader` and to `ChatHeader` (`PaneHeader`
+  of kind `pane` now draws `modes`). A thread's address, or a stored pane showing one, opens its paper.
+- **The rider** is an `AgentRow` in `RunningAgents` (`client/chat/agents.tsx`) under Background: "Connected to
+  <paper>", pressed to open the paper beside (window event `conduit:open-artifact`), its stop control named
+  Disconnect. `AgentRow` took `icon` and `stop`. `client/document/connections.ts` is what the client knows of
+  connections. The paper's header has the "Connect a chat" menu (the project's chats, ticked); a chat's sidebar menu
+  has "Connect to artifact…" (`artifact-connect.tsx`, lazy; not offered in the Chats project, which has no artifacts
+  listed).
+- Known gaps: deleting a paper leaves its mated thread's chat, hidden; the routines digest does not see paper
+  threads; an agent whose chat is busy on a harness that cannot steer is not told (the item goes back to waiting);
+  a paper is always the view a reload opens, never its thread; switching from a chat with riders to one with none
+  may play the old rows' leave in the new chat (not looked at); the row's accessible names read "Open Connected to
+  <paper>"; "Comments come here" on the rider is the builder's copy.
 
 ### Step (a) as built
 
@@ -93,7 +133,7 @@ The code keeps `document` inside the editor and the hub's service; the pane kind
   standalone route for now. The test document is `Test document.paper` in the Test project's folder
   (`~/.conduit/data/chat/files/test`), id `test`, with its threads.
 
-The order, agreed: (a) done: papers in panes; (b) the mated thread as the second view, started by the hub, and
+The order, agreed: (a) done: papers in panes; (b) done: the mated thread as the second view, started by the hub, and
 connections with their rider; (c) the MCP tools and addressing by `@name`; (d) projects on another node; (e) other
 kinds of artifact.
 
@@ -167,7 +207,7 @@ engineer: they read your prose closely and your diffs shallowly, so what you tel
   raised twice on the user's word (2026-11-12): a ceiling may be raised for planned feature work and comes down after
   a cleanup. `src/` is at 115,190 after milestone 3, which added about 360 lines; the next milestone adds a pane kind,
   many documents and the mated thread, so it has 3,800 lines of room. The test and Markdown budgets (`conduit-web/budgets.json`) still only fall,
-  and the bundle budget is tight: initial JS is within 1.1 kB gzip of 425,000, so new pieces stay out of the barrel.
+  and the bundle budget is tight: initial JS is within 1 kB gzip of 427,000, so new pieces stay out of the barrel.
 - The two interface-feedback probes send real items, and a session whose `wait` is running is handed them: lines the
   listener prints while a probe runs are the probe's, not the user's. `markup-document.mjs` sends one comment, handed
   to no session, and finishes it.
@@ -310,5 +350,8 @@ document stays possible: a comment may be a mark, not only words.
   Computer dashboard's own file list still opens a `.paper` in the file viewer; a paper in a folder git ignores is
   listed only once it has been opened from the file tree.
 - Who an author is: every person's client is recorded as `person` until there is a name to give it.
-- The hub starting a thread touches its session code, which Markup has not needed before.
+- Rough edges of step (b), none yet judged by the user: the first comment on a paper goes to its mated thread, on
+  the project's default profile, with no word to the person that a model is about to run; the rider's wording and
+  mark; whether the thread should be kept when its paper is deleted; whether an agent's tools should see a paper's
+  thread; "Connect a chat" uses the chat icon, since the library has no link icon.
 - Moving Markup and the editor into the shared components package: parked until the package's scope is decided.

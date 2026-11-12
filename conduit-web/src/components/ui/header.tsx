@@ -91,6 +91,7 @@ export function PaneHeader(props: JSX.HTMLAttributes<HTMLElement> & {
     <div class="ui-header-title">{local.children}</div>
     {local.pill}
     {local.after}
+    {local.modes}
     <div class="ui-header-group" data-actions="">{local.actions}</div>
   </header>;
 }

@@ -27,8 +27,16 @@ import { startWebSocketKeepalive } from "./ws-keepalive.js";
  * agents changed for a comment) and the paper's comments, a Markup store of its own (markup-store.js) whose listeners
  * are the hub's one registry (the feedback folder's), so a session that waits for interface feedback is handed a
  * paper's comments too. Which papers there are is read from the folders, never kept.
+ *
+ * A paper is tied to chats (links.json, beside its state). Its mated thread is its own chat, the paper's second view and
+ * never in the project's list of chats, made when it is first asked for or first sent a comment: the listener named
+ * `conduit`, the first one, so a comment goes to it unless the person says otherwise. A chat the person connected is a
+ * listener by its title. The hub holds both itself: a comment sent to one is written into that chat as a notice, which
+ * starts its agent on it; what the agent answers with is the CLI, as for any session. A session Conduit does not run
+ * keeps `wait`.
  */
 const SAVE_AFTER_MS = 500, LOOK_EVERY_MS = 2_000, SCAN_AFTER_MS = 3_000;
+const MATED = "conduit", SCRIPT = path.resolve(import.meta.dirname, "../../../scripts/conduit-markup.mjs");
 const EXT = ".paper", ID = /^[a-z0-9-]{1,64}$/, WALK = { entries: 20_000, depth: 6 };
 const fault = (status, message) => Object.assign(new Error(message), { status });
 const run = promisify(execFile), there = (file) => fs.access(file).then(() => true, () => false);
@@ -37,7 +45,8 @@ const put = async (file, text) => { const part = path.join(path.dirname(file), `
 const under = (root, file) => file === root || file.startsWith(root + path.sep);
 const shown = ({ id, kind, name, path: at, project }) => ({ id, kind, name, path: at, project });
 
-export function createDocuments({ dataRoot, projects, changed = () => {} }) {
+/** `chats`: () => the hub's chats, once it has them: `open({ workspace, title, mark })` makes one, `get(id)` is its summary, `notify(id, text)` writes a notice into it. */
+export function createDocuments({ dataRoot, projects, changed = () => {}, chats = () => null }) {
   const folder = path.join(dataRoot, "documents"), extensions = documentExtensions(), schema = getSchema(extensions), markdown = new MarkdownManager({ extensions });
   const sockets = new WebSocketServer({ noServer: true }), rooms = new Map(), known = new Map(), scans = new Map(), rescans = new Map();
   const withIds = (node) => ({ ...node, ...(BLOCK_TYPES.includes(node.type) ? { attrs: { ...node.attrs, id: node.attrs?.id ?? blockId() } } : {}), ...(node.content ? { content: node.content.map(withIds) } : {}) });
@@ -123,7 +132,8 @@ export function createDocuments({ dataRoot, projects, changed = () => {} }) {
     const other = read.id && known.get(read.id), copy = other && path.join(other.root, other.path) !== file && await there(path.join(other.root, other.path));
     const id = read.id && !copy ? read.id : crypto.randomBytes(8).toString("hex");
     if (id !== read.id) await put(file, written(id, read.blocks));
-    return known.set(id, { id, kind: "paper", name, path: at, project: project.id, root, side: path.join(side, id) }).get(id);
+    const links = known.get(id)?.links ?? await fs.readFile(path.join(side, id, "links.json"), "utf8").then(JSON.parse).then((kept) => ({ thread: kept.thread ?? null, connections: [...kept.connections ?? []] }), () => ({ thread: null, connections: [] }));
+    return known.set(id, { id, kind: "paper", name, path: at, project: project.id, root, side: path.join(side, id), links }).get(id);
   }
   /** A project's folder is read for its papers once, and again when one of them is found missing. The oldest file is read first, so of a paper and its copy the paper keeps the id. */
   const scan = (project) => scans.get(project.id) ?? scans.set(project.id, (async () => {
@@ -140,6 +150,57 @@ export function createDocuments({ dataRoot, projects, changed = () => {} }) {
     for (const project of await here()) await scan(project).catch((error) => console.error(`Could not read ${project.name}'s papers`, error));
   })().catch((error) => console.error("Could not read the projects' papers", error));
   const entryOf = async (id) => known.get(id) ?? (await ready, known.get(id)) ?? (() => { throw fault(404, `No paper ${id}`); })();
+
+  const host = () => chats() ?? (() => { throw fault(503, "The hub's chats are not ready yet"); })();
+  const link = async (entry) => { await writePrivateFile(path.join(entry.side, "links.json"), `${JSON.stringify(entry.links)}\n`); changed(entry.project); };
+  /** The paper's mated thread, made if it has none (or the one it had is gone: an empty chat is not kept for long). */
+  const making = new Map();
+  async function mated(id) {
+    const entry = await entryOf(id), had = entry.links.thread && host().get(entry.links.thread);
+    if (had) return had;
+    // One at a time: the Thread view and a first comment may ask together.
+    if (!making.has(id)) making.set(id, (async () => {
+      const chat = await host().open({ workspace: entry.project, title: entry.name, mark: { mated: id } });
+      (known.get(id) ?? entry).links.thread = chat.id;
+      await link(known.get(id) ?? entry);
+      return host().get(chat.id);
+    })().finally(() => making.delete(id)));
+    return making.get(id);
+  }
+  /** Who the hub holds a paper's comments for: its mated thread first, then each connected chat by its title (the first to have a title keeps it). */
+  const heldFor = (id) => {
+    const entry = known.get(id), names = new Set([MATED]);
+    if (!entry || !chats()) return [];
+    return [{ name: MATED, chat: entry.links.thread }, ...entry.links.connections.flatMap((chat) => {
+      const title = chats().get(chat)?.title, name = title && !names.has(title) ? title : `chat ${chat.slice(0, 8)}`;
+      if (!chats().get(chat) || names.has(name)) return [];
+      names.add(name);
+      return [{ name, chat }];
+    })];
+  };
+  /**
+   * What the hub does for a listener it holds, as the CLI's `wait` does for a session: the item is taken in its name,
+   * each comment is marked as being worked on, and the chat is told where the item is. `said`: what the person wrote
+   * back on an item already handed over.
+   */
+  async function hand(room, item, to, said) {
+    // The mated thread is made again where it has gone (an empty chat is not kept): what is sent to the paper always has a chat to reach.
+    const dir = path.join(room.entry.side, "markup", item), chat = to.name === MATED ? (await mated(room.id)).id : to.chat, at = new Date().toISOString();
+    // The name is the file's, which anyone who can write the folder chooses: it reaches the agent as a quoted name, never as lines of its own.
+    const name = JSON.stringify(room.entry.name.replace(/\s+/g, " ").slice(0, 120)), taken = path.join(dir, "taken.json");
+    if (said) return host().notify(chat, `On the paper ${name}, markup item ${item}: ${said}\nThe item is ${path.join(dir, "item.json")}; answer with \`node ${SCRIPT} reply ${item} [n] "<words>"\`.`);
+    // Taken once: a session that took it first (a `wait` under the same name) keeps it, and the chat is told nothing.
+    const mine = await fs.writeFile(taken, `${JSON.stringify({ name: to.name, held: true, chat, at })}\n`, { flag: "wx" }).then(() => true, async () => (await fs.readFile(taken, "utf8").then(JSON.parse).catch(() => null))?.held === true);
+    if (!mine) return;
+    // What the chat has not been told of yet: the comments with no line saying one is being worked on.
+    const told = new Set((await fs.readFile(path.join(dir, "thread.jsonl"), "utf8").catch(() => "")).split("\n").filter(Boolean).map((line) => JSON.parse(line)).filter((line) => line.working).map((line) => line.n));
+    const comments = JSON.parse(await fs.readFile(path.join(dir, "item.json"), "utf8")).comments ?? [], fresh = comments.filter((comment) => !told.has(comment.n));
+    if (!fresh.length) return;
+    // A chat that cannot be told has not taken it: the item goes back to waiting, which is what the person then reads.
+    await host().notify(chat, `${fresh.length === comments.length ? "The person" : "The person added to what they"} sent you ${fresh.length === 1 ? "a comment" : `${fresh.length} comments`} on the paper ${name}${fresh.length === comments.length ? "" : ` (${fresh.map((comment) => comment.n).join(", ")})`}. Read ${path.join(dir, "item.json")} (its \`read\` says how) and do what it asks.`)
+      .catch(async (error) => { if (!told.size) await fs.rm(taken, { force: true }); throw error; });
+    await fs.appendFile(path.join(dir, "thread.jsonl"), fresh.map((comment) => `${JSON.stringify({ at, from: "agent", by: to.name, n: comment.n, working: true })}\n`).join(""));
+  }
 
   /** The file is the paper: what it holds that the live copy does not is taken, as the smallest change that makes the live copy so. */
   async function take(room) {
@@ -190,7 +251,8 @@ export function createDocuments({ dataRoot, projects, changed = () => {} }) {
     await take(room);
     const store = createMarkupStore({
       folder: path.join(entry.side, "markup"), listeners: path.join(dataRoot, "feedback"), on: `the paper ${entry.name} (document ${id})`,
-      about: ["To answer a comment by changing the document, add `--for <this item's id>/<n>` to `document replace`, `insert` or `delete`: the person then sees which blocks changed for comment n and can take the change back. Resolving the comment yourself does not accept the change for the person: the comment stays in their margin, marked as resolved by you, with the change shown, until they resolve it too."],
+      held: async () => heldFor(id), done: (item) => `node ${SCRIPT} done ${item}`,
+      about: [`Where a line here says \`node scripts/conduit-markup.mjs\`, run \`node ${SCRIPT}\`: it works from any folder.`, "To answer a comment by changing the document, add `--for <this item's id>/<n>` to `document replace`, `insert` or `delete`: the person then sees which blocks changed for comment n and can take the change back. Resolving the comment yourself does not accept the change for the person: the comment stays in their margin, marked as resolved by you, with the change shown, until they resolve it too."],
       log: (line) => console.log(JSON.stringify({ ...line, type: "conduit.document.markup", document: id })),
     });
     /** A change is accepted when the person resolves its comment (a session's resolve accepts nothing); read on every look at the open threads, which hold every comment the person has not resolved. */
@@ -200,7 +262,21 @@ export function createDocuments({ dataRoot, projects, changed = () => {} }) {
       if (settled.length) doc.transact(() => { for (const [block] of settled) room.changes.delete(block); });
       return items;
     };
-    room.markup = { ...store, open, say: async (item, body) => { const said = await store.say(item, body); await open(); return said; } };
+    // What is sent to a listener the hub holds, or written back on an item one of them took, is handed to its chat. The person's page is answered first: a chat that cannot be started is said in the log, and the item stays in the folder.
+    // Who holds an item is the chat that took it, whatever it is called now: a chat's listener name is its title, which changes.
+    const held = async (name, item) => {
+      const all = heldFor(id), took = item && await fs.readFile(path.join(entry.side, "markup", item, "taken.json"), "utf8").then(JSON.parse).catch(() => null);
+      return took?.held ? took.name === MATED ? all[0] : all.find((one) => one.chat === took.chat) && { name: took.name, chat: took.chat } : all.find((one) => one.name === name);
+    };
+    const failed = (error) => console.error(`Could not hand a comment on the paper ${room.entry.name} to its chat: ${error.message}`);
+    room.markup = { ...store, open,
+      send: async (item, body) => { const sent = await store.send(item, body), to = await held(sent.handed?.to?.name, sent.id); if (to) void hand(room, sent.id, to).catch(failed); return sent; },
+      say: async (item, body) => {
+        const said = await store.say(item, body), to = await held(said.by, item);
+        await open();
+        if (to && (body?.text || body?.resolved === false)) void hand(room, item, to, body.text ? `the person wrote back${Number.isInteger(body.n) ? ` on comment ${body.n}` : ""}: ${String(body.text).trim()}` : `the person reopened comment ${body.n}.`).catch(failed);
+        return said;
+      } };
     doc.on("update", (update, origin) => {
       for (const peer of room.peers) if (peer !== origin) peer.send(frame(FRAME.update, update));
       clearTimeout(room.saving);
@@ -250,6 +326,25 @@ export function createDocuments({ dataRoot, projects, changed = () => {} }) {
       return listing(of.id) === before ? shown(entry) : told(entry);
     },
     about: async (id) => shown(await entryOf(id)),
+    /** The paper's mated thread, as a chat's summary. */
+    thread: async (id) => ({ chat: await mated(id), project: (await entryOf(id)).project }),
+    /** The chats tied to a paper: its mated thread (none until it is made) and those the person connected. */
+    async connections(id) {
+      const { links } = await entryOf(id);
+      return { thread: links.thread && chats()?.get(links.thread) ? links.thread : null, connections: links.connections.flatMap((chat) => { const found = chats()?.get(chat); return found ? [{ chat, title: found.title || "Untitled chat" }] : []; }) };
+    },
+    /** A chat is connected to a paper, or (`on` false) no longer: the hub then hands it the comments sent to it. */
+    async connect(id, chat, on = true) {
+      const entry = await entryOf(id);
+      if (!host().get(chat)) throw fault(404, `No chat ${chat}`);
+      if (chat === entry.links.thread) throw fault(400, "That is the paper's own thread");
+      entry.links.connections = [...entry.links.connections.filter((one) => one !== chat), ...(on ? [chat] : [])];
+      await fs.mkdir(entry.side, { recursive: true });
+      await link(entry);
+      return this.connections(id);
+    },
+    /** The papers a chat is connected to. */
+    connectedTo: (chat) => [...known.values()].filter((entry) => entry.links.connections.includes(chat)).map(shown),
     /** Files changed in these projects (a paper pulled in, moved or deleted outside Conduit): once the changes stop, each folder is read again and its clients are told when its papers are others. */
     filesChanged(ids) {
       for (const id of ids) {
@@ -361,6 +456,11 @@ export function registerDocumentRoutes(app, documents) {
     const read = await documents.read(request.params.id, request.query.as);
     if (typeof read === "string") response.type("text/markdown").send(read); else response.json(read);
   });
+  app.post("/v0/document/:id/thread", async (request, response) => response.json(await documents.thread(request.params.id)));
+  app.get("/v0/document/:id/connections", async (request, response) => response.json(await documents.connections(request.params.id)));
+  app.put("/v0/document/:id/connections/:chat", async (request, response) => response.json(await documents.connect(request.params.id, request.params.chat)));
+  app.delete("/v0/document/:id/connections/:chat", async (request, response) => response.json(await documents.connect(request.params.id, request.params.chat, false)));
+  app.get("/v0/chats/:chat/connections", (request, response) => response.json({ connections: documents.connectedTo(request.params.chat) }));
   app.patch("/v0/document/:id", async (request, response) => response.json(await documents.rename(request.params.id, request.body?.name)));
   app.delete("/v0/document/:id", async (request, response) => { await documents.remove(request.params.id); response.status(204).end(); });
   app.post("/v0/document/:id/blocks", async (request, response) => response.json(await documents.edit(request.params.id, request.body)));

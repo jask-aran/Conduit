@@ -46,6 +46,8 @@ export function ChatHeader(props: {
   tabActions?: JSX.Element;
   tabs?: JSX.Element;
   pill?: JSX.Element;
+  /** What the pane shows of one thing in turn (a paper and its thread), as the switch between them. */
+  modes?: JSX.Element;
 }) {
   const placeKind = () => props.project && isWorkspace(props.project) ? "workspace" : "project";
   // Offline is the workspace's, so it is said where the workspace is named; a step that needs the device asks then.
@@ -114,6 +116,7 @@ export function ChatHeader(props: {
       </DropdownMenu>
     </Show>}
     after={props.badge}
+    modes={props.modes}
     actions={<>
       {/* On a desktop search and the palette are the right rail's; a phone's header keeps them. */}
       <HeaderButton only="phone" label="Search chats" icon={<Icons.Search />} onClick={props.onOpenSearch} />

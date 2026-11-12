@@ -37,6 +37,31 @@ export function createChatHost({ registry, projects, backends, chatLogs, findCha
   const personChat = (chatId) => {
     if (typeof chatId !== "string" || !visible().some((chat) => chat.id === chatId)) throw new Error("Chat not found in the person's chats");
   };
+  const make = async ({ workspace, profile, title }, mark = {}) => {
+    if (title !== undefined) title = required(title, "title");
+    const workspaces = await projects.list();
+    const name = workspace === undefined ? "chat" : required(workspace, "workspace");
+    const project = workspaces.find((item) => item.id === name) || workspaces.find((item) => item.slug === name)
+      || workspaces.find((item) => item.name === name);
+    if (!project) throw new Error("Workspace not found");
+    await projects.validate(project);
+    const templates = backends.config?.piTemplates || backends.adapters.get("conduit-runtime")?.runtime?.templates || [];
+    const selection = profileSelection({ profileId: profile === undefined ? project.defaultTemplateId || "assistant" : required(profile, "profile") });
+    const profiles = agentProfiles(templates, { available: backends.local || new Set(backends.adapters.keys()) });
+    const selected = profiles.find((item) => item.id === selection.profileId);
+    const template = templates.find((item) => item.id === selection.templateId);
+    if (!selected || selected.id === "agent" || template?.internal || template?.defaultable === false || template?.special) {
+      throw new Error("Profile is unknown or internal");
+    }
+    const implementation = selected.agent.implementation;
+    const can = await backends.capabilities?.(project);
+    if (can && !can.harnesses.includes(implementation)) throw new Error("Harness is not available in this workspace");
+    if ((!can && selected.disabled) || !backends.adapters.has(implementation)) throw new Error("Profile is unavailable");
+    const chat = await registry.create(project, selected.management === "agent" ? {
+      backend: { profileId: selected.id, profileRevision: null, management: selected.management, ...selected.agent, opaqueSession: null, ...mark },
+    } : { templateId: template.id, templateVersion: template.version, backend: { ...templateBackend(template), ...mark } });
+    return { chat, project, title };
+  };
   const contextFor = async (chatId) => {
     personChat(chatId);
     const context = await findChatContext(chatId);
@@ -112,37 +137,23 @@ export function createChatHost({ registry, projects, backends, chatLogs, findCha
 
     async startChat({ workspace, profile, prompt, title }) {
       required(prompt, "prompt");
-      if (title !== undefined) title = required(title, "title");
-      const workspaces = await projects.list();
-      const name = workspace === undefined ? "chat" : required(workspace, "workspace");
-      const project = workspaces.find((item) => item.id === name) || workspaces.find((item) => item.slug === name)
-        || workspaces.find((item) => item.name === name);
-      if (!project) throw new Error("Workspace not found");
-      await projects.validate(project);
-      const templates = backends.config?.piTemplates || backends.adapters.get("conduit-runtime")?.runtime?.templates || [];
-      const selection = profileSelection({ profileId: profile === undefined ? project.defaultTemplateId || "assistant" : required(profile, "profile") });
-      const profiles = agentProfiles(templates, { available: backends.local || new Set(backends.adapters.keys()) });
-      const selected = profiles.find((item) => item.id === selection.profileId);
-      const template = templates.find((item) => item.id === selection.templateId);
-      if (!selected || selected.id === "agent" || template?.internal || template?.defaultable === false || template?.special) {
-        throw new Error("Profile is unknown or internal");
-      }
-      const implementation = selected.agent.implementation;
-      const can = await backends.capabilities?.(project);
-      if (can && !can.harnesses.includes(implementation)) throw new Error("Harness is not available in this workspace");
-      if ((!can && selected.disabled) || !backends.adapters.has(implementation)) throw new Error("Profile is unavailable");
-      const chat = await registry.create(project, selected.management === "agent" ? {
-        backend: { profileId: selected.id, profileRevision: null, management: selected.management, ...selected.agent, opaqueSession: null },
-      } : { templateId: template.id, templateVersion: template.version, backend: templateBackend(template) });
+      const { chat, project, title: named } = await make({ workspace, profile, title });
       try {
         // Set the title before prompting so automatic naming cannot replace it.
-        if (title !== undefined) await registry.update(chat.id, { title });
+        if (named !== undefined) await registry.update(chat.id, { title: named });
         await launchLiveSession({ chatId: chat.id, requestedProject: project.id });
         await submitPrompt(chat.id, prompt);
       } catch (error) {
         throw new Error(`Chat ${chat.id} was created, but could not start: ${error?.message || error}`, { cause: error });
       }
       return { chatId: chat.id, title: registry.metadata(chat.id)?.title || "", workspace: project.name };
+    },
+
+    /** A chat made and not yet started, on the workspace's default profile; `mark` is kept on its backend (a paper's mated thread is marked with its paper). */
+    async openChat({ workspace, title, mark }) {
+      const { chat, title: named } = await make({ workspace, title }, mark);
+      if (named !== undefined) await registry.update(chat.id, { title: named });
+      return registry.metadata(chat.id) ?? chat;
     },
 
     async say(chatId, text) {
@@ -155,6 +166,7 @@ export function createChatHost({ registry, projects, backends, chatLogs, findCha
       else await submitPrompt(chatId, text);
     },
 
+    /** A notice written into a chat by Conduit, which starts the chat's agent on it (or steers it where it is busy). */
     async deliverApproval(chatId, text) {
       const context = await findChatContext(chatId);
       if (!context?.chat) throw new Error("Chat not found");

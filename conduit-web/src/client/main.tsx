@@ -3,7 +3,7 @@ import { NOT_SPOKEN } from "../transcript-fold.js";
 import { duration, easing, reducedMotion, whenMotionEnds } from "@/components/ui/motion";
 import { HarnessMark, StatusDot } from "@/components/ui";
 import { Icons } from "@/components/ui";
-import { handDrawerOnto, paneDrawn, AppShell, LeadInput, DashHeader, DropOverlay, Notice, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading, Note, Empty, Actions, IconButton, Heading, PaneHeader, HeaderButton } from "@/components/ui";
+import { handDrawerOnto, paneDrawn, AppShell, Segmented, LeadInput, DashHeader, DropOverlay, Notice, RiderButton, Sheet, SheetFill, Row, Group, GroupHeading, Note, Empty, Actions, IconButton, Heading, PaneHeader, HeaderButton } from "@/components/ui";
 import { buildLabel, clientBuild, isDevClient } from "./platform/build-info.ts";
 import { liveTrace } from "./turn-rows";
 import { ConnectionScreen, ConnectionRecovery, ConnectionForm, ConnectionChoices, ConnectionChoice, ConnectionGroup, ConnectionAddress, ConnectionStatus, ConnectionPassword, ConnectionSteps, ConnectionEntry, ConnectionGo, ConnectionScan, type AddressState } from "@/components/ui/connection";
@@ -643,6 +643,13 @@ function App() {
   applyStreamFade();
   watchStrayFrost();
   installFocusShown();
+  // A paper and its mated thread are one tab, showing either: the thread is a chat no list holds, found from its paper.
+  // Which chats are mated threads is kept, so a reload on one opens its paper.
+  const [matedThreads, setMatedThreads] = createSignal<Record<string, string>>((() => { try { return JSON.parse(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "mated") || "{}") as Record<string, string>; } catch { return {}; } })());
+  const matedPaper = (view: string | null | undefined) => view?.startsWith("chat:") ? matedThreads()[view.slice("chat:".length)] : undefined;
+  const paperOf = <View extends string | null>(view: View) => { const paper = matedPaper(view); return paper ? `artifact:${paper}` as const : view; };
+  // The address of a thread opens its paper in the first pane; the other panes, the dock and the tabs it names are kept.
+  { const paper = matedPaper(`chat:${pathChatId()}`), url = new URL(location.href); if (paper) { url.pathname = "/"; url.searchParams.set("a", `artifact:${paper}`); history.replaceState({}, "", url); } }
   const launchUrl = new URL(location.href);
   const urlNamesPanes = launchUrl.searchParams.has("pane") || launchUrl.searchParams.has("a");
   const atStart = launchUrl.pathname === "/" && !launchUrl.search;
@@ -650,8 +657,8 @@ function App() {
   const MAX_DOCKED = 3;
   const storedViews = (urlNamesPanes ? launchUrl.searchParams.getAll("pane").slice(0, 2)
     : atStart ? [readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split"), readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-2")] : [])
-    .map((value) => isSplitView(value) ? value : null);
-  const storedDocked = (urlNamesPanes ? launchUrl.searchParams.getAll("dock") : atStart ? (readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-docked") || "").split("\n") : []).filter(isSplitView).slice(0, MAX_DOCKED);
+    .map((value) => isSplitView(value) ? paperOf(value) : null);
+  const storedDocked = (urlNamesPanes ? launchUrl.searchParams.getAll("dock") : atStart ? (readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-docked") || "").split("\n") : []).filter(isSplitView).map(paperOf).slice(0, MAX_DOCKED);
   const initialViews: (SplitView | null)[] = [...(storedViews[0] ? [storedViews[0], storedViews[1] ?? null] : [storedViews[1] ?? null, null]), ...[0, 1, 2].map((index) => storedDocked[index] ?? null)];
   const storedPaneA = urlNamesPanes ? launchUrl.searchParams.get("a") : atStart ? readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-a") : null;
   const [paneAOverride, setPaneAOverrideState] = createSignal<SplitView | null>(isSplitView(storedPaneA) && !/^(chat|page):/.test(storedPaneA) ? storedPaneA : null);
@@ -2904,8 +2911,25 @@ function App() {
     namedPapers.add(view);
     void import("./document/artifacts").then(({ artifactAbout }) => artifactAbout(view.slice("artifact:".length))).then((found) => setPaperNames((current) => ({ ...current, [view]: found.name })), () => {});
   };
+  /** The paper's pane turns to its mated thread, which the hub makes if there is none: the same tab, as a chat. */
+  const showThread = async (pane: PaneKey, paper: string) => {
+    try {
+      const { chat } = await api<{ chat: ChatSummary }>(`/v0/document/${encodeURIComponent(paper)}/thread`, { method: "POST" });
+      setMatedThreads((current) => { const next = { ...current, [chat.id]: paper }; writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "mated", JSON.stringify(next)); return next; });
+      await agentChat(chat.id);
+      await setPaneView(pane, `chat:${chat.id}`);
+    } catch (error) { showError(error); }
+  };
+  const paperModes = (pane: PaneKey, paper: string, shown: "paper" | "thread") => <Segmented label="View" size="sm" value={shown} options={[{ value: "paper", label: "Paper" }, { value: "thread", label: "Thread" }]}
+    onChange={(next) => { if (next !== shown) void (next === "thread" ? showThread(pane, paper) : setPaneView(pane, `artifact:${paper}`)); }} />;
+  /** The switch on a chat's header, where the chat is a paper's mated thread. */
+  const threadModes = (pane: PaneKey) => { const paper = matedPaper(viewOf(pane)); return paper ? paperModes(pane, paper, "thread") : undefined; };
+  const openArtifactFromEvent = (event: Event) => { const { id, beside } = (event as CustomEvent<{ id: string; beside?: boolean }>).detail; void openArtifact(id, beside); };
+  window.addEventListener("conduit:open-artifact", openArtifactFromEvent);
+  onCleanup(() => window.removeEventListener("conduit:open-artifact", openArtifactFromEvent));
   const renderArtifactDocument = (pane: PaneKey, id: string) => <ArtifactPane id={id} quiet={feedbackMode() !== null} onName={(name) => setPaperNames((current) => ({ ...current, [`artifact:${id}`]: name }))}
-    header={(extra) => <PaneHeader actions={<>{extra}{paneTabActions(pane)}</>}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`artifact:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />;
+    chats={(project) => (catalogue.projects().find((item) => item.id === project)?.sessions ?? []).map((chat) => ({ id: chat.id, title: chat.title || "Untitled chat" }))}
+    header={(extra) => <PaneHeader modes={paperModes(pane, id, "paper")} actions={<>{extra}{paneTabActions(pane)}</>}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`artifact:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />;
   const renderBrowserDocument = (pane: PaneKey, id: string) => <SheetFill class="pane-browser">
     <BrowserPane id={id} onTitle={(title) => setBrowserTitles((current) => ({ ...current, [`browser:${id}`]: title }))}
       header={<PaneHeader actions={paneTabActions(pane)}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`browser:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />
@@ -3206,6 +3230,8 @@ function App() {
   const openComputerHere = () => openInFocusedPane("page:computer", () => openComputer());
   const openArtifact = async (id: string, beside = false) => {
     const view = `artifact:${id}` as const;
+    const threaded = (["main", ...slotOrder()] as PaneKey[]).find((pane) => matedPaper(viewOf(pane)) === id);
+    if (threaded !== undefined) { await setPaneView(threaded, view); return focusAnyPane(threaded); }
     if ((beside || altActivation()) && !isMobileLayout()) await openBeside(view, false); else await openInFocusedPane(view, () => setPaneView("main", view));
   };
   const openHarnessHere = (id: string) => openInFocusedPane(`page:harness:${encodeURIComponent(id)}`, () => openComputerHarness(id));
@@ -3249,7 +3275,7 @@ function App() {
         queueMicrotask(async () => {
           if (slotChatId(slot) !== id || !catalogue.loaded() || hiddenChats().has(id)
             || catalogue.projects().some((project) => project.sessions.some((item) => item.id === id))) return;
-          if ((tabsOf(slot)?.ids.length ?? 0) > 1) void closeTab(slot, id);
+          if ((tabsOf(slot)?.ids.length ?? 0) > 1) void closeTab(slot, tabKey(`chat:${id}`));
           else await setSlotView(slot, null);
         });
         return;
@@ -3486,6 +3512,7 @@ function App() {
   const foldedSlots = () => !dockAvailable() || isMobileLayout() ? [] : slotOrder().filter((slot) => slotView(slot) && !isDocked(slot)).slice(0, 2).filter((slot) => !shownSlots().includes(slot));
   const viewName = (view: SplitView | null): string => {
     if (!view) return "";
+    if (matedPaper(view)) return viewName(paperOf(view));
     if (view.startsWith("chat:")) {
       const id = view.slice("chat:".length);
       const found = catalogue.projects().flatMap((project) => project.sessions).find((item) => item.id === id) || hiddenChats().get(id)?.chat;
@@ -3518,7 +3545,7 @@ function App() {
   const [paneTabs, setPaneTabs] = createSignal<Record<string, PaneTabs>>(launchTabs());
   const tabsOf = (pane: PaneKey) => paneTabs()[String(pane)] ?? null;
   const tabbable = (view: string | null | undefined): view is SplitView => Boolean(view && (view === "home" || /^(chat|page|browser|term|artifact):/.test(view)));
-  const tabKey = (view: SplitView) => view.startsWith("chat:") ? view.slice("chat:".length) : view;
+  const tabKey = (view: SplitView) => view.startsWith("chat:") ? matedPaper(view) ? paperOf(view) : view.slice("chat:".length) : view;
   const tabView = (key: string) => (key === "home" || key.includes(":") ? key : `chat:${key}`) as SplitView;
   const tabPlace = (id: string) => id === "home" ? "doc:page" : id.startsWith("page:project:") ? id.slice("page:project:".length)
     : id.includes(":") ? `doc:${id.split(":")[0]}`
@@ -4134,7 +4161,7 @@ function App() {
             {attachInput()}
             <Show when={side.chat.loadedId()} fallback={<Empty role="status">Loading chat…</Empty>}>
             <ChatSurface session={side} opening={side.chat.presentation().kind !== "ready" || side.chat.loadedId() !== slotChatId(slot)} project={side.selected()?.project}
-              {...paneTabRow(slot)} keyboardOwner={owns} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
+              {...paneTabRow(slot)} modes={threadModes(slot)} keyboardOwner={owns} place={chatPlace(side)} modelSelector onShare={() => void shareChat(side.selectedId())}
               onRename={() => runSidebar("rename-chat", side.selected() ?? {})} onDelete={() => runSidebar("delete-chat", side.selected() ?? {})}
               notice={workspaceNotice(side.selected()?.project, side.selectedId())}
               tabActions={paneTabActions(slot)} />
@@ -5457,6 +5484,7 @@ function App() {
     actions?: JSX.Element;
     tabActions?: JSX.Element;
     tabs?: JSX.Element;
+    modes?: JSX.Element;
     notice?: JSX.Element;
     place?: ReturnType<typeof chatPlace>;
     modelSelector?: boolean;
@@ -5468,7 +5496,7 @@ function App() {
     const parent = () => subagentParent(surfaceChat.loadedId());
     createEffect(() => { const id = surfaceChat.loadedId(); if (id && subagent() && !hiddenChats().has(id)) void agentChat(id).catch(() => {}); });
     return <>
-      <ChatHeader project={props.project} onOpenPlace={openPlace} parent={subagent() ? parent() : undefined} title={surfaceChat.title() || (surfaceChat.status() === "draft" ? "New chat" : "Untitled chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs} />
+      <ChatHeader project={props.project} onOpenPlace={openPlace} parent={subagent() ? parent() : undefined} title={surfaceChat.title() || (surfaceChat.status() === "draft" ? "New chat" : "Untitled chat")} profile={current.activeProfile()} runtime={surfaceChat.runtimeIdentity()} live={surfaceChat.live() as unknown as Record<string, unknown>} chat={surfaceChat} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={props.onShare} onRename={props.onRename} onDelete={props.onDelete} actions={props.actions} tabActions={props.tabActions} tabs={props.tabs} modes={props.modes} />
       {props.notice}
       <Conversation chat={surfaceChat} busy={surfaceChat.presentation().kind === "opening_live"} empty={props.empty} sending={props.sending} opening={props.opening} stackRef={props.stackRef}
         transcript={<Transcript readOnly={subagent()} chat={surfaceChat} supports={current.capability} agentThread={agentThread(surfaceChat.loadedId())} profileLabel={current.activeProfile()?.label || current.activeProfile()?.id || surfaceChat.templateId() || undefined} projectId={props.project?.id} approvals={approvalsFor(surfaceChat.loadedId())} />}
@@ -5649,7 +5677,7 @@ function App() {
         <Show when={routeKind() !== "dashboard" && routeKind() !== "computer" && routeKind() !== "agent" && routeKind() !== "jbot"}>
         <Show when={routeKind() === "project" && selectedProject()} fallback={<>
           <Show when={dropActive()}><DropOverlay>Drop files to attach</DropOverlay></Show>
-          <ChatSurface session={session} opening={withheldLiveChat()} empty={routeKind() === "chat" && emptyLayout()} sending={routeKind() === "chat" && emptyChat() && !emptyLayout()} project={selectedProject()} tabActions={paneTabActions("main")} {...paneTabRow("main")} keyboardOwner={() => !sideHasKeyboard()} place={chatPlace()} modelSelector stackRef={(element) => { chatComposerStack = element; }}
+          <ChatSurface session={session} opening={withheldLiveChat()} empty={routeKind() === "chat" && emptyLayout()} sending={routeKind() === "chat" && emptyChat() && !emptyLayout()} project={selectedProject()} tabActions={paneTabActions("main")} modes={threadModes("main")} {...paneTabRow("main")} keyboardOwner={() => !sideHasKeyboard()} place={chatPlace()} modelSelector stackRef={(element) => { chatComposerStack = element; }}
             onShare={() => void shareChat()} onRename={() => runSidebar("rename-chat")} onDelete={() => runSidebar("delete-chat")}
             notice={workspaceNotice(selectedProject(), catalogue.selectedId())} />
         </>}>

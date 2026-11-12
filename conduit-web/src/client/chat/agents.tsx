@@ -1,4 +1,4 @@
-import { AgentDelegate, AgentReport, AgentReportItem, AgentRider, AgentRiderGroup, AgentRow, AgentRows, AgentSpawn, type AgentState } from "@/components/ui";
+import { AgentDelegate, AgentReport, AgentReportItem, AgentRider, AgentRiderGroup, AgentRow, AgentRows, AgentSpawn, Icons, type AgentState } from "@/components/ui";
 import { createEffect, createMemo, createSignal, For, Index, onCleanup, Show, type JSX } from "solid-js";
 
 import type { AgentSummary, Message, ToolItem } from "../api/contracts";
@@ -125,19 +125,22 @@ export function TurnReports(props: { reports: Message[]; agents: AgentSummary[];
   </AgentReport></AgentRows>;
 }
 
-export function RunningAgents(props: { agents: AgentSummary[]; onStop?: (id: string) => void }) {
+export function RunningAgents(props: { agents: AgentSummary[]; connections?: { id: string; name: string }[]; onStop?: (id: string) => void; onDisconnect?: (paper: string) => void }) {
   const running = createMemo(() => props.agents.filter((agent) => agent.status === "running" && (agent.run || agent.mode === "foreground" || agent.id)));
   const list = createLeavingList(running, (agent) => `child:${agent.conversationId}`);
-  const rider = createLeaving(running, (agents) => agents.length > 0, undefined, "--duration-gentle");
+  // A connected paper rides under Background for as long as it is connected.
+  const papers = createLeavingList(() => props.connections ?? [], (paper) => paper.id);
+  const rider = createLeaving(() => running().length + (props.connections?.length ?? 0), (count) => count > 0, undefined, "--duration-gentle");
   const now = useNow(() => running().length > 0);
   const keysOf = (mode: AgentSummary["mode"] | "runs") => list.keys().filter((key) => {
     const agent = list.get(key);
     return mode === "runs" ? Boolean(agent?.run) : !agent?.run && agent?.mode === mode;
   });
-  return <Show when={list.keys().length}>
+  const papersIn = (mode: AgentSummary["mode"] | "runs") => mode === "background" ? papers.keys() : [];
+  return <Show when={list.keys().length + papers.keys().length}>
     <AgentRider motion={riderMotion(rider.leaving())}>
-      <For each={(["foreground", "background", "runs"] as const).filter((mode) => keysOf(mode).length)}>{(mode) =>
-        <AgentRiderGroup label={mode === "foreground" ? "Foreground" : mode === "background" ? "Background" : "Runs"} going={keysOf(mode).every(list.leaving)}>
+      <For each={(["foreground", "background", "runs"] as const).filter((mode) => keysOf(mode).length + papersIn(mode).length)}>{(mode) =>
+        <AgentRiderGroup label={mode === "foreground" ? "Foreground" : mode === "background" ? "Background" : "Runs"} going={keysOf(mode).every(list.leaving) && papersIn(mode).every(papers.leaving)}>
           <For each={keysOf(mode)}>{(key) => {
             const agent = () => list.get(key)!;
             return <AgentRow line id={agent().id || undefined} title={agent().run ? (agent().run!.number ? `${agent().run!.label} #${agent().run!.number}` : agent().run!.label) : agent().title} state={agent().status} activity={agent().activity || undefined}
@@ -145,6 +148,9 @@ export function RunningAgents(props: { agents: AgentSummary[]; onStop?: (id: str
               onOpen={agent().chatId ? () => openAgentChat(agent().chatId!) : undefined}
               onStop={mode !== "foreground" && props.onStop && agent().id ? () => props.onStop!(agent().id!) : undefined} stopRoom />;
           }}</For>
+          <For each={papersIn(mode)}>{(id) => <AgentRow line title={`Connected to ${papers.get(id)!.name}`} state="running" icon={<Icons.FileText />} activity="Comments come here" stop="Disconnect"
+            motion={papers.leaving(id) ? "leaving" : undefined} onOpen={() => window.dispatchEvent(new CustomEvent("conduit:open-artifact", { detail: { id, beside: true } }))}
+            onStop={() => props.onDisconnect?.(id)} />}</For>
         </AgentRiderGroup>}</For>
     </AgentRider>
   </Show>;
