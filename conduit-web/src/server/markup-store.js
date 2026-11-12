@@ -46,7 +46,7 @@ const SUBJECT = 200_000;
 const short = (value, length) => { const text = typeof value === "string" ? value : JSON.stringify(value) ?? ""; return text.length > length ? `${text.slice(0, length)}… (${text.length} characters)` : text; };
 
 export function createMarkupStore({ folder, snapshot = async () => ({}), on = "the interface", about = [], done = (id) => `node scripts/conduit-markup.mjs done ${id}`, answered = true, log = () => {}, listeners = folder }) {
-  const marks = new Map();
+  const marks = new Map(), closed = new Map();
 
   /**
    * The sessions an item can be handed to, by name: one whose `wait` is running (its file in .waiting, while its
@@ -195,11 +195,12 @@ export function createMarkupStore({ folder, snapshot = async () => ({}), on = "t
     // Being worked on: the session's last line about it is that it was handed it, not long ago.
     const lastBy = new Map(all.filter((message) => message.from === "agent").map((message) => [message.n ?? null, message]));
     const working = (n) => { const last = lastBy.get(n); return Boolean(last?.working && !handled && Date.now() - Date.parse(last.at) < ANSWERING_MS); };
-    const resolved = new Map(messages.filter((message) => typeof message.resolved === "boolean").map((message) => [message.n, message.resolved]));
+    // Who last settled a comment is kept: a surface may hold a comment its session resolved until the person has said so too.
+    const settled = new Map(messages.filter((message) => typeof message.resolved === "boolean").map((message) => [message.n, message])), resolved = new Map([...settled].map(([n, message]) => [n, message.resolved]));
     const unread = messages.filter((message) => message.from === "agent").length - ((await read(path.join(dir, "person-read.json")))?.agent ?? 0);
     if (seen && unread) await fs.writeFile(path.join(dir, "person-read.json"), `${JSON.stringify({ agent: messages.filter((message) => message.from === "agent").length })}\n`);
     return { id, sentAt: item.sentAt, state: handled ? "handled" : taken ? "taken" : "waiting", by: taken?.name ?? item.handed?.to?.name ?? null, unread: Math.max(0, unread), working: working(null),
-      comments: (item.comments ?? []).map((entry) => ({ n: entry.n, name: entry.name, comment: entry.comment, ...(entry.quote ? { quote: entry.quote } : {}), ...(entry.under ? { under: entry.under } : {}), resolved: resolved.get(entry.n) === true, working: resolved.get(entry.n) !== true && working(entry.n) })), messages };
+      comments: (item.comments ?? []).map((entry) => ({ n: entry.n, name: entry.name, comment: entry.comment, ...(entry.quote ? { quote: entry.quote } : {}), ...(entry.under ? { under: entry.under } : {}), resolved: resolved.get(entry.n) === true, ...(resolved.get(entry.n) ? { resolvedBy: settled.get(entry.n).from === "agent" ? "agent" : "person" } : {}), working: resolved.get(entry.n) !== true && working(entry.n) })), messages };
   }
 
   /** What the person writes back, about comment `n` or the item as a whole; or, with `resolved`, comment `n` settled or reopened. */
@@ -207,7 +208,8 @@ export function createMarkupStore({ folder, snapshot = async () => ({}), on = "t
     if (typeof resolved === "boolean" && Number.isInteger(n)) {
       const dir = path.join(folder, id), now = await thread(id);
       await fs.appendFile(path.join(dir, "thread.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), from: "person", n, resolved })}\n`);
-      // The last comment resolved finishes the item; one reopened hands it back to the session that took it.
+      // The last comment resolved finishes the item; one reopened hands it back to the session that took it. Settling it, the person has read what was said of it.
+      if (resolved) await fs.writeFile(path.join(dir, "person-read.json"), `${JSON.stringify({ agent: now.messages.filter((message) => message.from === "agent").length })}\n`);
       if (!resolved) await fs.rm(path.join(dir, "handled.json"), { force: true });
       else if (now.comments.every((entry) => entry.resolved || entry.n === n)) await fs.writeFile(path.join(dir, "handled.json"), `${JSON.stringify({ at: new Date().toISOString(), by: "person" })}\n`);
       return thread(id);
@@ -231,12 +233,15 @@ export function createMarkupStore({ folder, snapshot = async () => ({}), on = "t
     return found;
   }
 
-  /** Every item still to be read in full: the unfinished ones, and a finished one with an answer the person has not read. A surface that keeps its comments beside what they are about (a document's margin) shows these. */
+  /** Every item the person has not put away: one with a comment they have not resolved themselves (a session resolving it, or finishing the item, does not put it away), or with an answer they have not read. A surface that keeps its comments beside what they are about (a document's margin) shows these. */
   async function open() {
     const found = [];
     if (answered) for (const id of (await fs.readdir(folder).catch(() => [])).filter((name) => !name.startsWith(".")).sort()) {
+      // This is asked every few seconds and items put away only gather: one is read again only when something has been said on it since.
+      const said = await fs.stat(path.join(folder, id, "thread.jsonl")).then((stat) => stat.mtimeMs, () => 0);
+      if (closed.get(id) === said) continue;
       const one = await thread(id).catch(() => null);
-      if (one && (one.state !== "handled" || one.unread)) found.push(one);
+      if (one && (one.unread || !one.comments.every((entry) => entry.resolved && entry.resolvedBy === "person"))) found.push(one); else closed.set(id, said);
     }
     return found;
   }

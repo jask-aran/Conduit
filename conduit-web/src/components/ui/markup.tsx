@@ -139,8 +139,9 @@ export type MarkupView = "use" | "page" | "screenshot";
  *  for a phone's width. `tools`: the ones this host offers (all, unsaid). `thread`: the item is sent and its thread is followed, so the bar is only what was said of it (`status`) and close.
  *  `onBack` then leaves it for marking up again. `replies`: answers unread on what was sent before, and `sent` how many of those there are to come back to (`onReplies`).
  *  `thin` (unsaid: so): its surface is thinner than the library's frost, to sit over an interface being looked at. A tool pressed while the app is in use goes back to annotating with it.
- *  `outstanding`: how many comments Send would deliver; `standing`: where the item they have gone to stands, once some have. */
-export function MarkupBar(props: { view: MarkupView; screenshots?: boolean; onView: (view: MarkupView) => void; tools?: readonly (MarkupToolKind | "note")[]; tool: MarkupToolKind; onTool: (tool: MarkupToolKind) => void; onNote: () => void; outstanding?: number; standing?: string; thin?: boolean; thread?: boolean; onBack?: () => void; replies?: number; sent?: number; onReplies?: () => void; ink?: MarkupInk; onInk?: (ink: MarkupInk) => void; weight?: MarkupWeight; onWeight?: (weight: MarkupWeight) => void; shape?: MarkupShape; onShape?: (shape: MarkupShape) => void; onUndo?: () => void; onRedo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
+ *  `outstanding`: how many comments Send would deliver; `standing`: where the item they have gone to stands, once some have.
+ *  `own`: the host's own tools (a document's block kinds), and `onAsk` a comment about where the surface's selection or caret is: a rail above the bar while the app is in use. */
+export function MarkupBar(props: { view: MarkupView; own?: readonly { name: string; label: string; icon: () => JSX.Element; active?: boolean; run: () => void }[]; onAsk?: () => void; screenshots?: boolean; onView: (view: MarkupView) => void; tools?: readonly (MarkupToolKind | "note")[]; tool: MarkupToolKind; onTool: (tool: MarkupToolKind) => void; onNote: () => void; outstanding?: number; standing?: string; thin?: boolean; thread?: boolean; onBack?: () => void; replies?: number; sent?: number; onReplies?: () => void; ink?: MarkupInk; onInk?: (ink: MarkupInk) => void; weight?: MarkupWeight; onWeight?: (weight: MarkupWeight) => void; shape?: MarkupShape; onShape?: (shape: MarkupShape) => void; onUndo?: () => void; onRedo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
   canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void }) {
   const using = () => props.view === "use";
   const views = (): Array<{ value: MarkupView; label: string; icon: JSX.Element }> => [
@@ -166,6 +167,11 @@ export function MarkupBar(props: { view: MarkupView; screenshots?: boolean; onVi
     <Show when={lined()}>{(onWeight) => <Segmented label="Line" icons size="sm" value={props.weight ?? "medium"} onChange={onWeight()} options={(Object.keys(MARKUP_WEIGHTS) as MarkupWeight[]).map((value) => ({ value, label: MARKUP_WEIGHTS[value].label,
       icon: <span class="ui-markup-weight" data-weight={value} data-kind={props.tool === "highlight" ? "highlight" : undefined} style={inked(props.ink)} /> }))} />}</Show>
     <Show when={props.compact}><IconButton label="Undo" disabled={!props.onUndo} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton></Show>
+  </Frost></Show>
+  {/* Only while the app is in use, as the options are only while annotating: the two never stand together. */}
+  <Show when={using() && !props.thread && (props.own?.length || props.onAsk)}><Frost lift="raised" class="ui-markup-bar" role="toolbar" aria-label="Document tools">
+    <For each={props.own}>{(tool) => <IconButton label={tool.label} aria-pressed={tool.active} onClick={tool.run}>{tool.icon()}</IconButton>}</For>
+    <Show when={props.onAsk}><Button variant="ghost" size="sm" onClick={props.onAsk}><Icons.Agent />Ask the agent</Button></Show>
   </Frost></Show>
   <Frost lift="raised" class="ui-markup-bar" role="toolbar" aria-label="UI markup">
     <Show when={props.thread && props.onBack}><IconButton label="Back to marking up" onClick={props.onBack}><Icons.Back /></IconButton></Show>

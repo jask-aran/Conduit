@@ -49,12 +49,12 @@ export function createDocuments({ dataRoot }) {
     const doc = new Y.Doc(), room = { doc, blocks: doc.getXmlFragment(FRAGMENT), authors: doc.getMap(AUTHORS), changes: doc.getMap(CHANGES), peers: new Set(), agents: new Map(), save: () => writePrivateFile(file, Y.encodeStateAsUpdate(doc)) };
     const store = createMarkupStore({
       folder: path.join(folder, `${id}.markup`), listeners: path.join(dataRoot, "feedback"), on: `the document ${id}`,
-      about: ["To answer a comment by changing the document, add `--for <this item's id>/<n>` to `document replace`, `insert` or `delete`: the person then sees which blocks changed for comment n and can take the change back. Leave such a comment for the person to resolve: resolving it accepts the change."],
+      about: ["To answer a comment by changing the document, add `--for <this item's id>/<n>` to `document replace`, `insert` or `delete`: the person then sees which blocks changed for comment n and can take the change back. Resolving the comment yourself does not accept the change for the person: the comment stays in their margin, marked as resolved by you, with the change shown, until they resolve it too."],
       log: (entry) => console.log(JSON.stringify({ ...entry, type: "conduit.document.markup", document: id })),
     });
-    /** A change whose comment is resolved (or gone) is accepted: read on every look at the open threads, since an agent resolves by writing to the folder, with no hub in the path. */
+    /** A change is accepted when the person resolves its comment (a session's resolve accepts nothing); read on every look at the open threads, which hold every comment the person has not resolved. */
     const open = async () => {
-      const items = await store.open(), unsettled = new Set(items.flatMap((item) => item.comments.filter((comment) => !comment.resolved).map((comment) => `${item.id}/${comment.n}`)));
+      const items = await store.open(), unsettled = new Set(items.flatMap((item) => item.comments.filter((comment) => !(comment.resolved && comment.resolvedBy === "person")).map((comment) => `${item.id}/${comment.n}`)));
       const settled = [...room.changes.entries()].filter(([, change]) => !unsettled.has(change.for));
       if (settled.length) doc.transact(() => { for (const [block] of settled) room.changes.delete(block); });
       return items;

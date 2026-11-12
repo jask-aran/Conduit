@@ -7,6 +7,7 @@
  * The other half is the receiver (server/markup-store.js: the item folder, who is listening). A transport speaks
  * to one; httpTransport is the routes both Conduit's hub and `conduit-markup serve` answer.
  */
+import type { JSX } from "solid-js";
 
 /** Which piece draws an element, read from the host's own source at build time (Conduit: scripts/ui-pieces.mjs). */
 export type PieceNames = {
@@ -29,7 +30,7 @@ export type MarkupHanded = { to: { name: string } | null };
 /** An item once sent, as the person follows it: where it stands (`by`: the session it was handed to or that took it), and what was said about each comment (`n`) or the item as a whole.
  *  A message with `resolved` and no `text` is that comment settled (or reopened) by whoever it is `from`. `working`: the session has been handed it and has not yet answered. */
 export type MarkupThread = { id: string; sentAt: string; state: "waiting" | "taken" | "handled"; by: string | null; unread: number; working?: boolean;
-  comments: { n: number; name: string; comment: string; quote?: string; under?: Record<string, string | number | boolean>; resolved?: boolean; working?: boolean }[]; messages: { at: string; from: "agent" | "person"; n: number | null; text?: string; resolved?: boolean }[] };
+  comments: { n: number; name: string; comment: string; quote?: string; under?: Record<string, string | number | boolean>; resolved?: boolean; resolvedBy?: "agent" | "person"; working?: boolean }[]; messages: { at: string; from: "agent" | "person"; n: number | null; text?: string; resolved?: boolean }[] };
 /** An item in the list of what was sent before; `first` is its first comment's words. */
 export type MarkupSent = { id: string; sentAt: string; state: MarkupThread["state"]; by: string | null; unread: number; comments: number; first: string };
 
@@ -51,7 +52,7 @@ export interface MarkupTransport {
   resolve(id: string, n: number, resolved: boolean): Promise<MarkupThread>;
   /** The latest items not finished, with an answer unread or sent in the last day, newest first. */
   threads(): Promise<MarkupSent[]>;
-  /** Every item still to be read in full, oldest first: the unfinished, and a finished one with an answer unread. A margin shows these. */
+  /** Every item the person has not put away, oldest first: one with a comment they have not resolved themselves, or with an answer unread. A margin shows these. */
   open(): Promise<MarkupThread[]>;
   /** A mark nothing was sent to. */
   drop(mark: string): Promise<void>;
@@ -96,7 +97,7 @@ export type MarkupCapabilities = {
 /** What a host that declares nothing gets: a collaborator's batched markup with every tool. */
 export const MARKUP_CAPABILITIES: MarkupCapabilities = { deliveries: ["batched"], tools: ["select", "quote", "pen", "highlight", "shape", "text", "erase", "note"], screenshot: true, listeners: true, inks: true, sent: "corner", thin: true };
 
-/** A comment that stands in the margin, as the surface is told of it: `key` is "<item>/<n>"; `quote` and `under` are what it was sent with; `current`: its card is open. */
+/** A comment that stands in the margin, as the surface is told of it: `key` is "<item>/<n>"; `quote` and `under` are what it was sent with; `current`: its card is open; `resolved`: by the person, so it is no longer marked. */
 export type MarkupAnchor = { key: string; quote?: string; under?: Record<string, string | number | boolean>; current: boolean; resolved: boolean };
 
 /** What a surface with a margin does for it: it marks what each comment is about, and says where that is. */
@@ -110,6 +111,9 @@ export interface MarkupMarginHost {
   /** Where the surface keeps what an agent changed to answer a comment: whether there is such a change (read where it is drawn, so it follows), and taking it back. */
   revert?: { can(key: string): boolean; run(key: string): Promise<unknown> };
 }
+
+/** One of the host's own tools: what it is called, its icon, whether it is what the surface is now (a heading where the caret is), and doing it. */
+export type MarkupHostTool = { name: string; label: string; icon: () => JSX.Element; active?: boolean; run(): void };
 
 export interface MarkupHost {
   /** What differs from MARKUP_CAPABILITIES here. */
@@ -130,6 +134,10 @@ export interface MarkupHost {
   capturePage?(): Promise<Blob | null>;
   /** The surface's margin, where its capabilities say sent comments stand there. */
   margin?: MarkupMarginHost;
+  /** Tools of the host's own (a document's block kinds), shown in a rail of their own above the bar while the app is in use; read where they are drawn, so `active` follows. */
+  tools?(): MarkupHostTool[];
+  /** What a comment asked for from that rail is about: the surface's selection, or where its caret is; null when there is neither. */
+  asking?(): Range | null;
   /** Told when comments have gone, where something other than the tool shows them. */
   sent?(): void;
   notify(outcome: "sent" | "failed", message: string): void;

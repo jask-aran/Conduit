@@ -72,6 +72,8 @@
 .ui-markup-margin { position: relative; display: flex; flex-direction: column; gap: var(--space-xs); font-family: var(--font-sans); }
 .ui-markup-margin[data-beside] > .ui-markup-note { position: absolute; right: 0; left: 0; }
 .ui-markup-margin > .ui-markup-note:not([data-open]) { cursor: pointer; }
+/* A card is as tall as its thread: its own limit (its holder's height) would be measured against the card itself here. */
+.ui-markup-margin .ui-card { max-height: none; }
 .ui-markup-rails { position: fixed; bottom: var(--space-lg); right: var(--space-lg); left: var(--space-lg); display: flex; flex-direction: column; align-items: center; gap: var(--space-xs); pointer-events: none; }
 .ui-markup-bar { display: flex; flex-wrap: wrap; justify-content: center; max-width: 100%; align-items: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: var(--space-xs); color: var(--foreground); font-size: var(--text-caption); }
 /* Thinner than the one frost, where the bar sits over an interface being looked at. conventions-ok: the tool's own surface */

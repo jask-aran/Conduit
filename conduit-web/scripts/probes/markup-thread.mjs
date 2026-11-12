@@ -84,6 +84,12 @@ try {
   cli("reply", doc.id, "1", "Tightened.");
   await page.waitForTimeout(4500);
   console.log("B cards:", await cards(), "| bar:", await buttons());
+  // Resolved by the session, the card stays, saying so; the person's tick puts it away.
+  cli("resolve", doc.id, "1"); await page.waitForTimeout(4500);
+  console.log("B after the session resolved it:", await cards());
+  await press("Use the app"); // While annotating, the layer has every press.
+  await page.locator(".ui-markup-margin .ui-markup-note", { hasText: "Doc probe" }).locator("button[aria-label='Resolve']").click(); await page.waitForTimeout(4500);
+  console.log("B after the person's tick:", await cards());
   await page.screenshot({ path: `${out}-doc.png` });
   console.log("errors:", JSON.stringify(errors));
 } finally {

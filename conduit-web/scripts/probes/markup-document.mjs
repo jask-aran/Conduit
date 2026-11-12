@@ -1,13 +1,18 @@
 // /document: the page shows the hub's test document; a block an agent writes with the CLI shows on the page and opening a page writes none; typing reaches the hub and a second page;
-// a phone-sized page types without harming the blocks; Markup's bar answers over it. Every block it adds it deletes, and it says whether the document ended as it began. Sends no markup.
+// the rail makes a block another kind and asks the agent about it; a comment's card stands in the margin beside its text on a second page (under the text on a phone-sized one), an edit sent
+// --for it tints its block, Revert puts the block back, a session's resolve leaves the card and the tint, the person's accepts the change; a phone-sized page types without harming the blocks; Markup's bar answers over it. Every block it adds
+// it deletes and the one comment it sends (handed to no session) it finishes.
 import { execFileSync } from "node:child_process";
 import { open, origin, root } from "./lib.mjs";
 const { context, page, cdp, close } = await open({ width: 1500, height: 900 });
-const cli = (...args) => execFileSync("node", ["scripts/conduit-markup.mjs", "document", ...args, "--as", "probe"], { cwd: root, encoding: "utf8" });
+const markup = (...args) => execFileSync("node", ["scripts/conduit-markup.mjs", ...args], { cwd: root, encoding: "utf8" });
+const cli = (...args) => markup("document", ...args, "--as", "probe");
 const ids = (text) => [...text.matchAll(/<!-- block (\w+) -->/g)].map((match) => match[1]);
-let added = [];
+let added = [], item;
 try {
   await cdp.send("Network.setBypassServiceWorker", { bypass: true });
+  // The comment is handed to no one: a session that is listening is not given a probe's words to act on.
+  await context.addInitScript(() => { localStorage.setItem("ui-markup.hand", "off"); localStorage.setItem("ui-markup.live", "off"); });
   const errors = [];
   const watch = (target) => target.on("pageerror", (error) => errors.push(String(error.stack ?? error).slice(0, 400)));
   const visit = async (target) => { watch(target); await target.goto(`${origin}/document`); await target.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 }); };
@@ -32,22 +37,58 @@ try {
   await until("a typed block has an id of its own and a kind", async () => page.evaluate(() => { const made = [...document.querySelectorAll(".ui-document-text > h1[data-id]")].at(-1); return made?.textContent === "A heading"; }));
   added.push(...ids(cli("read", "test")).filter((id) => !ids(before).includes(id) && !added.includes(id)));
   console.log("the format names its authors:", await page.evaluate(() => fetch("/v0/document/test?as=blocks").then((answer) => answer.json()).then((kept) => `${kept.format} ${kept.version}: ${[...new Set(Object.values(kept.authors))].sort().join(", ")}`)));
-  console.log("block kind in the bar:", await page.locator(".ui-document button[aria-label='Block kind']").textContent());
+  const rail = page.locator(".ui-markup-bar[aria-label='Document tools']");
+  await rail.locator("button[aria-label='Heading 2']").click();
+  await until("the rail makes the caret's block another kind", () => page.evaluate(() => { const made = [...document.querySelectorAll(".ui-document-text > h2[data-id]")].at(-1); return made?.textContent === "A heading"; }));
+  console.log("the rail says which kind the caret is in:", await rail.locator("button[aria-pressed='true']").getAttribute("aria-label"), "| the document's own bar holds:", await page.locator(".ui-document .ui-pane-header button, .ui-document header button").allTextContents());
+  await rail.locator("button", { hasText: "Ask the agent" }).click();
+  await until("Ask the agent starts a comment about the caret's block", async () => (await page.locator(".ui-markup-note[data-float]").textContent().catch(() => "")).includes("A heading"));
+  await page.locator(".ui-markup-note[data-float] button", { hasText: "Remove" }).click();
+
+  // One comment, made on the first page; what stands for it is read on the second.
+  const at = await page.locator(`.ui-document-text > [data-id="${added[0]}"]`).boundingBox();
+  await page.locator(".ui-markup-bar button[aria-label^='Select text']").click();
+  await page.mouse.move(at.x + 4, at.y + at.height / 2); await page.mouse.down(); await page.mouse.move(at.x + 120, at.y + at.height / 2, { steps: 6 }); await page.mouse.up(); await page.waitForTimeout(400);
+  await page.keyboard.type("Document probe: say this another way"); await page.keyboard.press("Enter");
+  await page.locator(".ui-markup-bar button", { hasText: "Send" }).click();
+  await page.locator(".ui-markup-bar button[aria-label^='Use the app']").click();
+  const card = (target) => target.evaluate(() => {
+    const note = [...document.querySelectorAll(".ui-markup-margin .ui-markup-note")].find((one) => one.textContent.includes("Document probe")), mark = note && document.querySelector(`[data-comment~="${note.dataset.key}"]`);
+    const box = note?.getBoundingClientRect(), about = mark?.getBoundingClientRect();
+    return note ? { key: note.dataset.key, state: note.querySelector(".ui-markup-state")?.textContent, off: about && Math.round(box.top - about.top), beside: about && box.left > about.right, under: about && box.top > about.bottom, marked: mark?.textContent } : null;
+  });
+  const tinted = (target) => target.evaluate((id) => Boolean(document.querySelector(`.ui-document-text > [data-id="${id}"].ui-document-changed`)), added[0]);
+  const mine = (target) => target.locator(".ui-markup-margin .ui-markup-note", { hasText: "Document probe" });
+  await until("the comment's card stands beside its text on a second page", async () => { const now = await card(second); return Boolean(now?.beside) && Math.abs(now.off) <= 2; });
+  const sent = await card(second), key = sent?.key ?? "none/0"; item = key.split("/")[0];
+  console.log("the card:", JSON.stringify(sent), "| in the tool's corner:", await page.locator(".ui-markup-notes .ui-markup-note").count());
+  cli("replace", "test", added[0], "A line the agent wrote **another way**.", "--for", key);
+  await until("an edit sent for the comment tints its block, and the card says Changed", async () => await tinted(second) && (await card(second))?.state === "Changed");
+  await mine(second).click(); await mine(second).locator("button", { hasText: "Revert" }).click();
+  await until("Revert puts the block back and the tint goes", async () => cli("read", "test").includes("A line the **agent** wrote.") && !await tinted(second));
+  cli("replace", "test", added[0], "A line the agent wrote **another way**.", "--for", key);
+  await until("a second edit tints it again", () => tinted(page));
+  markup("resolve", item, "1");
+  await until("a session's resolve accepts nothing: the card stays, saying so, and the tint with it", async () => (await card(page))?.state === "Agent resolved" && await tinted(page));
 
   await second.setViewportSize({ width: 390, height: 800 });
+  await until("a phone-sized page has the card under the text", async () => { const now = await card(second); return Boolean(now?.under) && !now.beside; });
   await second.locator(`.ui-document-text > [data-id="${added[1]}"]`).click();
   await second.keyboard.press("End"); await second.keyboard.type(" and on a phone");
   await until("a phone-sized page's typing merges", async () => cli("read", "test").includes("typed on the first page and on a phone"));
   console.log("phone page scrolls sideways:", await second.evaluate(() => document.documentElement.scrollWidth > innerWidth));
   await second.close();
+  await mine(page).locator("button[aria-label='Resolve']").click();
+  await until("resolving accepts the change: the card and the tint go, the text stays", async () => !await card(page) && !await tinted(page) && cli("read", "test").includes("another way"));
 
   const tools = () => page.evaluate(() => JSON.stringify([...document.querySelectorAll(".ui-markup-bar [role=radio]")].map((button) => button.getAttribute("aria-label").split(" ")[0] + (button.getAttribute("aria-checked") === "true" ? "*" : ""))));
-  console.log("Markup's bar on load:", await tools());
+  console.log("Markup's bar while the app is in use:", await tools());
   await page.locator(".ui-markup-bar button[aria-label^='Highlighter']").click(); await page.waitForTimeout(400);
   console.log("after pressing Highlighter from Use:", await tools(), "| layer selecting:", await page.evaluate(() => document.querySelector(".ui-markup-layer").hasAttribute("data-select")), "| thin:", await page.evaluate(() => document.querySelector(".ui-markup-rails").hasAttribute("data-thin")));
   await page.screenshot({ path: "/tmp/markup-probe-document.png" });
   console.log("errors:", JSON.stringify(errors));
 } finally {
   for (const id of added) try { cli("delete", "test", id); } catch { /* already gone */ }
+  if (item) try { markup("done", item); } catch { /* never sent */ }
   await close();
 }

@@ -2,12 +2,11 @@ import { Extension, type ChainedCommands, type Editor } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import { createEffect, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, onCleanup, Show, type JSX } from "solid-js";
 import { createEditorTransaction, createTiptapEditor } from "solid-tiptap";
 import { redo, undo, ySyncPlugin, yUndoPlugin } from "y-prosemirror";
 import type { Map as YMap, XmlFragment } from "yjs";
-import { DocumentSheet, documentMarkClass, documentTextClass } from "@/components/ui/document";
-import { DropdownMenu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "@/components/ui/menus";
+import { DocumentSheet, documentBlockIcons, documentMarkClass, documentTextClass } from "@/components/ui/document";
 import { CHANGES, FRAGMENT, documentExtensions } from "@/document-format.js";
 import { DOCUMENT_BLOCKS, type DocumentAnchor, type DocumentBlockKind, type DocumentHost, type DocumentMarks } from "./host";
 import { createLiveDocument } from "./live";
@@ -100,6 +99,11 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   const kind = createEditorTransaction(editor, kindAt);
   // Ready is the hub's copy drawn, or the hub not answering: never a page still waiting.
   createEffect(() => { if (editor() || copy.state() === "away") props.onReady?.(); });
+  // Made once, `active` read where it is drawn: a list made again at each change would have its buttons redrawn under the press (the editor changes as it loses focus to one).
+  const tools = DOCUMENT_BLOCKS.filter((offered) => (props.host.blocks ?? DOCUMENT_BLOCKS).includes(offered)).map((name) => {
+    const Icon = documentBlockIcons[name];
+    return { name, label: KINDS[name].label, icon: () => <Icon />, get active() { return kind() === name; }, run: () => { const made = editor(); if (made) KINDS[name].make(made.chain().focus()).run(); } };
+  });
   props.marks?.({
     subject: () => ({ kind: "document", name: props.name, document: props.id }),
     under: (box) => {
@@ -115,18 +119,25 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     },
     watch: (listener) => { watching.add(listener); return () => watching.delete(listener); },
     changed: (key) => changed().includes(key),
+    tools: () => tools,
+    selection: () => {
+      const view = editor()?.view;
+      if (!view) return null;
+      const { from, to, empty, $from } = view.state.selection, range = document.createRange();
+      if (empty) {
+        // The caret's top-level block, as it is drawn.
+        const block = $from.depth ? view.nodeDOM($from.before(1)) : null;
+        if (!block) return null;
+        range.selectNodeContents(block);
+      } else {
+        const start = view.domAtPos(from), end = view.domAtPos(to);
+        range.setStart(start.node, start.offset);
+        range.setEnd(end.node, end.offset);
+      }
+      return range;
+    },
   });
-  return <DocumentSheet ref={setColumn} name={props.name} state={copy.state() === "away" ? "Reconnecting" : undefined} margin={props.margin} actions={<>
-    <DropdownMenu>
-      <MenuTrigger aria-label="Block kind" disabled={!editor()}>{KINDS[kind()].label}</MenuTrigger>
-      <MenuContent>
-        <MenuRadioGroup value={kind()} onChange={(next) => KINDS[next as DocumentBlockKind].make(editor()!.chain().focus()).run()}>
-          <For each={DOCUMENT_BLOCKS.filter((offered) => (props.host.blocks ?? DOCUMENT_BLOCKS).includes(offered))}>{(offered) => <MenuRadioItem value={offered}>{KINDS[offered].label}</MenuRadioItem>}</For>
-        </MenuRadioGroup>
-      </MenuContent>
-    </DropdownMenu>
-    {props.actions}
-  </>}>
+  return <DocumentSheet ref={setColumn} name={props.name} state={copy.state() === "away" ? "Reconnecting" : undefined} margin={props.margin} actions={props.actions}>
     {/* The editor is made only once the hub's copy is held: made before, its first empty block would be merged in as a block of its own. */}
     <Show when={copy.synced() && column()}>{(element) => {
       const made = createTiptapEditor(() => ({ element: element(), extensions: [...documentExtensions(), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told)], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name } } }));

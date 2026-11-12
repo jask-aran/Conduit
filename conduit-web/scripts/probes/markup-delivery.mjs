@@ -64,6 +64,8 @@ try {
   await page.locator(".ui-markup-bar button", { hasText: "Send" }).click(); await page.waitForTimeout(5000);
   console.log("B after Send:", await sentDoc(), "|", await cards());
   console.log("errors:", JSON.stringify(errors));
+  // Put away as the person does it: a session's `done` leaves a document's comment in its margin.
+  await js(`Promise.all(${JSON.stringify([...mine])}.map((id) => fetch("/v0/document/test/markup/items/" + id).then((r) => r.ok ? r.json() : null).then((item) => item && Promise.all(item.comments.map((comment) => fetch("/v0/document/test/markup/items/" + id + "/messages", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ n: comment.n, resolved: true }) }))))))`).catch(() => {});
 } finally {
   stay.kill();
   for (const id of mine) console.log(cli("done", id));

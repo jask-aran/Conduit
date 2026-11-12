@@ -4,6 +4,7 @@
  * the app it runs in. What it needs of the app comes through a DocumentHost, and what it offers a layer over it
  * (Markup) is DocumentMarks: neither side reaches past what the other declares here.
  */
+import type { JSX } from "solid-js";
 
 /** A kind of block the editor can make of where the caret is. */
 export type DocumentBlockKind = "heading-1" | "heading-2" | "heading-3" | "bullets" | "numbers" | "checklist" | "quote" | "code" | "table" | "divider" | "text";
@@ -28,9 +29,13 @@ export type DocumentAnchor = { key: string; quote?: string; under?: Record<strin
  * What the editor tells a layer that marks it up, in the shape Markup's host asks for: what is being marked, and the
  * blocks a mark lies over (their ids, and their text as drawn); and for a margin of comments, the marks of those it is
  * told, where each is now, and word of when they may have moved or one was pressed. `changed`: blocks stand changed
- * for that comment (document-format.js CHANGES), read where it is drawn so it follows.
+ * for that comment (document-format.js CHANGES), read where it is drawn so it follows. `tools`: the block kinds
+ * offered, each making the caret's block that kind (`active`: it is that kind now, read where it is drawn). `selection`:
+ * the text selected, else the caret's block; null before the editor is made.
  */
 export type DocumentMarks = {
+  tools(): { name: DocumentBlockKind; label: string; icon: () => JSX.Element; active: boolean; run(): void }[];
+  selection(): Range | null;
   subject(): Record<string, string>;
   under(box: { left: number; top: number; width: number; height: number }): Record<string, string> | null;
   anchors(list: DocumentAnchor[]): void;

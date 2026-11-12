@@ -1,4 +1,5 @@
 import { ColourPicker } from "@/components/ui/controls";
+import { documentBlockIcons } from "@/components/ui/document";
 import { MarkupBar, MarkupDrawing, MarkupLayer, MarkupMark, MarkupNote, MarkupNotes, MarkupText } from "@/components/ui/markup";
 import { row, token, type Page } from "../model";
 import { noop } from "../demos";
@@ -43,7 +44,7 @@ export const markupPage: Page = {
     { selector: ".ui-markup-mark[data-kind='cursor']", name: "Cursor mark", does: "what a press would choose, named for its piece", from: "MarkupMark kind cursor" },
     { selector: ".ui-markup-drawing", name: "Drawing", does: "what the person drew for one comment, any number together: a pen line, a highlight, an arrow, a box, words; numbered by a drawn mark", from: "MarkupDrawing, MarkupText, MarkupMark kind drawn" },
     { selector: ".ui-markup-note", name: "Note", does: "one comment: beside what it is about while it is written, then in the stack with its words on a line and its picture", from: "MarkupNotes > MarkupNote > Card, CardPreview, TextArea" },
-    { selector: ".ui-markup-bar", name: "Bar", does: "the mode (use the app, annotate the live page, annotate a screenshot), the annotating tools, the ink and line picker and Undo, the listening session, Send", from: "MarkupBar > Segmented, Popover, IconButton, Button" },
+    { selector: ".ui-markup-bar", name: "Bar", does: "the mode (use the app, annotate the live page, annotate a screenshot), the annotating tools, the ink and line picker and Undo, the listening session, Send; while the app is in use, a rail of the host's own tools and Ask the agent", from: "MarkupBar > Segmented, Popover, IconButton, Button" },
   ] },
   examples: [
     row("marks", "cursor, chosen, a group with its members, a drag's marquee", scene(() => <>
@@ -89,6 +90,8 @@ export const markupPage: Page = {
     row("bar, handing over", "a session listens and the item goes to it; with several waiting its name is a button to the next", scene(() => <>{bar({ hand: true, agent: "ui-markup", onNextAgent: noop })}</>), { surfaces: ["ground"] }),
     row("bar, compact", "a phone: icons alone, and no Screenshot where the client cannot capture its display", scene(() => <>{bar({ compact: true, screenshots: false, keys: undefined })}</>), { surfaces: ["ground"] }),
     row("bar, using the app", "the pointer goes to the app; the marks stay", scene(() => <>{bar({ view: "use", tool: "pen", status: "Using the app" })}</>), { surfaces: ["ground"] }),
+    row("bar, using a document", "the host's own tools (a document's block kinds, the caret's lit) in a rail over the bar, with Ask the agent about what is selected", scene(() => <>{bar({ view: "use", tool: "pen", status: "Using the app", onAsk: noop,
+      own: ([["text", "Text"], ["heading-1", "Heading 1"], ["heading-2", "Heading 2"], ["bullets", "Bullet list"], ["checklist", "Checklist"]] as const).map(([name, label]) => ({ name, label, icon: () => { const Icon = documentBlockIcons[name]; return <Icon />; }, active: name === "heading-1", run: noop })) })}</>), { surfaces: ["ground"] }),
     row("bar, sending", "Send turns while the item goes", scene(() => <>{bar({ sending: true })}</>), { surfaces: ["ground"] }),
   ],
   tokens: [{ title: "Its lines and layer", tokens: [

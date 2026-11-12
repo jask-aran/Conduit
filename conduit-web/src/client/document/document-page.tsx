@@ -36,6 +36,8 @@ export default function DocumentPage(props: { onReady: () => void }) {
       anchors: (list) => marks?.anchors(list), place: (key) => marks?.place(key) ?? null, watch: (listener) => marks?.watch(listener) ?? (() => {}),
       revert: { can: (key) => marks?.changed(key) ?? false, run: (key) => api(`/v0/document/${ID}/changes`, { method: "POST", body: JSON.stringify({ op: "revert", thread: key }) }) },
     },
+    tools: () => marks?.tools() ?? [],
+    asking: () => marks?.selection() ?? null,
     sent: () => setSent((count) => count + 1),
     notify: (outcome, message) => outcome === "sent" ? toast.success(message) : toast.error(message),
   };

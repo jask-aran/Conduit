@@ -10,7 +10,7 @@ import StarterKit from "@tiptap/starter-kit";
  * AUTHORS map names who wrote under each Yjs client id, so every character keeps its author. Its CHANGES map is what
  * agents changed to answer a comment and the person has not yet accepted: block id -> { for: "<item>/<n>" (the comment),
  * before: the block as it was (null: the block is new), after: the id of the block a deleted one followed (null: it
- * was first), by, at }. A change is gone once its comment is resolved, or it is taken back.
+ * was first), by, at }. A change is gone once the person resolves its comment, or it is taken back.
  */
 export const BLOCK_TYPES = ["paragraph", "heading", "blockquote", "codeBlock", "bulletList", "orderedList", "taskList", "listItem", "taskItem", "table", "horizontalRule"];
 export const FRAGMENT = "blocks";

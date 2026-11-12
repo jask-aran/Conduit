@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount } from "solid-js";
-import { createStore, reconcile } from "solid-js/store";
+import { createStore, reconcile, unwrap } from "solid-js/store";
 import { MarkupMarginNotes, MarkupNote } from "@/components/ui/markup";
 import type { MarkupHost, MarkupThread } from "./host";
 
@@ -7,7 +7,7 @@ const OPEN_EVERY_MS = 3000;
 const split = (key: string) => { const at = key.lastIndexOf("/"); return [key.slice(0, at), Number(key.slice(at + 1))] as const; };
 
 /**
- * A surface's margin: every open comment as its thread, beside what it is about, whether or not the tool is open. The
+ * A surface's margin: every comment the person has not resolved, as its thread, beside what it is about, whether or not the tool is open. The
  * host mounts it where its margin is and says through `host.margin` where each comment's place is. Where the host has
  * no room beside (it has put this under what is marked, as on a phone) the cards are a list in the order of their places.
  * `sent` changing asks for the threads at once: the host changes it when the tool has sent.
@@ -18,7 +18,8 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown }) {
   const [openKey, setOpenKey] = createSignal<string | null>(null), [reply, setReply] = createSignal(""), [beside, setBeside] = createSignal(false);
   let column: HTMLDivElement | undefined, field: HTMLTextAreaElement | undefined, due = 0;
   const failed = (what: string) => (error: unknown) => host.notify("failed", `${what}: ${error instanceof Error ? error.message : String(error)}`);
-  const ask = () => { if (!document.hidden) void transport.open().then((items) => setHeld("items", reconcile(items, { key: "id" })), () => {}); };
+  // An item put away leaves once its answer is read, but not from under the person reading it: the open card's item stays until the card is shut.
+  const ask = () => { if (!document.hidden) void transport.open().then((items) => { const reading = openKey() && itemOf(openKey()!); setHeld("items", reconcile(reading && !items.some((item) => item.id === reading.id) ? [...items, unwrap(reading)] : items, { key: "id" })); }, () => {}); };
   const took = (thread: MarkupThread) => setHeld("items", (item) => item.id === thread.id, reconcile(thread));
   // By key, so a card stays the card it was through each look (and its field keeps the words being written).
   const keys = createMemo(() => held.items.flatMap((item) => item.comments.map((comment) => `${item.id}/${comment.n}`)), [], { equals: (a, b) => a.length === b.length && a.every((key, at) => key === b[at]) });
@@ -26,7 +27,9 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown }) {
   const commentOf = (key: string) => itemOf(key)?.comments.find((comment) => comment.n === split(key)[1]);
   /** What was said about a comment; what was said of its item as a whole stands with the item's first. */
   const saidOf = (key: string) => { const item = itemOf(key), n = split(key)[1]; return (item?.messages ?? []).filter((message) => message.n === n || (message.n === null && item!.comments[0]?.n === n)).map((message) => ({ from: message.from, at: message.at, text: message.text ?? (message.resolved ? "Resolved" : "Reopened") })); };
-  const stateOf = (key: string) => { const comment = commentOf(key), said = saidOf(key); return comment?.resolved ? { label: "Resolved" } : comment?.working ? { label: "Working on it", busy: true } : margin?.revert?.can(key) ? { label: "Changed" } : said[said.length - 1]?.from === "agent" ? { label: "Answered" } : { label: itemOf(key)?.by ? "Sent" : "Saved" }; };
+  /** Resolved by the person, a comment is put away. Resolved by the session only, its card stays as it was, saying so, until the person resolves it too: nothing leaves the margin but by their hand. */
+  const putAway = (key: string) => { const comment = commentOf(key); return Boolean(comment?.resolved && comment.resolvedBy === "person"); };
+  const stateOf = (key: string) => { const comment = commentOf(key), said = saidOf(key).filter((line) => line.text !== "Resolved"); return putAway(key) ? { label: "Resolved" } : comment?.working ? { label: "Working on it", busy: true } : comment?.resolved ? { label: "Agent resolved" } : margin?.revert?.can(key) ? { label: "Changed" } : itemOf(key)?.state === "handled" ? { label: "Handled" } : said[said.length - 1]?.from === "agent" ? { label: "Answered" } : { label: itemOf(key)?.by ? "Sent" : "Saved" }; };
 
   /** Each card at the height of its place, the next pushed down past it; with no room beside, a list in that order. */
   const lay = () => {
@@ -59,7 +62,7 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown }) {
   };
   const settle = (key: string, resolved: boolean) => { if (resolved && openKey() === key) open(null); void transport.resolve(split(key)[0], split(key)[1], resolved).then((thread) => { took(thread); ask(); }, failed(resolved ? "Not resolved" : "Not reopened")); };
 
-  createEffect(() => { margin?.anchors(keys().map((key) => { const comment = commentOf(key); return { key, quote: comment?.quote, under: comment?.under, current: openKey() === key, resolved: Boolean(comment?.resolved) }; })); soon(); });
+  createEffect(() => { margin?.anchors(keys().map((key) => { const comment = commentOf(key); return { key, quote: comment?.quote, under: comment?.under, current: openKey() === key, resolved: putAway(key) }; })); soon(); });
   createEffect(on(() => props.sent, ask, { defer: true }));
   onMount(() => {
     ask();
@@ -74,7 +77,7 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown }) {
 
   return <MarkupMarginNotes ref={(element) => { column = element; }} beside={beside()}>
     <For each={keys()}>{(key) => <MarkupNote ref={(element) => { field = element; }} key={key} open={openKey() === key} tag="" name={commentOf(key)?.quote ? `“${commentOf(key)!.quote}”` : commentOf(key)?.name ?? ""} words={commentOf(key)?.comment} said={saidOf(key)} state={stateOf(key)}
-      placeholder="Write back" resolved={commentOf(key)?.resolved} value={openKey() === key ? reply() : ""} onOpen={() => open(key)} onInput={setReply} onSay={answer} onResolve={(resolved) => settle(key, resolved)}
+      placeholder="Write back" resolved={putAway(key)} value={openKey() === key ? reply() : ""} onOpen={() => open(key)} onInput={setReply} onSay={answer} onResolve={(resolved) => settle(key, resolved)}
       onRevert={margin?.revert?.can(key) ? () => void margin.revert!.run(key).catch(failed("Not taken back")) : undefined} />}</For>
   </MarkupMarginNotes>;
 }

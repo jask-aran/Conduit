@@ -1,3 +1,4 @@
+import { CodeIcon, Heading1Icon, Heading2Icon, Heading3Icon, ListChecksIcon, ListIcon, ListOrderedIcon, MinusIcon, PilcrowIcon, TableIcon, TextQuoteIcon } from "lucide-solid";
 import { Show, type JSX } from "solid-js";
 // Through the barrel, as markup.tsx does, so the editor's chunk takes the header from the app's own.
 import { PaneHeader } from "./index";
@@ -10,6 +11,9 @@ export const documentTextClass = "ui-answer ui-document-text";
 
 /** What marks in a document's text wear: a run of text a comment is about, a block one is about, a block an agent changed that is not yet accepted, and what stands where a block was deleted. */
 export const documentMarkClass = { comment: "ui-document-comment", commented: "ui-document-commented", changed: "ui-document-changed", removed: "ui-document-removed" };
+
+/** Each kind of block's icon. Here, not in the library's icons, so only the editor's chunk carries them. */
+export const documentBlockIcons = { text: PilcrowIcon, "heading-1": Heading1Icon, "heading-2": Heading2Icon, "heading-3": Heading3Icon, bullets: ListIcon, numbers: ListOrderedIcon, checklist: ListChecksIcon, quote: TextQuoteIcon, code: CodeIcon, table: TableIcon, divider: MinusIcon };
 
 /** A Conduit document on its page: its bar (its name, how its copy stands with the hub's when that needs saying, what can be done to it) over one reading column that scrolls;
  *  `ref` is where its text goes. `margin`: what stands beside the text (its comments), and under it where the page is too narrow for both. */
