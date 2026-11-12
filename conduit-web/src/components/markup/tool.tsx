@@ -311,6 +311,10 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   const open = () => selections.find((selection) => selection.id === openId()) ?? null;
   /** A comment about a place has its note beside the place while it is written; the others are written in the stack. */
   const floats = (selection: Selection | null) => Boolean(selection && !selection.general && !selection.whole);
+  // Where sent comments stand in the host's margin, one written and not yet sent stands beside what it is about too, never in the corner.
+  const inline = can.sent === "margin";
+  const stands = (selection: Selection) => inline && floats(selection) && !selection.sent && selection.id !== openId();
+  const [standsAt, setStandingAt] = createSignal<Record<number, { left: number; top: number }>>({});
   const numbered = () => selections.filter((selection) => !selection.whole);
   // What has gone keeps the number it went under; the rest are numbered after.
   const unsent = () => numbered().filter((selection) => !selection.sent);
@@ -645,6 +649,19 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
       const under = notes ? [...layer!.querySelectorAll(".ui-markup-bar")].map((rail) => rail.getBoundingClientRect()).filter((rail) => rail.right > notes.left) : [];
       const lift = under.length ? Math.max(...under.map((rail) => rail.bottom)) - Math.min(...under.map((rail) => rail.top)) : 0;
       if (lift !== barLift()) setBarLift(lift);
+      // Those waiting to be sent: at the edge of the piece each is about (a paper's text column, so in its margin), at the height of its marks, one under another where they would cross.
+      if (inline) {
+        let foot = 0;
+        const next: Record<number, { left: number; top: number }> = {};
+        for (const waiting of selections.filter(stands).map((one) => ({ one, marks: extent(one) })).sort((a, b) => a.marks.top - b.marks.top)) {
+          const card = layer?.querySelector<HTMLElement>(`.ui-markup-note[data-key="unsent-${waiting.one.id}"]`), width = card?.offsetWidth ?? 0, edge = boxOf(waiting.one.elements);
+          const left = Math.max(NOTE_GAP, Math.min(edge.left + edge.width + NOTE_GAP, innerWidth - width - NOTE_GAP)), top = Math.max(waiting.marks.top, foot);
+          next[waiting.one.id] = { left, top };
+          foot = top + (card?.offsetHeight ?? 0) + NOTE_GAP;
+        }
+        const now = standsAt(), ids = Object.keys(next);
+        if (ids.length !== Object.keys(now).length || ids.some((id) => now[+id]?.left !== next[+id]!.left || now[+id]?.top !== next[+id]!.top)) setStandingAt(next);
+      }
       // The note being written sits beside what it is about: to its right, else its left, else under or over it.
       const selection = open(), note = layer?.querySelector<HTMLElement>(".ui-markup-note[data-float]");
       if (selection && note) {
@@ -846,8 +863,12 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
           <MarkupNote ref={(element) => { noteField = element; }} float={noteAt() ? { left: `${noteAt()!.left}px`, top: `${noteAt()!.top}px` } : { opacity: 0 }} open tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)} state={forWhom(selection)}
             value={selection.comment} onOpen={() => {}} onInput={write(selection)} onDone={() => openNote(null)} onRemove={() => remove(selection.id)} sendNow={offersLive ? live() : undefined} onSendNow={agent() ? (on) => { keepLive(on); noteField?.focus({ preventScroll: true }); } : undefined} />}
         </Show>
-        <Show when={selections.some((selection) => !floats(selection) || selection.id !== openId())}>
-          <MarkupNotes lift={barLift()}><For each={selections}>{(selection) => <Show when={!floats(selection) || selection.id !== openId()}>
+        <For each={selections}>{(selection) => <Show when={stands(selection)}>
+          <MarkupNote key={`unsent-${selection.id}`} float={standsAt()[selection.id] ? { left: `${standsAt()[selection.id]!.left}px`, top: `${standsAt()[selection.id]!.top}px` } : { opacity: 0 }} open={false} tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)}
+            value={selection.comment} onOpen={() => openNote(selection.id)} onInput={write(selection)} onRemove={() => remove(selection.id)} state={forWhom(selection) ?? { label: "Not sent" }} />
+        </Show>}</For>
+        <Show when={selections.some((selection) => !stands(selection) && (!floats(selection) || selection.id !== openId()))}>
+          <MarkupNotes lift={barLift()}><For each={selections}>{(selection) => <Show when={!stands(selection) && (!floats(selection) || selection.id !== openId())}>
             <Show when={selection.sent} fallback={<>
             <MarkupNote ref={(element) => { noteField = element; }} open={openId() === selection.id} tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)} picture={selection.whole ? picture()?.url : selection.preview}
               value={selection.comment} onOpen={() => { if (floats(selection) && props.mode === "select") show(selection.on); openNote(selection.id); }} onInput={write(selection)} onRemove={() => remove(selection.id)} state={forWhom(selection) ?? (lastSent() || offersLive ? { label: "Not sent" } : undefined)} />
