@@ -30,6 +30,7 @@ import { compareChatsBySort, saveChatSort, useChatSort } from "../preferences/ch
 import { WorkspaceGlyph } from "./workspace-appearance";
 import { WorkspaceAppearanceEditor } from "./workspace-appearance-editor";
 import { Row } from "@/components/ui/row";
+import { artifactsOf } from "../document/artifacts";
 
 const CLONE_POLL_MS = 500;
 
@@ -427,6 +428,15 @@ export function ProjectDashboard(props: {
     </Show>
   </SplitGroup>;
 
+  // Where a person looks to make one: the project's own page, beside its files.
+  const artifactsGroup = () => <SplitGroup id="dashboard-artifacts" label="Artifacts" actions={<GroupAction onClick={() => props.onContextAction("new-artifact", { project: props.project })}>New</GroupAction>}>
+    <Show when={artifactsOf(props.project.id).length} fallback={<SplitEmpty>No artifacts yet.</SplitEmpty>}>
+      <For each={artifactsOf(props.project.id)}>{(artifact) =>
+        <Row density="list" element="button" title={artifact.path} draggable="true" data-doc-view={`artifact:${artifact.id}`} onClick={() => window.dispatchEvent(new CustomEvent("conduit:open-artifact", { detail: { id: artifact.id } }))} lead={<Icons.FileText />} label={artifact.name} />}
+      </For>
+    </Show>
+  </SplitGroup>;
+
   const filesGroup = () => <SplitGroup id="dashboard-files" label="Files" actions={<GroupAction onClick={() => props.onOpenView("files")}>Browse</GroupAction>}>
     <Show when={payload()?.recentFiles?.length} fallback={<SplitEmpty>{!payload() ? "Loading…"
       : awayDevice(props.project) ? `${props.project.capabilities?.device.name || "Its device"} is offline.`
@@ -471,6 +481,7 @@ export function ProjectDashboard(props: {
       list={<Show when={!cloning()}>{threadsGroup()}</Show>}
       aside={<Show when={!cloning()}>
         <Show when={isWorkspace()}>{terminalsGroup()}</Show>
+        <Show when={props.project.slug !== "chat"}>{artifactsGroup()}</Show>
         <Show when={payload()?.changes.length} fallback={filesGroup()}>{changesGroup()}</Show>
       </Show>} />
 
