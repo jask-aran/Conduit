@@ -86,9 +86,11 @@ export type FeedbackCapabilities = {
   listeners: boolean;
   /** Choosing what a drawing is drawn in, and how thick. */
   inks: boolean;
+  /** The bar is thinner than the library's frost, to show the interface being looked at under it; a document's needs no such thing. */
+  thin: boolean;
 };
 /** What a host that declares nothing gets: a collaborator's batched markup with every tool. */
-export const FEEDBACK_CAPABILITIES: FeedbackCapabilities = { deliveries: ["batched"], tools: ["select", "quote", "pen", "highlight", "shape", "text", "erase", "note"], screenshot: true, listeners: true, inks: true };
+export const FEEDBACK_CAPABILITIES: FeedbackCapabilities = { deliveries: ["batched"], tools: ["select", "quote", "pen", "highlight", "shape", "text", "erase", "note"], screenshot: true, listeners: true, inks: true, thin: true };
 
 export interface FeedbackHost {
   /** What differs from FEEDBACK_CAPABILITIES here. */

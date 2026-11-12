@@ -116,6 +116,7 @@ import { ContextStore } from "./context/context-store.js";
 import { registerContextRoutes } from "./server/routes/context.js";
 import { registerClientReportRoutes } from "./server/routes/client-reports.js";
 import { createFeedback, registerFeedbackRoutes } from "./server/feedback.js";
+import { registerDocumentScratch } from "./server/document-scratch.js";
 import { ChatBackendRegistry } from "./chat-backend-registry.js";
 import { MANIFESTS } from "./harnesses/index.js";
 import { detect } from "./harnesses/probe.js";
@@ -640,6 +641,7 @@ const uiControl = new UiControl({ runtimeHub, nodeHub });
 mcpRuntime.uiControl = uiControl;
 const feedback = lifetime.own("feedback", createFeedback({ dataRoot: config.dataRoot, config, serverName: serverIdentity.name, runtimeHub, uiControl, chatLogs, listProcesses: () => backends.list() }), (owned) => owned.close());
 registerFeedbackRoutes(app, feedback);
+registerDocumentScratch(app, config.dataRoot);
 const browserHost = lifetime.own("hub browser", new BrowserHost({ dataRoot: config.dataRoot,
   onChange: () => runtimeHub.publish({ type: "browser_changed", id: "hub" }) }), (owned) => owned.close());
 mcpAccess.browser = browserHost.mcpServer();

@@ -69,9 +69,9 @@
 
 /* The bar, and over it what the held tool draws with. Only the rails take the pointer. */
 .ui-feedback-rails { position: fixed; bottom: var(--space-lg); right: var(--space-lg); left: var(--space-lg); display: flex; flex-direction: column; align-items: center; gap: var(--space-xs); pointer-events: none; }
-.ui-feedback-bar { display: flex; flex-wrap: wrap; justify-content: center; max-width: 100%; align-items: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: var(--space-xs); color: var(--foreground); font-size: var(--text-caption);
-  /* Thinner than the one frost: the bar sits over the interface being looked at. conventions-ok: the tool's own surface */
-  --frost-fill: color-mix(in oklch, var(--foreground), transparent 92%); }
+.ui-feedback-bar { display: flex; flex-wrap: wrap; justify-content: center; max-width: 100%; align-items: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: var(--space-xs); color: var(--foreground); font-size: var(--text-caption); }
+/* Thinner than the one frost, where the bar sits over an interface being looked at. conventions-ok: the tool's own surface */
+.ui-feedback-rails[data-thin] > .ui-feedback-bar { --frost-fill: color-mix(in oklch, var(--foreground), transparent 92%); }
 /* A phone: every control on one row. */
 .ui-feedback-rails[data-compact] { right: var(--space-2xs); left: var(--space-2xs); }
 .ui-feedback-rails[data-compact] > .ui-feedback-bar { gap: 0; }

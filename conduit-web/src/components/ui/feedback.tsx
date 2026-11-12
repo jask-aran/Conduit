@@ -96,7 +96,7 @@ export function FeedbackNote(props: { ref?: (element: HTMLTextAreaElement) => vo
     <Card size="compact" role="group" label={props.tag ? `Comment ${props.tag}` : props.name}
       title={<><Show when={props.tag}><b class="ui-feedback-number">{props.tag}</b></Show><span class="ui-feedback-name">{props.name}</span><Show when={props.state}>{(state) => <span class="ui-feedback-state"><Show when={state().busy}><Spinner /></Show>{state().label}</span>}</Show></>}
       detail={thread() ? (props.open ? undefined : props.words) : props.open ? props.source : props.value.trim() || (props.picture ? undefined : "No comment yet")}
-      close={props.float ? props.onDone : thread() ? settle() : props.onRemove} closeLabel={props.float ? "Done" : thread() ? "Resolve" : "Remove"}
+      close={props.float ? props.onDone : thread() ? settle() : props.onRemove} closeLabel={props.float ? "Done" : thread() ? "Resolve" : "Remove"} closeIcon={thread() ? <Icons.Check /> : undefined}
       actions={props.float ? <><Show when={props.sendNow !== undefined}><label class="ui-feedback-now" title={props.onSendNow ? undefined : "Needs a session listening"}>Send now<Switch label="Send this comment as it is Done" checked={Boolean(props.sendNow)} disabled={!props.onSendNow} onChange={props.onSendNow} /></label></Show><Button variant="ghost" size="sm" onClick={props.onRemove}>Remove</Button><Button variant="primary" outline size="sm" onClick={props.onDone}>Done</Button></>
         : props.open && props.onSay ? <><Show when={props.resolved && props.onResolve}><Button variant="ghost" size="sm" onClick={() => props.onResolve!(false)}>Reopen</Button></Show><Button variant="primary" outline size="sm" disabled={!props.value.trim()} onClick={props.onSay}>Reply</Button></> : undefined}>
       <Show when={props.picture && !props.float && !thread()}><CardPreview><img src={props.picture} alt="" /></CardPreview></Show>
@@ -133,8 +133,9 @@ export type FeedbackView = "use" | "page" | "screenshot";
  *  one is looked at; the listening session the item is handed to (`agent`, none when no session listens); Send and close. `compact`: icons alone,
  *  for a phone's width. `tools`: the ones this host offers (all, unsaid). `thread`: the item is sent and its thread is followed, so the bar is only what was said of it (`status`) and close.
  *  `onBack` then leaves it for marking up again. `replies`: answers unread on what was sent before, and `sent` how many of those there are to come back to (`onReplies`).
+ *  `thin` (unsaid: so): its surface is thinner than the library's frost, to sit over an interface being looked at. A tool pressed while the app is in use goes back to annotating with it.
  *  `outstanding`: how many comments Send would deliver; `standing`: where the item they have gone to stands, once some have. */
-export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; onView: (view: FeedbackView) => void; tools?: readonly (FeedbackToolKind | "note")[]; tool: FeedbackToolKind; onTool: (tool: FeedbackToolKind) => void; onNote: () => void; outstanding?: number; standing?: string; thread?: boolean; onBack?: () => void; replies?: number; sent?: number; onReplies?: () => void; ink?: FeedbackInk; onInk?: (ink: FeedbackInk) => void; weight?: FeedbackWeight; onWeight?: (weight: FeedbackWeight) => void; shape?: FeedbackShape; onShape?: (shape: FeedbackShape) => void; onUndo?: () => void; onRedo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
+export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; onView: (view: FeedbackView) => void; tools?: readonly (FeedbackToolKind | "note")[]; tool: FeedbackToolKind; onTool: (tool: FeedbackToolKind) => void; onNote: () => void; outstanding?: number; standing?: string; thin?: boolean; thread?: boolean; onBack?: () => void; replies?: number; sent?: number; onReplies?: () => void; ink?: FeedbackInk; onInk?: (ink: FeedbackInk) => void; weight?: FeedbackWeight; onWeight?: (weight: FeedbackWeight) => void; shape?: FeedbackShape; onShape?: (shape: FeedbackShape) => void; onUndo?: () => void; onRedo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
   canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void }) {
   const using = () => props.view === "use";
   const views = (): Array<{ value: FeedbackView; label: string; icon: JSX.Element }> => [
@@ -146,7 +147,7 @@ export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; 
   const [own, setOwn] = createSignal<FeedbackInk>(props.ink?.startsWith("#") ? props.ink : "#ff3b9a");
   const [picking, setPicking] = createSignal(false);
   const options = () => !props.thread && !using() && (OPTIONED.includes(props.tool) || props.tool === "erase") && (inks() || props.compact);
-  return <div class="ui-feedback-rails" data-compact={props.compact ? "" : undefined}>
+  return <div class="ui-feedback-rails" data-compact={props.compact ? "" : undefined} data-thin={props.thin === false ? undefined : ""}>
   <Show when={picking() && options() && props.ink?.startsWith("#") && inks()}><Frost lift="raised" class="ui-feedback-bar ui-feedback-picker">
     <ColourPicker label="Any colour" value={own()} onChange={(hex) => { setOwn(hex as FeedbackInk); props.onInk?.(own()); }} />
   </Frost></Show>
@@ -168,8 +169,8 @@ export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; 
       <Show when={props.screenshots} fallback={<IconButton label={views()[0]!.label} aria-pressed={using()} onClick={() => props.onView(using() ? "page" : "use")}><Icons.UseApp /></IconButton>}>
         <Segmented label="Mode" icons size="sm" value={props.view} onChange={props.onView} options={views()} />
       </Show>
-      <Segmented label="Annotate with" icons size="sm" value={props.tool} onChange={(tool) => tool === "note" ? props.onNote() : props.onTool(tool)} disabled={using()}
-        options={TOOLS.filter((option) => (!props.tools || props.tools.includes(option.value)) && !(props.compact && option.wide) && (props.view !== "screenshot" || (option.value !== "select" && option.value !== "quote"))).map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} />
+      <span class="ui-feedback-with" onPointerDown={() => { if (using()) props.onView("page"); }}><Segmented label="Annotate with" icons size="sm" value={props.tool} onChange={(tool) => tool === "note" ? props.onNote() : props.onTool(tool)}
+        options={TOOLS.filter((option) => (!props.tools || props.tools.includes(option.value)) && !(props.compact && option.wide) && (props.view !== "screenshot" || (option.value !== "select" && option.value !== "quote"))).map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} /></span>
     </Show>
     <Show when={!props.thread && !props.compact}><span class="ui-feedback-with">
       <IconButton label="Undo (Ctrl Z)" disabled={!props.onUndo || using()} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton>

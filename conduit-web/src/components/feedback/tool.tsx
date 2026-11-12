@@ -770,7 +770,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
       <Show when={listing()}>
         <FeedbackNotes lift={barLift()}><For each={earlier.latest}>{(item) => <FeedbackNote open={false} tag="" name={item.first || `${item.comments} comments`} onInput={() => {}} onOpen={() => follow(item.id, true)}
           value={`${item.unread ? `${item.unread} unread · ` : ""}${item.state === "handled" ? "Handled" : item.state === "taken" ? `${item.by ?? "A session"} is working on it` : item.by ? `Sent to ${item.by}` : "Saved"} · ${item.comments} ${item.comments === 1 ? "comment" : "comments"}`} />}</For></FeedbackNotes>
-        <FeedbackBar thread onBack={leave} view="use" onView={() => {}} tool="select" onTool={() => {}} onNote={() => {}} status="Sent before" canSend={false} onSend={() => {}} onClose={props.onClose} />
+        <FeedbackBar thin={can.thin} thread onBack={leave} view="use" onView={() => {}} tool="select" onTool={() => {}} onNote={() => {}} status="Sent before" canSend={false} onSend={() => {}} onClose={props.onClose} />
       </Show>
       <Show when={alone() && thread()}>{(item) => <>
         <FeedbackNotes lift={barLift()}>
@@ -778,7 +778,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
           <For each={item().comments}>{(comment) => <FeedbackNote ref={(element) => { noteField = element; }} open={replyTo() === comment.n} tag={String(comment.n)} name={comment.name} words={comment.comment} said={saidOf(comment.n)} state={stateOf(comment.n)} placeholder="Write back" resolved={comment.resolved}
             value={reply()} onOpen={() => { setReply(""); setReplyTo(comment.n); queueMicrotask(() => noteField?.focus()); }} onInput={setReply} onSay={() => void answer()} onResolve={(resolved) => settle(comment.n, resolved)} />}</For>
         </FeedbackNotes>
-        <FeedbackBar thread onBack={leave} view="use" onView={() => {}} tool="select" onTool={() => {}} onNote={() => {}} status={standing()} canSend={false} onSend={() => {}} onClose={props.onClose} />
+        <FeedbackBar thin={can.thin} thread onBack={leave} view="use" onView={() => {}} tool="select" onTool={() => {}} onNote={() => {}} status={standing()} canSend={false} onSend={() => {}} onClose={props.onClose} />
       </>}</Show>
       <Show when={!capturing() && !alone() && !listing()}>
         <Show when={floats(open()) && open()} keyed>{(selection) =>
@@ -794,7 +794,7 @@ export function FeedbackTool(props: { host: FeedbackHost; mode: Mode; onMode: (m
               value={reply()} onOpen={() => startReply(n())} onInput={setReply} resolved={resolvedOf(n())} onSay={() => void answer()} onResolve={(resolved) => settle(n(), resolved)} />}</Show>
           </Show>}</For></FeedbackNotes>
         </Show>
-        <FeedbackBar view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onTool={(tool) => { setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); }} onNote={note}
+        <FeedbackBar thin={can.thin} view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onTool={(tool) => { setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); }} onNote={note}
           status={status()} compact={touchOnly} keys={touchOnly ? undefined : props.keys?.()} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} shape={shape()} onShape={setShape} onUndo={undoable() ? undo : undefined} onRedo={redoable() ? redo : undefined}
           replies={unread().reduce((sum, item) => sum + item.unread, 0)} sent={thread() ? 0 : earlier.latest?.length} onReplies={sentBefore}
           outstanding={unsent().filter((selection) => selection.comment.trim()).length} standing={thread() ? standing() : undefined}

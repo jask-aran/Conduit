@@ -32,11 +32,12 @@ export function Actions(props: JSX.HTMLAttributes<HTMLElement> & { kind?: Action
     {...(rest as Record<string, unknown>)} class="ui-actions" data-actions={kind()} data-stack={local.stack ? "" : undefined} />;
 }
 
-export function CloseButton(props: { onClick: (event: MouseEvent) => void; label?: string; title?: string; kind?: IconButtonKind; size?: "sm" | "xs";
+/** `icon`: what the corner does when that is not closing (a tick, to settle). */
+export function CloseButton(props: { onClick: (event: MouseEvent) => void; label?: string; title?: string; icon?: JSX.Element; kind?: IconButtonKind; size?: "sm" | "xs";
   class?: string; disabled?: boolean; tabIndex?: number; onMouseDown?: (event: MouseEvent) => void }) {
   const label = () => props.label ?? "Close";
   if (props.kind) return <IconButton kind={props.kind} close label={label()} title={props.title ?? label()} class={props.class} disabled={props.disabled}
-    tabIndex={props.tabIndex} onMouseDown={props.onMouseDown} onClick={(event) => props.onClick(event)}><Icons.Close /></IconButton>;
+    tabIndex={props.tabIndex} onMouseDown={props.onMouseDown} onClick={(event) => props.onClick(event)}>{props.icon ?? <Icons.Close />}</IconButton>;
   return <Button variant="ghost" size={props.size === "xs" ? "icon-xs" : "icon-sm"} haptic="dismiss" class={props.class} aria-label={label()} title={props.title ?? label()}
-    disabled={props.disabled} tabIndex={props.tabIndex} onMouseDown={props.onMouseDown} onClick={(event) => props.onClick(event)}><Icons.Close /></Button>;
+    disabled={props.disabled} tabIndex={props.tabIndex} onMouseDown={props.onMouseDown} onClick={(event) => props.onClick(event)}>{props.icon ?? <Icons.Close />}</Button>;
 }
