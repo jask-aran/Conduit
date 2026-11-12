@@ -147,7 +147,7 @@ export type MarkupOwnTool = { name: string; label: string; icon: () => JSX.Eleme
  *  `onBack` then leaves it for marking up again. `replies`: answers unread on what was sent before, and `sent` how many of those there are to come back to (`onReplies`).
  *  `thin` (unsaid: so): its surface is thinner than the library's frost, to sit over an interface being looked at. A tool pressed while the app is in use goes back to annotating with it.
  *  `outstanding`: how many comments Send would deliver; `standing`: where the item they have gone to stands, once some have.
- *  `ribbon`: it stands at the head of the frame and is always there: the host's tools are in the bar itself, first, whatever the mode (one pressed while annotating goes back to using the app), what a tool draws with stands under it, and it has no close.
+ *  `ribbon`: it stands at the head of the frame and is always there: the host's tools (its edit set) are a bar of their own beside Markup's, whatever the mode (one pressed while annotating goes back to using the app), what a tool draws with stands under it, and it has no close.
  *  The ribbon has no "Use the app": the app is in use while no tool is held, a tool pressed is held, and pressed again is let go. It has no "Ask the agent" either: on a paper `@`, the tools over a selection and a block's menu each start that comment.
  *  On the ribbon what is sent is always handed on, so who it goes to is said and not a choice to turn off.
  *  `own`: the host's own tools (a document's block kinds), and `onAsk` a comment about where the surface's selection or caret is: a rail above the bar while the app is in use. */
@@ -191,10 +191,10 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     <Show when={props.compact}><IconButton label="Undo" disabled={!props.onUndo} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton></Show>
   </Frost></Show>
   {/* Only while the app is in use, as the options are only while annotating: the two never stand together. */}
-  <Show when={!props.ribbon && using() && !props.thread && (props.own?.length || props.onAsk)}><Frost lift="raised" class="ui-markup-bar" role="toolbar" aria-label="Document tools">{owned()}</Frost></Show>
-  <Frost lift="raised" class="ui-markup-bar" role="toolbar" aria-label="UI markup">
+  <Show when={(props.ribbon || using()) && !props.thread && (props.own?.length || (props.onAsk && !props.ribbon))}><Frost lift="raised" class="ui-markup-bar" data-set="edit" role="toolbar" aria-label="Document tools">{owned()}</Frost></Show>
+  <Show when={props.ribbon}><span class="ui-markup-break" /></Show>
+  <Frost lift="raised" class="ui-markup-bar" data-set="markup" role="toolbar" aria-label="UI markup">
     <Show when={props.thread && props.onBack}><IconButton label="Back to marking up" onClick={props.onBack}><Icons.Back /></IconButton></Show>
-    <Show when={props.ribbon && !props.thread && (props.own?.length || props.onAsk)}><span class="ui-markup-with" role="group" aria-label="Document tools">{owned()}</span></Show>
     <Show when={!props.thread}>
       {/* With no screenshot to be had there are two modes, and one control says which. */}
       <Show when={!props.ribbon}><Show when={props.screenshots} fallback={<IconButton label={views()[0]!.label} aria-pressed={using()} onClick={() => props.onView(using() && !props.ribbon ? "page" : "use")}><Icons.UseApp /></IconButton>}>

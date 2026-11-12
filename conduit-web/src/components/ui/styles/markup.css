@@ -83,7 +83,12 @@
 .ui-markup-rails[data-thin] > .ui-markup-bar { --frost-fill: color-mix(in oklch, var(--foreground), transparent 92%); }
 /* A phone: every control on one row. */
 /* The ribbon: at the head of its frame, what a tool draws with under it. */
-.ui-markup-rails[data-ribbon] { top: calc(var(--markup-frame-top, 0px) + var(--space-xs)); bottom: auto; flex-direction: column-reverse; }
+/* Its two sets (the host's edit tools, Markup's) stand side by side as bars of their own; what a tool draws with is on the line under them. */
+.ui-markup-rails[data-ribbon] { top: calc(var(--markup-frame-top, 0px) + var(--space-xs)); bottom: auto; flex-flow: row wrap; justify-content: center; }
+.ui-markup-rails[data-ribbon] > [data-set="edit"] { order: 1; }
+.ui-markup-rails[data-ribbon] > [data-set="markup"] { order: 2; }
+.ui-markup-break { order: 3; flex-basis: 100%; height: 0; margin-top: calc(-1 * var(--space-xs)); }
+.ui-markup-rails[data-ribbon] > :not([data-set], .ui-markup-break) { order: 4; }
 .ui-markup-room { flex: none; height: calc(var(--control-sm) + 4 * var(--space-xs)); }
 .ui-markup-rails[data-compact] { right: calc(var(--markup-frame-right, 0px) + var(--space-2xs)); left: calc(var(--markup-frame-left, 0px) + var(--space-2xs)); }
 .ui-markup-rails[data-compact] > .ui-markup-bar { gap: 0; }

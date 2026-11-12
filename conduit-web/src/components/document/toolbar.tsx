@@ -25,7 +25,7 @@ const keep = (event: MouseEvent) => event.preventDefault();
  * wears them), a link (its address asked for in place), a comment (`onComment`), and a table's rows and columns. Escape or a press away shuts it
  * until the selection changes.
  */
-export function SelectionTools(props: { editor: Accessor<Editor | undefined>; onComment?: (about: Range) => void }) {
+export function SelectionTools(props: { editor: Accessor<Editor | undefined>; /** The marks offered (every one, unsaid). */ marks?: readonly string[]; onComment?: (about: Range) => void }) {
   const [linking, setLinking] = createSignal(false), [shut, setShut] = createSignal<string>();
   const state = createEditorTransaction(props.editor, (made) => {
     if (!made?.isEditable) return null;
@@ -47,7 +47,7 @@ export function SelectionTools(props: { editor: Accessor<Editor | undefined>; on
       <Show when={state()}>{(now) => <DocumentTools label={now().text ? "Format" : "Table"}>
         <Show when={linking()} fallback={<>
           <Show when={now().text}>
-            <For each={MARKS}>{([name, label]) => { const Icon = Icons[name]; return <IconButton label={label} aria-pressed={now().marks[name]} onMouseDown={keep} onClick={() => chain().toggleMark(name).run()}><Icon /></IconButton>; }}</For>
+            <For each={MARKS.filter(([name]) => !props.marks || props.marks.includes(name))}>{([name, label]) => { const Icon = Icons[name]; return <IconButton label={label} aria-pressed={now().marks[name]} onMouseDown={keep} onClick={() => chain().toggleMark(name).run()}><Icon /></IconButton>; }}</For>
             <IconButton label={now().link ? "Change the link" : "Link"} aria-pressed={Boolean(now().link)} onMouseDown={keep} onClick={() => setLinking(true)}><Icons.link /></IconButton>
             <Show when={props.onComment}><IconButton label="Comment" onMouseDown={keep} onClick={comment}><Icons.comment /></IconButton></Show>
           </Show>

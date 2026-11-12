@@ -67,6 +67,14 @@ and site really right to start with". No new kind of artifact is next. Built tha
   in the Markdown as `---` lines; `document set <id> <name> [value]` and the tool's `set` for agents); and a count of
   blocks and words at the foot, switched from a paper's row menu ("Count blocks and words", kept in the browser).
 
+- The ribbon's two sets stand apart, as two bars: the artifact's **edit set** (a paper's block kinds and text marks;
+  a site has none) and **Markup's set**. What each kind offers of either is one typed table,
+  `client/document/artifact-capabilities.ts` (`ARTIFACT_CAPABILITIES`); the editor's side of it is `DocumentHost.tools`
+  (`DocumentToolName`). The ribbon has no "Use the app" (the app is in use while no Markup tool is held; a held tool
+  pressed again is let go) and no "Ask the agent" (`@`, the tools over a selection and a block's menu start that
+  comment). On a paper a comment written and not yet sent stands in the margin beside its text, never in the corner
+  stack; a site's stay in the corner, as the interface's do.
+
 Asked for and not built: a **suggesting mode** beside editing, where what the person types is a suggestion (a comment)
 and not an edit. Not designed yet.
 

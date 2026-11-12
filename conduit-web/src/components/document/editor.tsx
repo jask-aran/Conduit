@@ -134,7 +134,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   createEffect(() => { if (editor() || copy.state() === "away") props.onReady?.(); });
   createEffect(() => props.onAway?.(copy.state() === "away"));
   // Made once, `active` read where it is drawn: a list made again at each change would have its buttons redrawn under the press (the editor changes as it loses focus to one).
-  const tools = DOCUMENT_BLOCKS.filter((offered) => (props.host.blocks ?? DOCUMENT_BLOCKS).includes(offered)).map((name) => {
+  const tools = DOCUMENT_BLOCKS.filter((offered) => (props.host.tools ?? DOCUMENT_BLOCKS).includes(offered)).map((name) => {
     const Icon = documentBlockIcons[name];
     return { name, label: KINDS[name].label, icon: () => <Icon />, get active() { return kind() === name; }, run: () => { const made = editor(); if (made) KINDS[name].make(made.chain().focus()).run(); } };
   });
@@ -148,7 +148,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   });
   // The marks the selection wears, for a bar that is always there; the tools over a selection offer them too.
   const wears = createEditorTransaction(editor, (made) => MARKS.filter(([name]) => made?.isActive(name)).map(([name]) => name).join(" "));
-  const worn = MARKS.map(([name, label]) => { const Icon = documentToolIcons[name]; return { name, label, icon: () => <Icon />, get active() { return wears().includes(name); }, run: () => { editor()?.chain().focus().toggleMark(name).run(); } }; });
+  const worn = MARKS.filter(([name]) => !props.host.tools || props.host.tools.includes(name)).map(([name, label]) => { const Icon = documentToolIcons[name]; return { name, label, icon: () => <Icon />, get active() { return wears().includes(name); }, run: () => { editor()?.chain().focus().toggleMark(name).run(); } }; });
   props.marks?.({
     subject: () => ({ kind: "document", name: props.name, document: props.id }),
     under: (box) => {
@@ -185,6 +185,6 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     {/* Menus and tools beside the sheet, never in it: the sheet's column is the editor's to fill, and a child of it that comes and goes clears it. */}
     <TypedMenu label="Ask" anchor={anchor} items={offered()} name={(name) => name} active={active()} onCursor={setActive} onPick={pick} onDismiss={dismiss} />
     {slash.menu()}
-    <SelectionTools editor={editor} onComment={props.onComment} />
+    <SelectionTools editor={editor} marks={props.host.tools} onComment={props.onComment} />
   </>;
 }

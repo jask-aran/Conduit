@@ -46,7 +46,7 @@ try {
   await until("a typed block has an id of its own and a kind", async () => page.evaluate(() => { const made = [...document.querySelectorAll(".ui-document-text > h1[data-id]")].at(-1); return made?.textContent === "A heading"; }));
   added.push(...ids(cli("read", "test")).filter((id) => !ids(before).includes(id) && !added.includes(id)));
   console.log("the format names its authors:", await page.evaluate(() => fetch("/v0/document/test?as=blocks").then((answer) => answer.json()).then((kept) => `${kept.format} ${kept.version}: ${[...new Set(Object.values(kept.authors))].sort().join(", ")}`)));
-  const rail = page.locator(".ui-markup-bar [aria-label='Document tools']");
+  const rail = page.locator(".ui-markup-bar[aria-label='Document tools']");
   await rail.locator("button[aria-label='Block']").click(); await page.getByRole("menuitem", { name: "Heading 2" }).click();
   await until("the ribbon makes the caret's block another kind", () => page.evaluate(() => { const made = [...document.querySelectorAll(".ui-document-text > h2[data-id]")].at(-1); return made?.textContent === "A heading"; }));
   console.log("the ribbon says which kind the caret is in:", await rail.locator("button[aria-label='Block']").textContent(), "| the document's own bar holds:", await page.locator(".ui-document .ui-pane-header button, .ui-document header button").allTextContents());

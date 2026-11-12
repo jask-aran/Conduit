@@ -10,7 +10,7 @@ const { page, close } = await open({ width: 1600, height: 950 });
 const errors = []; page.on("pageerror", (error) => errors.push(String(error)));
 const there = (file) => fs.stat(`${folder}/${file}`).then(() => true, () => false);
 const menu = async (target, item) => { await target.click({ button: "right" }); await page.getByRole("menuitem", { name: item }).click(); };
-const centred = () => page.evaluate(() => [...document.querySelectorAll(".pane-artifact")].map((pane) => { const box = pane.getBoundingClientRect(); return Math.round(box.left + box.width / 2); }).join() === [...document.querySelectorAll(".ui-markup-rails")].map((rail) => { const box = rail.lastElementChild.getBoundingClientRect(); return Math.round(box.left + box.width / 2); }).join());
+const centred = () => page.evaluate(() => [...document.querySelectorAll(".pane-artifact")].map((pane) => { const box = pane.getBoundingClientRect(); return Math.round(box.left + box.width / 2); }).join() === [...document.querySelectorAll(".ui-markup-rails")].map((rail) => { const boxes = [...rail.querySelectorAll(".ui-markup-bar")].map((bar) => bar.getBoundingClientRect()), left = Math.min(...boxes.map((box) => box.left)), right = Math.max(...boxes.map((box) => box.right)); return Math.round((left + right) / 2); }).join());
 let made;
 try {
   await page.goto(`${origin}/?a=artifact:test`);

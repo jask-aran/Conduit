@@ -1,6 +1,7 @@
 import { createSignal, onCleanup, Show, type JSX } from "solid-js";
 import type { MarkupHost } from "@/components/markup";
 import { Empty, WebPage } from "@/components/ui";
+import { ARTIFACT_CAPABILITIES } from "./artifact-capabilities";
 import { siteContent, type Artifact } from "./artifacts";
 import { siteBridge } from "./site-bridge";
 
@@ -22,7 +23,7 @@ export default function SitePane(props: { about: () => Artifact; host: Omit<Mark
   onCleanup(() => { clearInterval(timer); window.removeEventListener("conduit:artifacts-changed", look); for (const type of ["dragstart", "dragend", "drop"]) window.removeEventListener(type, drag, true); bridge.close(); });
   const markup: MarkupHost = {
     ...props.host,
-    capabilities: { deliveries: ["batched", "live"], tools: ["pen", "highlight", "shape", "text", "erase", "note"], screenshot: true, sent: "corner", thin: false, bar: "ribbon", grounded: true },
+    capabilities: ARTIFACT_CAPABILITIES.site.markup,
     client: () => ({ kind: "site" }),
     subject: () => ({ site: props.about().name, file: props.about().path, change: "This is one HTML file in the project's folder. Change that file to answer: the person's pane shows the new version a moment after it is saved." }),
     under: (box) => bridge.under(box),

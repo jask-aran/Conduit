@@ -10,6 +10,7 @@ import { api } from "../api/client";
 import { webSocketUrl } from "../api/transport.js";
 import { capturePage } from "../feedback/conduit-feedback";
 import { artifactAbout, artifactKnown, artifactLabel, paperCounted, renameArtifact, type Artifact } from "./artifacts";
+import { ARTIFACT_CAPABILITIES } from "./artifact-capabilities";
 import { connect, connectedTo, disconnect } from "./connections";
 import SitePane from "./site-pane";
 
@@ -31,13 +32,13 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
   // What the open tool offers the paper's `@`: who is listening, and a comment for one of them.
   const [offer, setOffer] = createSignal<Parameters<NonNullable<MarkupHost["asks"]>>[0]>(null);
   const ask = (about: Range, name?: string) => offer()?.ask(about, name);
-  const editing: DocumentHost = { socket: async (id) => new WebSocket(await webSocketUrl(`/v0/document/${id}/live`)), author: () => "person" };
+  const editing: DocumentHost = { tools: ARTIFACT_CAPABILITIES.paper.edit, socket: async (id) => new WebSocket(await webSocketUrl(`/v0/document/${id}/live`)), author: () => "person" };
   const base = () => `/v0/document/${encodeURIComponent(props.id)}`;
   const shared = { names, transport: httpTransport(api, `${base()}/markup`), clientId: () => client, capturePage, frame: () => room ?? frame,
     notify: (outcome, message) => outcome === "sent" ? toast.success(message) : toast.error(message) } satisfies Partial<MarkupHost>;
   const markup: MarkupHost = {
     ...shared,
-    capabilities: { deliveries: ["batched", "live"], tools: ["quote", "highlight", "pen", "shape", "text", "erase", "note"], screenshot: false, sent: "margin", thin: false, bar: "ribbon" },
+    capabilities: ARTIFACT_CAPABILITIES.paper.markup,
     client: () => ({ kind: "document" }),
     subject: () => ({ ...marks?.subject(), change: `\`node scripts/conduit-markup.mjs document read ${props.id}\` prints it as it is now, as Markdown with each block under its id; \`document replace\`, \`insert\` and \`delete\` change one block (\`document\` alone says how).` }),
     under: (box) => marks?.under(box) ?? null,

@@ -10,13 +10,20 @@ import type { JSX } from "solid-js";
 export type DocumentBlockKind = "heading-1" | "heading-2" | "heading-3" | "bullets" | "numbers" | "checklist" | "quote" | "code" | "table" | "divider" | "text";
 export const DOCUMENT_BLOCKS: readonly DocumentBlockKind[] = ["text", "heading-1", "heading-2", "heading-3", "bullets", "numbers", "checklist", "quote", "code", "table", "divider"];
 
+/** A mark the editor can put on the text selected. */
+export type DocumentMarkKind = "bold" | "italic" | "strike" | "code";
+export const DOCUMENT_MARKS: readonly DocumentMarkKind[] = ["bold", "italic", "strike", "code"];
+/** An edit tool: what changes the document itself, as against what marks it up. */
+export type DocumentToolName = DocumentBlockKind | DocumentMarkKind;
+export const DOCUMENT_TOOLS: readonly DocumentToolName[] = [...DOCUMENT_BLOCKS, ...DOCUMENT_MARKS];
+
 export interface DocumentHost {
   /** The hub's live socket for a document, opened with the app's own sign-in. */
   socket(id: string): Promise<WebSocket>;
   /** Who writes from this client, as the document keeps it beside what they wrote. */
   author(): string;
-  /** The block kinds offered here; every kind where it declares none. */
-  blocks?: readonly DocumentBlockKind[];
+  /** The edit tools offered here (block kinds and text marks), in the rail, the slash menu, a block's menu and over a selection; every one where it declares none. */
+  tools?: readonly DocumentToolName[];
 }
 
 /** How this copy stands with the hub's: `away` keeps what is written and sends it when the hub answers again. */
