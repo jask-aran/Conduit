@@ -397,10 +397,6 @@ export function analyzeSilence(pcm, byteLength, options = {}) {
   };
 }
 
-export function splitSilence(pcm, byteLength, options = {}) {
-  return analyzeSilence(pcm, byteLength, options).segments;
-}
-
 function createSignalAccumulator() {
   return { sumSquares: 0, sampleCount: 0, peak: 0, clippedSamples: 0 };
 }

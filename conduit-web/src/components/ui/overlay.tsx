@@ -240,8 +240,6 @@ export function SettingCredential(props: {
   </>;
 }
 export const SettingValue = (props: { mono?: boolean; children: JSX.Element }) => <span class="ui-setting-value ui-truncate" data-mono={props.mono ? "" : undefined}>{props.children}</span>;
-export const SettingStateLink = (props: { onClick: () => void; children: JSX.Element }) =>
-  <button type="button" class="ui-setting-state-link" onClick={() => props.onClick()}>{props.children}</button>;
 export const SettingLink = (props: { href: string; children: JSX.Element }) => <a class="ui-setting-link" href={props.href} target="_blank" rel="noreferrer">{props.children}</a>;
 export const SettingDetails = (props: { summary: string; children: JSX.Element }) => <details class="ui-setting-details"><summary>{props.summary}</summary>{props.children}</details>;
 /** The switch between a settings page's views, over them, and beside it the one control that governs the page. */

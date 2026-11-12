@@ -1154,7 +1154,3 @@ export function getCommandDefinition(commandId: string): ShortcutCommandDefiniti
   if (!definition) throw new Error(`Unknown command: ${commandId}`);
   return definition;
 }
-
-export const paletteStableCommandIds = commandRegistry
-  .filter((definition) => definition.palette)
-  .map((definition) => definition.id);

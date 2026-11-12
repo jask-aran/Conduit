@@ -63,10 +63,6 @@ export function serializeChatQuery(filters: ChatQueryFilter[], text: string): st
   return [filter?.value.trim() ? tokenText(filter) : "", String(text || "").trim()].filter(Boolean).join(" ");
 }
 
-export function removeChatQueryFilter(parsed: ParsedChatQuery, index: number): string {
-  return serializeChatQuery(parsed.filters.filter((_, itemIndex) => itemIndex !== index), parsed.text);
-}
-
 function projectMatches(project: Project, value: string): boolean {
   const target = normalize(value);
   return [project.id, project.slug, project.name].some((candidate) => normalize(candidate) === target);

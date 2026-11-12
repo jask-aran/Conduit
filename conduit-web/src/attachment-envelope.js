@@ -101,18 +101,3 @@ function enrichAttachment(attachment) {
     type: attachment.type || mimeFromName(name),
   };
 }
-
-export function announcedAttachmentIds(entries) {
-  const ids = new Set();
-  for (const entry of entries || []) {
-    if (entry.type !== "message" || entry.message?.role !== "user") continue;
-    for (const attachment of parseAttachmentEnvelope(textContent(entry.message.content)).attachments) ids.add(attachment.id);
-  }
-  return ids;
-}
-
-function textContent(content) {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content.filter((block) => block?.type === "text").map((block) => block.text || "").join("\n");
-}

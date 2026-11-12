@@ -538,11 +538,6 @@ export async function readWorkspaceVersion(root, { paths = [], watchImpl = watch
   }
 }
 
-export function closeWorkspaceVersionWatch(root) {
-  const record = workspaceWatches.get(root);
-  if (record) closeWorkspaceWatch(record);
-}
-
 export async function readWorkspaceFileMetadata(root, relativePath) {
   const resolved = await resolveInspectorPath(root, relativePath, { kind: "file" });
   return readWorkspaceFileMetadataAt(resolved);

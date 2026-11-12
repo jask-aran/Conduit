@@ -47,33 +47,6 @@ export function authStartupViolation(config, authStore) {
   return null;
 }
 
-export function createRateLimiter() {
-  let failures = 0;
-  let nextAllowedAt = 0;
-  return {
-    noteFailure(now = Date.now()) {
-      failures += 1;
-      if (failures < RATE_LIMIT_THRESHOLD) {
-        nextAllowedAt = now;
-        return 0;
-      }
-      const backoff = Math.min(RATE_LIMIT_CAP_MS, RATE_LIMIT_BASE_MS * 2 ** (failures - RATE_LIMIT_THRESHOLD));
-      nextAllowedAt = now + backoff;
-      return backoff;
-    },
-    noteSuccess() {
-      failures = 0;
-      nextAllowedAt = 0;
-    },
-    waitUntilMs() {
-      return nextAllowedAt;
-    },
-    isThrottled(now = Date.now()) {
-      return now < nextAllowedAt;
-    },
-  };
-}
-
 /*
  * Failures are counted per client, so one client cannot lock everyone out, under a ceiling across all clients, so
  * attempts spread over many addresses are still slowed. Kept in a file so a restart is no reset.
