@@ -4,12 +4,58 @@ Agreed with the user on 2026-11-12. Milestones 1, 2 and 3 are done. Delete a par
 
 ## Start here: the brief for the session that builds this
 
-You are picking up a build whose design is settled. Read this section, then the rest of this file, then
-`AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background session the user checks in on.
+You are picking up a build part-way. Milestones 1 to 3 are built and their design is settled. What comes next is
+not: read "Next: settle where an artifact lives" before you build anything. Read this section, then the rest of this
+file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background session the user checks in on.
+
+### Where things stand (2026-11-12, end of milestone 3)
+
+- Local `main` holds all of milestones 1 to 3. `origin/main` is one commit behind it: someone other than the building
+  session pushed at 14:57 on 2026-11-12, up to `d8dcf4f9d` (margin threads). The commit after it (the rail, "Ask the
+  agent", and the rule that only the person's tick puts a comment away) is local only. Pushing is still the user's call.
+- conduit-local on :4310 runs local `main`. Try it at `/document`.
+- The three probes pass on that build (`markup-document.mjs` 17 checks, `markup-delivery.mjs`, `markup-thread.mjs`).
+  Not run: `npm test`, the headed Chrome on :9222, a real phone, Android, desktop, two people typing in one paragraph.
+- No Markup listener is running. The user said (2026-11-12) it need not be kept live all the time; start
+  `wait --stay` when you want their markup.
+- The user asked for the main build to be done by the session itself, with Opus 5.5 subagents at low or medium effort
+  for bounded pieces (a CLI change, gallery rows, one seam). Give each a file list it may edit and forbid builds and
+  restarts while you run probes.
+
+### Next: settle where an artifact lives
+
+The user said on 2026-11-12, while milestone 3 was being built: `/document` was a test. What opens is an
+**artifact**, in a pane as a tab, like a chat or a browser. The block document built so far is the first kind of
+artifact; other kinds follow. It needs a name that is not "document", because `DESIGN.md` already calls what any pane
+holds a document, and it probably needs new verbs. They also asked how a chat shows that it is linked to an
+artifact, either because it is acting on it or because it is the artifact's own thread (the mated thread), and
+leaned towards this: the mated thread is a second view of the artifact, in the same tab, not another pane.
+
+None of that is designed. Settle it with the user before you build, in one round of questions with your
+recommendation for each (the `grill-me` skill fits). These decide the work:
+
+1. The name of the block-document kind of artifact, and whether "artifact" is the word the interface shows.
+2. The verbs: how one is made, opened, renamed, deleted, and how an agent makes one.
+3. Where artifacts are listed and made: under a project in the sidebar, in the file tree, or both.
+4. The two views. `DESIGN.md` gives a pane header "its modes as a segmented switch": is the mated thread that
+   switch's second mode? Does the mated thread also show in the project's list of chats?
+5. How a chat that acts on an artifact, without being its mated thread, shows the link (a control in its header
+   that opens the artifact beside it is the obvious first answer).
+6. What becomes of `/document` and the test document.
+
+What is known about the code, for that talk: a pane's content is a `SplitView` (`client/workspace/workspace-types.ts`:
+`chat:<id>`, `browser:<id>`, `page:<id>` and others), and every kind is also declared in the UI API, checked each way
+by `SplitViewKind`; `client/main.tsx` holds the pane and tab logic. A new kind (say `artifact:<id>`) is therefore a
+change to an existing Conduit feature (panes), which "Ownership" below says needs the user's go-ahead: their message
+is that go-ahead in principle, and the round of questions is where it becomes exact.
+
+The proposed order after that, for the user to confirm: first artifacts in panes (the new pane kind, many
+documents, the mated thread as the second view, started by the hub); then the MCP tools and addressing by `@name`;
+then the workspace copy with its Markdown twin; then other kinds of artifact.
 
 ### Goal
 
-Build Markup & Conduit Documents from milestone 4 onward, in the order under "Milestones". The user marks up
+Build Markup & Conduit Documents onward from milestone 3, in the order agreed under "Next". The user marks up
 Conduit's interface today and gets answers from a coding agent. They want the same loop on documents they and their
 agents write together, live, and later on pages an agent makes. They ship a lot of code but are not a software
 engineer: they read your prose closely and your diffs shallowly, so what you tell them is what they know.
@@ -68,9 +114,10 @@ engineer: they read your prose closely and your diffs shallowly, so what you tel
 - The block kinds are tools of Markup's rail (`MarkupHost.tools`, a rail of their own above the bar while the app is
   in use), with "Ask the agent" (`MarkupHost.asking`), which starts a comment about the selection or the caret's block.
   The document's own bar holds only Mark up.
-- The source ceiling (convention rule 10, `LIMITS.sourceLines`) is 117,000, raised from 115,000 for this work on the
-  user's word (2026-11-12): a ceiling may be raised for planned feature work and comes down after a cleanup. `src/` was
-  at about 114,830 when milestone 3 began. The test and Markdown budgets (`conduit-web/budgets.json`) still only fall,
+- The source ceiling (convention rule 10, `LIMITS.sourceLines`) is 119,000. It was 115,000 before this work and was
+  raised twice on the user's word (2026-11-12): a ceiling may be raised for planned feature work and comes down after
+  a cleanup. `src/` is at 115,190 after milestone 3, which added about 360 lines; the next milestone adds a pane kind,
+  many documents and the mated thread, so it has 3,800 lines of room. The test and Markdown budgets (`conduit-web/budgets.json`) still only fall,
   and the bundle budget is tight: initial JS is within 1.1 kB gzip of 425,000, so new pieces stay out of the barrel.
 - The two interface-feedback probes send real items, and a session whose `wait` is running is handed them: lines the
   listener prints while a probe runs are the probe's, not the user's. `markup-document.mjs` sends one comment, handed
@@ -172,7 +219,8 @@ document stays possible: a comment may be a mark, not only words.
 ## Comments and agents
 
 - **Where threads live.** With the document. Shown in the margin beside what they are about; the thread says when
-  the agent is working on it, a tick resolves it, and it folds to its latest line.
+  the agent is working on it and folds to its latest line. The person's tick resolves it and puts it away; an
+  agent's resolve only marks it.
 - **One bar.** Markup's rail, extended for documents with the block tools (text style, table, image, checklist,
   lists, quote, code, divider, date) and "ask the agent". Which tools show is the host's declaration.
 - **Making a comment.** With a Markup tool, or by typing `@name` inline. Both make the same thread.
@@ -181,7 +229,7 @@ document stays possible: a comment may be a mark, not only words.
   person's persistent agent and any agent connected to the document's listener can be addressed by name.
 - **How agents reach a document.** One hub API, as MCP tools and as the `conduit-markup` CLI: read as Markdown
   with block ids; replace, insert after and delete a block; reply; resolve.
-- **An agent's edit** lands at once, tinted until the thread that asked is resolved; that thread carries Revert.
+- **An agent's edit** lands at once, tinted until the person resolves the thread that asked; that thread carries Revert.
 
 ## Milestones
 
@@ -189,9 +237,9 @@ document stays possible: a comment may be a mark, not only words.
 2. Done: the hub's document service with live merging; the block editor at `/document` on the test document; the
    CLI's block commands. Phone editing merges; its polish is later.
 3. Done: margin threads and the block tools in Markup's rail on the document; agent edits shown as changed, with Revert.
-4. The hub-started mated thread; the MCP tools; addressing by `@name`.
-5. Documents in projects: the file tree, many documents, the saved workspace copy and its Markdown twin.
-6. Artifacts: agent-made pages with Markup over them.
+4. to 6. were: the hub-started mated thread, the MCP tools and addressing by `@name`; documents in projects (the
+   file tree, many documents, the saved workspace copy and its Markdown twin); artifacts (agent-made pages with
+   Markup over them). The user's message of 2026-11-12 reorders these: see "Next: settle where an artifact lives".
 
 ## Not settled
 
@@ -204,13 +252,7 @@ document stays possible: a comment may be a mark, not only words.
   its item is resolved (so Reopen is only reachable until then); a drawing made on a document is not kept on the page
   once sent, only the blocks under it; a phone has the cards under the text, not beside a block; while annotating, the
   layer has every press, so a card is pressed only while the app is in use.
-- Where a Conduit document lives in the interface (the user, 2026-11-12, not yet designed). `/document` was a test. The
-  thing that opens is an artifact, in a pane as a tab, like a chat or a browser; the block document is the first kind
-  of artifact, and others follow. It needs a name that is not "document" (DESIGN.md already calls what any pane holds
-  a document) and new verbs. Open with it: how a chat shows it is linked to an artifact, whether it is acting on it or
-  is its mated thread; the user's leaning is that the mated thread is a second view of the artifact (chat and artifact
-  as two views of one tab), not another pane. This reshapes milestones 4 to 6: settle it with the user before
-  building the mated thread.
+- Where an artifact lives in the interface: see "Next: settle where an artifact lives".
 - Who an author is: every person's client is recorded as `person` until there is a name to give it.
 - The hub starting a thread touches its session code, which Markup has not needed before.
 - Moving Markup and the editor into the shared components package: parked until the package's scope is decided.
