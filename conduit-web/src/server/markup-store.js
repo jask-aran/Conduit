@@ -225,6 +225,15 @@ export function createMarkupStore({ folder, snapshot = async () => ({}), on = "t
     return thread(id);
   }
 
+  /** A session's side of a thread, as the script's `reply` and `resolve` write it: its words on a comment (or on the item), or a comment marked as done, which finishes the item once every comment is. */
+  async function answer(id, { n, text, resolved, by } = {}) {
+    const now = await thread(id), words = String(text ?? "").trim(), line = { at: new Date().toISOString(), from: "agent", ...(by ? { by: short(String(by), 80) } : {}), n: Number.isInteger(n) ? n : null };
+    if (resolved ? !now.comments.some((entry) => entry.n === n) : !words) throw Object.assign(new Error(resolved ? `No comment ${n} in ${id}` : "Nothing was said"), { status: 400 });
+    await fs.appendFile(path.join(folder, id, "thread.jsonl"), `${JSON.stringify(resolved ? { ...line, resolved: true } : { ...line, text: short(words, 4000) })}\n`);
+    if (resolved && now.comments.every((entry) => entry.resolved || entry.n === n)) await fs.writeFile(path.join(folder, id, "handled.json"), `${JSON.stringify({ at: line.at })}\n`);
+    return thread(id);
+  }
+
   /** The latest items that are not finished, have an answer unread or were sent in the last day, newest first. */
   async function threads() {
     const found = [];
@@ -250,7 +259,7 @@ export function createMarkupStore({ folder, snapshot = async () => ({}), on = "t
     return found;
   }
 
-  return { mark, send, picture, waiting, thread, say, threads, open, drop: (id) => marks.delete(id) };
+  return { mark, send, picture, waiting, thread, say, answer, threads, open, drop: (id) => marks.delete(id) };
 }
 
 /** The store's routes for a plain Node server (the hub has its own, behind its sign-in): true when the request was one of them. */

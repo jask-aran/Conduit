@@ -39,7 +39,7 @@ export function createMcpEndpoint({ runtime, token, version = "" }) {
     if (method === "initialize") {
       return reply(id, { protocolVersion: typeof params?.protocolVersion === "string" ? params.protocolVersion : PROTOCOL,
         capabilities: { tools: { listChanged: false } }, serverInfo: { name: "conduit", title: "Conduit", version },
-        instructions: "Conduit itself, the app the person uses: what is on their screens (conduit_ui, targets a client tab, default the one the person is talking to you from) and the hub's own state (conduit_inbox, shared context inbox; no client parameter). More hub areas can follow. The hub's shared browser uses agent-browser's own server (pane browser:hub)." });
+        instructions: "Conduit itself, the app the person uses: what is on their screens (conduit_ui, targets a client tab, default the one the person is talking to you from) and the hub's own state (conduit_inbox, shared context inbox; no client parameter; conduit_paper, the papers the person and agents write together, with the person's comments on them). More hub areas can follow. The hub's shared browser uses agent-browser's own server (pane browser:hub)." });
     }
     if (method === "ping") return reply(id, {});
     if (method === "tools/list") {

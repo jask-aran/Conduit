@@ -252,7 +252,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     const store = createMarkupStore({
       folder: path.join(entry.side, "markup"), listeners: path.join(dataRoot, "feedback"), on: `the paper ${entry.name} (document ${id})`,
       held: async () => heldFor(id), done: (item) => `node ${SCRIPT} done ${item}`,
-      about: [`Where a line here says \`node scripts/conduit-markup.mjs\`, run \`node ${SCRIPT}\`: it works from any folder.`, "To answer a comment by changing the document, add `--for <this item's id>/<n>` to `document replace`, `insert` or `delete`: the person then sees which blocks changed for comment n and can take the change back. Resolving the comment yourself does not accept the change for the person: the comment stays in their margin, marked as resolved by you, with the change shown, until they resolve it too."],
+      about: [`Where a line here says \`node scripts/conduit-markup.mjs\`, run \`node ${SCRIPT}\`: it works from any folder.`, "If you have the tool `conduit_paper`, it does the same without a shell: read, replace, insert, delete (with `for`), reply and resolve.", "To answer a comment by changing the document, add `--for <this item's id>/<n>` to `document replace`, `insert` or `delete`: the person then sees which blocks changed for comment n and can take the change back. Resolving the comment yourself does not accept the change for the person: the comment stays in their margin, marked as resolved by you, with the change shown, until they resolve it too."],
       log: (line) => console.log(JSON.stringify({ ...line, type: "conduit.document.markup", document: id })),
     });
     /** A change is accepted when the person resolves its comment (a session's resolve accepts nothing); read on every look at the open threads, which hold every comment the person has not resolved. */
@@ -342,6 +342,11 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       await fs.mkdir(entry.side, { recursive: true });
       await link(entry);
       return this.connections(id);
+    },
+    /** What a chat has to do with papers: its project, and the papers it is the thread of or connected to, each with the name it listens under there. */
+    of(chat) {
+      const found = chat ? chats()?.get(chat) : null;
+      return { project: found?.projectId ?? null, papers: found ? [...known.values()].flatMap((entry) => { const as = heldFor(entry.id).find((one) => one.chat === chat)?.name; return as ? [{ id: entry.id, as }] : []; }) : [] };
     },
     /** The papers a chat is connected to. */
     connectedTo: (chat) => [...known.values()].filter((entry) => entry.links.connections.includes(chat)).map(shown),

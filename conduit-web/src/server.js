@@ -647,6 +647,7 @@ const paperChats = () => (paperChatHost ??= createChatHost({ registry, projects,
 const documents = lifetime.own("documents", createDocuments({ dataRoot: config.dataRoot, projects, changed: (projectId) => runtimeHub.publish({ type: "artifacts_changed", projectId }),
   chats: () => ({ open: (asked) => paperChats().openChat(asked), notify: (id, text) => paperChats().deliverApproval(id, text), get: (id) => { const chat = registry.metadata(id); return chat ? chatView(chat) : null; } }) }), (owned) => owned.close());
 registerDocumentRoutes(app, documents);
+mcpRuntime.documents = documents;
 onWorkspaceChange((projectIds) => documents.filesChanged(projectIds));
 registerMarkupRoutes(app, "/v0/document/:document/markup", (request) => documents.markup(request.params.document));
 const browserHost = lifetime.own("hub browser", new BrowserHost({ dataRoot: config.dataRoot,
@@ -776,6 +777,7 @@ if (durableAdapter) {
   durableAdapter.runtime.screens = screens;
   durableAdapter.runtime.browserHost = browserHost;
   durableAdapter.runtime.personBrowsers = personBrowsers;
+  durableAdapter.runtime.documents = documents;
   void durableAdapter.runtime.loadBrowserTools();
 }
 const persistentAgent = durableAdapter ? new PersistentAgent({ runtime: durableAdapter.runtime, registry, projects, launchLiveSession, findChatContext }) : null;

@@ -1,6 +1,7 @@
 // A paper's mated thread and its connections: the pane's Paper | Thread switch turns the same tab to the paper's own chat (made by the hub, in no list of
 // chats) and back; a chat connected to the paper is a listener by name, a comment sent to it is taken in its name and written into the chat, which starts
 // its agent; the chat shows the connection as a rider, which opens the paper beside it and disconnects it.
+// The chat's harness answers through the tool conduit_paper (Conduit's MCP endpoint).
 // Makes a chat on the scripted test-stream profile (no model is called) and deletes it; the comment it sends it resolves as the person.
 import { open, origin } from "./lib.mjs";
 
@@ -33,6 +34,12 @@ try {
   const handed = await api(`${paper}/markup/items/${item}`), told = await api(`/v0/chats/${chat}`);
   console.log("the comment is taken in the chat's name:", handed.state === "taken" && handed.by === name, JSON.stringify({ state: handed.state, by: handed.by }));
   console.log("the chat was written to and its agent started:", told.status === "active" && Boolean(told.lastMessageAt), JSON.stringify({ status: told.status, at: told.lastMessageAt }));
+  // The same chat's harness, through Conduit's tools: the paper is the one it is connected to.
+  const tool = async (args) => (await api(`/v0/mcp/chat/${chat}`, "POST", { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "conduit_paper", arguments: args } })).result;
+  const asked = await tool({ action: "comments" }), read = await tool({ action: "read" });
+  console.log("conduit_paper reads the paper and what was asked, with no paper named:", !asked.isError && asked.content[0].text.includes(item) && asked.content[0].text.includes("Thread probe: say hello") && /<!-- block \w+ -->/.test(read.content[0].text));
+  await tool({ action: "reply", item, n: 1, text: "Hello from the tool" });
+  console.log("its reply is in the thread:", (await api(`${paper}/markup/items/${item}`)).messages.some((message) => message.from === "agent" && message.text === "Hello from the tool"));
   await page.goto(`${origin}/chat/${chat}`); await page.waitForSelector(".chat-main textarea", { timeout: 15000 }); await wait(2500);
   console.log("the chat reads the notice:", await page.evaluate(() => document.querySelector(".chat-main")?.textContent.includes('on the paper "Test document"') ?? false));
   const rider = page.getByRole("button", { name: "Open Connected to Test document" });
@@ -43,7 +50,7 @@ try {
   console.log("the paper's menu has the chat ticked:", await page.evaluate(() => [...document.querySelectorAll('[role^="menuitem"]')].some((row) => row.getAttribute("aria-checked") === "true" || row.querySelector("svg") && row.dataset.picked !== undefined)));
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Disconnect Connected to Test document" }).click(); await wait(1500);
-  console.log("Disconnect ends it:", (await api(`${paper}/connections`)).connections.length === 0 && await rider.count() === 0);
+  console.log("Disconnect ends it:", !(await api(`${paper}/connections`)).connections.some((one) => one.chat === chat) && await rider.count() === 0);
   // The other end: the chat's own menu connects it to an artifact of its project.
   const title = (await api(`/v0/chats/${chat}`)).title;
   await page.locator(".ui-row", { hasText: title }).first().click({ button: "right" });

@@ -4,24 +4,29 @@ Agreed with the user on 2026-11-12. Milestones 1, 2 and 3 and step (a) of what f
 
 ## Start here: the brief for the session that builds this
 
-You are picking up a build part-way. Milestones 1 to 3, step (a), papers in panes, and step (b), the mated thread and
-connections, are built. Step (c) is next: the MCP tools and addressing by `@name`. Read "Settled with the user on
-2026-11-12" first. Read this section, then the rest of this
+You are picking up a build part-way. Milestones 1 to 3, step (a), papers in panes, step (b), the mated thread and
+connections, and the first half of step (c), the tool `conduit_paper`, are built. Addressing by `@name` is next, and
+waits for the user's answers under "Not settled". Read "Settled with the user on 2026-11-12" first. Read this section, then the rest of this
 file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background session the user checks in on.
 
-### Where things stand (2026-11-12, end of step (b): the mated thread and connections)
+### Where things stand (2026-11-12, after step (b) and the tool of step (c))
 
 - Local `main` holds milestones 1 to 3 and steps (a) and (b). `origin/main` is behind it: someone other than the
   building session pushed at 14:57 on 2026-11-12, up to `d8dcf4f9d` (margin threads). Pushing is still the user's call.
 - conduit-local on :4310 runs local `main`. Try it: open the Test project in the sidebar and press "Test document";
   the header's Paper | Thread switch; the header's "Connect a chat" menu, or a chat's menu › Connect to artifact….
-- Five probes pass on that build, each with `errors: []`: `markup-threads.mjs` (12 checks: the switch, the hidden
-  thread, a connected chat handed a comment on the scripted profile, the rider, both ways to connect),
+- Five probes pass on that build, each with `errors: []`: `markup-threads.mjs` (14 checks: the switch, the hidden
+  thread, a connected chat handed a comment on the scripted profile, `conduit_paper` called as that chat, the rider,
+  both ways to connect),
   `markup-artifacts.mjs` (10), `markup-document.mjs` (17), `markup-delivery.mjs`, `markup-thread.mjs`. In eight runs
   of `markup-threads.mjs` one stopped on a click that timed out; which click was not found. Not run: `npm test`,
-  the headed Chrome on :9222, a real phone, Android, desktop, two people typing in one paragraph. A real model was
-  tried once: a comment sent to the Test document's mated thread was taken and answered ("pong") in about 20 seconds;
-  that comment is still open in its margin. An agent changing blocks from a mated thread was not tried.
+  the headed Chrome on :9222, a real phone, Android, desktop, two people typing in one paragraph. Real models were tried
+  three times on the Test document. Its mated thread (Conduit's own runtime) took a comment and answered "pong" with
+  the CLI in about 20 seconds. Asked to use `conduit_paper`, the same thread said it has no such tool (see step (c)).
+  A Claude Code chat connected to the paper used `conduit_paper` to add a paragraph for the comment and to reply.
+  The paper and the project were put back afterwards (the change taken back, the comments resolved, that chat
+  deleted); the mated thread's Thread view still holds its two turns. A margin with other open comments moves a
+  card away from its text, which fails one check of `markup-document.mjs`: run the probes on a paper with none.
   Screenshots were looked at headless only.
 - No Markup listener is running. The user said (2026-11-12) it need not be kept live all the time; start
   `wait --stay` when you want their markup.
@@ -67,6 +72,21 @@ file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background
   a paper is always the view a reload opens, never its thread; switching from a chat with riders to one with none
   may play the old rows' leave in the new chat (not looked at); the row's accessible names read "Open Connected to
   <paper>"; "Comments come here" on the rider is the builder's copy.
+
+### Step (c) so far: the tool `conduit_paper`
+
+- `server/paper-tool.js`, in `conduitTools` (`server/conduit-mcp.js`), so it is served at Conduit's MCP endpoint to
+  every harness that is handed it. One tool with an `action`: `list`, `new`, `read` (Markdown with block ids),
+  `replace`, `insert`, `delete` (with `for: "<item>/<n>"` to mark the change for a comment), `comments` (what is not
+  settled on the paper), `reply`, `resolve`. The paper need not be named in its own thread or in a chat connected to
+  one paper (`documents.of(chat)`); an edit is written under the name the chat listens by. The Markup store took
+  `answer` (a session's reply or resolve, as the CLI writes them).
+- **Conduit's own runtime does not offer it.** `selectionFor` in `server/durable-runtime.js` gives each profile the
+  tools its template names, plus a fixed few; `conduit_paper` is not among them, so a chat on the Assistant profile
+  (every mated thread, by default) uses the CLI through its shell. Adding it there puts one more tool in every such
+  chat's prompt: the user's call (see "Not settled").
+- Any chat can read or change any paper it names; a connection only decides who is handed comments. The `.paper`
+  file is in the project's folder, which those agents can already write.
 
 ### Step (a) as built
 
@@ -350,6 +370,11 @@ document stays possible: a comment may be a mark, not only words.
   chats still says "No chats" above them; a tab not yet shown that is renamed keeps its old name until shown; the
   Computer dashboard's own file list still opens a `.paper` in the file viewer; a paper in a folder git ignores is
   listed only once it has been opened from the file tree.
+- **Addressing by `@name`, not built, waiting for the user:** (1) whether `@name` typed in a Markup comment's words
+  sends that comment to that listener instead of the bar's; (2) what typing `@name` in the paper's own text does
+  (the plan says it makes a thread: on which words, sent when, and whether the mention stays in the text); (3)
+  whether the person's persistent agent is a listener on every paper; (4) whether `conduit_paper` goes into every
+  chat of Conduit's own runtime.
 - Who an author is: every person's client is recorded as `person` until there is a name to give it.
 - Rough edges of step (b), none yet judged by the user: the first comment on a paper goes to its mated thread, on
   the project's default profile, with no word to the person that a model is about to run; the rider's wording and
