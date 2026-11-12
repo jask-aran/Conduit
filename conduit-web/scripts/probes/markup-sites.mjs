@@ -66,7 +66,7 @@ try {
   const item = items[0] && JSON.parse(await fs.readFile(`${folder}/.conduit/artifacts/${made}/markup/${items[0].id}/item.json`, "utf8"));
   console.log("the item says which file to change:", item?.summary, "|", item?.read.some((line) => line.includes(file)));
   if (items[0]) await api(`/v0/document/${made}/markup/items/${items[0].id}/messages`, "POST", { n: 1, resolved: true });
-  await page.locator(".ui-markup-bar button[aria-label^='Use the app']").click().catch(() => {});
+  await page.locator(".ui-markup-bar [aria-label='Annotate with'] button[aria-pressed='true']").click({ timeout: 2000 }).catch(() => {});
   console.log("the block routes refuse a site and say where its file is:", JSON.stringify((await api(`/v0/document/${made}`)).body), (await api(`/v0/document/${made}/blocks`, "POST", { op: "insert", block: "start", markdown: "x" })).status);
   console.log("its HTML is never served as a page:", await page.evaluate(async (id) => (await fetch(`/v0/document/${id}?as=site`)).headers.get("content-type"), made));
   await menu(row, "Delete"); await page.getByRole("button", { name: "Delete", exact: true }).last().click(); await wait(2500);

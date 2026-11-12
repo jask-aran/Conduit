@@ -50,7 +50,7 @@ try {
   const named = (await api(`${paper}/markup/open`)).items.filter((one) => one.comments.some((comment) => comment.comment.startsWith("Thread probe: by")));
   extra.push(...named.map((one) => one.id));
   console.log("both went to the chat named, each an item of its own:", forName && named.length === 2 && named.every((one) => one.by === name), JSON.stringify(named.map((one) => [one.by, one.comments[0].comment])));
-  await page.locator(".ui-markup-bar button[title^='Use the app'], .ui-markup-bar button[aria-label^='Use the app']").first().click().catch(() => {});
+  await page.locator(".ui-markup-bar [aria-label='Annotate with'] button[aria-pressed='true']").click({ timeout: 2000 }).catch(() => {});
   // The chat's first turn names it, and a connected chat listens by its title: the name is read again.
   let titled = name; for (let tries = 0; tries < 16 && titled === name; tries++) { await wait(500); titled = (await api(`${paper}/markup/waiting`)).waiting.map((one) => one.name).find((one) => one !== "conduit") ?? name; }
   const mark = await api(`${paper}/markup/marks`, "POST", {});

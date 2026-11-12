@@ -72,7 +72,6 @@ try {
   const picked = async (name) => { const next = page.locator('.ui-markup-bar button[title="The next waiting session"]'); for (let tries = 0; tries < 8 && (await next.textContent().catch(() => "")) !== name; tries++) { await next.click(); await page.waitForTimeout(150); } if ((await next.textContent()) !== name) throw new Error(`The bar does not hand to ${name}`); };
   await picked("doc-probe");
   await page.screenshot({ path: `${out}-doc0.png` });
-  await press("Annotate").catch(() => press("Use the app"));
   await page.waitForTimeout(300);
   await press("Select text"); await page.waitForTimeout(300);
   const line = await js("(() => { const l = document.querySelectorAll('.ui-document-text > [data-id]')[1].getBoundingClientRect(); return { x: l.left, y: l.top + l.height / 2 }; })()");
@@ -90,7 +89,7 @@ try {
   // Resolved by the session, the card stays, saying so; the person's tick puts it away.
   cli("resolve", doc.id, "1"); await page.waitForTimeout(4500);
   console.log("B after the session resolved it:", await cards());
-  await press("Use the app"); // While annotating, the layer has every press.
+  await page.locator(".ui-markup-bar [aria-label='Annotate with'] button[aria-pressed='true']").click({ timeout: 2000 }).catch(() => {}); // While annotating, the layer has every press.
   await page.locator(".ui-markup-margin .ui-markup-note", { hasText: "Doc probe" }).locator("button[aria-label='Resolve']").click(); await page.waitForTimeout(4500);
   console.log("B after the person's tick:", await cards());
   await page.screenshot({ path: `${out}-doc.png` });

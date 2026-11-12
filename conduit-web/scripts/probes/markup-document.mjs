@@ -50,9 +50,6 @@ try {
   await rail.locator("button[aria-label='Block']").click(); await page.getByRole("menuitem", { name: "Heading 2" }).click();
   await until("the ribbon makes the caret's block another kind", () => page.evaluate(() => { const made = [...document.querySelectorAll(".ui-document-text > h2[data-id]")].at(-1); return made?.textContent === "A heading"; }));
   console.log("the ribbon says which kind the caret is in:", await rail.locator("button[aria-label='Block']").textContent(), "| the document's own bar holds:", await page.locator(".ui-document .ui-pane-header button, .ui-document header button").allTextContents());
-  await rail.locator("button", { hasText: "Ask the agent" }).click();
-  await until("Ask the agent starts a comment about the caret's block", async () => (await page.locator(".ui-markup-note[data-float]").textContent().catch(() => "")).includes("A heading"));
-  await page.locator(".ui-markup-note[data-float] button", { hasText: "Remove" }).click();
   // The paper's own tools: the caret's empty paragraph hints, `/` makes a block a kind, and selected text has its tools over it.
   await page.locator(".ui-document-text > h2[data-id]").last().click(); await page.keyboard.press("End"); await page.keyboard.press("Enter");
   console.log("the caret's empty paragraph hints:", await page.evaluate(() => { const hint = document.querySelector(".ui-document-text .ui-document-hint"); return hint ? getComputedStyle(hint, "::before").content : null; }));
@@ -95,7 +92,8 @@ try {
   await page.mouse.move(at.x + 4, at.y + at.height / 2); await page.mouse.down(); await page.mouse.move(at.x + 120, at.y + at.height / 2, { steps: 6 }); await page.mouse.up(); await page.waitForTimeout(400);
   await page.keyboard.type("Document probe: say this another way"); await page.keyboard.press("Enter");
   await page.locator(".ui-markup-bar button", { hasText: "Send" }).click();
-  await page.locator(".ui-markup-bar button[aria-label^='Use the app']").click();
+  // The ribbon has no mode to press: the tool held is let go, and the app is in use.
+  await page.locator(".ui-markup-bar [aria-label='Annotate with'] button[aria-pressed='true']").click({ timeout: 2000 }).catch(() => {});
   const card = (target) => target.evaluate(() => {
     const note = [...document.querySelectorAll(".ui-markup-margin .ui-markup-note")].find((one) => one.textContent.includes("Document probe")), mark = note && document.querySelector(`[data-comment~="${note.dataset.key}"]`);
     const box = note?.getBoundingClientRect(), about = mark?.getBoundingClientRect();
