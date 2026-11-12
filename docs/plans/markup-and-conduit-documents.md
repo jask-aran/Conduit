@@ -4,8 +4,8 @@ Agreed with the user on 2026-11-12. Milestones 1, 2 and 3 are done. Delete a par
 
 ## Start here: the brief for the session that builds this
 
-You are picking up a build part-way. Milestones 1 to 3 are built and their design is settled. What comes next is
-not: read "Next: settle where an artifact lives" before you build anything. Read this section, then the rest of this
+You are picking up a build part-way. Milestones 1 to 3 are built. Where an artifact lives is settled with the user:
+read "Settled with the user on 2026-11-12" before you build. Read this section, then the rest of this
 file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background session the user checks in on.
 
 ### Where things stand (2026-11-12, end of milestone 3)
@@ -23,40 +23,52 @@ file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background
   for bounded pieces (a CLI change, gallery rows, one seam). Give each a file list it may edit and forbid builds and
   restarts while you run probes.
 
-### Next: settle where an artifact lives
+### Settled with the user on 2026-11-12: where an artifact lives
 
-The user said on 2026-11-12, while milestone 3 was being built: `/document` was a test. What opens is an
-**artifact**, in a pane as a tab, like a chat or a browser. The block document built so far is the first kind of
-artifact; other kinds follow. It needs a name that is not "document", because `DESIGN.md` already calls what any pane
-holds a document, and it probably needs new verbs. They also asked how a chat shows that it is linked to an
-artifact, either because it is acting on it or because it is the artifact's own thread (the mated thread), and
-leaned towards this: the mated thread is a second view of the artifact, in the same tab, not another pane.
+What opens is an **artifact**, in a pane as a tab, like a chat or a browser. The block document is the first kind of
+artifact and is called a **paper** ("for now", the user said); `DESIGN.md` keeps "document" for what any pane holds.
+The code keeps `document` inside the editor and the hub's service; the pane kind is `artifact:<id>`.
 
-None of that is designed. Settle it with the user before you build, in one round of questions with your
-recommendation for each (the `grill-me` skill fits). These decide the work:
+- **A paper is a file.** `<name>.paper` in its project's folder: the blocks as readable JSON (`conduit-document`),
+  with the paper's id inside, so a rename or a move keeps its threads. Its threads, change marks and Yjs state live
+  in `<project>/.conduit/artifacts/<id>/`. The hub is the only writer while Conduit runs and writes the file after
+  each save. Conduit does not touch `.gitignore`. An artifact always belongs to a project.
+- **A file changed outside Conduit wins.** When the file differs from what the hub last wrote (a checkout, a hand
+  edit, a clone with no `.conduit/`), the hub takes the file as the paper, blocks matched by id. A file it cannot read
+  is an error shown, never a guess.
+- **No Markdown twin.** Export to Markdown is a command on the paper.
+- **Listed** as rows in the sidebar under the project (for now), and seen in the file tree as the file it is;
+  pressing a `.paper` there opens the artifact.
+- **Verbs.** "New Artifact" (beside "New chat", and in the palette) opens the artifact creator, which offers the
+  kinds; paper is the first. Open follows the one rule (plain replaces, Ctrl keeps a tab, Alt opens beside). Rename,
+  move and delete are the file's. An agent makes one with `conduit-markup document new "<name>" --project <id>`.
+- **Two views, one tab.** The pane header's segmented switch, Paper | Thread: Thread is the mated thread as an
+  ordinary chat view. The mated thread is not in the project's list of chats. The hub starts it on the first comment
+  to `@conduit`, on the project's default profile.
+- **A connection is a rider.** Any other chat acts on a paper only because the person connected it ("Connect a
+  chat…" on the paper, "Connect to artifact…" in the chat). The chat then shows a rider below the composer, under
+  Background: "Connected to <paper>"; a press opens the paper beside, its × disconnects. The mated thread has no
+  rider. One registry of listeners holds every connection; how a comment arrives differs: the hub writes it into a
+  chat Conduit runs as a notice that wakes it, and a session Conduit does not run (a terminal agent) keeps `wait`.
+  The user hoped for one mechanism and accepted two arrivals, since the MCP tools make a second way in anyway.
+- **Projects on another node** (Writing, Screenshots, conduitcomposer) follow as their own step; the first build
+  covers projects whose folder is on the hub. How the hub writes a file on a node has not been read yet.
+- **`/document`** goes at the end of step (a). A paper in the first pane has its place in the app's address as a chat
+  does; no standalone route for now. The test document becomes `Test document.paper` in the Test project's folder
+  (`~/.conduit/data/chat/files/test`), with its threads; the user's go-ahead for those writes is given.
 
-1. The name of the block-document kind of artifact, and whether "artifact" is the word the interface shows.
-2. The verbs: how one is made, opened, renamed, deleted, and how an agent makes one.
-3. Where artifacts are listed and made: under a project in the sidebar, in the file tree, or both.
-4. The two views. `DESIGN.md` gives a pane header "its modes as a segmented switch": is the mated thread that
-   switch's second mode? Does the mated thread also show in the project's list of chats?
-5. How a chat that acts on an artifact, without being its mated thread, shows the link (a control in its header
-   that opens the artifact beside it is the obvious first answer).
-6. What becomes of `/document` and the test document.
+The order, agreed: (a) papers in panes: the file and its `.conduit/artifacts/<id>/`, many papers, the pane kind,
+the sidebar rows, the creator and the verbs; (b) the mated thread as the second view, started by the hub, and
+connections with their rider; (c) the MCP tools and addressing by `@name`; (d) projects on another node; (e) other
+kinds of artifact.
 
-What is known about the code, for that talk: a pane's content is a `SplitView` (`client/workspace/workspace-types.ts`:
-`chat:<id>`, `browser:<id>`, `page:<id>` and others), and every kind is also declared in the UI API, checked each way
-by `SplitViewKind`; `client/main.tsx` holds the pane and tab logic. A new kind (say `artifact:<id>`) is therefore a
-change to an existing Conduit feature (panes), which "Ownership" below says needs the user's go-ahead: their message
-is that go-ahead in principle, and the round of questions is where it becomes exact.
-
-The proposed order after that, for the user to confirm: first artifacts in panes (the new pane kind, many
-documents, the mated thread as the second view, started by the hub); then the MCP tools and addressing by `@name`;
-then the workspace copy with its Markdown twin; then other kinds of artifact.
+What is known about the code: a pane's content is a `SplitView` (`client/workspace/workspace-types.ts`: `chat:<id>`,
+`browser:<id>`, `page:<id>` and others), and every kind is also declared in the UI API (`UI_VIEWS` in `ui-api.js`),
+checked each way by `SplitViewKind`; `client/main.tsx` holds the pane and tab logic; `PaneHeader` has a `modes` slot.
 
 ### Goal
 
-Build Markup & Conduit Documents onward from milestone 3, in the order agreed under "Next". The user marks up
+Build Markup & Conduit Documents onward from milestone 3, in the order agreed under "Settled". The user marks up
 Conduit's interface today and gets answers from a coding agent. They want the same loop on documents they and their
 agents write together, live, and later on pages an agent makes. They ship a lot of code but are not a software
 engineer: they read your prose closely and your diffs shallowly, so what you tell them is what they know.
@@ -209,8 +221,8 @@ document stays possible: a comment may be a mark, not only words.
 
 ## The document
 
-- **Hub-owned.** A Conduit document belongs to a project; the hub holds the live copy and is the only way in. It
-  saves a copy into the workspace with a readable Markdown twin, both output only (git, backup, other tools).
+- **Hub-held, kept as a file.** A paper belongs to a project and is a file in its folder; the hub holds the live copy
+  and is the only way in while Conduit runs. See "Settled with the user on 2026-11-12".
 - **Blocks.** Our own structured format: every block has a stable id; threads anchor to a block or a run of text.
 - **Edited live by many.** The person on several devices and several agents at once, merged as they type: any
   signed-in session and any agent in the project. Each edit and comment records its author, for people later.
@@ -240,7 +252,7 @@ document stays possible: a comment may be a mark, not only words.
 3. Done: margin threads and the block tools in Markup's rail on the document; agent edits shown as changed, with Revert.
 4. to 6. were: the hub-started mated thread, the MCP tools and addressing by `@name`; documents in projects (the
    file tree, many documents, the saved workspace copy and its Markdown twin); artifacts (agent-made pages with
-   Markup over them). The user's message of 2026-11-12 reorders these: see "Next: settle where an artifact lives".
+   Markup over them). Reordered on 2026-11-12: see "Settled with the user on 2026-11-12" for steps (a) to (e).
 
 ## Not settled
 
@@ -253,7 +265,7 @@ document stays possible: a comment may be a mark, not only words.
   its item is resolved (so Reopen is only reachable until then); a drawing made on a document is not kept on the page
   once sent, only the blocks under it; a phone has the cards under the text, not beside a block; while annotating, the
   layer has every press, so a card is pressed only while the app is in use.
-- Where an artifact lives in the interface: see "Next: settle where an artifact lives".
+- How the artifact creator, the Paper | Thread switch on a phone and the connection's rider feel: build, then the user judges.
 - Who an author is: every person's client is recorded as `person` until there is a name to give it.
 - The hub starting a thread touches its session code, which Markup has not needed before.
 - Moving Markup and the editor into the shared components package: parked until the package's scope is decided.
