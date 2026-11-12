@@ -28,7 +28,7 @@ Run from `conduit-web/`. Pick the single cheapest check that proves the change:
 | A component or styling | `npm run gallery`, then the Windows Chrome DevTools CLI (`node ../scripts/run-windows-chrome-devtools.mjs`) |
 | A release | `npm test` (release only) |
 
-For a low-blast-radius change, skip the check and say "not run". Run checks in the foreground. Tests and Markdown only
+For a low-blast-radius change, skip the check and say "not run". Run checks in the foreground. Tests and Markdown outside `docs/` only
 shrink (`conduit-web/budgets.json`, checked with the conventions), so a change that needs a new test or document
 removes more than it adds.
 

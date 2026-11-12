@@ -166,7 +166,7 @@ try {
 
 // 10. Size limits on tests and documents. Both were added faster than they were kept true, so one that is needed
 //     replaces more than it adds. Fixed ceilings: LIMITS below. Figures that only fall: budgets.json (the tests' total
-//     lines, and the repo's Markdown lines and files outside templates/). sourceLines is every .ts, .tsx, .js and .css
+//     lines, and the repo's Markdown lines and files outside templates/ and docs/, where a plan is as long as it needs). sourceLines is every .ts, .tsx, .js and .css
 //     line under src/.
 const LIMITS = { tests: 300, testFiles: 100, testFileLines: 300, sourceLines: 115_000 };
 const budgetFile = path.join(root, "budgets.json");
@@ -184,7 +184,7 @@ if (sourceLines > LIMITS.sourceLines) problems.push(`src/  source lines: ${sourc
 const counts = { testLines: testFiles.reduce((n, f) => n + lineCount(f), 0) };
 try {
   const repo = path.resolve(root, "..");
-  const markdown = execFileSync("git", ["-C", repo, "ls-files", "*.md", ":!templates"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+  const markdown = execFileSync("git", ["-C", repo, "ls-files", "*.md", ":!templates", ":!docs"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
     .split("\n").filter((f) => f && fs.existsSync(path.join(repo, f)));
   counts.markdownLines = markdown.reduce((n, f) => n + lineCount(path.join(repo, f)), 0);
   counts.markdownFiles = markdown.length;
