@@ -28,6 +28,10 @@ import { startWebSocketKeepalive } from "./ws-keepalive.js";
  * are the hub's one registry (the feedback folder's), so a session that waits for interface feedback is handed a
  * paper's comments too. Which papers there are is read from the folders, never kept.
  *
+ * A project's folder can be on another device: the paper's file is then read and written through that device
+ * (workspace-host.js), and what belongs to it stays on the hub, where that project's chats are. While the device is out
+ * of reach the live copy goes on and the file is written when it answers again.
+ *
  * A paper is tied to chats (links.json, beside its state). Its mated thread is its own chat, the paper's second view and
  * never in the project's list of chats, made when it is first asked for or first sent a comment: the listener named
  * `conduit`, the first one, so a comment goes to it unless the person says otherwise. A chat the person connected is a
@@ -35,20 +39,83 @@ import { startWebSocketKeepalive } from "./ws-keepalive.js";
  * starts its agent on it; what the agent answers with is the CLI, as for any session. A session Conduit does not run
  * keeps `wait`.
  */
-const SAVE_AFTER_MS = 500, LOOK_EVERY_MS = 2_000, SCAN_AFTER_MS = 3_000;
+const SAVE_AFTER_MS = 500, LOOK_EVERY_MS = 2_000, SCAN_AFTER_MS = 3_000, FAR_SCAN_MS = 15_000;
 const MATED = "conduit", SCRIPT = path.resolve(import.meta.dirname, "../../../scripts/conduit-markup.mjs");
 const EXT = ".paper", ID = /^[a-z0-9-]{1,64}$/, WALK = { entries: 20_000, depth: 6 };
 const fault = (status, message) => Object.assign(new Error(message), { status });
-const run = promisify(execFile), there = (file) => fs.access(file).then(() => true, () => false);
-/** Whole or not at all: a crash while writing leaves the paper as it was, never half of it. */
-const put = async (file, text) => { const part = path.join(path.dirname(file), `.${path.basename(file)}.${crypto.randomBytes(4).toString("hex")}.part`); await fs.writeFile(part, text); await fs.rename(part, file).catch(async (error) => { await fs.rm(part, { force: true }); throw error; }); };
+const run = promisify(execFile);
 const under = (root, file) => file === root || file.startsWith(root + path.sep);
+const partOf = (at) => [...at.split("/").slice(0, -1), `.${at.split("/").at(-1)}.${crypto.randomBytes(4).toString("hex")}.part`].join("/");
+/** Every paper's file under a folder, by a walk that `ls(dir)` feeds with a directory's `{ name, file, dir }` entries. */
+async function walk(ls) {
+  const found = [], queue = [["", 0]];
+  for (let seen = 0; queue.length && seen < WALK.entries;) {
+    const [dir, depth] = queue.shift();
+    for (const entry of await ls(dir)) {
+      seen += 1;
+      const at = dir ? `${dir}/${entry.name}` : entry.name;
+      if (entry.file && entry.name.endsWith(EXT)) found.push(at);
+      else if (entry.dir && depth < WALK.depth && !entry.name.startsWith(".") && entry.name !== "node_modules") queue.push([at, depth + 1]);
+    }
+  }
+  return found;
+}
+/*
+ * A project's folder as its papers' files are reached, by paths relative to it and `/`-separated. `stat` is null for a
+ * file that is not there and fails when the folder cannot be reached; `write` is whole or not at all (a part file,
+ * then a rename), so a crash while writing leaves the paper as it was; `create` fails with EEXIST over a file.
+ */
+function localDisk(root) {
+  const at = (relative) => path.join(root, relative);
+  return {
+    key: root, far: false, at,
+    read: (relative) => fs.readFile(at(relative), "utf8"),
+    stat: (relative) => fs.stat(at(relative)).then(({ mtimeMs, birthtimeMs }) => ({ mtimeMs, born: birthtimeMs }), (error) => error.code === "ENOENT" ? null : Promise.reject(error)),
+    async write(relative, text) { const part = at(partOf(relative)); await fs.writeFile(part, text); await fs.rename(part, at(relative)).catch(async (error) => { await fs.rm(part, { force: true }); throw error; }); },
+    create: (relative, text) => fs.writeFile(at(relative), text, { flag: "wx" }),
+    rename: (from, to) => fs.rename(at(from), at(to)),
+    remove: (relative) => fs.rm(at(relative), { force: true }),
+    /** The file as it really is must be inside the folder: a link out of it is not followed. */
+    async inside(relative) {
+      const [folder, home] = await Promise.all([fs.realpath(path.dirname(at(relative))), fs.realpath(root)]).catch(() => [null, null]);
+      if (folder && !under(home, folder)) throw fault(400, "That is not a path in this project's folder");
+    },
+    /** What git tracks or would (so nothing it ignores), or a walk where the folder is no repository. */
+    files: async () => await run("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", `*${EXT}`], { cwd: root, maxBuffer: 8 * 1024 * 1024, timeout: 15_000 }).then(({ stdout }) => stdout.split("\0").filter(Boolean), () => null)
+      ?? walk(async (dir) => (await fs.readdir(at(dir), { withFileTypes: true }).catch(() => [])).map((entry) => ({ name: entry.name, file: entry.isFile(), dir: entry.isDirectory() }))),
+  };
+}
+/** The same over a device's folder (`host`: workspace-host.js's). It has no time a file was made, a link is not followed there at all, and a folder that cannot be listed fails the listing (a part of it would read as papers deleted). */
+function deviceDisk(host) {
+  return {
+    key: host.key, far: true, at: (relative) => `${host.key}\n${relative}`,
+    read: async (relative) => (await host.read(relative)).toString("utf8"),
+    stat: async (relative) => { const info = await host.lstat(relative); return info && { mtimeMs: info.mtimeMs, born: 0 }; },
+    // A file a sync client holds open cannot be renamed over: it is then written in place. The part file has one name, so one a lost device leaves behind is the next write's.
+    async write(relative, text) {
+      const part = [...relative.split("/").slice(0, -1), `.${relative.split("/").at(-1)}.part`].join("/");
+      await host.write(part, text, {});
+      await host.rename(part, relative).catch(async () => { try { await host.write(relative, text, {}); } finally { await host.unlink(part).catch(() => {}); } });
+    },
+    create: (relative, text) => host.write(relative, text, { exclusive: true }),
+    rename: (from, to) => host.rename(from, to),
+    remove: (relative) => host.unlink(relative).catch((error) => { if (error.code !== "ENOENT") throw error; }),
+    inside: async () => {},
+    files: async () => (await host.files({ exclude: ["node_modules", ".conduit"], limit: WALK.entries }))?.filter((at) => at.endsWith(EXT))
+      ?? walk(async (dir) => (await host.list(dir, { limit: WALK.entries }).catch((error) => dir && ["ENOENT", "permission_denied"].includes(error.code) ? [] : Promise.reject(error)) ?? []).map((entry) => ({ name: entry.name, file: entry.type === "file", dir: entry.type === "directory" }))),
+  };
+}
+const spot = (entry) => entry.disk.at(entry.path);
+const hash = (text) => crypto.createHash("sha256").update(text).digest("hex");
 const shown = ({ id, kind, name, path: at, project }) => ({ id, kind, name, path: at, project });
 
-/** `chats`: () => the hub's chats, once it has them: `open({ workspace, title, mark })` makes one, `get(id)` is its summary, `notify(id, text)` writes a notice into it. */
-export function createDocuments({ dataRoot, projects, changed = () => {}, chats = () => null }) {
+/**
+ * `chats`: () => the hub's chats, once it has them: `open({ workspace, title, mark })` makes one, `get(id)` is its summary, `notify(id, text)` writes a notice into it.
+ * `devices`: (project) => the host of a folder on another device.
+ */
+export function createDocuments({ dataRoot, projects, changed = () => {}, chats = () => null, devices = null }) {
   const folder = path.join(dataRoot, "documents"), extensions = documentExtensions(), schema = getSchema(extensions), markdown = new MarkdownManager({ extensions });
-  const sockets = new WebSocketServer({ noServer: true }), rooms = new Map(), known = new Map(), scans = new Map(), rescans = new Map();
+  const sockets = new WebSocketServer({ noServer: true }), rooms = new Map(), known = new Map(), scans = new Map(), rescans = new Map(), scanned = new Map();
   const withIds = (node) => ({ ...node, ...(BLOCK_TYPES.includes(node.type) ? { attrs: { ...node.attrs, id: node.attrs?.id ?? blockId() } } : {}), ...(node.content ? { content: node.content.map(withIds) } : {}) });
   const parse = (text) => [...schema.nodeFromJSON(withIds(markdown.parse(text))).content.content];
   const blocksOf = (room) => [...yXmlFragmentToProseMirrorRootNode(room.blocks, schema).content.content];
@@ -84,19 +151,14 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   };
 
   const place = (project) => {
-    if (remoteNode(project)) throw fault(501, "Papers in a project on another device are not built yet");
-    return { root: path.resolve(project.workingRoot), side: path.join(path.resolve(project.chatRoot || project.workingRoot), ".conduit", "artifacts") };
+    const far = Boolean(remoteNode(project));
+    if (far && !(devices && project.chatRoot)) throw fault(501, "This hub cannot reach papers in a project on another device");
+    return { disk: far ? deviceDisk(devices(project)) : localDisk(path.resolve(project.workingRoot)), side: path.join(path.resolve(project.chatRoot || project.workingRoot), ".conduit", "artifacts") };
   };
   const projectOf = async (id) => await projects.get(id) ?? (() => { throw fault(404, `No project ${id}`); })();
   const here = async () => (await projects.list()).filter((project) => !remoteNode(project));
   /** A file is one project's: the one whose folder holds it most closely (a project's folder can stand inside another's, as every managed one stands inside Chats'). */
   const owner = (file, all) => all.filter((project) => under(path.resolve(project.workingRoot), file)).sort((a, b) => path.resolve(b.workingRoot).length - path.resolve(a.workingRoot).length)[0];
-  /** The file as it really is, which must be inside the project's folder: a link out of it is not followed. */
-  const real = async (root, at) => {
-    const file = path.join(root, at), [folder, home] = await Promise.all([fs.realpath(path.dirname(file)), fs.realpath(root)]).catch(() => [null, null]);
-    if (folder && !under(home, folder)) throw fault(400, "That is not a path in this project's folder");
-    return file;
-  };
   /** A name a file can have, on any device the project is opened from. */
   const named = (name) => {
     const clean = String(name ?? "").replace(/[\\/:*?"<>|\0-\x1f]/g, " ").replace(/\s+/g, " ").trim().replace(/^\.+/, "").slice(0, 120).trim();
@@ -108,48 +170,42 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     if (parts.some((part) => part === ".." || part === ".conduit" || part === ".git")) throw fault(400, "That is not a path in this project's folder");
     return parts.join("/");
   };
-  /** Every paper's file in a project's folder: what git tracks or would (so nothing it ignores), or a walk where the folder is no repository. */
-  async function files(root) {
-    const listed = await run("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", `*${EXT}`], { cwd: root, maxBuffer: 8 * 1024 * 1024, timeout: 15_000 }).then(({ stdout }) => stdout.split("\0").filter(Boolean), () => null);
-    if (listed) return listed;
-    const found = [], queue = [["", 0]];
-    for (let seen = 0; queue.length && seen < WALK.entries;) {
-      const [dir, depth] = queue.shift();
-      for (const entry of await fs.readdir(path.join(root, dir), { withFileTypes: true }).catch(() => [])) {
-        seen += 1;
-        const at = dir ? `${dir}/${entry.name}` : entry.name;
-        if (entry.isFile() && entry.name.endsWith(EXT)) found.push(at);
-        else if (entry.isDirectory() && depth < WALK.depth && !entry.name.startsWith(".") && entry.name !== "node_modules") queue.push([at, depth + 1]);
-      }
-    }
-    return found;
-  }
   /** The CLI finds a paper's comments through this list: it runs beside the hub and cannot ask it where the projects are. */
   const tell = () => writePrivateFile(path.join(folder, "roots.json"), `${JSON.stringify([...known.values()].map((entry) => path.join(entry.side, "markup")))}\n`).catch((error) => console.error("Could not write the papers' Markup folders", error));
   /** The paper in this file is known. One that carries no id, or the id of a paper that is still in another file (a copy), is given its own, written into it. */
   async function adopt(project, at) {
-    const { root, side } = place(project), file = await real(root, at), name = path.basename(at, EXT), read = paper(await fs.readFile(file, "utf8"), name);
-    const other = read.id && known.get(read.id), copy = other && path.join(other.root, other.path) !== file && await there(path.join(other.root, other.path));
+    const { disk, side } = place(project), name = path.basename(at, EXT);
+    await disk.inside(at);
+    const read = paper(await disk.read(at), name), other = read.id && known.get(read.id), copy = other && spot(other) !== disk.at(at) && await other.disk.stat(other.path).catch(() => true);
     const id = read.id && !copy ? read.id : crypto.randomBytes(8).toString("hex");
-    if (id !== read.id) await put(file, written(id, read.blocks));
+    if (id !== read.id) await disk.write(at, written(id, read.blocks));
     const links = known.get(id)?.links ?? await fs.readFile(path.join(side, id, "links.json"), "utf8").then(JSON.parse).then((kept) => ({ thread: kept.thread ?? null, connections: [...kept.connections ?? []] }), () => ({ thread: null, connections: [] }));
-    return known.set(id, { id, kind: "paper", name, path: at, project: project.id, root, side: path.join(side, id), links }).get(id);
+    return known.set(id, { id, kind: "paper", name, path: at, project: project.id, disk, side: path.join(side, id), links }).get(id);
   }
-  /** A project's folder is read for its papers once, and again when one of them is found missing. The oldest file is read first, so of a paper and its copy the paper keeps the id. */
+  /**
+   * A project's folder is read for its papers once, and again when one of them is found missing. The oldest file is read first, so of a paper and its copy the
+   * paper keeps the id (a device does not say when a file was made: there the first by path keeps it).
+   */
   const scan = (project) => scans.get(project.id) ?? scans.set(project.id, (async () => {
-    const { root } = place(project), all = await here(), mine = (await files(root)).filter((at) => owner(path.join(root, at), all)?.id === project.id);
-    const found = await Promise.all(mine.map(async (at) => ({ at, born: (await fs.stat(path.join(root, at)).catch(() => null))?.birthtimeMs }))), kept = new Set();
+    const { disk } = place(project), all = disk.far ? [] : await here(), mine = (await disk.files()).filter((at) => disk.far || owner(path.join(disk.key, at), all)?.id === project.id).sort();
+    // A device that drops while it is read fails the reading: files it did not answer for are not papers deleted.
+    const found = await Promise.all(mine.map(async (at) => ({ at, born: (await disk.stat(at).catch((error) => disk.far ? Promise.reject(error) : null))?.born }))), kept = new Set();
     // A paper whose file cannot be read just now (a merge's conflict in it) is still that paper, at that path.
     const still = (at) => [...known.values()].find((entry) => entry.project === project.id && entry.path === at)?.id;
-    for (const { at } of found.filter((file) => file.born !== undefined).sort((a, b) => a.born - b.born)) kept.add(await adopt(project, at).then((entry) => entry.id, () => still(at)));
+    for (const { at } of found.filter((file) => file.born !== undefined).sort((a, b) => a.born - b.born)) kept.add(await adopt(project, at).then((entry) => entry.id, (error) => disk.far && !error.status ? Promise.reject(error) : still(at)));
     for (const [id, entry] of known) if (entry.project === project.id && !kept.has(id)) known.delete(id);
+    scanned.set(project.id, Date.now());
     await tell();
   })().catch((error) => { scans.delete(project.id); throw error; })).get(project.id);
-  const again = async (id) => { scans.delete(id); const project = await Promise.resolve(projects.get(id)).catch(() => null); if (project) await scan(project).catch(() => {}); };
+  /** True when the folder was read. */
+  const again = async (id) => { scans.delete(id); const project = await Promise.resolve(projects.get(id)).catch(() => null); return project ? scan(project).then(() => true, () => false) : false; };
   const ready = (async () => {
     for (const project of await here()) await scan(project).catch((error) => console.error(`Could not read ${project.name}'s papers`, error));
   })().catch((error) => console.error("Could not read the projects' papers", error));
-  const entryOf = async (id) => known.get(id) ?? (await ready, known.get(id)) ?? (() => { throw fault(404, `No paper ${id}`); })();
+  // A folder on another device is read when it is first asked about, since the device may not be there when the hub starts.
+  const distant = async () => { for (const project of (await projects.list()).filter(remoteNode)) await scan(project).catch(() => {}); };
+  void ready.then(distant).catch(() => {});
+  const entryOf = async (id) => known.get(id) ?? (await ready, known.get(id)) ?? (await distant(), known.get(id)) ?? (() => { throw fault(404, `No paper ${id}`); })();
 
   const host = () => chats() ?? (() => { throw fault(503, "The hub's chats are not ready yet"); })();
   const link = async (entry) => { await writePrivateFile(path.join(entry.side, "links.json"), `${JSON.stringify(entry.links)}\n`); changed(entry.project); };
@@ -204,35 +260,51 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
 
   /** The file is the paper: what it holds that the live copy does not is taken, as the smallest change that makes the live copy so. */
   async function take(room) {
-    const file = path.join(room.entry.root, room.entry.path), text = await fs.readFile(file, "utf8");
+    const { disk, path: at } = room.entry, text = await disk.read(at);
     if (text !== room.text) {
       const read = paper(text, room.entry.name);
       if (read.id && read.id !== room.id) throw Object.assign(new Error("Another paper's file is at this path"), { other: true });
-      if (!room.blocks.length || written(room.id, read.blocks) !== written(room.id, blocksOf(room))) set(room, read.blocks);
+      // What was written while the folder could not be reached is owed to a file that has not changed since: the kept state is then the paper, and the file takes it.
+      if (!(room.owed && room.owed === hash(text) && room.blocks.length) && (!room.blocks.length || written(room.id, read.blocks) !== written(room.id, blocksOf(room)))) set(room, read.blocks);
       room.text = text;
     }
-    room.seen = (await fs.stat(file)).mtimeMs;
+    room.owed = null;
+    room.seen = (await disk.stat(at))?.mtimeMs;
     room.unread = null;
   }
   /** Has the file changed under the hub? A file that has gone, or is now another paper's (a checkout), is looked for under another name; a paper whose file is nowhere is closed, never written again. */
   async function look(room) {
-    const stat = await fs.stat(path.join(room.entry.root, room.entry.path)).catch(() => null);
+    // A folder that cannot be reached (its device is away) is not a file that has gone: the live copy goes on, and nothing is written until it answers.
+    const stat = await room.entry.disk.stat(room.entry.path).catch((error) => { room.away = error.message; });
+    if (stat === undefined) return;
+    room.away = null;
     if (stat?.mtimeMs === room.seen) return;
     // A file that cannot be read stays as it is until it can: the hub writes nothing over a person's edit.
-    const unread = (error) => { if (error.other) return true; room.unread = error.message; room.seen = stat?.mtimeMs; console.error(error.message); return false; };
+    const unread = (error) => {
+      if (error.other) return true;
+      // A device that went between the look and the reading is away, and the file is read when it answers.
+      if (room.entry.disk.far && error.status !== 422) { room.away = error.message; return false; }
+      room.unread = error.message; room.seen = stat?.mtimeMs; console.error(error.message); return false;
+    };
     if (stat && !await take(room).then(() => false, unread)) return;
-    await again(room.entry.project);
+    if (!await again(room.entry.project) && room.entry.disk.far) { room.away = "The folder could not be read"; return; }
     const now = known.get(room.id);
-    if (!now || path.join(now.root, now.path) === path.join(room.entry.root, room.entry.path)) return shut(room, "This paper's file is gone");
+    if (!now || spot(now) === spot(room.entry)) return shut(room, "This paper's file is gone");
     room.entry = now;
     await take(room).catch(unread);
   }
   async function save(room) {
     await look(room);
     if (room.gone) return;
-    const text = written(room.id, blocksOf(room)), file = path.join(room.entry.root, room.entry.path);
-    if (!room.unread && text !== room.text) { await put(file, text); room.text = text; room.seen = (await fs.stat(file)).mtimeMs; }
+    const text = written(room.id, blocksOf(room)), { disk, path: at } = room.entry;
+    const owed = path.join(room.entry.side, "unwritten");
+    if (!room.unread && !room.away && text !== room.text) {
+      // A device that goes as it is written to is away: the state is kept, and the file is written when it answers.
+      await disk.write(at, text).then(async () => { room.text = text; room.seen = (await disk.stat(at))?.mtimeMs; if (disk.far) await fs.rm(owed, { force: true }); }, (error) => { if (!disk.far) throw error; room.away = error.message; });
+    }
     await writePrivateFile(path.join(room.entry.side, "state.yjs"), Y.encodeStateAsUpdate(room.doc));
+    // Kept across a restart: which file the state is ahead of, so the file read then is not taken over what was written here.
+    if (room.away && room.text !== undefined && text !== room.text) await writePrivateFile(owed, hash(room.text));
   }
   function shut(room, why) {
     clearTimeout(room.saving);
@@ -245,9 +317,10 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     /** One at a time: a save, a look at the file and a rename never cross. */
     room.work = (job) => (room.queue = room.queue.then(job, job));
     await fs.mkdir(entry.side, { recursive: true });
-    void excludeConduitFromGit(entry.root).catch(() => {});
+    if (!entry.disk.far) void excludeConduitFromGit(entry.disk.key).catch(() => {});
     const kept = await fs.readFile(path.join(entry.side, "state.yjs")).catch(() => null);
     if (kept) Y.applyUpdate(doc, kept);
+    room.owed = await fs.readFile(path.join(entry.side, "unwritten"), "utf8").catch(() => null);
     await take(room);
     const store = createMarkupStore({
       folder: path.join(entry.side, "markup"), listeners: path.join(dataRoot, "feedback"), on: `the paper ${entry.name} (document ${id})`,
@@ -292,8 +365,10 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     return rooms.get(id);
   };
   /** The live copy, the file looked at first: what an agent reads or changes is the paper as it is on disk now. */
-  const current = async (id) => { const room = await held(id); await room.work(() => look(room)); return room.gone ? (() => { throw fault(404, `No paper ${id}`); })() : room; };
-  const looking = setInterval(() => { for (const loading of rooms.values()) void loading.then((room) => room.peers.size ? room.work(() => look(room)) : null).catch(() => {}); }, LOOK_EVERY_MS);
+  /** The file is looked at; what was written while its folder could not be reached is put in it once it can be. */
+  const see = async (room) => { const was = room.away; await look(room); if (was && !room.away) await save(room); };
+  const current = async (id) => { const room = await held(id); await room.work(() => see(room)); return room.gone ? (() => { throw fault(404, `No paper ${id}`); })() : room; };
+  const looking = setInterval(() => { for (const loading of rooms.values()) void loading.then((room) => room.peers.size || room.away ? room.work(() => see(room)) : null).catch(() => {}); }, LOOK_EVERY_MS);
   looking.unref();
   const told = async (entry) => { await tell(); changed(entry.project); return shown(entry); };
   const listing = (project) => JSON.stringify([...known.values()].filter((entry) => entry.project === project).map((entry) => [entry.id, entry.path]).sort());
@@ -303,21 +378,25 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     async list(project) {
       const of = await projectOf(project), mine = () => [...known.values()].filter((entry) => entry.project === of.id);
       await scan(of);
-      if (!(await Promise.all(mine().map((entry) => there(path.join(entry.root, entry.path))))).every(Boolean)) await again(of.id);
+      // A folder on this disk is cheap to ask about each paper. One on a device is read again, behind the answer, when it was last read a while ago: its changes are not told to the hub, and reading it is a call to the device for each directory.
+      if (!remoteNode(of)) { if (!(await Promise.all(mine().map((entry) => entry.disk.stat(entry.path).catch(() => null)))).every(Boolean)) await again(of.id); }
+      else if (Date.now() - (scanned.get(of.id) ?? 0) > FAR_SCAN_MS) { scanned.set(of.id, Date.now()); const before = listing(of.id); void again(of.id).then(() => { if (listing(of.id) !== before) changed(of.id); }); }
       return mine().map(shown).sort((a, b) => a.name.localeCompare(b.name));
     },
     /** A new paper, empty, in a folder of the project (unsaid: its root). */
     async create(project, { kind = "paper", name, folder: into = "" } = {}) {
       if (kind !== "paper") throw fault(400, `There is no artifact of the kind ${kind}`);
-      const of = await projectOf(project), { root } = place(of), at = [within(into), `${named(name)}${EXT}`].filter(Boolean).join("/");
-      await fs.writeFile(await real(root, at), written(crypto.randomBytes(8).toString("hex"), [empty()]), { flag: "wx" }).catch((error) => {
+      const of = await projectOf(project), { disk } = place(of), at = [within(into), `${named(name)}${EXT}`].filter(Boolean).join("/");
+      await disk.inside(at);
+      await disk.create(at, written(crypto.randomBytes(8).toString("hex"), [empty()])).catch((error) => {
         throw error.code === "EEXIST" ? fault(409, `A paper named ${path.basename(at, EXT)} is already there`) : error.code === "ENOENT" ? fault(404, `No folder ${into} in this project`) : error;
       });
       return told(await adopt(of, at));
     },
     /** The artifact a file of the project is. */
     async at(project, file) {
-      const asked = await projectOf(project), full = path.join(place(asked).root, within(file)), of = owner(full, await here()) ?? asked, at = path.relative(place(of).root, full).split(path.sep).join("/");
+      const asked = await projectOf(project), far = Boolean(remoteNode(asked)), full = far ? null : path.join(path.resolve(asked.workingRoot), within(file)), of = far ? asked : owner(full, await here()) ?? asked;
+      const at = far ? within(file) : path.relative(path.resolve(of.workingRoot), full).split(path.sep).join("/");
       if (!at.endsWith(EXT)) throw fault(400, `${file} is not a paper`);
       const before = listing(of.id), entry = await adopt(of, at).catch((error) => { throw error.code === "ENOENT" ? fault(404, `No file ${file} in this project`) : error; });
       const room = await rooms.get(entry.id)?.catch(() => null);
@@ -362,8 +441,8 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     async rename(id, name) {
       const entry = await entryOf(id), room = await rooms.get(id)?.catch(() => null), to = [path.dirname(entry.path), `${named(name)}${EXT}`].filter((part) => part && part !== ".").join("/");
       const move = async () => {
-        if (to !== entry.path && await there(path.join(entry.root, to))) throw fault(409, `A paper named ${path.basename(to, EXT)} is already there`);
-        await fs.rename(path.join(entry.root, entry.path), path.join(entry.root, to));
+        if (to !== entry.path && await entry.disk.stat(to)) throw fault(409, `A paper named ${path.basename(to, EXT)} is already there`);
+        await entry.disk.rename(entry.path, to);
         const next = known.set(id, { ...entry, path: to, name: path.basename(to, EXT) }).get(id);
         if (room) room.entry = next;
         return next;
@@ -374,7 +453,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     async remove(id) {
       const entry = await entryOf(id), room = await rooms.get(id)?.catch(() => null);
       if (room) await room.work(() => shut(room, "This paper was deleted"));
-      await fs.rm(path.join(entry.root, entry.path), { force: true });
+      await entry.disk.remove(entry.path);
       known.delete(id);
       await told(entry);
     },

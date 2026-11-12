@@ -644,7 +644,7 @@ registerMarkupRoutes(app, "/v0/markup", () => feedback);
 // Made at its first use, when everything it names exists: a paper's mated thread and connected chats are the hub's own chats.
 let paperChatHost;
 const paperChats = () => (paperChatHost ??= createChatHost({ registry, projects, backends, chatLogs, findChatContext, launchLiveSession, contextStore, submitPrompt: (...args) => liveSessionStream.submitPrompt(...args) }));
-const documents = lifetime.own("documents", createDocuments({ dataRoot: config.dataRoot, projects, changed: (projectId) => runtimeHub.publish({ type: "artifacts_changed", projectId }),
+const documents = lifetime.own("documents", createDocuments({ dataRoot: config.dataRoot, projects, devices: (project) => projectWorkspace(project, nodeHub), changed: (projectId) => runtimeHub.publish({ type: "artifacts_changed", projectId }),
   chats: () => ({ open: (asked) => paperChats().openChat(asked), notify: (id, text) => paperChats().deliverApproval(id, text), get: (id) => { const chat = registry.metadata(id); return chat ? chatView(chat) : null; } }) }), (owned) => owned.close());
 registerDocumentRoutes(app, documents);
 mcpRuntime.documents = documents;

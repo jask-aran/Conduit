@@ -136,6 +136,12 @@ export function deviceHost({ hub, nodeId, place, label = "" }) {
       value(await env.writeFile(relative, content, ctx));
       return statOf(value(await env.fileInfo(relative, ctx)));
     },
+    /** Every file under the folder, in one call where a walk is one for each directory; null when the device's build has no such call. */
+    async files({ exclude = [], limit }) {
+      const result = await env.listFiles(".", { exclude, maxEntries: limit }, context());
+      if (!result.ok && result.error.code === "not_supported") return null;
+      return value(result).entries.filter((entry) => entry.kind === "file").map((entry) => entry.path);
+    },
     async unlink(relative) { value(await env.remove(relative, { recursive: false }, context())); },
     async mkdir(relative) { value(await env.createDir(relative, { recursive: false }, context())); },
     async rename(from, to) { value(await env.renameFile(from, to, context())); },

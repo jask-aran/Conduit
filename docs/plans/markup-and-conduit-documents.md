@@ -5,8 +5,7 @@ Agreed with the user on 2026-11-12. Milestones 1, 2 and 3 and step (a) of what f
 ## Start here: the brief for the session that builds this
 
 You are picking up a build part-way. Milestones 1 to 3, step (a), papers in panes, step (b), the mated thread and
-connections, and the first half of step (c), the tool `conduit_paper`, are built. Addressing by `@name` is next, and
-waits for the user's answers under "Not settled". Read "Settled with the user on 2026-11-12" first. Read this section, then the rest of this
+connections, and the first half of step (c), the tool `conduit_paper`, are built. Addressing by `@name` and step (d) are next; the user's answers are at the end of "Settled". Read "Settled with the user on 2026-11-12" first. Read this section, then the rest of this
 file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background session the user checks in on.
 
 ### Where things stand (2026-11-12, after step (b) and the tool of step (c))
@@ -172,6 +171,15 @@ The code keeps `document` inside the editor and the hub's service; the pane kind
 - **`/document`** is gone. A paper in the first pane has its place in the app's address (`/?a=artifact:<id>`); no
   standalone route for now. The test document is `Test document.paper` in the Test project's folder
   (`~/.conduit/data/chat/files/test`), id `test`, with its threads.
+
+Settled on 2026-11-12, later the same day (the user said yes to each): `@name` in a Markup comment's words sends
+that comment to the listener of that name, whatever the bar says, and comments for different listeners become one
+item each; typing `@` in a paper's text offers the paper's listeners, and picking one opens a comment on that block
+for that listener, the mention not kept in the text; the person's persistent agent is not a listener on papers for
+now; chats on Conduit's own runtime stay on the CLI for now (`conduit_paper` is not added to their tools); for a
+project on another device, the `.paper` file is on the device and its threads and state are on the hub, where that
+project's chats are; the hub may write `Test paper.paper` and a part file into
+`C:\Users\jaska\Downloads\conduitcomposer` on the Windows device to try this, deleted afterwards.
 
 The order, agreed: (a) done: papers in panes; (b) done: the mated thread as the second view, started by the hub, and
 connections with their rider; (c) the MCP tools and addressing by `@name`; (d) projects on another node; (e) other
@@ -389,14 +397,6 @@ document stays possible: a comment may be a mark, not only words.
   chats still says "No chats" above them; a tab not yet shown that is renamed keeps its old name until shown; the
   Computer dashboard's own file list still opens a `.paper` in the file viewer; a paper in a folder git ignores is
   listed only once it has been opened from the file tree.
-- **Addressing by `@name`, not built, waiting for the user:** (1) whether `@name` typed in a Markup comment's words
-  sends that comment to that listener instead of the bar's; (2) what typing `@name` in the paper's own text does
-  (the plan says it makes a thread: on which words, sent when, and whether the mention stays in the text); (3)
-  whether the person's persistent agent is a listener on every paper; (4) whether `conduit_paper` goes into every
-  chat of Conduit's own runtime.
-- **Step (d), waiting for the user:** whether a paper's threads and state for a project on another device are kept
-  on the hub (recommended: where that project's chats already are) or in the folder on the device; and a go-ahead to
-  make a test paper in one of those folders.
 - Who an author is: every person's client is recorded as `person` until there is a name to give it.
 - Rough edges of step (b), none yet judged by the user: the first comment on a paper goes to its mated thread, on
   the project's default profile, with no word to the person that a model is about to run; the rider's wording and
