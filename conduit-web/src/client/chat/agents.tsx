@@ -125,7 +125,7 @@ export function TurnReports(props: { reports: Message[]; agents: AgentSummary[];
   </AgentReport></AgentRows>;
 }
 
-export function RunningAgents(props: { agents: AgentSummary[]; connections?: { id: string; name: string }[]; onStop?: (id: string) => void; onDisconnect?: (paper: string) => void }) {
+export function RunningAgents(props: { agents: AgentSummary[]; connections?: { id: string; name: string; kind?: string }[]; onStop?: (id: string) => void; onDisconnect?: (paper: string) => void }) {
   const running = createMemo(() => props.agents.filter((agent) => agent.status === "running" && (agent.run || agent.mode === "foreground" || agent.id)));
   const list = createLeavingList(running, (agent) => `child:${agent.conversationId}`);
   // A connected paper rides under Background for as long as it is connected.
@@ -148,7 +148,7 @@ export function RunningAgents(props: { agents: AgentSummary[]; connections?: { i
               onOpen={agent().chatId ? () => openAgentChat(agent().chatId!) : undefined}
               onStop={mode !== "foreground" && props.onStop && agent().id ? () => props.onStop!(agent().id!) : undefined} stopRoom />;
           }}</For>
-          <For each={papersIn(mode)}>{(id) => <AgentRow line title={`Connected to ${papers.get(id)!.name}`} state="running" icon={<Icons.FileText />} activity="Comments come here" stop="Disconnect"
+          <For each={papersIn(mode)}>{(id) => <AgentRow line title={`Connected to ${papers.get(id)!.name}`} name={papers.get(id)!.name} state="running" icon={papers.get(id)!.kind === "site" ? <Icons.Browser /> : <Icons.FileText />} activity="Comments come here" stop="Disconnect"
             motion={papers.leaving(id) ? "leaving" : undefined} onOpen={() => window.dispatchEvent(new CustomEvent("conduit:open-artifact", { detail: { id, beside: true } }))}
             onStop={() => props.onDisconnect?.(id)} />}</For>
         </AgentRiderGroup>}</For>

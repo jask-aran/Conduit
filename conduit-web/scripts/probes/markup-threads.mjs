@@ -62,14 +62,14 @@ try {
   console.log("its reply is in the thread:", (await api(`${paper}/markup/items/${item}`)).messages.some((message) => message.from === "agent" && message.text === "Hello from the tool"));
   await page.goto(`${origin}/chat/${chat}`); await page.waitForSelector(".chat-main textarea", { timeout: 15000 }); await wait(2500);
   console.log("the chat reads the notice:", await page.evaluate(() => document.querySelector(".chat-main")?.textContent.includes('on the paper "Test document"') ?? false));
-  const rider = page.getByRole("button", { name: "Open Connected to Test document" });
+  const rider = page.getByRole("button", { name: "Open Test document" });
   console.log("the chat shows the connection as a rider:", await rider.count() === 1);
   await rider.click(); await page.waitForSelector(".pane-artifact .ui-document-text [data-id]", { timeout: 15000 });
   console.log("the rider opens the paper beside the chat:", await page.evaluate(() => document.querySelectorAll(".pane-artifact").length === 1 && Boolean(document.querySelector(".chat-main"))));
   await page.getByRole("button", { name: "Connect a chat" }).click(); await wait(500);
   console.log("the paper's menu has the chat ticked:", await page.evaluate(() => [...document.querySelectorAll('[role^="menuitem"]')].some((row) => row.getAttribute("aria-checked") === "true" || row.querySelector("svg") && row.dataset.picked !== undefined)));
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Disconnect Connected to Test document" }).click(); await wait(1500);
+  await page.getByRole("button", { name: "Disconnect Test document" }).click(); await wait(1500);
   console.log("Disconnect ends it:", !(await api(`${paper}/connections`)).connections.some((one) => one.chat === chat) && await rider.count() === 0);
   // The other end: the chat's own menu connects it to an artifact of its project.
   // The chat's row is drawn again as its first turn names it, which shuts a menu open on it: the row is pressed once it has its name.

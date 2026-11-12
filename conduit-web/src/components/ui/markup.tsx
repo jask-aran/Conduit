@@ -12,10 +12,11 @@ export type MarkupBox = { left: number; top: number; width: number; height: numb
 const TAG_ROOM = 20;
 const place = (box: MarkupBox): JSX.CSSProperties => ({ left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px`, height: `${box.height}px` });
 
-/** `frozen`: a screenshot of the page, shown over the page (which goes on changing under it). `text`: the pointer selects text. */
-export const MarkupLayer = (props: { select: boolean; text?: boolean; frozen?: string; hidden?: boolean; ref?: (element: HTMLDivElement) => void; children: JSX.Element }) =>
+/** `frozen`: a screenshot of the page, shown over the page (which goes on changing under it). `text`: the pointer selects text.
+ *  `grounded`: what the layer is over may be light (a site), where frost alone is white on white: its bar and cards then have the frost's own dark ground. */
+export const MarkupLayer = (props: { select: boolean; text?: boolean; frozen?: string; hidden?: boolean; grounded?: boolean; ref?: (element: HTMLDivElement) => void; children: JSX.Element }) =>
   // data-mobile-swipe-ignore: a finger's drag on the layer gathers or draws; the drawers do not answer it (edge-swipe.ts).
-  <div ref={props.ref} class="ui-markup-layer" data-select={props.select ? "" : undefined} data-text={props.text ? "" : undefined} data-hidden={props.hidden ? "" : undefined} data-mobile-swipe-ignore={props.select ? "" : undefined}>
+  <div ref={props.ref} class="ui-markup-layer" data-select={props.select ? "" : undefined} data-text={props.text ? "" : undefined} data-hidden={props.hidden ? "" : undefined} data-grounded={props.grounded ? "" : undefined} data-mobile-swipe-ignore={props.select ? "" : undefined}>
     <Show when={props.frozen}><img class="ui-markup-frozen" src={props.frozen} alt="" /></Show>{props.children}
   </div>;
 

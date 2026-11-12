@@ -735,6 +735,8 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
       if (!first) { first = { capture, of }; await transport.picture(mark, capture.blob); }
       for (const [index, blob] of (await cropAreas(capture, comments.map((entry) => entry.on === of ? entry.area : null))).entries()) if (blob) await transport.picture(mark, blob, numberOf(index));
     }
+    // A host that has to ask what is under a mark (a site in its frame) answers later: only that is waited for, and before Send.
+    for (const entry of comments) if (entry.under instanceof Promise) { const found: unknown = await entry.under.catch(() => null); if (found) entry.under = found; else delete entry.under; }
     const result = await transport.send(mark, {
       comments, live, subject: host.subject?.(), to,
       screenshot: first ? { width: first.capture.width, height: first.capture.height, surface: first.capture.surface, outlined: true, of: first.of } : { missing: views.length ? captureError ?? "capture failed" : marksOn("page") ? noPicture() ?? "not taken: Send does not ask the browser to share its tab" : "text only" },
@@ -803,7 +805,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   const sourceLine = (selection: Selection) => selection.whole ? "The whole page, as it was when this was taken." : selection.general ? "About nothing on the page in particular." : selection.quote ? `“${selection.quote.text}”` : selection.elements.length === 1 ? sourceOf(selection.elements[0]!) : undefined;
 
   return <Portal>
-    <MarkupLayer ref={(element) => { layer = element; }} select={select()} text={pointerTool() === "quote" && showing() === "page"} frozen={showing() === "screenshot" ? picture()?.url : undefined} hidden={taking()}>
+    <MarkupLayer ref={(element) => { layer = element; }} grounded={can.grounded} select={select()} text={pointerTool() === "quote" && showing() === "page"} frozen={showing() === "screenshot" ? picture()?.url : undefined} hidden={taking()}>
       <For each={selections}>{(selection) => <Show when={floats(selection) && selection.on === showing()}>
         <Show when={selection.drawings} fallback={<Show when={selection.quote} fallback={<MarkupMark kind="chosen" box={box(selection.elements)} tag={tagOf(selection)} current={openId() === selection.id} onOpen={() => openCard(selection)} />}>{(quote) =>
           <Index each={linesNow(quote())}>{(line, at) => <MarkupMark kind="quote" box={line()} tag={at ? undefined : tagOf(selection)} current={openId() === selection.id} onOpen={at ? undefined : () => openCard(selection)} />}</Index>}</Show>}>{(drawings) => <>

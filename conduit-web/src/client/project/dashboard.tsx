@@ -31,6 +31,7 @@ import { WorkspaceGlyph } from "./workspace-appearance";
 import { WorkspaceAppearanceEditor } from "./workspace-appearance-editor";
 import { Row } from "@/components/ui/row";
 import { artifactsOf } from "../document/artifacts";
+import { ArtifactIcon } from "../document/artifact-rows";
 
 const CLONE_POLL_MS = 500;
 
@@ -432,7 +433,7 @@ export function ProjectDashboard(props: {
   const artifactsGroup = () => <SplitGroup id="dashboard-artifacts" label="Artifacts" actions={<GroupAction onClick={() => props.onContextAction("new-artifact", { project: props.project })}>New</GroupAction>}>
     <Show when={artifactsOf(props.project.id).length} fallback={<SplitEmpty>No artifacts yet.</SplitEmpty>}>
       <For each={artifactsOf(props.project.id)}>{(artifact) =>
-        <Row density="list" element="button" title={artifact.path} draggable="true" data-doc-view={`artifact:${artifact.id}`} onClick={() => window.dispatchEvent(new CustomEvent("conduit:open-artifact", { detail: { id: artifact.id } }))} lead={<Icons.FileText />} label={artifact.name} />}
+        <Row density="list" element="button" title={artifact.path} draggable="true" data-doc-view={`artifact:${artifact.id}`} onClick={() => window.dispatchEvent(new CustomEvent("conduit:open-artifact", { detail: { id: artifact.id } }))} lead={<ArtifactIcon kind={artifact.kind} />} label={artifact.name} />}
       </For>
     </Show>
   </SplitGroup>;

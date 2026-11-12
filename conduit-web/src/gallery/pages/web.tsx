@@ -1,5 +1,5 @@
 import { onMount } from "solid-js";
-import { Icons, ToolBar, LeadInput, WebScreen, WebView, IconButton } from "@/components/ui";
+import { Icons, ToolBar, LeadInput, WebPage, WebScreen, WebView, IconButton } from "@/components/ui";
 import { row, token, type Page } from "../model";
 
 function paint(canvas: HTMLCanvasElement) {
@@ -51,10 +51,12 @@ export const webPage: Page = {
     row("LeadInput · web · plain and secure", "A globe for an address that is not https; a lock for one that is.", () => <div style={{ display: "grid", gap: "var(--space-md)", width: "calc(28 * var(--u-space))" }}>
       <LeadInput kind="web" aria-label="Address" value="http://127.0.0.1:4310/healthz" lead={<Icons.Browser />} /><LeadInput kind="web" aria-label="Address" value="https://example.com/" lead={<Icons.Lock />} /><LeadInput kind="web" aria-label="Address" placeholder="Search or type an address" value="" lead={<Icons.Browser />} />
     </div>),
+    row("WebPage", "A page given as HTML, in a frame that fills what holds it: a site (an artifact), whose scripts run with no origin. It has no ground of its own, so a page that names no colours takes the browser's.", () => <div style={{ display: "flex", height: "calc(12 * var(--u-space))", width: "min(100%, calc(32 * var(--u-space)))" }}>
+      <WebPage title="A site" sandbox="allow-scripts" srcdoc={'<style>:root{color-scheme:light dark;font:16px/1.5 system-ui}</style><h1>Plans</h1><p>One HTML file, drawn as it is.</p>'} /></div>, { code: '<WebPage title={name} sandbox="allow-scripts" srcdoc={html} />' }),
   ],
   tokens: [
     { title: "Address", tokens: [token("--control-tool", "Field height"), token("--tint", "Field fill"), token("--font-data", "Address face"), token("--ring", "Focused hairline")] },
     { title: "Screen", tokens: [token("--background", "Ground behind the page"), token("--duration-quick", "First frame's fade in"), token("--destructive", "Unavailable")] },
   ],
-  api: ["WebView", "LeadInput", "WebScreen"],
+  api: ["WebView", "LeadInput", "WebScreen", "WebPage"],
 };

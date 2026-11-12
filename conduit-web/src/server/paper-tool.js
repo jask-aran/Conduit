@@ -16,12 +16,15 @@ export function PaperTool(runtime) {
       + "replace (block, markdown: the first block written keeps the id), insert (block: the one to write after, or `start`; markdown) and delete (block) change it at once, for everyone who has it open. "
       + "To answer a comment by changing the paper, pass `for: \"<item>/<n>\"`: the person then sees what changed for that comment and can take it back. "
       + "comments lists what the person asked on the paper that is not settled (item ids, comment numbers, the text each is about). "
-      + "reply (item, n?, text) answers in the margin beside the text; resolve (item, n) marks a comment done, which the person then confirms.",
+      + "reply (item, n?, text) answers in the margin beside the text; resolve (item, n) marks a comment done, which the person then confirms. "
+      + "A project also holds sites: one HTML file each (`<name>.site.html`) that the person sees drawn in a pane and marks up. new with kind `site` makes one (so does writing such a file); "
+      + "change it by editing the file with your own tools, not with read, replace, insert or delete. list, comments, reply and resolve take a site's id as they take a paper's.",
     parameters: Type.Object({
       action: Type.Union(ACTIONS.map((value) => Type.Literal(value))),
       paper: Type.Optional(Type.String({ description: "A paper's id." })),
       project: Type.Optional(Type.String({ description: "list, new: a project's id or slug." })),
       name: Type.Optional(Type.String({ description: "new: the paper's name." })),
+      kind: Type.Optional(Type.Union([Type.Literal("paper"), Type.Literal("site")], { description: "new: paper (the default) or site." })),
       block: Type.Optional(Type.String({ description: "A block's id, from read." })),
       markdown: Type.Optional(Type.String()),
       for: Type.Optional(Type.String({ description: "The comment an edit answers, as <item>/<n>." })),
@@ -38,8 +41,8 @@ export function PaperTool(runtime) {
         if (args.action === "list" || args.action === "new") {
           const project = args.project ?? mine.project;
           if (!project) throw new Error("Say which project.");
-          const found = args.action === "list" ? await documents.list(project) : [await documents.create(project, { kind: "paper", name: args.name })];
-          return text(found.map((one) => `${one.id}  ${one.path}`).join("\n") || "No papers in this project.");
+          const found = args.action === "list" ? await documents.list(project) : [await documents.create(project, { kind: args.kind, name: args.name })];
+          return text(found.map((one) => `${one.id}  ${one.path}`).join("\n") || "No papers or sites in this project.");
         }
         const paper = args.paper ?? (mine.papers.length === 1 ? mine.papers[0].id : null);
         if (!paper) throw new Error(mine.papers.length ? `Say which paper: this chat is connected to ${mine.papers.map((one) => one.id).join(", ")}.` : "Say which paper (`list` gives ids).");
@@ -52,7 +55,7 @@ export function PaperTool(runtime) {
         const markup = await documents.markup(paper);
         if (args.action === "comments") {
           const items = await markup.open();
-          return text(items.map((item) => [`item ${item.id} (${item.state}${item.by ? `, ${item.by}` : ""})`, ...item.comments.map((comment) => `  ${comment.n}${comment.resolved ? ` [resolved by ${comment.resolvedBy ?? "the person"}]` : ""}: ${comment.comment}${comment.quote ? `\n     on “${comment.quote}”` : ""}${comment.under?.blocks ? `\n     in block ${comment.under.blocks}` : ""}`),
+          return text(items.map((item) => [`item ${item.id} (${item.state}${item.by ? `, ${item.by}` : ""})`, ...item.comments.map((comment) => `  ${comment.n}${comment.resolved ? ` [resolved by ${comment.resolvedBy ?? "the person"}]` : ""}: ${comment.comment}${comment.quote ? `\n     on “${comment.quote}”` : ""}${comment.under?.blocks ? `\n     in block ${comment.under.blocks}` : ""}${comment.under?.elements ? `\n     over ${comment.under.elements}` : ""}`),
             ...item.messages.map((message) => `  ${message.from === "agent" ? message.by ?? "agent" : "person"}${message.n ? ` on ${message.n}` : ""}: ${message.text}`)].join("\n")).join("\n\n") || "Nothing on this paper waits for an answer.");
         }
         if (!args.item) throw new Error("Say which item.");

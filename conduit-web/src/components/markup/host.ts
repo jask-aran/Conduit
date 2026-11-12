@@ -93,9 +93,11 @@ export type MarkupCapabilities = {
   sent: "corner" | "margin";
   /** The bar is thinner than the library's frost, to show the interface being looked at under it; a document's needs no such thing. */
   thin: boolean;
+  /** What the tool stands over may be light (a site in a frame), where frost alone cannot be read: its bar and cards then have a dark ground of their own. */
+  grounded: boolean;
 };
 /** What a host that declares nothing gets: a collaborator's batched markup with every tool. */
-export const MARKUP_CAPABILITIES: MarkupCapabilities = { deliveries: ["batched"], tools: ["select", "quote", "pen", "highlight", "shape", "text", "erase", "note"], screenshot: true, listeners: true, inks: true, sent: "corner", thin: true };
+export const MARKUP_CAPABILITIES: MarkupCapabilities = { deliveries: ["batched"], tools: ["select", "quote", "pen", "highlight", "shape", "text", "erase", "note"], screenshot: true, listeners: true, inks: true, sent: "corner", thin: true, grounded: false };
 
 /** A comment that stands in the margin, as the surface is told of it: `key` is "<item>/<n>"; `quote` and `under` are what it was sent with; `current`: its card is open; `resolved`: by the person, so it is no longer marked. */
 export type MarkupAnchor = { key: string; quote?: string; under?: Record<string, string | number | boolean>; current: boolean; resolved: boolean };
@@ -128,8 +130,8 @@ export interface MarkupHost {
   client?(): Record<string, unknown> | Promise<Record<string, unknown>>;
   /** What is being marked up, where that is more than the page says of itself: a document's name and text, read at each Send. */
   subject?(): Record<string, string | number | boolean>;
-  /** What a mark covers (its box, in the viewport's pixels), where the host knows more than the pieces there say: a document's lines under a drawing. */
-  under?(box: { left: number; top: number; width: number; height: number }): Record<string, string | number | boolean> | null;
+  /** What a mark covers (its box, in the viewport's pixels), where the host knows more than the pieces there say: a document's lines under a drawing. A host that has to ask (a site in its frame) answers later. */
+  under?(box: { left: number; top: number; width: number; height: number }): Record<string, string | number | boolean> | null | Promise<Record<string, string | number | boolean> | null>;
   /** A shell that can take the page's picture itself, with nothing asked; null where it cannot, and the tool uses display capture. */
   capturePage?(): Promise<Blob | null>;
   /** What the tool is put over, where that is less than the window (a document in one pane): the bar stands at its foot, centred on it. Read once, as the tool opens. */

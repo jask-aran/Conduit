@@ -16,8 +16,9 @@
 //
 // `document <list|new|read|replace|insert|delete> …` is the one part that needs the hub running: the hub holds a paper
 // (a Conduit document, a .paper file in a project's folder) and is the only way to it, so these sign in as
-// `conduit-auth api` does. `list <project>` prints a project's papers, each id first; `new <name> --project <id>`
-// makes one and prints its id. `read` prints the document as
+// `conduit-auth api` does. `list <project>` prints a project's artifacts, each id first; `new <name> --project <id>`
+// makes a paper and prints its id (`--kind site`: a site, one HTML file an agent then edits as a file; the block
+// commands are a paper's alone). `read` prints the document as
 // Markdown, each block under a comment that gives its id; the others change one block, taking Markdown from their last
 // arguments or from stdin, and print the ids of the blocks written. `--as <name>` says who writes; `--for <item>/<n>`
 // says which comment the edit answers.
@@ -185,10 +186,10 @@ if (command === "wait") {
 } else if (command === "document" && rest[0] && (argument === "list" || argument === "new")) {
   const { execFileSync } = await import("node:child_process");
   const flag = (name) => { const at = rest.indexOf(name); return at < 0 ? undefined : rest.splice(at, 2)[1]; };
-  const project = argument === "list" ? rest[0] : flag("--project"), into = flag("--folder");
+  const project = argument === "list" ? rest[0] : flag("--project"), into = flag("--folder"), kind = flag("--kind") ?? "paper";
   if (!project) { console.error("document new takes --project <id or slug>"); process.exit(1); }
   try {
-    const answer = JSON.parse(execFileSync(process.execPath, [new URL("./conduit-auth.mjs", import.meta.url).pathname, "api", argument === "list" ? "GET" : "POST", `/v0/projects/${encodeURIComponent(project)}/artifacts`, ...(argument === "list" ? [] : [JSON.stringify({ kind: "paper", name: rest.join(" "), folder: into })])], { encoding: "utf8" }));
+    const answer = JSON.parse(execFileSync(process.execPath, [new URL("./conduit-auth.mjs", import.meta.url).pathname, "api", argument === "list" ? "GET" : "POST", `/v0/projects/${encodeURIComponent(project)}/artifacts`, ...(argument === "list" ? [] : [JSON.stringify({ kind, name: rest.join(" "), folder: into })])], { encoding: "utf8" }));
     for (const made of answer.artifacts ?? [answer]) console.log(`${made.id}  ${made.path}`);
   } catch (error) { process.stderr.write(error.stdout || `${error.message}\n`); process.exit(1); }
 } else if (command === "document" && rest[0] && (argument === "read" || (["replace", "insert", "delete"].includes(argument) && rest[1]))) {
@@ -212,6 +213,6 @@ if (command === "wait") {
     if (waiter && alive(waiter.id)) console.log(`waiter   ${waiter.name}  (${waiter.cwd}, since ${waiter.since})`);
   }
 } else {
-  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document list <project> | document new <name> --project <id> [--folder <path>] | document read <id> | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block>   (--as <name>; --for <item>/<n> names the comment an edit answers; Markdown from stdin when not given)");
+  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document list <project> | document new <name> --project <id> [--folder <path>] [--kind site] | document read <id> | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block>   (--as <name>; --for <item>/<n> names the comment an edit answers; Markdown from stdin when not given)");
   process.exit(command ? 1 : 0);
 }

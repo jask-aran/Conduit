@@ -1003,9 +1003,8 @@ export function Sidebar(props: {
         </ContextMenuContent>
       </ContextMenu>}>
       <For each={sortChats(blockProps.project.sessions, chatSort())}>{(chat) => <ChatMenu chat={chat} project={blockProps.project} indent />}</For>
-      <Show when={!blockProps.project.sessions.length}><Note kind="nav">No chats</Note></Show>
       {/* Its own boundary: the rows' code arriving holds back nothing else. */}
-      <Show when={opened()}><Suspense><ArtifactRows project={blockProps.project.id} current={props.focusedView} placement={menuPlacement()} phone={isMobileLayout()}
+      <Show when={opened()}><Suspense><ArtifactRows project={blockProps.project.id} empty={<Show when={!blockProps.project.sessions.length}><Note kind="nav">No chats</Note></Show>} current={props.focusedView} placement={menuPlacement()} phone={isMobileLayout()}
         onOpen={(artifact, beside) => beside ? void props.onOpenArtifact(artifact, true) : openOnto(props.onOpenArtifact(artifact))} /></Suspense></Show>
     </NavFolder>;
   };

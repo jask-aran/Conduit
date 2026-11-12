@@ -2903,14 +2903,19 @@ function App() {
   };
   const [browserTitles, setBrowserTitles] = createSignal<Record<string, string>>({});
   const [termTitles, setTermTitles] = createSignal<Record<string, string>>({});
-  const [paperNames, setPaperNames] = createSignal<Record<string, string>>({});
-  // A tab is named before its pane is first shown: the hub is asked, once. Shown, the pane says its name, and its new one when it is renamed.
-  const namedPapers = new Set<string>();
-  const namePaper = (view: string) => {
-    if (namedPapers.has(view)) return;
-    namedPapers.add(view);
-    void import("./document/artifacts").then(({ artifactAbout }) => artifactAbout(view.slice("artifact:".length))).then((found) => setPaperNames((current) => ({ ...current, [view]: found.name })), () => {});
+  const [artifactNames, setArtifactNames] = createSignal<Record<string, { name: string; label: string }>>({});
+  const nameArtifact = (view: string, name: string, label: string) => setArtifactNames((current) => current[view]?.name === name && current[view]?.label === label ? current : { ...current, [view]: { name, label } });
+  // A tab is named before its pane is first shown: the hub is asked, once, and again for every tab drawn when an artifact changes, as one not shown may be the one renamed.
+  const namedArtifacts = new Set<string>(), [artifactsChanged, setArtifactsChanged] = createSignal(undefined, { equals: false });
+  const askArtifactName = (view: string) => {
+    artifactsChanged();
+    if (namedArtifacts.has(view)) return;
+    namedArtifacts.add(view);
+    void import("./document/artifacts").then(({ artifactAbout, ARTIFACT_KINDS }) => artifactAbout(view.slice("artifact:".length)).then((found) => nameArtifact(view, found.name, ARTIFACT_KINDS.find((kind) => kind.kind === found.kind)?.label ?? "Artifact"))).catch(() => {});
   };
+  const renameArtifacts = () => { namedArtifacts.clear(); setArtifactsChanged(); };
+  window.addEventListener("conduit:artifacts-changed", renameArtifacts);
+  onCleanup(() => window.removeEventListener("conduit:artifacts-changed", renameArtifacts));
   /** The paper's pane turns to its mated thread, which the hub makes if there is none: the same tab, as a chat. */
   const showThread = async (pane: PaneKey, paper: string) => {
     try {
@@ -2920,14 +2925,14 @@ function App() {
       await setPaneView(pane, `chat:${chat.id}`);
     } catch (error) { showError(error); }
   };
-  const paperModes = (pane: PaneKey, paper: string, shown: "paper" | "thread") => <Segmented label="View" size="sm" value={shown} options={[{ value: "paper", label: "Paper" }, { value: "thread", label: "Thread" }]}
+  const paperModes = (pane: PaneKey, paper: string, shown: "paper" | "thread") => <Segmented label="View" size="sm" value={shown} options={[{ value: "paper", label: (askArtifactName(`artifact:${paper}`), artifactNames()[`artifact:${paper}`]?.label) ?? "Artifact" }, { value: "thread", label: "Thread" }]}
     onChange={(next) => { if (next !== shown) void (next === "thread" ? showThread(pane, paper) : setPaneView(pane, `artifact:${paper}`)); }} />;
   /** The switch on a chat's header, where the chat is a paper's mated thread. */
   const threadModes = (pane: PaneKey) => { const paper = matedPaper(viewOf(pane)); return paper ? paperModes(pane, paper, "thread") : undefined; };
   const openArtifactFromEvent = (event: Event) => { const { id, beside } = (event as CustomEvent<{ id: string; beside?: boolean }>).detail; void openArtifact(id, beside); };
   window.addEventListener("conduit:open-artifact", openArtifactFromEvent);
   onCleanup(() => window.removeEventListener("conduit:open-artifact", openArtifactFromEvent));
-  const renderArtifactDocument = (pane: PaneKey, id: string) => <ArtifactPane id={id} quiet={feedbackMode() !== null} onName={(name) => setPaperNames((current) => ({ ...current, [`artifact:${id}`]: name }))}
+  const renderArtifactDocument = (pane: PaneKey, id: string) => <ArtifactPane id={id} quiet={feedbackMode() !== null} onAbout={(found, label) => nameArtifact(`artifact:${id}`, found.name, label)}
     chats={(project) => (catalogue.projects().find((item) => item.id === project)?.sessions ?? []).map((chat) => ({ id: chat.id, title: chat.title || "Untitled chat" }))}
     header={(extra) => <PaneHeader modes={paperModes(pane, id, "paper")} actions={<>{extra}{paneTabActions(pane)}</>}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`artifact:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />;
   const renderBrowserDocument = (pane: PaneKey, id: string) => <SheetFill class="pane-browser">
@@ -2985,8 +2990,8 @@ function App() {
   }
   const [fileReveal, setFileReveal] = createSignal<{ entry: FileEntry; request: ReviewNavigationRequest } | null>(null);
   const openFileDocument = async (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest }) => {
-    // A paper is an artifact: its file opens as the paper, never in the file viewer.
-    if (entry.path.endsWith(".paper")) return void await import("./document/artifacts").then(({ artifactAt }) => artifactAt(entry.projectId, entry.path)).then(
+    // A paper or a site is an artifact: its file opens as the artifact, never in the file viewer.
+    if (entry.path.endsWith(".paper") || entry.path.endsWith(".site.html")) return void await import("./document/artifacts").then(({ artifactAt }) => artifactAt(entry.projectId, entry.path)).then(
       ({ id }) => openArtifact(id, options.beside),
       (error) => toast.error(error instanceof Error ? error.message : String(error)));
     const keepTab = tabActivation();
@@ -3530,7 +3535,7 @@ function App() {
     if (files) return files.length ? files.map((entry) => entry.path.split("/").pop()).join(", ") : "File viewer";
     if (view.startsWith("term:")) return termTitles()[view] || "Terminal";
     if (view.startsWith("browser:")) return browserTitles()[view] || "Browser";
-    if (view.startsWith("artifact:")) { namePaper(view); return paperNames()[view] || "Paper"; }
+    if (view.startsWith("artifact:")) { askArtifactName(view); return artifactNames()[view]?.name || "Artifact"; }
     return isPanelTab(view) ? WORKSPACE_TOOL_LABELS[view] : "Pane";
   };
   type PaneTabs = { ids: string[]; used: string[] };

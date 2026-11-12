@@ -3,6 +3,10 @@ import * as Icons from "./icons";
 
 export const WebView = (props: { label: string; children: JSX.Element }) => <section class="ui-web" aria-label={props.label}>{props.children}</section>;
 
+/** A page in a frame filling what holds it; what it may do is the caller's `sandbox`. The frame says the interface is dark, so a page drawn for a dark
+ *  one stands on the pane's ground and any other (one that names no colours: black on nothing) gets the browser's own light canvas, never dark on dark. */
+export const WebPage = (props: JSX.IframeHTMLAttributes<HTMLIFrameElement> & { title: string }) => <iframe {...props} class="ui-web-page" />;
+
 export type AgentPointerState = { x: number; y: number; phase: "move" | "down" | "up" | "click" | "type" | "scroll"; label?: string; key: number; resting?: boolean };
 export const AgentPointer = (props: { pointer: AgentPointerState; by?: string }) =>
   <div class="ui-agent-pointer" aria-hidden="true" data-phase={props.pointer.phase} data-resting={props.pointer.resting ? "" : undefined}

@@ -1,6 +1,8 @@
 /* Over everything, notifications included: a toast or a menu can be what is marked. */
 /* Its line width is every drawing's, and what a note's picture of a comment is drawn with. */
 .ui-markup-layer { position: fixed; inset: 0; z-index: var(--layer-markup); pointer-events: none; font-family: var(--font-sans); stroke-width: var(--stroke); }
+/* conventions-ok: the tool's own surface */
+.ui-markup-layer[data-grounded] { --frost-fill: var(--frost-core-ground); }
 /* touch-action: a finger's drag gathers or draws; it does not scroll the page under the layer. */
 .ui-markup-layer[data-select] { pointer-events: auto; cursor: crosshair; touch-action: none; }
 .ui-markup-layer[data-select][data-text] { cursor: text; }

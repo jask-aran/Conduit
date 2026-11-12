@@ -1,21 +1,30 @@
 # Markup & Conduit Documents
 
-Agreed with the user on 2026-11-12. Milestones 1, 2 and 3 and step (a) of what follows are done. Delete a part when it lands.
+Agreed with the user on 2026-11-12. Milestones 1, 2 and 3 and steps (a) to (d) of what follows are done, and the
+first other kind of artifact of step (e), the site. Delete a part when it lands.
 
 ## Start here: the brief for the session that builds this
 
 You are picking up a build part-way. Milestones 1 to 3 and steps (a) to (d) are built: papers in panes, the mated
 thread and connections, the tool `conduit_paper` and addressing by `@name`, and papers in a project on another device.
-Step (d) has not written to a real device yet (see its section). Step (e), other kinds of artifact, is next and has
-no design. Read "Settled with the user on 2026-11-12" first. Read this section, then the rest of this
+Step (d) has not written to a real device yet (see its section). Of step (e), other kinds of artifact, the site is
+built (see its section): the user has not yet judged its name, its file or how it feels. Read "Settled with the user on 2026-11-12" first. Read this section, then the rest of this
 file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background session the user checks in on.
 
-### Where things stand (2026-11-12, after steps (b), (c) and (d))
+### Where things stand (2026-11-12, after steps (b), (c), (d) and the site of (e))
 
 - Local `main` holds milestones 1 to 3 and steps (a) and (b). `origin/main` is behind it: someone other than the
   building session pushed at 14:57 on 2026-11-12, up to `d8dcf4f9d` (margin threads). Pushing is still the user's call.
 - conduit-local on :4310 runs local `main`. Try it: open the Test project in the sidebar and press "Test document";
   the header's Paper | Thread switch; the header's "Connect a chat" menu, or a chat's menu › Connect to artifact….
+- `markup-sites.mjs` (the site's probe: 13 lines, among them that what the frame asks the hub carries no sign-in)
+  passes on the build with sites, with the five below. The Test project has `Test site.site.html` beside the test
+  document. A real model changed that file for a comment, twice, by accident: a script that took screenshots pressed
+  Escape on a comment whose "Send now" was on, which sends it to the site's thread (Assistant profile). The thread
+  read the item, made the day pass blue in the file, replied and resolved; the pane showed the new file. Take from
+  it: a probe or script that types a comment on an artifact addresses it to a scripted chat or switches "Send now"
+  off first. One hidden chat is left from the same mistake in the probe's first run: the thread of a deleted "Probe
+  site" (`e3d2a9fa…`), which the builder was not allowed to delete.
 - Five probes pass on that build, each with `errors: []`: `markup-threads.mjs` (16 checks: the switch, the hidden
   thread, `@` in the paper and `@name` in a comment, a connected chat handed a comment on the scripted profile,
   `conduit_paper` called as that chat, the rider, both ways to connect),
@@ -35,7 +44,8 @@ file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background
   two at once when each uses narrow edits. The review found the worst defects of steps (a) and (b) before either ran
   on real data.
 - **The initial JS budget is 427,000 B gzip** (was 425,000; the user said "Ok keep going" to a raise of up to 3,000
-  on 2026-11-12). The build is at 426,048. New panes and dialogs load lazily; a rider and a header switch cannot.
+  on 2026-11-12). The build is at 426,292 with sites. New panes and dialogs load lazily; a rider and a header switch
+  cannot. `src/` is at about 116,400 lines of the 119,000 ceiling.
 
 ### Step (b) as built
 
@@ -72,6 +82,54 @@ file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background
   a paper is always the view a reload opens, never its thread; switching from a chat with riders to one with none
   may play the old rows' leave in the new chat (not looked at); the row's accessible names read "Open Connected to
   <paper>"; "Comments come here" on the rider is the builder's copy.
+
+### Step (e), the site, as built (2026-11-12)
+
+The second kind of artifact is a **site**: a page an agent builds, as one HTML file. The builder chose the name, the
+file and the rest below; the user has judged none of it yet.
+
+- **The name.** "Page" is what `DESIGN.md` already calls a dashboard in a pane (`page:<id>`), so the kind is a site.
+  A site of several files (a folder) is not built; the name leaves room for it.
+- **A site is a file,** `<name>.site.html` in its project's folder, which opens in any browser as it is. An agent
+  writes it with its own tools; the hub holds no live copy and writes it only when Conduit makes it (the creator, or
+  `new` with kind `site`), from the template `SITE` in `server/documents.js`. An agent that writes such a file has
+  made an artifact: the project's list takes it when the folder is next read.
+- **Its id** is its path's, kept in `<project>/.conduit/artifacts/paths.json`: an agent that writes the file whole
+  and drops the tag below has not made another site. A path with no id yet takes the one the file says
+  (`<meta name="conduit-artifact" content="<id>">`, in the template), so a file moved by hand keeps its threads, and
+  an id is one path's (the old path's entry goes). Rename moves the entry with the file; a new site made at a deleted
+  one's path is a new site. The hub never writes an id into a site, because an agent may be at work on the file. A
+  copy that says another site's id is its own site, by its path. A file moved by hand that says no id is a new site.
+- **The hub** (`server/documents.js`): `KINDS` gives each kind its file ending; `adopt`, `create`, `rename`, `at` and
+  the folder listings take either. A site's room is its Markup store alone (`loadSite`; `markupOf` is what both
+  kinds' stores share), made again when the file has moved, since an item's `read` says where the file is. The block
+  routes refuse a site and say where its file is. `GET /v0/document/<id>?as=site&have=<revision>` gives
+  `{ revision, html? }`: the HTML as JSON, never as a page of the hub's, the revision being the file's time.
+  `?as=about` now also gives `trouble` (a paper whose file cannot be read, or whose device is away).
+- **The frame.** The pane draws the HTML in `<iframe sandbox="allow-scripts" srcdoc>`: its scripts run with no
+  origin, so they cannot read Conduit's page, and a request they make to the hub carries no sign-in (the cookie is
+  `SameSite=Lax`; an installed client's token is not theirs to read). They can reach the internet, as a browser pane
+  can. The pane asks for the file every two seconds while it is looked at and gives the frame the new HTML when the
+  revision changes. The frame is the library's `WebPage`, which says the interface is dark (`color-scheme`), so a site
+  that names no colours gets the browser's light canvas, never dark text on the pane's ground. Not closed: `srcdoc`
+  takes the hub's address as its base, so a site's relative link opens the hub's sign-in page inside the frame.
+- **The bridge** (`client/document/site-bridge.ts`): a script put after the site's HTML, which says where the site
+  is scrolled (a new version opens there) and, asked by message, which elements lie in a box. That is the site's
+  `MarkupHost.under`, which may now answer later (a Promise): a comment drawn on a site carries `under.elements`,
+  each as its parent and itself with its text (`section#plans > h2 “Plans”`), which is how an agent finds it in the
+  file.
+- **Markup on a site**: the drawing tools and the note, pictures as interface feedback takes them, sent comments in
+  the tool's own corner stack. `MarkupCapabilities.grounded` (the layer's `data-grounded`) gives the bar and the
+  cards the frost's dark ground, since frost alone over a light site is white on white. Not offered: selecting text, the quote, "Ask the agent", a margin, Revert (the file's
+  history is git's). The mated thread, the Site | Thread switch, connections and the rider are the paper's.
+- **For agents**: `conduit_paper`'s `list` and `new` take sites (`kind: "site"`), and `comments`, `reply` and
+  `resolve` work by a site's id; `conduit-markup document new <name> --project <id> --kind site`.
+- An unanchored review of the diff found, before it was committed: a paper that cannot be read threw where it
+  should have been refused (422); a site lost its threads when its file was written without the tag; a site deleted
+  by hand was never told to clients (`again` now tells them whenever a reading changes the list); a link out of the
+  folder was followed (`inside` now looks at the file itself). All four are mended and in the hub's checks.
+- Not proven: a phone, the installed clients (their own picture-taking over a frame), the headed Chrome, a site in a
+  project on another device, the gallery's `WebPage` row (written, not looked at). Not built: see "Not settled".
 
 ### Step (c) as built: the tool `conduit_paper` and addressing by `@name`
 
@@ -422,4 +480,12 @@ document stays possible: a comment may be a mark, not only words.
   the project's default profile, with no word to the person that a model is about to run; the rider's wording and
   mark; whether the thread should be kept when its paper is deleted; whether an agent's tools should see a paper's
   thread; "Connect a chat" uses the chat icon, since the library has no link icon.
+- The site, none of it judged by the user: its name; that it is one file (images and scripts beside it are not
+  served to the frame); that a site may reach the internet; no way to open its source from its row (the file tree
+  opens the site); comments stand in the corner stack, not beside what they are about; marks do not follow the site
+  when it scrolls (the layer has every press while annotating, so it holds still), and what a mark names is read at
+  Send, so a comment drawn before the site was scrolled names what is there after; the first ink is white, which a
+  light site hides but for its shadow; a comment's card is titled for the library's piece ("over WebPage") and its
+  source; nothing shows that a new version has just arrived; the first comment on a site starts a model with no
+  word (as on a paper); other kinds (a whiteboard) have no design.
 - Moving Markup and the editor into the shared components package: parked until the package's scope is decided.
