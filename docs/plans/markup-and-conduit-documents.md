@@ -88,6 +88,25 @@ file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background
 - Any chat can read or change any paper it names; a connection only decides who is handed comments. The `.paper`
   file is in the project's folder, which those agents can already write.
 
+### Step (d), read and not built: a project on another device
+
+- Such a project has `local: false` and a `nodeId` (`remoteNode` in `place.js`); its `workingRoot` is the path on the
+  device, and its `chatRoot` is on the hub's disk, where its chats and their attachments already are. Today they are
+  conduitcomposer and Screenshots (the Windows device) and Writing (a third device).
+- The hub's way to a device's files is `projectWorkspace(project, nodeHub)` (`workspace-host.js`), a host with
+  `stat`, `list`, `read` (a Buffer), `write`, `rename`, `unlink`, `mkdir`, `watch`; under it `listFiles` lists a tree.
+  The file tree and viewer use it through `workspace-inspector.js`. A device that is offline throws `device_offline`
+  at once; a call otherwise times out after 60 s. The folder must be shared with `--write`.
+- What it lacks, against what `server/documents.js` does with `node:fs`: a write is not atomic (write a part file,
+  then `rename`), there is no exclusive create, no `realpath` (the check that a link does not leave the folder), no
+  file birth time (which of two copies keeps the id), and no glob (`listFiles`, then keep `*.paper`). Changes on a
+  device reach `onWorkspaceChange` only while some client has that project's file tree open.
+- The smallest build: `documents.js` reads and writes the `.paper` file through a host (the local one is `node:fs`),
+  polls `stat` every two seconds while a paper is open, and keeps `.conduit/artifacts/<id>/` under `chatRoot` on the
+  hub, as chats do. That last part is not what was settled for local projects (threads in the project's folder), so
+  it is the user's call. No test device is paired with conduit-local: trying it writes a `.paper` into one of the
+  three real folders, which needs the user's go-ahead.
+
 ### Step (a) as built
 
 - `server/documents.js` is the whole of it on the hub. Which papers exist is read from the folders, never kept: at
@@ -375,6 +394,9 @@ document stays possible: a comment may be a mark, not only words.
   (the plan says it makes a thread: on which words, sent when, and whether the mention stays in the text); (3)
   whether the person's persistent agent is a listener on every paper; (4) whether `conduit_paper` goes into every
   chat of Conduit's own runtime.
+- **Step (d), waiting for the user:** whether a paper's threads and state for a project on another device are kept
+  on the hub (recommended: where that project's chats already are) or in the folder on the device; and a go-ahead to
+  make a test paper in one of those folders.
 - Who an author is: every person's client is recorded as `person` until there is a name to give it.
 - Rough edges of step (b), none yet judged by the user: the first comment on a paper goes to its mated thread, on
   the project's default profile, with no word to the person that a model is about to run; the rider's wording and
