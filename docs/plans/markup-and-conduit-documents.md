@@ -4,21 +4,22 @@ Agreed with the user on 2026-11-12. Milestones 1, 2 and 3 and step (a) of what f
 
 ## Start here: the brief for the session that builds this
 
-You are picking up a build part-way. Milestones 1 to 3, step (a), papers in panes, step (b), the mated thread and
-connections, and the first half of step (c), the tool `conduit_paper`, are built. Addressing by `@name` and step (d) are next; the user's answers are at the end of "Settled". Read "Settled with the user on 2026-11-12" first. Read this section, then the rest of this
+You are picking up a build part-way. Milestones 1 to 3 and steps (a) to (d) are built: papers in panes, the mated
+thread and connections, the tool `conduit_paper` and addressing by `@name`, and papers in a project on another device.
+Step (d) has not written to a real device yet (see its section). Step (e), other kinds of artifact, is next and has
+no design. Read "Settled with the user on 2026-11-12" first. Read this section, then the rest of this
 file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background session the user checks in on.
 
-### Where things stand (2026-11-12, after step (b) and the tool of step (c))
+### Where things stand (2026-11-12, after steps (b), (c) and (d))
 
 - Local `main` holds milestones 1 to 3 and steps (a) and (b). `origin/main` is behind it: someone other than the
   building session pushed at 14:57 on 2026-11-12, up to `d8dcf4f9d` (margin threads). Pushing is still the user's call.
 - conduit-local on :4310 runs local `main`. Try it: open the Test project in the sidebar and press "Test document";
   the header's Paper | Thread switch; the header's "Connect a chat" menu, or a chat's menu › Connect to artifact….
-- Five probes pass on that build, each with `errors: []`: `markup-threads.mjs` (14 checks: the switch, the hidden
-  thread, a connected chat handed a comment on the scripted profile, `conduit_paper` called as that chat, the rider,
-  both ways to connect),
-  `markup-artifacts.mjs` (10), `markup-document.mjs` (17), `markup-delivery.mjs`, `markup-thread.mjs`. In eight runs
-  of `markup-threads.mjs` one stopped on a click that timed out; which click was not found. Not run: `npm test`,
+- Five probes pass on that build, each with `errors: []`: `markup-threads.mjs` (16 checks: the switch, the hidden
+  thread, `@` in the paper and `@name` in a comment, a connected chat handed a comment on the scripted profile,
+  `conduit_paper` called as that chat, the rider, both ways to connect),
+  `markup-artifacts.mjs` (10), `markup-document.mjs` (17), `markup-delivery.mjs`, `markup-thread.mjs`. Not run: `npm test`,
   the headed Chrome on :9222, a real phone, Android, desktop, two people typing in one paragraph. Real models were tried
   three times on the Test document. Its mated thread (Conduit's own runtime) took a comment and answered "pong" with
   the CLI in about 20 seconds. Asked to use `conduit_paper`, the same thread said it has no such tool (see step (c)).
@@ -72,7 +73,19 @@ file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background
   may play the old rows' leave in the new chat (not looked at); the row's accessible names read "Open Connected to
   <paper>"; "Comments come here" on the rider is the builder's copy.
 
-### Step (c) so far: the tool `conduit_paper`
+### Step (c) as built: the tool `conduit_paper` and addressing by `@name`
+
+- **`@name` in a comment's words** (`components/markup/tool.tsx`): `addressOf` finds `@` followed by a listener's
+  whole name (the longest that matches; no letter or digit before it). `send` gives each named listener an item of
+  its own (`deliver`, its own mark, `to` that name) before the rest go as they did. The note's title says "For
+  <name>". This holds on every surface Markup runs on. In the corner (the interface's Markup) a comment sent this
+  way leaves the stack and is found under "Sent before"; it is not the thread the corner follows.
+- **`@` typed in a paper** (`components/document/editor.tsx`): the plugin `mentioning` starts a mention only on this
+  person's typing at a word's start, in a block that holds other text; a `Popover` at the `@` lists the listeners,
+  filtered as they type (Up, Down, Enter or Tab, Escape). Picking one deletes the typed `@…` and opens the comment
+  "Ask the agent" opens, for that listener: the tool hands the paper `MarkupHost.asks` (who listens, and `ask`), so
+  `@` offers nothing while Markup is closed. The menu is drawn beside `DocumentSheet`, never in it: the sheet's
+  column is the editor's to fill, and a child of it that comes and goes clears the paper's text.
 
 - `server/paper-tool.js`, in `conduitTools` (`server/conduit-mcp.js`), so it is served at Conduit's MCP endpoint to
   every harness that is handed it. One tool with an `action`: `list`, `new`, `read` (Markdown with block ids),
@@ -87,24 +100,31 @@ file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background
 - Any chat can read or change any paper it names; a connection only decides who is handed comments. The `.paper`
   file is in the project's folder, which those agents can already write.
 
-### Step (d), read and not built: a project on another device
+### Step (d) as built: a paper in a project on another device
 
-- Such a project has `local: false` and a `nodeId` (`remoteNode` in `place.js`); its `workingRoot` is the path on the
-  device, and its `chatRoot` is on the hub's disk, where its chats and their attachments already are. Today they are
-  conduitcomposer and Screenshots (the Windows device) and Writing (a third device).
-- The hub's way to a device's files is `projectWorkspace(project, nodeHub)` (`workspace-host.js`), a host with
-  `stat`, `list`, `read` (a Buffer), `write`, `rename`, `unlink`, `mkdir`, `watch`; under it `listFiles` lists a tree.
-  The file tree and viewer use it through `workspace-inspector.js`. A device that is offline throws `device_offline`
-  at once; a call otherwise times out after 60 s. The folder must be shared with `--write`.
-- What it lacks, against what `server/documents.js` does with `node:fs`: a write is not atomic (write a part file,
-  then `rename`), there is no exclusive create, no `realpath` (the check that a link does not leave the folder), no
-  file birth time (which of two copies keeps the id), and no glob (`listFiles`, then keep `*.paper`). Changes on a
-  device reach `onWorkspaceChange` only while some client has that project's file tree open.
-- The smallest build: `documents.js` reads and writes the `.paper` file through a host (the local one is `node:fs`),
-  polls `stat` every two seconds while a paper is open, and keeps `.conduit/artifacts/<id>/` under `chatRoot` on the
-  hub, as chats do. That last part is not what was settled for local projects (threads in the project's folder), so
-  it is the user's call. No test device is paired with conduit-local: trying it writes a `.paper` into one of the
-  three real folders, which needs the user's go-ahead.
+- Such a project has `local: false` and a `nodeId` (`remoteNode` in `place.js`); its `chatRoot` is on the hub's disk,
+  where its chats are. Today they are conduitcomposer and Screenshots (the Laptop) and Writing (the Desktop's
+  Windows side).
+- `server/documents.js` reaches a paper's file through a disk: `localDisk(root)` (`node:fs`) or `deviceDisk(host)`,
+  over `projectWorkspace(project, nodeHub)` (`workspace-host.js`, which took `files`). Each has `read`, `stat` (null:
+  not there; a failure: the folder cannot be reached), `write` (a part file, then a rename; on a device, written in
+  place where the rename fails), `create`, `rename`, `remove`, `inside`, `files`. A paper's threads and state stay in
+  `<chatRoot>/.conduit/artifacts/<id>/` on the hub.
+- A device's folder is read when it is first asked about, and again, behind the answer, when `list` finds the last
+  reading older than 15 s. The device's build has no one-call listing, so it is walked: a call for each directory,
+  six deep, folders git ignores included. A device that drops while it is read fails the reading, so its papers are
+  not taken for deleted. Of a paper and its copy on a device, the first by path keeps the id (a device does not say
+  when a file was made).
+- While the device is away (`room.away`) the live copy goes on and the file is not written; the two-second look
+  writes it when the device answers, with nobody there too. What is owed to the file is marked (`unwritten`, beside
+  the state, holding the hash of the file as last seen), so after a hub restart the kept state is the paper unless
+  the file changed meanwhile. A paper cannot be opened while its device is away.
+- **Not proven on a real device.** Checks with a made-up device pass (24: an edit, a hand edit, away and back, a
+  drop while reading and while writing, a restart while away, a locked file, rename, copy, delete). On the real
+  hub, Writing was listed through its device (no papers; nothing written) and conduitcomposer answered "The device
+  holding this workspace is offline". The write the user approved (`Test paper.paper` in
+  `C:\Users\jaska\Downloads\conduitcomposer`) waits for the Laptop to be online. A person with a paper open is not
+  told that its device is away.
 
 ### Step (a) as built
 
