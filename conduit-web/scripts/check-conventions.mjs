@@ -171,8 +171,8 @@ try {
 // 10. Size limits on tests and documents. Both were added faster than they were kept true, so one that is needed
 //     replaces more than it adds. Fixed ceilings: LIMITS below. Figures that only fall: budgets.json (the tests' total
 //     lines, and the repo's Markdown lines and files outside templates/ and docs/, where a plan is as long as it needs). sourceLines is every .ts, .tsx, .js and .css
-//     line under src/.
-const LIMITS = { tests: 300, testFiles: 100, testFileLines: 300, sourceLines: 115_000 };
+//     line under src/: raised when planned feature work needs the room (117,000 for Markup & Conduit Documents), lowered after a cleanup.
+const LIMITS = { tests: 300, testFiles: 100, testFileLines: 300, sourceLines: 117_000 };
 const budgetFile = path.join(root, "budgets.json");
 const testFiles = walk(path.join(root, "test")).filter((f) => /\.m?[jt]sx?$/.test(f));
 const lineCount = (file) => { const text = fs.readFileSync(file, "utf8"); return text.split("\n").length - (text.endsWith("\n") ? 1 : 0); };

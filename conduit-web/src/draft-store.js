@@ -156,5 +156,3 @@ export class DraftStore {
     return entry;
   }
 }
-
-export const DRAFT_LIMITS = { MAX_DRAFT_BYTES, MAX_DRAFTS, MAX_STASH: 1, MAX_ATTACHMENTS };

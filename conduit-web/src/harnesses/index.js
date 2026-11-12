@@ -6,8 +6,6 @@ import { manifest as fx } from "./fx.js";
 import { manifest as opencode } from "./opencode.js";
 import { manifest as testStream } from "./test-stream.js";
 
-export const NAME_GENERATION_MODES = Object.freeze(["conduit", "backend"]);
-
 // Registration, the harness catalogue, profile selection, thread discovery and detection all read from here, so adding
 // a harness is this array plus its module.
 export const MANIFESTS = [conduitRuntime, codex, claudeCode, fx, opencode, chatgptWeb, testStream];

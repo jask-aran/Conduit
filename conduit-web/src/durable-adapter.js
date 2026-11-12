@@ -1701,26 +1701,6 @@ export class DurableAdapter extends EventEmitter {
     return stopBackgroundSubagent(await this.runtime.open(), Number(chat.backend?.opaqueSession), id, this.context);
   }
 
-  async subagents({ liveSessionId, opaqueSession }) {
-    const record = liveSessionId ? this.get(liveSessionId) : null;
-    const current = record?.conversationId ?? Number(opaqueSession);
-    if (!Number.isInteger(current)) return [];
-    const harness = await this.runtime.open();
-    const children = [];
-    for (const conversationId of [...await this.branchesOf(current), current]) {
-      const conversation = await harness.conversation(conversationId, this.context);
-      const page = conversation ? await conversation.commit((tx) => tx.scanConversations({ ownerConversationId: conversationId }, 200), this.context) : { items: [] };
-      for (const child of page.items) {
-        const handle = await harness.conversation(child.id, this.context);
-        const first = handle && (await handle.entries({ order: "ascending" }, 5, undefined, this.context)).items.find((entry) => entry.kind === USER_ENTRY || entry.kind === "pi.user");
-        children.push({ conversationId: String(child.id), parentConversationId: String(conversationId),
-          task: textOf(first?.model?.[0]?.content) || (typeof first?.model?.[0]?.content === "string" ? first.model[0].content : ""),
-          answer: (await this.runtime.lastAnswer(child.id)) || null });
-      }
-    }
-    return children;
-  }
-
   /**
    * Every branch the chat left moves too (an edit there forks from it). Nothing in the store moves. The caller closes
    * the chat's live session first.

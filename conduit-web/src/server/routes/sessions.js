@@ -191,10 +191,6 @@ export function registerSessionRoutes(app, {
     }
   });
 
-  app.post("/v0/sessions/:id/duplicate", (_request, response) => {
-    response.status(409).json({ error: "chat_duplication_deferred", message: "Chat duplication is unavailable while attachment ownership is unsettled." });
-  });
-
   app.delete("/v0/sessions/:id", async (request, response) => {
     if (!isChatId(request.params.id)) return response.status(404).json({ error: "chat_not_found" });
     const deleted = await lifecycle.deleteChat(request.params.id, async () => {

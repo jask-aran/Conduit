@@ -72,6 +72,4 @@ export function capabilitiesOf(live, record = {}) {
   return held;
 }
 
-export const SCREEN_CAPABILITIES = Object.fromEntries(entries.filter(([, capability]) => capability.screen).map(([key, capability]) => [capability.screen, key]));
-
 export const environmentName = (device, node) => (device.nodes.length > 1 ? `${device.name} · ${node.name}` : device.name);

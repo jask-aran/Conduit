@@ -10,25 +10,6 @@ import { stopSessionProcesses } from "../../session-operations.js";
 import { agentProfiles, harnessCapabilities, profileSelection, templateBackend } from "../../chat-backend.js";
 import { manifestForImplementation } from "../../harnesses/index.js";
 
-const opaqueSessionId = (chat) => typeof chat.backend?.opaqueSession === "string"
-  ? chat.backend.opaqueSession
-  : chat.backend?.opaqueSession?.threadId || null;
-
-export function projectBackendSessions({ chats, sessions, projectId, implementation }) {
-  const backendChats = chats.filter((chat) => chat.backend?.implementation === implementation);
-  const trackedIds = new Set(backendChats.map(opaqueSessionId).filter(Boolean));
-  return {
-    tracked: backendChats.filter((chat) => chat.projectId === projectId && chat.status !== "subagent").map(chatView),
-    adoptable: sessions.filter((session) => !trackedIds.has(session.id)),
-  };
-}
-
-const discoverableFrom = (backends) => (implementation) => {
-  const manifest = backends.manifestFor?.(implementation);
-  if (!manifest || manifest.discovery === "none") return null;
-  return (backends.local || backends.adapters).has(implementation) ? manifest : null;
-};
-
 export function registerChatRoutes(app, {
   nodeHub = null,
   announceChat = null,
@@ -173,9 +154,6 @@ export function registerChatRoutes(app, {
     });
   });
 
-  const discoverable = discoverableFrom(backends);
-  const defaultDiscovery = () => backends.where((manifest) => manifest.discovery !== "none")
-    .filter((implementation) => (backends.local || backends.adapters).has(implementation))[0] || "";
   const profileFor = (profileId) => agentProfiles(config.piTemplates, {
     available: new Set([...(backends.local || backends.adapters.keys())]),
   }).find((profile) => profile.id === profileId && profile.management === "agent");
@@ -193,60 +171,6 @@ export function registerChatRoutes(app, {
       if (error.code !== "live_process_limit") console.error("Could not start new chat runtime", { chatId: chat.id, error });
     });
   };
-  app.get("/v0/projects/:projectId/backend-sessions", async (request, response) => {
-    const project = await projects.get(request.params.projectId);
-    if (!project) return response.status(404).json({ error: "project_not_found" });
-    await projects.validate(project);
-    const implementation = String(request.query.implementation || defaultDiscovery());
-    if (!discoverable(implementation)) {
-      return response.status(409).json({ error: "backend_discovery_unavailable" });
-    }
-    const adapter = backends.forImplementation(implementation);
-    const sessions = await adapter.listSessions({ cwd: project.workingRoot });
-    const projection = projectBackendSessions({ chats: registry.list({ includeHidden: true, includeUntracked: false }), sessions,
-      projectId: project.id, implementation });
-    response.json({ implementation, replayFidelity: "full",
-      ...projection });
-  });
-
-  app.post("/v0/projects/:projectId/backend-sessions/:sessionId/adopt", async (request, response) => {
-    const project = await projects.get(request.params.projectId);
-    if (!project) return response.status(404).json({ error: "project_not_found" });
-    await lifecycle.withProjects([project.id], async () => {
-      await projects.validate(project);
-      const implementation = String(request.query.implementation || defaultDiscovery());
-      const manifest = discoverable(implementation);
-      if (!manifest) return response.status(409).json({ error: "backend_discovery_unavailable" });
-      const adapter = backends.forImplementation(implementation);
-      const liveId = typeof request.body?.liveSessionId === "string" ? request.body.liveSessionId : "";
-      const live = liveId ? adapter.get(liveId) : null;
-      if (liveId && (!live || live.sessionId !== request.params.sessionId)) {
-        return response.status(409).json({ error: "live_session_mismatch" });
-      }
-      const session = (await adapter.listSessions({ cwd: project.workingRoot }))
-        .find((item) => item.id === request.params.sessionId);
-      if (!session) return response.status(404).json({ error: "backend_session_not_found" });
-      const alreadyTracked = registry.list({ includeHidden: true, includeUntracked: false }).find((chat) =>
-        chat.backend?.implementation === implementation && opaqueSessionId(chat) === session.id);
-      if (alreadyTracked) return response.status(409).json({ error: "backend_session_already_tracked", chatId: alreadyTracked.id });
-      const chat = await registry.create(project, { backend: {
-        profileId: implementation, profileRevision: null, management: "agent", protocol: manifest.protocol,
-        implementation, installationId: manifest.installationId, opaqueSession: { threadId: session.id },
-      } });
-      const timestamp = new Date().toISOString();
-      // Adopted history is not new to anyone: seed the read watermark past it
-      // so the thread does not arrive unread.
-      await registry.update(chat.id, { status: "active", title: session.title,
-        lastMessageAt: session.updatedAt || timestamp, updatedAt: timestamp,
-        lastReadAt: session.updatedAt || timestamp });
-      if (live) {
-        adapter.track(live.id, chat.id);
-        live.ephemeral = false;
-      }
-      response.status(201).json(chatView(registry.metadata(chat.id)));
-    });
-  });
-
   app.post("/v0/chats/:chatId/track", async (request, response) => {
     const context = await findChatContext(request.params.chatId);
     if (!context) return response.status(404).json({ error: "chat_not_found" });
@@ -359,18 +283,6 @@ export function registerChatRoutes(app, {
     await adapter.reset({ liveSessionId: backends.getByChatId(context.chat.id)?.id,
       opaqueSession: context.chat.backend?.opaqueSession, handoff: request.body?.handoff });
     response.json({ ok: true });
-  });
-
-  app.get("/v0/chats/:chatId/subagents{/:conversationId}", async (request, response) => {
-    const context = await findChatContext(request.params.chatId);
-    if (!context) return response.status(404).json({ error: "chat_not_found" });
-    const adapter = backends.forChat(context.chat);
-    if (typeof adapter.subagents !== "function") return response.json({ subagents: [] });
-    const options = { liveSessionId: backends.getByChatId(context.chat.id)?.id, opaqueSession: context.chat.backend?.opaqueSession };
-    const subagents = await adapter.subagents(options);
-    if (!request.params.conversationId) return response.json({ subagents });
-    if (!subagents.some((item) => item.conversationId === request.params.conversationId)) return response.status(404).json({ error: "subagent_not_found" });
-    response.json(await adapter.readTranscript({ opaqueSession: request.params.conversationId }));
   });
 
   app.get("/v0/chats/:chatId/history", async (request, response) => {

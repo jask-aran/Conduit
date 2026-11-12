@@ -1,7 +1,6 @@
 import { createLiveSessionLauncher, enforceLiveProcessLimit, maySpawnProcess } from "../live-session-launcher.js";
 
 export function registerLiveSessionRoutes(app, {
-  attachments,
   backends,
   catalogFor,
   config,
@@ -89,23 +88,6 @@ export function registerLiveSessionRoutes(app, {
       streamUrl: `/v0/live-sessions/${live.id}/stream`,
       ...(modelRecovery ? { modelRecovery } : {}),
     });
-  });
-
-  app.get("/v0/live-sessions/:id/snapshot", async (request, response) => {
-    const live = backends.get(request.params.id);
-    if (!live) return response.status(404).json({ error: "live_session_not_found" });
-    const context = live.chatId ? await findChatContext(live.chatId) : null;
-    const adapter = backends.adapterForRecord(live);
-    const projection = await adapter.readTranscript({
-      liveSessionId: live.id,
-      chatId: live.chatId,
-      opaqueSession: context?.chat?.backend?.opaqueSession,
-      project: context?.project,
-    });
-    if (context) {
-      projection.messages = await attachments.decorateMessages(context.project, context.chat.id, projection.messages);
-    }
-    response.json({ live: backends.view(live), events: live.events, ...projection });
   });
 
   app.delete("/v0/live-sessions/:id/process", async (request, response) => {
