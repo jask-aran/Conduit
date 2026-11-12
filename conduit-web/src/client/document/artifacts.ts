@@ -17,8 +17,8 @@ export const ARTIFACT_KINDS = [
   { kind: "paper", label: "Paper", says: "Blocks of text you and agents write together, with comments in the margin." },
   { kind: "site", label: "Site", says: "A page an agent builds as one HTML file. You mark it up, and the agent changes the file." },
 ] as const satisfies readonly { kind: ArtifactKind; label: string; says: string }[];
-/** The file names that are artifacts, by their ending. */
-export const artifactFile = (path: string): ArtifactKind | null => path.endsWith(".paper") ? "paper" : path.endsWith(".site.html") ? "site" : null;
+/** What a kind is called. */
+export const artifactLabel = (kind: ArtifactKind) => ARTIFACT_KINDS.find((item) => item.kind === kind)?.label ?? "Artifact";
 export const artifactView = (id: string) => `artifact:${id}` as const;
 
 const [lists, setLists] = createSignal<Record<string, Artifact[]>>({});

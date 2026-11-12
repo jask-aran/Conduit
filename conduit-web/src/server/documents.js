@@ -202,7 +202,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   /** The ids of the sites whose files do not say one, by path (paths.json, beside the project's artifacts); `change` is made to them and kept, one at a time. */
   let filing = Promise.resolve();
   const paths = (side, change) => (filing = filing.catch(() => {}).then(async () => {
-    const file = path.join(side, "paths.json"), kept = await fs.readFile(file, "utf8").then(JSON.parse, () => ({})), before = JSON.stringify(kept);
+    const file = path.join(side, "paths.json"), kept = await fs.readFile(file, "utf8").then(JSON.parse).then((read) => read && typeof read === "object" && !Array.isArray(read) ? read : {}, () => ({})), before = JSON.stringify(kept);
     change(kept);
     if (JSON.stringify(kept) !== before) await writePrivateFile(file, `${JSON.stringify(kept)}\n`);
     return kept;
@@ -211,16 +211,17 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   async function adopt(project, at) {
     const { disk, side } = place(project), kind = kindOf(at), name = nameOf(at);
     await disk.inside(at);
-    const text = await disk.read(at), read = kind === "paper" ? paper(text, name) : { id: SITE_ID.exec(text)?.[1] ?? null };
-    const other = read.id && known.get(read.id), copy = other && spot(other) !== disk.at(at) && await other.disk.stat(other.path).catch(() => true);
-    let id = read.id && !copy ? read.id : null;
-    if (!id && kind === "paper") { id = crypto.randomBytes(8).toString("hex"); await disk.write(at, written(id, read.blocks)); }
     // A site's file is its agent's to write, and one written whole may no longer say its id: the id its path has is the site's, before what the file
-    // says, which is taken only for a path that has none (a file moved by hand). An id is one path's.
-    if (kind === "site") id = (await paths(side, (kept) => {
-      kept[at] ??= id ?? crypto.randomBytes(8).toString("hex");
-      for (const [was, held] of Object.entries(kept)) if (held === kept[at] && was !== at) delete kept[was];
-    }))[at];
+    // says, which is read only for a path that has none (a new file, or one moved by hand). An id is one path's.
+    let id = kind === "site" ? (await paths(side, () => {}))[at] : null;
+    if (id && !await disk.stat(at)) throw Object.assign(new Error(`No file ${at}`), { code: "ENOENT" });
+    if (!id) {
+      const text = await disk.read(at), read = kind === "paper" ? paper(text, name) : { id: SITE_ID.exec(text)?.[1] ?? null };
+      const other = read.id && known.get(read.id), copy = other && spot(other) !== disk.at(at) && await other.disk.stat(other.path).catch(() => true);
+      id = read.id && !copy ? read.id : crypto.randomBytes(8).toString("hex");
+      if (kind === "paper" && id !== read.id) await disk.write(at, written(id, read.blocks));
+      if (kind === "site") await paths(side, (kept) => { for (const was of Object.keys(kept)) if (kept[was] === id) delete kept[was]; kept[at] = id; });
+    }
     const links = known.get(id)?.links ?? await fs.readFile(path.join(side, id, "links.json"), "utf8").then(JSON.parse).then((kept) => ({ thread: kept.thread ?? null, connections: [...kept.connections ?? []] }), () => ({ thread: null, connections: [] }));
     return known.set(id, { id, kind, name, path: at, project: project.id, disk, side: path.join(side, id), links }).get(id);
   }
@@ -363,13 +364,14 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   }
   /**
    * An artifact's comments: a Markup store of its own, and what the hub does for the listeners it holds. `where`: what an
-   * item's summary says after the artifact's name; `about`: lines for the item's `read`; `seen`: told the open threads on each look at them.
+   * item's summary says after the artifact's name; `about`: lines for the item's `read` (both read at each Send: a site
+   * is renamed and moved while its store, which holds what is being marked, goes on); `seen`: told the open threads on each look at them.
    */
   function markupOf(room, where, about, seen = () => {}) {
     const { id, entry } = room, store = createMarkupStore({
-      folder: path.join(entry.side, "markup"), listeners: path.join(dataRoot, "feedback"), on: `the ${entry.kind} ${entry.name} ${where}`,
+      folder: path.join(entry.side, "markup"), listeners: path.join(dataRoot, "feedback"), on: () => `the ${entry.kind} ${room.entry.name} ${where()}`,
       held: async () => heldFor(id), done: (item) => `node ${SCRIPT} done ${item}`,
-      about: [`Where a line here says \`node scripts/conduit-markup.mjs\`, run \`node ${SCRIPT}\`: it works from any folder.`, ...about],
+      about: () => [`Where a line here says \`node scripts/conduit-markup.mjs\`, run \`node ${SCRIPT}\`: it works from any folder.`, ...about()],
       log: (line) => console.log(JSON.stringify({ ...line, type: "conduit.document.markup", document: id })),
     });
     const open = async () => { const items = await store.open(); seen(items); return items; };
@@ -391,12 +393,13 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   }
   /** A site as the hub holds it: its comments and nothing of its file, which is read when it is asked for. */
   async function loadSite(entry) {
-    const room = { id: entry.id, entry, at: entry.path, peers: new Set(), queue: Promise.resolve() };
+    const room = { id: entry.id, entry, peers: new Set(), queue: Promise.resolve() };
     room.work = (job) => (room.queue = room.queue.then(job, job));
     await fs.mkdir(entry.side, { recursive: true });
     if (!entry.disk.far) void excludeConduitFromGit(entry.disk.key).catch(() => {});
-    const file = entry.disk.far ? `${entry.path} in the project's folder, on the device that holds it` : entry.disk.at(entry.path);
-    room.markup = markupOf(room, `(the file ${file})`, [`This site is one HTML file, ${file}, which the person sees drawn in a pane. To answer a comment, change that file with your own tools: the pane shows the new version a moment after it is saved. Leave its \`conduit-artifact\` meta tag as it is, and do not rename or move the file.`,
+    // Where the site is now: `known` is told of a rename and of a file found moved.
+    const file = () => { const now = known.get(entry.id) ?? room.entry; return now.disk.far ? `${now.path} in the project's folder, on the device that holds it` : now.disk.at(now.path); };
+    room.markup = markupOf(room, () => `(the file ${file()})`, () => [`This site is one HTML file, ${file()}, which the person sees drawn in a pane. To answer a comment, change that file with your own tools: the pane shows the new version a moment after it is saved. Leave its \`conduit-artifact\` meta tag as it is, and do not rename or move the file.`,
       "A comment's `under.elements` names what of the site its marks were drawn over, each as its parent and itself (`section#plans > h2`) with the text it shows; `rect` and `drawings` are in the pixels of the person's window, not of the site.",
       "If you have the tool `conduit_paper`, its comments, reply and resolve work on a site by its id."]);
     return room;
@@ -413,7 +416,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     room.owed = await fs.readFile(path.join(entry.side, "unwritten"), "utf8").catch(() => null);
     await take(room);
     // A change is accepted when the person resolves its comment (a session's resolve accepts nothing); read on every look at the open threads, which hold every comment the person has not resolved.
-    room.markup = markupOf(room, `(document ${id})`, ["If you have the tool `conduit_paper`, it does the same without a shell: read, replace, insert, delete (with `for`), reply and resolve.", "To answer a comment by changing the document, add `--for <this item's id>/<n>` to `document replace`, `insert` or `delete`: the person then sees which blocks changed for comment n and can take the change back. Resolving the comment yourself does not accept the change for the person: the comment stays in their margin, marked as resolved by you, with the change shown, until they resolve it too."], (items) => {
+    room.markup = markupOf(room, () => `(document ${id})`, () => ["If you have the tool `conduit_paper`, it does the same without a shell: read, replace, insert, delete (with `for`), reply and resolve.", "To answer a comment by changing the document, add `--for <this item's id>/<n>` to `document replace`, `insert` or `delete`: the person then sees which blocks changed for comment n and can take the change back. Resolving the comment yourself does not accept the change for the person: the comment stays in their margin, marked as resolved by you, with the change shown, until they resolve it too."], (items) => {
       const unsettled = new Set(items.flatMap((item) => item.comments.filter((comment) => !(comment.resolved && comment.resolvedBy === "person")).map((comment) => `${item.id}/${comment.n}`)));
       const settled = [...room.changes.entries()].filter(([, change]) => !unsettled.has(change.for));
       if (settled.length) doc.transact(() => { for (const [block] of settled) room.changes.delete(block); });
@@ -428,15 +431,20 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     return room;
   }
   const held = async (id) => {
-    const entry = await entryOf(id), kept = rooms.get(id), had = await kept?.catch(() => null);
-    // A site's comments say where its file is: once it has moved they are made again (once, where two ask together).
-    if (had?.at && had.at !== entry.path && rooms.get(id) === kept) rooms.delete(id);
+    const entry = await entryOf(id);
     if (!rooms.has(id)) { const loading = load(entry); rooms.set(id, loading); loading.catch(() => { if (rooms.get(id) === loading) rooms.delete(id); }); }
     return rooms.get(id);
   };
   /** The live copy, the file looked at first: what an agent reads or changes is the paper as it is on disk now. */
   /** The file is looked at; what was written while its folder could not be reached is put in it once it can be. */
-  const see = async (room) => { const was = room.away; await look(room); if (was && !room.away) await save(room); };
+  const troubleOf = (room) => room?.unread ? `Nothing typed now is kept, because the file cannot be read: ${room.unread}` : room?.away ? "The device that holds this file is away. What is written here is put in the file when it answers." : null;
+  const see = async (room) => {
+    const was = room.away, said = troubleOf(room);
+    await look(room);
+    if (was && !room.away) await save(room);
+    // A pane asks what is wrong when it is told something changed.
+    if (!room.gone && troubleOf(room) !== said) changed(room.entry.project);
+  };
   const current = async (id) => {
     const entry = await entryOf(id);
     if (entry.kind !== "paper") throw fault(400, `${entry.name} is a ${entry.kind}, which has no blocks: it is the file ${entry.path} in its project's folder, changed as any file is`);
@@ -460,7 +468,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     },
     /** A new artifact (a paper, empty, or a site that says what it is), in a folder of the project (unsaid: its root). */
     async create(project, { kind = "paper", name, folder: into = "" } = {}) {
-      if (!Object.hasOwn(KINDS, kind)) throw fault(400, `There is no artifact of the kind ${kind}`);
+      if (typeof kind !== "string" || !Object.hasOwn(KINDS, kind)) throw fault(400, `There is no artifact of the kind ${kind}`);
       const of = await projectOf(project), { disk } = place(of), at = [within(into), `${named(name)}${KINDS[kind]}`].filter(Boolean).join("/"), id = crypto.randomBytes(8).toString("hex");
       await disk.inside(at);
       await disk.create(at, kind === "paper" ? written(id, [empty()]) : SITE(id, nameOf(at))).catch((error) => {
@@ -484,7 +492,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     /** `trouble`: why what a paper's pane shows may not be what its file holds. */
     async about(id) {
       const entry = await entryOf(id), room = await rooms.get(id)?.catch(() => null);
-      return { ...shown(entry), trouble: room?.unread ? `Nothing typed now is kept, because the file cannot be read: ${room.unread}` : room?.away ? "The device that holds this file is away. What is written here is put in the file when it answers." : null };
+      return { ...shown(entry), trouble: troubleOf(room) };
     },
     /** A site's HTML as its file holds it now, with a revision that changes when the file does; `have`: the revision the asker shows, which is not sent again. */
     async site(id, have) {
@@ -549,6 +557,8 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       const entry = await entryOf(id), room = await rooms.get(id)?.catch(() => null);
       if (room) await room.work(() => shut(room, "This paper was deleted"));
       await entry.disk.remove(entry.path);
+      // Deleted here, its path is free: a site an agent later writes there is another one. (One deleted by hand and brought back is still itself.)
+      if (entry.kind === "site") await paths(path.dirname(entry.side), (kept) => { if (kept[entry.path] === id) delete kept[entry.path]; });
       known.delete(id);
       await told(entry);
     },

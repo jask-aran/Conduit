@@ -8,11 +8,9 @@ import { toast } from "@/components/ui/notifications";
 import { api } from "../api/client";
 import { webSocketUrl } from "../api/transport.js";
 import { capturePage } from "../feedback/conduit-feedback";
-import { ARTIFACT_KINDS, artifactAbout, artifactKnown, type Artifact } from "./artifacts";
+import { artifactAbout, artifactKnown, artifactLabel, type Artifact } from "./artifacts";
 import { connect, connectedTo, disconnect } from "./connections";
 import SitePane from "./site-pane";
-
-const ABOUT_MS = 5000;
 
 /*
  * An artifact in a pane (the view `artifact:<id>`): a paper's editor and margin, or a site's frame (SitePane), with
@@ -21,14 +19,11 @@ const ABOUT_MS = 5000;
  * may not be the file, "Mark up" while its bar is closed, and "Connect a chat" over `chats`, the project's.
  */
 export default function ArtifactPane(props: { id: string; quiet?: boolean; chats?: (project: string) => { id: string; title: string }[]; onAbout?: (about: Artifact, label: string) => void; header: (actions: JSX.Element) => JSX.Element }) {
-  // A look of its own that fails keeps what was known; one asked for by a change shows it (deleted, it says so).
-  const [about, { refetch }] = createResource<Artifact, string, "look">(() => props.id, (id, { value, refetching }) => artifactAbout(id).then((found) => { was = found.kind; props.onAbout?.(found, ARTIFACT_KINDS.find((kind) => kind.kind === found.kind)?.label ?? "Artifact"); return found; },
-    (error) => { if (refetching === "look" && value) return value; throw error; }));
+  const [about, { refetch }] = createResource(() => props.id, (id) => artifactAbout(id).then((found) => { was = found.kind; props.onAbout?.(found, artifactLabel(found.kind)); return found; }));
+  // Renamed, it takes its new name; deleted, it says so, where its editor would only wait for the hub; and the hub says when its trouble starts and ends.
   const changed = () => void refetch();
   window.addEventListener("conduit:artifacts-changed", changed);
-  // A paper's device can go away while it is open, and trouble has to clear when it is over.
-  const looking = setInterval(() => { if (found()?.trouble || found()?.kind === "paper") void refetch("look"); }, ABOUT_MS);
-  onCleanup(() => { clearInterval(looking); window.removeEventListener("conduit:artifacts-changed", changed); });
+  onCleanup(() => window.removeEventListener("conduit:artifacts-changed", changed));
   const [mode, setMode] = createSignal<MarkupMode | null>("use"), [sent, setSent] = createSignal(0), [away, setAway] = createSignal(false);
   const client = `document-${Math.random().toString(36).slice(2, 10)}`;
   let frame: HTMLDivElement | undefined, marks: DocumentMarks | undefined, was: Artifact["kind"] | undefined;

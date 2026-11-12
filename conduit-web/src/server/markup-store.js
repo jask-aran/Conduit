@@ -25,6 +25,7 @@ import { randomBytes } from "node:crypto";
  *   snapshot   ({ client, markedAt }) => fields added to the item, read when the item is started, not at Send
  *   on         what is marked up, as an item's summary says it (unsaid: the interface)
  *   about      lines for the item's `read`, saying what those fields are
+ *              (either may be a function, read at each Send, where what is marked up can be renamed or moved)
  *   done       (id) => the command that marks an item handled, as the item states it
  *   answered   false for one-way markup (from people owed no answer): no thread is served or taken, and an item does not invite a reply
  *   log        (entry) => told of each item written
@@ -140,7 +141,7 @@ export function createMarkupStore({ folder, snapshot = async () => ({}), on = "t
     const item = {
       schema: "conduit.markup/1",
       id,
-      summary: `${body.comments.length} ${body.comments.length === 1 ? "comment" : "comments"} on ${on}, from the ${client.kind ?? "browser"} client at ${client.url ?? "?"}`,
+      summary: `${body.comments.length} ${body.comments.length === 1 ? "comment" : "comments"} on ${typeof on === "function" ? on() : on}, from the ${client.kind ?? "browser"} client at ${client.url ?? "?"}`,
       read: [
         "Each entry of `comments` is one thing the person asked for, about one selection of the interface. `on` says what it was made on: `screenshot`, a picture of the page the person took earlier (so what does not last could be marked) and drew on, or `page`, the live page at Send. One of kind `note` is about no selection: words about the interface as a whole, with no picture of its own.",
         "`source` is where that library piece is declared and `styles` where its CSS rules start; paths are from the repository root. `within` is the pieces it sits in, outermost first. `regionSource` is where the app writes the region it is in; to find the app code that drew this instance, search the app's source for `label` or an attribute in `attributes`.",
@@ -150,7 +151,7 @@ export function createMarkupStore({ folder, snapshot = async () => ({}), on = "t
         "screenshot.png shows what `screenshot.of` says (the `screenshot` the person drew on, or the live `page` at Send) with the selections made on it outlined and numbered as `n`. A comment's `picture.file` is that selection alone, cut from the one it was made on: `picture.area` is the part of the page it shows, the area the person dragged round when `dragged`, else its marks with a margin. Look at it first.",
         ...(body.subject ? ["`subject` is what was being marked up, as its host tells it; a comment's `quote` is a run of its text. Its `change` says how to read it as it is now and to write there what a comment asks for, which the person then sees. A comment's `under` is what that host says its marks cover: a document's `blocks` (their ids) and their `text` as it was when the comment was sent."] : []),
         ...(body.live ? ["This item grows: the person may add comments while you work, and `wait` hands you each as it comes. `screenshot.png` is the latest taken; a comment's own picture is as it was when the comment was made."] : []),
-        ...about,
+        ...(typeof about === "function" ? about() : about),
         ...(answered ? [`To answer the person: \`${done(id).replace(/ done .*/, "")} reply ${id} [n] "<words>"\`, n being the comment answered (none: the item as a whole). They read it in the tool beside that comment and may write back; \`wait\` hands you what they say.`] : ["This is one-way markup: the person is not shown an answer."]),
         ...(answered ? [`When one comment is dealt with: \`${done(id).replace(/ done .*/, "")} resolve ${id} <n>\`. The person may resolve or reopen one too, and the item is handled once every comment is resolved.`] : []),
         `When the whole item is dealt with: ${done(id)}`,

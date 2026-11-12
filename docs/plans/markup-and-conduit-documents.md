@@ -98,19 +98,27 @@ file and the rest below; the user has judged none of it yet.
   and drops the tag below has not made another site. A path with no id yet takes the one the file says
   (`<meta name="conduit-artifact" content="<id>">`, in the template), so a file moved by hand keeps its threads, and
   an id is one path's (the old path's entry goes). Rename moves the entry with the file; a new site made at a deleted
-  one's path is a new site. The hub never writes an id into a site, because an agent may be at work on the file. A
-  copy that says another site's id is its own site, by its path. A file moved by hand that says no id is a new site.
+  one's path is a new site, and so is a file an agent writes where a site was deleted in Conduit (Delete frees the
+  path; a file deleted by hand and brought back is still itself). The hub never writes an id into a site, because an
+  agent may be at work on the file, and reads a site's file for its id only when its path has none. A copy that says
+  another site's id is its own site, by its path. A file moved by hand that says no id is a new site. A file moved
+  by hand over another site's path is that path's site, whatever id it says.
 - **The hub** (`server/documents.js`): `KINDS` gives each kind its file ending; `adopt`, `create`, `rename`, `at` and
   the folder listings take either. A site's room is its Markup store alone (`loadSite`; `markupOf` is what both
-  kinds' stores share), made again when the file has moved, since an item's `read` says where the file is. The block
+  kinds' stores share). What an item says of the artifact (its name, where a site's file is) is read at each Send
+  (the Markup store's `on` and `about` may be functions), so a rename keeps the store and what is being marked. The block
   routes refuse a site and say where its file is. `GET /v0/document/<id>?as=site&have=<revision>` gives
   `{ revision, html? }`: the HTML as JSON, never as a page of the hub's, the revision being the file's time.
-  `?as=about` now also gives `trouble` (a paper whose file cannot be read, or whose device is away).
+  `?as=about` now also gives `trouble` (a paper whose file cannot be read, or whose device is away); the hub tells
+  clients (`artifacts_changed`) when it starts and ends, so a pane asks only when told.
 - **The frame.** The pane draws the HTML in `<iframe sandbox="allow-scripts" srcdoc>`: its scripts run with no
   origin, so they cannot read Conduit's page, and a request they make to the hub carries no sign-in (the cookie is
   `SameSite=Lax`; an installed client's token is not theirs to read). They can reach the internet, as a browser pane
-  can. The pane asks for the file every two seconds while it is looked at and gives the frame the new HTML when the
-  revision changes. The frame is the library's `WebPage`, which says the interface is dark (`color-scheme`), so a site
+  can. The pane asks for the file every two seconds while it is looked at (one request at a time) and gives the
+  frame the new HTML when the revision changes. While something of Conduit's is dragged the frame takes no pointer
+  (`WebPage`'s `still`), so a tab or a row dropped on a site's pane lands. Not closed: once the site has been
+  pressed, the keys are the frame's, and Conduit's shortcuts wait until something outside it is pressed; they are
+  not passed on from the frame, since a site could then press them itself. The frame is the library's `WebPage`, which says the interface is dark (`color-scheme`), so a site
   that names no colours gets the browser's light canvas, never dark text on the pane's ground. Not closed: `srcdoc`
   takes the hub's address as its base, so a site's relative link opens the hub's sign-in page inside the frame.
 - **The bridge** (`client/document/site-bridge.ts`): a script put after the site's HTML, which says where the site
@@ -127,7 +135,12 @@ file and the rest below; the user has judged none of it yet.
 - An unanchored review of the diff found, before it was committed: a paper that cannot be read threw where it
   should have been refused (422); a site lost its threads when its file was written without the tag; a site deleted
   by hand was never told to clients (`again` now tells them whenever a reading changes the list); a link out of the
-  folder was followed (`inside` now looks at the file itself). All four are mended and in the hub's checks.
+  folder was followed (`inside` now looks at the file itself). All four are mended and in the hub's checks. A second
+  review, of the commit, found: a rename threw away a site's Markup store and the mark being made with it; the pane's
+  own look every five seconds could hide that an artifact was deleted (the look is gone); a site's pane was dead to
+  drops; a path kept a deleted site's id; `paths.json` unreadable lost a project's sites; a `kind` that was not a
+  word wrote a site into a `.paper`; looks could overtake one another; every site was read whole at each reading of
+  the folder. All mended. Left: a site in a project on another device is asked for every two seconds.
 - Not proven: a phone, the installed clients (their own picture-taking over a frame), the headed Chrome, a site in a
   project on another device, the gallery's `WebPage` row (written, not looked at). Not built: see "Not settled".
 

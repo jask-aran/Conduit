@@ -2911,7 +2911,7 @@ function App() {
     artifactsChanged();
     if (namedArtifacts.has(view)) return;
     namedArtifacts.add(view);
-    void import("./document/artifacts").then(({ artifactAbout, ARTIFACT_KINDS }) => artifactAbout(view.slice("artifact:".length)).then((found) => nameArtifact(view, found.name, ARTIFACT_KINDS.find((kind) => kind.kind === found.kind)?.label ?? "Artifact"))).catch(() => {});
+    void import("./document/artifacts").then(({ artifactAbout, artifactLabel }) => artifactAbout(view.slice("artifact:".length)).then((found) => nameArtifact(view, found.name, artifactLabel(found.kind)))).catch(() => {});
   };
   const renameArtifacts = () => { namedArtifacts.clear(); setArtifactsChanged(); };
   window.addEventListener("conduit:artifacts-changed", renameArtifacts);
