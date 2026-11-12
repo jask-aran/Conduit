@@ -51,7 +51,7 @@ export const webPage: Page = {
     row("LeadInput · web · plain and secure", "A globe for an address that is not https; a lock for one that is.", () => <div style={{ display: "grid", gap: "var(--space-md)", width: "calc(28 * var(--u-space))" }}>
       <LeadInput kind="web" aria-label="Address" value="http://127.0.0.1:4310/healthz" lead={<Icons.Browser />} /><LeadInput kind="web" aria-label="Address" value="https://example.com/" lead={<Icons.Lock />} /><LeadInput kind="web" aria-label="Address" placeholder="Search or type an address" value="" lead={<Icons.Browser />} />
     </div>),
-    row("WebPage", "A page given as HTML, in a frame that fills what holds it: a site (an artifact), whose scripts run with no origin. It has no ground of its own, so a page that names no colours takes the browser's.", () => <div style={{ display: "flex", height: "calc(12 * var(--u-space))", width: "min(100%, calc(32 * var(--u-space)))" }}>
+    row("WebPage", "A page given as HTML, in a frame that fills what holds it: a site (an artifact), whose scripts run with no origin. The frame says the interface is dark: a page drawn for a dark one stands on the ground under it, and one that names no colours takes the browser's light canvas.", () => <div style={{ display: "flex", height: "calc(12 * var(--u-space))", width: "min(100%, calc(32 * var(--u-space)))" }}>
       <WebPage title="A site" sandbox="allow-scripts" srcdoc={'<style>:root{color-scheme:light dark;font:16px/1.5 system-ui}</style><h1>Plans</h1><p>One HTML file, drawn as it is.</p>'} /></div>, { code: '<WebPage title={name} sandbox="allow-scripts" srcdoc={html} />' }),
   ],
   tokens: [
