@@ -18,8 +18,9 @@ type Quote = { range: Range; text: string };
  * `general`: about nothing on the page in particular. `whole`: the page's picture itself. Neither has elements or a mark.
  * `quote`: a run of text selected on the live page; `elements` is then the piece it is in.
  * `preview`: the picture a note shows of it. `sent`: its number in a live item it has gone to; it is then a thread, not to be changed.
+ * `to`: the listener the surface asked it of (a paper's `@`).
  */
-type Selection = { id: number; elements: Element[]; comment: string; on: View; reach?: MarkupBox; drawings?: Drawing[]; from?: { left: number; top: number }; quote?: Quote; general?: true; whole?: true; preview?: string; sent?: number };
+type Selection = { id: number; elements: Element[]; comment: string; on: View; reach?: MarkupBox; drawings?: Drawing[]; from?: { left: number; top: number }; quote?: Quote; general?: true; whole?: true; preview?: string; sent?: number; to?: string };
 const GENERAL = "General note";
 const WHOLE = "Screenshot";
 type Tool = MarkupToolKind;
@@ -185,6 +186,10 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   const [agentName, setAgentName] = createSignal<string | null>(null);
   const agent = () => waiters.latest?.find((waiter) => waiter.name === agentName()) ?? waiters.latest?.[0] ?? null;
   const nextAgent = () => { const all = waiters.latest ?? []; setAgentName(all[(all.findIndex((waiter) => waiter.name === agent()?.name) + 1) % all.length]?.name ?? null); };
+  /** Who a comment is for, whatever the bar hands to: a listener its words name with `@` (the longest that matches), else the one it was asked of. */
+  const addressOf = (selection: Selection) => (waiters.latest ?? []).map((waiter) => waiter.name).sort((a, b) => b.length - a.length)
+    .find((name) => new RegExp(`(?<!\\w)@${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\w)`, "i").test(selection.comment)) ?? selection.to ?? null;
+  const forWhom = (selection: Selection) => { const to = addressOf(selection); return to ? { label: `For ${to}` } : undefined; };
   const [sending, setSending] = createSignal(false);
   const [capturing, setCapturing] = createSignal(false);
   // The screenshot. Where taking one asks nothing (a shell that takes its own; a browser that was already asked on this page) it is taken
@@ -370,12 +375,12 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     if (done && !done.sent && !done.whole && done.comment.trim()) posting = posting.then(() => send(done.id));
   };
   /** Selected text is a comment about the piece it is in. */
-  const addQuote = (range: Range) => {
+  const addQuote = (range: Range, to?: string) => {
     const text = quoted(range);
     if (!text) return;
     const holder = range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
     const id = nextId++;
-    keep(); setSelections(selections.length, { id, elements: placed([pieceRoot(holder) ?? holder ?? document.body]), comment: "", on: "page", quote: { range, text } });
+    keep(); setSelections(selections.length, { id, elements: placed([pieceRoot(holder) ?? holder ?? document.body]), comment: "", on: "page", quote: { range, text }, ...(to ? { to } : {}) });
     openNote(id);
   };
   const add = (elements: Element[], drag?: MarkupBox) => {
@@ -617,6 +622,8 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   onMount(() => {
     // The moment is kept in case it is wanted; the tool opens on the live page all the same.
     if (atOpen) void take(false);
+    host.asks?.({ names: () => (waiters.latest ?? []).map((waiter) => waiter.name), ask: addQuote });
+    onCleanup(() => host.asks?.(null));
     for (const type of POINTER_EVENTS) window.addEventListener(type, swallow, { capture: true, passive: false });
     window.addEventListener("keydown", onKeyDown, { capture: true });
     for (const type of ["focusin", "focusout"] as const) window.addEventListener(type, quietFocus, { capture: true });
@@ -692,7 +699,57 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     batch(() => { setSelections(unwrap(selections).filter((selection) => !selection.sent)); setLastSent(0); setThread(null); setReplyTo(undefined); });
     marked = transport.mark(host.clientId()).catch(() => null);
   };
-  /** Every comment not yet sent; or the one that was just Done (`only`). What is sent in one sitting is one item, which grows. */
+  /** Comments as one item to `mark`, numbered from `base`, with their pictures. */
+  async function deliver(mark: string, listed: Selection[], whole: Selection | undefined, base: number, to: string | null, live: boolean) {
+    const numberOf = (index: number) => base + index + 1;
+    // What each comment is, read before any capture so the boxes are the ones in the pictures.
+    const comments: Array<Record<string, unknown> & { area: MarkupBox | null; on?: View }> = listed.map((selection, index) => {
+      if (selection.general) return { n: numberOf(index), comment: selection.comment.trim(), kind: "note" as const, name: GENERAL, area: null };
+      const members = selection.elements.map(describe);
+      const marks = extent(selection), shift = shiftOf(selection), under = host.under?.(marks);
+      const drawings = selection.drawings?.map((drawing) => {
+        const every = Math.max(1, Math.ceil(drawing.points.length / SENT_POINTS));
+        return { kind: drawing.kind, colour: drawing.ink, ...(drawing.kind === "text" ? { text: drawing.text ?? "" } : { weight: drawing.weight ?? "medium" }), points: drawing.points.filter((_, at) => at % every === 0 || at === drawing.points.length - 1).map((point) => [Math.round(point[0] + shift.x), Math.round(point[1] + shift.y)]) };
+      });
+      // The comment's own box is the last word on where it is: a piece the app took off the page measures as nothing.
+      return { ...(members.length > 1 ? { members } : members[0]), n: numberOf(index), on: selection.on, ...(drawings ? { drawings } : {}), ...(selection.quote ? { quote: selection.quote.text } : {}), ...(under ? { under } : {}), dragged: Boolean(selection.reach), area: areaOf(selection), comment: selection.comment.trim(), kind: members.length > 1 ? "group" as const : "component" as const, name: titleOf(selection),
+        rect: { left: Math.round(marks.left), top: Math.round(marks.top), width: Math.round(marks.width), height: Math.round(marks.height) } };
+    });
+    if (whole) comments.push({ n: base + comments.length + 1, comment: whole.comment.trim(), kind: "note", name: WHOLE, area: null });
+    // A picture of each thing looked at that has marks on it: the page as it was, the page as it is. The first is the item's screenshot;
+    // each comment's own picture is cut from the one it was made on. Words alone need none.
+    const marksOn = (on: View) => comments.some((entry) => entry.on === on);
+    const shot = picture();
+    const views = ([shot && (marksOn("screenshot") || whole) ? "screenshot" : null, marksOn("page") && !noPicture() && (Boolean(host.capturePage) || captureHeld()) ? "page" : null] as const).filter((on): on is View => on !== null);
+    let first: { capture: Capture; of: View } | null = null, captureError: string | null = null;
+    for (const of of views) {
+      let capture: Capture | null = of === "screenshot" && !marksOn("screenshot") ? shot!.capture : null;
+      if (!capture) {
+        setShooting(of);
+        setCapturing(true);
+        try { capture = await captureScreen(capturePage); } catch (error) { captureError = error instanceof Error ? error.message : String(error); }
+        setCapturing(false);
+        setShooting(null);
+      }
+      if (!capture) continue;
+      if (!first) { first = { capture, of }; await transport.picture(mark, capture.blob); }
+      for (const [index, blob] of (await cropAreas(capture, comments.map((entry) => entry.on === of ? entry.area : null))).entries()) if (blob) await transport.picture(mark, blob, numberOf(index));
+    }
+    const result = await transport.send(mark, {
+      comments, live, subject: host.subject?.(), to,
+      screenshot: first ? { width: first.capture.width, height: first.capture.height, surface: first.capture.surface, outlined: true, of: first.of } : { missing: views.length ? captureError ?? "capture failed" : marksOn("page") ? noPicture() ?? "not taken: Send does not ask the browser to share its tab" : "text only" },
+      client: { id: host.clientId(), userAgent: navigator.userAgent, url: location.pathname + location.search, viewport: { width: innerWidth, height: innerHeight, devicePixelRatio }, ...await host.client?.() },
+    });
+    const where = result.handed.to ? `Sent, and handed to ${result.handed.to.name}` : "Sent";
+    return { result, count: comments.length, told: captureError ? `${where}, without a screenshot: ${captureError}` : where };
+  }
+  /** Sent comments the margin has from here, or that went as an item of their own: what Undo would bring back has gone with them. */
+  const gone = (went: Selection[]) => {
+    const ids = new Set(went.map((selection) => selection.id));
+    setSelections((all) => all.filter((selection) => !ids.has(selection.id)));
+    history.length = undone.length = 0; counted();
+  };
+  /** Every comment not yet sent; or the one that was just Done (`only`). What is sent in one sitting is one item, which grows; a comment for a listener of its own (`addressOf`) goes to that one, an item for each. */
   async function send(only?: number) {
     const one = only === undefined ? undefined : selections.find((selection) => selection.id === only);
     if (sending() || (only === undefined ? !canSend() : !one || Boolean(one.sent))) return;
@@ -701,64 +758,35 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     setCursor(null);
     try {
       if (lastSent() && thread()?.state === "handled") startAfresh();
+      const all = one ? [one] : unsent(), wholeOne = one ? undefined : selections.find((selection) => selection.whole && !selection.sent && selection.comment.trim());
+      const addressed = new Map<string, Selection[]>();
+      for (const selection of [...all, ...(wholeOne ? [wholeOne] : [])]) { const to = addressOf(selection); if (to) addressed.set(to, [...(addressed.get(to) ?? []), selection]); }
+      for (const [to, group] of addressed) {
+        const { told } = await deliver((await transport.mark(host.clientId())).id, group.filter((selection) => !selection.whole), group.find((selection) => selection.whole), 0, to, false);
+        gone(group);
+        if (cornered || !answered) host.notify("sent", told);
+      }
+      // Told now: what follows can fail, and these have gone.
+      if (addressed.size && answered && !cornered) void host.sent?.();
+      const named = new Set([...addressed.values()].flat()), listed = all.filter((selection) => !named.has(selection)), whole = wholeOne && !named.has(wholeOne) ? wholeOne : undefined;
+      if (!listed.length && !whole) return answered ? cornered ? undefined : host.sent?.() : props.onClose();
       const mark = await marked ?? await transport.mark(host.clientId());
       const base = lastSent();
-      const listed = one ? [one] : unsent(), whole = one ? undefined : selections.find((selection) => selection.whole && !selection.sent && selection.comment.trim());
-      const numberOf = (index: number) => base + index + 1;
-      // What each comment is, read before any capture so the boxes are the ones in the pictures.
-      const comments: Array<Record<string, unknown> & { area: MarkupBox | null; on?: View }> = listed.map((selection, index) => {
-        if (selection.general) return { n: numberOf(index), comment: selection.comment.trim(), kind: "note" as const, name: GENERAL, area: null };
-        const members = selection.elements.map(describe);
-        const marks = extent(selection), shift = shiftOf(selection), under = host.under?.(marks);
-        const drawings = selection.drawings?.map((drawing) => {
-          const every = Math.max(1, Math.ceil(drawing.points.length / SENT_POINTS));
-          return { kind: drawing.kind, colour: drawing.ink, ...(drawing.kind === "text" ? { text: drawing.text ?? "" } : { weight: drawing.weight ?? "medium" }), points: drawing.points.filter((_, at) => at % every === 0 || at === drawing.points.length - 1).map((point) => [Math.round(point[0] + shift.x), Math.round(point[1] + shift.y)]) };
-        });
-        // The comment's own box is the last word on where it is: a piece the app took off the page measures as nothing.
-        return { ...(members.length > 1 ? { members } : members[0]), n: numberOf(index), on: selection.on, ...(drawings ? { drawings } : {}), ...(selection.quote ? { quote: selection.quote.text } : {}), ...(under ? { under } : {}), dragged: Boolean(selection.reach), area: areaOf(selection), comment: selection.comment.trim(), kind: members.length > 1 ? "group" as const : "component" as const, name: titleOf(selection),
-          rect: { left: Math.round(marks.left), top: Math.round(marks.top), width: Math.round(marks.width), height: Math.round(marks.height) } };
-      });
-      if (whole) comments.push({ n: base + comments.length + 1, comment: whole.comment.trim(), kind: "note", name: WHOLE, area: null });
-      // A picture of each thing looked at that has marks on it: the page as it was, the page as it is. The first is the item's screenshot;
-      // each comment's own picture is cut from the one it was made on. Words alone need none.
-      const marksOn = (on: View) => comments.some((entry) => entry.on === on);
-      const shot = picture();
-      const views = ([shot && (marksOn("screenshot") || whole) ? "screenshot" : null, marksOn("page") && !noPicture() && (Boolean(host.capturePage) || captureHeld()) ? "page" : null] as const).filter((on): on is View => on !== null);
-      let first: { capture: Capture; of: View } | null = null, captureError: string | null = null;
-      for (const of of views) {
-        let capture: Capture | null = of === "screenshot" && !marksOn("screenshot") ? shot!.capture : null;
-        if (!capture) {
-          setShooting(of);
-          setCapturing(true);
-          try { capture = await captureScreen(capturePage); } catch (error) { captureError = error instanceof Error ? error.message : String(error); }
-          setCapturing(false);
-          setShooting(null);
-        }
-        if (!capture) continue;
-        if (!first) { first = { capture, of }; await transport.picture(mark.id, capture.blob); }
-        for (const [index, blob] of (await cropAreas(capture, comments.map((entry) => entry.on === of ? entry.area : null))).entries()) if (blob) await transport.picture(mark.id, blob, numberOf(index));
-      }
-      const result = await transport.send(mark.id, {
-        comments, live: cornered, subject: host.subject?.(), to: one || hand() ? agent()?.name ?? null : null,
-        screenshot: first ? { width: first.capture.width, height: first.capture.height, surface: first.capture.surface, outlined: true, of: first.of } : { missing: views.length ? captureError ?? "capture failed" : marksOn("page") ? noPicture() ?? "not taken: Send does not ask the browser to share its tab" : "text only" },
-        client: { id: host.clientId(), userAgent: navigator.userAgent, url: location.pathname + location.search, viewport: { width: innerWidth, height: innerHeight, devicePixelRatio }, ...await host.client?.() },
-      });
+      const { result, count, told } = await deliver(mark.id, listed, whole, base, one || hand() ? agent()?.name ?? null : null, cornered);
       sent = true;
       if (answered && !cornered) {
-        // The margin has them from here: each Send is an item of its own, and what Undo would bring back has gone.
-        const gone = new Set([...listed, ...(whole ? [whole] : [])].map((selection) => selection.id));
-        setSelections((all) => all.filter((selection) => !gone.has(selection.id)));
-        history.length = undone.length = 0; counted();
+        // The margin has them from here: each Send is an item of its own.
+        gone([...listed, ...(whole ? [whole] : [])]);
         marked = transport.mark(host.clientId()).catch(() => null); sent = false;
         return host.sent?.();
       }
       // Each stays where it is, as a thread; the item's is followed while more is marked.
       batch(() => {
-        listed.forEach((selection, index) => setSelections((candidate) => candidate.id === selection.id, "sent", numberOf(index)));
-        if (whole) setSelections((candidate) => candidate.id === whole.id, "sent", base + comments.length);
-        setLastSent(base + comments.length);
+        listed.forEach((selection, index) => setSelections((candidate) => candidate.id === selection.id, "sent", base + index + 1));
+        if (whole) setSelections((candidate) => candidate.id === whole.id, "sent", base + count);
+        setLastSent(base + count);
       });
-      if (!one || !answered) { const where = result.handed.to ? `Sent, and handed to ${result.handed.to.name}` : "Sent"; host.notify("sent", captureError ? `${where}, without a screenshot: ${captureError}` : where); }
+      if (!one || !answered) host.notify("sent", told);
       // One-way markup is done once it has gone.
       if (!answered) return props.onClose();
       if (!thread()) follow(result.id, false);
@@ -810,14 +838,14 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
       </>}</Show>
       <Show when={!capturing() && !alone() && !listing()}>
         <Show when={floats(open()) && open()} keyed>{(selection) =>
-          <MarkupNote ref={(element) => { noteField = element; }} float={noteAt() ? { left: `${noteAt()!.left}px`, top: `${noteAt()!.top}px` } : { opacity: 0 }} open tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)}
+          <MarkupNote ref={(element) => { noteField = element; }} float={noteAt() ? { left: `${noteAt()!.left}px`, top: `${noteAt()!.top}px` } : { opacity: 0 }} open tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)} state={forWhom(selection)}
             value={selection.comment} onOpen={() => {}} onInput={write(selection)} onDone={() => openNote(null)} onRemove={() => remove(selection.id)} sendNow={offersLive ? live() : undefined} onSendNow={agent() ? (on) => { keepLive(on); noteField?.focus({ preventScroll: true }); } : undefined} />}
         </Show>
         <Show when={selections.some((selection) => !floats(selection) || selection.id !== openId())}>
           <MarkupNotes lift={barLift()}><For each={selections}>{(selection) => <Show when={!floats(selection) || selection.id !== openId()}>
             <Show when={selection.sent} fallback={<>
             <MarkupNote ref={(element) => { noteField = element; }} open={openId() === selection.id} tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)} picture={selection.whole ? picture()?.url : selection.preview}
-              value={selection.comment} onOpen={() => { if (floats(selection) && props.mode === "select") show(selection.on); openNote(selection.id); }} onInput={write(selection)} onRemove={() => remove(selection.id)} state={lastSent() || offersLive ? { label: "Not sent" } : undefined} />
+              value={selection.comment} onOpen={() => { if (floats(selection) && props.mode === "select") show(selection.on); openNote(selection.id); }} onInput={write(selection)} onRemove={() => remove(selection.id)} state={forWhom(selection) ?? (lastSent() || offersLive ? { label: "Not sent" } : undefined)} />
             </>}>{(n) => <MarkupNote ref={(element) => { noteField = element; }} open={replyTo() === n()} tag={tagOf(selection)} name={titleOf(selection)} picture={selection.preview} words={selection.comment} said={saidOf(n())} state={stateOf(n())} placeholder="Write back"
               value={reply()} onOpen={() => startReply(n())} onInput={setReply} resolved={resolvedOf(n())} onSay={() => void answer()} onResolve={(resolved) => settle(n(), resolved)} />}</Show>
           </Show>}</For></MarkupNotes>

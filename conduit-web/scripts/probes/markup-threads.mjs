@@ -11,7 +11,7 @@ const errors = []; page.on("pageerror", (error) => errors.push(String(error)));
 const api = (url, method = "GET", body) => page.evaluate(async ([url, method, body]) => { const answer = await fetch(url, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined }); return answer.json().catch(() => null); }, [url, method, body]);
 const view = () => page.evaluate(() => ({ shown: document.querySelector('[aria-label="View"] [aria-checked="true"], [aria-label="View"] [aria-pressed="true"], [aria-label="View"] [data-current]')?.textContent.trim(), tabs: [...document.querySelectorAll("main [role=tab]")].map((tab) => tab.textContent.trim()).join() }));
 const turn = (to) => page.locator('[aria-label="View"]').getByText(to).click();
-let chat, item;
+let chat, item; const extra = [];
 try {
   await page.goto(`${origin}/?a=artifact:test`);
   await page.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 }); await wait(1200);
@@ -28,11 +28,31 @@ try {
   await api(`${paper}/connections/${chat}`, "PUT");
   const waiting = (await api(`${paper}/markup/waiting`)).waiting.map((one) => one.name);
   console.log("the hub's listeners are the mated thread, then the connected chat:", waiting[0] === "conduit" && waiting.includes(name), JSON.stringify(waiting));
+  // Addressing by name, with the bar still handing to conduit: `@` typed in the paper offers the listeners and opens a comment for the one picked; `@name` in a comment's words sends it there.
+  await page.reload(); await page.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 }); await wait(3000);
+  const last = page.locator(".ui-document-text > [data-id]").last(), was = await last.textContent(), note = () => page.locator(".ui-markup-note[data-float]").textContent();
+  await last.click(); await page.keyboard.press("Home"); await page.keyboard.type("@chat"); await wait(600);
+  const offered = await page.evaluate(() => [...document.querySelectorAll("[role=option]")].map((one) => one.textContent.trim()));
+  await page.keyboard.press("Enter"); await wait(800);
+  console.log("@ in the paper offers the listeners; the one picked gets a comment on that block, the mention gone:", offered.join() === name && (await note()).includes(`For ${name}`) && (await last.textContent()) === was, JSON.stringify(offered));
+  await page.keyboard.type("Thread probe: by the at sign"); await page.keyboard.press("Enter"); await wait(2500);
+  await page.locator(".ui-markup-bar button[title^='Select text'], .ui-markup-bar button[aria-label^='Select text']").first().click(); await wait(300);
+  const line = await page.evaluate(() => { const box = document.querySelectorAll(".ui-document-text > [data-id]")[1].getBoundingClientRect(); return { x: box.left, y: box.top + box.height / 2 }; });
+  await page.mouse.move(line.x + 4, line.y); await page.mouse.down(); await page.mouse.move(line.x + 94, line.y, { steps: 8 }); await page.mouse.up(); await wait(500);
+  await page.keyboard.type(`Thread probe: by name, @${name}`); await wait(300);
+  const forName = (await note()).includes(`For ${name}`);
+  await page.keyboard.press("Enter"); await wait(3000);
+  const named = (await api(`${paper}/markup/open`)).items.filter((one) => one.comments.some((comment) => comment.comment.startsWith("Thread probe: by")));
+  extra.push(...named.map((one) => one.id));
+  console.log("both went to the chat named, each an item of its own:", forName && named.length === 2 && named.every((one) => one.by === name), JSON.stringify(named.map((one) => [one.by, one.comments[0].comment])));
+  await page.locator(".ui-markup-bar button[title^='Use the app'], .ui-markup-bar button[aria-label^='Use the app']").first().click().catch(() => {});
+  // The chat's first turn names it, and a connected chat listens by its title: the name is read again.
+  let titled = name; for (let tries = 0; tries < 16 && titled === name; tries++) { await wait(500); titled = (await api(`${paper}/markup/waiting`)).waiting.map((one) => one.name).find((one) => one !== "conduit") ?? name; }
   const mark = await api(`${paper}/markup/marks`, "POST", {});
-  item = (await api(`${paper}/markup/marks/${mark.id}/send`, "POST", { to: name, comments: [{ n: 1, kind: "note", name: "note", comment: "Thread probe: say hello" }], client: { kind: "probe" } })).id;
+  item = (await api(`${paper}/markup/marks/${mark.id}/send`, "POST", { to: titled, comments: [{ n: 1, kind: "note", name: "note", comment: "Thread probe: say hello" }], client: { kind: "probe" } })).id;
   await wait(6000);
   const handed = await api(`${paper}/markup/items/${item}`), told = await api(`/v0/chats/${chat}`);
-  console.log("the comment is taken in the chat's name:", handed.state === "taken" && handed.by === name, JSON.stringify({ state: handed.state, by: handed.by }));
+  console.log("the comment is taken in the chat's name:", handed.state === "taken" && handed.by === titled, JSON.stringify({ state: handed.state, by: handed.by, titled }));
   console.log("the chat was written to and its agent started:", told.status === "active" && Boolean(told.lastMessageAt), JSON.stringify({ status: told.status, at: told.lastMessageAt }));
   // The same chat's harness, through Conduit's tools: the paper is the one it is connected to.
   const tool = async (args) => (await api(`/v0/mcp/chat/${chat}`, "POST", { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "conduit_paper", arguments: args } })).result;
@@ -52,14 +72,16 @@ try {
   await page.getByRole("button", { name: "Disconnect Connected to Test document" }).click(); await wait(1500);
   console.log("Disconnect ends it:", !(await api(`${paper}/connections`)).connections.some((one) => one.chat === chat) && await rider.count() === 0);
   // The other end: the chat's own menu connects it to an artifact of its project.
-  const title = (await api(`/v0/chats/${chat}`)).title;
-  await page.locator(".ui-row", { hasText: title }).first().click({ button: "right" });
+  // The chat's row is drawn again as its first turn names it, which shuts a menu open on it: the row is pressed once it has its name.
+  const row = page.locator(`[data-chat-id="${chat}"]`).first();
+  for (let tries = 0; tries < 40 && !((await api(`/v0/chats/${chat}`)).title && (await row.textContent())?.includes((await api(`/v0/chats/${chat}`)).title)); tries++) await wait(500);
+  await wait(800); await row.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Connect to artifact…" }).click();
   await page.getByRole("dialog").getByText("Test document").click(); await wait(1200);
   await page.keyboard.press("Escape"); await wait(600);
   console.log("Connect to artifact, from the chat's menu, connects it, and Escape shuts the dialog:", (await api(`${paper}/connections`)).connections.some((one) => one.chat === chat) && await page.getByRole("dialog").count() === 0 && await rider.count() === 1);
 } finally {
-  if (item) await api(`${paper}/markup/items/${item}/messages`, "POST", { n: 1, resolved: true });
+  for (const id of [item, ...extra].filter(Boolean)) await api(`${paper}/markup/items/${id}/messages`, "POST", { n: 1, resolved: true });
   if (chat) { await api(`${paper}/connections/${chat}`, "DELETE"); await api(`/v0/sessions/${chat}`, "DELETE"); }
   console.log("errors:", JSON.stringify(errors));
   await close();

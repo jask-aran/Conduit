@@ -26,6 +26,8 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
   const [mode, setMode] = createSignal<MarkupMode | null>("use"), [sent, setSent] = createSignal(0), [away, setAway] = createSignal(false);
   const client = `document-${Math.random().toString(36).slice(2, 10)}`;
   let frame: HTMLDivElement | undefined, marks: DocumentMarks | undefined;
+  // What the open tool offers the paper's `@`: who is listening, and a comment for one of them.
+  const [offer, setOffer] = createSignal<Parameters<NonNullable<MarkupHost["asks"]>>[0]>(null);
   const editing: DocumentHost = { socket: async (id) => new WebSocket(await webSocketUrl(`/v0/document/${id}/live`)), author: () => "person" };
   const base = () => `/v0/document/${encodeURIComponent(props.id)}`;
   const markup: MarkupHost = {
@@ -44,6 +46,7 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
     },
     tools: () => marks?.tools() ?? [],
     asking: () => marks?.selection() ?? null,
+    asks: setOffer,
     sent: () => setSent((count) => count + 1),
     notify: (outcome, message) => outcome === "sent" ? toast.success(message) : toast.error(message),
   };
@@ -64,7 +67,7 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
     {props.header(<><Show when={away()}><StatusDot label="Reconnecting to the hub" title="Reconnecting to the hub" tone="warn" spinning /></Show><Show when={!props.quiet && !mode() && found()}><HeaderButton label="Mark up" icon={<Icons.Feedback />} onClick={() => setMode("use")} /></Show><Show when={found()}>{connecting}</Show></>)}
     <Show when={!about.error} fallback={<Empty role="alert">This paper could not be opened: {String((about.error as Error)?.message || "the hub did not say why").replace(/\.$/, "")}.</Empty>}>
       <Show when={found()?.id} keyed fallback={<Empty role="status">Opening the paper…</Empty>}>{(id) => <>
-        <DocumentEditor host={editing} id={id} name={name()} bare onAway={setAway} marks={(offered) => { marks = offered; }} margin={<MarkupMargin host={markup} sent={sent()} />} />
+        <DocumentEditor host={editing} id={id} name={name()} bare onAway={setAway} marks={(offered) => { marks = offered; }} mentions={() => offer()?.names() ?? []} onMention={(about, name) => offer()?.ask(about, name)} margin={<MarkupMargin host={markup} sent={sent()} />} />
         <Show when={!props.quiet && mode()}>{(now) => <MarkupTool host={markup} mode={now()} onMode={setMode} onClose={() => setMode(null)} />}</Show>
       </>}</Show>
     </Show>

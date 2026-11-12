@@ -1,12 +1,14 @@
 import { Extension, type ChainedCommands, type Editor } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
-import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import { createEffect, createSignal, onCleanup, Show, type JSX } from "solid-js";
+import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
+import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import { createEditorTransaction, createTiptapEditor } from "solid-tiptap";
-import { redo, undo, ySyncPlugin, yUndoPlugin } from "y-prosemirror";
+import { redo, undo, ySyncPlugin, ySyncPluginKey, yUndoPlugin } from "y-prosemirror";
 import type { Map as YMap, XmlFragment } from "yjs";
 import { DocumentSheet, documentBlockIcons, documentMarkClass, documentTextClass } from "@/components/ui/document";
+import { Popover, PopoverContent } from "@/components/ui/menus";
+import { Item, Section } from "@/components/ui/popover";
 import { CHANGES, FRAGMENT, documentExtensions } from "@/document-format.js";
 import { DOCUMENT_BLOCKS, type DocumentAnchor, type DocumentBlockKind, type DocumentHost, type DocumentMarks } from "./host";
 import { createLiveDocument } from "./live";
@@ -86,8 +88,43 @@ const marked = (changes: YMap<Change>, told: { anchors: DocumentAnchor[]; moved:
   });
 };
 
+/** An `@` typed at a word's start, and what follows it up to the caret (`from`..`to`, the `@` included). */
+type Mention = { from: number; to: number; query: string };
+type Mentioning = { at: Mention | null; dismissed: number | null };
+const mentioned = new PluginKey<Mentioning>("mention");
+/**
+ * Who is asked, as `@` is typed: the plugin finds it and marks where it starts with `anchor` (what the menu is placed by); `keys` has the
+ * keys while the menu shows. A mention is started only by this person's typing, so the caret put back after an old one opens nothing and neither
+ * does what someone else writes; one dismissed stays shut. A block that holds nothing else has no text to ask about, so none starts there.
+ */
+const mentioning = (anchor: HTMLElement, told: (at: Mention | null) => void, keys: (event: KeyboardEvent) => boolean) => Extension.create({
+  name: "mention",
+  addProseMirrorPlugins: () => [new Plugin<Mentioning>({
+    key: mentioned,
+    state: {
+      init: () => ({ at: null, dismissed: null }),
+      apply: (tr, old, _, state) => {
+        const dismissed = tr.getMeta(mentioned) ? old.at?.from ?? null : old.dismissed === null ? null : tr.mapping.map(old.dismissed);
+        const { empty, $from } = state.selection;
+        const typed = empty && $from.parent.isTextblock && !$from.parent.type.spec.code && ((tr.docChanged && !tr.getMeta(ySyncPluginKey)?.isChangeOrigin) || old.at) ? /(?<!\S)@((?:\S[^@]*)?)$/.exec($from.parent.textBetween(0, $from.parentOffset, undefined, "\ufffc")) : null;
+        const at = typed && $from.node(1).textContent.trim() !== typed[0].trim() ? { from: $from.start() + typed.index, to: $from.pos, query: typed[1]! } : null;
+        return { at: at && at.from !== dismissed ? at : null, dismissed: at ? dismissed : null };
+      },
+    },
+    props: {
+      decorations: (state) => { const at = mentioned.getState(state)?.at; return at ? DecorationSet.create(state.doc, [Decoration.widget(at.from, anchor, { key: "mention", side: -1 })]) : null; },
+      handleKeyDown: (_view, event) => keys(event),
+    },
+    view: () => ({ update: (view) => told(mentioned.getState(view.state)?.at ?? null) }),
+  })],
+});
+/** The caret's top-level block, as it is drawn. */
+const caretBlock = (view: EditorView) => { const { $from } = view.state.selection, block = $from.depth ? view.nodeDOM($from.before(1)) : null; if (!block) return null; const range = document.createRange(); range.selectNodeContents(block); return range; };
+
 /** `bare`: in a pane, whose header is the document's bar; `onAway` then tells that header when the hub's copy is out of reach. */
-export function DocumentEditor(props: { host: DocumentHost; id: string; name: string; actions?: JSX.Element; margin?: JSX.Element; bare?: boolean; onAway?: (away: boolean) => void; onReady?: () => void; marks?: (marks: DocumentMarks) => void }) {
+export function DocumentEditor(props: { host: DocumentHost; id: string; name: string; actions?: JSX.Element; margin?: JSX.Element; bare?: boolean; onAway?: (away: boolean) => void; onReady?: () => void; marks?: (marks: DocumentMarks) => void;
+  /** `mentions`: who `@` offers; picked, the typed `@…` goes and `onMention` is told the caret's block and the name. */
+  mentions?: () => string[]; onMention?: (about: Range, name: string) => void }) {
   const copy = createLiveDocument(props.host, props.id);
   const [column, setColumn] = createSignal<HTMLDivElement>(), [editor, setEditor] = createSignal<Editor>();
   const changes = copy.doc.getMap<Change>(CHANGES), [changed, setChanged] = createSignal<string[]>([]);
@@ -98,6 +135,26 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   // The text reflows when its column changes width, with no change to the document.
   createEffect(() => { const element = column(); if (!element) return; const sized = new ResizeObserver(() => told.moved()); sized.observe(element); onCleanup(() => sized.disconnect()); });
   const kind = createEditorTransaction(editor, kindAt);
+  const anchor = document.createElement("span"), [asked, setAsked] = createSignal<Mention | null>(null, { equals: (a, b) => a?.from === b?.from && a?.query === b?.query }), [active, setActive] = createSignal(0);
+  const offered = createMemo(() => { const at = asked(), query = at?.query.toLowerCase() ?? ""; return at ? (props.mentions?.() ?? []).filter((name) => name.toLowerCase().includes(query)) : []; });
+  createEffect(() => { asked(); setActive(0); });
+  const dismiss = () => { const view = editor()?.view; if (view && asked()) view.dispatch(view.state.tr.setMeta(mentioned, true)); };
+  const pick = (name: string) => {
+    const view = editor()?.view, at = asked();
+    if (!view || !at) return;
+    view.dispatch(view.state.tr.delete(at.from, at.to));
+    const about = caretBlock(view);
+    if (about) props.onMention?.(about, name);
+  };
+  const keys = (event: KeyboardEvent) => {
+    const list = offered();
+    if (!list.length) return false;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") setActive((at) => Math.max(0, Math.min(list.length - 1, at + (event.key === "ArrowDown" ? 1 : -1))));
+    else if (event.key === "Enter" || event.key === "Tab") pick(list[Math.min(active(), list.length - 1)]!);
+    else if (event.key === "Escape") dismiss();
+    else return false;
+    return true;
+  };
   // Ready is the hub's copy drawn, or the hub not answering: never a page still waiting.
   createEffect(() => { if (editor() || copy.state() === "away") props.onReady?.(); });
   createEffect(() => props.onAway?.(copy.state() === "away"));
@@ -125,26 +182,28 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     selection: () => {
       const view = editor()?.view;
       if (!view) return null;
-      const { from, to, empty, $from } = view.state.selection, range = document.createRange();
-      if (empty) {
-        // The caret's top-level block, as it is drawn.
-        const block = $from.depth ? view.nodeDOM($from.before(1)) : null;
-        if (!block) return null;
-        range.selectNodeContents(block);
-      } else {
-        const start = view.domAtPos(from), end = view.domAtPos(to);
-        range.setStart(start.node, start.offset);
-        range.setEnd(end.node, end.offset);
-      }
+      const { from, to, empty } = view.state.selection;
+      if (empty) return caretBlock(view);
+      const range = document.createRange(), start = view.domAtPos(from), end = view.domAtPos(to);
+      range.setStart(start.node, start.offset);
+      range.setEnd(end.node, end.offset);
       return range;
     },
   });
-  return <DocumentSheet ref={setColumn} name={props.name} state={copy.state() === "away" ? "Reconnecting" : undefined} margin={props.margin} actions={props.actions} bare={props.bare}>
+  return <>
+  <DocumentSheet ref={setColumn} name={props.name} state={copy.state() === "away" ? "Reconnecting" : undefined} margin={props.margin} actions={props.actions} bare={props.bare}>
     {/* The editor is made only once the hub's copy is held: made before, its first empty block would be merged in as a block of its own. */}
     <Show when={copy.synced() && column()}>{(element) => {
-      const made = createTiptapEditor(() => ({ element: element(), extensions: [...documentExtensions(), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told)], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name } } }));
+      const made = createTiptapEditor(() => ({ element: element(), extensions: [...documentExtensions(), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), ...(props.onMention ? [mentioning(anchor, setAsked, keys)] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name } } }));
       createEffect(() => setEditor(made()));
       return null;
     }}</Show>
-  </DocumentSheet>;
+  </DocumentSheet>
+    {/* A menu would take the typing: the popover is placed at the `@` and the editor keeps the keys. Beside the sheet, never in it: the sheet's column is the editor's to fill, and a child of it that comes and goes clears it. */}
+    <Popover open={offered().length > 0} onOpenChange={(open) => { if (!open) dismiss(); }} anchorRef={() => anchor} placement="bottom-start">
+      <PopoverContent aria-label="Ask" width="sm" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}>
+        <Section role="listbox"><For each={offered()}>{(name, at) => <Item role="option" aria-selected={active() === at()} active={active() === at()} onCursor={() => setActive(at())} onMouseDown={(event: MouseEvent) => event.preventDefault()} onClick={() => pick(name)}>{name}</Item>}</For></Section>
+      </PopoverContent>
+    </Popover>
+  </>;
 }
