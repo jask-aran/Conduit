@@ -1,4 +1,5 @@
-import { CodeIcon, Heading1Icon, Heading2Icon, Heading3Icon, ListChecksIcon, ListIcon, ListOrderedIcon, MinusIcon, PilcrowIcon, TableIcon, TextQuoteIcon } from "lucide-solid";
+import { BetweenHorizontalEndIcon, BetweenVerticalEndIcon, BoldIcon, CodeIcon, Grid2x2XIcon, Heading1Icon, Heading2Icon, Heading3Icon, ItalicIcon, LinkIcon, ListChecksIcon, ListIcon, ListOrderedIcon, MessageSquarePlusIcon, MinusIcon, PilcrowIcon, StrikethroughIcon,
+  TableColumnsSplitIcon, TableIcon, TableRowsSplitIcon, TextQuoteIcon, UnlinkIcon } from "lucide-solid";
 import { Show, type JSX } from "solid-js";
 // Through the barrel, as markup.tsx does, so the editor's chunk takes the header from the app's own.
 import { PaneHeader } from "./index";
@@ -14,6 +15,16 @@ export const documentMarkClass = { comment: "ui-document-comment", commented: "u
 
 /** Each kind of block's icon. Here, not in the library's icons, so only the editor's chunk carries them. */
 export const documentBlockIcons = { text: PilcrowIcon, "heading-1": Heading1Icon, "heading-2": Heading2Icon, "heading-3": Heading3Icon, bullets: ListIcon, numbers: ListOrderedIcon, checklist: ListChecksIcon, quote: TextQuoteIcon, code: CodeIcon, table: TableIcon, divider: MinusIcon };
+
+/** What can be done to the text selected (its marks, a link, a comment) and to the table the caret is in. */
+export const documentToolIcons = { bold: BoldIcon, italic: ItalicIcon, strike: StrikethroughIcon, code: CodeIcon, link: LinkIcon, unlink: UnlinkIcon, comment: MessageSquarePlusIcon,
+  "row-below": BetweenHorizontalEndIcon, "column-right": BetweenVerticalEndIcon, "delete-row": TableRowsSplitIcon, "delete-column": TableColumnsSplitIcon, "delete-table": Grid2x2XIcon };
+
+/** An empty paragraph's hint, its words in `data-hint`; `data-empty`: the document holds nothing else, so it shows without the caret. */
+export const documentHintClass = "ui-document-hint";
+
+/** A row of those tools, floating over what they act on; a field (a link's address) stands in it in place of the buttons. */
+export const DocumentTools = (props: { label: string; children: JSX.Element }) => <div role="toolbar" aria-label={props.label} class="ui-document-tools">{props.children}</div>;
 
 /** A Conduit document on its page: its bar (its name, how its copy stands with the hub's when that needs saying, what can be done to it) over one reading column that scrolls;
  *  `ref` is where its text goes. `margin`: what stands beside the text (its comments), and under it where the page is too narrow for both.

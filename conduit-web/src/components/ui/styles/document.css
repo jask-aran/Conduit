@@ -22,8 +22,16 @@
 .ui-document-text ul[data-type="taskList"] { list-style: none; padding-left: 0; }
 .ui-document-text ul[data-type="taskList"] > li { display: flex; gap: var(--space-md); }
 .ui-document-text ul[data-type="taskList"] > li > div { min-width: 0; flex: 1; margin-top: 0; }
-.ui-document-text input[type="checkbox"] { accent-color: var(--primary); }
+/* The box stands on the item's first line, however tall the line. */
+.ui-document-text ul[data-type="taskList"] > li > label { display: flex; height: 1lh; flex: none; align-items: center; }
+.ui-document-text input[type="checkbox"] { width: var(--icon); height: var(--icon); margin: 0; accent-color: var(--primary); cursor: pointer; }
+.ui-document-text li[data-checked="true"] > div { color: var(--muted-foreground); }
 /* An answer's table scrolls inside itself; an edited one sits in the wrapper ProseMirror gives it, which scrolls. */
 .ui-document-text .tableWrapper { overflow-x: auto; }
 .ui-document-text table { display: table; overflow: visible; }
 .ui-document-text .selectedCell { background: var(--accent); }
+.ui-document-text.ProseMirror-focused .ui-document-hint::before, .ui-document-hint[data-empty]::before { content: attr(data-hint); float: left; height: 0; color: var(--muted-foreground); pointer-events: none; }
+.ui-document-tools { display: flex; align-items: center; gap: var(--space-2xs); }
+.ui-document-tools > .ui-input { min-width: var(--measure-xs); flex: 1; }
+/* The bar is as wide as its tools, not a menu's least width. */
+.ui-menu:has(> .ui-document-tools) { min-width: 0; }

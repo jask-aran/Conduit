@@ -1,4 +1,4 @@
-// Sites, the second kind of artifact: New Artifact makes one (a .site.html file in the project's folder) and its pane draws the file in a frame with no
+// Sites, the second kind of artifact: New artifact makes one (a .site.html file in the project's folder) and its pane draws the file in a frame with no
 // origin, whose scripts cannot reach the hub as the person or the page that holds them; the file changed on disk is shown again where it was scrolled,
 // in the same frame; the pane's switch says Site | Thread; a box drawn over the site with Markup is sent with the elements under it, to a chat connected
 // to the site; the block routes refuse a site; Delete removes the file. Makes "Probe site" in the Test project and deletes it, with what the hub kept for
@@ -21,12 +21,12 @@ try {
   await page.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 }); await wait(1200);
   const project = page.locator('.ui-nav-link:has-text("Test")').first();
   if (!(await page.locator('[data-doc-view="artifact:test"]').count())) await page.locator('button[title="Expand Test"]').click();
-  await menu(project, "New Artifact"); await page.getByRole("radio", { name: "Site" }).click().catch(() => page.locator('[aria-label="Kind"]').getByText("Site").click());
+  await menu(project, "New artifact"); await page.locator(".ui-pane-home").getByRole("button", { name: /^Site/ }).click();
   await page.fill("#artifact-name", "Probe site"); await page.keyboard.press("Enter");
   const row = page.locator('[data-doc-view^="artifact:"]:has-text("Probe site")').first(); await row.waitFor(); await wait(1500);
   made = (await row.getAttribute("data-doc-view")).slice("artifact:".length);
   const html = await fs.readFile(file, "utf8").catch(() => "");
-  console.log("New Artifact makes the file, with its id in it, and opens it:", html.includes(`content="${made}"`) && page.url().includes(made));
+  console.log("New artifact makes the file, with its id in it, and opens it:", html.includes(`content="${made}"`) && page.url().includes(made));
   await until("the pane draws the file in a frame", async () => (await site()?.evaluate(() => document.querySelector("h1")?.textContent)) === "Probe site");
   console.log("the frame may run scripts and nothing else:", await page.evaluate(() => document.querySelector(".pane-artifact iframe")?.getAttribute("sandbox")) === "allow-scripts");
   console.log("the site's scripts cannot reach the hub as the person, its cookies or the page that holds it:", JSON.stringify(await site().evaluate(async (hub) => ({

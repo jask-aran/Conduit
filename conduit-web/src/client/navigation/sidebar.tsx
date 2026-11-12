@@ -33,7 +33,6 @@ import { publishUiPreference, UI_PREFERENCE_CHANGE_EVENT } from "../preferences/
 import { agentName, agentView, refreshAgent } from "../state/agent";
 import { installSidebarCursor } from "./sidebar-cursor";
 
-const ArtifactCreator = lazy(() => import("../document/artifact-creator"));
 const ArtifactRows = lazy(() => import("../document/artifact-rows"));
 const ArtifactConnect = lazy(() => import("../document/artifact-connect"));
 const ComputerExplorer = lazy(() => import("../dashboard/computer-dashboard").then((module) => ({ default: module.ComputerExplorer })));
@@ -121,7 +120,7 @@ export function Sidebar(props: {
   onOpenChatBeside?: (chat: ChatSummary, project: Project) => void;
   /** What the focused pane shows, for an artifact row's current mark. */
   focusedView?: string | null;
-  onOpenArtifact: (artifact: Artifact, beside?: boolean) => Promise<void>;
+  onOpenArtifact: (artifact: Pick<Artifact, "id">, beside?: boolean) => Promise<void>;
   onNewPane?: () => void;
   navigatingId?: string | null;
   dashboard: boolean;
@@ -421,8 +420,6 @@ export function Sidebar(props: {
   const [renameValue, setRenameValue] = createSignal("");
   const [deleting, setDeleting] = createSignal<DeleteTarget | null>(null);
   const [moving, setMoving] = createSignal<{ chat: ChatSummary; project: Project } | null>(null);
-  // Undefined until first asked for, so the creator's code loads only then.
-  const [creating, setCreating] = createSignal<Project | null>();
   const [connecting, setConnecting] = createSignal<{ chat: ChatSummary; project: Project } | null>();
   let appliedDefaultWorkspacePath = "";
   let handledCommandNonce: number | null = null;
@@ -439,7 +436,7 @@ export function Sidebar(props: {
     handledCommandNonce = command.nonce;
     if (command.type === "new-folder") openNewDialog("folder");
     if (command.type === "new-workspace") openNewDialog("workspace");
-    if (command.type === "new-artifact") { const project = command.project || currentProject(); if (project) setCreating(project); }
+    if (command.type === "new-artifact") newArtifact(command.project || currentProject());
     if (command.type === "new-workspace-created" || command.type === "new-workspace-cloned") {
       openNewDialog("workspace");
       selectWorkspaceMode(command.type === "new-workspace-created" ? "created" : "cloned");
@@ -664,6 +661,7 @@ export function Sidebar(props: {
     if (props.onMobileShutOnto) props.onMobileShutOnto(opening); else closeMobile();
     void opening.then(enterPane);
   };
+  const newArtifact = (project?: Project) => openOnto(props.onOpenArtifact({ id: project ? `new:${project.id}` : "new" }));
   // Opening a page from the sidebar, even the page already open, enters it. Actions with a target of their own (a
   // dialog, the palette, a terminal) do not.
   const enterPane = () => props.onEnterMainPane();
@@ -992,7 +990,7 @@ export function Sidebar(props: {
         <ContextMenuContent>
           <PlaceMenuItems project={blockProps.project} places={props.projects}
             onNewChat={() => startNewChat(blockProps.project)}
-            onNewArtifact={() => setCreating(blockProps.project)}
+            onNewArtifact={() => newArtifact(blockProps.project)}
             onOpenMaximized={() => { closeMobile(); props.onOpenProjectMaximized(blockProps.project); }}
             onRename={() => requestRenameProject(blockProps.project)}
             pin={isConduitManagedProject(blockProps.project) ? { pinned: isPinned("project", blockProps.project.id), onToggle: () => void togglePin("project", blockProps.project.id) } : undefined}
@@ -1274,9 +1272,6 @@ export function Sidebar(props: {
       actions={<><DialogButton variant="ghost" outline onClick={() => setDeleting(null)}>Cancel</DialogButton><DialogButton variant="destructive" onClick={() => void confirmDelete()}>{deleteButtonLabel()}</DialogButton></>} />
 
     <Show when={connecting() !== undefined}><ArtifactConnect chat={connecting() ?? null} onClose={() => setConnecting(null)} /></Show>
-    <Show when={creating() !== undefined}>
-      <ArtifactCreator project={creating() ?? null} onClose={() => setCreating(null)} onMade={(artifact) => openOnto(props.onOpenArtifact(artifact))} />
-    </Show>
 
     <Dialog open={Boolean(moving())} title="Move chat" description="Choose the working folder for this chat and its attachments." onOpenChange={(open) => { if (!open) setMoving(null); }}
       actions={<DialogButton type="button" variant="ghost" outline onClick={() => setMoving(null)}>Cancel</DialogButton>}>

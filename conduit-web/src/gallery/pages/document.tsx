@@ -1,6 +1,6 @@
 import type { JSX } from "solid-js";
-import { Button } from "@/components/ui";
-import { DocumentSheet, documentMarkClass, documentTextClass } from "@/components/ui/document"; // Comes with the editor: imported on its own, never from the barrel
+import { Button, IconButton } from "@/components/ui";
+import { DocumentSheet, DocumentTools, documentHintClass, documentMarkClass, documentTextClass, documentToolIcons as Tools } from "@/components/ui/document"; // Comes with the editor: imported on its own, never from the barrel
 import { MarkupMarginNotes, MarkupNote } from "@/components/ui/markup";
 import { row, type Page } from "../model";
 import { noop } from "../demos";
@@ -18,6 +18,10 @@ const margin = () => <MarkupMarginNotes beside={false}>
   {thread({ name: "“Osaka”", words: "Add the hotel to the table.", state: { label: "Working on it", busy: true } })}
 </MarkupMarginNotes>;
 
+const tools = () => <DocumentTools label="Format">
+  <IconButton label="Bold" aria-pressed><Tools.bold /></IconButton><IconButton label="Italic"><Tools.italic /></IconButton><IconButton label="Strikethrough"><Tools.strike /></IconButton><IconButton label="Code"><Tools.code /></IconButton><IconButton label="Link"><Tools.link /></IconButton><IconButton label="Comment"><Tools.comment /></IconButton>
+</DocumentTools>;
+
 export const documentPage: Page = {
   title: "Document",
   summary: "DocumentSheet is a Conduit document on its page: a bar over one reading column that scrolls. Its text is an answer's Markdown (.ui-answer) with what editing adds: a checklist, a code block, a table in the wrapper the editor gives it. Its margin (MarkupMarginNotes) holds the comments as threads beside the text, under it where the page is too narrow; the text wears marks for what they are about and what an agent changed (documentMarkClass).",
@@ -27,6 +31,8 @@ export const documentPage: Page = {
     row("away from the hub", "The bar says so beside the name; with the hub answering it says nothing", () => sheet("Reconnecting"), { code: "<DocumentSheet state>", surfaces: ["ground"] }),
     row("with its margin", "Each comment's thread beside the text: answered and shut, changed and open (Revert takes the change back, Reply, the tick resolves it), being worked on. In the app each stands at the height of what it is about (beside); here they flow as a list", () => sheet(undefined, MARKED, margin()), { code: "<DocumentSheet margin={<MarkupMarginNotes beside>…}>", surfaces: ["ground"] }),
     row("marks in the text", "comment: a run of text a comment is about, with data-current while its card is open; commented: a whole block, the same; changed: a block an agent changed that is not yet accepted; removed: the line where a block was deleted", () => sheet(undefined, MARKS), { code: "documentMarkClass", surfaces: ["ground"] }),
+    row("an empty document", "Its one paragraph says what it is for (documentHintClass, its words in data-hint); in the app the caret's empty paragraph says it too, while the editor has focus", () => sheet(undefined, `<p class="${documentHintClass}" data-hint="Write, / for blocks, @ to ask an agent" data-empty></p>`), { code: "documentHintClass", surfaces: ["ground"] }),
+    row("selection tools", "Over the text selected, in a popover: its marks, pressed where the selection wears them, a link and a comment; in a table, its rows and columns. A link's address is asked for in place of the buttons", tools, { code: "<DocumentTools label>", surfaces: ["frost"] }),
   ],
-  api: ["DocumentSheet", "MarkupMarginNotes", "MarkupNote"],
+  api: ["DocumentSheet", "DocumentTools", "MarkupMarginNotes", "MarkupNote"],
 };

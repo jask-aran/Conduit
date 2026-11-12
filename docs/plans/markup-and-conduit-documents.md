@@ -219,7 +219,7 @@ file and the rest below; the user has judged none of it yet.
   <id>` are the agent's side.
 - Client: `client/document/artifacts.ts` (what the client knows of artifacts), `artifact-pane.tsx` (the pane:
   editor, margin, Markup's tool, one for each open paper), `artifact-rows.tsx` (the sidebar's rows with their menu,
-  rename and delete), `artifact-creator.tsx` (New Artifact). All four load lazily. In `client/main.tsx`:
+  rename and delete), `artifact-creator.tsx` (the creator, drawn in its tab). All four load lazily. In `client/main.tsx`:
   `renderArtifactDocument`, `openArtifact`, and `artifact` added to `isToolView` and `tabbable` (a view kind missing
   from `isToolView` is drawn as a dock tool over the pane). A `.paper` opened through `openFileDocument` opens the
   artifact. `/?a=artifact:<id>` is a paper in the first pane.
@@ -245,8 +245,9 @@ The code keeps `document` inside the editor and the hub's service; the pane kind
 - **No Markdown twin.** Export to Markdown is a command on the paper.
 - **Listed** as rows in the sidebar under the project (for now), and seen in the file tree as the file it is;
   pressing a `.paper` there opens the artifact.
-- **Verbs.** "New Artifact" (beside "New chat", and in the palette) opens the artifact creator, which offers the
-  kinds; paper is the first. Open follows the one rule (plain replaces, Ctrl keeps a tab, Alt opens beside). Rename,
+- **Verbs.** "New artifact" (on the new tab screen, a project's menu and page, and the palette) turns a tab into the
+  artifact creator (`artifact:new`, `artifact:new:<project>` with the project chosen), which offers the kinds, the
+  project and a name; paper is the first. Open follows the one rule (plain replaces, Ctrl keeps a tab, Alt opens beside). Rename,
   move and delete are the file's. An agent makes one with `conduit-markup document new "<name>" --project <id>`.
 - **Two views, one tab.** The pane header's segmented switch, Paper | Thread: Thread is the mated thread as an
   ordinary chat view. The mated thread is not in the project's list of chats. The hub starts it on the first comment

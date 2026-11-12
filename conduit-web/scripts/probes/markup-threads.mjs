@@ -31,6 +31,11 @@ try {
   // Addressing by name, with the bar still handing to conduit: `@` typed in the paper offers the listeners and opens a comment for the one picked; `@name` in a comment's words sends it there.
   await page.reload(); await page.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 }); await wait(3000);
   const last = page.locator(".ui-document-text > [data-id]").last(), was = await last.textContent(), note = () => page.locator(".ui-markup-note[data-float]").textContent();
+  // A line with nothing else on it asks too: the `@` offers who is listening there as anywhere.
+  await last.click(); await page.keyboard.press("End"); await page.keyboard.press("Enter"); await page.keyboard.type("@"); await wait(600);
+  const alone = await page.evaluate(() => [...document.querySelectorAll("[role=option]")].map((one) => one.textContent.trim()));
+  await page.keyboard.press("Escape"); await page.keyboard.press("Backspace"); await page.keyboard.press("Backspace"); await wait(300);
+  console.log("@ alone on a new line offers the listeners:", alone[0] === "conduit" && alone.includes(name) && (await last.textContent()) === was, JSON.stringify(alone));
   await last.click(); await page.keyboard.press("Home"); await page.keyboard.type("@chat"); await wait(600);
   const offered = await page.evaluate(() => [...document.querySelectorAll("[role=option]")].map((one) => one.textContent.trim()));
   await page.keyboard.press("Enter"); await wait(800);

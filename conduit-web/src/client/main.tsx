@@ -206,6 +206,7 @@ const FileTypeIcon = lazy(() => import("@/components/ui/file-marks").then((modul
 const ComputerDashboard = lazy(() => import("./dashboard/computer-dashboard").then((module) => ({ default: module.ComputerDashboard })));
 const FeedbackTool = lazy(() => import("./feedback/conduit-feedback"));
 const ArtifactPane = lazy(() => import("./document/artifact-pane"));
+const ArtifactCreator = lazy(() => import("./document/artifact-creator"));
 const AgentPage = lazy(() => import("./dashboard/agent-page").then((module) => ({ default: module.AgentPage })));
 const JbotRoom = lazy(() => import("./dashboard/jbot-room").then((module) => ({ default: module.JbotRoom })));
 const EnvironmentPage = lazy(() => import("./dashboard/environment-page").then((module) => ({ default: module.EnvironmentPage })));
@@ -2872,11 +2873,12 @@ function App() {
     document.removeEventListener("drop", onDocDrop);
     document.removeEventListener("dragend", endDocDrag);
   });
+  const homeProjects = () => catalogue.projects().filter((project) => project.slug !== "chat" && project.origin !== "linked" && project.origin !== "created" && project.origin !== "cloned" && project.kind !== "workspace");
   const renderHome = (pane: PaneKey) => {
     const fill = async (view: SplitView) => { if (await setPaneView(pane, view)) focusAnyPane(pane); };
     const terminal = async () => { const id = await pickShell(); if (id) await fill(`term:${id}`); else toast.info("Open a workspace first: a terminal starts in one."); };
     const greeting = () => { const hour = new Date().getHours(); return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"; };
-    const projects = () => catalogue.projects().filter((project) => project.slug !== "chat" && project.origin !== "linked" && project.origin !== "created" && project.origin !== "cloned" && project.kind !== "workspace").slice(0, 5);
+    const projects = () => homeProjects().slice(0, 5);
     const recent = () => catalogue.projects().flatMap((project) => project.sessions.map((chat) => ({ chat, project })))
       .sort((a, b) => (b.chat.updatedAt ?? "").localeCompare(a.chat.updatedAt ?? "")).slice(0, 5);
     return <>
@@ -2887,6 +2889,7 @@ function App() {
           <RiderButton show="label" icon={<Icons.NewChat />} label="New chat" onClick={() => void fill("page:dashboard")} />
           <RiderButton show="label" icon={<Icons.Terminal />} label="New terminal" onClick={() => void terminal()} />
           <RiderButton show="label" icon={<Icons.Browser />} label="Browser" onClick={() => void fill("browser:hub")} />
+          <RiderButton show="label" icon={<Icons.WriteFile />} label="New artifact" onClick={() => void fill("artifact:new")} />
         </Actions>
         <Show when={recent().length}>
           <Group kind="dash" id="Continue" heading={<GroupHeading>Continue</GroupHeading>}>
@@ -2932,7 +2935,12 @@ function App() {
   const openArtifactFromEvent = (event: Event) => { const { id, beside } = (event as CustomEvent<{ id: string; beside?: boolean }>).detail; void openArtifact(id, beside); };
   window.addEventListener("conduit:open-artifact", openArtifactFromEvent);
   onCleanup(() => window.removeEventListener("conduit:open-artifact", openArtifactFromEvent));
-  const renderArtifactDocument = (pane: PaneKey, id: string) => <ArtifactPane id={id} quiet={feedbackMode() !== null} onAbout={(found, label) => nameArtifact(`artifact:${id}`, found.name, label)}
+  // `artifact:new[:<project>]` is the creator, so it is a tab with a name that survives a reload; ids are hex, so never "new".
+  const renderArtifactDocument = (pane: PaneKey, id: string) => id === "new" || id.startsWith("new:") ? <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>
+    <PaneHeader actions={paneTabActions(pane)}><Show when={documentTab(pane)} fallback={<HeaderCrumb title="New artifact" />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>
+    <ArtifactCreator project={id.slice("new:".length) || undefined} projects={catalogue.projects().filter((item) => item.id === id.slice("new:".length) || homeProjects().includes(item))}
+      onBack={() => void setPaneView(pane, "home")} onMade={(made) => void setPaneView(pane, `artifact:${made.id}`).then(() => focusAnyPane(pane))} />
+  </SheetFill> : <ArtifactPane id={id} quiet={feedbackMode() !== null} onAbout={(found, label) => nameArtifact(`artifact:${id}`, found.name, label)}
     chats={(project) => (catalogue.projects().find((item) => item.id === project)?.sessions ?? []).map((chat) => ({ id: chat.id, title: chat.title || "Untitled chat" }))}
     header={(extra) => <PaneHeader modes={paperModes(pane, id, "paper")} actions={<>{extra}{paneTabActions(pane)}</>}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`artifact:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />;
   const renderBrowserDocument = (pane: PaneKey, id: string) => <SheetFill class="pane-browser">
@@ -3535,6 +3543,7 @@ function App() {
     if (files) return files.length ? files.map((entry) => entry.path.split("/").pop()).join(", ") : "File viewer";
     if (view.startsWith("term:")) return termTitles()[view] || "Terminal";
     if (view.startsWith("browser:")) return browserTitles()[view] || "Browser";
+    if (view === "artifact:new" || view.startsWith("artifact:new:")) return "New artifact";
     if (view.startsWith("artifact:")) { askArtifactName(view); return artifactNames()[view]?.name || "Artifact"; }
     return isPanelTab(view) ? WORKSPACE_TOOL_LABELS[view] : "Pane";
   };

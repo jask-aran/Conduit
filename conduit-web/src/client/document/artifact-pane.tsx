@@ -29,6 +29,10 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
   let frame: HTMLDivElement | undefined, marks: DocumentMarks | undefined, was: Artifact["kind"] | undefined;
   // What the open tool offers the paper's `@`: who is listening, and a comment for one of them.
   const [offer, setOffer] = createSignal<Parameters<NonNullable<MarkupHost["asks"]>>[0]>(null);
+  // With the bar closed `@` still offers who is listening, and the one picked opens the bar on that comment.
+  const [listening] = createResource(() => !mode() && props.id, () => shared.transport.listening().then((list) => list.map((one) => one.name), () => [] as string[]));
+  let asked: [Range, string?] | undefined;
+  const ask = (about: Range, name?: string) => { const open = offer(); if (open) open.ask(about, name); else { asked = [about, name]; setMode("use"); } };
   const editing: DocumentHost = { socket: async (id) => new WebSocket(await webSocketUrl(`/v0/document/${id}/live`)), author: () => "person" };
   const base = () => `/v0/document/${encodeURIComponent(props.id)}`;
   const shared = { names, transport: httpTransport(api, `${base()}/markup`), clientId: () => client, capturePage, frame: () => frame,
@@ -45,7 +49,7 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
     },
     tools: () => marks?.tools() ?? [],
     asking: () => marks?.selection() ?? null,
-    asks: setOffer,
+    asks: (offered) => { setOffer(() => offered); if (offered && asked) offered.ask(...asked); asked = undefined; },
     sent: () => setSent((count) => count + 1),
   };
   const tool = (host: MarkupHost) => <Show when={!props.quiet && mode()}>{(now) => <MarkupTool host={host} mode={now()} onMode={setMode} onClose={() => setMode(null)} />}</Show>;
@@ -67,7 +71,7 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
     {props.header(<><Show when={found()?.trouble}>{(why) => <StatusDot label={why()} title={why()} tone="warn" />}</Show><Show when={away()}><StatusDot label="Reconnecting to the hub" title="Reconnecting to the hub" tone="warn" spinning /></Show><Show when={!props.quiet && !mode() && found()}><HeaderButton label="Mark up" icon={<Icons.Feedback />} onClick={() => setMode("use")} /></Show><Show when={found()}>{connecting}</Show></>)}
     <Show when={!about.error} fallback={<Empty role="alert">This {kind()} could not be opened: {String((about.error as Error)?.message || "the hub did not say why").replace(/\.$/, "")}.</Empty>}>
       <Show when={found()?.id} keyed fallback={<Empty role="status">Opening the {kind()}…</Empty>}>{(id) => found()?.kind === "site" ? <SitePane about={() => found()!} host={shared} tool={tool} /> : <>
-        <DocumentEditor host={editing} id={id} name={found()?.name ?? ""} bare onAway={setAway} marks={(offered) => { marks = offered; }} mentions={() => offer()?.names() ?? []} onMention={(about, name) => offer()?.ask(about, name)} margin={<MarkupMargin host={markup} sent={sent()} />} />
+        <DocumentEditor host={editing} id={id} name={found()?.name ?? ""} bare onAway={setAway} marks={(offered) => { marks = offered; }} mentions={() => props.quiet ? [] : offer()?.names() ?? listening() ?? []} onMention={ask} onComment={props.quiet ? undefined : ask} margin={<MarkupMargin host={markup} sent={sent()} />} />
         {tool(markup)}
       </>}</Show>
     </Show>

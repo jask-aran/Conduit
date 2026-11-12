@@ -1,5 +1,5 @@
 // The test paper in a pane (/?a=artifact:test): the pane shows the hub's test paper; a block an agent writes with the CLI shows on the page and opening a page writes none; typing reaches the hub and a second page;
-// the rail makes a block another kind and asks the agent about it; a comment's card stands in the margin beside its text on a second page (under the text on a phone-sized one), an edit sent
+// the rail makes a block another kind and asks the agent about it; the caret's empty paragraph hints, `/` makes a block a kind, selected text's Bold bolds it; a comment's card stands in the margin beside its text on a second page (under the text on a phone-sized one), an edit sent
 // --for it tints its block, Revert puts the block back, a session's resolve leaves the card and the tint, the person's accepts the change; a phone-sized page types without harming the blocks; Markup's bar answers over it. Every block it adds
 // it deletes and the one comment it sends (handed to no session) it finishes.
 import { execFileSync } from "node:child_process";
@@ -44,6 +44,20 @@ try {
   await rail.locator("button", { hasText: "Ask the agent" }).click();
   await until("Ask the agent starts a comment about the caret's block", async () => (await page.locator(".ui-markup-note[data-float]").textContent().catch(() => "")).includes("A heading"));
   await page.locator(".ui-markup-note[data-float] button", { hasText: "Remove" }).click();
+  // The paper's own tools: the caret's empty paragraph hints, `/` makes a block a kind, and selected text has its tools over it.
+  await page.locator(".ui-document-text > h2[data-id]").last().click(); await page.keyboard.press("End"); await page.keyboard.press("Enter");
+  console.log("the caret's empty paragraph hints:", await page.evaluate(() => { const hint = document.querySelector(".ui-document-text .ui-document-hint"); return hint ? getComputedStyle(hint, "::before").content : null; }));
+  await page.keyboard.type("/quo");
+  await until("/ offers the block kinds, filtered by what follows it", async () => (await page.locator("[aria-label='Blocks'] [role=option]").allTextContents()).join() === "Quote");
+  await page.keyboard.press("Enter"); await page.keyboard.type("Quoted by the probe");
+  await until("picked, the block is that kind and the typed /quo is gone", () => page.evaluate(() => [...document.querySelectorAll(".ui-document-text > blockquote")].some((block) => block.textContent === "Quoted by the probe")));
+  await page.keyboard.press("Shift+Home");
+  const format = page.locator("[role=toolbar][aria-label='Format']");
+  await format.waitFor({ timeout: 3000 }).catch(() => {});
+  console.log("selected text has its tools:", await format.locator("button").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label")).join(", ")).catch(() => "none"));
+  await format.locator("button[aria-label='Bold']").click();
+  await until("Bold makes the selection bold, and its button says so", async () => await page.evaluate(() => [...document.querySelectorAll(".ui-document-text > blockquote strong")].some((bold) => bold.textContent === "Quoted by the probe")) && await format.locator("button[aria-label='Bold']").getAttribute("aria-pressed") === "true");
+  added.push(...ids(cli("read", "test")).filter((id) => !ids(before).includes(id) && !added.includes(id)));
 
   // One comment, made on the first page; what stands for it is read on the second.
   const at = await page.locator(`.ui-document-text > [data-id="${added[0]}"]`).boundingBox();

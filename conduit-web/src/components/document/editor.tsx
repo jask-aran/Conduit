@@ -2,16 +2,17 @@ import { Extension, type ChainedCommands, type Editor } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
-import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from "solid-js";
 import { createEditorTransaction, createTiptapEditor } from "solid-tiptap";
-import { redo, undo, ySyncPlugin, ySyncPluginKey, yUndoPlugin } from "y-prosemirror";
+import { redo, undo, ySyncPlugin, yUndoPlugin } from "y-prosemirror";
 import type { Map as YMap, XmlFragment } from "yjs";
 import { DocumentSheet, documentBlockIcons, documentMarkClass, documentTextClass } from "@/components/ui/document";
-import { Popover, PopoverContent } from "@/components/ui/menus";
-import { Item, Section } from "@/components/ui/popover";
 import { CHANGES, FRAGMENT, documentExtensions } from "@/document-format.js";
 import { DOCUMENT_BLOCKS, type DocumentAnchor, type DocumentBlockKind, type DocumentHost, type DocumentMarks } from "./host";
+import { hinted } from "./hint";
 import { createLiveDocument } from "./live";
+import { SelectionTools, selectedRange } from "./toolbar";
+import { createSlash, menuKeys, TypedMenu, typing, type Typed, type Typing } from "./typed";
 
 /** What the caret's block is, read in this order (a list inside a quote is a list), and how a block is made that kind. */
 const KINDS: Record<DocumentBlockKind, { label: string; is?: [string, Record<string, unknown>?]; make: (chain: ChainedCommands) => ChainedCommands }> = {
@@ -89,42 +90,19 @@ const marked = (changes: YMap<Change>, told: { anchors: DocumentAnchor[]; moved:
 };
 
 /** An `@` typed at a word's start, and what follows it up to the caret (`from`..`to`, the `@` included). */
-type Mention = { from: number; to: number; query: string };
-type Mentioning = { at: Mention | null; dismissed: number | null };
-const mentioned = new PluginKey<Mentioning>("mention");
-/**
- * Who is asked, as `@` is typed: the plugin finds it and marks where it starts with `anchor` (what the menu is placed by); `keys` has the
- * keys while the menu shows. A mention is started only by this person's typing, so the caret put back after an old one opens nothing and neither
- * does what someone else writes; one dismissed stays shut. A block that holds nothing else has no text to ask about, so none starts there.
- */
-const mentioning = (anchor: HTMLElement, told: (at: Mention | null) => void, keys: (event: KeyboardEvent) => boolean) => Extension.create({
-  name: "mention",
-  addProseMirrorPlugins: () => [new Plugin<Mentioning>({
-    key: mentioned,
-    state: {
-      init: () => ({ at: null, dismissed: null }),
-      apply: (tr, old, _, state) => {
-        const dismissed = tr.getMeta(mentioned) ? old.at?.from ?? null : old.dismissed === null ? null : tr.mapping.map(old.dismissed);
-        const { empty, $from } = state.selection;
-        const typed = empty && $from.parent.isTextblock && !$from.parent.type.spec.code && ((tr.docChanged && !tr.getMeta(ySyncPluginKey)?.isChangeOrigin) || old.at) ? /(?<!\S)@((?:\S[^@]*)?)$/.exec($from.parent.textBetween(0, $from.parentOffset, undefined, "\ufffc")) : null;
-        const at = typed && $from.node(1).textContent.trim() !== typed[0].trim() ? { from: $from.start() + typed.index, to: $from.pos, query: typed[1]! } : null;
-        return { at: at && at.from !== dismissed ? at : null, dismissed: at ? dismissed : null };
-      },
-    },
-    props: {
-      decorations: (state) => { const at = mentioned.getState(state)?.at; return at ? DecorationSet.create(state.doc, [Decoration.widget(at.from, anchor, { key: "mention", side: -1 })]) : null; },
-      handleKeyDown: (_view, event) => keys(event),
-    },
-    view: () => ({ update: (view) => told(mentioned.getState(view.state)?.at ?? null) }),
-  })],
-});
+type Mention = Typed;
+const mentioned = new PluginKey<Typing>("mention");
+/** Who is asked, as `@` is typed (`typing`, typed.tsx). */
+const mentioning = (anchor: HTMLElement, told: (at: Mention | null) => void, keys: (event: KeyboardEvent) => boolean) => typing("mention", mentioned, /(?<!\S)@((?:\S[^@]*)?)$/, anchor, told, keys);
 /** The caret's top-level block, as it is drawn. */
 const caretBlock = (view: EditorView) => { const { $from } = view.state.selection, block = $from.depth ? view.nodeDOM($from.before(1)) : null; if (!block) return null; const range = document.createRange(); range.selectNodeContents(block); return range; };
 
 /** `bare`: in a pane, whose header is the document's bar; `onAway` then tells that header when the hub's copy is out of reach. */
 export function DocumentEditor(props: { host: DocumentHost; id: string; name: string; actions?: JSX.Element; margin?: JSX.Element; bare?: boolean; onAway?: (away: boolean) => void; onReady?: () => void; marks?: (marks: DocumentMarks) => void;
   /** `mentions`: who `@` offers; picked, the typed `@…` goes and `onMention` is told the caret's block and the name. */
-  mentions?: () => string[]; onMention?: (about: Range, name: string) => void }) {
+  mentions?: () => string[]; onMention?: (about: Range, name: string) => void;
+  /** `onComment`: the selection tools' Comment, told the text selected. */
+  onComment?: (about: Range) => void }) {
   const copy = createLiveDocument(props.host, props.id);
   const [column, setColumn] = createSignal<HTMLDivElement>(), [editor, setEditor] = createSignal<Editor>();
   const changes = copy.doc.getMap<Change>(CHANGES), [changed, setChanged] = createSignal<string[]>([]);
@@ -146,15 +124,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     const about = caretBlock(view);
     if (about) props.onMention?.(about, name);
   };
-  const keys = (event: KeyboardEvent) => {
-    const list = offered();
-    if (!list.length) return false;
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") setActive((at) => Math.max(0, Math.min(list.length - 1, at + (event.key === "ArrowDown" ? 1 : -1))));
-    else if (event.key === "Enter" || event.key === "Tab") pick(list[Math.min(active(), list.length - 1)]!);
-    else if (event.key === "Escape") dismiss();
-    else return false;
-    return true;
-  };
+  const keys = (event: KeyboardEvent) => menuKeys(event, offered(), active(), setActive, pick, dismiss);
   // Ready is the hub's copy drawn, or the hub not answering: never a page still waiting.
   createEffect(() => { if (editor() || copy.state() === "away") props.onReady?.(); });
   createEffect(() => props.onAway?.(copy.state() === "away"));
@@ -163,6 +133,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     const Icon = documentBlockIcons[name];
     return { name, label: KINDS[name].label, icon: () => <Icon />, get active() { return kind() === name; }, run: () => { const made = editor(); if (made) KINDS[name].make(made.chain().focus()).run(); } };
   });
+  const slash = createSlash(editor, tools);
   props.marks?.({
     subject: () => ({ kind: "document", name: props.name, document: props.id }),
     under: (box) => {
@@ -182,28 +153,21 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     selection: () => {
       const view = editor()?.view;
       if (!view) return null;
-      const { from, to, empty } = view.state.selection;
-      if (empty) return caretBlock(view);
-      const range = document.createRange(), start = view.domAtPos(from), end = view.domAtPos(to);
-      range.setStart(start.node, start.offset);
-      range.setEnd(end.node, end.offset);
-      return range;
+      return view.state.selection.empty ? caretBlock(view) : selectedRange(view);
     },
   });
   return <>
   <DocumentSheet ref={setColumn} name={props.name} state={copy.state() === "away" ? "Reconnecting" : undefined} margin={props.margin} actions={props.actions} bare={props.bare}>
     {/* The editor is made only once the hub's copy is held: made before, its first empty block would be merged in as a block of its own. */}
     <Show when={copy.synced() && column()}>{(element) => {
-      const made = createTiptapEditor(() => ({ element: element(), extensions: [...documentExtensions(), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), ...(props.onMention ? [mentioning(anchor, setAsked, keys)] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name } } }));
+      const made = createTiptapEditor(() => ({ element: element(), extensions: [...documentExtensions(), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), slash.extension(), ...(props.onMention ? [mentioning(anchor, setAsked, keys)] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name } } }));
       createEffect(() => setEditor(made()));
       return null;
     }}</Show>
   </DocumentSheet>
-    {/* A menu would take the typing: the popover is placed at the `@` and the editor keeps the keys. Beside the sheet, never in it: the sheet's column is the editor's to fill, and a child of it that comes and goes clears it. */}
-    <Popover open={offered().length > 0} onOpenChange={(open) => { if (!open) dismiss(); }} anchorRef={() => anchor} placement="bottom-start">
-      <PopoverContent aria-label="Ask" width="sm" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}>
-        <Section role="listbox"><For each={offered()}>{(name, at) => <Item role="option" aria-selected={active() === at()} active={active() === at()} onCursor={() => setActive(at())} onMouseDown={(event: MouseEvent) => event.preventDefault()} onClick={() => pick(name)}>{name}</Item>}</For></Section>
-      </PopoverContent>
-    </Popover>
+    {/* Menus and tools beside the sheet, never in it: the sheet's column is the editor's to fill, and a child of it that comes and goes clears it. */}
+    <TypedMenu label="Ask" anchor={anchor} items={offered()} name={(name) => name} active={active()} onCursor={setActive} onPick={pick} onDismiss={dismiss} />
+    {slash.menu()}
+    <SelectionTools editor={editor} onComment={props.onComment} />
   </>;
 }

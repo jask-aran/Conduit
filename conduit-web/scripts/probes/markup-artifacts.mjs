@@ -1,5 +1,5 @@
 // Papers in panes: the test paper opens as artifact:test under the pane's one header with Markup's bar centred on its pane; the Test project lists its
-// artifacts; New Artifact makes a paper (a .paper file in the project's folder) and refuses a name already there; Rename renames the file and the tab and
+// artifacts; New artifact turns the tab into the creator, which makes a paper (a .paper file in the project's folder) and refuses a name already there; Rename renames the file and the tab and
 // keeps the editor; a second paper beside has a bar of its own, centred on its own pane; Delete removes the file and the row, and the pane says so.
 // Makes "Probe paper" in the Test project and deletes it, with what the hub kept for it.
 import fs from "node:fs/promises";
@@ -21,13 +21,13 @@ try {
   const test = page.locator('[data-doc-view="artifact:test"]'), project = page.locator('.ui-nav-link:has-text("Test")').first();
   if (!(await test.count())) { await page.locator('button[title="Expand Test"]').click(); await test.waitFor(); }
   console.log("the project lists its paper:", (await test.first().textContent()) === "Test document");
-  await menu(project, "New Artifact"); await page.fill("#artifact-name", "Probe paper"); await page.keyboard.press("Enter");
+  await menu(project, "New artifact"); await page.fill("#artifact-name", "Probe paper"); await page.keyboard.press("Enter");
   const row = page.locator('[data-doc-view^="artifact:"]:has-text("Probe paper")').first(); await row.waitFor(); await wait(1500);
   made = (await row.getAttribute("data-doc-view")).slice("artifact:".length);
-  console.log("New Artifact makes the file and opens it:", await there("Probe paper.paper") && await page.evaluate((id) => location.search.includes(id), made));
-  await menu(project, "New Artifact"); await page.fill("#artifact-name", "Probe paper"); await page.keyboard.press("Enter"); await wait(800);
-  console.log("a name already there is refused in the creator:", await page.evaluate(() => document.querySelector('[role="dialog"]')?.textContent.includes("already there") ?? false));
-  await page.keyboard.press("Escape"); await wait(400);
+  console.log("New artifact makes the file and opens it in the tab:", await there("Probe paper.paper") && await page.evaluate((id) => location.search.includes(id), made));
+  await menu(project, "New artifact"); await page.fill("#artifact-name", "Probe paper"); await page.keyboard.press("Enter"); await wait(800);
+  console.log("a name already there is refused in the creator:", await page.evaluate(() => document.querySelector('.ui-pane-home[aria-label="New artifact"]')?.textContent.includes("already there") ?? false));
+  await row.click(); await page.waitForSelector(".pane-artifact .ui-document-text"); await wait(800);
   await page.locator(".pane-artifact .ui-document-text").first().click(); await page.keyboard.type("Typed by the probe."); await wait(1200);
   await menu(row, "Rename"); await page.fill("#artifact-rename", "Probe paper two"); await page.keyboard.press("Enter"); await wait(1800);
   console.log("Rename renames the file, with what was typed:", !(await there("Probe paper.paper")) && (await fs.readFile(`${folder}/Probe paper two.paper`, "utf8").catch(() => "")).includes("Typed by the probe."));

@@ -377,10 +377,11 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   /** Selected text is a comment about the piece it is in. */
   const addQuote = (range: Range, to?: string) => {
     const text = quoted(range);
-    if (!text) return;
+    // Asked of someone in a block with no text yet (a paper's `@` on an empty line), it is a comment about that block.
+    if (!text && !to) return;
     const holder = range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
     const id = nextId++;
-    keep(); setSelections(selections.length, { id, elements: placed([pieceRoot(holder) ?? holder ?? document.body]), comment: "", on: "page", quote: { range, text }, ...(to ? { to } : {}) });
+    keep(); setSelections(selections.length, { id, elements: placed([(text && pieceRoot(holder)) || holder || document.body]), comment: "", on: "page", ...(text ? { quote: { range, text } } : {}), ...(to ? { to } : {}) });
     openNote(id);
   };
   const add = (elements: Element[], drag?: MarkupBox) => {

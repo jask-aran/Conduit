@@ -297,7 +297,7 @@ export const commandRegistry: ShortcutCommandDefinition[] = [
   }),
   command({
     id: COMMAND_IDS.newArtifact,
-    label: "New Artifact",
+    label: "New artifact",
     description: "Make an artifact in the current project",
     group: "commands",
     icon: "attach",
