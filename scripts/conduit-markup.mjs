@@ -12,6 +12,11 @@
 // <id>/thread.jsonl, where the tool reads it; what they write back there ends the same name's next `wait`, and so
 // does a comment added to a live item. `resolve <id> <n>` settles one comment; the last one settled handles the item.
 //
+// `document <read|replace|insert|delete> <id> …` is the one part that needs the hub running: the hub holds a Conduit
+// document and is the only way to it, so these sign in as `conduit-auth api` does. `read` prints the document as
+// Markdown, each block under a comment that gives its id; the others change one block, taking Markdown from their last
+// arguments or from stdin, and print the ids of the blocks written. `--as <name>` says who writes.
+//
 // `wait <name> --stay` does not end: it prints one line for each thing that comes, so a session whose harness wakes it
 // on a line of output (Claude Code's Monitor) stays listed the whole time. Plain `wait` ends at the first, for a
 // harness that wakes only when a command ends.
@@ -165,6 +170,15 @@ if (command === "wait") {
   if (!await exists(path.join(dir, "item.json"))) { console.error(`No markup item ${argument} in ${folder}`); process.exit(1); }
   await fs.writeFile(path.join(dir, "handled.json"), `${JSON.stringify({ at: new Date().toISOString() })}\n`);
   console.log(`Handled ${argument}`);
+} else if (command === "document" && rest[0] && (argument === "read" || (["replace", "insert", "delete"].includes(argument) && rest[1]))) {
+  const { execFileSync } = await import("node:child_process");
+  const named = rest.indexOf("--as"), by = named < 0 ? path.basename(process.cwd()) : rest.splice(named, 2)[1];
+  const [id, block, ...words] = rest;
+  const markdown = argument === "read" || argument === "delete" ? undefined : words.length ? words.join(" ") : await (await import("node:stream/consumers")).text(process.stdin);
+  const route = `/v0/document/${encodeURIComponent(id)}${argument === "read" ? "" : "/blocks"}`;
+  try {
+    process.stdout.write(execFileSync(process.execPath, [new URL("./conduit-auth.mjs", import.meta.url).pathname, "api", argument === "read" ? "GET" : "POST", route, ...(argument === "read" ? [] : [JSON.stringify({ op: argument, block, markdown, by })])], { encoding: "utf8" }));
+  } catch (error) { process.stderr.write(error.stdout || `${error.message}\n`); process.exit(1); }
 } else if (command === "list") {
   for (const entry of await items()) {
     const handed = entry.state === "waiting" ? JSON.parse(await fs.readFile(entry.item, "utf8")).handed ?? {} : {};
@@ -175,6 +189,6 @@ if (command === "wait") {
     if (waiter && alive(waiter.id)) console.log(`waiter   ${waiter.name}  (${waiter.cwd}, since ${waiter.since})`);
   }
 } else {
-  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]");
+  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document read <id> | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block>   (--as <name>; Markdown from stdin when not given)");
   process.exit(command ? 1 : 0);
 }

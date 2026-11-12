@@ -47,12 +47,12 @@ try {
   console.log("A second resolved from its corner:", await cards());
 
   await page.goto("http://127.0.0.1:4310/document");
-  await page.waitForSelector(".cm-content", { timeout: 20000 });
+  await page.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 });
   await page.waitForTimeout(4500);
   const press = (label) => page.locator(`.ui-markup-bar button[aria-label^='${label}'], .ui-markup-bar button[title^='${label}']`).first().click();
   await press("Use the app"); await page.waitForTimeout(300);
   await press("Select text"); await page.waitForTimeout(300);
-  const line = await js("(() => { const l = document.querySelectorAll('.cm-line')[2].getBoundingClientRect(); return { x: l.left, y: l.top + l.height / 2 }; })()");
+  const line = await js("(() => { const l = document.querySelectorAll('.ui-document-text > [data-id]')[1].getBoundingClientRect(); return { x: l.left, y: l.top + l.height / 2 }; })()");
   const quote = async (from, words, off) => { await page.mouse.move(line.x + from, line.y); await page.mouse.down(); await page.mouse.move(line.x + from + 90, line.y, { steps: 8 }); await page.mouse.up(); await page.waitForTimeout(500); if (off) { await page.locator(".ui-markup-note[data-float] button[role=switch]").click(); await page.waitForTimeout(200); } const float = await cards(); await page.keyboard.type(words); await page.keyboard.press("Enter"); await page.waitForTimeout(4500); return float; };
   console.log("B float card:", await quote(4, "Doc: goes now"));
   const doc = await latest(); mine.add(doc);

@@ -1,29 +1,53 @@
-// /document: the page shows the hub's file, a tool pressed from Use starts annotating, the bar is solid, and a write to the file shows on the page. Sends nothing.
-import { open } from "./lib.mjs";
-import fs from "node:fs";
-const file = `${process.env.HOME}/.conduit/data/documents/scratch.md`, before = fs.readFileSync(file, "utf8");
-const { page, cdp, close } = await open({ width: 1500, height: 900 });
+// /document: the page shows the hub's test document; a block an agent writes with the CLI shows on the page and opening a page writes none; typing reaches the hub and a second page;
+// a phone-sized page types without harming the blocks; Markup's bar answers over it. Every block it adds it deletes, and it says whether the document ended as it began. Sends no markup.
+import { execFileSync } from "node:child_process";
+import { open, origin, root } from "./lib.mjs";
+const { context, page, cdp, close } = await open({ width: 1500, height: 900 });
+const cli = (...args) => execFileSync("node", ["scripts/conduit-markup.mjs", "document", ...args, "--as", "probe"], { cwd: root, encoding: "utf8" });
+const ids = (text) => [...text.matchAll(/<!-- block (\w+) -->/g)].map((match) => match[1]);
+let added = [];
 try {
   await cdp.send("Network.setBypassServiceWorker", { bypass: true });
   const errors = [];
-  page.on("pageerror", (error) => errors.push(String(error.stack ?? error).slice(0, 400)));
-  const js = (expression) => page.evaluate(expression);
-  await page.goto("http://127.0.0.1:4310/document");
-  await page.waitForSelector(".cm-content", { timeout: 20000 });
-  await page.waitForTimeout(4500);
-  const doc = () => js("[...document.querySelectorAll('.cm-line')].map(l => l.textContent).join('\\n')");
-  console.log("page shows the file's first line:", (await doc()).split("\n")[0] === before.split("\n")[0]);
-  const tools = () => js("JSON.stringify([...document.querySelectorAll('.ui-markup-bar [role=radio]')].map(b => b.getAttribute('aria-label').split(' ')[0] + (b.disabled ? ' (off)' : '') + (b.getAttribute('aria-checked') === 'true' ? '*' : '')))");
-  console.log("on load:", await tools(), "| mode pressed:", await js("document.querySelector('.ui-markup-bar button[aria-pressed]')?.getAttribute('aria-pressed')"));
+  const watch = (target) => target.on("pageerror", (error) => errors.push(String(error.stack ?? error).slice(0, 400)));
+  const visit = async (target) => { watch(target); await target.goto(`${origin}/document`); await target.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 }); };
+  const shown = (target) => target.evaluate(() => [...document.querySelectorAll(".ui-document-text > [data-id]")].map((block) => `${block.dataset.id} ${block.textContent}`));
+  const until = async (what, test) => { for (let tries = 0; tries < 40; tries += 1) { if (await test()) return console.log(`${what}: true`); await page.waitForTimeout(100); } console.log(`${what}: false`); };
+  const before = cli("read", "test");
+  await visit(page);
+  console.log("page shows the hub's blocks, in order:", JSON.stringify((await shown(page)).map((line) => line.split(" ")[0])) === JSON.stringify(ids(before)));
+
+  added = JSON.parse(cli("insert", "test", ids(before).at(-1), "A line the **agent** wrote.\n\nProbe types here:\n\n---")).blocks;
+  await until("the agent's block shows on the page", async () => (await shown(page)).some((line) => line === `${added[0]} A line the agent wrote.`));
+
+  const second = await context.newPage();
+  await visit(second);
+  await page.waitForTimeout(500);
+  console.log("opening pages wrote no block:", JSON.stringify(ids(cli("read", "test"))) === JSON.stringify([...ids(before), ...added]));
+  await page.locator(`.ui-document-text > [data-id="${added[1]}"]`).click();
+  await page.keyboard.press("End"); await page.keyboard.type(" typed on the first page");
+  await until("typing reaches the hub", async () => cli("read", "test").includes("Probe types here: typed on the first page"));
+  await until("typing shows on a second page", async () => (await shown(second)).some((line) => line.includes("typed on the first page")));
+  await page.keyboard.press("Enter"); await page.keyboard.type("# A heading");
+  await until("a typed block has an id of its own and a kind", async () => page.evaluate(() => { const made = [...document.querySelectorAll(".ui-document-text > h1[data-id]")].at(-1); return made?.textContent === "A heading"; }));
+  added.push(...ids(cli("read", "test")).filter((id) => !ids(before).includes(id) && !added.includes(id)));
+  console.log("the format names its authors:", await page.evaluate(() => fetch("/v0/document/test?as=blocks").then((answer) => answer.json()).then((kept) => `${kept.format} ${kept.version}: ${[...new Set(Object.values(kept.authors))].sort().join(", ")}`)));
+  console.log("block kind in the bar:", await page.locator(".ui-document button[aria-label='Block kind']").textContent());
+
+  await second.setViewportSize({ width: 390, height: 800 });
+  await second.locator(`.ui-document-text > [data-id="${added[1]}"]`).click();
+  await second.keyboard.press("End"); await second.keyboard.type(" and on a phone");
+  await until("a phone-sized page's typing merges", async () => cli("read", "test").includes("typed on the first page and on a phone"));
+  console.log("phone page scrolls sideways:", await second.evaluate(() => document.documentElement.scrollWidth > innerWidth));
+  await second.close();
+
+  const tools = () => page.evaluate(() => JSON.stringify([...document.querySelectorAll(".ui-markup-bar [role=radio]")].map((button) => button.getAttribute("aria-label").split(" ")[0] + (button.getAttribute("aria-checked") === "true" ? "*" : ""))));
+  console.log("Markup's bar on load:", await tools());
   await page.locator(".ui-markup-bar button[aria-label^='Highlighter']").click(); await page.waitForTimeout(400);
-  console.log("after pressing Highlighter from Use:", await tools(), "| mode pressed:", await js("document.querySelector('.ui-markup-bar button[aria-pressed]')?.getAttribute('aria-pressed')"), "| layer selecting:", await js("document.querySelector('.ui-markup-layer').hasAttribute('data-select')"));
-  console.log("bar fill:", await js("getComputedStyle(document.querySelector('.ui-markup-bar')).getPropertyValue('--frost-fill') + ' / thin: ' + document.querySelector('.ui-markup-rails').hasAttribute('data-thin')"));
-  fs.writeFileSync(file, before + "\nA line the agent wrote.\n");
-  await page.waitForTimeout(3500);
-  console.log("agent's write shows:", (await doc()).includes("A line the agent wrote."));
-  await page.locator(".ui-markup-bar button[aria-label^='Use the app']").click(); await page.waitForTimeout(300);
-  await page.locator(".cm-content").click(); await page.keyboard.press("Control+End"); await page.keyboard.type("typed here"); await page.waitForTimeout(1500);
-  console.log("typing reaches the file:", fs.readFileSync(file, "utf8").includes("typed here"));
-  await page.screenshot({ path: "/tmp/markup-probe-doc2.png" });
+  console.log("after pressing Highlighter from Use:", await tools(), "| layer selecting:", await page.evaluate(() => document.querySelector(".ui-markup-layer").hasAttribute("data-select")), "| thin:", await page.evaluate(() => document.querySelector(".ui-markup-rails").hasAttribute("data-thin")));
+  await page.screenshot({ path: "/tmp/markup-probe-document.png" });
   console.log("errors:", JSON.stringify(errors));
-} finally { fs.writeFileSync(file, before); await close(); }
+} finally {
+  for (const id of added) try { cli("delete", "test", id); } catch { /* already gone */ }
+  await close();
+}

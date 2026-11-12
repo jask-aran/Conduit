@@ -1,6 +1,6 @@
 # Markup & Conduit Documents
 
-Agreed with the user on 2026-11-12. Milestone 1 is done; the rest is not started. Delete a part when it lands.
+Agreed with the user on 2026-11-12. Milestones 1 and 2 are done; the rest is not started. Delete a part when it lands.
 
 ## Start here: the brief for the session that builds this
 
@@ -9,7 +9,7 @@ You are picking up a build whose design is settled. Read this section, then the 
 
 ### Goal
 
-Build Markup & Conduit Documents from milestone 2 onward, in the order under "Milestones". The user marks up
+Build Markup & Conduit Documents from milestone 3 onward, in the order under "Milestones". The user marks up
 Conduit's interface today and gets answers from a coding agent. They want the same loop on documents they and their
 agents write together, live, and later on pages an agent makes. They ship a lot of code but are not a software
 engineer: they read your prose closely and your diffs shallowly, so what you tell them is what they know.
@@ -19,8 +19,8 @@ engineer: they read your prose closely and your diffs shallowly, so what you tel
 - `npm run typecheck` (from `conduit-web/`) is clean, conventions included.
 - Interface feedback still works: `node scripts/probes/markup-delivery.mjs` and `markup-thread.mjs` pass (from
   `conduit-web/`, against conduit-local on :4310). Run them before a Markup change lands, not after.
-- The milestone has a probe of its own beside those, and it passes. `markup-document.mjs` covers today's
-  scratchpad at `/document`; replace it as the editor replaces the scratchpad.
+- The milestone has a probe of its own beside those, and it passes. `markup-document.mjs` covers the editor at
+  `/document` and the CLI's block commands; it deletes every block it adds. Extend it as the editor grows.
 - It is committed, on local `main`, and conduit-local is restarted (`bash scripts/start-conduit.sh restart`), so the
   user can try it. Then you report (see "Reporting") and go on to the next milestone without waiting.
 
@@ -29,13 +29,27 @@ engineer: they read your prose closely and your diffs shallowly, so what you tel
 - `conduit-web/src/components/markup/` is the layer; `host.ts` states its boundary and its typed capabilities.
   `components/ui/markup.tsx` is its library pieces. `server/markup-store.js` is the receiver; the hub wraps it in
   `server/feedback.js`. `scripts/conduit-markup.mjs` is the agent's side (`wait --stay`, `reply`, `resolve`, `done`).
-- `/document` is a temporary scratchpad: `client/document/document-scratch.tsx` over `server/document-scratch.js`,
-  a Markdown file at `~/.conduit/data/documents/scratch.md`. Milestone 2 replaces both.
-- Convention rule 9 (`conduit-web/scripts/check-conventions.mjs`) keeps Markup's boundary: the layer imports only
-  solid-js, its own folder and the library. Extend the rule to each new seam rather than working round it.
-- Decisions you make yourself, and say in your report: the document format's shape, the hub service's wire protocol,
-  how the workspace copy and its Markdown twin are written. How the editor feels (block menus, margin layout, the
-  phone) cannot be decided on paper: build it, look at it in the headed Chrome on :9222, and tell the user what to try.
+- `src/document-format.js` is the document format and the live socket's frames, shared by the hub and the editor.
+  `server/documents.js` is the hub's document service (`/v0/document/<id>`, its `/blocks` and its `/live` socket), each
+  document kept as Yjs state in `~/.conduit/data/documents/<id>.yjs`. `components/document/` is the editor; its
+  `host.ts` states its boundary (`DocumentHost`) and what it offers Markup (`DocumentMarks`). `components/ui/document.tsx`
+  is its library piece. `client/document/document-page.tsx` is `/document`: the one test document, id `test`.
+  `conduit-markup document read|replace|insert|delete <id>` is the agent's side. The old `scratch.md` is left where it was.
+- Decisions made in milestone 2, each stated where the code is: blocks are ProseMirror nodes with an `id` attribute
+  (`BLOCK_TYPES`); the wire is two binary frames, `have` and `update`, over Yjs alone; an agent's edit is applied by the
+  hub as the smallest change, under a Yjs client id of the agent's own, and the document's `authors` map names each
+  client id; the editor is made only after the first merge with the hub; it never adds a trailing block; `y-prosemirror`
+  is used directly (a small extension in `editor.tsx`), not TipTap's Collaboration extension, whose fork of it was not
+  on the approved list.
+- `src/` is at its ceiling of 115,000 lines (convention rule 10): milestone 2 fitted by deleting unused code. Later
+  milestones need the same, or the user's word to raise it. `conduit-web/budgets.json` and the bundle budget
+  (initial JS is within 1.1 kB gzip of 425,000) are as tight.
+- Convention rule 9 (`conduit-web/scripts/check-conventions.mjs`) keeps Markup's boundary and the editor's: each
+  imports only solid-js, its own folder and the library (the editor also the format and its packages). Extend the rule
+  to each new seam rather than working round it.
+- Decisions you make yourself, and say in your report: how the workspace copy and its Markdown twin are written.
+  How the editor feels (block menus, margin layout, the phone) cannot be decided on paper: build it, look at it in the
+  headed Chrome on :9222, and tell the user what to try.
 
 ### Ownership
 
@@ -141,8 +155,8 @@ document stays possible: a comment may be a mark, not only words.
 ## Milestones
 
 1. Done: the code is named Markup; one delivery (Send now per comment, or Send for what is outstanding).
-2. Hub document service with live merging; the block editor at `/document` on one test document; CLI block
-   commands. The phone reads and comments; phone editing must not corrupt, its polish is later.
+2. Done: the hub's document service with live merging; the block editor at `/document` on the test document; the
+   CLI's block commands. Phone editing merges; its polish is later.
 3. Margin threads and Markup tools on the document; agent edits shown as changed, with Revert.
 4. The hub-started mated thread; the MCP tools; addressing by `@name`.
 5. Documents in projects: the file tree, many documents, the saved workspace copy and its Markdown twin.
@@ -150,8 +164,10 @@ document stays possible: a comment may be a mark, not only words.
 
 ## Not settled
 
-- How the editor feels (block menus, margin layout, the phone): tried in milestone 2, not decided on paper.
-- Whether live merging from the start is worth its cost. It is what makes the document hub-owned and structured;
-  "the person plus agents, a block at a time" would make milestone 2 much smaller. Raised, not revisited.
+- How the editor feels. Milestone 2 has one block menu in the bar (the caret's block kind, opening the kinds) and
+  Markdown typing rules; the user has not yet said how it feels. Milestone 3 moves the block tools to Markup's rail.
+  Not built: other people's carets, a placeholder, images and dates, the library's own checkbox in a checklist, and
+  keeping what is typed while the hub is away if the page is closed before it answers.
+- Who an author is: every person's client is recorded as `person` until there is a name to give it.
 - The hub starting a thread touches its session code, which Markup has not needed before.
 - Moving Markup and the editor into the shared components package: parked until the package's scope is decided.

@@ -48,26 +48,31 @@ try {
   console.log("A after Reply:", await cards());
   await page.screenshot({ path: `${out}-thread.png`, clip: { x: 900, y: 400, width: 600, height: 500 } });
   await page.locator(".ui-markup-note").last().click(); await page.waitForTimeout(300);
-  await page.locator(".ui-markup-note button", { hasText: "Resolve" }).click(); await page.waitForTimeout(1500);
-  await page.keyboard.press("Escape"); await page.waitForTimeout(400);
+  await page.locator(".ui-markup-note[data-open] button[aria-label='Resolve']").click(); await page.waitForTimeout(1500);
+  // With no card open Escape would close Markup itself.
+  if (await page.locator(".ui-markup-note[data-open]").count()) { await page.keyboard.press("Escape"); await page.waitForTimeout(400); }
   console.log("A resolved, shut:", await cards(), "| handled:", fs.existsSync(`${process.env.HOME}/.conduit/data/feedback/${id}/handled.json`));
-  await press("Back"); await page.waitForTimeout(3500);
+  // Resolving its last comment handles the item, and the bar then leaves the thread by itself.
+  if (await page.locator(".ui-markup-bar button[aria-label^='Back']").count()) await press("Back");
+  await page.waitForTimeout(3500);
   console.log("A back:", await buttons());
-  await press("What was sent"); await page.waitForTimeout(1500);
+  // The list is offered only while an item is unfinished; this probe's own was handled when its comment was resolved.
+  if (await page.locator(".ui-markup-bar button[aria-label^='What was sent']").count()) await press("What was sent");
+  await page.waitForTimeout(1500);
   console.log("A sent before:", await cards(), await buttons());
   await page.screenshot({ path: `${out}-list.png`, clip: { x: 900, y: 300, width: 600, height: 600 } });
   }
 
   stay = spawn("node", [script, "wait", "doc-probe", "--stay"]); let told = ""; stay.stdout.on("data", (data) => { told += data; });
   await page.goto("http://127.0.0.1:4310/document");
-  await page.waitForSelector(".cm-content", { timeout: 20000 });
+  await page.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 });
   await page.waitForTimeout(4500);
   console.log("B bar:", await buttons(), "| launch mark gone:", await js("!document.querySelector('[data-launch-mark], #launch-mark')"));
   await page.screenshot({ path: `${out}-doc0.png` });
   await press("Annotate").catch(() => press("Use the app"));
   await page.waitForTimeout(300);
   await press("Select text"); await page.waitForTimeout(300);
-  const line = await js("(() => { const l = document.querySelectorAll('.cm-line')[2].getBoundingClientRect(); return { x: l.left, y: l.top + l.height / 2 }; })()");
+  const line = await js("(() => { const l = document.querySelectorAll('.ui-document-text > [data-id]')[1].getBoundingClientRect(); return { x: l.left, y: l.top + l.height / 2 }; })()");
   await page.mouse.move(line.x + 4, line.y); await page.mouse.down(); await page.mouse.move(line.x + 180, line.y, { steps: 8 }); await page.mouse.up(); await page.waitForTimeout(500);
   await page.keyboard.type("Doc probe: tighten this"); await page.keyboard.press("Enter");
   await page.waitForTimeout(5000);

@@ -17,6 +17,7 @@ import { expandPage } from "./pages/expand";
 import { filesPages } from "./files";
 import { connectionPage } from "./pages/connection";
 import { frostPage } from "./pages/frost";
+import { documentPage } from "./pages/document";
 import { fadePage } from "./pages/fade";
 import { navPage } from "./pages/nav";
 import { dashboardPage } from "./pages/dashboard";
@@ -83,6 +84,7 @@ const piecePages: Page[] = [
   cardPage,
   toastPage,
   markupPage,
+  documentPage,
   overlayPage,
   networkPage,
   workbenchPage,

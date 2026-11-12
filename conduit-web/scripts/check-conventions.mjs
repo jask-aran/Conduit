@@ -140,12 +140,16 @@ for (const file of serverCode) {
 // 9. Markup's boundary (components/markup/host.ts). The tool is lifted into other projects, so it
 //    takes everything of the app's through its MarkupHost: it imports solid-js, its own folder and the library, and
 //    nothing else. The receiver's store likewise runs under `conduit-markup serve` with no hub: Node's own modules only.
-for (const file of files.filter((f) => /\.tsx?$/.test(f) && inDir(f, "src/components/markup"))) {
-  const text = stripComments(fs.readFileSync(file, "utf8"));
-  each(file, text, /\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g, (m) => {
-    const from = m[1];
-    if (!/^(solid-js(\/.*)?|\.\/[\w-]+|@\/components\/ui(\/.*)?)$/.test(from)) report(file, text, m.index, "markup boundary", `"${from}" is the app's: pass it through MarkupHost`);
-  });
+//    The document editor (components/document/host.ts) keeps the same boundary through its DocumentHost, with what it is
+//    built on besides: the document format, which the hub shares, and the editor's own packages.
+for (const [dir, host, more] of [["markup", "MarkupHost", ""], ["document", "DocumentHost", "|@\\/document-format\\.js|@tiptap\\/[\\w-]+|solid-tiptap|yjs|y-prosemirror"]]) {
+  for (const file of files.filter((f) => /\.tsx?$/.test(f) && inDir(f, `src/components/${dir}`))) {
+    const text = stripComments(fs.readFileSync(file, "utf8"));
+    each(file, text, /\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g, (m) => {
+      const from = m[1];
+      if (!new RegExp(`^(solid-js(\\/.*)?|\\.\\/[\\w-]+|@\\/components\\/ui(\\/.*)?${more})$`).test(from)) report(file, text, m.index, `${dir} boundary`, `"${from}" is the app's: pass it through ${host}`);
+    });
+  }
 }
 {
   const file = path.join(root, "src/server/markup-store.js");

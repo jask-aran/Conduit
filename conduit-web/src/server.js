@@ -116,7 +116,7 @@ import { ContextStore } from "./context/context-store.js";
 import { registerContextRoutes } from "./server/routes/context.js";
 import { registerClientReportRoutes } from "./server/routes/client-reports.js";
 import { createFeedback, registerFeedbackRoutes } from "./server/feedback.js";
-import { registerDocumentScratch } from "./server/document-scratch.js";
+import { createDocuments, registerDocumentRoutes } from "./server/documents.js";
 import { ChatBackendRegistry } from "./chat-backend-registry.js";
 import { MANIFESTS } from "./harnesses/index.js";
 import { detect } from "./harnesses/probe.js";
@@ -641,7 +641,8 @@ const uiControl = new UiControl({ runtimeHub, nodeHub });
 mcpRuntime.uiControl = uiControl;
 const feedback = lifetime.own("feedback", createFeedback({ dataRoot: config.dataRoot, config, serverName: serverIdentity.name, runtimeHub, uiControl, chatLogs, listProcesses: () => backends.list() }), (owned) => owned.close());
 registerFeedbackRoutes(app, feedback);
-registerDocumentScratch(app, config.dataRoot);
+const documents = lifetime.own("documents", createDocuments({ dataRoot: config.dataRoot }), (owned) => owned.close());
+registerDocumentRoutes(app, documents);
 const browserHost = lifetime.own("hub browser", new BrowserHost({ dataRoot: config.dataRoot,
   onChange: () => runtimeHub.publish({ type: "browser_changed", id: "hub" }) }), (owned) => owned.close());
 mcpAccess.browser = browserHost.mcpServer();
@@ -1031,9 +1032,10 @@ const handleUpgrade = async (request, socket, head) => {
   const ptyMatch = pathname.match(/^\/v0\/ptys\/([a-f0-9-]{36})\/attach$/);
   const dictationMatch = pathname === "/v0/dictation/stream";
   const browserMatch = pathname.match(/^\/v0\/browsers\/([A-Za-z0-9_-]{1,64})\/stream$/);
+  const documentMatch = pathname.match(/^\/v0\/document\/([a-z0-9-]{1,64})\/live$/);
   // A device dialling in proves itself with its pairing key, not a browser session.
   if (pathname === "/v0/nodes/connect") return nodeHub.handleUpgrade(request, socket, head);
-  if ((!match || !backends.get(match[1])) && (!ptyMatch || !terminals.get(ptyMatch[1])) && !dictationMatch
+  if ((!match || !backends.get(match[1])) && (!ptyMatch || !terminals.get(ptyMatch[1])) && !dictationMatch && !documentMatch
     && (!browserMatch || !browsers.get(browserMatch[1])?.available)) return socket.destroy();
   try {
     if (authStore.hasPassword()) {
@@ -1054,6 +1056,7 @@ const handleUpgrade = async (request, socket, head) => {
     return socket.destroy();
   }
   if (dictationMatch) return dictationStream.handleUpgrade(request, socket, head);
+  if (documentMatch) return documents.handleUpgrade(documentMatch[1], request, socket, head);
   if (browserMatch) return browsers.get(browserMatch[1]).handleUpgrade(browserMatch[1], request, socket, head);
   if (ptyMatch) return terminalStream.handleUpgrade(ptyMatch[1], request, socket, head);
   if (!backends.get(match[1])) return socket.destroy();

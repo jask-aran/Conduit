@@ -205,7 +205,7 @@ const FileViewer = lazy(() => import("./workspace/workspace-file-viewer"));
 const FileTypeIcon = lazy(() => import("@/components/ui/file-marks").then((module) => ({ default: module.FileTypeIcon })));
 const ComputerDashboard = lazy(() => import("./dashboard/computer-dashboard").then((module) => ({ default: module.ComputerDashboard })));
 const FeedbackTool = lazy(() => import("./feedback/conduit-feedback"));
-const DocumentScratch = lazy(() => import("./document/document-scratch"));
+const DocumentPage = lazy(() => import("./document/document-page"));
 const AgentPage = lazy(() => import("./dashboard/agent-page").then((module) => ({ default: module.AgentPage })));
 const JbotRoom = lazy(() => import("./dashboard/jbot-room").then((module) => ({ default: module.JbotRoom })));
 const EnvironmentPage = lazy(() => import("./dashboard/environment-page").then((module) => ({ default: module.EnvironmentPage })));
@@ -5705,5 +5705,5 @@ void startPush().catch(() => {});
 void keepThisComputerConnected().catch(() => {});
 
 render(() => <ErrorBoundary fallback={(error) => { dismissLaunchMark(); return <ConnectionRecovery title="Conduit hit a UI error" error={error instanceof Error ? error.message : "Unknown interface error"} onRetry={() => location.reload()} retryLabel="Reload Conduit" />; }}>
-  {location.pathname === "/document" ? <DocumentScratch onReady={dismissLaunchMark} /> : nativeApp ? <NativeRoot /> : <App />}
+  {location.pathname === "/document" ? <DocumentPage onReady={dismissLaunchMark} /> : nativeApp ? <NativeRoot /> : <App />}
 </ErrorBoundary>, mount);
