@@ -34,7 +34,7 @@ export type DocumentAnchor = { key: string; quote?: string; under?: Record<strin
  * the text selected, else the caret's block; null before the editor is made.
  */
 export type DocumentMarks = {
-  tools(): { name: DocumentBlockKind; label: string; icon: () => JSX.Element; active: boolean; run(): void }[];
+  tools(): { name: string; label: string; icon: () => JSX.Element; active: boolean; menu?: string; run(): void }[];
   selection(): Range | null;
   subject(): Record<string, string>;
   under(box: { left: number; top: number; width: number; height: number }): Record<string, string> | null;

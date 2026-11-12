@@ -3,6 +3,7 @@ import { createResource, createSignal, For, onCleanup, Show, type JSX } from "so
 import { DocumentEditor, type DocumentHost, type DocumentMarks } from "@/components/document";
 import { MarkupMargin, MarkupTool, httpTransport, type MarkupHost, type MarkupMode } from "@/components/markup";
 import { Empty, HeaderButton, Icons, SheetFill, StatusDot } from "@/components/ui";
+import { MarkupRibbonRoom } from "@/components/ui/markup";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
 import { api } from "../api/client";
@@ -24,22 +25,19 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
   const changed = () => void refetch();
   window.addEventListener("conduit:artifacts-changed", changed);
   onCleanup(() => window.removeEventListener("conduit:artifacts-changed", changed));
-  const [mode, setMode] = createSignal<MarkupMode | null>("use"), [sent, setSent] = createSignal(0), [away, setAway] = createSignal(false);
+  const [mode, setMode] = createSignal<MarkupMode>("use"), [sent, setSent] = createSignal(0), [away, setAway] = createSignal(false);
   const client = `document-${Math.random().toString(36).slice(2, 10)}`;
-  let frame: HTMLDivElement | undefined, marks: DocumentMarks | undefined, was: Artifact["kind"] | undefined;
+  let frame: HTMLDivElement | undefined, room: HTMLDivElement | undefined, marks: DocumentMarks | undefined, was: Artifact["kind"] | undefined;
   // What the open tool offers the paper's `@`: who is listening, and a comment for one of them.
   const [offer, setOffer] = createSignal<Parameters<NonNullable<MarkupHost["asks"]>>[0]>(null);
-  // With the bar closed `@` still offers who is listening, and the one picked opens the bar on that comment.
-  const [listening] = createResource(() => !mode() && props.id, () => shared.transport.listening().then((list) => list.map((one) => one.name), () => [] as string[]));
-  let asked: [Range, string?] | undefined;
-  const ask = (about: Range, name?: string) => { const open = offer(); if (open) open.ask(about, name); else { asked = [about, name]; setMode("use"); } };
+  const ask = (about: Range, name?: string) => offer()?.ask(about, name);
   const editing: DocumentHost = { socket: async (id) => new WebSocket(await webSocketUrl(`/v0/document/${id}/live`)), author: () => "person" };
   const base = () => `/v0/document/${encodeURIComponent(props.id)}`;
-  const shared = { names, transport: httpTransport(api, `${base()}/markup`), clientId: () => client, capturePage, frame: () => frame,
+  const shared = { names, transport: httpTransport(api, `${base()}/markup`), clientId: () => client, capturePage, frame: () => room ?? frame,
     notify: (outcome, message) => outcome === "sent" ? toast.success(message) : toast.error(message) } satisfies Partial<MarkupHost>;
   const markup: MarkupHost = {
     ...shared,
-    capabilities: { deliveries: ["batched", "live"], tools: ["quote", "highlight", "pen", "shape", "text", "erase", "note"], screenshot: false, sent: "margin", thin: false },
+    capabilities: { deliveries: ["batched", "live"], tools: ["quote", "highlight", "pen", "shape", "text", "erase", "note"], screenshot: false, sent: "margin", thin: false, bar: "ribbon" },
     client: () => ({ kind: "document" }),
     subject: () => ({ ...marks?.subject(), change: `\`node scripts/conduit-markup.mjs document read ${props.id}\` prints it as it is now, as Markdown with each block under its id; \`document replace\`, \`insert\` and \`delete\` change one block (\`document\` alone says how).` }),
     under: (box) => marks?.under(box) ?? null,
@@ -49,10 +47,10 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
     },
     tools: () => marks?.tools() ?? [],
     asking: () => marks?.selection() ?? null,
-    asks: (offered) => { setOffer(() => offered); if (offered && asked) offered.ask(...asked); asked = undefined; },
+    asks: (offered) => setOffer(() => offered),
     sent: () => setSent((count) => count + 1),
   };
-  const tool = (host: MarkupHost) => <Show when={!props.quiet && mode()}>{(now) => <MarkupTool host={host} mode={now()} onMode={setMode} onClose={() => setMode(null)} />}</Show>;
+  const tool = (host: MarkupHost) => <Show when={!props.quiet}><MarkupTool host={host} mode={mode()} onMode={setMode} onClose={() => setMode("use")} /></Show>;
   // `latest`: asked again, it stays as it was until the hub answers, so its editor is not made anew.
   const found = () => about.error ? undefined : about.latest;
   // `was`: deleted, it is in no list, and its pane still says what it was.
@@ -68,10 +66,11 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
     </MenuSection></MenuContent>
   </DropdownMenu>;
   return <SheetFill ref={(element) => { frame = element; }} class="pane-artifact">
-    {props.header(<><Show when={found()?.trouble}>{(why) => <StatusDot label={why()} title={why()} tone="warn" />}</Show><Show when={away()}><StatusDot label="Reconnecting to the hub" title="Reconnecting to the hub" tone="warn" spinning /></Show><Show when={!props.quiet && !mode() && found()}><HeaderButton label="Mark up" icon={<Icons.Feedback />} onClick={() => setMode("use")} /></Show><Show when={found()}>{connecting}</Show></>)}
+    {props.header(<><Show when={found()?.trouble}>{(why) => <StatusDot label={why()} title={why()} tone="warn" />}</Show><Show when={away()}><StatusDot label="Reconnecting to the hub" title="Reconnecting to the hub" tone="warn" spinning /></Show><Show when={found()}>{connecting}</Show></>)}
+    <Show when={!props.quiet && found()}><MarkupRibbonRoom ref={(element) => { room = element; }} /></Show>
     <Show when={!about.error} fallback={<Empty role="alert">This {kind()} could not be opened: {String((about.error as Error)?.message || "the hub did not say why").replace(/\.$/, "")}.</Empty>}>
       <Show when={found()?.id} keyed fallback={<Empty role="status">Opening the {kind()}…</Empty>}>{(id) => found()?.kind === "site" ? <SitePane about={() => found()!} host={shared} tool={tool} /> : <>
-        <DocumentEditor host={editing} id={id} name={found()?.name ?? ""} bare onAway={setAway} marks={(offered) => { marks = offered; }} mentions={() => props.quiet ? [] : offer()?.names() ?? listening() ?? []} onMention={ask} onComment={props.quiet ? undefined : ask} margin={<MarkupMargin host={markup} sent={sent()} />} />
+        <DocumentEditor host={editing} id={id} name={found()?.name ?? ""} bare onAway={setAway} marks={(offered) => { marks = offered; }} mentions={() => props.quiet ? [] : offer()?.names() ?? []} onMention={ask} onComment={props.quiet ? undefined : ask} margin={<MarkupMargin host={markup} sent={sent()} />} />
         {tool(markup)}
       </>}</Show>
     </Show>

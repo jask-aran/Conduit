@@ -82,6 +82,9 @@
 /* Thinner than the one frost, where the bar sits over an interface being looked at. conventions-ok: the tool's own surface */
 .ui-markup-rails[data-thin] > .ui-markup-bar { --frost-fill: color-mix(in oklch, var(--foreground), transparent 92%); }
 /* A phone: every control on one row. */
+/* The ribbon: at the head of its frame, what a tool draws with under it. */
+.ui-markup-rails[data-ribbon] { top: calc(var(--markup-frame-top, 0px) + var(--space-xs)); bottom: auto; flex-direction: column-reverse; }
+.ui-markup-room { flex: none; height: calc(var(--control-sm) + 4 * var(--space-xs)); }
 .ui-markup-rails[data-compact] { right: calc(var(--markup-frame-right, 0px) + var(--space-2xs)); left: calc(var(--markup-frame-left, 0px) + var(--space-2xs)); }
 .ui-markup-rails[data-compact] > .ui-markup-bar { gap: 0; }
 /* Its controls keep their width; only the status gives way. */

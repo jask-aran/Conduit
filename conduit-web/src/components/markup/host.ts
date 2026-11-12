@@ -93,11 +93,13 @@ export type MarkupCapabilities = {
   sent: "corner" | "margin";
   /** The bar is thinner than the library's frost, to show the interface being looked at under it; a document's needs no such thing. */
   thin: boolean;
+  /** Where the bar stands: at the `foot` of what is marked up, opened and closed; or a `ribbon` at the head of the host's frame, always there, the host's own tools in it beside Markup's: an artifact's, which is edited and marked up in one place. */
+  bar: "foot" | "ribbon";
   /** What the tool stands over may be light (a site in a frame), where frost alone cannot be read: its bar and cards then have a dark ground of their own. */
   grounded: boolean;
 };
 /** What a host that declares nothing gets: a collaborator's batched markup with every tool. */
-export const MARKUP_CAPABILITIES: MarkupCapabilities = { deliveries: ["batched"], tools: ["select", "quote", "pen", "highlight", "shape", "text", "erase", "note"], screenshot: true, listeners: true, inks: true, sent: "corner", thin: true, grounded: false };
+export const MARKUP_CAPABILITIES: MarkupCapabilities = { deliveries: ["batched"], tools: ["select", "quote", "pen", "highlight", "shape", "text", "erase", "note"], screenshot: true, listeners: true, inks: true, sent: "corner", thin: true, bar: "foot", grounded: false };
 
 /** A comment that stands in the margin, as the surface is told of it: `key` is "<item>/<n>"; `quote` and `under` are what it was sent with; `current`: its card is open; `resolved`: by the person, so it is no longer marked. */
 export type MarkupAnchor = { key: string; quote?: string; under?: Record<string, string | number | boolean>; current: boolean; resolved: boolean };

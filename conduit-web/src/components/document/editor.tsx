@@ -6,12 +6,12 @@ import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } fro
 import { createEditorTransaction, createTiptapEditor } from "solid-tiptap";
 import { redo, undo, ySyncPlugin, yUndoPlugin } from "y-prosemirror";
 import type { Map as YMap, XmlFragment } from "yjs";
-import { DocumentSheet, documentBlockIcons, documentMarkClass, documentTextClass } from "@/components/ui/document";
+import { DocumentSheet, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons } from "@/components/ui/document";
 import { CHANGES, FRAGMENT, documentExtensions } from "@/document-format.js";
 import { DOCUMENT_BLOCKS, type DocumentAnchor, type DocumentBlockKind, type DocumentHost, type DocumentMarks } from "./host";
 import { hinted } from "./hint";
 import { createLiveDocument } from "./live";
-import { SelectionTools, selectedRange } from "./toolbar";
+import { MARKS, SelectionTools, selectedRange } from "./toolbar";
 import { createSlash, menuKeys, TypedMenu, typing, type Typed, type Typing } from "./typed";
 
 /** What the caret's block is, read in this order (a list inside a quote is a list), and how a block is made that kind. */
@@ -134,6 +134,9 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     return { name, label: KINDS[name].label, icon: () => <Icon />, get active() { return kind() === name; }, run: () => { const made = editor(); if (made) KINDS[name].make(made.chain().focus()).run(); } };
   });
   const slash = createSlash(editor, tools);
+  // The marks the selection wears, for a bar that is always there; the tools over a selection offer them too.
+  const wears = createEditorTransaction(editor, (made) => MARKS.filter(([name]) => made?.isActive(name)).map(([name]) => name).join(" "));
+  const worn = MARKS.map(([name, label]) => { const Icon = documentToolIcons[name]; return { name, label, icon: () => <Icon />, get active() { return wears().includes(name); }, run: () => { editor()?.chain().focus().toggleMark(name).run(); } }; });
   props.marks?.({
     subject: () => ({ kind: "document", name: props.name, document: props.id }),
     under: (box) => {
@@ -149,7 +152,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     },
     watch: (listener) => { watching.add(listener); return () => watching.delete(listener); },
     changed: (key) => changed().includes(key),
-    tools: () => tools,
+    tools: () => [...tools.map((tool) => ({ ...tool, menu: "Block", get active() { return tool.active; } })), ...worn],
     selection: () => {
       const view = editor()?.view;
       if (!view) return null;

@@ -180,7 +180,9 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   const canCapture = Boolean(host.capturePage || navigator.mediaDevices?.getDisplayMedia);
   const screenshots = can.screenshot && canCapture;
   const capturePage = host.capturePage && (() => Promise.race([host.capturePage!(), new Promise<null>((resolve) => setTimeout(resolve, PICTURE_WAIT_MS, null))]));
-  const [hand, setHand] = createSignal((() => { try { return localStorage.getItem(HAND_KEY) !== "off"; } catch { return true; } })());
+  // A ribbon is on an artifact, which always has a thread to hand to: there the choice is not offered and handing is on.
+  const [handing, setHand] = createSignal((() => { try { return localStorage.getItem(HAND_KEY) !== "off"; } catch { return true; } })());
+  const hand = () => can.bar === "ribbon" || handing();
   const keepHand = (on: boolean) => { setHand(on); try { localStorage.setItem(HAND_KEY, on ? "on" : "off"); } catch { /* this session only */ } };
   const [waiters, { refetch: askWaiters }] = createResource(() => can.listeners ? transport.listening().catch(() => [] as Waiter[]) : [] as Waiter[]);
   const [agentName, setAgentName] = createSignal<string | null>(null);
@@ -666,7 +668,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     const framed = host.frame?.();
     if (framed && layer) {
       let last = "", still = 0, settling = 0;
-      const place = () => { const box = framed.getBoundingClientRect(), now = `${box.left}px ${innerWidth - box.right}px`; if (now === last) return false; last = now; layer!.style.setProperty("--markup-frame-left", `${box.left}px`); layer!.style.setProperty("--markup-frame-right", `${innerWidth - box.right}px`); return true; };
+      const place = () => { const box = framed.getBoundingClientRect(), now = `${box.left}px ${innerWidth - box.right}px ${box.top}px`; if (now === last) return false; last = now; layer!.style.setProperty("--markup-frame-top", `${box.top}px`); layer!.style.setProperty("--markup-frame-left", `${box.left}px`); layer!.style.setProperty("--markup-frame-right", `${innerWidth - box.right}px`); return true; };
       const settle = () => { still = place() ? 0 : still + 1; settling = still < 30 ? requestAnimationFrame(settle) : 0; };
       const moved = () => { place(); if (!settling) { still = 0; settle(); } };
       const sized = new ResizeObserver(moved);
@@ -853,7 +855,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
               value={reply()} onOpen={() => startReply(n())} onInput={setReply} resolved={resolvedOf(n())} onSay={() => void answer()} onResolve={(resolved) => settle(n(), resolved)} />}</Show>
           </Show>}</For></MarkupNotes>
         </Show>
-        <MarkupBar thin={can.thin} own={host.tools?.()} onAsk={host.asking && offered("quote") ? () => { const range = host.asking!(); if (range) addQuote(range); } : undefined} view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onTool={(tool) => { if (props.mode === "use") look("page"); setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); }} onNote={() => { if (props.mode === "use") look("page"); note(); }}
+        <MarkupBar thin={can.thin} ribbon={can.bar === "ribbon"} own={host.tools?.()} onAsk={host.asking && offered("quote") ? () => { const range = host.asking!(); if (range) addQuote(range); } : undefined} view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onTool={(tool) => { if (props.mode === "use") look("page"); setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); }} onNote={() => { if (props.mode === "use") look("page"); note(); }}
           status={status()} compact={touchOnly} keys={touchOnly ? undefined : props.keys?.()} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} shape={shape()} onShape={setShape} onUndo={undoable() ? undo : undefined} onRedo={redoable() ? redo : undefined}
           replies={unread().reduce((sum, item) => sum + item.unread, 0)} sent={thread() ? 0 : earlier.latest?.length} onReplies={sentBefore}
           outstanding={unsent().filter((selection) => selection.comment.trim()).length} standing={thread() ? standing() : undefined}

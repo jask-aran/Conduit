@@ -11,7 +11,9 @@ const ids = (text) => [...text.matchAll(/<!-- block (\w+) -->/g)].map((match) =>
 let added = [], item;
 try {
   await cdp.send("Network.setBypassServiceWorker", { bypass: true });
-  // The comment is handed to no one: a session that is listening is not given a probe's words to act on.
+  // The comment is handed to no one: a session that is listening is not given a probe's words to act on. An artifact's ribbon always
+  // hands on (to the paper's own thread, a real model), so here the hub is made to say no one is listening.
+  await context.route("**/v0/document/*/markup/waiting", (route) => route.fulfill({ json: { waiting: [] } }));
   await context.addInitScript(() => { localStorage.setItem("ui-markup.hand", "off"); localStorage.setItem("ui-markup.live", "off"); });
   const errors = [];
   const watch = (target) => target.on("pageerror", (error) => errors.push(String(error.stack ?? error).slice(0, 400)));
@@ -37,10 +39,10 @@ try {
   await until("a typed block has an id of its own and a kind", async () => page.evaluate(() => { const made = [...document.querySelectorAll(".ui-document-text > h1[data-id]")].at(-1); return made?.textContent === "A heading"; }));
   added.push(...ids(cli("read", "test")).filter((id) => !ids(before).includes(id) && !added.includes(id)));
   console.log("the format names its authors:", await page.evaluate(() => fetch("/v0/document/test?as=blocks").then((answer) => answer.json()).then((kept) => `${kept.format} ${kept.version}: ${[...new Set(Object.values(kept.authors))].sort().join(", ")}`)));
-  const rail = page.locator(".ui-markup-bar[aria-label='Document tools']");
-  await rail.locator("button[aria-label='Heading 2']").click();
-  await until("the rail makes the caret's block another kind", () => page.evaluate(() => { const made = [...document.querySelectorAll(".ui-document-text > h2[data-id]")].at(-1); return made?.textContent === "A heading"; }));
-  console.log("the rail says which kind the caret is in:", await rail.locator("button[aria-pressed='true']").getAttribute("aria-label"), "| the document's own bar holds:", await page.locator(".ui-document .ui-pane-header button, .ui-document header button").allTextContents());
+  const rail = page.locator(".ui-markup-bar [aria-label='Document tools']");
+  await rail.locator("button[aria-label='Block']").click(); await page.getByRole("menuitem", { name: "Heading 2" }).click();
+  await until("the ribbon makes the caret's block another kind", () => page.evaluate(() => { const made = [...document.querySelectorAll(".ui-document-text > h2[data-id]")].at(-1); return made?.textContent === "A heading"; }));
+  console.log("the ribbon says which kind the caret is in:", await rail.locator("button[aria-label='Block']").textContent(), "| the document's own bar holds:", await page.locator(".ui-document .ui-pane-header button, .ui-document header button").allTextContents());
   await rail.locator("button", { hasText: "Ask the agent" }).click();
   await until("Ask the agent starts a comment about the caret's block", async () => (await page.locator(".ui-markup-note[data-float]").textContent().catch(() => "")).includes("A heading"));
   await page.locator(".ui-markup-note[data-float] button", { hasText: "Remove" }).click();

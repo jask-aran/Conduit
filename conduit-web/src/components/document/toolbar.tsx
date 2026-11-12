@@ -15,7 +15,7 @@ export const selectedRange = (view: EditorView) => {
   return range;
 };
 
-const MARKS = [["bold", "Bold"], ["italic", "Italic"], ["strike", "Strikethrough"], ["code", "Code"]] as const;
+export const MARKS = [["bold", "Bold"], ["italic", "Italic"], ["strike", "Strikethrough"], ["code", "Code"]] as const;
 const TABLE = [["row-below", "Add a row below", "addRowAfter"], ["column-right", "Add a column to the right", "addColumnAfter"], ["delete-row", "Delete the row", "deleteRow"], ["delete-column", "Delete the column", "deleteColumn"], ["delete-table", "Delete the table", "deleteTable"]] as const;
 // A press on a tool keeps the editor's focus, and with it the selection the tool acts on.
 const keep = (event: MouseEvent) => event.preventDefault();
