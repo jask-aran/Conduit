@@ -148,6 +148,7 @@ export type MarkupOwnTool = { name: string; label: string; icon: () => JSX.Eleme
  *  `thin` (unsaid: so): its surface is thinner than the library's frost, to sit over an interface being looked at. A tool pressed while the app is in use goes back to annotating with it.
  *  `outstanding`: how many comments Send would deliver; `standing`: where the item they have gone to stands, once some have.
  *  `ribbon`: it stands at the head of the frame and is always there: the host's tools are in the bar itself, first, whatever the mode (one pressed while annotating goes back to using the app), what a tool draws with stands under it, and it has no close.
+ *  On the ribbon "Use the app" only ever goes back to using it: a tool is what starts annotating, so what it draws with comes up for that tool and never for the hand.
  *  On the ribbon what is sent is always handed on, so who it goes to is said and not a choice to turn off.
  *  `own`: the host's own tools (a document's block kinds), and `onAsk` a comment about where the surface's selection or caret is: a rail above the bar while the app is in use. */
 export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnTool[]; onAsk?: () => void; ribbon?: boolean; screenshots?: boolean; onView: (view: MarkupView) => void; tools?: readonly (MarkupToolKind | "note")[]; tool: MarkupToolKind; onTool: (tool: MarkupToolKind) => void; onNote: () => void; outstanding?: number; standing?: string; thin?: boolean; thread?: boolean; onBack?: () => void; replies?: number; sent?: number; onReplies?: () => void; ink?: MarkupInk; onInk?: (ink: MarkupInk) => void; weight?: MarkupWeight; onWeight?: (weight: MarkupWeight) => void; shape?: MarkupShape; onShape?: (shape: MarkupShape) => void; onUndo?: () => void; onRedo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
@@ -195,7 +196,7 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     <Show when={props.ribbon && !props.thread && (props.own?.length || props.onAsk)}><span class="ui-markup-with" role="group" aria-label="Document tools">{owned()}</span></Show>
     <Show when={!props.thread}>
       {/* With no screenshot to be had there are two modes, and one control says which. */}
-      <Show when={props.screenshots} fallback={<IconButton label={views()[0]!.label} aria-pressed={using()} onClick={() => props.onView(using() ? "page" : "use")}><Icons.UseApp /></IconButton>}>
+      <Show when={props.screenshots} fallback={<IconButton label={views()[0]!.label} aria-pressed={using()} onClick={() => props.onView(using() && !props.ribbon ? "page" : "use")}><Icons.UseApp /></IconButton>}>
         <Segmented label="Mode" icons size="sm" value={props.view} onChange={props.onView} options={views()} />
       </Show>
       <span class="ui-markup-with" onClick={() => { if (using()) props.onView("page"); }}><Segmented label="Annotate with" icons size="sm" value={props.tool} onChange={(tool) => tool === "note" ? props.onNote() : props.onTool(tool)}
