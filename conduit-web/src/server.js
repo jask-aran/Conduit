@@ -115,7 +115,7 @@ import { VOICE_EXECUTION_CATALOG } from "./server/voice-execution-catalog.js";
 import { ContextStore } from "./context/context-store.js";
 import { registerContextRoutes } from "./server/routes/context.js";
 import { registerClientReportRoutes } from "./server/routes/client-reports.js";
-import { createFeedback, registerFeedbackRoutes } from "./server/feedback.js";
+import { createFeedback, registerMarkupRoutes } from "./server/feedback.js";
 import { createDocuments, registerDocumentRoutes } from "./server/documents.js";
 import { ChatBackendRegistry } from "./chat-backend-registry.js";
 import { MANIFESTS } from "./harnesses/index.js";
@@ -565,7 +565,7 @@ async function findChatContext(chatId) {
 registerAttachmentRoutes(app, { attachments, findChatContext });
 
 app.use("/v0/context", express.json({ limit: "256kb" }));
-app.use("/v0/markup", express.json({ limit: "4mb" }));
+app.use(["/v0/markup", "/v0/document"], express.json({ limit: "4mb" }));
 app.use(express.json({ limit: "128kb" }));
 app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 app.use(mcp.afterAuth);
@@ -640,9 +640,10 @@ registerClientReportRoutes(app, { dataRoot: config.dataRoot });
 const uiControl = new UiControl({ runtimeHub, nodeHub });
 mcpRuntime.uiControl = uiControl;
 const feedback = lifetime.own("feedback", createFeedback({ dataRoot: config.dataRoot, config, serverName: serverIdentity.name, runtimeHub, uiControl, chatLogs, listProcesses: () => backends.list() }), (owned) => owned.close());
-registerFeedbackRoutes(app, feedback);
+registerMarkupRoutes(app, "/v0/markup", () => feedback);
 const documents = lifetime.own("documents", createDocuments({ dataRoot: config.dataRoot }), (owned) => owned.close());
 registerDocumentRoutes(app, documents);
+registerMarkupRoutes(app, "/v0/document/:document/markup", (request) => documents.markup(request.params.document));
 const browserHost = lifetime.own("hub browser", new BrowserHost({ dataRoot: config.dataRoot,
   onChange: () => runtimeHub.publish({ type: "browser_changed", id: "hub" }) }), (owned) => owned.close());
 mcpAccess.browser = browserHost.mcpServer();

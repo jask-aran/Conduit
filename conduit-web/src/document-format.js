@@ -7,11 +7,15 @@ import StarterKit from "@tiptap/starter-kit";
  * The Conduit document format, built the same way by the hub's document service (server/documents.js) and the editor
  * (components/document): a document is a list of blocks, and every block carries an id that never changes, which is
  * what a thread or an agent's edit names. The live copy is a Yjs document: its FRAGMENT holds the blocks, and its
- * AUTHORS map names who wrote under each Yjs client id, so every character keeps its author.
+ * AUTHORS map names who wrote under each Yjs client id, so every character keeps its author. Its CHANGES map is what
+ * agents changed to answer a comment and the person has not yet accepted: block id -> { for: "<item>/<n>" (the comment),
+ * before: the block as it was (null: the block is new), after: the id of the block a deleted one followed (null: it
+ * was first), by, at }. A change is gone once its comment is resolved, or it is taken back.
  */
 export const BLOCK_TYPES = ["paragraph", "heading", "blockquote", "codeBlock", "bulletList", "orderedList", "taskList", "listItem", "taskItem", "table", "horizontalRule"];
 export const FRAGMENT = "blocks";
 export const AUTHORS = "authors";
+export const CHANGES = "changes";
 export const blockId = () => Math.random().toString(36).slice(2, 10).padEnd(8, "0");
 // No trailing block: an editor that adds one writes it into the hub's copy, once for each page that has the document open.
 export const documentExtensions = () => [StarterKit.configure({ undoRedo: false, trailingNode: false, link: { openOnClick: false } }), TaskList, TaskItem.configure({ nested: true }), TableKit, UniqueID.configure({ types: BLOCK_TYPES, generateID: blockId })];

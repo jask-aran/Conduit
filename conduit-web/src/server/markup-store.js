@@ -23,10 +23,12 @@ import { randomBytes } from "node:crypto";
  *
  *   folder     where items are written
  *   snapshot   ({ client, markedAt }) => fields added to the item, read when the item is started, not at Send
+ *   on         what is marked up, as an item's summary says it (unsaid: the interface)
  *   about      lines for the item's `read`, saying what those fields are
  *   done       (id) => the command that marks an item handled, as the item states it
  *   answered   false for one-way markup (from people owed no answer): no thread is served or taken, and an item does not invite a reply
  *   log        (entry) => told of each item written
+ *   listeners  the folder whose .waiting names the sessions listening, where that is another store's: one registry for several stores
  */
 const MARKS = 12;
 /** How many of the latest items are looked through for one still open, and how many finished ones are listed with those. */
@@ -43,7 +45,7 @@ const ANSWERING_MS = 15 * 60_000;
 const SUBJECT = 200_000;
 const short = (value, length) => { const text = typeof value === "string" ? value : JSON.stringify(value) ?? ""; return text.length > length ? `${text.slice(0, length)}… (${text.length} characters)` : text; };
 
-export function createMarkupStore({ folder, snapshot = async () => ({}), about = [], done = (id) => `node scripts/conduit-markup.mjs done ${id}`, answered = true, log = () => {} }) {
+export function createMarkupStore({ folder, snapshot = async () => ({}), on = "the interface", about = [], done = (id) => `node scripts/conduit-markup.mjs done ${id}`, answered = true, log = () => {}, listeners = folder }) {
   const marks = new Map();
 
   /**
@@ -51,7 +53,7 @@ export function createMarkupStore({ folder, snapshot = async () => ({}), about =
    * process lives), and one at work on an item it took and has not finished, which will wait again when it has.
    */
   async function waiting() {
-    const dir = path.join(folder, ".waiting");
+    const dir = path.join(listeners, ".waiting");
     const found = new Map();
     for (const name of await fs.readdir(dir).catch(() => [])) {
       const waiter = await fs.readFile(path.join(dir, name), "utf8").then(JSON.parse).catch(() => null);
@@ -134,7 +136,7 @@ export function createMarkupStore({ folder, snapshot = async () => ({}), about =
     const item = {
       schema: "conduit.markup/1",
       id,
-      summary: `${body.comments.length} ${body.comments.length === 1 ? "comment" : "comments"} on the interface, from the ${client.kind ?? "browser"} client at ${client.url ?? "?"}`,
+      summary: `${body.comments.length} ${body.comments.length === 1 ? "comment" : "comments"} on ${on}, from the ${client.kind ?? "browser"} client at ${client.url ?? "?"}`,
       read: [
         "Each entry of `comments` is one thing the person asked for, about one selection of the interface. `on` says what it was made on: `screenshot`, a picture of the page the person took earlier (so what does not last could be marked) and drew on, or `page`, the live page at Send. One of kind `note` is about no selection: words about the interface as a whole, with no picture of its own.",
         "`source` is where that library piece is declared and `styles` where its CSS rules start; paths are from the repository root. `within` is the pieces it sits in, outermost first. `regionSource` is where the app writes the region it is in; to find the app code that drew this instance, search the app's source for `label` or an attribute in `attributes`.",
@@ -197,7 +199,7 @@ export function createMarkupStore({ folder, snapshot = async () => ({}), about =
     const unread = messages.filter((message) => message.from === "agent").length - ((await read(path.join(dir, "person-read.json")))?.agent ?? 0);
     if (seen && unread) await fs.writeFile(path.join(dir, "person-read.json"), `${JSON.stringify({ agent: messages.filter((message) => message.from === "agent").length })}\n`);
     return { id, sentAt: item.sentAt, state: handled ? "handled" : taken ? "taken" : "waiting", by: taken?.name ?? item.handed?.to?.name ?? null, unread: Math.max(0, unread), working: working(null),
-      comments: (item.comments ?? []).map((entry) => ({ n: entry.n, name: entry.name, comment: entry.comment, resolved: resolved.get(entry.n) === true, working: resolved.get(entry.n) !== true && working(entry.n) })), messages };
+      comments: (item.comments ?? []).map((entry) => ({ n: entry.n, name: entry.name, comment: entry.comment, ...(entry.quote ? { quote: entry.quote } : {}), ...(entry.under ? { under: entry.under } : {}), resolved: resolved.get(entry.n) === true, working: resolved.get(entry.n) !== true && working(entry.n) })), messages };
   }
 
   /** What the person writes back, about comment `n` or the item as a whole; or, with `resolved`, comment `n` settled or reopened. */
@@ -229,7 +231,17 @@ export function createMarkupStore({ folder, snapshot = async () => ({}), about =
     return found;
   }
 
-  return { mark, send, picture, waiting, thread, say, threads, drop: (id) => marks.delete(id) };
+  /** Every item still to be read in full: the unfinished ones, and a finished one with an answer the person has not read. A surface that keeps its comments beside what they are about (a document's margin) shows these. */
+  async function open() {
+    const found = [];
+    if (answered) for (const id of (await fs.readdir(folder).catch(() => [])).filter((name) => !name.startsWith(".")).sort()) {
+      const one = await thread(id).catch(() => null);
+      if (one && (one.state !== "handled" || one.unread)) found.push(one);
+    }
+    return found;
+  }
+
+  return { mark, send, picture, waiting, thread, say, threads, open, drop: (id) => marks.delete(id) };
 }
 
 /** The store's routes for a plain Node server (the hub has its own, behind its sign-in): true when the request was one of them. */
@@ -250,6 +262,7 @@ export async function handleMarkup(store, request, response, base = "/v0/markup"
     else if (route === "POST /marks/:id/send") answer(201, await store.send(id, await json()));
     else if (route === "DELETE /marks/:id") { store.drop(id); answer(204); }
     else if (route === "GET /items") answer(200, { items: await store.threads() });
+    else if (route === "GET /open") answer(200, { items: await store.open() });
     else if (request.method === "GET" && item && !said) answer(200, await store.thread(item, { seen: url.searchParams.has("seen") }));
     else if (request.method === "POST" && item && said) answer(201, await store.say(item, await json()));
     else answer(404, { error: "No such markup route" });

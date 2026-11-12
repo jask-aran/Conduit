@@ -65,16 +65,20 @@ export function createFeedback({ dataRoot, config, serverName, runtimeHub, uiCon
   return { ...store, close() { for (const undo of restore) undo(); chatLogs.tap = null; runtimeHub.tap = null; } };
 }
 
-/** Before the app's own JSON parser: an item's selections carry markup, so its body may be larger than a setting's. */
-export function registerFeedbackRoutes(app, feedback) {
-  app.post("/v0/markup/marks", async (request, response) => response.status(201).json(await feedback.mark(request.body)));
+/**
+ * A Markup store's routes under `base`, behind the hub's sign-in; `of` is the store a request is for (the hub's own, or one document's).
+ * They stand before the app's own JSON parser: an item's selections carry markup, so its body may be larger than a setting's.
+ */
+export function registerMarkupRoutes(app, base, of) {
   const png = express.raw({ type: "image/png", limit: "32mb" });
-  app.put("/v0/markup/marks/:id/screenshot", png, (request, response) => { feedback.picture(request.params.id, request.body); response.status(204).end(); });
-  app.put("/v0/markup/marks/:id/areas/:n", png, (request, response) => { feedback.picture(request.params.id, request.body, Number(request.params.n)); response.status(204).end(); });
-  app.post("/v0/markup/marks/:id/send", async (request, response) => response.status(201).json(await feedback.send(request.params.id, request.body)));
-  app.get("/v0/markup/waiting", async (_request, response) => response.json({ waiting: await feedback.waiting() }));
-  app.delete("/v0/markup/marks/:id", (request, response) => { feedback.drop(request.params.id); response.status(204).end(); });
-  app.get("/v0/markup/items", async (_request, response) => response.json({ items: await feedback.threads() }));
-  app.get("/v0/markup/items/:id", async (request, response) => response.json(await feedback.thread(request.params.id, { seen: "seen" in request.query })));
-  app.post("/v0/markup/items/:id/messages", async (request, response) => response.status(201).json(await feedback.say(request.params.id, request.body)));
+  app.post(`${base}/marks`, async (request, response) => response.status(201).json(await (await of(request)).mark(request.body)));
+  app.put(`${base}/marks/:id/screenshot`, png, async (request, response) => { (await of(request)).picture(request.params.id, request.body); response.status(204).end(); });
+  app.put(`${base}/marks/:id/areas/:n`, png, async (request, response) => { (await of(request)).picture(request.params.id, request.body, Number(request.params.n)); response.status(204).end(); });
+  app.post(`${base}/marks/:id/send`, async (request, response) => response.status(201).json(await (await of(request)).send(request.params.id, request.body)));
+  app.get(`${base}/waiting`, async (request, response) => response.json({ waiting: await (await of(request)).waiting() }));
+  app.delete(`${base}/marks/:id`, async (request, response) => { (await of(request)).drop(request.params.id); response.status(204).end(); });
+  app.get(`${base}/items`, async (request, response) => response.json({ items: await (await of(request)).threads() }));
+  app.get(`${base}/open`, async (request, response) => response.json({ items: await (await of(request)).open() }));
+  app.get(`${base}/items/:id`, async (request, response) => response.json(await (await of(request)).thread(request.params.id, { seen: "seen" in request.query })));
+  app.post(`${base}/items/:id/messages`, async (request, response) => response.status(201).json(await (await of(request)).say(request.params.id, request.body)));
 }
