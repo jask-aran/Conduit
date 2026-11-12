@@ -19,9 +19,10 @@ file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background
   thread, a connected chat handed a comment on the scripted profile, the rider, both ways to connect),
   `markup-artifacts.mjs` (10), `markup-document.mjs` (17), `markup-delivery.mjs`, `markup-thread.mjs`. In eight runs
   of `markup-threads.mjs` one stopped on a click that timed out; which click was not found. Not run: `npm test`,
-  the headed Chrome on :9222, a real phone, Android, desktop, two people typing in one paragraph, **and a comment
-  answered by a real model in a mated thread** (every check used the scripted `test-stream` profile or a fake chat
-  host). Screenshots were looked at headless only.
+  the headed Chrome on :9222, a real phone, Android, desktop, two people typing in one paragraph. A real model was
+  tried once: a comment sent to the Test document's mated thread was taken and answered ("pong") in about 20 seconds;
+  that comment is still open in its margin. An agent changing blocks from a mated thread was not tried.
+  Screenshots were looked at headless only.
 - No Markup listener is running. The user said (2026-11-12) it need not be kept live all the time; start
   `wait --stay` when you want their markup.
 - The user asked (2026-11-12) for subagents to build and check in parallel: Opus 5.5 at low or medium effort, each
