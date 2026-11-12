@@ -21,8 +21,20 @@ export interface DocumentHost {
 /** How this copy stands with the hub's: `away` keeps what is written and sends it when the hub answers again. */
 export type DocumentState = "connecting" | "live" | "away";
 
-/** What the editor tells a layer that marks it up, in the shape Markup's host asks for: what is being marked, and the blocks a mark lies over (their ids, and their text as drawn). */
+/** A comment the editor marks in the text: `under.blocks` is the ids of the blocks it was made on, `quote` the run of text in them (found again in its block; the block itself when the text has changed). */
+export type DocumentAnchor = { key: string; quote?: string; under?: Record<string, string | number | boolean>; current: boolean; resolved: boolean };
+
+/**
+ * What the editor tells a layer that marks it up, in the shape Markup's host asks for: what is being marked, and the
+ * blocks a mark lies over (their ids, and their text as drawn); and for a margin of comments, the marks of those it is
+ * told, where each is now, and word of when they may have moved or one was pressed. `changed`: blocks stand changed
+ * for that comment (document-format.js CHANGES), read where it is drawn so it follows.
+ */
 export type DocumentMarks = {
   subject(): Record<string, string>;
   under(box: { left: number; top: number; width: number; height: number }): Record<string, string> | null;
+  anchors(list: DocumentAnchor[]): void;
+  place(key: string): { left: number; top: number; width: number; height: number } | null;
+  watch(listener: (pressed?: string) => void): () => void;
+  changed(key: string): boolean;
 };

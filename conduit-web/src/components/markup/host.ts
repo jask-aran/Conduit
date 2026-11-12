@@ -29,7 +29,7 @@ export type MarkupHanded = { to: { name: string } | null };
 /** An item once sent, as the person follows it: where it stands (`by`: the session it was handed to or that took it), and what was said about each comment (`n`) or the item as a whole.
  *  A message with `resolved` and no `text` is that comment settled (or reopened) by whoever it is `from`. `working`: the session has been handed it and has not yet answered. */
 export type MarkupThread = { id: string; sentAt: string; state: "waiting" | "taken" | "handled"; by: string | null; unread: number; working?: boolean;
-  comments: { n: number; name: string; comment: string; resolved?: boolean; working?: boolean }[]; messages: { at: string; from: "agent" | "person"; n: number | null; text?: string; resolved?: boolean }[] };
+  comments: { n: number; name: string; comment: string; quote?: string; under?: Record<string, string | number | boolean>; resolved?: boolean; working?: boolean }[]; messages: { at: string; from: "agent" | "person"; n: number | null; text?: string; resolved?: boolean }[] };
 /** An item in the list of what was sent before; `first` is its first comment's words. */
 export type MarkupSent = { id: string; sentAt: string; state: MarkupThread["state"]; by: string | null; unread: number; comments: number; first: string };
 
@@ -51,6 +51,8 @@ export interface MarkupTransport {
   resolve(id: string, n: number, resolved: boolean): Promise<MarkupThread>;
   /** The latest items not finished, with an answer unread or sent in the last day, newest first. */
   threads(): Promise<MarkupSent[]>;
+  /** Every item still to be read in full, oldest first: the unfinished, and a finished one with an answer unread. A margin shows these. */
+  open(): Promise<MarkupThread[]>;
   /** A mark nothing was sent to. */
   drop(mark: string): Promise<void>;
   listening(): Promise<MarkupListener[]>;
@@ -86,11 +88,28 @@ export type MarkupCapabilities = {
   listeners: boolean;
   /** Choosing what a drawing is drawn in, and how thick. */
   inks: boolean;
+  /** Where a comment stands once sent: in the tool's own `corner` stack while the tool is open, or in the host's `margin` (MarkupMargin, which the host mounts) beside what it is about, the tool open or not. */
+  sent: "corner" | "margin";
   /** The bar is thinner than the library's frost, to show the interface being looked at under it; a document's needs no such thing. */
   thin: boolean;
 };
 /** What a host that declares nothing gets: a collaborator's batched markup with every tool. */
-export const MARKUP_CAPABILITIES: MarkupCapabilities = { deliveries: ["batched"], tools: ["select", "quote", "pen", "highlight", "shape", "text", "erase", "note"], screenshot: true, listeners: true, inks: true, thin: true };
+export const MARKUP_CAPABILITIES: MarkupCapabilities = { deliveries: ["batched"], tools: ["select", "quote", "pen", "highlight", "shape", "text", "erase", "note"], screenshot: true, listeners: true, inks: true, sent: "corner", thin: true };
+
+/** A comment that stands in the margin, as the surface is told of it: `key` is "<item>/<n>"; `quote` and `under` are what it was sent with; `current`: its card is open. */
+export type MarkupAnchor = { key: string; quote?: string; under?: Record<string, string | number | boolean>; current: boolean; resolved: boolean };
+
+/** What a surface with a margin does for it: it marks what each comment is about, and says where that is. */
+export interface MarkupMarginHost {
+  /** Told every comment in the margin, each time they change. */
+  anchors(list: MarkupAnchor[]): void;
+  /** Where what one is about is now (its box, in the viewport's pixels); null when the surface cannot find it. */
+  place(key: string): { left: number; top: number; width: number; height: number } | null;
+  /** The listener is told when a place may have changed, and (with its key) when the person pressed what a comment is about. The return ends it. */
+  watch(listener: (pressed?: string) => void): () => void;
+  /** Where the surface keeps what an agent changed to answer a comment: whether there is such a change (read where it is drawn, so it follows), and taking it back. */
+  revert?: { can(key: string): boolean; run(key: string): Promise<unknown> };
+}
 
 export interface MarkupHost {
   /** What differs from MARKUP_CAPABILITIES here. */
@@ -109,6 +128,10 @@ export interface MarkupHost {
   under?(box: { left: number; top: number; width: number; height: number }): Record<string, string | number | boolean> | null;
   /** A shell that can take the page's picture itself, with nothing asked; null where it cannot, and the tool uses display capture. */
   capturePage?(): Promise<Blob | null>;
+  /** The surface's margin, where its capabilities say sent comments stand there. */
+  margin?: MarkupMarginHost;
+  /** Told when comments have gone, where something other than the tool shows them. */
+  sent?(): void;
   notify(outcome: "sent" | "failed", message: string): void;
 }
 
@@ -124,6 +147,7 @@ export function httpTransport(request: <T>(path: string, init?: { method?: strin
     say: (id, n, text) => request(`${base}/items/${id}/messages`, { method: "POST", body: JSON.stringify({ n, text }) }),
     resolve: (id, n, resolved) => request(`${base}/items/${id}/messages`, { method: "POST", body: JSON.stringify({ n, resolved }) }),
     threads: () => request<{ items: MarkupSent[] }>(`${base}/items`).then((answer) => answer.items),
+    open: () => request<{ items: MarkupThread[] }>(`${base}/open`).then((answer) => answer.items),
     listening: () => request<{ waiting: MarkupListener[] }>(`${base}/waiting`).then((answer) => answer.waiting),
   };
 }

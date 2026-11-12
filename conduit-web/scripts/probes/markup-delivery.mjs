@@ -1,4 +1,4 @@
-// One delivery: on Conduit comments wait for Send and go to one growing item; on /document Done sends while "Send now" is on. Card states, folding, the corner's Resolve, the working mark.
+// One delivery: on Conduit comments wait for Send and go to one growing item; on /document Done sends while "Send now" is on, each to the document's own store and margin. Card states, folding, the corner's Resolve, the working mark.
 import { open } from "./lib.mjs";
 import { spawn, execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -55,13 +55,14 @@ try {
   const line = await js("(() => { const l = document.querySelectorAll('.ui-document-text > [data-id]')[1].getBoundingClientRect(); return { x: l.left, y: l.top + l.height / 2 }; })()");
   const quote = async (from, words, off) => { await page.mouse.move(line.x + from, line.y); await page.mouse.down(); await page.mouse.move(line.x + from + 90, line.y, { steps: 8 }); await page.mouse.up(); await page.waitForTimeout(500); if (off) { await page.locator(".ui-markup-note[data-float] button[role=switch]").click(); await page.waitForTimeout(200); } const float = await cards(); await page.keyboard.type(words); await page.keyboard.press("Enter"); await page.waitForTimeout(4500); return float; };
   console.log("B float card:", await quote(4, "Doc: goes now"));
-  const doc = await latest(); mine.add(doc);
-  console.log("B after Done:", doc, item(doc).comments.length, "|", await cards(), await buttons());
+  // A document's comments go to its own store, each Send an item of its own, and stand in its margin.
+  const sentDoc = async () => { const all = JSON.parse(await js("fetch('/v0/document/test/markup/open').then(r => r.text())")).items.filter((one) => one.comments.some((comment) => comment.comment.startsWith("Doc: "))); for (const one of all) mine.add(one.id); return all.map((one) => `${one.by}: ${one.comments.map((comment) => comment.comment).join(" / ")}`).join(" ; "); };
+  console.log("B after Done:", await sentDoc(), "|", await cards(), await buttons());
   await page.screenshot({ path: `${out}-doc.png`, clip: { x: 900, y: 500, width: 600, height: 400 } });
   console.log("B float, Send now turned off:", await quote(200, "Doc: waits", true));
-  console.log("B after Done:", item(doc).comments.length, "|", await cards(), await buttons());
+  console.log("B after Done:", await sentDoc(), "|", await cards(), await buttons());
   await page.locator(".ui-markup-bar button", { hasText: "Send" }).click(); await page.waitForTimeout(5000);
-  console.log("B after Send:", item(doc).comments.length, "|", await cards());
+  console.log("B after Send:", await sentDoc(), "|", await cards());
   console.log("errors:", JSON.stringify(errors));
 } finally {
   stay.kill();

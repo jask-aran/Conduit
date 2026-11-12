@@ -68,6 +68,10 @@
 .ui-markup-note .ui-card > p { overflow: hidden; font-family: var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
 
 /* The bar, and over it what the held tool draws with. Only the rails take the pointer. */
+/* A surface's margin: each card at the height of what it is about (margin.tsx sets `top`), or a list where the margin is not beside it. */
+.ui-markup-margin { position: relative; display: flex; flex-direction: column; gap: var(--space-xs); font-family: var(--font-sans); }
+.ui-markup-margin[data-beside] > .ui-markup-note { position: absolute; right: 0; left: 0; }
+.ui-markup-margin > .ui-markup-note:not([data-open]) { cursor: pointer; }
 .ui-markup-rails { position: fixed; bottom: var(--space-lg); right: var(--space-lg); left: var(--space-lg); display: flex; flex-direction: column; align-items: center; gap: var(--space-xs); pointer-events: none; }
 .ui-markup-bar { display: flex; flex-wrap: wrap; justify-content: center; max-width: 100%; align-items: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: var(--space-xs); color: var(--foreground); font-size: var(--text-caption); }
 /* Thinner than the one frost, where the bar sits over an interface being looked at. conventions-ok: the tool's own surface */

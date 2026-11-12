@@ -213,8 +213,10 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   const [replyTo, setReplyTo] = createSignal<number | null | undefined>(undefined);
   const [reply, setReply] = createSignal("");
   const answered = can.deliveries[0] !== "one-way";
+  /** Sent comments are the tool's to show, in its corner; with a margin they leave the tool as they go. */
+  const cornered = answered && can.sent === "corner";
   const offersLive = can.listeners && (can.deliveries as readonly string[]).includes("live");
-  const [earlier, { refetch: askEarlier }] = createResource(() => answered ? transport.threads().catch(() => [] as MarkupSent[]) : [] as MarkupSent[]);
+  const [earlier, { refetch: askEarlier }] = createResource(() => cornered ? transport.threads().catch(() => [] as MarkupSent[]) : [] as MarkupSent[]);
   const unread = () => (earlier.latest ?? []).filter((item) => item.unread);
   let following: ReturnType<typeof setInterval> | undefined;
   /** `alone`: the thread is all there is to look at (a batch that was sent, or one come back to); a live item's is followed while more is marked. */
@@ -307,7 +309,8 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   const unsent = () => numbered().filter((selection) => !selection.sent);
   const tagOf = (selection: Selection) => selection.whole ? "" : String(selection.sent ?? lastSent() + unsent().indexOf(selection) + 1);
   const openCard = (selection: Selection) => selection.sent ? startReply(selection.sent) : openNote(selection.id);
-  const own = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest(".ui-markup-note, .ui-markup-bar, .ui-markup-tag[data-press], .ui-markup-text[data-editable]"));
+  // The margin's cards are not the tool's: they keep their own keys and presses.
+  const own = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest(".ui-markup-note, .ui-markup-bar, .ui-markup-tag[data-press], .ui-markup-text[data-editable]")) && !target.closest(".ui-markup-margin");
   /** A comment about pieces as they are, not about what was drawn or text selected over them. */
   const ofPieces = (selection: Selection) => !selection.drawings && !selection.quote;
   const chosenBy = (element: Element) => selections.find((selection) => ofPieces(selection) && selection.on === showing() && selection.elements.includes(element)) ?? null;
@@ -647,7 +650,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
       handle = requestAnimationFrame(tick);
     });
     onCleanup(() => cancelAnimationFrame(handle));
-    const asking = setInterval(() => { if (can.listeners) void askWaiters(); if (answered && (!thread() || listing())) void askEarlier(); }, WAITING_EVERY_MS);
+    const asking = setInterval(() => { if (can.listeners) void askWaiters(); if (cornered && (!thread() || listing())) void askEarlier(); }, WAITING_EVERY_MS);
     onCleanup(() => clearInterval(asking));
   });
   onCleanup(() => {
@@ -719,11 +722,19 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
         for (const [index, blob] of (await cropAreas(capture, comments.map((entry) => entry.on === of ? entry.area : null))).entries()) if (blob) await transport.picture(mark.id, blob, numberOf(index));
       }
       const result = await transport.send(mark.id, {
-        comments, live: answered, subject: host.subject?.(), to: one || hand() ? agent()?.name ?? null : null,
+        comments, live: cornered, subject: host.subject?.(), to: one || hand() ? agent()?.name ?? null : null,
         screenshot: first ? { width: first.capture.width, height: first.capture.height, surface: first.capture.surface, outlined: true, of: first.of } : { missing: views.length ? captureError ?? "capture failed" : marksOn("page") ? noPicture() ?? "not taken: Send does not ask the browser to share its tab" : "text only" },
         client: { id: host.clientId(), userAgent: navigator.userAgent, url: location.pathname + location.search, viewport: { width: innerWidth, height: innerHeight, devicePixelRatio }, ...await host.client?.() },
       });
       sent = true;
+      if (answered && !cornered) {
+        // The margin has them from here: each Send is an item of its own, and what Undo would bring back has gone.
+        const gone = new Set([...listed, ...(whole ? [whole] : [])].map((selection) => selection.id));
+        setSelections((all) => all.filter((selection) => !gone.has(selection.id)));
+        history.length = undone.length = 0; counted();
+        marked = transport.mark(host.clientId()).catch(() => null); sent = false;
+        return host.sent?.();
+      }
       // Each stays where it is, as a thread; the item's is followed while more is marked.
       batch(() => {
         listed.forEach((selection, index) => setSelections((candidate) => candidate.id === selection.id, "sent", numberOf(index)));

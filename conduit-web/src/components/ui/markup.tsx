@@ -71,6 +71,10 @@ export const MarkupText = (props: { ref?: (element: HTMLInputElement) => void; a
 export const MarkupNotes = (props: { lift?: number; children: JSX.Element }) =>
   <div class="ui-markup-notes" data-lifted={props.lift ? "" : undefined} style={{ "--markup-bar-height": `${props.lift ?? 0}px` }}>{props.children}</div>;
 
+/** A surface's margin (margin.tsx): every open comment's card. `beside`: each stands at the height of what it is about, where the margin is beside that (its `top` is set by who lays them out); else they are a list. */
+export const MarkupMarginNotes = (props: { ref?: (element: HTMLDivElement) => void; beside: boolean; children: JSX.Element }) =>
+  <div ref={props.ref} class="ui-markup-margin" data-beside={props.beside ? "" : undefined}>{props.children}</div>;
+
 /** When a line of a thread was said, in as few words as place it: the minutes since, then the time today, then the day. */
 const saidWhen = (at: string) => {
   const then = new Date(at), minutes = Math.floor((Date.now() - then.getTime()) / 60_000);
@@ -87,18 +91,19 @@ const said = (line: Said) => <p class="ui-markup-said" data-from={line.from}><Sh
  *  `picture`, and a press opens it. `state` says where it stands (not sent, sent, being worked on, answered, resolved). Once sent it is a thread:
  *  `words` is the comment and `said` what the agent and the person have written about it since, each with when. Shut, it shows the comment on a line
  *  and the latest of those; open, all of it, and the field is the person's answer (`placeholder`, sent by Reply: `onSay`). It is not removed: its
- *  corner settles it (`onResolve`), and `resolved` it folds to the comment's line until it is opened and reopened. */
-export function MarkupNote(props: { ref?: (element: HTMLTextAreaElement) => void; float?: JSX.CSSProperties; open: boolean; tag: string; name: string; source?: string; value: string; picture?: string; words?: string; said?: Said[]; state?: { label: string; busy?: boolean };
-  placeholder?: string; resolved?: boolean; sendNow?: boolean; onSendNow?: (on: boolean) => void; onOpen: () => void; onInput: (value: string) => void; onDone?: () => void; onRemove?: () => void; onSay?: () => void; onResolve?: (resolved: boolean) => void }) {
+ *  corner settles it (`onResolve`), and `resolved` it folds to the comment's line until it is opened and reopened. `onRevert`: an agent changed
+ *  something to answer it, which this takes back. `key`: what a margin knows it by. */
+export function MarkupNote(props: { ref?: (element: HTMLTextAreaElement) => void; key?: string; float?: JSX.CSSProperties; open: boolean; tag: string; name: string; source?: string; value: string; picture?: string; words?: string; said?: Said[]; state?: { label: string; busy?: boolean };
+  placeholder?: string; resolved?: boolean; sendNow?: boolean; onSendNow?: (on: boolean) => void; onOpen: () => void; onInput: (value: string) => void; onDone?: () => void; onRemove?: () => void; onSay?: () => void; onResolve?: (resolved: boolean) => void; onRevert?: () => void }) {
   const thread = () => props.said !== undefined;
   const settle = () => props.onResolve && !props.resolved ? () => props.onResolve!(true) : undefined;
-  return <div class="ui-markup-note" style={props.float} data-float={props.float ? "" : undefined} data-open={props.open ? "" : undefined} onClick={(event) => { if (!props.open && !(event.target as Element).closest("button")) props.onOpen(); }}>
+  return <div class="ui-markup-note" data-key={props.key} style={props.float} data-float={props.float ? "" : undefined} data-open={props.open ? "" : undefined} onClick={(event) => { if (!props.open && !(event.target as Element).closest("button")) props.onOpen(); }}>
     <Card size="compact" role="group" label={props.tag ? `Comment ${props.tag}` : props.name}
       title={<><Show when={props.tag}><b class="ui-markup-number">{props.tag}</b></Show><span class="ui-markup-name">{props.name}</span><Show when={props.state}>{(state) => <span class="ui-markup-state"><Show when={state().busy}><Spinner /></Show>{state().label}</span>}</Show></>}
       detail={thread() ? (props.open ? undefined : props.words) : props.open ? props.source : props.value.trim() || (props.picture ? undefined : "No comment yet")}
       close={props.float ? props.onDone : thread() ? settle() : props.onRemove} closeLabel={props.float ? "Done" : thread() ? "Resolve" : "Remove"} closeIcon={thread() ? <Icons.Check /> : undefined}
       actions={props.float ? <><Show when={props.sendNow !== undefined}><label class="ui-markup-now" title={props.onSendNow ? undefined : "Needs a session listening"}>Send now<Switch label="Send this comment as it is Done" checked={Boolean(props.sendNow)} disabled={!props.onSendNow} onChange={props.onSendNow} /></label></Show><Button variant="ghost" size="sm" onClick={props.onRemove}>Remove</Button><Button variant="primary" outline size="sm" onClick={props.onDone}>Done</Button></>
-        : props.open && props.onSay ? <><Show when={props.resolved && props.onResolve}><Button variant="ghost" size="sm" onClick={() => props.onResolve!(false)}>Reopen</Button></Show><Button variant="primary" outline size="sm" disabled={!props.value.trim()} onClick={props.onSay}>Reply</Button></> : undefined}>
+        : props.open && props.onSay ? <><Show when={props.onRevert}><Button variant="ghost" size="sm" title="Put back what the agent changed for this comment" onClick={props.onRevert}>Revert</Button></Show><Show when={props.resolved && props.onResolve}><Button variant="ghost" size="sm" onClick={() => props.onResolve!(false)}>Reopen</Button></Show><Button variant="primary" outline size="sm" disabled={!props.value.trim()} onClick={props.onSay}>Reply</Button></> : undefined}>
       <Show when={props.picture && !props.float && !thread()}><CardPreview><img src={props.picture} alt="" /></CardPreview></Show>
       <Show when={thread()}>
         <Show when={props.open} fallback={<Show when={!props.resolved && props.said![props.said!.length - 1]} keyed>{(latest) => <div class="ui-markup-latest">{said(latest)}</div>}</Show>}>
