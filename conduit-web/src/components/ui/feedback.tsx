@@ -169,7 +169,7 @@ export function FeedbackBar(props: { view: FeedbackView; screenshots?: boolean; 
       <Show when={props.screenshots} fallback={<IconButton label={views()[0]!.label} aria-pressed={using()} onClick={() => props.onView(using() ? "page" : "use")}><Icons.UseApp /></IconButton>}>
         <Segmented label="Mode" icons size="sm" value={props.view} onChange={props.onView} options={views()} />
       </Show>
-      <span class="ui-feedback-with" onPointerDown={() => { if (using()) props.onView("page"); }}><Segmented label="Annotate with" icons size="sm" value={props.tool} onChange={(tool) => tool === "note" ? props.onNote() : props.onTool(tool)}
+      <span class="ui-feedback-with" onClick={() => { if (using()) props.onView("page"); }}><Segmented label="Annotate with" icons size="sm" value={props.tool} onChange={(tool) => tool === "note" ? props.onNote() : props.onTool(tool)}
         options={TOOLS.filter((option) => (!props.tools || props.tools.includes(option.value)) && !(props.compact && option.wide) && (props.view !== "screenshot" || (option.value !== "select" && option.value !== "quote"))).map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} /></span>
     </Show>
     <Show when={!props.thread && !props.compact}><span class="ui-feedback-with">
