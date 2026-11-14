@@ -22,14 +22,20 @@
 .ui-markup-mark[data-kind="asked"] { border-color: transparent; background: var(--accent); }
 .ui-markup-mark[data-kind="quote"] { border-width: 0 0 var(--stroke); border-color: var(--primary); border-radius: 0; background: var(--accent); }
 .ui-markup-drawing { position: fixed; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; fill: none; stroke: var(--markup-ink, var(--primary)); stroke-width: var(--markup-weight); stroke-linecap: round; stroke-linejoin: round; filter: var(--glyph-shadow); }
-.ui-markup-any { display: contents; }
+/* A line's size as it will be drawn, in the ink it will be drawn in. */
+.ui-markup-weight { display: block; width: var(--icon-sm); height: var(--markup-weight); border-radius: var(--markup-weight); background: var(--markup-ink, currentColor); }
+/* Its true size, without the widest making the rail taller than the others leave it. */
+.ui-markup-weight[data-kind="highlight"] { height: calc(6 * var(--markup-weight)); margin-block: calc(-2.5 * var(--markup-weight)); border-radius: 0; opacity: var(--opacity-faint); }
 /* conventions-ok: every hue, for the ink that is any colour, until one is chosen */
-.ui-markup-any > .ui-swatch:not([style*="background"]) { background: conic-gradient(hsl(0 90% 60%), hsl(60 90% 60%), hsl(120 90% 60%), hsl(180 90% 60%), hsl(240 90% 60%), hsl(300 90% 60%), hsl(360 90% 60%)); }
+.ui-markup-bar [data-any] > .ui-swatch:not([style*="background"]) { background: conic-gradient(hsl(0 90% 60%), hsl(60 90% 60%), hsl(120 90% 60%), hsl(180 90% 60%), hsl(240 90% 60%), hsl(300 90% 60%), hsl(360 90% 60%)); }
 .ui-markup-picker { padding: var(--space-md); }
+:is(.ui-markup-drawing, .ui-markup-weight)[data-weight="thin"] { --markup-weight: var(--stroke-thin); }
+:is(.ui-markup-drawing, .ui-markup-weight)[data-weight="medium"] { --markup-weight: var(--stroke); }
+:is(.ui-markup-drawing, .ui-markup-weight)[data-weight="thick"] { --markup-weight: calc(2 * var(--stroke)); }
 /* A highlighter marks over what it is on: wide and see-through, with no shadow to muddy it. */
 .ui-markup-drawing[data-kind="highlight"] { stroke-width: calc(6 * var(--markup-weight)); stroke-opacity: var(--opacity-faint); stroke-linecap: butt; filter: none; }
 .ui-markup-drawing marker > path { fill: var(--markup-ink, var(--primary)); stroke: none; }
-.ui-markup-text { position: fixed; field-sizing: content; min-width: var(--control-2xs); border: 0; outline: none; background: none; padding: 0; color: var(--markup-ink, var(--primary)); font: var(--weight-strong) var(--text-body)/var(--control-2xs) var(--font-sans); filter: var(--glyph-shadow); pointer-events: none; }
+.ui-markup-text { position: fixed; field-sizing: content; min-width: var(--control-2xs); border: 0; outline: none; background: none; padding: 0; color: var(--markup-ink, var(--primary)); font: var(--weight-strong) var(--text-body)/1.3 var(--font-sans); filter: var(--glyph-shadow); pointer-events: none; }
 .ui-markup-text::placeholder { color: inherit; opacity: 0.5; }
 .ui-markup-layer .ui-markup-text[data-editable] { pointer-events: auto; cursor: text; }
 .ui-markup-tag { position: absolute; bottom: 100%; left: calc(-1 * var(--hairline)); display: flex; max-width: var(--measure-sm); align-items: center; gap: var(--space-xs); overflow: hidden; border-radius: var(--radius-inset); background: var(--frame); color: var(--foreground); font: var(--weight-lift) var(--text-label)/var(--control-2xs) var(--font-data); white-space: nowrap; }
@@ -110,3 +116,6 @@
 .ui-markup-bar > :not(.ui-markup-status) { flex: none; }
 .ui-markup-status { min-width: 0; overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
 .ui-markup-with { display: flex; align-items: center; gap: var(--space-2xs); }
+
+/* A stepper among a bar's tools is as wide as its number needs, not the bar. */
+.ui-markup-bar .ui-stepper > .ui-input { width: calc(2 * var(--control-sm)); flex: none; }

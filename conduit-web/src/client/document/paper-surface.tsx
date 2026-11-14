@@ -1,9 +1,9 @@
-import { createMemo, createSignal, onCleanup, Show } from "solid-js";
+import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { DocumentEditor, type DocumentControls, type DocumentHost, type DocumentMarks } from "@/components/document";
 import { PAPER_KEYS, PaperShortcuts, type PaperKeyGroup, type PaperKeyRow } from "@/components/document/shortcuts";
 import { HeaderButton, Icons } from "@/components/ui";
-import { DocumentOutline, type DocumentWidth } from "@/components/ui/document";
-import { DropdownMenu, MenuContent, MenuControl, MenuSection } from "@/components/ui/menus";
+import { documentBlockIcons, type DocumentWidth } from "@/components/ui/document";
+import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
 import { api } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
@@ -89,7 +89,7 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
     },
     header: () => <Show when={controls()}>{(edits) => <DropdownMenu modal={false} placement="bottom-end">
       <MenuControl as={HeaderButton} ref={(element: HTMLButtonElement) => { outlining = element; }} label="Outline" icon={<Icons.Sidebar />} />
-      <MenuContent width="md"><MenuSection title="Outline" note={edits().outline().length ? undefined : "No headings yet"}><Show when={edits().outline().length}><DocumentOutline headings={edits().outline()} current={edits().current()} onPick={edits().reveal} /></Show></MenuSection></MenuContent>
+      <MenuContent width="md"><MenuSection title="Outline" note={edits().outline().length ? undefined : "No headings yet"}><For each={edits().outline()}>{(heading) => { const Level = documentBlockIcons[`heading-${Math.min(3, Math.max(1, heading.level))}` as "heading-1"]; return <MenuRow icon={<Level />} checked={heading.id === edits().current() || undefined} onSelect={() => edits().reveal(heading.id)}>{heading.text || "Untitled"}</MenuRow>; }}</For></MenuSection></MenuContent>
     </DropdownMenu>}</Show>,
     away, stale,
     reveal: () => controls()?.reveal,

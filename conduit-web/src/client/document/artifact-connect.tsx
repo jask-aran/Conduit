@@ -1,6 +1,7 @@
-import { createMemo, For, Show } from "solid-js";
-import { Icons, Note, Row } from "@/components/ui";
+import { createMemo, Show } from "solid-js";
+import { Icons } from "@/components/ui";
 import { Dialog } from "@/components/ui/dialog";
+import { SearchList } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
 import type { ChatSummary, Project } from "../api/contracts";
 import { artifactKnown, artifactsOf } from "./artifacts";
@@ -14,10 +15,8 @@ export default function ArtifactConnect(props: { chat: { chat: ChatSummary; proj
     <Show when={props.chat}>{(found) => {
       // By id: the list is read again each time a connection changes, and a row rebuilt under the pointer loses the keyboard.
       const ids = createMemo(() => artifactsOf(found().project.id).map((artifact) => artifact.id), [], { equals: (a, b) => a.join() === b.join() });
-      return <>
-        <For each={ids()}>{(id) => <Row density="list" element="button" lead={<Icons.FileText />} label={artifactKnown(id)?.name} selected={linked(id)} end={<Show when={linked(id)}><Icons.Check /></Show>} onClick={() => turn(id)} />}</For>
-        <Show when={!ids().length}><Note kind="card">No artifacts in this project</Note></Show>
-      </>;
+      return <SearchList items={ids()} placeholder="Search artifacts" empty={ids().length ? undefined : "No artifacts in this project"} isCurrent={linked} onChoose={turn}
+        matches={(id, needle) => (artifactKnown(id)?.name ?? "").toLowerCase().includes(needle)} row={(id) => ({ icon: <Icons.FileText />, label: artifactKnown(id)?.name ?? "" })} />;
     }}</Show>
   </Dialog>;
 }

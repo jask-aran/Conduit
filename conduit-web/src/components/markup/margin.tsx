@@ -17,7 +17,11 @@ export type MarkupMarginWaiting = { want: number; height: number; at(place: { le
 const columns = new WeakMap<MarkupHost, { waiting: Map<string, MarkupMarginWaiting>; lay(): void }>();
 export const marginColumn = (host: MarkupHost) => columns.get(host);
 /** One card of the margin as a list shows it (`key` as its host knows it): a comment (`about` its quote or first words, `by` who it is with, `unread` an answer the person has not opened) or a suggestion. */
-export type MarkupMarginEntry = { key: string; kind: "comment" | "suggestion"; about: string; by: string | null; state: "waiting" | "working" | "answered" | "resolved" | "suggested"; unread: boolean };
+export type MarkupMarginEntry = { key: string; kind: "comment" | "suggestion"; about: string; by: string | null; state: "saved" | "waiting" | "working" | "answered" | "resolved" | "suggested"; unread: boolean };
+/** What a card's state is called, on the card and in any list of the cards. */
+export const MARKUP_STATES: Record<MarkupMarginEntry["state"], string> = { saved: "Saved", waiting: "Sent", working: "Working on it", answered: "Answered", resolved: "Agent resolved", suggested: "Suggested" };
+/** Who made a suggestion, as the person reads it. */
+const who = (by: string | null | undefined) => by === "person" ? "you" : by ?? null;
 /** What the host can do with the margin from outside it: how many comments stand open (sent and not resolved); opening the next or previous one, or one by key, in the order of their places;
  *  every card in that order (`list`, read where drawn); and resolving every comment the agent has resolved (`resolveDone`, one after another, the outcome said once). */
 export type MarkupMarginControl = { open(): number; next(): void; previous(): void; go(key: string): void; list(): MarkupMarginEntry[]; resolveDone(): Promise<void> };
@@ -51,8 +55,9 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
   const seat = (key: string) => margin?.working?.(key);
   const said = (key: string) => saidOf(key).filter((line) => line.text !== "Resolved");
   const answered = (key: string) => Boolean(margin?.revert?.can(key) || itemOf(key)?.state === "handled" || said(key).at(-1)?.from === "agent");
-  const stateOf = (key: string) => { const comment = commentOf(key), at = seat(key); return putAway(key) ? { label: "Resolved" } : at ? { label: `${at.by} is ${at.state}`, busy: true } : comment?.working ? { label: "Working on it", busy: true } : comment?.resolved ? { label: "Agent resolved" } : margin?.revert?.can(key) ? { label: "Changed" } : itemOf(key)?.state === "handled" ? { label: "Handled" } : said(key).at(-1)?.from === "agent" ? { label: "Answered" } : { label: itemOf(key)?.by ? "Sent" : "Saved" }; };
-  const phase = (key: string): MarkupMarginEntry["state"] => seat(key) || commentOf(key)?.working ? "working" : commentOf(key)?.resolved ? "resolved" : answered(key) ? "answered" : "waiting";
+  const phase = (key: string): MarkupMarginEntry["state"] => seat(key) || commentOf(key)?.working ? "working" : commentOf(key)?.resolved ? "resolved" : answered(key) ? "answered" : itemOf(key)?.by ? "waiting" : "saved";
+  // While someone is seen at work on it, the card says who and what they are doing, and that an answer changed the text (which Revert puts back); the list keeps to the table.
+  const stateOf = (key: string) => { const at = seat(key); return putAway(key) ? { label: "Resolved" } : at ? { label: `${at.by} is ${at.state}`, busy: true } : phase(key) !== "working" && phase(key) !== "resolved" && margin?.revert?.can(key) ? { label: "Changed" } : { label: MARKUP_STATES[phase(key)], busy: phase(key) === "working" }; };
   /** An answer stands that the person has not opened: more lines than they last saw, the latest the agent's. */
   const unread = (key: string) => !putAway(key) && saidOf(key).at(-1)?.from === "agent" && saidOf(key).length > (seen[key] ?? seenOf(key));
   const saw = (key: string) => { const count = saidOf(key).length; if (seen[key] === count) return; setSeen(key, count); try { localStorage.setItem(SEEN + key, String(count)); } catch { /* this session only */ } };
@@ -123,7 +128,7 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
     go(list[at < 0 ? (by > 0 ? 0 : list.length - 1) : (at + by + list.length) % list.length]!);
   };
   const list = () => byPlace([...keys().filter((key) => !putAway(key)), ...suggestions().map((one) => SUGGESTED + one.key)]).map((key): MarkupMarginEntry => {
-    if (key.startsWith(SUGGESTED)) { const one = suggestionOf(key.slice(SUGGESTED.length))!; return { key: one.key, kind: "suggestion", about: one.summary, by: one.by, state: "suggested", unread: false }; }
+    if (key.startsWith(SUGGESTED)) { const one = suggestionOf(key.slice(SUGGESTED.length))!; return { key: one.key, kind: "suggestion", about: one.summary, by: who(one.by), state: "suggested", unread: false }; }
     const comment = commentOf(key);
     return { key, kind: "comment", about: comment?.quote || comment?.comment || comment?.name || "", by: itemOf(key)?.by ?? null, state: phase(key), unread: unread(key) };
   });
@@ -149,7 +154,7 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
     <For each={keys()}>{(key) => <MarkupNote ref={(element) => { field = element; }} key={key} open={openKey() === key} tag="" name="" quote={commentOf(key)?.quote} words={commentOf(key)?.comment} said={saidOf(key)} by={itemOf(key)?.by ?? undefined} state={stateOf(key)} unread={unread(key)}
       placeholder="Write back" resolved={putAway(key)} value={openKey() === key ? reply() : ""} onOpen={() => open(key)} onInput={setReply} onSay={answer} onResolve={(resolved) => settle(key, resolved)}
       onRevert={margin?.revert?.can(key) ? () => void margin.revert!.run(key).catch(failed("Not taken back")) : undefined} />}</For>
-    <For each={suggestions().map((one) => one.key)}>{(key) => <MarkupNote key={SUGGESTED + key} open={false} tag="" name="" words={suggestionOf(key)?.summary} state={{ label: `Suggested by ${suggestionOf(key)?.by === "person" ? "you" : suggestionOf(key)?.by ?? "an agent"}` }} value="" onOpen={() => {}} onInput={() => {}}
+    <For each={suggestions().map((one) => one.key)}>{(key) => <MarkupNote key={SUGGESTED + key} open={false} tag="" name="" words={suggestionOf(key)?.summary} state={{ label: `${MARKUP_STATES.suggested} by ${who(suggestionOf(key)?.by) ?? "an agent"}` }} value="" onOpen={() => {}} onInput={() => {}}
       onAccept={() => margin?.suggestions?.accept(key)} onReject={() => margin?.suggestions?.reject(key)} />}</For>
   </MarkupMarginNotes>;
 }

@@ -4,7 +4,7 @@ import { MarkupBar, MarkupDrawing, MarkupLayer, MarkupMark, MarkupNote, MarkupNo
 import { row, token, type Page } from "../model";
 import { noop } from "../demos";
 
-const bar = (more: Partial<Parameters<typeof MarkupBar>[0]> = {}) => <MarkupBar view="page" screenshots onView={noop} tool="select" onTool={noop} onNote={noop} ink="plain" onInk={noop} weight={2} onWeight={noop} onUndo={noop} status="Press or drag" onRetake={noop} onHand={noop} canSend onSend={noop} onClose={noop} {...more} />;
+const bar = (more: Partial<Parameters<typeof MarkupBar>[0]> = {}) => <MarkupBar view="page" screenshots onView={noop} tool="select" onTool={noop} onNote={noop} ink="plain" onInk={noop} weight="medium" onWeight={noop} onUndo={noop} status="Press or drag" onRetake={noop} onHand={noop} canSend onSend={noop} onClose={noop} {...more} />;
 const note = (more: Partial<Parameters<typeof MarkupNote>[0]> = {}) => <MarkupNote open={false} tag="1" name="IconButton" source="conduit-web/src/components/ui/actions.tsx:21"
   value="Match the other rail icons' stroke." onOpen={noop} onInput={noop} onRemove={noop} {...more} />;
 const notes = () => <MarkupNotes>{note()}{note({ tag: "2", name: "2 pieces: Row ×2", source: undefined, value: "" })}{note({ tag: "3", name: "General note", source: "About nothing on the page in particular.", value: "The page feels crowded.", open: true })}</MarkupNotes>;
@@ -63,11 +63,11 @@ export const markupPage: Page = {
       <MarkupDrawing kind="box" points={[[300, 50], [420, 130]]} ink="red" current />
       <MarkupMark kind="drawn" tag="3" box={{ left: 300, top: 50, width: 120, height: 80 }} />
     </>), { surfaces: ["ground"] }),
-    row("highlight and line weights", "a highlighter stroke, and the pen at 1, 2 and 4 px", scene(() => <>
+    row("highlight and line weights", "a highlighter stroke, and the pen thin, medium and thick", scene(() => <>
       <MarkupDrawing kind="highlight" points={[[30, 60], [80, 58], [140, 62], [200, 60]]} ink="amber" />
-      <MarkupDrawing kind="pen" weight={1} points={[[30, 110], [200, 110]]} />
+      <MarkupDrawing kind="pen" weight="thin" points={[[30, 110], [200, 110]]} />
       <MarkupDrawing kind="pen" points={[[30, 140], [200, 140]]} />
-      <MarkupDrawing kind="pen" weight={4} points={[[30, 170], [200, 170]]} ink="red" />
+      <MarkupDrawing kind="pen" weight="thick" points={[[30, 170], [200, 170]]} ink="red" />
     </>), { surfaces: ["ground"] }),
     row("selected text", "a run of text over two lines, each line marked, numbered on its first", scene(() => <>
       <MarkupMark kind="quote" tag="1" current box={{ left: 120, top: 60, width: 220, height: 18 }} />

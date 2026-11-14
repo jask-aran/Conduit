@@ -1,6 +1,7 @@
 import names from "virtual:ui-pieces";
 import { createEffect, createResource, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import { MarkupMargin, MarkupTool, httpTransport, type MarkupHost, type MarkupMarginControl, type MarkupMarginEntry, type MarkupMode } from "@/components/markup";
+import { MARKUP_STATES } from "@/components/markup/margin";
 import { Button, Dot, Empty, HeaderButton, Icons, SheetFill, StatusDot } from "@/components/ui";
 import { MarkupRibbonRoom } from "@/components/ui/markup";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
@@ -11,8 +12,6 @@ import { ARTIFACT_KINDS, type ArtifactSurface, type ArtifactSurfaceProps, type M
 import { artifactAbout, artifactKnown, artifactLabel, type Artifact } from "./artifacts";
 import { holdArtifact, placeShown, placeWanted } from "./focused-artifact";
 import { connect, connectedTo, disconnect } from "./connections";
-
-const STATES: Record<MarkupMarginEntry["state"], string> = { waiting: "Waiting", working: "Working", answered: "Answered", resolved: "Agent resolved", suggested: "Suggested" };
 
 /*
  * An artifact in a pane (the view `artifact:<id>`): its kind's surface (ARTIFACT_KINDS), with Markup's bar over the
@@ -51,9 +50,10 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
     const entries = () => margin.list(), notes = () => entries().filter((one) => one.kind === "comment"), suggested = () => entries().filter((one) => one.kind === "suggestion");
     const waiting = () => notes().filter((one) => one.state === "answered" || one.state === "resolved"), done = () => notes().filter((one) => one.state === "resolved").length;
     const suggestions = () => host()?.margin?.suggestions;
-    const row = (entry: MarkupMarginEntry) => <MenuRow icon={entry.unread ? <Dot tone="unread" aria-label="Unread" /> : undefined} detail={entry.by ?? undefined} meta={STATES[entry.state]} onSelect={() => margin.go(entry.key)}>{entry.about || "Comment"}</MenuRow>;
-    return <Show when={entries().length}><DropdownMenu modal={false} placement="bottom-end">
-      <MenuControl as={Button} variant="ghost" size="sm" title="Comments">{margin.open() ? `${margin.open()} open` : `${entries().length} to review`}</MenuControl>
+    const row = (entry: MarkupMarginEntry) => <MenuRow icon={entry.unread ? <Dot tone="unread" aria-label="Unread" /> : undefined} detail={entry.by ?? undefined} meta={MARKUP_STATES[entry.state]} onSelect={() => margin.go(entry.key)}>{entry.about || "Comment"}</MenuRow>;
+    // Always there, with how many are open: at rest the header says what waits on the person.
+    return <Show when={margin}><DropdownMenu modal={false} placement="bottom-end">
+      <MenuControl as={Button} variant="ghost" size="sm" aria-label="Comments" title={margin.open() ? `${margin.open()} open` : entries().length ? `${entries().length} to review` : "No comments"}><Icons.Chat />{margin.open() || null}</MenuControl>
       <MenuContent width="md" height="lg">
         <MenuSection title="Show">
           <MenuRow closeOnSelect={false} checked={needsMe()} meta={String(waiting().length)} onSelect={() => setNeedsMe(true)}>Needs me</MenuRow>
@@ -73,11 +73,15 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
   // Its own mated thread is the artifact's already, never connected to it.
   const chats = () => (props.chats?.(found()?.project ?? "") ?? []).filter((chat) => chat.id !== connectedTo(props.id).thread);
   const linked = (chat: string) => connectedTo(props.id).connections.some((connection) => connection.chat === chat);
+  // Who listens to this artifact now (its own thread, and any chat connected or session waiting), told by the open tool.
+  const listening = () => offer()?.names() ?? [];
   const connecting = <DropdownMenu modal={false} placement="bottom-end">
-    <MenuControl as={HeaderButton} label="Connect a chat" icon={<Icons.Chat />} />
-    <MenuContent width="md"><MenuSection title="Connect a chat">
-      <For each={chats()} fallback={<MenuRow disabled>No chats in this project</MenuRow>}>{(chat) =>
-        <MenuRow closeOnSelect={false} picked={linked(chat.id)} onSelect={() => void (linked(chat.id) ? disconnect : connect)(props.id, chat.id).catch((error: Error) => toast.error(error.message))}>{chat.title}</MenuRow>}</For>
+    <MenuControl as={Button} variant="ghost" size="sm" aria-label="Agents" title={`${listening().length} listening`}><Icons.Agent />{listening().length || null}</MenuControl>
+    <MenuContent width="md"><MenuSection title="Comments go to" note={listening().length ? undefined : "No agent is listening"}>
+      <For each={listening()}>{(name) => <MenuRow closeOnSelect={false} checked={offer()?.to() === name || undefined} onSelect={() => offer()?.hand(name)}>{name}</MenuRow>}</For>
+    </MenuSection><MenuSection title="Connect a chat" note={chats().length ? undefined : "No chats in this project"}>
+      <For each={chats()}>{(chat) =>
+        <MenuRow closeOnSelect={false} checked={linked(chat.id)} onSelect={() => void (linked(chat.id) ? disconnect : connect)(props.id, chat.id).catch((error: Error) => toast.error(error.message))}>{chat.title}</MenuRow>}</For>
     </MenuSection></MenuContent>
   </DropdownMenu>;
   // Made once for each artifact, as a keyed child: its kind's surface, and the host it reports (the pane's part over the kind's), which the margin and the tool are made over.
@@ -91,7 +95,7 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
     </>;
   };
   return <SheetFill ref={(element) => { frame = element; }} class="pane-artifact">
-    {props.header(<><Show when={found()?.trouble}>{(why) => <StatusDot label={why()} title={why()} tone="warn" />}</Show><Show when={surface()?.stale?.()}><Button variant="secondary" size="sm" onClick={() => location.reload()}>Reload: this page is older than the {noun()}</Button></Show><Show when={surface()?.away?.()}><StatusDot label="Reconnecting to the hub" title="Reconnecting to the hub" tone="warn" spinning /></Show><Show when={!props.quiet && comments()}>{(margin) => commentList(margin())}</Show>
+    {props.header(<><Show when={offer()?.unsent()}>{(unsent) => <Button variant="primary" outline size="sm" data-markup-own="" title="Send (Ctrl Enter)" onClick={() => offer()?.send()}>{unsent() > 1 ? `Send ${unsent()}` : "Send"}</Button>}</Show><Show when={found()?.trouble}>{(why) => <StatusDot label={why()} title={why()} tone="warn" />}</Show><Show when={surface()?.stale?.()}><HeaderButton label={`Reload: this page is older than the ${noun()}`} icon={<Icons.Refresh />} onClick={() => location.reload()} /></Show><Show when={surface()?.away?.()}><StatusDot label="Reconnecting to the hub" title="Reconnecting to the hub" tone="warn" spinning /></Show><Show when={!props.quiet && comments()}>{(margin) => commentList(margin())}</Show>
       {surface()?.header?.()}
       <Show when={found()}>{connecting}</Show></>)}
     <Show when={!props.quiet && found()}><MarkupRibbonRoom ref={(element) => { room = element; }} /></Show>

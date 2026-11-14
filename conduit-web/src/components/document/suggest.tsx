@@ -160,7 +160,7 @@ export function createSuggesting(editor: Accessor<Editor | undefined>, doc: Doc,
       found.push(Decoration.widget(pos, () => {
         const element = Object.assign(document.createElement("div"), { contentEditable: "false" });
         element.dataset.suggestion = one.key;
-        parts.set(element, render(() => <DocumentSuggested by={one.by} onAccept={() => accept(one.key)} onReject={() => reject(one.key)} />, element));
+        parts.set(element, render(() => <DocumentSuggested by={one.by === host.author() ? "you" : one.by} onAccept={() => accept(one.key)} onReject={() => reject(one.key)} />, element));
         return element;
       }, { key: `suggested ${one.key} ${one.by}`, side: -2, ignoreSelection: true, stopEvent: () => true, destroy: (element) => parts.get(element)?.() }));
     }

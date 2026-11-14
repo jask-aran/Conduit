@@ -1,8 +1,8 @@
 import { BaselineIcon, BetweenHorizontalEndIcon, BetweenVerticalEndIcon, BoldIcon, CalendarIcon, ChevronRightIcon, CodeIcon, ExternalLinkIcon, Grid2x2XIcon, GripVerticalIcon, Heading1Icon, Heading2Icon, Heading3Icon, HighlighterIcon, ImageIcon, ImageOffIcon, InfoIcon, ItalicIcon, LinkIcon, ListChecksIcon, ListCollapseIcon, ListIcon, ListOrderedIcon,
   MessageSquarePlusIcon, MinusIcon, PencilIcon, PencilLineIcon, PilcrowIcon, StrikethroughIcon, TableColumnsSplitIcon, TableIcon, TableRowsSplitIcon, TextQuoteIcon, TriangleAlertIcon, UnlinkIcon } from "lucide-solid";
-import { createSignal, For, Show, splitProps, type JSX } from "solid-js";
+import { createEffect, createSignal, onCleanup, Show, splitProps, type JSX } from "solid-js";
 // Through the barrel, as markup.tsx does, so the editor's chunk takes the header from the app's own.
-import { Button, FindBar, Frost, IconButton, Icons, PaneHeader, Row, TextArea } from "./index";
+import { Button, FindBar, Frost, IconButton, Icons, PaneHeader, Spinner, TextArea } from "./index";
 import "./styles/document.css";
 
 /* Not in the library's barrel: the document editor imports this file, so the app's first load does not carry it. */
@@ -54,15 +54,16 @@ export const DocumentSeatJump = (props: { label: string; below: boolean; ink: Do
   <Frost as="button" type="button" class="ui-document-seat-jump" data-at={props.below ? "below" : "above"} data-seat-ink={props.ink} onClick={() => props.onJump()}>
     <Show when={props.below} fallback={<Icons.ArrowUp />}><Icons.ArrowDown /></Show><span>{props.label}</span>
   </Frost>;
-/** Asking someone to write in the paper, where the caret is: who is asked, what of them, and Send. Enter sends; Shift Enter is a new line. `width`: the line of text it stands for, in px. */
-export function DocumentAsk(props: { name: string; width?: number; onSend: (words: string) => void }) {
+/** Asking someone to write in the paper, as a line of it: who is asked, what of them, and Send. `at`: the line it stands in, within the sheet's body. Enter sends, Shift Enter is
+ *  a new line; Escape, or focus leaving it, puts it away (`onClose`). */
+export function DocumentAsk(props: { name: string; at: { left: number; top: number; width: number }; onSend: (words: string) => void; onClose: () => void }) {
   const [words, setWords] = createSignal("");
   const send = () => { const said = words().trim(); if (said) props.onSend(said); };
-  return <div class="ui-document-ask" style={{ width: props.width ? `${props.width}px` : undefined }}>
+  return <div class="ui-document-ask" style={{ left: `${props.at.left}px`, top: `${props.at.top}px`, width: `${props.at.width}px` }} onFocusOut={(event) => { if (event.currentTarget.isConnected && !event.currentTarget.contains(event.relatedTarget as Node | null)) props.onClose(); }}>
     <span class="ui-document-mention">@{props.name}</span>
     <TextArea ref={(field) => queueMicrotask(() => field.focus({ preventScroll: true }))} aria-label={`Ask ${props.name}`} placeholder={`Tell ${props.name} what to write or edit`} value={words()} onInput={(event) => setWords(event.currentTarget.value)}
-      onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); send(); } }} />
-    <IconButton label="Send (Enter)" disabled={!words().trim()} onClick={send}><Icons.Send /></IconButton>
+      onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); props.onClose(); } else if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); send(); } }} />
+    <IconButton label="Send (Enter)" disabled={!words().trim()} onMouseDown={(event) => event.preventDefault()} onClick={send}><Icons.Send /></IconButton>
   </div>;
 }
 export const documentDrawClass = { mention: "ui-document-mention", match: "ui-document-match", currentMatch: "ui-document-match-current", revealed: "ui-document-revealed" };
@@ -102,17 +103,31 @@ export type DocumentWidth = "narrow" | "wide" | "full";
 /** A Conduit document on its page: its bar (its name, how its copy stands with the hub's when that needs saying, what can be done to it) over one reading column that scrolls;
  *  `ref` is where its text goes. `head`: what stands over the text (DocumentHead), `foot` under it (DocumentCount); `over`: what floats beside its blocks
  *  (DocumentHandle, DocumentDropLine, DocumentTableEdges), placed from the top of the text's column. `onHover`: the pointer over the column, null as it leaves.
- *  `margin`: what stands beside the text (its comments), and under it where the page is too narrow for both; `marginEmpty`: it holds nothing now, so it takes no room and the text stands centred. `bare`: it is in a pane, whose header is its bar.
+ *  `margin`: what stands beside the text (its comments), and tucked over its right edge where the page is too narrow for both; `marginEmpty`: it holds nothing now, so it takes no room and the text stands centred. `bare`: it is in a pane, whose header is its bar.
  *  `width`: how wide the text runs (narrow, unsaid). `find`: a DocumentFind, at the sheet's top right. `scroller`: the element that scrolls. `edge`: what is pinned
  *  to the sheet's edge over the column whatever is scrolled (DocumentSeatJump). */
 export function DocumentSheet(props: { ref?: (element: HTMLDivElement) => void; name: string; state?: string; actions?: JSX.Element; margin?: JSX.Element; marginEmpty?: boolean; bare?: boolean; head?: JSX.Element; foot?: JSX.Element; over?: JSX.Element;
   width?: DocumentWidth; find?: JSX.Element; edge?: JSX.Element; scroller?: (element: HTMLDivElement) => void; onHover?: (event: PointerEvent | null) => void; children?: JSX.Element }) {
+  // Where the text at its full measure and the margin do not fit side by side, the margin is tucked: it takes no room, and its cards stand over the
+  // text's right edge as small marks until one is opened. Measured from the two's own widths, so no width is named here. (The margin keeps its
+  // flex basis while tucked: it is what says how wide it would stand.)
+  const [tucked, setTucked] = createSignal(false);
+  let column: HTMLDivElement | undefined, body: HTMLDivElement | undefined, aside: HTMLElement | undefined;
+  const fit = () => {
+    if (!column || !body || !aside) return setTucked(false);
+    const widest = parseFloat(getComputedStyle(body).maxWidth), beside = parseFloat(getComputedStyle(aside).flexBasis), look = getComputedStyle(column), page = getComputedStyle(column.firstElementChild!);
+    const room = column.clientWidth - parseFloat(look.paddingLeft) - parseFloat(look.paddingRight);
+    setTucked(!(widest + (parseFloat(page.columnGap) || 0) + beside <= room));
+  };
+  const sized = new ResizeObserver(fit);
+  onCleanup(() => sized.disconnect());
+  createEffect(() => { props.width; props.marginEmpty; queueMicrotask(fit); });
   return <section class="ui-document" aria-label={props.name} data-bare={props.bare ? "" : undefined} data-width={props.width ?? "narrow"}>
     <Show when={!props.bare}><PaneHeader kind="tool" name={props.name} place={props.state} actions={props.actions} /></Show>
     {props.find}
-    <div ref={props.scroller} class="ui-document-column" onPointerMove={(event) => props.onHover?.(event)} onPointerLeave={() => props.onHover?.(null)}><div class="ui-document-page" data-margin={props.marginEmpty ? "none" : undefined}>
-      <div class="ui-document-body">{props.head}<div ref={props.ref} class="ui-document-content">{props.children}</div>{props.over}{props.foot}</div>
-      <Show when={props.margin}><aside class="ui-document-margin" aria-label="Comments">{props.margin}</aside></Show>
+    <div ref={(element) => { column = element; sized.observe(element); props.scroller?.(element); }} class="ui-document-column" onPointerMove={(event) => props.onHover?.(event)} onPointerLeave={() => props.onHover?.(null)}><div class="ui-document-page" data-margin={props.marginEmpty ? "none" : tucked() ? "tucked" : undefined}>
+      <div ref={body} class="ui-document-body">{props.head}<div ref={props.ref} class="ui-document-content">{props.children}</div>{props.over}{props.foot}</div>
+      <Show when={props.margin}><aside ref={aside} class="ui-document-margin" aria-label="Comments">{props.margin}</aside></Show>
     </div></div>
     {props.edge}
   </section>;
@@ -121,7 +136,7 @@ export function DocumentSheet(props: { ref?: (element: HTMLDivElement) => void; 
 /** What stands over a document's text, ruled off from it: its title, then its properties, then `add`, the way to add one, a quiet row always there
  *  (none while one is being added). */
 export const DocumentHead = (props: { add?: { label: string; onClick: () => void }; children: JSX.Element }) =>
-  <header class="ui-document-head">{props.children}<Show when={props.add}>{(add) => <button type="button" class="ui-document-add" onClick={() => add().onClick()}><Icons.Add />{add().label}</button>}</Show></header>;
+  <header class="ui-document-head">{props.children}<Show when={props.add}>{(add) => <Button variant="ghost" size="sm" class="ui-document-add" onClick={() => add().onClick()}><Icons.Add />{add().label}</Button>}</Show></header>;
 /** The document's name as its title: a field where it can be renamed (`editable`), else plain text. */
 export function DocumentTitle(props: JSX.InputHTMLAttributes<HTMLInputElement> & { editable?: boolean }) {
   const [local, rest] = splitProps(props, ["editable"]);
@@ -151,10 +166,6 @@ export const DocumentTableEdges = (props: { box?: { top: number; left: number; w
   </div>}</Show>;
 };
 
-/** A document's headings as a list to go to, stepped in by level; `current` the one being read. */
-export const DocumentOutline = (props: { headings: readonly { id: string; level: number; text: string }[]; current?: string; onPick: (id: string) => void }) =>
-  <nav class="ui-document-outline" aria-label="Outline"><For each={props.headings}>{(heading) =>
-    <Row element="button" density="tree" depth={heading.level - 1} current={heading.id === props.current} onClick={() => props.onPick(heading.id)}>{heading.text || "Untitled"}</Row>}</For></nav>;
 
 /** Find in a document's text, at the sheet's top right: the field, how many it found and which is current ("3 of 12"), previous, next, close. */
 export const DocumentFind = (props: Omit<Parameters<typeof FindBar>[0], "label" | "plain" | "children">) => <FindBar label="Find" {...props} />;
@@ -173,7 +184,7 @@ export const DocumentFold = (props: { open: boolean; onToggle: () => void }) =>
 /** An image block: the picture (`src`; none yet, it is loading, or `missing`, it is not kept with this document) and its caption, written in place where `onCaption` is given. */
 export const DocumentImage = (props: { src?: string; caption: string; missing?: string; onCaption?: (caption: string) => void }) =>
   <figure class="ui-document-image">
-    <Show when={props.src} fallback={<div class="ui-document-image-missing" role="img" aria-label={props.caption || "Image"}><ImageOffIcon />{props.missing ?? "Loading the image"}</div>}><img src={props.src} alt={props.caption} draggable={false} /></Show>
+    <Show when={props.src} fallback={<div class="ui-document-image-missing" role="img" aria-label={props.caption || "Image"}><Show when={props.missing} fallback={<Spinner />}><ImageOffIcon /></Show>{props.missing ?? "Loading the image"}</div>}><img src={props.src} alt={props.caption} draggable={false} /></Show>
     <Show when={props.onCaption || props.caption}>
       <figcaption><input class="ui-document-field ui-document-caption" aria-label="Caption" placeholder="Add a caption" value={props.caption} readOnly={!props.onCaption} onInput={(event) => props.onCaption?.(event.currentTarget.value)} /></figcaption>
     </Show>
@@ -185,7 +196,3 @@ export const DocumentDate = (props: { date: string; onPress?: () => void; ref?: 
   return <button ref={props.ref} type="button" class="ui-document-date-chip" onClick={() => props.onPress?.()}><time datetime={props.date}>{shown()}</time></button>;
 };
 
-/** Under a new, empty document's hint: ways to start it, each a quiet button (Button ghost); `note` says what to do where a button could not do it itself.
- *  `top`: placed from the column's top, under the line it is about (unsaid: where it stands). */
-export const DocumentStarts = (props: { top?: number; note?: string; children: JSX.Element }) =>
-  <div class="ui-document-starts" role="group" aria-label="Start from" data-placed={props.top === undefined ? undefined : ""} style={props.top === undefined ? undefined : { top: `${props.top}px` }}>{props.children}<Show when={props.note}><p class="ui-document-starts-note" role="status">{props.note}</p></Show></div>;

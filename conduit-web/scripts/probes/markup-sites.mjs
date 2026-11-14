@@ -60,7 +60,7 @@ try {
   await page.mouse.move(x - 6, y - 6); await page.mouse.down(); await page.mouse.move(x + Math.min(inside.width, 200), y + inside.height + 6, { steps: 8 }); await page.mouse.up(); await wait(500);
   if (await page.locator(".ui-markup-note[data-float] button[role=switch][aria-checked=true]").count()) await page.locator(".ui-markup-note[data-float] button[role=switch]").click();
   await page.keyboard.type(`@${name} Site probe: make this heading larger`); await page.keyboard.press("Enter"); await wait(500);
-  await bar.locator("button", { hasText: "Send" }).click(); await wait(5000);
+  await page.locator("header button", { hasText: /^Send/ }).click({ force: true }); await wait(5000);
   const items = (await api(`/v0/document/${made}/markup/open`)).body?.items ?? [], comment = items[0]?.comments[0];
   console.log("the comment is sent with the elements under the box:", comment?.under?.elements, "| it is on the site's own store, taken by the connected chat:", items.length === 1 && items[0].by === name, items[0]?.state);
   const item = items[0] && JSON.parse(await fs.readFile(`${folder}/.conduit/artifacts/${made}/markup/${items[0].id}/item.json`, "utf8"));

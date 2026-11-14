@@ -61,8 +61,8 @@ try {
   const format = page.locator("[role=toolbar][aria-label='Format']");
   await format.waitFor({ timeout: 3000 }).catch(() => {});
   console.log("selected text has its tools:", await format.locator("button").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label")).join(", ")).catch(() => "none"));
-  await format.locator("button[aria-label='Bold']").click();
-  await until("Bold makes the selection bold, and its button says so", async () => await page.evaluate(() => [...document.querySelectorAll(".ui-document-text > blockquote strong")].some((bold) => bold.textContent === "Quoted by the probe")) && await format.locator("button[aria-label='Bold']").getAttribute("aria-pressed") === "true");
+  await format.locator("button[aria-label^='Bold']").click();
+  await until("Bold makes the selection bold, and its button says so", async () => await page.evaluate(() => [...document.querySelectorAll(".ui-document-text > blockquote strong")].some((bold) => bold.textContent === "Quoted by the probe")) && await format.locator("button[aria-label^='Bold']").getAttribute("aria-pressed") === "true");
   added.push(...ids(cli("read", "test")).filter((id) => !ids(before).includes(id) && !added.includes(id)));
 
   // The block handle, beside the block the mouse is over (inside its left edge where the gutter is narrower than the handle); its menu's Duplicate writes a copy under it with an id of its own.
@@ -87,11 +87,12 @@ try {
   await until("a property cleared and left goes, from both pages and the hub", async () => !await property(second) && !await property(page) && !cli("read", "test").includes("Probe check"));
 
   // One comment, made on the first page; what stands for it is read on the second.
+  await page.locator(`.ui-document-text > [data-id="${added[0]}"]`).scrollIntoViewIfNeeded(); await page.waitForTimeout(300);
   const at = await page.locator(`.ui-document-text > [data-id="${added[0]}"]`).boundingBox();
   await page.locator(".ui-markup-bar button[aria-label^='Select text']").click();
   await page.mouse.move(at.x + 4, at.y + at.height / 2); await page.mouse.down(); await page.mouse.move(at.x + 120, at.y + at.height / 2, { steps: 6 }); await page.mouse.up(); await page.waitForTimeout(400);
   await page.keyboard.type("Document probe: say this another way"); await page.keyboard.press("Enter");
-  await page.locator(".ui-markup-bar button", { hasText: "Send" }).click();
+  await page.locator("header button", { hasText: /^Send/ }).click({ force: true });
   // The ribbon has no mode to press: the tool held is let go, and the app is in use.
   await page.locator(".ui-markup-bar [aria-label='Annotate with'] button[aria-pressed='true']").click({ timeout: 2000 }).catch(() => {});
   const card = (target) => target.evaluate(() => {
@@ -101,6 +102,7 @@ try {
   });
   const tinted = (target) => target.evaluate((id) => Boolean(document.querySelector(`.ui-document-text > [data-id="${id}"].ui-document-changed`)), added[0]);
   const mine = (target) => target.locator(".ui-markup-margin .ui-markup-note", { hasText: "Document probe" });
+  await second.setViewportSize({ width: 1800, height: 900 });
   await until("the comment's card stands beside its text on a second page", async () => { const now = await card(second); return Boolean(now?.beside) && Math.abs(now.off) <= 2; });
   const sent = await card(second), key = sent?.key ?? "none/0"; item = key.split("/")[0];
   console.log("the card:", JSON.stringify(sent), "| in the tool's corner:", await page.locator(".ui-markup-notes .ui-markup-note").count());
@@ -114,7 +116,7 @@ try {
   await until("a session's resolve accepts nothing: the card stays, saying so, and the tint with it", async () => (await card(page))?.state === "Agent resolved" && await tinted(page));
 
   await second.setViewportSize({ width: 390, height: 800 });
-  await until("a phone-sized page has the card under the text", async () => { const now = await card(second); return Boolean(now?.under) && !now.beside; });
+  await until("a phone-sized page tucks the margin over the text's edge", () => second.evaluate(() => document.querySelector(".ui-document-page").dataset.margin === "tucked"));
   await second.locator(`.ui-document-text > [data-id="${added[1]}"]`).click();
   await second.keyboard.press("End"); await second.keyboard.type(" and on a phone");
   await until("a phone-sized page's typing merges", async () => cli("read", "test").includes("typed on the first page and on a phone"));
@@ -126,7 +128,7 @@ try {
   const tools = () => page.evaluate(() => JSON.stringify([...document.querySelectorAll(".ui-markup-bar [role=radio]")].map((button) => button.getAttribute("aria-label").split(" ")[0] + (button.getAttribute("aria-checked") === "true" ? "*" : ""))));
   console.log("Markup's bar while the app is in use:", await tools());
   await page.locator(".ui-markup-bar button[aria-label^='Highlighter']").click(); await page.waitForTimeout(400);
-  console.log("after pressing Highlighter from Use, its ink menu:", await page.locator(".ui-markup-bar button[aria-label='Ink and line']").count(), "| layer selecting:", await page.evaluate(() => document.querySelector(".ui-markup-layer").hasAttribute("data-select")), "| thin:", await page.evaluate(() => document.querySelector(".ui-markup-rails").hasAttribute("data-thin")));
+  console.log("after pressing Highlighter from Use:", await tools(), "| layer selecting:", await page.evaluate(() => document.querySelector(".ui-markup-layer").hasAttribute("data-select")), "| thin:", await page.evaluate(() => document.querySelector(".ui-markup-rails").hasAttribute("data-thin")));
   await page.screenshot({ path: "/tmp/markup-probe-document.png" });
   console.log("errors:", JSON.stringify(errors));
 } finally {

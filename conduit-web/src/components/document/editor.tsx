@@ -8,11 +8,9 @@ import { isOn, markAttrs, probeEditor, readEditor, sameJson } from "./read";
 import { lateSync, settle } from "./sync";
 import { redo, undo, ySyncPlugin, yUndoPlugin, yUndoPluginKey } from "y-prosemirror";
 import type { Doc, Map as YMap, XmlFragment } from "yjs";
-import { Button, Icons } from "@/components/ui";
-import { Popover, PopoverContent } from "@/components/ui/menus";
 import { MARKUP_INKS } from "@/components/ui/markup";
-import { DocumentAsk, DocumentCount, DocumentSeatJump, DocumentSheet, DocumentStarts, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons, documentWritingIcons, type DocumentWidth } from "@/components/ui/document";
-import { CHANGES, FRAGMENT, PROPERTIES, documentExtensions, isSuggestion } from "@/document-format.js";
+import { DocumentAsk, DocumentCount, DocumentSeatJump, DocumentSheet, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons, documentWritingIcons, type DocumentWidth } from "@/components/ui/document";
+import { CHANGES, FRAGMENT, documentExtensions, isSuggestion } from "@/document-format.js";
 import { blockById, blockKeys, caretBlockAt, shiftBlock } from "./blocks";
 import { drawn, revealed } from "./drawn";
 import { createFind } from "./find";
@@ -23,7 +21,7 @@ import { hinted } from "./hint";
 import { createLiveDocument } from "./live";
 import { createSeatsAway, seatsDrawn } from "./seats";
 import { createSuggesting, type Change } from "./suggest";
-import { dayFrom, insertMarkdown, paperTyping, pickImages, viewed } from "./nodes";
+import { dayFrom, paperTyping, pickImages, viewed } from "./nodes";
 import { INKED, INKS, inkSwatch, MARKS, putInk, SelectionTools, TableTools, selectedRange, type PaperInk } from "./toolbar";
 import { createSlash, menuKeys, TypedMenu, typing, type Typed, type Typing } from "./typed";
 
@@ -174,7 +172,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   // Picked, the one asked is told what to write in a field at the caret's block: a comment is about what is there, this asks for what is not.
   const [asking, setAsking] = createSignal<{ about: Range; name: string } | null>(null);
   // On an empty line the field stands in the line's own place; under a block with text, so the text it is about is read.
-  const askedOf = () => { const at = asking()?.about.startContainer; if (!(at instanceof Element)) return undefined; const box = at.getBoundingClientRect(); return at.textContent ? box : new DOMRect(box.left, box.top, box.width, 0); };
+  const askedAt = () => { reflowed(); const at = asking()?.about.startContainer, body = column()?.parentElement; if (!(at instanceof Element) || !body) return undefined; const box = at.getBoundingClientRect(), within = body.getBoundingClientRect(); return { left: box.left - within.left, top: (at.textContent ? box.bottom : box.top) - within.top, width: box.width }; };
   const ask = (words: string) => { const at = asking(); setAsking(null); if (at) props.onMention?.(at.about, at.name, words); editor()?.commands.focus(); };
   const keys = (event: KeyboardEvent) => menuKeys(event, offered(), active(), setActive, pick, dismiss);
   // Ready is the hub's copy drawn, or the hub not answering: never a page still waiting.
@@ -189,7 +187,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   // An image is offered only where the host keeps them.
   const tools = DOCUMENT_BLOCKS.filter((offered) => (props.host.tools ?? DOCUMENT_BLOCKS).includes(offered) && (offered !== "image" || props.host.images)).map((name) => {
     const Icon = documentBlockIcons[name];
-    return { name, label: KINDS[name].label, icon: () => <Icon />, get active() { return kind() === name; }, run: () => { const made = editor(); if (made && name === "image") pickImages(made, props.host); else if (made) KINDS[name].make(made.chain().focus()).run(); } };
+    return { name, label: KINDS[name].label, icon: () => <Icon />, is: KINDS[name].is, get active() { return kind() === name; }, run: () => { const made = editor(); if (made && name === "image") pickImages(made, props.host); else if (made) KINDS[name].make(made.chain().focus()).run(); } };
   });
   const offers = { dates: tools.some((tool) => tool.name === "date"), images: tools.some((tool) => tool.name === "image") };
   const suggesting = createSuggesting(editor, copy.doc, changes, props.host, props.id);
@@ -206,28 +204,6 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     doc.forEach((block) => { let had = wordsIn.get(block); if (had === undefined) wordsIn.set(block, had = block.textBetween(0, block.content.size, " ", " ").split(/\s+/).filter(Boolean).length); words += had; });
     const many = (n: number, what: string) => `${n.toLocaleString()} ${what}${n === 1 ? "" : "s"}`;
     return `${many(doc.childCount, "block")} · ${many(words, "word")}`;
-  });
-  // A new paper (one empty line, no properties) offers ways to start it under its hint, until it is first written in.
-  const properties = copy.doc.getMap(PROPERTIES), [bare, setBare] = createSignal(properties.size === 0), [started, setStarted] = createSignal(false), [note, setNote] = createSignal<string>();
-  const kept = () => setBare(properties.size === 0);
-  properties.observe(kept);
-  onCleanup(() => properties.unobserve(kept));
-  // Read only until the paper is started: nothing after asks.
-  const blank = createMemo(() => { if (started()) return false; const doc = counted(); return Boolean(doc && doc.childCount === 1 && doc.firstChild!.type.name === "paragraph" && !doc.firstChild!.content.size); });
-  createEffect(() => { if (!started() && counted() && (!blank() || !bare())) setStarted(true); });
-  const asker = () => props.onMention ? props.mentions?.()[0] : undefined;
-  const paste = async () => {
-    const made = editor();
-    if (!made) return;
-    const text = await navigator.clipboard?.readText?.().catch(() => "") ?? "";
-    if (text.trim()) return void insertMarkdown(made, text);
-    made.commands.focus("start");
-    setNote(`Press ${/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘V" : "Ctrl+V"} to paste: Markdown becomes blocks`);
-  };
-  const starts = createMemo(() => {
-    const view = editor()?.view, first = view && blank() && !started() ? view.nodeDOM(0) as HTMLElement | null : null, body = column()?.parentElement;
-    reflowed();
-    return first && body ? first.getBoundingClientRect().bottom - body.getBoundingClientRect().top : undefined;
   });
   // The marks the selection wears, for a bar that is always there; the tools over a selection offer them too.
   const wears = readEditor(editor, "caret", (made) => MARKS.filter(([name]) => isOn(made, name)).map(([name]) => name).join(" "));
@@ -306,11 +282,8 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   <DocumentSheet ref={setColumn} scroller={setScroller} width={props.width} find={find.view()} name={props.name} state={copy.state() === "away" ? "Reconnecting" : copy.state() === "stale" ? "Reload: this page is older than the paper" : undefined}
     edge={<Show when={away()}>{(seat) => <DocumentSeatJump label={seat().label} below={seat().below} ink={seat().ink} onJump={() => reveal(seat().block)} />}</Show>} margin={props.margin} marginEmpty={props.marginEmpty} actions={props.actions} bare={props.bare}
     head={<Show when={copy.synced()}><PaperHead doc={copy.doc} name={props.name} onRename={props.onRename} onDown={() => editor()?.commands.focus("start")} /></Show>}
-    over={<>{handle.view}<TableTools editor={editor} body={() => column()?.parentElement ?? undefined} moved={reflowed} />
-      <Show when={starts() !== undefined}><DocumentStarts top={starts()} note={note()}>
-        <Show when={asker()}>{(name) => <Button variant="ghost" size="sm" onMouseDown={(event) => event.preventDefault()} onClick={() => editor()?.chain().focus("start").insertContent("@").run()}><Icons.Agent />Ask @{name()} to draft…</Button>}</Show>
-        <Button variant="ghost" size="sm" onMouseDown={(event) => event.preventDefault()} onClick={() => void paste()}><Icons.Paste />Paste Markdown</Button>
-      </DocumentStarts></Show></>} onHover={handle.hover} foot={<Show when={count()}>{(line) => <DocumentCount>{line()}</DocumentCount>}</Show>}>
+    over={<>{handle.view}<Show when={asking()} keyed>{(asked) => <Show when={askedAt()}>{(at) => <DocumentAsk name={asked.name} at={at()} onSend={ask} onClose={() => { setAsking(null); editor()?.commands.focus(); }} />}</Show>}</Show><TableTools editor={editor} body={() => column()?.parentElement ?? undefined} moved={reflowed} />
+</>} onHover={handle.hover} foot={<Show when={count()}>{(line) => <DocumentCount>{line()}</DocumentCount>}</Show>}>
     {/* The editor is made only once the hub's copy is held: made before, its first empty block would be merged in as a block of its own. */}
     <Show when={copy.synced() && column()}>{(element) => {
       // Untracked: a signal or prop read in what the editor is made from would make it again (caret, undo and find lost) each time it changed.
@@ -320,9 +293,6 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     }}</Show>
   </DocumentSheet>
     {/* Menus and tools beside the sheet, never in it: the sheet's column is the editor's to fill, and a child of it that comes and goes clears it. */}
-    <Popover open={Boolean(asking())} onOpenChange={(open) => { if (!open) setAsking(null); }} anchorRect={askedOf} placement="bottom-start">
-      <PopoverContent aria-label="Ask" snug onCloseAutoFocus={(event) => { event.preventDefault(); editor()?.commands.focus(); }}><Show when={asking()} keyed>{(at) => <DocumentAsk name={at.name} width={askedOf()?.width} onSend={ask} />}</Show></PopoverContent>
-    </Popover>
     <TypedMenu label="Ask" anchor={anchor} items={offered()} name={(name) => name} active={active()} onCursor={setActive} onPick={pick} onDismiss={dismiss} />
     {slash.menu()}
     <SelectionTools editor={editor} bounds={scroller} marks={props.host.tools} onComment={props.onComment} />

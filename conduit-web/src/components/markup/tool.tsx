@@ -1,7 +1,7 @@
 import { batch, createMemo, createResource, createSignal, For, Index, onCleanup, onMount, Show } from "solid-js";
 import { createStore, produce, reconcile, unwrap } from "solid-js/store";
 import { Portal } from "solid-js/web";
-import { drawingBox, MarkupBar, MarkupDrawing, MarkupLayer, MarkupMark, MarkupNote, MarkupNotes, MarkupText, markupInkColour, MARKUP_INKS, MARKUP_WEIGHT, type MarkupBox, type MarkupDrawingKind, type MarkupInk, type MarkupPoint, type MarkupShape, type MarkupToolKind, type MarkupWeight } from "@/components/ui/markup";
+import { drawingBox, MarkupBar, MarkupDrawing, MarkupLayer, MarkupMark, MarkupNote, MarkupNotes, MarkupText, markupInkColour, MARKUP_INKS, MARKUP_TEXT, type MarkupBox, type MarkupDrawingKind, type MarkupInk, type MarkupPoint, type MarkupShape, type MarkupToolKind, type MarkupWeight } from "@/components/ui/markup";
 import { captureHeld, captureScreen, cropAreas, previewOf, type Capture } from "./capture";
 import { MARKUP_CAPABILITIES, type MarkupHost, type MarkupListener, type MarkupSent, type MarkupThread } from "./host";
 import { marginColumn } from "./margin";
@@ -10,7 +10,7 @@ import { createPieces } from "./pieces";
 /** What a comment was made on: a screenshot of the page, or the live page. Its marks show on that one. */
 type View = "screenshot" | "page";
 /** `text`: words put on the page at its one point; `size`: what they measure, once written. */
-type Drawing = { kind: MarkupDrawingKind | "text"; points: MarkupPoint[]; ink: MarkupInk; weight?: MarkupWeight; text?: string; size?: { width: number; height: number } };
+type Drawing = { kind: MarkupDrawingKind | "text"; points: MarkupPoint[]; ink: MarkupInk; weight?: MarkupWeight; font?: number; text?: string; size?: { width: number; height: number } };
 /** A run of text selected on the live page: the range follows the page; `text` is what it said when chosen. */
 type Quote = { range: Range; text: string };
 /**
@@ -144,9 +144,10 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   const drawingTool = (["pen", "highlight", "shape", "text"] as const).find(offered);
   const [pointerTool, setPointerTool] = createSignal<Tool>(offered("select") ? "select" : drawingTool ?? "select");
   const [stroke, setStroke] = createSignal<{ kind: MarkupDrawingKind; points: MarkupPoint[] } | null>(null);
-  const [looks, setLooks] = createStore<Record<Inked, { ink: MarkupInk; weight: MarkupWeight }>>({ pen: { ink: "plain", weight: MARKUP_WEIGHT.rest }, highlight: { ink: "amber", weight: MARKUP_WEIGHT.rest }, shape: { ink: "plain", weight: MARKUP_WEIGHT.rest }, text: { ink: "plain", weight: MARKUP_WEIGHT.rest } });
+  const [looks, setLooks] = createStore<Record<Inked, { ink: MarkupInk; weight: MarkupWeight }>>({ pen: { ink: "plain", weight: "medium" }, highlight: { ink: "amber", weight: "medium" }, shape: { ink: "plain", weight: "medium" }, text: { ink: "plain", weight: "medium" } });
   const inkedTool = (): Inked => { const tool = pointerTool(); return tool === "highlight" || tool === "shape" || tool === "text" ? tool : "pen"; };
   const ink = () => looks[inkedTool()].ink, weight = () => looks[inkedTool()].weight;
+  const [textSize, setTextSize] = createSignal<number>(MARKUP_TEXT.rest);
   const setInk = (to: MarkupInk) => setLooks(inkedTool(), "ink", to), setWeight = (to: MarkupWeight) => setLooks(inkedTool(), "weight", to);
   const [shape, setShape] = createSignal<MarkupShape>("arrow");
   /** Text being selected: where the press was and where the pointer is now. */
@@ -161,12 +162,12 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   // A drawing's line as the layer draws it (its width and see-through), for a note's picture.
   const lines = new Map<string, { width: number; opacity: number }>();
   const lineOf = (drawing: Drawing) => {
-    const key = `${drawing.kind} ${drawing.weight ?? MARKUP_WEIGHT.rest}`;
+    const key = `${drawing.kind} ${drawing.weight ?? "medium"}`;
     if (!lines.has(key) && layer) {
       const probe = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       probe.setAttribute("class", "ui-markup-drawing");
       probe.dataset.kind = drawing.kind;
-      probe.style.setProperty("--markup-weight", `${drawing.weight ?? MARKUP_WEIGHT.rest}px`);
+      probe.dataset.weight = drawing.weight ?? "medium";
       layer.append(probe);
       const style = getComputedStyle(probe);
       lines.set(key, { width: parseFloat(style.strokeWidth) || 1, opacity: parseFloat(style.strokeOpacity) || 1 });
@@ -325,10 +326,10 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   const unsent = () => numbered().filter((selection) => !selection.sent);
   const tagOf = (selection: Selection) => selection.whole ? "" : String(selection.sent ?? lastSent() + unsent().indexOf(selection) + 1);
   const openCard = (selection: Selection) => selection.sent ? startReply(selection.sent) : openNote(selection.id);
-  // The margin's cards are not the tool's: they keep their own keys and presses.
+  // The margin's cards are not the tool's: they keep their own keys and presses. What a host draws of the tool's own outside it (Send in a pane's header) says so with `data-markup-own`.
   // A menu that stands open is heard before the tool: a press in it is its own, a press outside it or Escape shuts it and does nothing else.
   const MENUS = "[data-slot='ui-menu-content'], [data-slot='ui-menu-sub-content']";
-  const own = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest(".ui-markup-note, .ui-markup-bar, .ui-markup-tag[data-press], .ui-markup-text[data-editable]")) && !target.closest(".ui-markup-margin");
+  const own = (target: EventTarget | null) => target instanceof Element && Boolean(target.closest(".ui-markup-note, .ui-markup-bar, .ui-markup-tag[data-press], .ui-markup-text[data-editable], [data-markup-own]")) && !target.closest(".ui-markup-margin");
   /** A comment about pieces as they are, not about what was drawn or text selected over them. */
   const ofPieces = (selection: Selection) => !selection.drawings && !selection.quote;
   const chosenBy = (element: Element) => selections.find((selection) => ofPieces(selection) && selection.on === showing() && selection.elements.includes(element)) ?? null;
@@ -534,7 +535,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     const tool = pointerTool();
     if (tool === "text") {
       // Words go where the press was, written there.
-      const id = draw({ kind: "text", points: [[event.clientX, event.clientY]], ink: ink(), text: "" });
+      const id = draw({ kind: "text", points: [[event.clientX, event.clientY]], ink: ink(), font: textSize(), text: "" });
       setNoteAt(null);
       setOpenId(id);
       return queueMicrotask(() => {
@@ -589,6 +590,11 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     // A drag that began on the page is the layer's to its end, over the tool's own note or bar too.
     if (!select() || (own(event.target) && !press)) return;
     if (!press && document.querySelector(MENUS)) return;
+    // The layer lies over the host's own controls too: a press on one of the tool's that the host draws under it (Send in a pane's header) is that control's.
+    if (event.type === "pointerdown" && !press) {
+      const under = document.elementsFromPoint((event as PointerEvent).clientX, (event as PointerEvent).clientY).map((element) => element.closest<HTMLElement>("[data-markup-own]")).find(Boolean);
+      if (under) { event.stopImmediatePropagation(); event.preventDefault(); return under.click(); }
+    }
     event.stopImmediatePropagation();
     // Touch events are only kept from the app (its swipes would answer a drag); the pointer events they come with do the work.
     if (event.type.startsWith("touch")) return;
@@ -649,7 +655,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   onMount(() => {
     // The moment is kept in case it is wanted; the tool opens on the live page all the same.
     if (atOpen) void take(false);
-    host.asks?.({ names: () => (waiters.latest ?? []).map((waiter) => waiter.name), ask: addQuote });
+    host.asks?.({ names: () => (waiters.latest ?? []).map((waiter) => waiter.name), ask: addQuote, unsent: () => sending() ? 0 : selections.filter((selection) => !selection.sent && selection.comment.trim()).length, send: () => void send(), to: () => agent()?.name ?? null, hand: setAgentName });
     onCleanup(() => host.asks?.(null));
     for (const type of POINTER_EVENTS) window.addEventListener(type, swallow, { capture: true, passive: false });
     window.addEventListener("keydown", onKeyDown, { capture: true });
@@ -769,7 +775,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
       const marks = extent(selection), shift = shiftOf(selection), under = host.under?.(marks);
       const drawings = selection.drawings?.map((drawing) => {
         const every = Math.max(1, Math.ceil(drawing.points.length / SENT_POINTS));
-        return { kind: drawing.kind, colour: drawing.ink, ...(drawing.kind === "text" ? { text: drawing.text ?? "" } : { weight: drawing.weight ?? MARKUP_WEIGHT.rest }), points: drawing.points.filter((_, at) => at % every === 0 || at === drawing.points.length - 1).map((point) => [Math.round(point[0] + shift.x), Math.round(point[1] + shift.y)]) };
+        return { kind: drawing.kind, colour: drawing.ink, ...(drawing.kind === "text" ? { text: drawing.text ?? "", size: drawing.font ?? MARKUP_TEXT.rest } : { weight: drawing.weight ?? "medium" }), points: drawing.points.filter((_, at) => at % every === 0 || at === drawing.points.length - 1).map((point) => [Math.round(point[0] + shift.x), Math.round(point[1] + shift.y)]) };
       });
       // The comment's own box is the last word on where it is: a piece the app took off the page measures as nothing.
       return { ...(members.length > 1 ? { members } : members[0]), n: numberOf(index), on: selection.on, ...(drawings ? { drawings } : {}), ...(selection.quote ? { quote: selection.quote.text } : {}), ...(under ? { under } : {}), dragged: Boolean(selection.reach), area: areaOf(selection), comment: selection.comment.trim(), kind: members.length > 1 ? "group" as const : "component" as const, name: titleOf(selection),
@@ -870,7 +876,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
         <Show when={selection.drawings} fallback={<Show when={selection.quote} fallback={<MarkupMark kind={selection.to ? "asked" : "chosen"} box={box(selection.elements)} tag={selection.to ? undefined : tagOf(selection)} current={openId() === selection.id} onOpen={() => openCard(selection)} />}>{(quote) =>
           <Index each={linesNow(quote())}>{(line, at) => <MarkupMark kind={selection.to ? "asked" : "quote"} box={line()} tag={at || selection.to ? undefined : tagOf(selection)} current={openId() === selection.id} onOpen={at ? undefined : () => openCard(selection)} />}</Index>}</Show>}>{(drawings) => <>
           <For each={drawings()}>{(drawing, at) => drawing.kind === "text"
-            ? <MarkupText ref={(element) => { textField = element; }} at={drawing.points[0]!} ink={drawing.ink} shift={shiftOf(selection)} value={drawing.text ?? ""} editable={openId() === selection.id}
+            ? <MarkupText ref={(element) => { textField = element; }} at={drawing.points[0]!} ink={drawing.ink} size={drawing.font} shift={shiftOf(selection)} value={drawing.text ?? ""} editable={openId() === selection.id}
                 onInput={(value, element) => setSelections((candidate) => candidate.id === selection.id, "drawings", at(), produce((draft) => { draft.text = value; draft.size = { width: element.offsetWidth, height: element.offsetHeight }; }))} onDone={() => textDone(selection.id, at())} />
             : <MarkupDrawing kind={drawing.kind} points={drawing.points} ink={drawing.ink} weight={drawing.weight} shift={shiftOf(selection)} current={openId() === selection.id} />}</For>
           <MarkupMark kind="drawn" box={extent(selection)} tag={tagOf(selection)} onOpen={() => openCard(selection)} />
@@ -917,7 +923,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
           </Show>}</For></MarkupNotes>
         </Show>
         <MarkupBar thin={can.thin} ribbon={can.bar === "ribbon"} own={host.tools?.()} onOwn={() => setMarkedLast(false)} onAsk={host.asking && offered("quote") ? () => { const range = host.asking!(); if (range) addQuote(range); } : undefined} view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onTool={(tool) => { if (props.mode === "use") look("page"); setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); }} onNote={() => { if (props.mode === "use") look("page"); note(); }}
-          status={status()} compact={touchOnly} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} shape={shape()} onShape={setShape} onUndo={undoable() || surface?.canUndo() ? undoAny : undefined} onRedo={redoable() || surface?.canRedo() ? redoAny : undefined}
+          status={status()} compact={touchOnly} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} size={textSize()} onSize={can.inks ? setTextSize : undefined} shape={shape()} onShape={setShape} onUndo={undoable() || surface?.canUndo() ? undoAny : undefined} onRedo={redoable() || surface?.canRedo() ? redoAny : undefined}
           replies={unread().reduce((sum, item) => sum + item.unread, 0)} sent={thread() ? 0 : earlier.latest?.length} onReplies={sentBefore}
           outstanding={unsent().filter((selection) => selection.comment.trim()).length} standing={thread() ? standing() : undefined}
           hand={hand()} onHand={can.listeners ? keepHand : undefined} agent={agent()?.name} heard={waiters.latest !== undefined} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}

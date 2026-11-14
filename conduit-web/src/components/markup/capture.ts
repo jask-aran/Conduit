@@ -71,7 +71,7 @@ export async function cropAreas(capture: Capture, areas: (Area | null)[]): Promi
 
 type Point = readonly [x: number, y: number];
 /** `width` and `opacity`: its line as the layer draws it, where that is not the layer's own. */
-export type Drawn = { kind: "pen" | "highlight" | "line" | "arrow" | "box" | "text"; points: readonly Point[]; text?: string; colour?: string; width?: number; opacity?: number };
+export type Drawn = { kind: "pen" | "highlight" | "line" | "arrow" | "box" | "text"; points: readonly Point[]; text?: string; font?: number; colour?: string; width?: number; opacity?: number };
 /** An arrow's head is this many line widths long, as the layer draws it. */
 const HEAD = 6;
 
@@ -93,6 +93,7 @@ export async function previewOf(capture: Capture, area: Area, marks: { outline?:
     context.globalAlpha = drawing.opacity ?? 1;
     context.lineCap = drawing.kind === "highlight" ? "butt" : "round";
     const from = drawing.points[0]!, to = drawing.points[drawing.points.length - 1]!;
+    if (drawing.kind === "text") context.font = drawing.font ? look.font.replace(/[\d.]+px/, `${drawing.font}px`) : look.font;
     if (drawing.kind === "text") context.fillText(drawing.text ?? "", from[0], from[1]);
     else if (drawing.kind === "box") context.strokeRect(Math.min(from[0], to[0]), Math.min(from[1], to[1]), Math.abs(to[0] - from[0]), Math.abs(to[1] - from[1]));
     else {

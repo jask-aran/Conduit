@@ -8,7 +8,8 @@ import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection, MenuSub, 
 import { addUnder, blockAt, blockById, blockRange, blockStarts, caretBlockAt, caretInto, deleteBlock, duplicateBlock, moveBlock, shiftBlock } from "./blocks";
 import { DOCUMENT_TURNABLE, type DocumentBlockKind } from "./host";
 
-type Tool = { name: DocumentBlockKind; label: string; icon: () => JSX.Element; run(): void };
+/** `is`: the node a block of this kind is, and its attrs (a heading's level); a paragraph is Text. */
+type Tool = { name: DocumentBlockKind; label: string; icon: () => JSX.Element; is?: [string, Record<string, unknown>?]; run(): void };
 // Under this, a press on the grip is a press (its menu), not a drag.
 const DRAG_SLOP_PX = 4;
 
@@ -25,11 +26,15 @@ export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: r
   const from = createMemo(() => { const id = hovered(), made = editor(); if (!id || !made) return null; track(made, "doc"); return blockById(made.state.doc, id); });
   const origin = () => (handle?.offsetParent as HTMLElement | null)?.getBoundingClientRect() ?? null;
   const place = createMemo(() => {
-    const pos = from(), view = editor()?.view, block = pos === null ? null : view?.nodeDOM(pos) as HTMLElement | null, body = origin(), scroller = options.scroller();
-    if (!block?.getBoundingClientRect || !handle || !body) return undefined;
+    const pos = from(), view = editor()?.view, block = pos === null ? null : view?.nodeDOM(pos) as HTMLElement | null, body = origin(), scroller = options.scroller(), grip = handle?.querySelector<HTMLElement>("[data-grip]");
+    if (!view || !block?.getBoundingClientRect || !handle || !body || !scroller || !grip) return undefined;
+    // It stands left of the text, in the room the column shows there (the sheet's gutter, and the pane's ground where it is wide), never over the text:
+    // where the "+" does not fit too it folds into the grip's menu, and where the grip does not fit it is not shown.
+    const style = getComputedStyle(handle), room = view.dom.getBoundingClientRect().left - scroller.getBoundingClientRect().left - (parseFloat(style.marginRight) || 0);
+    if (room < grip.offsetWidth) return undefined;
     // On the block's first line, however tall its line (a heading's), or on the block where it is thinner than a line (a divider).
     const box = block.getBoundingClientRect(), line = Math.min(parseFloat(getComputedStyle(block).lineHeight) || box.height, box.height);
-    return { top: box.top - body.top + (line - handle.offsetHeight) / 2, inside: Boolean(scroller && body.left - scroller.getBoundingClientRect().left < handle.offsetWidth) };
+    return { top: box.top - body.top + (line - handle.offsetHeight) / 2, add: room >= 2 * grip.offsetWidth + (parseFloat(style.columnGap) || 0) };
   });
 
   const hover = (event: PointerEvent | null) => {
@@ -103,21 +108,25 @@ export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: r
   // A callout's tone is chosen from its menu, where callouts are offered.
   const tone = createMemo(() => { const at = from(), made = editor(); if (at === null || !made) return null; track(made, "doc"); const node = made.state.doc.nodeAt(at); return node?.type.name === "callout" && tools.some((tool) => tool.name === "callout") ? node.attrs.tone as keyof typeof documentToneIcons : null; });
   const tones = [["note", "Note"], ["warning", "Warning"]] as const;
+  const kind = createMemo(() => { const at = from(), made = editor(); if (at === null || !made) return null; track(made, "doc"); const node = made.state.doc.nodeAt(at);
+    return node && (tools.find(({ is }) => is && node.type.name === is[0] && Object.entries(is[1] ?? {}).every(([key, value]) => node.attrs[key] === value))?.name ?? (node.type.name === "paragraph" ? "text" : null)); });
+  const add = act((on, at) => options.onAdded(addUnder(on, at)));
 
   const view = <>
-    <DocumentHandle ref={(element) => { handle = element; }} top={place()?.top} inside={place()?.inside}>
-      <IconButton label="Add a block below" onMouseDown={keep} onClick={act((on, at) => options.onAdded(addUnder(on, at)))}><Icons.Add /></IconButton>
+    <DocumentHandle ref={(element) => { handle = element; }} top={place()?.top}>
+      <Show when={place()?.add}><IconButton label="Add a block below" onMouseDown={keep} onClick={add}><Icons.Add /></IconButton></Show>
       {/* Opened by the press lifting, never as it goes down (a drag starts there); by the keyboard as any menu is. */}
-      <DropdownMenu open={open()} onOpenChange={(next) => { if (!next || !pressing) setOpen(next); }} placement="bottom-start">
+      <DropdownMenu modal={false} open={open()} onOpenChange={(next) => { if (!next || !pressing) setOpen(next); }} placement="bottom-start">
         <MenuControl as={IconButton} label="Drag to move, press for more" data-grip="" onPointerDown={press}><documentToolIcons.grip /></MenuControl>
         <MenuContent width="sm" onCloseAutoFocus={(event) => { event.preventDefault(); if (refocus) editor()?.commands.focus(); refocus = true; }}>
           <MenuSection>
+            <Show when={!place()?.add}><MenuRow icon={<Icons.Add />} onSelect={add}>Add a block below</MenuRow></Show>
             <MenuRow icon={<Icons.ArrowUp />} keys={["Alt", "Shift", "↑"]} onSelect={act((on, at) => shiftBlock(on, at, -1))}>Move up</MenuRow>
             <MenuRow icon={<Icons.ArrowDown />} keys={["Alt", "Shift", "↓"]} onSelect={act((on, at) => shiftBlock(on, at, 1))}>Move down</MenuRow>
             <MenuRow icon={<Icons.Copy />} onSelect={act(duplicateBlock)}>Duplicate</MenuRow>
             <MenuSub>
               <MenuSubTrigger icon={<documentBlockIcons.text />}>Turn into</MenuSubTrigger>
-              <MenuSubContent width="sm"><For each={tools.filter((tool) => (DOCUMENT_TURNABLE as readonly string[]).includes(tool.name))}>{(tool) => <MenuRow icon={tool.icon()} onSelect={turn(tool)}>{tool.label}</MenuRow>}</For></MenuSubContent>
+              <MenuSubContent width="sm"><For each={tools.filter((tool) => (DOCUMENT_TURNABLE as readonly string[]).includes(tool.name))}>{(tool) => <MenuRow icon={tool.icon()} checked={kind() === tool.name} onSelect={turn(tool)}>{tool.label}</MenuRow>}</For></MenuSubContent>
             </MenuSub>
             <Show when={tone()}>{(now) => <MenuSub>
               <MenuSubTrigger icon={<documentBlockIcons.callout />}>Tone</MenuSubTrigger>

@@ -7,6 +7,9 @@
 .ui-header-title[data-tabs] { flex: 1 1 auto; align-self: stretch; }
 .ui-header-group[data-lead] { display: none; }
 .ui-header-group[data-actions] { margin-left: auto; }
+/* Its columns are minmax(0, 1fr), so as a flex item it would squeeze to nothing and its labels spill over the
+   actions; it keeps its width and the title truncates instead. */
+.ui-pane-header:where([data-header="pane"]) > .ui-seg { flex: none; }
 .ui-header-group:empty { display: none; }
 
 .ui-header-crumb { display: flex; min-width: 0; align-items: baseline; gap: var(--space-sm); font-size: var(--text-row); line-height: var(--leading-row); }

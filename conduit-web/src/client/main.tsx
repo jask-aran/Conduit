@@ -113,7 +113,7 @@ import type { FileSlotHandle, FileSummary } from "./workspace/workspace-file-slo
 import { dropScope, pruneWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
 import { PANE_LAYOUTS, readToolDrag, TOOL_DRAG_TYPE, WORKSPACE_TOOL_LABELS, WorkspaceRail } from "./workspace/workspace-rail";
 import { isPanelTab, isSplitView, type SplitView } from "./workspace/workspace-types";
-import { minMainPaneWidth, minSplitPaneWidth } from "./layout-geometry";
+import { minArtifactPaneWidth, minMainPaneWidth, minSplitPaneWidth } from "./layout-geometry";
 import { dispatchPanelGeometryMotion } from "./panel-motion";
 import { publishUiPreference, queueUiPreferenceSave, uiPreferenceSaves, UI_PREFERENCE_CHANGE_EVENT, type ClientPreference, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
 import { applyUiScale, followZoomGestures, selectedUiScale, stepUiScale } from "./preferences/ui-scale";
@@ -2410,6 +2410,7 @@ function App() {
   const [agentPageNeed, setAgentPageNeed] = createSignal(0);
   const viewMinWidth = (view: SplitView | null) => view === "page:jbot" ? minMainPaneWidth()
     : view === "page:agent" ? Math.max(minMainPaneWidth(), agentPageNeed())
+    : view?.startsWith("artifact:") ? minArtifactPaneWidth()
     : !view || isPaneView(view) ? minMainPaneWidth() : minSplitPaneWidth();
   const paneMinWidth = (pane: PaneKey) => viewMinWidth(pane === "main" ? paneAView() : slotView(pane));
   const viewsFit = (views: (SplitView | null)[]) => layoutWidth() - (panelOpen() && dockAvailable() && !dockOverlay() ? dockMinWidth() + 8 : 0)

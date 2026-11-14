@@ -4,12 +4,12 @@
 .ui-document[data-width="full"] { --document-width: 100%; }
 /* In a pane the sheet has no header of its own, so find stands at its top. */
 .ui-document[data-bare] > .ui-find-bar { top: var(--space-md); }
-.ui-document-column { min-height: 0; flex: 1; overflow-y: auto; padding: var(--space-2xl) var(--space-lg) var(--measure-2xs); }
+.ui-document-column { min-height: 0; flex: 1; overflow-y: auto; padding: var(--space-2xl) var(--space-lg) 0; }
 /* The text, and the margin beside it. The margin wraps under the text at the width where the two no longer fit side by side, which is the text's own measure and the margin's. */
 .ui-document-page { display: flex; min-height: 100%; flex-wrap: wrap; justify-content: center; gap: var(--space-2xl); }
 /* The text gives up width before the margin goes under it: it wraps only where the text at its narrowest measure and the margin no longer fit side by side. */
-/* The paper is a sheet on the pane: darker than the ground round it, so its width is seen. */
-.ui-document-body { position: relative; display: flex; min-width: 0; max-width: calc(var(--document-width) + 2 * var(--space-4xl)); flex: 1 1 var(--measure-xl); flex-direction: column; border-radius: var(--radius-surface); background: var(--well); padding: var(--space-2xl) var(--space-4xl); }
+/* The paper is a sheet on the pane: darker than the ground round it, so its width is seen, and down to the pane's foot however little is written. */
+.ui-document-body { position: relative; display: flex; min-width: 0; max-width: calc(var(--document-width) + 2 * var(--space-4xl)); flex: 1 1 var(--measure-xl); flex-direction: column; border-radius: var(--radius-surface) var(--radius-surface) 0 0; background: var(--well); padding: var(--space-2xl) var(--space-4xl) var(--measure-2xs); }
 .ui-document[data-width="full"] .ui-document-body { max-width: 100%; }
 .ui-document-content { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 /* `min-width: 0`: a card whose quote is one long line is cut short in the margin, and never widens it past the row. */
@@ -17,9 +17,13 @@
 .ui-document-text { box-sizing: border-box; flex: 1; outline: 0; }
 .ui-document-comment { border-radius: var(--radius-inset); background: color-mix(in oklch, var(--status-warn), transparent 78%); cursor: pointer; }
 .ui-document-comment[data-current] { background: color-mix(in oklch, var(--status-warn), transparent 55%); }
-/* Asking where the caret is: as wide as a line of the text can use, the words growing down. */
-.ui-document-ask { display: flex; width: var(--measure-xl); max-width: 100%; align-items: flex-start; gap: var(--space-sm); padding: var(--space-xs); }
-.ui-document-ask > .ui-document-mention { flex: none; cursor: default; line-height: var(--control-sm); }
+/* Asking where the caret is: a line of the paper, in the line's own place and no taller, the words growing down. */
+.ui-document-ask { position: absolute; z-index: 1; display: flex; align-items: flex-start; gap: var(--space-sm); border-radius: var(--radius-control); background: var(--popover); box-shadow: 0 0 0 var(--space-xs) var(--popover); font-size: var(--text-body); line-height: var(--leading-reading); }
+.ui-document-ask > .ui-document-mention { flex: none; cursor: default; }
+.ui-document-ask > .ui-textarea { min-width: 0; flex: 1; font: inherit; }
+/* No taller than the line it stands in. */
+.ui-document-ask > .ui-icon-button { width: 1lh; height: 1lh; min-width: 0; min-height: 0; flex: none; }
+.ui-document-mention { flex: none; cursor: default; line-height: var(--control-sm); }
 .ui-document-ask > .ui-textarea { min-width: 0; flex: 1; padding-block: var(--space-xs); }
 .ui-document-mention { border-radius: var(--radius-inset); background: var(--tint); padding-inline: var(--space-2xs); cursor: pointer; }
 .ui-document-match { border-radius: var(--radius-inset); background: var(--border); }
@@ -73,16 +77,12 @@
 .ui-document-field { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0; color: var(--foreground); font: inherit; outline: 0; }
 .ui-document-field::placeholder { color: var(--muted-foreground); }
 /* Quiet, as a property's name is: a row of the head, washed as a target. */
-.ui-document-add { display: flex; width: fit-content; min-height: var(--control-xs); align-items: center; gap: var(--space-sm); margin-inline: calc(-1 * var(--space-xs)); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-xs); color: var(--muted-foreground); font: inherit; font-size: var(--text-row); cursor: pointer; }
-.ui-document-add > svg { width: var(--icon-sm); height: var(--icon-sm); }
-.ui-document-add:focus-visible { background: var(--accent); color: var(--foreground); }
-@media (hover: hover) { .ui-document-add:hover { background: var(--accent); color: var(--foreground); } }
+/* A quiet offer under the title, not an action of the page. */
+.ui-document-head > .ui-document-add { width: fit-content; margin-inline: calc(-1 * var(--space-md)); color: var(--muted-foreground); font-weight: var(--weight-rest); }
 .ui-document-count { margin: var(--space-2xl) 0 0; color: var(--muted-foreground); font-family: var(--font-data); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
 /* In the gutter beside the block pointed at; not there, it takes no focus. */
-.ui-document-handle { position: absolute; top: 0; right: 100%; display: flex; margin-right: var(--space-xs); gap: var(--space-2xs); opacity: 0; user-select: none; visibility: hidden; transition: opacity var(--duration-quick) var(--ease-leave), visibility 0s linear var(--duration-quick); }
+.ui-document-handle { position: absolute; top: 0; right: calc(100% - var(--space-4xl)); display: flex; margin-right: var(--space-xs); gap: var(--space-2xs); opacity: 0; user-select: none; visibility: hidden; transition: opacity var(--duration-quick) var(--ease-leave), visibility 0s linear var(--duration-quick); }
 .ui-document-handle[data-shown] { opacity: 1; visibility: visible; transition: opacity var(--duration-quick) var(--ease-arrive); }
-/* Where the gutter is too narrow for it, over the column's left edge, on the pane's ground so the text under it does not show through. */
-.ui-document-handle[data-inside] { right: auto; left: 0; margin-right: 0; border-radius: var(--radius-control); background: var(--background); }
 .ui-document-handle > [data-grip] { cursor: grab; touch-action: none; }
 .ui-document-drop { position: absolute; right: 0; left: 0; height: var(--stroke); border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); pointer-events: none; translate: 0 -50%; }
 /* A table's controls: its tools on its top edge, in the room the wrapper keeps over it; a row added on its bottom edge, a column on its right. */
@@ -92,9 +92,6 @@
 .ui-document-table > [data-edge] { position: absolute; }
 .ui-document-table > [data-edge="row"] { top: 100%; left: 50%; translate: -50% -50%; }
 .ui-document-table > [data-edge="column"] { top: 50%; left: 100%; translate: -50% -50%; }
-.ui-document-outline { display: flex; flex-direction: column; }
-.ui-document-outline > .ui-row[aria-current="page"] { color: var(--foreground); font-weight: var(--weight-current); }
-.ui-document-outline > .ui-row:focus-visible { background: var(--tint); color: var(--foreground); }
 /* A block the editor holds as a whole (an image, a divider) washes while it is the selection, as a row under the cursor does. */
 .ui-document-text > .ProseMirror-selectednode { border-radius: var(--radius-inset); background: var(--accent); box-shadow: 0 0 0 var(--space-xs) var(--accent); }
 /* A callout: its blocks in a tinted box, its tone a mark at the head; hue stays on the mark. */
@@ -120,9 +117,6 @@
 .ui-document-date-chip:focus-visible { background: var(--accent); color: var(--foreground); outline: 0; }
 @media (hover: hover) { .ui-document-date-chip:hover { background: var(--accent); color: var(--foreground); } }
 /* Ways to start a new document, under its hint; gone at the first edit. */
-.ui-document-starts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-top: var(--space-md); }
-.ui-document-starts[data-placed] { position: absolute; right: 0; left: 0; }
-.ui-document-starts-note { flex-basis: 100%; margin: 0; color: var(--muted-foreground); font-size: var(--text-row); }
 /* An agent at work, in its ink (DOCUMENT_SEAT_INKS, each Markup's of that name): the blocks it holds washed in it and breathing while it thinks, one being
    written over dimmed and struck; its caret at the start of the first, its name on a tag over it; what it is writing drawn as the blocks it will be, quiet,
    its caret at their end. Nothing of it takes room from the paper's text but what it writes, which stands where that will stand, aligned with it. */
@@ -157,3 +151,10 @@
 .ui-document-suggested > span { margin-inline-end: var(--space-xs); }
 /* A margin with no comment in it takes no room, so the text stands centred in the column. */
 .ui-document-page[data-margin="none"] > .ui-document-margin { display: none; }
+/* Tucked: the margin takes no room and the text keeps its measure. Each card is a small mark at the text's right edge, saying only how it stands, and
+   the whole card over the text once it is opened. */
+.ui-document-page[data-margin="tucked"] { position: relative; flex-wrap: nowrap; }
+.ui-document-page[data-margin="tucked"] > .ui-document-margin { position: absolute; top: 0; right: 0; bottom: 0; width: var(--measure-md); max-width: 100%; pointer-events: none; }
+.ui-document-page[data-margin="tucked"] .ui-markup-note { pointer-events: auto; }
+.ui-document-page[data-margin="tucked"] .ui-markup-note:not([data-open]) { left: auto; width: fit-content; }
+.ui-document-page[data-margin="tucked"] .ui-markup-note:not([data-open]) :is(.ui-markup-talk > :not(.ui-markup-state), .ui-card-close, .ui-card > h3) { display: none; }

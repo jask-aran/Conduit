@@ -1,7 +1,7 @@
 import { createSignal, For, Show, type JSX } from "solid-js";
 import { Actions, Icons, Row, StatusDot } from "@/components/ui";
 import { CardForm } from "@/components/ui/card";
-import { Button, Field, Input } from "@/components/ui/controls";
+import { Button, Input } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
@@ -38,7 +38,7 @@ export default function ArtifactRows(props: { project: string; empty?: JSX.Eleme
           <Show when={!props.phone}><MenuRow icon={<Icons.Split />} onSelect={() => props.onOpen(artifact, true)}>Open beside</MenuRow></Show>
           <MenuRow icon={<Icons.Edit />} onSelect={() => { setName(artifact.name); setRenaming(artifact); }}>Rename</MenuRow>
           <Show when={artifact.kind === "paper"}><><MenuRow icon={<Icons.Copy />} onSelect={() => void copyArtifactMarkdown(artifact).then(() => toast.success("Copied as Markdown"), failed)}>Copy as Markdown</MenuRow>
-            <MenuRow icon={<Icons.Download />} onSelect={() => void exportArtifactMarkdown(artifact).catch(failed)}>Download Markdown</MenuRow><MenuRow icon={<Icons.FileText />} picked={paperCounted()} onSelect={() => countPapers(!paperCounted())}>Count blocks and words</MenuRow></></Show>
+            <MenuRow icon={<Icons.Download />} onSelect={() => void exportArtifactMarkdown(artifact).catch(failed)}>Download Markdown</MenuRow><MenuRow icon={<Icons.FileText />} checked={paperCounted()} onSelect={() => countPapers(!paperCounted())}>Count blocks and words</MenuRow></></Show>
         </MenuSection>
         <MenuSection>
           <MenuRow destructive icon={<Icons.Delete />} onSelect={() => setDeleting(artifact)}>Delete</MenuRow>
@@ -46,7 +46,7 @@ export default function ArtifactRows(props: { project: string; empty?: JSX.Eleme
       </ContextMenuContent>
     </ContextMenu>}</For>
     <Dialog open={Boolean(renaming())} title="Rename artifact" onOpenChange={(open) => { if (!open) setRenaming(null); }}>
-      <CardForm onSubmit={rename}><Field label="Name"><Input id="artifact-rename" value={name()} onInput={(event) => setName(event.currentTarget.value)} /></Field>
+      <CardForm onSubmit={rename}><Input id="artifact-rename" aria-label="Name" value={name()} onInput={(event) => setName(event.currentTarget.value)} />
         <Actions><Button type="button" variant="ghost" outline onClick={() => setRenaming(null)}>Cancel</Button><Button type="submit" disabled={!name().trim()}>Rename</Button></Actions></CardForm>
     </Dialog>
     <Dialog alert open={Boolean(deleting())} title="Delete this artifact?" description={`This deletes the file ${deleting()?.path ?? ""} from the project's folder.`} onOpenChange={(open) => { if (!open) setDeleting(null); }}

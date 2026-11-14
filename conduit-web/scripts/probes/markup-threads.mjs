@@ -74,7 +74,7 @@ try {
   console.log("the chat shows the connection as a rider:", await rider.count() === 1);
   await rider.click(); await page.waitForSelector(".pane-artifact .ui-document-text [data-id]", { timeout: 15000 });
   console.log("the rider opens the paper beside the chat:", await page.evaluate(() => document.querySelectorAll(".pane-artifact").length === 1 && Boolean(document.querySelector(".chat-main"))));
-  await page.getByRole("button", { name: "Connect a chat" }).click(); await wait(500);
+  await page.getByRole("button", { name: "Agents" }).click(); await wait(500);
   console.log("the paper's menu has the chat ticked:", await page.evaluate(() => [...document.querySelectorAll('[role^="menuitem"]')].some((row) => row.getAttribute("aria-checked") === "true" || row.querySelector("svg") && row.dataset.picked !== undefined)));
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Disconnect Test document" }).click(); await wait(1500);

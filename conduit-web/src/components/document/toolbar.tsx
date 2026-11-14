@@ -9,6 +9,7 @@ import { DocumentAddress, DocumentTableEdges, DocumentTools, documentToolIcons a
 import { MARKUP_INKS } from "@/components/ui/markup";
 import { Popover, PopoverContent } from "@/components/ui/menus";
 import { PAPER_INKS } from "@/document-format.js";
+import { PAPER_MARK_KEYS } from "./shortcuts";
 
 /** The text selected, as it is drawn. */
 export const selectedRange = (view: EditorView) => {
@@ -28,6 +29,8 @@ export const inkSwatch = (ink?: PaperInk) => ink ? <Swatch colour={MARKUP_INKS[i
 /** The ink put on the text selected, or the mark taken off it (none). */
 export const putInk = (chain: ChainedCommands, mark: InkedMark, ink?: PaperInk) => (ink ? chain.setMark(mark, { ink }) : chain.unsetMark(mark)).run();
 const TABLE = [["delete-row", "Delete the row", "deleteRow"], ["delete-column", "Delete the column", "deleteColumn"], ["delete-table", "Delete the table", "deleteTable"]] as const;
+// The app's own writing of a chord is passed in (`chord`); without it, the ribbon's.
+const ribbonChord = (keys: string) => keys.split("-").map((key) => key === "Mod" ? "Ctrl" : key.length === 1 ? key.toUpperCase() : key).join(" ");
 // A press on a tool keeps the editor's focus, and with it the selection the tool acts on.
 const keep = (event: MouseEvent) => event.preventDefault();
 
@@ -42,10 +45,10 @@ const linesOf = (view: EditorView, from: number, to: number) => {
 /**
  * What can be done to the text selected, over it while the editor has focus: the marks (pressed where the selection wears them; a text colour and a
  * highlight each picked from a row of the inks in place of the buttons), a link (its address asked for in place), a comment (`onComment`); and with
- * the caret in a link, its address, Open, Edit and Remove. It stands clear above the lines it is about, or under them where `bounds` (the view the
+ * the caret in a link, its address, Open, Edit and Remove. `chord` writes a chord in the editor's notation (`Mod-b`) as the app writes keys. It stands clear above the lines it is about, or under them where `bounds` (the view the
  * text scrolls in) has no room above. Escape or a press away shuts it until the selection changes.
  */
-export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bounds: Accessor<HTMLElement | undefined>; /** The marks offered (every one, unsaid). */ marks?: readonly string[]; onComment?: (about: Range) => void }) {
+export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bounds: Accessor<HTMLElement | undefined>; /** The marks offered (every one, unsaid). */ marks?: readonly string[]; onComment?: (about: Range) => void; chord?: (keys: string) => string }) {
   const [linking, setLinking] = createSignal(false), [inking, setInking] = createSignal<typeof INKED[number]>(), [shut, setShut] = createSignal<string>();
   let tools: HTMLElement | undefined;
   // Where the selection is matters only while there is something to stand over: a caret in plain text has nothing, and typing there reads none of this.
@@ -81,7 +84,7 @@ export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bo
           <IconButton label="Edit the link" onMouseDown={keep} onClick={() => setLinking(true)}><Icons.edit /></IconButton>
           <IconButton label="Remove the link" onMouseDown={keep} onClick={() => link("")}><Icons.unlink /></IconButton>
         </>}>
-          <For each={MARKS.filter(([name]) => !props.marks || props.marks.includes(name))}>{([name, label]) => { const Icon = Icons[name]; return <IconButton label={label} aria-pressed={now().marks[name]} onMouseDown={keep} onClick={() => chain().toggleMark(name).run()}><Icon /></IconButton>; }}</For>
+          <For each={MARKS.filter(([name]) => !props.marks || props.marks.includes(name))}>{([name, label]) => { const Icon = Icons[name]; return <IconButton label={`${label} (${(props.chord ?? ribbonChord)(PAPER_MARK_KEYS[name])})`} aria-pressed={now().marks[name]} onMouseDown={keep} onClick={() => chain().toggleMark(name).run()}><Icon /></IconButton>; }}</For>
           <For each={INKED.filter(([name]) => !props.marks || props.marks.includes(name))}>{(inked) => { const Icon = Icons[inked[0]]; return <IconButton label={inked[1]} aria-pressed={now().marks[inked[0]]} onMouseDown={keep} onClick={() => setInking(inked)}><Icon /></IconButton>; }}</For>
           <IconButton label={now().link ? "Change the link" : "Link"} aria-pressed={Boolean(now().link)} onMouseDown={keep} onClick={() => setLinking(true)}><Icons.link /></IconButton>
           <Show when={props.onComment}><IconButton label="Comment" onMouseDown={keep} onClick={comment}><Icons.comment /></IconButton></Show>

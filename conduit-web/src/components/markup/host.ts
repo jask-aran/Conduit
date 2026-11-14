@@ -160,8 +160,10 @@ export interface MarkupHost {
   history?: MarkupHostHistory;
   /** What a comment asked for from that rail is about: the surface's selection, or where its caret is; null when there is neither. */
   asking?(): Range | null;
-  /** Given, as the tool opens (null as it closes), who is listening and opening a comment on a range for one of them: for a surface that asks itself (a paper's `@`). */
-  asks?(offer: { names(): string[]; ask(about: Range, to?: string, words?: string): void } | null): void;
+  /** Given, as the tool opens (null as it closes), who is listening and opening a comment on a range for one of them: for a surface that asks itself (a paper's `@`).
+   *  `unsent` and `send`: the comments written and not yet sent, for a host that shows Send with its own list of them. `to` and `hand`: which listener
+   *  they go to, for a host that says who listens itself. */
+  asks?(offer: { names(): string[]; ask(about: Range, to?: string, words?: string): void; unsent(): number; send(): void; to(): string | null; hand(name: string): void } | null): void;
   /** Told when comments have gone, where something other than the tool shows them. */
   sent?(): void;
   notify(outcome: "sent" | "failed", message: string): void;
