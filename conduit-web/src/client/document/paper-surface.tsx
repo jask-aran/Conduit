@@ -44,7 +44,7 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
   let marks: Marks | undefined, outlining: HTMLButtonElement | undefined;
   // Also as a signal, so what the margin reads of the editor live (its seats, its suggestions) follows once the editor is made.
   const [marked, setMarked] = createSignal<Marks>();
-  const [controls, setControls] = createSignal<DocumentControls>(), [away, setAway] = createSignal(false), [stale, setStale] = createSignal(false);
+  const [controls, setControls] = createSignal<DocumentControls>(), [away, setAway] = createSignal(false), [stale, setStale] = createSignal(false), [ready, setReady] = createSignal(false);
   // The margin's answer acts reach the editor once both are made, whichever is first.
   const [answers, setAnswers] = createSignal<DocumentAnswers | null>(null);
   createEffect(() => marked()?.answers(answers()));
@@ -100,8 +100,9 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
     </DropdownMenu>}</Show>,
     away, stale,
     reveal: () => controls()?.reveal,
+    drawn: ready,
   });
-  return <><DocumentEditor host={editing} id={id} name={props.about().name} bare onAway={setAway} onStale={setStale} marks={(offered) => { marks = offered; setMarked(() => offered); }} mentions={() => props.quiet ? [] : props.offer()?.names() ?? []} to={() => props.offer()?.to() ?? null} onMention={ask} onRename={(name) => renameArtifact(id, name)} count={Boolean(kind.count) && paperCounted()} width={width()} controls={setControls} onComment={props.quiet ? undefined : ask} margin={props.margin} marginEmpty={props.marginEmpty} />
+  return <><DocumentEditor host={editing} id={id} name={props.about().name} bare onAway={setAway} onStale={setStale} onReady={() => setReady(true)} marks={(offered) => { marks = offered; setMarked(() => offered); }} mentions={() => props.quiet ? [] : props.offer()?.names() ?? []} to={() => props.offer()?.to() ?? null} onMention={ask} onRename={(name) => renameArtifact(id, name)} count={Boolean(kind.count) && paperCounted()} width={width()} controls={setControls} onComment={props.quiet ? undefined : ask} margin={props.margin} marginEmpty={props.marginEmpty} />
     <PaperShortcuts open={showingKeys()} onOpenChange={setShowingKeys} groups={shownKeys()} />
   </>;
 }

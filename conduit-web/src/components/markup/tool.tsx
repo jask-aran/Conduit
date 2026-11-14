@@ -128,8 +128,8 @@ const linesOf = (range: Range): MarkupBox[] => {
 };
 const frames = (count: number) => new Promise<void>((resolve) => { const next = (left: number) => left ? requestAnimationFrame(() => next(left - 1)) : resolve(); next(count); });
 
-/** `keys`: the chord that opens the tool, as the bar shows it. */
-export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode: Mode) => void; onClose: () => void; keys?: () => string[] }) {
+/** `keys`: the chord that opens the tool, as the bar shows it. `hidden`: what it is put over is not shown just now (it stands over the page, not in it). */
+export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode: Mode) => void; onClose: () => void; keys?: () => string[]; hidden?: boolean }) {
   const host = props.host, transport = host.transport;
   const { again, describe, nameOf, pieceRoot, piecesWithin, placeOf, sourceOf, under } = createPieces(host.names, host.anchors);
   const places = new WeakMap<Element, ReturnType<typeof placeOf>>();
@@ -881,7 +881,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   const sourceLine = (selection: Selection) => selection.whole ? "The whole page, as it was when this was taken." : selection.general ? "About nothing on the page in particular." : selection.quote ? `“${selection.quote.text}”` : selection.elements.length === 1 ? sourceOf(selection.elements[0]!) : undefined;
 
   return <Portal>
-    <MarkupLayer ref={(element) => { layer = element; }} grounded={can.grounded} select={select()} text={pointerTool() === "quote" && showing() === "page"} frozen={showing() === "screenshot" ? picture()?.url : undefined} hidden={taking()}>
+    <MarkupLayer ref={(element) => { layer = element; }} grounded={can.grounded} select={select()} text={pointerTool() === "quote" && showing() === "page"} frozen={showing() === "screenshot" ? picture()?.url : undefined} hidden={taking() || props.hidden}>
       <For each={selections}>{(selection) => <Show when={floats(selection) && selection.on === showing()}>
         <Show when={selection.drawings} fallback={<Show when={selection.quote} fallback={<MarkupMark kind={selection.to ? "asked" : "chosen"} box={box(selection.elements)} tag={selection.to ? undefined : tagOf(selection)} current={openId() === selection.id} onOpen={() => openCard(selection)} />}>{(quote) =>
           <Index each={linesNow(quote())}>{(line, at) => <MarkupMark kind={selection.to ? "asked" : "quote"} box={line()} tag={at || selection.to ? undefined : tagOf(selection)} current={openId() === selection.id} onOpen={at ? undefined : () => openCard(selection)} />}</Index>}</Show>}>{(drawings) => <>

@@ -2462,7 +2462,9 @@ function App() {
     if (slotView(slot) === "file" && next !== "file" && releaseSplitFile && !(await releaseSplitFile(toDock))) return false;
     if (leavesUnsaved(previous, next, slot) && !(await confirmDialog("Discard unsaved changes and close this file?", { destructive: true, confirmLabel: "Discard", valid: () => slotView(slot) === previous }))) return false;
     if (slotView(slot) !== previous) return false;
+    if (arrives(slot, previous, next) && !(await arrive(slot, next!, () => slotView(slot) === previous))) return false;
     batch(() => {
+      leaves(slot);
       if (!next && isDocked(slot)) {
         setDockedSlots((current) => current.filter((item) => item !== slot));
         if (dockSlot() === slot) { setDockSlot(null); closePanel(); }
@@ -2486,12 +2488,31 @@ function App() {
     const previous = paneAOverride();
     if (leavesUnsaved(previous, next, "main") && !(await confirmDialog("Discard unsaved changes and close this file?", { destructive: true, confirmLabel: "Discard", valid: () => paneAOverride() === previous }))) return false;
     if (paneAOverride() !== previous) return false;
+    if (arrives("main", paneAView(), next) && !(await arrive("main", next!, () => paneAOverride() === previous))) return false;
     if (!next || isPaneView(next)) {
       setPaneAOverride(null);
       if (next) void openInPaneA(next);
-    } else setPaneAOverride(next);
+    } else batch(() => { leaves("main"); setPaneAOverride(next); });
     return true;
   };
+  // An artifact taking the place of what a pane shows is made behind it (pending) and takes its place in the frame it is
+  // drawn, so the pane never shows it opening; one that is slow says so once ARRIVE_MS has passed.
+  const ARRIVE_MS = 1500;
+  const [arriving, setArriving] = createSignal<Partial<Record<PaneKey, string>>>({});
+  const drawnArtifacts = new Set<string>();
+  const arrives = (pane: PaneKey, previous: SplitView | null, next: SplitView | null) => Boolean(previous && previous !== next && next?.startsWith("artifact:") && !/^artifact:new\b/.test(next) && paneElement(pane));
+  const leaves = (pane: PaneKey) => setArriving(({ [pane]: _, ...rest }) => rest);
+  /** True once the artifact is drawn (or ARRIVE_MS has passed), unless another took its place or the pane changed meanwhile (`unchanged`). */
+  const arrive = async (pane: PaneKey, view: SplitView, unchanged: () => boolean) => {
+    const id = view.slice("artifact:".length);
+    setArriving((now) => ({ ...now, [pane]: id }));
+    await waitFor(() => drawnArtifacts.has(`${pane}:${id}`) || arriving()[pane] !== id, ARRIVE_MS);
+    if (arriving()[pane] !== id) return false;
+    if (!unchanged()) leaves(pane);
+    return unchanged();
+  };
+  /** The artifacts a pane holds: the one it shows, and one arriving in its place. */
+  const artifactsIn = (pane: PaneKey) => [viewOf(pane)?.startsWith("artifact:") ? viewOf(pane)!.slice("artifact:".length) : undefined, arriving()[pane]].filter((id, index, all): id is string => Boolean(id) && all.indexOf(id) === index);
   const [paneAToolHost, setPaneAToolHost] = createSignal<HTMLElement>();
   const paneSelector = (pane: PaneKey) => pane === "main" ? ".chat-main" : `.main-split[data-pane-slot="${pane}"]`;
   const paneOf = (element: Element | null | undefined): PaneKey | null => {
@@ -2945,13 +2966,13 @@ function App() {
   window.addEventListener("conduit:open-artifact", openArtifactFromEvent);
   onCleanup(() => window.removeEventListener("conduit:open-artifact", openArtifactFromEvent));
   // `artifact:new[:<project>]` is the creator, so it is a tab with a name that survives a reload; ids are hex, so never "new".
-  const renderArtifactDocument = (pane: PaneKey, id: string) => id === "new" || id.startsWith("new:") ? <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>
+  const renderArtifactDocument = (pane: PaneKey, id: string) => (onCleanup(() => drawnArtifacts.delete(`${pane}:${id}`)), id === "new" || id.startsWith("new:") ? <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>
     <PaneHeader actions={paneTabActions(pane)}><Show when={documentTab(pane)} fallback={<HeaderCrumb title="New artifact" />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>
     <ArtifactCreator project={id.slice("new:".length) || undefined} projects={catalogue.projects().filter((item) => item.id === id.slice("new:".length) || homeProjects().includes(item))}
       onBack={() => void setPaneView(pane, "home")} onMade={(made) => void setPaneView(pane, `artifact:${made.id}`).then(() => focusAnyPane(pane))} />
-  </SheetFill> : <ArtifactPane id={id} onThread={() => void showThread(pane, id)} shortcuts={shortcutManager} onAbout={(found, label) => nameArtifact(`artifact:${id}`, found.name, label)}
+  </SheetFill> : <ArtifactPane id={id} pending={arriving()[pane] === id} moving={paneMotion()?.slot === pane} onDrawn={() => drawnArtifacts.add(`${pane}:${id}`)} onThread={() => void showThread(pane, id)} shortcuts={shortcutManager} onAbout={(found, label) => nameArtifact(`artifact:${id}`, found.name, label)}
     chats={(project) => (catalogue.projects().find((item) => item.id === project)?.sessions ?? []).map((chat) => ({ id: chat.id, title: chat.title || "Untitled chat" }))}
-    header={(extra) => <PaneHeader modes={paperModes(pane, id, "paper")} actions={<>{extra}{paneTabActions(pane)}</>}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`artifact:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />;
+    header={(extra) => <PaneHeader modes={paperModes(pane, id, "paper")} actions={<>{extra}{paneTabActions(pane)}</>}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`artifact:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />);
   const renderBrowserDocument = (pane: PaneKey, id: string) => <SheetFill class="pane-browser">
     <BrowserPane id={id} onTitle={(title) => setBrowserTitles((current) => ({ ...current, [`browser:${id}`]: title }))}
       header={<PaneHeader actions={paneTabActions(pane)}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`browser:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />
@@ -3012,7 +3033,7 @@ function App() {
       ({ id }) => openArtifact(id, options.beside),
       (error) => toast.error(error instanceof Error ? error.message : String(error)));
     // A file that is an artifact only once asked (a Markdown file) opens as one if it already is; otherwise in the file viewer.
-    if (!options.edit && !options.reveal && opensAs(entry.path)) { const made = await import("./document/artifacts").then(({ artifactAt }) => artifactAt(entry.projectId, entry.path)).catch(() => null); if (made) return void openArtifact(made.id, options.beside); }
+    if (!options.edit && !options.reveal && opensAs(entry.path)) { const made = await import("./document/artifacts").then(({ artifactFor }) => artifactFor(entry.projectId, entry.path)); if (made) return void openArtifact(made.id, options.beside); }
     const keepTab = tabActivation();
     // Every open sets it, so one without edit retires an earlier edit's that never loaded.
     pendingFileEdit = options.edit ? entry : null;
@@ -4156,7 +4177,7 @@ function App() {
         <Show when={parseFileView(slotView(slot))}>{renderFileViewer(slot)}</Show>
         <Show when={slotView(slot)?.startsWith("term:") ? slotView(slot)!.slice("term:".length) : undefined} keyed>{(shell) => renderTerminalDocument(slot, shell)}</Show>
         <Show when={slotView(slot)?.startsWith("browser:") ? slotView(slot)!.slice("browser:".length) : undefined} keyed>{(id) => renderBrowserDocument(slot, id)}</Show>
-        <Show when={slotView(slot)?.startsWith("artifact:") ? slotView(slot)!.slice("artifact:".length) : undefined} keyed>{(id) => renderArtifactDocument(slot, id)}</Show>
+        <For each={artifactsIn(slot)}>{(id) => renderArtifactDocument(slot, id)}</For>
         <Show when={slotView(slot) === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome(slot)}</SheetFill></Show>
         <Show when={page() === "computer"}>
           <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderPaneComputer(slot)}</SheetFill>
@@ -4394,6 +4415,7 @@ function App() {
   // ~45 ms before they move.
   let shownAsSeen = untrack(shownSlots);
   const shownAsSeenAtLoad = shownAsSeen;
+  const ARTIFACT_EASE_MS = 500;
   const heldSlots = new Map<number, { release: () => void; focus?: () => void }>();
   const animatePanes = () => panesSettled && !isMobileLayout() && !swappingPanes && !restoringPanes && !paneMotion()
     && !reducedMotion();
@@ -4450,8 +4472,9 @@ function App() {
       heldSlots.get(slot)?.release();
       requestAnimationFrame(() => {
         const element = paneSlot(slot).host();
-        const id = slotChatId(slot);
-        void waitFor(() => !id || paneSlot(slot).session.chat.loadedId() === id, 150).then(() => {
+        const id = slotChatId(slot), artifact = artifactsIn(slot)[0];
+        // An artifact eases in drawn, or after ARTIFACT_EASE_MS saying it is opening: never filling in as it moves.
+        void waitFor(() => artifact ? drawnArtifacts.has(`${slot}:${artifact}`) : !id || paneSlot(slot).session.chat.loadedId() === id, artifact ? ARTIFACT_EASE_MS : 150).then(() => {
           if (paneMotion()?.slot !== slot) return;
           if (!element || paneSlot(slot).host() !== element) return void batch(() => { setWeightOverride(null); setPaneMotion(null); });
           const fade = documentsOf(element).map((part) => part.animate([{ opacity: 0 }, { opacity: 1 }],
@@ -5659,7 +5682,7 @@ function App() {
       <Show when={parseFileView(paneAOverride())}>{renderFileViewer("main")}</Show>
       <Show when={paneAOverride()?.startsWith("term:") ? paneAOverride()!.slice("term:".length) : undefined} keyed>{(shell) => renderTerminalDocument("main", shell)}</Show>
       <Show when={paneAOverride()?.startsWith("browser:") ? paneAOverride()!.slice("browser:".length) : undefined} keyed>{(id) => renderBrowserDocument("main", id)}</Show>
-      <Show when={paneAOverride()?.startsWith("artifact:") ? paneAOverride()!.slice("artifact:".length) : undefined} keyed>{(id) => renderArtifactDocument("main", id)}</Show>
+      <For each={artifactsIn("main")}>{(id) => renderArtifactDocument("main", id)}</For>
       <Show when={paneAOverride() === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome("main")}</SheetFill></Show>
       <Show when={toolInPaneA()}><SheetFill ref={(element) => { setPaneAToolHost(element); onCleanup(() => setPaneAToolHost(undefined)); }} class="pane-a-tool-host" /></Show>
       <Show when={!paneAOverride() && routeBootstrap() === "ready"} fallback={paneAOverride() ? null : <Empty role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"

@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import type { SheetCellsOp } from "@/components/sheet";
 import { api } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
@@ -9,9 +10,9 @@ import { ARTIFACT_KINDS } from "./artifact-kinds";
  * hub once it is asked for and again whenever the hub says that project's artifacts changed. Each is a file in its
  * project's folder (`path`), whose name is the file's: a paper (`<name>.paper`, blocks the hub holds live) or a site
  * (`<name>.site.html`, one HTML file an agent writes, shown in a frame that can reach nothing of Conduit's) or a Markdown file (`<name>.md`,
- * held live as a paper is; which `.md` files are artifacts is the hub's to say).
+ * held live as a paper is; which `.md` files are artifacts is the hub's to say) or a sheet (`<name>.csv`, its cells held live, formulas kept beside it).
  */
-export type ArtifactKind = "paper" | "site" | "markdown";
+export type ArtifactKind = "paper" | "site" | "markdown" | "sheet";
 /**
  * `trouble`: why what is shown may not be what the file holds (it cannot be read, or its device is away); `edited`: a
  * paper's, false until anyone has changed it since it was made. Only `artifactAbout` says these.
@@ -47,13 +48,16 @@ export const artifactAbout = (id: string) => api<Artifact>(`/v0/document/${encod
 const send = (path: string, method: string, body?: unknown) => api<Artifact>(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 /** A new one, in a folder of the project (unsaid: its root). The hub refuses a name already there. */
 export const makeArtifact = (project: string, made: { kind: Artifact["kind"]; name: string; folder?: string }) => send(`/v0/projects/${encodeURIComponent(project)}/artifacts`, "POST", made);
-/** The artifact a file of the project is (one pressed in the file tree). */
-/** The artifact a file is. `adopt`: a file of a kind that is one only when asked (artifact-kinds `opens`) becomes one. */
+/** The artifact a file is, of those the client has been told of: a file that may be one only when asked (artifact-kinds `opens`) is looked for here, never asked of the hub, which answers 404 for the many that are not. */
+export const artifactFor = (project: string, path: string) => Object.values(lists()).flat().find((item) => item.project === project && item.path === path);
+/** The artifact a file is, asked of the hub (one pressed in the file tree). `adopt`: a file of a kind that is one only when asked (artifact-kinds `opens`) becomes one. */
 export const artifactAt = (project: string, path: string, adopt?: boolean) => send(`/v0/projects/${encodeURIComponent(project)}/artifacts`, "POST", { path, ...(adopt ? { adopt: true } : {}) });
 export const renameArtifact = (id: string, name: string) => send(`/v0/document/${encodeURIComponent(id)}`, "PATCH", { name });
 export const deleteArtifact = (id: string) => api<void>(`/v0/document/${encodeURIComponent(id)}`, { method: "DELETE" });
 /** A site's HTML as its file holds it now. `have`: the revision already shown; the hub then sends the HTML only when the file has changed since. */
 export const siteContent = (id: string, have?: string) => api<{ revision: string; html?: string }>(`/v0/document/${encodeURIComponent(id)}?as=site${have ? `&have=${encodeURIComponent(have)}` : ""}`);
+/** What only the hub does to a sheet: rows and columns inserted or deleted, and a fill whose formulas move per cell. */
+export const sheetCells = (id: string, op: SheetCellsOp) => api<unknown>(`/v0/document/${encodeURIComponent(id)}/cells`, { method: "POST", body: JSON.stringify(op) });
 /** Where its Markdown is read from, for Export. */
 export const artifactMarkdownPath = (id: string) => `/v0/document/${encodeURIComponent(id)}?as=markdown`;
 const markdownOf = async (id: string) => {

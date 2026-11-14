@@ -52,6 +52,7 @@ import "./assistant.css";
 import "./connection.css";
 
 import "./browser.css";
+import "./sheet.css";
 
 import "./marks.css";
 import "./voice.css";
