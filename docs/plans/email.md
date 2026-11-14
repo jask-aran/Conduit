@@ -25,23 +25,27 @@ Executor is too slow and too narrow for a client: a client needs a synced local 
 
 - **One mail primitive, an adapter per source.** Account, thread, message, draft, label are Conduit shapes; nothing
   Gmail-specific (label ids, history ids, API error shapes) reaches the browser. Phase 1 builds the Gmail adapter;
-  phase 2 adds jbot's mailbox as a second account; IMAP is a possible later adapter for other providers.
-- **Gmail API with Conduit's own Google OAuth client**, an unverified app for the owner only. Gmail scopes are
-  "restricted"; how Google expires refresh tokens for an unverified or "testing" app is a **guess** to confirm first,
-  because it decides whether sign-in lasts.
+  phase 2 adds jbot's mailbox as a second account. The same IMAP adapter later serves non-Gmail accounts.
+- **IMAP and SMTP with a Gmail app password**, chosen 2026-11-15 as the least setup: no Google Cloud project, no
+  consent screen, nothing that expires until revoked. Needs 2-Step Verification on; the owner creates the password at
+  myaccount.google.com/apppasswords and pastes it into Conduit. The Gmail API with Conduit's own OAuth client stays a
+  later adapter if IMAP falls short (its catch: a "Testing" app's sign-in expires every 7 days, **guess**).
 - **The hub keeps a copy in SQLite**: headers, snippet, labels and thread for all mail; full raw bodies for recent
   months; older bodies fetched on open and cached. Search is FTS5 over what is held.
-- **Sync** (quotas and limits are **guess**):
-  - Backfill: `messages.list` (ids, 500 a page), then `messages.get format=metadata` in batch requests of about 50,
-    newest first so the inbox is usable at once. Per-user quota of about 250 units a second at 5 a get gives roughly
-    50 messages a second, 100k messages in 30–40 minutes. Bodies with `format=raw`, parsed by the existing
-    `mail-pipeline.js`. Streamed and paged, never held whole in memory.
-  - Incremental: store `historyId`; `history.list` returns adds, deletes and label changes since. Poll every 30–60 s,
-    faster while a mail pane is open. An expired `historyId` triggers a partial resync of recent mail. Push through
-    `users.watch` and a Pub/Sub pull subscription is later, only if polling feels slow.
-  - Search: local FTS first; for body text the hub does not hold, also Gmail `messages.list q=` and merge.
-  - Writes: triage changes the local copy at once and sends `messages.modify` behind it, rolling back on failure;
-    `messages.send` and `drafts.create` with raw messages.
+- **Sync** over Gmail's IMAP extensions (which extensions Gmail supports, its bandwidth limits, and the Node library,
+  likely `imapflow`, are **guess**):
+  - Sync `[Gmail]/All Mail`, keyed by `X-GM-MSGID`, threaded by `X-GM-THRID`, labelled by `X-GM-LABELS`; track
+    `UIDVALIDITY`.
+  - Backfill: `FETCH` envelope, flags, labels and size in UID ranges, newest first so the inbox is usable at once.
+    Raw bodies (`BODY.PEEK[]`) for recent months, parsed by the existing `mail-pipeline.js`. Streamed and paged, never
+    held whole in memory.
+  - Incremental: `IDLE` on one connection for new mail within seconds; `CONDSTORE` (`CHANGEDSINCE` a stored
+    `HIGHESTMODSEQ`) for flag and label changes; a UID comparison for deletions. A `UIDVALIDITY` change triggers a
+    resync.
+  - Search: local FTS first; for body text the hub does not hold, also Gmail's `X-GM-RAW` search and merge.
+  - Writes: triage changes the local copy at once and sends `STORE` flags or `X-GM-LABELS` behind it, rolling back on
+    failure. Sending over SMTP (`smtp.gmail.com`), which Gmail files in Sent itself; drafts by `APPEND` to
+    `[Gmail]/Drafts`.
 - **The client is a Work pane kind**, beside papers and sheets, so the agent can sit next to it and Markup works over
   it. Built only from v2 library pieces (`components/ui`). Layout and feel are decided after a throwaway prototype.
 - **jbot gets a mail tool** that reads and searches the hub store directly (milliseconds), instead of Executor.
@@ -72,7 +76,7 @@ and serve both a mail pane in Work and a fast mail tool for jbot. This is phase 
 plan first. Its Decisions section is agreed and its phase 2 is what you build toward, not what you build.
 
 ## Done means
-- On conduit-local (:4310), I sign in to Gmail once, open a mail pane in Work, and see my inbox within seconds while
+- On conduit-local (:4310), I paste my Gmail address and app password once, open a mail pane in Work, and see my inbox within seconds while
   the backfill continues behind it.
 - Search returns in well under a second for mail the hub holds, and also finds older body text through Gmail.
 - I can read threads, archive, mark read, label, star, and compose, reply, forward and save drafts, and each shows in
@@ -89,11 +93,11 @@ Read `AGENTS.md` and the files it points to for UI work (`DESIGN.md`) and server
 - One Conduit mail primitive (account, thread, message, draft, label) with an adapter per source. Nothing
   Gmail-specific reaches the browser. Phase 2 will add jbot's mailbox (`agent/email.js`) as a second account, so
   shape the primitive to fit it.
-- Gmail API with Conduit's own Google OAuth client, for me only. Before building on it, confirm from Google's docs how
-  refresh tokens expire for an unverified or testing app with restricted Gmail scopes, and choose the setup that keeps
-  me signed in. Credentials go beside the existing connector credentials in `<dataRoot>`, never in the agent folder.
-- The sync design in the plan (backfill newest first, `history.list` polling, local FTS5 with Gmail search merged in,
-  optimistic writes). The quota numbers in the plan are from memory; check them.
+- IMAP and SMTP with a Gmail app password, not the Gmail API: I chose the least setup. The app password is stored
+  beside the existing connector credentials in `<dataRoot>`, written with `writePrivateJson`, never in the agent folder.
+- The sync design in the plan (Gmail's IMAP extensions, backfill newest first, IDLE plus CONDSTORE for changes, local
+  FTS5 with `X-GM-RAW` search merged in, optimistic writes). Which extensions Gmail supports, its limits and the
+  library choice are from memory; check them before building on them.
 - The client is a new Work pane kind, built only from v2 library pieces in `conduit-web/src/components/ui`. Its
   layout is yours to decide: build a throwaway prototype in the gallery first, pick, and give the reason in your
   report.
@@ -111,8 +115,8 @@ and Markdown outside `docs/` only shrink, so any new test removes more test line
   and adding beside it need no approval.
 - Never push to `main` without a go-ahead from me in this conversation: pushing deploys conduit-dev. Work and test on
   conduit-local only.
-- Google Cloud setup (the project, OAuth client, consent screen) and the first Gmail sign-in are mine to do. When you
-  reach them, write me the exact steps and values, then carry on with work that does not need them.
+- Creating the app password and pasting it in are mine to do. When the settings form is ready, tell me where it is,
+  then carry on with work that does not need it.
 - jbot's sending rule, built into the mail tool: jbot sends when I asked it to in that conversation; an email jbot
   decides to send on its own waits for my approval through `agent/approval-policy.js`.
 - Any node process that touches mail data runs with `--max-old-space-size=4096` or less, one heavy process at a time,
@@ -120,8 +124,8 @@ and Markdown outside `docs/` only shrink, so any new test removes more test line
 - These need no approval: editing anything under `conduit-web/` except the jbot mailbox code above, adding npm
   dependencies, committing your own files as you go with `git commit -- <paths>`, running
   `bash scripts/start-conduit.sh restart`, the gallery and the Chrome DevTools CLI, `curl` against `/v0/...`, sending
-  test emails from my account to any address, and retrying Gmail API reads and `history.list` after rate-limit or
-  network errors.
+  test emails from my account to any address, and retrying IMAP reads after rate-limit or
+  network errors, and reconnecting a dropped IMAP connection.
 
 ## How to work
 # Finishing work
@@ -133,8 +137,8 @@ If you notice yourself inviting the user to redirect you or offering to wait, in
 
 If someone clearly decided something is a hard blocker, such as a file marked not to be touched, access that was intentionally withheld, or a safety guardrail, leave it alone, say plainly what you found, and look for another safe way to finish the task. Stopping before the task is complete is very rarely merited, as in when the task can't move forward without user input, or where the blocker is deliberate and should not be worked past. This does not override the need for confirmation on risky or destructive actions.
 
-Order the work so the sign-in wait costs nothing: the primitive, store schema and sync engine against recorded
-fixtures first, the pane against the same fixtures, then live Gmail once I have signed in.
+Order the work so waiting for my app password costs nothing: the primitive, store schema and sync engine against
+recorded fixtures first, the pane against the same fixtures, then live Gmail once I have pasted it.
 
 Subagents: each one adds its own full context to the session's cost, and you see only its summary. Use them for
 pieces that are bounded and independent once you have written the contract between them (for example the pane while
@@ -152,14 +156,14 @@ Use plain words, and write in clear, understandable full sentences. Do not use a
 
 Then give: what I can try now and how; what changed, listing every change including small ones, because I review the
 diff against your list; what you verified and how, kept apart from what you expect but did not run; what is left; and
-the decisions you made for me (the pane layout, the token setup), each with its reason. Update the plan's Decisions
+the decisions you made for me (the pane layout, the IMAP library), each with its reason. Update the plan's Decisions
 for anything that changed, and delete what phase 1 finished from its Phases list.
 ```
 
 ## First-run watch list
 
-- **Stops at the sign-in wait.** It should build against fixtures and keep going. If it stops, reply "carry on with
-  the fixture-backed work; I'll sign in later."
+- **Stops while waiting for the app password.** It should build against fixtures and keep going. If it stops, reply
+  "carry on with the fixture-backed work; I'll paste the password later."
 - **Asks before routine steps** (commits, restarts, test sends). They are named as needing no approval; point at that
   list.
 - **Adds a second Gmail path beside `mail-task.js`.** That is expected in phase 1; retiring it is phase 2.

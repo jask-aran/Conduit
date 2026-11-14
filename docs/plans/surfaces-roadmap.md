@@ -14,7 +14,7 @@ notes behind them are in git history. Tick an item by deleting it.
 - [ ] 30. jbot channels: messaging apps (Telegram, Discord, Slack, WhatsApp, Signal, SMS, email) as jbot's channels,
   grown through the jbot message log (see jbot below). Worth keeping from the study: a conversation in a
   messaging app attaches to a thread, and a command there starts a fresh one.
-- [ ] Email client (2026-11-15): a Work pane over a hub-synced Gmail copy, and jbot's mailbox as a second account.
+- [ ] Email client (2026-11-15): a Work pane over a hub-synced Gmail copy over IMAP, and jbot's mailbox as a second account.
   Plan and phase 1 starter prompt in `docs/plans/email.md`.
 - [ ] 31. A single drawer pane from the bottom, later. Not recursive splits.
 - [ ] 32. Browser tabs as pane tabs, a setting (2026-11-03): today a browser is one document, a tab beside chats and
