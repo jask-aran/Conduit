@@ -112,6 +112,8 @@ export interface MarkupMarginHost {
   anchors(list: MarkupAnchor[]): void;
   /** Where what one is about is now (its box, in the viewport's pixels); null when the surface cannot find it. */
   place(key: string): { left: number; top: number; width: number; height: number } | null;
+  /** The column of what is marked up (a paper's text), which an open card spans where the margin lies over it. */
+  column?(): { left: number; width: number } | null;
   /** The listener is told when a place may have changed, and (with its key) when the person pressed what a comment is about. The return ends it. */
   watch(listener: (pressed?: string) => void): () => void;
   /** Where the surface keeps what an agent changed to answer a comment: whether there is such a change (read where it is drawn, so it follows), and taking it back. */

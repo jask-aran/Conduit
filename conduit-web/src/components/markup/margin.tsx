@@ -86,9 +86,10 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
     setTucked(tuck);
     const box = column.getBoundingClientRect(), gap = parseFloat(getComputedStyle(column).rowGap) || 0;
     const cards = [
-      // Tucked, every card of a place stands where its first does, so stepping through them holds still.
-      ...([...column.children] as HTMLElement[]).map((card) => ({ want: placeOf(tuck ? placed(card.dataset.key ?? "")[0]! : card.dataset.key ?? "")?.top ?? null, height: () => card.offsetHeight,
-        put: (top: number | null, order: number) => { card.style.top = top === null ? "" : `${top}px`; card.style.order = top === null ? String(order) : ""; } })),
+      // Tucked, every card of a place stands where its first does, so stepping through them holds still;
+      // and an open one stands under what it is about, never over it.
+      ...([...column.children] as HTMLElement[]).map((card) => { const at = placeOf(tuck ? placed(card.dataset.key ?? "")[0]! : card.dataset.key ?? ""); return { want: at ? at.top + (tuck && card.hasAttribute("data-open") ? at.height + gap : 0) : null, height: () => card.offsetHeight,
+        put: (top: number | null, order: number) => { card.style.top = top === null ? "" : `${top}px`; card.style.order = top === null ? String(order) : ""; const over = tuck && card.hasAttribute("data-open") ? margin?.column?.() : null; card.style.left = over ? `${over.left - box.left}px` : ""; card.style.width = over ? `${over.width}px` : ""; } }; }),
       ...[...waiting.values()].map((one) => ({ want: one.want as number | null, height: () => one.height, put: (top: number | null) => one.at(top === null ? null : { left: box.left, top: box.top + top, width: box.width }) })),
     ].sort((a, b) => (a.want ?? Number.MAX_VALUE) - (b.want ?? Number.MAX_VALUE));
     // Beside what is marked, the margin starts no lower than it; put under it, every place is above.

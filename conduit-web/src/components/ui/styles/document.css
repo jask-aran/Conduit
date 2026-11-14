@@ -181,7 +181,9 @@
 /* Tucked: the margin takes no room and the text keeps its measure. Each card is a small mark at the text's right edge, saying only how it stands, and
    the whole card over the text once it is opened. */
 .ui-document-page[data-margin="tucked"] { position: relative; flex-wrap: nowrap; }
-.ui-document-page[data-margin="tucked"] > .ui-document-margin { position: absolute; top: 0; right: 0; bottom: 0; width: var(--measure-md); max-width: 100%; pointer-events: none; }
+/* Tucked, the margin lies over the whole sheet: a closed mark at its right edge, an open card across the text under what it is about. */
+.ui-document-page[data-margin="tucked"] > .ui-document-margin { position: absolute; inset: 0; pointer-events: none; }
+.ui-document-page[data-margin="tucked"] .ui-markup-note[data-open] { right: auto; }
 .ui-document-page[data-margin="tucked"] .ui-markup-note { pointer-events: auto; }
 .ui-document-page[data-margin="tucked"] .ui-markup-note:not([data-open]) { left: auto; width: fit-content; }
 /* A tucked mark is only its sign (at work, unread, or a comment there) and how many: its words are on the card it opens. */

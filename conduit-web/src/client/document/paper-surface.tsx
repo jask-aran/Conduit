@@ -75,6 +75,7 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
         revert: { can: (key) => marks?.changed(key) ?? false, run: (key) => api(`${base}/changes`, { method: "POST", body: JSON.stringify({ op: "revert", thread: key }) }) },
         working: (key) => { const seat = marked()?.seats?.().find((one) => one.for === key); return seat && { by: seat.name, state: seat.state }; },
         suggestions: { list: () => marked()?.suggestions() ?? [], place: (key) => marks?.place(key) ?? null, accept: (key) => marks?.accept(key), reject: (key) => marks?.reject(key), acceptAll: (by) => marks?.acceptAll(by), rejectAll: (by) => marks?.rejectAll(by) },
+        column: () => props.pane()?.querySelector<HTMLElement>(".ui-document-text")?.getBoundingClientRect() ?? null,
         focus: () => props.pane()?.querySelector<HTMLElement>(".ui-document-text")?.focus({ preventScroll: true }),
       },
       tools: () => marks?.tools() ?? [],
