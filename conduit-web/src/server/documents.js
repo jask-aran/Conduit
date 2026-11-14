@@ -13,7 +13,9 @@ import { AUTHORS, BLOCK_TYPES, CHANGES, FORMAT, FRAGMENT, FRAME, IMAGE_NAME, PRO
 import { remoteNode } from "../place.js";
 import { writePrivateFile } from "../private-file.js";
 import { createMarkupStore } from "./markup-store.js";
-import { FOLDER, sheetKind } from "./sheets.js";
+import { MAIN, rowId } from "../sheet-format.js";
+import { importSummary, importXlsxApart } from "./sheet-xlsx.js";
+import { FOLDER, sheetKind, tabFile } from "./sheets.js";
 import { startWebSocketKeepalive } from "./ws-keepalive.js";
 
 /*
@@ -1099,6 +1101,34 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       return told(await adopt(of, at, true));
     },
     /**
+     * An .xlsx made a workbook of the project: a new folder <name>.sheet of its tabs' files, with its formulas and look beside it (sheet.json) and what
+     * did not come across (import.json: `report`, also answered). `bytes`: the file itself; or `from`: one in the project's folder, on this disk.
+     * @param {{ bytes?: Uint8Array, from?: string, name?: string, folder?: string, tabs?: string[] }} asked
+     */
+    async importXlsx(project, { bytes, from, name, folder: into = "", tabs } = {}) {
+      const of = await projectOf(project), { disk, side } = place(of);
+      if (typeof from === "string") {
+        if (disk.far) throw fault(400, "An .xlsx on a device is imported by sending the file itself");
+        await disk.inside(within(from));
+        bytes = await fs.readFile(disk.at(within(from))).catch((error) => { throw error.code === "ENOENT" ? fault(404, `No file ${from} in this project`) : error; });
+      }
+      if (!bytes?.length) throw fault(400, "Send the .xlsx file, or from: its path in the project's folder");
+      if (tabs !== undefined && (!Array.isArray(tabs) || tabs.some((tab) => typeof tab !== "string"))) throw fault(400, "tabs is a list of tab names");
+      const at = [within(into), `${named(name ?? (typeof from === "string" ? nameOf(from).replace(/\.xlsx$/i, "") : undefined))}${FOLDER}`].filter(Boolean).join("/");
+      if (await disk.stat(at)) throw fault(409, `A sheet named ${nameOf(at)} is already there`);
+      const { tabs: read, report } = await importXlsxApart(new Uint8Array(bytes), { tabs }), id = crypto.randomBytes(8).toString("hex");
+      await disk.inside(at);
+      await disk.mkdir(at).catch((error) => { throw error.code === "EEXIST" ? fault(409, `A sheet named ${nameOf(at)} is already there`) : error.code === "ENOENT" ? fault(404, `No folder ${into} in this project`) : error; });
+      for (const tab of read) await disk.create(`${at}/${tabFile(tab.name)}`, tab.csv);
+      await fs.mkdir(path.join(side, id), { recursive: true });
+      await writePrivateFile(path.join(side, id, "sheet.json"), `${JSON.stringify({ format: 2, tabs: read.map((tab, nth) => ({ id: nth ? rowId() : MAIN, name: tab.name, file: tabFile(tab.name), hidden: tab.hidden, inputs: tab.inputs, look: tab.look })) })}\n`);
+      await writePrivateFile(path.join(side, id, "import.json"), `${JSON.stringify(report)}\n`);
+      await KINDS.sheet.adopted({ side, at, id });
+      return { ...await told(await adopt(of, at, true)), report, summary: importSummary(report) };
+    },
+    /** What an imported workbook's import left out or froze; null for a sheet that was not imported. */
+    async importReport(id) { return fs.readFile(path.join((await entryOf(id)).side, "import.json"), "utf8").then(JSON.parse, () => null); },
+    /**
      * The artifact a file of the project is. A file of a kind that `adopts` only when asked, and was never made or asked to be one, is not one
      * (404 `not_an_artifact`) unless `adopt`, which makes it one.
      * @param {{ adopt?: boolean }} [options]
@@ -1349,14 +1379,21 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   };
 }
 
+const XLSX_MAX = 30 * 1024 * 1024;
 export function registerDocumentRoutes(app, documents) {
   app.get("/v0/projects/:project/artifacts", async (request, response) => response.json({ artifacts: await documents.list(request.params.project) }));
   app.post("/v0/projects/:project/artifacts", async (request, response) => {
     if (typeof request.body?.path === "string") return response.json(await documents.at(request.params.project, request.body.path, { adopt: request.body.adopt === true }));
     response.status(201).json(await documents.create(request.params.project, request.body));
   });
+  // The file itself (application/octet-stream; ?name=&folder=&tabs=a,b), or JSON { from, name?, folder?, tabs? } for one in the project's folder.
+  app.post("/v0/projects/:project/artifacts/import", express.raw({ type: "application/octet-stream", limit: XLSX_MAX }), async (request, response) => {
+    const sent = Buffer.isBuffer(request.body), { name, folder, tabs } = sent ? request.query : request.body ?? {};
+    response.status(201).json(await documents.importXlsx(request.params.project, { ...(sent ? { bytes: request.body } : { from: request.body?.from }), name: typeof name === "string" ? name : undefined, folder: typeof folder === "string" ? folder : undefined, tabs: typeof tabs === "string" ? tabs.split(",").filter(Boolean) : tabs }));
+  });
   app.get("/v0/document/:id", async (request, response) => {
     if (request.query.as === "about") return response.json(await documents.about(request.params.id));
+    if (request.query.as === "import") return response.json({ report: await documents.importReport(request.params.id) });
     // As data, never as a page of the hub's: a site's scripts are run only in the frame its pane gives it.
     if (request.query.as === "site") return response.json(await documents.site(request.params.id, typeof request.query.have === "string" ? request.query.have : undefined));
     const text = (name) => typeof request.query[name] === "string" ? request.query[name] : undefined, read = await documents.read(request.params.id, request.query.as, text("range"), text("tab"));

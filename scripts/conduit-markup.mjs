@@ -268,6 +268,15 @@ if (command === "wait") {
   if (!entry) { console.error(`No markup item ${argument} in ${folder}`); process.exit(1); }
   await fs.writeFile(path.join(entry.dir, "handled.json"), `${JSON.stringify({ at: new Date().toISOString() })}\n`);
   console.log(`Handled ${argument}`);
+} else if (command === "document" && argument === "import") {
+  const flag = (name) => { const at = rest.indexOf(name); return at < 0 ? undefined : rest.splice(at, 2)[1]; };
+  const name = flag("--name"), into = flag("--folder"), tabs = flag("--tabs"), [project, from] = rest;
+  if (!project || !from) { console.error(`Usage: node ${script} document import <project> <file.xlsx in the project's folder> [--name <name>] [--folder <path>] [--tabs <a,b>]`); process.exit(1); }
+  const { execFileSync } = await import("node:child_process");
+  try {
+    const made = JSON.parse(execFileSync(process.execPath, [new URL("./conduit-auth.mjs", import.meta.url).pathname, "api", "POST", `/v0/projects/${encodeURIComponent(project)}/artifacts/import`, JSON.stringify({ from, name, folder: into, tabs: tabs?.split(",").filter(Boolean) })], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }));
+    console.log(`${made.id}  ${made.path}\n${made.summary}`);
+  } catch (error) { process.stderr.write(error.stdout || `${error.message}\n`); process.exit(1); }
 } else if (command === "document" && rest[0] && (argument === "list" || argument === "new")) {
   const { execFileSync } = await import("node:child_process");
   const flag = (name) => { const at = rest.indexOf(name); return at < 0 ? undefined : rest.splice(at, 2)[1]; };
@@ -329,7 +338,7 @@ if (command === "wait") {
     if (waiter && alive(waiter.id)) console.log(`waiter   ${waiter.name}  (${waiter.cwd}, since ${waiter.since})`);
   }
 } else {
-  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | answer <id> [n] --json '{\"edits\":[{\"op\":\"replace\",\"at\":\"<block>\",\"markdown\":\"…\"}],\"reply\":\"…\",\"resolve\":true}' | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document list <project> | document new <name> --project <id> [--folder <path>] [--kind markdown|sheet|site] | document read <id> | document set <id> <name> [value] | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block> | document suggestions <id> | document accept|reject <id> <key> | document cells <id> [range] [--values] | document set <id> <A1> <value> | document fill <id> <range> [value] | document rows|cols <id> insert|delete <row|letter> [count] | document tabs <id> [add <name> [place] | rename <tab> <name> | delete <tab> | move <tab> <place> | hide|show <tab>]   (--tab <name> picks a sheet's tab for cells, set, fill, rows and cols, as an address such as Data!B4 does; --as <name>, by default the name this folder's wait listens under; --for <item>/<n> names the comment an edit answers, <item> alone its one comment; --suggest [key] makes it a suggestion; --json '{…}' gives any of block, markdown, as, for, suggest; Markdown piped in when not given)");
+  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | answer <id> [n] --json '{\"edits\":[{\"op\":\"replace\",\"at\":\"<block>\",\"markdown\":\"…\"}],\"reply\":\"…\",\"resolve\":true}' | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document list <project> | document new <name> --project <id> [--folder <path>] [--kind markdown|sheet|site] | document read <id> | document set <id> <name> [value] | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block> | document suggestions <id> | document accept|reject <id> <key> | document import <project> <file.xlsx> [--name <name>] [--folder <path>] [--tabs <a,b>] | document cells <id> [range] [--values] | document set <id> <A1> <value> | document fill <id> <range> [value] | document rows|cols <id> insert|delete <row|letter> [count] | document tabs <id> [add <name> [place] | rename <tab> <name> | delete <tab> | move <tab> <place> | hide|show <tab>]   (--tab <name> picks a sheet's tab for cells, set, fill, rows and cols, as an address such as Data!B4 does; --as <name>, by default the name this folder's wait listens under; --for <item>/<n> names the comment an edit answers, <item> alone its one comment; --suggest [key] makes it a suggestion; --json '{…}' gives any of block, markdown, as, for, suggest; Markdown piped in when not given)");
   // Asked for (`document` alone, as an item's `change` tells an agent to run it), usage is an answer, not a failure.
   process.exit(command && !(command === "document" && !argument) ? 1 : 0);
 }

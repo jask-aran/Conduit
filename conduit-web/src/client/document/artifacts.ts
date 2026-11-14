@@ -50,6 +50,13 @@ export const artifactAbout = (id: string) => api<Artifact>(`/v0/document/${encod
 const send = (path: string, method: string, body?: unknown) => api<Artifact>(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 /** A new one, in a folder of the project (unsaid: its root). The hub refuses a name already there. */
 export const makeArtifact = (project: string, made: { kind: Artifact["kind"]; name: string; folder?: string }) => send(`/v0/projects/${encodeURIComponent(project)}/artifacts`, "POST", made);
+/** An .xlsx made a workbook of the project (the hub's `importXlsx`): the new sheet, and in words what came across, what was frozen and what was left out. */
+export const importXlsx = async (project: string, file: Blob, name: string): Promise<Artifact & { summary: string }> => {
+  const response = await authorizedFetch(httpUrl(`/v0/projects/${encodeURIComponent(project)}/artifacts/import?name=${encodeURIComponent(name)}`), { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
+  const answer = await response.json().catch(() => ({})) as Artifact & { summary: string; message?: string; error?: string };
+  if (!response.ok) throw new Error(String(answer.message || answer.error || "That file could not be imported"));
+  return answer;
+};
 /** The artifact a file is, of those the client has been told of: a file that may be one only when asked (artifact-kinds `opens`) is looked for here, never asked of the hub, which answers 404 for the many that are not. */
 export const artifactFor = (project: string, path: string) => Object.values(lists).flat().find((item) => item.project === project && item.path === path);
 /** The artifact a file is, asked of the hub (one pressed in the file tree). `adopt`: a file of a kind that is one only when asked (artifact-kinds `opens`) becomes one. */

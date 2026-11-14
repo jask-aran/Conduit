@@ -5,7 +5,7 @@ import { Select } from "@/components/ui/menus";
 import type { Project } from "../api/contracts";
 import { ArtifactIcon } from "./artifact-rows";
 import { ARTIFACT_KINDS } from "./artifact-kinds";
-import { artifactsOf, makeArtifact, type Artifact, type ArtifactKind } from "./artifacts";
+import { artifactsOf, importXlsx, makeArtifact, type Artifact, type ArtifactKind } from "./artifacts";
 
 const KINDS = Object.keys(ARTIFACT_KINDS) as ArtifactKind[];
 
@@ -38,6 +38,16 @@ export default function ArtifactCreator(props: { project?: string; projects: Pro
     catch (cause) { setError((cause as Error).message); }
     finally { setBusy(false); }
   };
+  // An Excel file becomes a sheet: what did not come across is said here before the sheet is opened.
+  const [imported, setImported] = createSignal<(Artifact & { summary: string }) | null>(null);
+  const pick = () => { const picker = Object.assign(document.createElement("input"), { type: "file", accept: ".xlsx" }); picker.onchange = () => void bring(picker.files?.[0]); picker.click(); };
+  const bring = async (file: File | undefined) => {
+    if (!file || !project() || busy()) return;
+    setBusy(true); setError("");
+    try { setImported(await importXlsx(project(), file, typed()?.trim() || file.name.replace(/\.xlsx$/i, ""))); }
+    catch (cause) { setError((cause as Error).message); }
+    finally { setBusy(false); }
+  };
   return <PaneHome label="New artifact">
     <header><DashHeader title="New artifact" /></header>
     <Group kind="dash" id="Kind" heading={<GroupHeading>Kind</GroupHeading>}>
@@ -50,6 +60,10 @@ export default function ArtifactCreator(props: { project?: string; projects: Pro
     <Field label="Name"><Input ref={input} id="artifact-name" value={name()} disabled={busy()} onInput={(event) => { setTyped(event.currentTarget.value); setError(""); }}
       onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void create(); } }} /></Field>
     <Show when={error()}><Note kind="card" tone="error">{error()}</Note></Show>
-    <Actions kind="card"><Button variant="ghost" outline disabled={busy()} onClick={props.onBack}>Back</Button><Button disabled={!ready()} onClick={() => void create()}>Create</Button></Actions>
+    <Show when={imported()}>{(made) => <Note kind="card"><For each={made().summary.split("\n")}>{(line) => <p>{line}</p>}</For></Note>}</Show>
+    <Actions kind="card"><Button variant="ghost" outline disabled={busy()} onClick={props.onBack}>Back</Button>
+      <Show when={imported()} fallback={<><Show when={kind() === "sheet"}><Button variant="ghost" outline disabled={busy() || !project()} onClick={pick}>{busy() ? "Importing…" : "Import .xlsx"}</Button></Show><Button disabled={!ready()} onClick={() => void create()}>Create</Button></>}>
+        {(made) => <Button onClick={() => props.onMade(made())}>Open {made().name}</Button>}
+      </Show></Actions>
   </PaneHome>;
 }
