@@ -2,6 +2,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "so
 import { DocumentEditor, type DocumentAnswers, type DocumentControls, type DocumentHost, type DocumentMarks } from "@/components/document";
 import type { DocumentToolName } from "@/components/document/host";
 import { PAPER_KEYS, PaperShortcuts, type PaperKeyGroup, type PaperKeyRow } from "@/components/document/shortcuts";
+import { textPlace } from "@/components/markup";
 import { HeaderButton, Icons } from "@/components/ui";
 import { documentBlockIcons, type DocumentWidth } from "@/components/ui/document";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
@@ -15,6 +16,7 @@ import { formatShortcutBinding, formatShortcutStroke } from "../shortcuts/shortc
 import type { ShortcutModifier } from "../shortcuts/shortcut-types";
 import { ARTIFACT_KINDS, type ArtifactSurfaceProps } from "./artifact-kinds";
 import { copyArtifactMarkdown, countPapers, paperCounted, renameArtifact } from "./artifacts";
+import type { ArtifactPlace } from "./focused-artifact";
 
 /** What the paper's editor offers, with what another builder's side may not have added yet. */
 type Marks = DocumentMarks & Partial<{ seats(): { name: string; state: string; for?: string }[] }>;
@@ -48,7 +50,8 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
   // The margin's answer acts reach the editor once both are made, whichever is first.
   const [answers, setAnswers] = createSignal<DocumentAnswers | null>(null);
   createEffect(() => marked()?.answers(answers()));
-  const ask = (about: Range, name?: string, words?: string) => props.offer()?.ask(about, name, words);
+  // The paper's text is the page's own: its places are runs of it.
+  const ask = (about: Range, name: string) => props.offer()?.ask(textPlace(about), name), comment = (about: Range) => props.offer()?.comment(textPlace(about));
   // Read again each time the sheet opens, so a key rebound since shows.
   const [showingKeys, setShowingKeys] = createSignal(false);
   const shownKeys = createMemo<[PaperKeyGroup, PaperKeyRow[]][]>((was) => showingKeys() && props.shortcuts ? keyGroups(props.shortcuts, kind.edit) : was, []);
@@ -84,7 +87,8 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
       },
       tools: () => marks?.tools() ?? [],
       history: { undo: () => marks?.history.undo() ?? false, redo: () => marks?.history.redo() ?? false, canUndo: () => marks?.history.canUndo() ?? false, canRedo: () => marks?.history.canRedo() ?? false },
-      asking: () => marks?.selection() ?? null,
+      // The text selected in the paper, where the page's selection is in it.
+      place: () => { const chosen = getSelection(), text = props.pane()?.querySelector(".ui-document-text"); if (!chosen?.rangeCount || chosen.isCollapsed || !text?.contains(chosen.anchorNode)) return null; return textPlace(chosen.getRangeAt(0).cloneRange()); },
     },
     offers: () => {
       const edits = controls();
@@ -99,7 +103,7 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
       <MenuContent width="md"><MenuSection title="Outline" note={edits().outline().length ? undefined : "No headings yet"}><For each={edits().outline()}>{(heading) => { const Level = documentBlockIcons[`heading-${Math.min(3, Math.max(1, heading.level))}` as "heading-1"]; return <MenuRow icon={<Level />} checked={heading.id === edits().current() || undefined} onSelect={() => edits().reveal(heading.id)}>{heading.text || "Untitled"}</MenuRow>; }}</For></MenuSection></MenuContent>
     </DropdownMenu>}</Show>,
     away, stale,
-    reveal: () => controls()?.reveal,
+    reveal: () => { const show = controls()?.reveal; return show && ((place: ArtifactPlace) => { if (place.block) show(place.block.split(" ")[0]!); }); },
     drawn: ready,
     // The sheet and the margin beside it, and the column's own side room past them.
     reach: () => {
@@ -109,7 +113,7 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
       return right + (parseFloat(getComputedStyle(column).paddingRight) || 0) - pane.getBoundingClientRect().left;
     },
   });
-  return <><DocumentEditor host={editing} id={id} name={props.about().name} bare onAway={setAway} onStale={setStale} onReady={() => setReady(true)} marks={(offered) => { marks = offered; setMarked(() => offered); }} mentions={() => props.quiet ? [] : props.offer()?.names() ?? []} to={() => props.offer()?.to() ?? null} onMention={ask} onRename={(name) => renameArtifact(id, name)} count={Boolean(kind.count) && paperCounted()} width={width()} controls={setControls} onComment={props.quiet ? undefined : ask} margin={props.margin} marginEmpty={props.marginEmpty} />
+  return <><DocumentEditor host={editing} id={id} name={props.about().name} bare onAway={setAway} onStale={setStale} onReady={() => setReady(true)} marks={(offered) => { marks = offered; setMarked(() => offered); }} mentions={() => props.quiet ? [] : props.offer()?.names() ?? []} to={() => props.offer()?.to() ?? null} onAsk={ask} onRename={(name) => renameArtifact(id, name)} count={Boolean(kind.count) && paperCounted()} width={width()} controls={setControls} onComment={props.quiet ? undefined : comment} margin={props.margin} marginEmpty={props.marginEmpty} />
     <PaperShortcuts open={showingKeys()} onOpenChange={setShowingKeys} groups={shownKeys()} />
   </>;
 }

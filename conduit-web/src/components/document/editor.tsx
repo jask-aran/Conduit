@@ -10,7 +10,7 @@ import { lateSync, settle } from "./sync";
 import { redo, undo, ySyncPlugin, yUndoPlugin, yUndoPluginKey } from "y-prosemirror";
 import type { Doc, Map as YMap, XmlFragment } from "yjs";
 import { MARKUP_INKS } from "@/components/ui/markup";
-import { DocumentAnswered, DocumentAsk, DocumentCount, DocumentSeatJump, DocumentSheet, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons, documentWritingIcons, type DocumentWidth } from "@/components/ui/document";
+import { DocumentAnswered, DocumentCount, DocumentSeatJump, DocumentSheet, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons, documentWritingIcons, type DocumentWidth } from "@/components/ui/document";
 import { CHANGES, FRAGMENT, documentExtensions, isSuggestion } from "@/document-format.js";
 import { acrossBlocks, blockById, blockKeys, caretBlockAt, changedBlocks, shiftBlock } from "./blocks";
 import { drawn, revealed } from "./drawn";
@@ -202,8 +202,8 @@ const caretBlock = (view: EditorView) => { const { $from } = view.state.selectio
  *  text runs. `controls`: told what the editor offers the app round it (DocumentControls), once. */
 export function DocumentEditor(props: { host: DocumentHost; id: string; name: string; actions?: JSX.Element; margin?: JSX.Element; marginEmpty?: boolean; bare?: boolean; onAway?: (away: boolean) => void; /** The hub refused this page as older than the paper: only a reload mends it. */ onStale?: (stale: boolean) => void; onReady?: () => void; marks?: (marks: DocumentMarks) => void;
   width?: DocumentWidth; controls?: (controls: DocumentControls) => void;
-  /** `mentions`: who `@` offers; picked, the typed `@…` goes and `onMention` is told the caret's block and the name. */
-  mentions?: () => string[]; onMention?: (about: Range, name: string, words: string) => void;
+  /** `mentions`: who `@` offers; picked, the typed `@…` goes and `onAsk` is told the caret's block and the name, to ask them what to do there. */
+  mentions?: () => string[]; onAsk?: (about: Range, name: string) => void;
   /** `to`: who of `mentions` a comment goes to when none is named, asked by the comment key (PAPER_COMMENT_KEY); unsaid, the first. */
   to?: () => string | null;
   /** `onComment`: the selection tools' Comment, told the text selected, and the block handle's, told the block. */
@@ -235,29 +235,16 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     const view = editor()?.view, at = asked();
     if (!view || !at) return;
     view.dispatch(view.state.tr.delete(at.from, at.to));
+    // Picked, the one asked is asked what to write at the caret's block: a comment is about what is there, this asks for what is not.
     const about = caretBlock(view);
-    if (about) setAsking({ about, name });
+    if (about) props.onAsk?.(about, name);
   };
-  // Picked, the one asked is told what to write in a field at the caret's block: a comment is about what is there, this asks for what is not.
-  const [asking, setAsking] = createSignal<{ about: Range; name: string } | null>(null);
-  // On an empty line the field stands in the line's own place; under a block with text (a selection's last), so the text it is about is read.
-  const askedAt = () => {
-    reflowed();
-    const about = asking()?.about, root = editor()?.view.dom, body = column()?.parentElement;
-    if (!about || !root || !body) return undefined;
-    let at: globalThis.Node | null = about.endContainer;
-    while (at && at.parentNode !== root) at = at.parentNode;
-    if (!(at instanceof Element)) return undefined;
-    const box = at.getBoundingClientRect(), within = body.getBoundingClientRect();
-    return { left: box.left - within.left, top: (at.textContent ? box.bottom : box.top) - within.top, width: box.width };
-  };
-  const ask = (words: string) => { const at = asking(); setAsking(null); if (at) props.onMention?.(at.about, at.name, words); editor()?.commands.focus(); };
   // The comment key: the text selected, or the caret's block, asked of the one comments go to.
   const commentHere = () => {
     const view = editor()?.view, names = props.mentions?.() ?? [], to = props.to?.() ?? names[0];
-    if (!view || !props.onMention || !to || !names.includes(to)) return false;
+    if (!view || !props.onAsk || !to || !names.includes(to)) return false;
     const about = view.state.selection.empty ? caretBlock(view) : selectedRange(view);
-    if (about) setAsking({ about, name: to });
+    if (about) props.onAsk(about, to);
     return Boolean(about);
   };
   const commentKey = Extension.create({ name: "commentKey", addKeyboardShortcuts: () => ({ [PAPER_COMMENT_KEY]: commentHere }) });
@@ -357,11 +344,6 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     // A bar's block menu turns the caret's block into another kind: a kind that is only put in (a table, a divider) is listed while the caret is in one, to name it.
     tools: listed,
     marking, history,
-    selection: () => {
-      const view = editor()?.view;
-      if (!view) return null;
-      return view.state.selection.empty ? caretBlock(view) : selectedRange(view);
-    },
   });
   // Read by what shows it (an open outline), so typing does not gather it.
   const outline = () => {
@@ -396,12 +378,12 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   <DocumentSheet ref={setColumn} scroller={setScroller} width={props.width} find={find.view()} name={props.name} state={copy.state() === "away" ? "Reconnecting" : copy.state() === "stale" ? "Reload: this page is older than the paper" : undefined}
     edge={<Show when={away()}>{(seat) => <DocumentSeatJump label={seat().label} below={seat().below} ink={seat().ink} onJump={() => reveal(seat().block)} />}</Show>} margin={props.margin} marginEmpty={props.marginEmpty} actions={props.actions} bare={props.bare}
     head={<Show when={copy.synced()}><PaperHead properties={!props.host.holds || props.host.holds.includes("properties")} doc={copy.doc} name={props.name} onRename={props.onRename} onDown={() => editor()?.commands.focus("start")} /></Show>}
-    over={<>{handle.view}<Show when={asking()?.about} keyed>{(_about) => <Show when={askedAt()}>{(at) => <DocumentAsk name={asking()?.name ?? ""} names={props.mentions?.() ?? []} onName={(name) => setAsking((was) => was && { ...was, name })} at={at()} onSend={ask} onClose={() => { setAsking(null); editor()?.commands.focus(); }} />}</Show>}</Show><TableTools editor={editor} body={() => column()?.parentElement ?? undefined} moved={reflowed} />
+    over={<>{handle.view}<TableTools editor={editor} body={() => column()?.parentElement ?? undefined} moved={reflowed} />
 </>} onHover={handle.hover} foot={<Show when={count()}>{(line) => <DocumentCount>{line()}</DocumentCount>}</Show>}>
     {/* The editor is made only once the hub's copy is held: made before, its first empty block would be merged in as a block of its own. */}
     <Show when={copy.synced() && column()}>{(element) => {
       // Untracked: a signal or prop read in what the editor is made from would make it again (caret, undo and find lost) each time it changed.
-      const made = createTiptapEditor(() => { const at = element(); return untrack(() => ({ element: at, extensions: [...viewed(documentExtensions(props.host.holds), props.host), paperTyping(props.host, offers), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), suggesting.extension(), seatsDrawn(copy.seats, (redraw) => { redrawSeats = redraw; }, () => told.acts?.stop), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), numbered(scroller), slash.extension(), blockKeys, drawn((block, name) => props.host.showMention?.(block, name)), find.extension(), collapsing, ...(props.onMention ? [mentioning(anchor, setAsked, keys), commentKey] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name, "data-own-keys": OWN_KEYS } } })); });
+      const made = createTiptapEditor(() => { const at = element(); return untrack(() => ({ element: at, extensions: [...viewed(documentExtensions(props.host.holds), props.host), paperTyping(props.host, offers), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), suggesting.extension(), seatsDrawn(copy.seats, (redraw) => { redrawSeats = redraw; }, () => told.acts?.stop), hinted(props.onAsk ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), numbered(scroller), slash.extension(), blockKeys, drawn((block, name) => props.host.showMention?.(block, name)), find.extension(), collapsing, ...(props.onAsk ? [mentioning(anchor, setAsked, keys), commentKey] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name, "data-own-keys": OWN_KEYS } } })); });
       createEffect(() => setEditor(made()));
       return null;
     }}</Show>

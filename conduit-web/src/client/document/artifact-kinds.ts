@@ -6,7 +6,7 @@ import { Icons } from "@/components/ui";
 // Not yet one of the library's Icons; the document editor's library file has it, but it would bring the editor's styles into the first load.
 import { TableIcon } from "lucide-solid";
 import type { Artifact, ArtifactKind } from "./artifacts";
-import type { FocusedArtifact } from "./focused-artifact";
+import type { ArtifactPlace, FocusedArtifact } from "./focused-artifact";
 
 /*
  * A kind of artifact, on the client: everything else (the pane, Markup over it, its comments and their margin, the
@@ -32,8 +32,8 @@ export type ArtifactSurface = {
   away?(): boolean;
   /** The hub refuses this page as older than the artifact: the header offers a reload, the only mend. */
   stale?(): boolean;
-  /** Showing a place in it, as its anchors name one (a comment's card pressed in a thread asks for it): read reactively, undefined until the surface can, and the pane waits until then. */
-  reveal?(): ((place: string) => void) | undefined;
+  /** Showing a place in it, as a hand-off names one (a comment's card pressed in a thread asks for it): read reactively, undefined until the surface can, and the pane waits until then. */
+  reveal?(): ((place: ArtifactPlace) => void) | undefined;
   /** It is drawn as it will stand (a paper's text in, a site's page loaded), or can say why not: read reactively. */
   drawn(): boolean;
   /** How far what it draws reaches from its pane's leading edge (px), measured now: a surface that says is held at its width while its pane moves (CSS: data-held) for as long as the pane cuts none of that off. */
@@ -124,13 +124,14 @@ export const ARTIFACT_KINDS: Record<ArtifactKind, ArtifactKindClient> = {
     Surface: lazy(() => import("./site-surface")),
   },
   // Cells, with comments on ranges of them. A comment quotes the selected cells (`quote`); a drawing over the canvas could not follow it as it scrolls, so there is no ink.
+  // The grid draws a range commented on itself, and Markup's bar stands at the end of the formula bar while the sheet has no toolbar of its own (`bar: "ribbon"` puts it back over the pane).
   sheet: {
     label: "Sheet",
     says: "Rows and columns with formulas, kept as a CSV file, with comments on cells in the margin.",
     opens: ".csv",
     icon: TableIcon,
     edit: [],
-    markup: { deliveries: ["batched", "live"], tools: ["quote", "note"], screenshot: false, sent: "margin", thin: false, bar: "ribbon" },
+    markup: { deliveries: ["batched", "live"], tools: ["quote", "note"], screenshot: false, sent: "margin", thin: false, bar: "slot", marks: "surface" },
     Surface: lazy(() => import("./sheet-surface")),
   },
 };

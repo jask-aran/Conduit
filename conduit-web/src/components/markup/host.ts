@@ -8,6 +8,7 @@
  * to one; httpTransport is the routes both Conduit's hub and `conduit-markup serve` answer.
  */
 import type { JSX } from "solid-js";
+import type { MarkupBox } from "@/components/ui/markup";
 
 /** Which piece draws an element, read from the host's own source at build time (Conduit: scripts/ui-pieces.mjs). */
 export type PieceNames = {
@@ -95,13 +96,28 @@ export type MarkupCapabilities = {
   sent: "corner" | "margin";
   /** The bar is thinner than the library's frost, to show the interface being looked at under it; a document's needs no such thing. */
   thin: boolean;
-  /** Where the bar stands: at the `foot` of what is marked up, opened and closed, in parts side by side (what is marked up, the tools, sending; one bar on a phone); or a `ribbon` at the head of the host's frame, always there, the host's own tools in it beside Markup's: an artifact's, which is edited and marked up in one place. */
-  bar: "foot" | "ribbon";
+  /** Where the bar stands: at the `foot` of what is marked up, opened and closed, in parts side by side (what is marked up, the tools, sending; one bar on a phone); or a `ribbon` at the head of the host's frame, always there, the host's own tools in it beside Markup's: an artifact's, which is edited and marked up in one place;
+   *  or, as a ribbon is, in a `slot` the surface gives in a row of its own (`MarkupHost.slot`: a sheet's formula bar), at that row's height, folding to the room the row leaves it. */
+  bar: "foot" | "ribbon" | "slot";
+  /** Who draws a place a comment is being written about: the tool's `layer`, over the place's boxes (text on a page); or the `surface` itself, told it among its margin's anchors as one not yet sent (a sheet's highlight over its canvas). */
+  marks: "layer" | "surface";
   /** What the tool stands over may be light (a site in a frame), where frost alone cannot be read: its bar and cards then have a dark ground of their own. */
   grounded: boolean;
 };
 /** What a host that declares nothing gets: a collaborator's batched markup with every tool. */
-export const MARKUP_CAPABILITIES: MarkupCapabilities = { deliveries: ["batched"], tools: ["select", "quote", "pen", "highlight", "shape", "text", "erase", "note"], screenshot: true, listeners: true, inks: true, sent: "corner", thin: true, bar: "foot", grounded: false };
+export const MARKUP_CAPABILITIES: MarkupCapabilities = { deliveries: ["batched"], tools: ["select", "quote", "pen", "highlight", "shape", "text", "erase", "note"], screenshot: true, listeners: true, inks: true, sent: "corner", thin: true, bar: "foot", marks: "layer", grounded: false };
+
+/**
+ * The place the person means in what is marked up, as the surface says it (its adapter): a run of a paper's text, a range of a sheet's cells. Markup
+ * reads nothing of the surface for a quote but this. `text`: what it says, which a comment quotes ("" where it says nothing, as an empty line, which is
+ * only somewhere to ask about). `boxes`: where it is drawn now (each line of a run of text; a range's one box), read each frame while it is marked, so
+ * they follow; none while it is out of view. `under`: where it is in the artifact, in the kind's own terms (a sheet's `cells`), sent as the comment's
+ * `under`; unsaid, the host's `under` of its box is asked at Send. `label`: how it is named ("B3:D4"). `element`: where it is the page's own text, the
+ * element it is in, which an item describes as it does a piece.
+ */
+export type MarkupPlace = { text: string; boxes(): MarkupBox[]; under?: Record<string, string | number | boolean>; label?: string; element?: Element };
+/** A point in the viewport's pixels. */
+export type MarkupAt = { x: number; y: number };
 
 /** A comment that stands in the margin, as the surface is told of it: `key` is "<item>/<n>"; `quote` and `under` are what it was sent with; `current`: its card is open; `resolved`: by the person, so it is no longer marked. */
 export type MarkupAnchor = { key: string; quote?: string; under?: Record<string, string | number | boolean>; current: boolean; resolved: boolean };
@@ -170,18 +186,26 @@ export interface MarkupHost {
   tools?(): MarkupHostTool[];
   /** The surface's own undo history, where it has one. */
   history?: MarkupHostHistory;
-  /** What a comment asked for from that rail is about: the surface's selection, or where its caret is; null when there is neither. */
-  asking?(): Range | null;
-  /** Given, as the tool opens (null as it closes), who is listening and opening a comment on a range for one of them: for a surface that asks itself (a paper's `@`).
+  /** The place the person has chosen and is looking at (the surface's selection, where it has the keyboard): what the quote tool, pressed, comments on, and an "Ask the agent" asks about. Null with none. */
+  place?(): MarkupPlace | null;
+  /** What a drag of the quote tool from `from` to `to` covers (`to` null: a press with no drag), where the surface is not the page's own text (a sheet's canvas). Unsaid, the text under the pointer. */
+  placeAt?(from: MarkupAt, to: MarkupAt | null): MarkupPlace | null;
+  /** The element the bar is drawn in, where its capabilities say `slot`: the end of a row of the surface's own, whose other items give it room first. Read where drawn. */
+  slot?(): HTMLElement | null | undefined;
+  /** Given, as the tool opens (null as it closes), who is listening, and the tool's ways to start on a place: for a surface that asks itself (a paper's `@`, a key).
+   *  `comment`: a comment on it, written in its note. `ask`: the ask field at it, asking `to` (unsaid: the one comments go to) to do something there, sent as it is written.
    *  `unsent` and `send`: the comments written and not yet sent, for a host that shows Send with its own list of them. `to` and `hand`: which listener
    *  they go to, for a host that says who listens itself. */
-  asks?(offer: { names(): string[]; listeners(): MarkupListener[]; ask(about: Range, to?: string, words?: string): void; unsent(): number; send(): void; to(): string | null; hand(name: string): void } | null): void;
+  asks?(offer: MarkupOffer | null): void;
   /** Where the receiver keeps who an item for nobody by name goes to (an artifact's lead): choosing one sets it there (null: the receiver's own default), and the tool asks who is listening again. Without it the choice is this page's. */
   lead?(name: string | null): Promise<unknown>;
   /** Told when comments have gone, where something other than the tool shows them. */
   sent?(): void;
   notify(outcome: "sent" | "failed", message: string): void;
 }
+
+/** What the open tool offers its host (MarkupHost.asks). */
+export type MarkupOffer = { names(): string[]; listeners(): MarkupListener[]; comment(about: MarkupPlace): void; ask(about: MarkupPlace, to?: string): void; unsent(): number; send(): void; to(): string | null; hand(name: string): void };
 
 /** The receiver's routes over the host's own request function (its origin, its credentials); a 204 resolves with nothing. */
 export function httpTransport(request: <T>(path: string, init?: { method?: string; headers?: Record<string, string>; body?: string | Blob }) => Promise<T>, base = "/v0/markup"): MarkupTransport {

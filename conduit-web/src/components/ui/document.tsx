@@ -1,9 +1,8 @@
 import { BaselineIcon, BetweenHorizontalEndIcon, BetweenVerticalEndIcon, BoldIcon, CalendarIcon, ChevronRightIcon, CodeIcon, ExternalLinkIcon, Grid2x2XIcon, GripVerticalIcon, Heading1Icon, Heading2Icon, Heading3Icon, HighlighterIcon, ImageIcon, ImageOffIcon, InfoIcon, ItalicIcon, LinkIcon, ListChecksIcon, ListCollapseIcon, ListIcon, ListOrderedIcon,
   MessageSquarePlusIcon, MinusIcon, PencilIcon, FileDiffIcon, PilcrowIcon, StrikethroughIcon, TableColumnsSplitIcon, TableIcon, TableRowsSplitIcon, TextQuoteIcon, TriangleAlertIcon, UnlinkIcon } from "lucide-solid";
-import { createEffect, createMemo, createSignal, For, onCleanup, Show, splitProps, type JSX } from "solid-js";
+import { createEffect, createSignal, onCleanup, Show, splitProps, type JSX } from "solid-js";
 // Through the barrel, as markup.tsx does, so the editor's chunk takes the header from the app's own.
-import { Button, FindBar, Frost, IconButton, Icons, Item, Keycap, PaneHeader, Section, Spinner, TextArea } from "./index";
-import { Popover, PopoverContent } from "./menus";
+import { Button, FindBar, Frost, IconButton, Icons, PaneHeader, Spinner } from "./index";
 import "./styles/document.css";
 
 /* Not in the library's barrel: the document editor imports this file, so the app's first load does not carry it. */
@@ -55,56 +54,6 @@ export const DocumentSeatJump = (props: { label: string; below: boolean; ink: Do
   <Frost as="button" type="button" class="ui-document-seat-jump" data-at={props.below ? "below" : "above"} data-seat-ink={props.ink} onClick={() => props.onJump()}>
     <Show when={props.below} fallback={<Icons.ArrowUp />}><Icons.ArrowDown /></Show><span>{props.label}</span>
   </Frost>;
-// What was asked before, kept in this browser, newest first: ArrowUp recalls it, and the most used are offered while the field is empty.
-const ASKED = "conduit.document.asked";
-type Asked = { words: string; uses: number };
-const askedBefore = (): Asked[] => { try { const kept: unknown = JSON.parse(localStorage.getItem(ASKED) ?? "[]"); return Array.isArray(kept) ? kept.filter((one): one is Asked => typeof one?.words === "string" && typeof one.uses === "number") : []; } catch { return []; } };
-const keepAsked = (words: string) => { const was = askedBefore(), had = was.find((one) => one.words === words); try { localStorage.setItem(ASKED, JSON.stringify([{ words, uses: (had?.uses ?? 0) + 1 }, ...was.filter((one) => one !== had)].slice(0, 20))); } catch { /* not kept */ } };
-/** Asking someone to write in the paper, as a line of it: who is asked, what of them, and Send. `at`: the line it stands in, within the sheet's body. Enter sends, Shift Enter is
- *  a new line; ArrowUp in an empty field recalls what was asked before; `@` first offers the others of `names`, picked told to `onName`. Escape, or focus leaving it,
- *  puts it away (`onClose`). */
-export function DocumentAsk(props: { name: string; names?: readonly string[]; onName?: (name: string) => void; at: { left: number; top: number; width: number }; onSend: (words: string) => void; onClose: () => void }) {
-  const [words, setWords] = createSignal(""), [active, setActive] = createSignal(0), [shut, setShut] = createSignal<string>();
-  const before = askedBefore(), used = before.filter((one) => one.uses > 1).sort((a, b) => b.uses - a.uses).slice(0, 3);
-  let field: HTMLTextAreaElement | undefined, root: HTMLDivElement | undefined, recalled = -1;
-  const put = (said: string) => { setWords(said); queueMicrotask(() => field?.setSelectionRange(said.length, said.length)); };
-  const send = () => { const said = words().trim(); if (!said) return; keepAsked(said); props.onSend(said); };
-  const others = createMemo(() => { const typed = /^@(\S*)$/.exec(words())?.[1]?.toLowerCase(); return typed === undefined || shut() === words() ? [] : (props.names ?? []).filter((name) => name !== props.name && name.toLowerCase().includes(typed)); });
-  createEffect(() => { others(); setActive(0); });
-  const rename = (name: string) => { props.onName?.(name); put(""); };
-  const keep = (event: MouseEvent) => event.preventDefault();
-  const keys = (event: KeyboardEvent) => {
-    const menu = others(), up = event.key === "ArrowUp";
-    if (menu.length && (up || event.key === "ArrowDown")) { event.preventDefault(); setActive((at) => Math.min(menu.length - 1, Math.max(0, at + (up ? -1 : 1)))); }
-    else if (menu.length && (event.key === "Enter" || event.key === "Tab") && !event.isComposing) { event.preventDefault(); rename(menu[active()]!); }
-    else if (menu.length && event.key === "Escape") { event.preventDefault(); setShut(words()); }
-    else if (event.key === "Escape") { event.preventDefault(); props.onClose(); }
-    else if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); send(); }
-    // As a shell recalls: from empty, or from an ask recalled and left as it was, ArrowUp goes one older and ArrowDown one newer.
-    else if ((up || event.key === "ArrowDown") && (!words() || words() === before[recalled]?.words)) {
-      const next = (words() ? recalled : -1) + (up ? 1 : -1);
-      if (next < -1 || next >= before.length) return;
-      event.preventDefault(); recalled = next; put(before[next]?.words ?? "");
-    }
-  };
-  return <div ref={root} class="ui-document-ask" style={{ left: `${props.at.left}px`, top: `${props.at.top}px`, width: `${props.at.width}px` }} onFocusOut={(event) => { if (event.currentTarget.isConnected && !event.currentTarget.contains(event.relatedTarget as Node | null)) props.onClose(); }}>
-    <div class="ui-document-ask-field">
-      {/* Who is asked; pressed, it offers the others as typing @ does. */}
-      <Button variant="secondary" size="sm" aria-label={`Asking ${props.name}`} title={(props.names?.length ?? 0) > 1 ? "Ask someone else (@)" : undefined} disabled={(props.names?.length ?? 0) < 2} onMouseDown={keep} onClick={() => put("@")}>@{props.name}<Show when={(props.names?.length ?? 0) > 1}><Icons.ChevronDown /></Show></Button>
-      <TextArea ref={(element) => { field = element; queueMicrotask(() => element.focus({ preventScroll: true })); }} aria-label={`Ask ${props.name}`} placeholder="Ask about this…" value={words()} onInput={(event) => setWords(event.currentTarget.value)} onKeyDown={keys} />
-      <Show when={words().trim()} fallback={<Keycap>↵</Keycap>}><IconButton label="Send (Enter)" onMouseDown={keep} onClick={send}><Icons.Send /></IconButton></Show>
-    </div>
-    <Show when={!words() && before.length}><div class="ui-document-ask-asked" role="group" aria-label="Asked before">
-      <For each={used}>{(one) => <Button variant="ghost" outline size="sm" title={one.words} onMouseDown={keep} onClick={() => put(one.words)}><span class="ui-truncate">{one.words}</span></Button>}</For>
-      <span>↑ earlier asks</span>
-    </div></Show>
-    <Popover open={others().length > 0} onOpenChange={(open) => { if (!open) setShut(words()); }} anchorRef={() => root} placement="bottom-start">
-      <PopoverContent aria-label="Ask someone else" width="sm" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}>
-        <Section role="listbox"><For each={others()}>{(name, at) => <Item role="option" aria-selected={active() === at()} active={active() === at()} onCursor={() => setActive(at())} onMouseDown={keep} onClick={() => rename(name)}>{name}</Item>}</For></Section>
-      </PopoverContent>
-    </Popover>
-  </div>;
-}
 export const documentDrawClass = { mention: "ui-document-mention", match: "ui-document-match", currentMatch: "ui-document-match-current", revealed: "ui-document-revealed" };
 
 /** Each kind of block's icon. Here, not in the library's icons, so only the editor's chunk carries them. */

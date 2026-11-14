@@ -6,7 +6,7 @@
 /* touch-action: a finger's drag gathers or draws; it does not scroll the page under the layer. */
 .ui-markup-layer[data-select] { pointer-events: auto; cursor: crosshair; touch-action: none; }
 .ui-markup-layer[data-select][data-text] { cursor: text; }
-.ui-markup-layer :is(.ui-markup-note, .ui-markup-bar) { pointer-events: auto; cursor: auto; }
+.ui-markup-layer :is(.ui-markup-note, .ui-markup-bar, .ui-markup-ask) { pointer-events: auto; cursor: auto; }
 /* While the page's picture is taken, nothing of the tool is in it. */
 .ui-markup-layer[data-hidden] { visibility: hidden; }
 .ui-markup-frozen { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -133,3 +133,20 @@
 
 /* A stepper among a bar's tools is as wide as its number needs, not the bar. */
 .ui-markup-bar .ui-stepper > .ui-input { width: calc(2 * var(--control-sm)); flex: none; }
+
+/* Asking at a place: a field standing in the place's line (or under it), the words growing down, and under it what was asked before. Opaque, as it stands over what is below; never narrower than a field can be read. */
+.ui-markup-ask { position: fixed; display: flex; min-width: var(--measure-md); max-width: calc(100% - 2 * var(--space-lg)); flex-direction: column; gap: var(--space-sm); border-radius: var(--radius-control); background: var(--well); box-shadow: 0 0 0 var(--space-xs) var(--well); font-size: var(--text-body); pointer-events: auto; }
+.ui-markup-ask-field { display: flex; align-items: center; gap: var(--space-sm); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); background: var(--popover); padding: var(--space-xs) var(--space-sm); }
+.ui-markup-ask-field:focus-within { border-color: var(--muted-foreground); }
+.ui-markup-ask-field > .ui-textarea { min-width: 0; flex: 1; padding-block: var(--space-xs); font: inherit; }
+.ui-markup-ask-field > :is(.ui-button, .ui-icon-button, .ui-keycap) { flex: none; }
+/* What was asked most, under the field; a long ask is cut short rather than widening the row. */
+.ui-markup-ask-asked { display: flex; min-width: 0; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-markup-ask-asked > .ui-button { min-width: 0; flex: 0 1 auto; border-radius: var(--radius-round); }
+.ui-markup-ask-asked > span { flex: none; margin-inline-start: var(--space-xs); }
+
+/* In a slot of the surface's own row (a sheet's formula bar): in the row's flow at its end, at its controls' height, the bars plain groups side by side; what a held tool draws with stands under them. */
+.ui-markup-rails[data-slot] { position: relative; inset: auto; flex-flow: row nowrap; justify-content: flex-end; gap: var(--space-xs); pointer-events: auto; }
+.ui-markup-rails[data-slot] > .ui-markup-bar { height: var(--control); padding: 0; }
+.ui-markup-rails[data-slot] .ui-icon-button:where([data-icon-button="tool"]) { width: var(--control); height: var(--control); }
+.ui-markup-rails[data-slot] > .ui-markup-break { display: none; }

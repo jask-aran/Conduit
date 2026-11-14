@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { api } from "../api/client";
 import type { Message } from "../api/contracts";
 import type { MarkupHandoff } from "../../chat-backend-contract.js";
+import type { ArtifactPlace } from "./focused-artifact";
 
 /*
  * Connections between chats and papers (docs/plans/markup-and-conduit-documents.md): each asked of the hub on first
@@ -33,6 +34,7 @@ const send = (paper: string, chat: string, method: string) => api<Pick<PaperConn
 export const connect = (paper: string, chat: string) => send(paper, chat, "PUT");
 export const disconnect = (paper: string, chat: string) => send(paper, chat, "DELETE");
 
+const KINDS: MarkupHandoff["kind"][] = ["paper", "markdown", "sheet", "site"];
 /** A comment the hub handed a chat (`MarkupHandoff`), with the words the transcript draws for it. */
 export type HandedComment = MarkupHandoff & { words: string };
 const unescaped = (text: string) => text.replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(Number(code)));
@@ -46,9 +48,9 @@ function written(text: string): MarkupHandoff[] {
   if (!/^(?:<conduit_markup [^>]*>\n(?:<quote>[\s\S]*?<\/quote>\n)?(?:<words>[\s\S]*?<\/words>\n)?<\/conduit_markup>\n)+(?:The person |On the (?:paper|site) )[^\n]*$/.test(text)) return [];
   return [...text.matchAll(/<conduit_markup ([^>]*)>\n(?:<quote>([\s\S]*?)<\/quote>\n)?(?:<words>([\s\S]*?)<\/words>\n)?<\/conduit_markup>/g)].map(([, fields = "", quote, words]) => {
     const field = Object.fromEntries([...fields.matchAll(/(\w+)="([^"]*)"/g)].map(([, key = "", value = ""]) => [key, unescaped(value)]));
-    return { artifact: field.artifact ?? "", kind: field.kind === "site" ? "site" : "paper", name: field.name ?? "", item: field.item ?? "", n: field.n ? Number(field.n) : undefined, block: field.block,
+    return { artifact: field.artifact ?? "", kind: KINDS.find((kind) => kind === field.kind) ?? "paper", name: field.name ?? "", item: field.item ?? "", n: field.n ? Number(field.n) : undefined, block: field.block, cells: field.cells,
       said: field.said === "reply" || field.said === "reopened" ? field.said : undefined, quote: quote === undefined ? undefined : unescaped(quote), words: words === undefined ? undefined : unescaped(words) };
   });
 }
-/** Opens the artifact a hand-off is about, at its block (main.tsx's `conduit:open-artifact`). */
-export const showHandoff = (handoff: MarkupHandoff) => window.dispatchEvent(new CustomEvent("conduit:open-artifact", { detail: { id: handoff.artifact, block: handoff.block } }));
+/** Opens the artifact a hand-off is about, at its place (main.tsx's `conduit:open-artifact`; focused-artifact.ts keeps the place for the surface). */
+export const showHandoff = (handoff: MarkupHandoff) => window.dispatchEvent(new CustomEvent("conduit:open-artifact", { detail: { id: handoff.artifact, place: { block: handoff.block, cells: handoff.cells } satisfies ArtifactPlace } }));

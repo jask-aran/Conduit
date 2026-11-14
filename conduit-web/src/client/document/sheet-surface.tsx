@@ -20,15 +20,19 @@ export default function SheetSurface(props: ArtifactSurfaceProps) {
         change: "This is a sheet: a CSV file of values, with its formulas kept beside it. A comment is about the cells under `range` (A1). Read it, and change cells or insert and delete rows and columns, with the conduit_artifact tool (`cells`, `set`, `fill`, `rows`, `cols`)." }),
       under: (box) => marks()?.under(box) ?? null,
       margin: {
-        anchors: (list) => marks()?.anchors(list), place: (key) => marks()?.place(key) ?? null, watch: (listener) => marks()?.watch(listener) ?? (() => {}),
+        anchors: (list) => marks()?.anchors(list), place: (key) => marks()?.where(key) ?? null, watch: (listener) => marks()?.watch(listener) ?? (() => {}),
         focus: () => marks()?.focus(),
       },
       history: { undo: () => marks()?.history.undo() ?? false, redo: () => marks()?.history.redo() ?? false, canUndo: () => marks()?.history.canUndo() ?? false, canRedo: () => marks()?.history.canRedo() ?? false },
-      asking: () => props.quiet ? null : marks()?.selection() ?? null,
+      place: () => props.quiet ? null : marks()?.place() ?? null,
+      placeAt: (from, to) => marks()?.placeAt(from, to) ?? null,
+      slot: () => marks()?.slot(),
     },
     away, stale, drawn,
-    reveal: () => marks()?.reveal,
+    reveal: () => { const show = marks()?.reveal; return show && ((place) => { if (place.cells) show(place.cells); }); },
   });
-  return <SheetEditor host={host} id={id} name={props.about().name} margin={props.margin} marginEmpty={props.marginEmpty} marks={(made) => setMarks(() => made)} onDrawn={() => setDrawn(true)}
+  // The ask key asks the one comments go to about the cells selected.
+  const ask = () => { const place = marks()?.place(); if (place && !props.quiet) props.offer()?.ask(place); };
+  return <SheetEditor host={host} id={id} name={props.about().name} margin={props.margin} marginEmpty={props.marginEmpty} marks={(made) => setMarks(() => made)} onDrawn={() => setDrawn(true)} onAsk={ask}
     onState={(state) => { setAway(state === "away"); setStale(state === "stale"); }} />;
 }

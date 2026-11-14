@@ -1,7 +1,7 @@
-import { createContext, createEffect, createSignal, createUniqueId, For, onCleanup, onMount, Show, useContext, type JSX } from "solid-js";
+import { createContext, createEffect, createMemo, createSignal, createUniqueId, For, onCleanup, onMount, Show, useContext, type JSX } from "solid-js";
 // Through the barrel, so the tool's chunk takes these from the app's own and the build splits nothing new out of it.
-import { Button, Card, ColourPicker, CardPreview, CloseButton, Count, Dot, Frost, IconButton, Icons, Segmented, Spinner, Stepper, Swatch, Switch, TextArea } from "./index";
-import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "./menus";
+import { Button, Card, ColourPicker, CardPreview, CloseButton, Count, Dot, Frost, IconButton, Icons, Item, Keycap, Section, Segmented, Spinner, Stepper, Swatch, Switch, TextArea } from "./index";
+import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection, Popover, PopoverContent } from "./menus";
 import { clockTime } from "./time";
 import "./styles/markup.css";
 
@@ -148,6 +148,57 @@ export function MarkupNote(props: { ref?: (element: HTMLTextAreaElement) => void
   </div>;
 }
 
+// What was asked before, kept in this browser, newest first: ArrowUp recalls it, and the most used are offered while the field is empty.
+const ASKED = "conduit.document.asked";
+type Asked = { words: string; uses: number };
+const askedBefore = (): Asked[] => { try { const kept: unknown = JSON.parse(localStorage.getItem(ASKED) ?? "[]"); return Array.isArray(kept) ? kept.filter((one): one is Asked => typeof one?.words === "string" && typeof one.uses === "number") : []; } catch { return []; } };
+const keepAsked = (words: string) => { const was = askedBefore(), had = was.find((one) => one.words === words); try { localStorage.setItem(ASKED, JSON.stringify([{ words, uses: (had?.uses ?? 0) + 1 }, ...was.filter((one) => one !== had)].slice(0, 20))); } catch { /* not kept */ } };
+/** Asking someone to do something at a place (a paper's line, a range of cells), as a line standing there: who is asked, what of them, and Send. `at`: where it stands
+ *  (left, top and width in the viewport). Enter sends, Shift Enter is a new line; ArrowUp in an empty field recalls what was asked before; `@` first offers the others
+ *  of `names`, picked told to `onName`. Escape, or focus leaving it, puts it away (`onClose`). */
+export function MarkupAsk(props: { name: string; names?: readonly string[]; onName?: (name: string) => void; at: JSX.CSSProperties; onSend: (words: string) => void; onClose: () => void }) {
+  const [words, setWords] = createSignal(""), [active, setActive] = createSignal(0), [shut, setShut] = createSignal<string>();
+  const before = askedBefore(), used = before.filter((one) => one.uses > 1).sort((a, b) => b.uses - a.uses).slice(0, 3);
+  let field: HTMLTextAreaElement | undefined, root: HTMLDivElement | undefined, recalled = -1;
+  const put = (said: string) => { setWords(said); queueMicrotask(() => field?.setSelectionRange(said.length, said.length)); };
+  const send = () => { const said = words().trim(); if (!said) return; keepAsked(said); props.onSend(said); };
+  const others = createMemo(() => { const typed = /^@(\S*)$/.exec(words())?.[1]?.toLowerCase(); return typed === undefined || shut() === words() ? [] : (props.names ?? []).filter((name) => name !== props.name && name.toLowerCase().includes(typed)); });
+  createEffect(() => { others(); setActive(0); });
+  const rename = (name: string) => { props.onName?.(name); put(""); };
+  const keep = (event: MouseEvent) => event.preventDefault();
+  const keys = (event: KeyboardEvent) => {
+    const menu = others(), up = event.key === "ArrowUp";
+    if (menu.length && (up || event.key === "ArrowDown")) { event.preventDefault(); setActive((at) => Math.min(menu.length - 1, Math.max(0, at + (up ? -1 : 1)))); }
+    else if (menu.length && (event.key === "Enter" || event.key === "Tab") && !event.isComposing) { event.preventDefault(); rename(menu[active()]!); }
+    else if (menu.length && event.key === "Escape") { event.preventDefault(); setShut(words()); }
+    else if (event.key === "Escape") { event.preventDefault(); props.onClose(); }
+    else if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); send(); }
+    // As a shell recalls: from empty, or from an ask recalled and left as it was, ArrowUp goes one older and ArrowDown one newer.
+    else if ((up || event.key === "ArrowDown") && (!words() || words() === before[recalled]?.words)) {
+      const next = (words() ? recalled : -1) + (up ? 1 : -1);
+      if (next < -1 || next >= before.length) return;
+      event.preventDefault(); recalled = next; put(before[next]?.words ?? "");
+    }
+  };
+  return <div ref={root} class="ui-markup-ask" style={props.at} onFocusOut={(event) => { if (event.currentTarget.isConnected && !event.currentTarget.contains(event.relatedTarget as Node | null)) props.onClose(); }}>
+    <div class="ui-markup-ask-field">
+      {/* Who is asked; pressed, it offers the others as typing @ does. */}
+      <Button variant="secondary" size="sm" aria-label={`Asking ${props.name}`} title={(props.names?.length ?? 0) > 1 ? "Ask someone else (@)" : undefined} disabled={(props.names?.length ?? 0) < 2} onMouseDown={keep} onClick={() => put("@")}>@{props.name}<Show when={(props.names?.length ?? 0) > 1}><Icons.ChevronDown /></Show></Button>
+      <TextArea ref={(element) => { field = element; queueMicrotask(() => element.focus({ preventScroll: true })); }} aria-label={`Ask ${props.name}`} placeholder="Ask about this…" value={words()} onInput={(event) => setWords(event.currentTarget.value)} onKeyDown={keys} />
+      <Show when={words().trim()} fallback={<Keycap>↵</Keycap>}><IconButton label="Send (Enter)" onMouseDown={keep} onClick={send}><Icons.Send /></IconButton></Show>
+    </div>
+    <Show when={!words() && before.length}><div class="ui-markup-ask-asked" role="group" aria-label="Asked before">
+      <For each={used}>{(one) => <Button variant="ghost" outline size="sm" title={one.words} onMouseDown={keep} onClick={() => put(one.words)}><span class="ui-truncate">{one.words}</span></Button>}</For>
+      <span>↑ earlier asks</span>
+    </div></Show>
+    <Popover open={others().length > 0} onOpenChange={(open) => { if (!open) setShut(words()); }} anchorRef={() => root} placement="bottom-start">
+      <PopoverContent aria-label="Ask someone else" width="sm" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}>
+        <Section role="listbox"><For each={others()}>{(name, at) => <Item role="option" aria-selected={active() === at()} active={active() === at()} onCursor={() => setActive(at())} onMouseDown={keep} onClick={() => rename(name)}>{name}</Item>}</For></Section>
+      </PopoverContent>
+    </Popover>
+  </div>;
+}
+
 /** `quote`: a run of text on the live page, chosen as text is selected. */
 export type MarkupToolKind = "select" | "quote" | "pen" | "highlight" | "shape" | "text" | "erase";
 /** `wide`: left off the compact bar, which has no room for it (its key still works). */
@@ -171,9 +222,11 @@ const VIEWS: ReadonlyArray<{ value: MarkupView; label: string; icon: () => JSX.E
  *  `keys`: its shortcut, as its tooltip says it. */
 /** Whether the bars are out (MarkupBar `out`): each fades itself, since a frost faded through an ancestor blurs nothing until the fade ends. */
 const Out = createContext<() => boolean>(() => false);
+/** Whether the bars stand in a row of the surface's own (MarkupBar `slot`), which is no floating thing: there they are no frost. */
+const InRow = createContext(false);
 function Bar(props: JSX.HTMLAttributes<HTMLDivElement>) {
   const out = useContext(Out);
-  return <Frost lift="raised" {...props} data-move="fade" data-out={out() ? "" : undefined} />;
+  return <Frost lift="raised" plain={useContext(InRow)} {...props} data-move="fade" data-out={out() ? "" : undefined} />;
 }
 /** The bar's own tools: one frosted bar, or (parted) a row of them, each part a bar of its own. */
 function Sets(props: { parted: boolean; children: JSX.Element }) {
@@ -204,7 +257,7 @@ const FOLDS = 3;
  *  `own`: the host's own tools (a document's block kinds), `onOwn` told as one is pressed, and `onAsk` a comment about where the surface's selection or caret is: a rail above the bar while the app is in use.
  *  `out`: what it stands over is moving, so the bars fade out until it stops. */
 export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnTool[]; onOwn?: () => void; onAsk?: () => void; ribbon?: boolean; screenshots?: boolean; onView: (view: MarkupView) => void; tools?: readonly (MarkupToolKind | "note")[]; tool: MarkupToolKind; onTool: (tool: MarkupToolKind) => void; onNote: () => void; outstanding?: number; standing?: string; thin?: boolean; thread?: boolean; onBack?: () => void; replies?: number; sent?: number; onReplies?: () => void; ink?: MarkupInk; onInk?: (ink: MarkupInk) => void; weight?: MarkupWeight; onWeight?: (weight: MarkupWeight) => void; size?: number; onSize?: (size: number) => void; shape?: MarkupShape; onShape?: (shape: MarkupShape) => void; onUndo?: () => void; onRedo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; heard?: boolean; onNextAgent?: () => void; onRetake?: () => void;
-  canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void; out?: boolean }) {
+  canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void; out?: boolean; slot?: HTMLElement }) {
   const using = () => props.view === "use";
   // What the chosen tool draws with stands over the bar while that tool is held, so the bar itself stays the tools.
   const inks = () => OPTIONED.includes(props.tool) ? props.onInk : undefined, lined = () => props.tool !== "text" && inks() ? props.onWeight : undefined;
@@ -234,7 +287,9 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
       if (!anchor?.isConnected || !rails) return;
       const at = anchor.getBoundingClientRect(), bar = anchor.closest(".ui-markup-bar")!.getBoundingClientRect(), frame = rails.getBoundingClientRect(), gap = parseFloat(getComputedStyle(rails).rowGap) || 0;
       if (props.ribbon) line.style.top = `${bar.bottom - frame.top + gap}px`; else line.style.bottom = `${frame.bottom - bar.top + gap}px`;
-      line.style.left = `${Math.max(0, Math.min(frame.width - line.offsetWidth, at.left + at.width / 2 - frame.left - line.offsetWidth / 2))}px`;
+      // In a slot the rails are only as wide as the bars: the line is kept inside the window instead.
+      const least = props.slot ? -frame.left : 0, most = (props.slot ? innerWidth - frame.left : frame.width) - line.offsetWidth;
+      line.style.left = `${Math.max(least, Math.min(most, at.left + at.width / 2 - frame.left - line.offsetWidth / 2))}px`;
     };
     const seen = new ResizeObserver(place); seen.observe(line); if (rails) seen.observe(rails);
     // The tool held changes under a line that stays: it follows to the new one.
@@ -286,19 +341,27 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   const [fold, setFold] = createSignal(0);
   const needs: number[] = [];
   let rails: HTMLDivElement | undefined;
+  /** The room the bars have: the rails' own; in a slot, the row's less what its other items need at least (their width where they do not shrink), so the bars unfold as the row widens. */
+  const room = () => {
+    const row = props.slot?.parentElement;
+    if (!rails || !row) return rails?.clientWidth ?? 0;
+    const style = getComputedStyle(row), others = [...row.children].filter((item) => item !== props.slot);
+    const need = others.reduce((sum, item) => { const its = getComputedStyle(item); return sum + (its.flexShrink === "0" ? (item as HTMLElement).offsetWidth : parseFloat(its.minWidth) || 0); }, 0);
+    return row.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0) - others.length * (parseFloat(style.columnGap) || 0) - need;
+  };
   const fit = () => {
     for (let tries = 0; rails && tries <= 2 * FOLDS; tries++) {
       const sets = [...rails.querySelectorAll<HTMLElement>(":scope > [data-set]")], gap = parseFloat(getComputedStyle(rails).columnGap) || 0, at = fold();
       for (const set of sets) sizes.observe(set);
       needs[at] = sets.reduce((sum, set) => sum + set.offsetWidth + gap, -gap);
-      const next = needs[at]! > rails.clientWidth && at < FOLDS ? at + 1 : at > 0 && (needs[at - 1] ?? Infinity) <= rails.clientWidth ? at - 1 : at;
+      const has = room(), next = needs[at]! > has && at < FOLDS ? at + 1 : at > 0 && (needs[at - 1] ?? Infinity) <= has ? at - 1 : at;
       if (next === at) return;
       setFold(next);
     }
   };
   // A set that comes later (the host's tools, once its editor is made) is measured as it comes.
   const sizes = new ResizeObserver(fit), sets = new MutationObserver(fit);
-  onMount(() => { if (props.ribbon && rails) { sizes.observe(rails); sets.observe(rails, { childList: true }); } });
+  onMount(() => { if (props.ribbon && rails) { sizes.observe(props.slot?.parentElement ?? rails); sets.observe(rails, { childList: true }); } });
   // Escape shuts the innermost thing open under the bars: a colour picker, then the line of inks it stands under.
   const shut = (event: KeyboardEvent) => {
     const inner = event.key !== "Escape" ? undefined : pickingOwn() ? () => setPickingOwn(false) : inking() ? () => setInking(null) : picking() ? () => setPicking(false) : undefined;
@@ -311,7 +374,7 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
 
   // Over an interface the bar is in parts, as a paper's ribbon is: what is marked up, the tools, and sending. A phone's and a thread's stay one bar.
   const parted = () => !props.ribbon && !props.compact && !props.thread;
-  return <Out.Provider value={() => Boolean(props.out)}><div ref={rails} class="ui-markup-rails" data-ribbon={props.ribbon ? "" : undefined} data-compact={props.compact ? "" : undefined} data-thin={props.thin === false ? undefined : ""}>
+  return <Out.Provider value={() => Boolean(props.out)}><InRow.Provider value={Boolean(props.slot)}><div ref={rails} class="ui-markup-rails" data-ribbon={props.ribbon ? "" : undefined} data-slot={props.slot ? "" : undefined} data-compact={props.compact ? "" : undefined} data-thin={props.thin === false ? undefined : ""}>
   <Show when={options()}><div ref={props.compact ? undefined : held} class={props.compact ? "ui-markup-held" : "ui-markup-under"} data-over={props.ribbon ? undefined : ""}><Bar class="ui-markup-bar" role="toolbar" aria-label="Tool options">
     <Show when={props.tool === "shape" && props.onShape}>{(onShape) => <Segmented label="Shape" icons size="sm" value={props.shape ?? "arrow"} onChange={onShape()} options={SHAPES} />}</Show>
     <Show when={inks()}>{(onInk) => <>
@@ -393,5 +456,5 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     <Show when={!props.ribbon}><CloseButton size="sm" label="Close markup" onClick={props.onClose} /></Show>
     </Part>
   </Sets>
-  </div></Out.Provider>;
+  </div></InRow.Provider></Out.Provider>;
 }

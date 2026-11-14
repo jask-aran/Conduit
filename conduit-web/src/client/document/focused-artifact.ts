@@ -1,5 +1,6 @@
 import { createSignal, onCleanup } from "solid-js";
 import type { ArtifactCommand } from "../commands/command-registry.ts";
+import type { MarkupHandoff } from "../../chat-backend-contract.js";
 import type { ArtifactKind } from "./artifacts";
 
 /*
@@ -22,8 +23,10 @@ export function holdArtifact(pane: () => HTMLElement | undefined, about: () => F
   onCleanup(() => { document.removeEventListener("pointerdown", seen, true); document.removeEventListener("focusin", seen, true); if (holder() === about) setHolder(null); });
 }
 
-/** A place someone asked to be shown (a comment's card in a thread, pressed; for a paper, its first block): kept until the artifact's surface can show it (ArtifactSurface.reveal). */
-const [wanted, setWanted] = createSignal<{ id: string; place: string } | null>(null);
+/** Where in an artifact, as a hand-off says it: a paper's `block`, a sheet's `cells` (A1). Each kind reads the one it has. */
+export type ArtifactPlace = Pick<MarkupHandoff, "block" | "cells">;
+/** A place someone asked to be shown (a comment's card in a thread, pressed): kept until the artifact's surface can show it (ArtifactSurface.reveal). */
+const [wanted, setWanted] = createSignal<{ id: string; place: ArtifactPlace } | null>(null);
 export const placeWanted = (id: string) => wanted()?.id === id ? wanted()!.place : undefined;
 export const placeShown = () => setWanted(null);
-window.addEventListener("conduit:open-artifact", (event) => { const { id, block } = (event as CustomEvent<{ id: string; block?: string }>).detail; if (block) setWanted({ id, place: block.split(" ")[0]! }); });
+window.addEventListener("conduit:open-artifact", (event) => { const { id, place } = (event as CustomEvent<{ id: string; place?: ArtifactPlace }>).detail; if (place?.block || place?.cells) setWanted({ id, place }); });

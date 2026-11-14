@@ -90,8 +90,7 @@ export type DocumentAnchor = { key: string; quote?: string; under?: Record<strin
  * blocks a mark lies over (their ids, and their text as drawn); and for a margin of comments, the marks of those it is
  * told, where each is now, and word of when they may have moved or one was pressed. `changed`: blocks stand changed
  * for that comment (document-format.js CHANGES), read where it is drawn so it follows. `tools`: the block kinds
- * offered, each making the caret's block that kind (`active`: it is that kind now, read where it is drawn). `selection`:
- * the text selected, else the caret's block; null before the editor is made. `marking`: the text marks where the selection is, read where drawn.
+ * offered, each making the caret's block that kind (`active`: it is that kind now, read where it is drawn). `marking`: the text marks where the selection is, read where drawn.
  */
 /** An agent at work in the document, as the hub tells it (server/documents.js: a seat): the blocks it holds, what it is doing, and what it is heard writing before the change is made. */
 export type DocumentSeat = { name: string; state: "thinking" | "reading" | "writing"; blocks: string[]; for?: string; op?: "replace" | "insert"; text?: string };
@@ -100,7 +99,6 @@ export type DocumentMarks = {
   marking(): DocumentMarking;
   /** What was written here, taken back and put back; `canUndo` and `canRedo` are read where drawn. */
   history: { undo(): boolean; redo(): boolean; canUndo(): boolean; canRedo(): boolean };
-  selection(): Range | null;
   subject(): Record<string, string>;
   under(box: { left: number; top: number; width: number; height: number }): Record<string, string> | null;
   anchors(list: DocumentAnchor[]): void;

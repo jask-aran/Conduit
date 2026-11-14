@@ -151,7 +151,8 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; pendi
     {props.header(<><Show when={offer()?.unsent()}>{(unsent) => <Button variant="primary" outline size="sm" data-markup-own="" title="Send (Ctrl Enter)" onClick={() => offer()?.send()}>{unsent() > 1 ? `Send ${unsent()}` : "Send"}</Button>}</Show><Show when={found()?.trouble}>{(why) => <StatusDot label={why()} title={why()} tone="warn" />}</Show><Show when={surface()?.stale?.()}><HeaderButton label={`Reload: this page is older than the ${noun()}`} icon={<Icons.Refresh />} onClick={() => location.reload()} /></Show><Show when={props.said || opening()}><StatusDot label={`Opening the ${noun()}`} title={`Opening the ${noun()}`} spinning /></Show><Show when={surface()?.away?.()}><StatusDot label="Reconnecting to the hub" title="Reconnecting to the hub" tone="warn" spinning /></Show><Show when={!props.quiet && comments()}>{(margin) => commentList(margin())}</Show>
       {surface()?.header?.()}
       <Show when={found()}>{connecting}</Show></>)}
-    <Show when={!props.quiet && found()}><MarkupRibbonRoom ref={(element) => { room = element; }} /></Show>
+    {/* Room for a ribbon over the pane; a kind whose bar stands in a slot of its own row takes none. */}
+    <Show when={!props.quiet && found() && ARTIFACT_KINDS[found()!.kind].markup.bar === "ribbon"}><MarkupRibbonRoom ref={(element) => { room = element; }} /></Show>
     <Show when={!about.error} fallback={<Empty role="alert">This {noun()} could not be opened: {String((about.error as Error)?.message || "the hub did not say why").replace(/\.$/, "")}.</Empty>}>
       <Show when={opening()}><Empty role="status">Opening the {noun()}…</Empty></Show>
       <Show when={found()?.id} keyed>{(_id) => shown()}</Show>

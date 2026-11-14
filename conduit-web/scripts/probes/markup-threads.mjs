@@ -39,7 +39,7 @@ try {
   await last.click(); await page.keyboard.press("Home"); await page.keyboard.type("@chat"); await wait(600);
   const offered = await page.evaluate(() => [...document.querySelectorAll("[role=option]")].map((one) => one.textContent.trim()));
   await page.keyboard.press("Enter"); await wait(800);
-  console.log("@ in the paper offers the listeners; the one picked is asked in a field at that block, the mention gone:", offered.join() === name && ((await page.locator(".ui-document-ask").textContent()) ?? "").includes(`@${name}`) && (await last.textContent()) === was, JSON.stringify(offered));
+  console.log("@ in the paper offers the listeners; the one picked is asked in a field at that block, the mention gone:", offered.join() === name && ((await page.locator(".ui-markup-ask").textContent()) ?? "").includes(`@${name}`) && (await last.textContent()) === was, JSON.stringify(offered));
   await page.keyboard.type("Thread probe: by the at sign"); await page.keyboard.press("Enter"); await wait(2500);
   await page.locator(".ui-markup-bar button[title^='Select text'], .ui-markup-bar button[aria-label^='Select text']").first().click(); await wait(300);
   const line = await page.evaluate(() => { const box = document.querySelectorAll(".ui-document-text > [data-id]")[1].getBoundingClientRect(); return { x: box.left, y: box.top + box.height / 2 }; });

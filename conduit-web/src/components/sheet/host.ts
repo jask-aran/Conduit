@@ -32,22 +32,32 @@ export interface SheetHost {
 /** How this copy stands with the hub's, as a paper's (DocumentState). */
 export type SheetState = "connecting" | "live" | "away" | "stale";
 
+/** The ask key, by its code: with the platform's modifier and Alt, a paper's (components/document/shortcuts.ts PAPER_COMMENT_KEY) on a sheet. */
+export const ASK_KEY = "KeyM";
+/**
+ * A range as the place a comment is about, in the shape Markup's host asks for (MarkupPlace): its values row by row (`text`), its A1 address (`label`),
+ * `under` its corners by ids (`cells`, the hub's contract) and its address when chosen (`range`), and its box now, found by those ids.
+ */
+export type SheetPlace = { text: string; label: string; under: { cells: string; range: string }; boxes(): SheetBox[] };
+
 /** A comment the sheet marks: `under.cells` is the two corners of its range by ids ("<rowId>:<colId> <rowId>:<colId>"). */
 export type SheetAnchor = { key: string; quote?: string; under?: Record<string, string | number | boolean>; current: boolean; resolved: boolean };
 
 /**
  * What the editor tells a layer that marks it up, in the shape Markup's host asks for. `under`: the cells a box lies
- * over, by ids and by A1 address. `selection`: the cells selected, as a run of text standing over them (so a quote
- * is their values and its lines their boxes); null with nothing selected. `place`: where a comment's range is now.
- * `reveal`: scroll to a cell (`<rowId>:<colId>`) and select it. Not offered, because a sheet does not have them yet:
- * agents' seats, suggestions, and Keep or Revert of an agent's change.
+ * over, by ids and by A1 address. `place`: the cells selected, as a place; `placeAt`: the cells from one point to another
+ * (a press: the one cell), which it selects. `where`: where a comment's range is now. `reveal`: scroll to a range (A1) and
+ * select it. `slot`: the end of the formula bar, where a layer may put its own controls. Not offered, because a sheet
+ * does not have them yet: agents' seats, suggestions, and Keep or Revert of an agent's change.
  */
 export type SheetMarks = {
   subject(): Record<string, string | number>;
   under(box: SheetBox): Record<string, string> | null;
-  selection(): Range | null;
+  place(): SheetPlace | null;
+  placeAt(from: { x: number; y: number }, to: { x: number; y: number } | null): SheetPlace | null;
+  slot(): HTMLElement | undefined;
   anchors(list: SheetAnchor[]): void;
-  place(key: string): SheetBox | null;
+  where(key: string): SheetBox | null;
   watch(listener: (pressed?: string) => void): () => void;
   reveal(place: string): void;
   focus(): void;

@@ -97,18 +97,18 @@ async function writtenBack(name) {
 /** The artifact an item is on, where it is one: an artifact keeps its comments in <artifact>/markup/<item>. */
 const artifactOf = (entry) => path.dirname(entry.dir) !== folder && path.basename(path.dirname(entry.dir)) === "markup" ? path.basename(path.dirname(path.dirname(entry.dir))) : undefined;
 const quiet = (fields) => Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined && value !== null && value !== ""));
-/** One comment as a session is handed it: what it asks, the text it quotes, and what it was on when it was sent (a paper's blocks and their text, a site's elements). */
-const brief = (comment) => quiet({ n: comment.n, words: comment.comment, quote: comment.quote, blocks: comment.under?.blocks, context: comment.under?.text ?? comment.under?.elements });
+/** One comment as a session is handed it: what it asks, the text it quotes, and what it was on when it was sent (a paper's blocks and their text, a sheet's range by its A1 address, a site's elements). */
+const brief = (comment) => quiet({ n: comment.n, words: comment.comment, quote: comment.quote, blocks: comment.under?.blocks, cells: comment.under?.cells ? comment.under.range ?? comment.under.cells : undefined, context: comment.under?.text ?? comment.under?.elements });
 const answerWith = (entry, n, paper) => `node ${script} answer ${entry.id}${n ? ` ${n}` : ""} --json '{${paper ? `"edits":[{"op":"replace","at":"<block>","markdown":"…"}],` : ""}"reply":"…","resolve":true}'`;
 /**
  * What a session is handed: one JSON line holding everything it needs to answer (the comments, what the person wrote back), then one line saying how
  * to answer, with the item's file last, for its pictures and the rest.
  */
 async function handing(entry, comments, said = []) {
-  const all = JSON.parse(await fs.readFile(entry.item, "utf8")).comments ?? [], artifact = artifactOf(entry), paper = all.some((comment) => comment.under?.blocks);
+  const all = JSON.parse(await fs.readFile(entry.item, "utf8")).comments ?? [], artifact = artifactOf(entry), paper = all.some((comment) => comment.under?.blocks), sheet = artifact && all.some((comment) => comment.under?.cells);
   const n = all.length === 1 ? all[0].n : comments.length === 1 && !said.length ? comments[0].n : said.length === 1 && !comments.length ? said[0].n : null;
   return [JSON.stringify(quiet({ item: entry.id, artifact, comments: comments.length ? comments.map(brief) : undefined, said: said.length ? said.map((message) => quiet({ n: message.n, text: message.text, did: message.text ? undefined : message.resolved ? "resolved" : "reopened" })) : undefined, path: entry.item })),
-    `The person ${said.length ? "wrote back on" : "sent"} ${entry.id}: what they ask, the text quoted and what it is on are in the line above, so nothing needs reading first${artifact ? "" : " (a comment's pictures are in its item)"}. Answer${comments.length + said.length > 1 && !n ? " each comment, with its n" : ""}: ${answerWith(entry, n, paper)}${artifact ? "" : `, then: node ${script} done ${entry.id}`}. The item: ${entry.item}`];
+    `The person ${said.length ? "wrote back on" : "sent"} ${entry.id}: what they ask, the text quoted and what it is on are in the line above, so nothing needs reading first${artifact ? "" : " (a comment's pictures are in its item)"}. ${sheet ? `A comment's \`cells\` is its range as it was when sent (rows may have moved since): read it with node ${script} document cells ${artifact} <range>, change it with node ${script} document set ${artifact} <A1> <value> --for ${entry.id}/<n> (or document fill). ` : ""}Answer${comments.length + said.length > 1 && !n ? " each comment, with its n" : ""}: ${answerWith(entry, n, paper)}${artifact ? "" : `, then: node ${script} done ${entry.id}`}. The item: ${entry.item}`];
 }
 const hand = async (entry) => { for (const line of await handing(entry, JSON.parse(await fs.readFile(entry.item, "utf8")).comments ?? [])) console.log(line); };
 /** The name a session answers under: the one it took the item with, else the one its `wait` in this folder listens under, else the folder's. */

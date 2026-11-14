@@ -1,7 +1,7 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, type Signal } from "solid-js";
 import { createStore, reconcile, unwrap } from "solid-js/store";
 import { MarkupMarginNotes, MarkupNote } from "@/components/ui/markup";
-import type { MarkupAnswerActs, MarkupHost, MarkupThread } from "./host";
+import type { MarkupAnchor, MarkupAnswerActs, MarkupHost, MarkupThread } from "./host";
 
 const OPEN_EVERY_MS = 3000;
 const split = (key: string) => { const at = key.lastIndexOf("/"); return [key.slice(0, at), Number(key.slice(at + 1))] as const; };
@@ -18,6 +18,11 @@ export type MarkupMarginWaiting = { want: number; height: number; at(place: { le
 /** The margin's column for a host, where it has one mounted: sent cards and those waiting to be sent are laid out in it as one, in the order of their places. */
 const columns = new WeakMap<MarkupHost, { waiting: Map<string, MarkupMarginWaiting>; lay(): void }>();
 export const marginColumn = (host: MarkupHost) => columns.get(host);
+/** What a comment written and not yet sent is known by, in the column and among the anchors. */
+export const UNSENT = "unsent-";
+/** The places of comments not yet sent, which the tool tells a surface that draws its own places (`marks: "surface"`) through its margin's anchors, after the sent ones. */
+const unsent = new WeakMap<MarkupHost, Signal<MarkupAnchor[]>>();
+export const unsentAnchors = (host: MarkupHost) => unsent.get(host) ?? unsent.set(host, createSignal<MarkupAnchor[]>([])).get(host)!;
 /** One card of the margin as a list shows it (`key` as its host knows it): a comment (`about` its quote or first words, `by` who it is with, `unread` an answer the person has not opened) or a suggestion. */
 export type MarkupMarginEntry = { key: string; kind: "comment" | "suggestion"; about: string; by: string | null; state: "saved" | "waiting" | "working" | "answered" | "resolved" | "suggested"; unread: boolean };
 /** What a card's state is called, on the card and in any list of the cards. */
@@ -188,7 +193,7 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
   });
   props.control?.({ answered: laidOut, open: () => openKeys().length, next: () => step(1), previous: () => step(-1), go, list, resolveDone });
 
-  createEffect(() => { margin?.anchors(keys().map((key) => { const comment = commentOf(key); return { key, quote: comment?.quote, under: comment?.under, current: openKey() === key, resolved: putAway(key) }; })); soon(); });
+  createEffect(() => { margin?.anchors([...keys().map((key) => { const comment = commentOf(key); return { key, quote: comment?.quote, under: comment?.under, current: openKey() === key, resolved: putAway(key) }; }), ...unsentAnchors(host)[0]()]); soon(); });
   createEffect(on(() => suggestions().length, soon, { defer: true }));
   createEffect(on(() => props.sent, ask, { defer: true }));
   onMount(() => {
@@ -210,7 +215,8 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
     const away = (event: PointerEvent) => { if (openKey() && !reply().trim() && tucked() && event.target instanceof Element && !event.target.closest(".ui-markup-note, [data-comment]")) open(null); };
     window.addEventListener("keydown", shut); document.addEventListener("pointerdown", away, { capture: true });
     onCleanup(() => { window.removeEventListener("keydown", shut); document.removeEventListener("pointerdown", away, { capture: true }); });
-    const unwatch = margin?.watch((pressed) => { if (pressed) { open(pressed); column?.querySelector(`[data-key="${CSS.escape(pressed)}"]`)?.scrollIntoView({ block: "nearest" }); soon(); } else shifted(); });
+    // A press on what a comment not yet sent is about is the tool's, whose note stands there.
+    const unwatch = margin?.watch((pressed) => { if (pressed?.startsWith(UNSENT)) return; if (pressed) { open(pressed); column?.querySelector(`[data-key="${CSS.escape(pressed)}"]`)?.scrollIntoView({ block: "nearest" }); soon(); } else shifted(); });
     onCleanup(() => { clearInterval(asking); sized.disconnect(); cards.disconnect(); unwatch?.(); cancelAnimationFrame(due); });
   });
 
