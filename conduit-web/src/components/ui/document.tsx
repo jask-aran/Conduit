@@ -1,5 +1,5 @@
 import { BaselineIcon, BetweenHorizontalEndIcon, BetweenVerticalEndIcon, BoldIcon, CalendarIcon, ChevronRightIcon, CodeIcon, ExternalLinkIcon, Grid2x2XIcon, GripVerticalIcon, Heading1Icon, Heading2Icon, Heading3Icon, HighlighterIcon, ImageIcon, ImageOffIcon, InfoIcon, ItalicIcon, LinkIcon, ListChecksIcon, ListCollapseIcon, ListIcon, ListOrderedIcon,
-  MessageSquarePlusIcon, MinusIcon, PencilIcon, PencilLineIcon, PilcrowIcon, StrikethroughIcon, TableColumnsSplitIcon, TableIcon, TableRowsSplitIcon, TextQuoteIcon, TriangleAlertIcon, UnlinkIcon } from "lucide-solid";
+  MessageSquarePlusIcon, MinusIcon, PencilIcon, FileDiffIcon, PilcrowIcon, StrikethroughIcon, TableColumnsSplitIcon, TableIcon, TableRowsSplitIcon, TextQuoteIcon, TriangleAlertIcon, UnlinkIcon } from "lucide-solid";
 import { createEffect, createSignal, onCleanup, Show, splitProps, type JSX } from "solid-js";
 // Through the barrel, as markup.tsx does, so the editor's chunk takes the header from the app's own.
 import { Button, FindBar, Frost, IconButton, Icons, PaneHeader, Spinner, TextArea } from "./index";
@@ -78,7 +78,7 @@ export const documentToolIcons = { bold: BoldIcon, italic: ItalicIcon, strike: S
   grip: GripVerticalIcon, "row-below": BetweenHorizontalEndIcon, "column-right": BetweenVerticalEndIcon, "delete-row": TableRowsSplitIcon, "delete-column": TableColumnsSplitIcon, "delete-table": Grid2x2XIcon };
 
 /** How the reader writes (DocumentWriting): Editing, final; Suggesting, each change standing until it is accepted. */
-export const documentWritingIcons = { editing: PencilIcon, suggesting: PencilLineIcon };
+export const documentWritingIcons = { editing: PencilIcon, suggesting: FileDiffIcon };
 
 /** A suggestion's own controls, standing over its first block where nothing beside the text draws them: who suggested it, Accept (its text stays) and Reject (taken back). */
 export const DocumentSuggested = (props: { by: string; onAccept: () => void; onReject: () => void }) => {

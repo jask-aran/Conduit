@@ -159,7 +159,7 @@ const VIEWS: ReadonlyArray<{ value: MarkupView; label: string; icon: () => JSX.E
 /** A host's own tool in the bar, read where it is drawn (so a getter follows). `menu`: on the ribbon, those of one menu stand as one control under that name, `active` the one
  *  that is so now. A tool of no menu is a toggle, `pressed` while it is on (a mark the selection wears; unsaid, `active`). `disabled`: not to be done here.
  *  `keys`: its shortcut, as its tooltip says it. */
-export type MarkupOwnTool = { name: string; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; /** Its menu's control shows the icon alone (a swatch says its colour). */ compact?: boolean; /** It is a way the surface is worked on, one of a few: `review` is the one Markup's own tools belong to, entered as one is taken. */ mode?: "edit" | "review"; run: () => void };
+export type MarkupOwnTool = { name: string; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; /** Its menu's control shows the icon alone (a swatch says its colour). */ compact?: boolean; /** The colour it puts on, where it is one of a set of inks. */ swatch?: string; /** It is a way the surface is worked on, one of a few: `review` is the one Markup's own tools belong to, entered as one is taken. */ mode?: "edit" | "review"; run: () => void };
 
 const named = (label: string, keys?: readonly string[]) => keys?.length ? `${label} (${keys.join(" ")})` : label;
 /** How far the ribbon has folded to fit its frame: 1 drops the captions, 2 makes the edit set one Format menu, 3 Markup's tools one Annotate menu too. */
@@ -197,7 +197,12 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   const pressed = (tool: MarkupOwnTool) => tool.pressed ?? tool.active;
   const choice = (tool: MarkupOwnTool, on = tool.active) => <MenuRow icon={tool.icon()} checked={on || undefined} disabled={tool.disabled} keys={tool.keys} onSelect={() => press(tool)}>{tool.label}</MenuRow>;
   // One control a menu, as wide as any other tool of the bar and showing the one that is so now by its icon: the bars hold still as the caret moves.
-  const kinds = (menu: string) => { const now = () => of(menu).find((tool) => tool.active) ?? of(menu)[0]!; return <DropdownMenu modal={false} placement="bottom-start">
+  // A set of inks is chosen as Markup's own are: its control opens a line of swatches under the bars, one line at a time, and shows its own icon in the ink that is on.
+  const [inking, setInking] = createSignal<string | null>(null);
+  const inkSet = (menu: string) => of(menu).every((tool) => tool.compact);
+  const kinds = (menu: string) => { const now = () => of(menu).find((tool) => tool.active) ?? of(menu)[0]!;
+    if (inkSet(menu)) return <IconButton label={`${menu}: ${now().label}`} aria-pressed={inking() === menu} aria-expanded={inking() === menu} disabled={of(menu).every((tool) => tool.disabled)} style={{ color: now().swatch }} onMouseDown={(event) => event.preventDefault()} onClick={() => { if (!using()) props.onView("use"); setInking(inking() === menu ? null : menu); }}>{of(menu)[0]!.icon()}</IconButton>;
+    return <DropdownMenu modal={false} placement="bottom-start" onOpenChange={(open) => { if (!open) return; setInking(null); if (!using()) props.onView("use"); }}>
     <MenuControl as={IconButton} label={`${menu}: ${now().label}`}>{now().icon()}</MenuControl>
     <MenuContent width="sm"><MenuSection title={menu}><For each={of(menu)}>{(tool) => choice(tool)}</For></MenuSection></MenuContent>
   </DropdownMenu>; };
@@ -215,6 +220,7 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   </DropdownMenu>;
   const pick = (option: { value: MarkupToolKind | "note" }) => {
     if (!using() && option.value === props.tool) return props.onView("use");
+    setInking(null);
     // A tool of Markup's is taken to review: the surface goes into that mode with it.
     const review = modes().find((tool) => tool.mode === "review");
     if (review && !review.active) review.run();
@@ -268,6 +274,10 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     <Show when={props.tool === "text" && props.onSize}>{(onSize) => <Stepper label="Text size" unit="px" min={MARKUP_TEXT.min} max={MARKUP_TEXT.max} value={props.size ?? MARKUP_TEXT.rest} onChange={onSize()} />}</Show>
     <Show when={props.compact}><IconButton label="Undo" disabled={!props.onUndo} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton></Show>
   </Frost></Show>
+  <Show when={props.ribbon && using() && inking()} keyed>{(menu) => <Frost lift="raised" class="ui-markup-bar" role="toolbar" aria-label={menu}>
+    <Segmented label={menu} icons size="sm" value={(of(menu).find((tool) => tool.active) ?? of(menu)[0]!).name} onChange={(name) => press(of(menu).find((tool) => tool.name === name)!)}
+      options={of(menu).map((tool) => ({ value: tool.name, label: tool.label, disabled: tool.disabled, icon: <Swatch colour={tool.swatch} hollow={!tool.swatch} /> }))} />
+  </Frost>}</Show>
   <Show when={props.ribbon && !props.thread}><Frost lift="raised" class="ui-markup-bar" data-set="mode" role="toolbar" aria-label="Mode">
     <Show when={modes().length}><Segmented label="Mode" icons size="sm" value={(modes().find((tool) => tool.active) ?? modes()[0]!).name} onChange={(name) => press(modes().find((tool) => tool.name === name)!)} options={modes().map((tool) => ({ value: tool.name, label: tool.label, icon: tool.icon() }))} /></Show>
     <span class="ui-markup-with">{undo()}{redo()}</span>

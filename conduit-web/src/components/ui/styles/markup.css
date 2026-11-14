@@ -101,6 +101,8 @@
 /* Its two sets (the host's edit tools, Markup's) stand side by side as bars of their own; what a tool draws with is on the line under them. */
 .ui-markup-rails[data-ribbon] { top: calc(var(--markup-frame-top, 0px) + var(--space-xs)); bottom: auto; flex-flow: row wrap; justify-content: center; }
 .ui-markup-rails[data-ribbon] > [data-set="mode"] { order: 3; }
+/* Its two icons are tools of the bar, sized as the others are. */
+.ui-markup-bar[data-set="mode"] .ui-seg button svg { width: var(--icon); height: var(--icon); }
 .ui-markup-rails[data-ribbon] > [data-set="edit"] { order: 1; }
 .ui-markup-rails[data-ribbon] > [data-set="markup"] { order: 2; }
 .ui-markup-break { order: 3; flex-basis: 100%; height: 0; margin-top: calc(-1 * var(--space-xs)); }
