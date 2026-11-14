@@ -105,6 +105,8 @@ export type DocumentMarks = {
   under(box: { left: number; top: number; width: number; height: number }): Record<string, string> | null;
   anchors(list: DocumentAnchor[]): void;
   place(key: string): { left: number; top: number; width: number; height: number } | null;
+  /** Where every mark stands, as one word that changes whenever any may have moved (MarkupMarginHost.placed). */
+  placed(): string;
   watch(listener: (pressed?: string) => void): () => void;
   changed(key: string): boolean;
   /** The suggestions standing, oldest first, read where drawn. `place` finds one by its key. `accept`: its text stays and stops standing as suggested; `reject`: taken back. */

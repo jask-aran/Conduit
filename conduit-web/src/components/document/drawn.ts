@@ -3,7 +3,7 @@ import type { Node } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { documentDrawClass } from "@/components/ui/document";
-import { blockAt, blockById } from "./blocks";
+import { blockAt, blockById, redrawBlocks } from "./blocks";
 
 // `@` where a word may start, then a name (dots only inside it, so a sentence's full stop is not the name's).
 const MENTION = /(?<!\S)@([\p{L}\p{N}_-]+(?:\.[\p{L}\p{N}_-]+)*)/gu;
@@ -21,9 +21,10 @@ const mentionsIn = (block: Node) => {
   });
   return runs;
 };
+const mentionsAt = (block: Node, at: number) => block.type.spec.code ? [] : mentionsIn(block).map(([from, to, name]) => Decoration.inline(at + 1 + from, at + 1 + to, { class: documentDrawClass.mention, "data-mention": name }));
 const mentions = (doc: Node) => {
   const drawn: Decoration[] = [];
-  doc.forEach((block, at) => { if (!block.type.spec.code) for (const [from, to, name] of mentionsIn(block)) drawn.push(Decoration.inline(at + 1 + from, at + 1 + to, { class: documentDrawClass.mention, "data-mention": name })); });
+  doc.forEach((block, at) => drawn.push(...mentionsAt(block, at)));
   return DecorationSet.create(doc, drawn);
 };
 const mentioned = new PluginKey<DecorationSet>("mentions");
@@ -42,7 +43,7 @@ export const drawn = (shown: (block: string, name: string) => void) => Extension
     return [
       new Plugin({
         key: mentioned,
-        state: { init: (_, state) => mentions(state.doc), apply: (tr, old) => tr.docChanged ? mentions(tr.doc) : old },
+        state: { init: (_, state) => mentions(state.doc), apply: (tr, old, was) => tr.docChanged ? redrawBlocks(old, was.doc, tr.doc, mentionsAt) : old },
         props: {
           decorations: (state) => mentioned.getState(state),
           handleClick: (view, pos, event) => {

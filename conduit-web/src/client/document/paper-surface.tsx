@@ -73,7 +73,7 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
       subject: () => ({ ...marks?.subject(), change: `\`node scripts/conduit-markup.mjs document read ${id}\` prints it as it is now, as Markdown with each block under its id; \`document replace\`, \`insert\` and \`delete\` change one block (\`document\` alone says how).` }),
       under: (box) => marks?.under(box) ?? null,
       margin: {
-        anchors: (list) => marks?.anchors(list), place: (key) => marks?.place(key) ?? null, watch: (listener) => marks?.watch(listener) ?? (() => {}),
+        anchors: (list) => marks?.anchors(list), place: (key) => marks?.place(key) ?? null, placed: () => marks?.placed() ?? "", watch: (listener) => marks?.watch(listener) ?? (() => {}),
         stop: (key) => api(`${base}/stop`, { method: "POST", body: JSON.stringify({ item: key.split("/")[0] }) }),
         revert: { can: (key) => marks?.changed(key) ?? false, run: (key) => api(`${base}/changes`, { method: "POST", body: JSON.stringify({ op: "revert", thread: key }) }) },
         working: (key) => { const seat = marked()?.seats?.().find((one) => one.for === key); return seat && { by: seat.name, state: seat.state }; },

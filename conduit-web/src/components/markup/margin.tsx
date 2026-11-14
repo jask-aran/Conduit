@@ -48,8 +48,12 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
   const took = (thread: MarkupThread) => setHeld("items", (item) => item.id === thread.id, reconcile(thread));
   // By key, so a card stays the card it was through each look (and its field keeps the words being written).
   const keys = createMemo(() => held.items.flatMap((item) => item.comments.map((comment) => `${item.id}/${comment.n}`)), [], { equals: (a, b) => a.length === b.length && a.every((key, at) => key === b[at]) });
-  const itemOf = (key: string) => held.items.find((item) => item.id === split(key)[0]);
-  const commentOf = (key: string) => itemOf(key)?.comments.find((comment) => comment.n === split(key)[1]);
+  // Each card's item and comment by its key, made once for every look, never searched for card by card.
+  // Told on only where a card's item or comment is another: what changes within one is read where it is drawn.
+  const byKey = createMemo(() => { const found = new Map<string, { item: MarkupThread; comment: MarkupThread["comments"][number] }>(); for (const item of held.items) for (const comment of item.comments) found.set(`${item.id}/${comment.n}`, { item, comment }); return found; }, undefined,
+    { equals: (a, b) => a?.size === b.size && [...b].every(([key, now]) => { const was = a.get(key); return was?.item === now.item && was.comment === now.comment; }) });
+  const itemOf = (key: string) => byKey().get(key)?.item ?? held.items.find((item) => item.id === split(key)[0]);
+  const commentOf = (key: string) => byKey().get(key)?.comment;
   /** What was said about a comment; what was said of its item as a whole stands with the item's first. */
   const saidOf = (key: string) => { const item = itemOf(key), n = split(key)[1]; return (item?.messages ?? []).filter((message) => message.n === n || (message.n === null && item!.comments[0]?.n === n)).map((message) => ({ from: message.from, at: message.at, text: message.text ?? (message.resolved ? "Resolved" : "Reopened") })); };
   /** Resolved by the person, a comment is put away. Resolved by the session only, its card stays as it was, saying so, until the person resolves it too: nothing leaves the margin but by their hand. */
@@ -73,46 +77,64 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
   /** The place a comment is about where the surface says (a paper's first block under it); else it is a place of its own. */
   const blockOf = (key: string) => String(commentOf(key)?.under?.blocks ?? "").split(" ")[0] || key;
   /** Tucked over the text, the comments standing at one place are one mark there, in the order they were sent, and open one at a time. */
-  const placed = (key: string) => !keys().includes(key) || putAway(key) ? [key] : keys().filter((one) => !putAway(one) && blockOf(one) === blockOf(key));
+  const atPlace = createMemo(() => { const found = new Map<string, string[]>(); for (const key of keys()) if (!putAway(key)) { const block = blockOf(key); (found.get(block) ?? found.set(block, []).get(block)!).push(key); } return found; });
+  const placed = (key: string) => putAway(key) ? [key] : atPlace().get(blockOf(key))?.includes(key) ? atPlace().get(blockOf(key))! : [key];
   const stacked = (key: string) => { const here = placed(key), opened = openKey(); return tucked() && here.length > 1 && (opened && here.includes(opened) ? opened !== key : here[0] !== key); };
   const cycle = (key: string) => { const here = placed(key), at = here.indexOf(key), to = (by: number) => () => open(here[(at + by + here.length) % here.length]!);
     return tucked() && here.length > 1 ? { at: at + 1, of: here.length, onPrevious: to(-1), onNext: to(1) } : undefined; };
 
   /** Each card, sent or waiting to be, at the height of its place, the next pushed down past it; with no room beside, a list in that order (the tool places those waiting itself). */
   const waiting = new Map<string, MarkupMarginWaiting>();
+  // Told only that places may have moved (`shifted`, as the text under it changes, so on every key typed), and the surface says none has: nothing is done.
+  let shiftedOnly = false, wasPlaced: string | undefined;
   const lay = () => {
     due = 0;
     if (!column) return;
+    const only = shiftedOnly;
+    shiftedOnly = false;
     props.onCards?.(column.children.length + waiting.size);
-    // Nothing to place: no reason to measure (this runs as the text under it changes, so on every key typed).
+    // Nothing to place: no reason to measure.
     if (!column.children.length && !waiting.size) return;
+    const placedNow = margin?.placed?.();
+    if (only && placedNow !== undefined && placedNow === wasPlaced) return;
+    wasPlaced = placedNow;
     const tuck = Boolean(column.closest("[data-margin='tucked']"));
     setTucked(tuck);
     const box = column.getBoundingClientRect(), gap = parseFloat(getComputedStyle(column).rowGap) || 0;
+    // Every place and height is read before anything is written, so the column is laid out once however many cards stand in it; a style is written only where it changes.
+    const set = (card: HTMLElement, name: "top" | "order" | "left" | "width", value: string) => { if (card.style[name] !== value) card.style[name] = value; };
     const cards = [
       // Tucked, every card of a place stands where its first does, so stepping through them holds still;
-      // and an open one stands under what it is about, never over it.
-      ...([...column.children] as HTMLElement[]).map((card) => { const key = card.dataset.key ?? "", head = key.startsWith(BY), at = head ? null : placeOf(tuck ? placed(key)[0]! : key); return { want: head ? HEAD : at ? at.top + (tuck && card.hasAttribute("data-open") ? at.height + gap : 0) : null, height: () => card.offsetHeight,
-        put: (top: number | null, order: number) => { card.style.top = top === null ? "" : `${top}px`; card.style.order = top === null ? String(order) : ""; const over = tuck && card.hasAttribute("data-open") ? margin?.column?.() : null; card.style.left = over ? `${over.left - box.left}px` : ""; card.style.width = over ? `${over.width}px` : ""; } }; }),
-      ...[...waiting.values()].map((one) => ({ want: one.want as number | null, height: () => one.height, put: (top: number | null) => one.at(top === null ? null : { left: box.left, top: box.top + top, width: box.width }) })),
+      // and an open one stands under what it is about, never over it. Its width is the column's, written first since its height follows from it.
+      ...([...column.children] as HTMLElement[]).map((card) => {
+        const key = card.dataset.key ?? "", head = key.startsWith(BY), at = head ? null : placeOf(tuck ? placed(key)[0]! : key), over = tuck && card.hasAttribute("data-open") ? margin?.column?.() : null;
+        return { want: head ? HEAD : at ? at.top + (tuck && card.hasAttribute("data-open") ? at.height + gap : 0) : null, height: () => card.offsetHeight,
+          widen: () => { set(card, "left", over ? `${over.left - box.left}px` : ""); set(card, "width", over ? `${over.width}px` : ""); },
+          put: (top: number | null, order: number) => { set(card, "top", top === null ? "" : `${top}px`); set(card, "order", top === null ? String(order) : ""); } };
+      }),
+      ...[...waiting.values()].map((one) => ({ want: one.want as number | null, height: () => one.height, widen: () => {}, put: (top: number | null) => one.at(top === null ? null : { left: box.left, top: box.top + top, width: box.width }) })),
     ].sort((a, b) => (a.want ?? Number.MAX_VALUE) - (b.want ?? Number.MAX_VALUE));
     // Beside what is marked, the margin starts no lower than it; put under it, every place is above.
     const side = cards.some(({ want }) => want !== null && want >= box.top);
     setBeside(side);
+    for (const card of cards) card.widen();
+    const heights = cards.map((card) => card.height());
     let floor = 0;
     cards.forEach((card, order) => {
       const top = Math.max(card.want !== null ? card.want - box.top : floor, floor);
       card.put(side ? top : null, order);
       // A card not drawn (one of a place's stacked) takes no room.
-      const height = card.height();
-      if (height) floor = top + height + gap;
+      if (heights[order]) floor = top + heights[order]! + gap;
     });
-    column.style.minHeight = side ? `${Math.max(0, floor - gap)}px` : "";
+    const least = side ? `${Math.max(0, floor - gap)}px` : "";
+    if (column.style.minHeight !== least) column.style.minHeight = least;
   };
   // Answered once the hub's first answer (or its failure) has been laid out: the cards and the marks in the text come in one frame.
   const [laidOut, setLaidOut] = createSignal(false);
   let heard = false;
-  const soon = () => { due ||= requestAnimationFrame(() => { lay(); if (heard) setLaidOut(true); }); };
+  const laid = () => { lay(); if (heard) setLaidOut(true); };
+  const soon = () => { shiftedOnly = false; due ||= requestAnimationFrame(laid); };
+  const shifted = () => { if (!due) shiftedOnly = true; due ||= requestAnimationFrame(laid); };
   const open = (key: string | null) => {
     setReply(""); setOpenKey(key);
     if (key && !key.startsWith(SUGGESTED)) { void transport.thread(split(key)[0], true).then(took, () => {}); queueMicrotask(() => field?.focus({ preventScroll: true })); }
@@ -171,7 +193,7 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
   createEffect(on(() => props.sent, ask, { defer: true }));
   onMount(() => {
     ask();
-    columns.set(host, { waiting, lay });
+    columns.set(host, { waiting, lay: () => { shiftedOnly = false; lay(); } });
     margin?.answers?.(acts);
     onCleanup(() => { columns.delete(host); margin?.answers?.(null); });
     const asking = setInterval(ask, OPEN_EVERY_MS);
@@ -188,7 +210,7 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
     const away = (event: PointerEvent) => { if (openKey() && !reply().trim() && tucked() && event.target instanceof Element && !event.target.closest(".ui-markup-note, [data-comment]")) open(null); };
     window.addEventListener("keydown", shut); document.addEventListener("pointerdown", away, { capture: true });
     onCleanup(() => { window.removeEventListener("keydown", shut); document.removeEventListener("pointerdown", away, { capture: true }); });
-    const unwatch = margin?.watch((pressed) => { if (pressed) { open(pressed); column?.querySelector(`[data-key="${CSS.escape(pressed)}"]`)?.scrollIntoView({ block: "nearest" }); } soon(); });
+    const unwatch = margin?.watch((pressed) => { if (pressed) { open(pressed); column?.querySelector(`[data-key="${CSS.escape(pressed)}"]`)?.scrollIntoView({ block: "nearest" }); soon(); } else shifted(); });
     onCleanup(() => { clearInterval(asking); sized.disconnect(); cards.disconnect(); unwatch?.(); cancelAnimationFrame(due); });
   });
 

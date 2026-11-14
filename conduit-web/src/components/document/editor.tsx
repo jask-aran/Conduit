@@ -12,13 +12,14 @@ import type { Doc, Map as YMap, XmlFragment } from "yjs";
 import { MARKUP_INKS } from "@/components/ui/markup";
 import { DocumentAnswered, DocumentAsk, DocumentCount, DocumentSeatJump, DocumentSheet, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons, documentWritingIcons, type DocumentWidth } from "@/components/ui/document";
 import { CHANGES, FRAGMENT, documentExtensions, isSuggestion } from "@/document-format.js";
-import { blockById, blockKeys, caretBlockAt, shiftBlock } from "./blocks";
+import { acrossBlocks, blockById, blockKeys, caretBlockAt, changedBlocks, shiftBlock } from "./blocks";
 import { drawn, revealed } from "./drawn";
 import { createFind } from "./find";
 import { createBlockHandle } from "./handle";
 import { PaperHead } from "./head";
 import { DOCUMENT_BLOCKS, DOCUMENT_MARKS, DOCUMENT_TURNABLE, type DocumentAnchor, type DocumentAnswers, type DocumentBlockKind, type DocumentControls, type DocumentHeading, type DocumentHost, type DocumentMarking, type DocumentMarks } from "./host";
 import { hinted } from "./hint";
+import { numbered } from "./numbers";
 import { createLiveDocument } from "./live";
 import { createSeatsAway, seatsDrawn } from "./seats";
 import { blockDiff, createSuggesting, type Change } from "./suggest";
@@ -94,7 +95,11 @@ const within = (block: Node, from: number, quote: string) => {
   const start = text.indexOf(quote), spot = (offset: number) => { const run = runs.findLast((candidate) => candidate.at <= offset)!; return run.pos + offset - run.at; };
   return start < 0 ? null : [spot(start), spot(start + quote.length - 1) + 1] as const;
 };
-const shown = new PluginKey<DecorationSet>("documentMarks");
+/** The marks drawn; `refs`, every block they are drawn by (so writing in any other only moves them); `rev`, counted up whenever they may stand anywhere new but by the text's size changing. */
+type Shown = { set: DecorationSet; refs: Set<string>; rev: number };
+const shown = new PluginKey<Shown>("documentMarks");
+// What a place is found by: each mark's decoration says whose it is (`keys`), and a line where a block was deleted keeps its element here, by its change.
+type Placed = { keys: string[]; inline?: true; line?: true };
 /**
  * What is marked in the text, drawn as decorations so none of it is the document's: each comment `told.anchors` names (the quoted text where its
  * block still says it, else its blocks), each block in the document's changes, and a line where a changed block was deleted. `told.moved` hears
@@ -102,8 +107,8 @@ const shown = new PluginKey<DecorationSet>("documentMarks");
  */
 /** How long a block says who changed it, after the change lands; a paper opened later shows the tint alone. */
 const FRESH_MS = 5000;
-/** What the marks are told: the comments, the acts on an answer and the comments an agent is at work on now (`working`). */
-type Told = { anchors: DocumentAnchor[]; acts: DocumentAnswers | null; working: Set<string>; moved: (pressed?: string) => void };
+/** What the marks are told: the comments, the acts on an answer and the comments an agent is at work on now (`working`). `lines`: each line drawn where a changed block was deleted, by its change. */
+type Told = { anchors: DocumentAnchor[]; acts: DocumentAnswers | null; working: Set<string>; moved: (pressed?: string) => void; lines: Map<string, Set<HTMLElement>> };
 // A row's Solid root goes with its element, which a redraw may keep.
 const rendered = new WeakMap<globalThis.Node, () => void>();
 /** An answer's row, its acts read as pressed so a row kept through a redraw does what is offered now. */
@@ -115,14 +120,17 @@ const answered = (told: Told, key: string, by: string) => {
 const marked = (changes: YMap<Change>, told: Told) => {
   // The suggestion the caret is in shows what its blocks were, as a comment's change does while its card is open.
   const focusOf = (state: EditorState) => { const { $from } = state.selection, id = $from.depth ? $from.node(1).attrs.id : undefined, change = id ? changes.get(id) : undefined; return change && isSuggestion(change.for) ? change.for : undefined; };
-  const build = (doc: Node, focus?: string) => {
-    if (!told.anchors.length && !changes.size) return DecorationSet.empty;
-    const found: Decoration[] = [], on = new Map<string, { keys: string[]; current: boolean; open: boolean }>(), at = new Map<string, { from: number; to: number; block: Node }>();
+  let rev = 0, drawnWhere = "";
+  const build = (doc: Node, focus?: string): Shown => {
+    if (!told.anchors.length && !changes.size) { if (drawnWhere) { drawnWhere = ""; rev++; } return { set: DecorationSet.empty, refs: new Set(), rev }; }
+    const found: Decoration[] = [], on = new Map<string, { keys: string[]; current: boolean; open: boolean }>(), at = new Map<string, { from: number; to: number; block: Node }>(), refs = new Set<string>();
     doc.forEach((block, from) => { if (block.attrs.id) at.set(block.attrs.id, { from, to: from + block.nodeSize, block }); });
+    for (const anchor of told.anchors) for (const id of String(anchor.under?.blocks ?? "").split(" ")) refs.add(id);
+    changes.forEach((change, id) => { refs.add(id); if (change.after) refs.add(change.after); });
     for (const anchor of told.anchors) {
       const blocks = String(anchor.under?.blocks ?? "").split(" ").filter((id) => at.has(id)), first = at.get(blocks[0] ?? "");
       const run = first && anchor.quote && !anchor.resolved ? within(first.block, first.from, anchor.quote) : null;
-      if (run) found.push(Decoration.inline(run[0], run[1], { class: documentMarkClass.comment, "data-comment": anchor.key, ...(anchor.current ? { "data-current": "" } : {}) }));
+      if (run) found.push(Decoration.inline(run[0], run[1], { class: documentMarkClass.comment, "data-comment": anchor.key, ...(anchor.current ? { "data-current": "" } : {}) }, { keys: [anchor.key], inline: true } satisfies Placed));
       // A comment about several blocks is found by its first; the rest are only marked.
       else blocks.forEach((id, nth) => { const had = on.get(id) ?? on.set(id, { keys: [], current: false, open: false }).get(id)!; if (!nth) had.keys.push(anchor.key); had.current ||= anchor.current; had.open ||= !anchor.resolved; });
     }
@@ -131,7 +139,8 @@ const marked = (changes: YMap<Change>, told: Told) => {
     for (const [id, block] of at) {
       const had = on.get(id), change = changes.get(id);
       if (change && settling.has(change.for)) last.set(change.for, { to: block.to, by: change.by });
-      if (had || change) found.push(Decoration.node(block.from, block.to, { class: [had?.open && documentMarkClass.commented, change && documentMarkClass.changed].filter(Boolean).join(" "), ...(had?.keys.length ? { "data-comment": had.keys.join(" ") } : {}), ...(had?.current ? { "data-current": "" } : {}), ...(change ? { "data-change": change.for, ...(change.by !== "person" && !settling.has(change.for) && Date.now() - Date.parse(change.at) < FRESH_MS ? { "data-change-by": change.by } : {}) } : {}) }));
+      if (had || change) found.push(Decoration.node(block.from, block.to, { class: [had?.open && documentMarkClass.commented, change && documentMarkClass.changed].filter(Boolean).join(" "), ...(had?.keys.length ? { "data-comment": had.keys.join(" ") } : {}), ...(had?.current ? { "data-current": "" } : {}), ...(change ? { "data-change": change.for, ...(change.by !== "person" && !settling.has(change.for) && Date.now() - Date.parse(change.at) < FRESH_MS ? { "data-change-by": change.by } : {}) } : {}) },
+        { keys: [...had?.keys ?? [], ...change ? [change.for] : []] } satisfies Placed));
     }
     for (const [key, { to, by }] of last) found.push(Decoration.widget(to, () => answered(told, key, by), { key: `answered ${key} ${by}`, side: 1, ignoreSelection: true, stopEvent: () => true, destroy: (element) => rendered.get(element)?.() }));
     changes.forEach((change, id) => {
@@ -139,21 +148,44 @@ const marked = (changes: YMap<Change>, told: Told) => {
       if (!change.before || (at.has(id) && change.for !== focus && !told.anchors.some((anchor) => anchor.current && anchor.key === change.for))) return;
       // Where the block shows its change word by word, the line of what it was would say the struck words twice.
       if (at.has(id) && blockDiff(at.get(id)!.block, change.before)) return;
-      const line = () => { const element = Object.assign(document.createElement("div"), { className: documentMarkClass.removed, contentEditable: "false", textContent: textOf(change.before!) || "A block was removed" }); element.dataset.change = change.for; return element; };
-      found.push(Decoration.widget(at.get(id)?.from ?? (change.after === null ? 0 : at.get(change.after ?? "")?.to ?? doc.content.size), line, { key: id, side: -1 }));
+      const line = () => {
+        const element = Object.assign(document.createElement("div"), { className: documentMarkClass.removed, contentEditable: "false", textContent: textOf(change.before!) || "A block was removed" });
+        element.dataset.change = change.for;
+        (told.lines.get(change.for) ?? told.lines.set(change.for, new Set()).get(change.for)!).add(element);
+        return element;
+      };
+      found.push(Decoration.widget(at.get(id)?.from ?? (change.after === null ? 0 : at.get(change.after ?? "")?.to ?? doc.content.size), line, { key: id, side: -1, keys: [change.for], line: true } satisfies Placed & { key: string; side: number }));
     });
-    return DecorationSet.create(doc, found);
+    // Drawn again with every mark where it was (a card opened or shut changes only which is current), nothing has moved.
+    const where = found.map((mark) => `${mark.from} ${mark.to} ${(mark.spec as Partial<Placed> & { key?: string }).keys?.join(",") ?? mark.spec.key ?? ""}`).join(" ");
+    if (where !== drawnWhere) { drawnWhere = where; rev++; }
+    return { set: DecorationSet.create(doc, found), refs, rev };
+  };
+  /** Writing that changes no block a mark is drawn by only moves the marks; it moves them anywhere new (as against the text's size changing) only where it changed more than one block. */
+  const apply = (old: Shown, was: Node, now: Node, focus?: string): Shown => {
+    const changed = changedBlocks(was, now);
+    if (!changed) return old;
+    let touched = false;
+    const look = (block: Node) => { touched ||= old.refs.has(block.attrs.id); return false; };
+    was.nodesBetween(changed.from, changed.toWas, look);
+    now.nodesBetween(changed.from, changed.toNow, look);
+    if (touched) return build(now, focus);
+    drawnWhere = "";
+    return { set: old.set.map(acrossBlocks(changed), now), refs: old.refs, rev: changed.wasCount === 1 && changed.nowCount === 1 ? old.rev : ++rev };
   };
   return Extension.create({
     name: "documentMarks",
     addProseMirrorPlugins: () => [new Plugin({
       key: shown,
-      state: { init: (_, state) => build(state.doc, focusOf(state)), apply: (change, old, was, state) => change.docChanged || change.getMeta(shown) || focusOf(was) !== focusOf(state) ? build(change.doc, focusOf(state)) : old },
+      state: {
+        init: (_, state) => build(state.doc, focusOf(state)),
+        apply: (change, old, was, state) => change.getMeta(shown) || focusOf(was) !== focusOf(state) ? build(change.doc, focusOf(state)) : change.docChanged ? apply(old, was.doc, change.doc, focusOf(state)) : old,
+      },
       props: {
-        decorations: (state) => shown.getState(state),
+        decorations: (state) => shown.getState(state)!.set,
         handleClick: (_view, _pos, event) => { const key = (event.target as Element).closest?.("[data-comment]")?.getAttribute("data-comment")?.split(" ")[0]; if (key) told.moved(key); return false; },
       },
-      view: () => ({ update: (view, before) => { if (!before.doc.eq(view.state.doc) || shown.getState(before) !== shown.getState(view.state)) told.moved(); } }),
+      view: () => ({ update: (view, before) => { if (before.doc !== view.state.doc || shown.getState(before) !== shown.getState(view.state)) told.moved(); } }),
     })],
   });
 };
@@ -185,7 +217,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   const [column, setColumn] = createSignal<HTMLDivElement>(), [scroller, setScroller] = createSignal<HTMLDivElement>(), [editor, setEditor] = createSignal<Editor>();
   const [reflowed, setReflowed] = createSignal(0);
   const changes = copy.doc.getMap<Change>(CHANGES), [changed, setChanged] = createSignal<string[]>([]);
-  const watching = new Set<(pressed?: string) => void>(), told: Told = { anchors: [], acts: null, working: new Set(), moved: (pressed?: string) => { for (const listener of watching) listener(pressed); } };
+  const watching = new Set<(pressed?: string) => void>(), told: Told = { anchors: [], acts: null, working: new Set(), moved: (pressed?: string) => { for (const listener of watching) listener(pressed); }, lines: new Map() };
   const redraw = () => { const view = editor()?.view; if (view) view.dispatch(view.state.tr.setMeta(shown, true)); };
   // Who is at work on which comment, changing far less often than what they are heard writing.
   const working = createMemo(() => copy.seats().flatMap((seat) => seat.for ? [seat.for] : []).sort().join(" "));
@@ -279,6 +311,28 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   const manager = (made: Editor | undefined) => made ? yUndoPluginKey.getState(made.state)?.undoManager : undefined;
   const undoable = probeEditor(editor, (made) => Boolean(manager(made)?.undoStack.length)), redoable = probeEditor(editor, (made) => Boolean(manager(made)?.redoStack.length));
   const history = { undo: () => Boolean(editor() && step(editor()!, copy.doc, undo)), redo: () => Boolean(editor() && step(editor()!, copy.doc, redo)), canUndo: undoable, canRedo: redoable };
+  // Where every comment's and change's marks stand, from the text's top left: read in one pass over the marks' own decorations for every card a margin
+  // places, and kept while the marks stand where they stood and the text keeps its size, which typing in a block with no mark leaves as they were.
+  let placed: { rev: number; width: number; height: number; boxes: Map<string, { left: number; top: number; right: number; bottom: number }> } | undefined, text: DOMRect | undefined;
+  // The text's box, read once for all the places a margin asks for in one go.
+  const textBox = (view: EditorView) => { if (!text) { text = view.dom.getBoundingClientRect(); queueMicrotask(() => { text = undefined; }); } return text; };
+  const placesOf = (view: EditorView, text: DOMRect) => {
+    const { set, rev } = shown.getState(view.state)!;
+    if (placed?.rev === rev && placed.width === text.width && placed.height === text.height) return placed.boxes;
+    const boxes = new Map<string, { left: number; top: number; right: number; bottom: number }>();
+    const add = (keys: string[], mark: Element) => {
+      const at = mark.getBoundingClientRect(), left = at.left - text.left, top = at.top - text.top, right = at.right - text.left, bottom = at.bottom - text.top;
+      for (const key of keys) { const had = boxes.get(key); boxes.set(key, had ? { left: Math.min(had.left, left), top: Math.min(had.top, top), right: Math.max(had.right, right), bottom: Math.max(had.bottom, bottom) } : { left, top, right, bottom }); }
+    };
+    for (const mark of set.find(undefined, undefined, (spec) => Boolean((spec as Partial<Placed>).keys))) {
+      const { keys, inline, line } = mark.spec as Placed;
+      if (line) for (const element of told.lines.get(keys[0]!) ?? []) { if (element.isConnected) add(keys, element); else told.lines.get(keys[0]!)!.delete(element); }
+      else if (inline) for (const run of (view.nodeDOM(view.state.doc.resolve(mark.from).before(1)) as HTMLElement | null)?.querySelectorAll(`[data-comment~="${CSS.escape(keys[0]!)}"]`) ?? []) add(keys, run);
+      else { const block = view.nodeDOM(mark.from); if (block instanceof Element) add(keys, block); }
+    }
+    placed = { rev, width: text.width, height: text.height, boxes };
+    return boxes;
+  };
   // One list until a kind that is only put in comes or goes: a bar draws a row for each, and a new list would redraw them all.
   const listed = createMemo(() => [...tools.filter((tool) => (DOCUMENT_TURNABLE as readonly string[]).includes(tool.name) || tool.active).map((tool) => ({ ...tool, menu: "Block", get active() { return tool.active; } })), ...worn, ...inked, ...writings]);
   props.marks?.({
@@ -289,11 +343,12 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     },
     anchors: (list) => { told.anchors = list; redraw(); },
     place: (key) => {
-      const boxes = [...(column()?.querySelectorAll(`[data-comment~="${CSS.escape(key)}"], [data-change="${CSS.escape(key)}"]`) ?? [])].map((mark) => mark.getBoundingClientRect());
-      if (!boxes.length) return null;
-      const left = Math.min(...boxes.map((box) => box.left)), top = Math.min(...boxes.map((box) => box.top));
-      return { left, top, width: Math.max(...boxes.map((box) => box.right)) - left, height: Math.max(...boxes.map((box) => box.bottom)) - top };
+      const view = editor()?.view;
+      if (!view) return null;
+      const text = textBox(view), box = placesOf(view, text).get(key);
+      return box ? { left: text.left + box.left, top: text.top + box.top, width: box.right - box.left, height: box.bottom - box.top } : null;
     },
+    placed: () => { const view = editor()?.view; if (!view) return ""; const text = textBox(view); return `${shown.getState(view.state)!.rev} ${text.left} ${text.top} ${text.width} ${text.height}`; },
     watch: (listener) => { watching.add(listener); return () => watching.delete(listener); },
     changed: (key) => changed().includes(key),
     seats: copy.seats,
@@ -346,7 +401,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     {/* The editor is made only once the hub's copy is held: made before, its first empty block would be merged in as a block of its own. */}
     <Show when={copy.synced() && column()}>{(element) => {
       // Untracked: a signal or prop read in what the editor is made from would make it again (caret, undo and find lost) each time it changed.
-      const made = createTiptapEditor(() => { const at = element(); return untrack(() => ({ element: at, extensions: [...viewed(documentExtensions(props.host.holds), props.host), paperTyping(props.host, offers), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), suggesting.extension(), seatsDrawn(copy.seats, (redraw) => { redrawSeats = redraw; }, () => told.acts?.stop), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), slash.extension(), blockKeys, drawn((block, name) => props.host.showMention?.(block, name)), find.extension(), collapsing, ...(props.onMention ? [mentioning(anchor, setAsked, keys), commentKey] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name, "data-own-keys": OWN_KEYS } } })); });
+      const made = createTiptapEditor(() => { const at = element(); return untrack(() => ({ element: at, extensions: [...viewed(documentExtensions(props.host.holds), props.host), paperTyping(props.host, offers), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), suggesting.extension(), seatsDrawn(copy.seats, (redraw) => { redrawSeats = redraw; }, () => told.acts?.stop), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), numbered(scroller), slash.extension(), blockKeys, drawn((block, name) => props.host.showMention?.(block, name)), find.extension(), collapsing, ...(props.onMention ? [mentioning(anchor, setAsked, keys), commentKey] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name, "data-own-keys": OWN_KEYS } } })); });
       createEffect(() => setEditor(made()));
       return null;
     }}</Show>

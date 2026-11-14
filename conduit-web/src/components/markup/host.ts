@@ -112,6 +112,8 @@ export interface MarkupMarginHost {
   anchors(list: MarkupAnchor[]): void;
   /** Where what one is about is now (its box, in the viewport's pixels); null when the surface cannot find it. */
   place(key: string): { left: number; top: number; width: number; height: number } | null;
+  /** Where every place stands, as one word: while it is the word it was, no place has moved (the surface has written in a block nothing is about), so the cards are not placed again. Unsaid, they are placed each time the surface says a place may have moved. */
+  placed?(): string;
   /** The column of what is marked up (a paper's text), which an open card spans where the margin lies over it. */
   column?(): { left: number; width: number } | null;
   /** The listener is told when a place may have changed, and (with its key) when the person pressed what a comment is about. The return ends it. */

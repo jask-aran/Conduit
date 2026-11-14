@@ -21,10 +21,11 @@
 .ui-document-content { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 /* `min-width: 0`: a card whose quote is one long line is cut short in the margin, and never widens it past the row. */
 .ui-document-margin { min-width: 0; max-width: 100%; flex: 0 0 var(--measure-md); }
-.ui-document-text { box-sizing: border-box; flex: 1; outline: 0; counter-reset: block; }
-/* Each block is numbered in the sheet's gutter, where the handle stands over its number. */
-.ui-document-text > :is([data-id], .tableWrapper) { position: relative; counter-increment: block; }
-.ui-document-text > :is([data-id], .tableWrapper)::after { position: absolute; top: 0; right: 100%; margin-right: var(--space-md); color: color-mix(in oklch, var(--muted-foreground), transparent var(--tone-quiet)); font-family: var(--font-data); font-size: var(--text-caption); font-variant-numeric: tabular-nums; content: counter(block); pointer-events: none; user-select: none; }
+.ui-document-text { box-sizing: border-box; flex: 1; outline: 0; }
+/* Each block is numbered in the sheet's gutter, where the handle stands over its number: by the editor, the blocks round the view only (`data-n`,
+   document/numbers.ts), so a block put in renumbers a view's worth, and the paper's numbers are not each a box every pointer event is tested against. */
+.ui-document-text > [data-n] { position: relative; }
+.ui-document-text > [data-n]::after { position: absolute; top: 0; right: 100%; margin-right: var(--space-md); color: color-mix(in oklch, var(--muted-foreground), transparent var(--tone-quiet)); font-family: var(--font-data); font-size: var(--text-caption); font-variant-numeric: tabular-nums; content: attr(data-n); pointer-events: none; user-select: none; }
 .ui-document-comment { border-radius: var(--radius-inset); background: color-mix(in oklch, var(--status-warn), transparent 78%); cursor: pointer; }
 .ui-document-comment[data-current] { background: color-mix(in oklch, var(--status-warn), transparent 55%); }
 /* Asking where the caret is: a field in the line's own place, the words growing down, and under it what was asked before. Opaque, as it stands over the lines below. */
@@ -44,7 +45,8 @@
 .ui-document-revealed { animation: ui-document-revealed var(--duration-flash) var(--ease-leave); }
 @keyframes ui-document-revealed { from { background: var(--accent); box-shadow: 0 0 0 var(--space-xs) var(--accent); } }
 @media (prefers-reduced-motion: reduce) { .ui-document-revealed { animation: none; } }
-/* Each block lays out on its own: a letter typed in one is not a reason to look at the rest. */
+/* Each block lays out on its own, and is painted as a whole where it moves: a block put in shifts every block under it, which otherwise has every line of
+   them walked again before paint. */
 .ui-document-text > [data-id] { contain: layout style; }
 .ui-document-text > :is(.ui-document-commented, .ui-document-changed) { border-radius: var(--radius-inset); box-shadow: 0 0 0 var(--space-xs) var(--document-mark); background: var(--document-mark); }
 .ui-document-commented { --document-mark: color-mix(in oklch, var(--status-warn), transparent 88%); }
@@ -195,4 +197,5 @@
 .ui-document-page[data-margin="tucked"] .ui-markup-note:not([data-open]) .ui-markup-state-label { display: none; }
 .ui-document-page[data-margin="tucked"] .ui-markup-note:not([data-open]) .ui-markup-state-rest { display: inline-flex; }
 .ui-document-page[data-margin="tucked"] .ui-markup-note:not([data-open]) > .ui-card { border-radius: var(--radius-round); padding: var(--space-xs); }
-.ui-document-page[data-margin="tucked"] .ui-markup-note:not([data-open]) :is(.ui-markup-talk > :not(.ui-markup-state), .ui-card-close, .ui-card > h3) { display: none; }
+/* Each part of the talk but its state named by its class: a part named only by what it is not would make every change of the page's fold restyle the whole page, text and all. */
+.ui-document-page[data-margin="tucked"] .ui-markup-note:not([data-open]) :is(.ui-markup-talk > :is(.ui-markup-cycle, .ui-markup-quote, .ui-markup-source, .ui-card-preview, .ui-markup-words, .ui-markup-said), .ui-card-close, .ui-card > h3) { display: none; }

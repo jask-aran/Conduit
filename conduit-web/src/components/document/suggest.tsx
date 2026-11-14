@@ -1,6 +1,7 @@
 import { Extension, type Editor } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Mapping } from "@tiptap/pm/transform";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { createEffect, createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js";
 import { render } from "solid-js/web";
@@ -10,7 +11,7 @@ import type { Doc, Map as YMap } from "yjs";
 import { IconButton, Icons } from "@/components/ui";
 import { DocumentSuggested } from "@/components/ui/document";
 import { SUGGESTION, blockId, isSuggestion } from "@/document-format.js";
-import { blockById } from "./blocks";
+import { acrossBlocks, blockById, changedBlocks } from "./blocks";
 import type { DocumentHost, DocumentSuggestion, DocumentWriting } from "./host";
 
 type Json = { type: string; text?: string; content?: Json[] };
@@ -195,7 +196,8 @@ export function createSuggesting(editor: Accessor<Editor | undefined>, doc: Doc,
       } else summary = [[edited, "Changed"], [added.length, "Added"], [removed.length, "Removed"]].filter(([n]) => n).map(([n, verb], nth) => `${nth ? String(verb).toLowerCase() : verb} ${n} block${n === 1 ? "" : "s"}`).join(", ");
       return { ...one, blocks: entries.map(([block]) => block), summary };
     });
-  });
+    // The same list while what it says is the same: typing elsewhere would otherwise tell every card of it again.
+  }, NONE, { equals: (a, b) => a.length === b.length && a.every((one, at) => { const other = b[at]!; return one.key === other.key && one.by === other.by && one.at === other.at && one.summary === other.summary && one.blocks.join(" ") === other.blocks.join(" "); }) });
 
   // Untracked, so a suggestion changing redraws the controls and never makes the editor again. A control's Solid root goes with its element, which a redraw may keep.
   const parts = new WeakMap<globalThis.Node, () => void>();
@@ -251,18 +253,32 @@ export function createSuggesting(editor: Accessor<Editor | undefined>, doc: Doc,
     diffed(state, found);
     return found.length ? DecorationSet.create(state.doc, found) : DecorationSet.empty;
   };
+  /** Where writing changed no block that is changed, nor one a deleted block stands after, the controls only move: the mapping that moves them; else null, and they are drawn again. */
+  const untouched = (was: Node, now: Node) => {
+    const changed = changedBlocks(was, now);
+    if (!changed) return new Mapping();
+    const near = new Set<string>();
+    changes.forEach((change, block) => { near.add(block); if (change.after) near.add(change.after); });
+    let touched = false;
+    const look = (block: Node) => { touched ||= near.has(block.attrs.id); return false; };
+    was.nodesBetween(changed.from, changed.toWas, look);
+    now.nodesBetween(changed.from, changed.toNow, look);
+    return touched ? null : acrossBlocks(changed);
+  };
   const extension = () => Extension.create({
     name: "suggesting",
     addProseMirrorPlugins: () => [new Plugin({
       key: settled,
       state: {
         init: (_, state) => controls(state),
-        apply: (tr, old, _was, state) => {
+        apply: (tr, old, was, state) => {
           const sync = tr.getMeta(ySyncPluginKey) as { isChangeOrigin?: boolean; isUndoRedoOperation?: boolean } | undefined;
           if (tr.getMeta(settled)) skip = true;
           // Written here, or taken back or put back here (which reaches the editor as a merge); never another's writing merged in.
           else if (tr.docChanged && (!sync?.isChangeOrigin || sync.isUndoRedoOperation)) dirty = true;
-          return tr.docChanged || tr.getMeta(settled) !== undefined ? controls(state) : old.map(tr.mapping, tr.doc);
+          if (tr.getMeta(settled) !== undefined) return controls(state);
+          const moved = tr.docChanged ? untouched(was.doc, state.doc) : null;
+          return tr.docChanged && !moved ? controls(state) : old.map(moved ?? tr.mapping, tr.doc);
         },
       },
       props: { decorations: (state) => settled.getState(state) },

@@ -22,12 +22,21 @@ const DRAG_SLOP_PX = 4;
 export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: readonly Tool[], options: { scroller: Accessor<HTMLElement | undefined>; onComment: () => ((about: Range) => void) | undefined; onAdded: (id: string | undefined) => void }) {
   const [hovered, setHovered] = createSignal<string | null>(null), [open, setOpen] = createSignal(false), [drop, setDrop] = createSignal<{ to: number; top: number } | null>(null), [touched, setTouched] = createSignal(false);
   let handle: HTMLDivElement | undefined, pressing = false, dragging = false, frame = 0, refocus = true;
-  // Read with the text only while a block is pointed at.
-  const from = createMemo(() => { const id = hovered(), made = editor(); if (!id || !made) return null; track(made, "doc"); return blockById(made.state.doc, id); });
+  // Read with the text only while a block is pointed at, where it was first: typing in another block leaves it there, and looking for it costs a pass over the blocks.
+  const from = createMemo<number | null>((was) => {
+    const id = hovered(), made = editor();
+    if (!id || !made) return null;
+    track(made, "doc");
+    const { doc } = made.state;
+    return was != null && was < doc.content.size && doc.nodeAt(was)?.attrs.id === id ? was : blockById(doc, id);
+  }, null);
   const origin = () => (handle?.offsetParent as HTMLElement | null)?.getBoundingClientRect() ?? null;
   const place = createMemo(() => {
-    const pos = from(), view = editor()?.view, block = pos === null ? null : view?.nodeDOM(pos) as HTMLElement | null, body = origin(), scroller = options.scroller(), grip = handle?.querySelector<HTMLElement>("[data-grip]");
-    if (!view || !block?.getBoundingClientRect || !handle || !body || !scroller || !grip) return undefined;
+    // Measured only with a block pointed at: read as the editor is made, the box would lay the whole paper out inside the script that makes it.
+    const pos = from(), view = editor()?.view, block = pos === null ? null : view?.nodeDOM(pos) as HTMLElement | null, scroller = options.scroller(), grip = handle?.querySelector<HTMLElement>("[data-grip]");
+    if (!view || !block?.getBoundingClientRect || !handle || !scroller || !grip) return undefined;
+    const body = origin();
+    if (!body) return undefined;
     // It stands off the sheet, on the pane's ground beside it; where the pane leaves no room there, in the sheet's gutter. Never over the text:
     // where the "+" does not fit too it folds into the grip's menu, and where the grip does not fit it is not shown.
     const style = getComputedStyle(handle), gap = parseFloat(style.marginRight) || 0, outside = body.left - scroller.getBoundingClientRect().left - gap, inside = outside < grip.offsetWidth, room = inside ? view.dom.getBoundingClientRect().left - body.left - gap : outside;

@@ -167,25 +167,21 @@ export function DocumentSheet(props: { ref?: (element: HTMLDivElement) => void; 
   // what says how wide it would stand.)
   const SNUG = 1, TUCKED = 2;
   const [fold, setFold] = createSignal(0);
-  const needs: number[] = [];
   let column: HTMLDivElement | undefined, body: HTMLDivElement | undefined, aside: HTMLElement | undefined;
+  // Both folds' needs are read in one go, snug put on the column and back for the reading (which restyles the column and its page alone), and the fold is
+  // set once from them: no fold is tried and the paper laid out to see whether it fits. The room is read where the observer runs, after layout.
   const fit = () => {
-    for (let tries = 0; tries <= 2 * TUCKED; tries++) {
-      if (!column || !body || !aside || props.marginEmpty) return setFold(0);
-      const at = fold(), room = column.clientWidth;
-      if (at < TUCKED) {
-        const look = getComputedStyle(column), page = getComputedStyle(column.firstElementChild!);
-        needs[at] = parseFloat(getComputedStyle(body).maxWidth) + (parseFloat(page.columnGap) || 0) + parseFloat(getComputedStyle(aside).flexBasis) + parseFloat(look.paddingLeft) + parseFloat(look.paddingRight);
-      }
-      const next = at < TUCKED && needs[at]! > room ? at + 1 : at > 0 && (needs[at - 1] ?? Infinity) <= room ? at - 1 : at;
-      if (next === at) return;
-      setFold(next);
-    }
+    if (!column || !body || !aside || props.marginEmpty) return setFold(0);
+    const room = column.clientWidth, page = column.firstElementChild!, snug = column.hasAttribute("data-snug"), side = parseFloat(getComputedStyle(body).maxWidth) + parseFloat(getComputedStyle(aside).flexBasis);
+    const need = (at: number) => { column!.toggleAttribute("data-snug", at === SNUG); const look = getComputedStyle(column!); return side + (parseFloat(getComputedStyle(page).columnGap) || 0) + parseFloat(look.paddingLeft) + parseFloat(look.paddingRight); };
+    const wide = need(0), narrow = need(SNUG);
+    column.toggleAttribute("data-snug", snug);
+    setFold(wide <= room ? 0 : narrow <= room ? SNUG : TUCKED);
   };
   const sized = new ResizeObserver(fit);
   onCleanup(() => sized.disconnect());
-  // A new measure or a margin come or gone makes each fold's need new: measured again from the widest.
-  createEffect(() => { props.width; props.marginEmpty; queueMicrotask(() => { needs.length = 0; setFold(0); fit(); }); });
+  // A new measure or a margin come or gone changes each fold's need: read before the frame is drawn, never in the script that changed it, which would lay the paper out twice.
+  createEffect(() => { props.width; props.marginEmpty; const frame = requestAnimationFrame(fit); onCleanup(() => cancelAnimationFrame(frame)); });
   return <section class="ui-document" aria-label={props.name} data-bare={props.bare ? "" : undefined} data-width={props.width ?? "narrow"}>
     <Show when={!props.bare}><PaneHeader kind="tool" name={props.name} place={props.state} actions={props.actions} /></Show>
     {props.find}

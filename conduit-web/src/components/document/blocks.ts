@@ -1,7 +1,8 @@
 import { Extension } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { Selection, TextSelection } from "@tiptap/pm/state";
-import type { EditorView } from "@tiptap/pm/view";
+import { Mapping, StepMap } from "@tiptap/pm/transform";
+import type { Decoration, DecorationSet, EditorView } from "@tiptap/pm/view";
 
 /** The top-level block at or around a position: where it starts, or null between none. */
 export const blockAt = (doc: Node, pos: number) => {
@@ -57,7 +58,30 @@ export const addUnder = (view: EditorView, from: number) => {
   return view.state.doc.nodeAt(at)?.attrs.id as string | undefined;
 };
 /** Where the top-level block with this id starts, or null. */
-export const blockById = (doc: Node, id: string) => { let found: number | null = null; doc.forEach((node, at) => { if (node.attrs.id === id) found = at; }); return found; };
+export const blockById = (doc: Node, id: string) => { for (let i = 0, at = 0; i < doc.childCount; at += doc.child(i++).nodeSize) if (doc.child(i).attrs.id === id) return at; return null; };
+/**
+ * The run of top-level blocks that differ between two documents: the index and start of its first, and where it ends in each; null where none do.
+ * Found by which nodes are still the nodes they were, which is cheap: typing makes one new block, and a merge from the hub keeps the rest.
+ */
+export const changedBlocks = (was: Node, now: Node) => {
+  const n = was.childCount, m = now.childCount;
+  let head = 0, tail = 0, from = 0, after = 0;
+  while (head < n && head < m && was.child(head) === now.child(head)) from += was.child(head++).nodeSize;
+  if (head === n && head === m) return null;
+  while (tail < n - head && tail < m - head && was.child(n - 1 - tail) === now.child(m - 1 - tail)) after += was.child(n - 1 - tail++).nodeSize;
+  return { index: head, from, toWas: was.content.size - after, toNow: now.content.size - after, wasCount: n - head - tail, nowCount: m - head - tail };
+};
+/** The mapping that takes a document to the next across the blocks that differ, positions inside those blocks dropped; a merge from the hub replaces the whole document, which tr.mapping would drop everything across. */
+export const acrossBlocks = (changed: NonNullable<ReturnType<typeof changedBlocks>>) => new Mapping([new StepMap([changed.from, changed.toWas - changed.from, changed.toNow - changed.from])]);
+/** A plugin's decorations made for a new document by drawing only the top-level blocks that differ (`draw`: a block, where it starts and its index); the rest move with their blocks. */
+export const redrawBlocks = (set: DecorationSet, was: Node, now: Node, draw: (block: Node, at: number, index: number) => Decoration[]) => {
+  const changed = changedBlocks(was, now);
+  if (!changed) return set;
+  const made: Decoration[] = [];
+  let index = changed.index;
+  now.nodesBetween(changed.from, changed.toNow, (block, at) => { made.push(...draw(block, at, index++)); return false; });
+  return set.map(acrossBlocks(changed), now).add(now, made);
+};
 /** A block as it is drawn, for what asks about it. */
 export const blockRange = (view: EditorView, from: number) => { const block = view.nodeDOM(from); if (!block) return null; const range = document.createRange(); range.selectNodeContents(block); return range; };
 
