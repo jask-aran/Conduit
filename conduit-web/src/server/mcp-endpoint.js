@@ -39,14 +39,15 @@ export function createMcpEndpoint({ runtime, token, version = "" }) {
     if (method === "initialize") {
       return reply(id, { protocolVersion: typeof params?.protocolVersion === "string" ? params.protocolVersion : PROTOCOL,
         capabilities: { tools: { listChanged: false } }, serverInfo: { name: "conduit", title: "Conduit", version },
-        instructions: "Conduit itself, the app the person uses: what is on their screens (conduit_ui, targets a client tab, default the one the person is talking to you from) and the hub's own state (conduit_inbox, shared context inbox; no client parameter; conduit_paper, the papers the person and agents write together, with the person's comments on them). More hub areas can follow. The hub's shared browser uses agent-browser's own server (pane browser:hub)." });
+        instructions: "Conduit itself, the app the person uses: what is on their screens (conduit_ui, targets a client tab, default the one the person is talking to you from) and the hub's own state (conduit_inbox, shared context inbox; no client parameter; conduit_artifact, the papers the person and agents write together, with the person's comments on them). More hub areas can follow. The hub's shared browser uses agent-browser's own server (pane browser:hub)." });
     }
     if (method === "ping") return reply(id, {});
     if (method === "tools/list") {
       return reply(id, { tools: tools().map((tool) => ({ name: tool.name, description: tool.description, inputSchema: JSON.parse(JSON.stringify(tool.parameters)) })) });
     }
     if (method === "tools/call") {
-      const tool = tools().find((item) => item.name === params?.name);
+      // A chat begun before the tool was renamed still calls it by its old name.
+      const asked = params?.name === "conduit_paper" ? "conduit_artifact" : params?.name, tool = tools().find((item) => item.name === asked);
       if (!tool) return fail(id, -32602, `Unknown tool: ${params?.name}`);
       // A harness's arguments are not trusted to be well-formed.
       let args;

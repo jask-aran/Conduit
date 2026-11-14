@@ -112,7 +112,7 @@ over those. What still knows a paper's blocks outside the paper's two entries:
 
 - [ ] A seat carries `blocks`, on the hub (`sit`, `hear`, `readPartial`, the seat frame) and in the editor's `DocumentSeat`: a kind
   whose places are not blocks needs the field to be "places", which is a format change.
-- [ ] The `/blocks` route's body and the `conduit_paper` tool (its actions, its `block` parameter, its description) are the paper's. A
+- [ ] The `/blocks` route's body and the `conduit_artifact` tool (its actions, its `block` parameter, its description) are the paper's. A
   second editable kind needs its own place parameter there, or its own tool.
 - [ ] `current` and the live socket assume a room with a Yjs `doc`.
 - [ ] `artifact-kinds.ts` types `edit` as the paper's tool names; `artifact-rows.tsx` offers Copy as Markdown and Count by comparing

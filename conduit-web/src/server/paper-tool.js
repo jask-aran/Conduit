@@ -3,17 +3,19 @@ import { defineTool } from "@earendil-works/pi-durable";
 import { callingChat } from "./conduit-mcp.js";
 
 const text = (words, isError = false) => ({ output: [{ type: "text", text: words }], ...(isError ? { isError: true } : {}) });
-const ACTIONS = ["answer", "list", "new", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve"];
+const ACTIONS = ["answer", "list", "new", "show", "lead", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve"];
 
-/** Papers for an agent: the hub's document service (server/documents.js) as one tool, with the verbs `conduit-markup` has. */
+/** Artifacts for an agent (papers and sites): the hub's document service (server/documents.js) as one tool, with the verbs `conduit-markup` has. */
 export function PaperTool(runtime) {
   return defineTool({
-    name: "conduit_paper",
-    description: "Papers: the block documents the person and agents write together in a project (a `.paper` file; edit it only through this tool, since the hub holds the live copy). "
+    name: "conduit_artifact",
+    description: "Artifacts: what the person and agents make together in a project and the person marks up. Papers: the block documents the person and agents write together in a project (a `.paper` file; edit it only through this tool, since the hub holds the live copy). "
       + "`paper` is a paper's id; omit it in a paper's own thread, or in a chat connected to one paper. "
       + "answer (item, n: omit it for an item with one comment; edits: [{ op: replace | insert | delete, at: a block id, markdown }]; reply; resolve) answers a comment in one call: every edit is made for it, all or none, then the reply and the resolve. "
       + "A comment handed to you carries its text and the blocks it is on, so answer needs no read first; an edit on a block that has gone writes nothing and says what the comment is on now. "
-      + "list (project: id or slug, default this chat's) and new (name, project) give ids. "
+      + "list (project: id or slug, default this chat's) and new (name, kind: paper or site, project) give ids. "
+      + "new also makes this chat the artifact's lead (the person's comments on it come here, not to a thread of its own) and shows it to them beside this chat (show: false leaves it closed). "
+      + "show opens one for the person. lead takes the lead on one that exists, when the person asks you to work on it. "
       + "read prints the paper as Markdown, each block under `<!-- block <id> -->`. "
       + "set (name, text) writes one property of its front matter (the name: value lines read shows first); no text removes it. "
       + "replace (block, markdown: the first block written keeps the id), insert (block: the one to write after, or `start`; markdown) and delete (block) change it at once, for everyone who has it open. "
@@ -44,6 +46,7 @@ export function PaperTool(runtime) {
         markdown: Type.Optional(Type.String()),
       }), { description: "answer: the paper's edits for the comment, in order." })),
       reply: Type.Optional(Type.String({ description: "answer: what the person reads beside the comment." })),
+      show: Type.Optional(Type.Boolean({ description: "new: false leaves the new artifact closed." })),
       resolve: Type.Optional(Type.Boolean({ description: "answer: mark the comment done." })),
     }),
     replay: "unsafe",
@@ -51,16 +54,23 @@ export function PaperTool(runtime) {
       const documents = runtime.documents;
       if (!documents) return text("Papers are not ready yet.", true);
       try {
-        const mine = documents.of(await callingChat(runtime, api, context));
+        const chat = await callingChat(runtime, api, context), mine = documents.of(chat);
+        // Shown beside the chat that asked, in the tab the person talks to it from; an artifact nobody has open is still made.
+        const show = (id) => runtime.uiControl ? runtime.uiControl.command({ action: "open", view: `artifact:${id}`, beside: true }, null, chat).then(({ result }) => `Shown to the person: ${result}`, (error) => `Not shown (${error.message}); conduit_ui opens it as artifact:${id}.`) : `conduit_ui opens it as artifact:${id}.`;
         if (args.action === "list" || args.action === "new") {
           const project = args.project ?? mine.project;
           if (!project) throw new Error("Say which project.");
           const found = args.action === "list" ? await documents.list(project) : [await documents.create(project, { kind: args.kind, name: args.name })];
-          return text(found.map((one) => `${one.id}  ${one.path}`).join("\n") || "No papers or sites in this project.");
+          if (args.action === "list") return text(found.map((one) => `${one.id}  ${one.path}`).join("\n") || "No papers or sites in this project.");
+          // Whoever makes an artifact leads it: what the person says of it comes to the chat that knows why it was made.
+          if (chat) await documents.lead(found[0].id, chat);
+          return text(`${found[0].id}  ${found[0].path}${chat ? "\nThis chat leads it: the person's comments on it come here." : ""}${args.show === false ? "" : `\n${await show(found[0].id)}`}`);
         }
         const paper = args.paper ?? (mine.papers.length === 1 ? mine.papers[0].id : null);
         if (!paper) throw new Error(mine.papers.length ? `Say which paper: this chat is connected to ${mine.papers.map((one) => one.id).join(", ")}.` : "Say which paper (`list` gives ids).");
         const by = mine.papers.find((one) => one.id === paper)?.as ?? "agent";
+        if (args.action === "show") return text(await show(paper));
+        if (args.action === "lead") { if (!chat) throw new Error("Only a chat can lead an artifact."); await documents.lead(paper, chat); return text(`This chat leads ${paper}: the person's comments on it come here.`); }
         if (args.action === "answer") {
           const done = await documents.answer(paper, { item: args.item, n: args.n, edits: args.edits ?? [], reply: args.reply ?? args.text, resolve: args.resolve, by });
           const did = [args.edits?.length && `made ${args.edits.length === 1 ? "the edit" : `the ${args.edits.length} edits`}${done.blocks.length ? ` (wrote ${done.blocks.join(", ")})` : ""}`, done.replied && "replied", done.resolved && `resolved it${done.handled ? ", so the item is handled" : ""}`].filter(Boolean);

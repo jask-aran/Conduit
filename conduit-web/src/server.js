@@ -636,7 +636,7 @@ for (const adapter of backends.instances()) {
   });
   adapter.on?.("removed", ({ id, chatId }) => runtimeHub.publishProcessRemoved(id, chatId));
   if (adapter.sessions) adapter.sessions.onTurn = (record) => publishProcessChange(adapter.view(record), record, "turn");
-  adapter.on?.("tool_input", ({ chatId, name, input, call, done }) => { if (name === "conduit_paper") void artifactHeard(chatId, input, call, done); });
+  adapter.on?.("tool_input", ({ chatId, name, input, call, done }) => { if (name === "conduit_artifact" || name === "conduit_paper") void artifactHeard(chatId, input, call, done); });
 }
 registerDraftRoutes(app, { drafts, knownChat: async (chatId) => Boolean(await findChatContext(chatId)) });
 registerContextRoutes(app, { contextStore });

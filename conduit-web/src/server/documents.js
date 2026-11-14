@@ -304,7 +304,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       id = read.id && !copy ? read.id : crypto.randomBytes(8).toString("hex");
       await KINDS[kind].adopted({ disk, side, at, id, read });
     }
-    const links = known.get(id)?.links ?? await fs.readFile(path.join(side, id, "links.json"), "utf8").then(JSON.parse).then((kept) => ({ thread: kept.thread ?? null, connections: [...kept.connections ?? []] }), () => ({ thread: null, connections: [] }));
+    const links = known.get(id)?.links ?? await fs.readFile(path.join(side, id, "links.json"), "utf8").then(JSON.parse).then((kept) => ({ thread: kept.thread ?? null, connections: [...kept.connections ?? []], ...(kept.lead ? { lead: kept.lead } : {}) }), () => ({ thread: null, connections: [] }));
     return known.set(id, { id, kind, name, path: at, project: project.id, disk, side: path.join(side, id), links }).get(id);
   }
   /**
@@ -365,13 +365,16 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     if (!entry) return [];
     const agent = own && !names.has(own.name) ? [{ name: own.name, agent: true, chat: agentChat }] : [];
     for (const one of agent) names.add(one.name);
-    // The mated thread is the artifact's own and is listed before the hub's chats are read: it is never "no listener".
-    return [{ name: MATED, chat: entry.links.thread }, ...agent, ...(chats() ? entry.links.connections : []).flatMap((chat) => {
+    // Its lead (the chat that made it, or one the person put on it) is listed first, so what is sent to nobody by name goes there; its own thread stands behind.
+    const lead = entry.links.lead, order = chats() ? [...entry.links.connections].sort((a, b) => Number(b === lead) - Number(a === lead)) : [];
+    const others = order.flatMap((chat) => {
       const title = chats().get(chat)?.title, name = title && !names.has(title) ? title : `chat ${chat.slice(0, 8)}`;
       if (!chats().get(chat) || names.has(name)) return [];
       names.add(name);
       return [{ name, chat }];
-    })];
+    }), led = others[0]?.chat === lead ? others.splice(0, 1) : [];
+    // The artifact's own thread is always listed: it is never "no listener".
+    return [...led, { name: MATED, chat: entry.links.thread }, ...agent, ...others];
   };
   /**
    * How many of an artifact's comments the person has not settled (a session's resolve leaves one standing until they
@@ -421,7 +424,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   };
   /** Only a listener the hub holds has a seat, and only while it has one already or its chat has a turn running: a script that edits under a name is not at work for the person. */
   const sits = (id, name, room) => { const one = heldFor(id).find((held) => held.name === name); return Boolean(one && (room?.seats?.has(name) || chats()?.working?.(one.chat))); };
-  /** What is heard of each chat's conduit_paper call as the model writes it (`heard`): the call, its latest input, and once read, where it writes. */
+  /** What is heard of each chat's conduit_artifact call as the model writes it (`heard`): the call, its latest input, and once read, where it writes. */
   const hearing = new Map();
   const hear = async (one, documents) => {
     const { values, open } = readPartial(one.input), whole = (key) => key in values && open !== key ? values[key] : undefined;
@@ -458,7 +461,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     const handed = (comment, words, said) => Object.fromEntries(Object.entries({ artifact: room.id, kind: room.entry.kind, name: room.entry.name.replace(/\s+/g, " ").slice(0, 120), item, n: comment?.n, ...kind.where?.(comment?.under), said, rev,
       quote: comment?.quote || undefined, words: words || undefined, context: kind.context?.(room, comment?.under, 1) }).filter(([, value]) => value !== undefined && value !== null && !(Array.isArray(value) && !value.length)));
     // How to answer, the tool first: one call does the edits, the reply and the resolve, so nothing needs reading first.
-    const answering = (n) => `${kind.blocks ? `Answer in one call: the tool \`conduit_paper\`, action "answer", with paper "${room.id}", item "${item}"${n ? `, n ${n}` : ""}, \`edits\` ([{ op: "replace" | "insert" | "delete", at: <block id>, markdown }], each made for this comment), \`reply\` (what the person reads beside the comment) and \`resolve\`.` : `Change the site's file ${room.file?.() ?? room.entry.path} with your own tools, then answer with the tool \`conduit_paper\`, action "answer", paper "${room.id}", item "${item}"${n ? `, n ${n}` : ""}, \`reply\` and \`resolve\`.`} Without the tool: \`node ${SCRIPT} answer ${item}${n ? ` ${n}` : ""} --json '{${kind.blocks ? `"edits":[…],` : ""}"reply":"…","resolve":true}'\`.`;
+    const answering = (n) => `${kind.blocks ? `Answer in one call: the tool \`conduit_artifact\`, action "answer", with paper "${room.id}", item "${item}"${n ? `, n ${n}` : ""}, \`edits\` ([{ op: "replace" | "insert" | "delete", at: <block id>, markdown }], each made for this comment), \`reply\` (what the person reads beside the comment) and \`resolve\`.` : `Change the site's file ${room.file?.() ?? room.entry.path} with your own tools, then answer with the tool \`conduit_artifact\`, action "answer", paper "${room.id}", item "${item}"${n ? `, n ${n}` : ""}, \`reply\` and \`resolve\`.`} Without the tool: \`node ${SCRIPT} answer ${item}${n ? ` ${n}` : ""} --json '{${kind.blocks ? `"edits":[…],` : ""}"reply":"…","resolve":true}'\`.`;
     const about = (list) => [...new Set(list.flatMap((comment) => kind.places?.(comment?.under) ?? []))];
     // Seated once the chat has been told, never before: a chat that could not be told is not at work. One that is already reading or writing keeps that;
     // and one whose chat answered before it was seated, or never began a turn, has no turn end to leave by, so it leaves SEAT_START_MS on.
@@ -555,7 +558,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     // Who holds an item is the chat that took it, whatever it is called now: a chat's listener name is its title, which changes.
     const held = async (name, item) => {
       const all = heldFor(id), took = item && await fs.readFile(path.join(entry.side, "markup", item, "taken.json"), "utf8").then(JSON.parse).catch(() => null);
-      return took?.held ? took.name === MATED ? all[0] : took.agent ? all.find((one) => one.agent) : all.find((one) => one.chat === took.chat) && { name: took.name, chat: took.chat } : all.find((one) => one.name === name);
+      return took?.held ? took.name === MATED ? all.find((one) => one.name === MATED) : took.agent ? all.find((one) => one.agent) : all.find((one) => one.chat === took.chat) && { name: took.name, chat: took.chat } : all.find((one) => one.name === name);
     };
     const failed = (error) => console.error(`Could not hand a comment on the ${entry.kind} ${room.entry.name} to its chat: ${error.message}`);
     return { ...store, open,
@@ -578,7 +581,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     const file = room.file = () => { const now = known.get(entry.id) ?? room.entry; return now.disk.far ? `${now.path} in the project's folder, on the device that holds it` : now.disk.at(now.path); };
     room.markup = markupOf(room, () => `(the file ${file()})`, () => [`This site is one HTML file, ${file()}, which the person sees drawn in a pane. To answer a comment, change that file with your own tools: the pane shows the new version a moment after it is saved. Leave its \`conduit-artifact\` meta tag as it is, and do not rename or move the file.`,
       "A comment's `under.elements` names what of the site its marks were drawn over, each as its parent and itself (`section#plans > h2`) with the text it shows; `rect` and `drawings` are in the pixels of the person's window, not of the site.",
-      "If you have the tool `conduit_paper`, its comments, reply and resolve work on a site by its id."]);
+      "If you have the tool `conduit_artifact`, its comments, reply and resolve work on a site by its id."]);
     return room;
   }
   async function loadPaper(entry) {
@@ -592,7 +595,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     room.owed = await fs.readFile(path.join(entry.side, "unwritten"), "utf8").catch(() => null);
     await take(room);
     // A change is accepted when the person resolves its comment (a session's resolve accepts nothing); read on every look at the open threads, which hold every comment the person has not resolved.
-    room.markup = markupOf(room, () => `(document ${id})`, () => [`An image block reads as \`![caption](name)\`; its picture is the file ${path.join(room.entry.side, "images")}/<name>.`, "If you have the tool `conduit_paper`, its action `answer` makes a comment's edits, reply and resolve in one call (the CLI's `answer <item> [n] --json '{…}'` does too); read, replace, insert, delete (with `for`), reply and resolve do each alone.", "To answer a comment by changing the document, add `--for <this item's id>/<n>` to `document replace`, `insert` or `delete`: the person then sees which blocks changed for comment n and can take the change back. Resolving the comment yourself does not accept the change for the person: the comment stays in their margin, marked as resolved by you, with the change shown, until they resolve it too.", "Where the person asked for proposals rather than changes, add `--suggest` instead: the edit stands as a suggestion they accept or reject (`--suggest <key>` adds to one; `document suggestions <id>` lists them)."], (items) => {
+    room.markup = markupOf(room, () => `(document ${id})`, () => [`An image block reads as \`![caption](name)\`; its picture is the file ${path.join(room.entry.side, "images")}/<name>.`, "If you have the tool `conduit_artifact`, its action `answer` makes a comment's edits, reply and resolve in one call (the CLI's `answer <item> [n] --json '{…}'` does too); read, replace, insert, delete (with `for`), reply and resolve do each alone.", "To answer a comment by changing the document, add `--for <this item's id>/<n>` to `document replace`, `insert` or `delete`: the person then sees which blocks changed for comment n and can take the change back. Resolving the comment yourself does not accept the change for the person: the comment stays in their margin, marked as resolved by you, with the change shown, until they resolve it too.", "Where the person asked for proposals rather than changes, add `--suggest` instead: the edit stands as a suggestion they accept or reject (`--suggest <key>` adds to one; `document suggestions <id>` lists them)."], (items) => {
       const unsettled = new Set(items.flatMap((item) => item.comments.filter((comment) => !(comment.resolved && comment.resolvedBy === "person")).map((comment) => `${item.id}/${comment.n}`)));
       const settled = [...room.changes.entries()].filter(([, change]) => !isSuggestion(change.for) && !unsettled.has(change.for));
       if (settled.length) doc.transact(() => { for (const [block] of settled) room.changes.delete(block); });
@@ -671,7 +674,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
         if (!hit.length) return undefined;
         return all.slice(Math.max(0, hit[0] - radius), hit.at(-1) + radius + 1).map((block) => ({ id: block.attrs.id, md: markdown.serialize({ type: "doc", content: [block.toJSON()] }).trim(), ...(targets.has(block.attrs.id) ? { target: true } : {}) }));
       },
-      signing: (name) => ` Write in it as \`${name}\`: the tool \`conduit_paper\` does, and the CLI's \`document\` commands take \`--as ${name}\`.`,
+      signing: (name) => ` Write in it as \`${name}\`: the tool \`conduit_artifact\` does, and the CLI's \`document\` commands take \`--as ${name}\`.`,
       blocks: {
         /** As Markdown, each block under a comment that gives its id; `markdown`: the Markdown alone, to export; `blocks`: the format itself. */
         async read(kept, as) {
@@ -849,7 +852,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     /** A listener the hub holds read the paper (`reading`), or is heard writing a change to it before it is made (`writing`, with the block and the Markdown so far). */
     async seat(id, by, change) { const room = await rooms.get(id)?.catch(() => null); if (room && KINDS[room.entry.kind].places && sits(id, by, room)) sit(room, by, { text: undefined, ...change }); },
     /**
-     * A chat is heard writing a call to conduit_paper: `input` is its JSON so far, cut wherever the model has got to; `call` names the call in its turn,
+     * A chat is heard writing a call to conduit_artifact: `input` is its JSON so far, cut wherever the model has got to; `call` names the call in its turn,
      * and `done` says its input is whole. What can be read of it (readPartial: the action, the block, the Markdown so far) seats the chat's agent on
      * that block, writing. The latest input is read at most once each SEAT_TELL_MS, and where a call writes is read once.
      */
@@ -882,7 +885,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     /** The chats tied to a paper: its mated thread (none until it is made) and those the person connected. */
     async connections(id) {
       const { links } = await entryOf(id);
-      return { thread: links.thread && chats()?.get(links.thread) ? links.thread : null, connections: links.connections.flatMap((chat) => { const found = chats()?.get(chat); return found ? [{ chat, title: found.title || "Untitled chat" }] : []; }) };
+      return { thread: links.thread && chats()?.get(links.thread) ? links.thread : null, lead: links.lead && links.connections.includes(links.lead) && chats()?.get(links.lead) ? links.lead : null, connections: links.connections.flatMap((chat) => { const found = chats()?.get(chat); return found ? [{ chat, title: found.title || "Untitled chat" }] : []; }) };
     },
     /** A chat is connected to a paper, or (`on` false) no longer: the hub then hands it the comments sent to it. */
     async connect(id, chat, on = true) {
@@ -890,7 +893,17 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       if (!host().get(chat)) throw fault(404, `No chat ${chat}`);
       if (chat === entry.links.thread) throw fault(400, "That is the paper's own thread");
       entry.links.connections = [...entry.links.connections.filter((one) => one !== chat), ...(on ? [chat] : [])];
+      if (!on && entry.links.lead === chat) delete entry.links.lead;
       await fs.mkdir(entry.side, { recursive: true });
+      await link(entry);
+      return this.connections(id);
+    },
+    /** A chat takes the lead on an artifact: it is connected, and what the person sends to nobody by name is handed to it before the artifact's own thread. */
+    async lead(id, chat) {
+      const entry = await entryOf(id);
+      if (chat === entry.links.thread) return this.connections(id);
+      await this.connect(id, chat);
+      entry.links.lead = chat;
       await link(entry);
       return this.connections(id);
     },

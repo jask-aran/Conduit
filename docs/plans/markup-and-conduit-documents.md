@@ -6,7 +6,7 @@ first other kind of artifact of step (e), the site. Delete a part when it lands.
 ## Start here: the brief for the session that builds this
 
 You are picking up a build part-way. Milestones 1 to 3 and steps (a) to (d) are built: papers in panes, the mated
-thread and connections, the tool `conduit_paper` and addressing by `@name`, and papers in a project on another device.
+thread and connections, the tool `conduit_artifact` and addressing by `@name`, and papers in a project on another device.
 Step (d) has not written to a real device yet (see its section). Of step (e), other kinds of artifact, the site is
 built (see its section): the user has not yet judged its name, its file or how it feels. Read "Settled with the user on 2026-11-12" first. Read this section, then the rest of this
 file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background session the user checks in on.
@@ -27,12 +27,12 @@ file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background
   site" (`e3d2a9fa…`), which the builder was not allowed to delete.
 - Five probes pass on that build, each with `errors: []`: `markup-threads.mjs` (16 checks: the switch, the hidden
   thread, `@` in the paper and `@name` in a comment, a connected chat handed a comment on the scripted profile,
-  `conduit_paper` called as that chat, the rider, both ways to connect),
+  `conduit_artifact` called as that chat, the rider, both ways to connect),
   `markup-artifacts.mjs` (10), `markup-document.mjs` (17), `markup-delivery.mjs`, `markup-thread.mjs`. Not run: `npm test`,
   the headed Chrome on :9222, a real phone, Android, desktop, two people typing in one paragraph. Real models were tried
   three times on the Test document. Its mated thread (Conduit's own runtime) took a comment and answered "pong" with
-  the CLI in about 20 seconds. Asked to use `conduit_paper`, the same thread said it has no such tool (see step (c)).
-  A Claude Code chat connected to the paper used `conduit_paper` to add a paragraph for the comment and to reply.
+  the CLI in about 20 seconds. Asked to use `conduit_artifact`, the same thread said it has no such tool (see step (c)).
+  A Claude Code chat connected to the paper used `conduit_artifact` to add a paragraph for the comment and to reply.
   The paper and the project were put back afterwards (the change taken back, the comments resolved, that chat
   deleted); the mated thread's Thread view still holds its two turns. A margin with other open comments moves a
   card away from its text, which fails one check of `markup-document.mjs`: run the probes on a paper with none.
@@ -169,7 +169,7 @@ file and the rest below; the user has judged none of it yet.
   the tool's own corner stack. `MarkupCapabilities.grounded` (the layer's `data-grounded`) gives the bar and the
   cards the frost's dark ground, since frost alone over a light site is white on white. Not offered: selecting text, the quote, "Ask the agent", a margin, Revert (the file's
   history is git's). The mated thread, the Site | Thread switch, connections and the rider are the paper's.
-- **For agents**: `conduit_paper`'s `list` and `new` take sites (`kind: "site"`), and `comments`, `reply` and
+- **For agents**: `conduit_artifact`'s `list` and `new` take sites (`kind: "site"`), and `comments`, `reply` and
   `resolve` work by a site's id; `conduit-markup document new <name> --project <id> --kind site`.
 - An unanchored review of the diff found, before it was committed: a paper that cannot be read threw where it
   should have been refused (422); a site lost its threads when its file was written without the tag; a site deleted
@@ -183,7 +183,7 @@ file and the rest below; the user has judged none of it yet.
 - Not proven: a phone, the installed clients (their own picture-taking over a frame), the headed Chrome, a site in a
   project on another device, the gallery's `WebPage` row (written, not looked at). Not built: see "Not settled".
 
-### Step (c) as built: the tool `conduit_paper` and addressing by `@name`
+### Step (c) as built: the tool `conduit_artifact` and addressing by `@name`
 
 - **`@name` in a comment's words** (`components/markup/tool.tsx`): `addressOf` finds `@` followed by a listener's
   whole name (the longest that matches; no letter or digit before it). `send` gives each named listener an item of
@@ -204,7 +204,7 @@ file and the rest below; the user has judged none of it yet.
   one paper (`documents.of(chat)`); an edit is written under the name the chat listens by. The Markup store took
   `answer` (a session's reply or resolve, as the CLI writes them).
 - **Conduit's own runtime does not offer it.** `selectionFor` in `server/durable-runtime.js` gives each profile the
-  tools its template names, plus a fixed few; `conduit_paper` is not among them, so a chat on the Assistant profile
+  tools its template names, plus a fixed few; `conduit_artifact` is not among them, so a chat on the Assistant profile
   (every mated thread, by default) uses the CLI through its shell. Adding it there puts one more tool in every such
   chat's prompt: the user's call (see "Not settled").
 - Any chat can read or change any paper it names; a connection only decides who is handed comments. The `.paper`
@@ -307,7 +307,7 @@ Settled on 2026-11-12, later the same day (the user said yes to each): `@name` i
 that comment to the listener of that name, whatever the bar says, and comments for different listeners become one
 item each; typing `@` in a paper's text offers the paper's listeners, and picking one opens a comment on that block
 for that listener, the mention not kept in the text; the person's persistent agent is not a listener on papers for
-now; chats on Conduit's own runtime stay on the CLI for now (`conduit_paper` is not added to their tools); for a
+now; chats on Conduit's own runtime stay on the CLI for now (`conduit_artifact` is not added to their tools); for a
 project on another device, the `.paper` file is on the device and its threads and state are on the hub, where that
 project's chats are; the hub may write `Test paper.paper` and a part file into
 `C:\Users\jaska\Downloads\conduitcomposer` on the Windows device to try this, deleted afterwards.

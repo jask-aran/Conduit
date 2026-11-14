@@ -1,7 +1,7 @@
 // A paper's mated thread and its connections: the pane's Paper | Thread switch turns the same tab to the paper's own chat (made by the hub, in no list of
 // chats) and back; a chat connected to the paper is a listener by name, a comment sent to it is taken in its name and written into the chat, which starts
 // its agent; the chat shows the connection as a rider, which opens the paper beside it and disconnects it.
-// The chat's harness answers through the tool conduit_paper (Conduit's MCP endpoint).
+// The chat's harness answers through the tool conduit_artifact (Conduit's MCP endpoint).
 // Makes a chat on the scripted test-stream profile (no model is called) and deletes it; the comment it sends it resolves as the person.
 import { open, origin } from "./lib.mjs";
 
@@ -63,9 +63,9 @@ try {
   console.log("the comment is taken in the chat's name:", handed.state === "taken" && handed.by === titled, JSON.stringify({ state: handed.state, by: handed.by, titled }));
   console.log("the chat was written to and its agent started:", told.status === "active" && Boolean(told.lastMessageAt), JSON.stringify({ status: told.status, at: told.lastMessageAt }));
   // The same chat's harness, through Conduit's tools: the paper is the one it is connected to.
-  const tool = async (args) => (await api(`/v0/mcp/chat/${chat}`, "POST", { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "conduit_paper", arguments: args } })).result;
+  const tool = async (args) => (await api(`/v0/mcp/chat/${chat}`, "POST", { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "conduit_artifact", arguments: args } })).result;
   const asked = await tool({ action: "comments" }), read = await tool({ action: "read" });
-  console.log("conduit_paper reads the paper and what was asked, with no paper named:", !asked.isError && asked.content[0].text.includes(item) && asked.content[0].text.includes("Thread probe: say hello") && /<!-- block \w+ -->/.test(read.content[0].text));
+  console.log("conduit_artifact reads the paper and what was asked, with no paper named:", !asked.isError && asked.content[0].text.includes(item) && asked.content[0].text.includes("Thread probe: say hello") && /<!-- block \w+ -->/.test(read.content[0].text));
   await tool({ action: "reply", item, n: 1, text: "Hello from the tool" });
   console.log("its reply is in the thread:", (await api(`${paper}/markup/items/${item}`)).messages.some((message) => message.from === "agent" && message.text === "Hello from the tool"));
   await page.goto(`${origin}/chat/${chat}`); await page.waitForSelector(".chat-main textarea", { timeout: 15000 }); await wait(2500);
