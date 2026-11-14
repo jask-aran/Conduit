@@ -58,6 +58,12 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && target.isContentEditable;
 }
 
+/** A chord the focused text keeps for itself (`data-own-keys` on an editor: its bold is Ctrl+B, the application's sidebar chord everywhere else). */
+function keptByTarget(target: EventTarget | null, stroke: ShortcutStroke): boolean {
+  const own = isElement(target) ? target.closest("[data-own-keys]")?.getAttribute("data-own-keys") : null;
+  return Boolean(own && stroke.modifiers.length && own.split(" ").includes([...[...stroke.modifiers].sort(), stroke.code].join("+")));
+}
+
 function isExclusiveTerminalEvent(event: KeyboardEvent): boolean {
   const path = typeof event.composedPath === "function" ? event.composedPath() : [event.target];
   return path.some((target) => isElement(target) && target.getAttribute("data-shortcut-exclusive") === "terminal");
@@ -255,6 +261,7 @@ export class ShortcutManager {
     if (event.defaultPrevented || event.isComposing) return false;
     const stroke = normalizeKeyboardEvent(event, this.environment);
     if (!stroke) return false;
+    if (!this.pending && keptByTarget(event.target, stroke)) return false;
 
     if (this.pending) {
       // Esc, or the leader again, closes it -- and the leader is kept from
@@ -310,9 +317,8 @@ export class ShortcutManager {
     // a leader key works from inside any region below the one that owns it.
     let levels: PendingShortcutSequence["levels"] | null = null;
     for (const active of contexts) {
-      const matches = this.matchesForContext(active.context)
-        .filter((match) => sameStroke(match.binding.strokes[0], stroke)
-          && this.eventAllowedForMatch(event, stroke, active, match.command));
+      const matches = this.matchesForContext(active.context, stroke)
+        .filter((match) => this.eventAllowedForMatch(event, stroke, active, match.command));
       const sequenceIds = [...new Set(matches.filter((match) => match.binding.strokes.length === 2).map((match) => match.command.id))];
       if (!levels) {
         const complete = matches.find((match) => match.binding.strokes.length === 1);
@@ -362,7 +368,8 @@ export class ShortcutManager {
       || right.order - left.order);
   }
 
-  private matchesForContext(context: ShortcutContext): Array<{
+  /** `first`: only the bindings that begin with this stroke, asked before a handler's `when` (every key typed comes through here). */
+  private matchesForContext(context: ShortcutContext, first?: ShortcutStroke): Array<{
     binding: ShortcutBinding;
     command: ShortcutCommandDefinition;
     handler: RegisteredHandler;
@@ -373,12 +380,14 @@ export class ShortcutManager {
       handler: RegisteredHandler;
     }> = [];
     const handlers = [...this.handlers.values()]
-      .filter((handler) => handler.context === context && (!handler.when || handler.when()))
+      .filter((handler) => handler.context === context)
       .sort((left, right) => right.order - left.order);
     for (const handler of handlers) {
       const command = this.commandById.get(handler.commandId);
       if (!command) continue;
-      for (const binding of this.effectiveBindings(command.id)) matches.push({ binding, command, handler });
+      const bindings = this.effectiveBindings(command.id).filter((binding) => !first || sameStroke(binding.strokes[0], first));
+      if (!bindings.length || (handler.when && !handler.when())) continue;
+      for (const binding of bindings) matches.push({ binding, command, handler });
     }
     return matches;
   }

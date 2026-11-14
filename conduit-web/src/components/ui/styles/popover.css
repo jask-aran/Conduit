@@ -19,7 +19,7 @@
 .ui-row:where([data-density="menu"]) { padding: var(--row-pad); font-weight: var(--weight-rest); line-height: var(--leading-text); cursor: default; user-select: none; outline: none; }
 .ui-icon { display: inline-grid; width: var(--icon); height: var(--icon); flex: none; place-items: center; }
 .ui-icon > * { width: 100% !important; height: 100% !important; }
-.ui-icon:has(> .ui-harness-mark) { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-icon[data-mark] { width: var(--icon-sm); height: var(--icon-sm); }
 /* The meta gives way before the label does: a long one (a model's spec) truncates first. */
 .ui-row:where([data-density="menu"]) > small { flex: 0 4 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: auto; color: var(--muted-foreground); font: var(--weight-rest) var(--text-caption) var(--font-data); font-variant-numeric: tabular-nums; }
 .ui-row:where([data-density="menu"]) > .ui-keys { display: inline-flex; flex: none; gap: var(--space-xs); }
@@ -84,6 +84,8 @@
 .ui-section[data-scroll] { max-height: var(--measure-sm); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--tint) transparent; }
 .ui-menu:not(.ui-menu-panel) { z-index: var(--layer-popover); }
 .ui-menu[data-wide] { width: var(--measure-md); --menu-width: var(--measure-md); }
+/* A snug menu (a bar of tools) is as wide as what it holds, not a menu's least width. */
+.ui-menu[data-snug] { min-width: 0; }
 /* Unfolds: as wide as its cap from the start, so a row opening in place neither widens nor moves it. */
 .ui-menu[data-unfolds] { --menu-height-cap: 100dvh; width: min(var(--menu-width, var(--menu-width-cap)), calc(100vw - var(--space-xl))); }
 .ui-readout { min-height: 0; justify-content: space-between; gap: var(--row-gap); padding: 0 var(--space-md); color: var(--muted-foreground); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }

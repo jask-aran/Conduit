@@ -7,7 +7,7 @@
 .ui-card > :is(h3, p) { text-box: trim-both cap alphabetic; }
 .ui-card > h3 { color: var(--foreground); font-size: var(--text-body); font-weight: var(--weight-strong); }
 .ui-card > p { color: var(--muted-foreground); font-size: var(--text-caption); font-weight: var(--weight-rest); }
-.ui-card > h3 + p { margin-top: calc(var(--card-pair) - var(--card-gap)); }
+.ui-card > .ui-card-title + p { margin-top: calc(var(--card-pair) - var(--card-gap)); }
 .ui-outline { border: var(--hairline) solid var(--tint); border-radius: var(--radius-surface); }
 .ui-card[data-size="compact"] { --card-edge: var(--space-lg); --card-gap: var(--space-lg); width: min(100%, var(--measure-lg)); }
 .ui-card[data-size="row"] { padding: var(--space-md) var(--space-lg); }

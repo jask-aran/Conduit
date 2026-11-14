@@ -1,4 +1,4 @@
-import { AnnotationPopup, AnnotationButton, AnnotationInput, reviewTooltipClass, reviewCommentClass, annotationHostSelector } from "@/components/ui/editor";
+import { AnnotationPopup, AnnotationButton, AnnotationInput, reviewEditorAttributes, reviewTooltipClass, reviewCommentClass, annotationHostSelector } from "@/components/ui/editor";
 import type { Extension, Text } from "@codemirror/state";
 import { Decoration, EditorView, hoverTooltip } from "@codemirror/view";
 import { createEffect, createSignal, Show } from "solid-js";
@@ -65,6 +65,7 @@ export type CommentLocator = (view: EditorView, item: CommentHighlight) => { fro
 
 export function commentHighlightsExtension(items: readonly CommentHighlight[], locate: CommentLocator = commentRange): Extension {
   return [
+    EditorView.editorAttributes.of(reviewEditorAttributes),
     EditorView.decorations.of((view) => Decoration.set(items.flatMap((item) => {
       const range = locate(view, item);
       return range ? [Decoration.mark({ class: reviewCommentClass }).range(range.from, range.to)] : [];

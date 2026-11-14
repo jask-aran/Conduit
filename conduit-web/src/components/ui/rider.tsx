@@ -1,6 +1,6 @@
 import { Frost } from "./frost";
 import * as Icons from "./icons";
-import { children, createEffect, createSignal, For, Show, splitProps, type JSX } from "solid-js";
+import { children, createComputed, createContext, createEffect, createSignal, For, onCleanup, Show, splitProps, useContext, type JSX } from "solid-js";
 import { RotateCwIcon } from "lucide-solid";
 import { cn } from "@/lib/utils";
 import { unitPx } from "./layout";
@@ -9,10 +9,14 @@ import { CloseButton } from "./actions";
 import { Row } from "./row";
 import { type Motion, motionOf, moveCursor } from "./shared";
 
+/** Told while a rider in it is going, so what holds riders (the composer's under row) closes its room. */
+export const RiderGoing = createContext<(going: boolean) => void>();
 export function Rider(props: JSX.HTMLAttributes<HTMLDivElement> & { label?: string; layout?: "row" | "strip" | "card" | "wave"; motion?: Motion; children: JSX.Element }) {
   const [local, rest] = splitProps(props, ["label", "layout", "motion", "class", "children"]);
-  // `ui-rider-going` as it leaves: what holds it (the composer's under row) closes its room by it, a class for :has().
-  return <Frost role="group" {...rest} class={cn("ui-rider", (local.motion === "leaving" || local.motion === "removing") && "ui-rider-going", local.class)} data-layout={local.layout ?? "row"} aria-label={local.label} {...motionOf(local.motion)}>{local.children}</Frost>;
+  const going = () => local.motion === "leaving" || local.motion === "removing";
+  const tell = useContext(RiderGoing);
+  if (tell) createComputed(() => { if (!going()) return; tell(true); onCleanup(() => tell(false)); });
+  return <Frost role="group" {...rest} class={cn("ui-rider", going() && "ui-rider-going", local.class)} data-layout={local.layout ?? "row"} aria-label={local.label} {...motionOf(local.motion)}>{local.children}</Frost>;
 }
 export const RiderTitle = (props: { title?: string; children: JSX.Element }) => <span class="ui-title-text" title={props.title}>{props.children}</span>;
 export const RiderMark = (props: { icon: JSX.Element; label: string; title?: string }) =>

@@ -116,7 +116,7 @@ export function OverlayDialog(props: {
   createLeave(() => scrim, () => props.open, () => mount(), () => props.leave !== false);
   return <KDialog.Root open={props.open} onOpenChange={(open) => { if (!open) haptic("dismiss"); props.onOpenChange(open); }}>
     <KDialog.Portal mount={mount()}>
-      <KDialog.Content as={Scrim} data-piece="OverlayDialog" ref={(element: HTMLElement) => { scrim = element; }} dialog placement={props.placement ?? "top"} aria-label={props.label} data-state={props.open ? "open" : "closed"} style={props.placement === "middle" ? props.style : undefined}
+      <KDialog.Content as={Scrim} data-piece="OverlayDialog" data-overlay-dialog="" ref={(element: HTMLElement) => { scrim = element; }} dialog placement={props.placement ?? "top"} aria-label={props.label} data-state={props.open ? "open" : "closed"} style={props.placement === "middle" ? props.style : undefined}
         onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} onEscapeKeyDown={props.onEscapeKeyDown}
         onPointerDown={(event: PointerEvent) => { if (event.target === event.currentTarget) props.onOpenChange(false); }}>
         <Overlay embedded label={props.label} layout={props.layout} style={props.style} motion={props.open ? "entering" : "leaving"}>{props.children}</Overlay>

@@ -157,6 +157,30 @@ for (const [dir, host, more] of [["markup", "MarkupHost", ""], ["document", "Doc
   each(file, text, /\bfrom\s+["']([^"']+)["']/g, (m) => { if (!m[1].startsWith("node:")) report(file, text, m.index, "markup boundary", `"${m[1]}" is not Node's own: the store runs with no hub`); });
 }
 
+// 11. Selectors Chromium cannot narrow, in a stylesheet (the gallery's and motion-rules.ts's included). Measured adding a block to a 400-block paper:
+//     - :has(): while any is in the page, ancestors are re-checked on DOM changes (3.9 ms of layout work a block, 0.4 ms with none).
+//     - a sibling combinator led by a compound with no class, id or attribute (`* + *`, `li + li`, `:not(.a) + p`): everything under the parent
+//       is looked through, and restyled where it matches, each time a child is added or removed (5.3 ms of style a block, 0.24 ms with none).
+for (const file of files.filter((f) => f.endsWith(".css") || rel(f) === "src/client/motion-rules.ts")) {
+  const text = stripComments(fs.readFileSync(file, "utf8"), file.endsWith(".css"));
+  each(file, text, /:has\(/g, (m) => report(file, text, m.index, "has() in CSS", "have the component that renders the element set a data attribute, and select on that"));
+  if (!file.endsWith(".css")) continue;
+  each(file, text, /[^{}]+(?=\{)/g, (m) => {
+    if (m[0].trimStart().startsWith("@")) return;
+    let depth = 0;
+    for (let at = 0; at < m[0].length; at++) {
+      const char = m[0][at];
+      if (char === "(" || char === "[") depth++;
+      else if (char === ")" || char === "]") depth--;
+      // In a bracket it is an attribute's operator; before `=` likewise.
+      else if ((char === "+" || char === "~") && m[0][at + 1] !== "=" && !/\[[^\]]*$/.test(m[0].slice(0, at))) {
+        const lead = m[0].slice(0, at).trimEnd().match(/(?:[^\s>+~,()[\]]|\[[^\]]*\]|\([^()]*(?:\([^()]*\)[^()]*)*\))*$/)[0];
+        if (!/[.#[]/.test(lead.replace(/:not\([^()]*(?:\([^()]*\)[^()]*)*\)/g, ""))) report(file, text, m.index + at, "bare sibling selector", `"${lead || "*"} ${char}" starts at no class: give the element before it a class, or say it with :not(:first-child)`);
+      }
+    }
+  });
+}
+
 // 2. Unused locals, imports and parameters drift back once cleared. The flags stay out of tsconfig.json so a plain
 //    type error and leftover code are reported separately.
 try {

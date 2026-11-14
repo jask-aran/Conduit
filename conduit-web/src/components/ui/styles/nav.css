@@ -62,7 +62,7 @@
 
 @media (hover: hover) { .ui-nav-pane[data-keyboard-cursor] .ui-seg button:hover:not(:focus-visible, [data-held], [aria-checked="true"]) { background: transparent; color: var(--muted-foreground); } }
 
-.ui-row-lead:where([data-density="nav"] *):has(> .ui-harness-mark) { width: var(--icon-sm); }
+.ui-row-lead:where([data-density="nav"] *)[data-mark] { width: var(--icon-sm); }
 .ui-row:where([data-density="nav"]) > .ui-row-lead:where([data-density="nav"] *) > .ui-harness-mark { width: var(--icon-sm); height: calc(0.75 * var(--icon-sm)); opacity: var(--opacity-rest); transition: opacity var(--duration-quick) var(--ease-change); }
 .ui-row:where([data-density="nav"]):is(:focus-visible, [aria-current="page"]) > .ui-row-lead:where([data-density="nav"] *) > .ui-harness-mark { opacity: 1; }
 @media (hover: hover) { .ui-row:where([data-density="nav"]):is(:hover, :focus-visible, [aria-current="page"]) > .ui-row-lead:where([data-density="nav"] *) > .ui-harness-mark { opacity: 1; } }

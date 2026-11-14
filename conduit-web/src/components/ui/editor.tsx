@@ -11,6 +11,8 @@ export function CodeHost(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (el
 }
 export const AnnotationPopup = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-annotation" />;
 export const reviewTooltipClass = "ui-review-tooltip";
+/** On the editor whose hover tooltips are review notes (CodeMirror's hover host takes no class of its own). */
+export const reviewEditorAttributes = { "data-review": "" };
 export const reviewCommentClass = "ui-review-comment";
 export const searchPanelClass = "ui-search-panel";
 export const annotationHostSelector = ".ui-comparison-content, .ui-code-content";

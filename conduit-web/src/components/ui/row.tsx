@@ -1,7 +1,7 @@
-import { Show, splitProps, type JSX } from "solid-js";
+import { children, Show, splitProps, type JSX } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { cn } from "@/lib/utils";
-import { callHandler } from "./shared";
+import { callHandler, holds } from "./shared";
 import { feel, type HapticProp } from "./haptics";
 import * as Icons from "./icons";
 
@@ -40,6 +40,7 @@ export function Row(props: RowProps) {
   const [local, rest] = splitProps(props, PARTS);
   const density = () => local.density ?? "list";
   const element = () => local.element ?? "div";
+  const lead = children(() => local.lead);
   // A list row always draws its mark's room and its context's, so a column of them lines up and its data sits at the end.
   const keepsRoom = () => density() === "list";
   const click = (event: MouseEvent) => { if (element() !== "div") feel(local.haptic, "select"); callHandler(rest.onClick, event); };
@@ -52,7 +53,7 @@ export function Row(props: RowProps) {
     data-within={local.within ? "" : undefined} data-open={local.open ? "" : undefined}
     data-selected={local.selected ? "" : undefined} data-quiet={local.quiet ? "" : undefined}>
     <Show when={!local.bare} fallback={local.children}>
-      <Show when={local.lead !== undefined || keepsRoom()}><span class="ui-row-lead">{local.lead}</span></Show>
+      <Show when={local.lead !== undefined || keepsRoom()}><span class="ui-row-lead" data-mark={holds(lead(), "ui-harness-mark") ? "" : undefined}>{lead()}</span></Show>
       <Show when={local.detail} fallback={<span class="ui-row-title">{local.label ?? local.children}</span>}>
         <span class="ui-row-title" data-stacked=""><span>{local.label ?? local.children}</span><small class="ui-row-detail">{local.detail}</small></span>
       </Show>

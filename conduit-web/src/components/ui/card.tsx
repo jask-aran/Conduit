@@ -11,7 +11,7 @@ import { ChipCopy } from "./rider";
 
 export function Card(props: { title?: JSX.Element; element?: "div" | "button"; onClick?: () => void; role?: "group"; label?: string; surface?: "frost" | "outline"; detail?: JSX.Element; description?: JSX.Element; embedded?: boolean; class?: string; density?: Density; size?: "wide" | "large" | "split" | "compact" | "row"; close?: boolean | (() => void); closeLabel?: string; closeIcon?: JSX.Element; closeDisabled?: boolean; actions?: JSX.Element; motion?: Motion; children?: JSX.Element }) {
   return <Frost as={props.element} type={props.element === "button" ? "button" : undefined} onClick={props.onClick} lift="raised" plain={props.surface === "outline"} role={props.role ?? (props.embedded ? undefined : "dialog")} aria-label={props.label ?? (!props.embedded && typeof props.title === "string" ? props.title : undefined)} class={cn("ui-card", props.surface === "outline" && "ui-outline", props.class)} data-density={props.density} data-size={props.size} data-close={props.close ? "" : undefined} {...motionOf(props.motion)}>
-    <Show when={props.title}><h3>{props.title}</h3></Show><Show when={props.detail}><p>{props.detail}</p></Show>
+    <Show when={props.title}><h3 class="ui-card-title">{props.title}</h3></Show><Show when={props.detail}><p>{props.detail}</p></Show>
     <Show when={props.description}><span class="ui-card-description">{props.description}</span></Show>
     <Show when={props.close}><CloseButton class="ui-card-close" label={props.closeLabel} icon={props.closeIcon} disabled={props.closeDisabled} onClick={() => typeof props.close === "function" && props.close()} /></Show>
     {props.children}

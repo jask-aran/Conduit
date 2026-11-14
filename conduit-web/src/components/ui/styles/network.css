@@ -1,5 +1,5 @@
 .ui-network-box { display: flex; min-width: var(--measure-xs); max-width: 100%; flex-direction: column; gap: var(--space-2xs); margin: 0; padding: var(--space-sm); list-style: none; }
-.ui-network-box:has(> .ui-title) { padding-top: var(--space-md); }
+.ui-network-box[data-titled] { padding-top: var(--space-md); }
 .ui-network-box > .ui-title { margin: 0; padding: 0 var(--space-sm); }
 .ui-network-box ul { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
 .ui-network-box[data-hub] .ui-network-line > .ui-row-title { font-weight: var(--weight-strong); }

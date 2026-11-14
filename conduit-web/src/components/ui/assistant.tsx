@@ -5,6 +5,7 @@ import { createSignal, For, Show, type JSX } from "solid-js";
 import { Expand } from "./expand";
 import { Row } from "./row";
 import { FoldLine } from "./agents";
+import { holds } from "./shared";
 
 export type ReportLevel = "urgent" | "attention" | "fyi" | "failed" | "none";
 const LEVEL_WORD: Record<ReportLevel, string> = { urgent: "Urgent", attention: "Attention", fyi: "FYI", failed: "Failed", none: "Nothing to say" };
@@ -29,7 +30,7 @@ export function RoomRow(props: { icon: JSX.Element; channel: string; room: strin
     label={<span class="ui-room-head"><span class="ui-room-where">Over {props.channel}</span><b class="ui-room-name">{props.room}</b>
       <span class="ui-room-count">{props.count} {props.count === 1 ? "message" : "messages"}</span>
       <Show when={props.last}><span class="ui-room-last">{props.last}</span></Show></span>}
-    meta={props.time ? <time>{props.time}</time> : undefined} body={(exchange) => <div class="ui-room-body">{exchange}</div>}>{props.children}</FoldLine>;
+    meta={props.time ? <time>{props.time}</time> : undefined} body={(exchange) => <div class="ui-room-body" data-email={holds(exchange, "ui-email") ? "" : undefined}>{exchange}</div>}>{props.children}</FoldLine>;
 }
 
 export const AgentAvatar = (props: { class?: string; label?: string }) =>

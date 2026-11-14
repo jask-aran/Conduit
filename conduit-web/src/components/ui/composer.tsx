@@ -5,13 +5,14 @@ import { children, createEffect, createSignal, onCleanup, onMount, Show, splitPr
 import { cn } from "@/lib/utils";
 import { Button, TextArea } from "./controls";
 import { Aura, PillWave } from "./pill";
-import { Rider } from "./rider";
+import { Rider, RiderGoing } from "./rider";
 import { reducedMotion, whenMotionEnds } from "./motion";
 import type { Motion } from "./shared";
 
 export function DesktopComposer(props: { riders?: JSX.Element; under?: JSX.Element; takeover?: JSX.Element; opening?: boolean; class?: string; children: JSX.Element }) {
   const takeover = children(() => props.takeover);
-  const under = children(() => props.under);
+  const [going, setGoing] = createSignal(0);
+  const under = children(() => <RiderGoing.Provider value={(now) => setGoing((count) => count + (now ? 1 : -1))}>{props.under}</RiderGoing.Provider>);
   let slot!: HTMLDivElement;
   let stack!: HTMLDivElement;
   // A takeover taller than the composer gives the slot its height; when it goes, that room closes gently (a following
@@ -44,7 +45,7 @@ export function DesktopComposer(props: { riders?: JSX.Element; under?: JSX.Eleme
   onCleanup(() => watch?.disconnect());
   return <div ref={slot} class="ui-composer-slot ui-composer-width" data-taken={takeover() ? "" : undefined} data-opening={props.opening ? "" : undefined}>
     <div ref={stack} class="ui-composer-stack">{props.riders}<Frost class={cn("ui-desktop-composer", props.class)}>{props.children}</Frost></div>{takeover()}
-    <Show when={under.toArray().some((part) => part != null && part !== false && part !== "")}><div class="ui-composer-under">{under()}</div></Show></div>;
+    <Show when={under.toArray().some((part) => part != null && part !== false && part !== "")}><div class="ui-composer-under" data-going={going() ? "" : undefined}>{under()}</div></Show></div>;
 }
 export const VoiceRider = (props: { levels: number[]; gain?: number; level?: number; motion?: Motion }) =>
   <Rider label="Listening" layout="wave" motion={props.motion}><Aura on level={props.level} /><PillWave levels={props.levels} gain={props.gain} /></Rider>;

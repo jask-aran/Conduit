@@ -21,7 +21,7 @@
 .ui-reading-stat > dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-reading-stat > dd:first-of-type { color: var(--foreground); font-family: var(--font-data); font-size: var(--text-row); font-variant-numeric: tabular-nums; }
 /* The line under it wraps rather than being cut short: when it resets is the point of it. */
-.ui-reading-stat > dd + dd { color: var(--muted-foreground); white-space: normal; overflow-wrap: anywhere; }
+.ui-reading-stat > .ui-reading-detail { color: var(--muted-foreground); white-space: normal; overflow-wrap: anywhere; }
 
 .ui-reading-foot { display: flex; min-height: var(--control-sm); align-items: center; justify-content: space-between; gap: var(--space-md); color: var(--muted-foreground); }
 .ui-reading-foot > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

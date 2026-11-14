@@ -16,7 +16,7 @@
   height: auto; interpolate-size: allow-keywords; transition: height var(--duration-gentle) var(--ease-room), padding-top var(--duration-gentle) var(--ease-room); }
 @starting-style { .ui-composer-slot > .ui-composer-under { height: 0; padding-top: 0; } }
 /* Closing is even (--ease-room): a sped-up end or start moves a following transcript most in one frame. */
-.ui-composer-slot > .ui-composer-under:has(> .ui-rider-going) { height: 0; padding-top: 0; transition-timing-function: var(--ease-room); }
+.ui-composer-slot > .ui-composer-under[data-going] { height: 0; padding-top: 0; transition-timing-function: var(--ease-room); }
 .ui-composer-under > .ui-rider { --rise: var(--space-md); }
 .ui-composer-under > .ui-rider[data-leaving] { --rise: 100%; animation-duration: var(--duration-gentle); }
 /* The stack only moves; its frosts (riders, composer) fade themselves. */
@@ -37,7 +37,7 @@
 .ui-completion > span { color: transparent; }
 .ui-completion > small { font-size: var(--text-caption); }
 .ui-composer-field > .ui-completion { padding: var(--cmp-field-pad); }
-.ui-composer-field, .ui-pill-field:has(> .ui-completion) { position: relative; }
+.ui-composer-field, .ui-pill-field { position: relative; }
 .ui-pill-field > .ui-completion { padding: calc((var(--pill-size) - var(--space-2xs) - 1.4em) / 2) var(--pill-field-pad); }
 .ui-toolbar { position: relative; z-index: 2; display: flex; font-size: var(--text-row); min-height: var(--cmp-bar-min); align-items: center; justify-content: space-between; gap: var(--cmp-bar-gap); padding: var(--cmp-bar-pad); }
 .ui-toolbar-start, .ui-toolbar-end { display: flex; min-width: 0; align-items: center; gap: var(--cmp-slot-gap); }

@@ -59,7 +59,7 @@
 .ui-group:where([data-group="dash"]), .ui-group-body:where([data-group="dash"] *) { display: flex; min-width: 0; flex-direction: column; }
 .ui-group-switches { display: flex; min-width: 0; flex: none; flex-wrap: nowrap; align-items: center; gap: var(--space-md); }
 .ui-group-switches > * { flex: none; white-space: nowrap; }
-.ui-group-head:where([data-group="dash"] *):has(> .ui-group-switches) > .ui-group-actions:where([data-group="dash"] *) { position: relative; min-width: 0; flex: 1 1 0; justify-content: flex-end; }
+.ui-group-head:where([data-group="dash"] *) > .ui-group-switches ~ .ui-group-actions:where([data-group="dash"] *) { position: relative; min-width: 0; flex: 1 1 0; justify-content: flex-end; }
 .ui-group-actions:where([data-group="dash"] *) > * { flex: none; white-space: nowrap; }
 
 .ui-group-heading { min-width: 0; margin: 0; overflow: hidden; color: var(--muted-foreground);
@@ -179,6 +179,6 @@
 .ui-dash-panel-day { flex: 1 1 auto; min-width: 0; }
 .ui-dash-panel-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin-inline: calc(-1 * var(--panel-inset, 0px)); padding-inline: var(--panel-inset, 0px); scrollbar-gutter: stable; scrollbar-width: thin; }
 /* A panel that scrolls its own body (jbot's) leaves the surface's still: no second scroller cutting its hairline short. */
-.ui-panel-body:has(> .ui-dash-panel) { overflow: hidden; scrollbar-gutter: auto; }
+.ui-panel-body[data-own-scroll] { overflow: hidden; scrollbar-gutter: auto; }
 /* The first group under the panel's top (or in it) opens without a hairline of its own: the top's full-width one is it. */
 :is(.ui-dash-panel, .ui-ledge[data-fit], .ui-tray-panel[data-fit]) .ui-dash[data-one-column] .ui-group:where([data-group="dash"]):first-child { margin-top: 0; border-top: 0; padding-top: var(--space-sm); }

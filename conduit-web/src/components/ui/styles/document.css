@@ -21,6 +21,8 @@
 .ui-document-revealed { animation: ui-document-revealed var(--duration-flash) var(--ease-leave); }
 @keyframes ui-document-revealed { from { background: var(--accent); box-shadow: 0 0 0 var(--space-xs) var(--accent); } }
 @media (prefers-reduced-motion: reduce) { .ui-document-revealed { animation: none; } }
+/* Each block lays out on its own: a letter typed in one is not a reason to look at the rest. */
+.ui-document-text > [data-id] { contain: layout style; }
 .ui-document-text > :is(.ui-document-commented, .ui-document-changed) { border-radius: var(--radius-inset); box-shadow: 0 0 0 var(--space-xs) var(--document-mark); background: var(--document-mark); }
 .ui-document-commented { --document-mark: color-mix(in oklch, var(--status-warn), transparent 88%); }
 .ui-document-commented[data-current] { --document-mark: color-mix(in oklch, var(--status-warn), transparent 72%); }
@@ -29,7 +31,7 @@
 .ui-document-removed { margin-block: var(--space-md); border-radius: var(--radius-inset); background: color-mix(in oklch, var(--destructive), transparent 88%); padding: var(--space-xs) var(--space-sm); color: var(--muted-foreground); font-size: var(--text-caption); text-decoration: line-through; }
 .ui-document-text pre { overflow-x: auto; border-radius: var(--radius-control); background: var(--tint); padding: var(--space-md) var(--space-lg); font: var(--text-caption)/var(--leading-reading) var(--font-code); }
 /* A document has more levels of heading than an answer needs, each a step under the title's, and a heading under text opens a part of it. */
-.ui-document-text > * + :is(h1, h2, h3) { margin-top: var(--space-3xl); }
+.ui-document-text > :is(h1, h2, h3):not(:first-child) { margin-top: var(--space-3xl); }
 .ui-document-text h1 { font-size: var(--text-heading); }
 .ui-document-text h2 { font-size: var(--text-title); }
 .ui-document-text ul[data-type="taskList"] { list-style: none; padding-left: 0; }
@@ -56,8 +58,6 @@
 .ui-document-tools { display: flex; align-items: center; gap: var(--space-2xs); }
 .ui-document-tools > .ui-input { min-width: var(--measure-xs); flex: 1; }
 .ui-document-address { max-width: var(--measure-sm); overflow: hidden; padding-inline: var(--space-sm); color: var(--muted-foreground); font-family: var(--font-data); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
-/* The bar is as wide as its tools, not a menu's least width. */
-.ui-menu:has(> .ui-document-tools) { min-width: 0; }
 /* Over the text: its title, a step over its largest heading, then its properties, one line each, ruled off from the text. */
 .ui-document-head { display: flex; flex-direction: column; gap: var(--space-2xs); margin-bottom: var(--space-2xl); border-bottom: var(--hairline) solid var(--border); padding-bottom: var(--space-lg); }
 .ui-document-title { width: 100%; margin: 0; border: 0; background: transparent; padding: 0; color: var(--foreground); font-family: inherit; font-size: var(--text-display); font-weight: var(--weight-strong); line-height: var(--leading-tight); outline: 0; overflow-wrap: anywhere; }
@@ -133,10 +133,10 @@
 .ui-document-seat-caret { position: relative; display: inline-block; width: var(--stroke); height: 1lh; vertical-align: top; border-radius: var(--radius-round); background: var(--seat-ink); }
 .ui-document-seat-name { position: absolute; bottom: 100%; left: 0; border-radius: var(--radius-inset); background: var(--seat-ink); padding: 0 var(--space-2xs); color: var(--background); font-size: var(--text-caption); font-weight: var(--weight-strong); line-height: var(--leading-tight); text-decoration: none; white-space: nowrap; }
 .ui-document-text > .ui-document-seat-stream { position: relative; color: var(--muted-foreground); pointer-events: none; user-select: none; }
-.ui-document-text > * + .ui-document-seat-stream[data-lead="heading"] { margin-top: var(--space-3xl); }
+.ui-document-text > .ui-document-seat-stream[data-lead="heading"]:not(:first-child) { margin-top: var(--space-3xl); }
 .ui-document-seat-stream::before { position: absolute; top: 0; right: 100%; bottom: 0; width: var(--stroke); margin-inline-end: var(--space-sm); border-radius: var(--radius-round); background: var(--seat-ink); content: ""; }
-.ui-document-seat-body > * + * { margin-top: var(--answer-gap); }
-.ui-document-seat-body > * + :is(h1, h2, h3) { margin-top: var(--space-3xl); }
+.ui-document-seat-body > :where(:not(:first-child)) { margin-top: var(--answer-gap); }
+.ui-document-seat-body > :is(h1, h2, h3):not(:first-child) { margin-top: var(--space-3xl); }
 .ui-document-seat-body .ui-document-seat-caret { margin-inline-start: var(--hairline); animation: ui-document-seat-caret var(--duration-pulse) var(--ease-change) infinite alternate; }
 @keyframes ui-document-seat-caret { to { background: transparent; } }
 .ui-document-seat-jump { position: absolute; z-index: 3; left: 50%; display: flex; align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-round); padding: var(--space-xs) var(--space-md); color: var(--foreground); font: inherit; font-size: var(--text-row); cursor: pointer; translate: -50% 0; animation: ui-document-seat-jump var(--duration-gentle) var(--ease-arrive); }

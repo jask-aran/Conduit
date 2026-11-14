@@ -46,8 +46,20 @@ export function createSuggesting(editor: Accessor<Editor | undefined>, doc: Doc,
   let burst: { key: string; blocks: Set<string>; last: number } | undefined, dirty = false, skip = false;
   const setWriting = (next: DocumentWriting) => { burst = undefined; setWritingNow(next); try { localStorage.setItem(storeKey(id), next); } catch { /* this page only */ } };
 
+  const anySuggested = () => { for (const change of changes.values()) if (isSuggestion(change.for)) return true; return false; };
+  /** The one block that differs where writing changed that block alone (the common case: typing), found by which nodes are still the nodes they were, without a map of either paper. */
+  const lone = (was: Node, now: Node) => {
+    if (was.childCount !== now.childCount) return null;
+    let nth = -1;
+    for (let i = 0; i < now.childCount; i++) if (was.child(i) !== now.child(i)) { if (nth >= 0) return null; nth = i; }
+    const old = nth < 0 ? null : was.child(nth), made = nth < 0 ? null : now.child(nth), id = made?.attrs.id as string | undefined;
+    return old && made && id && old.attrs.id === id ? { id, old, made } : null;
+  };
   const record = (was: Node, now: Node) => {
-    const after = tops(now), before = tops(was, after), schema = now.type.schema;
+    // Editing with no suggestion standing has nothing to record or clear.
+    if (untrack(writing) !== "suggesting" && !anySuggested()) return;
+    const one = lone(was, now), schema = now.type.schema;
+    const after = one ? new Map([[one.id, { node: one.made, prev: null as string | null }]]) : tops(now), before = one ? new Map([[one.id, { node: one.old, prev: null as string | null }]]) : tops(was, after);
     const touched: [string, Node | null][] = [], gone: [string, Node, string | null][] = [];
     for (const [block, { node }] of after) { const old = before.get(block)?.node; if (!old) touched.push([block, null]); else if (old !== node && !old.eq(node)) touched.push([block, old]); }
     for (const [block, { node, prev }] of before) if (!after.has(block)) gone.push([block, node, prev]);
@@ -110,6 +122,7 @@ export function createSuggesting(editor: Accessor<Editor | undefined>, doc: Doc,
     version();
     const now = current(), schema = editor()?.schema;
     if (!now || !schema) return [];
+    if (!anySuggested()) return [];
     const order = new Map<string, number>();
     now.forEach((node, _at, nth) => { if (node.attrs.id) order.set(node.attrs.id, nth); });
     const found = new Map<string, { key: string; by: string; at: string; entries: [string, Change][] }>();

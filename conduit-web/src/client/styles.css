@@ -139,8 +139,7 @@ svg.lucide { stroke-width: 2.4; }
 @keyframes ui-leave { to { opacity: 0; } }
 
 /* The fade rules themselves are in `motion-rules.ts`: present only
-   while an arrival or route motion runs, since their :has() tax every DOM
-   change beneath the panes for as long as they exist. */
+   while an arrival or route motion runs. */
 
 /* The regions' bottoms line up, so the held region's line reads as one baseline with it lit. */
 [data-region]::after {

@@ -25,14 +25,14 @@ function Line(props: { icon: JSX.Element; name: string; meta?: string; online: b
 /** Clients talk only to the hub, so the hub is the root and devices its spokes. */
 export function NetworkMap(props: { hub: NetworkHub; devices: NetworkDevice[]; label?: string }) {
   return <figure class="ui-network" aria-label={props.label ?? "Network"}>
-    <section class="ui-outline ui-network-box" data-hub="" aria-label={props.hub.name}>
+    <section class="ui-outline ui-network-box" data-hub="" data-titled={props.hub.device ? "" : undefined} aria-label={props.hub.name}>
       <Show when={props.hub.device}><h4 class="ui-title">{props.hub.device}</h4></Show>
       <ul><Line icon={<Icons.Server />} name={props.hub.name} meta={props.hub.meta} online /></ul>
     </section>
     <Show when={props.devices.length}>
       <div class="ui-network-spokes">
         <For each={props.devices}>{(device) => <div class="ui-network-spoke" data-offline={device.clients.some((client) => client.online) ? undefined : ""}>
-          <section class="ui-outline ui-network-box" aria-label={device.name}>
+          <section class="ui-outline ui-network-box" data-titled="" aria-label={device.name}>
             <h4 class="ui-title">{device.name}</h4>
             <ul><For each={device.clients}>{(client) => <Line icon={clientMark(client)} name={client.name} meta={client.meta} online={client.online} />}</For></ul>
           </section>

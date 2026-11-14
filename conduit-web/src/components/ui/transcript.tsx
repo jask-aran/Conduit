@@ -87,7 +87,7 @@ function Envelope(props: { direction: "in" | "out"; icon: JSX.Element; from: str
         <button type="button" class="ui-envelope-toggle" aria-expanded={shown()} onClick={() => setShown(!shown())}>{who()}<Icons.ChevronDown class="ui-disclosure-chevron ui-fold-chevron ui-size-icon-sm" data-turn="half" /></button>
       </Show>
       <Show when={props.onBack}><button type="button" class="ui-envelope-open ui-envelope-back" onClick={() => props.onBack?.()}>{props.backLabel ?? "Back"}<Icons.ArrowUp aria-hidden="true" /></button></Show>
-      <Show when={props.time}><time dateTime={props.dateTime} title={props.title}>{props.time}</time></Show>
+      <Show when={props.time}><time class="ui-envelope-time" dateTime={props.dateTime} title={props.title}>{props.time}</time></Show>
       <Show when={props.onOpen}><button type="button" class="ui-envelope-open" onClick={() => props.onOpen?.()}>{props.openLabel ?? "Open"}<Icons.ChevronRight aria-hidden="true" /></button></Show>
     </header>
     <Expand open={shown()} class="ui-disclosure-body"><div class="ui-envelope-rule">

@@ -1,10 +1,11 @@
 import { dragRegion } from "./window";
 import { Frost } from "./frost";
-import { createContext, Show, splitProps, untrack, useContext, type JSX } from "solid-js";
+import { children, createContext, Show, splitProps, untrack, useContext, type JSX } from "solid-js";
 import { createFolds, watchFit } from "./fit";
 import "./layout";
 import { PaneMark } from "./row";
 import { Button } from "./controls";
+import { holds } from "./shared";
 
 export type PaneHeaderKind = "pane" | "tool" | "file" | "term";
 const TERM_FOLDS = ["shortcuts", "labels"] as const;
@@ -85,10 +86,11 @@ export function PaneHeader(props: JSX.HTMLAttributes<HTMLElement> & {
       data-folded={TERM_FOLDS.slice(0, folds.count()).join(" ") || undefined} data-tauri-drag-region={dragRegion()}>{mark()}{local.children}{local.actions}</header>;
   }
   const [local, rest] = splitProps(props, ["kind", "lead", "pill", "after", "actions", "frost", "children", "class", "name", "nameTitle", "place", "placeTitle", "modes", "views"]);
+  const title = children(() => local.children);
   return <header {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="pane" data-frost={local.frost ? "" : undefined} data-tauri-drag-region={dragRegion()}>
     {mark()}
     <Show when={local.lead}><div class="ui-header-group" data-lead="">{local.lead}</div></Show>
-    <div class="ui-header-title">{local.children}</div>
+    <div class="ui-header-title" data-tabs={holds(title(), "ui-tabs-row") ? "" : undefined}>{title()}</div>
     {local.pill}
     {local.after}
     {local.modes}

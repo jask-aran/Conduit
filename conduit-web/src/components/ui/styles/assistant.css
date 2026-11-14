@@ -42,7 +42,7 @@
 
 .ui-agent-avatar { display: block; width: 1em; height: 1em; flex: none; object-fit: contain; }
 
-.ui-room-body:has(> .ui-email) { gap: 0; }
+.ui-room-body[data-email] { gap: 0; }
 .ui-email { display: flex; min-width: 0; flex-direction: column; gap: var(--space-xs); padding-block: var(--space-md); }
 .ui-email + .ui-email { border-top: 1px solid var(--tint); }
 .ui-email-head { display: flex; min-width: 0; align-items: baseline; gap: var(--space-sm); font-size: var(--text-row); line-height: var(--leading-row); }

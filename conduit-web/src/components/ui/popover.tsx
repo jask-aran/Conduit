@@ -1,17 +1,17 @@
 import { Frost } from "./frost";
 import * as Icons from "./icons";
-import { For, Show, splitProps, type JSX } from "solid-js";
+import { children, For, Show, splitProps, type JSX } from "solid-js";
 
 import { cn } from "@/lib/utils";
 import { Keycap } from "./controls";
 import { Row, type RowProps } from "./row";
-import { type Density, type Motion, hovers, motionOf, moveCursor } from "./shared";
+import { type Density, type Motion, holds, hovers, motionOf, moveCursor } from "./shared";
 
 export type Measure = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
-export function Menu(props: JSX.HTMLAttributes<HTMLDivElement> & { density?: Density; motion?: Motion; under?: boolean; wide?: boolean; unfolds?: boolean; width?: Measure; height?: Measure }) {
-  const [, rest] = splitProps(props, ["class", "density", "motion", "under", "wide", "unfolds", "width", "height", "children", "style"]);
+export function Menu(props: JSX.HTMLAttributes<HTMLDivElement> & { density?: Density; motion?: Motion; under?: boolean; wide?: boolean; unfolds?: boolean; snug?: boolean; width?: Measure; height?: Measure }) {
+  const [, rest] = splitProps(props, ["class", "density", "motion", "under", "wide", "unfolds", "snug", "width", "height", "children", "style"]);
   const caps = () => ({ ...(props.width ? { "--menu-width": `var(--measure-${props.width})` } : {}), ...(props.height ? { "--menu-height": `var(--measure-${props.height})` } : {}), ...(typeof props.style === "object" ? props.style : {}) });
-  return <Frost lift="raised" role="menu" class={cn("ui-menu", props.class)} onPointerOver={moveCursor} {...rest} style={caps()} data-wide={props.wide ? "" : undefined} data-unfolds={props.unfolds ? "" : undefined} data-fits="" data-density={props.density} data-under={props.under ? "" : undefined} {...motionOf(props.motion)}>{props.children}</Frost>;
+  return <Frost lift="raised" role="menu" class={cn("ui-menu", props.class)} onPointerOver={moveCursor} {...rest} style={caps()} data-wide={props.wide ? "" : undefined} data-snug={props.snug ? "" : undefined} data-unfolds={props.unfolds ? "" : undefined} data-fits="" data-density={props.density} data-under={props.under ? "" : undefined} {...motionOf(props.motion)}>{props.children}</Frost>;
 }
 
 export function Section(props: JSX.HTMLAttributes<HTMLDivElement> & { note?: JSX.Element; kind?: "list" | "slider"; scroll?: boolean }) {
@@ -49,11 +49,12 @@ export function Item(props: JSX.HTMLAttributes<HTMLDivElement> & {
   indent?: boolean; picked?: boolean;
 }) {
   const [, rest] = splitProps(props, ["icon", "meta", "detail", "detailData", "keys", "opens", "active", "field", "keysFirst", "checked", "disabled", "destructive", "children", "end", "class", "onOpens", "opensLabel", "indent", "picked", "reveal", "away", "onCursor"]);
+  const icon = children(() => props.icon);
   return <Row density="menu" bare role={props.checked !== undefined ? "menuitemradio" : "menuitem"} aria-checked={props.checked} data-field={props.field ? "" : undefined}
     data-highlighted={props.active ? "" : undefined} data-checked={props.checked ? "" : undefined} data-disabled={props.disabled ? "" : undefined} data-destructive={props.destructive ? "" : undefined} data-indent={props.indent ? "" : undefined} data-picked={props.picked ? "" : undefined} onPointerMove={props.onCursor ? (event: PointerEvent) => { if (hovers(event)) props.onCursor!(); } : undefined} {...(rest as unknown as RowProps)}>
     <Show when={props.picked !== undefined}><span class="ui-row-check ui-size-icon" aria-hidden="true"><Show when={props.picked}><Icons.Check /></Show></span></Show>
     <Show when={props.keysFirst && props.keys}><Keys keys={props.keys!} first /></Show>
-    <Show when={props.icon}><span class="ui-icon">{props.icon}</span></Show><span class="ui-label" data-stacked={props.detail ? "" : undefined}><Show when={props.detail} fallback={props.children}><span>{props.children}</span><small class="ui-detail" data-data={props.detailData ? "" : undefined}>{props.detail}</small></Show></span>
+    <Show when={props.icon}><span class="ui-icon" data-mark={holds(icon(), "ui-harness-mark") ? "" : undefined}>{icon()}</span></Show><span class="ui-label" data-stacked={props.detail ? "" : undefined}><Show when={props.detail} fallback={props.children}><span>{props.children}</span><small class="ui-detail" data-data={props.detailData ? "" : undefined}>{props.detail}</small></Show></span>
     <Show when={props.meta}><small>{props.meta}</small></Show>
     <Show when={!props.keysFirst && props.keys}><Keys keys={props.keys!} /></Show>
     <Show when={props.opens}><Show when={props.onOpens} fallback={<Icons.ChevronRight class="ui-chevron ui-fold-chevron" />}>

@@ -14,8 +14,10 @@ export function FilesPane(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (e
     data-navigator-open={local.navigatorOpen ? "" : undefined} style={local.treeWidth === undefined ? undefined : { "--files-tree-width": `${local.treeWidth}px` }} />;
 }
 export const FilesTree = (props: JSX.HTMLAttributes<HTMLDivElement>) => <div {...props} class="ui-files-tree" />;
-export function FileViewer(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void }) {
-  return <div {...props} class="ui-file-viewer" />;
+/** `split`: two sides beside each other; `swaps`: a FileSwap over the divider between them. */
+export function FileViewer(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void; split?: boolean; swaps?: boolean }) {
+  const [local, rest] = splitProps(props, ["split", "swaps"]);
+  return <div {...rest} class="ui-file-viewer" data-split={local.split ? "" : undefined} data-swaps={local.swaps ? "" : undefined} />;
 }
 
 export const FileName = (props: { path: string; icon: JSX.Element }) =>

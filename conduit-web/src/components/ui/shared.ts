@@ -31,6 +31,10 @@ export const ANSWER_MARKDOWN = { flow: "ui-answer-flow", table: "ui-answer-table
 
 export const CODE_BLOCK = { line: "ui-code-line" } as const;
 
+/** Whether resolved children (`children()`) hold an element with the class `name` at their top level: what a
+ * `:has(> .name)` would ask, which no stylesheet may (check-conventions rule 11). */
+export const holds = (resolved: unknown, name: string) => [resolved].flat().some((node) => node instanceof Element && node.classList.contains(name));
+
 export function callHandler<E extends Event>(handler: unknown, event: E) {
   if (typeof handler === "function") handler(event);
   else if (Array.isArray(handler) && typeof handler[0] === "function") handler[0](handler[1], event);

@@ -1,12 +1,12 @@
 import { Frost } from "./frost";
 import { Dot } from "./nav";
 import * as Icons from "./icons";
-import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
+import { children, createEffect, createMemo, createSignal, For, on, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { haptic } from "./haptics";
 
 import { cn } from "@/lib/utils";
 import { Button, Input, Keycap, Spinner } from "./controls";
-import { type Density, type Motion, motionOf, moveCursor } from "./shared";
+import { type Density, type Motion, holds, motionOf, moveCursor } from "./shared";
 import { Actions, CloseButton } from "./actions";
 import { duration, easing, reducedMotion } from "./motion";
 import { DropdownMenu, MenuContent, MenuRow, MenuSection } from "./menus";
@@ -182,7 +182,11 @@ function SettingContext(props: { items: SettingContextItem[] }) {
   </DropdownMenu>;
 }
 export const SettingLine = (props: { label: JSX.Element; state?: JSX.Element; plain?: boolean; mono?: boolean; title?: string; children?: JSX.Element; context?: SettingContextItem[] }) => {
-  const inner = () => <><span data-mono={props.mono ? "" : undefined}>{props.label}<Show when={props.context?.length}><SettingContext items={props.context!} /></Show><Show when={props.state}><small>{props.state}</small></Show></span><span class="ui-setting-control">{props.children}</span></>;
+  const label = children(() => props.label);
+  const controls = children(() => props.children);
+  const valueOnly = () => { const parts = controls.toArray().filter((node) => node instanceof Element); return parts.length === 1 && holds(parts, "ui-setting-value"); };
+  const inner = () => <><span data-mono={props.mono ? "" : undefined} data-mark={holds(label(), "ui-harness-mark") ? "" : undefined}>{label()}<Show when={props.context?.length}><SettingContext items={props.context!} /></Show><Show when={props.state}><small>{props.state}</small></Show></span>
+    <span class="ui-setting-control" data-input={holds(controls(), "ui-input") ? "" : undefined} data-value-only={valueOnly() ? "" : undefined}>{controls()}</span></>;
   // A label hands any click to its control: right for a field, switch or menu, wrong for an acting button (Remove).
   const guard = (event: MouseEvent) => {
     const control = (event.currentTarget as HTMLLabelElement).control;

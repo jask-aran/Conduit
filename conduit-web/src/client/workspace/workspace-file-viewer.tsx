@@ -140,12 +140,13 @@ export default function FileViewer(props: {
   };
   const sides = () => props.entries.length + (props.splitEmpty ? 1 : 0);
   const share = () => Math.min(0.8, Math.max(0.2, props.share ?? 0.5));
+  const swaps = () => props.entries.length === 2 && Boolean(props.onSwapSides);
   const dragDivider = (): EdgeDrag => {
     const box = root!.getBoundingClientRect();
     return { move: (_dx, next) => props.onShare?.(Math.min(0.8, Math.max(0.2, (next.clientX - box.left) / box.width))) };
   };
   const splitButton = () => <Show when={props.entries.length === 1 && !props.splitEmpty}><IconButton kind="file" type="button" data-fold="1" aria-label="Open this file again beside" title="Split" onClick={() => props.onSplit()}><Icons.Split /></IconButton></Show>;
-  return <Viewer ref={(element) => { root = element; }} data-count={sides()} style={sides() > 1 ? { "--side-a": String(props.emptyFirst ? 1 - share() : share()), "--side-b": String(props.emptyFirst ? share() : 1 - share()) } : undefined}>
+  return <Viewer ref={(element) => { root = element; }} split={sides() > 1} swaps={swaps()} style={sides() > 1 ? { "--side-a": String(props.emptyFirst ? 1 - share() : share()), "--side-b": String(props.emptyFirst ? share() : 1 - share()) } : undefined}>
     <Index each={props.entries}>{(entry, index) =>
       <Show when={entry().mode} fallback={
         <WorkspaceFileSlot
@@ -184,7 +185,7 @@ export default function FileViewer(props: {
       }</Show>
     }</Index>
     {props.emptySide}
-    <Show when={props.entries.length === 2 && props.onSwapSides}><FileSwap type="button" tabIndex={-1} aria-label="Swap the sides" title="Swap the sides" style={{ left: `${share() * 100}%` }} onClick={() => props.onSwapSides?.()}><Icons.Swap /></FileSwap></Show>
+    <Show when={swaps()}><FileSwap type="button" tabIndex={-1} aria-label="Swap the sides" title="Swap the sides" style={{ left: `${share() * 100}%` }} onClick={() => props.onSwapSides?.()}><Icons.Swap /></FileSwap></Show>
     <Show when={sides() > 1}><ResizeEdge kind="sides" aria-label="Resize the sides" style={{ left: `${share() * 100}%` }} startDrag={dragDivider} onDblClick={() => props.onShare?.(0.5)} /></Show>
   </Viewer>;
 }

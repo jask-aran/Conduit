@@ -1,24 +1,33 @@
-import { Show, type JSX } from "solid-js";
+import { children, createComputed, createContext, createSignal, onCleanup, Show, useContext, type JSX } from "solid-js";
 import { createBack } from "./back";
 import { PHONE_LAYOUT_QUERY } from "./layout";
 import { Note } from "./state";
 import { Row } from "./row";
 import * as Icons from "./icons";
+import { holds } from "./shared";
 
-export const Workbench = (props: { label: string; children: JSX.Element }) => <div class="ui-workbench" role="region" aria-label={props.label}>{props.children}</div>;
+/** Told by the split whether its main side is open, which a phone shows in place of the workbench's title. */
+const SplitOpen = createContext<(open: boolean) => void>();
+export function Workbench(props: { label: string; children: JSX.Element }) {
+  const [open, setOpen] = createSignal(false);
+  return <div class="ui-workbench" role="region" aria-label={props.label} data-open={open() ? "" : undefined}><SplitOpen.Provider value={setOpen}>{props.children}</SplitOpen.Provider></div>;
+}
 export const WorkbenchTitle = (props: { title: JSX.Element; actions?: JSX.Element; meta?: string }) => <header class="ui-workbench-title">
   <div class="ui-workbench-title-line">{typeof props.title === "string" ? <h3 class="ui-workbench-name">{props.title}</h3> : props.title}<Show when={props.actions}><span class="ui-workbench-actions">{props.actions}</span></Show></div>
   <Show when={props.meta}><Note kind="workbench">{props.meta}</Note></Show>
 </header>;
 export const WorkbenchSplit = (props: { side: JSX.Element; facts?: JSX.Element; main: JSX.Element; open?: boolean; onOpenChange?: (open: boolean) => void; mainLabel?: string; opens?: string }) => {
   createBack(() => props.open && props.onOpenChange && matchMedia(PHONE_LAYOUT_QUERY).matches, () => props.onOpenChange?.(false));
+  const tell = useContext(SplitOpen);
+  if (tell) createComputed(() => { if (!props.open) return; tell(true); onCleanup(() => tell(false)); });
+  const side = children(() => props.side);
   return <div class={props.open ? "ui-workbench-split ui-workbench-split-open" : "ui-workbench-split"}>
     <Show when={props.facts} fallback={<div class="ui-workbench-side">
       <Show when={props.opens}><Row density="nav" element="button" class="ui-workbench-opens" end={<Icons.ChevronRight />} onClick={() => props.onOpenChange?.(true)}>{props.opens}</Row></Show>
-      {props.side}
+      {side()}
     </div>}>
       <div class="ui-workbench-side ui-workbench-side-parts">
-        <div class="ui-workbench-picks">{props.side}</div>
+        <div class="ui-workbench-picks" data-folds={holds(side(), "ui-workbench-fold") ? "" : undefined}>{side()}</div>
         <div class="ui-workbench-facts">{props.facts}</div>
       </div>
     </Show>

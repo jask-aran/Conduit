@@ -1,10 +1,11 @@
-import { createContext, createSignal, onCleanup, onMount, Show, useContext, type JSX } from "solid-js";
+import { children, createContext, createSignal, onCleanup, onMount, Show, useContext, type JSX } from "solid-js";
 import { CloseButton } from "./actions";
 import { overlayHaptics } from "./haptics";
 import { SWIPE } from "./edge-swipe";
 import { createDismiss } from "./dismiss";
 import { createFolds } from "./fit";
 import { Frost } from "./frost";
+import { holds } from "./shared";
 
 /* One height whatever a panel holds, so switching what it shows never moves it. */
 
@@ -19,7 +20,10 @@ export function PanelHead(props: PanelHeadParts & { onClose?: () => void; grip?:
     <span class="ui-panel-actions">{props.actions}<Show when={props.onClose}><CloseButton kind="pane" onClick={() => props.onClose?.()} /></Show></span>
   </div>;
 }
-export const PanelBody = (props: { children: JSX.Element }) => <div class="ui-panel-body">{props.children}</div>;
+export function PanelBody(props: { children: JSX.Element }) {
+  const body = children(() => props.children);
+  return <div class="ui-panel-body" data-own-scroll={holds(body(), "ui-dash-panel") ? "" : undefined}>{body()}</div>;
+}
 
 /** Inside its container, so what holds it stays live. Shut, it stays laid out off the foot and inert, so it rises at
  *  once. */

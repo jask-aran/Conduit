@@ -4,7 +4,7 @@ import { Plugin, PluginKey, TextSelection, type EditorState } from "@tiptap/pm/s
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { createTiptapEditor } from "solid-tiptap";
-import { readEditor, sameJson } from "./read";
+import { isOn, markAttrs, readEditor, sameJson } from "./read";
 import { redo, undo, ySyncPlugin, yUndoPlugin, yUndoPluginKey } from "y-prosemirror";
 import type { Map as YMap, XmlFragment } from "yjs";
 import { Button, Icons } from "@/components/ui";
@@ -45,9 +45,12 @@ const KINDS: Record<DocumentBlockKind, { label: string; is?: [string, Record<str
   date: { label: "Date", make: (chain) => chain.insertContent({ type: "date", attrs: { date: dayFrom() } }) },
   text: { label: "Text", make: (chain) => chain.clearNodes() },
 };
-const kindAt = (editor: Editor | undefined) => (Object.keys(KINDS) as DocumentBlockKind[]).find((kind) => { const is = KINDS[kind].is; return is && editor?.isActive(...is); }) ?? "text";
+const wordsIn = new WeakMap<Node, number>();
+const kindAt = (editor: Editor | undefined) => (Object.keys(KINDS) as DocumentBlockKind[]).find((kind) => { const is = KINDS[kind].is; return is && isOn(editor, ...is); }) ?? "text";
 
 const MARK_KEYS: Record<string, string[]> = { bold: ["Ctrl", "B"], italic: ["Ctrl", "I"], strike: ["Ctrl", "Shift", "S"], code: ["Ctrl", "E"] };
+// The chords the text keeps from the application while it has the keyboard (`data-own-keys`, read by the shortcut manager): its marks.
+const OWN_KEYS = Object.values(MARK_KEYS).map((keys) => [...keys.slice(0, -1).map((key) => key === "Ctrl" ? "primary" : key.toLowerCase()).sort(), `Key${keys.at(-1)}`].join("+")).join(" ");
 /** The editor's text is the Yjs document's blocks, each change merged as it is made; undo takes back only what was written here. */
 const merged = (blocks: XmlFragment) => Extension.create({
   name: "liveDocument",
@@ -176,7 +179,10 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   const count = createMemo(() => {
     const doc = counted();
     if (!props.count || !doc) return null;
-    const words = doc.textBetween(0, doc.content.size, " ", " ").split(/\s+/).filter(Boolean).length, many = (n: number, what: string) => `${n.toLocaleString()} ${what}${n === 1 ? "" : "s"}`;
+    let words = 0;
+    // Counted once for each block and kept by the block: a keystroke makes one new block.
+    doc.forEach((block) => { let had = wordsIn.get(block); if (had === undefined) wordsIn.set(block, had = block.textBetween(0, block.content.size, " ", " ").split(/\s+/).filter(Boolean).length); words += had; });
+    const many = (n: number, what: string) => `${n.toLocaleString()} ${what}${n === 1 ? "" : "s"}`;
     return `${many(doc.childCount, "block")} · ${many(words, "word")}`;
   });
   // A new paper (one empty line, no properties) offers ways to start it under its hint, until it is first written in.
@@ -201,14 +207,14 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     return first && body ? first.getBoundingClientRect().bottom - body.getBoundingClientRect().top : undefined;
   });
   // The marks the selection wears, for a bar that is always there; the tools over a selection offer them too.
-  const wears = readEditor(editor, (made) => MARKS.filter(([name]) => made?.isActive(name)).map(([name]) => name).join(" "));
+  const wears = readEditor(editor, (made) => MARKS.filter(([name]) => isOn(made, name)).map(([name]) => name).join(" "));
   const marking = readEditor(editor, (made): DocumentMarking => {
     const { selection } = made?.state ?? {}, block = selection?.$from.parent;
-    return { can: Boolean(made?.isEditable && selection instanceof TextSelection && block?.isTextblock && !block.type.spec.code), on: Object.fromEntries(DOCUMENT_MARKS.map((name) => [name, Boolean(made?.isActive(name))])) as DocumentMarking["on"] };
+    return { can: Boolean(made?.isEditable && selection instanceof TextSelection && block?.isTextblock && !block.type.spec.code), on: Object.fromEntries(DOCUMENT_MARKS.map((name) => [name, Boolean(isOn(made, name))])) as DocumentMarking["on"] };
   }, sameJson);
   const worn = MARKS.filter(([name]) => !props.host.tools || props.host.tools.includes(name)).map(([name, label]) => { const Icon = documentToolIcons[name]; return { name, label, icon: () => <Icon />, get active() { return wears().includes(name); }, get pressed() { return marking().on[name]; }, get disabled() { return !marking().can; }, keys: MARK_KEYS[name], run: () => { editor()?.chain().focus().toggleMark(name).run(); } }; });
   // On the ribbon each inked mark is one menu of the inks and None, showing the one the selection wears.
-  const inkOn = readEditor(editor, (made) => `${made?.getAttributes("color").ink ?? ""} ${made?.getAttributes("highlight").ink ?? ""}`);
+  const inkOn = readEditor(editor, (made) => `${markAttrs(made, "color").ink ?? ""} ${markAttrs(made, "highlight").ink ?? ""}`);
   const inked = INKED.filter(([name]) => !props.host.tools || props.host.tools.includes(name)).flatMap(([name, menu, none, noun], nth) => [undefined, ...INKS].map((ink?: PaperInk) => ({
     name: `${name}-${ink ?? "none"}`, label: ink ? `${MARKUP_INKS[ink].label} ${noun}` : none, icon: () => { const Plain = documentToolIcons[name]; return ink ? inkSwatch(ink) : <Plain />; }, menu, compact: true,
     get active() { return inkOn().split(" ")[nth] === (ink ?? ""); }, get disabled() { return !marking().can; }, run: () => { const made = editor(); if (made) putInk(made.chain().focus(), name, ink); } })));
@@ -243,11 +249,12 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
       return view.state.selection.empty ? caretBlock(view) : selectedRange(view);
     },
   });
-  const outline = createMemo(() => {
+  // Read by what shows it (an open outline), so typing does not gather it.
+  const outline = () => {
     const headings: DocumentHeading[] = [];
     counted()?.forEach((node) => { if (node.type.name === "heading" && node.attrs.id) headings.push({ id: node.attrs.id, level: node.attrs.level, text: node.textContent }); });
     return headings;
-  });
+  };
   // The heading being read: the last whose top is above the top of the view, read again as it scrolls.
   const [scrolled, setScrolled] = createSignal(0);
   createEffect(() => { const element = scroller(); if (!element) return; const moved = () => setScrolled((n) => n + 1); element.addEventListener("scroll", moved, { passive: true }); onCleanup(() => element.removeEventListener("scroll", moved)); });
@@ -283,7 +290,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     {/* The editor is made only once the hub's copy is held: made before, its first empty block would be merged in as a block of its own. */}
     <Show when={copy.synced() && column()}>{(element) => {
       // Untracked: a signal or prop read in what the editor is made from would make it again (caret, undo and find lost) each time it changed.
-      const made = createTiptapEditor(() => { const at = element(); return untrack(() => ({ element: at, extensions: [...viewed(documentExtensions(), props.host), paperTyping(props.host, offers), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), suggesting.extension(), seatsDrawn(copy.seats, (redraw) => { redrawSeats = redraw; }), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), slash.extension(), blockKeys, drawn((block, name) => props.host.showMention?.(block, name)), find.extension(), ...(props.onMention ? [mentioning(anchor, setAsked, keys)] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name } } })); });
+      const made = createTiptapEditor(() => { const at = element(); return untrack(() => ({ element: at, extensions: [...viewed(documentExtensions(), props.host), paperTyping(props.host, offers), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), suggesting.extension(), seatsDrawn(copy.seats, (redraw) => { redrawSeats = redraw; }), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), slash.extension(), blockKeys, drawn((block, name) => props.host.showMention?.(block, name)), find.extension(), ...(props.onMention ? [mentioning(anchor, setAsked, keys)] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name, "data-own-keys": OWN_KEYS } } })); });
       createEffect(() => setEditor(made()));
       return null;
     }}</Show>

@@ -24,7 +24,7 @@ export const ReadingStats = (props: { title: string; children: JSX.Element }) =>
   <section class="ui-reading-group" aria-label={props.title}><h4>{props.title}</h4><dl class="ui-reading-stats">{props.children}</dl></section>;
 
 export const ReadingStat = (props: { value: JSX.Element; label: string; detail?: JSX.Element }) =>
-  <div class="ui-reading-stat"><dt>{props.label}</dt><dd>{props.value}</dd><Show when={props.detail}><dd>{props.detail}</dd></Show></div>;
+  <div class="ui-reading-stat"><dt>{props.label}</dt><dd>{props.value}</dd><Show when={props.detail}><dd class="ui-reading-detail">{props.detail}</dd></Show></div>;
 
 export const ReadingFoot = (props: { children: JSX.Element; action?: JSX.Element }) =>
   <div class="ui-reading-foot"><span>{props.children}</span>{props.action}</div>;

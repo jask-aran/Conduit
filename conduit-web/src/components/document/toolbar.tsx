@@ -3,7 +3,7 @@ import { TextSelection } from "@tiptap/pm/state";
 import { addColumn, addRow, TableMap } from "@tiptap/pm/tables";
 import type { EditorView } from "@tiptap/pm/view";
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor } from "solid-js";
-import { readEditor, sameJson } from "./read";
+import { isOn, markAttrs, readEditor, sameJson } from "./read";
 import { IconButton, Input, Segmented, Swatch } from "@/components/ui";
 import { DocumentAddress, DocumentTableEdges, DocumentTools, documentToolIcons as Icons } from "@/components/ui/document";
 import { MARKUP_INKS } from "@/components/ui/markup";
@@ -50,11 +50,11 @@ export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bo
   let tools: HTMLElement | undefined;
   const state = readEditor(props.editor, (made) => {
     if (!made?.isEditable) return null;
-    const { selection } = made.state, text = selection instanceof TextSelection && !selection.empty, link = made.getAttributes("link").href as string | undefined;
+    const { selection } = made.state, text = selection instanceof TextSelection && !selection.empty, link = markAttrs(made, "link").href as string | undefined;
     if (!text && !(selection.empty && link)) return null;
     const { from, to } = text ? selection : { from: selection.from, to: selection.from };
-    return { text, focused: made.isFocused, key: `${from} ${to}`, link, marks: Object.fromEntries([...MARKS, ...INKED].map(([name]) => [name, made.isActive(name)])) as Record<string, boolean>,
-      inks: { color: made.getAttributes("color").ink, highlight: made.getAttributes("highlight").ink } as Record<InkedMark, PaperInk | undefined>, lines: () => linesOf(made.view, from, to) };
+    return { text, focused: made.isFocused, key: `${from} ${to}`, link, marks: Object.fromEntries([...MARKS, ...INKED].map(([name]) => [name, isOn(made, name)])) as Record<string, boolean>,
+      inks: { color: markAttrs(made, "color").ink, highlight: markAttrs(made, "highlight").ink } as Record<InkedMark, PaperInk | undefined>, lines: () => linesOf(made.view, from, to) };
   }, sameJson);
   // Placed again only when what it is over changes.
   const lines = createMemo(on(() => state()?.key, () => state()?.lines));
@@ -69,7 +69,7 @@ export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bo
   const ink = (mark: InkedMark, to: PaperInk | "none") => { putInk(chain(), mark, to === "none" ? undefined : to); setInking(undefined); };
   const comment = () => { const view = props.editor()?.view; if (!view) return; setShut(state()?.key); props.onComment?.(selectedRange(view)); };
   return <Popover open={open()} onOpenChange={(now) => { if (now) return; setShut(state()?.key); if (linking() || inking()) { setLinking(false); setInking(undefined); props.editor()?.commands.focus(); } }} anchorRef={() => props.editor()?.view.dom as HTMLElement | undefined} anchorRect={lines()} placement={placement()}>
-    <PopoverContent aria-label="Text tools" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}>
+    <PopoverContent snug aria-label="Text tools" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}>
       <Show when={state()}>{(now) => <DocumentTools ref={(element) => { tools = element; }} label={inking()?.[1] ?? (now().text ? "Format" : "Link")}>
         <Show when={inking()} fallback={<Show when={linking()} fallback={<Show when={now().text} fallback={<>
           <DocumentAddress href={now().link!} />
