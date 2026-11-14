@@ -4,7 +4,8 @@ import { colIndex } from "../sheet-format.js";
 import { callingChat } from "./conduit-mcp.js";
 
 const text = (words, isError = false) => ({ output: [{ type: "text", text: words }], ...(isError ? { isError: true } : {}) });
-const ACTIONS = ["answer", "list", "new", "show", "lead", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve", "cells", "fill", "rows", "cols"];
+const ACTIONS = ["answer", "list", "new", "show", "lead", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve", "cells", "fill", "rows", "cols", "tabs"];
+const TAB_OPS = { add: "add-tab", rename: "rename-tab", delete: "delete-tab", move: "move-tab", hide: "hide-tab", show: "hide-tab" };
 
 /** Artifacts for an agent (papers, Markdown files, sheets and sites): the hub's document service (server/documents.js) as one tool, with the verbs `conduit-markup` has. */
 export function PaperTool(runtime) {
@@ -30,12 +31,15 @@ export function PaperTool(runtime) {
       + "change it by editing the file with your own tools, not with read, replace, insert or delete. list, comments, reply and resolve take a site's id as they take a paper's. "
       + "A sheet (kind `sheet`, a `.csv` file whose cells can hold formulas; `paper` is its id too) is changed only through this tool: cells (range: optional, A1 such as B2:C5; computed: true for what formulas compute) reads it as CSV of what was typed; "
       + "set (at: one cell such as B4, value: text, a number, TRUE/FALSE or a formula starting with =; \"\" clears it) and fill (range, values: rows of cells' text repeated over the range, a formula's relative references moved per cell as a spreadsheet's fill does; or value for every cell; a range past the edge grows the sheet) write cells; "
-      + "rows and cols (op: insert | delete, at: the row number or column letter to insert before or to delete from, count) change its shape, rewriting formulas that refer to moved cells. They take `for` as an edit does; answer then takes reply and resolve, not edits.",
+      + "rows and cols (op: insert | delete, at: the row number or column letter to insert before or to delete from, count) change its shape, rewriting formulas that refer to moved cells. They take `for` as an edit does; answer then takes reply and resolve, not edits. "
+      + "A sheet can have tabs: each of those actions takes `tab` (a tab's name; the first tab unsaid), or an address that names one (at: \"Data!B4\", range: \"'My data'!A1:C3\"), and a formula reads another tab as Data!A1. "
+      + "tabs lists them with their sizes; tabs with op add (name, at: its place, 1 first; last unsaid), rename (tab, name: the new one; formulas naming it are rewritten), delete (tab; formulas naming it then show #REF!), move (tab, at), hide or show (tab) changes them.",
     parameters: Type.Object({
       action: Type.Union(ACTIONS.map((value) => Type.Literal(value))),
       paper: Type.Optional(Type.String({ description: "A paper's id." })),
       project: Type.Optional(Type.String({ description: "list, new: a project's id or slug." })),
-      name: Type.Optional(Type.String({ description: "new: the paper's name." })),
+      name: Type.Optional(Type.String({ description: "new: the paper's name; tabs add, rename: the tab's name." })),
+      tab: Type.Optional(Type.String({ description: "A sheet's tab, by name: cells, set, fill, rows, cols, tabs." })),
       kind: Type.Optional(Type.Union([Type.Literal("paper"), Type.Literal("markdown"), Type.Literal("sheet"), Type.Literal("site")], { description: "new: paper (the default), markdown (a plain .md file), sheet (a .csv, 20 rows x 8 columns) or site." })),
       block: Type.Optional(Type.String({ description: "A block's id, from read." })),
       markdown: Type.Optional(Type.String()),
@@ -53,11 +57,11 @@ export function PaperTool(runtime) {
       reply: Type.Optional(Type.String({ description: "answer: what the person reads beside the comment." })),
       show: Type.Optional(Type.Boolean({ description: "new: false leaves the new artifact closed." })),
       resolve: Type.Optional(Type.Boolean({ description: "answer: mark the comment done." })),
-      at: Type.Optional(Type.String({ description: "set: a cell (B4); rows: a row number (5); cols: a column letter (C)." })),
+      at: Type.Optional(Type.String({ description: "set: a cell (B4, or Data!B4); rows: a row number (5); cols: a column letter (C); tabs add, move: a tab's place (1 first)." })),
       range: Type.Optional(Type.String({ description: "cells, fill: an A1 range (B2:C5) or one cell." })),
       values: Type.Optional(Type.Array(Type.Array(Type.String()), { description: "fill: rows of cells' text." })),
       value: Type.Optional(Type.String({ description: "set, fill: one cell's text." })),
-      op: Type.Optional(Type.Union([Type.Literal("insert"), Type.Literal("delete")], { description: "rows, cols." })),
+      op: Type.Optional(Type.Union(["insert", "delete", "add", "rename", "move", "hide", "show"].map((value) => Type.Literal(value)), { description: "rows, cols: insert or delete; tabs: add, rename, delete, move, hide or show." })),
       count: Type.Optional(Type.Integer({ description: "rows, cols: how many (1)." })),
       computed: Type.Optional(Type.Boolean({ description: "cells: what formulas compute, as the file holds it." })),
     }),
@@ -89,16 +93,22 @@ export function PaperTool(runtime) {
           return text(`Answered ${done.item}${done.n ? `, comment ${done.n}` : ""}: ${did.join("; ")}.`);
         }
         if (args.action === "read") { void documents.seat(paper, by, { state: "reading" }); return text(await documents.read(paper)); }
-        if (args.action === "cells") { const read = await documents.read(paper, args.computed ? "values" : undefined, args.range); return text(typeof read === "string" ? read : JSON.stringify(read)); }
+        if (args.action === "cells") { const read = await documents.read(paper, args.computed ? "values" : undefined, args.range, args.tab); return text(typeof read === "string" ? read : JSON.stringify(read)); }
         if (args.action === "fill" || (args.action === "set" && args.at !== undefined)) {
-          const done = await documents.cells(paper, { op: args.action, at: args.at, range: args.range, values: args.values, value: args.value ?? args.text, by, for: args.for });
-          return text(`Wrote ${done.cells.join(", ")}; the sheet is ${done.rows} rows x ${done.cols} columns.`);
+          const done = await documents.cells(paper, { op: args.action, tab: args.tab, at: args.at, range: args.range, values: args.values, value: args.value ?? args.text, by, for: args.for });
+          return text(`Wrote ${done.cells.join(", ")}; the ${done.tab ? `tab ${done.tab}` : "sheet"} is ${done.rows} rows x ${done.cols} columns.`);
+        }
+        if (args.action === "tabs") {
+          const place = args.at === undefined ? undefined : /^\d+$/.test(String(args.at).trim()) ? Number(args.at) - 1 : NaN;
+          if (args.op && (!Object.hasOwn(TAB_OPS, args.op) || Number.isNaN(place) || (args.op === "move" && place === undefined))) throw new Error("tabs takes op add (name, at?), rename (tab, name), delete (tab), move (tab, at: a place, 1 first), hide or show (tab).");
+          const { tabs } = args.op ? await documents.cells(paper, { op: TAB_OPS[args.op], tab: args.tab, name: args.name, at: place, hidden: args.op === "hide", by, for: args.for }) : await documents.read(paper, "tabs");
+          return text(tabs.map((one, at) => `${at + 1}. ${one.name}  ${one.rows} rows x ${one.cols} columns${one.hidden ? ", hidden" : ""}`).join("\n"));
         }
         if (args.action === "rows" || args.action === "cols") {
           const rows = args.action === "rows", label = String(args.at ?? "").trim(), at = rows ? (/^\d+$/.test(label) ? Number(label) - 1 : NaN) : /^[A-Za-z]{1,3}$/.test(label) ? colIndex(label) : NaN;
           if (!args.op || !Number.isInteger(at) || at < 0) throw new Error(`${args.action} takes op (insert or delete) and at: ${rows ? "a row number, as 5" : "a column letter, as C"}.`);
-          const done = await documents.cells(paper, { op: `${args.op}-${args.action}`, at, count: args.count ?? 1, by, for: args.for });
-          return text(`The sheet is ${done.rows} rows x ${done.cols} columns.`);
+          const done = await documents.cells(paper, { op: `${args.op}-${args.action}`, tab: args.tab, at, count: args.count ?? 1, by, for: args.for });
+          return text(`The ${done.tab ? `tab ${done.tab}` : "sheet"} is ${done.rows} rows x ${done.cols} columns.`);
         }
         if (args.action === "set") return text(`Its properties: ${JSON.stringify((await documents.edit(paper, { op: "set", block: args.name, markdown: args.text ?? "", by })).properties)}`);
         if (args.action === "replace" || args.action === "insert" || args.action === "delete") {

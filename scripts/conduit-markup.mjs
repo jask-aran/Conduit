@@ -29,6 +29,8 @@
 // A sheet (`--kind sheet`, a .csv whose cells can hold formulas) has its own commands: `document cells <id> [range] [--values]` prints it as CSV
 // of what was typed (`--values`: of what formulas compute); `document set <id> <A1> <value>`, `document fill <id> <range> [value]` (or
 // --json '{"values":[[…]]}'), and `document rows|cols <id> insert|delete <row number|column letter> [count]` change it, with --as and --for.
+// A sheet with tabs: each takes `--tab <name>` (or an address that names one, `Data!B4`); `document tabs <id>` lists them, and
+// `document tabs <id> add|rename|delete|move|hide|show …` changes them.
 //
 // `wait <name> --stay` does not end: it prints one line for each thing that comes, so a session whose harness wakes it
 // on a line of output (Claude Code's Monitor) stays listed the whole time. Plain `wait` ends at the first, for a
@@ -156,7 +158,7 @@ const answerFor = async (answering) => {
   return answering;
 };
 /** The arguments that are not flags (each flag here but --values and --suggest takes a value). */
-const positional = (args) => args.filter((arg, at) => !arg.startsWith("--") && !["--as", "--for", "--json", "--project", "--folder", "--kind"].includes(args[at - 1]));
+const positional = (args) => args.filter((arg, at) => !arg.startsWith("--") && !["--as", "--for", "--json", "--project", "--folder", "--kind", "--tab"].includes(args[at - 1]));
 const A1 = /^\$?[A-Za-z]{1,3}\$?[1-9]\d*$/;
 /** Whether an artifact's cells are what changes in it (a sheet), as the hub says. */
 const hasCells = async (id) => {
@@ -275,21 +277,30 @@ if (command === "wait") {
     const answer = JSON.parse(execFileSync(process.execPath, [new URL("./conduit-auth.mjs", import.meta.url).pathname, "api", argument === "list" ? "GET" : "POST", `/v0/projects/${encodeURIComponent(project)}/artifacts`, ...(argument === "list" ? [] : [JSON.stringify({ kind, name: rest.join(" "), folder: into })])], { encoding: "utf8" }));
     for (const made of answer.artifacts ?? [answer]) console.log(`${made.id}  ${made.path}`);
   } catch (error) { process.stderr.write(error.stdout || `${error.message}\n`); process.exit(1); }
-} else if (command === "document" && (["cells", "fill", "rows", "cols"].includes(argument) || (argument === "set" && A1.test(positional(rest)[1] ?? "") && await hasCells(positional(rest)[0])))) {
-  const usage = `Usage: node ${script} document ${{ cells: "cells <id> [range] [--values]", set: "set <id> <A1> <value>", fill: "fill <id> <range> [value], or --json '{\"values\":[[\"…\"]]}'", rows: "rows <id> insert|delete <row number> [count]", cols: "cols <id> insert|delete <column letter> [count]" }[argument]}${argument === "cells" ? "" : " [--for <item>/<n>] [--as <name>]"}`;
+} else if (command === "document" && (["cells", "fill", "rows", "cols", "tabs"].includes(argument) || (argument === "set" && A1.test((positional(rest)[1] ?? "").replace(/^.*!/, "")) && await hasCells(positional(rest)[0])))) {
+  const usage = `Usage: node ${script} document ${{ cells: "cells <id> [range] [--values]", set: "set <id> <A1> <value>", fill: "fill <id> <range> [value], or --json '{\"values\":[[\"…\"]]}'", rows: "rows <id> insert|delete <row number> [count]", cols: "cols <id> insert|delete <column letter> [count]", tabs: "tabs <id> [add <name> [place] | rename <tab> <name> | delete <tab> | move <tab> <place> | hide <tab> | show <tab>]" }[argument]}${argument === "tabs" ? "" : " [--tab <name>]"}${argument === "cells" ? "" : " [--for <item>/<n>] [--as <name>]"}`;
   const body = jsonFlag(rest), flag = (name) => { const at = rest.indexOf(name); return at < 0 ? undefined : rest.splice(at, 2)[1]; };
-  const by = flag("--as") ?? body.as ?? body.by ?? await nameHere(), answering = await answerFor(flag("--for") ?? body.for), computed = rest.includes("--values");
+  const by = flag("--as") ?? body.as ?? body.by ?? await nameHere(), answering = await answerFor(flag("--for") ?? body.for), computed = rest.includes("--values"), tab = flag("--tab") ?? body.tab;
   const [id, first, ...more] = rest.filter((arg) => arg !== "--values"), route = `/v0/document/${encodeURIComponent(id ?? "")}`;
   if (!id) fail(usage);
-  if (argument === "cells") await hub("GET", `${route}?${new URLSearchParams({ ...(first ? { range: first } : {}), ...(computed ? { as: "values" } : {}) })}`);
-  else if (argument === "set" || argument === "fill") {
+  if (argument === "cells") await hub("GET", `${route}?${new URLSearchParams({ ...(first ? { range: first } : {}), ...(computed ? { as: "values" } : {}), ...(tab ? { tab } : {}) })}`);
+  else if (argument === "tabs") {
+    // Places are counted from 1, as the listing numbers them.
+    const place = (text) => /^\d+$/.test(text ?? "") && Number(text) > 0 ? Number(text) - 1 : fail(usage);
+    // add's place, when given, is its last word.
+    const op = { add: () => { const at = more.length > 1 && /^\d+$/.test(more.at(-1)) ? place(more.pop()) : undefined; return { name: more.join(" ") || fail(usage), at }; }, rename: () => ({ tab: more[0] ?? fail(usage), name: more.slice(1).join(" ") || fail(usage) }), delete: () => ({ tab: more[0] ?? fail(usage) }),
+      move: () => ({ tab: more[0] ?? fail(usage), at: place(more[1]) }), hide: () => ({ tab: more[0] ?? fail(usage), hidden: true }), show: () => ({ tab: more[0] ?? fail(usage), hidden: false }) }[first ?? ""];
+    if (first && !op) fail(usage);
+    if (op) await hub("POST", `${route}/cells`, { op: `${first === "show" ? "hide" : first}-tab`, ...op(), by, for: answering });
+    else await hub("GET", `${route}?as=tabs`);
+  } else if (argument === "set" || argument === "fill") {
     const value = body.value ?? (more.length ? more.join(" ") : undefined);
     if (!(first ?? body.range ?? body.at) || (value === undefined && body.values === undefined)) fail(usage);
-    await hub("POST", `${route}/cells`, { op: argument, ...(argument === "set" ? { at: first ?? body.at } : { range: first ?? body.range, values: body.values }), value, by, for: answering });
+    await hub("POST", `${route}/cells`, { op: argument, tab, ...(argument === "set" ? { at: first ?? body.at } : { range: first ?? body.range, values: body.values }), value, by, for: answering });
   } else {
     const label = more[0] ?? "", at = argument === "rows" ? (/^\d+$/.test(label) ? Number(label) - 1 : NaN) : /^[A-Za-z]{1,3}$/.test(label) ? [...label.toUpperCase()].reduce((sum, letter) => sum * 26 + letter.charCodeAt(0) - 64, 0) - 1 : NaN;
     if (!["insert", "delete"].includes(first) || !(at >= 0)) fail(usage);
-    await hub("POST", `${route}/cells`, { op: `${first}-${argument}`, at, count: more[1] ? Number(more[1]) : 1, by, for: answering });
+    await hub("POST", `${route}/cells`, { op: `${first}-${argument}`, tab, at, count: more[1] ? Number(more[1]) : 1, by, for: answering });
   }
 } else if (command === "document" && ["read", "replace", "insert", "delete", "set"].includes(argument)) {
   const usage = `Usage: node ${script} document ${argument} <id>${argument === "read" ? "" : ` ${argument === "set" ? "<name> [value]" : `<block${argument === "insert" ? "|start" : ""}>${argument === "delete" ? "" : " [markdown]"}`} [--for <item>/<n>] [--as <name>], or --json '{"block":"…"${argument === "delete" ? "" : ',"markdown":"…"'}}'`}`;
@@ -318,7 +329,7 @@ if (command === "wait") {
     if (waiter && alive(waiter.id)) console.log(`waiter   ${waiter.name}  (${waiter.cwd}, since ${waiter.since})`);
   }
 } else {
-  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | answer <id> [n] --json '{\"edits\":[{\"op\":\"replace\",\"at\":\"<block>\",\"markdown\":\"…\"}],\"reply\":\"…\",\"resolve\":true}' | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document list <project> | document new <name> --project <id> [--folder <path>] [--kind markdown|sheet|site] | document read <id> | document set <id> <name> [value] | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block> | document suggestions <id> | document accept|reject <id> <key> | document cells <id> [range] [--values] | document set <id> <A1> <value> | document fill <id> <range> [value] | document rows|cols <id> insert|delete <row|letter> [count]   (--as <name>, by default the name this folder's wait listens under; --for <item>/<n> names the comment an edit answers, <item> alone its one comment; --suggest [key] makes it a suggestion; --json '{…}' gives any of block, markdown, as, for, suggest; Markdown piped in when not given)");
+  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | answer <id> [n] --json '{\"edits\":[{\"op\":\"replace\",\"at\":\"<block>\",\"markdown\":\"…\"}],\"reply\":\"…\",\"resolve\":true}' | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document list <project> | document new <name> --project <id> [--folder <path>] [--kind markdown|sheet|site] | document read <id> | document set <id> <name> [value] | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block> | document suggestions <id> | document accept|reject <id> <key> | document cells <id> [range] [--values] | document set <id> <A1> <value> | document fill <id> <range> [value] | document rows|cols <id> insert|delete <row|letter> [count] | document tabs <id> [add <name> [place] | rename <tab> <name> | delete <tab> | move <tab> <place> | hide|show <tab>]   (--tab <name> picks a sheet's tab for cells, set, fill, rows and cols, as an address such as Data!B4 does; --as <name>, by default the name this folder's wait listens under; --for <item>/<n> names the comment an edit answers, <item> alone its one comment; --suggest [key] makes it a suggestion; --json '{…}' gives any of block, markdown, as, for, suggest; Markdown piped in when not given)");
   // Asked for (`document` alone, as an item's `change` tells an agent to run it), usage is an answer, not a failure.
   process.exit(command && !(command === "document" && !argument) ? 1 : 0);
 }

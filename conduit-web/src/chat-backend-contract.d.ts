@@ -258,14 +258,15 @@ export type TurnOutcome = "complete" | "interrupted" | "failed";
 
 /**
  * A comment on an artifact as the hub hands it to a chat (`hand`, server/documents.js), on the prompt's message as
- * `markup` and never in the text the model reads. `block`: the first block of a paper it is about; `cells`: the range of a sheet it is on (A1, as the hub reads its corners then); `said`: what the
+ * `markup` and never in the text the model reads. `block`: the first block of a paper it is about; `cells`: the range of a sheet it is on (A1, as the hub reads its corners then,
+ * `Data!B4:C5` where the sheet has several tabs); `tab`: that tab's name, where it has several; `said`: what the
  * person wrote back on an item already handed over ("reply"), or a comment they reopened. `context`: what it is on as
  * the hub has it now (a paper's commented blocks, `target`, and one block either side; a site's elements, with no `id`);
  * `rev`: a site's revision when it was handed (a paper's live copy has none).
  */
 export interface MarkupHandoff {
   artifact: string; kind: "paper" | "markdown" | "sheet" | "site"; name: string; item: string;
-  n?: number; block?: string; cells?: string; said?: "reply" | "reopened"; quote?: string; words?: string;
+  n?: number; block?: string; cells?: string; tab?: string; said?: "reply" | "reopened"; quote?: string; words?: string;
   context?: { id?: string; md: string; target?: true }[]; rev?: string;
 }
 

@@ -13,7 +13,7 @@ import { AUTHORS, BLOCK_TYPES, CHANGES, FORMAT, FRAGMENT, FRAME, IMAGE_NAME, PRO
 import { remoteNode } from "../place.js";
 import { writePrivateFile } from "../private-file.js";
 import { createMarkupStore } from "./markup-store.js";
-import { sheetKind } from "./sheets.js";
+import { FOLDER, sheetKind } from "./sheets.js";
 import { startWebSocketKeepalive } from "./ws-keepalive.js";
 
 /*
@@ -42,7 +42,8 @@ import { startWebSocketKeepalive } from "./ws-keepalive.js";
  * otherwise kept by the file's path, since the hub writes nothing into a file an agent is at work on.
  *
  * A sheet (<name>.csv, sheets.js) is held live as a paper is, in a Yjs doc of its own format: its file holds what its cells show, and what was typed
- * in them (its formulas) is kept beside it. A `.csv` is an artifact only when made or opened as one.
+ * in them (its formulas) is kept beside it. A `.csv` is an artifact only when made or opened as one. A sheet with tabs is a folder, <name>.sheet/, of
+ * one .csv per tab: the one artifact its tab files stand for when the folder is listed.
  *
  * An artifact is tied to chats (links.json, beside its state). Its mated thread is its own chat, the paper's second view and
  * never in the project's list of chats, made when it is first asked for or first sent a comment: the listener named
@@ -169,6 +170,8 @@ const run = promisify(execFile);
 const under = (root, file) => file === root || file.startsWith(root + path.sep);
 const partOf = (at) => [...at.split("/").slice(0, -1), `.${at.split("/").at(-1)}.${crypto.randomBytes(4).toString("hex")}.part`].join("/");
 const endsIn = (endings, at) => endings.some((ending) => at.endsWith(ending));
+/** A workbook folder's tab files are found as files: each stands for its folder, once. */
+const folded = (found) => found && [...new Set(found.map((at) => { const dir = at.slice(0, Math.max(0, at.lastIndexOf("/"))); return dir.endsWith(FOLDER) && at.endsWith(".csv") ? dir : at; }))];
 /** Every artifact's file under a folder (one with one of the kinds' `endings`), by a walk that `ls(dir)` feeds with a directory's `{ name, file, dir }` entries. */
 async function walk(ls, endings) {
   const found = [], queue = [["", 0]];
@@ -198,14 +201,17 @@ function localDisk(root, endings) {
     create: (relative, text) => fs.writeFile(at(relative), text, { flag: "wx" }),
     rename: (from, to) => fs.rename(at(from), at(to)),
     remove: (relative) => fs.rm(at(relative), { force: true }),
+    list: async (relative) => (await fs.readdir(at(relative), { withFileTypes: true })).map((entry) => ({ name: entry.name, file: entry.isFile(), dir: entry.isDirectory() })),
+    mkdir: (relative) => fs.mkdir(at(relative)),
+    removeTree: (relative) => fs.rm(at(relative), { recursive: true, force: true }),
     /** The file as it really is must be inside the folder: a link out of it is not followed. */
     async inside(relative) {
       const [folder, home, file] = await Promise.all([fs.realpath(path.dirname(at(relative))), fs.realpath(root), fs.realpath(at(relative)).catch(() => null)]).catch(() => [null, null, null]);
       if ((folder && !under(home, folder)) || (file && !under(home, file))) throw fault(400, "That is not a path in this project's folder");
     },
     /** What git tracks or would (so nothing it ignores), or a walk where the folder is no repository. */
-    files: async () => await run("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ...endings.map((ending) => `*${ending}`)], { cwd: root, maxBuffer: 8 * 1024 * 1024, timeout: 15_000 }).then(({ stdout }) => stdout.split("\0").filter(Boolean), () => null)
-      ?? walk(async (dir) => (await fs.readdir(at(dir), { withFileTypes: true }).catch(() => [])).map((entry) => ({ name: entry.name, file: entry.isFile(), dir: entry.isDirectory() })), endings),
+    files: async () => folded(await run("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ...endings.map((ending) => `*${ending}`)], { cwd: root, maxBuffer: 8 * 1024 * 1024, timeout: 15_000 }).then(({ stdout }) => stdout.split("\0").filter(Boolean), () => null)
+      ?? await walk(async (dir) => (await fs.readdir(at(dir), { withFileTypes: true }).catch(() => [])).map((entry) => ({ name: entry.name, file: entry.isFile(), dir: entry.isDirectory() })), endings)),
   };
 }
 /** The same over a device's folder (`host`: workspace-host.js's). It has no time a file was made, a link is not followed there at all, and a folder that cannot be listed fails the listing (a part of it would read as papers deleted). */
@@ -223,9 +229,12 @@ function deviceDisk(host, endings) {
     create: (relative, text) => host.write(relative, text, { exclusive: true }),
     rename: (from, to) => host.rename(from, to),
     remove: (relative) => host.unlink(relative).catch((error) => { if (error.code !== "ENOENT") throw error; }),
+    list: async (relative) => (await host.list(relative, { limit: WALK.entries }) ?? []).map((entry) => ({ name: entry.name, file: entry.type === "file", dir: entry.type === "directory" })),
+    mkdir: (relative) => host.mkdir(relative),
+    removeTree: (relative) => host.removeTree(relative).catch((error) => { if (error.code !== "ENOENT") throw error; }),
     inside: async () => {},
-    files: async () => (await host.files({ exclude: ["node_modules", ".conduit"], limit: WALK.entries }))?.filter((at) => endsIn(endings, at))
-      ?? walk(async (dir) => (await host.list(dir, { limit: WALK.entries }).catch((error) => dir && ["ENOENT", "permission_denied"].includes(error.code) ? [] : Promise.reject(error)) ?? []).map((entry) => ({ name: entry.name, file: entry.type === "file", dir: entry.type === "directory" })), endings),
+    files: async () => folded((await host.files({ exclude: ["node_modules", ".conduit"], limit: WALK.entries }))?.filter((at) => endsIn(endings, at))
+      ?? await walk(async (dir) => (await host.list(dir, { limit: WALK.entries }).catch((error) => dir && ["ENOENT", "permission_denied"].includes(error.code) ? [] : Promise.reject(error)) ?? []).map((entry) => ({ name: entry.name, file: entry.type === "file", dir: entry.type === "directory" })), endings)),
   };
 }
 const spot = (entry) => entry.disk.at(entry.path);
@@ -379,7 +388,33 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   const now = (room, kept = room.kept) => ({ blocks: blocksOf(room), properties: room.properties.toJSON(), kept });
   const fileOf = (room) => FILES[KINDS[room.entry.kind].ids];
 
-  const kindOf = (at) => Object.keys(KINDS).find((kind) => at.endsWith(KINDS[kind].ext)), nameOf = (at) => path.basename(at, KINDS[kindOf(at)].ext);
+  const kindOf = (at) => Object.keys(KINDS).find((kind) => at.endsWith(KINDS[kind].ext) || (KINDS[kind].folder && at.endsWith(KINDS[kind].folder)));
+  const extOf = (at) => { const kind = KINDS[kindOf(at)]; return kind.folder && at.endsWith(kind.folder) ? kind.folder : kind.ext; }, nameOf = (at) => path.basename(at, extOf(at));
+  /** An artifact held as a folder (ArtifactKind `folder`) is read, looked at and written as one text: its part files' texts by name, as JSON. */
+  const isFolder = (entry) => extOf(entry.path) === KINDS[entry.kind].folder;
+  const parts = async (entry) => (await entry.disk.list(entry.path)).filter((one) => one.file && one.name.endsWith(KINDS[entry.kind].ext)).map((one) => one.name).sort();
+  const readOf = async (entry) => {
+    if (!isFolder(entry)) return entry.disk.read(entry.path);
+    const files = {};
+    for (const name of await parts(entry)) files[name] = await entry.disk.read(`${entry.path}/${name}`);
+    return JSON.stringify(files);
+  };
+  /** A folder has changed when a part file was added or removed (the folder's own time) or written (the part's). */
+  const statOf = async (entry) => {
+    const stat = await entry.disk.stat(entry.path);
+    if (!stat || !isFolder(entry)) return stat;
+    let mtimeMs = stat.mtimeMs;
+    for (const name of await parts(entry)) mtimeMs = Math.max(mtimeMs, (await entry.disk.stat(`${entry.path}/${name}`))?.mtimeMs ?? 0);
+    return { ...stat, mtimeMs };
+  };
+  /** Only the part files that differ from `before` (what was last read or written) are written; one it had that is gone now (a tab renamed or deleted) is removed. */
+  const writeOf = async (entry, text, before) => {
+    if (!isFolder(entry)) return entry.disk.write(entry.path, text);
+    const files = JSON.parse(text), was = (() => { try { return JSON.parse(before ?? "{}"); } catch { return {}; } })();
+    if (!await entry.disk.stat(entry.path)) await entry.disk.mkdir(entry.path);
+    for (const [name, part] of Object.entries(files)) if (was[name] !== part) await entry.disk.write(`${entry.path}/${name}`, part);
+    for (const name of Object.keys(was)) if (!(name in files)) await entry.disk.remove(`${entry.path}/${name}`);
+  };
   const place = (project) => {
     const far = Boolean(remoteNode(project)), endings = Object.values(KINDS).map((kind) => kind.ext);
     if (far && !(devices && project.chatRoot)) throw fault(501, "This hub cannot reach papers in a project on another device");
@@ -421,7 +456,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     await disk.inside(at);
     if (id && !await disk.stat(at)) throw Object.assign(new Error(`No file ${at}`), { code: "ENOENT" });
     if (!id) {
-      const text = await disk.read(at), read = KINDS[kind].identify(text, name);
+      const text = KINDS[kind].folder && at.endsWith(KINDS[kind].folder) ? "" : await disk.read(at), read = KINDS[kind].identify(text, name);
       const other = read.id && known.get(read.id), copy = other && spot(other) !== disk.at(at) && await other.disk.stat(other.path).catch(() => true);
       id = read.id && !copy ? read.id : crypto.randomBytes(8).toString("hex");
       await KINDS[kind].adopted({ disk, side, at, id, read });
@@ -594,7 +629,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     const handed = (comment, words, said) => Object.fromEntries(Object.entries({ artifact: room.id, kind: room.entry.kind, name: room.entry.name.replace(/\s+/g, " ").slice(0, 120), item, n: comment?.n, ...kind.where?.(comment?.under, room), said, rev,
       quote: comment?.quote || undefined, words: words || undefined, context: kind.context?.(room, comment?.under, 1) }).filter(([, value]) => value !== undefined && value !== null && !(Array.isArray(value) && !value.length)));
     // How to answer, the tool first: one call does the edits, the reply and the resolve, so nothing needs reading first.
-    const answering = (n) => `${kind.cells ? `Change its cells with the tool \`conduit_artifact\`: action "set" (at: "B4", value) or "fill" (range: "B2:C5", values: rows of cells' text; a formula's references follow each cell), with paper "${room.id}" and for "${item}/${n ?? "<n>"}"; "cells" reads it (range optional). Then answer with action "answer", paper "${room.id}", item "${item}"${n ? `, n ${n}` : ""}, \`reply\` (what the person reads beside the comment) and \`resolve\`.` : kind.blocks ? `Answer in one call: the tool \`conduit_artifact\`, action "answer", with paper "${room.id}", item "${item}"${n ? `, n ${n}` : ""}, \`edits\` ([{ op: "replace" | "insert" | "delete", at: <block id>, markdown }], each made for this comment), \`reply\` (what the person reads beside the comment) and \`resolve\`.` : `Change the site's file ${room.file?.() ?? room.entry.path} with your own tools, then answer with the tool \`conduit_artifact\`, action "answer", paper "${room.id}", item "${item}"${n ? `, n ${n}` : ""}, \`reply\` and \`resolve\`.`} Without the tool: ${kind.cells ? `\`node ${SCRIPT} document set ${room.id} <A1> <value> --for ${item}/${n ?? "<n>"}\` (or \`document fill\`), then ` : ""}\`node ${SCRIPT} answer ${item}${n ? ` ${n}` : ""} --json '{${kind.blocks ? `"edits":[…],` : ""}"reply":"…","resolve":true}'\`.`;
+    const answering = (n) => `${kind.cells ? `Change its cells with the tool \`conduit_artifact\`: action "set" (at: "B4", or "Data!B4" for another tab, value) or "fill" (range: "B2:C5", values: rows of cells' text; a formula's references follow each cell), with paper "${room.id}" and for "${item}/${n ?? "<n>"}"; "cells" reads it (range optional). Then answer with action "answer", paper "${room.id}", item "${item}"${n ? `, n ${n}` : ""}, \`reply\` (what the person reads beside the comment) and \`resolve\`.` : kind.blocks ? `Answer in one call: the tool \`conduit_artifact\`, action "answer", with paper "${room.id}", item "${item}"${n ? `, n ${n}` : ""}, \`edits\` ([{ op: "replace" | "insert" | "delete", at: <block id>, markdown }], each made for this comment), \`reply\` (what the person reads beside the comment) and \`resolve\`.` : `Change the site's file ${room.file?.() ?? room.entry.path} with your own tools, then answer with the tool \`conduit_artifact\`, action "answer", paper "${room.id}", item "${item}"${n ? `, n ${n}` : ""}, \`reply\` and \`resolve\`.`} Without the tool: ${kind.cells ? `\`node ${SCRIPT} document set ${room.id} <A1> <value> --for ${item}/${n ?? "<n>"}\` (or \`document fill\`), then ` : ""}\`node ${SCRIPT} answer ${item}${n ? ` ${n}` : ""} --json '{${kind.blocks ? `"edits":[…],` : ""}"reply":"…","resolve":true}'\`.`;
     const about = (list) => [...new Set(list.flatMap((comment) => kind.places?.(comment?.under) ?? []))];
     // Seated once the chat has been told, never before: a chat that could not be told is not at work. One that is already reading or writing keeps that;
     // and one whose chat answered before it was seated, or never began a turn, has no turn end to leave by, so it leaves SEAT_START_MS on.
@@ -625,19 +660,19 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
    * the folder could not be reached is owed to a file that has not changed since (`owed`): the kept state is then the paper, and the file takes it.
    */
   async function take(room) {
-    const { disk, path: at } = room.entry, text = await disk.read(at);
+    const text = await readOf(room.entry);
     if (text !== room.text) {
       await KINDS[room.entry.kind].live.take(room, text, Boolean(room.owed && room.owed === hash(text)));
       room.text = text;
     }
     room.owed = null;
-    room.seen = (await disk.stat(at))?.mtimeMs;
+    room.seen = (await statOf(room.entry))?.mtimeMs;
     room.unread = null;
   }
   /** Has the file changed under the hub? A file that has gone, or is now another paper's (a checkout), is looked for under another name; a paper whose file is nowhere is closed, never written again. */
   async function look(room) {
     // A folder that cannot be reached (its device is away) is not a file that has gone: the live copy goes on, and nothing is written until it answers.
-    const stat = await room.entry.disk.stat(room.entry.path).catch((error) => { room.away = error.message; });
+    const stat = await statOf(room.entry).catch((error) => { room.away = error.message; });
     if (stat === undefined) return;
     room.away = null;
     if (stat?.mtimeMs === room.seen) return;
@@ -658,11 +693,11 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   async function save(room) {
     await look(room);
     if (room.gone) return;
-    const live = KINDS[room.entry.kind].live, text = live.write(room), { disk, path: at } = room.entry;
+    const live = KINDS[room.entry.kind].live, text = live.write(room), { disk } = room.entry;
     const owed = path.join(room.entry.side, "unwritten");
     if (!room.unread && !room.away && text !== room.text) {
       // A device that goes as it is written to is away: the state is kept, and the file is written when it answers.
-      await disk.write(at, text).then(async () => { room.text = text; room.seen = (await disk.stat(at))?.mtimeMs; if (disk.far) await fs.rm(owed, { force: true }); }, (error) => { if (!disk.far) throw error; room.away = error.message; });
+      await writeOf(room.entry, text, room.text).then(async () => { room.text = text; room.seen = (await statOf(room.entry))?.mtimeMs; if (disk.far) await fs.rm(owed, { force: true }); }, (error) => { if (!disk.far) throw error; room.away = error.message; });
     }
     await writePrivateFile(path.join(room.entry.side, "state.yjs"), Y.encodeStateAsUpdate(room.doc));
     await live.saved?.(room);
@@ -733,7 +768,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     const kept = await fs.readFile(path.join(entry.side, "state.yjs")).catch(() => null);
     if (kept) Y.applyUpdate(doc, kept);
     // Opened on the kept state, so what is built from it (a sheet's formula engine) is built once.
-    Object.assign(room, live.open(doc, KINDS[entry.kind]));
+    Object.assign(room, live.open(doc, KINDS[entry.kind], entry));
     room.owed = await fs.readFile(path.join(entry.side, "unwritten"), "utf8").catch(() => null);
     await take(room);
     room.markup = markupOf(room, () => `(document ${id})`, () => live.about(room), (items) => live.seen?.(room, items));
@@ -748,6 +783,24 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   }
   /** The ids of the sites whose files do not say one are kept by path: a path's record goes with its file, and only that site's. */
   const unfiled = (entry, to) => paths(path.dirname(entry.side), (kept) => { if (kept[entry.path] === entry.id) { delete kept[entry.path]; if (to) kept[to] = entry.id; } });
+  /**
+   * The artifact's file becomes the part `file` of a folder of its name (ArtifactKind `folder`: a sheet given a second tab): what belongs to it stays,
+   * since that is kept by its id, and its path's record moves with it.
+   */
+  function toFolder(room, file) {
+    return room.work(async () => {
+      const { entry } = room, kind = KINDS[entry.kind], dir = [path.dirname(entry.path), `${entry.name}${kind.folder}`].filter((part) => part && part !== ".").join("/");
+      if (await entry.disk.stat(dir)) throw fault(409, `There is already a ${dir} in this project's folder`);
+      await entry.disk.mkdir(dir);
+      await entry.disk.rename(entry.path, `${dir}/${file}`).catch(async (error) => { await entry.disk.removeTree(dir).catch(() => {}); throw error; });
+      await kind.renamed?.(entry, dir);
+      const next = known.set(entry.id, { ...entry, path: dir }).get(entry.id);
+      room.entry = next;
+      room.text = await readOf(next);
+      room.seen = (await statOf(next))?.mtimeMs;
+      await told(next);
+    });
+  }
   /**
    * One block's edit worked out over `now` (the paper, or what the edits before it in the same change make of it), writing nothing: what the paper
    * becomes, the blocks it writes, and `also`, what it keeps in the changes, run in the change that writes it. A block that is not there is `missing`.
@@ -779,6 +832,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
    * `seats` no agent is drawn at work in it.
    * @typedef {object} ArtifactKind
    * @property {string} ext  Its file's ending.
+   * @property {string} [folder]  The ending of a folder that is one artifact of it, its part files each a file of its `ext` (a workbook: <name>.sheet/<tab>.csv).
    * @property {string} noun  What it is called in a sentence, after "a" or "the": what the hub tells chats and people of it.
    * @property {"found" | "asked"} adopts  Which files with its ending are artifacts: each one found in a project's folder, or only one made as one or
    *   asked to be one (`at` with `adopt`); a listing never makes one of those.
@@ -799,7 +853,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
    * @property {(entry: object) => Promise<object>} load  Its room: `{ id, entry, peers, work, markup }`, its comments a Markup store from markupOf, and whatever live copy it keeps.
    * @property {(entry: object, have?: string) => Promise<{ revision: string, html?: string }>} [content]  What a pane draws, by HTTP, with a revision that changes when it does; `have` is not sent again.
    * @property {{ [op in "read" | "edit" | "revert" | "suggestions" | "accept" | "reject"]: (room: object, ...args: any[]) => Promise<any> }} [blocks]  Its blocks, read and changed in its live room (`doc`, loaded on `about`).
-   * @property {{ read: (room: object, as?: string, range?: string) => Promise<string | object>, edit: (room: object, body: object) => Promise<object> }} [cells]
+   * @property {{ read: (room: object, as?: string, range?: string, tab?: string) => Promise<string | object>, edit: (room: object, body: object) => Promise<object> }} [cells]
    *   Its cells, read and changed in its live room (sheets.js; the routes' `/cells`): what was typed in each, by A1 address, and its rows and columns.
    *   Nothing done for a comment is kept to take back.
    * @property {true} [images]  It keeps images beside it.
@@ -814,10 +868,10 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
    * How a live kind's room is made and kept in step with its file (loadLive, take, save).
    * @typedef {object} LiveKind
    * @property {number} format  What a page's handshake on the live socket must say (document-format.js FORMAT, sheet-format.js SHEET_FORMAT).
-   * @property {(doc: Y.Doc, kind: ArtifactKind) => object} open  The room's own fields over the doc, once its kept state is in it.
+   * @property {(doc: Y.Doc, kind: ArtifactKind, entry: object) => object} open  The room's own fields over the doc, once its kept state is in it.
    * @property {(room: object) => boolean} empty  The live copy holds nothing yet (a first read takes the file whole).
-   * @property {(room: object, text: string, owed: boolean) => void | Promise<void>} take  The file's text taken into the live copy; `owed`: the live copy is ahead of this very text.
-   * @property {(room: object) => string} write  The file for the live copy.
+   * @property {(room: object, text: string, owed: boolean) => void | Promise<void>} take  The file's text taken into the live copy (a folder's: its parts' texts by name, as JSON); `owed`: the live copy is ahead of this very text.
+   * @property {(room: object) => string} write  The file for the live copy (a folder's parts, as `take` reads them).
    * @property {(room: object) => Promise<void>} [saved]  After each save: what it keeps beside the file.
    * @property {(room: object) => void} [close]  The room is shut.
    * @property {(room: object) => string[]} about  Lines for a Markup item's `read`: how an agent changes it.
@@ -950,7 +1004,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   const KINDS = {
     // Cells in a CSV file, computed as a spreadsheet computes them.
     sheet: {
-      ...sheetKind({ fault, as }),
+      ...sheetKind({ fault, as, folder: (room, file) => toFolder(room, file) }),
       ...BY_PATH,
       load: loadLive,
       signing: LIVE.signing,
@@ -1053,6 +1107,8 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       const asked = await projectOf(project), far = Boolean(remoteNode(asked)), full = far ? null : path.join(path.resolve(asked.workingRoot), within(file)), of = far ? asked : owner(full, await here()) ?? asked;
       const at = far ? within(file) : path.relative(path.resolve(of.workingRoot), full).split(path.sep).join("/");
       if (!kindOf(at)) throw fault(400, `${file} is not an artifact`);
+      const holder = at.slice(0, Math.max(0, at.lastIndexOf("/")));
+      if (Object.values(KINDS).some((kind) => kind.folder && holder.endsWith(kind.folder) && at.endsWith(kind.ext))) throw fault(400, `${file} is a tab of the workbook ${holder}: open ${holder}`);
       const before = listing(of.id), entry = await adopt(of, at, asking === true).catch((error) => { throw error.code === "ENOENT" ? fault(404, `No file ${file} in this project`) : error; });
       if (!entry) throw Object.assign(fault(404, `${file} is not an artifact: open it as a ${KINDS[kindOf(at)].noun} to make it one`), { code: "not_an_artifact" });
       const room = await rooms.get(entry.id)?.catch(() => null);
@@ -1160,7 +1216,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     },
     /** Its file takes the new name, where it is; what belongs to it stays, since that is kept by its id. */
     async rename(id, name) {
-      const entry = await entryOf(id), room = await rooms.get(id)?.catch(() => null), to = [path.dirname(entry.path), `${named(name)}${KINDS[entry.kind].ext}`].filter((part) => part && part !== ".").join("/");
+      const entry = await entryOf(id), room = await rooms.get(id)?.catch(() => null), to = [path.dirname(entry.path), `${named(name)}${extOf(entry.path)}`].filter((part) => part && part !== ".").join("/");
       const move = async () => {
         if (to !== entry.path && await entry.disk.stat(to)) throw fault(409, `A ${KINDS[entry.kind].noun} named ${nameOf(to)} is already there`);
         await entry.disk.rename(entry.path, to);
@@ -1175,13 +1231,13 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     async remove(id) {
       const entry = await entryOf(id), room = await rooms.get(id)?.catch(() => null);
       if (room) await room.work(() => shut(room, `This ${KINDS[entry.kind].noun} was deleted`));
-      await entry.disk.remove(entry.path);
+      await (isFolder(entry) ? entry.disk.removeTree(entry.path) : entry.disk.remove(entry.path));
       await KINDS[entry.kind].removed?.(entry);
       known.delete(id);
       await told(entry);
     },
-    /** A paper's blocks, read and changed as its kind's `blocks` say; a sheet's cells read as its `cells` say (`range`: only those). */
-    read: async (id, as, range) => KINDS[(await entryOf(id)).kind].cells ? cells(id, "read", as, range) : blocks(id, "read", as),
+    /** A paper's blocks, read and changed as its kind's `blocks` say; a sheet's cells read as its `cells` say (`range`: only those; `tab`: of that tab). */
+    read: async (id, as, range, tab) => KINDS[(await entryOf(id)).kind].cells ? cells(id, "read", as, range, tab) : blocks(id, "read", as),
     /** A sheet's cells, or its rows and columns, changed. */
     cells: (id, body) => cells(id, "edit", body ?? {}),
     edit: (id, body) => blocks(id, "edit", body),
@@ -1303,7 +1359,7 @@ export function registerDocumentRoutes(app, documents) {
     if (request.query.as === "about") return response.json(await documents.about(request.params.id));
     // As data, never as a page of the hub's: a site's scripts are run only in the frame its pane gives it.
     if (request.query.as === "site") return response.json(await documents.site(request.params.id, typeof request.query.have === "string" ? request.query.have : undefined));
-    const range = typeof request.query.range === "string" ? request.query.range : undefined, read = await documents.read(request.params.id, request.query.as, range);
+    const text = (name) => typeof request.query[name] === "string" ? request.query[name] : undefined, read = await documents.read(request.params.id, request.query.as, text("range"), text("tab"));
     if (typeof read === "string") response.type((await documents.about(request.params.id)).changes === "cells" ? "text/csv" : "text/markdown").send(read); else response.json(read);
   });
   app.post("/v0/document/:id/cells", async (request, response) => response.json(await documents.cells(request.params.id, request.body)));
