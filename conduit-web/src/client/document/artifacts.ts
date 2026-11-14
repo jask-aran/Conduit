@@ -33,8 +33,12 @@ const [lists, setLists] = createStore<Record<string, Artifact[]>>({});
 const asked = new Set<string>();
 const read = (project: string) => api<{ artifacts: Artifact[] }>(`/v0/projects/${encodeURIComponent(project)}/artifacts`)
   // Each keeps its object by id and only what changed of it is set: a row drawn for it, and a menu open on that row, stand through a refresh.
-  .then(({ artifacts }) => setLists(project, reconcile(artifacts, { key: "id" })), () => { if (!(project in lists)) setLists(project, []); });
+  // Not answered (the hub is restarting, or slow just after): the list stays unread, never empty, and is asked for again.
+  .then(({ artifacts }) => { tries.delete(project); setLists(project, reconcile(artifacts, { key: "id" })); }, () => { const n = (tries.get(project) ?? 0) + 1; tries.set(project, n); if (n <= 6) window.setTimeout(() => void read(project), Math.min(30_000, 1000 * 2 ** n)); });
+const tries = new Map<string, number>();
 window.addEventListener("conduit:artifacts-changed", (event) => { const project = (event as CustomEvent<string>).detail; if (asked.has(project)) void read(project); });
+// What changed while the hub was away was not heard.
+window.addEventListener("conduit:runtime-resynced", () => { for (const project of asked) void read(project); });
 
 /** A project's artifacts, by name; empty until the hub has answered. */
 export const artifactsOf = (project: string): Artifact[] => {

@@ -15,6 +15,17 @@ import { holdArtifact, placeShown, placeWanted } from "./focused-artifact";
 import { connect, connectedTo, disconnect, setLead } from "./connections";
 
 const LISTENER_KINDS: Record<MarkupListener["kind"], string> = { thread: "This artifact's thread", agent: "Your agent", chat: "Connected chat", session: "Terminal session" };
+/** Asked again, for half a minute, while the hub does not answer or is starting (no status, or 5xx): what it refuses (404) is said at once. */
+const patiently = async <T,>(ask: () => Promise<T>): Promise<T> => {
+  for (let n = 0; ; n += 1) {
+    try { return await ask(); }
+    catch (error) {
+      const status = (error as { apiRequest?: { status?: number } }).apiRequest?.status;
+      if (n >= 8 || (status !== undefined && status < 500)) throw error;
+      await new Promise((done) => window.setTimeout(done, Math.min(5000, 500 * 2 ** n)));
+    }
+  }
+};
 /** A listener as the person reads it: the artifact's own thread is "Thread", whatever the hub calls it. */
 const listenerLabel = (listener: MarkupListener) => listener.kind === "thread" ? "Thread" : listener.name;
 
@@ -29,11 +40,13 @@ const listenerLabel = (listener: MarkupListener) => listener.kind === "thread" ?
  */
 export default function ArtifactPane(props: { id: string; quiet?: boolean; pending?: boolean; said?: boolean; moving?: boolean; onDrawn?: () => void; chats?: (project: string) => { id: string; title: string }[]; onAbout?: (about: Artifact, label: string) => void; onThread?: () => void; shortcuts?: ArtifactSurfaceProps["shortcuts"]; header: (actions: JSX.Element) => JSX.Element }) {
   // The kind's surface is fetched before the artifact is said to be found, so "Opening the …" stands until it can be drawn.
-  const [about, { refetch }] = createResource(() => props.id, (id) => artifactAbout(id).then((found) => { last = found; props.onAbout?.(found, artifactLabel(found.kind)); return ARTIFACT_KINDS[found.kind].Surface.preload().then(() => found); }));
+  const [about, { refetch }] = createResource(() => props.id, (id) => patiently(() => artifactAbout(id)).then((found) => { last = found; props.onAbout?.(found, artifactLabel(found.kind)); return ARTIFACT_KINDS[found.kind].Surface.preload().then(() => found); }));
   // Renamed, it takes its new name; deleted, it says so, where its surface would only wait for the hub; and the hub says when its trouble starts and ends.
   const changed = () => void refetch();
   window.addEventListener("conduit:artifacts-changed", changed);
-  onCleanup(() => window.removeEventListener("conduit:artifacts-changed", changed));
+  // Asked while the hub was away, it failed: asked again once the hub is back.
+  window.addEventListener("conduit:runtime-resynced", changed);
+  onCleanup(() => { window.removeEventListener("conduit:artifacts-changed", changed); window.removeEventListener("conduit:runtime-resynced", changed); });
   // While its pane moves (an edge dragged, panes easing; not its own ease open or shut, which holds its landing width), what the
   // surface draws is laid out once, against the pane's leading edge (CSS: data-held): at the width the pane lands at, where the
   // mover knows it; else at the width it had, until the pane would cut off what it reaches to, when it follows the pane again.

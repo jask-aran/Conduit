@@ -441,10 +441,13 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   const tell = () => writePrivateFile(path.join(folder, "roots.json"), `${JSON.stringify([...known.values()].map((entry) => path.join(entry.side, "markup")))}\n`).catch((error) => console.error("Could not write the papers' Markup folders", error));
   /** The ids of the sites whose files do not say one, by path (paths.json, beside the project's artifacts); `change` is made to them and kept, one at a time. */
   let filing = Promise.resolve();
+  // Read once and held: a start reads every project's folder, and asks this of each .md and .csv in them, one at a time.
+  const filed = new Map();
   const paths = (side, change) => (filing = filing.catch(() => {}).then(async () => {
-    const file = path.join(side, "paths.json"), kept = await fs.readFile(file, "utf8").then(JSON.parse).then((read) => read && typeof read === "object" && !Array.isArray(read) ? read : {}, () => ({})), before = JSON.stringify(kept);
+    const file = path.join(side, "paths.json"), kept = filed.get(side) ?? await fs.readFile(file, "utf8").then(JSON.parse).then((read) => read && typeof read === "object" && !Array.isArray(read) ? read : {}, () => ({})), before = JSON.stringify(kept);
+    filed.set(side, kept);
     change(kept);
-    if (JSON.stringify(kept) !== before) await writePrivateFile(file, `${JSON.stringify(kept)}\n`);
+    if (JSON.stringify(kept) !== before) await writePrivateFile(file, `${JSON.stringify(kept)}\n`).catch((error) => { filed.delete(side); throw error; });
     return kept;
   }));
   /**
