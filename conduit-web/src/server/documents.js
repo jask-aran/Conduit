@@ -938,6 +938,17 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     suggestions: (id) => blocks(id, "suggestions"),
     accept: (id, key) => blocks(id, "accept", key),
     reject: (id, key) => blocks(id, "reject", key),
+    /** Stops whoever the hub handed an item to: its chat's turn ends, and the comment stays as it is for the person to ask again or settle. */
+    async stop(id, item) {
+      const entry = await entryOf(id);
+      if (!/^[\w-]+$/.test(item)) throw fault(400, "Which item to stop is not said");
+      const took = await fs.readFile(path.join(entry.side, "markup", item, "taken.json"), "utf8").then(JSON.parse).catch(() => null);
+      if (!took?.held || !took.chat) throw fault(409, "No chat the hub holds is at work on this");
+      await host().stop(took.chat);
+      const room = await rooms.get(id)?.catch(() => null);
+      if (room?.seats?.has(took.name)) sit(room, took.name, null);
+      return { stopped: true };
+    },
     /**
      * One comment answered at once: every edit (made for `<item>/<n>`, in one change), then the reply and the resolve, then the seat is left. `n` may be
      * left out of an item with one comment. Nothing is written unless all of it can be: an edit on a block that is not there fails with the comment's blocks
@@ -1050,6 +1061,7 @@ export function registerDocumentRoutes(app, documents) {
   app.patch("/v0/document/:id", async (request, response) => response.json(await documents.rename(request.params.id, request.body?.name)));
   app.delete("/v0/document/:id", async (request, response) => { await documents.remove(request.params.id); response.status(204).end(); });
   app.post("/v0/document/:id/blocks", async (request, response) => response.json(await documents.edit(request.params.id, request.body)));
+  app.post("/v0/document/:id/stop", async (request, response) => response.json(await documents.stop(request.params.id, String(request.body?.item ?? ""))));
   app.post("/v0/document/:id/answer", async (request, response) => response.json(await documents.answer(request.params.id, request.body ?? {})));
   app.post("/v0/document/:id/images", express.raw({ type: "image/*", limit: IMAGE_MAX }), async (request, response) => response.status(201).json(await documents.keepImage(request.params.id, request.body)));
   // Drawn by an <img>, never run: no other type, no script, no page of the hub's.

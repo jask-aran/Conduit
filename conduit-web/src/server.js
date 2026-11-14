@@ -649,7 +649,7 @@ registerMarkupRoutes(app, "/v0/markup", () => feedback);
 let paperChatHost;
 const paperChats = () => (paperChatHost ??= createChatHost({ registry, projects, backends, chatLogs, findChatContext, launchLiveSession, contextStore, submitPrompt: (...args) => liveSessionStream.submitPrompt(...args) }));
 const documents = lifetime.own("documents", createDocuments({ dataRoot: config.dataRoot, projects, devices: (project) => projectWorkspace(project, nodeHub), changed: (projectId) => runtimeHub.publish({ type: "artifacts_changed", projectId }),
-  chats: () => ({ open: (asked) => paperChats().openChat(asked), notify: (id, text, markup) => paperChats().deliverApproval(id, text, { markup }), get: (id) => { const chat = registry.metadata(id); return chat ? chatView(chat) : null; }, working: (id) => isGeneratingRecord(backends.getByChatId(id)),
+  chats: () => ({ open: (asked) => paperChats().openChat(asked), notify: (id, text, markup) => paperChats().deliverApproval(id, text, { markup }), get: (id) => { const chat = registry.metadata(id); return chat ? chatView(chat) : null; }, working: (id) => isGeneratingRecord(backends.getByChatId(id)), stop: (id) => liveSessionStream.stopGeneration(id),
     // The person's own agent, while it is on: a listener on every artifact, told in its home chat.
     agent: () => { const agent = backends.adapters.get("conduit-runtime")?.runtime.agent; return agent?.active() ? { name: agent.settings().name, chat: async () => (await agent.home()).chat.id } : null; } }) }), (owned) => owned.close());
 artifactTurned = (chat) => documents.turned(chat);

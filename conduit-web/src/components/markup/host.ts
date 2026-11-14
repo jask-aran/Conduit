@@ -114,6 +114,8 @@ export interface MarkupMarginHost {
   watch(listener: (pressed?: string) => void): () => void;
   /** Where the surface keeps what an agent changed to answer a comment: whether there is such a change (read where it is drawn, so it follows), and taking it back. */
   revert?: { can(key: string): boolean; run(key: string): Promise<unknown> };
+  /** Stops whoever is at work on a comment (its chat's turn), where the surface can. */
+  stop?(key: string): Promise<unknown>;
   /** Who is at work on a comment now and what they are doing (thinking, reading, writing), read where drawn so it follows; undefined while no one is. */
   working?(key: string): { by: string; state: string } | undefined;
   /** Changes an agent has proposed to the surface and not made, each a card of its own in the margin, in the order of their places: `list` read where drawn,

@@ -102,7 +102,7 @@ type Said = { from: "agent" | "person"; text: string; at?: string };
  *  Revert and `onRetry` (the comment asked again). `onAccept` and `onReject`: it is a proposed change, which is taken or declined, with no field. `key`: what a margin knows it by.
  *  `count`: shut, it stands for that many cards of one place (its state says how many); `stacked`: it is one of those, not drawn; `cycle`: open, it is `at` of `of` there, stepped through. */
 export function MarkupNote(props: { ref?: (element: HTMLTextAreaElement) => void; key?: string; float?: JSX.CSSProperties; open: boolean; tag: string; name: string; quote?: string; source?: string; value: string; picture?: string; words?: string; said?: Said[]; by?: string; state?: { label: string; busy?: boolean }; unread?: boolean;
-  placeholder?: string; resolved?: boolean; sendNow?: boolean; onSendNow?: (on: boolean) => void; onOpen: () => void; onInput: (value: string) => void; onDone?: () => void; onRemove?: () => void; onSay?: () => void; onResolve?: (resolved: boolean) => void; onRevert?: () => void; onRetry?: () => void; onAccept?: () => void; onReject?: () => void;
+  placeholder?: string; resolved?: boolean; sendNow?: boolean; onSendNow?: (on: boolean) => void; onOpen: () => void; onInput: (value: string) => void; onDone?: () => void; onRemove?: () => void; onSay?: () => void; onResolve?: (resolved: boolean) => void; onRevert?: () => void; onRetry?: () => void; onStop?: () => void; onAccept?: () => void; onReject?: () => void;
   count?: number; stacked?: boolean; cycle?: { at: number; of: number; onPrevious: () => void; onNext: () => void } }) {
   const thread = () => props.said !== undefined;
   const head = () => Boolean(props.tag || props.name);
@@ -117,6 +117,7 @@ export function MarkupNote(props: { ref?: (element: HTMLTextAreaElement) => void
     // An answer that changed the text is first taken or put back: Keep is its Resolve, so it is not offered twice.
     const keep = () => Boolean(props.onRevert && !props.resolved && props.onResolve);
     if (props.open && props.onSay) return <>
+      <Show when={props.onStop}><Button variant="ghost" size="sm" title="Stop the agent working on this comment" onClick={props.onStop}>Stop</Button></Show>
       <Show when={keep()}><Button variant="primary" outline size="sm" title="Keep what the agent changed, and resolve the comment" onClick={() => props.onResolve!(true)}><Icons.Check />Keep</Button></Show>
       <Show when={props.onRevert}><Button variant="ghost" size="sm" title="Put back what the agent changed for this comment" onClick={props.onRevert}>Revert</Button></Show>
       <Show when={props.onRetry}><Button variant="ghost" size="sm" title="Put back what the agent changed and ask again" onClick={props.onRetry}>Try again</Button></Show>

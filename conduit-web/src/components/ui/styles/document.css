@@ -9,8 +9,8 @@
 .ui-document-page { display: flex; min-height: 100%; flex-wrap: wrap; justify-content: center; gap: var(--space-2xl); }
 /* The text gives up width before the margin goes under it: it wraps only where the text at its narrowest measure and the margin no longer fit side by side. */
 /* The paper is a sheet on the pane: darker than the ground round it, so its width is seen, and down to the pane's foot however little is written. */
-/* --document-pad: its side room, the gutter the block handle stands in. */
-.ui-document-body { --document-pad: var(--space-4xl); position: relative; display: flex; min-width: 0; max-width: calc(var(--document-width) + 2 * var(--document-pad)); flex: 1 1 var(--measure-xl); flex-direction: column; border-radius: var(--radius-surface) var(--radius-surface) 0 0; background: var(--well); padding: var(--space-2xl) var(--document-pad) var(--measure-2xs); }
+/* --document-pad: its side room, the gutter the block handle stands in: its two controls and their gap, with a little air. */
+.ui-document-body { --document-pad: calc(2 * var(--control-tool) + var(--space-md)); position: relative; display: flex; min-width: 0; max-width: calc(var(--document-width) + 2 * var(--document-pad)); flex: 1 1 var(--measure-xl); flex-direction: column; border-radius: var(--radius-surface) var(--radius-surface) 0 0; background: var(--well); padding: var(--space-2xl) var(--document-pad) var(--measure-2xs); }
 /* Snug: where the text and a margin with cards in it fit side by side only so, the sheet and the column give up side room before the margin is tucked (DocumentSheet). */
 .ui-document-column[data-snug] { padding-inline: var(--space-xs); }
 .ui-document-column[data-snug] > .ui-document-page { gap: var(--space-lg); }

@@ -176,7 +176,7 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
   return <MarkupMarginNotes ref={(element) => { column = element; }} beside={beside()}>
     <For each={keys()}>{(key) => <MarkupNote ref={(element) => { field = element; }} key={key} open={openKey() === key} tag="" name="" quote={commentOf(key)?.quote} words={commentOf(key)?.comment} said={saidOf(key)} by={itemOf(key)?.by ?? undefined} state={stateOf(key)} unread={unread(key)}
       placeholder="Write back" resolved={putAway(key)} value={openKey() === key ? reply() : ""} onOpen={() => open(key)} onInput={setReply} onSay={answer} onResolve={(resolved) => settle(key, resolved)}
-      onRevert={margin?.revert?.can(key) ? () => void margin.revert!.run(key).catch(failed("Not taken back")) : undefined} onRetry={margin?.revert?.can(key) && commentOf(key)?.comment ? () => retry(key) : undefined}
+      onStop={margin?.stop && stateOf(key).busy ? () => void margin.stop!(key).catch(failed("Not stopped")) : undefined} onRevert={margin?.revert?.can(key) ? () => void margin.revert!.run(key).catch(failed("Not taken back")) : undefined} onRetry={margin?.revert?.can(key) && commentOf(key)?.comment ? () => retry(key) : undefined}
       count={tucked() ? placed(key).length : undefined} stacked={stacked(key)} cycle={cycle(key)} />}</For>
     <For each={suggestions().map((one) => one.key)}>{(key) => <MarkupNote key={SUGGESTED + key} open={false} tag="" name="" words={suggestionOf(key)?.summary} state={{ label: `${MARKUP_STATES.suggested} by ${who(suggestionOf(key)?.by) ?? "an agent"}` }} value="" onOpen={() => {}} onInput={() => {}}
       onAccept={() => margin?.suggestions?.accept(key)} onReject={() => margin?.suggestions?.reject(key)} />}</For>
