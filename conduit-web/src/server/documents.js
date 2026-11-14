@@ -114,7 +114,8 @@ export function readPartial(input) {
   }
 }
 const SAVE_AFTER_MS = 500, LOOK_EVERY_MS = 2_000, SCAN_AFTER_MS = 3_000, FAR_SCAN_MS = 15_000;
-const MATED = "conduit", SCRIPT = path.resolve(import.meta.dirname, "../../../scripts/conduit-markup.mjs");
+// The own thread's listener name; OLD is what it was, still taken as it (old taken.json files, an old page's `to`, an agent told to write as it).
+const MATED = "thread", OLD = "conduit", alias = (name) => name === OLD ? MATED : name, SCRIPT = path.resolve(import.meta.dirname, "../../../scripts/conduit-markup.mjs");
 const ID = /^[a-z0-9-]{1,64}$/, WALK = { entries: 20_000, depth: 6 };
 const SITE_ID = /<meta\s+name=["']conduit-artifact["']\s+content=["']([a-z0-9-]{1,64})["']/i;
 /** A paper's images, kept beside it (<side>/images/<name>) and named for their bytes; what they are is read from the bytes, never from what the sender said. SVG is not taken: it can carry script. */
@@ -124,6 +125,12 @@ const sniff = (bytes) => {
   return ascii(0, 8) === "\x89PNG\r\n\x1a\n" ? "png" : ascii(0, 3) === "\xff\xd8\xff" ? "jpg" : /^GIF8[79]a$/.test(ascii(0, 6)) ? "gif"
     : ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP" ? "webp" : /^ftypavi[fs]$/.test(ascii(4, 12)) ? "avif" : null;
 };
+/**
+ * Who leads an artifact other than its own thread (links.json `lead`, none for the thread): what is sent to nobody by name goes to it.
+ * @typedef {{ kind: "chat", chat: string } | { kind: "agent" }} Lead
+ */
+/** @returns {Lead | undefined} links.json's `lead`, which was once a bare chat id. */
+const leadFrom = (kept) => typeof kept === "string" ? { kind: "chat", chat: kept } : kept?.kind === "agent" ? { kind: "agent" } : kept?.kind === "chat" && typeof kept.chat === "string" ? { kind: "chat", chat: kept.chat } : undefined;
 const escaped = (text) => text.replace(/[&<>"]/g, (character) => `&#${character.charCodeAt(0)};`);
 /**
  * One comment as the agent reads it, from the hand-off (`MarkupHandoff`, chat-backend-contract.d.ts) the chat is also
@@ -220,8 +227,19 @@ const hash = (text) => crypto.createHash("sha256").update(text).digest("hex");
 const shown = ({ id, kind, name, path: at, project }) => ({ id, kind, name, path: at, project });
 
 /**
- * `chats`: () => the hub's chats, once it has them: `open({ workspace, title, mark })` makes one, `get(id)` is its summary, `notify(id, text, markup)` writes a notice into it, `markup` its hand-offs.
+ * The hub's chats as the artifacts reach them (server.js gives them).
+ * @typedef {object} ChatHost
+ * @property {(asked: { workspace: string, title: string, mark: object }) => Promise<{ id: string }>} open  Makes one.
+ * @property {(id: string) => { title?: string, projectId?: string } | null} get  Its summary, or null for none.
+ * @property {(id: string, text: string, markup: object[]) => Promise<unknown>} notify  Writes a notice into it, `markup` its hand-offs.
+ * @property {(id: string | undefined) => boolean} working  It has a turn running.
+ * @property {(id: string) => Promise<unknown>} stop  Ends its turn.
+ * @property {() => { name: string, chat: () => Promise<string> } | null} agent  The person's own agent while it is on: the name it listens under, and its home chat.
+ */
+/**
+ * `chats`: () => the hub's ChatHost, once it has one.
  * `devices`: (project) => the host of a folder on another device.
+ * @param {{ dataRoot: string, projects: any, changed?: (projectId: string) => void, chats?: () => ChatHost | null, devices?: any }} options
  */
 export function createDocuments({ dataRoot, projects, changed = () => {}, chats = () => null, devices = null }) {
   const folder = path.join(dataRoot, "documents"), extensions = documentExtensions(), schema = getSchema(extensions), markdown = new MarkdownManager({ extensions });
@@ -304,7 +322,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       id = read.id && !copy ? read.id : crypto.randomBytes(8).toString("hex");
       await KINDS[kind].adopted({ disk, side, at, id, read });
     }
-    const links = known.get(id)?.links ?? await fs.readFile(path.join(side, id, "links.json"), "utf8").then(JSON.parse).then((kept) => ({ thread: kept.thread ?? null, connections: [...kept.connections ?? []], ...(kept.lead ? { lead: kept.lead } : {}) }), () => ({ thread: null, connections: [] }));
+    const links = known.get(id)?.links ?? await fs.readFile(path.join(side, id, "links.json"), "utf8").then(JSON.parse).then((kept) => ({ thread: kept.thread ?? null, connections: [...kept.connections ?? []], ...(leadFrom(kept.lead) ? { lead: leadFrom(kept.lead) } : {}) }), () =>({ thread: null, connections: [] }));
     return known.set(id, { id, kind, name, path: at, project: project.id, disk, side: path.join(side, id), links }).get(id);
   }
   /**
@@ -356,26 +374,31 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     return making.get(id);
   }
   /**
-   * Who the hub holds an artifact's comments for: its mated thread first, then the person's own agent (on every artifact while it is on, under the name
+   * The listeners the hub holds on an artifact, its lead first: its own thread, then the person's own agent (on every artifact while it is on, under the name
    * they gave it, and told in its home chat, known here once it has been handed something), then each connected chat by its title (the first to have a title keeps it).
+   * The lead is the one `links.lead` names while it is a listener, else the own thread, which is always listed: it is never "no listener". Sessions are the store's.
+   * @returns {import("./markup-store.js").Listener[]}
    */
   let agentChat;
-  const heldFor = (id) => {
-    const entry = known.get(id), names = new Set([MATED]), own = chats()?.agent?.();
+  const listeners = (id) => {
+    const entry = known.get(id), names = new Set([MATED, OLD]), own = chats()?.agent?.(), lead = entry?.links.lead;
     if (!entry) return [];
-    const agent = own && !names.has(own.name) ? [{ name: own.name, agent: true, chat: agentChat }] : [];
+    const thread = { name: MATED, kind: "thread", ...(entry.links.thread ? { chat: entry.links.thread } : {}) };
+    const agent = own && !names.has(own.name) ? [{ name: own.name, kind: "agent", ...(agentChat ? { chat: agentChat } : {}) }] : [];
     for (const one of agent) names.add(one.name);
-    // Its lead (the chat that made it, or one the person put on it) is listed first, so what is sent to nobody by name goes there; its own thread stands behind.
-    const lead = entry.links.lead, order = chats() ? [...entry.links.connections].sort((a, b) => Number(b === lead) - Number(a === lead)) : [];
+    // A lead chat is named first, so it keeps its title.
+    const leads = (chat) => Number(lead?.kind === "chat" && lead.chat === chat), order = chats() ? [...entry.links.connections].sort((a, b) => leads(b) - leads(a)) : [];
     const others = order.flatMap((chat) => {
       const title = chats().get(chat)?.title, name = title && !names.has(title) ? title : `chat ${chat.slice(0, 8)}`;
       if (!chats().get(chat) || names.has(name)) return [];
       names.add(name);
-      return [{ name, chat }];
-    }), led = others[0]?.chat === lead ? others.splice(0, 1) : [];
-    // The artifact's own thread is always listed: it is never "no listener".
-    return [...led, { name: MATED, chat: entry.links.thread }, ...agent, ...others];
+      return [{ name, kind: "chat", chat }];
+    });
+    const all = [thread, ...agent, ...others], first = all.find((one) => lead?.kind === "agent" ? one.kind === "agent" : lead?.kind === "chat" && one.kind === "chat" && one.chat === lead.chat) ?? thread;
+    return [{ ...first, lead: true }, ...all.filter((one) => one !== first)];
   };
+  /** The listener the hub holds under this name (the own thread's old name too). */
+  const listener = (id, name) => listeners(id).find((one) => one.name === alias(name));
   /**
    * How many of an artifact's comments the person has not settled (a session's resolve leaves one standing until they
    * confirm it), as its listing says. Read with a store of its own, so a list loads no paper; a change seen in an open
@@ -407,7 +430,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
    */
   const seated = (room, to = room.peers) => {
     // A chat disconnected or deleted is no longer at work here.
-    for (const name of room.seats?.keys() ?? []) if (!heldFor(room.id).some((one) => one.name === name)) { clearTimeout(room.leaving?.get(name)); room.seats.delete(name); }
+    for (const name of room.seats?.keys() ?? []) if (!listener(room.id, name)) { clearTimeout(room.leaving?.get(name)); room.seats.delete(name); }
     const bytes = frame(FRAME.seats, Buffer.from(JSON.stringify([...(room.seats?.values() ?? [])]))); for (const peer of to) peer.send(bytes);
   };
   const sit = (room, name, change) => {
@@ -422,8 +445,8 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     if (was?.state === now.state && was.op === now.op && String(was.blocks) === String(now.blocks)) room.telling ??= setTimeout(() => { room.telling = null; seated(room); }, SEAT_TELL_MS);
     else { clearTimeout(room.telling); room.telling = null; seated(room); }
   };
-  /** Only a listener the hub holds has a seat, and only while it has one already or its chat has a turn running: a script that edits under a name is not at work for the person. */
-  const sits = (id, name, room) => { const one = heldFor(id).find((held) => held.name === name); return Boolean(one && (room?.seats?.has(name) || chats()?.working?.(one.chat))); };
+  /** Only a listener the hub holds has a seat, and only while it has one already or its chat has a turn running: a script that edits under a name is not at work for the person. The one that sits, or none. */
+  const sits = (id, name, room) => { const one = listener(id, name); return one && (room?.seats?.has(one.name) || chats()?.working?.(one.chat)) ? one : undefined; };
   /** What is heard of each chat's conduit_artifact call as the model writes it (`heard`): the call, its latest input, and once read, where it writes. */
   const hearing = new Map();
   const hear = async (one, documents) => {
@@ -450,10 +473,14 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
    * What the hub does for a listener it holds, as the CLI's `wait` does for a session: the item is taken in its name,
    * each comment is marked as being worked on, and the chat is handed each comment with what it is on now and how to answer it in one call. `said`: what the person wrote
    * back on an item already handed over.
+   * @param {object} room
+   * @param {string} item
+   * @param {import("./markup-store.js").Listener} to  One the hub holds (never a `session`).
+   * @param {{ n: number | null, text: string }} [said]
    */
   async function hand(room, item, to, said) {
     // The mated thread is made again where it has gone (an empty chat is not kept): what is sent to the paper always has a chat to reach.
-    const dir = path.join(room.entry.side, "markup", item), chat = to.name === MATED ? (await mated(room.id)).id : to.agent ? agentChat = await host().agent().chat() : to.chat, at = new Date().toISOString();
+    const dir = path.join(room.entry.side, "markup", item), chat = to.kind === "thread" ? (await mated(room.id)).id : to.kind === "agent" ? agentChat = await host().agent().chat() : to.chat, at = new Date().toISOString();
     // The name is the file's, which anyone who can write the folder chooses: it reaches the agent as a quoted name, never as lines of its own.
     const name = JSON.stringify(room.entry.name.replace(/\s+/g, " ").slice(0, 120)), taken = path.join(dir, "taken.json");
     const comments = JSON.parse(await fs.readFile(path.join(dir, "item.json"), "utf8")).comments ?? [];
@@ -473,7 +500,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     const back = said && handed(comments.find((comment) => comment.n === said.n) ?? { n: said.n }, said.text, said.text ? "reply" : "reopened");
     if (said) return host().notify(chat, `${handoff(back)}\nOn the ${room.entry.kind} ${name}, markup item ${item}: ${said.text ? `the person wrote back${Number.isInteger(said.n) ? ` on comment ${said.n}` : ""}: ${said.text}` : `the person reopened comment ${said.n}.`} The comment and what it is on now are in the card above. ${answering(said.n ?? (comments.length === 1 ? comments[0].n : null))}`, [back]).then(() => seat(about([comments.find((comment) => comment.n === said.n)]), `${item}/${said.n ?? 1}`));
     // Taken once: a session that took it first (a `wait` under the same name) keeps it, and the chat is told nothing.
-    const mine = await fs.writeFile(taken, `${JSON.stringify({ name: to.name, held: true, chat, agent: to.agent, at })}\n`, { flag: "wx" }).then(() => true, async () => (await fs.readFile(taken, "utf8").then(JSON.parse).catch(() => null))?.held === true);
+    const mine = await fs.writeFile(taken, `${JSON.stringify({ name: to.name, held: true, kind: to.kind, chat, at })}\n`, { flag: "wx" }).then(() => true, async () => (await fs.readFile(taken, "utf8").then(JSON.parse).catch(() => null))?.held === true);
     if (!mine) return;
     // What the chat has not been told of yet: the comments with no line saying one is being worked on.
     const told = new Set((await fs.readFile(path.join(dir, "thread.jsonl"), "utf8").catch(() => "")).split("\n").filter(Boolean).map((line) => JSON.parse(line)).filter((line) => line.working).map((line) => line.n));
@@ -481,7 +508,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     if (!fresh.length) return;
     // A chat that cannot be told has not taken it: the item goes back to waiting, which is what the person then reads.
     const cards = fresh.map((comment) => handed(comment, comment.comment));
-    await host().notify(chat, `${cards.map((one) => handoff(one)).join("\n")}\n${fresh.length === comments.length ? "The person" : "The person added to what they"} sent you ${fresh.length === 1 ? "a comment" : `${fresh.length} comments`} on the ${room.entry.kind} ${name}${fresh.length === comments.length ? "" : ` (${fresh.map((comment) => comment.n).join(", ")})`}: what each asks, the text it quotes and what it is on now are in the ${fresh.length === 1 ? "card" : "cards"} above. ${answering(fresh.length === 1 ? fresh[0].n : null)}${fresh.length > 1 ? " One answer per comment, with its n." : ""} The person reads the ${room.entry.kind}'s margin, not this chat: say what you did, or ask what you need to know, in the reply, in a line or two; what you write here is only your own log. (Everything else about the item is in ${path.join(dir, "item.json")}.)${to.name === MATED ? kind.signing?.(MATED) ?? "" : ""}`, cards)
+    await host().notify(chat, `${cards.map((one) => handoff(one)).join("\n")}\n${fresh.length === comments.length ? "The person" : "The person added to what they"} sent you ${fresh.length === 1 ? "a comment" : `${fresh.length} comments`} on the ${room.entry.kind} ${name}${fresh.length === comments.length ? "" : ` (${fresh.map((comment) => comment.n).join(", ")})`}: what each asks, the text it quotes and what it is on now are in the ${fresh.length === 1 ? "card" : "cards"} above. ${answering(fresh.length === 1 ? fresh[0].n : null)}${fresh.length > 1 ? " One answer per comment, with its n." : ""} The person reads the ${room.entry.kind}'s margin, not this chat: say what you did, or ask what you need to know, in the reply, in a line or two; what you write here is only your own log. (Everything else about the item is in ${path.join(dir, "item.json")}.)${to.kind === "thread" ? kind.signing?.(to.name) ?? "" : ""}`, cards)
       .catch(async (error) => { if (!told.size) await fs.rm(taken, { force: true }); throw error; });
     await fs.appendFile(path.join(dir, "thread.jsonl"), fresh.map((comment) => `${JSON.stringify({ at, from: "agent", by: to.name, n: comment.n, working: true })}\n`).join(""));
     seat(about(fresh), `${item}/${fresh[0].n}`);
@@ -549,20 +576,24 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   function markupOf(room, where, about, seen = () => {}) {
     const { id, entry } = room, store = createMarkupStore({
       folder: path.join(entry.side, "markup"), listeners: path.join(dataRoot, "feedback"), on: () => `the ${entry.kind} ${room.entry.name} ${where()}`,
-      held: async () => heldFor(id), done: (item) => `node ${SCRIPT} done ${item}`,
+      held: async () => listeners(id), done: (item) => `node ${SCRIPT} done ${item}`,
       about: () => [`Where a line here says \`node scripts/conduit-markup.mjs\`, run \`node ${SCRIPT}\`: it works from any folder.`, ...about()],
       log: (line) => console.log(JSON.stringify({ ...line, type: "conduit.document.markup", document: id })),
     });
     const open = async () => { const items = await store.open(); seen(items); recount(room.id, items); return items; };
     // What is sent to a listener the hub holds, or written back on an item one of them took, is handed to its chat. The person's page is answered first: a chat that cannot be started is said in the log, and the item stays in the folder.
     // Who holds an item is the chat that took it, whatever it is called now: a chat's listener name is its title, which changes.
+    // A taken.json written before it said its kind says `agent: true` for the agent and the old name for the own thread.
+    /** @returns {Promise<import("./markup-store.js").Listener | undefined>} */
     const held = async (name, item) => {
-      const all = heldFor(id), took = item && await fs.readFile(path.join(entry.side, "markup", item, "taken.json"), "utf8").then(JSON.parse).catch(() => null);
-      return took?.held ? took.name === MATED ? all.find((one) => one.name === MATED) : took.agent ? all.find((one) => one.agent) : all.find((one) => one.chat === took.chat) && { name: took.name, chat: took.chat } : all.find((one) => one.name === name);
+      const took = item && await fs.readFile(path.join(entry.side, "markup", item, "taken.json"), "utf8").then(JSON.parse).catch(() => null);
+      if (!took?.held) return name ? listener(id, name) : undefined;
+      const kind = took.kind ?? (took.name === OLD ? "thread" : took.agent ? "agent" : "chat"), all = listeners(id);
+      return kind === "chat" ? all.some((one) => one.chat === took.chat) ? { name: took.name, kind, chat: took.chat } : undefined : all.find((one) => one.kind === kind);
     };
     const failed = (error) => console.error(`Could not hand a comment on the ${entry.kind} ${room.entry.name} to its chat: ${error.message}`);
     return { ...store, open,
-      send: async (item, body) => { const sent = await store.send(item, body), to = await held(sent.handed?.to?.name, sent.id); if (to) void hand(room, sent.id, to).catch(failed); void open().catch(() => {}); return sent; },
+      send: async (item, body) => { const sent = await store.send(item, body?.to === OLD ? { ...body, to: MATED } : body), to = await held(sent.handed?.to?.name, sent.id); if (to) void hand(room, sent.id, to).catch(failed); void open().catch(() => {}); return sent; },
       answer: async (item, body) => { const answered = await store.answer(item, body); void open().catch(() => {}); return answered; },
       say: async (item, body) => {
         const said = await store.say(item, body), to = await held(said.by, item);
@@ -702,7 +733,8 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
           if (about !== undefined) await kept.markup.thread(String(about).split("/")[0]);
           set(kept, next.length ? next : [empty()], name, also);
           // Its seat moves to what it wrote, and what it was heard writing is the paper's now.
-          if (sits(id, name, kept)) sit(kept, name, { state: "thinking", blocks: fresh.length ? fresh.map((made) => made.attrs.id) : [], text: undefined, ...(about === undefined ? {} : { for: String(about) }) });
+          const sitting = sits(id, name, kept);
+          if (sitting) sit(kept, sitting.name, { state: "thinking", blocks: fresh.length ? fresh.map((made) => made.attrs.id) : [], text: undefined, ...(about === undefined ? {} : { for: String(about) }) });
           return { blocks: fresh.map((made) => made.attrs.id), ...(suggestion ? { suggestion } : {}) };
         },
         /** Everything changed for one comment is put back as it was: a changed block is its `before` again, a new one goes, a deleted one returns after the block it followed. */
@@ -850,7 +882,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     },
     /** A chat's turn started or ended: where it is an artifact's mated thread, that project's clients are told. */
     /** A listener the hub holds read the paper (`reading`), or is heard writing a change to it before it is made (`writing`, with the block and the Markdown so far). */
-    async seat(id, by, change) { const room = await rooms.get(id)?.catch(() => null); if (room && KINDS[room.entry.kind].places && sits(id, by, room)) sit(room, by, { text: undefined, ...change }); },
+    async seat(id, by, change) { const room = await rooms.get(id)?.catch(() => null), one = room && KINDS[room.entry.kind].places && sits(id, by, room); if (one) sit(room, one.name, { text: undefined, ...change }); },
     /**
      * A chat is heard writing a call to conduit_artifact: `input` is its JSON so far, cut wherever the model has got to; `call` names the call in its turn,
      * and `done` says its input is whole. What can be read of it (readPartial: the action, the block, the Markdown so far) seats the chat's agent on
@@ -871,7 +903,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       if (chats()?.working?.(chat)) return;
       const one = hearing.get(chat);
       if (one) { clearTimeout(one.reading); clearTimeout(one.hush); hearing.delete(chat); }
-      for (const entry of known.values()) { const as = heldFor(entry.id).find((one) => one.chat === chat)?.name, room = as && await rooms.get(entry.id)?.catch(() => null); if (room?.seats?.has(as)) sit(room, as, null); }
+      for (const entry of known.values()) { const as = listeners(entry.id).find((one) => one.chat === chat)?.name, room = as && await rooms.get(entry.id)?.catch(() => null); if (room?.seats?.has(as)) sit(room, as, null); }
     },
     turned(chat) {
       void this.left(chat);
@@ -885,7 +917,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     /** The chats tied to a paper: its mated thread (none until it is made) and those the person connected. */
     async connections(id) {
       const { links } = await entryOf(id);
-      return { thread: links.thread && chats()?.get(links.thread) ? links.thread : null, lead: links.lead && links.connections.includes(links.lead) && chats()?.get(links.lead) ? links.lead : null, connections: links.connections.flatMap((chat) => { const found = chats()?.get(chat); return found ? [{ chat, title: found.title || "Untitled chat" }] : []; }) };
+      return { thread: links.thread && chats()?.get(links.thread) ? links.thread : null, lead: links.lead?.kind === "chat" && links.connections.includes(links.lead.chat) && chats()?.get(links.lead.chat) ? links.lead.chat : null, connections: links.connections.flatMap((chat) => { const found = chats()?.get(chat); return found ? [{ chat, title: found.title || "Untitled chat" }] : []; }) };
     },
     /** A chat is connected to a paper, or (`on` false) no longer: the hub then hands it the comments sent to it. */
     async connect(id, chat, on = true) {
@@ -893,24 +925,36 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       if (!host().get(chat)) throw fault(404, `No chat ${chat}`);
       if (chat === entry.links.thread) throw fault(400, "That is the paper's own thread");
       entry.links.connections = [...entry.links.connections.filter((one) => one !== chat), ...(on ? [chat] : [])];
-      if (!on && entry.links.lead === chat) delete entry.links.lead;
+      if (!on && entry.links.lead?.kind === "chat" && entry.links.lead.chat === chat) delete entry.links.lead;
       await fs.mkdir(entry.side, { recursive: true });
       await link(entry);
       return this.connections(id);
     },
-    /** A chat takes the lead on an artifact: it is connected, and what the person sends to nobody by name is handed to it before the artifact's own thread. */
+    /** A chat takes the lead on an artifact: it is connected, and what the person sends to nobody by name is handed to it before the artifact's own thread. The own thread taking it clears any other lead. */
     async lead(id, chat) {
       const entry = await entryOf(id);
-      if (chat === entry.links.thread) return this.connections(id);
-      await this.connect(id, chat);
-      entry.links.lead = chat;
+      if (chat === entry.links.thread) delete entry.links.lead;
+      else { await this.connect(id, chat); entry.links.lead = { kind: "chat", chat }; }
+      await fs.mkdir(entry.side, { recursive: true });
       await link(entry);
       return this.connections(id);
+    },
+    /** The person puts a listener the hub holds on an artifact in the lead, by its name; none (or the own thread's) gives the lead back to the own thread. */
+    async leader(id, name) {
+      const entry = await entryOf(id), one = name === null ? undefined : listener(id, name);
+      if (name !== null && !one) throw fault(404, `No listener ${name} on ${entry.name}`);
+      if (one?.kind === "agent") entry.links.lead = { kind: "agent" };
+      else if (one?.kind === "chat") entry.links.lead = { kind: "chat", chat: one.chat };
+      else delete entry.links.lead;
+      await fs.mkdir(entry.side, { recursive: true });
+      await link(entry);
+      const first = listeners(id)[0];
+      return { lead: { name: first.name, kind: first.kind } };
     },
     /** What a chat has to do with papers: its project, and the papers it is the thread of or connected to, each with the name it listens under there. */
     of(chat) {
       const found = chat ? chats()?.get(chat) : null;
-      return { project: found?.projectId ?? null, papers: found ? [...known.values()].flatMap((entry) => { const as = heldFor(entry.id).find((one) => one.chat === chat)?.name; return as ? [{ id: entry.id, as }] : []; }) : [] };
+      return { project: found?.projectId ?? null, papers: found ? [...known.values()].flatMap((entry) => { const as = listeners(entry.id).find((one) => one.chat === chat)?.name; return as ? [{ id: entry.id, as }] : []; }) : [] };
     },
     /** The papers a chat is connected to. */
     connectedTo: (chat) => [...known.values()].filter((entry) => entry.links.connections.includes(chat)).map(shown),
@@ -959,7 +1003,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       if (!took?.held || !took.chat) throw fault(409, "No chat the hub holds is at work on this");
       await host().stop(took.chat);
       const room = await rooms.get(id)?.catch(() => null);
-      if (room?.seats?.has(took.name)) sit(room, took.name, null);
+      if (room?.seats?.has(alias(took.name))) sit(room, alias(took.name), null);
       return { stopped: true };
     },
     /**
@@ -997,7 +1041,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
         if (words) await room.markup.answer(thread.id, { n: at ?? null, text: words, by: name });
         const done = resolve ? await room.markup.answer(thread.id, { n: at, resolved: true, by: name }) : null;
         await room.markup.open();
-        if (room.seats?.has(name)) sit(room, name, null);
+        if (room.seats?.has(alias(name))) sit(room, alias(name), null);
         return { item: thread.id, n: at ?? null, blocks: written, replied: Boolean(words), resolved: Boolean(resolve), ...(done ? { handled: done.state === "handled" } : {}) };
       });
     },
@@ -1068,6 +1112,11 @@ export function registerDocumentRoutes(app, documents) {
   });
   app.post("/v0/document/:id/thread", async (request, response) => response.json(await documents.thread(request.params.id)));
   app.get("/v0/document/:id/connections", async (request, response) => response.json(await documents.connections(request.params.id)));
+  app.put("/v0/document/:id/lead", async (request, response) => {
+    const name = request.body?.name;
+    if (name !== null && typeof name !== "string") throw fault(400, "The lead is { name: a listener's name, or null for the artifact's own thread }");
+    response.json(await documents.leader(request.params.id, name));
+  });
   app.put("/v0/document/:id/connections/:chat", async (request, response) => response.json(await documents.connect(request.params.id, request.params.chat)));
   app.delete("/v0/document/:id/connections/:chat", async (request, response) => response.json(await documents.connect(request.params.id, request.params.chat, false)));
   app.get("/v0/chats/:chat/connections", (request, response) => response.json({ connections: documents.connectedTo(request.params.chat) }));

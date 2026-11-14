@@ -37,8 +37,9 @@ export default function ArtifactRows(props: { project: string; empty?: JSX.Eleme
           <MenuRow icon={<ArtifactIcon kind={artifact.kind} />} onSelect={() => props.onOpen(artifact)}>Open</MenuRow>
           <Show when={!props.phone}><MenuRow icon={<Icons.Split />} onSelect={() => props.onOpen(artifact, true)}>Open beside</MenuRow></Show>
           <MenuRow icon={<Icons.Edit />} onSelect={() => { setName(artifact.name); setRenaming(artifact); }}>Rename</MenuRow>
-          <Show when={artifact.kind === "paper"}><><MenuRow icon={<Icons.Copy />} onSelect={() => void copyArtifactMarkdown(artifact).then(() => toast.success("Copied as Markdown"), failed)}>Copy as Markdown</MenuRow>
-            <MenuRow icon={<Icons.Download />} onSelect={() => void exportArtifactMarkdown(artifact).catch(failed)}>Download Markdown</MenuRow><MenuRow icon={<Icons.FileText />} checked={paperCounted()} onSelect={() => countPapers(!paperCounted())}>Count blocks and words</MenuRow></></Show>
+          <Show when={ARTIFACT_KINDS[artifact.kind]?.markdown}><MenuRow icon={<Icons.Copy />} onSelect={() => void copyArtifactMarkdown(artifact).then(() => toast.success("Copied as Markdown"), failed)}>Copy as Markdown</MenuRow>
+            <MenuRow icon={<Icons.Download />} onSelect={() => void exportArtifactMarkdown(artifact).catch(failed)}>Download Markdown</MenuRow></Show>
+          <Show when={ARTIFACT_KINDS[artifact.kind]?.count}><MenuRow icon={<Icons.FileText />} checked={paperCounted()} onSelect={() => countPapers(!paperCounted())}>Count blocks and words</MenuRow></Show>
         </MenuSection>
         <MenuSection>
           <MenuRow destructive icon={<Icons.Delete />} onSelect={() => setDeleting(artifact)}>Delete</MenuRow>

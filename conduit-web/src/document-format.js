@@ -2,6 +2,7 @@ import { Mark, mergeAttributes, Node } from "@tiptap/core";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
 import { UniqueID } from "@tiptap/extension-unique-id";
+import { MarkdownManager } from "@tiptap/markdown";
 import StarterKit from "@tiptap/starter-kit";
 
 /*
@@ -166,7 +167,22 @@ export const fitted = (node) => {
 };
 
 // No trailing block: an editor that adds one writes it into the hub's copy, once for each page that has the document open.
-export const documentExtensions = () => [StarterKit.configure({ undoRedo: false, trailingNode: false, link: { openOnClick: false } }), TaskList, TaskItem.configure({ nested: true }), TableKit, Image, Callout, Toggle, Day, inked("color", "span"), inked("highlight", "mark"), UniqueID.configure({ types: BLOCK_TYPES, generateID: blockId })];
+/** What the format holds that plain Markdown cannot say, each by the node or mark that holds it (components/document/host.ts DocumentExtra names them for a host; `properties` is kept beside the text). */
+const EXTRAS = ["callout", "toggle", "date", "color", "highlight", "underline"];
+/** The editor's and the hub's extensions. `holds`: the extras this document has (unsaid: every one); one it does not hold is out of the schema, so it is neither made nor read. */
+export const documentExtensions = (holds) => {
+  const has = (extra) => !holds || holds.includes(extra);
+  return [StarterKit.configure({ undoRedo: false, trailingNode: false, link: { openOnClick: false }, ...(has("underline") ? {} : { underline: false }) }), TaskList, TaskItem.configure({ nested: true }), TableKit, Image,
+    ...(has("callout") ? [Callout] : []), ...(has("toggle") ? [Toggle] : []), ...(has("date") ? [Day] : []), ...(has("color") ? [inked("color", "span")] : []), ...(has("highlight") ? [inked("highlight", "mark")] : []),
+    UniqueID.configure({ types: BLOCK_TYPES, generateID: blockId })];
+};
+const managers = new Map();
+/** The Markdown reader and writer for a schema documentExtensions made: of the same extras, so nothing is read that the schema cannot hold. */
+export const markdownFor = (schema) => {
+  const holds = EXTRAS.filter((extra) => schema.nodes[extra] || schema.marks[extra]), key = holds.join(" ");
+  if (!managers.has(key)) managers.set(key, new MarkdownManager({ extensions: documentExtensions(holds) }));
+  return managers.get(key);
+};
 
 /*
  * The live socket (/v0/document/<id>/live) carries binary frames, the first byte saying which: `have` is a Yjs state

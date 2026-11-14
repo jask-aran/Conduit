@@ -108,7 +108,10 @@ know about Float: the phone composes every send from the general routes. Panels 
 
 A kind is declared twice: on the client in `ARTIFACT_KINDS` (`client/document/artifact-kinds.ts`, with its `Surface`), on the hub in
 `KINDS` (`server/documents.js`, the `ArtifactKind` typedef). Markup, the margin, comments, hand-off and the pane are written once
-over those. What still knows a paper's blocks outside the paper's two entries:
+over those. A kind also gets its listeners for free: `listeners(id)` gives each held one as a `Listener` (`server/markup-store.js`;
+kind `thread`, `agent` or `chat`, the store adds each CLI `wait` as `session`), its lead first and marked `lead`. The lead is the hub's
+(`PUT /v0/document/:id/lead`, kept in links.json as a `Lead`), and is the own thread (`thread`, once `conduit`) unless one is set.
+What still knows a paper's blocks outside the paper's two entries:
 
 - [ ] A seat carries `blocks`, on the hub (`sit`, `hear`, `readPartial`, the seat frame) and in the editor's `DocumentSeat`: a kind
   whose places are not blocks needs the field to be "places", which is a format change.

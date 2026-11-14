@@ -8,9 +8,10 @@ import { ARTIFACT_KINDS } from "./artifact-kinds";
  * What the client knows of artifacts (docs/plans/markup-and-conduit-documents.md): each project's list, read from the
  * hub once it is asked for and again whenever the hub says that project's artifacts changed. Each is a file in its
  * project's folder (`path`), whose name is the file's: a paper (`<name>.paper`, blocks the hub holds live) or a site
- * (`<name>.site.html`, one HTML file an agent writes, shown in a frame that can reach nothing of Conduit's).
+ * (`<name>.site.html`, one HTML file an agent writes, shown in a frame that can reach nothing of Conduit's) or a Markdown file (`<name>.md`,
+ * held live as a paper is; which `.md` files are artifacts is the hub's to say).
  */
-export type ArtifactKind = "paper" | "site";
+export type ArtifactKind = "paper" | "site" | "markdown";
 /**
  * `trouble`: why what is shown may not be what the file holds (it cannot be read, or its device is away); `edited`: a
  * paper's, false until anyone has changed it since it was made. Only `artifactAbout` says these.

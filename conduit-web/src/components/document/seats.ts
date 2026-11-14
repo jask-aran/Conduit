@@ -1,12 +1,11 @@
 import { Extension, type Editor } from "@tiptap/core";
-import { MarkdownManager } from "@tiptap/markdown";
 import { DOMSerializer, type Node, type Schema } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
 import { ySyncPluginKey } from "y-prosemirror";
 import { DOCUMENT_SEAT_INKS, documentBlockClass, documentSeatCaret, documentSeatClass, documentSeatFlag, documentSeatStream, type DocumentSeatInk } from "@/components/ui/document";
-import { documentExtensions } from "@/document-format.js";
+import { markdownFor } from "@/document-format.js";
 import { blockById } from "./blocks";
 import type { DocumentSeat } from "./host";
 
@@ -38,13 +37,12 @@ const near = (doc: Node, id: string) => {
   return { node, next };
 };
 
-let manager: MarkdownManager | undefined;
 /** Markdown drawn as the paper's blocks are, by the schema's own rendering; a callout and a toggle take their boxes (a view's buttons are left out). */
 const blocksOf = (schema: Schema, markdown: string) => {
   const out = document.createDocumentFragment();
   if (!markdown.trim()) return out;
   try {
-    out.append(DOMSerializer.fromSchema(schema).serializeFragment(schema.nodeFromJSON((manager ??= new MarkdownManager({ extensions: documentExtensions() })).parse(markdown)).content));
+    out.append(DOMSerializer.fromSchema(schema).serializeFragment(schema.nodeFromJSON(markdownFor(schema).parse(markdown)).content));
   } catch {
     out.append(Object.assign(document.createElement("p"), { textContent: markdown }));
   }

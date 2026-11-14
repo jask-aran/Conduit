@@ -189,9 +189,15 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   // A failed ask keeps who was last heard of: "No listener" is only ever what the receiver answered.
   let heard: Waiter[] | undefined;
   const [waiters, { refetch: askWaiters }] = createResource(() => can.listeners ? transport.listening().then((all) => heard = all, () => heard) : [] as Waiter[]);
+  // Chosen here: this page's choice, or, where the receiver keeps a lead, the one asked of it until it answers.
   const [agentName, setAgentName] = createSignal<string | null>(null);
-  const agent = () => waiters.latest?.find((waiter) => waiter.name === agentName()) ?? waiters.latest?.[0] ?? null;
-  const nextAgent = () => { const all = waiters.latest ?? []; setAgentName(all[(all.findIndex((waiter) => waiter.name === agent()?.name) + 1) % all.length]?.name ?? null); };
+  const agent = () => { const all = waiters.latest ?? []; return all.find((waiter) => waiter.name === agentName()) ?? all.find((waiter) => waiter.lead) ?? all[0] ?? null; };
+  const handTo = (name: string | null) => {
+    setAgentName(name);
+    // A session waiting in a terminal comes and goes: choosing one is this page's, never the artifact's lead.
+    if (host.lead && (waiters.latest ?? []).find((waiter) => waiter.name === name)?.kind !== "session") void host.lead(name).then(() => askWaiters(), (error: Error) => host.notify("failed", error.message)).finally(() => { if (agentName() === name) setAgentName(null); });
+  };
+  const nextAgent = () => { const all = waiters.latest ?? []; handTo(all[(all.findIndex((waiter) => waiter.name === agent()?.name) + 1) % all.length]?.name ?? null); };
   /** Who a comment is for, whatever the bar hands to: a listener its words name with `@` (the longest that matches), else the one it was asked of. */
   const addressOf = (selection: Selection) => (waiters.latest ?? []).map((waiter) => waiter.name).sort((a, b) => b.length - a.length)
     .find((name) => new RegExp(`(?<!\\w)@${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\w)`, "i").test(selection.comment)) ?? selection.to ?? null;
@@ -659,7 +665,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   onMount(() => {
     // The moment is kept in case it is wanted; the tool opens on the live page all the same.
     if (atOpen) void take(false);
-    host.asks?.({ names: () => (waiters.latest ?? []).map((waiter) => waiter.name), ask: addQuote, unsent: () => sending() ? 0 : selections.filter((selection) => !selection.sent && selection.comment.trim()).length, send: () => void send(), to: () => agent()?.name ?? null, hand: setAgentName });
+    host.asks?.({ names: () => (waiters.latest ?? []).map((waiter) => waiter.name), listeners: () => waiters.latest ?? [], ask: addQuote, unsent: () => sending() ? 0 : selections.filter((selection) => !selection.sent && selection.comment.trim()).length, send: () => void send(), to: () => agent()?.name ?? null, hand: handTo });
     onCleanup(() => host.asks?.(null));
     for (const type of POINTER_EVENTS) window.addEventListener(type, swallow, { capture: true, passive: false });
     window.addEventListener("keydown", onKeyDown, { capture: true });

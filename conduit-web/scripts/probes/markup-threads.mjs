@@ -27,7 +27,7 @@ try {
   const name = `chat ${chat.slice(0, 8)}`;
   await api(`${paper}/connections/${chat}`, "PUT");
   const waiting = (await api(`${paper}/markup/waiting`)).waiting.map((one) => one.name);
-  console.log("the hub's listeners are the mated thread, then the connected chat:", waiting[0] === "conduit" && waiting.includes(name), JSON.stringify(waiting));
+  console.log("the hub's listeners are the mated thread, then the connected chat:", waiting[0] === "thread" && waiting.includes(name), JSON.stringify(waiting));
   // Addressing by name, with the bar still handing to conduit: `@` typed in the paper offers the listeners and opens a comment for the one picked; `@name` in a comment's words sends it there.
   await page.reload(); await page.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 }); await wait(3000);
   const last = page.locator(".ui-document-text > [data-id]").last(), was = await last.textContent(), note = () => page.locator(".ui-markup-note[data-float]").textContent();
@@ -35,7 +35,7 @@ try {
   await last.click(); await page.keyboard.press("End"); await page.keyboard.press("Enter"); await page.keyboard.type("@"); await wait(600);
   const alone = await page.evaluate(() => [...document.querySelectorAll("[role=option]")].map((one) => one.textContent.trim()));
   await page.keyboard.press("Escape"); await page.keyboard.press("Backspace"); await page.keyboard.press("Backspace"); await wait(300);
-  console.log("@ alone on a new line offers the listeners:", alone[0] === "conduit" && alone.includes(name) && (await last.textContent()) === was, JSON.stringify(alone));
+  console.log("@ alone on a new line offers the listeners:", alone[0] === "thread" && alone.includes(name) && (await last.textContent()) === was, JSON.stringify(alone));
   await last.click(); await page.keyboard.press("Home"); await page.keyboard.type("@chat"); await wait(600);
   const offered = await page.evaluate(() => [...document.querySelectorAll("[role=option]")].map((one) => one.textContent.trim()));
   await page.keyboard.press("Enter"); await wait(800);
@@ -55,7 +55,7 @@ try {
   console.log("both went to the chat named, each an item of its own:", forName && named.length === 2 && named.every((one) => one.by === name), JSON.stringify(named.map((one) => [one.by, one.comments[0].comment])));
   await page.locator(".ui-markup-bar [aria-label='Annotate with'] button[aria-pressed='true']").click({ timeout: 2000 }).catch(() => {});
   // The chat's first turn names it, and a connected chat listens by its title: the name is read again.
-  let titled = name; for (let tries = 0; tries < 16 && titled === name; tries++) { await wait(500); titled = (await api(`${paper}/markup/waiting`)).waiting.map((one) => one.name).filter((one) => one !== "conduit").at(-1) ?? name; } // Connected chats are listed last, after the artifact's own thread and the person's agent: the probe never writes to that agent.
+  let titled = name; for (let tries = 0; tries < 16 && titled === name; tries++) { await wait(500); titled = (await api(`${paper}/markup/waiting`)).waiting.map((one) => one.name).filter((one) => one !== "thread").at(-1) ?? name; } // Connected chats are listed last, after the artifact's own thread and the person's agent: the probe never writes to that agent.
   const mark = await api(`${paper}/markup/marks`, "POST", {});
   item = (await api(`${paper}/markup/marks/${mark.id}/send`, "POST", { to: titled, comments: [{ n: 1, kind: "note", name: "note", comment: "Thread probe: say hello" }], client: { kind: "probe" } })).id;
   await wait(6000);

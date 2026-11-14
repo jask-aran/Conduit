@@ -2922,9 +2922,14 @@ function App() {
   const renameArtifacts = () => { namedArtifacts.clear(); setArtifactsChanged(); };
   window.addEventListener("conduit:artifacts-changed", renameArtifacts);
   onCleanup(() => window.removeEventListener("conduit:artifacts-changed", renameArtifacts));
-  /** The paper's pane turns to its mated thread, which the hub makes if there is none: the same tab, as a chat. */
+  /** The paper's pane turns to its mated thread, which the hub makes if there is none: the same tab, as a chat. A chat the paper leads to instead opens beside it as itself, keeping its place in the sidebar. */
   const showThread = async (pane: PaneKey, paper: string) => {
     try {
+      const { lead } = await api<{ lead: string | null }>(`/v0/document/${encodeURIComponent(paper)}/connections`);
+      if (lead) {
+        const listed = catalogue.projects().flatMap((project) => project.sessions.map((chat) => ({ chat, project }))).find((one) => one.chat.id === lead) ?? await agentChat(lead);
+        return void await openChatBeside(listed.chat, listed.project);
+      }
       const { chat } = await api<{ chat: ChatSummary }>(`/v0/document/${encodeURIComponent(paper)}/thread`, { method: "POST" });
       setMatedThreads((current) => { const next = { ...current, [chat.id]: paper }; writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "mated", JSON.stringify(next)); return next; });
       await agentChat(chat.id);

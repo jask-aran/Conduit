@@ -30,7 +30,18 @@ import { randomBytes } from "node:crypto";
  *   answered   false for one-way markup (from people owed no answer): no thread is served or taken, and an item does not invite a reply
  *   log        (entry) => told of each item written
  *   listeners  the folder whose .waiting names the sessions listening, where that is another store's: one registry for several stores
- *   held       async () => the listeners the host holds itself, [{ name }]: it hands them what they are sent (a document's mated thread, a chat connected to it)
+ *   held       async () => the listeners the host holds itself (Listener, never a `session`): it hands them what they are sent (a document's own thread, a chat connected to it)
+ */
+/**
+ * One an item can be handed to, by name. `thread`, `agent` and `chat` are held by the host, which hands each what it is sent: a document's own thread,
+ * the person's own agent, a chat connected to it; `session` is a CLI `wait`, which takes what it is sent itself.
+ * @typedef {object} Listener
+ * @property {string} name  What the person sends to, and what an item it took is taken under.
+ * @property {"thread" | "agent" | "chat" | "session"} kind
+ * @property {true} [lead]  What is sent to nobody by name goes to it: one listener of a document has it, and it is listed first.
+ * @property {string} [chat]  The chat the host tells, where it knows one (a held listener's; a thread not yet made, or an agent not yet handed anything, has none).
+ * @property {"waiting" | "working"} [state]  A session's: its `wait` is running, or it is at work on an item it took. Held ones are waiting.
+ * @property {string} [since]
  */
 const MARKS = 12;
 /** How many of the latest items are looked through for one still open, and how many finished ones are listed with those. */
@@ -51,8 +62,9 @@ export function createMarkupStore({ folder, snapshot = async () => ({}), on = "t
   const marks = new Map(), closed = new Map();
 
   /**
-   * The sessions an item can be handed to, by name: one whose `wait` is running (its file in .waiting, while its
+   * Who an item can be handed to, by name: the host's own listeners, then the sessions, one whose `wait` is running (its file in .waiting, while its
    * process lives), and one at work on an item it took and has not finished, which will wait again when it has.
+   * @returns {Promise<(Required<Pick<Listener, "name" | "kind" | "state" | "since">> & Pick<Listener, "lead">)[]>}
    */
   async function waiting() {
     const dir = path.join(listeners, ".waiting");
@@ -61,17 +73,17 @@ export function createMarkupStore({ folder, snapshot = async () => ({}), on = "t
       const waiter = await fs.readFile(path.join(dir, name), "utf8").then(JSON.parse).catch(() => null);
       let alive = false;
       try { alive = Boolean(waiter?.id) && (process.kill(Number(waiter.id), 0), true); } catch (error) { alive = error.code === "EPERM"; }
-      if (alive) found.set(String(waiter.name), { name: short(String(waiter.name ?? ""), 80), state: "waiting", since: String(waiter.since ?? "") });
+      if (alive) found.set(String(waiter.name), { name: short(String(waiter.name ?? ""), 80), state: "waiting", since: String(waiter.since ?? ""), kind: "session" });
       else await fs.rm(path.join(dir, name), { force: true });
     }
     for (const id of (await fs.readdir(folder).catch(() => [])).filter((name) => !name.startsWith("."))) {
       const taken = await fs.readFile(path.join(folder, id, "taken.json"), "utf8").then(JSON.parse).catch(() => null);
       // One the host took for a listener it holds is the host's to list, for as long as it holds that listener.
       if (!taken?.name || taken.held || found.has(taken.name) || Date.now() - Date.parse(taken.at) > WORKING_MS) continue;
-      if (await fs.stat(path.join(folder, id, "handled.json")).then(() => false, () => true)) found.set(taken.name, { name: short(String(taken.name), 80), state: "working", since: String(taken.at) });
+      if (await fs.stat(path.join(folder, id, "handled.json")).then(() => false, () => true)) found.set(taken.name, { name: short(String(taken.name), 80), state: "working", since: String(taken.at), kind: "session" });
     }
-    // What the host holds itself comes first: its first is who a comment goes to unless the person says otherwise.
-    const own = (await held()).map((one) => ({ name: short(String(one.name), 80), state: one.state ?? "waiting", since: String(one.since ?? "") }));
+    // What the host holds itself comes first, its lead before the rest: who a comment goes to unless the person says otherwise.
+    const own = (await held()).map((one) => ({ name: short(String(one.name), 80), state: one.state ?? "waiting", since: String(one.since ?? ""), kind: one.kind, ...(one.lead ? { lead: true } : {}) }));
     return [...own, ...[...found.values()].filter((one) => !own.some((mine) => mine.name === one.name)).sort((a, b) => b.since.localeCompare(a.since))];
   }
 

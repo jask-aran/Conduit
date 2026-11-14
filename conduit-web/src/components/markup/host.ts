@@ -23,8 +23,10 @@ export type PieceNames = {
 /** A host with no names of its own: a piece is then an element that says so (`data-piece`), or a control, a landmark or a heading. */
 export const NO_NAMES: PieceNames = { pieces: {}, classes: {}, styles: {}, anchors: {} };
 
-/** A session an item can be handed to: its `wait` is running, or it is at work on one it took. */
-export type MarkupListener = { name: string; state: "waiting" | "working" };
+/** What a listener is: the artifact's own `thread`, the person's `agent`, a connected `chat`, or a `session` whose `wait` is running (all a receiver that does not say is listing). */
+export type MarkupListenerKind = "thread" | "agent" | "chat" | "session";
+/** Someone an item can be handed to, waiting or at work on one it took. `lead`: who an item for nobody by name goes to, where the receiver keeps one (an artifact's); at most one is. */
+export type MarkupListener = { name: string; state: string; since?: string; kind: MarkupListenerKind; lead?: true };
 export type MarkupHanded = { to: { name: string } | null };
 
 /** An item once sent, as the person follows it: where it stands (`by`: the session it was handed to or that took it), and what was said about each comment (`n`) or the item as a whole.
@@ -165,7 +167,9 @@ export interface MarkupHost {
   /** Given, as the tool opens (null as it closes), who is listening and opening a comment on a range for one of them: for a surface that asks itself (a paper's `@`).
    *  `unsent` and `send`: the comments written and not yet sent, for a host that shows Send with its own list of them. `to` and `hand`: which listener
    *  they go to, for a host that says who listens itself. */
-  asks?(offer: { names(): string[]; ask(about: Range, to?: string, words?: string): void; unsent(): number; send(): void; to(): string | null; hand(name: string): void } | null): void;
+  asks?(offer: { names(): string[]; listeners(): MarkupListener[]; ask(about: Range, to?: string, words?: string): void; unsent(): number; send(): void; to(): string | null; hand(name: string): void } | null): void;
+  /** Where the receiver keeps who an item for nobody by name goes to (an artifact's lead): choosing one sets it there (null: the receiver's own default), and the tool asks who is listening again. Without it the choice is this page's. */
+  lead?(name: string | null): Promise<unknown>;
   /** Told when comments have gone, where something other than the tool shows them. */
   sent?(): void;
   notify(outcome: "sent" | "failed", message: string): void;
@@ -184,6 +188,6 @@ export function httpTransport(request: <T>(path: string, init?: { method?: strin
     resolve: (id, n, resolved) => request(`${base}/items/${id}/messages`, { method: "POST", body: JSON.stringify({ n, resolved }) }),
     threads: () => request<{ items: MarkupSent[] }>(`${base}/items`).then((answer) => answer.items),
     open: () => request<{ items: MarkupThread[] }>(`${base}/open`).then((answer) => answer.items),
-    listening: () => request<{ waiting: MarkupListener[] }>(`${base}/waiting`).then((answer) => answer.waiting),
+    listening: () => request<{ waiting: (Omit<MarkupListener, "kind"> & { kind?: MarkupListenerKind })[] }>(`${base}/waiting`).then((answer) => answer.waiting.map((one) => ({ ...one, kind: one.kind ?? "session" }))),
   };
 }

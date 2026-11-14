@@ -1,14 +1,14 @@
 import { createComputed, For, on, Show } from "solid-js";
 import { Group, Keycap, OverlayPage, SettingLine, SettingValue } from "@/components/ui";
 import { OverlayDialog } from "@/components/ui/dialog";
-import type { DocumentMarkKind } from "./host";
+import type { DocumentMarkKind, DocumentToolName } from "./host";
 
 /**
  * One thing done in a paper and its ways: chords in the editor's notation (`Mod-Alt-1`, as `addKeyboardShortcuts` names them) and text typed
  * where a line or a word starts (`typed`, `space` when a Space ends it). A row with `command` is one of the app's palette commands
- * (ARTIFACT_COMMANDS): the app names it and adds the keys it is bound to.
+ * (ARTIFACT_COMMANDS): the app names it and adds the keys it is bound to. `tool`: the edit tool it makes, so a document not offering it leaves it off the sheet.
  */
-export type PaperKey = ({ does: string } | { command: string }) & { keys?: readonly string[]; typed?: string; space?: boolean };
+export type PaperKey = ({ does: string } | { command: string }) & { keys?: readonly string[]; typed?: string; space?: boolean; tool?: DocumentToolName };
 export type PaperKeyGroup = "Writing" | "Blocks" | "Comments" | "Paper";
 /** A row as the sheet shows it, its chords already written in the app's words. */
 export type PaperKeyRow = { does: string; keys: string[]; typed?: string; space?: boolean };
@@ -29,32 +29,32 @@ export const paperKeys = (chord: string) => chord.split("-").map((key) => key ==
  */
 export const PAPER_KEYS: Record<PaperKeyGroup, readonly PaperKey[]> = {
   Writing: [
-    { does: "Bold", keys: [PAPER_MARK_KEYS.bold], typed: "**text**" },
-    { does: "Italic", keys: [PAPER_MARK_KEYS.italic], typed: "*text*" },
-    { does: "Strikethrough", keys: [PAPER_MARK_KEYS.strike], typed: "~~text~~" },
-    { does: "Code", keys: [PAPER_MARK_KEYS.code], typed: "`text`" },
+    { does: "Bold", keys: [PAPER_MARK_KEYS.bold], typed: "**text**", tool: "bold" },
+    { does: "Italic", keys: [PAPER_MARK_KEYS.italic], typed: "*text*", tool: "italic" },
+    { does: "Strikethrough", keys: [PAPER_MARK_KEYS.strike], typed: "~~text~~", tool: "strike" },
+    { does: "Code", keys: [PAPER_MARK_KEYS.code], typed: "`text`", tool: "code" },
     { does: "Line break", keys: ["Shift-Enter"] },
     { does: "Undo", keys: ["Mod-z"] },
     { does: "Redo", keys: ["Shift-Mod-z", "Mod-y"] },
-    { does: "Today's date", typed: "@today", space: true },
-    { does: "Tomorrow's date", typed: "@tomorrow", space: true },
+    { does: "Today's date", typed: "@today", space: true, tool: "date" },
+    { does: "Tomorrow's date", typed: "@tomorrow", space: true, tool: "date" },
   ],
   Blocks: [
     { command: "blockMenu", typed: "/" },
-    { does: "Text", keys: ["Mod-Alt-0"] },
-    { does: "Heading 1", keys: ["Mod-Alt-1"], typed: "#", space: true },
-    { does: "Heading 2", keys: ["Mod-Alt-2"], typed: "##", space: true },
-    { does: "Heading 3", keys: ["Mod-Alt-3"], typed: "###", space: true },
-    { does: "Bullet list", keys: ["Mod-Shift-8"], typed: "-", space: true },
-    { does: "Numbered list", keys: ["Mod-Shift-7"], typed: "1.", space: true },
-    { does: "Checklist", keys: ["Mod-Shift-9"], typed: "[ ]", space: true },
-    { does: "Quote", keys: ["Mod-Shift-b"], typed: ">", space: true },
-    { does: "Code", keys: ["Mod-Alt-c"], typed: "```", space: true },
-    { does: "Divider", typed: "---" },
+    { does: "Text", keys: ["Mod-Alt-0"], tool: "text" },
+    { does: "Heading 1", keys: ["Mod-Alt-1"], typed: "#", space: true, tool: "heading-1" },
+    { does: "Heading 2", keys: ["Mod-Alt-2"], typed: "##", space: true, tool: "heading-2" },
+    { does: "Heading 3", keys: ["Mod-Alt-3"], typed: "###", space: true, tool: "heading-3" },
+    { does: "Bullet list", keys: ["Mod-Shift-8"], typed: "-", space: true, tool: "bullets" },
+    { does: "Numbered list", keys: ["Mod-Shift-7"], typed: "1.", space: true, tool: "numbers" },
+    { does: "Checklist", keys: ["Mod-Shift-9"], typed: "[ ]", space: true, tool: "checklist" },
+    { does: "Quote", keys: ["Mod-Shift-b"], typed: ">", space: true, tool: "quote" },
+    { does: "Code", keys: ["Mod-Alt-c"], typed: "```", space: true, tool: "code" },
+    { does: "Divider", typed: "---", tool: "divider" },
     { does: "Indent list item", keys: ["Tab"] },
     { does: "Outdent list item", keys: ["Shift-Tab"] },
-    { does: "Next table cell", keys: ["Tab"] },
-    { does: "Previous table cell", keys: ["Shift-Tab"] },
+    { does: "Next table cell", keys: ["Tab"], tool: "table" },
+    { does: "Previous table cell", keys: ["Shift-Tab"], tool: "table" },
     { command: "blockUp" },
     { command: "blockDown" },
   ],

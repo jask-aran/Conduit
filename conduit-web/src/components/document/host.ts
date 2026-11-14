@@ -19,6 +19,12 @@ export const DOCUMENT_MARKS: readonly DocumentMarkKind[] = ["bold", "italic", "s
 /** An edit tool: what changes the document itself, as against what marks it up. */
 export type DocumentToolName = DocumentBlockKind | DocumentMarkKind;
 export const DOCUMENT_TOOLS: readonly DocumentToolName[] = [...DOCUMENT_BLOCKS, ...DOCUMENT_MARKS];
+/**
+ * What the format holds that plain Markdown cannot say (document-format.js writes each as raw HTML, its own syntax, or keeps it beside the text): its
+ * nodes `callout`, `toggle` and `date`, the marks `color`, `highlight` and `underline` (StarterKit's, bound to Mod-u), and the `properties` over the text.
+ */
+export type DocumentExtra = "callout" | "toggle" | "date" | "color" | "highlight" | "underline" | "properties";
+export const DOCUMENT_EXTRAS: readonly DocumentExtra[] = ["callout", "toggle", "date", "color", "highlight", "underline", "properties"];
 
 export interface DocumentHost {
   /** The hub's live socket for a document, opened with the app's own sign-in. */
@@ -40,6 +46,12 @@ export interface DocumentHost {
    * first block, or a layer over it (`margin`, from DocumentMarks.suggestions).
    */
   suggest?: { controls: "inline" | "margin" };
+  /**
+   * The extras this document holds (every one where it declares none). One it does not hold is out of the editor's schema, so it is neither made,
+   * pasted, typed by its keys nor merged in, and out of every tool whatever `tools` says; without `properties` the head is the title alone. The hub
+   * builds the same document with the same list, or the two schemas would differ and each would drop what the other wrote.
+   */
+  holds?: readonly DocumentExtra[];
 }
 
 /** How the reader writes in a paper: `editing` is final; in `suggesting` each burst of writing stands as a suggestion until accepted or rejected. Each reader's, per paper, never written to it. */

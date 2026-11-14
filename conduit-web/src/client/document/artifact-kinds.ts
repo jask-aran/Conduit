@@ -1,5 +1,5 @@
 import { lazy, type Component, type JSX } from "solid-js";
-import { DOCUMENT_TOOLS, type DocumentHost, type DocumentToolName } from "@/components/document/host";
+import { DOCUMENT_EXTRAS, DOCUMENT_TOOLS, type DocumentHost, type DocumentToolName } from "@/components/document/host";
 import type { MarkupCapabilities, MarkupHost } from "@/components/markup";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { Icons } from "@/components/ui";
@@ -68,10 +68,18 @@ export type ArtifactKindClient = {
    */
   edit: readonly DocumentToolName[];
   suggest?: DocumentHost["suggest"];
+  /** For a kind drawn in the document editor, what its file holds beyond plain Markdown (DocumentHost.holds). */
+  holds?: DocumentHost["holds"];
   markup: Partial<MarkupCapabilities>;
+  /** The hub gives its Markdown (`?as=markdown`): its row offers Copy and Download Markdown. `count`: it can say how many blocks and words it has. */
+  markdown?: boolean;
+  count?: boolean;
   /** Draws it in its pane. Lazy, so a kind's code is fetched only once one is opened, and the pane waits for it with the artifact itself. */
   Surface: Component<ArtifactSurfaceProps> & { preload(): Promise<unknown> };
 };
+
+const PAPER_MARKUP: Partial<MarkupCapabilities> = { deliveries: ["batched", "live"], tools: ["quote", "highlight", "pen", "shape", "text", "erase", "note"], screenshot: false, sent: "margin", thin: false, bar: "ribbon" };
+const paperSurface = lazy(() => import("./paper-surface"));
 
 /** Every kind, in the order the creator offers them. */
 export const ARTIFACT_KINDS: Record<ArtifactKind, ArtifactKindClient> = {
@@ -81,8 +89,22 @@ export const ARTIFACT_KINDS: Record<ArtifactKind, ArtifactKindClient> = {
     icon: Icons.FileText,
     edit: DOCUMENT_TOOLS,
     suggest: { controls: "margin" },
-    markup: { deliveries: ["batched", "live"], tools: ["quote", "highlight", "pen", "shape", "text", "erase", "note"], screenshot: false, sent: "margin", thin: false, bar: "ribbon" },
-    Surface: lazy(() => import("./paper-surface")),
+    holds: DOCUMENT_EXTRAS,
+    markup: PAPER_MARKUP,
+    markdown: true, count: true,
+    Surface: paperSurface,
+  },
+  // A paper's editor over a plain Markdown file: only what Markdown itself says.
+  markdown: {
+    label: "Markdown",
+    says: "A plain Markdown file you and agents write together, with comments in the margin.",
+    icon: Icons.File,
+    edit: ["text", "heading-1", "heading-2", "heading-3", "bullets", "numbers", "checklist", "quote", "code", "table", "image", "divider", "bold", "italic", "strike"], // "code" names both the block and the mark
+    suggest: { controls: "margin" },
+    holds: [],
+    markup: PAPER_MARKUP,
+    markdown: true, count: true,
+    Surface: paperSurface,
   },
   site: {
     label: "Site",

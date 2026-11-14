@@ -1,6 +1,6 @@
 import names from "virtual:ui-pieces";
 import { createEffect, createResource, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
-import { MarkupMargin, MarkupTool, httpTransport, type MarkupHost, type MarkupMarginControl, type MarkupMarginEntry, type MarkupMode } from "@/components/markup";
+import { MarkupMargin, MarkupTool, httpTransport, type MarkupHost, type MarkupListener, type MarkupMarginControl, type MarkupMarginEntry, type MarkupMode } from "@/components/markup";
 import { MARKUP_STATES } from "@/components/markup/margin";
 import { Button, Dot, Empty, HeaderButton, Icons, SettingValue, SheetFill, StatusDot } from "@/components/ui";
 import { MarkupRibbonRoom } from "@/components/ui/markup";
@@ -11,7 +11,11 @@ import { capturePage } from "../feedback/conduit-feedback";
 import { ARTIFACT_KINDS, type ArtifactSurface, type ArtifactSurfaceProps, type MarkupOffer } from "./artifact-kinds";
 import { artifactAbout, artifactKnown, artifactLabel, type Artifact } from "./artifacts";
 import { holdArtifact, placeShown, placeWanted } from "./focused-artifact";
-import { connect, connectedTo, disconnect } from "./connections";
+import { connect, connectedTo, disconnect, setLead } from "./connections";
+
+const LISTENER_KINDS: Record<MarkupListener["kind"], string> = { thread: "This artifact's thread", agent: "Your agent", chat: "Connected chat", session: "Terminal session" };
+/** A listener as the person reads it: the artifact's own thread is "Thread", whatever the hub calls it. */
+const listenerLabel = (listener: MarkupListener) => listener.kind === "thread" ? "Thread" : listener.name;
 
 /*
  * An artifact in a pane (the view `artifact:<id>`): its kind's surface (ARTIFACT_KINDS), with Markup's bar over the
@@ -43,7 +47,7 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
   createEffect(() => { const place = placeWanted(props.id), reveal = surface()?.reveal?.(); if (!place || !reveal) return; const due = requestAnimationFrame(() => { reveal(place); placeShown(); }); onCleanup(() => cancelAnimationFrame(due)); });
   const shared = { names, transport: httpTransport(api, `/v0/document/${encodeURIComponent(props.id)}/markup`), clientId: () => client, capturePage, frame: () => room ?? frame,
     notify: (outcome, message) => outcome === "sent" ? toast.success(message) : toast.error(message),
-    asks: (offered) => setOffer(() => offered), sent: () => setSent((count) => count + 1) } satisfies Partial<MarkupHost>;
+    asks: (offered) => setOffer(() => offered), sent: () => setSent((count) => count + 1), lead: (name) => setLead(props.id, name) } satisfies Partial<MarkupHost>;
   // Every card of the margin, in the order of their places: those waiting on the person (answered, resolved by the agent) or all, then the suggestions.
   const [needsMe, setNeedsMe] = createSignal(true);
   const commentList = (margin: MarkupMarginControl) => {
@@ -75,13 +79,15 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
   const chats = () => (props.chats?.(found()?.project ?? "") ?? []).filter((chat) => chat.id !== connectedTo(props.id).thread);
   const linked = (chat: string) => connectedTo(props.id).connections.some((connection) => connection.chat === chat);
   // Who listens to this artifact now (its own thread, and any chat connected or session waiting), told by the open tool.
-  const listening = () => offer()?.names() ?? [];
+  const listening = () => offer()?.listeners() ?? [];
+  // The lead, or one chosen and not yet set on the hub.
+  const lead = () => { const to = offer()?.to(); const found = listening().find((listener) => listener.name === to); return found ? listenerLabel(found) : null; };
   const connecting = <DropdownMenu modal={false} placement="bottom-end">
     {/* Who an unaddressed comment goes to, always in sight. */}
-    <MenuControl as={Button} variant="ghost" size="sm" aria-label={offer()?.to() ? `Agents: comments go to ${offer()!.to()}` : "Agents"} title={[`${listening().length} listening`, offer()?.to() && `comments go to ${offer()!.to()}`].filter(Boolean).join(", ")}>
-      <Icons.Agent /><Show when={offer()?.to()}>{(to) => <SettingValue>{to()}</SettingValue>}</Show>{listening().length || null}</MenuControl>
+    <MenuControl as={Button} variant="ghost" size="sm" aria-label={lead() ? `Agents: comments go to ${lead()}` : "Agents"} title={[`${listening().length} listening`, lead() && `comments go to ${lead()}`].filter(Boolean).join(", ")}>
+      <Icons.Agent /><Show when={lead()}>{(to) => <SettingValue>{to()}</SettingValue>}</Show>{listening().length || null}</MenuControl>
     <MenuContent width="md"><MenuSection title="Comments go to" note={listening().length ? undefined : "No agent is listening"}>
-      <For each={listening()}>{(name) => <MenuRow closeOnSelect={false} checked={offer()?.to() === name || undefined} onSelect={() => offer()?.hand(name)}>{name}</MenuRow>}</For>
+      <For each={listening()}>{(listener) => <MenuRow closeOnSelect={false} detail={LISTENER_KINDS[listener.kind]} checked={offer()?.to() === listener.name || undefined} onSelect={() => offer()?.hand(listener.name)}>{listenerLabel(listener)}</MenuRow>}</For>
     </MenuSection><MenuSection title="Connect a chat" note={chats().length ? undefined : "No chats in this project"}>
       <For each={chats()}>{(chat) =>
         <MenuRow closeOnSelect={false} checked={linked(chat.id)} onSelect={() => void (linked(chat.id) ? disconnect : connect)(props.id, chat.id).catch((error: Error) => toast.error(error.message))}>{chat.title}</MenuRow>}</For>

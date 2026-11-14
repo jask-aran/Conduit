@@ -8,7 +8,8 @@ import type { MarkupHandoff } from "../../chat-backend-contract.js";
  * use and again whenever it says artifacts changed. Unanswered or failed, a chat has none and a paper no thread.
  */
 export interface Connected { id: string; name: string; project: string }
-export interface PaperConnections { thread: string | null; connections: { chat: string; title: string }[] }
+/** `lead`: the chat an unaddressed comment goes to, null while that is not a chat (the artifact's own thread, the person's agent). */
+export interface PaperConnections { thread: string | null; lead: string | null; connections: { chat: string; title: string }[] }
 
 const at = encodeURIComponent;
 function store<T>(path: (id: string) => string, empty: T) {
@@ -16,16 +17,18 @@ function store<T>(path: (id: string) => string, empty: T) {
   const asked = new Set<string>();
   const read = (id: string) => api<T>(path(id)).then((value) => setKnown((current) => ({ ...current, [id]: value })), () => {});
   window.addEventListener("conduit:artifacts-changed", () => { for (const id of asked) void read(id); });
-  return (id: string): T => {
+  return Object.assign((id: string): T => {
     if (!asked.has(id)) { asked.add(id); void read(id); }
     return known()[id] ?? empty;
-  };
+  }, { again: read });
 }
 const ofChat = store<{ connections: Connected[] }>((chat) => `/v0/chats/${at(chat)}/connections`, { connections: [] });
 /** The papers a chat is connected to (never its own paper, for a mated thread). */
 export const connectionsOf = (chat: string) => ofChat(chat).connections;
 /** A paper's mated thread (null until it starts) and the chats connected to it. */
-export const connectedTo = store<PaperConnections>((paper) => `/v0/document/${at(paper)}/connections`, { thread: null, connections: [] });
+export const connectedTo = store<PaperConnections>((paper) => `/v0/document/${at(paper)}/connections`, { thread: null, lead: null, connections: [] });
+/** Sets who an unaddressed comment on a paper goes to, by its listener name (null: its own thread), and reads its connections again for the lead. */
+export const setLead = (paper: string, name: string | null) => api(`/v0/document/${at(paper)}/lead`, { method: "PUT", body: JSON.stringify({ name }) }).then(() => connectedTo.again(paper));
 const send = (paper: string, chat: string, method: string) => api<Pick<PaperConnections, "connections">>(`/v0/document/${at(paper)}/connections/${at(chat)}`, { method });
 export const connect = (paper: string, chat: string) => send(paper, chat, "PUT");
 export const disconnect = (paper: string, chat: string) => send(paper, chat, "DELETE");

@@ -1,5 +1,4 @@
 import { Extension, InputRule, type AnyExtension, type Editor, type NodeViewRenderer } from "@tiptap/core";
-import { MarkdownManager } from "@tiptap/markdown";
 import type { Node } from "@tiptap/pm/model";
 import { Plugin, TextSelection } from "@tiptap/pm/state";
 import type { EditorView, ViewMutationRecord } from "@tiptap/pm/view";
@@ -8,7 +7,7 @@ import { render } from "solid-js/web";
 import { Input } from "@/components/ui";
 import { DocumentDate, DocumentFold, DocumentImage, DocumentToneMark, documentBlockClass } from "@/components/ui/document";
 import { Popover, PopoverContent } from "@/components/ui/menus";
-import { IMAGE_NAME, documentExtensions, fitted, isDay } from "@/document-format.js";
+import { IMAGE_NAME, fitted, isDay, markdownFor } from "@/document-format.js";
 import { caretBlockAt } from "./blocks";
 import type { DocumentHost } from "./host";
 
@@ -88,13 +87,11 @@ export const viewed = (extensions: AnyExtension[], host: DocumentHost) => {
 };
 
 // Made once, when first asked: it adds the format's own Markdown to the parser it is given.
-let manager: MarkdownManager | undefined;
-const markdown = () => (manager ??= new MarkdownManager({ extensions: documentExtensions() }));
 /** What looks written in Markdown rather than as plain lines: a heading, a list, a quote, a fence, a table row, an image, or a strong run or a link inside text. */
 const MARKDOWN = /^(?: {0,3}#{1,6}\s|\s*[-*+]\s|\s*\d+[.)]\s|\s*>|\s*```|\s*~~~|\s*\|.*\|\s*$|!\[)|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\([^)\s]+\)/m;
 /** Markdown put in at the caret as blocks; one paragraph's worth goes into the line as text does. */
 export const insertMarkdown = (editor: Editor, text: string) => {
-  const blocks = (fitted(markdown().parse(text)).content ?? []) as { type: string; content?: unknown[] }[];
+  const blocks = (fitted(markdownFor(editor.schema).parse(text)).content ?? []) as { type: string; content?: unknown[] }[];
   const content = blocks.length === 1 && blocks[0]!.type === "paragraph" ? blocks[0]!.content ?? [] : blocks;
   return editor.chain().focus().insertContent(content as never).run();
 };

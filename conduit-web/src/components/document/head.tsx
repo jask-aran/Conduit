@@ -8,13 +8,13 @@ import { PROPERTIES } from "@/document-format.js";
  * back), and its properties, the Yjs document's PROPERTIES map, each written there as it is typed so it merges as the text does. A property
  * whose value is cleared goes as its field is left. `onDown`: Enter or ArrowDown in the title, which go on to the text.
  */
-export function PaperHead(props: { doc: Doc; name: string; onRename?: (name: string) => Promise<unknown> | void; onDown: () => void }) {
+export function PaperHead(props: { /** Whether it holds properties (DocumentHost.holds): a plain Markdown file's head is its title alone. */ properties?: boolean; doc: Doc; name: string; onRename?: (name: string) => Promise<unknown> | void; onDown: () => void }) {
   const map = props.doc.getMap<string>(PROPERTIES), [values, setValues] = createSignal(map.toJSON() as Record<string, string>);
   const redraw = () => setValues(map.toJSON());
   map.observe(redraw);
   onCleanup(() => map.unobserve(redraw));
   // Keyed by name, so a row being typed in is never drawn anew under the caret.
-  const names = createMemo(() => Object.keys(values()));
+  const names = createMemo(() => props.properties === false ? [] : Object.keys(values()));
   const [draft, setDraft] = createSignal<string>(), [adding, setAdding] = createSignal<{ name?: string } | null>(null);
   createEffect(on(() => props.name, () => setDraft(undefined), { defer: true }));
   const rename = async (field: HTMLInputElement) => {
