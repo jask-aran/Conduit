@@ -115,8 +115,7 @@ export function readPartial(input) {
 }
 const SAVE_AFTER_MS = 500, LOOK_EVERY_MS = 2_000, SCAN_AFTER_MS = 3_000, FAR_SCAN_MS = 15_000;
 const MATED = "conduit", SCRIPT = path.resolve(import.meta.dirname, "../../../scripts/conduit-markup.mjs");
-const KINDS = { paper: ".paper", site: ".site.html" }, ID = /^[a-z0-9-]{1,64}$/, WALK = { entries: 20_000, depth: 6 };
-const kindOf = (at) => Object.keys(KINDS).find((kind) => at.endsWith(KINDS[kind])), nameOf = (at) => path.basename(at, KINDS[kindOf(at)]);
+const ID = /^[a-z0-9-]{1,64}$/, WALK = { entries: 20_000, depth: 6 };
 const SITE_ID = /<meta\s+name=["']conduit-artifact["']\s+content=["']([a-z0-9-]{1,64})["']/i;
 /** A paper's images, kept beside it (<side>/images/<name>) and named for their bytes; what they are is read from the bytes, never from what the sender said. SVG is not taken: it can carry script. */
 const IMAGE_MAX = 10 * 1024 * 1024, IMAGE_TYPES = { png: "image/png", jpg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif" };
@@ -155,15 +154,16 @@ const fault = (status, message) => Object.assign(new Error(message), { status })
 const run = promisify(execFile);
 const under = (root, file) => file === root || file.startsWith(root + path.sep);
 const partOf = (at) => [...at.split("/").slice(0, -1), `.${at.split("/").at(-1)}.${crypto.randomBytes(4).toString("hex")}.part`].join("/");
-/** Every artifact's file under a folder, by a walk that `ls(dir)` feeds with a directory's `{ name, file, dir }` entries. */
-async function walk(ls) {
+const endsIn = (endings, at) => endings.some((ending) => at.endsWith(ending));
+/** Every artifact's file under a folder (one with one of the kinds' `endings`), by a walk that `ls(dir)` feeds with a directory's `{ name, file, dir }` entries. */
+async function walk(ls, endings) {
   const found = [], queue = [["", 0]];
   for (let seen = 0; queue.length && seen < WALK.entries;) {
     const [dir, depth] = queue.shift();
     for (const entry of await ls(dir)) {
       seen += 1;
       const at = dir ? `${dir}/${entry.name}` : entry.name;
-      if (entry.file && kindOf(entry.name)) found.push(at);
+      if (entry.file && endsIn(endings, entry.name)) found.push(at);
       else if (entry.dir && depth < WALK.depth && !entry.name.startsWith(".") && entry.name !== "node_modules") queue.push([at, depth + 1]);
     }
   }
@@ -174,7 +174,7 @@ async function walk(ls) {
  * file that is not there and fails when the folder cannot be reached; `write` is whole or not at all (a part file,
  * then a rename), so a crash while writing leaves the paper as it was; `create` fails with EEXIST over a file.
  */
-function localDisk(root) {
+function localDisk(root, endings) {
   const at = (relative) => path.join(root, relative);
   return {
     key: root, far: false, at,
@@ -190,12 +190,12 @@ function localDisk(root) {
       if ((folder && !under(home, folder)) || (file && !under(home, file))) throw fault(400, "That is not a path in this project's folder");
     },
     /** What git tracks or would (so nothing it ignores), or a walk where the folder is no repository. */
-    files: async () => await run("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ...Object.values(KINDS).map((ending) => `*${ending}`)], { cwd: root, maxBuffer: 8 * 1024 * 1024, timeout: 15_000 }).then(({ stdout }) => stdout.split("\0").filter(Boolean), () => null)
-      ?? walk(async (dir) => (await fs.readdir(at(dir), { withFileTypes: true }).catch(() => [])).map((entry) => ({ name: entry.name, file: entry.isFile(), dir: entry.isDirectory() }))),
+    files: async () => await run("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ...endings.map((ending) => `*${ending}`)], { cwd: root, maxBuffer: 8 * 1024 * 1024, timeout: 15_000 }).then(({ stdout }) => stdout.split("\0").filter(Boolean), () => null)
+      ?? walk(async (dir) => (await fs.readdir(at(dir), { withFileTypes: true }).catch(() => [])).map((entry) => ({ name: entry.name, file: entry.isFile(), dir: entry.isDirectory() })), endings),
   };
 }
 /** The same over a device's folder (`host`: workspace-host.js's). It has no time a file was made, a link is not followed there at all, and a folder that cannot be listed fails the listing (a part of it would read as papers deleted). */
-function deviceDisk(host) {
+function deviceDisk(host, endings) {
   return {
     key: host.key, far: true, at: (relative) => `${host.key}\n${relative}`,
     read: async (relative) => (await host.read(relative)).toString("utf8"),
@@ -210,8 +210,8 @@ function deviceDisk(host) {
     rename: (from, to) => host.rename(from, to),
     remove: (relative) => host.unlink(relative).catch((error) => { if (error.code !== "ENOENT") throw error; }),
     inside: async () => {},
-    files: async () => (await host.files({ exclude: ["node_modules", ".conduit"], limit: WALK.entries }))?.filter(kindOf)
-      ?? walk(async (dir) => (await host.list(dir, { limit: WALK.entries }).catch((error) => dir && ["ENOENT", "permission_denied"].includes(error.code) ? [] : Promise.reject(error)) ?? []).map((entry) => ({ name: entry.name, file: entry.type === "file", dir: entry.type === "directory" }))),
+    files: async () => (await host.files({ exclude: ["node_modules", ".conduit"], limit: WALK.entries }))?.filter((at) => endsIn(endings, at))
+      ?? walk(async (dir) => (await host.list(dir, { limit: WALK.entries }).catch((error) => dir && ["ENOENT", "permission_denied"].includes(error.code) ? [] : Promise.reject(error)) ?? []).map((entry) => ({ name: entry.name, file: entry.type === "file", dir: entry.type === "directory" })), endings),
   };
 }
 const spot = (entry) => entry.disk.at(entry.path);
@@ -257,13 +257,14 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       });
       const properties = Object.fromEntries(Object.entries(file.properties && typeof file.properties === "object" && !Array.isArray(file.properties) ? file.properties : {}).filter(([, value]) => typeof value === "string"));
       return { id: typeof file.id === "string" && ID.test(file.id) ? file.id : null, blocks: blocks.length ? blocks : [empty()], properties };
-    } catch (error) { throw fault(422, `${name}${KINDS.paper} is not a paper Conduit can read: ${error.message}`); }
+    } catch (error) { throw fault(422, `${name}${KINDS.paper.ext} is not a paper Conduit can read: ${error.message}`); }
   };
 
+  const kindOf = (at) => Object.keys(KINDS).find((kind) => at.endsWith(KINDS[kind].ext)), nameOf = (at) => path.basename(at, KINDS[kindOf(at)].ext);
   const place = (project) => {
-    const far = Boolean(remoteNode(project));
+    const far = Boolean(remoteNode(project)), endings = Object.values(KINDS).map((kind) => kind.ext);
     if (far && !(devices && project.chatRoot)) throw fault(501, "This hub cannot reach papers in a project on another device");
-    return { disk: far ? deviceDisk(devices(project)) : localDisk(path.resolve(project.workingRoot)), side: path.join(path.resolve(project.chatRoot || project.workingRoot), ".conduit", "artifacts") };
+    return { disk: far ? deviceDisk(devices(project), endings) : localDisk(path.resolve(project.workingRoot), endings), side: path.join(path.resolve(project.chatRoot || project.workingRoot), ".conduit", "artifacts") };
   };
   const projectOf = async (id) => await projects.get(id) ?? (() => { throw fault(404, `No project ${id}`); })();
   const here = async () => (await projects.list()).filter((project) => !remoteNode(project));
@@ -294,16 +295,13 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   async function adopt(project, at) {
     const { disk, side } = place(project), kind = kindOf(at), name = nameOf(at);
     await disk.inside(at);
-    // A site's file is its agent's to write, and one written whole may no longer say its id: the id its path has is the site's, before what the file
-    // says, which is read only for a path that has none (a new file, or one moved by hand). An id is one path's.
-    let id = kind === "site" ? (await paths(side, () => {}))[at] : null;
+    let id = await KINDS[kind].filed?.(side, at) ?? null;
     if (id && !await disk.stat(at)) throw Object.assign(new Error(`No file ${at}`), { code: "ENOENT" });
     if (!id) {
-      const text = await disk.read(at), read = kind === "paper" ? paper(text, name) : { id: SITE_ID.exec(text)?.[1] ?? null };
+      const text = await disk.read(at), read = KINDS[kind].identify(text, name);
       const other = read.id && known.get(read.id), copy = other && spot(other) !== disk.at(at) && await other.disk.stat(other.path).catch(() => true);
       id = read.id && !copy ? read.id : crypto.randomBytes(8).toString("hex");
-      if (kind === "paper" && id !== read.id) await disk.write(at, written(id, read.blocks, read.properties));
-      if (kind === "site") await paths(side, (kept) => { for (const was of Object.keys(kept)) if (kept[was] === id) delete kept[was]; kept[at] = id; });
+      await KINDS[kind].adopted({ disk, side, at, id, read });
     }
     const links = known.get(id)?.links ?? await fs.readFile(path.join(side, id, "links.json"), "utf8").then(JSON.parse).then((kept) => ({ thread: kept.thread ?? null, connections: [...kept.connections ?? []] }), () => ({ thread: null, connections: [] }));
     return known.set(id, { id, kind, name, path: at, project: project.id, disk, side: path.join(side, id), links }).get(id);
@@ -449,12 +447,13 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     // The name is the file's, which anyone who can write the folder chooses: it reaches the agent as a quoted name, never as lines of its own.
     const name = JSON.stringify(room.entry.name.replace(/\s+/g, " ").slice(0, 120)), taken = path.join(dir, "taken.json");
     const comments = JSON.parse(await fs.readFile(path.join(dir, "item.json"), "utf8")).comments ?? [];
-    const card = (comment, words, said) => handoff({ artifact: room.id, kind: room.entry.kind, name: room.entry.name.replace(/\s+/g, " ").slice(0, 120), item, n: comment?.n, block: String(comment?.under?.blocks ?? "").split(" ")[0] || undefined, said }, comment?.quote, words);
-    const about = (list) => [...new Set(list.flatMap((comment) => String(comment?.under?.blocks ?? "").split(" ").filter(Boolean)))];
+    const kind = KINDS[room.entry.kind];
+    const card = (comment, words, said) => handoff({ artifact: room.id, kind: room.entry.kind, name: room.entry.name.replace(/\s+/g, " ").slice(0, 120), item, n: comment?.n, ...kind.where?.(comment?.under), said }, comment?.quote, words);
+    const about = (list) => [...new Set(list.flatMap((comment) => kind.places?.(comment?.under) ?? []))];
     // Seated once the chat has been told, never before: a chat that could not be told is not at work. One that is already reading or writing keeps that;
     // and one whose chat answered before it was seated, or never began a turn, has no turn end to leave by, so it leaves SEAT_START_MS on.
     const seat = (blocks, about) => {
-      if (!room.doc) return;
+      if (!kind.places) return;
       if (!["reading", "writing"].includes(room.seats?.get(to.name)?.state)) sit(room, to.name, { state: "thinking", blocks, for: about, text: undefined });
       setTimeout(() => { if (!chats()?.working?.(chat)) sit(room, to.name, null); }, SEAT_START_MS).unref?.();
     };
@@ -467,7 +466,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     const fresh = comments.filter((comment) => !told.has(comment.n));
     if (!fresh.length) return;
     // A chat that cannot be told has not taken it: the item goes back to waiting, which is what the person then reads.
-    await host().notify(chat, `${fresh.map((comment) => card(comment, comment.comment)).join("\n")}\n${fresh.length === comments.length ? "The person" : "The person added to what they"} sent you ${fresh.length === 1 ? "a comment" : `${fresh.length} comments`} on the ${room.entry.kind} ${name}${fresh.length === comments.length ? "" : ` (${fresh.map((comment) => comment.n).join(", ")})`}. Read ${path.join(dir, "item.json")} (its \`read\` says how) and do what it asks. The person reads the ${room.entry.kind}'s margin, not this chat: say what you did, or ask what you need to know, with \`reply\` on the comment, in a line or two; what you write here is only your own log.${to.name === MATED && room.entry.kind === "paper" ? ` Write in it as \`${MATED}\`: the tool \`conduit_paper\` does, and the CLI's \`document\` commands take \`--as ${MATED}\`.` : ""}`)
+    await host().notify(chat, `${fresh.map((comment) => card(comment, comment.comment)).join("\n")}\n${fresh.length === comments.length ? "The person" : "The person added to what they"} sent you ${fresh.length === 1 ? "a comment" : `${fresh.length} comments`} on the ${room.entry.kind} ${name}${fresh.length === comments.length ? "" : ` (${fresh.map((comment) => comment.n).join(", ")})`}. Read ${path.join(dir, "item.json")} (its \`read\` says how) and do what it asks. The person reads the ${room.entry.kind}'s margin, not this chat: say what you did, or ask what you need to know, with \`reply\` on the comment, in a line or two; what you write here is only your own log.${to.name === MATED ? kind.signing?.(MATED) ?? "" : ""}`)
       .catch(async (error) => { if (!told.size) await fs.rm(taken, { force: true }); throw error; });
     await fs.appendFile(path.join(dir, "thread.jsonl"), fresh.map((comment) => `${JSON.stringify({ at, from: "agent", by: to.name, n: comment.n, working: true })}\n`).join(""));
     seat(about(fresh), `${item}/${fresh[0].n}`);
@@ -570,8 +569,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       "If you have the tool `conduit_paper`, its comments, reply and resolve work on a site by its id."]);
     return room;
   }
-  async function load(entry) {
-    if (entry.kind === "site") return loadSite(entry);
+  async function loadPaper(entry) {
     const { id } = entry, doc = new Y.Doc(), room = { id, entry, doc, blocks: doc.getXmlFragment(FRAGMENT), authors: doc.getMap(AUTHORS), changes: doc.getMap(CHANGES), properties: doc.getMap(PROPERTIES), peers: new Set(), agents: new Map(), queue: Promise.resolve() };
     /** One at a time: a save, a look at the file and a rename never cross. */
     room.work = (job) => (room.queue = room.queue.then(job, job));
@@ -596,9 +594,158 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     await save(room);
     return room;
   }
+  /** The ids of the sites whose files do not say one are kept by path: a path's record goes with its file, and only that site's. */
+  const unfiled = (entry, to) => paths(path.dirname(entry.side), (kept) => { if (kept[entry.path] === entry.id) { delete kept[entry.path]; if (to) kept[to] = entry.id; } });
+
+  /**
+   * A kind of artifact as the hub holds it: everything the hub does that differs by kind. What a kind leaves out it refuses or does not do: with
+   * no `blocks` it has no blocks to read or change, with no `images` it keeps none, with no `places` no seat is drawn in it.
+   * @typedef {object} ArtifactKind
+   * @property {string} ext  Its file's ending.
+   * @property {(id: string, name: string) => string} made  What a new file of it holds.
+   * @property {(text: string, name: string) => { id: string | null }} identify  What its file says of it: the id it carries, where it says one (a paper also its `blocks` and `properties`).
+   * @property {(side: string, at: string) => Promise<string | undefined>} [filed]  An id kept for the file's path, taken before what the file says.
+   * @property {(found: { disk: object, side: string, at: string, id: string, read: { id: string | null } }) => Promise<void>} adopted  A file read without its id (none, or a copy's) is given `id`.
+   * @property {(side: string, at: string) => Promise<void>} [created]  After a new file is made at `at`.
+   * @property {(entry: object, to: string) => Promise<void>} [renamed]  After its file is moved to `to`.
+   * @property {(entry: object) => Promise<void>} [removed]  After its file is deleted.
+   * @property {(entry: object) => Promise<object>} load  Its room: `{ id, entry, peers, work, markup }`, its comments a Markup store from markupOf, and whatever live copy it keeps.
+   * @property {(entry: object, have?: string) => Promise<{ revision: string, html?: string }>} [content]  What a pane draws, by HTTP, with a revision that changes when it does; `have` is not sent again.
+   * @property {{ [op in "read" | "edit" | "revert" | "suggestions" | "accept" | "reject"]: (room: object, ...args: any[]) => Promise<any> }} [blocks]  Its blocks, read and changed in its live room (`doc`, loaded on `about`).
+   * @property {true} [images]  It keeps images beside it.
+   * @property {(under: object | undefined) => Record<string, string | undefined>} [where]  What a hand-off card says of where a comment is, from the comment's `under`.
+   * @property {(under: object | undefined) => string[]} [places]  What of it a comment's `under` names, for a seat to sit on.
+   * @property {(name: string) => string} [signing]  What its mated thread, listening as `name`, is told of writing in it under that name.
+   */
+  /** @type {Record<string, ArtifactKind>} */
+  const KINDS = {
+    paper: {
+      ext: ".paper",
+      made: (id) => written(id, [empty()]),
+      identify: (text, name) => paper(text, name),
+      adopted: async ({ disk, at, id, read }) => { if (id !== read.id) await disk.write(at, written(id, read.blocks, read.properties)); },
+      load: loadPaper,
+      images: true,
+      where: (under) => ({ block: String(under?.blocks ?? "").split(" ")[0] || undefined }),
+      places: (under) => String(under?.blocks ?? "").split(" ").filter(Boolean),
+      signing: (name) => ` Write in it as \`${name}\`: the tool \`conduit_paper\` does, and the CLI's \`document\` commands take \`--as ${name}\`.`,
+      blocks: {
+        /** As Markdown, each block under a comment that gives its id; `markdown`: the Markdown alone, to export; `blocks`: the format itself. */
+        async read(kept, as) {
+          const blocks = blocksOf(kept), properties = kept.properties.toJSON(), front = Object.keys(properties).length ? `---\n${Object.entries(properties).map(([name, value]) => `${name}: ${JSON.stringify(value)}`).join("\n")}\n---\n\n` : "";
+          if (as === "blocks") return { format: "conduit-document", version: 1, id: kept.id, properties, blocks: blocks.map((block) => block.toJSON()), authors: kept.authors.toJSON(), changes: kept.changes.toJSON() };
+          if (as === "markdown") return `${front}${markdown.serialize({ type: "doc", content: blocks.map((block) => block.toJSON()) }).trim()}\n`;
+          return `${front}${blocks.map((block) => `<!-- block ${block.attrs.id} -->\n${markdown.serialize({ type: "doc", content: [block.toJSON()] }).trim()}`).join("\n\n")}\n`;
+        },
+        /**
+         * One block changed: `replace` it with the Markdown's blocks (the first keeps its id), `insert` them after it (after `start`: first), or `delete` it.
+         * `set` writes its front matter instead.
+         * `for` ("<item>/<n>") is the comment it answers: what it changes is then kept in the document's changes until that comment is resolved.
+         * `suggest`: the edit is a suggestion instead, kept the same way until the person accepts or rejects it; true starts one, a suggestion's key adds to it.
+         */
+        async edit(kept, { op, block, markdown: text = "", by, for: about, suggest } = {}) {
+          const { id } = kept, now = blocksOf(kept), at = now.findIndex((candidate) => candidate.attrs.id === block);
+          // `set`: one property of its front matter (`block` its name, the Markdown its value as plain text; none removes it).
+          if (op === "set") {
+            const name = String(block ?? "").trim(), value = String(text).trim();
+            if (!name || name.length > 60 || /[\n:]/.test(name)) throw fault(400, "A property's name is a few words, with no colon");
+            kept.doc.transact(() => value ? kept.properties.set(name, value.slice(0, 2000)) : kept.properties.delete(name));
+            return { properties: kept.properties.toJSON() };
+          }
+          if (!["replace", "insert", "delete", "set"].includes(op)) throw fault(400, "op is replace, insert, delete or set");
+          if (at < 0 && !(op === "insert" && block === "start")) throw fault(404, `No block ${block} in ${id}: read it again for its blocks as they are now (the person may be typing in it)`);
+          const fresh = op === "delete" ? [] : parse(String(text));
+          // Markdown that reads as blocks the paper cannot hold is refused here, never left to fail when someone next types in them.
+          for (const made of fresh) { try { made.check(); } catch (error) { throw fault(400, `That Markdown makes a block the paper cannot hold (${error.message}): write it another way`); } }
+          if (op === "replace" && fresh[0]) fresh[0] = fresh[0].type.create({ ...fresh[0].attrs, id: block }, fresh[0].content);
+          const next = [...now.slice(0, op === "insert" ? at + 1 : at), ...fresh, ...now.slice(at + 1)], name = typeof by === "string" && by ? by.slice(0, 80) : "agent";
+          if (suggest && about !== undefined) throw fault(400, "An edit either answers a comment (for) or is a suggestion (suggest), not both");
+          if (suggest && suggest !== true && ![...kept.changes.values()].some((change) => change.for === suggest)) throw fault(404, `No suggestion ${suggest} in ${id}: suggestions lists them`);
+          const suggestion = suggest ? suggest === true ? `${SUGGESTION}${blockId()}` : String(suggest) : undefined, key = suggestion ?? (about === undefined ? undefined : String(about));
+          if (about !== undefined) await kept.markup.thread(String(about).split("/")[0]);
+          set(kept, next.length ? next : [empty()], name, key === undefined ? undefined : () => {
+            const stamp = { for: key, by: name, at: new Date().toISOString() }, had = kept.changes.get(block), gone = op !== "insert" && !fresh.length;
+            // The first `before` is the one kept: what is taken back is everything done for the comment, not its last step. A block made for a comment and then deleted leaves nothing to show.
+            if (gone && had?.before === null) kept.changes.delete(block);
+            else if (op !== "insert") kept.changes.set(block, { ...stamp, before: now[at].toJSON(), ...had, ...(gone ? { after: now[at - 1]?.attrs.id ?? null, at: stamp.at } : {}) });
+            for (const made of fresh.slice(op === "replace" ? 1 : 0)) kept.changes.set(made.attrs.id, { ...stamp, before: null });
+          });
+          // Its seat moves to what it wrote, and what it was heard writing is the paper's now.
+          if (sits(id, name, kept)) sit(kept, name, { state: "thinking", blocks: fresh.length ? fresh.map((made) => made.attrs.id) : [], text: undefined, ...(about === undefined ? {} : { for: String(about) }) });
+          return { blocks: fresh.map((made) => made.attrs.id), ...(suggestion ? { suggestion } : {}) };
+        },
+        /** Everything changed for one comment is put back as it was: a changed block is its `before` again, a new one goes, a deleted one returns after the block it followed. */
+        async revert(kept, thread) {
+          const blocks = blocksOf(kept), mine = [...kept.changes.entries()].filter(([, change]) => change.for === thread);
+          // Deleted blocks return latest first: two that followed the same block then stand in their old order.
+          for (const [block, change] of mine.sort((a, b) => String(b[1].at).localeCompare(a[1].at))) {
+            const at = blocks.findIndex((candidate) => candidate.attrs.id === block), before = change.before && schema.nodeFromJSON(change.before);
+            if (at >= 0) blocks.splice(at, 1, ...(before ? [before] : []));
+            else if (before) { const after = blocks.findIndex((candidate) => candidate.attrs.id === change.after); blocks.splice(change.after === null ? 0 : after < 0 ? blocks.length : after + 1, 0, before); }
+          }
+          set(kept, blocks.length ? blocks : [empty()], undefined, () => { for (const [block] of mine) kept.changes.delete(block); });
+          return { blocks: mine.map(([block]) => block) };
+        },
+        /** The suggestions standing in the paper, oldest first: who made each, its blocks (in the paper's order, then those it deleted), and their text before and now. */
+        async suggestions(kept) {
+          const blocks = blocksOf(kept), found = new Map(), clip = (text) => text.length > 200 ? `${text.slice(0, 199)}…` : text;
+          const order = new Map(blocks.map((block, nth) => [block.attrs.id, nth]));
+          for (const [block, change] of kept.changes.entries()) {
+            // A block made for a suggestion and deleted since is not part of it.
+            if (!isSuggestion(change.for) || (change.before === null && !order.has(block))) continue;
+            const one = found.get(change.for) ?? found.set(change.for, { key: change.for, by: change.by, at: change.at, entries: [] }).get(change.for);
+            if (String(change.at) < String(one.at)) one.at = change.at;
+            one.entries.push([block, change]);
+          }
+          return [...found.values()].sort((a, b) => String(a.at).localeCompare(b.at)).map(({ entries, ...one }) => {
+            entries.sort((a, b) => (order.get(a[0]) ?? Infinity) - (order.get(b[0]) ?? Infinity));
+            const was = entries.flatMap(([, change]) => change.before ? [schema.nodeFromJSON(change.before).textContent] : []), now = entries.flatMap(([block]) => order.has(block) ? [blocks[order.get(block)].textContent] : []);
+            return { ...one, blocks: entries.map(([block]) => block), before: clip(was.join("\n")), after: clip(now.join("\n")) };
+          });
+        },
+        /** A suggestion is accepted: its blocks stay as they are and stop standing as suggested. */
+        async accept(kept, key) {
+          const mine = [...kept.changes.entries()].filter(([, change]) => change.for === key);
+          if (!isSuggestion(key) || !mine.length) throw fault(404, `No suggestion ${key} in ${kept.id}: suggestions lists them (a comment's change is accepted by resolving the comment)`);
+          kept.doc.transact(() => { for (const [block] of mine) kept.changes.delete(block); });
+          return { blocks: mine.map(([block]) => block) };
+        },
+        /** A suggestion is rejected: taken back, as a comment's change is. */
+        async reject(kept, key) {
+          if (!isSuggestion(key) || ![...kept.changes.values()].some((change) => change.for === key)) throw fault(404, `No suggestion ${key} in ${kept.id}: suggestions lists them`);
+          return this.revert(kept, key);
+        },
+      },
+    },
+    site: {
+      ext: ".site.html",
+      made: (id, name) => SITE(id, name),
+      identify: (text) => ({ id: SITE_ID.exec(text)?.[1] ?? null }),
+      // A site's file is its agent's to write, and one written whole may no longer say its id: the id its path has is the site's, before what the file
+      // says, which is read only for a path that has none (a new file, or one moved by hand). An id is one path's.
+      filed: async (side, at) => (await paths(side, () => {}))[at],
+      adopted: ({ side, at, id }) => paths(side, (kept) => { for (const was of Object.keys(kept)) if (kept[was] === id) delete kept[was]; kept[at] = id; }),
+      // A new site is not the one that was once at its path.
+      created: (side, at) => paths(side, (kept) => { delete kept[at]; }),
+      renamed: (entry, to) => unfiled(entry, to),
+      // Deleted here, its path is free: a site an agent later writes there is another one. (One deleted by hand and brought back is still itself.)
+      removed: (entry) => unfiled(entry),
+      load: loadSite,
+      async content(entry, have) {
+        const { id } = entry;
+        let stat = await entry.disk.stat(entry.path);
+        // A file that has gone may have been moved: the folder is read again, and a site that says its id is found where it is now.
+        if (!stat) { await again(entry.project); entry = known.get(id); stat = entry?.kind === "site" ? await entry.disk.stat(entry.path) : null; }
+        if (!stat) throw fault(404, "This site's file is gone");
+        await entry.disk.inside(entry.path);
+        const revision = String(stat.mtimeMs);
+        return revision === have ? { revision } : { revision, html: await entry.disk.read(entry.path) };
+      },
+    },
+  };
   const held = async (id) => {
     const entry = await entryOf(id);
-    if (!rooms.has(id)) { const loading = load(entry); rooms.set(id, loading); loading.catch(() => { if (rooms.get(id) === loading) rooms.delete(id); }); }
+    if (!rooms.has(id)) { const loading = KINDS[entry.kind].load(entry); rooms.set(id, loading); loading.catch(() => { if (rooms.get(id) === loading) rooms.delete(id); }); }
     return rooms.get(id);
   };
   /** The live copy, the file looked at first: what an agent reads or changes is the paper as it is on disk now. */
@@ -613,10 +760,11 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   };
   const current = async (id) => {
     const entry = await entryOf(id);
-    if (entry.kind !== "paper") throw fault(400, `${entry.name} is a ${entry.kind}, which has no blocks: it is the file ${entry.path} in its project's folder, changed as any file is`);
+    if (!KINDS[entry.kind].blocks) throw fault(400, `${entry.name} is a ${entry.kind}, which has no blocks: it is the file ${entry.path} in its project's folder, changed as any file is`);
     const room = await held(id); await room.work(() => see(room));
     return room.gone ? (() => { throw fault(404, `No paper ${id}`); })() : room;
   };
+  const blocks = async (id, op, ...args) => { const room = await current(id); return KINDS[room.entry.kind].blocks[op](room, ...args); };
   const looking = setInterval(() => { for (const loading of rooms.values()) void loading.then((room) => room.peers.size || room.away ? room.work(() => see(room)) : null).catch(() => {}); }, LOOK_EVERY_MS);
   looking.unref();
   const told = async (entry) => { await tell(); changed(entry.project); return shown(entry); };
@@ -635,13 +783,12 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     /** A new artifact (a paper, empty, or a site that says what it is), in a folder of the project (unsaid: its root). */
     async create(project, { kind = "paper", name, folder: into = "" } = {}) {
       if (typeof kind !== "string" || !Object.hasOwn(KINDS, kind)) throw fault(400, `There is no artifact of the kind ${kind}`);
-      const of = await projectOf(project), { disk } = place(of), at = [within(into), `${named(name)}${KINDS[kind]}`].filter(Boolean).join("/"), id = crypto.randomBytes(8).toString("hex");
+      const of = await projectOf(project), { disk } = place(of), at = [within(into), `${named(name)}${KINDS[kind].ext}`].filter(Boolean).join("/"), id = crypto.randomBytes(8).toString("hex");
       await disk.inside(at);
-      await disk.create(at, kind === "paper" ? written(id, [empty()]) : SITE(id, nameOf(at))).catch((error) => {
+      await disk.create(at, KINDS[kind].made(id, nameOf(at))).catch((error) => {
         throw error.code === "EEXIST" ? fault(409, `A ${kind} named ${nameOf(at)} is already there`) : error.code === "ENOENT" ? fault(404, `No folder ${into} in this project`) : error;
       });
-      // A new site is not the one that was once at its path.
-      if (kind === "site") await paths(place(of).side, (kept) => { delete kept[at]; });
+      await KINDS[kind].created?.(place(of).side, at);
       return told(await adopt(of, at));
     },
     /** The artifact a file of the project is. */
@@ -657,25 +804,19 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     },
     /** `trouble`: why what a paper's pane shows may not be what its file holds; `edited`: a paper's, false until anyone (a person, an agent, a hand edit of the file) has changed it since it was made. */
     async about(id) {
-      const entry = await entryOf(id), room = await (entry.kind === "paper" ? held(id) : rooms.get(id))?.catch(() => null);
+      const entry = await entryOf(id), room = await (KINDS[entry.kind].blocks ? held(id) : rooms.get(id))?.catch(() => null);
       // Made, its blocks are written under one Yjs client; any later change is written under another.
       return { ...shown(entry), trouble: troubleOf(room), ...(room?.doc ? { edited: room.doc.store.clients.size > 1 } : {}) };
     },
     /** A site's HTML as its file holds it now, with a revision that changes when the file does; `have`: the revision the asker shows, which is not sent again. */
     async site(id, have) {
-      let entry = await entryOf(id);
-      if (entry.kind !== "site") throw fault(400, `${entry.name} is not a site`);
-      let stat = await entry.disk.stat(entry.path);
-      // A file that has gone may have been moved: the folder is read again, and a site that says its id is found where it is now.
-      if (!stat) { await again(entry.project); entry = known.get(id); stat = entry?.kind === "site" ? await entry.disk.stat(entry.path) : null; }
-      if (!stat) throw fault(404, "This site's file is gone");
-      await entry.disk.inside(entry.path);
-      const revision = String(stat.mtimeMs);
-      return revision === have ? { revision } : { revision, html: await entry.disk.read(entry.path) };
+      const entry = await entryOf(id), kind = KINDS[entry.kind];
+      if (!kind.content) throw fault(400, `${entry.name} is not a site`);
+      return kind.content(entry, have);
     },
     /** A chat's turn started or ended: where it is an artifact's mated thread, that project's clients are told. */
     /** A listener the hub holds read the paper (`reading`), or is heard writing a change to it before it is made (`writing`, with the block and the Markdown so far). */
-    async seat(id, by, change) { const room = await rooms.get(id)?.catch(() => null); if (room?.doc && sits(id, by, room)) sit(room, by, { text: undefined, ...change }); },
+    async seat(id, by, change) { const room = await rooms.get(id)?.catch(() => null); if (room && KINDS[room.entry.kind].places && sits(id, by, room)) sit(room, by, { text: undefined, ...change }); },
     /**
      * A chat is heard writing a call to conduit_paper: `input` is its JSON so far, cut wherever the model has got to; `call` names the call in its turn,
      * and `done` says its input is whole. What can be read of it (readPartial: the action, the block, the Markdown so far) seats the chat's agent on
@@ -739,12 +880,11 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     },
     /** Its file takes the new name, where it is; what belongs to it stays, since that is kept by its id. */
     async rename(id, name) {
-      const entry = await entryOf(id), room = await rooms.get(id)?.catch(() => null), to = [path.dirname(entry.path), `${named(name)}${KINDS[entry.kind]}`].filter((part) => part && part !== ".").join("/");
+      const entry = await entryOf(id), room = await rooms.get(id)?.catch(() => null), to = [path.dirname(entry.path), `${named(name)}${KINDS[entry.kind].ext}`].filter((part) => part && part !== ".").join("/");
       const move = async () => {
         if (to !== entry.path && await entry.disk.stat(to)) throw fault(409, `A ${entry.kind} named ${nameOf(to)} is already there`);
         await entry.disk.rename(entry.path, to);
-        // An id kept by the file's path goes with it.
-        if (entry.kind === "site") await paths(path.dirname(entry.side), (kept) => { if (kept[entry.path] === id) { delete kept[entry.path]; kept[to] = id; } });
+        await KINDS[entry.kind].renamed?.(entry, to);
         const next = known.set(id, { ...entry, path: to, name: nameOf(to) }).get(id);
         if (room) room.entry = next;
         return next;
@@ -756,102 +896,21 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       const entry = await entryOf(id), room = await rooms.get(id)?.catch(() => null);
       if (room) await room.work(() => shut(room, "This paper was deleted"));
       await entry.disk.remove(entry.path);
-      // Deleted here, its path is free: a site an agent later writes there is another one. (One deleted by hand and brought back is still itself.)
-      if (entry.kind === "site") await paths(path.dirname(entry.side), (kept) => { if (kept[entry.path] === id) delete kept[entry.path]; });
+      await KINDS[entry.kind].removed?.(entry);
       known.delete(id);
       await told(entry);
     },
-    /** As Markdown, each block under a comment that gives its id; `markdown`: the Markdown alone, to export; `blocks`: the format itself. */
-    async read(id, as) {
-      const kept = await current(id), blocks = blocksOf(kept);
-      const properties = kept.properties.toJSON(), front = Object.keys(properties).length ? `---\n${Object.entries(properties).map(([name, value]) => `${name}: ${JSON.stringify(value)}`).join("\n")}\n---\n\n` : "";
-      if (as === "blocks") return { format: "conduit-document", version: 1, id, properties, blocks: blocks.map((block) => block.toJSON()), authors: kept.authors.toJSON(), changes: kept.changes.toJSON() };
-      if (as === "markdown") return `${front}${markdown.serialize({ type: "doc", content: blocks.map((block) => block.toJSON()) }).trim()}\n`;
-      return `${front}${blocks.map((block) => `<!-- block ${block.attrs.id} -->\n${markdown.serialize({ type: "doc", content: [block.toJSON()] }).trim()}`).join("\n\n")}\n`;
-    },
-    /**
-     * One block changed: `replace` it with the Markdown's blocks (the first keeps its id), `insert` them after it (after `start`: first), or `delete` it.
-     * `set` writes its front matter instead.
-     * `for` ("<item>/<n>") is the comment it answers: what it changes is then kept in the document's changes until that comment is resolved.
-     * `suggest`: the edit is a suggestion instead, kept the same way until the person accepts or rejects it; true starts one, a suggestion's key adds to it.
-     */
-    async edit(id, { op, block, markdown: text = "", by, for: about, suggest } = {}) {
-      const kept = await current(id), now = blocksOf(kept), at = now.findIndex((candidate) => candidate.attrs.id === block);
-      // `set`: one property of its front matter (`block` its name, the Markdown its value as plain text; none removes it).
-      if (op === "set") {
-        const name = String(block ?? "").trim(), value = String(text).trim();
-        if (!name || name.length > 60 || /[\n:]/.test(name)) throw fault(400, "A property's name is a few words, with no colon");
-        kept.doc.transact(() => value ? kept.properties.set(name, value.slice(0, 2000)) : kept.properties.delete(name));
-        return { properties: kept.properties.toJSON() };
-      }
-      if (!["replace", "insert", "delete", "set"].includes(op)) throw fault(400, "op is replace, insert, delete or set");
-      if (at < 0 && !(op === "insert" && block === "start")) throw fault(404, `No block ${block} in ${id}: read it again for its blocks as they are now (the person may be typing in it)`);
-      const fresh = op === "delete" ? [] : parse(String(text));
-      // Markdown that reads as blocks the paper cannot hold is refused here, never left to fail when someone next types in them.
-      for (const made of fresh) { try { made.check(); } catch (error) { throw fault(400, `That Markdown makes a block the paper cannot hold (${error.message}): write it another way`); } }
-      if (op === "replace" && fresh[0]) fresh[0] = fresh[0].type.create({ ...fresh[0].attrs, id: block }, fresh[0].content);
-      const next = [...now.slice(0, op === "insert" ? at + 1 : at), ...fresh, ...now.slice(at + 1)], name = typeof by === "string" && by ? by.slice(0, 80) : "agent";
-      if (suggest && about !== undefined) throw fault(400, "An edit either answers a comment (for) or is a suggestion (suggest), not both");
-      if (suggest && suggest !== true && ![...kept.changes.values()].some((change) => change.for === suggest)) throw fault(404, `No suggestion ${suggest} in ${id}: suggestions lists them`);
-      const suggestion = suggest ? suggest === true ? `${SUGGESTION}${blockId()}` : String(suggest) : undefined, key = suggestion ?? (about === undefined ? undefined : String(about));
-      if (about !== undefined) await kept.markup.thread(String(about).split("/")[0]);
-      set(kept, next.length ? next : [empty()], name, key === undefined ? undefined : () => {
-        const stamp = { for: key, by: name, at: new Date().toISOString() }, had = kept.changes.get(block), gone = op !== "insert" && !fresh.length;
-        // The first `before` is the one kept: what is taken back is everything done for the comment, not its last step. A block made for a comment and then deleted leaves nothing to show.
-        if (gone && had?.before === null) kept.changes.delete(block);
-        else if (op !== "insert") kept.changes.set(block, { ...stamp, before: now[at].toJSON(), ...had, ...(gone ? { after: now[at - 1]?.attrs.id ?? null, at: stamp.at } : {}) });
-        for (const made of fresh.slice(op === "replace" ? 1 : 0)) kept.changes.set(made.attrs.id, { ...stamp, before: null });
-      });
-      // Its seat moves to what it wrote, and what it was heard writing is the paper's now.
-      if (sits(id, name, kept)) sit(kept, name, { state: "thinking", blocks: fresh.length ? fresh.map((made) => made.attrs.id) : [], text: undefined, ...(about === undefined ? {} : { for: String(about) }) });
-      return { blocks: fresh.map((made) => made.attrs.id), ...(suggestion ? { suggestion } : {}) };
-    },
-    /** Everything changed for one comment is put back as it was: a changed block is its `before` again, a new one goes, a deleted one returns after the block it followed. */
-    async revert(id, thread) {
-      const kept = await current(id), blocks = blocksOf(kept), mine = [...kept.changes.entries()].filter(([, change]) => change.for === thread);
-      // Deleted blocks return latest first: two that followed the same block then stand in their old order.
-      for (const [block, change] of mine.sort((a, b) => String(b[1].at).localeCompare(a[1].at))) {
-        const at = blocks.findIndex((candidate) => candidate.attrs.id === block), before = change.before && schema.nodeFromJSON(change.before);
-        if (at >= 0) blocks.splice(at, 1, ...(before ? [before] : []));
-        else if (before) { const after = blocks.findIndex((candidate) => candidate.attrs.id === change.after); blocks.splice(change.after === null ? 0 : after < 0 ? blocks.length : after + 1, 0, before); }
-      }
-      set(kept, blocks.length ? blocks : [empty()], undefined, () => { for (const [block] of mine) kept.changes.delete(block); });
-      return { blocks: mine.map(([block]) => block) };
-    },
-    /** The suggestions standing in the paper, oldest first: who made each, its blocks (in the paper's order, then those it deleted), and their text before and now. */
-    async suggestions(id) {
-      const kept = await current(id), blocks = blocksOf(kept), found = new Map(), clip = (text) => text.length > 200 ? `${text.slice(0, 199)}…` : text;
-      const order = new Map(blocks.map((block, nth) => [block.attrs.id, nth]));
-      for (const [block, change] of kept.changes.entries()) {
-        // A block made for a suggestion and deleted since is not part of it.
-        if (!isSuggestion(change.for) || (change.before === null && !order.has(block))) continue;
-        const one = found.get(change.for) ?? found.set(change.for, { key: change.for, by: change.by, at: change.at, entries: [] }).get(change.for);
-        if (String(change.at) < String(one.at)) one.at = change.at;
-        one.entries.push([block, change]);
-      }
-      return [...found.values()].sort((a, b) => String(a.at).localeCompare(b.at)).map(({ entries, ...one }) => {
-        entries.sort((a, b) => (order.get(a[0]) ?? Infinity) - (order.get(b[0]) ?? Infinity));
-        const was = entries.flatMap(([, change]) => change.before ? [schema.nodeFromJSON(change.before).textContent] : []), now = entries.flatMap(([block]) => order.has(block) ? [blocks[order.get(block)].textContent] : []);
-        return { ...one, blocks: entries.map(([block]) => block), before: clip(was.join("\n")), after: clip(now.join("\n")) };
-      });
-    },
-    /** A suggestion is accepted: its blocks stay as they are and stop standing as suggested. */
-    async accept(id, key) {
-      const kept = await current(id), mine = [...kept.changes.entries()].filter(([, change]) => change.for === key);
-      if (!isSuggestion(key) || !mine.length) throw fault(404, `No suggestion ${key} in ${id}: suggestions lists them (a comment's change is accepted by resolving the comment)`);
-      kept.doc.transact(() => { for (const [block] of mine) kept.changes.delete(block); });
-      return { blocks: mine.map(([block]) => block) };
-    },
-    /** A suggestion is rejected: taken back, as a comment's change is. */
-    async reject(id, key) {
-      const kept = await current(id);
-      if (!isSuggestion(key) || ![...kept.changes.values()].some((change) => change.for === key)) throw fault(404, `No suggestion ${key} in ${id}: suggestions lists them`);
-      return this.revert(id, key);
-    },
+    /** A paper's blocks, read and changed as its kind's `blocks` say. */
+    read: (id, as) => blocks(id, "read", as),
+    edit: (id, body) => blocks(id, "edit", body),
+    revert: (id, thread) => blocks(id, "revert", thread),
+    suggestions: (id) => blocks(id, "suggestions"),
+    accept: (id, key) => blocks(id, "accept", key),
+    reject: (id, key) => blocks(id, "reject", key),
     /** An image is kept beside the paper, under a name its block holds in place of the bytes. */
     async keepImage(id, bytes) {
       const entry = await entryOf(id), kind = Buffer.isBuffer(bytes) && bytes.length ? sniff(bytes) : null;
-      if (entry.kind !== "paper") throw fault(400, `${entry.name} is a ${entry.kind}, which holds no images`);
+      if (!KINDS[entry.kind].images) throw fault(400, `${entry.name} is a ${entry.kind}, which holds no images`);
       if (!kind) throw fault(415, "That is not a PNG, JPEG, GIF, WebP or AVIF image");
       const name = `${crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 16)}.${kind}`, file = path.join(entry.side, "images", name);
       if (!await fs.stat(file).catch(() => null)) await writePrivateFile(file, bytes);

@@ -23,7 +23,18 @@ export const DOCUMENT_SEAT_INKS = ["plain", "green", "amber", "blue"] as const;
 export type DocumentSeatInk = typeof DOCUMENT_SEAT_INKS[number];
 const made = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string, more: Partial<HTMLElementTagNameMap[K]> = {}) => Object.assign(document.createElement(tag), { className, ...more });
 /** An agent's caret, as another writer's is drawn: a bar in its ink, `label` (its name, and what it is doing) on a tag over it. In a line of text it stands where it is put. */
-export const documentSeatCaret = (label: string) => { const caret = made("span", "ui-document-seat-caret"); caret.append(made("span", "ui-document-seat-name", { textContent: label })); return caret; };
+export const documentSeatCaret = (label: string) => {
+  const caret = made("span", "ui-document-seat-caret"), name = made("span", "ui-document-seat-name", { textContent: label });
+  caret.append(name);
+  // The name stands from the caret rightward, and leftward where the edge of the text's column would cut it (and back, where the other edge would).
+  const cut = new IntersectionObserver(([seen]) => {
+    if (!caret.isConnected) return cut.disconnect();
+    if (!seen || seen.intersectionRatio >= 1 || !seen.intersectionRect.width) return;
+    if (seen.boundingClientRect.right > seen.intersectionRect.right + 0.5) caret.dataset.flip = ""; else if (seen.boundingClientRect.left < seen.intersectionRect.left - 0.5) delete caret.dataset.flip;
+  }, { threshold: 1 });
+  cut.observe(name);
+  return caret;
+};
 /** The caret of an agent at work on a block, put at the start of the block's first line: it takes no room, so nothing moves as it comes and goes. */
 export const documentSeatFlag = (label: string, ink: DocumentSeatInk) => {
   const flag = made("span", "ui-document-seat-flag", { contentEditable: "false" });

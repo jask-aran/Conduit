@@ -4,7 +4,10 @@ import { Button, Field, Input } from "@/components/ui/controls";
 import { Select } from "@/components/ui/menus";
 import type { Project } from "../api/contracts";
 import { ArtifactIcon } from "./artifact-rows";
-import { ARTIFACT_KINDS, artifactsOf, makeArtifact, type Artifact } from "./artifacts";
+import { ARTIFACT_KINDS } from "./artifact-kinds";
+import { artifactsOf, makeArtifact, type Artifact, type ArtifactKind } from "./artifacts";
+
+const KINDS = Object.keys(ARTIFACT_KINDS) as ArtifactKind[];
 
 /** The project with the latest chat activity: the one the person was last in, where the creator was not told a project. */
 const latest = (projects: Project[]) => projects.map((project) => ({ project, at: project.sessions.reduce((most, chat) => (chat.updatedAt ?? "") > most ? chat.updatedAt ?? "" : most, "") }))
@@ -12,7 +15,7 @@ const latest = (projects: Project[]) => projects.map((project) => ({ project, at
 
 /** The artifact creator, drawn in its tab (the view `artifact:new[:<project>]`): a hub refusal (a name already there, a folder on another device) stays on screen in the hub's words. */
 export default function ArtifactCreator(props: { project?: string; projects: Project[]; onBack: () => void; onMade: (artifact: Artifact) => void }) {
-  const [kind, setKind] = createSignal<Artifact["kind"]>(ARTIFACT_KINDS[0].kind);
+  const [kind, setKind] = createSignal<ArtifactKind>(KINDS[0]!);
   const [project, setProject] = createSignal(props.project ?? latest(props.projects));
   // Untyped, the name is the first "Untitled" the project has room for, so Create works at once.
   const [typed, setTyped] = createSignal<string | null>(null);
@@ -38,8 +41,8 @@ export default function ArtifactCreator(props: { project?: string; projects: Pro
   return <PaneHome label="New artifact">
     <header><DashHeader title="New artifact" /></header>
     <Group kind="dash" id="Kind" heading={<GroupHeading>Kind</GroupHeading>}>
-      <For each={ARTIFACT_KINDS}>{(item) => <Row density="list" element="button" aria-pressed={kind() === item.kind} current={kind() === item.kind}
-        lead={<ArtifactIcon kind={item.kind} />} label={item.label} detail={item.says} onClick={() => setKind(item.kind)} />}</For>
+      <For each={KINDS}>{(item) => <Row density="list" element="button" aria-pressed={kind() === item} current={kind() === item}
+        lead={<ArtifactIcon kind={item} />} label={ARTIFACT_KINDS[item].label} detail={ARTIFACT_KINDS[item].says} onClick={() => setKind(item)} />}</For>
     </Group>
     <Field label="Project"><Select id="artifact-project" value={project()} disabled={busy()} onChange={(event) => { setProject(event.currentTarget.value); setError(""); }}>
       <For each={props.projects}>{(item) => <option value={item.id}>{item.name || item.slug}</option>}</For>

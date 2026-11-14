@@ -5,10 +5,11 @@ import { Button, Field, Input } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
+import { ARTIFACT_KINDS } from "./artifact-kinds";
 import { artifactsOf, artifactsRead, artifactView, copyArtifactMarkdown, countPapers, deleteArtifact, exportArtifactMarkdown, paperCounted, renameArtifact, type Artifact } from "./artifacts";
 
-/** An artifact's mark in a row: a site is a page, a paper a document. */
-export const ArtifactIcon = (props: { kind: Artifact["kind"] }) => props.kind === "site" ? <Icons.Browser /> : <Icons.FileText />;
+/** An artifact's mark in a row: its kind's. */
+export const ArtifactIcon = (props: { kind: Artifact["kind"] }) => { const Icon = ARTIFACT_KINDS[props.kind].icon; return <Icon />; };
 
 /*
  * A project's artifacts as the sidebar's rows, under its chats, each with its menu and what the menu opens. Loaded

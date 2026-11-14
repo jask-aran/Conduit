@@ -22,8 +22,8 @@ export function holdArtifact(pane: () => HTMLElement | undefined, about: () => F
   onCleanup(() => { document.removeEventListener("pointerdown", seen, true); document.removeEventListener("focusin", seen, true); if (holder() === about) setHolder(null); });
 }
 
-/** A block someone asked to be shown (a comment's card in a thread, pressed): kept until its paper's pane has an editor to show it in. */
-const [wanted, setWanted] = createSignal<{ id: string; block: string } | null>(null);
-export const blockWanted = (id: string) => wanted()?.id === id ? wanted()!.block : undefined;
-export const blockShown = () => setWanted(null);
-window.addEventListener("conduit:open-artifact", (event) => { const { id, block } = (event as CustomEvent<{ id: string; block?: string }>).detail; if (block) setWanted({ id, block: block.split(" ")[0]! }); });
+/** A place someone asked to be shown (a comment's card in a thread, pressed; for a paper, its first block): kept until the artifact's surface can show it (ArtifactSurface.reveal). */
+const [wanted, setWanted] = createSignal<{ id: string; place: string } | null>(null);
+export const placeWanted = (id: string) => wanted()?.id === id ? wanted()!.place : undefined;
+export const placeShown = () => setWanted(null);
+window.addEventListener("conduit:open-artifact", (event) => { const { id, block } = (event as CustomEvent<{ id: string; block?: string }>).detail; if (block) setWanted({ id, place: block.split(" ")[0]! }); });

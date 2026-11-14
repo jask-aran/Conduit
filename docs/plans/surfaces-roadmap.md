@@ -103,3 +103,20 @@ know about Float: the phone composes every send from the general routes. Panels 
 - [ ] `POST /v0/chats/:id/prompt` does not dedupe by `messageId`, so Float refuses a retry whose outcome is unknown.
   Fix: the hub recognises a `clientUserMessageId` it has already taken for that chat.
 - [ ] jbot's routes take text only, so pictures go to chats, not to jbot.
+
+### Artifact kinds
+
+A kind is declared twice: on the client in `ARTIFACT_KINDS` (`client/document/artifact-kinds.ts`, with its `Surface`), on the hub in
+`KINDS` (`server/documents.js`, the `ArtifactKind` typedef). Markup, the margin, comments, hand-off and the pane are written once
+over those. What still knows a paper's blocks outside the paper's two entries:
+
+- [ ] A seat carries `blocks`, on the hub (`sit`, `hear`, `readPartial`, the seat frame) and in the editor's `DocumentSeat`: a kind
+  whose places are not blocks needs the field to be "places", which is a format change.
+- [ ] The `/blocks` route's body and the `conduit_paper` tool (its actions, its `block` parameter, its description) are the paper's. A
+  second editable kind needs its own place parameter there, or its own tool.
+- [ ] `current` and the live socket assume a room with a Yjs `doc`.
+- [ ] `artifact-kinds.ts` types `edit` as the paper's tool names; `artifact-rows.tsx` offers Copy as Markdown and Count by comparing
+  the kind; `main.tsx` names the two file endings and passes "paper" as every artifact's modes; `connections.ts` types a hand-off's
+  kind as the two.
+- [ ] A kind this client does not know has no entry, where it used to be drawn as a paper.
+- [ ] The paper as a plain Markdown file (the owner's direction, not started): `identify`, `made` and its places as the kind's own.

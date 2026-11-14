@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { api } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl } from "../api/transport";
+import { ARTIFACT_KINDS } from "./artifact-kinds";
 
 /*
  * What the client knows of artifacts (docs/plans/markup-and-conduit-documents.md): each project's list, read from the
@@ -16,13 +17,8 @@ export type ArtifactKind = "paper" | "site";
  * `open`: how many comments on it the person has not settled; `working`: its mated thread has a turn running. Only a list says these.
  */
 export interface Artifact { id: string; kind: ArtifactKind; name: string; path: string; project: string; trouble?: string | null; edited?: boolean; open?: number; working?: boolean }
-/** The kinds the artifact creator offers, and what each is called where it is named (a tab with no name yet, the pane's switch). */
-export const ARTIFACT_KINDS = [
-  { kind: "paper", label: "Paper", says: "Blocks of text you and agents write together, with comments in the margin." },
-  { kind: "site", label: "Site", says: "A page an agent builds as one HTML file. You mark it up, and the agent changes the file." },
-] as const satisfies readonly { kind: ArtifactKind; label: string; says: string }[];
-/** What a kind is called. */
-export const artifactLabel = (kind: ArtifactKind) => ARTIFACT_KINDS.find((item) => item.kind === kind)?.label ?? "Artifact";
+/** What a kind is called; a kind this client does not know is an artifact. */
+export const artifactLabel = (kind: ArtifactKind) => ARTIFACT_KINDS[kind]?.label ?? "Artifact";
 /** Whether a paper says how many blocks and words it has, at its foot: this browser's choice, for every paper. */
 const COUNT_KEY = "conduit.paper.count";
 const [counted, setCounted] = createSignal((() => { try { return localStorage.getItem(COUNT_KEY) === "on"; } catch { return false; } })());

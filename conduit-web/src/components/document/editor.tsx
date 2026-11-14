@@ -5,8 +5,9 @@ import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { createTiptapEditor } from "solid-tiptap";
 import { isOn, markAttrs, readEditor, sameJson } from "./read";
+import { lateSync, settle } from "./sync";
 import { redo, undo, ySyncPlugin, yUndoPlugin, yUndoPluginKey } from "y-prosemirror";
-import type { Map as YMap, XmlFragment } from "yjs";
+import type { Doc, Map as YMap, XmlFragment } from "yjs";
 import { Button, Icons } from "@/components/ui";
 import { MARKUP_INKS } from "@/components/ui/markup";
 import { DocumentCount, DocumentSeatJump, DocumentSheet, DocumentStarts, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons, documentWritingIcons, type DocumentWidth } from "@/components/ui/document";
@@ -52,10 +53,23 @@ const MARK_KEYS: Record<string, string[]> = { bold: ["Ctrl", "B"], italic: ["Ctr
 // The chords the text keeps from the application while it has the keyboard (`data-own-keys`, read by the shortcut manager): its marks.
 const OWN_KEYS = Object.values(MARK_KEYS).map((keys) => [...keys.slice(0, -1).map((key) => key === "Ctrl" ? "primary" : key.toLowerCase()).sort(), `Key${keys.at(-1)}`].join("+")).join(" ");
 /** The editor's text is the Yjs document's blocks, each change merged as it is made; undo takes back only what was written here. */
+/**
+ * A step through the history, which is the document's. What is typed and not yet written to it is written first, or it would be taken back out of
+ * order. Then the caret is put at the end of what the step changed: the sync plugin restores it from where it stood when the change was made, which
+ * a redo lands a paragraph on and an undo of a whole block lands at the top of the paper.
+ */
+const step = (made: Editor, doc: Doc | null, run: typeof undo) => {
+  if (doc) settle(doc);
+  const was = made.state.doc;
+  if (!run(made.state)) return false;
+  const now = made.state.doc, start = was.content.findDiffStart(now.content), end = start === null ? null : was.content.findDiffEnd(now.content);
+  if (start !== null) made.view.dispatch(made.state.tr.setSelection(TextSelection.near(now.resolve(Math.min(now.content.size, Math.max(start, end?.b ?? start))), -1)).scrollIntoView());
+  return true;
+};
 const merged = (blocks: XmlFragment) => Extension.create({
   name: "liveDocument",
-  addProseMirrorPlugins: () => [ySyncPlugin(blocks), yUndoPlugin()],
-  addKeyboardShortcuts() { return { "Mod-z": () => undo(this.editor.state), "Mod-y": () => redo(this.editor.state), "Shift-Mod-z": () => redo(this.editor.state) }; },
+  addProseMirrorPlugins: () => [ySyncPlugin(blocks), yUndoPlugin(), lateSync()],
+  addKeyboardShortcuts() { return { "Mod-z": () => step(this.editor, blocks.doc, undo), "Mod-y": () => step(this.editor, blocks.doc, redo), "Shift-Mod-z": () => step(this.editor, blocks.doc, redo) }; },
 });
 
 const textOf = (node: { text?: string; content?: unknown[] }): string => node.text ?? (node.content ?? []).map((child) => textOf(child as { text?: string })).join(" ");
@@ -220,7 +234,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     get active() { return inkOn().split(" ")[nth] === (ink ?? ""); }, get disabled() { return !marking().can; }, run: () => { const made = editor(); if (made) putInk(made.chain().focus(), name, ink); } })));
   // What can be taken back here is what was written here (the Yjs undo manager's stacks), read after each change.
   const stacks = readEditor(editor, (made) => { const manager = made ? yUndoPluginKey.getState(made.state)?.undoManager : undefined; return [manager?.undoStack.length ?? 0, manager?.redoStack.length ?? 0]; }, sameJson);
-  const history = { undo: () => Boolean(editor() && undo(editor()!.state)), redo: () => Boolean(editor() && redo(editor()!.state)), canUndo: () => stacks()[0]! > 0, canRedo: () => stacks()[1]! > 0 };
+  const history = { undo: () => Boolean(editor() && step(editor()!, copy.doc, undo)), redo: () => Boolean(editor() && step(editor()!, copy.doc, redo)), canUndo: () => stacks()[0]! > 0, canRedo: () => stacks()[1]! > 0 };
   // One list until a kind that is only put in comes or goes: a bar draws a row for each, and a new list would redraw them all.
   const listed = createMemo(() => [...tools.filter((tool) => (DOCUMENT_TURNABLE as readonly string[]).includes(tool.name) || tool.active).map((tool) => ({ ...tool, menu: "Block", get active() { return tool.active; } })), ...worn, ...inked, ...writings]);
   props.marks?.({

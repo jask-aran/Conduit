@@ -2,6 +2,7 @@ import { createSignal, onCleanup } from "solid-js";
 import * as Y from "yjs";
 import { FORMAT, FRAME, frame } from "@/document-format.js";
 import type { DocumentHost, DocumentSeat, DocumentState } from "./host";
+import { settle } from "./sync";
 
 const RETRY_BASE_MS = 500;
 const RETRY_CAP_MS = 15_000;
@@ -31,6 +32,7 @@ export function createLiveDocument(host: DocumentHost, id: string) {
       const bytes = new Uint8Array(event.data as ArrayBuffer);
       if (bytes[0] === FRAME.have) return send(FRAME.update, Y.encodeStateAsUpdate(doc, bytes.subarray(1)));
       if (bytes[0] === FRAME.seats) { try { setSeats(JSON.parse(new TextDecoder().decode(bytes.subarray(1))) as DocumentSeat[]); } catch { setSeats([]); } return; }
+      settle(doc);
       Y.applyUpdate(doc, bytes.subarray(1), hub);
       tries = 0;
       setState("live");

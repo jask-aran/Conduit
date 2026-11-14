@@ -131,6 +131,7 @@
 .ui-document-seat-flag { position: absolute; z-index: 1; pointer-events: none; user-select: none; }
 .ui-document-seat-flag > .ui-document-seat-caret { position: absolute; top: 0; right: 100%; margin-inline-end: var(--space-2xs); }
 .ui-document-seat-caret { position: relative; display: inline-block; width: var(--stroke); height: 1lh; vertical-align: top; border-radius: var(--radius-round); background: var(--seat-ink); }
+.ui-document-seat-caret[data-flip] > .ui-document-seat-name { right: 0; left: auto; }
 .ui-document-seat-name { position: absolute; bottom: 100%; left: 0; border-radius: var(--radius-inset); background: var(--seat-ink); padding: 0 var(--space-2xs); color: var(--background); font-size: var(--text-caption); font-weight: var(--weight-strong); line-height: var(--leading-tight); text-decoration: none; white-space: nowrap; }
 .ui-document-text > .ui-document-seat-stream { position: relative; color: var(--muted-foreground); pointer-events: none; user-select: none; }
 .ui-document-text > .ui-document-seat-stream[data-lead="heading"]:not(:first-child) { margin-top: var(--space-3xl); }
