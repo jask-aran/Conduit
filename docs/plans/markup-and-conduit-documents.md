@@ -43,8 +43,8 @@ file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background
   with a file list it may edit, no builds or restarts, and one that only reviews. `client/main.tsx` can be edited by
   two at once when each uses narrow edits. The review found the worst defects of steps (a) and (b) before either ran
   on real data.
-- **The initial JS budget is 428,000 B gzip** (was 425,000, then 427,000; the build is at 427,907 on 2026-11-14, so the
-  next piece that cannot load lazily needs the user to raise it again; the user said "Ok keep going" to a raise of up to 3,000
+- **The initial JS budget is 431,000 B gzip** (425,000, then 427,000, 428,000; the user raised it by 3,000 on 2026-11-14
+  with the build at 427,990; the user said "Ok keep going" to a raise of up to 3,000
   on 2026-11-12). The build is at 426,292 with sites. New panes and dialogs load lazily; a rider and a header switch
   cannot. `src/` is at about 116,400 lines of the 119,000 ceiling.
 

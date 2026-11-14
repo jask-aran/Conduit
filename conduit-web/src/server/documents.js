@@ -45,6 +45,9 @@ import { startWebSocketKeepalive } from "./ws-keepalive.js";
  * starts its agent on it; what the agent answers with is the CLI, as for any session. A session Conduit does not run
  * keeps `wait`.
  */
+// A seat with no word from its agent is left after SEAT_IDLE_MS (a turn that ended unheard), and one whose chat has no turn running SEAT_START_MS after a
+// comment was handed to it is left then; pages are told of seats at most once each SEAT_TELL_MS.
+const SEAT_IDLE_MS = 600_000, SEAT_TELL_MS = 80, SEAT_START_MS = 5_000;
 const SAVE_AFTER_MS = 500, LOOK_EVERY_MS = 2_000, SCAN_AFTER_MS = 3_000, FAR_SCAN_MS = 15_000;
 const MATED = "conduit", SCRIPT = path.resolve(import.meta.dirname, "../../../scripts/conduit-markup.mjs");
 const KINDS = { paper: ".paper", site: ".site.html" }, ID = /^[a-z0-9-]{1,64}$/, WALK = { entries: 20_000, depth: 6 };
@@ -324,6 +327,29 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   const working = new Map();
   const workingOf = (entry) => Boolean(entry.links.thread && chats()?.working?.(entry.links.thread));
   /**
+   * An agent's seat in a paper: where a listener the hub holds is at work, told to every page that has the paper open so the person sees it as they
+   * would see someone else writing. `{ name, state, blocks, for?, text? }`: `thinking` from the moment a comment is handed to it (the blocks the
+   * comment is about), `reading` when it reads the paper, `writing` on the block it changes, with `text` the Markdown it has written so far where the
+   * hub can hear the model write it. It leaves when its chat's turn ends, or after SEAT_IDLE_MS with no word from it. Never kept: a seat is not the paper.
+   */
+  const seated = (room, to = room.peers) => {
+    // A chat disconnected or deleted is no longer at work here.
+    for (const name of room.seats?.keys() ?? []) if (!heldFor(room.id).some((one) => one.name === name)) { clearTimeout(room.leaving?.get(name)); room.seats.delete(name); }
+    const bytes = frame(FRAME.seats, Buffer.from(JSON.stringify([...(room.seats?.values() ?? [])]))); for (const peer of to) peer.send(bytes);
+  };
+  const sit = (room, name, change) => {
+    room.seats ??= new Map(); room.leaving ??= new Map();
+    clearTimeout(room.leaving.get(name));
+    if (!change) { room.leaving.delete(name); if (room.seats.delete(name)) seated(room); return; }
+    room.seats.set(name, { blocks: [], ...room.seats.get(name), ...change, name });
+    const idle = setTimeout(() => sit(room, name, null), SEAT_IDLE_MS); idle.unref?.(); room.leaving.set(name, idle);
+    // Told at most once each SEAT_TELL_MS: a model writes many times a second.
+    room.telling ??= setTimeout(() => { room.telling = null; seated(room); }, SEAT_TELL_MS);
+  };
+  /** Only a listener the hub holds has a seat, and only while it has one already or its chat has a turn running: a script that edits under a name is not at work for the person. */
+  const sits = (id, name, room) => { const one = heldFor(id).find((held) => held.name === name); return Boolean(one && (room?.seats?.has(name) || chats()?.working?.(one.chat))); };
+
+  /**
    * What the hub does for a listener it holds, as the CLI's `wait` does for a session: the item is taken in its name,
    * each comment is marked as being worked on, and the chat is told where the item is. `said`: what the person wrote
    * back on an item already handed over.
@@ -335,6 +361,8 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     const name = JSON.stringify(room.entry.name.replace(/\s+/g, " ").slice(0, 120)), taken = path.join(dir, "taken.json");
     const comments = JSON.parse(await fs.readFile(path.join(dir, "item.json"), "utf8")).comments ?? [];
     const card = (comment, words, said) => handoff({ artifact: room.id, kind: room.entry.kind, name: room.entry.name.replace(/\s+/g, " ").slice(0, 120), item, n: comment?.n, block: String(comment?.under?.blocks ?? "").split(" ")[0] || undefined, said }, comment?.quote, words);
+    const about = (list) => [...new Set(list.flatMap((comment) => String(comment?.under?.blocks ?? "").split(" ").filter(Boolean)))];
+    if (room.doc && said) sit(room, to.name, { state: "thinking", blocks: about([comments.find((comment) => comment.n === said.n)]), for: `${item}/${said.n ?? 1}`, text: undefined });
     if (said) return host().notify(chat, `${card(comments.find((comment) => comment.n === said.n) ?? { n: said.n }, said.text, said.text ? "reply" : "reopened")}\nOn the ${room.entry.kind} ${name}, markup item ${item}: ${said.text ? `the person wrote back${Number.isInteger(said.n) ? ` on comment ${said.n}` : ""}: ${said.text}` : `the person reopened comment ${said.n}.`}\nThe item is ${path.join(dir, "item.json")}; answer with \`node ${SCRIPT} reply ${item} [n] "<words>"\`.`);
     // Taken once: a session that took it first (a `wait` under the same name) keeps it, and the chat is told nothing.
     const mine = await fs.writeFile(taken, `${JSON.stringify({ name: to.name, held: true, chat, at })}\n`, { flag: "wx" }).then(() => true, async () => (await fs.readFile(taken, "utf8").then(JSON.parse).catch(() => null))?.held === true);
@@ -344,9 +372,12 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     const fresh = comments.filter((comment) => !told.has(comment.n));
     if (!fresh.length) return;
     // A chat that cannot be told has not taken it: the item goes back to waiting, which is what the person then reads.
-    await host().notify(chat, `${fresh.map((comment) => card(comment, comment.comment)).join("\n")}\n${fresh.length === comments.length ? "The person" : "The person added to what they"} sent you ${fresh.length === 1 ? "a comment" : `${fresh.length} comments`} on the ${room.entry.kind} ${name}${fresh.length === comments.length ? "" : ` (${fresh.map((comment) => comment.n).join(", ")})`}. Read ${path.join(dir, "item.json")} (its \`read\` says how) and do what it asks.${to.name === MATED && room.entry.kind === "paper" ? ` Write in it as \`${MATED}\`: the tool \`conduit_paper\` does, and the CLI's \`document\` commands take \`--as ${MATED}\`.` : ""}`)
+    await host().notify(chat, `${fresh.map((comment) => card(comment, comment.comment)).join("\n")}\n${fresh.length === comments.length ? "The person" : "The person added to what they"} sent you ${fresh.length === 1 ? "a comment" : `${fresh.length} comments`} on the ${room.entry.kind} ${name}${fresh.length === comments.length ? "" : ` (${fresh.map((comment) => comment.n).join(", ")})`}. Read ${path.join(dir, "item.json")} (its \`read\` says how) and do what it asks. The person reads the ${room.entry.kind}'s margin, not this chat: say what you did, or ask what you need to know, with \`reply\` on the comment, in a line or two; what you write here is only your own log.${to.name === MATED && room.entry.kind === "paper" ? ` Write in it as \`${MATED}\`: the tool \`conduit_paper\` does, and the CLI's \`document\` commands take \`--as ${MATED}\`.` : ""}`)
       .catch(async (error) => { if (!told.size) await fs.rm(taken, { force: true }); throw error; });
     await fs.appendFile(path.join(dir, "thread.jsonl"), fresh.map((comment) => `${JSON.stringify({ at, from: "agent", by: to.name, n: comment.n, working: true })}\n`).join(""));
+    if (room.doc) sit(room, to.name, { state: "thinking", blocks: about(fresh), for: `${item}/${fresh[0].n}`, text: undefined });
+    // A chat that answered before it was seated, or never began a turn, has no turn end to leave by.
+    if (room.doc) setTimeout(() => { if (!chats()?.working?.(chat)) sit(room, to.name, null); }, SEAT_START_MS).unref?.();
   }
 
   /** The file is the paper: what it holds that the live copy does not is taken, as the smallest change that makes the live copy so. */
@@ -550,7 +581,24 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       return revision === have ? { revision } : { revision, html: await entry.disk.read(entry.path) };
     },
     /** A chat's turn started or ended: where it is an artifact's mated thread, that project's clients are told. */
+    /** A listener the hub holds read the paper (`reading`), or is heard writing a change to it before it is made (`writing`, with the block and the Markdown so far). */
+    async seat(id, by, change) { const room = await rooms.get(id)?.catch(() => null); if (room?.doc && sits(id, by, room)) sit(room, by, { text: undefined, ...change }); },
+    /**
+     * A chat is heard writing a call to conduit_paper: `input` is its JSON so far, cut wherever the model has got to. What can be read of it (the
+     * action, the block, the Markdown up to its last whole character) seats the chat's agent on that block, writing.
+     */
+    async heard(chat, input) {
+      const said = (key) => { const found = new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)`).exec(input)?.[1]; if (found === undefined) return undefined; try { return JSON.parse(`"${found.replace(/\\(u[0-9a-f]{0,3})?$/i, "")}"`); } catch { return undefined; } };
+      const action = said("action"), block = said("block"), mine = this.of(chat), paper = said("paper") ?? (mine.papers.length === 1 ? mine.papers[0].id : null), as = mine.papers.find((one) => one.id === paper)?.as;
+      if (as && block && (action === "replace" || action === "insert")) await this.seat(paper, as, { state: "writing", op: action, blocks: [block], text: said("markdown") ?? "" });
+    },
+    /** A chat's turn ended or began: the seats it holds are left when it is no longer at work. */
+    async left(chat) {
+      if (chats()?.working?.(chat)) return;
+      for (const entry of known.values()) { const as = heldFor(entry.id).find((one) => one.chat === chat)?.name, room = as && await rooms.get(entry.id)?.catch(() => null); if (room?.seats?.has(as)) sit(room, as, null); }
+    },
     turned(chat) {
+      void this.left(chat);
       const entry = [...known.values()].find((one) => one.links.thread === chat);
       if (!entry || working.get(entry.id) === workingOf(entry)) return;
       working.set(entry.id, workingOf(entry));
@@ -647,6 +695,8 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
         else if (op !== "insert") kept.changes.set(block, { ...stamp, before: now[at].toJSON(), ...had, ...(gone ? { after: now[at - 1]?.attrs.id ?? null, at: stamp.at } : {}) });
         for (const made of fresh.slice(op === "replace" ? 1 : 0)) kept.changes.set(made.attrs.id, { ...stamp, before: null });
       });
+      // Its seat moves to what it wrote, and what it was heard writing is the paper's now.
+      if (sits(id, name, kept)) sit(kept, name, { state: "thinking", blocks: fresh.length ? fresh.map((made) => made.attrs.id) : [], text: undefined, ...(about === undefined ? {} : { for: String(about) }) });
       return { blocks: fresh.map((made) => made.attrs.id) };
     },
     /** Everything changed for one comment is put back as it was: a changed block is its `before` again, a new one goes, a deleted one returns after the block it followed. */
@@ -692,7 +742,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
               // A page loaded before the format grew would delete the blocks it cannot draw: it is kept out until it is reloaded.
               if (format !== FORMAT) return peer.close(4426, "This page is older than the paper: reload it");
               peer.author = [String(Number(client)), String(name).slice(0, 80)];
-              if (!kept.peers.has(peer)) { kept.peers.add(peer); peer.send(frame(FRAME.have, Y.encodeStateVector(kept.doc))); }
+              if (!kept.peers.has(peer)) { kept.peers.add(peer); peer.send(frame(FRAME.have, Y.encodeStateVector(kept.doc))); if (kept.seats?.size) seated(kept, [peer]); }
             }
             else if (!kept.peers.has(peer)) peer.close(1003, "Name the client first");
             else if (data[0] === FRAME.have) peer.send(frame(FRAME.update, Y.encodeStateAsUpdate(kept.doc, data.subarray(1))));

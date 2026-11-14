@@ -37,7 +37,7 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
   const [offer, setOffer] = createSignal<Parameters<NonNullable<MarkupHost["asks"]>>[0]>(null);
   const ask = (about: Range, name?: string) => offer()?.ask(about, name);
   // What the paper's editor and margin offer the pane, once each is made: the header, the palette and the shortcuts act through them.
-  const [controls, setControls] = createSignal<DocumentControls>(), [comments, setComments] = createSignal<MarkupMarginControl>();
+  const [controls, setControls] = createSignal<DocumentControls>(), [comments, setComments] = createSignal<MarkupMarginControl>(), [cards, setCards] = createSignal(0);
   const WIDTHS: DocumentWidth[] = ["narrow", "wide", "full"], widthKey = `conduit.paper.width.${props.id}`;
   const [width, setWidth] = createSignal<DocumentWidth>((() => { try { const kept = localStorage.getItem(widthKey) as DocumentWidth | null; return kept && WIDTHS.includes(kept) ? kept : "narrow"; } catch { return "narrow"; } })());
   const widen = () => { const next = WIDTHS[(WIDTHS.indexOf(width()) + 1) % WIDTHS.length]!; setWidth(next); try { localStorage.setItem(widthKey, next); } catch { /* this session only */ } };
@@ -109,7 +109,7 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
     <Show when={!props.quiet && found()}><MarkupRibbonRoom ref={(element) => { room = element; }} /></Show>
     <Show when={!about.error} fallback={<Empty role="alert">This {kind()} could not be opened: {String((about.error as Error)?.message || "the hub did not say why").replace(/\.$/, "")}.</Empty>}>
       <Show when={found()?.id} keyed fallback={<Empty role="status">Opening the {kind()}…</Empty>}>{(id) => found()?.kind === "site" ? <SitePane about={() => found()!} host={shared} tool={tool} /> : <>
-        <DocumentEditor host={editing} id={id} name={found()?.name ?? ""} bare onAway={setAway} marks={(offered) => { marks = offered; }} mentions={() => props.quiet ? [] : offer()?.names() ?? []} onMention={ask} onRename={(name) => renameArtifact(id, name)} count={paperCounted()} width={width()} controls={setControls} onComment={props.quiet ? undefined : ask} margin={<MarkupMargin host={markup} sent={sent()} control={setComments} />} />
+        <DocumentEditor host={editing} id={id} name={found()?.name ?? ""} bare onAway={setAway} marks={(offered) => { marks = offered; }} mentions={() => props.quiet ? [] : offer()?.names() ?? []} onMention={ask} onRename={(name) => renameArtifact(id, name)} count={paperCounted()} width={width()} controls={setControls} onComment={props.quiet ? undefined : ask} margin={<MarkupMargin host={markup} sent={sent()} control={setComments} onCards={setCards} />} marginEmpty={!cards()} />
         {tool(markup)}
       </>}</Show>
     </Show>

@@ -46,7 +46,10 @@ try {
   await page.mouse.move(line.x + 4, line.y); await page.mouse.down(); await page.mouse.move(line.x + 94, line.y, { steps: 8 }); await page.mouse.up(); await wait(500);
   await page.keyboard.type(`Thread probe: by name, @${name}`); await wait(300);
   const forName = (await note()).includes(`For ${name}`);
-  await page.keyboard.press("Enter"); await wait(3000);
+  await page.keyboard.press("Enter"); await wait(900);
+  // The chat handed a comment is seen at work on the block it is about (its seat), before it has answered.
+  console.log("the chat's agent is seen at work in the paper (its seat):", await page.evaluate(() => { const seat = document.querySelector(".ui-document-seat"); return seat ? `${seat.textContent} | blocks held: ${document.querySelectorAll(".ui-document-seat-held").length}` : null; }));
+  await wait(2100);
   const named = (await api(`${paper}/markup/open`)).items.filter((one) => one.comments.some((comment) => comment.comment.startsWith("Thread probe: by")));
   extra.push(...named.map((one) => one.id));
   console.log("both went to the chat named, each an item of its own:", forName && named.length === 2 && named.every((one) => one.by === name), JSON.stringify(named.map((one) => [one.by, one.comments[0].comment])));

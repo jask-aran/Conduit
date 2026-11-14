@@ -9,18 +9,17 @@ import { addUnder, blockAt, blockById, blockRange, blockStarts, caretBlockAt, ca
 import { DOCUMENT_TURNABLE, type DocumentBlockKind } from "./host";
 
 type Tool = { name: DocumentBlockKind; label: string; icon: () => JSX.Element; run(): void };
-// Under this, a press on the grip is a press (its menu), not a drag; a touch held still that long on a block opens its menu.
+// Under this, a press on the grip is a press (its menu), not a drag.
 const DRAG_SLOP_PX = 4;
-const HOLD_MS = 500;
 
 /**
- * The block handle: one grip and one "+" in the gutter beside the top-level block the mouse is over. Dragged, the grip moves the block, a line saying
- * where it lands; pressed, it opens what can be done to the block, which a touch held on a block and `openMenu` (the caret's block, the keyboard in
- * it) open too. Followed by its id, so what others write elsewhere leaves it on its block. `hover` is fed the pointer over the sheet's column;
- * `scroller` is the column, whose room left of the text is the gutter. `onAdded`: the block "+" made, to offer the block kinds in.
+ * The block handle: one grip and one "+" in the gutter beside the top-level block the mouse is over, or, after a touch (which has no hover and whose
+ * long press stays the platform's selection), the block holding the caret. Dragged, the grip moves the block, a line saying where it lands; pressed,
+ * it opens what can be done to the block, which `openMenu` (the caret's block, the keyboard in it) opens too.
+ * Followed by its id, so what others write elsewhere leaves it on its block. `hover` is fed the pointer over the sheet's column; `scroller` is the column, whose room left of the text is the gutter. `onAdded`: the block "+" made, to offer the block kinds in.
  */
 export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: readonly Tool[], options: { scroller: Accessor<HTMLElement | undefined>; onComment: () => ((about: Range) => void) | undefined; onAdded: (id: string | undefined) => void }) {
-  const [hovered, setHovered] = createSignal<string | null>(null), [open, setOpen] = createSignal(false), [drop, setDrop] = createSignal<{ to: number; top: number } | null>(null);
+  const [hovered, setHovered] = createSignal<string | null>(null), [open, setOpen] = createSignal(false), [drop, setDrop] = createSignal<{ to: number; top: number } | null>(null), [touched, setTouched] = createSignal(false);
   let handle: HTMLDivElement | undefined, pressing = false, dragging = false, frame = 0, refocus = true;
   const doc = createEditorTransaction(editor, (made) => made?.state.doc);
   const from = createMemo(() => { const id = hovered(), now = doc(); return id && now ? blockById(now, id) : null; });
@@ -34,7 +33,8 @@ export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: r
   });
 
   const hover = (event: PointerEvent | null) => {
-    if (open() || pressing) return;
+    if (event?.pointerType === "mouse") setTouched(false);
+    if (open() || pressing || touched()) return;
     if (!event) { cancelAnimationFrame(frame); return setHovered(null); }
     if (event.pointerType !== "mouse" || handle?.contains(event.target as Node)) return;
     const { clientX, clientY } = event;
@@ -56,27 +56,15 @@ export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: r
   const openOn = (view: EditorView, at: number | null) => { const id = at === null ? null : view.state.doc.nodeAt(at)?.attrs.id; if (!id) return; setHovered(id); setOpen(true); };
   const openMenu = () => { const view = editor()?.view; if (view) openOn(view, caretBlockAt(view)); };
 
-  // A touch held still on a block opens its menu, in place of the one the platform would show.
+  // After a touch the handle follows the caret's block: a tap puts the caret there, and the handle is how its menu is reached.
+  const caret = createEditorTransaction(editor, (made) => { const view = made?.view, at = view ? caretBlockAt(view) : null; return at === null ? null : view!.state.doc.nodeAt(at)?.attrs.id as string | null ?? null; });
+  createEffect(() => { if (touched() && !open()) setHovered(caret()); });
   createEffect(() => {
     const dom = editor()?.view.dom;
     if (!dom) return;
-    let timer = 0, start: { x: number; y: number } | null = null, held = false;
-    const down = (event: PointerEvent) => {
-      if (event.pointerType !== "touch") return;
-      start = { x: event.clientX, y: event.clientY }; held = false;
-      clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        const view = editor()?.view, found = view?.posAtCoords({ left: start!.x, top: start!.y });
-        if (!view || !found) return;
-        held = true;
-        openOn(view, blockAt(view.state.doc, found.inside >= 0 ? found.inside : found.pos));
-      }, HOLD_MS);
-    };
-    const move = (event: PointerEvent) => { if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > DRAG_SLOP_PX) { clearTimeout(timer); start = null; } };
-    const lift = () => { clearTimeout(timer); start = null; };
-    const native = (event: Event) => { if (held || start) event.preventDefault(); };
-    dom.addEventListener("pointerdown", down); dom.addEventListener("pointermove", move); dom.addEventListener("pointerup", lift); dom.addEventListener("pointercancel", lift); dom.addEventListener("contextmenu", native);
-    onCleanup(() => { clearTimeout(timer); dom.removeEventListener("pointerdown", down); dom.removeEventListener("pointermove", move); dom.removeEventListener("pointerup", lift); dom.removeEventListener("pointercancel", lift); dom.removeEventListener("contextmenu", native); });
+    const down = (event: PointerEvent) => setTouched(event.pointerType !== "mouse");
+    dom.addEventListener("pointerdown", down);
+    onCleanup(() => dom.removeEventListener("pointerdown", down));
   });
 
   /** The gap nearest the pointer, and where its line is drawn; none where the block would land where it is. */

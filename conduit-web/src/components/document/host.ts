@@ -13,9 +13,9 @@ export const DOCUMENT_BLOCKS: readonly DocumentBlockKind[] = ["text", "heading-1
 export type DocumentTurnableKind = Exclude<DocumentBlockKind, "table" | "image" | "divider" | "date">;
 export const DOCUMENT_TURNABLE: readonly DocumentTurnableKind[] = ["text", "heading-1", "heading-2", "heading-3", "bullets", "numbers", "checklist", "quote", "callout", "toggle", "code"];
 
-/** A mark the editor can put on the text selected. */
-export type DocumentMarkKind = "bold" | "italic" | "strike" | "code";
-export const DOCUMENT_MARKS: readonly DocumentMarkKind[] = ["bold", "italic", "strike", "code"];
+/** A mark the editor can put on the text selected. `color` and `highlight` each take an ink (document-format.js PAPER_INKS). */
+export type DocumentMarkKind = "bold" | "italic" | "strike" | "code" | "color" | "highlight";
+export const DOCUMENT_MARKS: readonly DocumentMarkKind[] = ["bold", "italic", "strike", "code", "color", "highlight"];
 /** An edit tool: what changes the document itself, as against what marks it up. */
 export type DocumentToolName = DocumentBlockKind | DocumentMarkKind;
 export const DOCUMENT_TOOLS: readonly DocumentToolName[] = [...DOCUMENT_BLOCKS, ...DOCUMENT_MARKS];
@@ -71,8 +71,10 @@ export type DocumentAnchor = { key: string; quote?: string; under?: Record<strin
  * offered, each making the caret's block that kind (`active`: it is that kind now, read where it is drawn). `selection`:
  * the text selected, else the caret's block; null before the editor is made. `marking`: the text marks where the selection is, read where drawn.
  */
+/** An agent at work in the document, as the hub tells it (server/documents.js: a seat): the blocks it holds, what it is doing, and what it is heard writing before the change is made. */
+export type DocumentSeat = { name: string; state: "thinking" | "reading" | "writing"; blocks: string[]; for?: string; op?: "replace" | "insert"; text?: string };
 export type DocumentMarks = {
-  tools(): { name: string; label: string; icon: () => JSX.Element; active: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; run(): void }[];
+  tools(): { name: string; label: string; icon: () => JSX.Element; active: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; compact?: boolean; run(): void }[];
   marking(): DocumentMarking;
   /** What was written here, taken back and put back; `canUndo` and `canRedo` are read where drawn. */
   history: { undo(): boolean; redo(): boolean; canUndo(): boolean; canRedo(): boolean };

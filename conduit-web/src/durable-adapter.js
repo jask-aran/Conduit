@@ -1133,6 +1133,7 @@ export class DurableAdapter extends EventEmitter {
         this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "delta", seq: ++record.generationSeq,
           messageId, contentIndex: change.contentIndex, blockKind: "tool_call", delta: "", name: change.block.name,
           toolKind: toolKind(TOOL_KINDS, change.block.name), ...(change.block.id ? { toolCallId: change.block.id } : {}) });
+        (turn.calls ??= new Map()).set(change.contentIndex, { name: change.block.name, input: "" });
         continue;
       }
       if (change.type === "block" || change.type.endsWith("_start")) { whole(change.contentIndex, change.block); continue; }
@@ -1140,6 +1141,9 @@ export class DurableAdapter extends EventEmitter {
       if (blockKind === "tool_call") {
         if (change.delta) this.publish(record, { type: "assistant_content", generationId: turn.generationId, phase: "delta",
           seq: ++record.generationSeq, messageId, contentIndex: change.contentIndex, blockKind, delta: change.delta });
+        // A tool's input as the model writes it, for a tool whose work the person watches (a paper shows what is being written to it).
+        const call = turn.calls?.get(change.contentIndex);
+        if (call && change.delta) { call.input += change.delta; this.emit("tool_input", { chatId: record.chatId, name: call.name, input: call.input }); }
         continue;
       }
       send(change.contentIndex, blockKind, change.delta);

@@ -1,4 +1,4 @@
-import { mergeAttributes, Node } from "@tiptap/core";
+import { Mark, mergeAttributes, Node } from "@tiptap/core";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
 import { UniqueID } from "@tiptap/extension-unique-id";
@@ -109,16 +109,37 @@ const Day = Node.create({
   renderMarkdown: (node) => node.attrs?.date ?? "",
 });
 
+/** The inks text may wear, named as Markup names them (components/ui/markup.tsx MARKUP_INKS) and never a colour, so each theme draws its own; plain is no mark. */
+export const PAPER_INKS = ["red", "amber", "green", "blue"];
+/**
+ * Text in an ink (`color`, `<span data-color="red">…</span>`) or washed in one (`highlight`, `<mark data-color="amber">…</mark>`). Either with an ink
+ * not in PAPER_INKS is read as its words alone.
+ */
+const inked = (name, tag) => {
+  const token = `paper-${name}`, found = new RegExp(`^<${tag} data-color="([^"<>]*)">([\\s\\S]*?)</${tag}>`);
+  return Mark.create({
+    name,
+    addAttributes: () => ({ ink: { default: null, parseHTML: (element) => element.getAttribute("data-color"), renderHTML: (attrs) => ({ "data-color": attrs.ink }) } }),
+    parseHTML: () => [{ tag: `${tag}[data-color]`, getAttrs: (element) => PAPER_INKS.includes(element.getAttribute("data-color")) && null }],
+    renderHTML: ({ HTMLAttributes }) => [tag, HTMLAttributes, 0],
+    markdownTokenName: token,
+    markdownTokenizer: { name: token, level: "inline", start: (src) => src.indexOf(`<${tag} data-color="`), tokenize: (src, _tokens, lexer) => { const at = found.exec(src); return at ? { type: token, raw: at[0], ink: at[1], tokens: lexer.inlineTokens(at[2]) } : undefined; } },
+    parseMarkdown: (token, h) => PAPER_INKS.includes(token.ink) ? h.applyMark(name, h.parseInline(token.tokens ?? []), { ink: token.ink }) : h.parseInline(token.tokens ?? []),
+    renderMarkdown: (node, h) => `<${tag} data-color="${node.attrs?.ink}">${h.renderChildren(node)}</${tag}>`,
+  });
+};
+
 // No trailing block: an editor that adds one writes it into the hub's copy, once for each page that has the document open.
-export const documentExtensions = () => [StarterKit.configure({ undoRedo: false, trailingNode: false, link: { openOnClick: false } }), TaskList, TaskItem.configure({ nested: true }), TableKit, Image, Callout, Toggle, Day, UniqueID.configure({ types: BLOCK_TYPES, generateID: blockId })];
+export const documentExtensions = () => [StarterKit.configure({ undoRedo: false, trailingNode: false, link: { openOnClick: false } }), TaskList, TaskItem.configure({ nested: true }), TableKit, Image, Callout, Toggle, Day, inked("color", "span"), inked("highlight", "mark"), UniqueID.configure({ types: BLOCK_TYPES, generateID: blockId })];
 
 /*
  * The live socket (/v0/document/<id>/live) carries binary frames, the first byte saying which: `have` is a Yjs state
  * vector ("this is what I hold: send what I lack") and `update` a Yjs update. A text frame is the client naming itself,
  * { client, name, format }, which it sends first; the hub answers with `have`, then each side answers one with an update
- * and sends each change as it is made. `format` is FORMAT: an editor built for another drops the blocks it cannot draw
- * and writes that back, so the hub lets in only this one.
+ * and sends each change as it is made. `format` is FORMAT: an editor built for another drops the blocks, and the text in marks,
+ * it cannot draw and writes that back, so the hub lets in only this one.
  */
-export const FORMAT = 2;
-export const FRAME = { have: 0, update: 1 };
+export const FORMAT = 3;
+/** `seats` is not Yjs: its bytes are JSON, the agents at work in the document now (server/documents.js: a seat), told whole each time one changes and never kept. */
+export const FRAME = { have: 0, update: 1, seats: 2 };
 export const frame = (kind, bytes) => { const out = new Uint8Array(bytes.length + 1); out[0] = kind; out.set(bytes, 1); return out; };

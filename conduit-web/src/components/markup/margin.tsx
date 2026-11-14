@@ -19,8 +19,10 @@ export type MarkupMarginControl = { open(): number; next(): void; previous(): vo
  * host mounts it where its margin is and says through `host.margin` where each comment's place is. Where the host has
  * no room beside (it has put this under what is marked, as on a phone) the cards are a list in the order of their places.
  * `sent` changing asks for the threads at once: the host changes it when the tool has sent. `control` is handed what the host can do with it (MarkupMarginControl).
+ * `onCards` is told how many cards stand in it, sent or waiting, each time they are laid out and before they are measured: a host whose margin takes no room
+ * while it is empty makes that room then, so the first card is laid out beside the text.
  */
-export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?: (control: MarkupMarginControl) => void }) {
+export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?: (control: MarkupMarginControl) => void; onCards?: (count: number) => void }) {
   const host = props.host, transport = host.transport, margin = host.margin;
   const [held, setHeld] = createStore<{ items: MarkupThread[] }>({ items: [] });
   const [openKey, setOpenKey] = createSignal<string | null>(null), [reply, setReply] = createSignal(""), [beside, setBeside] = createSignal(false);
@@ -44,6 +46,7 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
   const lay = () => {
     due = 0;
     if (!column) return;
+    props.onCards?.(column.children.length + waiting.size);
     const box = column.getBoundingClientRect(), gap = parseFloat(getComputedStyle(column).rowGap) || 0;
     const cards = [
       ...([...column.children] as HTMLElement[]).map((card) => ({ want: margin?.place(card.dataset.key ?? "")?.top ?? null, height: () => card.offsetHeight,

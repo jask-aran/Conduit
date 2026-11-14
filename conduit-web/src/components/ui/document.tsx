@@ -1,4 +1,4 @@
-import { BetweenHorizontalEndIcon, BetweenVerticalEndIcon, BoldIcon, CalendarIcon, ChevronRightIcon, CodeIcon, ExternalLinkIcon, Grid2x2XIcon, GripVerticalIcon, Heading1Icon, Heading2Icon, Heading3Icon, ImageIcon, ImageOffIcon, InfoIcon, ItalicIcon, LinkIcon, ListChecksIcon, ListCollapseIcon, ListIcon, ListOrderedIcon,
+import { BaselineIcon, BetweenHorizontalEndIcon, BetweenVerticalEndIcon, BoldIcon, CalendarIcon, ChevronRightIcon, CodeIcon, ExternalLinkIcon, Grid2x2XIcon, GripVerticalIcon, Heading1Icon, Heading2Icon, Heading3Icon, HighlighterIcon, ImageIcon, ImageOffIcon, InfoIcon, ItalicIcon, LinkIcon, ListChecksIcon, ListCollapseIcon, ListIcon, ListOrderedIcon,
   MessageSquarePlusIcon, MinusIcon, PencilIcon, PilcrowIcon, StrikethroughIcon, TableColumnsSplitIcon, TableIcon, TableRowsSplitIcon, TextQuoteIcon, TriangleAlertIcon, UnlinkIcon } from "lucide-solid";
 import { For, Show, splitProps, type JSX } from "solid-js";
 // Through the barrel, as markup.tsx does, so the editor's chunk takes the header from the app's own.
@@ -13,6 +13,8 @@ export const documentTextClass = "ui-answer ui-document-text";
 /** What marks in a document's text wear: a run of text a comment is about, a block one is about, a block an agent changed that is not yet accepted, and what stands where a block was deleted. */
 export const documentMarkClass = { comment: "ui-document-comment", commented: "ui-document-commented", changed: "ui-document-changed", removed: "ui-document-removed" };
 /** What the editor draws over its own text: an `@name` (a chip that shows what it asked), a match of find and the current one, a block just revealed. */
+/** An agent at work (a seat): the blocks it holds, its name and what it is doing, and what it is heard writing. */
+export const documentSeatClass = { held: "ui-document-seat-held", label: "ui-document-seat", writing: "ui-document-seat-writing" };
 export const documentDrawClass = { mention: "ui-document-mention", match: "ui-document-match", currentMatch: "ui-document-match-current", revealed: "ui-document-revealed" };
 
 /** Each kind of block's icon. Here, not in the library's icons, so only the editor's chunk carries them. */
@@ -21,7 +23,7 @@ export const documentBlockIcons = { text: PilcrowIcon, "heading-1": Heading1Icon
 export const documentToneIcons = { note: InfoIcon, warning: TriangleAlertIcon };
 
 /** What can be done to the text selected (its marks, a link, a comment) and to the table the caret is in. */
-export const documentToolIcons = { bold: BoldIcon, italic: ItalicIcon, strike: StrikethroughIcon, code: CodeIcon, link: LinkIcon, unlink: UnlinkIcon, open: ExternalLinkIcon, edit: PencilIcon, comment: MessageSquarePlusIcon,
+export const documentToolIcons = { bold: BoldIcon, italic: ItalicIcon, strike: StrikethroughIcon, code: CodeIcon, color: BaselineIcon, highlight: HighlighterIcon, link: LinkIcon, unlink: UnlinkIcon, open: ExternalLinkIcon, edit: PencilIcon, comment: MessageSquarePlusIcon,
   grip: GripVerticalIcon, "row-below": BetweenHorizontalEndIcon, "column-right": BetweenVerticalEndIcon, "delete-row": TableRowsSplitIcon, "delete-column": TableColumnsSplitIcon, "delete-table": Grid2x2XIcon };
 
 /** An empty paragraph's hint, its words in `data-hint`; `data-empty`: the document holds nothing else, so it shows without the caret. */
@@ -38,14 +40,14 @@ export type DocumentWidth = "narrow" | "wide" | "full";
 /** A Conduit document on its page: its bar (its name, how its copy stands with the hub's when that needs saying, what can be done to it) over one reading column that scrolls;
  *  `ref` is where its text goes. `head`: what stands over the text (DocumentHead), `foot` under it (DocumentCount); `over`: what floats beside its blocks
  *  (DocumentHandle, DocumentDropLine, DocumentTableEdges), placed from the top of the text's column. `onHover`: the pointer over the column, null as it leaves.
- *  `margin`: what stands beside the text (its comments), and under it where the page is too narrow for both. `bare`: it is in a pane, whose header is its bar.
+ *  `margin`: what stands beside the text (its comments), and under it where the page is too narrow for both; `marginEmpty`: it holds nothing now, so it takes no room and the text stands centred. `bare`: it is in a pane, whose header is its bar.
  *  `width`: how wide the text runs (narrow, unsaid). `find`: a DocumentFind, at the sheet's top right. `scroller`: the element that scrolls. */
-export function DocumentSheet(props: { ref?: (element: HTMLDivElement) => void; name: string; state?: string; actions?: JSX.Element; margin?: JSX.Element; bare?: boolean; head?: JSX.Element; foot?: JSX.Element; over?: JSX.Element;
+export function DocumentSheet(props: { ref?: (element: HTMLDivElement) => void; name: string; state?: string; actions?: JSX.Element; margin?: JSX.Element; marginEmpty?: boolean; bare?: boolean; head?: JSX.Element; foot?: JSX.Element; over?: JSX.Element;
   width?: DocumentWidth; find?: JSX.Element; scroller?: (element: HTMLDivElement) => void; onHover?: (event: PointerEvent | null) => void; children?: JSX.Element }) {
   return <section class="ui-document" aria-label={props.name} data-bare={props.bare ? "" : undefined} data-width={props.width ?? "narrow"}>
     <Show when={!props.bare}><PaneHeader kind="tool" name={props.name} place={props.state} actions={props.actions} /></Show>
     {props.find}
-    <div ref={props.scroller} class="ui-document-column" onPointerMove={(event) => props.onHover?.(event)} onPointerLeave={() => props.onHover?.(null)}><div class="ui-document-page">
+    <div ref={props.scroller} class="ui-document-column" onPointerMove={(event) => props.onHover?.(event)} onPointerLeave={() => props.onHover?.(null)}><div class="ui-document-page" data-margin={props.marginEmpty ? "none" : undefined}>
       <div class="ui-document-body">{props.head}<div ref={props.ref} class="ui-document-content">{props.children}</div>{props.over}{props.foot}</div>
       <Show when={props.margin}><aside class="ui-document-margin" aria-label="Comments">{props.margin}</aside></Show>
     </div></div>

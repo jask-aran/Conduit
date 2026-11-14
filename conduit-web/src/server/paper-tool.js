@@ -48,7 +48,7 @@ export function PaperTool(runtime) {
         const paper = args.paper ?? (mine.papers.length === 1 ? mine.papers[0].id : null);
         if (!paper) throw new Error(mine.papers.length ? `Say which paper: this chat is connected to ${mine.papers.map((one) => one.id).join(", ")}.` : "Say which paper (`list` gives ids).");
         const by = mine.papers.find((one) => one.id === paper)?.as ?? "agent";
-        if (args.action === "read") return text(await documents.read(paper));
+        if (args.action === "read") { void documents.seat(paper, by, { state: "reading" }); return text(await documents.read(paper)); }
         if (args.action === "set") return text(`Its properties: ${JSON.stringify((await documents.edit(paper, { op: "set", block: args.name, markdown: args.text ?? "", by })).properties)}`);
         if (args.action === "replace" || args.action === "insert" || args.action === "delete") {
           const { blocks } = await documents.edit(paper, { op: args.action, block: args.block, markdown: args.markdown, by, for: args.for });

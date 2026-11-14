@@ -9,7 +9,8 @@
 .ui-document-page { display: flex; min-height: 100%; flex-wrap: wrap; justify-content: center; gap: var(--space-2xl); }
 .ui-document-body { position: relative; display: flex; min-width: 0; max-width: var(--document-width); flex: 1 1 var(--document-width); flex-direction: column; }
 .ui-document-content { display: flex; min-width: 0; flex: 1; flex-direction: column; }
-.ui-document-margin { max-width: 100%; flex: 0 0 var(--measure-md); }
+/* `min-width: 0`: a card whose quote is one long line is cut short in the margin, and never widens it past the row. */
+.ui-document-margin { min-width: 0; max-width: 100%; flex: 0 0 var(--measure-md); }
 .ui-document-text { box-sizing: border-box; flex: 1; outline: 0; }
 .ui-document-comment { border-radius: var(--radius-inset); background: color-mix(in oklch, var(--status-warn), transparent 78%); cursor: pointer; }
 .ui-document-comment[data-current] { background: color-mix(in oklch, var(--status-warn), transparent 55%); }
@@ -37,6 +38,13 @@
 .ui-document-text ul[data-type="taskList"] > li > label { display: flex; height: 1lh; flex: none; align-items: center; }
 .ui-document-text input[type="checkbox"] { width: var(--icon); height: var(--icon); margin: 0; accent-color: var(--primary); cursor: pointer; }
 .ui-document-text li[data-checked="true"] > div { color: var(--muted-foreground); }
+/* Text in an ink or washed in one (document-format.js PAPER_INKS), each ink the token Markup's of that name is (MARKUP_INKS). */
+.ui-document-text :is(span, mark)[data-color="red"] { --document-ink: var(--destructive); }
+.ui-document-text :is(span, mark)[data-color="amber"] { --document-ink: var(--status-warn); }
+.ui-document-text :is(span, mark)[data-color="green"] { --document-ink: var(--status-success); }
+.ui-document-text :is(span, mark)[data-color="blue"] { --document-ink: var(--status-unread); }
+.ui-document-text span[data-color] { color: var(--document-ink); }
+.ui-document-text mark[data-color] { border-radius: var(--radius-inset); background: color-mix(in oklch, var(--document-ink), transparent 72%); color: inherit; }
 /* An answer's table scrolls inside itself; an edited one fills the column in the wrapper ProseMirror gives it, which scrolls. The room above it
    holds its tools while the caret is in it, so they never stand over the block above. */
 .ui-document-text .tableWrapper { overflow-x: auto; padding-top: var(--control-tool); }
@@ -108,3 +116,12 @@
 .ui-document-starts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-top: var(--space-md); }
 .ui-document-starts[data-placed] { position: absolute; right: 0; left: 0; }
 .ui-document-starts-note { flex-basis: 100%; margin: 0; color: var(--muted-foreground); font-size: var(--text-row); }
+/* An agent at work: its blocks washed in the accent and breathing while it thinks, its name over the first, and what it is writing under the block, quiet until it is the paper's. */
+.ui-document-text > .ui-document-seat-held { border-radius: var(--radius-inset); box-shadow: 0 0 0 var(--space-xs) var(--tint); background: var(--tint); }
+.ui-document-text > .ui-document-seat-held:not([data-seat="reading"]) { animation: ui-document-seat var(--duration-breathe) var(--ease-change) infinite alternate; }
+@keyframes ui-document-seat { to { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .ui-document-text > .ui-document-seat-held { animation: none; } }
+.ui-document-seat { margin-block: var(--space-sm) var(--space-2xs); color: var(--muted-foreground); font-size: var(--text-caption); user-select: none; }
+.ui-document-seat-writing { margin-block: var(--space-sm); border-inline-start: var(--stroke-thin) solid var(--border); padding-inline-start: var(--space-md); color: var(--muted-foreground); white-space: pre-wrap; }
+/* A margin with no comment in it takes no room, so the text stands centred in the column. */
+.ui-document-page[data-margin="none"] > .ui-document-margin { display: none; }

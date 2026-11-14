@@ -1,7 +1,7 @@
 import { createSignal, type JSX } from "solid-js";
-import { Button, IconButton, Icons } from "@/components/ui";
+import { Button, IconButton, Icons, Segmented, Swatch } from "@/components/ui";
 import { DocumentAddress, DocumentCount, DocumentDate, DocumentDropLine, DocumentField, DocumentFind, DocumentFold, DocumentHandle, DocumentHead, DocumentImage, DocumentOutline, DocumentProperty, DocumentSheet, DocumentStarts, DocumentTableEdges, DocumentTitle, DocumentToneMark, DocumentTools, documentBlockClass, documentDrawClass, documentHintClass, documentMarkClass, documentTextClass, documentToolIcons as Tools } from "@/components/ui/document"; // Comes with the editor: imported on its own, never from the barrel
-import { MarkupMarginNotes, MarkupNote } from "@/components/ui/markup";
+import { MARKUP_INKS, MarkupMarginNotes, MarkupNote } from "@/components/ui/markup";
 import { row, type Page } from "../model";
 import { noop } from "../demos";
 
@@ -52,8 +52,12 @@ const starts = (note?: string) => drawn(<><p class={documentHintClass} data-hint
   <DocumentStarts note={note}><Button variant="ghost" size="sm"><Icons.Agent />Ask @conduit to draft…</Button><Button variant="ghost" size="sm"><Icons.Paste />Paste Markdown</Button></DocumentStarts></>);
 
 const tools = () => <DocumentTools label="Format">
-  <IconButton label="Bold" aria-pressed><Tools.bold /></IconButton><IconButton label="Italic"><Tools.italic /></IconButton><IconButton label="Strikethrough"><Tools.strike /></IconButton><IconButton label="Code"><Tools.code /></IconButton><IconButton label="Link"><Tools.link /></IconButton><IconButton label="Comment"><Tools.comment /></IconButton>
+  <IconButton label="Bold" aria-pressed><Tools.bold /></IconButton><IconButton label="Italic"><Tools.italic /></IconButton><IconButton label="Strikethrough"><Tools.strike /></IconButton><IconButton label="Code"><Tools.code /></IconButton><IconButton label="Text colour" aria-pressed><Tools.color /></IconButton><IconButton label="Highlight"><Tools.highlight /></IconButton><IconButton label="Link"><Tools.link /></IconButton><IconButton label="Comment"><Tools.comment /></IconButton>
 </DocumentTools>;
+
+const INKS = (["red", "amber", "green", "blue"] as const).map((value) => ({ value, label: MARKUP_INKS[value].label, icon: <Swatch colour={MARKUP_INKS[value].colour} /> }));
+const inks = () => <>{drawn(<p>The ferry leaves at <span data-color="red">09:40 sharp</span>; <mark data-color="amber">bring the passports</mark>, and <mark data-color="green"><span data-color="blue">both</span></mark> at once.</p>)}
+  <DocumentTools label="Text colour"><Segmented label="Text colour" icons size="sm" value="red" onChange={noop} options={[{ value: "none", label: "No colour", icon: <Swatch hollow /> }, ...INKS]} /></DocumentTools></>;
 
 export const documentPage: Page = {
   title: "Document",
@@ -81,6 +85,7 @@ export const documentPage: Page = {
     row("starting points", "Under a new, empty paper's hint: ask the paper's agent to draft it (where it can be asked), or paste Markdown, which becomes blocks; gone at the first edit", () => starts(), { code: "<DocumentStarts top>", surfaces: ["ground"] }),
     row("starting points, pasting refused", "Where the clipboard cannot be read, the line says how to paste instead", () => starts("Press Ctrl+V to paste: Markdown becomes blocks"), { code: "<DocumentStarts note>", surfaces: ["ground"] }),
     row("link tools", "With the caret in a link: its address, Open, Edit (the address asked for in place) and Remove", link, { code: "<DocumentTools><DocumentAddress href>", surfaces: ["frost"] }),
+    row("text colour and highlight", "Text in one of Markup's inks, or washed in one; in Markdown <span data-color> and <mark data-color>. Text colour and Highlight in the selection tools each ask for the ink in place of the buttons (None takes it off); on the ribbon each is a menu of the inks", inks, { code: "document-format.js PAPER_INKS · <Segmented icons> of <Swatch>", surfaces: ["ground"] }),
     row("selection tools", "Clear above the lines selected, in a popover (under them where there is no room above): its marks, pressed where the selection wears them, a link and a comment. A link's address is asked for in place of the buttons", tools, { code: "<DocumentTools label>", surfaces: ["frost"] }),
   ],
   api: ["DocumentSheet", "DocumentImage", "DocumentToneMark", "DocumentFold", "DocumentDate", "DocumentStarts", "DocumentHead", "DocumentTitle", "DocumentProperty", "DocumentField", "DocumentCount", "DocumentHandle", "DocumentDropLine", "DocumentTools", "DocumentAddress", "DocumentTableEdges", "DocumentOutline", "DocumentFind", "MarkupMarginNotes", "MarkupNote"],

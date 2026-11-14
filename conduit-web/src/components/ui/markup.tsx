@@ -133,19 +133,22 @@ const TOOLS: ReadonlyArray<{ value: MarkupToolKind | "note"; label: string; icon
   { value: "shape", label: "Shape: line, arrow or box (S)", icon: () => <Icons.Shapes /> }, { value: "text", label: "Text (T)", icon: () => <Icons.DrawText /> },
   { value: "erase", label: "Eraser (E)", icon: () => <Icons.Erase /> }, { value: "note", label: "General note (N)", icon: () => <Icons.Note /> },
 ];
-/** Use the app, or annotate: the live page, or a screenshot of it. */
+/** Use the app (no tool held), or annotate: the live page, or a screenshot of it. */
 export type MarkupView = "use" | "page" | "screenshot";
+const VIEWS: ReadonlyArray<{ value: MarkupView; label: string; icon: () => JSX.Element }> = [
+  { value: "page", label: "Annotate the live page", icon: () => <Icons.Feedback /> }, { value: "screenshot", label: "Annotate a screenshot", icon: () => <Icons.Image /> },
+];
 
 /** A host's own tool in the bar, read where it is drawn (so a getter follows). `menu`: on the ribbon, those of one menu stand as one control under that name, `active` the one
  *  that is so now. A tool of no menu is a toggle, `pressed` while it is on (a mark the selection wears; unsaid, `active`). `disabled`: not to be done here.
  *  `keys`: its shortcut, as its tooltip says it. */
-export type MarkupOwnTool = { name: string; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; run: () => void };
+export type MarkupOwnTool = { name: string; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; /** Its menu's control shows the icon alone (a swatch says its colour). */ compact?: boolean; run: () => void };
 
 const named = (label: string, keys?: readonly string[]) => keys?.length ? `${label} (${keys.join(" ")})` : label;
 /** How far the ribbon has folded to fit its frame: 1 drops the captions, 2 makes the edit set one Format menu, 3 Markup's tools one Annotate menu too. */
 const FOLDS = 3;
 
-/** The tool's bar, at the foot: its mode (`view`; `keys` is the chord that goes to the app and back; Screenshot only where the client can take one);
+/** The tool's bar, at the foot: what is annotated (`view`: the live page or a screenshot, offered only where the client can take one);
  *  the annotating tools, with a general note among them and neither Select on a screenshot, which has nothing under it to select; beside them
  *  the ink and thickness the next drawing is in (`picking`: their popover is open), and Undo, both left to the keyboard and the eraser on a phone; a new screenshot while
  *  one is looked at; the listening session the item is handed to (`agent`, none when no session listens; `heard` false until the receiver has said who listens); Send and close. `compact`: icons alone,
@@ -155,21 +158,17 @@ const FOLDS = 3;
  *  `outstanding`: how many comments Send would deliver; `standing`: where the item they have gone to stands, once some have.
  *  `ribbon`: it stands at the head of the frame and is always there: the host's tools (its edit set) are a bar of their own beside Markup's, each captioned, whatever the mode (one pressed while annotating goes back to using the app), what a tool draws with stands under it, and it has no close.
  *  The two stay on one line: where the frame is narrower than they need (measured), the captions go, then the edit set folds into one Format menu, then Markup's tools into one Annotate menu; the agent and Send stay.
- *  The ribbon has no "Use the app": the app is in use while no tool is held, a tool pressed is held, and pressed again is let go. It has no "Ask the agent" either: on a paper `@`, the tools over a selection and a block's menu each start that comment.
+ *  Neither form has a "Use the app": the app is in use while no tool is held, a tool pressed is held, and pressed again is let go (on the foot, a view pressed again too). The ribbon has no "Ask the agent" either: on a paper `@`, the tools over a selection and a block's menu each start that comment.
  *  On the ribbon what is sent is always handed on, so who it goes to is said and not a choice to turn off; Undo and Redo work while the app is in use (the tool decides whose history they step).
  *  `own`: the host's own tools (a document's block kinds), `onOwn` told as one is pressed, and `onAsk` a comment about where the surface's selection or caret is: a rail above the bar while the app is in use. */
-export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnTool[]; onOwn?: () => void; onAsk?: () => void; ribbon?: boolean; screenshots?: boolean; onView: (view: MarkupView) => void; tools?: readonly (MarkupToolKind | "note")[]; tool: MarkupToolKind; onTool: (tool: MarkupToolKind) => void; onNote: () => void; outstanding?: number; standing?: string; thin?: boolean; thread?: boolean; onBack?: () => void; replies?: number; sent?: number; onReplies?: () => void; ink?: MarkupInk; onInk?: (ink: MarkupInk) => void; weight?: MarkupWeight; onWeight?: (weight: MarkupWeight) => void; shape?: MarkupShape; onShape?: (shape: MarkupShape) => void; onUndo?: () => void; onRedo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; heard?: boolean; onNextAgent?: () => void; keys?: string[]; onRetake?: () => void;
+export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnTool[]; onOwn?: () => void; onAsk?: () => void; ribbon?: boolean; screenshots?: boolean; onView: (view: MarkupView) => void; tools?: readonly (MarkupToolKind | "note")[]; tool: MarkupToolKind; onTool: (tool: MarkupToolKind) => void; onNote: () => void; outstanding?: number; standing?: string; thin?: boolean; thread?: boolean; onBack?: () => void; replies?: number; sent?: number; onReplies?: () => void; ink?: MarkupInk; onInk?: (ink: MarkupInk) => void; weight?: MarkupWeight; onWeight?: (weight: MarkupWeight) => void; shape?: MarkupShape; onShape?: (shape: MarkupShape) => void; onUndo?: () => void; onRedo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; heard?: boolean; onNextAgent?: () => void; onRetake?: () => void;
   canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void }) {
   const using = () => props.view === "use";
-  const views = (): Array<{ value: MarkupView; label: string; icon: JSX.Element }> => [
-    { value: "use", label: `Use the app${props.keys?.length ? ` (${props.keys.join(" ")})` : ""}`, icon: <Icons.UseApp /> }, { value: "page", label: "Annotate the live page", icon: <Icons.Feedback /> },
-    ...(props.screenshots ? [{ value: "screenshot" as const, label: "Annotate a screenshot", icon: <Icons.Image /> }] : []),
-  ];
   // What the chosen tool draws with stands over the bar while that tool is held, so the bar itself stays the tools.
   const inks = () => OPTIONED.includes(props.tool) ? props.onInk : undefined, lined = () => props.tool !== "text" && inks() ? props.onWeight : undefined;
   const [own, setOwn] = createSignal<MarkupInk>(props.ink?.startsWith("#") ? props.ink : "#ff3b9a");
   const [picking, setPicking] = createSignal(false);
-  const offered = () => TOOLS.filter((option) => (!props.tools || props.tools.includes(option.value)) && !(props.compact && option.wide)).map((option) => ({ value: option.value, label: option.label, icon: option.icon() }));
+  const offered = () => TOOLS.filter((option) => (!props.tools || props.tools.includes(option.value)) && !(props.compact && option.wide) && (props.view !== "screenshot" || !(option.value === "select" || option.value === "quote"))).map((option) => ({ value: option.value, label: option.label, icon: option.icon() }));
   const options = () => !props.thread && !using() && (OPTIONED.includes(props.tool) || props.tool === "erase") && (inks() || props.compact);
   const press = (tool: MarkupOwnTool) => { if (!using()) props.onView("use"); props.onOwn?.(); tool.run(); };
   // On the ribbon the tools of one `menu` are one control, which shows the one that is so now.
@@ -181,8 +180,8 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   // Each choice is drawn unseen in the control's own cell, so it is as wide as the widest and the bars hold still as the caret moves.
   const kinds = (menu: string) => { const now = () => of(menu).find((tool) => tool.active) ?? of(menu)[0]!; return <DropdownMenu modal={false} placement="bottom-start">
     <span class="ui-markup-steady">
-      <MenuControl as={Button} variant="ghost" size="sm" aria-label={menu} title={menu}>{now().icon()}{now().label}<Icons.ChevronDown /></MenuControl>
-      <For each={of(menu)}>{(tool) => <Button variant="ghost" size="sm" aria-hidden="true" tabIndex={-1}>{tool.icon()}{tool.label}<Icons.ChevronDown /></Button>}</For>
+      <MenuControl as={Button} variant="ghost" size="sm" aria-label={menu} title={menu}>{now().icon()}{now().compact ? null : now().label}<Icons.ChevronDown /></MenuControl>
+      <For each={of(menu)}>{(tool) => <Button variant="ghost" size="sm" aria-hidden="true" tabIndex={-1}>{tool.icon()}{tool.compact ? null : tool.label}<Icons.ChevronDown /></Button>}</For>
     </span>
     <MenuContent width="sm"><MenuSection title={menu}><For each={of(menu)}>{(tool) => choice(tool)}</For></MenuSection></MenuContent>
   </DropdownMenu>; };
@@ -254,15 +253,12 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     <Show when={props.thread && props.onBack}><IconButton label="Back to marking up" onClick={props.onBack}><Icons.Back /></IconButton></Show>
     <Show when={!props.thread}>
       {caption("Mark up")}
-      {/* With no screenshot to be had there are two modes, and one control says which. */}
-      <Show when={!props.ribbon}><Show when={props.screenshots} fallback={<IconButton label={views()[0]!.label} aria-pressed={using()} onClick={() => props.onView(using() && !props.ribbon ? "page" : "use")}><Icons.UseApp /></IconButton>}>
-        <Segmented label="Mode" icons size="sm" value={props.view} onChange={props.onView} options={views()} />
-      </Show></Show>
-      <Show when={props.ribbon}><Show when={fold() < FOLDS} fallback={annotate()}>
+      {/* With no screenshot to be had, a tool is all it takes to annotate the live page. */}
+      <Show when={!props.ribbon && props.screenshots}><span class="ui-markup-with" role="group" aria-label="Mode"><For each={VIEWS}>{(option) =>
+        <IconButton label={option.label} aria-pressed={props.view === option.value} onClick={() => props.onView(props.view === option.value ? "use" : option.value)}>{option.icon()}</IconButton>}</For></span></Show>
+      <Show when={fold() < FOLDS} fallback={annotate()}>
         <span class="ui-markup-with" role="group" aria-label="Annotate with"><For each={offered()}>{(option) => <IconButton label={option.label} aria-pressed={!using() && option.value === props.tool} onClick={() => pick(option)}>{option.icon}</IconButton>}</For></span>
-      </Show></Show>
-      <Show when={!props.ribbon}><span class="ui-markup-with" onClick={() => { if (using()) props.onView("page"); }}><Segmented label="Annotate with" icons size="sm" value={props.tool} onChange={(tool) => tool === "note" ? props.onNote() : props.onTool(tool)}
-        options={TOOLS.filter((option) => (!props.tools || props.tools.includes(option.value)) && !(props.compact && option.wide) && (props.view !== "screenshot" || (option.value !== "select" && option.value !== "quote"))).map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} /></span></Show>
+      </Show>
     </Show>
     <Show when={!props.thread && !props.compact && !(props.ribbon && fold() >= FOLDS)}><span class="ui-markup-with">{undo()}{redo()}</span></Show>
     <Show when={props.status && (props.thread || !(props.compact || props.ribbon))}><span class="ui-markup-status">{props.status}</span></Show>
