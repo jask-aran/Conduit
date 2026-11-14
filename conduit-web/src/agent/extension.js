@@ -16,7 +16,9 @@ import { RoutineTools } from "./routines.js";
 /** A part reaches the agent as `runtime.agent` at call time: the server makes it after the runtime. */
 export function AgentExtension(runtime, installed) {
   const schedules = ScheduleTools(runtime);
-  const parts = [MemoryTools(runtime), schedules, EventTools(runtime), ChatTools(runtime), InboxTools(runtime), MessageTools(runtime), FeedTools(runtime, schedules), RoutineTools(runtime), MailTools(runtime)];
+  const parts = [MemoryTools(runtime), schedules, EventTools(runtime), ChatTools(runtime), InboxTools(runtime), MessageTools(runtime), FeedTools(runtime, schedules), RoutineTools(runtime)];
+  // Off while the mail pane is finished: the person's Gmail stays with Executor for now. CONDUIT_AGENT_MAIL=1 turns it on to try.
+  if (process.env.CONDUIT_AGENT_MAIL === "1") parts.push(MailTools(runtime));
   const own = parts.flatMap((part) => part.tools || []);
   return defineExtension({
     name: "agent",
