@@ -390,14 +390,15 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     if (done && !done.sent && !done.whole && done.comment.trim()) posting = posting.then(() => send(done.id));
   };
   /** Selected text is a comment about the piece it is in. */
-  const addQuote = (range: Range, to?: string) => {
+  const addQuote = (range: Range, to?: string, words?: string) => {
     const text = quoted(range);
     // Asked of someone in a block with no text yet (a paper's `@` on an empty line), it is a comment about that block.
     if (!text && !to) return;
     const holder = range.commonAncestorContainer instanceof Element ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
     const id = nextId++;
-    keep(); setSelections(selections.length, { id, elements: placed([(text && pieceRoot(holder)) || holder || document.body]), comment: "", on: "page", ...(text ? { quote: { range, text } } : {}), ...(to ? { to } : {}) });
-    openNote(id);
+    keep(); setSelections(selections.length, { id, elements: placed([(text && pieceRoot(holder)) || holder || document.body]), comment: words ?? "", on: "page", ...(text && !words ? { quote: { range, text } } : {}), ...(to ? { to } : {}) });
+    // Asked with its words (a paper's `@`): sent as it is, with no card to finish.
+    if (words) posting = posting.then(() => send(id)); else openNote(id);
   };
   const add = (elements: Element[], drag?: MarkupBox) => {
     const id = nextId++;

@@ -8,13 +8,19 @@
 /* The text, and the margin beside it. The margin wraps under the text at the width where the two no longer fit side by side, which is the text's own measure and the margin's. */
 .ui-document-page { display: flex; min-height: 100%; flex-wrap: wrap; justify-content: center; gap: var(--space-2xl); }
 /* The text gives up width before the margin goes under it: it wraps only where the text at its narrowest measure and the margin no longer fit side by side. */
-.ui-document-body { position: relative; display: flex; min-width: 0; max-width: var(--document-width); flex: 1 1 var(--measure-xl); flex-direction: column; }
+/* The paper is a sheet on the pane: darker than the ground round it, so its width is seen. */
+.ui-document-body { position: relative; display: flex; min-width: 0; max-width: calc(var(--document-width) + 2 * var(--space-4xl)); flex: 1 1 var(--measure-xl); flex-direction: column; border-radius: var(--radius-surface); background: var(--well); padding: var(--space-2xl) var(--space-4xl); }
+.ui-document[data-width="full"] .ui-document-body { max-width: 100%; }
 .ui-document-content { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 /* `min-width: 0`: a card whose quote is one long line is cut short in the margin, and never widens it past the row. */
 .ui-document-margin { min-width: 0; max-width: 100%; flex: 0 0 var(--measure-md); }
 .ui-document-text { box-sizing: border-box; flex: 1; outline: 0; }
 .ui-document-comment { border-radius: var(--radius-inset); background: color-mix(in oklch, var(--status-warn), transparent 78%); cursor: pointer; }
 .ui-document-comment[data-current] { background: color-mix(in oklch, var(--status-warn), transparent 55%); }
+/* Asking where the caret is: as wide as a line of the text can use, the words growing down. */
+.ui-document-ask { display: flex; width: var(--measure-xl); max-width: 100%; align-items: flex-start; gap: var(--space-sm); padding: var(--space-xs); }
+.ui-document-ask > .ui-document-mention { flex: none; cursor: default; line-height: var(--control-sm); }
+.ui-document-ask > .ui-textarea { min-width: 0; flex: 1; padding-block: var(--space-xs); }
 .ui-document-mention { border-radius: var(--radius-inset); background: var(--tint); padding-inline: var(--space-2xs); cursor: pointer; }
 .ui-document-match { border-radius: var(--radius-inset); background: var(--border); }
 .ui-document-match-current { background: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); color: var(--background); }

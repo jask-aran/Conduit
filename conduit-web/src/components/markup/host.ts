@@ -161,7 +161,7 @@ export interface MarkupHost {
   /** What a comment asked for from that rail is about: the surface's selection, or where its caret is; null when there is neither. */
   asking?(): Range | null;
   /** Given, as the tool opens (null as it closes), who is listening and opening a comment on a range for one of them: for a surface that asks itself (a paper's `@`). */
-  asks?(offer: { names(): string[]; ask(about: Range, to?: string): void } | null): void;
+  asks?(offer: { names(): string[]; ask(about: Range, to?: string, words?: string): void } | null): void;
   /** Told when comments have gone, where something other than the tool shows them. */
   sent?(): void;
   notify(outcome: "sent" | "failed", message: string): void;

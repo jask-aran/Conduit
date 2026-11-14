@@ -9,8 +9,9 @@ import { lateSync, settle } from "./sync";
 import { redo, undo, ySyncPlugin, yUndoPlugin, yUndoPluginKey } from "y-prosemirror";
 import type { Doc, Map as YMap, XmlFragment } from "yjs";
 import { Button, Icons } from "@/components/ui";
+import { Popover, PopoverContent } from "@/components/ui/menus";
 import { MARKUP_INKS } from "@/components/ui/markup";
-import { DocumentCount, DocumentSeatJump, DocumentSheet, DocumentStarts, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons, documentWritingIcons, type DocumentWidth } from "@/components/ui/document";
+import { DocumentAsk, DocumentCount, DocumentSeatJump, DocumentSheet, DocumentStarts, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons, documentWritingIcons, type DocumentWidth } from "@/components/ui/document";
 import { CHANGES, FRAGMENT, PROPERTIES, documentExtensions, isSuggestion } from "@/document-format.js";
 import { blockById, blockKeys, caretBlockAt, shiftBlock } from "./blocks";
 import { drawn, revealed } from "./drawn";
@@ -140,7 +141,7 @@ const caretBlock = (view: EditorView) => { const { $from } = view.state.selectio
 export function DocumentEditor(props: { host: DocumentHost; id: string; name: string; actions?: JSX.Element; margin?: JSX.Element; marginEmpty?: boolean; bare?: boolean; onAway?: (away: boolean) => void; /** The hub refused this page as older than the paper: only a reload mends it. */ onStale?: (stale: boolean) => void; onReady?: () => void; marks?: (marks: DocumentMarks) => void;
   width?: DocumentWidth; controls?: (controls: DocumentControls) => void;
   /** `mentions`: who `@` offers; picked, the typed `@…` goes and `onMention` is told the caret's block and the name. */
-  mentions?: () => string[]; onMention?: (about: Range, name: string) => void;
+  mentions?: () => string[]; onMention?: (about: Range, name: string, words: string) => void;
   /** `onComment`: the selection tools' Comment, told the text selected, and the block handle's, told the block. */
   onComment?: (about: Range) => void;
   /** `onRename`: the title renames the document; refused (rejected), it shows the name it had. Without it the title is plain text. `count`: a line under the text says how many blocks and words it holds. */
@@ -168,8 +169,13 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     if (!view || !at) return;
     view.dispatch(view.state.tr.delete(at.from, at.to));
     const about = caretBlock(view);
-    if (about) props.onMention?.(about, name);
+    if (about) setAsking({ about, name });
   };
+  // Picked, the one asked is told what to write in a field at the caret's block: a comment is about what is there, this asks for what is not.
+  const [asking, setAsking] = createSignal<{ about: Range; name: string } | null>(null);
+  // On an empty line the field stands in the line's own place; under a block with text, so the text it is about is read.
+  const askedOf = () => { const at = asking()?.about.startContainer; if (!(at instanceof Element)) return undefined; const box = at.getBoundingClientRect(); return at.textContent ? box : new DOMRect(box.left, box.top, box.width, 0); };
+  const ask = (words: string) => { const at = asking(); setAsking(null); if (at) props.onMention?.(at.about, at.name, words); editor()?.commands.focus(); };
   const keys = (event: KeyboardEvent) => menuKeys(event, offered(), active(), setActive, pick, dismiss);
   // Ready is the hub's copy drawn, or the hub not answering: never a page still waiting.
   createEffect(() => { if (editor() || copy.state() === "away" || copy.state() === "stale") props.onReady?.(); });
@@ -314,6 +320,9 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     }}</Show>
   </DocumentSheet>
     {/* Menus and tools beside the sheet, never in it: the sheet's column is the editor's to fill, and a child of it that comes and goes clears it. */}
+    <Popover open={Boolean(asking())} onOpenChange={(open) => { if (!open) setAsking(null); }} anchorRect={askedOf} placement="bottom-start">
+      <PopoverContent aria-label="Ask" snug onCloseAutoFocus={(event) => { event.preventDefault(); editor()?.commands.focus(); }}><Show when={asking()} keyed>{(at) => <DocumentAsk name={at.name} width={askedOf()?.width} onSend={ask} />}</Show></PopoverContent>
+    </Popover>
     <TypedMenu label="Ask" anchor={anchor} items={offered()} name={(name) => name} active={active()} onCursor={setActive} onPick={pick} onDismiss={dismiss} />
     {slash.menu()}
     <SelectionTools editor={editor} bounds={scroller} marks={props.host.tools} onComment={props.onComment} />

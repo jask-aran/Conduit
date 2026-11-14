@@ -44,7 +44,7 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
   // Also as a signal, so what the margin reads of the editor live (its seats, its suggestions) follows once the editor is made.
   const [marked, setMarked] = createSignal<Marks>();
   const [controls, setControls] = createSignal<DocumentControls>(), [away, setAway] = createSignal(false), [stale, setStale] = createSignal(false);
-  const ask = (about: Range, name?: string) => props.offer()?.ask(about, name);
+  const ask = (about: Range, name?: string, words?: string) => props.offer()?.ask(about, name, words);
   // Read again each time the sheet opens, so a key rebound since shows.
   const [showingKeys, setShowingKeys] = createSignal(false);
   const shownKeys = createMemo<[PaperKeyGroup, PaperKeyRow[]][]>((was) => showingKeys() && props.shortcuts ? keyGroups(props.shortcuts) : was, []);

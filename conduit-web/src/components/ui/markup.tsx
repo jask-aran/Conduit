@@ -192,12 +192,9 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   const toggles = () => props.own?.filter((tool) => !menus().includes(tool.menu ?? "")) ?? [];
   const pressed = (tool: MarkupOwnTool) => tool.pressed ?? tool.active;
   const choice = (tool: MarkupOwnTool, on = tool.active) => <MenuRow icon={tool.icon()} checked={on || undefined} disabled={tool.disabled} keys={tool.keys} onSelect={() => press(tool)}>{tool.label}</MenuRow>;
-  // Each choice is drawn unseen in the control's own cell, so it is as wide as the widest and the bars hold still as the caret moves.
+  // One control a menu, as wide as any other tool of the bar and showing the one that is so now by its icon: the bars hold still as the caret moves.
   const kinds = (menu: string) => { const now = () => of(menu).find((tool) => tool.active) ?? of(menu)[0]!; return <DropdownMenu modal={false} placement="bottom-start">
-    <span class="ui-markup-steady">
-      <MenuControl as={Button} variant="ghost" size="sm" aria-label={menu} title={menu}>{now().icon()}{now().compact ? null : now().label}<Icons.ChevronDown /></MenuControl>
-      <For each={of(menu)}>{(tool) => <Button variant="ghost" size="sm" aria-hidden="true" tabIndex={-1}>{tool.icon()}{tool.compact ? null : tool.label}<Icons.ChevronDown /></Button>}</For>
-    </span>
+    <MenuControl as={IconButton} label={`${menu}: ${now().label}`}>{now().icon()}</MenuControl>
     <MenuContent width="sm"><MenuSection title={menu}><For each={of(menu)}>{(tool) => choice(tool)}</For></MenuSection></MenuContent>
   </DropdownMenu>; };
   const owned = () => <>
@@ -214,7 +211,7 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   </DropdownMenu>;
   // What the held tool draws with is one menu, as the paper's own colours are: a menu opened closes any other.
   const look = () => <DropdownMenu modal={false} placement="bottom-start">
-    <MenuControl as={Button} variant="ghost" size="sm" aria-label="Ink and line" title="Ink and line"><Swatch colour={markupInkColour(props.ink)} /><Icons.ChevronDown /></MenuControl>
+    <MenuControl as={IconButton} label="Ink and line"><Swatch colour={markupInkColour(props.ink)} /></MenuControl>
     <MenuContent width="sm">
       <Show when={props.tool === "shape" && props.onShape}>{(onShape) => <MenuSection title="Shape"><For each={SHAPES}>{(shape) => <MenuRow icon={shape.icon} checked={(props.shape ?? "arrow") === shape.value || undefined} onSelect={() => onShape()(shape.value)}>{shape.label}</MenuRow>}</For></MenuSection>}</Show>
       <Show when={inks()}>{(onInk) => <MenuSection title="Colour (C)">

@@ -22,8 +22,8 @@
 .ui-markup-mark[data-kind="asked"] { border-color: transparent; background: var(--accent); }
 .ui-markup-mark[data-kind="quote"] { border-width: 0 0 var(--stroke); border-color: var(--primary); border-radius: 0; background: var(--accent); }
 .ui-markup-drawing { position: fixed; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; fill: none; stroke: var(--markup-ink, var(--primary)); stroke-width: var(--markup-weight); stroke-linecap: round; stroke-linejoin: round; filter: var(--glyph-shadow); }
-/* conventions-ok: every hue, for the ink that is any colour, until one is chosen */
 .ui-markup-any { display: contents; }
+/* conventions-ok: every hue, for the ink that is any colour, until one is chosen */
 .ui-markup-any > .ui-swatch:not([style*="background"]) { background: conic-gradient(hsl(0 90% 60%), hsl(60 90% 60%), hsl(120 90% 60%), hsl(180 90% 60%), hsl(240 90% 60%), hsl(300 90% 60%), hsl(360 90% 60%)); }
 .ui-markup-picker { padding: var(--space-md); }
 /* A highlighter marks over what it is on: wide and see-through, with no shadow to muddy it. */
@@ -103,10 +103,6 @@
 .ui-markup-caption { padding-inline: var(--space-xs); white-space: nowrap; }
 /* The edit set is the paper's own tools, usable at rest: full strength, washed while on, dimmed only when not to be done. */
 .ui-markup-bar[data-set="edit"] .ui-icon-button:not(:disabled) { color: var(--foreground); }
-/* A menu control as wide as its widest choice: each is drawn unseen in the same cell. */
-.ui-markup-steady { display: inline-grid; }
-.ui-markup-steady > * { grid-area: 1 / 1; }
-.ui-markup-steady > [aria-hidden] { visibility: hidden; }
 .ui-markup-room { flex: none; height: calc(var(--control-sm) + 4 * var(--space-xs)); }
 .ui-markup-rails[data-compact] { right: calc(var(--markup-frame-right, 0px) + var(--space-2xs)); left: calc(var(--markup-frame-left, 0px) + var(--space-2xs)); }
 .ui-markup-rails[data-compact] > .ui-markup-bar { gap: 0; }

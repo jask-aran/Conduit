@@ -1,8 +1,8 @@
 import { BaselineIcon, BetweenHorizontalEndIcon, BetweenVerticalEndIcon, BoldIcon, CalendarIcon, ChevronRightIcon, CodeIcon, ExternalLinkIcon, Grid2x2XIcon, GripVerticalIcon, Heading1Icon, Heading2Icon, Heading3Icon, HighlighterIcon, ImageIcon, ImageOffIcon, InfoIcon, ItalicIcon, LinkIcon, ListChecksIcon, ListCollapseIcon, ListIcon, ListOrderedIcon,
   MessageSquarePlusIcon, MinusIcon, PencilIcon, PencilLineIcon, PilcrowIcon, StrikethroughIcon, TableColumnsSplitIcon, TableIcon, TableRowsSplitIcon, TextQuoteIcon, TriangleAlertIcon, UnlinkIcon } from "lucide-solid";
-import { For, Show, splitProps, type JSX } from "solid-js";
+import { createSignal, For, Show, splitProps, type JSX } from "solid-js";
 // Through the barrel, as markup.tsx does, so the editor's chunk takes the header from the app's own.
-import { Button, FindBar, Frost, IconButton, Icons, PaneHeader, Row } from "./index";
+import { Button, FindBar, Frost, IconButton, Icons, PaneHeader, Row, TextArea } from "./index";
 import "./styles/document.css";
 
 /* Not in the library's barrel: the document editor imports this file, so the app's first load does not carry it. */
@@ -54,6 +54,17 @@ export const DocumentSeatJump = (props: { label: string; below: boolean; ink: Do
   <Frost as="button" type="button" class="ui-document-seat-jump" data-at={props.below ? "below" : "above"} data-seat-ink={props.ink} onClick={() => props.onJump()}>
     <Show when={props.below} fallback={<Icons.ArrowUp />}><Icons.ArrowDown /></Show><span>{props.label}</span>
   </Frost>;
+/** Asking someone to write in the paper, where the caret is: who is asked, what of them, and Send. Enter sends; Shift Enter is a new line. `width`: the line of text it stands for, in px. */
+export function DocumentAsk(props: { name: string; width?: number; onSend: (words: string) => void }) {
+  const [words, setWords] = createSignal("");
+  const send = () => { const said = words().trim(); if (said) props.onSend(said); };
+  return <div class="ui-document-ask" style={{ width: props.width ? `${props.width}px` : undefined }}>
+    <span class="ui-document-mention">@{props.name}</span>
+    <TextArea ref={(field) => queueMicrotask(() => field.focus({ preventScroll: true }))} aria-label={`Ask ${props.name}`} placeholder={`Tell ${props.name} what to write or edit`} value={words()} onInput={(event) => setWords(event.currentTarget.value)}
+      onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); send(); } }} />
+    <IconButton label="Send (Enter)" disabled={!words().trim()} onClick={send}><Icons.Send /></IconButton>
+  </div>;
+}
 export const documentDrawClass = { mention: "ui-document-mention", match: "ui-document-match", currentMatch: "ui-document-match-current", revealed: "ui-document-revealed" };
 
 /** Each kind of block's icon. Here, not in the library's icons, so only the editor's chunk carries them. */
