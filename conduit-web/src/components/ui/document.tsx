@@ -141,7 +141,7 @@ export type DocumentWidth = "narrow" | "wide" | "full";
  *  `margin`: what stands beside the text (its comments), and tucked over its right edge where the page is too narrow for both; `marginEmpty`: it holds nothing now, so it takes no room and the text stands centred. `bare`: it is in a pane, whose header is its bar.
  *  `width`: how wide the text runs (narrow, unsaid). `find`: a DocumentFind, at the sheet's top right. `scroller`: the element that scrolls. `edge`: what is pinned
  *  to the sheet's edge over the column whatever is scrolled (DocumentSeatJump). */
-export function DocumentSheet(props: { ref?: (element: HTMLDivElement) => void; name: string; state?: string; actions?: JSX.Element; margin?: JSX.Element; marginEmpty?: boolean; bare?: boolean; /** How it is being written (DocumentWriting): the sheet's edge says when writing only suggests. */ writing?: string; head?: JSX.Element; foot?: JSX.Element; over?: JSX.Element;
+export function DocumentSheet(props: { ref?: (element: HTMLDivElement) => void; name: string; state?: string; actions?: JSX.Element; margin?: JSX.Element; marginEmpty?: boolean; bare?: boolean; head?: JSX.Element; foot?: JSX.Element; over?: JSX.Element;
   width?: DocumentWidth; find?: JSX.Element; edge?: JSX.Element; scroller?: (element: HTMLDivElement) => void; onHover?: (event: PointerEvent | null) => void; children?: JSX.Element }) {
   // Where the text at its full measure and the margin with cards in it do not fit side by side, the sheet first gives up its side room (snug), and
   // where that is not enough the margin is tucked: it takes no room, and its cards stand over the text's right edge as small marks until one is opened.
@@ -172,7 +172,7 @@ export function DocumentSheet(props: { ref?: (element: HTMLDivElement) => void; 
     <Show when={!props.bare}><PaneHeader kind="tool" name={props.name} place={props.state} actions={props.actions} /></Show>
     {props.find}
     <div ref={(element) => { column = element; sized.observe(element); props.scroller?.(element); }} class="ui-document-column" data-snug={fold() === SNUG ? "" : undefined} onPointerMove={(event) => props.onHover?.(event)} onPointerLeave={() => props.onHover?.(null)}><div class="ui-document-page" data-margin={props.marginEmpty ? "none" : fold() === TUCKED ? "tucked" : "beside"}>
-      <div ref={body} class="ui-document-body" data-writing={props.writing}>{props.head}<div ref={props.ref} class="ui-document-content">{props.children}</div>{props.over}{props.foot}</div>
+      <div ref={body} class="ui-document-body">{props.head}<div ref={props.ref} class="ui-document-content">{props.children}</div>{props.over}{props.foot}</div>
       <Show when={props.margin}><aside ref={aside} class="ui-document-margin" aria-label="Comments">{props.margin}</aside></Show>
     </div></div>
     {props.edge}

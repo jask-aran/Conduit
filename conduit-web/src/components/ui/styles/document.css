@@ -174,8 +174,6 @@
 .ui-document-diff-acts > .ui-icon-button { width: 1lh; height: 1lh; min-width: 0; min-height: 0; }
 /* Reviewing: the caret and an edge beside the text in the suggestion's colour. The edge's room is taken from beside the text, so no word moves. */
 .ui-document-text[data-writing="suggesting"] { caret-color: var(--status-success); }
-/* Reviewing is said on the sheet's own edge. */
-.ui-document-body[data-writing="suggesting"] { box-shadow: inset var(--stroke) 0 0 color-mix(in oklch, var(--status-success), transparent var(--tone-quiet)); }
 /* A margin with no comment in it takes no room, so the text stands centred in the column. */
 .ui-document-page[data-margin="none"] > .ui-document-margin { display: none; }
 /* Tucked: the margin takes no room and the text keeps its measure. Each card is a small mark at the text's right edge, saying only how it stands, and

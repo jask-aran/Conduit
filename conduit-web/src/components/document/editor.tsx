@@ -320,7 +320,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   });
   return <>
   <DocumentSheet ref={setColumn} scroller={setScroller} width={props.width} find={find.view()} name={props.name} state={copy.state() === "away" ? "Reconnecting" : copy.state() === "stale" ? "Reload: this page is older than the paper" : undefined}
-    edge={<Show when={away()}>{(seat) => <DocumentSeatJump label={seat().label} below={seat().below} ink={seat().ink} onJump={() => reveal(seat().block)} />}</Show>} margin={props.margin} marginEmpty={props.marginEmpty} actions={props.actions} bare={props.bare} writing={suggesting.writing()}
+    edge={<Show when={away()}>{(seat) => <DocumentSeatJump label={seat().label} below={seat().below} ink={seat().ink} onJump={() => reveal(seat().block)} />}</Show>} margin={props.margin} marginEmpty={props.marginEmpty} actions={props.actions} bare={props.bare}
     head={<Show when={copy.synced()}><PaperHead doc={copy.doc} name={props.name} onRename={props.onRename} onDown={() => editor()?.commands.focus("start")} /></Show>}
     over={<>{handle.view}<Show when={asking()?.about} keyed>{(_about) => <Show when={askedAt()}>{(at) => <DocumentAsk name={asking()?.name ?? ""} names={props.mentions?.() ?? []} onName={(name) => setAsking((was) => was && { ...was, name })} at={at()} onSend={ask} onClose={() => { setAsking(null); editor()?.commands.focus(); }} />}</Show>}</Show><TableTools editor={editor} body={() => column()?.parentElement ?? undefined} moved={reflowed} />
 </>} onHover={handle.hover} foot={<Show when={count()}>{(line) => <DocumentCount>{line()}</DocumentCount>}</Show>}>
