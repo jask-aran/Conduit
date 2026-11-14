@@ -17,6 +17,7 @@ export const RUNTIME_EVENTS = /** @type {const} */ ({
   keybindings_changed: "keybindings.json changed on the hub",
   browser_changed: "the hub's browser changed",
   artifacts_changed: "a project's artifacts changed: one made, renamed, moved or deleted",
+  mail_changed: "an account's mail changed: these threads, or everything shown; `accounts`: an account or its status",
   ui_command: "an agent's command to one tab (sent to its connection alone)",
   pwa_restart_prepared: "a restart is coming: a browser installs the new build and says so",
 });

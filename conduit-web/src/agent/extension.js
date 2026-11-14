@@ -6,6 +6,7 @@ import { ChatTools } from "./chat-tools.js";
 import { EventTools } from "./events.js";
 import { FeedTools } from "./feeds.js";
 import { InboxTools } from "./inbox.js";
+import { MailTools } from "./mail-tool.js";
 import { MemoryTools } from "./memory.js";
 import { MessageTools } from "./messages.js";
 import { policyWraps } from "./policy.js";
@@ -15,7 +16,7 @@ import { RoutineTools } from "./routines.js";
 /** A part reaches the agent as `runtime.agent` at call time: the server makes it after the runtime. */
 export function AgentExtension(runtime, installed) {
   const schedules = ScheduleTools(runtime);
-  const parts = [MemoryTools(runtime), schedules, EventTools(runtime), ChatTools(runtime), InboxTools(runtime), MessageTools(runtime), FeedTools(runtime, schedules), RoutineTools(runtime)];
+  const parts = [MemoryTools(runtime), schedules, EventTools(runtime), ChatTools(runtime), InboxTools(runtime), MessageTools(runtime), FeedTools(runtime, schedules), RoutineTools(runtime), MailTools(runtime)];
   const own = parts.flatMap((part) => part.tools || []);
   return defineExtension({
     name: "agent",

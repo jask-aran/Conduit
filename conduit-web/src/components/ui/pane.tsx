@@ -166,9 +166,11 @@ export const LayoutGlyph = (props: { weights: number[] }) =>
 
 export const PaneHome = (props: { label: string; children: JSX.Element }) =>
   <section class="ui-pane-home" aria-label={props.label}><div class="ui-pane-home-column">{props.children}</div></section>;
-export function ToolBar(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void; edge?: "top" | "bottom"; vertical?: boolean }) {
-  const [local, rest] = splitProps(props, ["edge", "vertical"]);
-  return <div {...rest} class="ui-tool-bar" data-edge={local.edge ?? "bottom"} data-vertical={local.vertical ? "" : undefined} />;
+/** `end`: controls held at the bar's far end, after what it says or holds. */
+export function ToolBar(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void; edge?: "top" | "bottom"; vertical?: boolean; end?: JSX.Element }) {
+  const [local, rest] = splitProps(props, ["edge", "vertical", "end", "children"]);
+  return <div {...rest} class="ui-tool-bar" data-edge={local.edge ?? "bottom"} data-vertical={local.vertical ? "" : undefined}>
+    {local.children}<Show when={local.end}><div class="ui-tool-bar-end">{local.end}</div></Show></div>;
 }
 export function TreeRow(props: JSX.ButtonHTMLAttributes<HTMLButtonElement> & { depth?: number; folder?: boolean; open?: boolean; icon: JSX.Element; name: string; end?: JSX.Element; selected?: boolean; "data-open-file"?: string }) {
   const [local, rest] = splitProps(props, ["depth", "folder", "open", "icon", "name", "end", "selected", "style"]);

@@ -59,9 +59,12 @@ export function createApprover(options) {
     if (breaker.tripped(String(api.conversationId))) {
       return { verdict: { outcome: "escalate", risk: "high", authorization: "none", reason: "Several of the agent's actions were refused in a row; you decide from here.", source: "breaker" }, attempts: 0 };
     }
+    // Rule of Two, for a remembered allow as for a fresh one: after outside content, what reaches someone is the person's.
+    const outside = async (verdict) => verdict.outcome === "allow" && (held.reversible === false || held.recipients?.length) && await options.untrusted?.(api, context)
+      ? { ...verdict, outcome: "escalate", reason: `${verdict.reason} The agent read outside content in this turn, so an action that reaches someone is yours to approve.`, source: "rule-of-two" } : verdict;
     const cacheKey = `${policy.version}:${key}`;
     const cached = cache.get(cacheKey);
-    if (cached) return { verdict: cached, attempts: 0 };
+    if (cached) return { verdict: await outside(cached), attempts: 0 };
     const commands = SHELL_TOOLS.has(held.action) && typeof held.input?.command === "string" ? canonicalShell(held.input.command) : null;
     let model;
     let rating;
@@ -82,10 +85,7 @@ export function createApprover(options) {
     const unreadable = SHELL_TOOLS.has(held.action) && commands === null;
     let outcome = outcomeOf(rating, held, table);
     if (outcome === "allow" && (rating.truncated || unreadable) && rating.risk !== "low") outcome = "escalate";
-    let verdict = { outcome, risk: rating.risk, authorization: rating.authorization, reason: rating.reason, source: "model" };
-    if (outcome === "allow" && (held.reversible === false || held.recipients?.length) && await options.untrusted?.(api, context)) {
-      verdict = { ...verdict, outcome: "escalate", reason: `${rating.reason} The agent read outside content in this turn, so an action that reaches someone is yours to approve.`, source: "rule-of-two" };
-    }
+    const verdict = await outside({ outcome, risk: rating.risk, authorization: rating.authorization, reason: rating.reason, source: "model" });
     if (verdict.outcome === "allow") cache.set(cacheKey, verdict);
     return { verdict, attempts, model: model?.id, usage: rating.usage };
   }

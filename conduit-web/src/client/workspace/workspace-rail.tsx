@@ -30,6 +30,7 @@ export function WorkspaceRail(props: {
   onOpenSearch: () => void;
   onOpenPalette: () => void;
   onOpenBrowser: () => void;
+  onOpenMail: () => void;
   windowControls?: JSX.Element;
   current: PanelTab | null;
   inSplit: PanelTab | null;
@@ -83,7 +84,7 @@ export function WorkspaceRail(props: {
     <Show when={props.tools || props.jbot}><RailRule /></Show>
     <Show when={props.docked.some((doc) => doc.view !== "page:jbot")}>
       <For each={props.docked.filter((doc) => doc.view !== "page:jbot")}>{(doc) => {
-        const Icon = doc.view.startsWith("chat:") ? Icons.Message : doc.view.startsWith("page:") ? Icons.Dashboard : doc.view.startsWith("term:") ? Icons.Shell : doc.view.startsWith("browser:") ? Icons.Browser : Icons.FileText;
+        const Icon = doc.view.startsWith("chat:") ? Icons.Message : doc.view.startsWith("page:") ? Icons.Dashboard : doc.view.startsWith("term:") ? Icons.Shell : doc.view.startsWith("browser:") ? Icons.Browser : doc.view.startsWith("mail:") ? Icons.Mail : Icons.FileText;
         return <IconButton kind="rail" tabIndex={-1} draggable={true} data-doc-view={doc.view}
           aria-label={`${doc.name} (docked)`} title={doc.name} current={props.currentDocked === doc.slot}
           onClick={(event) => props.onChooseDocked(doc.slot, event.altKey)}><Icon /></IconButton>;
@@ -91,6 +92,7 @@ export function WorkspaceRail(props: {
       <RailRule />
     </Show>
     <IconButton kind="rail" tabIndex={-1} aria-label="Browser" title="Browser" onClick={() => props.onOpenBrowser()}><Icons.Browser /></IconButton>
+    <IconButton kind="rail" tabIndex={-1} aria-label="Mail" title="Mail" onClick={() => props.onOpenMail()}><Icons.Mail /></IconButton>
     <IconButton kind="rail" tabIndex={-1} aria-label="Search chats" title="Search chats" onClick={() => props.onOpenSearch()}><Icons.Search /></IconButton>
     <IconButton kind="rail" tabIndex={-1} aria-label="Open command palette" title="Command palette" onClick={() => props.onOpenPalette()}><CommandIcon /></IconButton>
     <Show when={props.feedback}>{(feedback) => <IconButton kind="rail" tabIndex={-1} aria-label="UI feedback" title="UI feedback" aria-pressed={feedback().open} data-open={feedback().open ? "" : undefined} onClick={() => feedback().onToggle()}><Icons.Pointer /></IconButton>}</Show>

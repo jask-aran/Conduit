@@ -15,6 +15,7 @@ import { BrowserSettings } from "./browser-settings";
 import { SkillsSettings } from "./skills-settings";
 import { IntegrationsSettings } from "./connectors-settings";
 import { UsageSettings } from "./usage-settings";
+import { MailSettings } from "./mail-settings";
 import { agentView } from "../state/agent";
 import { createLatest } from "../state/latest";
 import { createSingleFlight } from "../state/single-flight";
@@ -83,7 +84,7 @@ const allSectionGroups = [
   { label: "Personal", sections: [{ id: "account", label: "Account", icon: Icons.User }, { id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
   { label: "AI", sections: [{ id: "models", label: "Models", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }, { id: "blocks", label: "Blocks", icon: Icons.Boxes }, { id: "tools", label: "Tools", icon: Icons.Tool }, { id: "skills", label: "Skills", icon: SparklesIcon }, { id: "agent", label: "Agent", icon: Icons.Agent }] },
   { label: "System", sections: [{ id: "server", label: "Server", icon: Icons.Server }, { id: "device", label: "This device", icon: installedClientKind === "android" ? SmartphoneIcon : LaptopIcon }, { id: "devices", label: "Network", icon: NetworkIcon }, { id: "usage", label: "Usage", icon: ChartColumnIcon }] },
-  { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }, { id: "browser", label: "Hub browser", icon: Icons.Browser }, { id: "integrations", label: "Integrations", icon: Icons.ExternalLink }] },
+  { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }, { id: "browser", label: "Hub browser", icon: Icons.Browser }, { id: "mail", label: "Mail", icon: Icons.Mail }, { id: "integrations", label: "Integrations", icon: Icons.ExternalLink }] },
 ] as const;
 type VisibleSection = typeof allSectionGroups[number]["sections"][number]["id"];
 const sectionGroups = touchOnly() ? allSectionGroups.map((group) => ({ ...group, sections: group.sections.filter((item) => item.id !== "shortcuts") })) : allSectionGroups;
@@ -1475,6 +1476,7 @@ export function Settings(props: {
           <Show when={section() === "browser"}><BrowserSettings /></Show>
           <Show when={section() === "integrations"}><>
             <Group title="Model providers">
+          <Show when={section() === "mail"}><MailSettings /></Show>
               <Dialog open={Boolean(authAttempt()?.owned && (authAttempt()!.active || authAttempt()!.error))} onOpenChange={(open) => { if (!open) { if (authAttempt()?.active) void cancelOAuth(); else { attemptWrites.drop(); setAuthAttempt(null); } } }}
                 title={`Sign in to ${authAttempt()?.providerLabel || "the provider"}`} description={authAttempt()?.message} close busy={authLoading()}>
                 <Show when={authAttempt()}>{(current) => <>

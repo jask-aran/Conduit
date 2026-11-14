@@ -220,6 +220,7 @@ const TerminalRoute = lazy(() => import("./remotes/terminal-route").then((module
 const Settings = lazy(() => import("./settings/settings").then((module) => ({ default: module.Settings })));
 const BrowserPane = lazy(() => import("./browser/browser-pane").then((module) => ({ default: module.BrowserPane })));
 const prefetchProjectDashboard = (project: Project) => void import("./project/dashboard").then((module) => module.prefetchProjectDashboard(project)).catch(() => {});
+const MailPane = lazy(() => import("./mail/mail-pane"));
 const prefetchWorkspaceTerminal = () => void import("./workspace/workspace-panel");
 
 const ConnectDialog = lazy(() => import("./navigation/pair-dialog").then((module) => ({ default: module.ConnectDialog })));
@@ -2429,7 +2430,7 @@ function App() {
   }, [], { equals: (a, b) => a.length === b.length && a.every((slot, index) => slot === b[index]) });
   const renderSlots = shownSlots;
   const splitShown = () => shownSlots().length > 0;
-  const isToolView = (view: SplitView | null) => Boolean(view && view !== "home" && !isPaneView(view) && !/^(files|term|browser|artifact):/.test(view));
+  const isToolView = (view: SplitView | null) => Boolean(view && view !== "home" && !isPaneView(view) && !/^(files|term|browser|mail|artifact):/.test(view));
   const toolSlot = () => shownSlots().find((slot) => isToolView(slotView(slot))) ?? null;
   const toolInPaneA = () => isToolView(paneAOverride());
   const toolView = () => { if (toolInPaneA()) return paneAOverride(); const slot = toolSlot(); return slot === null ? null : slotView(slot); };
@@ -2923,6 +2924,7 @@ function App() {
           <RiderButton show="label" icon={<Icons.Browser />} label="Browser" onClick={() => void fill("browser:hub")} />
           <RiderButton show="label" icon={<Icons.WriteFile />} label="New artifact" onClick={() => void fill(dockProject() ? `artifact:new:${dockProject()!.id}` : "artifact:new")} />
         </Actions>
+          <RiderButton show="label" icon={<Icons.Mail />} label="Mail" onClick={() => void fill("mail:default")} />
         <Show when={recent().length}>
           <Group kind="dash" id="Continue" heading={<GroupHeading>Continue</GroupHeading>}>
             <For each={recent()}>{(item) => <Row density="list" element="button" lead={<Icons.Chat />} label={item.chat.title || "New chat"} context={placeLabelOf(item.project.id)} onClick={() => void fill(`chat:${item.chat.id}`)} />}</For>
@@ -2986,6 +2988,8 @@ function App() {
   </SheetFill>;
   const renderTerminalDocument = (pane: PaneKey, shell: string) => {
     const [record, setRecord] = createSignal<{ projectId: string; cwd?: string | null; title?: string | null } | null | undefined>(undefined);
+  const renderMailDocument = (pane: PaneKey, account: string) => <MailPane account={account} onAccount={(id) => void setPaneView(pane, `mail:${id}`)} onSettings={() => openSettings("mail")}
+    header={(actions) => <PaneHeader actions={<>{actions}{paneTabActions(pane)}</>}><Show when={documentTab(pane)} fallback={<HeaderCrumb title="Mail" />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />;
     void api<PtysPayload>("/v0/ptys")
       .then(({ ptys = [] }) => {
         const found = ptys.find((item) => item.id === shell && item.status === "running") ?? null;
@@ -3591,6 +3595,7 @@ function App() {
     if (view.startsWith("browser:")) return browserTitles()[view] || "Browser";
     if (view === "artifact:new" || view.startsWith("artifact:new:")) return "New artifact";
     if (view.startsWith("artifact:")) { askArtifactName(view); return artifactNames()[view]?.name || "Artifact"; }
+    if (view.startsWith("mail:")) return "Mail";
     return isPanelTab(view) ? WORKSPACE_TOOL_LABELS[view] : "Pane";
   };
   type PaneTabs = { ids: string[]; used: string[] };
@@ -3604,7 +3609,7 @@ function App() {
   };
   const [paneTabs, setPaneTabs] = createSignal<Record<string, PaneTabs>>(launchTabs());
   const tabsOf = (pane: PaneKey) => paneTabs()[String(pane)] ?? null;
-  const tabbable = (view: string | null | undefined): view is SplitView => Boolean(view && (view === "home" || /^(chat|page|browser|term|artifact):/.test(view)));
+  const tabbable = (view: string | null | undefined): view is SplitView => Boolean(view && (view === "home" || /^(chat|page|browser|mail|term|artifact):/.test(view)));
   const tabKey = (view: SplitView) => view.startsWith("chat:") ? matedPaper(view) ? paperOf(view) : view.slice("chat:".length) : view;
   const tabView = (key: string) => (key === "home" || key.includes(":") ? key : `chat:${key}`) as SplitView;
   const tabPlace = (id: string) => id === "home" ? "doc:page" : id.startsWith("page:project:") ? id.slice("page:project:".length)
@@ -3996,7 +4001,7 @@ function App() {
     const row = createTabStrip({
       keys: () => { const list = tabsOf(pane); return list && list.ids.length && !isMobileLayout() ? list.ids : null; },
       place: tabPlace,
-      placeLabel: (id) => { const place = tabPlace(id); return place === "doc:browser" ? "Browser" : place === "doc:term" ? "Terminal" : place.startsWith("doc:") ? "Conduit" : place.startsWith("sub:") ? subagentParent(id).title : placeLabelOf(place); },
+      placeLabel: (id) => { const place = tabPlace(id); return place === "doc:browser" ? "Browser" : place === "doc:mail" ? "Mail" : place === "doc:term" ? "Terminal" : place.startsWith("doc:") ? "Conduit" : place.startsWith("sub:") ? subagentParent(id).title : placeLabelOf(place); },
       title: (id) => viewName(tabView(id)),
       icon: (id) => hiddenChats().get(id)?.chat.status === "subagent" ? <Icons.Agent /> : undefined,
       lit: () => activeTabOf(pane),
@@ -4074,6 +4079,11 @@ function App() {
   };
   const openEmptyPane = () => {
     if (shownSlots().length >= 2 || !viewsFit([...shownSlots().map(slotView), "home"])) return void toast.info("There is no room for another pane.");
+  const openMail = () => {
+    const at = shownSlots().find((slot) => slotView(slot)?.startsWith("mail:"));
+    if (paneAOverride()?.startsWith("mail:") || at !== undefined) return focusAnyPane(at ?? "main");
+    void openBeside("mail:default");
+  };
     void openBeside("home", true, true);
   };
   const closePane = async (pane: PaneKey) => {
@@ -4191,6 +4201,7 @@ function App() {
         <Show when={slotView(slot)?.startsWith("browser:") ? slotView(slot)!.slice("browser:".length) : undefined} keyed>{(id) => renderBrowserDocument(slot, id)}</Show>
         <For each={artifactsIn(slot)}>{(id) => renderArtifactDocument(slot, id)}</For>
         <Show when={slotView(slot) === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome(slot)}</SheetFill></Show>
+        <Show when={slotView(slot)?.startsWith("mail:") ? slotView(slot)!.slice("mail:".length) : undefined} keyed>{(account) => renderMailDocument(slot, account)}</Show>
         <Show when={page() === "computer"}>
           <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderPaneComputer(slot)}</SheetFill>
         </Show>
@@ -5061,6 +5072,7 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.openBrowser, "application", () => openBrowser()),
       shortcutManager.registerHandler(COMMAND_IDS.previousPane, "application", () => stepPane(-1), { when: () => splitShown() && !isMobileLayout() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "application", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
+      shortcutManager.registerHandler(COMMAND_IDS.openMail, "application", () => openMail()),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "chat", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "workspace-panel", toggleChatWorkspaceFocus),
       shortcutManager.registerHandler(COMMAND_IDS.workspaceMoveToMain, "workspace-panel", () => openBeside(dockTool()), { when: () => !isMobileLayout() && panelOpen() && !document.activeElement?.closest(".main-split") }),
@@ -5716,6 +5728,7 @@ function App() {
       <Show when={paneAOverride()?.startsWith("browser:") ? paneAOverride()!.slice("browser:".length) : undefined} keyed>{(id) => renderBrowserDocument("main", id)}</Show>
       <For each={artifactsIn("main")}>{(id) => renderArtifactDocument("main", id)}</For>
       <Show when={paneAOverride() === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome("main")}</SheetFill></Show>
+      <Show when={paneAOverride()?.startsWith("mail:") ? paneAOverride()!.slice("mail:".length) : undefined} keyed>{(account) => renderMailDocument("main", account)}</Show>
       <Show when={toolInPaneA()}><SheetFill ref={(element) => { setPaneAToolHost(element); onCleanup(() => setPaneAToolHost(undefined)); }} class="pane-a-tool-host" /></Show>
       <Show when={!paneAOverride() && routeBootstrap() === "ready"} fallback={paneAOverride() ? null : <Empty role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
@@ -5796,7 +5809,7 @@ function App() {
     <Show when={dragHintContent()}>{(hint) => <DragPill ref={(element) => { dragHintElement = element; placeDragHint(); onCleanup(() => { if (dragHintElement === element) dragHintElement = undefined; }); }}
       icon={<Show when={hint().icon} keyed>{(icon) => ({ left: <Icons.Sidebar />, right: <Icons.Workspace />, column: <Icons.Split />, tab: <PanelTopIcon />, swap: <Icons.Swap />, here: <PanelTopIcon /> })[icon]}</Show>}>{hint().text}</DragPill>}</Show>
     <Show when={docDrop() && ["left", "middle", "right", "dock"].includes(docDrop()!.zone) ? docDrop() : null}>{(drop) => <DropWash style={{ left: `${drop().rect.left}px`, top: `${drop().rect.top}px`, width: `${drop().rect.width}px`, height: `${drop().rect.height}px` }} />}</Show>
-    <WorkspaceRail windowControls={desktopShell && desktopTitleBar() === "none" ? windowControls("rail") : undefined} onOpenBrowser={openBrowser} tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && dockHome() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
+    <WorkspaceRail windowControls={desktopShell && desktopTitleBar() === "none" ? windowControls("rail") : undefined} onOpenBrowser={openBrowser} onOpenMail={openMail} tools={Boolean(routeKind() === "computer" ? computerLocation() : ["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && dockHome() && workspacePanelScope())} onOpenSearch={toggleSearchPalette} onOpenPalette={() => openPalette(null)}
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
       docked={dockContents().filter((slot) => slotView(slot)).map((slot) => ({ slot, view: slotView(slot)!, name: isDocked(slot) ? viewName(slotView(slot)) : `${viewName(slotView(slot))} (no room; returns when there is)` }))} currentDocked={panelOpen() ? dockSlot() : null} onChooseDocked={chooseDocked} dockOverlay={dockOverlay()} onToggleDockOverlay={toggleDockOverlay}
       jbot={agentView()?.enabled ? { name: agentName(), needs: agentNeeds(), current: jbotShownInDock(),

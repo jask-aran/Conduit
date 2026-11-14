@@ -48,6 +48,7 @@ import "./code.css";
 import "./trace.css";
 import "./agents.css";
 import "./assistant.css";
+import "./mail.css";
 
 import "./connection.css";
 

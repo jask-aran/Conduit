@@ -13,6 +13,7 @@ import { personWords } from "./person-words.js";
 import { permissionChoices } from "../approval-api.js";
 import { armReminder, opened, prunable, statusAt, transition } from "./asks.js";
 import { browserFor } from "../server/person-browser-tool.js";
+import { outgoingMail, sendsMail } from "./mail-tool.js";
 
 /** Outward calls need an asynchronous approval; private reads taint the conversation. */
 const PLACED = ["read", "write", "edit", "bash"];
@@ -26,7 +27,7 @@ const routineFile = (folder, name, args) => {
   return target === dir || target.startsWith(`${dir}${path.sep}`);
 };
 const PRIVATE_READS = { chats: (args) => ["read", "search"].includes(args?.action), feed: (args) => args?.action === "test",
-  routine: (args) => args?.action === "test", conduit_inbox: (args) => args?.action === "read" };
+  routine: (args) => args?.action === "test", conduit_inbox: (args) => args?.action === "read", mail: (args) => ["search", "thread"].includes(args?.action) };
 const privateRead = (name, args) => PRIVATE_READS[name]?.(args) || (name.startsWith("mcp__") && connectorRead(name, args));
 
 /*
@@ -176,6 +177,7 @@ export function askOf(tool, { guarded = false } = {}) {
         ? { asks: "sometimes", when: "Connected tools decide: reads run, and what they hold for approval (a send, a change) asks you. Settings › Agent › Approvals can hand this back to Conduit's list of reads." }
         : { asks: "sometimes", when: "Reads go ahead; anything that sends, creates, changes or deletes asks first. In a turn you started, an edit you asked for goes ahead (Settings › Agent)." };
   }
+  if (name === "mail") return { asks: "sometimes", when: "Reading, drafts and filing go ahead. A send goes at once when you asked for it in that conversation; one it decides on itself asks first." };
   if (name === BROWSER) return { asks: "sometimes", when: "Asks before it drives a device's browser, each thread: Allow covers that thread for a day, and there is no Always. Listing its tools goes ahead." };
   if (!guarded) return { asks: "never" };
   if (ALWAYS_OUTWARD[name] && OUTWARD_ACTIONS[name]) return { asks: "sometimes", when: `Asks to ${OUTWARD_ACTIONS[name].join(" or ")}; its other actions go ahead.` };
@@ -189,7 +191,7 @@ export function permissionOf(name, args) {
   if (name === BROWSER) return "browser";
   // Resuming Executor's held request is one decision about one action, and a program cannot be read ahead of running.
   if (name.startsWith("mcp__")) return resumeTool(name) || (!connectorCalls(name, args) && connectorTool(name) === "execute") ? "program" : "connector";
-  if (name === "feed" || name === "routine") return name;
+  if (name === "feed" || name === "routine" || name === "mail") return name;
   if (name === "start_chat" || name === "steer_chat") return "chat";
   return "device";
 }
@@ -215,6 +217,7 @@ async function ruleTarget(runtime, name, args) {
 const ruleLabel = (name, args) => {
   if (name.startsWith("mcp__")) return `${[...new Set(connectorActions(name, args) || [])].map(actionWords).join(", ") || mcpLabel(name, args)}, any input`;
   if (name === BROWSER) return `drive your browser on ${args.device}`;
+  if (name === "mail") return "send an email";
   if (name === "feed") return "add a feed";
   if (name === "routine") return "change a routine";
   if (name === "start_chat") return `start a chat, ${args.workspace || "a workspace"}`;
@@ -276,6 +279,15 @@ function presentation(name, args) {
   if (name === "bash") return { title: `Run \`${String(args.command || "").slice(0, 80)}\` on ${args.device}`, service: null, lines: [{ text: target, code: codeOf(args.command) }] };
   return { title: `${name[0].toUpperCase() + name.slice(1)} on ${args.device}`, service: null,
     lines: [target, ...args.path ? [String(args.path)] : [], ...name === "write" && args.content ? [{ code: codeOf(args.content) }] : []] };
+}
+
+/** An email as its approval shows it: every address it reaches, and whose earlier mail goes out with it. */
+function mailShown(mail, why) {
+  const list = (label, values) => values.length ? [{ label, value: values.join(", ") }] : [];
+  const earlier = (label, about) => about ? [{ label, value: `${about.from}, ${about.date.slice(0, 10)}: ${about.subject}${about.attachments ? ", with its attachments" : ""}` }] : [];
+  return { title: `Send an email to ${mail.to.slice(0, 3).join(", ")}${mail.to.length > 3 ? ` and ${mail.to.length - 3} more` : ""}`, service: null, why,
+    lines: [{ fields: [{ label: "From", value: mail.from }, ...list("To", mail.to), ...list("Cc", mail.cc), ...list("Bcc", mail.bcc), { label: "Subject", value: mail.subject },
+      ...earlier("Quotes", mail.quotes), ...earlier("Forwards", mail.forwards), { label: "Message", value: mail.text }] }] };
 }
 
 function tellPerson(runtime, ask, push) {
@@ -433,7 +445,7 @@ function approverOf(runtime) {
     audit: jsonlAudit(path.join(runtime.dataRoot, "agent", "approvals")),
   });
   // Wrapped per call: a connector reinstalls its tools, so a wrap kept by name would hold a stale one.
-  entry = { gate: (tool) => approver.wraps([tool])[0].wrap(tool) };
+  entry = { gate: (tool) => approver.wraps([tool])[0].wrap(tool), judge: approver.judge };
   approvers.set(runtime, entry);
   return entry;
 }
@@ -451,6 +463,25 @@ function guard(runtime, tools, confine) {
         if (picked) args = { ...args, device: picked.name };
       }
       const judged = connectorGates(runtime, tool.name) || connectorResume(runtime, tool.name);
+      // An email as the person: the judge weighs it against their rules and their own words in this conversation, and
+      // never allows one after outside content unless they started the turn (Rule of Two). Anything short of its allow
+      // is theirs to approve; with no review model set, every send is. What is judged and shown is the email the tool
+      // sends (outgoingMail), never the call's arguments alone.
+      if (sendsMail(tool.name, args)) {
+        let out;
+        try { out = outgoingMail(runtime.mail, args); }
+        catch (error) { return { output: [{ type: "text", text: error.message }], isError: true }; }
+        const [to, cc, bcc] = [out.to, out.cc, out.bcc].map((list) => list.map((party) => party.address));
+        const sent = { from: out.account.address, to, cc, bcc, subject: out.subject, text: out.text, ...(out.quotes ? { quotes: out.quotes } : {}), ...(out.forwards ? { forwards: out.forwards } : {}) };
+        // The conversation is part of what is judged, so an allow remembered for one never clears a send from another.
+        const held = { source: "conduit", tool: tool.name, action: "mail.send", reversible: false, recipients: [...to, ...cc, ...bcc], input: { ...sent, conversation: String(api.conversationId) } };
+        const verdict = await approverOf(runtime).judge(held, api, context);
+        if (verdict.outcome !== "allow") {
+          const { thread } = await threadFor(runtime, api);
+          const waiting = await approve(runtime, api, tool.name, args, context, thread, mailShown(sent, verdict.reason));
+          if (waiting) return waiting;
+        }
+      }
       if ((tool.name.startsWith("mcp__") && !judged && !connectorRead(tool.name, args)) || outward(tool.name, args)) {
         const { thread, run } = await threadFor(runtime, api);
         // Decided once per call, so a replay does not decide again on a turn that has since moved on.
@@ -467,7 +498,7 @@ function guard(runtime, tools, confine) {
       // What a connector read is outside content: for a while, an outward action from this conversation is the
       // person's to approve. A script's reads cannot be told from its writes, so a script counts as reading.
       // Both marks are kept in the agent's document, so a turn resumed after a restart still reads as having read them.
-      const outside = tool.name.startsWith("mcp__") && !result?.isError && (connectorRead(tool.name, args) || connectorTool(tool.name) === "execute");
+      const outside = !result?.isError && (tool.name === "mail" ? privateRead(tool.name, args) : tool.name.startsWith("mcp__") && (connectorRead(tool.name, args) || connectorTool(tool.name) === "execute"));
       const secret = privateRead(tool.name, args) && !result?.isError;
       if (outside || secret) {
         await api.commit(async (tx) => {

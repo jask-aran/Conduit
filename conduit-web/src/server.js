@@ -77,6 +77,8 @@ import { registerPiAuthRoutes } from "./server/routes/pi-auth.js";
 import { registerPtyRoutes } from "./server/routes/ptys.js";
 import { registerTerminalPasteRoutes } from "./server/routes/terminal-paste.js";
 import { registerDraftRoutes } from "./server/routes/drafts.js";
+import { registerMailRoutes } from "./server/routes/mail.js";
+import { createMail } from "./mail/service.js";
 import { registerRuntimeRoutes } from "./server/routes/runtime.js";
 import { registerChatRoutes } from "./server/routes/chats.js";
 import { registerRunRoutes } from "./server/routes/runs.js";
@@ -569,6 +571,8 @@ registerAttachmentRoutes(app, { attachments, findChatContext });
 
 app.use("/v0/context", express.json({ limit: "256kb" }));
 app.use(["/v0/markup", "/v0/document"], express.json({ limit: "4mb" }));
+// A draft may quote a long thread.
+app.use("/v0/mail", express.json({ limit: "1mb" }));
 app.use(express.json({ limit: "128kb" }));
 app.use(express.urlencoded({ extended: false, limit: "32kb" }));
 app.use(mcp.afterAuth);
@@ -658,6 +662,11 @@ registerDocumentRoutes(app, documents);
 mcpRuntime.documents = documents;
 onWorkspaceChange((projectIds) => documents.filesChanged(projectIds));
 registerMarkupRoutes(app, "/v0/document/:document/markup", (request) => documents.markup(request.params.document));
+// The hub's own copy of the person's mail (docs/plans/email.md): the mail pane and jbot's mail tool read it.
+// A mail store that will not open must not keep the hub from starting: its routes are then absent, and the pane says so.
+const mail = await createMail({ dataRoot: config.dataRoot, changed: (event) => runtimeHub.publish({ type: "mail_changed", ...event }) })
+  .catch((error) => { console.error("[mail] did not start", error); return null; });
+if (mail) registerMailRoutes(app, { mail: lifetime.own("mail", mail, (owned) => owned.stop()) });
 const browserHost = lifetime.own("hub browser", new BrowserHost({ dataRoot: config.dataRoot,
   onChange: () => runtimeHub.publish({ type: "browser_changed", id: "hub" }) }), (owned) => owned.close());
 mcpAccess.browser = browserHost.mcpServer();
@@ -786,6 +795,7 @@ if (durableAdapter) {
   durableAdapter.runtime.browserHost = browserHost;
   durableAdapter.runtime.personBrowsers = personBrowsers;
   durableAdapter.runtime.documents = documents;
+  durableAdapter.runtime.mail = mail;
   void durableAdapter.runtime.loadBrowserTools();
 }
 const persistentAgent = durableAdapter ? new PersistentAgent({ runtime: durableAdapter.runtime, registry, projects, launchLiveSession, findChatContext }) : null;

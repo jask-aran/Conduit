@@ -113,6 +113,13 @@ import {
   ShapesIcon,
   SlashIcon,
   TextCursorIcon,
+  StarIcon,
+  ArchiveIcon,
+  ReplyIcon,
+  ReplyAllIcon,
+  ForwardIcon,
+  TagIcon,
+  MailOpenIcon,
 } from "lucide-solid";
 
 export const Runtime = ActivityIcon;
@@ -233,3 +240,10 @@ export const Narration = ListCollapseIcon;
 export const Tool = WrenchIcon;
 export const WriteFile = FilePenLineIcon;
 export const Mail = MailIcon;
+export const MailRead = MailOpenIcon;
+export const Star = StarIcon;
+export const Archive = ArchiveIcon;
+export const Reply = ReplyIcon;
+export const ReplyAll = ReplyAllIcon;
+export const MailForward = ForwardIcon;
+export const Label = TagIcon;

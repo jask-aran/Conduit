@@ -14,6 +14,7 @@ export const PERMISSIONS = /** @type {const} */ ({
   program: { choices: ["allow", "deny"], allow: "this run", says: "A program or a held action: it cannot be read ahead of running, so no rule fits it" },
   feed: { choices: ["allow", "deny"], allow: "this change", says: "Adding a feed" },
   routine: { choices: ["allow", "deny"], allow: "this change", says: "Saving or removing a routine" },
+  mail: { choices: ["allow", "deny"], allow: "this email", says: "Sending an email as the person, when they did not ask for it in that conversation" },
   chat: { choices: ["allow", "always", "deny"], allow: "this message", says: "Starting a chat or posting in one of the person's" },
   device: { choices: ["allow", "always", "deny"], allow: "this call", says: "Files and commands on a device" },
   browser: { choices: ["allow", "deny"], allow: "this thread, for a day", says: "Driving the person's own signed-in browser on a device: asked of each thread, never allowed for good" },

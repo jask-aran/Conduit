@@ -36,17 +36,24 @@ export function RoomRow(props: { icon: JSX.Element; channel: string; room: strin
 export const AgentAvatar = (props: { class?: string; label?: string }) =>
   <img class={`ui-agent-avatar${props.class ? ` ${props.class}` : ""}`} src="/pwa-192x192.png" alt={props.label || ""} aria-hidden={props.label ? undefined : "true"} draggable={false} />;
 
-export function EmailItem(props: { from: string; to?: string; time?: string; dateTime?: string; quoted?: string; children: JSX.Element }) {
+/** `folded`: one line (who, `snippet`, when) that opens it with `onOpen`; nothing else of it is drawn. `attachments`: its
+ *  files, as rows under the text; `actions`: its foot, the message's own verbs. */
+export function EmailItem(props: { from: string; to?: string; time?: string; dateTime?: string; quoted?: string; folded?: boolean; snippet?: string; onOpen?: () => void;
+  attachments?: JSX.Element; actions?: JSX.Element; children?: JSX.Element }) {
   const [shown, setShown] = createSignal(false);
-  return <article class="ui-email">
-    <header class="ui-email-head"><b class="ui-email-from">{props.from}</b><Show when={props.to}><span class="ui-email-to ui-truncate">to {props.to}</span></Show>
-      <Show when={props.time}><time dateTime={props.dateTime}>{props.time}</time></Show></header>
+  const when = () => <Show when={props.time}><time dateTime={props.dateTime}>{props.time}</time></Show>;
+  return <Show when={!props.folded} fallback={<article class="ui-email" data-folded="">
+    <button type="button" class="ui-email-head" onClick={() => props.onOpen?.()}><b class="ui-email-from">{props.from}</b><span class="ui-email-snippet ui-truncate">{props.snippet}</span>{when()}</button>
+  </article>}><article class="ui-email">
+    <header class="ui-email-head"><b class="ui-email-from">{props.from}</b><Show when={props.to}><span class="ui-email-to ui-truncate">to {props.to}</span></Show>{when()}</header>
     <div class="ui-email-body">{props.children}</div>
     <Show when={props.quoted}>
       <button type="button" class="ui-email-more" aria-expanded={shown()} aria-label={shown() ? "Hide quoted text" : "Show quoted text"} onClick={() => setShown(!shown())}>···</button>
       <Expand open={shown()}><pre class="ui-email-quoted">{props.quoted}</pre></Expand>
     </Show>
-  </article>;
+    <Show when={props.attachments}><div class="ui-email-files">{props.attachments}</div></Show>
+    <Show when={props.actions}><footer class="ui-email-foot">{props.actions}</footer></Show>
+  </article></Show>;
 }
 
 export type ClockKind = "heartbeat" | "brief" | "feed" | "checkback" | "schedule";

@@ -57,6 +57,7 @@ export * from "./code";
 export * from "./trace";
 export * from "./agents";
 export * from "./assistant";
+export * from "./mail";
 export * from "./connection";
 export * from "./browser";
 export * from "./palettes";

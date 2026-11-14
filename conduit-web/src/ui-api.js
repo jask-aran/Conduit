@@ -25,6 +25,7 @@ export const UI_VIEWS = /** @type {const} */ ([
   { kind: "page", view: "page:project:<id>", agent: true, says: "" },
   { kind: "browser", view: "browser:hub", agent: true, says: "the hub's browser, which you work through codemode's browser namespace; it follows the page, so open it once" },
   { kind: "browser", view: "browser:<device>", agent: true, says: "a device's browser, by its view from screens: for the person to see and use; your browser tools work the hub's" },
+  { kind: "mail", view: "mail:<account>", agent: true, says: "the person's mail in a pane, for them to read and write in (mail:default is their first account; an account's id comes from the mail tool); you read and write mail with the mail tool" },
   { kind: "artifact", view: "artifact:<id>", agent: true, says: "an artifact by its id: a paper the person and agents write together, or a site an agent builds as one HTML file" },
   { kind: "terminal", view: "terminal", agent: true, says: "" },
   { kind: "files", view: "files", agent: true, says: "" },

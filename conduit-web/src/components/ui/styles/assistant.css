@@ -52,3 +52,12 @@
 .ui-email-more { align-self: flex-start; border: 0; border-radius: var(--radius-control); background: var(--tint); padding: 0 var(--space-sm); color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-row); letter-spacing: 0.1em; cursor: pointer; }
 @media (hover: hover) { .ui-email-more:hover { color: var(--foreground); } }
 .ui-email-quoted { margin: 0; color: var(--muted-foreground); font: var(--text-caption)/var(--leading-row) var(--font-sans); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-email[data-folded] { padding-block: var(--space-2xs); }
+.ui-email[data-folded] + .ui-email[data-folded] { border-top: 0; }
+button.ui-email-head { width: calc(100% + 2 * var(--space-sm)); margin-inline: calc(-1 * var(--space-sm)); border: 0; border-radius: var(--radius-control); background: transparent; padding: var(--space-2xs) var(--space-sm); color: inherit; text-align: left; cursor: pointer; }
+button.ui-email-head:is(:focus-visible, :active) { outline: none; background: var(--border); }
+@media (hover: hover) { button.ui-email-head:hover { background: var(--border); } }
+.ui-email-snippet { min-width: 0; flex: 1; color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-email-files { display: grid; }
+.ui-email-files .ui-row-lead > svg { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-email-foot { display: flex; flex-wrap: wrap; gap: var(--space-xs); padding-top: var(--space-xs); }
