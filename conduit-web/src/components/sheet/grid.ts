@@ -7,7 +7,7 @@ import { CompactSelection, DataEditor, GridCellKind, type DataEditorProps, type 
 import "@glideapps/glide-data-grid/dist/index.css";
 import { createElement, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { colName, type SheetModel } from "@/sheet-format.js";
+import { colName, type SheetModel, COL_LIMIT } from "@/sheet-format.js";
 import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange } from "./host";
 
 /** What the grid reads of the sheet besides its cells: each column's width and type (`look`). */
@@ -23,6 +23,8 @@ const range = (box: Rectangle): SheetRange => ({ top: box.y, left: box.x, bottom
 const edges = (picked: CompactSelection): [number, number] | null => { const all = picked.toArray(); return all.length ? [Math.min(...all), Math.max(...all)] : null; };
 
 /** The cells a selection covers: a range, or whole rows or columns. */
+/** The empty rows and columns drawn past the sheet's own, and the fewest ever drawn. */
+const ROOM = { rows: 50, cols: 10, least: { rows: 100, cols: 26 } };
 const selected = (selection: GridSelection, size: { rows: number; cols: number }): SheetRange | null => {
   if (selection.current) return range(selection.current.range);
   const cols = edges(selection.columns), rows = edges(selection.rows);
@@ -48,7 +50,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   const drive: { select?(selection: GridSelection): void; width?(col: number, width: number): void; marks?(list: DataEditorProps["highlightRegions"]): void; look?(look: SheetLook): void; structure?(): void } = {};
   let look = options.look;
 
-  let size = model.size(), current = NO_SELECTION;
+  // The grid runs on past what the sheet holds, as a spreadsheet's does: a cell written out there makes the sheet reach it (the hub's `set`).
+  const reach = () => { const held = model.size(); return { rows: Math.max(held.rows + ROOM.rows, ROOM.least.rows), cols: Math.min(COL_LIMIT, Math.max(held.cols + ROOM.cols, ROOM.least.cols)) }; };
+  let size = reach(), current = NO_SELECTION;
   const write = (list: { row: number; col: number; input: string }[]) => { if (list.length) events.write(list); };
   // Made once: a new function or object for the grid on each render has it work everything out again, the cost of each arrow-key move.
   const handlers: Partial<DataEditorProps> = {
@@ -59,7 +63,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     },
     onPaste: (target, values) => {
       const [col, row] = target, bottom = row + values.length - 1, right = col + Math.max(...values.map((line) => line.length)) - 1;
-      if (bottom >= size.rows || right >= size.cols) events.fill({ top: row, left: col, bottom, right }, values.map((line) => [...line]));
+      if (bottom >= model.size().rows || right >= model.size().cols) events.fill({ top: row, left: col, bottom, right }, values.map((line) => [...line]));
       else write(values.flatMap((line, y) => line.map((input, x) => ({ row: row + y, col: col + x, input }))));
       return false;
     },
@@ -98,7 +102,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     current = selection;
     useEffect(() => {
       drive.select = setSelection; drive.marks = setMarks; drive.look = setTheme; drive.width = (col, width) => setWidths((was) => ({ ...was, [col]: width }));
-      drive.structure = () => { size = model.size(); setWidths({}); setShape((n) => n + 1); };
+      drive.structure = () => { size = reach(); setWidths({}); setShape((n) => n + 1); };
       // Mounted, the grid has drawn in its layout effects; the frame after is on screen.
       requestAnimationFrame(() => events.drawn());
     }, []);

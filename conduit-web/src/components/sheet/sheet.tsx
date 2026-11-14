@@ -3,7 +3,7 @@ import * as Y from "yjs";
 import { Empty, Icons } from "@/components/ui";
 import { Input } from "@/components/ui/controls";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
-import { CELLS, LOOK, createSheetModel, key, parseRange, rangeA1, type SheetModel } from "@/sheet-format.js";
+import { CELLS, LOOK, a1, createSheetModel, key, parseRange, rangeA1, type SheetModel } from "@/sheet-format.js";
 import type { SheetAnchor, SheetBox, SheetGrid, SheetGridEvents, SheetHost, SheetMarks, SheetRange, SheetState } from "./host";
 import { createLiveSheet } from "./live";
 import { readLook } from "./theme";
@@ -19,7 +19,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const [model, setModel] = createSignal<SheetModel>(), [grid, setGrid] = createSignal<SheetGrid>(), [failed, setFailed] = createSignal<string>();
   const [at, setAt] = createSignal<SheetRange | null>(null), [changed, setChanged] = createSignal(0), [draft, setDraft] = createSignal<string | null>(null), [address, setAddress] = createSignal<string | null>(null);
   const [menu, setMenu] = createSignal<Menu>({});
-  let root: HTMLElement | undefined, island: HTMLDivElement | undefined, quote: HTMLDivElement | undefined, anchors: SheetAnchor[] = [];
+  // The grid's element is a signal: the menu trigger that makes it may make it again, and the grid then mounts in the one that stands.
+  const [island, setIsland] = createSignal<HTMLDivElement>();
+  let root: HTMLElement | undefined, quote: HTMLDivElement | undefined, anchors: SheetAnchor[] = [];
   const watchers = new Set<(pressed?: string) => void>(), moved = (pressed?: string) => watchers.forEach((listener) => listener(pressed));
   createEffect(() => props.onState?.(live.state()));
   onCleanup(() => history.destroy());
@@ -27,7 +29,10 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const write = (list: readonly { row: number; col: number; input: string }[]) => {
     const sheet = model();
     if (!sheet) return;
-    live.doc.transact(() => { for (const { row, col, input } of list) { const rowId = sheet.rowAt(row), colId = sheet.colAt(col); if (!rowId || !colId) continue; if (input) cells.set(key(rowId, colId), input); else cells.delete(key(rowId, colId)); } });
+    // A cell past the sheet's edge has no row or column of its own yet: the hub makes them as it sets it.
+    const past: { row: number; col: number; input: string }[] = [];
+    live.doc.transact(() => { for (const { row, col, input } of list) { const rowId = sheet.rowAt(row), colId = sheet.colAt(col); if (!rowId || !colId) { if (input) past.push({ row, col, input }); continue; } if (input) cells.set(key(rowId, colId), input); else cells.delete(key(rowId, colId)); } });
+    for (const { row, col, input } of past) void props.host.cells({ op: "set", at: a1(row, col), value: input }).catch((error: Error) => props.host.failed(error.message));
   };
   const hub = (op: Parameters<SheetHost["cells"]>[0]) => void props.host.cells(op).catch((error: Error) => props.host.failed(error.message));
   const events: SheetGridEvents = {
@@ -49,12 +54,12 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     onCleanup(() => sheet.destroy());
   });
   createEffect(() => {
-    const sheet = model();
-    if (!sheet || !island) return;
+    const sheet = model(), into = island();
+    if (!sheet || !into) return;
     let made: SheetGrid | undefined, over = false;
     void import("./grid").then(({ mountGrid }) => {
       if (over) return;
-      made = mountGrid(island!, { model: sheet, events, look: readLook(root!), columns: {
+      made = mountGrid(into, { model: sheet, events, look: readLook(root!), columns: {
         width: (col) => { const width = look.get(`width:${sheet.colAt(col)}`); return typeof width === "number" ? width : undefined; },
         type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; },
       } });
@@ -145,7 +150,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   return <section ref={root} class="ui-spreadsheet" aria-label={props.name} data-margin={props.marginEmpty ? "none" : "beside"}
     onKeyDown={(event) => {
       // The grid has no history of its own: what this page wrote is undone here, never what others wrote.
-      if (!(event.ctrlKey || event.metaKey) || !island?.contains(event.target as Node)) return;
+      if (!(event.ctrlKey || event.metaKey) || !island()?.contains(event.target as Node)) return;
       const redo = event.key === "y" || (event.key === "z" && event.shiftKey);
       if (event.key !== "z" && !redo) return;
       event.preventDefault();
@@ -161,7 +166,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     <div class="ui-spreadsheet-body">
       <Show when={!failed()} fallback={<Empty role="alert">The sheet could not be drawn: {failed()}</Empty>}>
         <ContextMenu placement="bottom-start">
-          <ContextMenuTrigger as="div" ref={island} class="ui-spreadsheet-grid" />
+          <ContextMenuTrigger as="div" ref={setIsland} class="ui-spreadsheet-grid" />
           <ContextMenuContent>
             <Show when={rows()}>{(range) => <MenuSection>
               <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-rows", range().top, count(range().top, range().bottom))}>Insert {count(range().top, range().bottom) > 1 ? `${count(range().top, range().bottom)} rows` : "row"} above</MenuRow>
