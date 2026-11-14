@@ -13,6 +13,8 @@
 // An item is a thread: `reply <id> [n] <words>` answers the person (about comment n, or the item as a whole) in
 // <id>/thread.jsonl, where the tool reads it; what they write back there ends the same name's next `wait`, and so
 // does a comment added to a live item. `resolve <id> <n>` settles one comment; the last one settled handles the item.
+// `answer <id> [n] --json '{"edits":[…],"reply":"…","resolve":true}'` does all of that for one comment at once; on an
+// artifact it goes through the hub, which makes every edit or none.
 //
 // `document <list|new|read|replace|insert|delete|set> …` is the one part that needs the hub running: the hub holds a paper
 // (a Conduit document, a .paper file in a project's folder) and is the only way to it, so these sign in as
@@ -88,8 +90,57 @@ async function writtenBack(name) {
   }
   return null;
 }
-const handing = (entry) => [entry.item, `Read it (its \`read\` says how), do what it asks, then: node ${script} done ${entry.id}`];
-const hand = (entry) => { for (const line of handing(entry)) console.log(line); };
+/** The artifact an item is on, where it is one: an artifact keeps its comments in <artifact>/markup/<item>. */
+const artifactOf = (entry) => path.dirname(entry.dir) !== folder && path.basename(path.dirname(entry.dir)) === "markup" ? path.basename(path.dirname(path.dirname(entry.dir))) : undefined;
+const quiet = (fields) => Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined && value !== null && value !== ""));
+/** One comment as a session is handed it: what it asks, the text it quotes, and what it was on when it was sent (a paper's blocks and their text, a site's elements). */
+const brief = (comment) => quiet({ n: comment.n, words: comment.comment, quote: comment.quote, blocks: comment.under?.blocks, context: comment.under?.text ?? comment.under?.elements });
+const answerWith = (entry, n, paper) => `node ${script} answer ${entry.id}${n ? ` ${n}` : ""} --json '{${paper ? `"edits":[{"op":"replace","at":"<block>","markdown":"…"}],` : ""}"reply":"…","resolve":true}'`;
+/**
+ * What a session is handed: one JSON line holding everything it needs to answer (the comments, what the person wrote back), then one line saying how
+ * to answer, with the item's file last, for its pictures and the rest.
+ */
+async function handing(entry, comments, said = []) {
+  const all = JSON.parse(await fs.readFile(entry.item, "utf8")).comments ?? [], artifact = artifactOf(entry), paper = all.some((comment) => comment.under?.blocks);
+  const n = all.length === 1 ? all[0].n : comments.length === 1 && !said.length ? comments[0].n : said.length === 1 && !comments.length ? said[0].n : null;
+  return [JSON.stringify(quiet({ item: entry.id, artifact, comments: comments.length ? comments.map(brief) : undefined, said: said.length ? said.map((message) => quiet({ n: message.n, text: message.text, did: message.text ? undefined : message.resolved ? "resolved" : "reopened" })) : undefined, path: entry.item })),
+    `The person ${said.length ? "wrote back on" : "sent"} ${entry.id}: what they ask, the text quoted and what it is on are in the line above, so nothing needs reading first${artifact ? "" : " (a comment's pictures are in its item)"}. Answer${comments.length + said.length > 1 && !n ? " each comment, with its n" : ""}: ${answerWith(entry, n, paper)}${artifact ? "" : `, then: node ${script} done ${entry.id}`}. The item: ${entry.item}`];
+}
+const hand = async (entry) => { for (const line of await handing(entry, JSON.parse(await fs.readFile(entry.item, "utf8")).comments ?? [])) console.log(line); };
+/** The name a session answers under: the one it took the item with, else the one its `wait` in this folder listens under, else the folder's. */
+const waiterHere = async () => {
+  const here = [];
+  for (const name of await fs.readdir(waiting).catch(() => [])) {
+    const waiter = JSON.parse(await fs.readFile(path.join(waiting, name), "utf8").catch(() => "null"));
+    if (waiter?.name && waiter.cwd === process.cwd() && alive(waiter.id)) here.push(waiter);
+  }
+  return here.sort((a, b) => String(b.since).localeCompare(String(a.since)))[0]?.name;
+};
+const takenBy = (dir) => fs.readFile(path.join(dir, "taken.json"), "utf8").then((text) => JSON.parse(text).name ?? null, () => null);
+const nameHere = async (dir) => (dir && await takenBy(dir)) ?? await waiterHere() ?? path.basename(process.cwd());
+const fail = (message) => { console.error(message); process.exit(1); };
+/** What a session writes on an item's thread straight into the folder: words on comment `n` (null: the item), or `n` resolved, which handles the item once every comment is. */
+const sayOn = async (dir, n, text, by) => fs.appendFile(path.join(dir, "thread.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), from: "agent", ...(by ? { by } : {}), n, text })}\n`);
+const settle = async (dir, n, by) => {
+  await fs.appendFile(path.join(dir, "thread.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), from: "agent", ...(by ? { by } : {}), n, resolved: true })}\n`);
+  const all = await allResolved(dir);
+  if (all) await fs.writeFile(path.join(dir, "handled.json"), `${JSON.stringify({ at: new Date().toISOString() })}\n`);
+  return all;
+};
+/** The hub, as `conduit-auth api` reaches it: its answer printed, or its error said and the run failed. */
+const hub = async (method, route, body) => {
+  const { execFileSync } = await import("node:child_process");
+  try { process.stdout.write(execFileSync(process.execPath, [new URL("./conduit-auth.mjs", import.meta.url).pathname, "api", method, route, ...(body === undefined ? [] : [JSON.stringify(body)])], { encoding: "utf8" })); }
+  catch (error) { process.stderr.write(error.stdout || `${error.message}\n`); process.exit(1); }
+};
+/** A `--json '{…}'` argument, taken out of the arguments. */
+const jsonFlag = (args) => {
+  const at = args.indexOf("--json");
+  if (at < 0) return {};
+  const [, text] = args.splice(at, 2);
+  try { const read = JSON.parse(text ?? ""); if (read && typeof read === "object" && !Array.isArray(read)) return read; } catch { /* said below */ }
+  return fail(`--json takes one JSON object, as in --json '{"markdown":"…"}'`);
+};
 /** What every comment of an item is now, by what the thread last said of it. */
 const allResolved = async (dir) => {
   const settled = new Map((await thread(dir)).filter((message) => typeof message.resolved === "boolean").map((message) => [message.n, message.resolved]));
@@ -126,17 +177,13 @@ if (command === "wait") {
     let lines;
     if (taken.said) {
       await working(taken.entry.dir, [...taken.added.map((comment) => comment.n), ...taken.said.filter((message) => message.text).map((message) => message.n ?? null)]);
-      lines = [
-        ...(taken.added.length ? [`The person added to ${taken.entry.item} (read each there, with its picture):`, ...taken.added.map((comment) => `  comment ${comment.n} (${comment.name}): ${comment.comment}`)] : []),
-        ...(taken.said.length ? [`The person wrote back on ${taken.entry.item}:`, ...taken.said.map((message) => `  ${message.n ? `about comment ${message.n}` : "about the item"}: ${message.text ?? (message.resolved ? "resolved it" : "reopened it")}`)] : []),
-        `Answer with: node ${script} reply ${taken.entry.id} [n] "<words>"`,
-      ];
+      lines = await handing(taken.entry, taken.added, taken.said);
     } else {
       // From here on only what is new is handed over.
       const comments = JSON.parse(await fs.readFile(taken.item, "utf8")).comments;
       await noteHanded(taken.dir, { person: 0, comments: comments.length });
       await working(taken.dir, comments.map((comment) => comment.n));
-      lines = handing(taken);
+      lines = await handing(taken, comments);
     }
     // Staying, each thing that comes is one line, which is what wakes the session.
     if (stay) console.log(lines.map((line) => line.trim().replace(/\s*\n\s*/g, " ")).join("  "));
@@ -161,24 +208,37 @@ if (command === "wait") {
   const entry = await find(argument);
   if (!entry) { console.error(`No markup item ${argument} in ${folder}`); process.exit(1); }
   if (entry.state === "waiting" && !await claim(entry)) { console.error(`${entry.id} was taken just now`); process.exit(1); }
-  hand(entry);
+  await hand(entry);
 } else if (command === "reply" && argument && rest.length) {
   const entry = await find(argument);
   if (!entry) { console.error(`No markup item ${argument} in ${folder}`); process.exit(1); }
   const { id, dir } = entry;
   const n = rest.length > 1 && /^\d+$/.test(rest[0]) ? Number(rest.shift()) : null;
-  const by = await fs.readFile(path.join(dir, "taken.json"), "utf8").then((text) => JSON.parse(text).name ?? null, () => null);
-  await fs.appendFile(path.join(dir, "thread.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), from: "agent", ...(by ? { by } : {}), n, text: rest.join(" ") })}\n`);
+  await sayOn(dir, n, rest.join(" "), await takenBy(dir));
   console.log(`Said on ${id}${n ? `, comment ${n}` : ""}`);
 } else if (command === "resolve" && argument && /^\d+$/.test(rest[0] ?? "")) {
   const entry = await find(argument), n = Number(rest[0]);
   if (!entry) { console.error(`No markup item ${argument} in ${folder}`); process.exit(1); }
-  const { id, dir } = entry;
-  const by = await fs.readFile(path.join(dir, "taken.json"), "utf8").then((text) => JSON.parse(text).name ?? null, () => null);
-  await fs.appendFile(path.join(dir, "thread.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), from: "agent", ...(by ? { by } : {}), n, resolved: true })}\n`);
-  const all = await allResolved(dir);
-  if (all) await fs.writeFile(path.join(dir, "handled.json"), `${JSON.stringify({ at: new Date().toISOString() })}\n`);
-  console.log(`Resolved comment ${n} of ${id}${all ? ": every comment is resolved, so the item is handled" : ""}`);
+  const all = await settle(entry.dir, n, await takenBy(entry.dir));
+  console.log(`Resolved comment ${n} of ${entry.id}${all ? ": every comment is resolved, so the item is handled" : ""}`);
+} else if (command === "answer" && argument) {
+  // One comment answered at once. On an artifact the hub does it (every edit or none, then the reply and the resolve); on the interface, the folder is written here.
+  const body = jsonFlag(rest), entry = await find(argument) ?? fail(`No markup item ${argument} in ${folder}`);
+  if (!Object.keys(body).length && !process.stdin.isTTY) Object.assign(body, JSON.parse(await (await import("node:stream/consumers")).text(process.stdin) || "{}"));
+  if (!Object.keys(body).length) fail(`Usage: node ${script} answer <item> [n] --json '{"edits":[{"op":"replace","at":"<block>","markdown":"…"}],"reply":"…","resolve":true}'`);
+  const said = rest.indexOf("--as"), by = said >= 0 ? rest.splice(said, 2)[1] : body.by ?? body.as ?? await nameHere(entry.dir);
+  const n = /^\d+$/.test(rest[0] ?? "") ? Number(rest[0]) : Number.isInteger(body.n) ? body.n : undefined, artifact = artifactOf(entry);
+  if (artifact) await hub("POST", `/v0/document/${encodeURIComponent(artifact)}/answer`, { item: entry.id, n, edits: body.edits ?? [], reply: body.reply, resolve: body.resolve, by });
+  else {
+    const comments = JSON.parse(await fs.readFile(entry.item, "utf8")).comments ?? [], at = n ?? (comments.length === 1 ? comments[0].n : undefined);
+    if (body.edits?.length) fail(`${entry.id} is on the interface, not an artifact: make its changes with your own tools, then answer with reply and resolve`);
+    if (body.resolve && !comments.some((comment) => comment.n === at)) fail(at === undefined ? `Say which comment of ${entry.id} this answers (n: ${comments.map((comment) => comment.n).join(", ")})` : `No comment ${at} in ${entry.id}`);
+    const words = typeof body.reply === "string" ? body.reply.trim() : "";
+    if (!words && !body.resolve) fail("An answer has a reply or resolve");
+    if (words) await sayOn(entry.dir, at ?? null, words, by);
+    const all = body.resolve && await settle(entry.dir, at, by);
+    console.log(`Answered ${entry.id}${at ? `, comment ${at}` : ""}${words ? ": replied" : ""}${body.resolve ? `${words ? "," : ":"} resolved${all ? ", so the item is handled" : ""}` : ""}`);
+  }
 } else if (command === "done" && argument) {
   const entry = await find(argument);
   if (!entry) { console.error(`No markup item ${argument} in ${folder}`); process.exit(1); }
@@ -193,18 +253,25 @@ if (command === "wait") {
     const answer = JSON.parse(execFileSync(process.execPath, [new URL("./conduit-auth.mjs", import.meta.url).pathname, "api", argument === "list" ? "GET" : "POST", `/v0/projects/${encodeURIComponent(project)}/artifacts`, ...(argument === "list" ? [] : [JSON.stringify({ kind, name: rest.join(" "), folder: into })])], { encoding: "utf8" }));
     for (const made of answer.artifacts ?? [answer]) console.log(`${made.id}  ${made.path}`);
   } catch (error) { process.stderr.write(error.stdout || `${error.message}\n`); process.exit(1); }
-} else if (command === "document" && rest[0] && (argument === "read" || (["replace", "insert", "delete", "set"].includes(argument) && rest[1]))) {
-  const { execFileSync } = await import("node:child_process");
-  const named = rest.indexOf("--as"), by = named < 0 ? path.basename(process.cwd()) : rest.splice(named, 2)[1];
-  const answers = rest.indexOf("--for"), answering = answers < 0 ? undefined : rest.splice(answers, 2)[1];
-  if (answering !== undefined && !/^[\w-]+\/\d+$/.test(answering)) { console.error(`--for takes <item>/<n> (an item id and a comment number), not ${answering}`); process.exit(1); }
-  const suggests = rest.indexOf("--suggest"), suggest = suggests < 0 ? undefined : /^suggestion\//.test(rest[suggests + 1] ?? "") ? rest.splice(suggests, 2)[1] : (rest.splice(suggests, 1), true);
-  const [id, block, ...words] = rest;
-  const markdown = argument === "read" || argument === "delete" ? undefined : argument === "set" || words.length ? words.join(" ") : await (await import("node:stream/consumers")).text(process.stdin);
-  const route = `/v0/document/${encodeURIComponent(id)}${argument === "read" ? "" : "/blocks"}`;
-  try {
-    process.stdout.write(execFileSync(process.execPath, [new URL("./conduit-auth.mjs", import.meta.url).pathname, "api", argument === "read" ? "GET" : "POST", route, ...(argument === "read" ? [] : [JSON.stringify({ op: argument, block, markdown, by, for: answering, suggest })])], { encoding: "utf8" }));
-  } catch (error) { process.stderr.write(error.stdout || `${error.message}\n`); process.exit(1); }
+} else if (command === "document" && ["read", "replace", "insert", "delete", "set"].includes(argument)) {
+  const usage = `Usage: node ${script} document ${argument} <id>${argument === "read" ? "" : ` ${argument === "set" ? "<name> [value]" : `<block${argument === "insert" ? "|start" : ""}>${argument === "delete" ? "" : " [markdown]"}`} [--for <item>/<n>] [--as <name>], or --json '{"block":"…"${argument === "delete" ? "" : ',"markdown":"…"'}}'`}`;
+  const body = jsonFlag(rest), named = rest.indexOf("--as"), by = named < 0 ? body.as ?? body.by ?? await nameHere() : rest.splice(named, 2)[1];
+  const answers = rest.indexOf("--for");
+  let answering = answers < 0 ? body.for : rest.splice(answers, 2)[1];
+  // An item alone names its one comment.
+  if (answering !== undefined && /^[\w-]+$/.test(String(answering))) {
+    const entry = await find(String(answering)), comments = entry ? JSON.parse(await fs.readFile(entry.item, "utf8")).comments ?? [] : [];
+    if (comments.length !== 1) fail(`--for takes <item>/<n>${entry ? `: ${answering} has comments ${comments.map((comment) => comment.n).join(", ")}` : `, and there is no markup item ${answering}`}`);
+    answering = `${answering}/${comments[0].n}`;
+  }
+  if (answering !== undefined && !/^[\w-]+\/\d+$/.test(String(answering))) fail(`--for takes <item>/<n> (an item id and a comment number), not ${answering}`);
+  const suggests = rest.indexOf("--suggest"), suggest = suggests < 0 ? body.suggest : /^suggestion\//.test(rest[suggests + 1] ?? "") ? rest.splice(suggests, 2)[1] : (rest.splice(suggests, 1), true);
+  const id = rest.shift() ?? body.id, block = body.block ?? rest.shift(), words = rest;
+  if (!id || (argument !== "read" && !block)) fail(usage);
+  // Markdown not given on the line is read from a pipe, never waited for from a terminal.
+  const piped = async () => process.stdin.isTTY ? fail(usage) : (await import("node:stream/consumers")).text(process.stdin);
+  const markdown = argument === "read" || argument === "delete" ? undefined : body.markdown ?? (argument === "set" || words.length ? words.join(" ") : await piped());
+  await hub(argument === "read" ? "GET" : "POST", `/v0/document/${encodeURIComponent(id)}${argument === "read" ? "" : "/blocks"}`, argument === "read" ? undefined : { op: argument, block, markdown, by, for: answering, suggest });
 } else if (command === "document" && rest[0] && (argument === "suggestions" || ((argument === "accept" || argument === "reject") && rest[1]))) {
   const { execFileSync } = await import("node:child_process");
   const [id, key] = rest, settle = argument !== "suggestions";
@@ -221,7 +288,7 @@ if (command === "wait") {
     if (waiter && alive(waiter.id)) console.log(`waiter   ${waiter.name}  (${waiter.cwd}, since ${waiter.since})`);
   }
 } else {
-  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document list <project> | document new <name> --project <id> [--folder <path>] [--kind site] | document read <id> | document set <id> <name> [value] | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block> | document suggestions <id> | document accept|reject <id> <key>   (--as <name>; --for <item>/<n> names the comment an edit answers; --suggest [key] makes it a suggestion; Markdown from stdin when not given)");
+  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | answer <id> [n] --json '{\"edits\":[{\"op\":\"replace\",\"at\":\"<block>\",\"markdown\":\"…\"}],\"reply\":\"…\",\"resolve\":true}' | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document list <project> | document new <name> --project <id> [--folder <path>] [--kind site] | document read <id> | document set <id> <name> [value] | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block> | document suggestions <id> | document accept|reject <id> <key>   (--as <name>, by default the name this folder's wait listens under; --for <item>/<n> names the comment an edit answers, <item> alone its one comment; --suggest [key] makes it a suggestion; --json '{…}' gives any of block, markdown, as, for, suggest; Markdown piped in when not given)");
   // Asked for (`document` alone, as an item's `change` tells an agent to run it), usage is an answer, not a failure.
   process.exit(command && !(command === "document" && !argument) ? 1 : 0);
 }

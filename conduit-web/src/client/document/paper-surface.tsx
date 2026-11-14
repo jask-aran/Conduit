@@ -72,7 +72,7 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
         anchors: (list) => marks?.anchors(list), place: (key) => marks?.place(key) ?? null, watch: (listener) => marks?.watch(listener) ?? (() => {}),
         revert: { can: (key) => marks?.changed(key) ?? false, run: (key) => api(`${base}/changes`, { method: "POST", body: JSON.stringify({ op: "revert", thread: key }) }) },
         working: (key) => { const seat = marked()?.seats?.().find((one) => one.for === key); return seat && { by: seat.name, state: seat.state }; },
-        suggestions: { list: () => marked()?.suggestions() ?? [], place: (key) => marks?.place(key) ?? null, accept: (key) => marks?.accept(key), reject: (key) => marks?.reject(key) },
+        suggestions: { list: () => marked()?.suggestions() ?? [], place: (key) => marks?.place(key) ?? null, accept: (key) => marks?.accept(key), reject: (key) => marks?.reject(key), acceptAll: (by) => marks?.acceptAll(by), rejectAll: (by) => marks?.rejectAll(by) },
         focus: () => props.pane()?.querySelector<HTMLElement>(".ui-document-text")?.focus({ preventScroll: true }),
       },
       tools: () => marks?.tools() ?? [],
@@ -94,7 +94,7 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
     away, stale,
     reveal: () => controls()?.reveal,
   });
-  return <><DocumentEditor host={editing} id={id} name={props.about().name} bare onAway={setAway} onStale={setStale} marks={(offered) => { marks = offered; setMarked(() => offered); }} mentions={() => props.quiet ? [] : props.offer()?.names() ?? []} onMention={ask} onRename={(name) => renameArtifact(id, name)} count={paperCounted()} width={width()} controls={setControls} onComment={props.quiet ? undefined : ask} margin={props.margin} marginEmpty={props.marginEmpty} />
+  return <><DocumentEditor host={editing} id={id} name={props.about().name} bare onAway={setAway} onStale={setStale} marks={(offered) => { marks = offered; setMarked(() => offered); }} mentions={() => props.quiet ? [] : props.offer()?.names() ?? []} to={() => props.offer()?.to() ?? null} onMention={ask} onRename={(name) => renameArtifact(id, name)} count={paperCounted()} width={width()} controls={setControls} onComment={props.quiet ? undefined : ask} margin={props.margin} marginEmpty={props.marginEmpty} />
     <PaperShortcuts open={showingKeys()} onOpenChange={setShowingKeys} groups={shownKeys()} />
   </>;
 }

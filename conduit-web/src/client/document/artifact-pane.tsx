@@ -2,7 +2,7 @@ import names from "virtual:ui-pieces";
 import { createEffect, createResource, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import { MarkupMargin, MarkupTool, httpTransport, type MarkupHost, type MarkupMarginControl, type MarkupMarginEntry, type MarkupMode } from "@/components/markup";
 import { MARKUP_STATES } from "@/components/markup/margin";
-import { Button, Dot, Empty, HeaderButton, Icons, SheetFill, StatusDot } from "@/components/ui";
+import { Button, Dot, Empty, HeaderButton, Icons, SettingValue, SheetFill, StatusDot } from "@/components/ui";
 import { MarkupRibbonRoom } from "@/components/ui/markup";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
@@ -61,7 +61,8 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
         </MenuSection>
         <MenuSection title="Comments" note={(needsMe() ? waiting() : notes()).length ? undefined : needsMe() ? "Nothing waiting on you" : "No comments"}><For each={needsMe() ? waiting() : notes()}>{row}</For></MenuSection>
         <Show when={suggested().length}><MenuSection title="Suggestions"><For each={suggested()}>{(entry) => <MenuRow detail={entry.by ?? undefined} onSelect={() => margin.go(entry.key)}
-          actions={[{ label: "Reject", icon: <Icons.Close />, onSelect: () => suggestions()?.reject(entry.key) }, { label: "Accept", icon: <Icons.Check />, onSelect: () => suggestions()?.accept(entry.key) }]}>{entry.about}</MenuRow>}</For></MenuSection></Show>
+          actions={[{ label: "Reject", icon: <Icons.Close />, onSelect: () => suggestions()?.reject(entry.key) }, { label: "Accept", icon: <Icons.Check />, onSelect: () => suggestions()?.accept(entry.key) }]}>{entry.about}</MenuRow>}</For>
+          <Show when={suggested().length > 1}><MenuRow icon={<Icons.Check />} meta={String(suggested().length)} onSelect={() => suggestions()?.acceptAll?.()}>Accept all</MenuRow><MenuRow icon={<Icons.Close />} onSelect={() => suggestions()?.rejectAll?.()}>Reject all</MenuRow></Show></MenuSection></Show>
         <Show when={done()}><MenuSection><MenuRow icon={<Icons.Check />} meta={String(done())} onSelect={() => void margin.resolveDone()}>Resolve all the agent resolved</MenuRow></MenuSection></Show>
       </MenuContent>
     </DropdownMenu></Show>;
@@ -76,7 +77,9 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
   // Who listens to this artifact now (its own thread, and any chat connected or session waiting), told by the open tool.
   const listening = () => offer()?.names() ?? [];
   const connecting = <DropdownMenu modal={false} placement="bottom-end">
-    <MenuControl as={Button} variant="ghost" size="sm" aria-label="Agents" title={`${listening().length} listening`}><Icons.Agent />{listening().length || null}</MenuControl>
+    {/* Who an unaddressed comment goes to, always in sight. */}
+    <MenuControl as={Button} variant="ghost" size="sm" aria-label={offer()?.to() ? `Agents: comments go to ${offer()!.to()}` : "Agents"} title={[`${listening().length} listening`, offer()?.to() && `comments go to ${offer()!.to()}`].filter(Boolean).join(", ")}>
+      <Icons.Agent /><Show when={offer()?.to()}>{(to) => <SettingValue>{to()}</SettingValue>}</Show>{listening().length || null}</MenuControl>
     <MenuContent width="md"><MenuSection title="Comments go to" note={listening().length ? undefined : "No agent is listening"}>
       <For each={listening()}>{(name) => <MenuRow closeOnSelect={false} checked={offer()?.to() === name || undefined} onSelect={() => offer()?.hand(name)}>{name}</MenuRow>}</For>
     </MenuSection><MenuSection title="Connect a chat" note={chats().length ? undefined : "No chats in this project"}>

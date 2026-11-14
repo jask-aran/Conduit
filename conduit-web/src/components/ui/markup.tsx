@@ -1,6 +1,6 @@
 import { createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 // Through the barrel, so the tool's chunk takes these from the app's own and the build splits nothing new out of it.
-import { Button, Card, ColourPicker, CardPreview, CloseButton, Dot, Frost, IconButton, Icons, Segmented, Spinner, Stepper, Swatch, Switch, TextArea } from "./index";
+import { Button, Card, ColourPicker, CardPreview, CloseButton, Count, Dot, Frost, IconButton, Icons, Segmented, Spinner, Stepper, Swatch, Switch, TextArea } from "./index";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "./menus";
 import { clockTime } from "./time";
 import "./styles/markup.css";
@@ -98,10 +98,12 @@ type Said = { from: "agent" | "person"; text: string; at?: string };
  *  `state` says where it stands (not sent, sent, being worked on, answered, resolved), `unread` an answer not yet opened. Once sent it is a thread:
  *  `words` is the comment and `said` what the agent (`by`) and the person have written about it since, each with when. Shut, it shows the comment and the latest of those,
  *  each cut short; open, all of it, the field is the person's answer (`placeholder`, sent by Reply: `onSay`), and Resolve stands with Reply. Shut, its corner resolves it (`onResolve`);
- *  `resolved` it folds to the comment until it is opened and reopened. `onRevert`: an agent changed something to answer it, which this takes back.
- *  `onAccept` and `onReject`: it is a proposed change, which is taken or declined, with no field. `key`: what a margin knows it by. */
+ *  `resolved` it folds to the comment until it is opened and reopened. `onRevert`: an agent changed something to answer it, which this takes back; the card then leads with Keep (its Resolve),
+ *  Revert and `onRetry` (the comment asked again). `onAccept` and `onReject`: it is a proposed change, which is taken or declined, with no field. `key`: what a margin knows it by.
+ *  `count`: shut, it stands for that many cards of one place (its state says how many); `stacked`: it is one of those, not drawn; `cycle`: open, it is `at` of `of` there, stepped through. */
 export function MarkupNote(props: { ref?: (element: HTMLTextAreaElement) => void; key?: string; float?: JSX.CSSProperties; open: boolean; tag: string; name: string; quote?: string; source?: string; value: string; picture?: string; words?: string; said?: Said[]; by?: string; state?: { label: string; busy?: boolean }; unread?: boolean;
-  placeholder?: string; resolved?: boolean; sendNow?: boolean; onSendNow?: (on: boolean) => void; onOpen: () => void; onInput: (value: string) => void; onDone?: () => void; onRemove?: () => void; onSay?: () => void; onResolve?: (resolved: boolean) => void; onRevert?: () => void; onAccept?: () => void; onReject?: () => void }) {
+  placeholder?: string; resolved?: boolean; sendNow?: boolean; onSendNow?: (on: boolean) => void; onOpen: () => void; onInput: (value: string) => void; onDone?: () => void; onRemove?: () => void; onSay?: () => void; onResolve?: (resolved: boolean) => void; onRevert?: () => void; onRetry?: () => void; onAccept?: () => void; onReject?: () => void;
+  count?: number; stacked?: boolean; cycle?: { at: number; of: number; onPrevious: () => void; onNext: () => void } }) {
   const thread = () => props.said !== undefined;
   const head = () => Boolean(props.tag || props.name);
   const proposed = () => Boolean(props.onAccept || props.onReject);
@@ -112,26 +114,33 @@ export function MarkupNote(props: { ref?: (element: HTMLTextAreaElement) => void
   const actions = () => {
     if (proposed()) return <><Show when={props.onReject}><Button variant="ghost" size="sm" onClick={props.onReject}>Reject</Button></Show><Show when={props.onAccept}><Button variant="primary" outline size="sm" onClick={props.onAccept}>Accept</Button></Show></>;
     if (props.float && props.open) return <><Show when={props.sendNow !== undefined}><label class="ui-markup-now" title={props.onSendNow ? undefined : "Needs a session listening"}>Send now<Switch label="Send this comment as it is Done" checked={Boolean(props.sendNow)} disabled={!props.onSendNow} onChange={props.onSendNow} /></label></Show><Button variant="ghost" size="sm" onClick={props.onRemove}>Remove</Button><Button variant="primary" outline size="sm" onClick={props.onDone}>Done</Button></>;
+    // An answer that changed the text is first taken or put back: Keep is its Resolve, so it is not offered twice.
+    const keep = () => Boolean(props.onRevert && !props.resolved && props.onResolve);
     if (props.open && props.onSay) return <>
+      <Show when={keep()}><Button variant="primary" outline size="sm" title="Keep what the agent changed, and resolve the comment" onClick={() => props.onResolve!(true)}><Icons.Check />Keep</Button></Show>
       <Show when={props.onRevert}><Button variant="ghost" size="sm" title="Put back what the agent changed for this comment" onClick={props.onRevert}>Revert</Button></Show>
+      <Show when={props.onRetry}><Button variant="ghost" size="sm" title="Put back what the agent changed and ask again" onClick={props.onRetry}>Try again</Button></Show>
       <Show when={props.resolved && props.onResolve}><Button variant="ghost" size="sm" onClick={() => props.onResolve!(false)}>Reopen</Button></Show>
       <span class="ui-markup-gap" />
-      <Show when={!props.resolved && props.onResolve}><Button variant="ghost" size="sm" aria-label="Resolve" onClick={() => props.onResolve!(true)}><Icons.Check />Resolve</Button></Show>
-      <Button variant="primary" outline size="sm" title="Reply (Ctrl Enter)" disabled={!props.value.trim()} onClick={props.onSay}>Reply</Button>
+      <Show when={!props.resolved && props.onResolve && !keep()}><Button variant="ghost" size="sm" aria-label="Resolve" onClick={() => props.onResolve!(true)}><Icons.Check />Resolve</Button></Show>
+      <Button variant={keep() ? "ghost" : "primary"} outline={!keep()} size="sm" title="Reply (Ctrl Enter)" disabled={!props.value.trim()} onClick={props.onSay}>Reply</Button>
     </>;
     return undefined;
   };
-  return <div class="ui-markup-note" data-key={props.key} style={props.float} data-float={props.float ? "" : undefined} data-open={props.open ? "" : undefined} data-head={head() ? "" : undefined} data-proposed={proposed() ? "" : undefined} onClick={(event) => { if (!props.open && !(event.target as Element).closest("button")) props.onOpen(); }}>
+  return <div class="ui-markup-note" data-key={props.key} style={props.float} data-float={props.float ? "" : undefined} data-open={props.open ? "" : undefined} data-head={head() ? "" : undefined} data-proposed={proposed() ? "" : undefined} data-stacked={props.stacked ? "" : undefined} onClick={(event) => { if (!props.open && !(event.target as Element).closest("button")) props.onOpen(); }}>
     <Card size="compact" role="group" label={props.tag ? `Comment ${props.tag}` : props.name || props.quote || (proposed() ? "Suggestion" : "Comment")}
       title={head() ? <><Show when={props.tag}><b class="ui-markup-number">{props.tag}</b></Show><span class="ui-markup-name">{props.name}</span></> : undefined}
       close={corner()} closeLabel={thread() ? "Resolve" : "Remove"} closeIcon={thread() ? <Icons.Check /> : undefined} actions={actions()}>
       <div class="ui-markup-talk">
+        <Show when={props.open && props.cycle}>{(cycle) => <p class="ui-markup-cycle">
+          <IconButton label="Previous comment here" onClick={cycle().onPrevious}><Icons.ChevronLeft /></IconButton><span>{cycle().at} of {cycle().of}</span><IconButton label="Next comment here" onClick={cycle().onNext}><Icons.ChevronRight /></IconButton>
+        </p>}</Show>
         <Show when={props.quote}><p class="ui-markup-quote">{props.quote}</p></Show>
         <Show when={!props.quote && !thread() && props.open && props.source}><p class="ui-markup-source">{props.source}</p></Show>
         <Show when={props.picture && !props.float && (!thread() || props.open)}><CardPreview><img src={props.picture} alt="" /></CardPreview></Show>
         <Show when={words()}><Show when={thread()} fallback={<p class="ui-markup-words">{words()}</p>}><div class="ui-markup-said" data-from="person"><span class="ui-markup-who">You</span><p>{words()}</p></div></Show></Show>
         <Show when={thread()}><Show when={props.open} fallback={<Show when={latest()} keyed>{entry}</Show>}><For each={props.said}>{entry}</For></Show></Show>
-        <Show when={props.state || props.unread}><p class="ui-markup-state"><Show when={props.unread}><Dot tone="unread" aria-label="Unread" /></Show><Show when={props.state?.busy}><Spinner /></Show>{props.state?.label ?? "Unread"}</p></Show>
+        <Show when={props.state || props.unread}><p class="ui-markup-state"><Show when={props.unread}><Dot tone="unread" aria-label="Unread" /></Show><Show when={props.state?.busy}><Spinner /></Show>{props.state?.label ?? "Unread"}<Show when={!props.open && (props.count ?? 0) > 1}><Count value={props.count!} label={`${props.count} comments here`} /></Show></p></Show>
       </div>
       <Show when={props.open}><TextArea ref={props.ref} rows={1} placeholder={props.placeholder ?? "What should change?"} value={props.value} onInput={(event) => props.onInput(event.currentTarget.value)} /></Show>
     </Card>

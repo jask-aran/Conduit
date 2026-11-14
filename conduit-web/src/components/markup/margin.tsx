@@ -38,7 +38,7 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
   const host = props.host, transport = host.transport, margin = host.margin;
   const [held, setHeld] = createStore<{ items: MarkupThread[] }>({ items: [] });
   const [openKey, setOpenKey] = createSignal<string | null>(null), [reply, setReply] = createSignal(""), [beside, setBeside] = createSignal(false);
-  const [seen, setSeen] = createStore<Record<string, number>>({});
+  const [seen, setSeen] = createStore<Record<string, number>>({}), [tucked, setTucked] = createSignal(false);
   let column: HTMLDivElement | undefined, field: HTMLTextAreaElement | undefined, due = 0;
   const failed = (what: string) => (error: unknown) => host.notify("failed", `${what}: ${error instanceof Error ? error.message : String(error)}`);
   // An item put away leaves once its answer is read, but not from under the person reading it: the open card's item stays until the card is shut.
@@ -66,6 +66,13 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
   const suggestions = () => margin?.suggestions?.list() ?? [];
   const suggestionOf = (key: string) => suggestions().find((one) => one.key === key);
   const placeOf = (key: string) => key.startsWith(SUGGESTED) ? margin?.suggestions?.place(key.slice(SUGGESTED.length)) ?? null : margin?.place(key) ?? null;
+  /** The place a comment is about where the surface says (a paper's first block under it); else it is a place of its own. */
+  const blockOf = (key: string) => String(commentOf(key)?.under?.blocks ?? "").split(" ")[0] || key;
+  /** Tucked over the text, the comments standing at one place are one mark there, in the order they were sent, and open one at a time. */
+  const placed = (key: string) => !keys().includes(key) || putAway(key) ? [key] : keys().filter((one) => !putAway(one) && blockOf(one) === blockOf(key));
+  const stacked = (key: string) => { const here = placed(key), opened = openKey(); return tucked() && here.length > 1 && (opened && here.includes(opened) ? opened !== key : here[0] !== key); };
+  const cycle = (key: string) => { const here = placed(key), at = here.indexOf(key), to = (by: number) => () => open(here[(at + by + here.length) % here.length]!);
+    return tucked() && here.length > 1 ? { at: at + 1, of: here.length, onPrevious: to(-1), onNext: to(1) } : undefined; };
 
   /** Each card, sent or waiting to be, at the height of its place, the next pushed down past it; with no room beside, a list in that order (the tool places those waiting itself). */
   const waiting = new Map<string, MarkupMarginWaiting>();
@@ -75,9 +82,12 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
     props.onCards?.(column.children.length + waiting.size);
     // Nothing to place: no reason to measure (this runs as the text under it changes, so on every key typed).
     if (!column.children.length && !waiting.size) return;
+    const tuck = Boolean(column.closest("[data-margin='tucked']"));
+    setTucked(tuck);
     const box = column.getBoundingClientRect(), gap = parseFloat(getComputedStyle(column).rowGap) || 0;
     const cards = [
-      ...([...column.children] as HTMLElement[]).map((card) => ({ want: placeOf(card.dataset.key ?? "")?.top ?? null, height: () => card.offsetHeight,
+      // Tucked, every card of a place stands where its first does, so stepping through them holds still.
+      ...([...column.children] as HTMLElement[]).map((card) => ({ want: placeOf(tuck ? placed(card.dataset.key ?? "")[0]! : card.dataset.key ?? "")?.top ?? null, height: () => card.offsetHeight,
         put: (top: number | null, order: number) => { card.style.top = top === null ? "" : `${top}px`; card.style.order = top === null ? String(order) : ""; } })),
       ...[...waiting.values()].map((one) => ({ want: one.want as number | null, height: () => one.height, put: (top: number | null) => one.at(top === null ? null : { left: box.left, top: box.top + top, width: box.width }) })),
     ].sort((a, b) => (a.want ?? Number.MAX_VALUE) - (b.want ?? Number.MAX_VALUE));
@@ -88,7 +98,9 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
     cards.forEach((card, order) => {
       const top = Math.max(card.want !== null ? card.want - box.top : floor, floor);
       card.put(side ? top : null, order);
-      floor = top + card.height() + gap;
+      // A card not drawn (one of a place's stacked) takes no room.
+      const height = card.height();
+      if (height) floor = top + height + gap;
     });
     column.style.minHeight = side ? `${Math.max(0, floor - gap)}px` : "";
   };
@@ -103,6 +115,8 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
     setReply("");
     void transport.say(split(key)[0], split(key)[1], words).then(took, failed("Not said"));
   };
+  /** The comment asked again of whoever has its item: what the agent changed for it put back, then its own words said once more on its thread. */
+  const retry = (key: string) => { const words = commentOf(key)?.comment; if (words && margin?.revert) void margin.revert.run(key).then(() => transport.say(split(key)[0], split(key)[1], words)).then(took, failed("Not asked again")); };
   const settle = (key: string, resolved: boolean) => { if (resolved && openKey() === key) open(null); void transport.resolve(split(key)[0], split(key)[1], resolved).then((thread) => { took(thread); ask(); }, failed(resolved ? "Not resolved" : "Not reopened")); };
   const resolveDone = async () => {
     const done = keys().filter((key) => commentOf(key)?.resolved && !putAway(key));
@@ -144,11 +158,15 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
     const asking = setInterval(ask, OPEN_EVERY_MS);
     const sized = new ResizeObserver(soon), cards = new MutationObserver(() => { for (const card of column!.children) sized.observe(card); soon(); });
     sized.observe(column!); cards.observe(column!, { childList: true });
+    // Tucked or not is the surface's to say, and may change with no card changing size.
+    const tucks = new MutationObserver(soon), frame = column!.closest("[data-margin]");
+    if (frame) tucks.observe(frame, { attributes: true, attributeFilter: ["data-margin"] });
+    onCleanup(() => tucks.disconnect());
     // Ctrl Enter says it, and Enter is a new line (a reply runs longer than a note); Escape shuts the card and gives the keyboard back to the surface.
     column!.addEventListener("keydown", (event) => { if (event.key === "Escape") { open(null); margin?.focus?.(); } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); answer(); } });
     // An open card is shut by Escape from anywhere, once nothing nearer has taken it; and where the margin is tucked over the text, by a press outside it (never losing words being written back).
     const shut = (event: KeyboardEvent) => { if (event.key === "Escape" && openKey() && !event.defaultPrevented && !document.querySelector("[data-slot='ui-menu-content'], [role='dialog']")) { event.preventDefault(); open(null); } };
-    const away = (event: PointerEvent) => { if (openKey() && !reply().trim() && column!.closest("[data-margin='tucked']") && event.target instanceof Element && !event.target.closest(".ui-markup-note, [data-comment]")) open(null); };
+    const away = (event: PointerEvent) => { if (openKey() && !reply().trim() && tucked() && event.target instanceof Element && !event.target.closest(".ui-markup-note, [data-comment]")) open(null); };
     window.addEventListener("keydown", shut); document.addEventListener("pointerdown", away, { capture: true });
     onCleanup(() => { window.removeEventListener("keydown", shut); document.removeEventListener("pointerdown", away, { capture: true }); });
     const unwatch = margin?.watch((pressed) => { if (pressed) { open(pressed); column?.querySelector(`[data-key="${CSS.escape(pressed)}"]`)?.scrollIntoView({ block: "nearest" }); } soon(); });
@@ -158,7 +176,8 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
   return <MarkupMarginNotes ref={(element) => { column = element; }} beside={beside()}>
     <For each={keys()}>{(key) => <MarkupNote ref={(element) => { field = element; }} key={key} open={openKey() === key} tag="" name="" quote={commentOf(key)?.quote} words={commentOf(key)?.comment} said={saidOf(key)} by={itemOf(key)?.by ?? undefined} state={stateOf(key)} unread={unread(key)}
       placeholder="Write back" resolved={putAway(key)} value={openKey() === key ? reply() : ""} onOpen={() => open(key)} onInput={setReply} onSay={answer} onResolve={(resolved) => settle(key, resolved)}
-      onRevert={margin?.revert?.can(key) ? () => void margin.revert!.run(key).catch(failed("Not taken back")) : undefined} />}</For>
+      onRevert={margin?.revert?.can(key) ? () => void margin.revert!.run(key).catch(failed("Not taken back")) : undefined} onRetry={margin?.revert?.can(key) && commentOf(key)?.comment ? () => retry(key) : undefined}
+      count={tucked() ? placed(key).length : undefined} stacked={stacked(key)} cycle={cycle(key)} />}</For>
     <For each={suggestions().map((one) => one.key)}>{(key) => <MarkupNote key={SUGGESTED + key} open={false} tag="" name="" words={suggestionOf(key)?.summary} state={{ label: `${MARKUP_STATES.suggested} by ${who(suggestionOf(key)?.by) ?? "an agent"}` }} value="" onOpen={() => {}} onInput={() => {}}
       onAccept={() => margin?.suggestions?.accept(key)} onReject={() => margin?.suggestions?.reject(key)} />}</For>
   </MarkupMarginNotes>;

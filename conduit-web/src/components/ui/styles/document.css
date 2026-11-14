@@ -9,20 +9,31 @@
 .ui-document-page { display: flex; min-height: 100%; flex-wrap: wrap; justify-content: center; gap: var(--space-2xl); }
 /* The text gives up width before the margin goes under it: it wraps only where the text at its narrowest measure and the margin no longer fit side by side. */
 /* The paper is a sheet on the pane: darker than the ground round it, so its width is seen, and down to the pane's foot however little is written. */
-.ui-document-body { position: relative; display: flex; min-width: 0; max-width: calc(var(--document-width) + 2 * var(--space-4xl)); flex: 1 1 var(--measure-xl); flex-direction: column; border-radius: var(--radius-surface) var(--radius-surface) 0 0; background: var(--well); padding: var(--space-2xl) var(--space-4xl) var(--measure-2xs); }
+/* --document-pad: its side room, the gutter the block handle stands in. */
+.ui-document-body { --document-pad: var(--space-4xl); position: relative; display: flex; min-width: 0; max-width: calc(var(--document-width) + 2 * var(--document-pad)); flex: 1 1 var(--measure-xl); flex-direction: column; border-radius: var(--radius-surface) var(--radius-surface) 0 0; background: var(--well); padding: var(--space-2xl) var(--document-pad) var(--measure-2xs); }
+/* Snug: where the text and a margin with cards in it fit side by side only so, the sheet and the column give up side room before the margin is tucked (DocumentSheet). */
+.ui-document-column[data-snug] { padding-inline: var(--space-xs); }
+.ui-document-column[data-snug] > .ui-document-page { gap: var(--space-lg); }
+/* Snug keeps the gutter: the block numbers and the handle stand in it. */
 .ui-document[data-width="full"] .ui-document-body { max-width: 100%; }
 .ui-document-content { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 /* `min-width: 0`: a card whose quote is one long line is cut short in the margin, and never widens it past the row. */
 .ui-document-margin { min-width: 0; max-width: 100%; flex: 0 0 var(--measure-md); }
-.ui-document-text { box-sizing: border-box; flex: 1; outline: 0; }
+.ui-document-text { box-sizing: border-box; flex: 1; outline: 0; counter-reset: block; }
+/* Each block is numbered in the sheet's gutter, where the handle stands over its number. */
+.ui-document-text > :is([data-id], .tableWrapper) { position: relative; counter-increment: block; }
+.ui-document-text > :is([data-id], .tableWrapper)::after { position: absolute; top: 0; right: 100%; margin-right: var(--space-md); color: color-mix(in oklch, var(--muted-foreground), transparent var(--tone-quiet)); font-family: var(--font-data); font-size: var(--text-caption); font-variant-numeric: tabular-nums; content: counter(block); pointer-events: none; user-select: none; }
 .ui-document-comment { border-radius: var(--radius-inset); background: color-mix(in oklch, var(--status-warn), transparent 78%); cursor: pointer; }
 .ui-document-comment[data-current] { background: color-mix(in oklch, var(--status-warn), transparent 55%); }
 /* Asking where the caret is: a line of the paper, in the line's own place and no taller, the words growing down. */
-.ui-document-ask { position: absolute; z-index: 1; display: flex; align-items: flex-start; gap: var(--space-sm); border-radius: var(--radius-control); background: var(--popover); box-shadow: 0 0 0 var(--space-xs) var(--popover); font-size: var(--text-body); line-height: var(--leading-reading); }
+.ui-document-ask { position: absolute; z-index: 1; display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-sm); border-radius: var(--radius-control); background: var(--popover); box-shadow: 0 0 0 var(--space-xs) var(--popover); font-size: var(--text-body); line-height: var(--leading-reading); }
 .ui-document-ask > .ui-document-mention { flex: none; cursor: default; }
 .ui-document-ask > .ui-textarea { min-width: 0; flex: 1; font: inherit; }
 /* No taller than the line it stands in. */
 .ui-document-ask > .ui-icon-button { width: 1lh; height: 1lh; min-width: 0; min-height: 0; flex: none; }
+/* What was asked most, a row of its own under the field; a long ask is cut short rather than widening the row. */
+.ui-document-ask-asked { display: flex; min-width: 0; flex: 1 0 100%; gap: var(--space-xs); }
+.ui-document-ask-asked > .ui-button { min-width: 0; flex: 0 1 auto; }
 .ui-document-mention { flex: none; cursor: default; line-height: var(--control-sm); }
 .ui-document-ask > .ui-textarea { min-width: 0; flex: 1; padding-block: var(--space-xs); }
 .ui-document-mention { border-radius: var(--radius-inset); background: var(--tint); padding-inline: var(--space-2xs); cursor: pointer; }
@@ -38,6 +49,11 @@
 .ui-document-commented[data-current] { --document-mark: color-mix(in oklch, var(--status-warn), transparent 72%); }
 /* A block both commented and changed shows the change. */
 .ui-document-text > .ui-document-changed { --document-mark: color-mix(in oklch, var(--status-success), transparent 86%); }
+/* As an agent's change lands, the block says whose it is on a quiet line under its right edge for a moment, taking no room (the block's containment holds it). */
+.ui-document-text > .ui-document-changed[data-change-by]::after { position: absolute; top: 100%; right: 0; color: var(--muted-foreground); content: attr(data-change-by) " changed this"; font: var(--weight-rest) var(--text-caption)/var(--leading-tight) var(--font-sans); pointer-events: none; user-select: none; white-space: nowrap;
+  animation: ui-document-changed-in var(--duration-gentle) var(--ease-arrive), ui-document-changed-out var(--duration-gentle) var(--ease-leave) calc(var(--duration-breathe) + var(--duration-pulse)) forwards; }
+@keyframes ui-document-changed-in { from { opacity: 0; } }
+@keyframes ui-document-changed-out { to { opacity: 0; } }
 .ui-document-removed { margin-block: var(--space-md); border-radius: var(--radius-inset); background: color-mix(in oklch, var(--destructive), transparent 88%); padding: var(--space-xs) var(--space-sm); color: var(--muted-foreground); font-size: var(--text-caption); text-decoration: line-through; }
 .ui-document-text pre { overflow-x: auto; border-radius: var(--radius-control); background: var(--tint); padding: var(--space-md) var(--space-lg); font: var(--text-caption)/var(--leading-reading) var(--font-code); }
 /* A document has more levels of heading than an answer needs, each a step under the title's, and a heading under text opens a part of it. */
@@ -81,7 +97,7 @@
 .ui-document-head > .ui-document-add { width: fit-content; margin-inline: calc(-1 * var(--space-md)); color: var(--muted-foreground); font-weight: var(--weight-rest); }
 .ui-document-count { margin: var(--space-2xl) 0 0; color: var(--muted-foreground); font-family: var(--font-data); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
 /* In the gutter beside the block pointed at; not there, it takes no focus. */
-.ui-document-handle { position: absolute; top: 0; right: calc(100% - var(--space-4xl)); display: flex; margin-right: var(--space-xs); gap: var(--space-2xs); opacity: 0; user-select: none; visibility: hidden; transition: opacity var(--duration-quick) var(--ease-leave), visibility 0s linear var(--duration-quick); }
+.ui-document-handle { z-index: 1; background: var(--well); position: absolute; top: 0; right: calc(100% - var(--document-pad)); display: flex; margin-right: var(--space-xs); gap: var(--space-2xs); opacity: 0; user-select: none; visibility: hidden; transition: opacity var(--duration-quick) var(--ease-leave), visibility 0s linear var(--duration-quick); }
 .ui-document-handle[data-shown] { opacity: 1; visibility: visible; transition: opacity var(--duration-quick) var(--ease-arrive); }
 .ui-document-handle > [data-grip] { cursor: grab; touch-action: none; }
 .ui-document-drop { position: absolute; right: 0; left: 0; height: var(--stroke); border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); pointer-events: none; translate: 0 -50%; }
@@ -149,6 +165,17 @@
 @media (prefers-reduced-motion: reduce) { .ui-document-text > .ui-document-seat-held, .ui-document-seat-body .ui-document-seat-caret, .ui-document-seat-jump { animation: none; } }
 .ui-document-suggested { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); margin-block: var(--space-sm) var(--space-2xs); color: var(--muted-foreground); font-size: var(--text-caption); user-select: none; }
 .ui-document-suggested > span { margin-inline-end: var(--space-xs); }
+/* A suggested block shows its words: taken out struck, standing in the text but no part of it; put in washed. Its tint gives way to them. */
+.ui-document-text > .ui-document-changed.ui-document-diff { --document-mark: transparent; }
+.ui-document-diff-added { border-radius: var(--radius-inset); background: color-mix(in oklch, var(--status-success), transparent 72%); }
+.ui-document-diff-removed { color: var(--muted-foreground); text-decoration: line-through var(--hairline) var(--destructive); user-select: none; }
+/* At the end of the suggestion's last line, no taller than the line, so the text does not move as they come and go. */
+.ui-document-diff-acts { display: inline-flex; height: 1lh; vertical-align: top; gap: var(--space-2xs); margin-inline-start: var(--space-xs); user-select: none; }
+.ui-document-diff-acts > .ui-icon-button { width: 1lh; height: 1lh; min-width: 0; min-height: 0; }
+/* Reviewing: the caret and an edge beside the text in the suggestion's colour. The edge's room is taken from beside the text, so no word moves. */
+.ui-document-text[data-writing="suggesting"] { caret-color: var(--status-success); }
+/* Reviewing is said on the sheet's own edge. */
+.ui-document-body[data-writing="suggesting"] { box-shadow: inset var(--stroke) 0 0 color-mix(in oklch, var(--status-success), transparent var(--tone-quiet)); }
 /* A margin with no comment in it takes no room, so the text stands centred in the column. */
 .ui-document-page[data-margin="none"] > .ui-document-margin { display: none; }
 /* Tucked: the margin takes no room and the text keeps its measure. Each card is a small mark at the text's right edge, saying only how it stands, and

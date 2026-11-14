@@ -3,7 +3,7 @@ import { defineTool } from "@earendil-works/pi-durable";
 import { callingChat } from "./conduit-mcp.js";
 
 const text = (words, isError = false) => ({ output: [{ type: "text", text: words }], ...(isError ? { isError: true } : {}) });
-const ACTIONS = ["list", "new", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve"];
+const ACTIONS = ["answer", "list", "new", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve"];
 
 /** Papers for an agent: the hub's document service (server/documents.js) as one tool, with the verbs `conduit-markup` has. */
 export function PaperTool(runtime) {
@@ -11,6 +11,8 @@ export function PaperTool(runtime) {
     name: "conduit_paper",
     description: "Papers: the block documents the person and agents write together in a project (a `.paper` file; edit it only through this tool, since the hub holds the live copy). "
       + "`paper` is a paper's id; omit it in a paper's own thread, or in a chat connected to one paper. "
+      + "answer (item, n: omit it for an item with one comment; edits: [{ op: replace | insert | delete, at: a block id, markdown }]; reply; resolve) answers a comment in one call: every edit is made for it, all or none, then the reply and the resolve. "
+      + "A comment handed to you carries its text and the blocks it is on, so answer needs no read first; an edit on a block that has gone writes nothing and says what the comment is on now. "
       + "list (project: id or slug, default this chat's) and new (name, project) give ids. "
       + "read prints the paper as Markdown, each block under `<!-- block <id> -->`. "
       + "set (name, text) writes one property of its front matter (the name: value lines read shows first); no text removes it. "
@@ -33,9 +35,16 @@ export function PaperTool(runtime) {
       for: Type.Optional(Type.String({ description: "The comment an edit answers, as <item>/<n>." })),
       suggest: Type.Optional(Type.Boolean({ description: "replace, insert, delete: make the edit a suggestion." })),
       suggestion: Type.Optional(Type.String({ description: "A suggestion's key (suggestion/<id>), from suggestions or an earlier suggest: accept, reject, or add to it with suggest." })),
-      item: Type.Optional(Type.String({ description: "reply, resolve: a markup item's id." })),
+      item: Type.Optional(Type.String({ description: "answer, reply, resolve: a markup item's id." })),
       n: Type.Optional(Type.Integer({ description: "A comment's number in its item." })),
       text: Type.Optional(Type.String({ description: "reply: what to say." })),
+      edits: Type.Optional(Type.Array(Type.Object({
+        op: Type.Union([Type.Literal("replace"), Type.Literal("insert"), Type.Literal("delete")]),
+        at: Type.String({ description: "A block's id; insert also takes `start`." }),
+        markdown: Type.Optional(Type.String()),
+      }), { description: "answer: the paper's edits for the comment, in order." })),
+      reply: Type.Optional(Type.String({ description: "answer: what the person reads beside the comment." })),
+      resolve: Type.Optional(Type.Boolean({ description: "answer: mark the comment done." })),
     }),
     replay: "unsafe",
     execute: async (args, api = {}, context) => {
@@ -52,6 +61,11 @@ export function PaperTool(runtime) {
         const paper = args.paper ?? (mine.papers.length === 1 ? mine.papers[0].id : null);
         if (!paper) throw new Error(mine.papers.length ? `Say which paper: this chat is connected to ${mine.papers.map((one) => one.id).join(", ")}.` : "Say which paper (`list` gives ids).");
         const by = mine.papers.find((one) => one.id === paper)?.as ?? "agent";
+        if (args.action === "answer") {
+          const done = await documents.answer(paper, { item: args.item, n: args.n, edits: args.edits ?? [], reply: args.reply ?? args.text, resolve: args.resolve, by });
+          const did = [args.edits?.length && `made ${args.edits.length === 1 ? "the edit" : `the ${args.edits.length} edits`}${done.blocks.length ? ` (wrote ${done.blocks.join(", ")})` : ""}`, done.replied && "replied", done.resolved && `resolved it${done.handled ? ", so the item is handled" : ""}`].filter(Boolean);
+          return text(`Answered ${done.item}${done.n ? `, comment ${done.n}` : ""}: ${did.join("; ")}.`);
+        }
         if (args.action === "read") { void documents.seat(paper, by, { state: "reading" }); return text(await documents.read(paper)); }
         if (args.action === "set") return text(`Its properties: ${JSON.stringify((await documents.edit(paper, { op: "set", block: args.name, markdown: args.text ?? "", by })).properties)}`);
         if (args.action === "replace" || args.action === "insert" || args.action === "delete") {

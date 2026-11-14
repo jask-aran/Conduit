@@ -20,10 +20,11 @@ import { DOCUMENT_BLOCKS, DOCUMENT_MARKS, DOCUMENT_TURNABLE, type DocumentAnchor
 import { hinted } from "./hint";
 import { createLiveDocument } from "./live";
 import { createSeatsAway, seatsDrawn } from "./seats";
-import { createSuggesting, type Change } from "./suggest";
+import { blockDiff, createSuggesting, type Change } from "./suggest";
 import { dayFrom, paperTyping, pickImages, viewed } from "./nodes";
 import { INKED, INKS, inkSwatch, MARKS, putInk, SelectionTools, TableTools, selectedRange, type PaperInk } from "./toolbar";
 import { createSlash, menuKeys, TypedMenu, typing, type Typed, type Typing } from "./typed";
+import { PAPER_COMMENT_KEY, PAPER_MARK_KEYS, paperKeys } from "./shortcuts";
 
 /** What the caret's block is, read in this order (a list inside a quote is a list), and how a block is made that kind. */
 const KINDS: Record<DocumentBlockKind, { label: string; is?: [string, Record<string, unknown>?]; make: (chain: ChainedCommands) => ChainedCommands }> = {
@@ -48,9 +49,21 @@ const KINDS: Record<DocumentBlockKind, { label: string; is?: [string, Record<str
 const wordsIn = new WeakMap<Node, number>();
 const kindAt = (editor: Editor | undefined) => (Object.keys(KINDS) as DocumentBlockKind[]).find((kind) => { const is = KINDS[kind].is; return is && isOn(editor, ...is); }) ?? "text";
 
-const MARK_KEYS: Record<string, string[]> = { bold: ["Ctrl", "B"], italic: ["Ctrl", "I"], strike: ["Ctrl", "Shift", "S"], code: ["Ctrl", "E"] };
-// The chords the text keeps from the application while it has the keyboard (`data-own-keys`, read by the shortcut manager): its marks.
-const OWN_KEYS = Object.values(MARK_KEYS).map((keys) => [...keys.slice(0, -1).map((key) => key === "Ctrl" ? "primary" : key.toLowerCase()).sort(), `Key${keys.at(-1)}`].join("+")).join(" ");
+const MARK_KEYS: Record<string, string[]> = Object.fromEntries(Object.entries(PAPER_MARK_KEYS).map(([name, chord]) => [name, paperKeys(chord)]));
+// The chords the text keeps from the application while it has the keyboard (`data-own-keys`, read by the shortcut manager): its marks and the comment key.
+const OWN_KEYS = [...Object.values(PAPER_MARK_KEYS), PAPER_COMMENT_KEY].map((chord) => { const parts = chord.split("-"), key = parts.pop()!; return [...parts.map((part) => part === "Mod" ? "primary" : part.toLowerCase()).sort(), `Key${key.toUpperCase()}`].join("+"); }).join(" ");
+const chordHint = (chord: string) => paperKeys(chord).join(" ");
+/** Escape steps out of a selection to its head, so its tools go (DESIGN.md, the Escape ladder); last of the editor's keys, and never where something took the press first. */
+const collapsing = Extension.create({
+  name: "collapseOnEscape",
+  priority: 0,
+  addProseMirrorPlugins: () => [new Plugin({ props: { handleKeyDown: (view, event) => {
+    const { selection } = view.state;
+    if (event.key !== "Escape" || event.defaultPrevented || !(selection instanceof TextSelection) || selection.empty) return false;
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, selection.head)));
+    return true;
+  } } })],
+});
 /** The editor's text is the Yjs document's blocks, each change merged as it is made; undo takes back only what was written here. */
 /**
  * A step through the history, which is the document's. What is typed and not yet written to it is written first, or it would be taken back out of
@@ -86,6 +99,8 @@ const shown = new PluginKey<DecorationSet>("documentMarks");
  * block still says it, else its blocks), each block in the document's changes, and a line where a changed block was deleted. `told.moved` hears
  * when any of it may have moved, and of a press on a comment's mark.
  */
+/** How long a block says who changed it, after the change lands; a paper opened later shows the tint alone. */
+const FRESH_MS = 5000;
 const marked = (changes: YMap<Change>, told: { anchors: DocumentAnchor[]; moved: (pressed?: string) => void }) => {
   // The suggestion the caret is in shows what its blocks were, as a comment's change does while its card is open.
   const focusOf = (state: EditorState) => { const { $from } = state.selection, id = $from.depth ? $from.node(1).attrs.id : undefined, change = id ? changes.get(id) : undefined; return change && isSuggestion(change.for) ? change.for : undefined; };
@@ -102,11 +117,13 @@ const marked = (changes: YMap<Change>, told: { anchors: DocumentAnchor[]; moved:
     }
     for (const [id, block] of at) {
       const had = on.get(id), changed = changes.has(id);
-      if (had || changed) found.push(Decoration.node(block.from, block.to, { class: [had?.open && documentMarkClass.commented, changed && documentMarkClass.changed].filter(Boolean).join(" "), ...(had?.keys.length ? { "data-comment": had.keys.join(" ") } : {}), ...(had?.current ? { "data-current": "" } : {}), ...(changed ? { "data-change": changes.get(id)!.for } : {}) }));
+      if (had || changed) found.push(Decoration.node(block.from, block.to, { class: [had?.open && documentMarkClass.commented, changed && documentMarkClass.changed].filter(Boolean).join(" "), ...(had?.keys.length ? { "data-comment": had.keys.join(" ") } : {}), ...(had?.current ? { "data-current": "" } : {}), ...(changed ? { "data-change": changes.get(id)!.for, ...(changes.get(id)!.by !== "person" && Date.now() - Date.parse(changes.get(id)!.at) < FRESH_MS ? { "data-change-by": changes.get(id)!.by } : {}) } : {}) }));
     }
     changes.forEach((change, id) => {
       // A block changed and still here shows what it was while its comment's card is open: the tint alone does not say what the agent took out.
       if (!change.before || (at.has(id) && change.for !== focus && !told.anchors.some((anchor) => anchor.current && anchor.key === change.for))) return;
+      // Where the block shows its change word by word, the line of what it was would say the struck words twice.
+      if (at.has(id) && blockDiff(at.get(id)!.block, change.before)) return;
       const line = () => { const element = Object.assign(document.createElement("div"), { className: documentMarkClass.removed, contentEditable: "false", textContent: textOf(change.before!) || "A block was removed" }); element.dataset.change = change.for; return element; };
       found.push(Decoration.widget(at.get(id)?.from ?? (change.after === null ? 0 : at.get(change.after ?? "")?.to ?? doc.content.size), line, { key: id, side: -1 }));
     });
@@ -140,6 +157,8 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   width?: DocumentWidth; controls?: (controls: DocumentControls) => void;
   /** `mentions`: who `@` offers; picked, the typed `@…` goes and `onMention` is told the caret's block and the name. */
   mentions?: () => string[]; onMention?: (about: Range, name: string, words: string) => void;
+  /** `to`: who of `mentions` a comment goes to when none is named, asked by the comment key (PAPER_COMMENT_KEY); unsaid, the first. */
+  to?: () => string | null;
   /** `onComment`: the selection tools' Comment, told the text selected, and the block handle's, told the block. */
   onComment?: (about: Range) => void;
   /** `onRename`: the title renames the document; refused (rejected), it shows the name it had. Without it the title is plain text. `count`: a line under the text says how many blocks and words it holds. */
@@ -171,9 +190,27 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   };
   // Picked, the one asked is told what to write in a field at the caret's block: a comment is about what is there, this asks for what is not.
   const [asking, setAsking] = createSignal<{ about: Range; name: string } | null>(null);
-  // On an empty line the field stands in the line's own place; under a block with text, so the text it is about is read.
-  const askedAt = () => { reflowed(); const at = asking()?.about.startContainer, body = column()?.parentElement; if (!(at instanceof Element) || !body) return undefined; const box = at.getBoundingClientRect(), within = body.getBoundingClientRect(); return { left: box.left - within.left, top: (at.textContent ? box.bottom : box.top) - within.top, width: box.width }; };
+  // On an empty line the field stands in the line's own place; under a block with text (a selection's last), so the text it is about is read.
+  const askedAt = () => {
+    reflowed();
+    const about = asking()?.about, root = editor()?.view.dom, body = column()?.parentElement;
+    if (!about || !root || !body) return undefined;
+    let at: globalThis.Node | null = about.endContainer;
+    while (at && at.parentNode !== root) at = at.parentNode;
+    if (!(at instanceof Element)) return undefined;
+    const box = at.getBoundingClientRect(), within = body.getBoundingClientRect();
+    return { left: box.left - within.left, top: (at.textContent ? box.bottom : box.top) - within.top, width: box.width };
+  };
   const ask = (words: string) => { const at = asking(); setAsking(null); if (at) props.onMention?.(at.about, at.name, words); editor()?.commands.focus(); };
+  // The comment key: the text selected, or the caret's block, asked of the one comments go to.
+  const commentHere = () => {
+    const view = editor()?.view, names = props.mentions?.() ?? [], to = props.to?.() ?? names[0];
+    if (!view || !props.onMention || !to || !names.includes(to)) return false;
+    const about = view.state.selection.empty ? caretBlock(view) : selectedRange(view);
+    if (about) setAsking({ about, name: to });
+    return Boolean(about);
+  };
+  const commentKey = Extension.create({ name: "commentKey", addKeyboardShortcuts: () => ({ [PAPER_COMMENT_KEY]: commentHere }) });
   const keys = (event: KeyboardEvent) => menuKeys(event, offered(), active(), setActive, pick, dismiss);
   // Ready is the hub's copy drawn, or the hub not answering: never a page still waiting.
   createEffect(() => { if (editor() || copy.state() === "away" || copy.state() === "stale") props.onReady?.(); });
@@ -242,7 +279,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     watch: (listener) => { watching.add(listener); return () => watching.delete(listener); },
     changed: (key) => changed().includes(key),
     seats: copy.seats,
-    suggestions: suggesting.suggestions, accept: suggesting.accept, reject: suggesting.reject,
+    suggestions: suggesting.suggestions, accept: suggesting.accept, reject: suggesting.reject, acceptAll: suggesting.acceptAll, rejectAll: suggesting.rejectAll,
     // A bar's block menu turns the caret's block into another kind: a kind that is only put in (a table, a divider) is listed while the caret is in one, to name it.
     tools: listed,
     marking, history,
@@ -283,14 +320,14 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   });
   return <>
   <DocumentSheet ref={setColumn} scroller={setScroller} width={props.width} find={find.view()} name={props.name} state={copy.state() === "away" ? "Reconnecting" : copy.state() === "stale" ? "Reload: this page is older than the paper" : undefined}
-    edge={<Show when={away()}>{(seat) => <DocumentSeatJump label={seat().label} below={seat().below} ink={seat().ink} onJump={() => reveal(seat().block)} />}</Show>} margin={props.margin} marginEmpty={props.marginEmpty} actions={props.actions} bare={props.bare}
+    edge={<Show when={away()}>{(seat) => <DocumentSeatJump label={seat().label} below={seat().below} ink={seat().ink} onJump={() => reveal(seat().block)} />}</Show>} margin={props.margin} marginEmpty={props.marginEmpty} actions={props.actions} bare={props.bare} writing={suggesting.writing()}
     head={<Show when={copy.synced()}><PaperHead doc={copy.doc} name={props.name} onRename={props.onRename} onDown={() => editor()?.commands.focus("start")} /></Show>}
-    over={<>{handle.view}<Show when={asking()} keyed>{(asked) => <Show when={askedAt()}>{(at) => <DocumentAsk name={asked.name} at={at()} onSend={ask} onClose={() => { setAsking(null); editor()?.commands.focus(); }} />}</Show>}</Show><TableTools editor={editor} body={() => column()?.parentElement ?? undefined} moved={reflowed} />
+    over={<>{handle.view}<Show when={asking()?.about} keyed>{(_about) => <Show when={askedAt()}>{(at) => <DocumentAsk name={asking()?.name ?? ""} names={props.mentions?.() ?? []} onName={(name) => setAsking((was) => was && { ...was, name })} at={at()} onSend={ask} onClose={() => { setAsking(null); editor()?.commands.focus(); }} />}</Show>}</Show><TableTools editor={editor} body={() => column()?.parentElement ?? undefined} moved={reflowed} />
 </>} onHover={handle.hover} foot={<Show when={count()}>{(line) => <DocumentCount>{line()}</DocumentCount>}</Show>}>
     {/* The editor is made only once the hub's copy is held: made before, its first empty block would be merged in as a block of its own. */}
     <Show when={copy.synced() && column()}>{(element) => {
       // Untracked: a signal or prop read in what the editor is made from would make it again (caret, undo and find lost) each time it changed.
-      const made = createTiptapEditor(() => { const at = element(); return untrack(() => ({ element: at, extensions: [...viewed(documentExtensions(), props.host), paperTyping(props.host, offers), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), suggesting.extension(), seatsDrawn(copy.seats, (redraw) => { redrawSeats = redraw; }), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), slash.extension(), blockKeys, drawn((block, name) => props.host.showMention?.(block, name)), find.extension(), ...(props.onMention ? [mentioning(anchor, setAsked, keys)] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name, "data-own-keys": OWN_KEYS } } })); });
+      const made = createTiptapEditor(() => { const at = element(); return untrack(() => ({ element: at, extensions: [...viewed(documentExtensions(), props.host), paperTyping(props.host, offers), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), suggesting.extension(), seatsDrawn(copy.seats, (redraw) => { redrawSeats = redraw; }), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), slash.extension(), blockKeys, drawn((block, name) => props.host.showMention?.(block, name)), find.extension(), collapsing, ...(props.onMention ? [mentioning(anchor, setAsked, keys), commentKey] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name, "data-own-keys": OWN_KEYS } } })); });
       createEffect(() => setEditor(made()));
       return null;
     }}</Show>
@@ -298,6 +335,6 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     {/* Menus and tools beside the sheet, never in it: the sheet's column is the editor's to fill, and a child of it that comes and goes clears it. */}
     <TypedMenu label="Ask" anchor={anchor} items={offered()} name={(name) => name} active={active()} onCursor={setActive} onPick={pick} onDismiss={dismiss} />
     {slash.menu()}
-    <SelectionTools editor={editor} bounds={scroller} marks={props.host.tools} onComment={props.onComment} />
+    <SelectionTools editor={editor} bounds={scroller} marks={props.host.tools} onComment={props.onComment} chord={chordHint} />
   </>;
 }

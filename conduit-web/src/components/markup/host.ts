@@ -118,7 +118,7 @@ export interface MarkupMarginHost {
   working?(key: string): { by: string; state: string } | undefined;
   /** Changes an agent has proposed to the surface and not made, each a card of its own in the margin, in the order of their places: `list` read where drawn,
    *  `place` where each is now (as `place` above), and the person taking or declining it. */
-  suggestions?: { list(): MarkupSuggestion[]; place(key: string): { left: number; top: number; width: number; height: number } | null; accept(key: string): unknown; reject(key: string): unknown };
+  suggestions?: { list(): MarkupSuggestion[]; place(key: string): { left: number; top: number; width: number; height: number } | null; accept(key: string): unknown; reject(key: string): unknown; acceptAll?(by?: string): unknown; rejectAll?(by?: string): unknown };
   /** Gives the keyboard back to the surface, as a card is shut from it. */
   focus?(): void;
 }

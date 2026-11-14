@@ -2,11 +2,12 @@ import { Extension, type Editor } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import { createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js";
 import { render } from "solid-js/web";
 import { track } from "./read";
 import { ySyncPluginKey } from "y-prosemirror";
 import type { Doc, Map as YMap } from "yjs";
+import { IconButton, Icons } from "@/components/ui";
 import { DocumentSuggested } from "@/components/ui/document";
 import { SUGGESTION, blockId, isSuggestion } from "@/document-format.js";
 import { blockById } from "./blocks";
@@ -34,12 +35,52 @@ const tops = (doc: Node, kept?: Map<string, unknown>) => {
 };
 const caretId = (doc: Node, from: number) => { const $from = doc.resolve(from); return $from.depth ? $from.node(1).attrs.id as string | undefined : undefined; };
 
+type Run = { put: boolean; text: string; at: number };
+// The words between what is the same at both ends are diffed only up to this many pairs of words, so a diff made again as it is typed in stays cheap.
+const DIFF_PAIRS = 40_000;
+// Each leaf (a break, a mention) as one character, so an offset in the text is the same offset in the block.
+const textIn = (block: Node) => block.textBetween(0, block.content.size, undefined, "￼");
+/** The words taken out of `was` and put in to make `now`, each at its offset in `now` (null: too far apart to diff). */
+const wordDiff = (was: string, now: string): Run[] | null => {
+  const a = was.match(/\s+|\S+/g) ?? [], b = now.match(/\s+|\S+/g) ?? [];
+  let head = 0, tail = 0;
+  while (head < a.length && head < b.length && a[head] === b[head]) head++;
+  while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
+  const x = a.slice(head, a.length - tail), y = b.slice(head, b.length - tail), n = x.length, m = y.length;
+  if (n * m > DIFF_PAIRS) return null;
+  const kept = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) kept[i]![j] = x[i] === y[j] ? kept[i + 1]![j + 1]! + 1 : Math.max(kept[i + 1]![j]!, kept[i]![j + 1]!);
+  const runs: Run[] = [];
+  let at = b.slice(0, head).join("").length, i = 0, j = 0;
+  const add = (put: boolean, text: string) => { const last = runs.at(-1); if (last?.put === put && (put ? last.at + last.text.length : last.at) === at) last.text += text; else runs.push({ put, text, at }); };
+  while (i < n || j < m) {
+    if (i < n && j < m && x[i] === y[j]) { at += y[j++]!.length; i++; }
+    // A word replaced reads as the old struck, then the new.
+    else if (j < m && (i === n || kept[i]![j + 1]! > kept[i + 1]![j]!)) { add(true, y[j]!); at += y[j++]!.length; }
+    else add(false, x[i++]!);
+  }
+  return runs;
+};
+// By the block as it is, which stands for as long as the block is not written in: only the block being typed in is diffed again.
+const diffs = new WeakMap<Node, { before: Json; runs: Run[] | null }>();
+/** What a suggested block's text was and is, word by word, where both are text and not too far apart; else null, and the block is only tinted. */
+export const blockDiff = (block: Node, before: Json): Run[] | null => {
+  const had = diffs.get(block);
+  if (had?.before === before) return had.runs;
+  const was = block.isTextblock ? block.type.schema.nodeFromJSON(before) : null, runs = was?.isTextblock ? wordDiff(textIn(was), textIn(block)) : null;
+  // Only marks or the kind of block changed: nothing to show in the words.
+  const made = { before, runs: runs?.length ? runs : null };
+  diffs.set(block, made);
+  return made.runs;
+};
+
 /**
  * Suggesting: how the reader writes (DocumentWriting, kept in this browser for each paper), and in Suggesting each burst of writing recorded as one
  * suggestion in the document's changes, its blocks' `before` taken at their first touch. The writing itself is merged live like any other; only its
  * standing is provisional. A burst is the writing done while the caret stays in the blocks it touched (a block it makes counts), and ends when the
  * caret settles in another block, the reader switches to Editing, or nothing is written for PAUSE_MS; writing again in a block of one's own
- * suggestion goes on with that suggestion. `inline`: each suggestion's Accept and Reject stand at its first block.
+ * suggestion goes on with that suggestion. A suggested block shows its words taken out and put in (blockDiff). `inline`: each suggestion's Accept and
+ * Reject stand at its first block; else at the end of its last, as well as on its card. `acceptAll` and `rejectAll` settle every suggestion, or one author's.
  */
 export function createSuggesting(editor: Accessor<Editor | undefined>, doc: Doc, changes: YMap<Change>, host: DocumentHost, id: string) {
   const stored = (() => { try { return localStorage.getItem(storeKey(id)); } catch { return null; } })();
@@ -114,8 +155,19 @@ export function createSuggesting(editor: Accessor<Editor | undefined>, doc: Doc,
     doc.transact(() => { for (const [block] of mine) changes.delete(block); });
   };
 
+  /** Every suggestion standing, by `by` alone where given, the latest first: each taken back leaves the paper as the one before it found it. */
+  const standing = (by?: string) => {
+    const last = new Map<string, string>();
+    for (const change of changes.values()) { const had = last.get(change.for); if (isSuggestion(change.for) && (by === undefined || change.by === by) && (!had || change.at > had)) last.set(change.for, change.at); }
+    return [...last].sort((a, b) => b[1].localeCompare(a[1])).map(([key]) => key);
+  };
+  const acceptAll = (by?: string) => doc.transact(() => standing(by).forEach(accept));
+  const rejectAll = (by?: string) => standing(by).forEach(reject);
+
+  // Whether any suggestion stands, kept as the changes change, so writing with none reads nothing more of them.
+  let some = anySuggested();
   const [version, setVersion] = createSignal(0);
-  const bump = () => queueMicrotask(() => setVersion((n) => n + 1));
+  const bump = () => { some = anySuggested(); queueMicrotask(() => setVersion((n) => n + 1)); };
   changes.observe(bump);
   onCleanup(() => changes.unobserve(bump));
   // One list for none, read with the text only while there are some: a new empty list each keystroke is told on to all that shows them.
@@ -149,10 +201,11 @@ export function createSuggesting(editor: Accessor<Editor | undefined>, doc: Doc,
 
   // Untracked, so a suggestion changing redraws the controls and never makes the editor again. A control's Solid root goes with its element, which a redraw may keep.
   const parts = new WeakMap<globalThis.Node, () => void>();
-  const controls = (state: { doc: Node }) => {
+  let text: HTMLElement | undefined;
+  const cards = (state: { doc: Node }, found: Decoration[]) => {
     const list = untrack(suggestions);
-    if (host.suggest?.controls !== "inline" || !list.length) return DecorationSet.empty;
-    const at = new Map<string, { from: number; to: number }>(), found: Decoration[] = [];
+    if (host.suggest?.controls !== "inline" || !list.length) return;
+    const at = new Map<string, { from: number; to: number }>();
     state.doc.forEach((node, from) => { if (node.attrs.id) at.set(node.attrs.id, { from, to: from + node.nodeSize }); });
     for (const one of list) {
       const first = one.blocks.find((block) => at.has(block)), change = changes.get(one.blocks[0]!);
@@ -164,7 +217,41 @@ export function createSuggesting(editor: Accessor<Editor | undefined>, doc: Doc,
         return element;
       }, { key: `suggested ${one.key} ${one.by}`, side: -2, ignoreSelection: true, stopEvent: () => true, destroy: (element) => parts.get(element)?.() }));
     }
-    return DecorationSet.create(state.doc, found);
+  };
+  const removed = (words: string) => Object.assign(document.createElement("del"), { className: "ui-document-diff-removed", contentEditable: "false", textContent: words });
+  // Where the card holds a suggestion's Accept and Reject, they stand at the end of its last block too, by what it wrote.
+  const acts = (key: string, by: string) => {
+    const element = Object.assign(document.createElement("span"), { className: "ui-document-diff-acts", contentEditable: "false" }), keep = (event: MouseEvent) => event.preventDefault(), who = by === host.author() ? "your" : `${by}’s`;
+    parts.set(element, render(() => <>
+      <IconButton label={`Accept ${who} suggestion`} onMouseDown={keep} onClick={() => accept(key)}><Icons.Check /></IconButton>
+      <IconButton label={`Reject ${who} suggestion`} onMouseDown={keep} onClick={() => reject(key)}><Icons.Undo /></IconButton>
+    </>, element));
+    return element;
+  };
+  /** Each suggested block's words taken out (struck, standing in the text but no part of it) and put in (washed), and its suggestion's Accept and Reject at the end of its last block. */
+  const diffed = (state: { doc: Node }, found: Decoration[]) => {
+    const last = new Map<string, { from: number; block: Node; by: string }>();
+    state.doc.forEach((block, from) => {
+      const id = block.attrs.id as string | undefined, change = id ? changes.get(id) : undefined;
+      if (!change || !isSuggestion(change.for)) return;
+      last.set(change.for, { from, block, by: change.by });
+      const runs = change.before && blockDiff(block, change.before);
+      if (!runs) return;
+      found.push(Decoration.node(from, from + block.nodeSize, { class: "ui-document-diff" }));
+      for (const run of runs) {
+        const at = from + 1 + run.at;
+        found.push(run.put ? Decoration.inline(at, at + run.text.length, { class: "ui-document-diff-added" }) : Decoration.widget(at, () => removed(run.text), { key: `removed ${run.text}`, side: -1, marks: [], ignoreSelection: true }));
+      }
+    });
+    if (host.suggest?.controls === "inline") return;
+    for (const [key, { from, block, by }] of last) if (block.isTextblock) found.push(Decoration.widget(from + block.nodeSize - 1, () => acts(key, by), { key: `acts ${key} ${by}`, side: 1, marks: [], ignoreSelection: true, stopEvent: () => true, destroy: (element) => parts.get(element)?.() }));
+  };
+  const controls = (state: { doc: Node }) => {
+    if (!some) return DecorationSet.empty;
+    const found: Decoration[] = [];
+    cards(state, found);
+    diffed(state, found);
+    return found.length ? DecorationSet.create(state.doc, found) : DecorationSet.empty;
   };
   const extension = () => Extension.create({
     name: "suggesting",
@@ -182,6 +269,8 @@ export function createSuggesting(editor: Accessor<Editor | undefined>, doc: Doc,
       },
       props: { decorations: (state) => settled.getState(state) },
       view: (view) => {
+        text = view.dom;
+        text.dataset.writing = untrack(writing);
         const redraw = () => queueMicrotask(() => { if (!view.isDestroyed) view.dispatch(view.state.tr.setMeta(settled, false)); });
         changes.observe(redraw);
         return {
@@ -196,5 +285,8 @@ export function createSuggesting(editor: Accessor<Editor | undefined>, doc: Doc,
       },
     })],
   });
-  return { writing, setWriting, suggestions, accept, reject, extension };
+  // The mode on the text itself, so its caret and edge say which way it is being written. Set by hand on the editor's element, not as one of its
+  // attributes, so writing never reads it.
+  createEffect(() => { const now = writing(); if (text) text.dataset.writing = now; });
+  return { writing, setWriting, suggestions, accept, reject, acceptAll, rejectAll, extension };
 }

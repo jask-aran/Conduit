@@ -99,6 +99,9 @@ export type DocumentMarks = {
   suggestions(): DocumentSuggestion[];
   accept(key: string): void;
   reject(key: string): void;
+  /** Every suggestion standing, or every one `by` made, accepted or taken back at once. */
+  acceptAll(by?: string): void;
+  rejectAll(by?: string): void;
   /** The agents at work in the document now, as the hub tells them; read where drawn. */
   seats(): DocumentSeat[];
 };

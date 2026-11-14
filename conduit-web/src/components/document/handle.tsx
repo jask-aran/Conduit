@@ -28,9 +28,9 @@ export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: r
   const place = createMemo(() => {
     const pos = from(), view = editor()?.view, block = pos === null ? null : view?.nodeDOM(pos) as HTMLElement | null, body = origin(), scroller = options.scroller(), grip = handle?.querySelector<HTMLElement>("[data-grip]");
     if (!view || !block?.getBoundingClientRect || !handle || !body || !scroller || !grip) return undefined;
-    // It stands left of the text, in the room the column shows there (the sheet's gutter, and the pane's ground where it is wide), never over the text:
+    // It stands left of the text in the sheet's own gutter, never over the text nor off the sheet:
     // where the "+" does not fit too it folds into the grip's menu, and where the grip does not fit it is not shown.
-    const style = getComputedStyle(handle), room = view.dom.getBoundingClientRect().left - scroller.getBoundingClientRect().left - (parseFloat(style.marginRight) || 0);
+    const style = getComputedStyle(handle), room = view.dom.getBoundingClientRect().left - body.left - (parseFloat(style.marginRight) || 0);
     if (room < grip.offsetWidth) return undefined;
     // On the block's first line, however tall its line (a heading's), or on the block where it is thinner than a line (a divider).
     const box = block.getBoundingClientRect(), line = Math.min(parseFloat(getComputedStyle(block).lineHeight) || box.height, box.height);

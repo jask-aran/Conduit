@@ -70,6 +70,10 @@
 .ui-markup-note:not([data-head]) .ui-card[data-close] > .ui-markup-talk > :first-child { padding-right: var(--space-4xl); }
 .ui-markup-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-markup-state { display: flex; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); }
+/* One of several cards of one place, while one mark stands for them all. */
+.ui-markup-note[data-stacked] { display: none; }
+/* Which of a place's cards this is, stepped through where only one stands at a time. */
+.ui-markup-cycle { display: flex; align-items: center; gap: var(--space-2xs); color: var(--muted-foreground); font-family: var(--font-data); font-variant-numeric: tabular-nums; }
 /* The answer is one line, growing with what is written. */
 .ui-markup-note .ui-card .ui-textarea { min-height: 0; max-height: var(--measure-xs); padding: var(--space-sm) var(--space-md); resize: none; }
 /* One row: what undoes on the left, Resolve and Reply on the right. */

@@ -124,7 +124,7 @@ try {
   await until("a phone-sized page's typing merges", async () => cli("read", "test").includes("typed on the first page and on a phone"));
   console.log("phone page scrolls sideways:", await second.evaluate(() => document.documentElement.scrollWidth > innerWidth));
   await second.close();
-  await mine(page).click(); await mine(page).locator("button[aria-label='Resolve']").click();
+  await mine(page).click(); await mine(page).locator("button[aria-label='Resolve'], button:has-text('Keep')").first().click();
   await until("resolving accepts the change: the card and the tint go, the text stays", async () => !await card(page) && !await tinted(page) && cli("read", "test").includes("another way"));
 
   const tools = () => page.evaluate(() => JSON.stringify([...document.querySelectorAll(".ui-markup-bar [role=radio]")].map((button) => button.getAttribute("aria-label").split(" ")[0] + (button.getAttribute("aria-checked") === "true" ? "*" : ""))));

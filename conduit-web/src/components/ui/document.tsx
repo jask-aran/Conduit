@@ -1,8 +1,9 @@
 import { BaselineIcon, BetweenHorizontalEndIcon, BetweenVerticalEndIcon, BoldIcon, CalendarIcon, ChevronRightIcon, CodeIcon, ExternalLinkIcon, Grid2x2XIcon, GripVerticalIcon, Heading1Icon, Heading2Icon, Heading3Icon, HighlighterIcon, ImageIcon, ImageOffIcon, InfoIcon, ItalicIcon, LinkIcon, ListChecksIcon, ListCollapseIcon, ListIcon, ListOrderedIcon,
   MessageSquarePlusIcon, MinusIcon, PencilIcon, FileDiffIcon, PilcrowIcon, StrikethroughIcon, TableColumnsSplitIcon, TableIcon, TableRowsSplitIcon, TextQuoteIcon, TriangleAlertIcon, UnlinkIcon } from "lucide-solid";
-import { createEffect, createSignal, onCleanup, Show, splitProps, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, Show, splitProps, type JSX } from "solid-js";
 // Through the barrel, as markup.tsx does, so the editor's chunk takes the header from the app's own.
-import { Button, FindBar, Frost, IconButton, Icons, PaneHeader, Spinner, TextArea } from "./index";
+import { Button, FindBar, Frost, IconButton, Icons, Item, PaneHeader, Section, Spinner, TextArea } from "./index";
+import { Popover, PopoverContent } from "./menus";
 import "./styles/document.css";
 
 /* Not in the library's barrel: the document editor imports this file, so the app's first load does not carry it. */
@@ -54,16 +55,50 @@ export const DocumentSeatJump = (props: { label: string; below: boolean; ink: Do
   <Frost as="button" type="button" class="ui-document-seat-jump" data-at={props.below ? "below" : "above"} data-seat-ink={props.ink} onClick={() => props.onJump()}>
     <Show when={props.below} fallback={<Icons.ArrowUp />}><Icons.ArrowDown /></Show><span>{props.label}</span>
   </Frost>;
+// What was asked before, kept in this browser, newest first: ArrowUp recalls it, and the most used are offered while the field is empty.
+const ASKED = "conduit.document.asked";
+type Asked = { words: string; uses: number };
+const askedBefore = (): Asked[] => { try { const kept: unknown = JSON.parse(localStorage.getItem(ASKED) ?? "[]"); return Array.isArray(kept) ? kept.filter((one): one is Asked => typeof one?.words === "string" && typeof one.uses === "number") : []; } catch { return []; } };
+const keepAsked = (words: string) => { const was = askedBefore(), had = was.find((one) => one.words === words); try { localStorage.setItem(ASKED, JSON.stringify([{ words, uses: (had?.uses ?? 0) + 1 }, ...was.filter((one) => one !== had)].slice(0, 20))); } catch { /* not kept */ } };
 /** Asking someone to write in the paper, as a line of it: who is asked, what of them, and Send. `at`: the line it stands in, within the sheet's body. Enter sends, Shift Enter is
- *  a new line; Escape, or focus leaving it, puts it away (`onClose`). */
-export function DocumentAsk(props: { name: string; at: { left: number; top: number; width: number }; onSend: (words: string) => void; onClose: () => void }) {
-  const [words, setWords] = createSignal("");
-  const send = () => { const said = words().trim(); if (said) props.onSend(said); };
-  return <div class="ui-document-ask" style={{ left: `${props.at.left}px`, top: `${props.at.top}px`, width: `${props.at.width}px` }} onFocusOut={(event) => { if (event.currentTarget.isConnected && !event.currentTarget.contains(event.relatedTarget as Node | null)) props.onClose(); }}>
+ *  a new line; ArrowUp in an empty field recalls what was asked before; `@` first offers the others of `names`, picked told to `onName`. Escape, or focus leaving it,
+ *  puts it away (`onClose`). */
+export function DocumentAsk(props: { name: string; names?: readonly string[]; onName?: (name: string) => void; at: { left: number; top: number; width: number }; onSend: (words: string) => void; onClose: () => void }) {
+  const [words, setWords] = createSignal(""), [active, setActive] = createSignal(0), [shut, setShut] = createSignal<string>();
+  const before = askedBefore(), used = [...before].sort((a, b) => b.uses - a.uses).slice(0, 3);
+  let field: HTMLTextAreaElement | undefined, root: HTMLDivElement | undefined, recalled = -1;
+  const put = (said: string) => { setWords(said); queueMicrotask(() => field?.setSelectionRange(said.length, said.length)); };
+  const send = () => { const said = words().trim(); if (!said) return; keepAsked(said); props.onSend(said); };
+  const others = createMemo(() => { const typed = /^@(\S*)$/.exec(words())?.[1]?.toLowerCase(); return typed === undefined || shut() === words() ? [] : (props.names ?? []).filter((name) => name !== props.name && name.toLowerCase().includes(typed)); });
+  createEffect(() => { others(); setActive(0); });
+  const rename = (name: string) => { props.onName?.(name); put(""); };
+  const keep = (event: MouseEvent) => event.preventDefault();
+  const keys = (event: KeyboardEvent) => {
+    const menu = others(), up = event.key === "ArrowUp";
+    if (menu.length && (up || event.key === "ArrowDown")) { event.preventDefault(); setActive((at) => Math.min(menu.length - 1, Math.max(0, at + (up ? -1 : 1)))); }
+    else if (menu.length && (event.key === "Enter" || event.key === "Tab") && !event.isComposing) { event.preventDefault(); rename(menu[active()]!); }
+    else if (menu.length && event.key === "Escape") { event.preventDefault(); setShut(words()); }
+    else if (event.key === "Escape") { event.preventDefault(); props.onClose(); }
+    else if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); send(); }
+    // As a shell recalls: from empty, or from an ask recalled and left as it was, ArrowUp goes one older and ArrowDown one newer.
+    else if ((up || event.key === "ArrowDown") && (!words() || words() === before[recalled]?.words)) {
+      const next = (words() ? recalled : -1) + (up ? 1 : -1);
+      if (next < -1 || next >= before.length) return;
+      event.preventDefault(); recalled = next; put(before[next]?.words ?? "");
+    }
+  };
+  return <div ref={root} class="ui-document-ask" style={{ left: `${props.at.left}px`, top: `${props.at.top}px`, width: `${props.at.width}px` }} onFocusOut={(event) => { if (event.currentTarget.isConnected && !event.currentTarget.contains(event.relatedTarget as Node | null)) props.onClose(); }}>
     <span class="ui-document-mention">@{props.name}</span>
-    <TextArea ref={(field) => queueMicrotask(() => field.focus({ preventScroll: true }))} aria-label={`Ask ${props.name}`} placeholder={`Tell ${props.name} what to write or edit`} value={words()} onInput={(event) => setWords(event.currentTarget.value)}
-      onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); props.onClose(); } else if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); send(); } }} />
-    <IconButton label="Send (Enter)" disabled={!words().trim()} onMouseDown={(event) => event.preventDefault()} onClick={send}><Icons.Send /></IconButton>
+    <TextArea ref={(element) => { field = element; queueMicrotask(() => element.focus({ preventScroll: true })); }} aria-label={`Ask ${props.name}`} placeholder={`Tell ${props.name} what to write or edit`} value={words()} onInput={(event) => setWords(event.currentTarget.value)} onKeyDown={keys} />
+    <IconButton label="Send (Enter)" disabled={!words().trim()} onMouseDown={keep} onClick={send}><Icons.Send /></IconButton>
+    <Show when={!words() && used.length}><div class="ui-document-ask-asked" role="group" aria-label="Asked before">
+      <For each={used}>{(one) => <Button variant="ghost" size="sm" title={one.words} onMouseDown={keep} onClick={() => put(one.words)}><span class="ui-truncate">{one.words}</span></Button>}</For>
+    </div></Show>
+    <Popover open={others().length > 0} onOpenChange={(open) => { if (!open) setShut(words()); }} anchorRef={() => root} placement="bottom-start">
+      <PopoverContent aria-label="Ask someone else" width="sm" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}>
+        <Section role="listbox"><For each={others()}>{(name, at) => <Item role="option" aria-selected={active() === at()} active={active() === at()} onCursor={() => setActive(at())} onMouseDown={keep} onClick={() => rename(name)}>{name}</Item>}</For></Section>
+      </PopoverContent>
+    </Popover>
   </div>;
 }
 export const documentDrawClass = { mention: "ui-document-mention", match: "ui-document-match", currentMatch: "ui-document-match-current", revealed: "ui-document-revealed" };
@@ -106,27 +141,38 @@ export type DocumentWidth = "narrow" | "wide" | "full";
  *  `margin`: what stands beside the text (its comments), and tucked over its right edge where the page is too narrow for both; `marginEmpty`: it holds nothing now, so it takes no room and the text stands centred. `bare`: it is in a pane, whose header is its bar.
  *  `width`: how wide the text runs (narrow, unsaid). `find`: a DocumentFind, at the sheet's top right. `scroller`: the element that scrolls. `edge`: what is pinned
  *  to the sheet's edge over the column whatever is scrolled (DocumentSeatJump). */
-export function DocumentSheet(props: { ref?: (element: HTMLDivElement) => void; name: string; state?: string; actions?: JSX.Element; margin?: JSX.Element; marginEmpty?: boolean; bare?: boolean; head?: JSX.Element; foot?: JSX.Element; over?: JSX.Element;
+export function DocumentSheet(props: { ref?: (element: HTMLDivElement) => void; name: string; state?: string; actions?: JSX.Element; margin?: JSX.Element; marginEmpty?: boolean; bare?: boolean; /** How it is being written (DocumentWriting): the sheet's edge says when writing only suggests. */ writing?: string; head?: JSX.Element; foot?: JSX.Element; over?: JSX.Element;
   width?: DocumentWidth; find?: JSX.Element; edge?: JSX.Element; scroller?: (element: HTMLDivElement) => void; onHover?: (event: PointerEvent | null) => void; children?: JSX.Element }) {
-  // Where the text at its full measure and the margin do not fit side by side, the margin is tucked: it takes no room, and its cards stand over the
-  // text's right edge as small marks until one is opened. Measured from the two's own widths, so no width is named here. (The margin keeps its
-  // flex basis while tucked: it is what says how wide it would stand.)
-  const [tucked, setTucked] = createSignal(false);
+  // Where the text at its full measure and the margin with cards in it do not fit side by side, the sheet first gives up its side room (snug), and
+  // where that is not enough the margin is tucked: it takes no room, and its cards stand over the text's right edge as small marks until one is opened.
+  // Each fold's need is measured as it is drawn (as the ribbon's are), so no width is named here. (The margin keeps its flex basis while tucked: it is
+  // what says how wide it would stand.)
+  const SNUG = 1, TUCKED = 2;
+  const [fold, setFold] = createSignal(0);
+  const needs: number[] = [];
   let column: HTMLDivElement | undefined, body: HTMLDivElement | undefined, aside: HTMLElement | undefined;
   const fit = () => {
-    if (!column || !body || !aside) return setTucked(false);
-    const widest = parseFloat(getComputedStyle(body).maxWidth), beside = parseFloat(getComputedStyle(aside).flexBasis), look = getComputedStyle(column), page = getComputedStyle(column.firstElementChild!);
-    const room = column.clientWidth - parseFloat(look.paddingLeft) - parseFloat(look.paddingRight);
-    setTucked(!(widest + (parseFloat(page.columnGap) || 0) + beside <= room));
+    for (let tries = 0; tries <= 2 * TUCKED; tries++) {
+      if (!column || !body || !aside || props.marginEmpty) return setFold(0);
+      const at = fold(), room = column.clientWidth;
+      if (at < TUCKED) {
+        const look = getComputedStyle(column), page = getComputedStyle(column.firstElementChild!);
+        needs[at] = parseFloat(getComputedStyle(body).maxWidth) + (parseFloat(page.columnGap) || 0) + parseFloat(getComputedStyle(aside).flexBasis) + parseFloat(look.paddingLeft) + parseFloat(look.paddingRight);
+      }
+      const next = at < TUCKED && needs[at]! > room ? at + 1 : at > 0 && (needs[at - 1] ?? Infinity) <= room ? at - 1 : at;
+      if (next === at) return;
+      setFold(next);
+    }
   };
   const sized = new ResizeObserver(fit);
   onCleanup(() => sized.disconnect());
-  createEffect(() => { props.width; props.marginEmpty; queueMicrotask(fit); });
+  // A new measure or a margin come or gone makes each fold's need new: measured again from the widest.
+  createEffect(() => { props.width; props.marginEmpty; queueMicrotask(() => { needs.length = 0; setFold(0); fit(); }); });
   return <section class="ui-document" aria-label={props.name} data-bare={props.bare ? "" : undefined} data-width={props.width ?? "narrow"}>
     <Show when={!props.bare}><PaneHeader kind="tool" name={props.name} place={props.state} actions={props.actions} /></Show>
     {props.find}
-    <div ref={(element) => { column = element; sized.observe(element); props.scroller?.(element); }} class="ui-document-column" onPointerMove={(event) => props.onHover?.(event)} onPointerLeave={() => props.onHover?.(null)}><div class="ui-document-page" data-margin={props.marginEmpty ? "none" : tucked() ? "tucked" : undefined}>
-      <div ref={body} class="ui-document-body">{props.head}<div ref={props.ref} class="ui-document-content">{props.children}</div>{props.over}{props.foot}</div>
+    <div ref={(element) => { column = element; sized.observe(element); props.scroller?.(element); }} class="ui-document-column" data-snug={fold() === SNUG ? "" : undefined} onPointerMove={(event) => props.onHover?.(event)} onPointerLeave={() => props.onHover?.(null)}><div class="ui-document-page" data-margin={props.marginEmpty ? "none" : fold() === TUCKED ? "tucked" : "beside"}>
+      <div ref={body} class="ui-document-body" data-writing={props.writing}>{props.head}<div ref={props.ref} class="ui-document-content">{props.children}</div>{props.over}{props.foot}</div>
       <Show when={props.margin}><aside ref={aside} class="ui-document-margin" aria-label="Comments">{props.margin}</aside></Show>
     </div></div>
     {props.edge}

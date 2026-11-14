@@ -51,7 +51,7 @@ try {
   await page.waitForTimeout(4500);
   const press = (label) => page.locator(`.ui-markup-bar button[aria-label^='${label}'], .ui-markup-bar button[title^='${label}']`).first().click();
   // A paper's first listener is its mated thread, which a real model answers: the probe's own listener is chosen, and nothing is sent until it is.
-  const picked = async (name) => { const next = page.locator('.ui-markup-bar button[title="The next waiting session"]'); if (!(await next.count())) { await page.locator("header button[aria-label='Agents']").click(); await page.locator("[role^=menuitem]", { hasText: name }).first().click(); await page.keyboard.press("Escape"); return; } for (let tries = 0; tries < 8 && (await next.textContent().catch(() => "")) !== name; tries++) { await next.click(); await page.waitForTimeout(150); } if ((await next.textContent()) !== name) throw new Error(`The bar does not hand to ${name}`); };
+  const picked = async (name) => { const next = page.locator('.ui-markup-bar button[title="The next waiting session"]'); if (!(await next.count())) { await page.locator("header button[aria-label^='Agents']").click(); await page.locator("[role^=menuitem]", { hasText: name }).first().click(); await page.keyboard.press("Escape"); return; } for (let tries = 0; tries < 8 && (await next.textContent().catch(() => "")) !== name; tries++) { await next.click(); await page.waitForTimeout(150); } if ((await next.textContent()) !== name) throw new Error(`The bar does not hand to ${name}`); };
   await picked("one-probe");
   await press("Select text"); await page.waitForTimeout(300);
   // Measured before each drag: the text stands centred until its first comment, then moves over for the margin.

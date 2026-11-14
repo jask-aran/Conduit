@@ -4,7 +4,7 @@ import { addColumn, addRow, TableMap } from "@tiptap/pm/tables";
 import type { EditorView } from "@tiptap/pm/view";
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor } from "solid-js";
 import { isOn, markAttrs, sameJson, track } from "./read";
-import { IconButton, Input, Segmented, Swatch } from "@/components/ui";
+import { ColourPicker, IconButton, Input, Segmented, Swatch } from "@/components/ui";
 import { DocumentAddress, DocumentTableEdges, DocumentTools, documentToolIcons as Icons } from "@/components/ui/document";
 import { MARKUP_INKS } from "@/components/ui/markup";
 import { Popover, PopoverContent } from "@/components/ui/menus";
@@ -44,12 +44,15 @@ const linesOf = (view: EditorView, from: number, to: number) => {
 
 /**
  * What can be done to the text selected, over it while the editor has focus: the marks (pressed where the selection wears them; a text colour and a
- * highlight each picked from a row of the inks in place of the buttons), a link (its address asked for in place), a comment (`onComment`); and with
+ * highlight each picked from a row of the inks and Any colour in place of the buttons), a link (its address asked for in place), a comment (`onComment`); and with
  * the caret in a link, its address, Open, Edit and Remove. `chord` writes a chord in the editor's notation (`Mod-b`) as the app writes keys. It stands clear above the lines it is about, or under them where `bounds` (the view the
  * text scrolls in) has no room above. Escape or a press away shuts it until the selection changes.
  */
 export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bounds: Accessor<HTMLElement | undefined>; /** The marks offered (every one, unsaid). */ marks?: readonly string[]; onComment?: (about: Range) => void; chord?: (keys: string) => string }) {
   const [linking, setLinking] = createSignal(false), [inking, setInking] = createSignal<typeof INKED[number]>(), [shut, setShut] = createSignal<string>();
+  // Any colour's picker, open under the strip; the last colour chosen for each mark is kept to come back to. It puts its colour without taking the
+  // editor's focus, so its hex can be typed.
+  const [picking, setPicking] = createSignal(false), [own, setOwn] = createSignal<Record<string, `#${string}`>>({});
   let tools: HTMLElement | undefined;
   // Where the selection is matters only while there is something to stand over: a caret in plain text has nothing, and typing there reads none of this.
   const state = createMemo(() => {
@@ -61,7 +64,7 @@ export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bo
     const { from, to } = text ? selection : { from: selection.from, to: selection.from };
     track(made, "selection");
     return { text, focused: made.isFocused, key: `${from} ${to}`, link, marks: Object.fromEntries([...MARKS, ...INKED].map(([name]) => [name, isOn(made, name)])) as Record<string, boolean>,
-      inks: { color: markAttrs(made, "color").ink, highlight: markAttrs(made, "highlight").ink } as Record<InkedMark, PaperInk | undefined>, lines: () => linesOf(made.view, from, to) };
+      inks: { color: markAttrs(made, "color").ink, highlight: markAttrs(made, "highlight").ink } as Record<InkedMark, PaperInk | `#${string}` | undefined>, lines: () => linesOf(made.view, from, to) };
   }, undefined, { equals: sameJson });
   // Placed again only when what it is over changes.
   const lines = createMemo(on(() => state()?.key, () => state()?.lines));
@@ -69,13 +72,15 @@ export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bo
     const now = state()?.lines(), top = props.bounds()?.getBoundingClientRect().top;
     return now && top !== undefined && now.y - top < (tools?.offsetHeight ?? 0) * 1.5 ? "bottom-start" as const : "top-start" as const;
   }));
-  createEffect(on(() => state()?.key, () => { setLinking(false); setInking(undefined); setShut(undefined); }, { defer: true }));
+  createEffect(on(() => state()?.key, () => { setLinking(false); setInking(undefined); setPicking(false); setShut(undefined); }, { defer: true }));
   const open = () => { const now = state(); return Boolean(now && (now.focused || linking() || inking()) && shut() !== now.key); };
   const chain = () => props.editor()!.chain().focus();
   const link = (href: string) => { const made = chain().extendMarkRange("link"); (href.trim() ? made.setLink({ href: href.trim() }) : made.unsetLink()).run(); setLinking(false); };
-  const ink = (mark: InkedMark, to: PaperInk | "none") => { putInk(chain(), mark, to === "none" ? undefined : to); setInking(undefined); };
+  const ink = (mark: InkedMark, to: PaperInk | "none") => { putInk(chain(), mark, to === "none" ? undefined : to); setInking(undefined); setPicking(false); };
+  const ownOf = (mark: InkedMark) => { const on = state()?.inks[mark]; return on?.startsWith("#") ? on as `#${string}` : own()[mark] ?? "#ff3b9a"; };
+  const anyInk = (mark: InkedMark, hex: `#${string}`) => { setOwn({ ...own(), [mark]: hex }); putInk(props.editor()!.chain(), mark, hex); };
   const comment = () => { const view = props.editor()?.view; if (!view) return; setShut(state()?.key); props.onComment?.(selectedRange(view)); };
-  return <Popover open={open()} onOpenChange={(now) => { if (now) return; setShut(state()?.key); if (linking() || inking()) { setLinking(false); setInking(undefined); props.editor()?.commands.focus(); } }} anchorRef={() => props.editor()?.view.dom as HTMLElement | undefined} anchorRect={lines()} placement={placement()}>
+  return <Popover open={open()} onOpenChange={(now) => { if (now) return; if (picking()) return void setPicking(false); setShut(state()?.key); if (linking() || inking()) { setLinking(false); setInking(undefined); props.editor()?.commands.focus(); } }} anchorRef={() => props.editor()?.view.dom as HTMLElement | undefined} anchorRect={lines()} placement={placement()}>
     <PopoverContent snug aria-label="Text tools" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}>
       <Show when={state()}>{(now) => <DocumentTools ref={(element) => { tools = element; }} label={inking()?.[1] ?? (now().text ? "Format" : "Link")}>
         <Show when={inking()} fallback={<Show when={linking()} fallback={<Show when={now().text} fallback={<>
@@ -92,11 +97,15 @@ export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bo
           <Input ref={(field) => queueMicrotask(() => field.focus())} aria-label="Link address" placeholder="Link address" value={now().link ?? ""}
             onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); link(event.currentTarget.value); } }} />
           <Show when={now().link}><IconButton label="Remove the link" onClick={() => link("")}><Icons.unlink /></IconButton></Show>
-        </Show>}>{(asked) => { const [mark, label, none] = asked();
-          return <Segmented label={label} icons size="sm" value={now().inks[mark] ?? "none"} onChange={(to) => ink(mark, to)}
-            options={[{ value: "none" as const, label: none, icon: inkSwatch() }, ...INKS.map((value) => ({ value, label: MARKUP_INKS[value].label, icon: inkSwatch(value) }))]} />; }}
+        </Show>}>{(asked) => { const [mark, label, none] = asked(), mine = () => now().inks[mark]?.startsWith("#") ? now().inks[mark] as `#${string}` : undefined;
+          return <>
+            <Segmented label={label} icons size="sm" value={(mine() ? "any" : now().inks[mark] ?? "none") as PaperInk | "none"} onChange={(to) => ink(mark, to)}
+              options={[{ value: "none" as const, label: none, icon: inkSwatch() }, ...INKS.map((value) => ({ value, label: MARKUP_INKS[value].label, icon: inkSwatch(value) }))]} />
+            <IconButton data-any="" label="Any colour" aria-pressed={Boolean(mine())} aria-expanded={picking()} onMouseDown={keep} onClick={() => { setPicking(!mine() || !picking()); anyInk(mark, ownOf(mark)); }}><Swatch colour={mine()} /></IconButton>
+          </>; }}
         </Show>
       </DocumentTools>}</Show>
+      <Show when={picking() && inking()}>{(asked) => <ColourPicker label={`${asked()[1]}: any colour`} value={ownOf(asked()[0])} onChange={(hex) => anyInk(asked()[0], hex as `#${string}`)} />}</Show>
     </PopoverContent>
   </Popover>;
 }

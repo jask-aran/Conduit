@@ -128,9 +128,10 @@ const escaped = (text) => text.replace(/[&<>"]/g, (character) => `&#${character.
 /**
  * One comment as the agent reads it, from the hand-off (`MarkupHandoff`, chat-backend-contract.d.ts) the chat is also
  * given beside the text for its transcript to draw; `said`: "reply" or "reopened" for what the person wrote back on an
- * item already handed over.
+ * item already handed over. Its `context` is what the comment is on as it is now, written as `read` writes a paper, so answering needs no read.
  */
-const handoff = ({ quote, words, ...fields }) => `<conduit_markup ${Object.entries(fields).map(([key, value]) => `${key}="${escaped(String(value))}"`).join(" ")}>\n${quote ? `<quote>${escaped(quote)}</quote>\n` : ""}${words ? `<words>${escaped(words)}</words>\n` : ""}</conduit_markup>`;
+const contextOf = (context) => context.map((one) => `${one.id ? `<!-- block ${one.id}${one.target ? " (commented)" : ""} -->\n` : ""}${one.md}`).join("\n\n");
+const handoff = ({ quote, words, context, ...fields }) => `<conduit_markup ${Object.entries(fields).map(([key, value]) => `${key}="${escaped(String(value))}"`).join(" ")}>\n${quote ? `<quote>${escaped(quote)}</quote>\n` : ""}${words ? `<words>${escaped(words)}</words>\n` : ""}${context?.length ? `<context>\n${escaped(contextOf(context))}\n</context>\n` : ""}</conduit_markup>`;
 /** A new site: a page that says what it is, in the colours of whoever looks at it, for an agent to write over. */
 const SITE = (id, name) => `<!doctype html>
 <html lang="en">
@@ -444,7 +445,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
 
   /**
    * What the hub does for a listener it holds, as the CLI's `wait` does for a session: the item is taken in its name,
-   * each comment is marked as being worked on, and the chat is told where the item is. `said`: what the person wrote
+   * each comment is marked as being worked on, and the chat is handed each comment with what it is on now and how to answer it in one call. `said`: what the person wrote
    * back on an item already handed over.
    */
   async function hand(room, item, to, said) {
@@ -453,9 +454,11 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     // The name is the file's, which anyone who can write the folder chooses: it reaches the agent as a quoted name, never as lines of its own.
     const name = JSON.stringify(room.entry.name.replace(/\s+/g, " ").slice(0, 120)), taken = path.join(dir, "taken.json");
     const comments = JSON.parse(await fs.readFile(path.join(dir, "item.json"), "utf8")).comments ?? [];
-    const kind = KINDS[room.entry.kind];
-    const handed = (comment, words, said) => Object.fromEntries(Object.entries({ artifact: room.id, kind: room.entry.kind, name: room.entry.name.replace(/\s+/g, " ").slice(0, 120), item, n: comment?.n, ...kind.where?.(comment?.under), said,
-      quote: comment?.quote || undefined, words: words || undefined }).filter(([, value]) => value !== undefined && value !== null));
+    const kind = KINDS[room.entry.kind], rev = await kind.revision?.(room).catch(() => undefined);
+    const handed = (comment, words, said) => Object.fromEntries(Object.entries({ artifact: room.id, kind: room.entry.kind, name: room.entry.name.replace(/\s+/g, " ").slice(0, 120), item, n: comment?.n, ...kind.where?.(comment?.under), said, rev,
+      quote: comment?.quote || undefined, words: words || undefined, context: kind.context?.(room, comment?.under, 1) }).filter(([, value]) => value !== undefined && value !== null && !(Array.isArray(value) && !value.length)));
+    // How to answer, the tool first: one call does the edits, the reply and the resolve, so nothing needs reading first.
+    const answering = (n) => `${kind.blocks ? `Answer in one call: the tool \`conduit_paper\`, action "answer", with paper "${room.id}", item "${item}"${n ? `, n ${n}` : ""}, \`edits\` ([{ op: "replace" | "insert" | "delete", at: <block id>, markdown }], each made for this comment), \`reply\` (what the person reads beside the comment) and \`resolve\`.` : `Change the site's file ${room.file?.() ?? room.entry.path} with your own tools, then answer with the tool \`conduit_paper\`, action "answer", paper "${room.id}", item "${item}"${n ? `, n ${n}` : ""}, \`reply\` and \`resolve\`.`} Without the tool: \`node ${SCRIPT} answer ${item}${n ? ` ${n}` : ""} --json '{${kind.blocks ? `"edits":[…],` : ""}"reply":"…","resolve":true}'\`.`;
     const about = (list) => [...new Set(list.flatMap((comment) => kind.places?.(comment?.under) ?? []))];
     // Seated once the chat has been told, never before: a chat that could not be told is not at work. One that is already reading or writing keeps that;
     // and one whose chat answered before it was seated, or never began a turn, has no turn end to leave by, so it leaves SEAT_START_MS on.
@@ -465,7 +468,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       setTimeout(() => { if (!chats()?.working?.(chat)) sit(room, to.name, null); }, SEAT_START_MS).unref?.();
     };
     const back = said && handed(comments.find((comment) => comment.n === said.n) ?? { n: said.n }, said.text, said.text ? "reply" : "reopened");
-    if (said) return host().notify(chat, `${handoff(back)}\nOn the ${room.entry.kind} ${name}, markup item ${item}: ${said.text ? `the person wrote back${Number.isInteger(said.n) ? ` on comment ${said.n}` : ""}: ${said.text}` : `the person reopened comment ${said.n}.`}\nThe item is ${path.join(dir, "item.json")}; answer with \`node ${SCRIPT} reply ${item} [n] "<words>"\`.`, [back]).then(() => seat(about([comments.find((comment) => comment.n === said.n)]), `${item}/${said.n ?? 1}`));
+    if (said) return host().notify(chat, `${handoff(back)}\nOn the ${room.entry.kind} ${name}, markup item ${item}: ${said.text ? `the person wrote back${Number.isInteger(said.n) ? ` on comment ${said.n}` : ""}: ${said.text}` : `the person reopened comment ${said.n}.`} The comment and what it is on now are in the card above. ${answering(said.n ?? (comments.length === 1 ? comments[0].n : null))}`, [back]).then(() => seat(about([comments.find((comment) => comment.n === said.n)]), `${item}/${said.n ?? 1}`));
     // Taken once: a session that took it first (a `wait` under the same name) keeps it, and the chat is told nothing.
     const mine = await fs.writeFile(taken, `${JSON.stringify({ name: to.name, held: true, chat, agent: to.agent, at })}\n`, { flag: "wx" }).then(() => true, async () => (await fs.readFile(taken, "utf8").then(JSON.parse).catch(() => null))?.held === true);
     if (!mine) return;
@@ -475,7 +478,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     if (!fresh.length) return;
     // A chat that cannot be told has not taken it: the item goes back to waiting, which is what the person then reads.
     const cards = fresh.map((comment) => handed(comment, comment.comment));
-    await host().notify(chat, `${cards.map((one) => handoff(one)).join("\n")}\n${fresh.length === comments.length ? "The person" : "The person added to what they"} sent you ${fresh.length === 1 ? "a comment" : `${fresh.length} comments`} on the ${room.entry.kind} ${name}${fresh.length === comments.length ? "" : ` (${fresh.map((comment) => comment.n).join(", ")})`}. Read ${path.join(dir, "item.json")} (its \`read\` says how) and do what it asks. The person reads the ${room.entry.kind}'s margin, not this chat: say what you did, or ask what you need to know, with \`reply\` on the comment, in a line or two; what you write here is only your own log.${to.name === MATED ? kind.signing?.(MATED) ?? "" : ""}`, cards)
+    await host().notify(chat, `${cards.map((one) => handoff(one)).join("\n")}\n${fresh.length === comments.length ? "The person" : "The person added to what they"} sent you ${fresh.length === 1 ? "a comment" : `${fresh.length} comments`} on the ${room.entry.kind} ${name}${fresh.length === comments.length ? "" : ` (${fresh.map((comment) => comment.n).join(", ")})`}: what each asks, the text it quotes and what it is on now are in the ${fresh.length === 1 ? "card" : "cards"} above. ${answering(fresh.length === 1 ? fresh[0].n : null)}${fresh.length > 1 ? " One answer per comment, with its n." : ""} The person reads the ${room.entry.kind}'s margin, not this chat: say what you did, or ask what you need to know, in the reply, in a line or two; what you write here is only your own log. (Everything else about the item is in ${path.join(dir, "item.json")}.)${to.name === MATED ? kind.signing?.(MATED) ?? "" : ""}`, cards)
       .catch(async (error) => { if (!told.size) await fs.rm(taken, { force: true }); throw error; });
     await fs.appendFile(path.join(dir, "thread.jsonl"), fresh.map((comment) => `${JSON.stringify({ at, from: "agent", by: to.name, n: comment.n, working: true })}\n`).join(""));
     seat(about(fresh), `${item}/${fresh[0].n}`);
@@ -572,7 +575,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     await fs.mkdir(entry.side, { recursive: true });
     if (!entry.disk.far) void excludeConduitFromGit(entry.disk.key).catch(() => {});
     // Where the site is now: `known` is told of a rename and of a file found moved.
-    const file = () => { const now = known.get(entry.id) ?? room.entry; return now.disk.far ? `${now.path} in the project's folder, on the device that holds it` : now.disk.at(now.path); };
+    const file = room.file = () => { const now = known.get(entry.id) ?? room.entry; return now.disk.far ? `${now.path} in the project's folder, on the device that holds it` : now.disk.at(now.path); };
     room.markup = markupOf(room, () => `(the file ${file()})`, () => [`This site is one HTML file, ${file()}, which the person sees drawn in a pane. To answer a comment, change that file with your own tools: the pane shows the new version a moment after it is saved. Leave its \`conduit-artifact\` meta tag as it is, and do not rename or move the file.`,
       "A comment's `under.elements` names what of the site its marks were drawn over, each as its parent and itself (`section#plans > h2`) with the text it shows; `rect` and `drawings` are in the pixels of the person's window, not of the site.",
       "If you have the tool `conduit_paper`, its comments, reply and resolve work on a site by its id."]);
@@ -589,7 +592,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     room.owed = await fs.readFile(path.join(entry.side, "unwritten"), "utf8").catch(() => null);
     await take(room);
     // A change is accepted when the person resolves its comment (a session's resolve accepts nothing); read on every look at the open threads, which hold every comment the person has not resolved.
-    room.markup = markupOf(room, () => `(document ${id})`, () => [`An image block reads as \`![caption](name)\`; its picture is the file ${path.join(room.entry.side, "images")}/<name>.`, "If you have the tool `conduit_paper`, it does the same without a shell: read, replace, insert, delete (with `for`), reply and resolve.", "To answer a comment by changing the document, add `--for <this item's id>/<n>` to `document replace`, `insert` or `delete`: the person then sees which blocks changed for comment n and can take the change back. Resolving the comment yourself does not accept the change for the person: the comment stays in their margin, marked as resolved by you, with the change shown, until they resolve it too.", "Where the person asked for proposals rather than changes, add `--suggest` instead: the edit stands as a suggestion they accept or reject (`--suggest <key>` adds to one; `document suggestions <id>` lists them)."], (items) => {
+    room.markup = markupOf(room, () => `(document ${id})`, () => [`An image block reads as \`![caption](name)\`; its picture is the file ${path.join(room.entry.side, "images")}/<name>.`, "If you have the tool `conduit_paper`, its action `answer` makes a comment's edits, reply and resolve in one call (the CLI's `answer <item> [n] --json '{…}'` does too); read, replace, insert, delete (with `for`), reply and resolve do each alone.", "To answer a comment by changing the document, add `--for <this item's id>/<n>` to `document replace`, `insert` or `delete`: the person then sees which blocks changed for comment n and can take the change back. Resolving the comment yourself does not accept the change for the person: the comment stays in their margin, marked as resolved by you, with the change shown, until they resolve it too.", "Where the person asked for proposals rather than changes, add `--suggest` instead: the edit stands as a suggestion they accept or reject (`--suggest <key>` adds to one; `document suggestions <id>` lists them)."], (items) => {
       const unsettled = new Set(items.flatMap((item) => item.comments.filter((comment) => !(comment.resolved && comment.resolvedBy === "person")).map((comment) => `${item.id}/${comment.n}`)));
       const settled = [...room.changes.entries()].filter(([, change]) => !isSuggestion(change.for) && !unsettled.has(change.for));
       if (settled.length) doc.transact(() => { for (const [block] of settled) room.changes.delete(block); });
@@ -605,6 +608,30 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   }
   /** The ids of the sites whose files do not say one are kept by path: a path's record goes with its file, and only that site's. */
   const unfiled = (entry, to) => paths(path.dirname(entry.side), (kept) => { if (kept[entry.path] === entry.id) { delete kept[entry.path]; if (to) kept[to] = entry.id; } });
+  /**
+   * One block's edit worked out over `now` (the paper, or what the edits before it in the same change make of it), writing nothing: what the paper
+   * becomes, the blocks it writes, and `also`, what it keeps in the changes, run in the change that writes it. A block that is not there is `missing`.
+   */
+  const planned = (kept, now, { op, block, markdown: text = "", by, for: about, suggest }) => {
+    const { id } = kept, at = now.findIndex((candidate) => candidate.attrs.id === block);
+    if (!["replace", "insert", "delete"].includes(op)) throw fault(400, "op is replace, insert, delete or set");
+    if (at < 0 && !(op === "insert" && block === "start")) throw Object.assign(fault(404, `No block ${block} in ${id}: read it again for its blocks as they are now (the person may be typing in it)`), { missing: block });
+    const fresh = op === "delete" ? [] : parse(String(text ?? ""));
+    // Markdown that reads as blocks the paper cannot hold is refused here, never left to fail when someone next types in them.
+    for (const made of fresh) { try { made.check(); } catch (error) { throw fault(400, `That Markdown makes a block the paper cannot hold (${error.message}): write it another way`); } }
+    if (op === "replace" && fresh[0]) fresh[0] = fresh[0].type.create({ ...fresh[0].attrs, id: block }, fresh[0].content);
+    const next = [...now.slice(0, op === "insert" ? at + 1 : at), ...fresh, ...now.slice(at + 1)], name = typeof by === "string" && by ? by.slice(0, 80) : "agent";
+    if (suggest && about !== undefined) throw fault(400, "An edit either answers a comment (for) or is a suggestion (suggest), not both");
+    if (suggest && suggest !== true && ![...kept.changes.values()].some((change) => change.for === suggest)) throw fault(404, `No suggestion ${suggest} in ${id}: suggestions lists them`);
+    const suggestion = suggest ? suggest === true ? `${SUGGESTION}${blockId()}` : String(suggest) : undefined, key = suggestion ?? (about === undefined ? undefined : String(about));
+    return { next, fresh, name, suggestion, also: key === undefined ? undefined : () => {
+      const stamp = { for: key, by: name, at: new Date().toISOString() }, had = kept.changes.get(block), gone = op !== "insert" && !fresh.length;
+      // The first `before` is the one kept: what is taken back is everything done for the comment, not its last step. A block made for a comment and then deleted leaves nothing to show.
+      if (gone && had?.before === null) kept.changes.delete(block);
+      else if (op !== "insert") kept.changes.set(block, { ...stamp, before: now[at].toJSON(), ...had, ...(gone ? { after: now[at - 1]?.attrs.id ?? null, at: stamp.at } : {}) });
+      for (const made of fresh.slice(op === "replace" ? 1 : 0)) kept.changes.set(made.attrs.id, { ...stamp, before: null });
+    } };
+  };
 
   /**
    * A kind of artifact as the hub holds it: everything the hub does that differs by kind. What a kind leaves out it refuses or does not do: with
@@ -624,6 +651,8 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
    * @property {true} [images]  It keeps images beside it.
    * @property {(under: object | undefined) => Record<string, string | undefined>} [where]  What a hand-off card says of where a comment is, from the comment's `under`.
    * @property {(under: object | undefined) => string[]} [places]  What of it a comment's `under` names, for a seat to sit on.
+   * @property {(room: object, under: object | undefined, radius: number) => { id?: string, md: string, target?: true }[] | undefined} [context]  What a comment is on as it is now, with `radius` blocks either side, for a hand-off to carry.
+   * @property {(room: object) => Promise<string>} [revision]  What it is at now, as its `content` says (a paper's live copy has none).
    * @property {(name: string) => string} [signing]  What its mated thread, listening as `name`, is told of writing in it under that name.
    */
   /** @type {Record<string, ArtifactKind>} */
@@ -637,6 +666,11 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       images: true,
       where: (under) => ({ block: String(under?.blocks ?? "").split(" ")[0] || undefined }),
       places: (under) => String(under?.blocks ?? "").split(" ").filter(Boolean),
+      context(room, under, radius) {
+        const all = blocksOf(room), targets = new Set(KINDS.paper.places(under)), hit = all.flatMap((block, nth) => targets.has(block.attrs.id) ? [nth] : []);
+        if (!hit.length) return undefined;
+        return all.slice(Math.max(0, hit[0] - radius), hit.at(-1) + radius + 1).map((block) => ({ id: block.attrs.id, md: markdown.serialize({ type: "doc", content: [block.toJSON()] }).trim(), ...(targets.has(block.attrs.id) ? { target: true } : {}) }));
+      },
       signing: (name) => ` Write in it as \`${name}\`: the tool \`conduit_paper\` does, and the CLI's \`document\` commands take \`--as ${name}\`.`,
       blocks: {
         /** As Markdown, each block under a comment that gives its id; `markdown`: the Markdown alone, to export; `blocks`: the format itself. */
@@ -653,7 +687,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
          * `suggest`: the edit is a suggestion instead, kept the same way until the person accepts or rejects it; true starts one, a suggestion's key adds to it.
          */
         async edit(kept, { op, block, markdown: text = "", by, for: about, suggest } = {}) {
-          const { id } = kept, now = blocksOf(kept), at = now.findIndex((candidate) => candidate.attrs.id === block);
+          const { id } = kept;
           // `set`: one property of its front matter (`block` its name, the Markdown its value as plain text; none removes it).
           if (op === "set") {
             const name = String(block ?? "").trim(), value = String(text).trim();
@@ -661,24 +695,9 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
             kept.doc.transact(() => value ? kept.properties.set(name, value.slice(0, 2000)) : kept.properties.delete(name));
             return { properties: kept.properties.toJSON() };
           }
-          if (!["replace", "insert", "delete", "set"].includes(op)) throw fault(400, "op is replace, insert, delete or set");
-          if (at < 0 && !(op === "insert" && block === "start")) throw fault(404, `No block ${block} in ${id}: read it again for its blocks as they are now (the person may be typing in it)`);
-          const fresh = op === "delete" ? [] : parse(String(text));
-          // Markdown that reads as blocks the paper cannot hold is refused here, never left to fail when someone next types in them.
-          for (const made of fresh) { try { made.check(); } catch (error) { throw fault(400, `That Markdown makes a block the paper cannot hold (${error.message}): write it another way`); } }
-          if (op === "replace" && fresh[0]) fresh[0] = fresh[0].type.create({ ...fresh[0].attrs, id: block }, fresh[0].content);
-          const next = [...now.slice(0, op === "insert" ? at + 1 : at), ...fresh, ...now.slice(at + 1)], name = typeof by === "string" && by ? by.slice(0, 80) : "agent";
-          if (suggest && about !== undefined) throw fault(400, "An edit either answers a comment (for) or is a suggestion (suggest), not both");
-          if (suggest && suggest !== true && ![...kept.changes.values()].some((change) => change.for === suggest)) throw fault(404, `No suggestion ${suggest} in ${id}: suggestions lists them`);
-          const suggestion = suggest ? suggest === true ? `${SUGGESTION}${blockId()}` : String(suggest) : undefined, key = suggestion ?? (about === undefined ? undefined : String(about));
+          const { next, fresh, name, also, suggestion } = planned(kept, blocksOf(kept), { op, block, markdown: text, by, for: about, suggest });
           if (about !== undefined) await kept.markup.thread(String(about).split("/")[0]);
-          set(kept, next.length ? next : [empty()], name, key === undefined ? undefined : () => {
-            const stamp = { for: key, by: name, at: new Date().toISOString() }, had = kept.changes.get(block), gone = op !== "insert" && !fresh.length;
-            // The first `before` is the one kept: what is taken back is everything done for the comment, not its last step. A block made for a comment and then deleted leaves nothing to show.
-            if (gone && had?.before === null) kept.changes.delete(block);
-            else if (op !== "insert") kept.changes.set(block, { ...stamp, before: now[at].toJSON(), ...had, ...(gone ? { after: now[at - 1]?.attrs.id ?? null, at: stamp.at } : {}) });
-            for (const made of fresh.slice(op === "replace" ? 1 : 0)) kept.changes.set(made.attrs.id, { ...stamp, before: null });
-          });
+          set(kept, next.length ? next : [empty()], name, also);
           // Its seat moves to what it wrote, and what it was heard writing is the paper's now.
           if (sits(id, name, kept)) sit(kept, name, { state: "thinking", blocks: fresh.length ? fresh.map((made) => made.attrs.id) : [], text: undefined, ...(about === undefined ? {} : { for: String(about) }) });
           return { blocks: fresh.map((made) => made.attrs.id), ...(suggestion ? { suggestion } : {}) };
@@ -740,6 +759,9 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       // Deleted here, its path is free: a site an agent later writes there is another one. (One deleted by hand and brought back is still itself.)
       removed: (entry) => unfiled(entry),
       load: loadSite,
+      // What its marks were drawn over, as the site named it when the comment was sent: the hub reads nothing of the file for it.
+      context: (room, under) => under?.elements ? [{ md: String(under.elements) }] : undefined,
+      revision: async (room) => { const now = known.get(room.id) ?? room.entry, stat = await now.disk.stat(now.path); return stat ? String(stat.mtimeMs) : undefined; },
       async content(entry, have) {
         const { id } = entry;
         let stat = await entry.disk.stat(entry.path);
@@ -916,6 +938,45 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     suggestions: (id) => blocks(id, "suggestions"),
     accept: (id, key) => blocks(id, "accept", key),
     reject: (id, key) => blocks(id, "reject", key),
+    /**
+     * One comment answered at once: every edit (made for `<item>/<n>`, in one change), then the reply and the resolve, then the seat is left. `n` may be
+     * left out of an item with one comment. Nothing is written unless all of it can be: an edit on a block that is not there fails with the comment's blocks
+     * as they are now, so the next try needs no read.
+     */
+    async answer(id, { item, n, edits = [], reply, resolve, by } = {}) {
+      const entry = await entryOf(id), kind = KINDS[entry.kind], name = typeof by === "string" && by ? by.slice(0, 80) : "agent";
+      if (!Array.isArray(edits)) throw fault(400, "edits is a list of { op, at, markdown }");
+      if (edits.length && !kind.blocks) throw fault(400, `${entry.name} is a ${entry.kind}, which has no blocks: change its file ${entry.path} with your own tools, then answer with reply and resolve alone`);
+      const words = typeof reply === "string" ? reply.trim() : "";
+      if (reply !== undefined && !words) throw fault(400, "reply is the words the person reads beside the comment");
+      if (!edits.length && !words && !resolve) throw fault(400, "An answer has edits, a reply or resolve");
+      const room = edits.length ? await current(id) : await held(id);
+      return room.work(async () => {
+        const thread = await room.markup.thread(String(item ?? "")), at = Number.isInteger(n) ? n : thread.comments.length === 1 ? thread.comments[0].n : undefined;
+        const comment = thread.comments.find((one) => one.n === at);
+        if ((edits.length || resolve || at !== undefined) && !comment) throw fault(400, at === undefined ? `Say which comment of ${item} this answers (n: ${thread.comments.map((one) => one.n).join(", ")})` : `No comment ${at} in ${item}`);
+        const written = [];
+        if (edits.length) {
+          let now = blocksOf(room);
+          const alsos = [];
+          for (const edit of edits) {
+            let one;
+            try { one = planned(room, now, { op: edit?.op, block: edit?.at, markdown: edit?.markdown, by: name, for: `${item}/${at}` }); } catch (error) {
+              if (!error.missing) throw fault(error.status ?? 400, `Nothing was written: ${error.message}`);
+              const context = kind.context(room, comment.under, 1);
+              throw fault(409, `Nothing was written: there is no block ${error.missing} in the paper now (the person may have changed it). ${context ? `What comment ${at} is on now:\n\n${contextOf(context)}` : `None of the blocks comment ${at} was on is left: read the paper for its blocks.`}`);
+            }
+            now = one.next; alsos.push(one.also); written.push(...one.fresh.map((made) => made.attrs.id));
+          }
+          set(room, now.length ? now : [empty()], name, () => { for (const also of alsos) also?.(); });
+        }
+        if (words) await room.markup.answer(thread.id, { n: at ?? null, text: words, by: name });
+        const done = resolve ? await room.markup.answer(thread.id, { n: at, resolved: true, by: name }) : null;
+        await room.markup.open();
+        if (room.seats?.has(name)) sit(room, name, null);
+        return { item: thread.id, n: at ?? null, blocks: written, replied: Boolean(words), resolved: Boolean(resolve), ...(done ? { handled: done.state === "handled" } : {}) };
+      });
+    },
     /** An image is kept beside the paper, under a name its block holds in place of the bytes. */
     async keepImage(id, bytes) {
       const entry = await entryOf(id), kind = Buffer.isBuffer(bytes) && bytes.length ? sniff(bytes) : null;
@@ -989,6 +1050,7 @@ export function registerDocumentRoutes(app, documents) {
   app.patch("/v0/document/:id", async (request, response) => response.json(await documents.rename(request.params.id, request.body?.name)));
   app.delete("/v0/document/:id", async (request, response) => { await documents.remove(request.params.id); response.status(204).end(); });
   app.post("/v0/document/:id/blocks", async (request, response) => response.json(await documents.edit(request.params.id, request.body)));
+  app.post("/v0/document/:id/answer", async (request, response) => response.json(await documents.answer(request.params.id, request.body ?? {})));
   app.post("/v0/document/:id/images", express.raw({ type: "image/*", limit: IMAGE_MAX }), async (request, response) => response.status(201).json(await documents.keepImage(request.params.id, request.body)));
   // Drawn by an <img>, never run: no other type, no script, no page of the hub's.
   app.get("/v0/document/:id/images/:name", async (request, response) => {

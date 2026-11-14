@@ -15,6 +15,12 @@ export type PaperKeyRow = { does: string; keys: string[]; typed?: string; space?
 
 /** The marks' chords, which the format's StarterKit binds. */
 export const PAPER_MARK_KEYS: Record<Exclude<DocumentMarkKind, "color" | "highlight">, string> = { bold: "Mod-b", italic: "Mod-i", strike: "Mod-Shift-s", code: "Mod-e" };
+/** Asks the one comments go to about the text selected, or the caret's block (editor.tsx). */
+export const PAPER_COMMENT_KEY = "Mod-Alt-m";
+// Read here, not from the app's shortcut environment: the editor is lifted whole into other projects.
+const apple = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+/** A chord in the editor's notation (`Mod-Shift-s`) as its hints write it: Mod is ⌘ on Apple platforms and Ctrl elsewhere. */
+export const paperKeys = (chord: string) => chord.split("-").map((key) => key === "Mod" ? apple ? "⌘" : "Ctrl" : key.length === 1 ? key.toUpperCase() : key);
 
 /*
  * Most of these are bound inside the editor's libraries (the format's StarterKit, task list and table, with their input rules), which say them only
@@ -54,6 +60,7 @@ export const PAPER_KEYS: Record<PaperKeyGroup, readonly PaperKey[]> = {
   ],
   Comments: [
     { does: "Ask an agent", typed: "@" },
+    { does: "Comment on the selection", keys: [PAPER_COMMENT_KEY] },
     { does: "Send a reply", keys: ["Mod-Enter"] },
     { command: "nextComment" },
     { command: "previousComment" },
