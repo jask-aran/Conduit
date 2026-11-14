@@ -4,7 +4,7 @@ import { colIndex } from "../sheet-format.js";
 import { callingChat } from "./conduit-mcp.js";
 
 const text = (words, isError = false) => ({ output: [{ type: "text", text: words }], ...(isError ? { isError: true } : {}) });
-const ACTIONS = ["answer", "list", "new", "show", "lead", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve", "cells", "fill", "rows", "cols", "tabs", "import"];
+const ACTIONS = ["answer", "list", "new", "show", "lead", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve", "cells", "fill", "rows", "cols", "tabs", "import", "export"];
 const TAB_OPS = { add: "add-tab", rename: "rename-tab", delete: "delete-tab", move: "move-tab", hide: "hide-tab", show: "hide-tab" };
 
 /** Artifacts for an agent (papers, Markdown files, sheets and sites): the hub's document service (server/documents.js) as one tool, with the verbs `conduit-markup` has. */
@@ -34,12 +34,15 @@ export function PaperTool(runtime) {
       + "rows and cols (op: insert | delete, at: the row number or column letter to insert before or to delete from, count) change its shape, rewriting formulas that refer to moved cells. They take `for` as an edit does; answer then takes reply and resolve, not edits. "
       + "A sheet can have tabs: each of those actions takes `tab` (a tab's name; the first tab unsaid), or an address that names one (at: \"Data!B4\", range: \"'My data'!A1:C3\"), and a formula reads another tab as Data!A1. "
       + "import (project, from: an .xlsx file's path in the project's folder; name; only: the tabs to take) makes a workbook of an Excel file and says which formulas could not be computed here (those hold the file's value) and what was left out. "
+      + "export (paper, to: a path in the project's folder; replace: true to write over a file) writes a sheet as an .xlsx file. "
       + "tabs lists them with their sizes; tabs with op add (name, at: its place, 1 first; last unsaid), rename (tab, name: the new one; formulas naming it are rewritten), delete (tab; formulas naming it then show #REF!), move (tab, at), hide or show (tab) changes them.",
     parameters: Type.Object({
       action: Type.Union(ACTIONS.map((value) => Type.Literal(value))),
       paper: Type.Optional(Type.String({ description: "A paper's id." })),
       project: Type.Optional(Type.String({ description: "list, new, import: a project's id or slug." })),
       name: Type.Optional(Type.String({ description: "new: the paper's name; tabs add, rename: the tab's name." })),
+      to: Type.Optional(Type.String({ description: "export: the .xlsx file's path in the project's folder." })),
+      replace: Type.Optional(Type.Boolean({ description: "export: write over a file already there." })),
       from: Type.Optional(Type.String({ description: "import: the .xlsx file's path in the project's folder." })),
       only: Type.Optional(Type.Array(Type.String(), { description: "import: the tabs to take, by name (all unsaid)." })),
       tab: Type.Optional(Type.String({ description: "A sheet's tab, by name: cells, set, fill, rows, cols, tabs." })),
@@ -83,6 +86,11 @@ export function PaperTool(runtime) {
           const made = await documents.importXlsx(project, { from: args.from, name: args.name, tabs: args.only });
           if (chat) await documents.lead(made.id, chat);
           return text(`${made.id}  ${made.path}\n${made.summary}${args.show === false ? "" : `\n${await show(made.id)}`}`);
+        }
+        if (args.action === "export") {
+          if (!args.paper || !args.to) throw new Error("export takes paper: the sheet's id, and to: the .xlsx file's path in the project's folder.");
+          const made = await documents.exportXlsx(args.paper, { to: args.to, replace: args.replace === true });
+          return text(`Written to ${made.path} (${made.bytes} bytes): formulas with the values they compute here, number formats, column widths and hidden tabs; no fills, fonts or borders.`);
         }
         if (args.action === "list" || args.action === "new") {
           const project = args.project ?? mine.project;

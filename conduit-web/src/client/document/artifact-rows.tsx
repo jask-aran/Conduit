@@ -6,7 +6,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
 import { ARTIFACT_KINDS } from "./artifact-kinds";
-import { artifactsOf, artifactsRead, artifactView, copyArtifactMarkdown, countPapers, deleteArtifact, exportArtifactMarkdown, paperCounted, renameArtifact, type Artifact } from "./artifacts";
+import { artifactsOf, artifactsRead, artifactView, copyArtifactMarkdown, countPapers, deleteArtifact, exportArtifactMarkdown, exportArtifactXlsx, paperCounted, renameArtifact, type Artifact } from "./artifacts";
 
 /** An artifact's mark in a row: its kind's. */
 export const ArtifactIcon = (props: { kind: Artifact["kind"] }) => { const Icon = ARTIFACT_KINDS[props.kind].icon; return <Icon />; };
@@ -39,6 +39,7 @@ export default function ArtifactRows(props: { project: string; empty?: JSX.Eleme
           <MenuRow icon={<Icons.Edit />} onSelect={() => { setName(artifact.name); setRenaming(artifact); }}>Rename</MenuRow>
           <Show when={ARTIFACT_KINDS[artifact.kind]?.markdown}><MenuRow icon={<Icons.Copy />} onSelect={() => void copyArtifactMarkdown(artifact).then(() => toast.success("Copied as Markdown"), failed)}>Copy as Markdown</MenuRow>
             <MenuRow icon={<Icons.Download />} onSelect={() => void exportArtifactMarkdown(artifact).catch(failed)}>Download Markdown</MenuRow></Show>
+          <Show when={ARTIFACT_KINDS[artifact.kind]?.xlsx}><MenuRow icon={<Icons.Download />} onSelect={() => void exportArtifactXlsx(artifact).catch(failed)}>Download .xlsx</MenuRow></Show>
           <Show when={ARTIFACT_KINDS[artifact.kind]?.count}><MenuRow icon={<Icons.FileText />} checked={paperCounted()} onSelect={() => countPapers(!paperCounted())}>Count blocks and words</MenuRow></Show>
         </MenuSection>
         <MenuSection>

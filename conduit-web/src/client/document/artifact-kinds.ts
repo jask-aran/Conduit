@@ -79,6 +79,8 @@ export type ArtifactKindClient = {
   markup: Partial<MarkupCapabilities>;
   /** The hub gives its Markdown (`?as=markdown`): its row offers Copy and Download Markdown. `count`: it can say how many blocks and words it has. */
   markdown?: boolean;
+  /** It downloads as an .xlsx workbook (the hub's `?as=xlsx`). */
+  xlsx?: boolean;
   count?: boolean;
   /** The ending of the files that are this kind only when asked: one opens in the file viewer until it is opened as this (artifactAt with `adopt`). */
   opens?: string;
@@ -130,6 +132,7 @@ export const ARTIFACT_KINDS: Record<ArtifactKind, ArtifactKindClient> = {
     says: "Rows and columns with formulas, kept as a CSV file, with comments on cells in the margin.",
     opens: ".csv",
     icon: TableIcon,
+    xlsx: true,
     edit: [],
     markup: { deliveries: ["batched", "live"], tools: ["quote", "note"], screenshot: false, sent: "margin", thin: false, bar: "slot", marks: "surface" },
     Surface: lazy(() => import("./sheet-surface")),

@@ -14,7 +14,7 @@ import { remoteNode } from "../place.js";
 import { writePrivateFile } from "../private-file.js";
 import { createMarkupStore } from "./markup-store.js";
 import { MAIN, rowId } from "../sheet-format.js";
-import { importSummary, importXlsxApart } from "./sheet-xlsx.js";
+import { exportXlsx, importSummary, importXlsxApart } from "./sheet-xlsx.js";
 import { FOLDER, sheetKind, tabFile } from "./sheets.js";
 import { startWebSocketKeepalive } from "./ws-keepalive.js";
 
@@ -1126,6 +1126,19 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       await KINDS.sheet.adopted({ side, at, id });
       return { ...await told(await adopt(of, at, true)), report, summary: importSummary(report) };
     },
+    /**
+     * A sheet as an .xlsx: its bytes; with `to`, written to that path in the project's folder (on this disk), which must not be there unless `replace`.
+     * @param {{ to?: string, replace?: boolean }} [asked]
+     */
+    async exportXlsx(id, { to, replace = false } = {}) {
+      const room = await current(id, "cells"), bytes = exportXlsx((await KINDS[room.entry.kind].cells.read(room, "book")).tabs, await this.importReport(id));
+      if (to === undefined) return { name: `${room.entry.name}.xlsx`, bytes };
+      const { disk } = room.entry, at = within(/\.xlsx$/i.test(to) ? to : `${to}.xlsx`);
+      if (disk.far) throw fault(400, "A project on a device takes an export by download (GET ?as=xlsx)");
+      await disk.inside(at);
+      await fs.writeFile(disk.at(at), bytes, { flag: replace ? "w" : "wx" }).catch((error) => { throw error.code === "EEXIST" ? fault(409, `${at} is already there: replace: true writes over it`) : error.code === "ENOENT" ? fault(404, `No folder for ${at} in this project`) : error; });
+      return { path: at, bytes: bytes.length };
+    },
     /** What an imported workbook's import left out or froze; null for a sheet that was not imported. */
     async importReport(id) { return fs.readFile(path.join((await entryOf(id)).side, "import.json"), "utf8").then(JSON.parse, () => null); },
     /**
@@ -1393,11 +1406,16 @@ export function registerDocumentRoutes(app, documents) {
   });
   app.get("/v0/document/:id", async (request, response) => {
     if (request.query.as === "about") return response.json(await documents.about(request.params.id));
+    if (request.query.as === "xlsx") { const made = await documents.exportXlsx(request.params.id); return response.type("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet").attachment(made.name).send(made.bytes); }
     if (request.query.as === "import") return response.json({ report: await documents.importReport(request.params.id) });
     // As data, never as a page of the hub's: a site's scripts are run only in the frame its pane gives it.
     if (request.query.as === "site") return response.json(await documents.site(request.params.id, typeof request.query.have === "string" ? request.query.have : undefined));
     const text = (name) => typeof request.query[name] === "string" ? request.query[name] : undefined, read = await documents.read(request.params.id, request.query.as, text("range"), text("tab"));
     if (typeof read === "string") response.type((await documents.about(request.params.id)).changes === "cells" ? "text/csv" : "text/markdown").send(read); else response.json(read);
+  });
+  app.post("/v0/document/:id/export", async (request, response) => {
+    if (typeof request.body?.to !== "string" || !request.body.to.trim()) throw fault(400, "export takes to: the .xlsx file's path in the project's folder (GET ?as=xlsx downloads it)");
+    response.json(await documents.exportXlsx(request.params.id, { to: request.body.to, replace: request.body.replace === true }));
   });
   app.post("/v0/document/:id/cells", async (request, response) => response.json(await documents.cells(request.params.id, request.body)));
   app.post("/v0/document/:id/thread", async (request, response) => response.json(await documents.thread(request.params.id)));

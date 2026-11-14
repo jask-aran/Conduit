@@ -11,7 +11,7 @@ import { NAMES } from "../sheet-functions.js";
  * formula). Pure and slow for a large file: the hub runs it off its main thread.
  */
 /** @typedef {{ name: string, hidden: boolean, csv: string, inputs: Record<string, string>, look: Record<string, unknown>, rows: number, cols: number, formulas: number }} ImportedTab */
-/** @typedef {{ tabs: { name: string, rows: number, cols: number, formulas: number }[], skipped: string[], computed: { same: number, frozen: number, noCache: number, volatile: number }, frozen: Record<string, Record<string, { formula: string, why: string }>>, reasons: Record<string, number>, dropped: Record<string, number> }} ImportReport */
+/** @typedef {{ tabs: { name: string, rows: number, cols: number, formulas: number }[], skipped: string[], computed: { same: number, frozen: number, noCache: number, volatile: number }, frozen: Record<string, Record<string, { formula: string, why: string, kept?: string }>>, reasons: Record<string, number>, dropped: Record<string, number> }} ImportReport */
 
 const VOLATILE = /\b(?:TODAY|NOW|RAND|RANDBETWEEN|RANDARRAY)\s*\(/i, FORMATS_PER_TAB = 2000, PASSES = 4;
 const ERROR_TEXT = { 0: "#NULL!", 7: "#DIV/0!", 15: "#VALUE!", 23: "#REF!", 29: "#NAME?", 36: "#NUM!", 42: "#N/A", 43: "#GETTING_DATA" };
@@ -103,14 +103,14 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     };
     const moving = downstream(formulas.filter((one) => VOLATILE.test(one.formula)));
     for (const one of formulas) if (VOLATILE.test(one.formula)) moving.add(id(at(one)));
-    for (const one of spilt) { (report.frozen[one.tab.name] ??= {})[a1(one.r, one.c)] = { formula: one.formula, why: "a formula over several cells" }; report.reasons["a formula over several cells"] = (report.reasons["a formula over several cells"] ?? 0) + 1; }
+    for (const one of spilt) { (report.frozen[one.tab.name] ??= {})[a1(one.r, one.c)] = { formula: one.formula, why: "a formula over several cells", kept: String(one.tab.typed[one.r][one.c] ?? "") }; report.reasons["a formula over several cells"] = (report.reasons["a formula over several cells"] ?? 0) + 1; }
     report.computed.frozen += spilt.length;
     let open = formulas.filter((one) => !moving.has(id(at(one))));
     const freeze = (wrong, gave = wrong.map((one) => engine.getCellValue(at(one)))) => engine.batch(() => {
       for (const [index, one] of wrong.entries()) {
         const value = gave[index], text = kept(one.cell);
         const why = isError(value) ? (value.value === "#NAME?" ? "a function or name this sheet does not have" : `it gives ${value.value} here`) : `it gives ${valueText(value) || "nothing"} here, ${text || "nothing"} in the file`;
-        (report.frozen[one.tab.name] ??= {})[a1(one.r, one.c)] = { formula: one.formula, why };
+        (report.frozen[one.tab.name] ??= {})[a1(one.r, one.c)] = { formula: one.formula, why, kept: one.cell.t === "s" || one.cell.t === "str" ? `'${one.cell.v}` : text };
         const reason = !why.startsWith("it gives") ? why : isError(value) ? `gives ${value.value}` : "a different value";
         report.reasons[reason] = (report.reasons[reason] ?? 0) + 1;
         const typed = one.cell.t === "n" ? one.cell.v : one.cell.t === "s" || one.cell.t === "str" ? `'${one.cell.v}` : text || null;
@@ -160,6 +160,39 @@ export function importSummary(report) {
     ...(listed.length ? [`Frozen: ${listed.slice(0, 20).join("; ")}${listed.length > 20 ? `; and ${listed.length - 20} more (GET /v0/document/<id>?as=import lists all)` : ""}.`] : []),
     ...(Object.keys(report.dropped).length ? [`Left out: ${Object.entries(report.dropped).map(([what, count]) => `${count} ${what}`).join(", ")}; also any charts, fills, borders, fonts, validation, conditional formats and notes, which are not read.`] : ["Charts, fills, borders, fonts, validation, conditional formats and notes are not read."]),
   ].join("\n");
+}
+// Functions an .xlsx stores under a prefix: without it a spreadsheet shows #NAME? until the cell is entered again.
+const PREFIXED = new Set("STDEV.S STDEV.P VAR.S VAR.P COVARIANCE.S COVARIANCE.P FLOOR.MATH CEILING.MATH CEILING.PRECISE FLOOR.PRECISE ISO.CEILING IFS SWITCH MAXIFS MINIFS CONCAT TEXTJOIN XLOOKUP XMATCH IFNA XOR RANK.EQ RANK.AVG PERCENTILE.INC PERCENTILE.EXC PERCENTRANK.INC PERCENTRANK.EXC QUARTILE.INC QUARTILE.EXC MODE.SNGL MODE.MULT NORM.DIST NORM.INV NORM.S.DIST NORM.S.INV T.DIST T.DIST.2T T.DIST.RT T.INV T.INV.2T T.TEST CHISQ.DIST CHISQ.DIST.RT CHISQ.INV CHISQ.INV.RT CHISQ.TEST F.DIST F.DIST.RT F.INV F.INV.RT F.TEST Z.TEST BINOM.DIST BINOM.DIST.RANGE BINOM.INV NEGBINOM.DIST POISSON.DIST EXPON.DIST GAMMA.DIST GAMMA.INV BETA.DIST BETA.INV WEIBULL.DIST LOGNORM.DIST LOGNORM.INV HYPGEOM.DIST CONFIDENCE.NORM CONFIDENCE.T NETWORKDAYS.INTL WORKDAY.INTL DAYS ISOWEEKNUM NUMBERVALUE FORECAST.LINEAR UNICHAR UNICODE BITAND BITOR BITXOR BITLSHIFT BITRSHIFT SHEET SHEETS FORMULATEXT ISFORMULA PERMUTATIONA GAMMA GAUSS PHI SEC CSC COT SECH CSCH COTH ACOT ACOTH ARABIC BASE DECIMAL COMBINA MUNIT SKEW.P AGGREGATE ERF.PRECISE ERFC.PRECISE GAMMALN.PRECISE UNIQUE SEQUENCE RANDARRAY SORTBY TAKE DROP CHOOSECOLS CHOOSEROWS EXPAND".split(" "));
+const SCOPED = new Set(["FILTER", "SORT"]);
+const stored = (formula) => formula.slice(1).split(/("(?:[^"]|"")*")/).map((part, nth) => nth % 2 ? part : part.replace(/([A-Za-z][A-Za-z0-9.]*)\(/g, (all, name) => PREFIXED.has(name.toUpperCase()) ? `_xlfn.${all}` : SCOPED.has(name.toUpperCase()) ? `_xlfn._xlws.${all}` : all)).join("");
+const ERROR_CODE = Object.fromEntries(Object.entries(ERROR_TEXT).map(([code, text]) => [text, Number(code)]));
+/**
+ * A workbook written as an .xlsx: each formula with the value it computes here, number formats, column widths and hidden tabs. A cell an import
+ * froze gets its formula back where it still holds what the import left in it. No fills, fonts or borders are written.
+ * @param {{ name: string, hidden: boolean, typed: string[][], values: unknown[][], look: Record<string, unknown> }[]} tabs  `values`: what each cell computes
+ * @param {ImportReport | null} [imported]
+ * @returns {Buffer}
+ */
+export function exportXlsx(tabs, imported) {
+  const book = XLSX.utils.book_new();
+  for (const tab of tabs) {
+    const frozen = imported?.frozen?.[tab.name] ?? {}, sheet = {}, cols = Math.max(1, ...tab.typed.map((row) => row.length));
+    tab.typed.forEach((row, r) => row.forEach((typed, c) => {
+      if (!typed) return;
+      const at = a1(r, c), was = frozen[at], formula = typed.startsWith("=") ? typed : was?.kept === typed && !was.why.startsWith("a formula over") ? was.formula : null, value = tab.values[r]?.[c];
+      const cell = isError(value) ? { t: "e", v: ERROR_CODE[value.value] ?? 15, w: value.value } : typeof value === "number" ? { t: "n", v: value } : typeof value === "boolean" ? { t: "b", v: value } : { t: "s", v: String(value ?? "") };
+      if (cell.t === "s" && cell.v === "" && !formula) return;
+      if (formula) cell.f = stored(formula);
+      const format = tab.look[`fmt:${at}`] ?? tab.look[`fmt:${colName(c)}`];
+      if (cell.t === "n" && typeof format === "string" && format !== "General") cell.z = format;
+      sheet[at] = cell;
+    }));
+    sheet["!ref"] = `A1:${a1(Math.max(0, tab.typed.length - 1), cols - 1)}`;
+    sheet["!cols"] = Array.from({ length: cols }, (_, c) => typeof tab.look[`width:${colName(c)}`] === "number" ? { wpx: tab.look[`width:${colName(c)}`] } : {});
+    XLSX.utils.book_append_sheet(book, sheet, tab.name);
+  }
+  book.Workbook = { Sheets: tabs.map((tab) => ({ Hidden: tab.hidden ? 1 : 0 })) };
+  return XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true });
 }
 const IMPORT_MS = 180_000, IMPORT_HEAP_MB = 2048;
 /** `importXlsx` on a thread of its own, so the hub answers while a large workbook computes; it is ended after three minutes. */

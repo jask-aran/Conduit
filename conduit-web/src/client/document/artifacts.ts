@@ -74,14 +74,22 @@ const markdownOf = async (id: string) => {
   if (!response.ok) throw new Error(String((await response.json().catch(() => ({})) as { error?: string }).error || "Its Markdown could not be read"));
   return response.blob();
 };
+const save = (blob: Blob, name: string) => {
+  const url = URL.createObjectURL(blob), link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url));
+};
+/** Saves a sheet as `<name>.xlsx`. */
+export const exportArtifactXlsx = async (artifact: Pick<Artifact, "id" | "name">) => {
+  const response = await authorizedFetch(httpUrl(`/v0/document/${encodeURIComponent(artifact.id)}?as=xlsx`));
+  if (!response.ok) throw new Error(String((await response.json().catch(() => ({})) as { message?: string }).message || "It could not be exported"));
+  save(await response.blob(), `${artifact.name}.xlsx`);
+};
 /** Puts a paper's Markdown on the clipboard. */
 export const copyArtifactMarkdown = async (artifact: Pick<Artifact, "id">) => navigator.clipboard.writeText(await (await markdownOf(artifact.id)).text());
 /** Saves its Markdown as `<name>.md`, as the file viewer saves a file. */
 export const exportArtifactMarkdown = async (artifact: Pick<Artifact, "id" | "name">) => {
-  const url = URL.createObjectURL(await markdownOf(artifact.id));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${artifact.name}.md`;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url));
+  save(await markdownOf(artifact.id), `${artifact.name}.md`);
 };

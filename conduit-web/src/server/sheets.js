@@ -253,11 +253,13 @@ export function sheetKind(hub) {
     cells: {
       /**
        * The sheet as text for an agent: a line saying what it is, then the CSV of what was typed in a tab (`tab`, or the tab `range` names; the first
-       * unsaid). `as` "values": of what the file holds; "cells": JSON of each cell that has something, with the tab's id-keyed rows, columns and look,
+       * unsaid). `as` "values": of what the file holds; "book": every tab for an export; "cells": JSON of each cell that has something, with the tab's id-keyed rows, columns and look,
        * and the tabs; "tabs": the tabs alone, each with its size. `range` reads only those cells.
        */
       async read(room, as, range, tab) {
         if (as === "tabs") return { tabs: tabsWithSize(room) };
+        // For an export: every tab, what is typed in it, what that computes, and its look by letter and address.
+        if (as === "book") return { tabs: room.book.tabs().map((tab) => { const sheet = room.book.tab(tab.id), typed = sheet.inputs(); return { name: tab.name, hidden: tab.hidden, typed, values: typed.map((row, r) => row.map((input, col) => input ? sheet.engine.getCellValue({ sheet: sheet.sheet, row: r, col }) : null)), look: lookOf(room, sheet) }; }) };
         const ref = parseRef(range ?? ""), sheet = pick(room, tab, ref.tab ?? undefined), { rows, cols } = sheet.size(), whole = { top: 0, left: 0, bottom: rows - 1, right: cols - 1 };
         const asked = ref.range === "" ? whole : parseRange(ref.range);
         if (!asked) throw fault(400, `range is an A1 range such as B2:C5 (or Data!B2:C5), not ${range}`);
