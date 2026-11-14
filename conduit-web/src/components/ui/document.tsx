@@ -2,7 +2,7 @@ import { BaselineIcon, BetweenHorizontalEndIcon, BetweenVerticalEndIcon, BoldIco
   MessageSquarePlusIcon, MinusIcon, PencilIcon, FileDiffIcon, PilcrowIcon, StrikethroughIcon, TableColumnsSplitIcon, TableIcon, TableRowsSplitIcon, TextQuoteIcon, TriangleAlertIcon, UnlinkIcon } from "lucide-solid";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, splitProps, type JSX } from "solid-js";
 // Through the barrel, as markup.tsx does, so the editor's chunk takes the header from the app's own.
-import { Button, FindBar, Frost, IconButton, Icons, Item, PaneHeader, Section, Spinner, TextArea } from "./index";
+import { Button, FindBar, Frost, IconButton, Icons, Item, Keycap, PaneHeader, Section, Spinner, TextArea } from "./index";
 import { Popover, PopoverContent } from "./menus";
 import "./styles/document.css";
 
@@ -65,7 +65,7 @@ const keepAsked = (words: string) => { const was = askedBefore(), had = was.find
  *  puts it away (`onClose`). */
 export function DocumentAsk(props: { name: string; names?: readonly string[]; onName?: (name: string) => void; at: { left: number; top: number; width: number }; onSend: (words: string) => void; onClose: () => void }) {
   const [words, setWords] = createSignal(""), [active, setActive] = createSignal(0), [shut, setShut] = createSignal<string>();
-  const before = askedBefore(), used = [...before].sort((a, b) => b.uses - a.uses).slice(0, 3);
+  const before = askedBefore(), used = before.filter((one) => one.uses > 1).sort((a, b) => b.uses - a.uses).slice(0, 3);
   let field: HTMLTextAreaElement | undefined, root: HTMLDivElement | undefined, recalled = -1;
   const put = (said: string) => { setWords(said); queueMicrotask(() => field?.setSelectionRange(said.length, said.length)); };
   const send = () => { const said = words().trim(); if (!said) return; keepAsked(said); props.onSend(said); };
@@ -88,11 +88,15 @@ export function DocumentAsk(props: { name: string; names?: readonly string[]; on
     }
   };
   return <div ref={root} class="ui-document-ask" style={{ left: `${props.at.left}px`, top: `${props.at.top}px`, width: `${props.at.width}px` }} onFocusOut={(event) => { if (event.currentTarget.isConnected && !event.currentTarget.contains(event.relatedTarget as Node | null)) props.onClose(); }}>
-    <span class="ui-document-mention">@{props.name}</span>
-    <TextArea ref={(element) => { field = element; queueMicrotask(() => element.focus({ preventScroll: true })); }} aria-label={`Ask ${props.name}`} placeholder={`Tell ${props.name} what to write or edit`} value={words()} onInput={(event) => setWords(event.currentTarget.value)} onKeyDown={keys} />
-    <IconButton label="Send (Enter)" disabled={!words().trim()} onMouseDown={keep} onClick={send}><Icons.Send /></IconButton>
-    <Show when={!words() && used.length}><div class="ui-document-ask-asked" role="group" aria-label="Asked before">
-      <For each={used}>{(one) => <Button variant="ghost" size="sm" title={one.words} onMouseDown={keep} onClick={() => put(one.words)}><span class="ui-truncate">{one.words}</span></Button>}</For>
+    <div class="ui-document-ask-field">
+      {/* Who is asked; pressed, it offers the others as typing @ does. */}
+      <Button variant="secondary" size="sm" aria-label={`Asking ${props.name}`} title={(props.names?.length ?? 0) > 1 ? "Ask someone else (@)" : undefined} disabled={(props.names?.length ?? 0) < 2} onMouseDown={keep} onClick={() => put("@")}>@{props.name}<Show when={(props.names?.length ?? 0) > 1}><Icons.ChevronDown /></Show></Button>
+      <TextArea ref={(element) => { field = element; queueMicrotask(() => element.focus({ preventScroll: true })); }} aria-label={`Ask ${props.name}`} placeholder="Ask about this…" value={words()} onInput={(event) => setWords(event.currentTarget.value)} onKeyDown={keys} />
+      <Show when={words().trim()} fallback={<Keycap>↵</Keycap>}><IconButton label="Send (Enter)" onMouseDown={keep} onClick={send}><Icons.Send /></IconButton></Show>
+    </div>
+    <Show when={!words() && before.length}><div class="ui-document-ask-asked" role="group" aria-label="Asked before">
+      <For each={used}>{(one) => <Button variant="ghost" outline size="sm" title={one.words} onMouseDown={keep} onClick={() => put(one.words)}><span class="ui-truncate">{one.words}</span></Button>}</For>
+      <span>↑ earlier asks</span>
     </div></Show>
     <Popover open={others().length > 0} onOpenChange={(open) => { if (!open) setShut(words()); }} anchorRef={() => root} placement="bottom-start">
       <PopoverContent aria-label="Ask someone else" width="sm" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}>

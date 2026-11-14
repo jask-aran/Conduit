@@ -25,17 +25,17 @@
 .ui-document-text > :is([data-id], .tableWrapper)::after { position: absolute; top: 0; right: 100%; margin-right: var(--space-md); color: color-mix(in oklch, var(--muted-foreground), transparent var(--tone-quiet)); font-family: var(--font-data); font-size: var(--text-caption); font-variant-numeric: tabular-nums; content: counter(block); pointer-events: none; user-select: none; }
 .ui-document-comment { border-radius: var(--radius-inset); background: color-mix(in oklch, var(--status-warn), transparent 78%); cursor: pointer; }
 .ui-document-comment[data-current] { background: color-mix(in oklch, var(--status-warn), transparent 55%); }
-/* Asking where the caret is: a line of the paper, in the line's own place and no taller, the words growing down. */
-.ui-document-ask { position: absolute; z-index: 1; display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-sm); border-radius: var(--radius-control); background: var(--popover); box-shadow: 0 0 0 var(--space-xs) var(--popover); font-size: var(--text-body); line-height: var(--leading-reading); }
-.ui-document-ask > .ui-document-mention { flex: none; cursor: default; }
-.ui-document-ask > .ui-textarea { min-width: 0; flex: 1; font: inherit; }
-/* No taller than the line it stands in. */
-.ui-document-ask > .ui-icon-button { width: 1lh; height: 1lh; min-width: 0; min-height: 0; flex: none; }
-/* What was asked most, a row of its own under the field; a long ask is cut short rather than widening the row. */
-.ui-document-ask-asked { display: flex; min-width: 0; flex: 1 0 100%; gap: var(--space-xs); }
-.ui-document-ask-asked > .ui-button { min-width: 0; flex: 0 1 auto; }
+/* Asking where the caret is: a field in the line's own place, the words growing down, and under it what was asked before. Opaque, as it stands over the lines below. */
+.ui-document-ask { position: absolute; z-index: 1; display: flex; flex-direction: column; gap: var(--space-sm); border-radius: var(--radius-control); background: var(--well); box-shadow: 0 0 0 var(--space-xs) var(--well); font-size: var(--text-body); }
+.ui-document-ask-field { display: flex; align-items: center; gap: var(--space-sm); border: var(--hairline) solid var(--border); border-radius: var(--radius-control); background: var(--popover); padding: var(--space-xs) var(--space-sm); }
+.ui-document-ask-field:focus-within { border-color: var(--muted-foreground); }
+.ui-document-ask-field > .ui-textarea { min-width: 0; flex: 1; padding-block: var(--space-xs); font: inherit; }
+.ui-document-ask-field > :is(.ui-button, .ui-icon-button, .ui-keycap) { flex: none; }
+/* What was asked most, under the field; a long ask is cut short rather than widening the row. */
+.ui-document-ask-asked { display: flex; min-width: 0; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-document-ask-asked > .ui-button { min-width: 0; flex: 0 1 auto; border-radius: var(--radius-round); }
+.ui-document-ask-asked > span { flex: none; margin-inline-start: var(--space-xs); }
 .ui-document-mention { flex: none; cursor: default; line-height: var(--control-sm); }
-.ui-document-ask > .ui-textarea { min-width: 0; flex: 1; padding-block: var(--space-xs); }
 .ui-document-mention { border-radius: var(--radius-inset); background: var(--tint); padding-inline: var(--space-2xs); cursor: pointer; }
 .ui-document-match { border-radius: var(--radius-inset); background: var(--border); }
 .ui-document-match-current { background: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); color: var(--background); }
