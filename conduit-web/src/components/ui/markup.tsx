@@ -115,7 +115,7 @@ export function MarkupNote(props: { ref?: (element: HTMLTextAreaElement) => void
       <Show when={props.resolved && props.onResolve}><Button variant="ghost" size="sm" onClick={() => props.onResolve!(false)}>Reopen</Button></Show>
       <span class="ui-markup-gap" />
       <Show when={!props.resolved && props.onResolve}><Button variant="ghost" size="sm" aria-label="Resolve" onClick={() => props.onResolve!(true)}><Icons.Check />Resolve</Button></Show>
-      <Button variant="primary" outline size="sm" title="Reply (Enter)" disabled={!props.value.trim()} onClick={props.onSay}>Reply</Button>
+      <Button variant="primary" outline size="sm" title="Reply (Ctrl Enter)" disabled={!props.value.trim()} onClick={props.onSay}>Reply</Button>
     </>;
     return undefined;
   };

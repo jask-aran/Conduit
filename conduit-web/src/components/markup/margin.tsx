@@ -137,8 +137,8 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
     const asking = setInterval(ask, OPEN_EVERY_MS);
     const sized = new ResizeObserver(soon), cards = new MutationObserver(() => { for (const card of column!.children) sized.observe(card); soon(); });
     sized.observe(column!); cards.observe(column!, { childList: true });
-    // Enter (or Ctrl Enter) says it; Escape shuts the card and gives the keyboard back to the surface.
-    column!.addEventListener("keydown", (event) => { if (event.key === "Escape") { open(null); margin?.focus?.(); } else if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); answer(); } });
+    // Ctrl Enter says it, and Enter is a new line (a reply runs longer than a note); Escape shuts the card and gives the keyboard back to the surface.
+    column!.addEventListener("keydown", (event) => { if (event.key === "Escape") { open(null); margin?.focus?.(); } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); answer(); } });
     const unwatch = margin?.watch((pressed) => { if (pressed) { open(pressed); column?.querySelector(`[data-key="${CSS.escape(pressed)}"]`)?.scrollIntoView({ block: "nearest" }); } soon(); });
     onCleanup(() => { clearInterval(asking); sized.disconnect(); cards.disconnect(); unwatch?.(); cancelAnimationFrame(due); });
   });
