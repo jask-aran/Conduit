@@ -77,6 +77,17 @@
 @keyframes ui-grow { from { opacity: 0; transform: scale(var(--grow, .6)); } }
 @keyframes ui-slide { from { opacity: 0; transform: translateX(var(--slide, var(--space-md))); } }
 @keyframes ui-word-in { from { color: transparent; } }
+/* Selected text is washed in the text's own colour, everywhere. */
+::selection { background: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); }
+/* The caret breathes where the browser lets a page drive it; elsewhere it blinks as the browser has it. --caret: its colour, where a surface gives it one.
+   A field's by this animation; an editable region's from components/ui/caret.ts, in steps: the caret's colour is inherited, and animated here it would
+   restyle everything under the region every frame. */
+@keyframes ui-caret { 50% { caret-color: color-mix(in oklch, var(--caret, var(--foreground)), transparent var(--tone-wash)); } }
+@supports (caret-animation: manual) {
+  :is(input, textarea, [contenteditable="true"]):focus { caret-color: var(--caret, var(--foreground)); caret-animation: manual; }
+  :is(input, textarea):focus { animation: ui-caret var(--duration-breathe) var(--ease-room) infinite; }
+  @media (prefers-reduced-motion: reduce) { :is(input, textarea, [contenteditable="true"]):focus { caret-animation: auto; animation: none; } }
+}
 @media (prefers-reduced-motion: reduce) {
   :is(.ui-menu, .ui-card, .ui-toast, .ui-overlay, .ui-rider, .ui-chip, .ui-scrim, .ui-step-item, .ui-message, .ui-message-foot, .ui-rider-button, .ui-trace-fold, .ui-transcript-row):is([data-entering], [data-leaving]), .ui-message[data-entering] > *, .ui-answer-word, .ui-answer-math-in, .ui-toolbar-primary > *, .ui-toolbar-end > [aria-pressed="true"] { animation: none; }
   .ui-fold-chevron, .ui-rider-button, .ui-menu, .ui-composer-slot > .ui-composer-under, .ui-composer-slot > .ui-composer-stack, .ui-composer-slot > .ui-composer-stack > *, .ui-toolbar-end > .ui-toolbar-aside { transition: none; }

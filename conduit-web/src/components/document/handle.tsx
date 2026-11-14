@@ -28,13 +28,13 @@ export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: r
   const place = createMemo(() => {
     const pos = from(), view = editor()?.view, block = pos === null ? null : view?.nodeDOM(pos) as HTMLElement | null, body = origin(), scroller = options.scroller(), grip = handle?.querySelector<HTMLElement>("[data-grip]");
     if (!view || !block?.getBoundingClientRect || !handle || !body || !scroller || !grip) return undefined;
-    // It stands left of the text in the sheet's own gutter, never over the text nor off the sheet:
+    // It stands off the sheet, on the pane's ground beside it; where the pane leaves no room there, in the sheet's gutter. Never over the text:
     // where the "+" does not fit too it folds into the grip's menu, and where the grip does not fit it is not shown.
-    const style = getComputedStyle(handle), room = view.dom.getBoundingClientRect().left - body.left - (parseFloat(style.marginRight) || 0);
+    const style = getComputedStyle(handle), gap = parseFloat(style.marginRight) || 0, outside = body.left - scroller.getBoundingClientRect().left - gap, inside = outside < grip.offsetWidth, room = inside ? view.dom.getBoundingClientRect().left - body.left - gap : outside;
     if (room < grip.offsetWidth) return undefined;
     // On the block's first line, however tall its line (a heading's), or on the block where it is thinner than a line (a divider).
     const box = block.getBoundingClientRect(), line = Math.min(parseFloat(getComputedStyle(block).lineHeight) || box.height, box.height);
-    return { top: box.top - body.top + (line - handle.offsetHeight) / 2, add: room >= 2 * grip.offsetWidth + (parseFloat(style.columnGap) || 0) };
+    return { top: box.top - body.top + (line - handle.offsetHeight) / 2, add: room >= 2 * grip.offsetWidth + (parseFloat(style.columnGap) || 0), inside };
   });
 
   const hover = (event: PointerEvent | null) => {
@@ -113,7 +113,7 @@ export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: r
   const add = act((on, at) => options.onAdded(addUnder(on, at)));
 
   const view = <>
-    <DocumentHandle ref={(element) => { handle = element; }} top={place()?.top}>
+    <DocumentHandle ref={(element) => { handle = element; }} top={place()?.top} inside={place()?.inside}>
       <Show when={place()?.add}><IconButton label="Add a block below" onMouseDown={keep} onClick={add}><Icons.Add /></IconButton></Show>
       {/* Opened by the press lifting, never as it goes down (a drag starts there); by the keyboard as any menu is. */}
       <DropdownMenu modal={false} open={open()} onOpenChange={(next) => { if (!next || !pressing) setOpen(next); }} placement="bottom-start">

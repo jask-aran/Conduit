@@ -157,6 +157,7 @@ import {
 } from "./chat/transcript-appearance";
 import "./styles.css";
 import "@/components/ui/styles";
+import { breatheCarets } from "@/components/ui/caret";
 
 const DESKTOP_UPDATE_ROUTE_KEY = "conduit:desktop-update-route";
 const FIRST_DESKTOP_UPDATE_CHECK_MS = 10_000;
@@ -5775,6 +5776,7 @@ void startLiveUpdate(liveUpdateOrigin).catch(() => {});
 void startPush().catch(() => {});
 void keepThisComputerConnected().catch(() => {});
 
+breatheCarets();
 render(() => <ErrorBoundary fallback={(error) => { dismissLaunchMark(); return <ConnectionRecovery title="Conduit hit a UI error" error={error instanceof Error ? error.message : "Unknown interface error"} onRetry={() => location.reload()} retryLabel="Reload Conduit" />; }}>
   {nativeApp ? <NativeRoot /> : <App />}
 </ErrorBoundary>, mount);

@@ -9,8 +9,8 @@
 .ui-document-page { display: flex; min-height: 100%; flex-wrap: wrap; justify-content: center; gap: var(--space-2xl); }
 /* The text gives up width before the margin goes under it: it wraps only where the text at its narrowest measure and the margin no longer fit side by side. */
 /* The paper is a sheet on the pane: darker than the ground round it, so its width is seen, and down to the pane's foot however little is written. */
-/* --document-pad: its side room, the gutter the block handle stands in: its two controls and their gap, with a little air. */
-.ui-document-body { --document-pad: calc(2 * var(--control-tool) + var(--space-md)); position: relative; display: flex; min-width: 0; max-width: calc(var(--document-width) + 2 * var(--document-pad)); flex: 1 1 var(--measure-xl); flex-direction: column; border-radius: var(--radius-surface) var(--radius-surface) 0 0; background: var(--well); padding: var(--space-2xl) var(--document-pad) var(--measure-2xs); }
+/* --document-pad: its side room, the gutter its blocks are numbered in. */
+.ui-document-body { --document-pad: var(--space-4xl); position: relative; display: flex; min-width: 0; max-width: calc(var(--document-width) + 2 * var(--document-pad)); flex: 1 1 var(--measure-xl); flex-direction: column; border-radius: var(--radius-surface) var(--radius-surface) 0 0; background: var(--well); padding: var(--space-2xl) var(--document-pad) var(--measure-2xs); }
 /* Snug: where the text and a margin with cards in it fit side by side only so, the sheet and the column give up side room before the margin is tucked (DocumentSheet). */
 .ui-document-column[data-snug] { padding-inline: var(--space-xs); }
 .ui-document-column[data-snug] > .ui-document-page { gap: var(--space-lg); }
@@ -97,7 +97,9 @@
 .ui-document-head > .ui-document-add { width: fit-content; margin-inline: calc(-1 * var(--space-md)); color: var(--muted-foreground); font-weight: var(--weight-rest); }
 .ui-document-count { margin: var(--space-2xl) 0 0; color: var(--muted-foreground); font-family: var(--font-data); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
 /* In the gutter beside the block pointed at; not there, it takes no focus. */
-.ui-document-handle { z-index: 1; background: var(--well); position: absolute; top: 0; right: calc(100% - var(--document-pad)); display: flex; margin-right: var(--space-xs); gap: var(--space-2xs); opacity: 0; user-select: none; visibility: hidden; transition: opacity var(--duration-quick) var(--ease-leave), visibility 0s linear var(--duration-quick); }
+/* Off the sheet, on the pane's ground beside it; where the pane leaves no room there, in the gutter over the block's number. */
+.ui-document-handle[data-inside] { right: calc(100% - var(--document-pad)); background: var(--well); }
+.ui-document-handle { z-index: 1; position: absolute; top: 0; right: 100%; display: flex; margin-right: var(--space-xs); gap: var(--space-2xs); opacity: 0; user-select: none; visibility: hidden; transition: opacity var(--duration-quick) var(--ease-leave), visibility 0s linear var(--duration-quick); }
 .ui-document-handle[data-shown] { opacity: 1; visibility: visible; transition: opacity var(--duration-quick) var(--ease-arrive); }
 .ui-document-handle > [data-grip] { cursor: grab; touch-action: none; }
 .ui-document-drop { position: absolute; right: 0; left: 0; height: var(--stroke); border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); pointer-events: none; translate: 0 -50%; }
@@ -173,7 +175,7 @@
 .ui-document-diff-acts { display: inline-flex; height: 1lh; vertical-align: top; gap: var(--space-2xs); margin-inline-start: var(--space-xs); user-select: none; }
 .ui-document-diff-acts > .ui-icon-button { width: 1lh; height: 1lh; min-width: 0; min-height: 0; }
 /* Reviewing: the caret and an edge beside the text in the suggestion's colour. The edge's room is taken from beside the text, so no word moves. */
-.ui-document-text[data-writing="suggesting"] { caret-color: var(--status-success); }
+.ui-document-text[data-writing="suggesting"] { --caret: var(--status-success); caret-color: var(--caret); }
 /* A margin with no comment in it takes no room, so the text stands centred in the column. */
 .ui-document-page[data-margin="none"] > .ui-document-margin { display: none; }
 /* Tucked: the margin takes no room and the text keeps its measure. Each card is a small mark at the text's right edge, saying only how it stands, and
@@ -182,4 +184,9 @@
 .ui-document-page[data-margin="tucked"] > .ui-document-margin { position: absolute; top: 0; right: 0; bottom: 0; width: var(--measure-md); max-width: 100%; pointer-events: none; }
 .ui-document-page[data-margin="tucked"] .ui-markup-note { pointer-events: auto; }
 .ui-document-page[data-margin="tucked"] .ui-markup-note:not([data-open]) { left: auto; width: fit-content; }
+/* A tucked mark is only its sign (at work, unread, or a comment there) and how many: its words are on the card it opens. */
+.ui-markup-state-rest { display: none; }
+.ui-document-page[data-margin="tucked"] .ui-markup-note:not([data-open]) .ui-markup-state-label { display: none; }
+.ui-document-page[data-margin="tucked"] .ui-markup-note:not([data-open]) .ui-markup-state-rest { display: inline-flex; }
+.ui-document-page[data-margin="tucked"] .ui-markup-note:not([data-open]) > .ui-card { border-radius: var(--radius-round); padding: var(--space-xs); }
 .ui-document-page[data-margin="tucked"] .ui-markup-note:not([data-open]) :is(.ui-markup-talk > :not(.ui-markup-state), .ui-card-close, .ui-card > h3) { display: none; }
