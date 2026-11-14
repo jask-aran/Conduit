@@ -1,12 +1,12 @@
 import MailComposer from "nodemailer/lib/mail-composer";
 import PostalMime from "postal-mime";
+import { reachStart } from "./store.js";
 
 /*
  * A made-up mailbox behind the MailAdapter contract, for scripts/mail-check.mjs and the pane before a real account is
  * added. The same seed always gives the same mail; dates count back from the hour the account first started.
  */
 const DAY = 86_400_000;
-const HELD_DAYS = 90;
 const PAGE = 50;
 const PAUSE = 150;
 const LIVE_EVERY = 20_000;
@@ -141,6 +141,9 @@ export function createFixtureAdapter(ctx) {
   const byKey = new Map(messages.map((entry) => [entry.key, entry]));
   let next = messages.length;
   let running = false;
+  // Reading in: started and not paused. `run` counts readings, so a pause or a new reach ends the one under way.
+  let syncing = false;
+  let run = 0;
   // Work the adapter started on its own; stop() waits for it, and a stopped account's store refusing it is no fault.
   const tasks = new Set();
   const track = (promise) => {
@@ -154,11 +157,51 @@ export function createFixtureAdapter(ctx) {
   async function sync(entries) {
     const change = store.upsertMessages(account, entries.map(stored));
     const threads = new Set(change.threads);
-    for (const entry of entries.filter((item) => anchor - item.date < HELD_DAYS * DAY || item.raw)) {
+    const bodies = reachStart(ctx.sync().bodies) ?? 0;
+    for (const entry of entries.filter((item) => item.date >= bodies || item.raw)) {
       const raw = await rawOf(entry);
       for (const id of store.holdBody(account, entry.key, raw, await ctx.parse(raw)).threads) threads.add(id);
     }
     ctx.changed({ threads: [...threads] });
+  }
+  /** What the reach holds and the store lacks, newest first, then the bodies the text reach lacks; then new mail as it comes. */
+  async function read(reading) {
+    const going = () => syncing && reading === run;
+    pending.length = 0;
+    ctx.status({ state: "connecting" });
+    const since = reachStart(ctx.sync().since) ?? -Infinity;
+    const reached = messages.filter((entry) => entry.date >= since).sort((a, b) => b.date - a.date);
+    const keys = reached.map((entry) => entry.key);
+    const have = new Set(Array.from({ length: Math.ceil(keys.length / 500) }, (_, index) => keys.slice(index * 500, (index + 1) * 500))
+      .flatMap((part) => store.seqsOfKeys(account, part)).map((row) => row.key));
+    const missing = reached.filter((entry) => !have.has(entry.key));
+    for (let done = 0; done < missing.length && going(); done += PAGE) {
+      ctx.status({ state: "syncing", backfill: { done: reached.length - missing.length + done, total: reached.length }, at: new Date().toISOString() });
+      await sync(missing.slice(done, done + PAGE));
+      await sleep(PAUSE);
+    }
+    const skip = new Set();
+    while (going()) {
+      const bodiless = store.bodiless(account, reachStart(ctx.sync().bodies) ?? 0, skip.size + PAGE).filter((row) => !skip.has(row.key));
+      if (!bodiless.length) break;
+      ctx.status({ state: "syncing", at: new Date().toISOString() });
+      for (const row of bodiless) skip.add(row.key);
+      await sync(bodiless.map((row) => byKey.get(row.key)).filter(Boolean));
+    }
+    if (!going()) return;
+    ctx.status({ state: "idle", at: new Date().toISOString() });
+    if (process.env.CONDUIT_MAIL_FIXTURE_LIVE === "1") {
+      live = setInterval(() => {
+        const from = PEOPLE[next % PEOPLE.length];
+        const entry = { key: String(1_000_000 + next++), seq: next, messageId: `<fx-live-${next}@fixture.example>`, inReplyTo: null, references: [],
+          from, to: [me], cc: [], bcc: [], replyTo: [], subject: `Just now: ${TOPICS[next % TOPICS.length]}`, date: Date.now(), unread: true,
+          draft: false, labels: ["inbox"], text: `A new message, ref fx${next}.`, html: false, files: [] };
+        entry.thread = entry.key;
+        messages.push(entry);
+        byKey.set(entry.key, entry);
+        track(sync([entry]));
+      }, LIVE_EVERY);
+    }
   }
   async function arrive(raw, labels, draft) {
     const mail = await PostalMime.parse(raw);
@@ -188,35 +231,23 @@ export function createFixtureAdapter(ctx) {
         { id: "important", name: "Important", role: "important" }, { id: "sent", name: "Sent", role: "sent" },
         { id: "drafts", name: "Drafts", role: "drafts" }, { id: "l-receipts", name: "Receipts", role: null }, { id: "l-travel", name: "Travel", role: null },
       ]);
-      track((async () => {
-        if (!store.cursor(account, "backfilled")) {
-          ctx.status({ state: "connecting" });
-          const newest = [...messages].sort((a, b) => b.date - a.date);
-          for (let done = 0; done < newest.length && running; done += PAGE) {
-            ctx.status({ state: "syncing", backfill: { done, total: newest.length }, at: new Date().toISOString() });
-            await sync(newest.slice(done, done + PAGE));
-            await sleep(PAUSE);
-          }
-          if (!running) return;
-          store.setCursor(account, "backfilled", true);
-        }
-        ctx.status({ state: "idle", at: new Date().toISOString() });
-        if (process.env.CONDUIT_MAIL_FIXTURE_LIVE === "1") {
-          live = setInterval(() => {
-            const from = PEOPLE[next % PEOPLE.length];
-            const entry = { key: String(1_000_000 + next++), seq: next, messageId: `<fx-live-${next}@fixture.example>`, inReplyTo: null, references: [],
-              from, to: [me], cc: [], bcc: [], replyTo: [], subject: `Just now: ${TOPICS[next % TOPICS.length]}`, date: Date.now(), unread: true,
-              draft: false, labels: ["inbox"], text: `A new message, ref fx${next}.`, html: false, files: [] };
-            entry.thread = entry.key;
-            messages.push(entry);
-            byKey.set(entry.key, entry);
-            track(sync([entry]));
-          }, LIVE_EVERY);
-        }
-      })());
+      syncing = !ctx.sync().paused;
+      if (syncing) track(read(++run));
+      else ctx.status({ state: "off" });
     },
+    configure() {
+      if (!running) return;
+      run++;
+      clearInterval(live);
+      syncing = !ctx.sync().paused;
+      if (syncing) track(read(run));
+      else ctx.status({ state: "off" });
+    },
+    total: () => messages.length,
     async stop() {
       running = false;
+      syncing = false;
+      run++;
       clearInterval(live);
       await Promise.all(tasks);
     },
@@ -263,7 +294,7 @@ export function createFixtureAdapter(ctx) {
       if (raw) await sync([await arrive(raw, ["drafts"], true)]);
     },
     poke() {
-      track(sync(pending.splice(0)));
+      if (syncing) track(sync(pending.splice(0)));
     },
   };
 }

@@ -17,7 +17,30 @@ export interface MailStatus {
   at?: string;
 }
 
-export interface MailAccount { id: string; kind: MailAccountKind; address: string; name: string; status: MailStatus }
+/** How far back something reaches: a count of days, or "all". */
+export type MailReach = number | "all";
+/** What the person chose for an account's sync. Saved with the account; a change takes effect without a restart. */
+export interface MailSync {
+  /** The hub reads nothing from the source of its own accord and nothing new arrives; what is held stays readable and searchable, and what the person does (triage, drafts, send, opening a message whose text is not held, a search at the source) still goes, each on a connection of its own. */
+  paused: boolean;
+  /** Messages newer than this are read in (headers, labels, threads); older mail is found by a search at the source (`remote`). Shortening it only stops reading further back: what is already held stays. Default 1095. */
+  since: MailReach;
+  /** Messages newer than this have their text fetched, held and searchable; an older one's is fetched when it is opened. Shortening it fetches no more: text already held stays. Never further back than `since`. Default 90. */
+  bodies: MailReach;
+}
+/** What the hub holds of an account, counted when asked. */
+export interface MailHeld {
+  messages: number; threads: number;
+  /** Messages whose text is held. */
+  bodies: number;
+  /** Bytes on disk: the account's share of the store plus its raw files (the store's share may be an estimate). */
+  bytes: number;
+  /** The oldest held message's date, ISO; absent when none is held. */
+  oldest?: string;
+  /** How many messages the source has in all, when it has said. */
+  total?: number;
+}
+export interface MailAccount { id: string; kind: MailAccountKind; address: string; name: string; status: MailStatus; sync: MailSync; held: MailHeld }
 
 /** What a label is for, where every source has one; a label the person made has none. */
 export type MailLabelRole = "inbox" | "sent" | "drafts" | "starred" | "important";
@@ -80,6 +103,8 @@ export interface MailChange { threads?: string[]; messages?: string[]; add?: str
  * GET    /v0/mail/accounts                                   → { accounts: MailAccount[] }
  * POST   /v0/mail/accounts  { kind, address, secret, name? } → 201 { account }; 400 when the source refuses the sign-in
  * DELETE /v0/mail/accounts/:account                          → 204; the hub's copy of its mail goes with it
+ * PATCH  /v0/mail/accounts/:account  { name?, sync?: Partial<MailSync> } → { account }; 400 for a reach that is not a positive whole number of days or "all"
+ * POST   /v0/mail/accounts/:account/resync                   → { account }; the hub's copy is dropped and read in again (its drafts kept); nothing changes at the source
  * GET    /v0/mail/accounts/:account/labels                   → { labels: MailLabel[] }
  * GET    /v0/mail/threads?account=&label=&unread=1&before=&limit=   → { threads: MailThread[], next: string | null }
  *          newest first; `before` is the `next` of the page above; `label` is a MailLabel id ("inbox" when unsaid), or "all" for every thread
@@ -153,6 +178,14 @@ export interface MailStore {
   /** Messages since `since` (ms) whose body is not held, newest first. */
   bodiless(account: string, since: number, limit: number): { key: string; seq: number | null; size: number }[];
   count(account: string): number;
+  /** Up to `limit` messages dated before `before` (ms), oldest first, taken out of the hub's copy as `removeMessages` does (a read-in again pages through every one); `count`: how many went. */
+  prune(account: string, before: number, limit: number): StoreChange & { count: number };
+  /** What is held, from indexed counts; `oldest` in ms, `raw` the held raw files' bytes, `all` every account's messages. */
+  held(account: string): { messages: number; threads: number; bodies: number; oldest: number | null; raw: number; all: number };
+  /** The database's bytes on disk, every account's. */
+  dbBytes(): number;
+  /** The adapter's sync state, every name of it. */
+  clearCursors(account: string): void;
 
   // What the service reads and writes.
   labels(account: string): MailLabel[];
@@ -184,6 +217,8 @@ export interface MailError extends Error { reason: "credentials" | "network" | "
 
 export interface MailAdapterContext {
   account: { id: string; kind: MailAccountKind; address: string; name: string };
+  /** The person's choices as they stand: read each time, never copied, so a change is followed. The service calls `configure` after one. */
+  sync(): MailSync;
   /** The account's secret as the person gave it (Gmail: the app password). */
   secret: string;
   store: MailStore;
@@ -211,6 +246,10 @@ export interface MailAdapter {
   saveDraft?(messageId: string, raw: Buffer | null): Promise<void>;
   /** Asks the source for what is new now, without waiting for it to say (after a send). */
   poke?(): void;
+  /** `ctx.sync()` changed: stop or resume reading, and read in what a longer reach now covers. A shorter one leaves what is held as it is. */
+  configure?(): void;
+  /** How many messages the source holds in all, once it has said (kept across a pause). */
+  total?(): number | null;
 }
 
 /**
@@ -221,6 +260,8 @@ export interface MailService {
   accounts(): MailAccount[];
   addAccount(input: { kind: MailAccountKind; address: string; secret: string; name?: string }): Promise<MailAccount>;
   removeAccount(id: string): Promise<void>;
+  updateAccount(id: string, input: { name?: string; sync?: Partial<MailSync> }): Promise<MailAccount>;
+  resync(id: string): Promise<MailAccount>;
   labels(account: string): MailLabel[];
   threads(query: Parameters<MailStore["threads"]>[0]): ReturnType<MailStore["threads"]>;
   thread(id: string): { thread: MailThread; messages: MailMessage[]; drafts: MailDraft[] } | null;

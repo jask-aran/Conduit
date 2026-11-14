@@ -17,8 +17,11 @@
 /* The outgoing column goes first; the one taking its place arrives after. */
 .ui-reader-split[data-folded] > section:not([data-out]) { --fade-delay: var(--duration-quick); }
 
-.ui-reading-scroll { min-width: 0; min-height: 0; flex: 1; overflow-y: auto; scrollbar-width: thin; padding: var(--space-lg) var(--space-lg) var(--space-2xl); }
-.ui-reading-column { display: grid; width: min(100%, var(--reading-width)); grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-md); margin-inline: auto; }
+.ui-reading-scroll { min-width: 0; min-height: 0; flex: 1; overflow-y: auto; scrollbar-width: thin; padding: var(--space-xl) var(--space-xl) var(--space-2xl); }
+.ui-reading-column { display: grid; width: min(100%, var(--reading-width)); grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-lg); margin-inline: auto; }
+/* A message read at length: room between its head, its text and the next one, which a line in a chat does without. */
+.ui-reading-column .ui-email:not([data-folded]) { gap: var(--space-md); padding-block: var(--space-xl); }
+.ui-reading-column .ui-email-foot { padding-top: var(--space-sm); }
 .ui-reading-title { margin: 0; color: var(--foreground); font: var(--weight-strong) var(--text-title)/var(--leading-tight) var(--font-sans); overflow-wrap: anywhere; }
 
 .ui-draft-state { color: var(--muted-foreground); font-size: var(--text-caption); white-space: nowrap; }

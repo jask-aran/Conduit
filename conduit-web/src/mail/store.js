@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS messages_thread ON messages (account, thread, date);
 CREATE INDEX IF NOT EXISTS messages_seq ON messages (account, seq);
 CREATE INDEX IF NOT EXISTS messages_date ON messages (account, held, date);
+CREATE INDEX IF NOT EXISTS messages_age ON messages (account, date);
 CREATE INDEX IF NOT EXISTS messages_id ON messages (account, message_id);
 CREATE TABLE IF NOT EXISTS threads (
   account TEXT NOT NULL, thread TEXT NOT NULL, subject TEXT NOT NULL, date INTEGER NOT NULL,
@@ -59,6 +60,10 @@ const snippetOf = (text) => {
 const partyText = (parties) => parties.map((party) => `${party.name} ${party.address}`).join(" ");
 const chunks = (list) => Array.from({ length: Math.ceil(list.length / CHUNK) }, (_, index) => list.slice(index * CHUNK, (index + 1) * CHUNK));
 const marks = (list) => list.map(() => "?").join(",");
+const DAY = 86_400_000;
+
+/** Where a reach (MailSync's `since` or `bodies`) starts, in ms: the UTC midnight that many days back; null for "all". */
+export const reachStart = (reach, now = Date.now()) => reach === "all" ? null : Math.floor((now - reach * DAY) / DAY) * DAY;
 
 export function openMailStore({ dir }) {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -300,6 +305,27 @@ export function openMailStore({ dir }) {
     bodiless: (account, since, limit) => q("SELECT key, seq, size FROM messages WHERE account = ? AND held = 0 AND date >= ? ORDER BY date DESC LIMIT ?")
       .all(account, since, limit).map((row) => ({ key: row.key, seq: row.seq, size: row.size })),
     count: (account) => q("SELECT count(*) AS n FROM messages WHERE account = ?").get(account).n,
+
+    prune(account, before, limit) {
+      const keys = q("SELECT key FROM messages WHERE account = ? AND date < ? ORDER BY date LIMIT ?").all(account, before, limit).map((row) => row.key);
+      return { ...store.removeMessages(account, keys), count: keys.length };
+    },
+    held(account) {
+      const one = (sql) => q(sql).get(account);
+      return {
+        messages: one("SELECT count(*) AS n FROM messages WHERE account = ?").n,
+        threads: one("SELECT count(*) AS n FROM threads WHERE account = ?").n,
+        bodies: one("SELECT count(*) AS n FROM messages WHERE account = ? AND held = 1").n,
+        oldest: one("SELECT min(date) AS at FROM messages WHERE account = ?").at,
+        // The raw files are the source's bytes, so their sizes add up to the held messages' own.
+        raw: one("SELECT coalesce(sum(size), 0) AS n FROM messages WHERE account = ? AND held = 1").n,
+        all: q("SELECT count(*) AS n FROM messages").get().n,
+      };
+    },
+    dbBytes: () => ["mail.db", "mail.db-wal"].reduce((sum, name) => sum + (fs.statSync(path.join(dir, name), { throwIfNoEntry: false })?.size ?? 0), 0),
+    clearCursors(account) {
+      q("DELETE FROM cursors WHERE account = ?").run(account);
+    },
 
     labels(account) {
       const unread = new Map(q("SELECT label, count(*) AS n FROM thread_labels WHERE account = ? AND unread > 0 GROUP BY label").all(account).map((row) => [row.label, row.n]));

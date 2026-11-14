@@ -11,6 +11,10 @@ const DRAFT_QUIET_MS = 2000;
 const BODY_CACHE = 50;
 const BODY_CACHE_BYTES = 16 * 1024 * 1024;
 const LIMIT_MAX = 100;
+// A page of 500 takes about 150 ms to drop on a 31k-message copy; 100 keeps each well inside what a request waits.
+const PAGE = 100;
+const HELD_MS = 2_000;
+const SYNC = { paused: false, since: 1095, bodies: 90 };
 
 const notFound = (what) => Object.assign(new Error(`No such ${what}.`), { status: 404, code: "not_found" });
 const refused = (message) => Object.assign(new Error(message), { reason: "refused" });
@@ -19,6 +23,17 @@ const clamp = (limit) => Math.min(Math.max(Math.trunc(Number(limit)) || 50, 1), 
 const strings = (value) => value === undefined || (Array.isArray(value) && value.every((item) => typeof item === "string"));
 const flag = (value) => value === undefined || typeof value === "boolean";
 const sameSet = (a, b) => a.length === b.length && a.every((item) => b.includes(item));
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+const isReach = (value) => value === "all" || (Number.isInteger(value) && value > 0);
+/** Whether reach `a` goes further back than `b`. */
+const further = (a, b) => a === "all" ? b !== "all" : b !== "all" && a > b;
+const clampBodies = (sync) => further(sync.bodies, sync.since) ? { ...sync, bodies: sync.since } : sync;
+// A saved choice the hub cannot read falls back to the default rather than stopping the account.
+const syncOf = (saved = {}) => clampBodies({
+  paused: typeof saved.paused === "boolean" ? saved.paused : SYNC.paused,
+  since: isReach(saved.since) ? saved.since : SYNC.since,
+  bodies: isReach(saved.bodies) ? saved.bodies : SYNC.bodies,
+});
 const parties = (list) => (Array.isArray(list) ? list : []).filter((party) => typeof party?.address === "string" && party.address.trim())
   .map((party) => ({ name: typeof party.name === "string" ? party.name : "", address: party.address.trim() }));
 // What a client may write into a draft, each field checked; an absent field is left as it is.
@@ -40,7 +55,7 @@ export async function createMail({ dataRoot, changed }) {
   const store = openMailStore({ dir });
   const saved = JSON.parse(await fs.readFile(file, "utf8").catch((error) => error.code === "ENOENT" ? "{\"accounts\":[]}" : Promise.reject(error))).accounts;
   const live = new Map();
-  const persist = () => writePrivateJson(file, { accounts: [...live.values()].map(({ account, secret }) => ({ ...account, secret })) });
+  const persist = () => writePrivateJson(file, { accounts: [...live.values()].map(({ account: { status: _, ...account }, secret }) => ({ ...account, secret })) });
 
   // A backfill writes hundreds of threads a second; clients hear of them in one event per account every NOTIFY_MS.
   const queued = new Map();
@@ -71,10 +86,11 @@ export async function createMail({ dataRoot, changed }) {
     },
   });
   async function connect(record, secret) {
-    const entry = { account: { ...record, status: { state: "off" } }, secret, adapter: null, closed: false };
+    const entry = { account: { ...record, status: { state: "off" } }, secret, adapter: null, closed: false, held: null };
     const create = await loadAdapter(record.kind);
     entry.adapter = create({
       account: { id: record.id, kind: record.kind, address: record.address, name: record.name },
+      sync: () => entry.account.sync,
       secret, store: guarded(entry), parse: parseMail,
       changed: (change) => entry.closed || notify(record.id, { threads: change.threads, all: Boolean(change.all) }),
       status: (status) => {
@@ -89,13 +105,32 @@ export async function createMail({ dataRoot, changed }) {
     entry.closed = true;
     await entry.adapter?.stop();
   }
-  for (const { secret, ...record } of saved) {
+  /** An account's entry, its adapter started; one whose adapter cannot load stands as an error. */
+  async function open(record, secret) {
     const entry = await connect(record, secret).catch((error) => ({
-      account: { ...record, status: { state: "error", error: error.message } }, secret, adapter: null,
+      account: { ...record, status: { state: "error", error: error.message } }, secret, adapter: null, closed: false, held: null,
     }));
     live.set(record.id, entry);
     entry.adapter?.start();
+    return entry;
   }
+
+  const publicAccount = (entry) => ({ ...entry.account, held: heldOf(entry) });
+  function heldOf(entry) {
+    if (entry.held && Date.now() - entry.held.at < HELD_MS) return entry.held.value;
+    const found = store.held(entry.account.id);
+    const total = entry.adapter?.total?.() ?? null;
+    const value = {
+      messages: found.messages, threads: found.threads, bodies: found.bodies,
+      bytes: found.raw + Math.round(found.all ? store.dbBytes() * found.messages / found.all : 0),
+      ...(found.oldest === null ? {} : { oldest: new Date(found.oldest).toISOString() }),
+      ...(total === null ? {} : { total }),
+    };
+    entry.held = { at: Date.now(), value };
+    return value;
+  }
+
+  for (const { secret, ...record } of saved) await open({ ...record, sync: syncOf(record.sync) }, secret);
 
   const entryOf = (account) => {
     const entry = live.get(account);
@@ -203,7 +238,7 @@ export async function createMail({ dataRoot, changed }) {
   }
 
   const service = {
-    accounts: () => [...live.values()].map(({ account }) => account),
+    accounts: () => [...live.values()].map(publicAccount),
 
     async addAccount({ kind, address, secret, name }) {
       if (!["gmail", "fixture"].includes(kind) || typeof address !== "string" || !address.includes("@") || typeof secret !== "string" || !secret) {
@@ -212,7 +247,7 @@ export async function createMail({ dataRoot, changed }) {
       if ([...live.values()].some(({ account }) => account.kind === kind && account.address.toLowerCase() === address.trim().toLowerCase())) {
         throw refused("That account is already added.");
       }
-      const record = { id: crypto.randomBytes(4).toString("hex"), kind, address: address.trim(), name: (name || "").trim() || address.trim() };
+      const record = { id: crypto.randomBytes(4).toString("hex"), kind, address: address.trim(), name: (name || "").trim() || address.trim(), sync: syncOf() };
       const entry = await connect(record, secret);
       await entry.adapter.verify().catch(async (error) => {
         await close(entry);
@@ -222,7 +257,45 @@ export async function createMail({ dataRoot, changed }) {
       await persist();
       entry.adapter.start();
       notify(record.id, { accounts: true }, true);
-      return entry.account;
+      return publicAccount(entry);
+    },
+
+    async updateAccount(id, input) {
+      const entry = entryOf(id);
+      if (entry.closed) throw refused("This account is being read in again; change it once that has started.");
+      const { name, sync: asked } = input && typeof input === "object" ? input : {};
+      if ((name !== undefined && typeof name !== "string") || (asked !== undefined && (!asked || typeof asked !== "object"))
+        || !flag(asked?.paused) || ![asked?.since, asked?.bodies].every((reach) => reach === undefined || isReach(reach))) {
+        throw badRequest("A reach is a whole number of days above 0 or \"all\", and paused is true or false.");
+      }
+      const sync = clampBodies({ ...entry.account.sync, ...Object.fromEntries(Object.entries(asked ?? {}).filter(([key, value]) => key in SYNC && value !== undefined)) });
+      entry.account = { ...entry.account, ...(name === undefined ? {} : { name: name.trim() || entry.account.address }), sync };
+      // A shorter reach only stops reading further back: what is already held stays.
+      await persist();
+      entry.adapter?.configure?.();
+      entry.held = null;
+      notify(id, { accounts: true }, true);
+      return publicAccount(entry);
+    },
+
+    async resync(id) {
+      const old = entryOf(id);
+      if (old.closed) throw refused("This account is being read in again already.");
+      const { status: _, ...record } = old.account;
+      await close(old);
+      const pending = store.drafts(id).filter((draft) => draft.state === "saving").map((draft) => draft.id);
+      for (const draft of store.drafts(id)) await settle(draft.id);
+      for (let count = PAGE; count === PAGE;) {
+        count = store.prune(id, Number.MAX_SAFE_INTEGER, PAGE).count;
+        await tick();
+      }
+      store.clearCursors(id);
+      for (const key of [...bodies.keys()]) if (key.startsWith(`${id}.`)) forget(key);
+      if (live.get(id) !== old) return publicAccount(entryOf(id));
+      const entry = await open(record, old.secret);
+      for (const draft of pending) if (store.draft(draft)?.state === "saving") schedule(draft);
+      notify(id, { all: true, accounts: true }, true);
+      return publicAccount(entry);
     },
 
     async removeAccount(id) {

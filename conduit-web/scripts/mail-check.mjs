@@ -3,7 +3,8 @@
  * Mail's hub side against the fixture mailbox (src/mail/fixture-adapter.js), in a temporary data root that it removes:
  * the inbox before the backfill ends, thread roll-ups and label counts, search times, triage and its rollback, a draft
  * from save to send, the cleaned HTML, limits and types at the edge, the routes, and removing or stopping an account
- * mid-backfill. Exits 1 at the first wrong answer.
+ * mid-backfill; the sync choices (a shorter reach drops nothing, reading in again to a reach, a longer one backfilled, the text reach, pause, an old accounts.json).
+ * Exits 1 at the first wrong answer.
  * Run from conduit-web/: node --max-old-space-size=4096 scripts/mail-check.mjs
  */
 import assert from "node:assert/strict";
@@ -16,7 +17,7 @@ import express from "express";
 process.env.CONDUIT_MAIL_FIXTURE = "1";
 const { createMail } = await import("../src/mail/service.js");
 const { registerMailRoutes } = await import("../src/server/routes/mail.js");
-const { openMailStore } = await import("../src/mail/store.js");
+const { openMailStore, reachStart } = await import("../src/mail/store.js");
 const { readBody } = await import("../src/mail/parse.js");
 process.on("unhandledRejection", (error) => {
   console.error("unhandled rejection:", error);
@@ -52,6 +53,33 @@ const allThreads = (query) => {
   } while (before);
   return out;
 };
+/** Every thread's roll-up against its messages, and every label's unread count against its threads; the threads and labels. */
+const checkRollups = (account) => {
+  const threads = allThreads({ account, label: "all" });
+  assert.ok(descending(threads));
+  assert.equal(new Set(threads.map((thread) => thread.id)).size, threads.length, "paging repeats no thread");
+  for (const listed of threads) {
+    const { thread, messages } = mail.thread(listed.id);
+    assert.deepEqual(thread, listed);
+    assert.equal(thread.count, messages.length);
+    assert.equal(thread.unread, messages.filter((message) => message.unread).length);
+    assert.deepEqual(new Set(thread.labels), new Set(messages.flatMap((message) => message.labels)));
+    const senders = messages.map((message) => message.from).filter((party, index, all) => all.findIndex((other) => other.address.toLowerCase() === party.address.toLowerCase()) === index);
+    assert.deepEqual(thread.from, senders);
+    assert.equal(thread.date, messages[messages.length - 1].date);
+    assert.equal(thread.starred, messages.some((message) => message.starred));
+  }
+  const labels = mail.labels(account);
+  for (const label of labels) {
+    const inLabel = allThreads({ account, label: label.id });
+    assert.ok(inLabel.every((thread) => thread.labels.includes(label.id)));
+    assert.equal(label.unread, inLabel.filter((thread) => thread.unread).length, `unread count of ${label.name}`);
+    assert.equal(allThreads({ account, label: label.id, unread: true }).length, label.unread);
+  }
+  return { threads, labels };
+};
+const DAY = 86_400_000;
+const rawFiles = async (dir) => (await fs.readdir(dir, { recursive: true }).catch(() => [])).filter((name) => name.endsWith(".eml")).length;
 
 try {
   await assert.rejects(mail.addAccount({ kind: "fixture", address: "me@fixture.example", secret: "wrong" }), { reason: "credentials" });
@@ -67,27 +95,7 @@ try {
 
   await waitFor("the backfill", () => mail.accounts()[0].status.state === "idle");
   const total = mail.accounts()[0].status;
-  const threads = allThreads({ account, label: "all" });
-  assert.ok(descending(threads));
-  assert.equal(new Set(threads.map((thread) => thread.id)).size, threads.length, "paging repeats no thread");
-  for (const listed of threads) {
-    const { thread, messages } = mail.thread(listed.id);
-    assert.deepEqual(thread, listed);
-    assert.equal(thread.count, messages.length);
-    assert.equal(thread.unread, messages.filter((message) => message.unread).length);
-    assert.deepEqual(new Set(thread.labels), new Set(messages.flatMap((message) => message.labels)));
-    const senders = [...new Map(messages.map((message) => [message.from.address.toLowerCase(), message.from])).values()];
-    assert.deepEqual(thread.from, senders);
-    assert.equal(thread.date, messages[messages.length - 1].date);
-    assert.equal(thread.starred, messages.some((message) => message.starred));
-  }
-  const labels = mail.labels(account);
-  for (const label of labels) {
-    const inLabel = allThreads({ account, label: label.id });
-    assert.ok(inLabel.every((thread) => thread.labels.includes(label.id)));
-    assert.equal(label.unread, inLabel.filter((thread) => thread.unread).length, `unread count of ${label.name}`);
-    assert.equal(allThreads({ account, label: label.id, unread: true }).length, label.unread);
-  }
+  const { threads, labels } = checkRollups(account);
   const messages = threads.reduce((sum, thread) => sum + thread.count, 0);
   step(`${messages} messages in ${threads.length} threads (backfill ${total.backfill?.total ?? "done"}): roll-ups match their messages; ${labels.length} labels' unread counts match (${labels.map((l) => `${l.name} ${l.unread}`).join(", ")})`);
 
@@ -203,8 +211,87 @@ try {
   assert.equal((await call("/change", { method: "POST", body: { threads: [target.id], unread: "false" } })).body.error, "bad_request");
   const download = await fetch(`${base}/messages/${receipt.id}/attachments/0`);
   assert.match(download.headers.get("content-disposition"), /^attachment; filename="?receipt-/);
+  for (const bad of [{ sync: { since: 0 } }, { sync: { since: "forever" } }, { sync: { bodies: 2.5 } }, { sync: { paused: "yes" } }, { sync: 5 }, { name: 5 }]) {
+    assert.equal((await call(`/accounts/${account}`, { method: "PATCH", body: bad })).status, 400, JSON.stringify(bad));
+  }
+  assert.equal((await call("/accounts/nope", { method: "PATCH", body: { sync: { paused: true } } })).status, 404);
+  assert.deepEqual((await call(`/accounts/${account}`, { method: "PATCH", body: { name: "Me" } })).body.account.sync, { paused: false, since: 1095, bodies: 90 });
   server.close();
-  step("routes answer, with 404, 400 and a source's refusal as { error, message }");
+  step("routes answer, with 404, 400 and a source's refusal as { error, message }; a PATCH with a reach that is not days or \"all\" is 400");
+
+  const look = new DatabaseSync(path.join(dataRoot, "mail", "mail.db"), { readOnly: true });
+  const one = (sql, ...args) => look.prepare(sql).get(...args).n;
+  const heldNow = () => mail.accounts().find((item) => item.id === account).held;
+  const full = heldNow();
+  assert.ok(full.messages === one("SELECT count(*) AS n FROM messages WHERE account = ?", account) && full.bodies > 0 && full.bytes > 0 && full.total >= full.messages && full.oldest);
+  const cut90 = reachStart(90);
+  const older = one("SELECT count(*) AS n FROM messages WHERE account = ? AND date < ?", account, cut90);
+  assert.ok(older > 20, "the fixture has mail older than 90 days");
+  const shrunk = await mail.updateAccount(account, { sync: { since: 90, bodies: "all" } });
+  assert.deepEqual(shrunk.sync, { paused: false, since: 90, bodies: 90 }, "text is kept no further back than mail");
+  assert.deepEqual([shrunk.held.messages, shrunk.held.bodies], [full.messages, full.bodies], "a shorter reach drops nothing held");
+  assert.ok(mail.message(oldMessage.id)?.held);
+  step(`keep mail from 90 days: the ${older} older messages and their text stay; text reaches no further than mail`);
+
+  const kept = await mail.newDraft({ account, subject: "Kept through a read-in", text: "Still here." });
+  events.length = 0;
+  await mail.resync(account);
+  assert.ok(events.some((event) => event.account === account && event.accounts && !event.threads), "clients re-read everything");
+  assert.ok(mail.drafts(account).some((item) => item.id === kept.id), "hub drafts stay");
+  const idle = () => waitFor("the sync to settle", async () => {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return mail.accounts()[0].status.state === "idle";
+  });
+  await idle();
+  await mail.removeDraft(kept.id);
+  const reached = heldNow();
+  assert.equal(one("SELECT count(*) AS n FROM messages WHERE account = ? AND date < ?", account, reachStart(91)), 0, "read in again, nothing older than the reach");
+  assert.ok(reached.messages > 0 && reached.messages < reached.total);
+  checkRollups(account);
+  step(`read in again with 90 days: ${reached.messages} of ${reached.total} messages, the hub's draft kept`);
+
+  await mail.updateAccount(account, { sync: { since: 1095 } });
+  await waitFor("the backfill of the longer reach", () => heldNow().messages === heldNow().total && mail.accounts()[0].status.state === "idle");
+  checkRollups(account);
+  step(`keep mail from 3 years: the backfill read in the ${heldNow().messages - reached.messages} older messages`);
+
+  const bodiesHeld = heldNow().bodies;
+  await mail.updateAccount(account, { sync: { bodies: 30 } });
+  assert.equal(heldNow().bodies, bodiesHeld, "a shorter text reach drops no text");
+  await mail.updateAccount(account, { sync: { bodies: 365 } });
+  await waitFor("bodies of the longer text reach", () => one("SELECT count(*) AS n FROM messages WHERE account = ? AND held = 0 AND date >= ?", account, reachStart(365)) === 0);
+  await idle();
+  assert.equal(await rawFiles(path.join(dataRoot, "mail", "raw", account)), one("SELECT count(*) AS n FROM messages WHERE account = ? AND held = 1", account), "a raw file for each held body");
+  step("keep text of a month kept the text held; a year fetched the rest");
+
+  const paused = await mail.updateAccount(account, { sync: { paused: true } });
+  assert.equal(paused.status.state, "off");
+  const quiet = await mail.newDraft({ account, to: [{ name: "", address: "ada@example.com" }], subject: "While paused", text: "Sent while sync is paused." });
+  await mail.sendDraft(quiet.id);
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  assert.ok(!(await mail.search({ account, q: "subject:paused" })).length, "nothing arrives while paused");
+  await mail.updateAccount(account, { sync: { paused: false } });
+  await waitFor("the paused send to arrive", async () => (await mail.search({ account, q: "subject:paused" })).length);
+  look.close();
+  step("paused: sync off, a send still went; resumed: what arrived meanwhile came in");
+
+  const oldRoot = await fs.mkdtemp(path.join(os.tmpdir(), "conduit-mail-check-old-"));
+  await fs.mkdir(path.join(oldRoot, "mail"), { recursive: true });
+  await fs.writeFile(path.join(oldRoot, "mail", "accounts.json"), JSON.stringify({ accounts: [{ id: "old1", kind: "fixture", address: "old@fixture.example", name: "Old", secret: "x", status: { state: "idle" } }] }));
+  const seeded = openMailStore({ dir: path.join(oldRoot, "mail") });
+  seeded.upsertMessages("old1", [{ ...bare("9"), key: "ancient", date: Date.now() - 2 * 365 * DAY }]);
+  seeded.close();
+  const second_ = await createMail({ dataRoot: oldRoot, changed: () => {} });
+  try {
+    const [loaded] = second_.accounts();
+    assert.deepEqual(loaded.sync, { paused: false, since: 1095, bodies: 90 });
+    await waitFor("the backfill", () => second_.accounts()[0].status.state === "idle");
+    assert.ok(second_.message("old1.ancient"), "what was held from before the reach stays");
+  } finally {
+    await second_.stop();
+    await fs.rm(oldRoot, { recursive: true, force: true });
+  }
+  step("an accounts.json from before sync choices starts with the defaults and keeps what it held from before the reach");
 
   const { id: second } = await mail.addAccount({ kind: "fixture", address: "two@fixture.example", secret: "x" });
   await waitFor("the second backfill", () => mail.accounts().find((item) => item.id === second)?.status.backfill);

@@ -125,11 +125,15 @@ export function MailThreadView(props: { id: string; own: string; labels: MailLab
       attachments={body()?.attachments.length ? <For each={body()!.attachments}>{(file) => <Row density="line" element="button" lead={<Icons.Attach />} label={file.filename} meta={size(file.size)}
         onClick={() => void downloadAttachment(item.id, file.index, file.filename).catch((reason) => toast.error(failure(reason)))} />}</For> : undefined}
       actions={<>
-        <Show when={item.draft} fallback={<>
+        <Show when={item.draft} fallback={<Show when={item.id === messages().at(-1)?.id} fallback={<>
+          <IconButton label="Reply" onClick={() => void write({ reply: item.id })}><Icons.Reply /></IconButton>
+          <IconButton label="Reply all" onClick={() => void write({ reply: item.id, replyAll: true })}><Icons.ReplyAll /></IconButton>
+          <IconButton label="Forward" onClick={() => void write({ forward: item.id })}><Icons.MailForward /></IconButton>
+        </>}>
           <Button variant="ghost" outline size="sm" onClick={() => void write({ reply: item.id })}><Icons.Reply />Reply</Button>
           <Button variant="ghost" outline size="sm" onClick={() => void write({ reply: item.id, replyAll: true })}><Icons.ReplyAll />Reply all</Button>
           <Button variant="ghost" outline size="sm" onClick={() => void write({ forward: item.id })}><Icons.MailForward />Forward</Button>
-        </>}><Button variant="ghost" outline size="sm" onClick={() => void write({ adopt: item.id })}><Icons.Edit />Edit</Button></Show>
+        </Show>}><Button variant="ghost" outline size="sm" onClick={() => void write({ adopt: item.id })}><Icons.Edit />Edit</Button></Show>
         <Show when={body()?.html}><Button variant="ghost" size="sm" onClick={() => setShowing({ message: item.id, images: false })}>Original</Button></Show>
       </>}>
       <Answer><Suspense fallback={<Spinner />}><ChatMarkdown streaming={false}>{body()?.markdown ?? ""}</ChatMarkdown></Suspense></Answer>

@@ -38,6 +38,10 @@ export function outgoingMail(mail, args) {
   return { account, to, cc, bcc, subject, text, ...(args.reply ? { reply: original.id, quotes: about } : {}), ...(args.forward ? { forward: original.id, forwards: about } : {}) };
 }
 
+const accountLine = ({ id, address, status, sync, held }) => `${id}  ${address}  ${sync.paused ? "sync paused" : status.state}${status.error ? `: ${status.error}` : ""}`
+  + `  holds ${sync.since === "all" ? "all its mail" : `the last ${sync.since} days`}${held.oldest ? ` (back to ${held.oldest.slice(0, 10)})` : ""}`
+  + `${sync.since === "all" ? "" : "; older mail is found by search with `older: true`"}`;
+
 /** jbot's mail: the hub's own copy (mail/service.js), so a search is milliseconds and needs no connector. */
 export function MailTools(runtime) {
   const execute = (run) => async (args, api, context) => {
@@ -45,7 +49,7 @@ export function MailTools(runtime) {
       if (!runtime.agent?.enabled()) return result("The agent is disabled.", true);
       const mail = runtime.mail;
       const accounts = mail?.accounts() || [];
-      if (args.action === "accounts") return result(accounts.length ? accounts.map((account) => `${account.id}  ${account.address}  ${account.status.state}${account.status.error ? `: ${account.status.error}` : ""}`).join("\n") : NONE);
+      if (args.action === "accounts") return result(accounts.length ? accounts.map(accountLine).join("\n") : NONE);
       return await run(mail, accountOf(mail, args.account), args, api, context);
     } catch (error) {
       return result(error?.message || String(error), true);
@@ -54,7 +58,7 @@ export function MailTools(runtime) {
   return { tools: [defineTool({
     name: "mail",
     description: "The person's mail, from the hub's own copy: fast, and no connector is needed. Actions:\n"
-      + "- accounts: the connected accounts.\n"
+      + "- accounts: the connected accounts, how far back the hub's copy of each reaches, and whether its sync is paused.\n"
       + "- search: threads matching `q` (words, and from: to: subject: label: is:unread is:starred has:attachment); no `q` lists the inbox. `older: true` also asks the mail server, for text in mail older than the hub holds in full.\n"
       + "- thread: every message of the thread `id`, with its text.\n"
       + "- draft: write a draft for the person to send (`to`, `subject`, `text`; `reply` or `forward` a message id, `replyAll` to keep everyone).\n"

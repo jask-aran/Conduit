@@ -4,7 +4,7 @@ import { Answer, Button, ComposerField, ComposerLine, DashDay, DesktopComposer, 
 import { PaneTab, PaneTabRow, PaneTabs, TabPlace } from "@/components/ui/pane";
 import { Actions } from "@/components/ui/actions";
 import { attachRowMenus } from "@/components/ui/menus";
-import type { MailAccount, MailBody, MailChange, MailDraft, MailLabel, MailMessage, MailParty, MailThread } from "@/mail/mail";
+import type { MailAccount, MailBody, MailChange, MailDraft, MailLabel, MailMessage, MailParty, MailSync, MailThread } from "@/mail/mail";
 import { row, type Page } from "../model";
 
 const MailPane = lazy(() => import("../../client/mail/mail-pane"));
@@ -58,7 +58,9 @@ function seed(scenario: Scenario) {
   mode = scenario;
   accounts = scenario === "none" ? [] : [{ id: "a1", kind: "fixture", address: me.address, name: me.name,
     status: scenario === "error" ? { state: "error", error: "The source refused the sign-in: make a new app password in Settings › Mail." }
-      : { state: "syncing", backfill: { done: 4210, total: 18532 } } }];
+      : { state: "syncing", backfill: { done: 4210, total: 18532 }, at: new Date().toISOString() },
+    sync: { paused: false, since: 1095, bodies: 90 },
+    held: { messages: 12_430, threads: 7_918, bodies: 3_210, bytes: 432_013_312, oldest: ago(24 * 620), total: 31_225 } }];
   held = SEEDS.map((one, index) => {
     const id = `t${index + 1}`;
     const messages = one.from.map((from, at): MailMessage => ({ id: `${id}m${at + 1}`, thread: id, account: "a1", from, to: from === me ? [one.from[0]!] : [me, ...(one.from.includes(tom) && from !== tom ? [tom] : [])],
@@ -92,6 +94,14 @@ async function mailRoute(url: URL, init: RequestInit = {}): Promise<Response> {
   const message = (id: string) => held.flatMap((one) => one.messages).find((one) => one.id === id);
   if (path === "/accounts") return method === "POST" ? answer({ error: "refused", message: "The source refused the sign-in: check the app password." }, 400) : answer({ accounts });
   if (/^\/accounts\/[^/]+\/labels$/.test(path)) return answer({ labels: labelsNow() });
+  if (/^\/accounts\/[^/]+(\/resync)?$/.test(path) && accounts[0]) {
+    if (method === "DELETE") { accounts = []; return answer(undefined, 204); }
+    const one = accounts[0], sync = { ...one.sync, ...(body.sync as Partial<MailSync> | undefined) };
+    if (path.endsWith("/resync")) Object.assign(one, { status: { state: "syncing", backfill: { done: 0, total: 18532 } }, held: { messages: 0, threads: 0, bodies: 0, bytes: 0 } });
+    else Object.assign(one, { sync, status: sync.paused ? { state: "off" } : one.status.state === "off" ? { state: "syncing", backfill: { done: 4210, total: 18532 } } : one.status });
+    window.dispatchEvent(new CustomEvent("conduit:mail-changed", { detail: { type: "mail_changed", account: "a1", accounts: true } }));
+    return answer({ account: one });
+  }
   if (path === "/threads") {
     const label = url.searchParams.get("label") ?? "inbox", limit = Number(url.searchParams.get("limit") ?? 50), before = url.searchParams.get("before");
     const all = held.filter((one) => holds(label, one.thread)).map((one) => one.thread);
@@ -219,7 +229,7 @@ export const mailPage: Page = {
   examples: [
     row("MailPane · wide", "the real pane over a made-up mailbox: open a thread, triage it (its row's menu too), write and send; the list reads in older pages as it scrolls", () => <LivePane width={WIDE} />, { surfaces: ["ground"], source: "mail/mail-pane.tsx" }),
     row("MailPane · narrow", "too narrow for both: the list, then a thread in its place with Back; Escape steps back", () => <LivePane width={NARROW} />, { surfaces: ["ground"], source: "mail/mail-pane.tsx" }),
-    row("MailSettings", "Settings › Mail over the same mailbox: its accounts and how each stands, Remove behind a confirm, and the form to add one (this stub refuses every sign-in, to show the hub's sentence)", () => {
+    row("MailSettings", "Settings › Mail over the same mailbox: each account's sync (Pause, Remove), what it holds (Read in again), how far back it keeps mail and text, and the form to add one (this stub refuses every sign-in, to show the hub's sentence)", () => {
       onMount(stubMail);
       return <div style={box(40)}><Suspense><MailSettings /></Suspense></div>;
     }, { surfaces: ["frost"], source: "settings/mail-settings.tsx" }),

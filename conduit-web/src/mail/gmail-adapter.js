@@ -1,5 +1,6 @@
 import { ImapFlow as RealImapFlow } from "imapflow";
 import { createTransport as realCreateTransport } from "nodemailer";
+import { reachStart } from "./store.js";
 
 /*
  * Gmail over IMAP and SMTP with an app password (docs/plans/email.md). All Mail is the one mailbox synced: every
@@ -14,7 +15,7 @@ const WINDOW = 500;
 const PAGE = 500;
 const BODY_BATCH = 25;
 const BODY_MAX = 10 * 1024 * 1024;
-const RECENT_MS = 90 * 24 * 3600_000;
+const UPSERT_PAGE = 100;
 const POLL_MS = 45_000;
 const SWEEP_MS = 10 * 60_000;
 const EXPUNGE_SETTLE_MS = 5_000;
@@ -36,6 +37,7 @@ const SAY = {
   unsupported: "Gmail doesn't offer that.",
   refused: "Gmail refused that.",
   gone: "That message is no longer in Gmail.",
+  renumbered: "Gmail has renumbered this account's mail. Resume sync so Conduit can read it in again.",
 };
 
 const mailError = (reason, message = SAY[reason]) => Object.assign(new Error(message), { name: "MailError", reason });
@@ -61,6 +63,9 @@ const gmailLabel = (id) => GMAIL_OF[id] ?? (id.startsWith(USER) ? Buffer.from(id
 // Mailboxes that are not labels the person made: Gmail's own folders, and the parent that holds them.
 const NOT_LABELS = ["\\all", "\\archive", "\\drafts", "\\flagged", "\\junk", "\\sent", "\\trash", "\\important", "\\noselect", "\\nonexistent"];
 const hasFlag = (box, flag) => [...box.flags].some((f) => f.toLowerCase() === flag);
+const boxesOf = (boxes) => ({ all: boxes.find((b) => hasFlag(b, "\\all"))?.path, drafts: boxes.find((b) => hasFlag(b, "\\drafts"))?.path, trash: boxes.find((b) => hasFlag(b, "\\trash"))?.path });
+/** Whether reach `a` goes further back than `b`. */
+const further = (a, b) => a === "all" ? b !== "all" : b !== "all" && a > b;
 
 const FULL = { uid: true, flags: true, labels: true, emailId: true, threadId: true, envelope: true, size: true, internalDate: true, bodyStructure: true, headers: ["references"] };
 const STATE = { uid: true, flags: true, labels: true, emailId: true };
@@ -121,6 +126,8 @@ export function createGmailAdapter(ctx, deps = {}) {
   let fatal = null;
   let waiters = [];
   let said = { text: "", at: 0 };
+  let exists = store.cursor(account, "gmail")?.exists ?? null;
+  const paused = () => ctx.sync().paused;
 
   /** A status repeated only to move `at` on waits a while: bodies are read many a second. */
   const status = (value) => {
@@ -187,13 +194,36 @@ export function createGmailAdapter(ctx, deps = {}) {
   }
   const settle = (fn) => { for (const w of waiters) { clearTimeout(w.timer); fn(w); } waiters = []; };
 
-  /** The person's operation on the work connection, in All Mail unless it says otherwise. */
-  async function now(fn, path) {
+  /** The person's operation on the work connection, in All Mail unless `pick` says otherwise; while paused, on one of its own. */
+  async function now(fn, pick = (boxes) => boxes.all) {
+    if (paused() && !stopped) return brief(fn, pick);
     const s = await ready();
+    const path = pick(s.boxes);
+    if (!path) throw mailError("unsupported");
     try {
-      return await enqueue(s, "front", (c) => inBox(c, path || s.boxes.all, () => fn(c, s)));
+      return await enqueue(s, "front", (c) => inBox(c, path, () => fn(c, s)));
     } catch (err) {
       throw toMailError(err);
+    }
+  }
+  async function brief(fn, pick) {
+    const c = client({ disableAutoIdle: true });
+    const s = { alive: true, work: c };
+    try {
+      await c.connect();
+      s.boxes = boxesOf(await c.list());
+      const path = pick(s.boxes);
+      if (!path) throw mailError("unsupported", s.boxes.all ? SAY.unsupported : SAY.noAllMail);
+      return await inBox(c, path, () => {
+        // The store's UIDs name messages only under the numbering they were read in; the sync finds a new one, not this.
+        if (path === s.boxes.all && String(c.mailbox.uidValidity) !== store.cursor(account, "gmail")?.uidValidity) throw mailError("refused", SAY.renumbered);
+        return fn(c, s);
+      });
+    } catch (err) {
+      throw toMailError(err);
+    } finally {
+      s.alive = false;
+      c.close();
     }
   }
 
@@ -211,15 +241,14 @@ export function createGmailAdapter(ctx, deps = {}) {
       await s.work.connect();
       watchOver(s, s.work);
       const boxes = await s.work.list();
-      const all = boxes.find((b) => hasFlag(b, "\\all"));
-      if (!all) throw mailError("unsupported", SAY.noAllMail);
-      s.boxes = { all: all.path, drafts: boxes.find((b) => hasFlag(b, "\\drafts"))?.path, trash: boxes.find((b) => hasFlag(b, "\\trash"))?.path };
+      s.boxes = boxesOf(boxes);
+      if (!s.boxes.all) throw mailError("unsupported", SAY.noAllMail);
       const own = boxes.filter((b) => b.path.toUpperCase() !== "INBOX" && !NOT_LABELS.some((f) => hasFlag(b, f)));
       write(s, () => store.putLabels(account, [
         ...Object.entries(ROLE_NAMES).map(([id, name]) => ({ id, name, role: id })),
         ...own.map((b) => ({ id: labelId(b.path), name: b.path, role: null })),
       ]));
-      const box = await s.work.mailboxOpen(all.path);
+      const box = await s.work.mailboxOpen(s.boxes.all);
       let cursor = write(s, () => store.cursor(account, "gmail"));
       if (cursor && cursor.uidValidity !== String(box.uidValidity)) {
         write(s, () => store.clearMessages(account));
@@ -233,6 +262,8 @@ export function createGmailAdapter(ctx, deps = {}) {
       };
       // Where this session's backfill stands; the cursor follows it only while no window has been skipped.
       s.low = s.cursor.low;
+      s.cursor.exists = exists = box.exists;
+      reach(s);
       saveCursor(s);
       s.condstore = s.work.enabled.has("CONDSTORE") && !box.noModseq;
 
@@ -246,7 +277,7 @@ export function createGmailAdapter(ctx, deps = {}) {
       });
       await s.watch.connect();
       watchOver(s, s.watch);
-      await s.watch.mailboxOpen(all.path, { readOnly: true });
+      await s.watch.mailboxOpen(s.boxes.all, { readOnly: true });
       if (!s.alive) return;
 
       s.timers.push(setInterval(() => want(s, "catchUp"), POLL_MS), setInterval(() => want(s, "sweep"), SWEEP_MS), { clear: () => clearTimeout(settleExpunge) });
@@ -269,7 +300,7 @@ export function createGmailAdapter(ctx, deps = {}) {
     for (const task of [...s.front, ...s.back]) task.reject(error);
     s.front = []; s.back = [];
     if (session === s) session = null;
-    if (stopped) return;
+    if (stopped || paused()) return;
     if (error.reason === "credentials") {
       fatal = error;
       settle((w) => w.reject(error));
@@ -314,16 +345,27 @@ export function createGmailAdapter(ctx, deps = {}) {
     }
   }
 
-  /** Every UID in All Mail, ascending: Gmail's UIDs are sparse, so windows are cut from this list, not from numbers. */
-  async function uidList(c) {
-    const uids = await c.search({ all: true }, { uid: true });
+  /**
+   * UIDs in All Mail, ascending: every one, or (`reached`) those since the reach's start, by Gmail's own date. Gmail's
+   * UIDs are sparse, so windows are cut from this list, not from numbers. The deletion sweep always takes every UID:
+   * a message outside the reach is not one deleted at the source.
+   */
+  async function uidList(c, reached = false) {
+    const since = reached ? reachStart(ctx.sync().since) : null;
+    const uids = await c.search(since === null ? { all: true } : { since: new Date(since) }, { uid: true });
     if (!Array.isArray(uids)) throw mailError("refused");
     return uids.sort((a, b) => a - b);
   }
+  /** A longer reach than the backfill was cut to reopens it below where it stopped. An older cursor without one read everything. */
+  const reach = (s) => {
+    const { since } = ctx.sync();
+    if (further(since, s.cursor.reach ?? "all")) s.cursor.done = false;
+    s.cursor.reach = since;
+  };
 
-  const windowOf = (s) => {
-    const end = lowerBound(s.uids, s.low);
-    const first = end === lowerBound(s.uids, s.cursor.top + 1);
+  const windowOf = (s, uids = s.uids) => {
+    const end = lowerBound(uids, s.low);
+    const first = end === lowerBound(uids, s.cursor.top + 1);
     return { start: Math.max(0, end - (first ? FIRST_WINDOW : WINDOW)), end };
   };
 
@@ -347,16 +389,22 @@ export function createGmailAdapter(ctx, deps = {}) {
   async function backfillWindow(s, c) {
     await inBox(c, s.boxes.all, async () => {
       sameNumbers(s, c);
-      s.uids ||= await uidList(c);
-      const { start, end } = windowOf(s);
+      // Kept here: configure() may drop the session's list while this window is on its way.
+      const uids = s.uids ||= await uidList(c, true);
+      const { start, end } = windowOf(s, uids);
       if (end > start) {
         const rows = [];
-        for await (const msg of c.fetch(`${s.uids[start]}:${s.uids[end - 1]}`, FULL, { uid: true })) {
+        // A list cut by date names its UIDs one by one, so the older mail between them is not read in.
+        const set = ctx.sync().since === "all" ? `${uids[start]}:${uids[end - 1]}` : uids.slice(start, end).join(",");
+        for await (const msg of c.fetch(set, FULL, { uid: true })) {
           const row = storedOf(msg);
           if (row) rows.push(row);
         }
-        changed(s, write(s, () => store.upsertMessages(account, rows)));
-        s.low = s.uids[start];
+        for (const page of chunks(rows, UPSERT_PAGE)) {
+          changed(s, write(s, () => store.upsertMessages(account, page)));
+          await tick();
+        }
+        s.low = uids[start];
       }
       if (start === 0) s.backfilled = true;
       if (!s.gap) {
@@ -370,7 +418,7 @@ export function createGmailAdapter(ctx, deps = {}) {
 
   /** One recent message's raw body, newest first; false when none is left to read. */
   async function body(s) {
-    const next = write(s, () => store.bodiless(account, Date.now() - RECENT_MS, s.skip.size + 1)).find((b) => !s.skip.has(b.key));
+    const next = write(s, () => store.bodiless(account, reachStart(ctx.sync().bodies) ?? 0, s.skip.size + 1)).find((b) => !s.skip.has(b.key));
     if (!next) return false;
     if (next.seq == null || next.size > BODY_MAX) { s.skip.add(next.key); return true; }
     let raw;
@@ -425,6 +473,7 @@ export function createGmailAdapter(ctx, deps = {}) {
       }
       if (rows.length) note(write(s, () => store.upsertMessages(account, rows)));
       cur.top = top;
+      cur.exists = exists = box.exists;
       if (modseq) cur.modseq = String(modseq);
       saveCursor(s);
       changed(s, { threads: [...threads] });
@@ -478,8 +527,34 @@ export function createGmailAdapter(ctx, deps = {}) {
       if (!stopped) return;
       stopped = false;
       fatal = null;
-      reconnect();
+      if (paused()) status({ state: "off" });
+      else reconnect();
     },
+
+    configure() {
+      if (stopped) return;
+      if (paused()) {
+        clearTimeout(retry);
+        retry = null;
+        if (session) fail(session, mailError("network"));
+        settle((w) => w.reject(mailError("network")));
+        return status({ state: "off" });
+      }
+      const s = session;
+      if (!s && !connecting && !retry) {
+        fatal = null;
+        return reconnect();
+      }
+      if (!s?.ready) return;
+      reach(s);
+      saveCursor(s);
+      // The list is cut again to the new reach; the backfill goes on from where it stood.
+      s.uids = null;
+      s.backfilled = false;
+      want(s, "catchUp");
+    },
+
+    total: () => exists,
 
     async stop() {
       if (!stopped) ctx.status({ state: "off" });
@@ -553,14 +628,12 @@ export function createGmailAdapter(ctx, deps = {}) {
     async saveDraft(messageId, raw) {
       // A HEADER search for an empty value matches every message that has the header: the delete would empty Drafts.
       if (!String(messageId || "").trim()) throw mailError("refused");
-      const s = await ready();
-      if (!s.boxes.drafts) throw mailError("unsupported");
-      await now(async (c) => {
+      await now(async (c, s) => {
         const old = await c.search({ header: { "message-id": messageId } }, { uid: true });
         if (!Array.isArray(old)) throw mailError("refused");
         if (old.length) ok(c, await c.messageDelete(old.join(","), { uid: true }));
         if (raw) ok(c, await c.append(s.boxes.drafts, raw, ["\\Draft", "\\Seen"]));
-      }, s.boxes.drafts);
+      }, (boxes) => boxes.drafts);
     },
 
     poke() {

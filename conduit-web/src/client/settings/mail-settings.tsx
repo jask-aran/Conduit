@@ -1,21 +1,40 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import type { MailAccount } from "@/mail/mail";
-import { Button, Input } from "@/components/ui/controls";
+import type { MailAccount, MailReach, MailSync } from "@/mail/mail";
+import { Button, Input, Segmented } from "@/components/ui/controls";
 import { SettingLine, SettingStep } from "@/components/ui/overlay";
 import { Group } from "@/components/ui/group";
 import { Note } from "@/components/ui/state";
 import { Icons } from "@/components/ui";
 import { createDecisionScope } from "@/components/ui/decision-dialog";
+import { sizeLabel } from "../chat/attachments";
 import { failure, mailApi } from "../mail/mail-api";
 
-const stateOf = (account: MailAccount) => {
-  const { state, error, backfill } = account.status;
-  if (state === "error") return error || "Not working";
-  if (backfill) return `Reading in older mail · ${backfill.done.toLocaleString()} of ${backfill.total.toLocaleString()}`;
-  return { off: "Off", connecting: "Connecting…", syncing: "Syncing", idle: "Up to date" }[state];
+const SINCE = [{ value: "365", label: "1 year" }, { value: "1095", label: "3 years" }, { value: "1825", label: "5 years" }, { value: "all", label: "All" }];
+const BODIES = [{ value: "30", label: "1 month" }, { value: "90", label: "3 months" }, { value: "365", label: "1 year" }, { value: "all", label: "All" }];
+const reachOf = (value: string): MailReach => value === "all" ? "all" : Number(value);
+const further = (a: MailReach, b: MailReach) => a === "all" ? b !== "all" : b !== "all" && a > b;
+const count = (n: number) => n.toLocaleString();
+const ago = (at?: string) => {
+  if (!at) return "";
+  const minutes = Math.round((Date.now() - Date.parse(at)) / 60_000);
+  return minutes < 2 ? "heard just now" : minutes < 60 ? `heard ${minutes} min ago` : minutes < 48 * 60 ? `heard ${Math.round(minutes / 60)} h ago` : `heard ${Math.round(minutes / 1440)} days ago`;
 };
 
-/** Mail accounts the hub reads for you: each with how it stands, Remove behind a confirm, and a form to add one. */
+const stateOf = (account: MailAccount) => {
+  const { state, error, backfill, at } = account.status;
+  if (account.sync.paused) return "Paused";
+  if (state === "error") return error || "Not working";
+  const said = backfill ? `Reading in older mail · ${count(backfill.done)} of ${count(backfill.total)}`
+    : { off: "Off", connecting: "Connecting…", syncing: "Syncing", idle: "Up to date" }[state];
+  return [said, ago(at)].filter(Boolean).join(" · ");
+};
+const heldOf = ({ held, kind }: MailAccount) => [
+  `${count(held.messages)} messages`, `${count(held.bodies)} with text`, sizeLabel(held.bytes),
+  held.oldest && `back to ${new Date(held.oldest).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`,
+  held.total !== undefined && `of ${count(held.total)} in ${kind === "gmail" ? "Gmail" : "the source"}`,
+].filter(Boolean).join(" · ");
+
+/** Mail accounts the hub reads for you: how each stands and what it holds, how far back it reads, and a form to add one. */
 export function MailSettings() {
   const [accounts, setAccounts] = createSignal<MailAccount[] | null>(null);
   const [error, setError] = createSignal("");
@@ -32,6 +51,12 @@ export function MailSettings() {
   window.addEventListener("conduit:mail-changed", heard);
   onCleanup(() => window.removeEventListener("conduit:mail-changed", heard));
 
+  const act = async (id: string, run: () => Promise<unknown>) => {
+    setBusy(id);
+    try { await run(); await load(); }
+    catch (reason) { setError(failure(reason)); }
+    finally { setBusy(""); }
+  };
   const connect = async () => {
     setBusy("add"); setRefused("");
     try {
@@ -41,21 +66,36 @@ export function MailSettings() {
     } catch (reason) { setRefused(failure(reason)); }
     finally { setBusy(""); }
   };
+  const update = (account: MailAccount, sync: Partial<MailSync>) => act(account.id, () => mailApi.updateAccount(account.id, { sync }));
+  const resync = async (account: MailAccount) => {
+    if (!await confirm(`Read ${account.address} in again? The hub's copy is dropped and read again from Gmail; nothing there changes.`, { confirmLabel: "Read in again" })) return;
+    await act(account.id, () => mailApi.resync(account.id));
+  };
   const remove = async (account: MailAccount) => {
     if (!await confirm(`Remove ${account.address}? The hub's copy of its mail goes with it.`, { confirmLabel: "Remove", destructive: true })) return;
-    setBusy(account.id);
-    try { await mailApi.removeAccount(account.id); await load(); }
-    catch (reason) { setError(failure(reason)); }
-    finally { setBusy(""); }
+    await act(account.id, () => mailApi.removeAccount(account.id));
   };
   const ready = () => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address().trim()) && secret().trim().length > 0;
 
   return <>
-    <Show when={accounts()?.length}><Group title="Accounts">
-      <For each={accounts()}>{(account) => <SettingLine label={account.address} title={account.name || undefined} state={stateOf(account)}>
-        <Button variant="ghost" size="icon-sm" aria-label={`Remove ${account.address}`} title="Remove" disabled={busy() === account.id} onClick={() => void remove(account)}><Icons.Delete /></Button>
-      </SettingLine>}</For>
-    </Group></Show>
+    <For each={accounts()}>{(account) => <Group title={account.address}>
+      <SettingLine plain label="Sync" title={account.name || undefined} state={stateOf(account)}>
+        <Button variant="ghost" size="sm" disabled={busy() === account.id} onClick={() => void update(account, { paused: !account.sync.paused })}>{account.sync.paused ? "Resume" : "Pause"}</Button>
+        <Button variant="ghost" size="icon-sm" haptic="destructive" aria-label={`Remove ${account.address}`} title="Remove" disabled={busy() === account.id} onClick={() => void remove(account)}><Icons.Delete /></Button>
+      </SettingLine>
+      <SettingLine plain label="Held" state={heldOf(account)}>
+        <Button variant="ghost" size="icon-sm" aria-label={`Read ${account.address} in again`} title="Read in again" disabled={busy() === account.id} onClick={() => void resync(account)}><Icons.Refresh /></Button>
+      </SettingLine>
+      <SettingLine plain label="Keep mail from">
+        <Segmented label="Keep mail from" size="sm" value={String(account.sync.since)} options={SINCE} disabled={busy() === account.id}
+          onChange={(value) => void update(account, { since: reachOf(value) })} />
+      </SettingLine>
+      <SettingLine plain label="Keep text of">
+        <Segmented label="Keep text of" size="sm" value={String(account.sync.bodies)} disabled={busy() === account.id}
+          options={BODIES.map((option) => ({ ...option, disabled: further(reachOf(option.value), account.sync.since) }))}
+          onChange={(value) => void update(account, { bodies: reachOf(value) })} />
+      </SettingLine>
+    </Group>}</For>
     <Group title="Add a Gmail account">
       <Note>Gmail signs Conduit in with an app password: 16 letters Google makes for one app, in place of your own password.</Note>
       <SettingStep step={1} label="Turn on 2-Step Verification"><Button variant="secondary" size="sm" onClick={() => window.open("https://myaccount.google.com/signinoptions/twosv", "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Open Google</Button></SettingStep>

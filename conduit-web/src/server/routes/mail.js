@@ -22,6 +22,10 @@ export function registerMailRoutes(app, { mail }) {
     response.status(204).end();
   });
 
+  app.patch("/v0/mail/accounts/:account", async (request, response) => response.json({ account: await mail.updateAccount(request.params.account, request.body || {}) }));
+
+  app.post("/v0/mail/accounts/:account/resync", async (request, response) => response.json({ account: await mail.resync(request.params.account) }));
+
   app.get("/v0/mail/accounts/:account/labels", (request, response) => response.json({ labels: mail.labels(request.params.account) }));
 
   app.get("/v0/mail/threads", (request, response) => {
