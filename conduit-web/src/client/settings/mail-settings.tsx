@@ -1,7 +1,7 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import type { MailAccount } from "@/mail/mail";
 import { Button, Input } from "@/components/ui/controls";
-import { SettingLine } from "@/components/ui/overlay";
+import { SettingLine, SettingStep } from "@/components/ui/overlay";
 import { Group } from "@/components/ui/group";
 import { Note } from "@/components/ui/state";
 import { Icons } from "@/components/ui";
@@ -57,7 +57,10 @@ export function MailSettings() {
       </SettingLine>}</For>
     </Group></Show>
     <Group title="Add a Gmail account">
-      <Note>The password is a Google app password, made at myaccount.google.com/apppasswords once 2-Step Verification is on for the account.</Note>
+      <Note>Gmail signs Conduit in with an app password: 16 letters Google makes for one app, in place of your own password.</Note>
+      <SettingStep step={1} label="Turn on 2-Step Verification"><Button variant="secondary" size="sm" onClick={() => window.open("https://myaccount.google.com/signinoptions/twosv", "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Open Google</Button></SettingStep>
+      <SettingStep step={2} label="Create an app password"><Button variant="secondary" size="sm" onClick={() => window.open("https://myaccount.google.com/apppasswords", "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Open Google</Button></SettingStep>
+      <SettingStep step={3} label="Paste it here with your address" />
       <SettingLine label="Address">
         <Input id="mail-address" type="email" autocomplete="off" placeholder="you@gmail.com" value={address()} onInput={(event) => setAddress(event.currentTarget.value)} />
       </SettingLine>
