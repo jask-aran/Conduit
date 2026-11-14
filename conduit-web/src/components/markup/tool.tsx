@@ -448,8 +448,10 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   const [markedLast, setMarkedLast] = createSignal(false);
   const surface = host.history;
   const stepsOwn = (own: number, theirs?: () => boolean) => Boolean(own) && (markedLast() || !theirs?.());
-  const undoAny = () => stepsOwn(undoable(), surface?.canUndo) ? undo() : void surface?.undo();
-  const redoAny = () => stepsOwn(redoable(), surface?.canRedo) ? redo() : void surface?.redo();
+  // Where the surface has modes, the pair steps what its mode makes: its own writing while editing, and marks with what is written as suggestions while reviewing.
+  const reviewing = () => host.tools?.().find((tool) => tool.mode === "review")?.active ?? true;
+  const undoAny = () => reviewing() && stepsOwn(undoable(), surface?.canUndo) ? undo() : void surface?.undo();
+  const redoAny = () => reviewing() && stepsOwn(redoable(), surface?.canRedo) ? redo() : void surface?.redo();
   const remove = (id: number) => {
     keep();
     const preview = selections.find((selection) => selection.id === id)?.preview;
@@ -923,7 +925,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
           </Show>}</For></MarkupNotes>
         </Show>
         <MarkupBar thin={can.thin} ribbon={can.bar === "ribbon"} own={host.tools?.()} onOwn={() => setMarkedLast(false)} onAsk={host.asking && offered("quote") ? () => { const range = host.asking!(); if (range) addQuote(range); } : undefined} view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onTool={(tool) => { if (props.mode === "use") look("page"); setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); }} onNote={() => { if (props.mode === "use") look("page"); note(); }}
-          status={status()} compact={touchOnly} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} size={textSize()} onSize={can.inks ? setTextSize : undefined} shape={shape()} onShape={setShape} onUndo={undoable() || surface?.canUndo() ? undoAny : undefined} onRedo={redoable() || surface?.canRedo() ? redoAny : undefined}
+          status={status()} compact={touchOnly} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} size={textSize()} onSize={can.inks ? setTextSize : undefined} shape={shape()} onShape={setShape} onUndo={(reviewing() && undoable()) || surface?.canUndo() ? undoAny : undefined} onRedo={(reviewing() && redoable()) || surface?.canRedo() ? redoAny : undefined}
           replies={unread().reduce((sum, item) => sum + item.unread, 0)} sent={thread() ? 0 : earlier.latest?.length} onReplies={sentBefore}
           outstanding={unsent().filter((selection) => selection.comment.trim()).length} standing={thread() ? standing() : undefined}
           hand={hand()} onHand={can.listeners ? keepHand : undefined} agent={agent()?.name} heard={waiters.latest !== undefined} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}

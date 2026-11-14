@@ -191,8 +191,8 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   });
   const offers = { dates: tools.some((tool) => tool.name === "date"), images: tools.some((tool) => tool.name === "image") };
   const suggesting = createSuggesting(editor, copy.doc, changes, props.host, props.id);
-  // How the reader writes, as one menu on the ribbon's edit set, where the host offers Suggesting.
-  const writings = props.host.suggest ? (["editing", "suggesting"] as const).map((name) => { const Icon = documentWritingIcons[name]; return { name: `writing-${name}`, label: name === "editing" ? "Editing" : "Suggesting", icon: () => <Icon />, menu: "Writing", get active() { return suggesting.writing() === name; }, run: () => suggesting.setWriting(name) }; }) : [];
+  // How the reader works on the paper, as the ribbon's modes, where the host offers suggesting: Editing writes it; Reviewing (`suggesting`) writes suggestions, and is where Markup's tools are used.
+  const writings = props.host.suggest ? (["editing", "suggesting"] as const).map((name) => { const Icon = documentWritingIcons[name]; return { name: `writing-${name}`, label: name === "editing" ? "Editing" : "Reviewing", icon: () => <Icon />, menu: "Writing", mode: name === "editing" ? "edit" as const : "review" as const, get active() { return suggesting.writing() === name; }, run: () => suggesting.setWriting(name) }; }) : [];
   const slash = createSlash(editor, tools), handle = createBlockHandle(editor, tools, { scroller, onComment: () => props.onComment, onAdded: slash.made }), find = createFind(editor, scroller);
   const counted = readEditor(editor, "doc", (made) => made?.state.doc);
   const count = createMemo(() => {

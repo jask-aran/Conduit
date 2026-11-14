@@ -128,7 +128,7 @@ export type MarkupSuggestion = { key: string; by: string; at: string; summary: s
 /** One of the host's own tools: what it is called, its icon, and doing it; read where it is drawn, so getters follow. `menu`: on the ribbon, the tools of one menu
  *  are one control (a document's block kinds), `active` the one the surface is now (a heading where the caret is). A tool of no menu is a toggle, `pressed` while
  *  it is on (a mark the selection wears; unsaid, `active`). `disabled`: not to be done here now (a menu dims and strikes it). `keys`: its shortcut, for its tooltip. */
-export type MarkupHostTool = { name: string; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; compact?: boolean; run(): void };
+export type MarkupHostTool = { name: string; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; compact?: boolean; mode?: "edit" | "review"; run(): void };
 
 /** The surface's own undo history (a paper's typing), which the bar's Undo and Redo step where Markup has no mark of its own newer. Read where drawn, so `can…` follow. */
 export type MarkupHostHistory = { undo(): boolean; redo(): boolean; canUndo(): boolean; canRedo(): boolean };
