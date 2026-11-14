@@ -7,8 +7,12 @@
 
 /** Cells by position, 0-based and inclusive (sheet-format.js parseRange). */
 export type SheetRange = { top: number; left: number; bottom: number; right: number };
-/** The grid's look, read from the app's tokens (theme.ts): Glide's theme object, sizes in pixels, and the inks it draws itself. */
-export type SheetLook = { grid: Record<string, string | number>; row: number; header: number; width: number; error: string; mark: string; markCurrent: string };
+/** The grid's look, read from the app's tokens (theme.ts): Glide's theme object, sizes in pixels, and the inks it draws itself (`inks`: a formula's references, formula.ts INKS). */
+export type SheetLook = { grid: Record<string, string | number>; row: number; header: number; width: number; error: string; mark: string; markCurrent: string; inks: string[] };
+/** A reference in the formula being edited, outlined on the grid in its ink; `pointing`: the one being pointed at with the mouse or arrows. */
+export type SheetReference = { range: SheetRange; ink: number; pointing: boolean };
+/** A key pressed on the grid, as the editor is asked whether it takes it. */
+export type SheetKey = Pick<KeyboardEvent, "key" | "shiftKey" | "ctrlKey" | "metaKey" | "altKey" | "preventDefault">;
 /** A box in the viewport's pixels. */
 export type SheetBox = { left: number; top: number; width: number; height: number };
 
@@ -71,6 +75,10 @@ export interface SheetGrid {
   update(changed: readonly { row: number; col: number }[] | null): void;
   select(range: SheetRange | null, scroll?: boolean): void;
   highlight(list: readonly { range: SheetRange; current: boolean }[]): void;
+  /** The formula being edited's references, drawn over the comments' highlights. */
+  references(list: readonly SheetReference[]): void;
+  /** Scrolls a cell into view without selecting it. */
+  show(row: number, col: number): void;
   /** A range's box on screen, clipped to the grid's; null when none of it is in view. */
   bounds(range: SheetRange): SheetBox | null;
   /** The cell under a point of the viewport. */
@@ -93,6 +101,10 @@ export type SheetGridEvents = {
   /** Scrolled or resized: what is drawn where has moved. */
   moved(): void;
   pressed(row: number, col: number): void;
+  /** A key pressed on the selected cell: true when the editor took it (typing starts an edit; Enter and F2 open one), and the grid leaves it alone. */
+  key(event: SheetKey, row: number, col: number): boolean;
+  /** A cell double-clicked: it is opened to edit. */
+  activated(row: number, col: number): void;
   /** Its first frame with the sheet's cells is painted. */
   drawn(): void;
 };

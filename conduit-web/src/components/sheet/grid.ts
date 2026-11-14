@@ -8,14 +8,16 @@ import "@glideapps/glide-data-grid/dist/index.css";
 import { createElement, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { colName, type SheetModel, COL_LIMIT } from "@/sheet-format.js";
-import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange } from "./host";
+import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange, SheetReference } from "./host";
 
 /** What the grid reads of the sheet besides its cells: each column's width and type (`look`). */
 export type SheetColumns = { width(col: number): number | undefined; type(col: number): string | undefined };
 type GridOptions = { model: SheetModel; columns: SheetColumns; events: SheetGridEvents; look: SheetLook };
+type Highlight = NonNullable<DataEditorProps["highlightRegions"]>[number];
 
 const NO_SELECTION: GridSelection = { columns: CompactSelection.empty(), rows: CompactSelection.empty() };
-const EMPTY: GridCell = { kind: GridCellKind.Text, data: "", displayData: "", allowOverlay: true, copyData: "" };
+// No cell opens the grid's own editor: the sheet's formula editor (formula-editor.tsx) edits every one, so a key typed as it opens is never lost.
+const EMPTY: GridCell = { kind: GridCellKind.Text, data: "", displayData: "", allowOverlay: false, copyData: "" };
 // Most numbers are short as they are; only a long one (0.1 + 0.2) is cut to what a sheet shows.
 const shown = (value: string | number | boolean | null) => { if (typeof value !== "number") return value === null ? "" : typeof value === "boolean" ? (value ? "TRUE" : "FALSE") : value; const text = String(value); return text.length > 12 ? String(Number(value.toPrecision(12))) : text; };
 const rect = (range: SheetRange): Rectangle => ({ x: range.left, y: range.top, width: range.right - range.left + 1, height: range.bottom - range.top + 1 });
@@ -38,7 +40,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   const { model, events } = options;
   /** What a cell shows; what was typed into it is read only when the grid asks (editing, copying), since drawing never does. */
   class TextCell {
-    readonly kind = GridCellKind.Text; readonly allowOverlay = true;
+    readonly kind = GridCellKind.Text; readonly allowOverlay = false;
     constructor(private row: number, private col: number, private typed: string | null, readonly displayData: string, readonly contentAlign?: "right", readonly themeOverride?: Partial<Theme>) {}
     get data() { return this.typed ??= model.input(this.row, this.col); }
     get copyData() { return this.data; }
@@ -48,7 +50,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   let editor: DataEditorRef | null = null, view: Rectangle = { x: 0, y: 0, width: 0, height: 0 };
   // Set as the component mounts: the editor drives the island through these.
   const drive: { select?(selection: GridSelection): void; width?(col: number, width: number): void; marks?(list: DataEditorProps["highlightRegions"]): void; look?(look: SheetLook): void; structure?(): void } = {};
-  let look = options.look;
+  let look = options.look, comments: Highlight[] = [], references: Highlight[] = [];
+  const marks = () => drive.marks?.(comments.length || references.length ? [...references, ...comments] : undefined);
 
   // The grid runs on past what the sheet holds, as a spreadsheet's does: a cell written out there makes the sheet reach it (the hub's `set`).
   const reach = () => { const held = model.size(); return { rows: Math.max(held.rows + ROOM.rows, ROOM.least.rows), cols: Math.min(COL_LIMIT, Math.max(held.cols + ROOM.cols, ROOM.least.cols)) }; };
@@ -87,7 +90,11 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       const rows = inside ? { ...area, left: 0, right: 0 } : { top: row, bottom: row, left: 0, right: 0 }, cols = inside && col >= 0 ? { ...area, top: 0, bottom: 0 } : { top: 0, bottom: 0, left: col, right: col };
       events.menu(col < 0 ? { rows } : { rows, cols });
     },
-    onCellClicked: ([col, row]) => events.pressed(row, col),
+    // A press on the cell already selected moves nothing, so the grid would not take the keyboard back from the pane, which takes it on any press.
+    onCellClicked: ([col, row]) => { editor?.focus(); events.pressed(row, col); },
+    onCellActivated: ([col, row]) => events.activated(row, col),
+    onKeyDown: (event) => { const cell = current.current?.cell; if (cell && events.key(event, cell[1], cell[0])) event.cancel(); },
+    editOnType: false, cellActivationBehavior: "double-click",
     onVisibleRegionChanged: (region) => { view = region; events.moved(); },
     rowMarkers: "number", smoothScrollX: true, smoothScrollY: true, width: "100%", height: "100%", fillHandle: true, getCellsForSelection: true, keybindings: { search: false },
     // The grid's own description of every cell for a screen reader is rebuilt on each move and scroll. Drawn off screen and copied whole, an
@@ -141,7 +148,14 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       events.selected(to);
       if (to && scroll) editor?.scrollTo(to.left, to.top, "both", 0, 0, { vAlign: "center", hAlign: "center" });
     },
-    highlight: (list) => drive.marks?.(list.length ? list.map((one) => ({ color: one.current ? look.markCurrent : look.mark, range: rect(one.range), style: one.current ? "solid-outline" : "no-outline" })) : undefined),
+    highlight: (list) => { comments = list.map((one) => ({ color: one.current ? look.markCurrent : look.mark, range: rect(one.range), style: one.current ? "solid-outline" : "no-outline" })); marks(); },
+    // A whole column or row runs to the grid's end.
+    references: (list: readonly SheetReference[]) => {
+      references = list.map((one) => ({ color: look.inks[one.ink] ?? look.mark, range: rect({ ...one.range, bottom: Math.min(one.range.bottom, size.rows - 1), right: Math.min(one.range.right, size.cols - 1) }), style: one.pointing ? "dashed" : "solid" }));
+      marks();
+    },
+    // The region's edge cells may be cut off: those are scrolled to, the rest left where they are.
+    show: (row, col) => { if (col <= view.x || col >= view.x + view.width - 1 || row <= view.y || row >= view.y + view.height - 1) editor?.scrollTo(col, row); },
     bounds: (area) => {
       const first = box(area.left, area.top), last = box(area.right, area.bottom), numbers = box(-1, area.top), frame = element.getBoundingClientRect();
       if (!first || !last || !numbers) return null;

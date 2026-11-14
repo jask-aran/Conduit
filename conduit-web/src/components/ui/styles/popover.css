@@ -2,6 +2,11 @@
 /* Kobalte keeps a closing menu mounted until its animation ends. */
 .ui-menu[data-expanded] { animation: ui-rise var(--duration-gentle) var(--ease-arrive) backwards; }
 .ui-menu[data-closed] { animation: ui-drop var(--duration-quick) var(--ease-leave) forwards; pointer-events: none; }
+/* A popover kept built while shut (menus.tsx Popover `kept`) is out of sight once its leave move is done, and with no move at all; the box Kobalte places
+   it in stays where it was, so presses go through that box to its content, which takes them only while open. */
+.ui-menu[data-closed] { visibility: hidden; transition: visibility 0s linear var(--duration-quick); }
+[data-popper-positioner] { pointer-events: none; }
+[data-popper-positioner] > * { pointer-events: auto; }
 @media (prefers-reduced-motion: reduce) { .ui-menu:is([data-entering], [data-expanded], [data-leaving], [data-closed]) { animation: none; } }
 .ui-menu { transition: filter var(--duration-quick) var(--ease-change); }
 .ui-menu[data-under] { filter: var(--dim-under); pointer-events: none; }

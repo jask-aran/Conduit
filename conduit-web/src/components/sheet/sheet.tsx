@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
 import * as Y from "yjs";
 import { Empty, Icons } from "@/components/ui";
 import { Input } from "@/components/ui/controls";
@@ -7,6 +7,7 @@ import { CELLS, LOOK, a1, createSheetModel, key, parseRange, rangeA1, type Sheet
 import { ASK_KEY, type SheetAnchor, type SheetBox, type SheetGrid, type SheetGridEvents, type SheetHost, type SheetMarks, type SheetPlace, type SheetRange, type SheetState } from "./host";
 import { createLiveSheet } from "./live";
 import { readLook } from "./theme";
+import { createFormulaEditor, FormulaField, FormulaHelp } from "./formula-editor";
 
 // Cells written into the text a comment quotes, and how much of each: enough to read.
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
@@ -18,7 +19,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const live = createLiveSheet(props.host, props.id), cells = live.doc.getMap<string>(CELLS), look = live.doc.getMap<number | string>(LOOK);
   const history = new Y.UndoManager([cells, look]);
   const [model, setModel] = createSignal<SheetModel>(), [grid, setGrid] = createSignal<SheetGrid>(), [failed, setFailed] = createSignal<string>();
-  const [at, setAt] = createSignal<SheetRange | null>(null), [changed, setChanged] = createSignal(0), [draft, setDraft] = createSignal<string | null>(null), [address, setAddress] = createSignal<string | null>(null);
+  const [at, setAt] = createSignal<SheetRange | null>(null), [changed, setChanged] = createSignal(0), [address, setAddress] = createSignal<string | null>(null), [scrolled, setScrolled] = createSignal(0);
   const [menu, setMenu] = createSignal<Menu>({});
   // The grid's element is a signal: the menu trigger that makes it may make it again, and the grid then mounts in the one that stands.
   const [island, setIsland] = createSignal<HTMLDivElement>(), [slot, setSlot] = createSignal<HTMLDivElement>();
@@ -36,15 +37,29 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     for (const { row, col, input } of past) void props.host.cells({ op: "set", at: a1(row, col), value: input }).catch((error: Error) => props.host.failed(error.message));
   };
   const hub = (op: Parameters<SheetHost["cells"]>[0]) => void props.host.cells(op).catch((error: Error) => props.host.failed(error.message));
+  const editor = createFormulaEditor({
+    grid, input: (row, col) => model()?.input(row, col) ?? "", functions: () => model()?.engine.getRegisteredFunctionNames() ?? [],
+    write: (row, col, input) => write([{ row, col, input }]),
+  });
   const events: SheetGridEvents = {
-    selected: (range) => { setAt(range); setDraft(null); },
+    selected: setAt,
     write,
     fill: (range, values) => hub({ op: "fill", range: rangeA1(range), values }),
     resized: (col, width) => { const id = model()?.colAt(col); if (id) look.set(`width:${id}`, Math.round(width)); },
     menu: setMenu,
-    moved: () => moved(),
+    moved: () => { setScrolled((n) => n + 1); moved(); },
     drawn: () => props.onDrawn?.(),
     pressed: (row, col) => { const hit = anchors.find((anchor) => { const range = rangeOf(anchor); return range && row >= range.top && row <= range.bottom && col >= range.left && col <= range.right; }); if (hit) moved(hit.key); },
+    key: (event, row, col) => {
+      // AltGr is Ctrl and Alt together: what it types is typed.
+      if ((event.ctrlKey || event.metaKey) && !(event.ctrlKey && event.altKey)) return false;
+      if (event.key === "Enter" || event.key === "F2") { event.preventDefault(); editor.begin({ row, col }, "edit", "cell"); return true; }
+      // Not held back: the editor has focus before the browser types the key, so it lands there, and every key after it.
+      if (event.key.length !== 1 && event.key !== "Process") return false;
+      editor.begin({ row, col }, "enter", "cell");
+      return true;
+    },
+    activated: (row, col) => editor.begin({ row, col }, "edit", "cell"),
   };
 
   // The model is made once the hub's copy is held, so it is built once from it and not cell by cell as it arrives.
@@ -84,13 +99,40 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   onCleanup(() => relook.disconnect());
 
   const input = () => { changed(); const area = at(), sheet = model(); return area && sheet ? sheet.input(area.top, area.left) : ""; };
-  const commit = (move: boolean) => {
-    const area = at(), typed = draft();
-    if (area && typed !== null) write([{ row: area.top, col: area.left, input: typed }]);
-    setDraft(null);
-    if (area && move) grid()?.select({ top: area.top + 1, bottom: area.top + 1, left: area.left, right: area.left }, true);
-    grid()?.focus();
-  };
+  // The references of the formula being edited, outlined on the grid in their inks.
+  createEffect(() => grid()?.references(editor.references()));
+  // The cell editor stands over its cell, and may grow over the neighbours to its right as far as the grid's edge.
+  let body: HTMLDivElement | undefined;
+  const cellBox = createMemo<JSX.CSSProperties>((was) => {
+    scrolled();
+    const now = editor.editing(), made = grid(), into = island();
+    const cell = now && made?.bounds({ top: now.row, bottom: now.row, left: now.col, right: now.col });
+    if (!cell || !body || !into) return was;
+    const frame = body.getBoundingClientRect(), edge = into.getBoundingClientRect().right;
+    return { left: `${cell.left - frame.left}px`, top: `${cell.top - frame.top}px`, "min-width": `${cell.width}px`, "min-height": `${cell.height}px`, "max-width": `${edge - cell.left}px` };
+  }, {});
+  // While a formula is edited, a press on a cell points it into the formula (a drag, a range); a press anywhere else in the grid ends the edit and
+  // does what it would. A pointing press is the editor's alone: neither the grid nor the pane (which takes focus on a press) sees it, so the
+  // selection stays and the keyboard stays in the formula.
+  createEffect(() => {
+    const into = island();
+    if (!into) return;
+    let taking = false;
+    const drag = (event: PointerEvent) => { const cell = grid()?.cellAt(event.clientX, event.clientY); if (cell) editor.drag(cell); };
+    const up = () => { removeEventListener("pointermove", drag, true); removeEventListener("pointerup", up, true); };
+    const press = (event: PointerEvent) => {
+      taking = false;
+      if (event.button !== 0 || !editor.editing()) return;
+      const cell = grid()?.cellAt(event.clientX, event.clientY);
+      if (!cell || !editor.press(cell, event.shiftKey)) return editor.commit(undefined, false);
+      taking = true; event.stopPropagation();
+      addEventListener("pointermove", drag, true); addEventListener("pointerup", up, true);
+    };
+    const hold = (event: MouseEvent) => { if (taking) { event.preventDefault(); event.stopPropagation(); } };
+    into.addEventListener("pointerdown", press, true);
+    for (const kind of ["mousedown", "mouseup", "click"] as const) into.addEventListener(kind, hold, true);
+    onCleanup(() => { up(); into.removeEventListener("pointerdown", press, true); for (const kind of ["mousedown", "mouseup", "click"] as const) into.removeEventListener(kind, hold, true); });
+  });
   const go = () => { const range = parseRange(address() ?? ""); setAddress(null); if (range) grid()?.select(range, true); grid()?.focus(); };
   const structure = (op: "insert-rows" | "insert-cols" | "delete-rows" | "delete-cols", at: number, count = 1) => hub({ op, at, count });
 
@@ -164,12 +206,14 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     <div class="ui-spreadsheet-bar">
       <Input class="ui-spreadsheet-address" aria-label="Cell" spellcheck={false} value={address() ?? (at() ? rangeA1(at()!) : "")} onFocus={(event) => event.currentTarget.select()} onInput={(event) => setAddress(event.currentTarget.value)}
         onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); go(); } else if (event.key === "Escape") { setAddress(null); grid()?.focus(); } }} onBlur={() => setAddress(null)} />
-      <Input class="ui-spreadsheet-formula" aria-label="Formula" spellcheck={false} disabled={!at()} value={draft() ?? input()} onInput={(event) => setDraft(event.currentTarget.value)}
-        onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); commit(true); } else if (event.key === "Escape") { setDraft(null); grid()?.focus(); } }} onBlur={() => { if (draft() !== null) commit(false); }} />
+      {/* The formula bar edits the selected cell: focused, it opens the cell to edit as F2 does. */}
+      <div class="ui-input ui-spreadsheet-formula" onFocusIn={() => { const area = at(); if (area && !editor.editing()) editor.begin({ row: area.top, col: area.left }, "edit", "bar"); }}>
+        <FormulaField editor={editor} place="bar" label="Formula" class="ui-formula-text" idle={input} disabled={!at()} />
+      </div>
       {/* Room at the row's end for what a layer over the sheet puts there (Markup's bar, where its kind says so); empty, it takes none. */}
       <div ref={setSlot} class="ui-spreadsheet-slot" />
     </div>
-    <div class="ui-spreadsheet-body">
+    <div ref={body} class="ui-spreadsheet-body">
       <Show when={!failed()} fallback={<Empty role="alert">The sheet could not be drawn: {failed()}</Empty>}>
         <ContextMenu placement="bottom-start">
           <ContextMenuTrigger as="div" ref={setIsland} class="ui-spreadsheet-grid" />
@@ -186,6 +230,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
             </MenuSection>}</Show>
           </ContextMenuContent>
         </ContextMenu>
+        <div class="ui-spreadsheet-editor" data-open={editor.editing() ? "" : undefined} style={cellBox()}><FormulaField editor={editor} place="cell" label="Cell" class="ui-formula-text" /></div>
+        <FormulaHelp editor={editor} frame={() => body} />
         <Show when={!model()}><Empty role="status" class="ui-spreadsheet-waiting">Opening the sheet…</Empty></Show>
       </Show>
       <Show when={props.margin}><aside class="ui-spreadsheet-margin" aria-label="Comments">{props.margin}</aside></Show>

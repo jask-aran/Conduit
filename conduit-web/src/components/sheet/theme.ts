@@ -1,3 +1,4 @@
+import { INKS } from "./formula";
 import type { SheetLook } from "./host";
 
 // A colour as the canvas draws it: the grid mixes its colours itself and reads only rgb, where the tokens are oklch and color-mix.
@@ -42,6 +43,8 @@ export function readLook(where: HTMLElement): SheetLook {
   const look: SheetLook = {
     grid, row: length("var(--control-sm)"), header: length("var(--control-sm)"), width: length("var(--measure-2xs)"),
     error: colour("var(--destructive)"), mark: colour(wash("--tone-wash")), markCurrent: colour(wash("--tone-line")),
+    // A wash of each ink: the grid fills a reference with it and outlines it in the ink itself.
+    inks: INKS.map((ink) => colour(`color-mix(in oklch, var(${ink}), transparent var(--tone-wash))`)),
   };
   probe.remove();
   return look;

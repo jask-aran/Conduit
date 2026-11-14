@@ -201,11 +201,15 @@ export function MenuSub(props: ParentProps<{ phone?: boolean }>) {
   return <SubmenuContext.Provider value={{ phone: () => !!props.phone, close, setTrigger, setContent }}><KMenu.Sub open={open()} onOpenChange={(next) => { haptic(next ? "open" : "dismiss"); setOpen(next); }} getAnchorRect={anchorRect} fitViewport overflowPadding={edgePadding()}>{props.children}</KMenu.Sub></SubmenuContext.Provider>;
 }
 
-/** A menu's keys would take the typing, so this is the menu's surface without them. `anchorRect`: where it is placed when that is not `anchorRef`'s box (a run of selected text), read again as `anchorRef`'s scroller moves; a new one places it again. */
-export function Popover(props: ParentProps<{ open?: boolean; onOpenChange?: (open: boolean) => void; anchorRef?: () => HTMLElement | undefined; anchorRect?: () => DOMRect | undefined; placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end" }>) {
+/**
+ * A menu's keys would take the typing, so this is the menu's surface without them. `anchorRect`: where it is placed when that is not `anchorRef`'s box (a run
+ * of selected text), read again as `anchorRef`'s scroller moves; a new one places it again. `kept`: its content stays built while shut, out of sight in its
+ * leave move, for one that opens and shuts as fast as typing (building it again each time is a long task).
+ */
+export function Popover(props: ParentProps<{ open?: boolean; onOpenChange?: (open: boolean) => void; anchorRef?: () => HTMLElement | undefined; anchorRect?: () => DOMRect | undefined; placement?: "bottom-start" | "bottom-end" | "top-start" | "top-end"; kept?: boolean }>) {
   const padding = edgePadding(), gap = popoverGap();
   overlayHaptics(() => props.open);
-  return <KPopover open={props.open} onOpenChange={(open) => { haptic(open ? "open" : "dismiss"); props.onOpenChange?.(open); }} anchorRef={props.anchorRef} getAnchorRect={props.anchorRect} placement={props.placement || "bottom-end"} gutter={gap} fitViewport overflowPadding={padding}>{props.children}</KPopover>;
+  return <KPopover open={props.open} onOpenChange={(open) => { haptic(open ? "open" : "dismiss"); props.onOpenChange?.(open); }} anchorRef={props.anchorRef} getAnchorRect={props.anchorRect} placement={props.placement || "bottom-end"} gutter={gap} fitViewport overflowPadding={padding} forceMount={props.kept}>{props.children}</KPopover>;
 }
 export const PopoverTrigger = KPopover.Trigger;
 export function PopoverContent(props: ParentProps<Caps & { "aria-label"?: string; wide?: boolean; snug?: boolean; onPointerDownOutside?: (event: Event & { target: EventTarget | null }) => void; onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void }>) {
