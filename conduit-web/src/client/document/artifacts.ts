@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import type { SheetCellsOp } from "@/components/sheet";
 import { api } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
@@ -28,28 +29,29 @@ export const paperCounted = counted;
 export const countPapers = (on: boolean) => { setCounted(on); try { localStorage.setItem(COUNT_KEY, on ? "on" : "off"); } catch { /* this session only */ } };
 export const artifactView = (id: string) => `artifact:${id}` as const;
 
-const [lists, setLists] = createSignal<Record<string, Artifact[]>>({});
+const [lists, setLists] = createStore<Record<string, Artifact[]>>({});
 const asked = new Set<string>();
 const read = (project: string) => api<{ artifacts: Artifact[] }>(`/v0/projects/${encodeURIComponent(project)}/artifacts`)
-  .then(({ artifacts }) => setLists((current) => ({ ...current, [project]: artifacts })), () => setLists((current) => ({ ...current, [project]: current[project] ?? [] })));
+  // Each keeps its object by id and only what changed of it is set: a row drawn for it, and a menu open on that row, stand through a refresh.
+  .then(({ artifacts }) => setLists(project, reconcile(artifacts, { key: "id" })), () => { if (!(project in lists)) setLists(project, []); });
 window.addEventListener("conduit:artifacts-changed", (event) => { const project = (event as CustomEvent<string>).detail; if (asked.has(project)) void read(project); });
 
 /** A project's artifacts, by name; empty until the hub has answered. */
 export const artifactsOf = (project: string): Artifact[] => {
   if (!asked.has(project)) { asked.add(project); void read(project); }
-  return lists()[project] ?? [];
+  return lists[project] ?? [];
 };
 /** Whether the hub has answered for a project: until then an empty list says nothing. */
-export const artifactsRead = (project: string) => project in lists();
+export const artifactsRead = (project: string) => project in lists;
 /** One the client has already been told of, in any project. */
-export const artifactKnown = (id: string) => Object.values(lists()).flat().find((item) => item.id === id);
+export const artifactKnown = (id: string) => Object.values(lists).flat().find((item) => item.id === id);
 /** One by its id, asked of the hub: it need not be in a list the client has read. */
 export const artifactAbout = (id: string) => api<Artifact>(`/v0/document/${encodeURIComponent(id)}?as=about`);
 const send = (path: string, method: string, body?: unknown) => api<Artifact>(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 /** A new one, in a folder of the project (unsaid: its root). The hub refuses a name already there. */
 export const makeArtifact = (project: string, made: { kind: Artifact["kind"]; name: string; folder?: string }) => send(`/v0/projects/${encodeURIComponent(project)}/artifacts`, "POST", made);
 /** The artifact a file is, of those the client has been told of: a file that may be one only when asked (artifact-kinds `opens`) is looked for here, never asked of the hub, which answers 404 for the many that are not. */
-export const artifactFor = (project: string, path: string) => Object.values(lists()).flat().find((item) => item.project === project && item.path === path);
+export const artifactFor = (project: string, path: string) => Object.values(lists).flat().find((item) => item.project === project && item.path === path);
 /** The artifact a file is, asked of the hub (one pressed in the file tree). `adopt`: a file of a kind that is one only when asked (artifact-kinds `opens`) becomes one. */
 export const artifactAt = (project: string, path: string, adopt?: boolean) => send(`/v0/projects/${encodeURIComponent(project)}/artifacts`, "POST", { path, ...(adopt ? { adopt: true } : {}) });
 export const renameArtifact = (id: string, name: string) => send(`/v0/document/${encodeURIComponent(id)}`, "PATCH", { name });
