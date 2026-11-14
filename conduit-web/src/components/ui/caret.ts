@@ -9,6 +9,8 @@ export function breatheCarets() {
   const caret = document.createElement("div");
   caret.className = "ui-caret"; caret.setAttribute("aria-hidden", "true");
   let region: HTMLElement | null = null, due = 0, last = "";
+  // The region says its caret's colour by an attribute of its own (a paper's way of writing).
+  const looked = new MutationObserver(() => { last = ""; soon(); });
   /** Where a collapsed range stands; an empty line has no box of its own, so its block's first line stands for it. */
   const boxOf = (range: Range) => {
     const drawn = range.getClientRects()[0];
@@ -29,16 +31,18 @@ export function breatheCarets() {
     if (next === last) return;
     const [left, top, height] = next.split(",");
     last = next;
-    caret.style.cssText = `transform:translate(${left}px,${top}px);height:${height}px;--caret:${getComputedStyle(region!).getPropertyValue("--caret")}`;
+    // An empty --caret would be a value (and no colour at all), so it is set only where the region gives one.
+    const colour = getComputedStyle(region!).getPropertyValue("--caret").trim();
+    caret.style.cssText = `transform:translate(${left}px,${top}px);height:${height}px${colour ? `;--caret:${colour}` : ""}`;
     // Moved, it is solid again before it next fades.
     for (const animation of caret.getAnimations()) animation.currentTime = 0;
   };
   const soon = () => { if (region && !due) due = requestAnimationFrame(place); };
-  const leave = () => { region?.removeAttribute("data-caret"); region = null; caret.remove(); last = ""; };
+  const leave = () => { looked.disconnect(); region = null; caret.remove(); last = ""; };
   document.addEventListener("focusin", (event) => {
     leave();
     if (!(event.target instanceof HTMLElement) || event.target.contentEditable !== "true") return;
-    region = event.target; region.setAttribute("data-caret", "");
+    region = event.target; looked.observe(region, { attributes: true });
     // In the region's own frame, so it scrolls with the text where that frame does.
     (region.offsetParent ?? document.body).append(caret);
     soon();

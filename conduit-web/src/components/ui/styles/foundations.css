@@ -87,7 +87,10 @@
   :is(input, textarea):focus { caret-color: var(--caret, var(--foreground)); caret-animation: manual; animation: ui-caret var(--duration-breathe) var(--ease-room) infinite; }
   @media (prefers-reduced-motion: reduce) { :is(input, textarea):focus { caret-animation: auto; animation: none; } }
 }
-[contenteditable="true"][data-caret] { caret-color: transparent; }
+/* Neither is set as a region takes focus or changes its way of writing: the caret's colour is inherited, so changing it on a region restyles everything
+   in it (a long paper: a tenth of a second). The region's own caret is always hidden where one is drawn, and --caret is the region's alone. */
+@property --caret { syntax: "*"; inherits: false; }
+@media (pointer: fine) { [contenteditable="true"] { caret-color: transparent; } :is(input, textarea) { caret-color: var(--foreground); } }
 @keyframes ui-caret-breathe { 50% { opacity: 0; } }
 .ui-caret { position: absolute; top: 0; left: 0; z-index: 2; width: var(--stroke); border-radius: var(--radius-round); background: var(--caret, var(--foreground)); pointer-events: none; will-change: transform, opacity; }
 /* Solid for a moment after it moves (caret.ts starts this again), then fading out and in. */
