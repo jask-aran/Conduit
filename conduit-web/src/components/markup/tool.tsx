@@ -651,7 +651,8 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     window.addEventListener("beforeinput", typed, { capture: true });
     for (const type of ["focusin", "focusout"] as const) window.addEventListener(type, quietFocus, { capture: true });
     let handle = requestAnimationFrame(function tick() {
-      setFrame((value) => value + 1);
+      // Only marks read the frame: with none drawn, nothing is told a frame passed.
+      if (selections.length || quoting()) setFrame((value) => value + 1);
       // What the app redrew is found again where it was.
       for (const selection of selections) selection.elements.forEach((element, at) => {
         if (element.isConnected) return;

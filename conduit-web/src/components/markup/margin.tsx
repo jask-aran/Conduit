@@ -68,6 +68,8 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
     due = 0;
     if (!column) return;
     props.onCards?.(column.children.length + waiting.size);
+    // Nothing to place: no reason to measure (this runs as the text under it changes, so on every key typed).
+    if (!column.children.length && !waiting.size) return;
     const box = column.getBoundingClientRect(), gap = parseFloat(getComputedStyle(column).rowGap) || 0;
     const cards = [
       ...([...column.children] as HTMLElement[]).map((card) => ({ want: placeOf(card.dataset.key ?? "")?.top ?? null, height: () => card.offsetHeight,
