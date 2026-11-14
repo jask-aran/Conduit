@@ -14,15 +14,11 @@ export function sheetKind(hub) {
   const { fault } = hub, START = { rows: 20, cols: 8 };
   const blank = (rows, cols) => Array.from({ length: rows }, () => new Array(cols).fill(""));
   /** What was typed in each cell, by position. */
-  const inputs = (room) => {
-    const { model } = room, { rows, cols } = model.size(), grid = blank(rows, cols);
-    for (const [cell, input] of room.cells) { const cut = cell.indexOf(":"), r = model.indexOfRow(cell.slice(0, cut)), c = model.indexOfCol(cell.slice(cut + 1)); if (r >= 0 && c >= 0) grid[r][c] = input; }
-    return grid;
-  };
-  /** What the file holds: what was typed, and for a formula what it computes. */
+  const inputs = (room) => room.model.inputs();
+  /** What the file holds: what was typed, and for a formula what it computes (only formulas are asked of the engine). */
   const texts = (room, grid = inputs(room)) => {
-    const values = room.model.engine.getSheetValues(room.model.sheet);
-    return grid.map((row, r) => row.map((input, c) => input.startsWith("=") ? valueText(values[r]?.[c]) : input));
+    const { engine, sheet } = room.model;
+    return grid.map((row, r) => row.map((input, col) => input.startsWith("=") ? valueText(engine.getCellValue({ sheet, row: r, col })) : input));
   };
   const clip = (grid, { top, left, bottom, right }) => grid.slice(top, bottom + 1).map((row) => row.slice(left, right + 1));
   const sized = (rows, cols) => {

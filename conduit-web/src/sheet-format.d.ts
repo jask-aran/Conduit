@@ -33,6 +33,8 @@ export interface SheetModel {
   sheet: number;
   size(): { rows: number; cols: number };
   input(r: number, c: number): string;
+  /** What was typed in every cell, row by row ("" where nothing is): a copy. */
+  inputs(): string[][];
   /** An error cell's value is its code ("#DIV/0!"). */
   value(r: number, c: number): string | number | boolean | null;
   /** An error cell's message (its code where the engine gives none), else null. */
@@ -47,3 +49,17 @@ export interface SheetModel {
   destroy(): void;
 }
 export function createSheetModel(doc: Y.Doc): SheetModel;
+/** What `serveSheetModel` and `createSheetView` talk over: a Web Worker, its `self`, or a MessagePort. */
+export interface SheetPort {
+  postMessage(message: unknown): void;
+  addEventListener(type: "message", listener: (event: MessageEvent) => void): void;
+  removeEventListener(type: "message", listener: (event: MessageEvent) => void): void;
+  start?(): void;
+}
+/** In a worker: computes the sheet whose doc a page's `createSheetView` sends it. */
+export function serveSheetModel(port: SheetPort): void;
+/** A SheetModel's reads on the page with the engine in a worker; values are null until `ready`. */
+export interface SheetView extends Omit<SheetModel, "engine" | "sheet" | "structure"> {
+  ready: Promise<void>;
+}
+export function createSheetView(doc: Y.Doc, port: SheetPort): SheetView;

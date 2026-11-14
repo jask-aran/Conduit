@@ -1,4 +1,4 @@
-import { batch, createMemo, createResource, createSignal, For, Index, onCleanup, onMount, Show } from "solid-js";
+import { batch, createEffect, createMemo, createResource, createSignal, For, Index, on, onCleanup, onMount, Show } from "solid-js";
 import { createStore, produce, reconcile, unwrap } from "solid-js/store";
 import { Portal } from "solid-js/web";
 import { drawingBox, MarkupBar, MarkupDrawing, MarkupLayer, MarkupMark, MarkupNote, MarkupNotes, MarkupText, markupInkColour, MARKUP_INKS, MARKUP_TEXT, type MarkupBox, type MarkupDrawingKind, type MarkupInk, type MarkupPoint, type MarkupShape, type MarkupToolKind, type MarkupWeight } from "@/components/ui/markup";
@@ -128,8 +128,9 @@ const linesOf = (range: Range): MarkupBox[] => {
 };
 const frames = (count: number) => new Promise<void>((resolve) => { const next = (left: number) => left ? requestAnimationFrame(() => next(left - 1)) : resolve(); next(count); });
 
-/** `keys`: the chord that opens the tool, as the bar shows it. `hidden`: what it is put over is not shown just now (it stands over the page, not in it). */
-export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode: Mode) => void; onClose: () => void; keys?: () => string[]; hidden?: boolean }) {
+/** `keys`: the chord that opens the tool, as the bar shows it. `hidden`: what it is put over is not shown just now (it stands over the page, not in it), so
+ *  neither is anything of the tool's, and it takes no keys. `moving`: what it is put over is moving, so its bar fades out until it stops; its marks and notes stay. */
+export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode: Mode) => void; onClose: () => void; keys?: () => string[]; hidden?: boolean; moving?: boolean }) {
   const host = props.host, transport = host.transport;
   const { again, describe, nameOf, pieceRoot, piecesWithin, placeOf, sourceOf, under } = createPieces(host.names, host.anchors);
   const places = new WeakMap<Element, ReturnType<typeof placeOf>>();
@@ -626,7 +627,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   const quietFocus = (event: FocusEvent) => { if (own(event.type === "focusout" ? event.relatedTarget : event.target)) event.stopImmediatePropagation(); };
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (sending()) return;
+    if (sending() || props.hidden) return;
     // Escape shuts one thing a press, the innermost first: a line of inks or a colour picker open under the bars has it before a comment or the tool (MarkupBar shuts it).
     if (event.key === "Escape" && document.querySelector(".ui-markup-under, .ui-markup-picker")) return;
     // Not from a margin card's field, where Ctrl Enter is its Reply.
@@ -738,7 +739,8 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     const framed = host.frame?.();
     if (framed && layer) {
       let last = "", still = 0, settling = 0;
-      const place = () => { const box = framed.getBoundingClientRect(), now = `${box.left}px ${innerWidth - box.right}px ${box.top}px`; if (now === last) return false; last = now; layer!.style.setProperty("--markup-frame-top", `${box.top}px`); layer!.style.setProperty("--markup-frame-left", `${box.left}px`); layer!.style.setProperty("--markup-frame-right", `${innerWidth - box.right}px`); return true; };
+      // While the frame moves the bar is out, so it is not followed (a read each frame would lay the page out mid-frame): it is placed once the frame stops.
+      const place = () => { if (props.moving) return false; const box = framed.getBoundingClientRect(), now = `${box.left}px ${innerWidth - box.right}px ${box.top}px`; if (now === last) return false; last = now; layer!.style.setProperty("--markup-frame-top", `${box.top}px`); layer!.style.setProperty("--markup-frame-left", `${box.left}px`); layer!.style.setProperty("--markup-frame-right", `${innerWidth - box.right}px`); return true; };
       const settle = () => { still = place() ? 0 : still + 1; settling = still < 30 ? requestAnimationFrame(settle) : 0; };
       const moved = () => { place(); if (!settling) { still = 0; settle(); } };
       const sized = new ResizeObserver(moved);
@@ -747,6 +749,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
       window.addEventListener("resize", moved);
       for (const event of ["transitionend", "animationend"]) window.addEventListener(event, ended, true);
       settle();
+      createEffect(on(() => props.moving, (moving) => { if (!moving) moved(); }, { defer: true }));
       onCleanup(() => { sized.disconnect(); cancelAnimationFrame(settling); window.removeEventListener("resize", moved); for (const event of ["transitionend", "animationend"]) window.removeEventListener(event, ended, true); });
     }
   });
@@ -904,7 +907,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
       <Show when={listing()}>
         <MarkupNotes lift={barLift()}><For each={earlier.latest}>{(item) => <MarkupNote open={false} tag="" name={item.first || `${item.comments} comments`} onInput={() => {}} onOpen={() => follow(item.id, true)}
           value={`${item.unread ? `${item.unread} unread · ` : ""}${item.state === "handled" ? "Handled" : item.state === "taken" ? `${item.by ?? "A session"} is working on it` : item.by ? `Sent to ${item.by}` : "Saved"} · ${item.comments} ${item.comments === 1 ? "comment" : "comments"}`} />}</For></MarkupNotes>
-        <MarkupBar thin={can.thin} thread onBack={leave} view="use" onView={() => {}} tool="select" onTool={() => {}} onNote={() => {}} status="Sent before" canSend={false} onSend={() => {}} onClose={props.onClose} />
+        <MarkupBar out={props.moving} thin={can.thin} thread onBack={leave} view="use" onView={() => {}} tool="select" onTool={() => {}} onNote={() => {}} status="Sent before" canSend={false} onSend={() => {}} onClose={props.onClose} />
       </Show>
       <Show when={alone() && thread()}>{(item) => <>
         <MarkupNotes lift={barLift()}>
@@ -912,7 +915,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
           <For each={item().comments}>{(comment) => <MarkupNote ref={(element) => { noteField = element; }} open={replyTo() === comment.n} tag={String(comment.n)} name={comment.name} words={comment.comment} said={saidOf(comment.n)} by={item().by ?? undefined} state={stateOf(comment.n)} placeholder="Write back" resolved={comment.resolved}
             value={reply()} onOpen={() => { setReply(""); setReplyTo(comment.n); queueMicrotask(() => noteField?.focus()); }} onInput={setReply} onSay={() => void answer()} onResolve={(resolved) => settle(comment.n, resolved)} />}</For>
         </MarkupNotes>
-        <MarkupBar thin={can.thin} thread onBack={leave} view="use" onView={() => {}} tool="select" onTool={() => {}} onNote={() => {}} status={standing()} canSend={false} onSend={() => {}} onClose={props.onClose} />
+        <MarkupBar out={props.moving} thin={can.thin} thread onBack={leave} view="use" onView={() => {}} tool="select" onTool={() => {}} onNote={() => {}} status={standing()} canSend={false} onSend={() => {}} onClose={props.onClose} />
       </>}</Show>
       <Show when={!capturing() && !alone() && !listing()}>
         <Show when={floats(open()) && open()} keyed>{(selection) =>
@@ -932,7 +935,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
               value={reply()} onOpen={() => startReply(n())} onInput={setReply} resolved={resolvedOf(n())} onSay={() => void answer()} onResolve={(resolved) => settle(n(), resolved)} />}</Show>
           </Show>}</For></MarkupNotes>
         </Show>
-        <MarkupBar thin={can.thin} ribbon={can.bar === "ribbon"} own={host.tools?.()} onOwn={() => setMarkedLast(false)} onAsk={host.asking && offered("quote") ? () => { const range = host.asking!(); if (range) addQuote(range); } : undefined} view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onTool={(tool) => { if (props.mode === "use") look("page"); setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); }} onNote={() => { if (props.mode === "use") look("page"); note(); }}
+        <MarkupBar out={props.moving} thin={can.thin} ribbon={can.bar === "ribbon"} own={host.tools?.()} onOwn={() => setMarkedLast(false)} onAsk={host.asking && offered("quote") ? () => { const range = host.asking!(); if (range) addQuote(range); } : undefined} view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onTool={(tool) => { if (props.mode === "use") look("page"); setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); }} onNote={() => { if (props.mode === "use") look("page"); note(); }}
           status={status()} compact={touchOnly} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} size={textSize()} onSize={can.inks ? setTextSize : undefined} shape={shape()} onShape={setShape} onUndo={(reviewing() && undoable()) || surface?.canUndo() ? undoAny : undefined} onRedo={(reviewing() && redoable()) || surface?.canRedo() ? redoAny : undefined}
           replies={unread().reduce((sum, item) => sum + item.unread, 0)} sent={thread() ? 0 : earlier.latest?.length} onReplies={sentBefore}
           outstanding={unsent().filter((selection) => selection.comment.trim()).length} standing={thread() ? standing() : undefined}

@@ -2496,17 +2496,24 @@ function App() {
     return true;
   };
   // An artifact taking the place of what a pane shows is made behind it (pending) and takes its place in the frame it is
-  // drawn, so the pane never shows it opening; one that is slow says so once ARRIVE_MS has passed.
-  const ARRIVE_MS = 1500;
+  // drawn, so the pane never shows it opening. One that is slow says so in the pane's header from SAY_MS, and takes its
+  // place at ARRIVE_MS saying it is opening. Meanwhile what the pane shows takes no input (main: the effect over `arriving`).
+  const SAY_MS = 400, ARRIVE_MS = 1500;
   const [arriving, setArriving] = createSignal<Partial<Record<PaneKey, string>>>({});
+  const [said, setSaid] = createSignal<Partial<Record<PaneKey, string>>>({});
   const drawnArtifacts = new Set<string>();
   const arrives = (pane: PaneKey, previous: SplitView | null, next: SplitView | null) => Boolean(previous && previous !== next && next?.startsWith("artifact:") && !/^artifact:new\b/.test(next) && paneElement(pane));
   const leaves = (pane: PaneKey) => setArriving(({ [pane]: _, ...rest }) => rest);
+  /** Asked to show `view`, a pane drops what was arriving in it unless that is `view`: the last asked for is the one shown. */
+  const asked = (pane: PaneKey, view: SplitView) => { if (arriving()[pane] !== undefined && `artifact:${arriving()[pane]}` !== view) leaves(pane); };
   /** True once the artifact is drawn (or ARRIVE_MS has passed), unless another took its place or the pane changed meanwhile (`unchanged`). */
   const arrive = async (pane: PaneKey, view: SplitView, unchanged: () => boolean) => {
     const id = view.slice("artifact:".length);
     setArriving((now) => ({ ...now, [pane]: id }));
+    const say = setTimeout(() => { if (arriving()[pane] === id) setSaid((now) => ({ ...now, [pane]: id })); }, SAY_MS);
     await waitFor(() => drawnArtifacts.has(`${pane}:${id}`) || arriving()[pane] !== id, ARRIVE_MS);
+    clearTimeout(say);
+    if (said()[pane] === id) setSaid(({ [pane]: _, ...rest }) => rest);
     if (arriving()[pane] !== id) return false;
     if (!unchanged()) leaves(pane);
     return unchanged();
@@ -2970,9 +2977,9 @@ function App() {
     <PaneHeader actions={paneTabActions(pane)}><Show when={documentTab(pane)} fallback={<HeaderCrumb title="New artifact" />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>
     <ArtifactCreator project={id.slice("new:".length) || undefined} projects={catalogue.projects().filter((item) => item.id === id.slice("new:".length) || homeProjects().includes(item))}
       onBack={() => void setPaneView(pane, "home")} onMade={(made) => void setPaneView(pane, `artifact:${made.id}`).then(() => focusAnyPane(pane))} />
-  </SheetFill> : <ArtifactPane id={id} pending={arriving()[pane] === id} moving={paneMotion()?.slot === pane} onDrawn={() => drawnArtifacts.add(`${pane}:${id}`)} onThread={() => void showThread(pane, id)} shortcuts={shortcutManager} onAbout={(found, label) => nameArtifact(`artifact:${id}`, found.name, label)}
+  </SheetFill> : <ArtifactPane id={id} pending={arriving()[pane] === id} said={said()[pane] === id} moving={paneMotion()?.slot === pane} onDrawn={() => drawnArtifacts.add(`${pane}:${id}`)} onThread={() => void showThread(pane, id)} shortcuts={shortcutManager} onAbout={(found, label) => nameArtifact(`artifact:${id}`, found.name, label)}
     chats={(project) => (catalogue.projects().find((item) => item.id === project)?.sessions ?? []).map((chat) => ({ id: chat.id, title: chat.title || "Untitled chat" }))}
-    header={(extra) => <PaneHeader modes={paperModes(pane, id, "paper")} actions={<>{extra}{paneTabActions(pane)}</>}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`artifact:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />);
+    header={(extra) => <PaneHeader modes={paperModes(pane, id, "paper")} actions={<>{extra}{paneTabActions(pane)}</>}><Show when={documentTab(pane, arriving()[pane] === id ? viewName(`artifact:${id}`) : undefined)} fallback={<HeaderCrumb title={viewName(`artifact:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />);
   const renderBrowserDocument = (pane: PaneKey, id: string) => <SheetFill class="pane-browser">
     <BrowserPane id={id} onTitle={(title) => setBrowserTitles((current) => ({ ...current, [`browser:${id}`]: title }))}
       header={<PaneHeader actions={paneTabActions(pane)}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`browser:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />
@@ -3232,14 +3239,16 @@ function App() {
     return true;
   };
   const focusPaneShowing = (view: SplitView) => {
-    if (keyboardPaneSlot() !== null && viewOf("main") === view) { setKeyboardPane("main"); enterMainPane(); return true; }
+    if (keyboardPaneSlot() !== null && viewOf("main") === view) { asked("main", view); setKeyboardPane("main"); enterMainPane(); return true; }
     const slot = shownSlots().find((candidate) => slotView(candidate) === view);
     if (slot === undefined) return false;
+    asked(slot, view);
     focusPane(slot);
     return true;
   };
   const keyboardPaneSlot = () => { const pane = keyboardPane(); return pane !== "main" && shownSlots().includes(pane) ? pane : null; };
   const openInFocusedPane = async (view: SplitView, inPaneA: () => unknown) => {
+    asked(keyboardPaneSlot() ?? "main", view);
     if (focusPaneShowing(view) || switchToTab(view)) return;
     const slot = keyboardPaneSlot();
     if (tabActivation() && tabbable(view) && activeTabOf(slot ?? "main")) keepNext.add(String(slot ?? "main"));
@@ -3450,9 +3459,12 @@ function App() {
     return swapPartner(pane);
   };
   const paneElement = (pane: PaneKey) => pane === "main" ? document.querySelector<HTMLElement>(".chat-main") : paneSlot(pane).host();
+  // The time out is a timer: a background tab runs no frames.
   const waitFor = (ready: () => boolean, timeout = 800) => new Promise<void>((resolve) => {
-    const start = performance.now();
-    const check = () => ready() || performance.now() - start > timeout ? resolve() : requestAnimationFrame(check);
+    let done = false;
+    const finish = () => { done = true; clearTimeout(cap); resolve(); };
+    const cap = setTimeout(finish, timeout);
+    const check = () => { if (!done) ready() ? finish() : requestAnimationFrame(check); };
     check();
   });
   // A chat is drawn once its transcript is in the pane, not merely loaded:
@@ -4393,9 +4405,9 @@ function App() {
   // Open from a drag's or ease's begin to its end: the weights effect below stays out of the way meanwhile, or it
   // starts a motion of its own each frame, relaying out every transcript.
   let splitMotionOpen = false;
-  const announceSplit = (phase: "begin" | "change" | "end", size: number, panes?: { element: HTMLElement; width: number }[]) => {
+  const announceSplit = (phase: "begin" | "change" | "end", size: number, panes?: { element: HTMLElement; width: number }[], landing?: { element: HTMLElement; width: number }[]) => {
     splitMotionOpen = phase !== "end";
-    dispatchPanelGeometryMotion({ phase, id: splitMotionId, source: "workspace", size, panes });
+    dispatchPanelGeometryMotion({ phase, id: splitMotionId, source: "workspace", size, panes, landing });
   };
   const besideWidth = () => shownSlots().reduce((sum, slot) => sum + (paneSlot(slot).host()?.getBoundingClientRect().width ?? 0), 0);
   createEffect(on(() => [shownSlots(), paneWeights().join()] as const, () => {
@@ -4417,13 +4429,26 @@ function App() {
   const shownAsSeenAtLoad = shownAsSeen;
   const ARTIFACT_EASE_MS = 500;
   const heldSlots = new Map<number, { release: () => void; focus?: () => void }>();
-  const animatePanes = () => panesSettled && !isMobileLayout() && !swappingPanes && !restoringPanes && !paneMotion()
-    && !reducedMotion();
+  // A pane opened beside is held unseen until what it shows is drawn, eased in or (reduced motion) shown at once.
+  const holdPanes = () => panesSettled && !isMobileLayout() && !swappingPanes && !restoringPanes && !paneMotion();
+  const animatePanes = () => holdPanes() && !reducedMotion();
   const normalized = (weights: number[]) => { const total = weights.reduce((sum, weight) => sum + weight, 0) || 1; return weights.map((weight) => weight / total); };
   const paneShares = () => normalized(panesShown().map((pane) => paneElement(pane)?.getBoundingClientRect().width ?? 0));
   const [panesSettling, setPanesSettling] = createSignal(false);
   const documentsOf = (element: HTMLElement) => [...element.children]
     .filter((child): child is HTMLElement => child instanceof HTMLElement && !child.matches(".ui-resize-edge, .ui-sheet-backdrop"));
+  // From the moment an artifact is asked for in a pane, what the pane shows takes no input: keys typed while it is made are written nowhere.
+  createEffect(() => {
+    for (const key of Object.keys(arriving())) {
+      const element = paneElement(key === "main" ? "main" : Number(key));
+      for (const part of element ? documentsOf(element).filter((part) => part.dataset.pending === undefined) : []) {
+        part.inert = true;
+        // Inert lets go of the keyboard only at the next frame; a key pressed before it would still be written.
+        if (part.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
+        onCleanup(() => { part.inert = false; });
+      }
+    }
+  });
   const landingWidth = (target: number[], index: number, arriving: HTMLElement | undefined) => {
     const panes = panesShown().map((pane) => paneElement(pane)).filter((element): element is HTMLElement => Boolean(element));
     const room = panes.reduce((sum, element) => sum + element.getBoundingClientRect().width, 0)
@@ -4431,9 +4456,16 @@ function App() {
     const gutter = parseFloat(getComputedStyle(panes[0] ?? document.body).marginRight) || 0;
     return Math.max(0, Math.round((room - gutter) * (target[index] ?? 0)));
   };
+  /** Each pane's width once eased to `to`: the room they take now, less the gutter an arriving pane opens (collapsed until it moves) or plus the one a leaving pane gives back. */
+  const landings = (to: number[]) => {
+    const panes = panesShown().map((pane) => paneElement(pane)).filter((element): element is HTMLElement => Boolean(element));
+    const gutter = parseFloat(getComputedStyle(panes[0] ?? document.body).marginRight) || 0, phase = paneMotion()?.phase;
+    const room = panes.reduce((sum, element) => sum + element.getBoundingClientRect().width, 0) + (phase === "arriving" ? -gutter : phase === "leaving" ? gutter : 0);
+    return panes.map((element, index) => ({ element, width: Math.max(0, Math.round(room * (to[index] ?? 0))) }));
+  };
   const easePaneWeights = (to: number[], done: () => void) => {
     splitMotionId += 1;
-    announceSplit("begin", besideWidth());
+    announceSplit("begin", besideWidth(), undefined, landings(to));
     document.body.classList.add("panes-settling"); setPanesSettling(true);
     batch(() => {
       setWeightOverride(to);
@@ -4456,10 +4488,10 @@ function App() {
     // as restored, so the first pane opened eases in like any other. The load itself is not (panesSettled).
     const previous = before ?? shownAsSeenAtLoad;
     const added = now.filter((slot) => !previous.includes(slot));
-    const animated = added.length === 1 && animatePanes() ? added[0]! : null;
-    for (const [held, hold] of [...heldSlots]) if (held !== animated) hold.release();
-    if (animated === null) return;
-    const slot = animated;
+    const opened = added.length === 1 && holdPanes() ? added[0]! : null, eased = !reducedMotion();
+    for (const [held, hold] of [...heldSlots]) if (held !== opened) hold.release();
+    if (opened === null) return;
+    const slot = opened;
     const index = now.indexOf(slot);
     const start = weightsFor(previous.length + 1).slice();
     start.splice(index + 1, 0, 0);
@@ -4476,7 +4508,7 @@ function App() {
         // An artifact eases in drawn, or after ARTIFACT_EASE_MS saying it is opening: never filling in as it moves.
         void waitFor(() => artifact ? drawnArtifacts.has(`${slot}:${artifact}`) : !id || paneSlot(slot).session.chat.loadedId() === id, artifact ? ARTIFACT_EASE_MS : 150).then(() => {
           if (paneMotion()?.slot !== slot) return;
-          if (!element || paneSlot(slot).host() !== element) return void batch(() => { setWeightOverride(null); setPaneMotion(null); });
+          if (!element || paneSlot(slot).host() !== element || !eased) return void batch(() => { setWeightOverride(null); setPaneMotion(null); });
           const fade = documentsOf(element).map((part) => part.animate([{ opacity: 0 }, { opacity: 1 }],
             { delay: duration("--duration-fold") * 0.3, duration: duration("--duration-fold") * 0.7, easing: easing("--ease-arrive"), fill: "both" }));
           easePaneWeights(target, () => {
@@ -4493,7 +4525,7 @@ function App() {
     const total = weights.reduce((sum, weight) => sum + weight, 0);
     const next = weights.map((weight) => weight / total);
     splitMotionId += 1;
-    announceSplit("begin", besideWidth());
+    announceSplit("begin", besideWidth(), undefined, landings(next));
     document.body.classList.add("panes-settling"); setPanesSettling(true);
     if (count === 2) { setSplitRatio(next[1]!); writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratio", String(next[1]!)); }
     else { setSplitRatios3(next); writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-ratios", JSON.stringify(next)); }

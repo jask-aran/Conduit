@@ -1,4 +1,5 @@
 import { HyperFormula } from "hyperformula";
+import * as Y from "yjs";
 import { blockId } from "./document-format.js";
 
 /*
@@ -67,12 +68,24 @@ export function createSheetModel(doc) {
   let engine, sheet;
   const listeners = new Set();
   let rowIds = [], colIds = [], rowIndex = new Map(), colIndexOf = new Map(), pending = null;
-  const reindex = () => { rowIds = rows.toArray(); colIds = cols.toArray(); rowIndex = new Map(rowIds.map((id, at) => [id, at])); colIndexOf = new Map(colIds.map((id, at) => [id, at])); };
+  // What was typed, by position ("" where nothing is): the cells as of the last change, so reading them in order is no lookup by ids.
+  let typed = [], written = null;
+  const reindexRows = () => { rowIds = rows.toArray(); rowIndex = new Map(rowIds.map((id, at) => [id, at])); };
+  const reindexCols = () => { colIds = cols.toArray(); colIndexOf = new Map(colIds.map((id, at) => [id, at])); };
   const placeOf = (cell) => { const cut = cell.indexOf(":"), row = rowIndex.get(cell.slice(0, cut)), col = colIndexOf.get(cell.slice(cut + 1)); return row === undefined || col === undefined ? null : { sheet, row, col }; };
+  const blankRow = () => new Array(colIds.length).fill("");
+  const eachFormula = (each) => {
+    for (let row = 0; row < typed.length; row++) { const line = typed[row]; for (let col = 0; col < line.length; col++) { const input = line[col]; if (typeof input === "string" && input.charCodeAt(0) === 61) each(row, col, input); } }
+  };
+  /** Rows or columns inserted or deleted in `typed`, as they were in the doc. */
+  // Not spliced in as arguments: a call takes only so many, and a sheet's rows are more.
+  const moveRows = (at, n, removing) => { typed = removing ? typed.slice(0, at).concat(typed.slice(at + n)) : typed.slice(0, at).concat(Array.from({ length: n }, blankRow), typed.slice(at)); };
+  const moveCols = (at, n, removing) => { typed = typed.map((row) => removing ? row.slice(0, at).concat(row.slice(at + n)) : row.slice(0, at).concat(new Array(n).fill(""), row.slice(at))); };
   const rebuild = () => {
-    reindex();
+    reindexRows(); reindexCols();
+    typed = Array.from({ length: rowIds.length }, blankRow);
     const grid = Array.from({ length: rowIds.length }, () => new Array(colIds.length).fill(null));
-    for (const [cell, input] of cells) { const place = placeOf(cell); if (place) grid[place.row][place.col] = raw(input); }
+    for (const [cell, input] of cells) { const place = placeOf(cell); if (place) { typed[place.row][place.col] = input ?? ""; grid[place.row][place.col] = raw(input); } }
     engine?.destroy();
     engine = HyperFormula.buildFromArray(grid, CONFIG); sheet = engine.getSheetId(engine.getSheetNames()[0]);
   };
@@ -94,21 +107,27 @@ export function createSheetModel(doc) {
     pending = null;
     if (!now) return;
     let changed = null;
-    // The hub's own structure change was made in the engine first.
-    if (transaction.origin === self) reindex();
-    else if (now.keys.size > REBUILD_AT) rebuild();
+    const retype = (done) => {
+      const places = [];
+      for (const cell of now.keys) { if (done?.has(cell)) continue; const place = placeOf(cell); if (place) { const input = cells.get(cell); typed[place.row][place.col] = input ?? ""; places.push([place, raw(input)]); } }
+      return places;
+    };
+    // The hub's own structure change was made in the engine and in `typed` first: only what `write` changed is left.
+    if (transaction.origin === self) { retype(written); written = null; }
+    // A structure change rewrites many formulas, which the engine rewrites too: that is no reason to build it again.
+    else if (!structure && now.keys.size > REBUILD_AT) rebuild();
     else {
       // Suspended rather than batched: a batch keeps what it changed for an undo, many times slower for many cells.
       engine.suspendEvaluation();
       try {
-        if (now.rows) along(now.rows, (at, n) => engine.addRows(sheet, [at, n]), (at, n) => engine.removeRows(sheet, [at, n]));
-        if (now.cols) along(now.cols, (at, n) => engine.addColumns(sheet, [at, n]), (at, n) => engine.removeColumns(sheet, [at, n]));
-        if (structure) reindex();
-        for (const cell of now.keys) {
-          const place = placeOf(cell), input = raw(cells.get(cell));
-          // A formula the engine already rewrote for the same structure change is left as it is.
-          if (place && !(structure && input?.startsWith("=") && engine.getCellFormula(place) === input)) engine.setCellContents(place, input);
-        }
+        if (now.rows) along(now.rows, (at, n) => { engine.addRows(sheet, [at, n]); moveRows(at, n, false); }, (at, n) => { engine.removeRows(sheet, [at, n]); moveRows(at, n, true); });
+        if (now.cols) along(now.cols, (at, n) => { engine.addColumns(sheet, [at, n]); moveCols(at, n, false); }, (at, n) => { engine.removeColumns(sheet, [at, n]); moveCols(at, n, true); });
+        if (now.rows) reindexRows();
+        if (now.cols) reindexCols();
+        // After a structure change every formula is as the doc says: one the engine already rewrote in the same way is left as it is, and one typed
+        // here while the hub made the change, which the engine rewrote but the hub never saw, goes back to what the doc holds.
+        for (const [place, input] of retype()) if (!(structure && input?.startsWith("="))) engine.setCellContents(place, input);
+        if (structure) eachFormula((row, col, input) => { if (engine.getCellFormula({ sheet, row, col }) !== input) engine.setCellContents({ sheet, row, col }, input); });
       } finally { changed = engine.resumeEvaluation().flatMap((change) => change.address ? [{ row: change.address.row, col: change.address.col }] : []); }
     }
     for (const listener of listeners) listener({ structure, cells: changed });
@@ -120,7 +139,8 @@ export function createSheetModel(doc) {
   return {
     get engine() { return engine; }, get sheet() { return sheet; },
     size: () => ({ rows: rowIds.length, cols: colIds.length }),
-    input: (r, c) => rowIds[r] === undefined || colIds[c] === undefined ? "" : cells.get(key(rowIds[r], colIds[c])) ?? "",
+    input: (r, c) => typed[r]?.[c] ?? "",
+    inputs: () => typed.map((line) => line.slice()),
     value: (r, c) => { const value = read(r, c); return isError(value) ? value.value : value; },
     error: (r, c) => { const value = read(r, c); return isError(value) ? value.message || value.value : null; },
     rowAt: (i) => rowIds[i], colAt: (i) => colIds[i],
@@ -132,23 +152,103 @@ export function createSheetModel(doc) {
      */
     structure(op, at, count, write = () => {}) {
       const isRows = op === "insert-rows" || op === "delete-rows", removing = op.startsWith("delete"), ids = isRows ? rowIds : colIds, list = isRows ? rows : cols;
+      // Each formula by its row and column ids, with the engine's text of it before the change.
       const formulas = [];
-      for (const [cell, input] of cells) if (input.startsWith("=")) { const place = placeOf(cell); if (place) formulas.push([cell, engine.getCellFormula(place)]); }
-      const gone = new Set(removing ? ids.slice(at, at + count) : []), side = (cell) => isRows ? cell.slice(0, cell.indexOf(":")) : cell.slice(cell.indexOf(":") + 1);
+      eachFormula((row, col) => formulas.push([rowIds[row], colIds[col], engine.getCellFormula({ sheet, row, col })]));
+      const gone = new Set(removing ? ids.slice(at, at + count) : []), across = isRows ? colIds : rowIds;
       if (isRows) (removing ? engine.removeRows : engine.addRows).call(engine, sheet, [at, count]);
       else (removing ? engine.removeColumns : engine.addColumns).call(engine, sheet, [at, count]);
       doc.transact(() => {
         if (removing) list.delete(at, count); else list.insert(at, Array.from({ length: count }, blockId));
-        reindex();
-        if (gone.size) for (const cell of [...cells.keys()]) if (gone.has(side(cell))) cells.delete(cell);
-        for (const [cell, before] of formulas) {
-          const place = !gone.has(side(cell)) && placeOf(cell), after = place && engine.getCellFormula(place);
-          if (after && after !== before) cells.set(cell, after);
+        if (isRows) { reindexRows(); moveRows(at, count, removing); } else { reindexCols(); moveCols(at, count, removing); }
+        // The cells of what was deleted, found by their ids (a cell whose other id is gone too was never placed, and is left).
+        for (const id of gone) for (const other of across) { const cell = isRows ? key(id, other) : key(other, id); if (cells.has(cell)) cells.delete(cell); }
+        written = new Set();
+        for (const [row, col, before] of formulas) {
+          if (gone.has(isRows ? row : col)) continue;
+          const place = { sheet, row: rowIndex.get(row), col: colIndexOf.get(col) }, after = engine.getCellFormula(place);
+          if (after && after !== before) { const cell = key(row, col); cells.set(cell, after); typed[place.row][place.col] = after; written.add(cell); }
         }
         write();
       }, self);
       return { rows: rowIds.length, cols: colIds.length };
     },
     destroy() { rows.unobserve(onRows); cols.unobserve(onCols); cells.unobserve(onCells); doc.off("afterTransaction", flush); listeners.clear(); engine.destroy(); },
+  };
+}
+
+/** A value as it crosses to the page: an error as [code, message], anything else as it is. */
+const sent = (value) => isError(value) ? [value.value, value.message || value.value] : value;
+/**
+ * The engine off the page's thread (in a Web Worker: `serveSheetModel(self)`): a copy of the doc kept from the updates `createSheetView` sends,
+ * computed by createSheetModel, and what it computes sent back, each cell by its ids. Updates that arrive together are taken as one change.
+ */
+export function serveSheetModel(port) {
+  const doc = new Y.Doc(), queue = [];
+  let model = null, closed = false;
+  const all = () => {
+    const values = model.engine.getSheetValues(model.sheet), at = [], value = [];
+    values.forEach((line, r) => line.forEach((one, c) => { if (one !== null) { at.push(key(model.rowAt(r), model.colAt(c))); value.push(sent(one)); } }));
+    return { at, value };
+  };
+  const take = () => {
+    if (closed || !queue.length) return;
+    const updates = queue.splice(0);
+    doc.transact(() => { for (const update of updates) Y.applyUpdate(doc, update); });
+    if (model) return;
+    model = createSheetModel(doc);
+    model.onChange(({ cells }) => port.postMessage(cells ? { at: cells.map(({ row, col }) => key(model.rowAt(row), model.colAt(col))), value: cells.map(({ row, col }) => sent(model.engine.getCellValue({ sheet: model.sheet, row, col }))) } : { all: true, ...all() }));
+    port.postMessage({ all: true, ...all() });
+  };
+  port.addEventListener("message", ({ data }) => {
+    if (data.close) { closed = true; model?.destroy(); doc.destroy(); return; }
+    if (queue.push(data.update) === 1) setTimeout(take, 0);
+  });
+  port.start?.();
+}
+
+/**
+ * The page's sheet when its engine is in a worker (`serveSheetModel`), read as a SheetModel is: what was typed, the rows and the columns are the
+ * page's own doc; values are what the worker last sent, kept by each cell's ids, so rows or columns inserted or deleted move them at once and
+ * only values that changed wait for the worker. `onChange`: `structure` at once when rows or columns change, `cells` when values arrive.
+ */
+export function createSheetView(doc, port) {
+  const rows = doc.getArray(ROWS), cols = doc.getArray(COLS), cells = doc.getMap(CELLS), listeners = new Set(), values = new Map();
+  let rowIds = [], colIds = [], rowIndex = new Map(), colIndexOf = new Map(), moved = false, isReady;
+  const reindex = () => { rowIds = rows.toArray(); colIds = cols.toArray(); rowIndex = new Map(rowIds.map((id, at) => [id, at])); colIndexOf = new Map(colIds.map((id, at) => [id, at])); };
+  const emit = (change) => { for (const listener of listeners) listener(change); };
+  const read = (r, c) => rowIds[r] === undefined || colIds[c] === undefined ? null : values.get(key(rowIds[r], colIds[c])) ?? null;
+  const onMoved = () => { moved = true; };
+  const after = () => { if (moved) { moved = false; reindex(); emit({ structure: true, cells: null }); } };
+  const onUpdate = (update) => port.postMessage({ update });
+  const onMessage = ({ data }) => {
+    if (data.all) values.clear();
+    const changed = [];
+    data.at.forEach((cell, i) => {
+      const value = data.value[i];
+      if (value === null) values.delete(cell); else values.set(cell, value);
+      if (data.all) return;
+      const cut = cell.indexOf(":"), row = rowIndex.get(cell.slice(0, cut)), col = colIndexOf.get(cell.slice(cut + 1));
+      if (row !== undefined && col !== undefined) changed.push({ row, col });
+    });
+    emit({ structure: false, cells: data.all ? null : changed });
+    if (data.all) isReady();
+  };
+  const ready = new Promise((done) => { isReady = done; });
+  rows.observe(onMoved); cols.observe(onMoved); doc.on("afterTransaction", after); doc.on("update", onUpdate);
+  port.addEventListener("message", onMessage); port.start?.();
+  reindex();
+  port.postMessage({ update: Y.encodeStateAsUpdate(doc) });
+  const input = (r, c) => rowIds[r] === undefined || colIds[c] === undefined ? "" : cells.get(key(rowIds[r], colIds[c])) ?? "";
+  return {
+    ready,
+    size: () => ({ rows: rowIds.length, cols: colIds.length }),
+    input, inputs: () => rowIds.map((_, r) => colIds.map((_, c) => input(r, c))),
+    value: (r, c) => { const value = read(r, c); return Array.isArray(value) ? value[0] : value; },
+    error: (r, c) => { const value = read(r, c); return Array.isArray(value) ? value[1] : null; },
+    rowAt: (i) => rowIds[i], colAt: (i) => colIds[i],
+    indexOfRow: (id) => rowIndex.get(id) ?? -1, indexOfCol: (id) => colIndexOf.get(id) ?? -1,
+    onChange: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
+    destroy() { rows.unobserve(onMoved); cols.unobserve(onMoved); doc.off("afterTransaction", after); doc.off("update", onUpdate); port.removeEventListener("message", onMessage); listeners.clear(); port.postMessage({ close: true }); },
   };
 }

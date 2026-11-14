@@ -1,7 +1,7 @@
 /* A Conduit document on its page (document.tsx). Its text is an answer's (.ui-answer, transcript.css); here is only what a page and editing add. */
 .ui-document { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; background: var(--background); --document-width: var(--reading-width); }
-/* Its pane moving (an edge dragged, panes easing): the sheet keeps the width it had, centred and clipped, so it is laid out once, when the pane stops. */
-.ui-sheet-fill[data-held] > .ui-document { width: var(--held-width); align-self: center; }
+/* Its pane moving (an edge dragged, panes easing): the sheet is laid out once, at the width it is held at (where the pane lands, or the width it had), against the pane's leading edge. */
+.ui-sheet-fill[data-held] > .ui-document { width: var(--held-width); align-self: flex-start; }
 .ui-document[data-width="wide"] { --document-width: var(--measure-3xl); }
 .ui-document[data-width="full"] { --document-width: 100%; }
 /* In a pane the sheet has no header of its own, so find stands at its top. */

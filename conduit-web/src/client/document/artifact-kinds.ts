@@ -36,6 +36,8 @@ export type ArtifactSurface = {
   reveal?(): ((place: string) => void) | undefined;
   /** It is drawn as it will stand (a paper's text in, a site's page loaded), or can say why not: read reactively. */
   drawn(): boolean;
+  /** How far what it draws reaches from its pane's leading edge (px), measured now: a surface that says is held at its width while its pane moves (CSS: data-held) for as long as the pane cuts none of that off. */
+  reach?(): number;
 };
 
 /** What the pane gives every surface. */

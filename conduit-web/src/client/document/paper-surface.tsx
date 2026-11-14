@@ -101,6 +101,13 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
     away, stale,
     reveal: () => controls()?.reveal,
     drawn: ready,
+    // The sheet and the margin beside it, and the column's own side room past them.
+    reach: () => {
+      const pane = props.pane(), column = pane?.querySelector<HTMLElement>(".ui-document-column");
+      if (!pane || !column) return 0;
+      const right = Math.max(0, ...[...column.querySelectorAll(":scope > .ui-document-page > *")].map((part) => part.getBoundingClientRect().right));
+      return right + (parseFloat(getComputedStyle(column).paddingRight) || 0) - pane.getBoundingClientRect().left;
+    },
   });
   return <><DocumentEditor host={editing} id={id} name={props.about().name} bare onAway={setAway} onStale={setStale} onReady={() => setReady(true)} marks={(offered) => { marks = offered; setMarked(() => offered); }} mentions={() => props.quiet ? [] : props.offer()?.names() ?? []} to={() => props.offer()?.to() ?? null} onMention={ask} onRename={(name) => renameArtifact(id, name)} count={Boolean(kind.count) && paperCounted()} width={width()} controls={setControls} onComment={props.quiet ? undefined : ask} margin={props.margin} marginEmpty={props.marginEmpty} />
     <PaperShortcuts open={showingKeys()} onOpenChange={setShowingKeys} groups={shownKeys()} />

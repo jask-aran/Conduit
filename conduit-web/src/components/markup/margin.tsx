@@ -24,9 +24,9 @@ export type MarkupMarginEntry = { key: string; kind: "comment" | "suggestion"; a
 export const MARKUP_STATES: Record<MarkupMarginEntry["state"], string> = { saved: "Saved", waiting: "Sent", working: "Working on it", answered: "Answered", resolved: "Agent resolved", suggested: "Suggested" };
 /** Who made a suggestion, as the person reads it. */
 const who = (by: string | null | undefined) => by === "person" ? "you" : by ?? null;
-/** What the host can do with the margin from outside it: how many comments stand open (sent and not resolved); opening the next or previous one, or one by key, in the order of their places;
+/** What the host can do with the margin from outside it: whether the hub has answered and that is laid out (`answered`, read reactively); how many comments stand open (sent and not resolved); opening the next or previous one, or one by key, in the order of their places;
  *  every card in that order (`list`, read where drawn); and resolving every comment the agent has resolved (`resolveDone`, one after another, the outcome said once). */
-export type MarkupMarginControl = { open(): number; next(): void; previous(): void; go(key: string): void; list(): MarkupMarginEntry[]; resolveDone(): Promise<void> };
+export type MarkupMarginControl = { answered(): boolean; open(): number; next(): void; previous(): void; go(key: string): void; list(): MarkupMarginEntry[]; resolveDone(): Promise<void> };
 
 /**
  * A surface's margin: every comment the person has not resolved, as its thread, beside what it is about, whether or not the tool is open. The
@@ -44,7 +44,7 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
   let column: HTMLDivElement | undefined, field: HTMLTextAreaElement | undefined, due = 0;
   const failed = (what: string) => (error: unknown) => host.notify("failed", `${what}: ${error instanceof Error ? error.message : String(error)}`);
   // An item put away leaves once its answer is read, but not from under the person reading it: the open card's item stays until the card is shut.
-  const ask = () => { if (!document.hidden) void transport.open().then((items) => { const reading = openKey() && itemOf(openKey()!); setHeld("items", reconcile(reading && !items.some((item) => item.id === reading.id) ? [...items, unwrap(reading)] : items, { key: "id" })); }, () => {}); };
+  const ask = () => { if (!document.hidden) void transport.open().then((items) => { const reading = openKey() && itemOf(openKey()!); setHeld("items", reconcile(reading && !items.some((item) => item.id === reading.id) ? [...items, unwrap(reading)] : items, { key: "id" })); }, () => {}).finally(() => { if (!heard) { heard = true; soon(); } }); };
   const took = (thread: MarkupThread) => setHeld("items", (item) => item.id === thread.id, reconcile(thread));
   // By key, so a card stays the card it was through each look (and its field keeps the words being written).
   const keys = createMemo(() => held.items.flatMap((item) => item.comments.map((comment) => `${item.id}/${comment.n}`)), [], { equals: (a, b) => a.length === b.length && a.every((key, at) => key === b[at]) });
@@ -109,7 +109,10 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
     });
     column.style.minHeight = side ? `${Math.max(0, floor - gap)}px` : "";
   };
-  const soon = () => { due ||= requestAnimationFrame(lay); };
+  // Answered once the hub's first answer (or its failure) has been laid out: the cards and the marks in the text come in one frame.
+  const [laidOut, setLaidOut] = createSignal(false);
+  let heard = false;
+  const soon = () => { due ||= requestAnimationFrame(() => { lay(); if (heard) setLaidOut(true); }); };
   const open = (key: string | null) => {
     setReply(""); setOpenKey(key);
     if (key && !key.startsWith(SUGGESTED)) { void transport.thread(split(key)[0], true).then(took, () => {}); queueMicrotask(() => field?.focus({ preventScroll: true })); }
@@ -161,7 +164,7 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
     const comment = commentOf(key);
     return { key, kind: "comment", about: comment?.quote || comment?.comment || comment?.name || "", by: itemOf(key)?.by ?? null, state: phase(key), unread: unread(key) };
   });
-  props.control?.({ open: () => openKeys().length, next: () => step(1), previous: () => step(-1), go, list, resolveDone });
+  props.control?.({ answered: laidOut, open: () => openKeys().length, next: () => step(1), previous: () => step(-1), go, list, resolveDone });
 
   createEffect(() => { margin?.anchors(keys().map((key) => { const comment = commentOf(key); return { key, quote: comment?.quote, under: comment?.under, current: openKey() === key, resolved: putAway(key) }; })); soon(); });
   createEffect(on(() => suggestions().length, soon, { defer: true }));

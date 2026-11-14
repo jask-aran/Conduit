@@ -34,6 +34,11 @@
 
 /* A document made behind the one its pane shows, laid out at the pane's size, until it is drawn and takes its place. */
 .ui-sheet-fill[data-pending] { position: absolute; inset: 0; visibility: hidden; pointer-events: none; }
+/* Slow, it says so: its header (its name, opening) stands over the pane's own while what the pane showed stays painted under it. */
+.ui-sheet-fill[data-pending][data-said] { z-index: 1; }
+.ui-sheet-fill[data-pending][data-said] > .ui-pane-header { visibility: visible; pointer-events: auto; background: var(--background); }
+/* Shown before it is drawn, the pane says it is opening while the document is made unseen under that. */
+.ui-sheet-fill[data-opening] > :not(.ui-pane-header, .ui-markup-room, .ui-empty) { position: absolute; inset: 0; visibility: hidden; pointer-events: none; }
 .ui-sheet-fill { position: relative; isolation: isolate; display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border-radius: inherit; container-type: inline-size; }
 
 .ui-dock { position: relative; display: flex; width: 0; height: calc(100dvh - var(--space-xl) - var(--title-bar-room, 0px)); margin: var(--space-md) 0 var(--space-md) 0; flex: none; overflow: visible; pointer-events: none; border-radius: var(--radius-surface); transition: width var(--duration-fold) var(--ease-fold), margin-right var(--duration-fold) var(--ease-fold); }

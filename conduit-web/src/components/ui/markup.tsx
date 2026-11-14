@@ -1,4 +1,4 @@
-import { createEffect, createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { createContext, createEffect, createSignal, createUniqueId, For, onCleanup, onMount, Show, useContext, type JSX } from "solid-js";
 // Through the barrel, so the tool's chunk takes these from the app's own and the build splits nothing new out of it.
 import { Button, Card, ColourPicker, CardPreview, CloseButton, Count, Dot, Frost, IconButton, Icons, Segmented, Spinner, Stepper, Swatch, Switch, TextArea } from "./index";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "./menus";
@@ -169,12 +169,18 @@ const VIEWS: ReadonlyArray<{ value: MarkupView; label: string; icon: () => JSX.E
 /** A host's own tool in the bar, read where it is drawn (so a getter follows). `menu`: on the ribbon, those of one menu stand as one control under that name, `active` the one
  *  that is so now. A tool of no menu is a toggle, `pressed` while it is on (a mark the selection wears; unsaid, `active`). `disabled`: not to be done here.
  *  `keys`: its shortcut, as its tooltip says it. */
+/** Whether the bars are out (MarkupBar `out`): each fades itself, since a frost faded through an ancestor blurs nothing until the fade ends. */
+const Out = createContext<() => boolean>(() => false);
+function Bar(props: JSX.HTMLAttributes<HTMLDivElement>) {
+  const out = useContext(Out);
+  return <Frost lift="raised" {...props} data-move="fade" data-out={out() ? "" : undefined} />;
+}
 /** The bar's own tools: one frosted bar, or (parted) a row of them, each part a bar of its own. */
 function Sets(props: { parted: boolean; children: JSX.Element }) {
-  return <Show when={props.parted} fallback={<Frost lift="raised" class="ui-markup-bar" data-set="markup" role="toolbar" aria-label="UI markup">{props.children}</Frost>}><div class="ui-markup-sets">{props.children}</div></Show>;
+  return <Show when={props.parted} fallback={<Bar class="ui-markup-bar" data-set="markup" role="toolbar" aria-label="UI markup">{props.children}</Bar>}><div class="ui-markup-sets">{props.children}</div></Show>;
 }
 function Part(props: { parted: boolean; label: string; children: JSX.Element }) {
-  return <Show when={props.parted} fallback={props.children}><Frost lift="raised" class="ui-markup-bar" role="toolbar" aria-label={props.label}>{props.children}</Frost></Show>;
+  return <Show when={props.parted} fallback={props.children}><Bar class="ui-markup-bar" role="toolbar" aria-label={props.label}>{props.children}</Bar></Show>;
 }
 
 export type MarkupOwnTool = { name: string; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; /** Its menu's control shows the icon alone (a swatch says its colour). */ compact?: boolean; /** The colour it puts on, where it is one of a set of inks. */ swatch?: string; /** It puts on any colour, the one handed it: the last of a set of inks, chosen with the colour picker. */ pick?: (hex: string) => void; /** It is a way the surface is worked on, one of a few: `review` is the one Markup's own tools belong to, entered as one is taken. */ mode?: "edit" | "review"; run: () => void };
@@ -195,9 +201,10 @@ const FOLDS = 3;
  *  The two stay on one line: where the frame is narrower than they need (measured), the captions go, then the edit set folds into one Format menu, then Markup's tools into one Annotate menu; the agent and Send stay.
  *  Neither form has a "Use the app": the app is in use while no tool is held, a tool pressed is held, and pressed again is let go (on the foot, a view pressed again too). The ribbon has no "Ask the agent" either: on a paper `@`, the tools over a selection and a block's menu each start that comment.
  *  On the ribbon what is sent is always handed on, so who it goes to is said and not a choice to turn off; Undo and Redo work while the app is in use (the tool decides whose history they step).
- *  `own`: the host's own tools (a document's block kinds), `onOwn` told as one is pressed, and `onAsk` a comment about where the surface's selection or caret is: a rail above the bar while the app is in use. */
+ *  `own`: the host's own tools (a document's block kinds), `onOwn` told as one is pressed, and `onAsk` a comment about where the surface's selection or caret is: a rail above the bar while the app is in use.
+ *  `out`: what it stands over is moving, so the bars fade out until it stops. */
 export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnTool[]; onOwn?: () => void; onAsk?: () => void; ribbon?: boolean; screenshots?: boolean; onView: (view: MarkupView) => void; tools?: readonly (MarkupToolKind | "note")[]; tool: MarkupToolKind; onTool: (tool: MarkupToolKind) => void; onNote: () => void; outstanding?: number; standing?: string; thin?: boolean; thread?: boolean; onBack?: () => void; replies?: number; sent?: number; onReplies?: () => void; ink?: MarkupInk; onInk?: (ink: MarkupInk) => void; weight?: MarkupWeight; onWeight?: (weight: MarkupWeight) => void; size?: number; onSize?: (size: number) => void; shape?: MarkupShape; onShape?: (shape: MarkupShape) => void; onUndo?: () => void; onRedo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; heard?: boolean; onNextAgent?: () => void; onRetake?: () => void;
-  canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void }) {
+  canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void; out?: boolean }) {
   const using = () => props.view === "use";
   // What the chosen tool draws with stands over the bar while that tool is held, so the bar itself stays the tools.
   const inks = () => OPTIONED.includes(props.tool) ? props.onInk : undefined, lined = () => props.tool !== "text" && inks() ? props.onWeight : undefined;
@@ -304,8 +311,8 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
 
   // Over an interface the bar is in parts, as a paper's ribbon is: what is marked up, the tools, and sending. A phone's and a thread's stay one bar.
   const parted = () => !props.ribbon && !props.compact && !props.thread;
-  return <div ref={rails} class="ui-markup-rails" data-ribbon={props.ribbon ? "" : undefined} data-compact={props.compact ? "" : undefined} data-thin={props.thin === false ? undefined : ""}>
-  <Show when={options()}><div ref={props.compact ? undefined : held} class={props.compact ? "ui-markup-held" : "ui-markup-under"} data-over={props.ribbon ? undefined : ""}><Frost lift="raised" class="ui-markup-bar" role="toolbar" aria-label="Tool options">
+  return <Out.Provider value={() => Boolean(props.out)}><div ref={rails} class="ui-markup-rails" data-ribbon={props.ribbon ? "" : undefined} data-compact={props.compact ? "" : undefined} data-thin={props.thin === false ? undefined : ""}>
+  <Show when={options()}><div ref={props.compact ? undefined : held} class={props.compact ? "ui-markup-held" : "ui-markup-under"} data-over={props.ribbon ? undefined : ""}><Bar class="ui-markup-bar" role="toolbar" aria-label="Tool options">
     <Show when={props.tool === "shape" && props.onShape}>{(onShape) => <Segmented label="Shape" icons size="sm" value={props.shape ?? "arrow"} onChange={onShape()} options={SHAPES} />}</Show>
     <Show when={inks()}>{(onInk) => <>
       <Segmented label="Ink (C)" icons size="sm" value={props.ink ?? "plain"} onChange={onInk()} options={PRESETS.map((value) => ({ value, label: MARKUP_INKS[value].label, icon: <Swatch colour={MARKUP_INKS[value].colour} /> }))} />
@@ -317,28 +324,28 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     {/* Written words have a size where a line has a thickness. */}
     <Show when={props.tool === "text" && props.onSize}>{(onSize) => <Stepper label="Text size" unit="px" min={MARKUP_TEXT.min} max={MARKUP_TEXT.max} value={props.size ?? MARKUP_TEXT.rest} onChange={onSize()} />}</Show>
     <Show when={props.compact}><IconButton label="Undo" disabled={!props.onUndo} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton></Show>
-  </Frost>
-  <Show when={picking() && props.ink?.startsWith("#") && inks()}><Frost lift="raised" class="ui-markup-bar ui-markup-picker">
+  </Bar>
+  <Show when={picking() && props.ink?.startsWith("#") && inks()}><Bar class="ui-markup-bar ui-markup-picker">
     <ColourPicker label="Any colour" value={own()} onChange={(hex) => { setOwn(hex as MarkupInk); props.onInk?.(own()); }} />
-  </Frost></Show>
+  </Bar></Show>
   </div></Show>
   <Show when={props.ribbon && using() && inking()} keyed>{(menu) => { const named = () => of(menu).filter((tool) => !tool.pick), any = () => of(menu).find((tool) => tool.pick), own = () => any()?.swatch ?? ownInk()[menu] ?? "#ff3b9a";
     return <div ref={under} class="ui-markup-under">
-      <Frost lift="raised" class="ui-markup-bar" role="toolbar" aria-label={menu}>
+      <Bar class="ui-markup-bar" role="toolbar" aria-label={menu}>
         <Segmented label={menu} icons size="sm" value={(named().find((tool) => tool.active) ?? (any()?.active ? any()! : named()[0]!)).name} onChange={(name) => { setPickingOwn(false); press(named().find((tool) => tool.name === name)!); }}
           options={named().map((tool) => ({ value: tool.name, label: tool.label, disabled: tool.disabled, icon: <Swatch colour={tool.swatch} hollow={!tool.swatch} /> }))} />
         <Show when={any()}>{(tool) => <IconButton data-any="" label={tool().label} disabled={tool().disabled} aria-pressed={tool().active} aria-expanded={pickingOwn()} onMouseDown={(event) => event.preventDefault()} onClick={() => { setPickingOwn(!tool().active || !pickingOwn()); tool().pick!(own()); }}><Swatch colour={tool().swatch} /></IconButton>}</Show>
-      </Frost>
-      <Show when={pickingOwn() && any()}>{(tool) => <Frost lift="raised" class="ui-markup-bar ui-markup-picker"><ColourPicker label={tool().label} value={own()} onChange={(hex) => { setOwnInk({ ...ownInk(), [menu]: hex }); tool().pick!(hex); }} /></Frost>}</Show>
+      </Bar>
+      <Show when={pickingOwn() && any()}>{(tool) => <Bar class="ui-markup-bar ui-markup-picker"><ColourPicker label={tool().label} value={own()} onChange={(hex) => { setOwnInk({ ...ownInk(), [menu]: hex }); tool().pick!(hex); }} /></Bar>}</Show>
     </div>; }}</Show>
-  <Show when={props.ribbon && !props.thread}><Frost lift="raised" class="ui-markup-bar" data-set="mode" role="toolbar" aria-label="Mode">
+  <Show when={props.ribbon && !props.thread}><Bar class="ui-markup-bar" data-set="mode" role="toolbar" aria-label="Mode">
     <Show when={modes().length}><Segmented label="Mode" icons size="sm" value={(modes().find((tool) => tool.active) ?? modes()[0]!).name} onChange={(name) => press(modes().find((tool) => tool.name === name)!)} options={modes().map((tool) => ({ value: tool.name, label: tool.label, icon: tool.icon() }))} /></Show>
     <span class="ui-markup-with">{undo()}{redo()}</span>
-  </Frost></Show>
+  </Bar></Show>
   {/* Only while the app is in use, as the options are only while annotating: the two never stand together. */}
-  <Show when={(props.ribbon || using()) && !props.thread && (props.own?.length || (props.onAsk && !props.ribbon))}><Frost lift="raised" class="ui-markup-bar" data-set="edit" role="toolbar" aria-label="Document tools">
+  <Show when={(props.ribbon || using()) && !props.thread && (props.own?.length || (props.onAsk && !props.ribbon))}><Bar class="ui-markup-bar" data-set="edit" role="toolbar" aria-label="Document tools">
     {caption("Edit")}<Show when={fold() < 2} fallback={format()}>{owned()}</Show>
-  </Frost></Show>
+  </Bar></Show>
   <Show when={props.ribbon}><span class="ui-markup-break" /></Show>
   <Sets parted={parted()}>
     <Show when={props.thread && props.onBack}><IconButton label="Back to marking up" onClick={props.onBack}><Icons.Back /></IconButton></Show>
@@ -386,5 +393,5 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     <Show when={!props.ribbon}><CloseButton size="sm" label="Close markup" onClick={props.onClose} /></Show>
     </Part>
   </Sets>
-  </div>;
+  </div></Out.Provider>;
 }

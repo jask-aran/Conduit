@@ -23,25 +23,42 @@ const listenerLabel = (listener: MarkupListener) => listener.kind === "thread" ?
  * pane, wired as /document wires the test document. `quiet`: the app's own interface feedback is open, and there is
  * one bar. `header` is the pane's, given what the artifact adds to its actions: why what is shown may not be the
  * file, "Mark up" while its bar is closed, and "Connect a chat" over `chats`, the project's. `pending`: it is made
- * unseen behind what the pane shows, and `onDrawn` says when it can take its place. Markup's bar stands over the page,
- * not in the pane, so it is hidden while the pane is unseen: `pending`, or easing open or shut (`moving`).
+ * unseen behind what the pane shows, and `onDrawn` says when it can take its place; `said`: it is slow, and its header
+ * stands over the pane's saying it is opening. Markup stands over the page, not in the pane, so it is hidden while the
+ * artifact is unseen, and its bar leaves while the pane moves: easing open or shut (`moving`), or any other motion.
  */
-export default function ArtifactPane(props: { id: string; quiet?: boolean; pending?: boolean; moving?: boolean; onDrawn?: () => void; chats?: (project: string) => { id: string; title: string }[]; onAbout?: (about: Artifact, label: string) => void; onThread?: () => void; shortcuts?: ArtifactSurfaceProps["shortcuts"]; header: (actions: JSX.Element) => JSX.Element }) {
+export default function ArtifactPane(props: { id: string; quiet?: boolean; pending?: boolean; said?: boolean; moving?: boolean; onDrawn?: () => void; chats?: (project: string) => { id: string; title: string }[]; onAbout?: (about: Artifact, label: string) => void; onThread?: () => void; shortcuts?: ArtifactSurfaceProps["shortcuts"]; header: (actions: JSX.Element) => JSX.Element }) {
   // The kind's surface is fetched before the artifact is said to be found, so "Opening the …" stands until it can be drawn.
   const [about, { refetch }] = createResource(() => props.id, (id) => artifactAbout(id).then((found) => { last = found; props.onAbout?.(found, artifactLabel(found.kind)); return ARTIFACT_KINDS[found.kind].Surface.preload().then(() => found); }));
   // Renamed, it takes its new name; deleted, it says so, where its surface would only wait for the hub; and the hub says when its trouble starts and ends.
   const changed = () => void refetch();
   window.addEventListener("conduit:artifacts-changed", changed);
   onCleanup(() => window.removeEventListener("conduit:artifacts-changed", changed));
-  // While its pane moves (an edge dragged, panes easing; not its own ease open or shut, which holds its landing width), what the surface draws keeps its width (CSS: data-held).
+  // While its pane moves (an edge dragged, panes easing; not its own ease open or shut, which holds its landing width), what the
+  // surface draws is laid out once, against the pane's leading edge (CSS: data-held): at the width the pane lands at, where the
+  // mover knows it; else at the width it had, until the pane would cut off what it reaches to, when it follows the pane again.
+  // Held until every motion that began has ended (the sidebar's and the panes' can overlap); meanwhile Markup's bar is out (`shifting`).
+  const motions = new Set<string>(), [shifting, setShifting] = createSignal(false);
+  let reach = Infinity;
+  const held = (width: number) => { frame!.style.setProperty("--held-width", `${width}px`); frame!.dataset.held = ""; };
+  const narrowed = new ResizeObserver(([entry]) => { if (frame && entry && entry.contentRect.width < reach) { delete frame.dataset.held; narrowed.disconnect(); } });
   const hold = (event: Event) => {
-    const { phase } = (event as CustomEvent<PanelGeometryMotionDetail>).detail;
+    const { phase, id, source, landing } = (event as CustomEvent<PanelGeometryMotionDetail>).detail;
     if (!frame || phase === "change") return;
-    if (phase === "end") delete frame.dataset.held;
-    else if (frame.dataset.held === undefined && !frame.parentElement?.dataset.moving) { frame.style.setProperty("--held-width", `${frame.clientWidth}px`); frame.dataset.held = ""; }
+    if (phase === "end") { motions.delete(`${source}:${id}`); if (!motions.size) { setShifting(false); delete frame.dataset.held; narrowed.disconnect(); } return; }
+    motions.add(`${source}:${id}`);
+    setShifting(true);
+    const reaches = surface()?.reach;
+    if (!reaches || frame.parentElement?.dataset.moving) return;
+    const lands = landing?.find((pane) => pane.element === frame!.parentElement)?.width;
+    if (lands !== undefined) { narrowed.disconnect(); return held(lands); }
+    if (frame.dataset.held !== undefined) return;
+    reach = reaches();
+    held(frame.clientWidth);
+    narrowed.observe(frame);
   };
   window.addEventListener(PANEL_GEOMETRY_MOTION_EVENT, hold);
-  onCleanup(() => window.removeEventListener(PANEL_GEOMETRY_MOTION_EVENT, hold));
+  onCleanup(() => { window.removeEventListener(PANEL_GEOMETRY_MOTION_EVENT, hold); narrowed.disconnect(); });
   const [mode, setMode] = createSignal<MarkupMode>("use"), [sent, setSent] = createSignal(0);
   const client = `document-${Math.random().toString(36).slice(2, 10)}`;
   let frame: HTMLDivElement | undefined, room: HTMLDivElement | undefined, last: Artifact | undefined;
@@ -55,7 +72,21 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; pendi
     if (!kind) return null;
     return { id: props.id, kind, offers: { thread: props.onThread, ...surface()?.offers?.(), ...(margin && !props.quiet ? { nextComment: margin.next, previousComment: margin.previous } : {}) } };
   });
-  createEffect(() => { if (about.error || surface()?.drawn()) props.onDrawn?.(); });
+  // Drawn once its surface is and, for a kind with a margin, the margin has answered: the text, the header's count and the marks come in one frame.
+  const [drawn, setDrawn] = createSignal(false);
+  createEffect(() => { const kind = found()?.kind; if (about.error || (kind && surface()?.drawn() && (ARTIFACT_KINDS[kind].markup.sent !== "margin" || comments()?.answered()))) setDrawn(true); });
+  createEffect(() => { if (drawn()) props.onDrawn?.(); });
+  // Shown in place of what the pane showed, it has the keyboard from the frame it is drawn in, unless the person has gone elsewhere meanwhile.
+  let replacing = false;
+  createEffect(() => {
+    if (props.pending) return void (replacing = true);
+    if (!replacing || !drawn()) return;
+    replacing = false;
+    const at = document.activeElement;
+    if (!at || at === document.body || frame?.parentElement?.contains(at)) host()?.margin?.focus?.();
+  });
+  // Shown before it is drawn (it was slow, or nothing stood in the pane before it), the pane says it is opening, never a part-drawn surface.
+  const opening = () => !props.pending && !drawn() && !about.error;
   // A comment's card pressed in a thread asks for its place: shown once the surface can.
   createEffect(() => { const place = placeWanted(props.id), reveal = surface()?.reveal?.(); if (!place || !reveal) return; const due = requestAnimationFrame(() => { reveal(place); placeShown(); }); onCleanup(() => cancelAnimationFrame(due)); });
   const shared = { names, transport: httpTransport(api, `/v0/document/${encodeURIComponent(props.id)}/markup`), clientId: () => client, capturePage, frame: () => room ?? frame,
@@ -113,16 +144,17 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; pendi
     return <>
       <Surface about={() => found() ?? last!} quiet={props.quiet} offer={offer} pane={() => frame} shortcuts={props.shortcuts} onSurface={made} marginEmpty={!cards()}
         margin={<Show when={host()}>{(over) => <MarkupMargin host={over()} sent={sent()} control={setComments} onCards={setCards} />}</Show>} />
-      <Show when={!props.quiet && host()}>{(over) => <MarkupTool host={over()} hidden={props.pending || props.moving} mode={mode()} onMode={setMode} onClose={() => setMode("use")} />}</Show>
+      <Show when={!props.quiet && host()}>{(over) => <MarkupTool host={over()} hidden={props.pending || opening()} moving={props.moving || shifting()} mode={mode()} onMode={setMode} onClose={() => setMode("use")} />}</Show>
     </>;
   };
-  return <SheetFill ref={(element) => { frame = element; }} class="pane-artifact" data-pending={props.pending ? "" : undefined}>
-    {props.header(<><Show when={offer()?.unsent()}>{(unsent) => <Button variant="primary" outline size="sm" data-markup-own="" title="Send (Ctrl Enter)" onClick={() => offer()?.send()}>{unsent() > 1 ? `Send ${unsent()}` : "Send"}</Button>}</Show><Show when={found()?.trouble}>{(why) => <StatusDot label={why()} title={why()} tone="warn" />}</Show><Show when={surface()?.stale?.()}><HeaderButton label={`Reload: this page is older than the ${noun()}`} icon={<Icons.Refresh />} onClick={() => location.reload()} /></Show><Show when={surface()?.away?.()}><StatusDot label="Reconnecting to the hub" title="Reconnecting to the hub" tone="warn" spinning /></Show><Show when={!props.quiet && comments()}>{(margin) => commentList(margin())}</Show>
+  return <SheetFill ref={(element) => { frame = element; }} class="pane-artifact" data-pending={props.pending ? "" : undefined} data-said={props.said ? "" : undefined} data-opening={opening() ? "" : undefined}>
+    {props.header(<><Show when={offer()?.unsent()}>{(unsent) => <Button variant="primary" outline size="sm" data-markup-own="" title="Send (Ctrl Enter)" onClick={() => offer()?.send()}>{unsent() > 1 ? `Send ${unsent()}` : "Send"}</Button>}</Show><Show when={found()?.trouble}>{(why) => <StatusDot label={why()} title={why()} tone="warn" />}</Show><Show when={surface()?.stale?.()}><HeaderButton label={`Reload: this page is older than the ${noun()}`} icon={<Icons.Refresh />} onClick={() => location.reload()} /></Show><Show when={props.said || opening()}><StatusDot label={`Opening the ${noun()}`} title={`Opening the ${noun()}`} spinning /></Show><Show when={surface()?.away?.()}><StatusDot label="Reconnecting to the hub" title="Reconnecting to the hub" tone="warn" spinning /></Show><Show when={!props.quiet && comments()}>{(margin) => commentList(margin())}</Show>
       {surface()?.header?.()}
       <Show when={found()}>{connecting}</Show></>)}
     <Show when={!props.quiet && found()}><MarkupRibbonRoom ref={(element) => { room = element; }} /></Show>
     <Show when={!about.error} fallback={<Empty role="alert">This {noun()} could not be opened: {String((about.error as Error)?.message || "the hub did not say why").replace(/\.$/, "")}.</Empty>}>
-      <Show when={found()?.id} keyed fallback={<Empty role="status">Opening the {noun()}…</Empty>}>{(_id) => shown()}</Show>
+      <Show when={opening()}><Empty role="status">Opening the {noun()}…</Empty></Show>
+      <Show when={found()?.id} keyed>{(_id) => shown()}</Show>
     </Show>
   </SheetFill>;
 }
