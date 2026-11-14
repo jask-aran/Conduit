@@ -22,7 +22,12 @@ export const convertible = (info = {}) => CONVERTIBLE.has(extensionOf(info));
 
 export async function toMarkdown(input, { type, name } = {}) {
   // Loaded on first use: its native build covers only Linux and macOS, so a hub elsewhere starts, and only converting fails.
-  engine ??= new (await import("@shiftlabs/markit")).Markit();
+  if (!engine) {
+    // markit asks Node for a process report to learn the C library; with its network part in, that looks up every open
+    // socket's name and stops the hub for some 20 s.
+    if (process.report) process.report.excludeNetwork = true;
+    engine = new (await import("@shiftlabs/markit")).Markit();
+  }
   const bytes = Buffer.isBuffer(input) ? input : Buffer.from(String(input ?? ""), "utf8");
   const extension = extensionOf({ type, name });
   const { markdown } = await engine.convert(bytes, { ...(extension ? { extension } : {}), ...(type ? { mimetype: String(type).split(";")[0].trim() } : {}), ...(name ? { filename: String(name) } : {}) });
