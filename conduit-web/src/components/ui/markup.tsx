@@ -1,4 +1,4 @@
-import { createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 // Through the barrel, so the tool's chunk takes these from the app's own and the build splits nothing new out of it.
 import { Button, Card, ColourPicker, CardPreview, CloseButton, Count, Dot, Frost, IconButton, Icons, Segmented, Spinner, Stepper, Swatch, Switch, TextArea } from "./index";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "./menus";
@@ -220,16 +220,23 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   // The line stands under the control that opened it, kept inside the rails.
   let anchor: HTMLElement | undefined;
   const [pickingOwn, setPickingOwn] = createSignal(false), [ownInk, setOwnInk] = createSignal<Record<string, string>>({});
-  const under = (line: HTMLElement) => {
+  // A line of options stands by the control it belongs to: under it on a ribbon, over it on a foot bar, kept inside the rails.
+  const stand = (anchorOf: () => Element | null | undefined) => (line: HTMLElement) => {
     const place = () => {
+      const anchor = anchorOf();
       if (!anchor?.isConnected || !rails) return;
       const at = anchor.getBoundingClientRect(), bar = anchor.closest(".ui-markup-bar")!.getBoundingClientRect(), frame = rails.getBoundingClientRect(), gap = parseFloat(getComputedStyle(rails).rowGap) || 0;
-      line.style.top = `${bar.bottom - frame.top + gap}px`;
+      if (props.ribbon) line.style.top = `${bar.bottom - frame.top + gap}px`; else line.style.bottom = `${frame.bottom - bar.top + gap}px`;
       line.style.left = `${Math.max(0, Math.min(frame.width - line.offsetWidth, at.left + at.width / 2 - frame.left - line.offsetWidth / 2))}px`;
     };
     const seen = new ResizeObserver(place); seen.observe(line); if (rails) seen.observe(rails);
+    // The tool held changes under a line that stays: it follows to the new one.
+    createEffect(() => { void props.tool; void fold(); requestAnimationFrame(place); });
     onCleanup(() => seen.disconnect());
   };
+  const under = stand(() => anchor);
+  // Markup's own options stand by the tool held, or by the tools' bar where they are folded into a menu.
+  const held = stand(() => rails?.querySelector("[aria-label='Annotate with'] button[aria-pressed='true']") ?? rails?.querySelector("[aria-label='UI markup'], [data-set='markup']"));
   const inkSet = (menu: string) => of(menu).every((tool) => tool.compact);
   const kinds = (menu: string) => { const now = () => of(menu).find((tool) => tool.active) ?? of(menu)[0]!;
     if (inkSet(menu)) return <IconButton label={`${menu}: ${now().label}`} aria-pressed={inking() === menu} aria-expanded={inking() === menu} disabled={of(menu).every((tool) => tool.disabled)} style={{ color: now().swatch }} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { if (!using()) props.onView("use"); anchor = event.currentTarget; setPickingOwn(false); setInking(inking() === menu ? null : menu); }}>{of(menu)[0]!.icon()}</IconButton>;
@@ -298,10 +305,7 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   // Over an interface the bar is in parts, as a paper's ribbon is: what is marked up, the tools, and sending. A phone's and a thread's stay one bar.
   const parted = () => !props.ribbon && !props.compact && !props.thread;
   return <div ref={rails} class="ui-markup-rails" data-ribbon={props.ribbon ? "" : undefined} data-compact={props.compact ? "" : undefined} data-thin={props.thin === false ? undefined : ""}>
-  <Show when={picking() && options() && props.ink?.startsWith("#") && inks()}><Frost lift="raised" class="ui-markup-bar ui-markup-picker">
-    <ColourPicker label="Any colour" value={own()} onChange={(hex) => { setOwn(hex as MarkupInk); props.onInk?.(own()); }} />
-  </Frost></Show>
-  <Show when={options()}><Frost lift="raised" class="ui-markup-bar" role="toolbar" aria-label="Tool options">
+  <Show when={options()}><div ref={props.compact ? undefined : held} class={props.compact ? "ui-markup-held" : "ui-markup-under"} data-over={props.ribbon ? undefined : ""}><Frost lift="raised" class="ui-markup-bar" role="toolbar" aria-label="Tool options">
     <Show when={props.tool === "shape" && props.onShape}>{(onShape) => <Segmented label="Shape" icons size="sm" value={props.shape ?? "arrow"} onChange={onShape()} options={SHAPES} />}</Show>
     <Show when={inks()}>{(onInk) => <>
       <Segmented label="Ink (C)" icons size="sm" value={props.ink ?? "plain"} onChange={onInk()} options={PRESETS.map((value) => ({ value, label: MARKUP_INKS[value].label, icon: <Swatch colour={MARKUP_INKS[value].colour} /> }))} />
@@ -313,7 +317,11 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     {/* Written words have a size where a line has a thickness. */}
     <Show when={props.tool === "text" && props.onSize}>{(onSize) => <Stepper label="Text size" unit="px" min={MARKUP_TEXT.min} max={MARKUP_TEXT.max} value={props.size ?? MARKUP_TEXT.rest} onChange={onSize()} />}</Show>
     <Show when={props.compact}><IconButton label="Undo" disabled={!props.onUndo} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton></Show>
+  </Frost>
+  <Show when={picking() && props.ink?.startsWith("#") && inks()}><Frost lift="raised" class="ui-markup-bar ui-markup-picker">
+    <ColourPicker label="Any colour" value={own()} onChange={(hex) => { setOwn(hex as MarkupInk); props.onInk?.(own()); }} />
   </Frost></Show>
+  </div></Show>
   <Show when={props.ribbon && using() && inking()} keyed>{(menu) => { const named = () => of(menu).filter((tool) => !tool.pick), any = () => of(menu).find((tool) => tool.pick), own = () => any()?.swatch ?? ownInk()[menu] ?? "#ff3b9a";
     return <div ref={under} class="ui-markup-under">
       <Frost lift="raised" class="ui-markup-bar" role="toolbar" aria-label={menu}>
@@ -339,12 +347,16 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
       {/* With no screenshot to be had, a tool is all it takes to annotate the live page. */}
       {/* What is marked up, the live page or a picture of it, with the steps back and forward, as a paper's ribbon has its modes. */}
       <Part parted={parted()} label="Mode">
-        <Show when={!props.ribbon && props.screenshots}><span class="ui-markup-with" role="group" aria-label="Mode"><For each={VIEWS}>{(option) =>
-          <IconButton label={option.label} aria-pressed={props.view === option.value} onClick={() => props.onView(props.view === option.value ? "use" : option.value)}>{option.icon()}</IconButton>}</For></span></Show>
+        <Show when={!props.ribbon && props.screenshots}><Show when={parted()} fallback={<span class="ui-markup-with" role="group" aria-label="Mode"><For each={VIEWS}>{(option) =>
+          <IconButton label={option.label} aria-pressed={props.view === option.value} onClick={() => props.onView(props.view === option.value ? "use" : option.value)}>{option.icon()}</IconButton>}</For></span>}>
+          {/* Two ways only: using the app is something done while the live page is marked up, a tool beside the others. */}
+          <Segmented label="Mark up" icons size="sm" value={props.view === "screenshot" ? "screenshot" : "page"} onChange={(view) => props.onView(view)} options={VIEWS.map((option) => ({ value: option.value, label: option.label, icon: option.icon() }))} />
+        </Show></Show>
         <Show when={parted()}><Show when={props.onRetake && props.view === "screenshot"}><IconButton label="Take the screenshot again" onClick={props.onRetake}><Icons.Camera /></IconButton></Show><span class="ui-markup-with">{undo()}{redo()}</span></Show>
       </Part>
       <Part parted={parted()} label="UI markup">
         <Show when={parted()}><span class="ui-title-text ui-markup-caption">Mark up</span></Show>
+        <Show when={parted()}><IconButton label="Use the app: arrange what is shown, between marks" aria-pressed={using()} onClick={() => props.onView(using() ? "page" : "use")}><Icons.UseApp /></IconButton></Show>
         <Show when={fold() < FOLDS} fallback={annotate()}>
           <span class="ui-markup-with" role="group" aria-label="Annotate with"><For each={offered()}>{(option) => <IconButton label={option.label} aria-pressed={!using() && option.value === props.tool} onClick={() => pick(option)}>{option.icon}</IconButton>}</For></span>
         </Show>
