@@ -90,6 +90,7 @@ try {
   cli("resolve", doc.id, "1"); await page.waitForTimeout(4500);
   console.log("B after the session resolved it:", await cards());
   await page.locator(".ui-markup-bar [aria-label='Annotate with'] button[aria-pressed='true']").click({ timeout: 2000 }).catch(() => {}); // While annotating, the layer has every press.
+  await page.locator(".ui-markup-margin .ui-markup-note", { hasText: "Doc probe" }).click(); // Tucked, a card shows its Resolve once open.
   await page.locator(".ui-markup-margin .ui-markup-note", { hasText: "Doc probe" }).locator("button[aria-label='Resolve']").click(); await page.waitForTimeout(4500);
   console.log("B after the person's tick:", await cards());
   await page.screenshot({ path: `${out}-doc.png` });

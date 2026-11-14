@@ -621,6 +621,8 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (sending()) return;
+    // Escape shuts one thing a press, the innermost first: a line of inks or a colour picker open under the bars has it before a comment or the tool (MarkupBar shuts it).
+    if (event.key === "Escape" && document.querySelector(".ui-markup-under, .ui-markup-picker")) return;
     // Not from a margin card's field, where Ctrl Enter is its Reply.
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && canSend() && !(event.target instanceof Element && event.target.closest(".ui-markup-margin"))) { event.preventDefault(); event.stopImmediatePropagation(); return void send(); }
     if (own(event.target) && (event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLInputElement)) {

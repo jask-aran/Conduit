@@ -20,7 +20,7 @@ try {
   console.log("Markup's bar is centred on the pane:", await centred());
   const test = page.locator('[data-doc-view="artifact:test"]'), project = page.locator('.ui-nav-link:has-text("Test")').first();
   if (!(await test.count())) { await page.locator('button[title="Expand Test"]').click(); await test.waitFor(); }
-  console.log("the project lists its paper:", (await test.first().textContent()) === "Test document");
+  console.log("the project lists its paper:", (await test.first().textContent()).startsWith("Test document"));
   await menu(project, "New artifact"); await page.fill("#artifact-name", "Probe paper"); await page.keyboard.press("Enter");
   const row = page.locator('[data-doc-view^="artifact:"]:has-text("Probe paper")').first(); await row.waitFor(); await wait(1500);
   made = (await row.getAttribute("data-doc-view")).slice("artifact:".length);

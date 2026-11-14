@@ -267,7 +267,14 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   // A set that comes later (the host's tools, once its editor is made) is measured as it comes.
   const sizes = new ResizeObserver(fit), sets = new MutationObserver(fit);
   onMount(() => { if (props.ribbon && rails) { sizes.observe(rails); sets.observe(rails, { childList: true }); } });
-  onCleanup(() => { sizes.disconnect(); sets.disconnect(); });
+  // Escape shuts the innermost thing open under the bars: a colour picker, then the line of inks it stands under.
+  const shut = (event: KeyboardEvent) => {
+    const inner = event.key !== "Escape" ? undefined : pickingOwn() ? () => setPickingOwn(false) : inking() ? () => setInking(null) : picking() ? () => setPicking(false) : undefined;
+    if (!inner) return;
+    event.preventDefault(); event.stopImmediatePropagation(); inner();
+  };
+  onMount(() => document.addEventListener("keydown", shut, { capture: true }));
+  onCleanup(() => { sizes.disconnect(); sets.disconnect(); document.removeEventListener("keydown", shut, { capture: true }); });
   const caption = (words: string) => <Show when={props.ribbon && fold() < 1}><span class="ui-title-text ui-markup-caption">{words}</span></Show>;
 
   return <div ref={rails} class="ui-markup-rails" data-ribbon={props.ribbon ? "" : undefined} data-compact={props.compact ? "" : undefined} data-thin={props.thin === false ? undefined : ""}>

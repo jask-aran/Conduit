@@ -19,7 +19,7 @@ try {
   const errors = [];
   const watch = (target) => target.on("pageerror", (error) => errors.push(String(error.stack ?? error).slice(0, 400)));
   const visit = async (target) => { watch(target); await target.goto(`${origin}/?a=artifact:test`); await target.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 }); };
-  const shown = (target) => target.evaluate(() => [...document.querySelectorAll(".ui-document-text > [data-id]")].map((block) => `${block.dataset.id} ${block.textContent}`));
+  const shown = (target) => target.evaluate(() => [...document.querySelectorAll(".ui-document-text > [data-id], .ui-document-text > .tableWrapper > [data-id]")].map((block) => `${block.dataset.id} ${block.textContent}`));
   const until = async (what, test) => { for (let tries = 0; tries < 40; tries += 1) { if (await test()) return console.log(`${what}: true`); await page.waitForTimeout(100); } console.log(`${what}: false`); };
   const before = cli("read", "test");
   await visit(page);
@@ -117,12 +117,14 @@ try {
 
   await second.setViewportSize({ width: 390, height: 800 });
   await until("a phone-sized page tucks the margin over the text's edge", () => second.evaluate(() => document.querySelector(".ui-document-page").dataset.margin === "tucked"));
+  await second.keyboard.press("Escape");
+  await until("Escape shuts the open card, which stood over the text", async () => !await second.locator(".ui-markup-note[data-open]").count());
   await second.locator(`.ui-document-text > [data-id="${added[1]}"]`).click();
   await second.keyboard.press("End"); await second.keyboard.type(" and on a phone");
   await until("a phone-sized page's typing merges", async () => cli("read", "test").includes("typed on the first page and on a phone"));
   console.log("phone page scrolls sideways:", await second.evaluate(() => document.documentElement.scrollWidth > innerWidth));
   await second.close();
-  await mine(page).locator("button[aria-label='Resolve']").click();
+  await mine(page).click(); await mine(page).locator("button[aria-label='Resolve']").click();
   await until("resolving accepts the change: the card and the tint go, the text stays", async () => !await card(page) && !await tinted(page) && cli("read", "test").includes("another way"));
 
   const tools = () => page.evaluate(() => JSON.stringify([...document.querySelectorAll(".ui-markup-bar [role=radio]")].map((button) => button.getAttribute("aria-label").split(" ")[0] + (button.getAttribute("aria-checked") === "true" ? "*" : ""))));

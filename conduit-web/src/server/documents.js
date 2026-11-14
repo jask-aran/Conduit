@@ -354,12 +354,18 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     })().finally(() => making.delete(id)));
     return making.get(id);
   }
-  /** Who the hub holds a paper's comments for: its mated thread first, then each connected chat by its title (the first to have a title keeps it). */
+  /**
+   * Who the hub holds an artifact's comments for: its mated thread first, then the person's own agent (on every artifact while it is on, under the name
+   * they gave it, and told in its home chat, known here once it has been handed something), then each connected chat by its title (the first to have a title keeps it).
+   */
+  let agentChat;
   const heldFor = (id) => {
-    const entry = known.get(id), names = new Set([MATED]);
+    const entry = known.get(id), names = new Set([MATED]), own = chats()?.agent?.();
     if (!entry) return [];
+    const agent = own && !names.has(own.name) ? [{ name: own.name, agent: true, chat: agentChat }] : [];
+    for (const one of agent) names.add(one.name);
     // The mated thread is the artifact's own and is listed before the hub's chats are read: it is never "no listener".
-    return [{ name: MATED, chat: entry.links.thread }, ...(chats() ? entry.links.connections : []).flatMap((chat) => {
+    return [{ name: MATED, chat: entry.links.thread }, ...agent, ...(chats() ? entry.links.connections : []).flatMap((chat) => {
       const title = chats().get(chat)?.title, name = title && !names.has(title) ? title : `chat ${chat.slice(0, 8)}`;
       if (!chats().get(chat) || names.has(name)) return [];
       names.add(name);
@@ -443,7 +449,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
    */
   async function hand(room, item, to, said) {
     // The mated thread is made again where it has gone (an empty chat is not kept): what is sent to the paper always has a chat to reach.
-    const dir = path.join(room.entry.side, "markup", item), chat = to.name === MATED ? (await mated(room.id)).id : to.chat, at = new Date().toISOString();
+    const dir = path.join(room.entry.side, "markup", item), chat = to.name === MATED ? (await mated(room.id)).id : to.agent ? agentChat = await host().agent().chat() : to.chat, at = new Date().toISOString();
     // The name is the file's, which anyone who can write the folder chooses: it reaches the agent as a quoted name, never as lines of its own.
     const name = JSON.stringify(room.entry.name.replace(/\s+/g, " ").slice(0, 120)), taken = path.join(dir, "taken.json");
     const comments = JSON.parse(await fs.readFile(path.join(dir, "item.json"), "utf8")).comments ?? [];
@@ -461,7 +467,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     const back = said && handed(comments.find((comment) => comment.n === said.n) ?? { n: said.n }, said.text, said.text ? "reply" : "reopened");
     if (said) return host().notify(chat, `${handoff(back)}\nOn the ${room.entry.kind} ${name}, markup item ${item}: ${said.text ? `the person wrote back${Number.isInteger(said.n) ? ` on comment ${said.n}` : ""}: ${said.text}` : `the person reopened comment ${said.n}.`}\nThe item is ${path.join(dir, "item.json")}; answer with \`node ${SCRIPT} reply ${item} [n] "<words>"\`.`, [back]).then(() => seat(about([comments.find((comment) => comment.n === said.n)]), `${item}/${said.n ?? 1}`));
     // Taken once: a session that took it first (a `wait` under the same name) keeps it, and the chat is told nothing.
-    const mine = await fs.writeFile(taken, `${JSON.stringify({ name: to.name, held: true, chat, at })}\n`, { flag: "wx" }).then(() => true, async () => (await fs.readFile(taken, "utf8").then(JSON.parse).catch(() => null))?.held === true);
+    const mine = await fs.writeFile(taken, `${JSON.stringify({ name: to.name, held: true, chat, agent: to.agent, at })}\n`, { flag: "wx" }).then(() => true, async () => (await fs.readFile(taken, "utf8").then(JSON.parse).catch(() => null))?.held === true);
     if (!mine) return;
     // What the chat has not been told of yet: the comments with no line saying one is being worked on.
     const told = new Set((await fs.readFile(path.join(dir, "thread.jsonl"), "utf8").catch(() => "")).split("\n").filter(Boolean).map((line) => JSON.parse(line)).filter((line) => line.working).map((line) => line.n));
@@ -546,7 +552,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     // Who holds an item is the chat that took it, whatever it is called now: a chat's listener name is its title, which changes.
     const held = async (name, item) => {
       const all = heldFor(id), took = item && await fs.readFile(path.join(entry.side, "markup", item, "taken.json"), "utf8").then(JSON.parse).catch(() => null);
-      return took?.held ? took.name === MATED ? all[0] : all.find((one) => one.chat === took.chat) && { name: took.name, chat: took.chat } : all.find((one) => one.name === name);
+      return took?.held ? took.name === MATED ? all[0] : took.agent ? all.find((one) => one.agent) : all.find((one) => one.chat === took.chat) && { name: took.name, chat: took.chat } : all.find((one) => one.name === name);
     };
     const failed = (error) => console.error(`Could not hand a comment on the ${entry.kind} ${room.entry.name} to its chat: ${error.message}`);
     return { ...store, open,

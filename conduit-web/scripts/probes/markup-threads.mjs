@@ -55,7 +55,7 @@ try {
   console.log("both went to the chat named, each an item of its own:", forName && named.length === 2 && named.every((one) => one.by === name), JSON.stringify(named.map((one) => [one.by, one.comments[0].comment])));
   await page.locator(".ui-markup-bar [aria-label='Annotate with'] button[aria-pressed='true']").click({ timeout: 2000 }).catch(() => {});
   // The chat's first turn names it, and a connected chat listens by its title: the name is read again.
-  let titled = name; for (let tries = 0; tries < 16 && titled === name; tries++) { await wait(500); titled = (await api(`${paper}/markup/waiting`)).waiting.map((one) => one.name).find((one) => one !== "conduit") ?? name; }
+  let titled = name; for (let tries = 0; tries < 16 && titled === name; tries++) { await wait(500); titled = (await api(`${paper}/markup/waiting`)).waiting.map((one) => one.name).filter((one) => one !== "conduit").at(-1) ?? name; } // Connected chats are listed last, after the artifact's own thread and the person's agent: the probe never writes to that agent.
   const mark = await api(`${paper}/markup/marks`, "POST", {});
   item = (await api(`${paper}/markup/marks/${mark.id}/send`, "POST", { to: titled, comments: [{ n: 1, kind: "note", name: "note", comment: "Thread probe: say hello" }], client: { kind: "probe" } })).id;
   await wait(6000);

@@ -146,6 +146,11 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
     sized.observe(column!); cards.observe(column!, { childList: true });
     // Ctrl Enter says it, and Enter is a new line (a reply runs longer than a note); Escape shuts the card and gives the keyboard back to the surface.
     column!.addEventListener("keydown", (event) => { if (event.key === "Escape") { open(null); margin?.focus?.(); } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); answer(); } });
+    // An open card is shut by Escape from anywhere, once nothing nearer has taken it; and where the margin is tucked over the text, by a press outside it (never losing words being written back).
+    const shut = (event: KeyboardEvent) => { if (event.key === "Escape" && openKey() && !event.defaultPrevented && !document.querySelector("[data-slot='ui-menu-content'], [role='dialog']")) { event.preventDefault(); open(null); } };
+    const away = (event: PointerEvent) => { if (openKey() && !reply().trim() && column!.closest("[data-margin='tucked']") && event.target instanceof Element && !event.target.closest(".ui-markup-note, [data-comment]")) open(null); };
+    window.addEventListener("keydown", shut); document.addEventListener("pointerdown", away, { capture: true });
+    onCleanup(() => { window.removeEventListener("keydown", shut); document.removeEventListener("pointerdown", away, { capture: true }); });
     const unwatch = margin?.watch((pressed) => { if (pressed) { open(pressed); column?.querySelector(`[data-key="${CSS.escape(pressed)}"]`)?.scrollIntoView({ block: "nearest" }); } soon(); });
     onCleanup(() => { clearInterval(asking); sized.disconnect(); cards.disconnect(); unwatch?.(); cancelAnimationFrame(due); });
   });
