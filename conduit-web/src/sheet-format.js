@@ -1,6 +1,7 @@
 import { HyperFormula } from "hyperformula";
 import * as Y from "yjs";
 import { blockId } from "./document-format.js";
+import { NAMES } from "./sheet-functions.js";
 
 /*
  * A sheet (the `sheet` artifact kind): one tab of cells kept in a Yjs doc that the hub and every open page merge, and computed by the same
@@ -55,7 +56,15 @@ export function fromCsv(text) {
 
 // Dates are not read from text: a cell typed "01/02/2024" stays that text, so the file holds what was typed.
 // Nothing is undone in the engine (the doc is what is undone), so it keeps no undo stack.
-export const CONFIG = { licenseKey: "gpl-v3", dateFormats: [], timeFormats: [], maxRows: SHEET_LIMIT, maxColumns: COL_LIMIT, undoLimit: 0 };
+// As a spreadsheet computes: date serials count its false 29 February 1900 (DATE(1900,1,1) is 1); a range in arithmetic is an array (SUM(A1:A3*B1:B3),
+// and `=A1:A3` spills); `=A1` of an empty cell is 0; "a" and "á" differ, "a" and "A" do not; values show 15 significant digits (the engine's
+// default of 11 made 123456789012 read 123456789010; its count is one more than the setting). Criteria match whole cells with wildcards, as the defaults do.
+export const CONFIG = {
+  licenseKey: "gpl-v3", dateFormats: [], timeFormats: [], maxRows: SHEET_LIMIT, maxColumns: COL_LIMIT, undoLimit: 0,
+  leapYear1900: true, nullDate: { year: 1899, month: 12, day: 31 }, useArrayArithmetic: true, evaluateNullToZero: true, accentSensitive: true, precisionRounding: 14,
+};
+/** The engine as every sheet builds it: CONFIG, and the names a spreadsheet's formulas use bare. */
+const buildEngine =(grid) => HyperFormula.buildFromArray(grid, CONFIG, NAMES);
 // Past this many cells in one change a new engine is built from the doc, which is then faster than as many single sets.
 const REBUILD_AT = 50_000;
 const raw = (input) => input === undefined || input === "" ? null : input;
@@ -87,7 +96,7 @@ export function createSheetModel(doc) {
     const grid = Array.from({ length: rowIds.length }, () => new Array(colIds.length).fill(null));
     for (const [cell, input] of cells) { const place = placeOf(cell); if (place) { typed[place.row][place.col] = input ?? ""; grid[place.row][place.col] = raw(input); } }
     engine?.destroy();
-    engine = HyperFormula.buildFromArray(grid, CONFIG); sheet = engine.getSheetId(engine.getSheetNames()[0]);
+    engine = buildEngine(grid); sheet = engine.getSheetId(engine.getSheetNames()[0]);
   };
   /** A Y.Array's delta as the engine's row or column inserts and deletes. */
   const along = (delta, add, remove) => {
