@@ -4,12 +4,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { getSchema } from "@tiptap/core";
+import express from "express";
 import { MarkdownManager } from "@tiptap/markdown";
 import { WebSocketServer } from "ws";
 import { updateYFragment, yXmlFragmentToProseMirrorRootNode } from "y-prosemirror";
 import * as Y from "yjs";
 import { excludeConduitFromGit } from "../attachment-store.js";
-import { AUTHORS, BLOCK_TYPES, CHANGES, FRAGMENT, FRAME, PROPERTIES, blockId, documentExtensions, frame } from "../document-format.js";
+import { AUTHORS, BLOCK_TYPES, CHANGES, FORMAT, FRAGMENT, FRAME, IMAGE_NAME, PROPERTIES, blockId, documentExtensions, frame } from "../document-format.js";
 import { remoteNode } from "../place.js";
 import { writePrivateFile } from "../private-file.js";
 import { createMarkupStore } from "./markup-store.js";
@@ -49,6 +50,13 @@ const MATED = "conduit", SCRIPT = path.resolve(import.meta.dirname, "../../../sc
 const KINDS = { paper: ".paper", site: ".site.html" }, ID = /^[a-z0-9-]{1,64}$/, WALK = { entries: 20_000, depth: 6 };
 const kindOf = (at) => Object.keys(KINDS).find((kind) => at.endsWith(KINDS[kind])), nameOf = (at) => path.basename(at, KINDS[kindOf(at)]);
 const SITE_ID = /<meta\s+name=["']conduit-artifact["']\s+content=["']([a-z0-9-]{1,64})["']/i;
+/** A paper's images, kept beside it (<side>/images/<name>) and named for their bytes; what they are is read from the bytes, never from what the sender said. SVG is not taken: it can carry script. */
+const IMAGE_MAX = 10 * 1024 * 1024, IMAGE_TYPES = { png: "image/png", jpg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif" };
+const sniff = (bytes) => {
+  const ascii = (from, to) => bytes.subarray(from, to).toString("latin1");
+  return ascii(0, 8) === "\x89PNG\r\n\x1a\n" ? "png" : ascii(0, 3) === "\xff\xd8\xff" ? "jpg" : /^GIF8[79]a$/.test(ascii(0, 6)) ? "gif"
+    : ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP" ? "webp" : /^ftypavi[fs]$/.test(ascii(4, 12)) ? "avif" : null;
+};
 const escaped = (text) => text.replace(/[&<>"]/g, (character) => `&#${character.charCodeAt(0)};`);
 /**
  * One comment as a chat is handed it: the person's words and what they are about, which the transcript draws as their
@@ -450,7 +458,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     room.owed = await fs.readFile(path.join(entry.side, "unwritten"), "utf8").catch(() => null);
     await take(room);
     // A change is accepted when the person resolves its comment (a session's resolve accepts nothing); read on every look at the open threads, which hold every comment the person has not resolved.
-    room.markup = markupOf(room, () => `(document ${id})`, () => ["If you have the tool `conduit_paper`, it does the same without a shell: read, replace, insert, delete (with `for`), reply and resolve.", "To answer a comment by changing the document, add `--for <this item's id>/<n>` to `document replace`, `insert` or `delete`: the person then sees which blocks changed for comment n and can take the change back. Resolving the comment yourself does not accept the change for the person: the comment stays in their margin, marked as resolved by you, with the change shown, until they resolve it too."], (items) => {
+    room.markup = markupOf(room, () => `(document ${id})`, () => [`An image block reads as \`![caption](name)\`; its picture is the file ${path.join(room.entry.side, "images")}/<name>.`, "If you have the tool `conduit_paper`, it does the same without a shell: read, replace, insert, delete (with `for`), reply and resolve.", "To answer a comment by changing the document, add `--for <this item's id>/<n>` to `document replace`, `insert` or `delete`: the person then sees which blocks changed for comment n and can take the change back. Resolving the comment yourself does not accept the change for the person: the comment stays in their margin, marked as resolved by you, with the change shown, until they resolve it too."], (items) => {
       const unsettled = new Set(items.flatMap((item) => item.comments.filter((comment) => !(comment.resolved && comment.resolvedBy === "person")).map((comment) => `${item.id}/${comment.n}`)));
       const settled = [...room.changes.entries()].filter(([, change]) => !unsettled.has(change.for));
       if (settled.length) doc.transact(() => { for (const [block] of settled) room.changes.delete(block); });
@@ -653,6 +661,21 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       set(kept, blocks.length ? blocks : [empty()], undefined, () => { for (const [block] of mine) kept.changes.delete(block); });
       return { blocks: mine.map(([block]) => block) };
     },
+    /** An image is kept beside the paper, under a name its block holds in place of the bytes. */
+    async keepImage(id, bytes) {
+      const entry = await entryOf(id), kind = Buffer.isBuffer(bytes) && bytes.length ? sniff(bytes) : null;
+      if (entry.kind !== "paper") throw fault(400, `${entry.name} is a ${entry.kind}, which holds no images`);
+      if (!kind) throw fault(415, "That is not a PNG, JPEG, GIF, WebP or AVIF image");
+      const name = `${crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 16)}.${kind}`, file = path.join(entry.side, "images", name);
+      if (!await fs.stat(file).catch(() => null)) await writePrivateFile(file, bytes);
+      return { name };
+    },
+    /** One of the paper's images, with what it is. */
+    async image(id, name) {
+      const entry = await entryOf(id), missing = () => fault(404, "This paper has no such image");
+      if (!IMAGE_NAME.test(name)) throw missing();
+      return { bytes: await fs.readFile(path.join(entry.side, "images", name)).catch(() => { throw missing(); }), type: IMAGE_TYPES[name.split(".")[1]] };
+    },
     /** The paper's Markup store: its comments, each a thread. */
     markup: async (id) => (await held(id)).markup,
     async handleUpgrade(id, request, socket, head) {
@@ -660,12 +683,18 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       if (!kept) return socket.destroy();
       sockets.handleUpgrade(request, socket, head, (peer) => {
         startWebSocketKeepalive(peer);
-        kept.peers.add(peer);
         peer.on("close", () => kept.peers.delete(peer));
         peer.on("message", (data, binary) => {
           // A frame that is not what document-format.js says ends the socket, never the hub.
           try {
-            if (!binary) { const { client, name } = JSON.parse(data); peer.author = [String(Number(client)), String(name).slice(0, 80)]; }
+            if (!binary) {
+              const { client, name, format } = JSON.parse(data);
+              // A page loaded before the format grew would delete the blocks it cannot draw: it is kept out until it is reloaded.
+              if (format !== FORMAT) return peer.close(4426, "This page is older than the paper: reload it");
+              peer.author = [String(Number(client)), String(name).slice(0, 80)];
+              if (!kept.peers.has(peer)) { kept.peers.add(peer); peer.send(frame(FRAME.have, Y.encodeStateVector(kept.doc))); }
+            }
+            else if (!kept.peers.has(peer)) peer.close(1003, "Name the client first");
             else if (data[0] === FRAME.have) peer.send(frame(FRAME.update, Y.encodeStateAsUpdate(kept.doc, data.subarray(1))));
             else if (data[0] === FRAME.update) {
               Y.applyUpdate(kept.doc, data.subarray(1), peer);
@@ -673,7 +702,6 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
             }
           } catch { peer.close(1003, "Not a document frame"); }
         });
-        peer.send(frame(FRAME.have, Y.encodeStateVector(kept.doc)));
       });
     },
     async close() {
@@ -706,6 +734,12 @@ export function registerDocumentRoutes(app, documents) {
   app.patch("/v0/document/:id", async (request, response) => response.json(await documents.rename(request.params.id, request.body?.name)));
   app.delete("/v0/document/:id", async (request, response) => { await documents.remove(request.params.id); response.status(204).end(); });
   app.post("/v0/document/:id/blocks", async (request, response) => response.json(await documents.edit(request.params.id, request.body)));
+  app.post("/v0/document/:id/images", express.raw({ type: "image/*", limit: IMAGE_MAX }), async (request, response) => response.status(201).json(await documents.keepImage(request.params.id, request.body)));
+  // Drawn by an <img>, never run: no other type, no script, no page of the hub's.
+  app.get("/v0/document/:id/images/:name", async (request, response) => {
+    const { bytes, type } = await documents.image(request.params.id, request.params.name);
+    response.set({ "content-type": type, "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; sandbox", "cache-control": "private, max-age=31536000, immutable" }).send(bytes);
+  });
   app.post("/v0/document/:id/changes", async (request, response) => {
     if (request.body?.op !== "revert" || typeof request.body.thread !== "string") throw fault(400, "A change is taken back with { op: \"revert\", thread: \"<item>/<n>\" }");
     response.json(await documents.revert(request.params.id, request.body.thread));

@@ -80,3 +80,31 @@
 .ui-document-outline { display: flex; flex-direction: column; }
 .ui-document-outline > .ui-row[aria-current="page"] { color: var(--foreground); font-weight: var(--weight-current); }
 .ui-document-outline > .ui-row:focus-visible { background: var(--tint); color: var(--foreground); }
+/* A block the editor holds as a whole (an image, a divider) washes while it is the selection, as a row under the cursor does. */
+.ui-document-text > .ProseMirror-selectednode { border-radius: var(--radius-inset); background: var(--accent); box-shadow: 0 0 0 var(--space-xs) var(--accent); }
+/* A callout: its blocks in a tinted box, its tone a mark at the head; hue stays on the mark. */
+.ui-document-callout { display: flex; gap: var(--space-md); border-radius: var(--radius-control); background: var(--tint); padding: var(--space-md) var(--space-lg); }
+.ui-document-callout > :last-child { min-width: 0; flex: 1; }
+.ui-document-tone { display: flex; height: 1lh; flex: none; align-items: center; color: var(--muted-foreground); }
+.ui-document-tone > svg { width: var(--icon); height: var(--icon); }
+.ui-document-tone[data-tone="warning"] { color: var(--status-warn); }
+/* A toggle: its chevron on its summary's line, its blocks under the summary until it is folded. */
+.ui-document-toggle { display: flex; gap: var(--space-2xs); }
+.ui-document-toggle-body { min-width: 0; flex: 1; }
+.ui-document-toggle:not([data-open]) > .ui-document-toggle-body > :not(:first-child) { display: none; }
+.ui-document-fold { display: flex; height: 1lh; flex: none; align-items: center; }
+.ui-document-fold svg { transition: rotate var(--duration-quick) var(--ease-arrive); }
+.ui-document-fold [aria-expanded="true"] svg { rotate: 90deg; }
+@media (prefers-reduced-motion: reduce) { .ui-document-fold svg { transition: none; } }
+.ui-document-image { display: flex; margin: 0; flex-direction: column; gap: var(--space-xs); }
+.ui-document-image > img { display: block; max-width: 100%; border-radius: var(--radius-control); }
+.ui-document-image-missing { display: flex; align-items: center; gap: var(--space-sm); border-radius: var(--radius-control); background: var(--tint); padding: var(--space-lg); color: var(--muted-foreground); font-size: var(--text-row); }
+.ui-document-image-missing > svg { width: var(--icon); height: var(--icon); flex: none; }
+.ui-document-caption { width: 100%; color: var(--muted-foreground); font-size: var(--text-caption); }
+.ui-document-date-chip { border: 0; border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-2xs); color: inherit; font: inherit; cursor: pointer; }
+.ui-document-date-chip:focus-visible { background: var(--accent); color: var(--foreground); outline: 0; }
+@media (hover: hover) { .ui-document-date-chip:hover { background: var(--accent); color: var(--foreground); } }
+/* Ways to start a new document, under its hint; gone at the first edit. */
+.ui-document-starts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-top: var(--space-md); }
+.ui-document-starts[data-placed] { position: absolute; right: 0; left: 0; }
+.ui-document-starts-note { flex-basis: 100%; margin: 0; color: var(--muted-foreground); font-size: var(--text-row); }

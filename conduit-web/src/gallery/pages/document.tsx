@@ -1,6 +1,6 @@
 import { createSignal, type JSX } from "solid-js";
 import { Button, IconButton, Icons } from "@/components/ui";
-import { DocumentAddress, DocumentCount, DocumentDropLine, DocumentField, DocumentFind, DocumentHandle, DocumentHead, DocumentOutline, DocumentProperty, DocumentSheet, DocumentTableEdges, DocumentTitle, DocumentTools, documentDrawClass, documentHintClass, documentMarkClass, documentTextClass, documentToolIcons as Tools } from "@/components/ui/document"; // Comes with the editor: imported on its own, never from the barrel
+import { DocumentAddress, DocumentCount, DocumentDate, DocumentDropLine, DocumentField, DocumentFind, DocumentFold, DocumentHandle, DocumentHead, DocumentImage, DocumentOutline, DocumentProperty, DocumentSheet, DocumentStarts, DocumentTableEdges, DocumentTitle, DocumentToneMark, DocumentTools, documentBlockClass, documentDrawClass, documentHintClass, documentMarkClass, documentTextClass, documentToolIcons as Tools } from "@/components/ui/document"; // Comes with the editor: imported on its own, never from the barrel
 import { MarkupMarginNotes, MarkupNote } from "@/components/ui/markup";
 import { row, type Page } from "../model";
 import { noop } from "../demos";
@@ -39,6 +39,18 @@ const table = () => {
 };
 const link = () => <DocumentTools label="Link"><DocumentAddress href="https://example.com/ferry/timetable" /><IconButton label="Open the link"><Tools.open /></IconButton><IconButton label="Edit the link"><Tools.edit /></IconButton><IconButton label="Remove the link"><Tools.unlink /></IconButton></DocumentTools>;
 
+/** The editor's own blocks as their views draw them, in a sheet. */
+const drawn = (children: JSX.Element) => <DocumentSheet name="Trip plan"><div class={documentTextClass}>{children}</div></DocumentSheet>;
+const PICTURE = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="320"><rect width="640" height="320" fill="#3a3c42"/><path d="M0 320 220 140 360 260 460 180 640 320Z" fill="#55585f"/></svg>')}`;
+const callout = (tone: "note" | "warning", text: string) => <aside class={documentBlockClass.callout} data-tone={tone}><span><DocumentToneMark tone={tone} /></span><div><p>{text}</p></div></aside>;
+const toggle = (open: boolean) => {
+  const [shown, setShown] = createSignal(open);
+  return <div class={documentBlockClass.toggle} data-open={shown() ? "" : undefined}><span><DocumentFold open={shown()} onToggle={() => setShown(!shown())} /></span>
+    <div class={documentBlockClass.toggleBody}><p>Ferry times</p><p>09:40 from platform 2, 14:10 from platform 4.</p></div></div>;
+};
+const starts = (note?: string) => drawn(<><p class={documentHintClass} data-hint="Write, / for blocks, @ to ask an agent" data-empty />
+  <DocumentStarts note={note}><Button variant="ghost" size="sm"><Icons.Agent />Ask @conduit to draft…</Button><Button variant="ghost" size="sm"><Icons.Paste />Paste Markdown</Button></DocumentStarts></>);
+
 const tools = () => <DocumentTools label="Format">
   <IconButton label="Bold" aria-pressed><Tools.bold /></IconButton><IconButton label="Italic"><Tools.italic /></IconButton><IconButton label="Strikethrough"><Tools.strike /></IconButton><IconButton label="Code"><Tools.code /></IconButton><IconButton label="Link"><Tools.link /></IconButton><IconButton label="Comment"><Tools.comment /></IconButton>
 </DocumentTools>;
@@ -61,8 +73,15 @@ export const documentPage: Page = {
     row("a head with no properties", "The title, and Add a property, a quiet row always there", () => sheet(undefined, TEXT, undefined, { head: head(true) }), { code: "<DocumentHead empty add>", surfaces: ["ground"] }),
     row("the block handle", "In the gutter beside the block the mouse is over: + adds a block under it, the grip drags it (the line says where it lands) or, pressed, opens what can be done to it; a touch held on a block opens the same. Where the gutter is too narrow it stands inside the column's left edge (inside). Here on the first block, its line over it", () => sheet(undefined, TEXT, undefined, { over: handle() }), { code: "<DocumentHandle top><DocumentDropLine top>", surfaces: ["ground"] }),
     row("its count", "A quiet line under the text, where the document is set to show it", () => sheet(undefined, TEXT, undefined, { foot: <DocumentCount>9 blocks · 41 words</DocumentCount> }), { code: "<DocumentCount>", surfaces: ["ground"] }),
+    row("an image", "An image block: the picture, kept beside the paper by the hub, and its caption written in place under it (its alt text). Made from the block kinds (a file picker), by pasting an image or by dropping one on the text; pressed, the block is the selection", () => drawn(<DocumentImage src={PICTURE} caption="The ferry pier at dawn" onCaption={noop} />), { code: "<DocumentImage src caption onCaption>", surfaces: ["ground"] }),
+    row("an image not here", "While it loads, and where its name is not one kept with this paper (an address, or a block copied from another paper): never fetched, it says so", () => drawn(<DocumentImage caption="" missing="Not kept with this paper: https://example.com/pier.png" onCaption={noop} />), { code: "<DocumentImage missing>", surfaces: ["ground"] }),
+    row("callouts", "A tinted box of blocks with a tone, chosen from its block menu (Tone): note, and warning, whose mark alone takes the warn colour", () => drawn(<>{callout("note", "Passports must be valid for six months after the trip.")}{callout("warning", "The last ferry leaves at 18:00.")}</>), { code: "documentBlockClass.callout · <DocumentToneMark tone>", surfaces: ["ground"] }),
+    row("toggles", "A summary line over blocks that fold under it; how far is each reader's own and is never written. Unfolded, then folded; the caret going into what it folds unfolds it", () => drawn(<>{toggle(true)}{toggle(false)}</>), { code: "documentBlockClass.toggle · <DocumentFold open onToggle>", surfaces: ["ground"] }),
+    row("a date", "A day in the text, typed as @today or @tomorrow or put in from the block kinds (Date): a quiet chip in the reader's way of writing dates, kept as its ISO date; pressed, a date field changes it", () => drawn(<p>Book the ferry by <DocumentDate date="2026-11-20" onPress={noop} />, a day before we leave.</p>), { code: "<DocumentDate date onPress>", surfaces: ["ground"] }),
+    row("starting points", "Under a new, empty paper's hint: ask the paper's agent to draft it (where it can be asked), or paste Markdown, which becomes blocks; gone at the first edit", () => starts(), { code: "<DocumentStarts top>", surfaces: ["ground"] }),
+    row("starting points, pasting refused", "Where the clipboard cannot be read, the line says how to paste instead", () => starts("Press Ctrl+V to paste: Markdown becomes blocks"), { code: "<DocumentStarts note>", surfaces: ["ground"] }),
     row("link tools", "With the caret in a link: its address, Open, Edit (the address asked for in place) and Remove", link, { code: "<DocumentTools><DocumentAddress href>", surfaces: ["frost"] }),
     row("selection tools", "Clear above the lines selected, in a popover (under them where there is no room above): its marks, pressed where the selection wears them, a link and a comment. A link's address is asked for in place of the buttons", tools, { code: "<DocumentTools label>", surfaces: ["frost"] }),
   ],
-  api: ["DocumentSheet", "DocumentHead", "DocumentTitle", "DocumentProperty", "DocumentField", "DocumentCount", "DocumentHandle", "DocumentDropLine", "DocumentTools", "DocumentAddress", "DocumentTableEdges", "DocumentOutline", "DocumentFind", "MarkupMarginNotes", "MarkupNote"],
+  api: ["DocumentSheet", "DocumentImage", "DocumentToneMark", "DocumentFold", "DocumentDate", "DocumentStarts", "DocumentHead", "DocumentTitle", "DocumentProperty", "DocumentField", "DocumentCount", "DocumentHandle", "DocumentDropLine", "DocumentTools", "DocumentAddress", "DocumentTableEdges", "DocumentOutline", "DocumentFind", "MarkupMarginNotes", "MarkupNote"],
 };

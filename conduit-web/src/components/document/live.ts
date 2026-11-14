@@ -1,6 +1,6 @@
 import { createSignal, onCleanup } from "solid-js";
 import * as Y from "yjs";
-import { FRAME, frame } from "@/document-format.js";
+import { FORMAT, FRAME, frame } from "@/document-format.js";
 import type { DocumentHost, DocumentState } from "./host";
 
 const RETRY_BASE_MS = 500;
@@ -24,7 +24,7 @@ export function createLiveDocument(host: DocumentHost, id: string) {
     if (!next || over) { next?.close(); return again(); }
     socket = next;
     next.binaryType = "arraybuffer";
-    next.onopen = () => { next.send(JSON.stringify({ client: doc.clientID, name: host.author() })); send(FRAME.have, Y.encodeStateVector(doc)); };
+    next.onopen = () => { next.send(JSON.stringify({ client: doc.clientID, name: host.author(), format: FORMAT })); send(FRAME.have, Y.encodeStateVector(doc)); };
     next.onmessage = (event) => {
       const bytes = new Uint8Array(event.data as ArrayBuffer);
       if (bytes[0] === FRAME.have) return send(FRAME.update, Y.encodeStateAsUpdate(doc, bytes.subarray(1)));

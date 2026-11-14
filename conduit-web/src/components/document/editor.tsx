@@ -6,8 +6,9 @@ import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } fro
 import { createEditorTransaction, createTiptapEditor } from "solid-tiptap";
 import { redo, undo, ySyncPlugin, yUndoPlugin, yUndoPluginKey } from "y-prosemirror";
 import type { Map as YMap, XmlFragment } from "yjs";
-import { DocumentCount, DocumentSheet, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons, type DocumentWidth } from "@/components/ui/document";
-import { CHANGES, FRAGMENT, documentExtensions } from "@/document-format.js";
+import { Button, Icons } from "@/components/ui";
+import { DocumentCount, DocumentSheet, DocumentStarts, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons, type DocumentWidth } from "@/components/ui/document";
+import { CHANGES, FRAGMENT, PROPERTIES, documentExtensions } from "@/document-format.js";
 import { blockById, blockKeys, caretBlockAt, shiftBlock } from "./blocks";
 import { drawn, revealed } from "./drawn";
 import { createFind } from "./find";
@@ -16,6 +17,7 @@ import { PaperHead } from "./head";
 import { DOCUMENT_BLOCKS, DOCUMENT_MARKS, DOCUMENT_TURNABLE, type DocumentAnchor, type DocumentBlockKind, type DocumentControls, type DocumentHeading, type DocumentHost, type DocumentMarking, type DocumentMarks } from "./host";
 import { hinted } from "./hint";
 import { createLiveDocument } from "./live";
+import { dayFrom, insertMarkdown, paperTyping, pickImages, viewed } from "./nodes";
 import { MARKS, SelectionTools, TableTools, selectedRange } from "./toolbar";
 import { createSlash, menuKeys, TypedMenu, typing, type Typed, type Typing } from "./typed";
 
@@ -30,7 +32,13 @@ const KINDS: Record<DocumentBlockKind, { label: string; is?: [string, Record<str
   bullets: { label: "Bullet list", is: ["bulletList"], make: (chain) => chain.toggleBulletList() },
   numbers: { label: "Numbered list", is: ["orderedList"], make: (chain) => chain.toggleOrderedList() },
   quote: { label: "Quote", is: ["blockquote"], make: (chain) => chain.toggleBlockquote() },
+  callout: { label: "Callout", is: ["callout"], make: (chain) => chain.wrapIn("callout") },
+  // A toggle's summary is a line of text, so what it is made of becomes one first.
+  toggle: { label: "Toggle", is: ["toggle"], make: (chain) => chain.setParagraph().wrapIn("toggle") },
+  // Its file is asked for first (the tool's `run`): made when the hub has kept it.
+  image: { label: "Image", is: ["image"], make: (chain) => chain },
   divider: { label: "Divider", make: (chain) => chain.setHorizontalRule() },
+  date: { label: "Date", make: (chain) => chain.insertContent({ type: "date", attrs: { date: dayFrom() } }) },
   text: { label: "Text", make: (chain) => chain.clearNodes() },
 };
 const kindAt = (editor: Editor | undefined) => (Object.keys(KINDS) as DocumentBlockKind[]).find((kind) => { const is = KINDS[kind].is; return is && editor?.isActive(...is); }) ?? "text";
@@ -75,9 +83,10 @@ const marked = (changes: YMap<Change>, told: { anchors: DocumentAnchor[]; moved:
       if (had || changed) found.push(Decoration.node(block.from, block.to, { class: [had?.open && documentMarkClass.commented, changed && documentMarkClass.changed].filter(Boolean).join(" "), ...(had?.keys.length ? { "data-comment": had.keys.join(" ") } : {}), ...(had?.current ? { "data-current": "" } : {}) }));
     }
     changes.forEach((change, id) => {
-      if (at.has(id) || !change.before) return;
+      // A block changed and still here shows what it was while its comment's card is open: the tint alone does not say what the agent took out.
+      if (!change.before || (at.has(id) && !told.anchors.some((anchor) => anchor.current && anchor.key === change.for))) return;
       const line = () => Object.assign(document.createElement("div"), { className: documentMarkClass.removed, contentEditable: "false", textContent: textOf(change.before!) || "A block was removed" });
-      found.push(Decoration.widget(change.after === null ? 0 : at.get(change.after ?? "")?.to ?? doc.content.size, line, { key: id, side: -1 }));
+      found.push(Decoration.widget(at.get(id)?.from ?? (change.after === null ? 0 : at.get(change.after ?? "")?.to ?? doc.content.size), line, { key: id, side: -1 }));
     });
     return DecorationSet.create(doc, found);
   };
@@ -140,10 +149,12 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   createEffect(() => { if (editor() || copy.state() === "away") props.onReady?.(); });
   createEffect(() => props.onAway?.(copy.state() === "away"));
   // Made once, `active` read where it is drawn: a list made again at each change would have its buttons redrawn under the press (the editor changes as it loses focus to one).
-  const tools = DOCUMENT_BLOCKS.filter((offered) => (props.host.tools ?? DOCUMENT_BLOCKS).includes(offered)).map((name) => {
+  // An image is offered only where the host keeps them.
+  const tools = DOCUMENT_BLOCKS.filter((offered) => (props.host.tools ?? DOCUMENT_BLOCKS).includes(offered) && (offered !== "image" || props.host.images)).map((name) => {
     const Icon = documentBlockIcons[name];
-    return { name, label: KINDS[name].label, icon: () => <Icon />, get active() { return kind() === name; }, run: () => { const made = editor(); if (made) KINDS[name].make(made.chain().focus()).run(); } };
+    return { name, label: KINDS[name].label, icon: () => <Icon />, get active() { return kind() === name; }, run: () => { const made = editor(); if (made && name === "image") pickImages(made, props.host); else if (made) KINDS[name].make(made.chain().focus()).run(); } };
   });
+  const offers = { dates: tools.some((tool) => tool.name === "date"), images: tools.some((tool) => tool.name === "image") };
   const slash = createSlash(editor, tools), handle = createBlockHandle(editor, tools, { scroller, onComment: () => props.onComment, onAdded: slash.made }), find = createFind(editor, scroller);
   const counted = createEditorTransaction(editor, (made) => made?.state.doc);
   const count = createMemo(() => {
@@ -151,6 +162,27 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     if (!props.count || !doc) return null;
     const words = doc.textBetween(0, doc.content.size, " ", " ").split(/\s+/).filter(Boolean).length, many = (n: number, what: string) => `${n.toLocaleString()} ${what}${n === 1 ? "" : "s"}`;
     return `${many(doc.childCount, "block")} · ${many(words, "word")}`;
+  });
+  // A new paper (one empty line, no properties) offers ways to start it under its hint, until it is first written in.
+  const properties = copy.doc.getMap(PROPERTIES), [bare, setBare] = createSignal(properties.size === 0), [started, setStarted] = createSignal(false), [note, setNote] = createSignal<string>();
+  const kept = () => setBare(properties.size === 0);
+  properties.observe(kept);
+  onCleanup(() => properties.unobserve(kept));
+  const blank = createMemo(() => { const doc = counted(); return Boolean(doc && doc.childCount === 1 && doc.firstChild!.type.name === "paragraph" && !doc.firstChild!.content.size); });
+  createEffect(() => { if (counted() && (!blank() || !bare())) setStarted(true); });
+  const asker = () => props.onMention ? props.mentions?.()[0] : undefined;
+  const paste = async () => {
+    const made = editor();
+    if (!made) return;
+    const text = await navigator.clipboard?.readText?.().catch(() => "") ?? "";
+    if (text.trim()) return void insertMarkdown(made, text);
+    made.commands.focus("start");
+    setNote(`Press ${/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘V" : "Ctrl+V"} to paste: Markdown becomes blocks`);
+  };
+  const starts = createMemo(() => {
+    const view = editor()?.view, first = view && blank() && !started() ? view.nodeDOM(0) as HTMLElement | null : null, body = column()?.parentElement;
+    reflowed();
+    return first && body ? first.getBoundingClientRect().bottom - body.getBoundingClientRect().top : undefined;
   });
   // The marks the selection wears, for a bar that is always there; the tools over a selection offer them too.
   const wears = createEditorTransaction(editor, (made) => MARKS.filter(([name]) => made?.isActive(name)).map(([name]) => name).join(" "));
@@ -215,10 +247,14 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   return <>
   <DocumentSheet ref={setColumn} scroller={setScroller} width={props.width} find={find.view()} name={props.name} state={copy.state() === "away" ? "Reconnecting" : undefined} margin={props.margin} actions={props.actions} bare={props.bare}
     head={<Show when={copy.synced()}><PaperHead doc={copy.doc} name={props.name} onRename={props.onRename} onDown={() => editor()?.commands.focus("start")} /></Show>}
-    over={<>{handle.view}<TableTools editor={editor} body={() => column()?.parentElement ?? undefined} moved={reflowed} /></>} onHover={handle.hover} foot={<Show when={count()}>{(line) => <DocumentCount>{line()}</DocumentCount>}</Show>}>
+    over={<>{handle.view}<TableTools editor={editor} body={() => column()?.parentElement ?? undefined} moved={reflowed} />
+      <Show when={starts() !== undefined}><DocumentStarts top={starts()} note={note()}>
+        <Show when={asker()}>{(name) => <Button variant="ghost" size="sm" onMouseDown={(event) => event.preventDefault()} onClick={() => editor()?.chain().focus("start").insertContent("@").run()}><Icons.Agent />Ask @{name()} to draft…</Button>}</Show>
+        <Button variant="ghost" size="sm" onMouseDown={(event) => event.preventDefault()} onClick={() => void paste()}><Icons.Paste />Paste Markdown</Button>
+      </DocumentStarts></Show></>} onHover={handle.hover} foot={<Show when={count()}>{(line) => <DocumentCount>{line()}</DocumentCount>}</Show>}>
     {/* The editor is made only once the hub's copy is held: made before, its first empty block would be merged in as a block of its own. */}
     <Show when={copy.synced() && column()}>{(element) => {
-      const made = createTiptapEditor(() => ({ element: element(), extensions: [...documentExtensions(), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), slash.extension(), blockKeys, drawn((block, name) => props.host.showMention?.(block, name)), find.extension(), ...(props.onMention ? [mentioning(anchor, setAsked, keys)] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name } } }));
+      const made = createTiptapEditor(() => ({ element: element(), extensions: [...viewed(documentExtensions(), props.host), paperTyping(props.host, offers), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), slash.extension(), blockKeys, drawn((block, name) => props.host.showMention?.(block, name)), find.extension(), ...(props.onMention ? [mentioning(anchor, setAsked, keys)] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name } } }));
       createEffect(() => setEditor(made()));
       return null;
     }}</Show>

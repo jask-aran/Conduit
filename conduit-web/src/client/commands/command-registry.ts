@@ -139,7 +139,7 @@ export const ARTIFACT_COMMANDS = {
   rename: [COMMAND_IDS.artifactRename, "Rename artifact", "Change its name", "rename", ["title"]],
   copyMarkdown: [COMMAND_IDS.artifactCopyMarkdown, "Copy as Markdown", "Copy this paper's text", "copy-transcript", ["export"]],
   count: [COMMAND_IDS.artifactCount, "Count blocks and words", "Show or hide the count", "rename", ["length"]],
-  find: [COMMAND_IDS.artifactFind, "Find in paper", "Search its text", "search", []],
+  find: [COMMAND_IDS.artifactFind, "Find in paper", "Search its text", "chat", []],
   outline: [COMMAND_IDS.artifactOutline, "Outline", "Jump to a heading", "sidebar", ["headings"]],
   width: [COMMAND_IDS.artifactWidth, "Page width", "Narrow, wide or full", "workspace-panel", []],
   blockMenu: [COMMAND_IDS.artifactBlockMenu, "Block menu", "Open the caret's block menu", "settings", ["turn into"], stroke("Slash", "/", ["primary"])],

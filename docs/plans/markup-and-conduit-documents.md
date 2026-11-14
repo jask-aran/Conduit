@@ -514,8 +514,6 @@ document stays possible: a comment may be a mark, not only words.
 - How the editor feels: the block tools in the rail, Markdown typing rules, the margin. The user has not yet said.
   Not built: other people's carets, a placeholder, the library's own checkbox in a checklist, table controls, and
   keeping what is typed while the hub is away if the page is closed before it answers.
-- Image and date blocks. The format has neither. An image needs somewhere to keep the file, which comes with
-  documents in projects (milestone 5); a date is an inline node the format does not have. Neither is in the rail.
 - The margin's rules, to be judged by use: a comment the person has resolved leaves the margin once every comment of
   its item is resolved (so Reopen is only reachable until then); a drawing made on a document is not kept on the page
   once sent, only the blocks under it; a phone has the cards under the text, not beside a block; while annotating, the

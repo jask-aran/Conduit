@@ -8,7 +8,8 @@ import { MarkupRibbonRoom } from "@/components/ui/markup";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
 import { api } from "../api/client";
-import { webSocketUrl } from "../api/transport.js";
+import { authorizedFetch } from "../api/native-auth-client";
+import { httpUrl, webSocketUrl } from "../api/transport.js";
 import { capturePage } from "../feedback/conduit-feedback";
 import { artifactAbout, artifactKnown, artifactLabel, copyArtifactMarkdown, countPapers, paperCounted, renameArtifact, type Artifact } from "./artifacts";
 import { blockShown, blockWanted, holdArtifact } from "./focused-artifact";
@@ -29,6 +30,7 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
   window.addEventListener("conduit:artifacts-changed", changed);
   onCleanup(() => window.removeEventListener("conduit:artifacts-changed", changed));
   const [mode, setMode] = createSignal<MarkupMode>("use"), [sent, setSent] = createSignal(0), [away, setAway] = createSignal(false);
+  const base = () => `/v0/document/${encodeURIComponent(props.id)}`;
   const client = `document-${Math.random().toString(36).slice(2, 10)}`;
   let frame: HTMLDivElement | undefined, room: HTMLDivElement | undefined, marks: DocumentMarks | undefined, was: Artifact["kind"] | undefined;
   // What the open tool offers the paper's `@`: who is listening, and a comment for one of them.
@@ -52,8 +54,18 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
   });
   // A comment's card pressed in a thread asks for its block: shown once the editor has drawn it.
   createEffect(() => { const block = blockWanted(props.id), edits = controls(); if (!block || !edits) return; const due = requestAnimationFrame(() => { edits.reveal(block); blockShown(); }); onCleanup(() => cancelAnimationFrame(due)); });
-  const editing: DocumentHost = { tools: ARTIFACT_CAPABILITIES.paper.edit, socket: async (id) => new WebSocket(await webSocketUrl(`/v0/document/${id}/live`)), author: () => "person" };
-  const base = () => `/v0/document/${encodeURIComponent(props.id)}`;
+  // A paper's pictures are kept by the hub beside it. An installed client signs in with a token an <img> does not send, so each is fetched as the person and shown from memory.
+  const pictures = new Map<string, Promise<string>>();
+  const images: DocumentHost["images"] = {
+    keep: async (file) => {
+      const response = await authorizedFetch(httpUrl(`${base()}/images`), { method: "POST", body: file, headers: { "content-type": file.type } });
+      if (!response.ok) { const why = (await response.json().catch(() => null) as { message?: string } | null)?.message ?? `the hub answered ${response.status}`; toast.error(`Image not kept: ${why}`); throw new Error(why); }
+      return (await response.json() as { name: string }).name;
+    },
+    src: (name) => pictures.get(name) ?? pictures.set(name, authorizedFetch(httpUrl(`${base()}/images/${name}`)).then(async (response) => { if (!response.ok) throw new Error(String(response.status)); return URL.createObjectURL(await response.blob()); })).get(name)!,
+  };
+  onCleanup(() => pictures.forEach((made) => void made.then(URL.revokeObjectURL, () => {})));
+  const editing: DocumentHost = { images, tools: ARTIFACT_CAPABILITIES.paper.edit, socket: async (id) => new WebSocket(await webSocketUrl(`/v0/document/${id}/live`)), author: () => "person" };
   const shared = { names, transport: httpTransport(api, `${base()}/markup`), clientId: () => client, capturePage, frame: () => room ?? frame,
     notify: (outcome, message) => outcome === "sent" ? toast.success(message) : toast.error(message) } satisfies Partial<MarkupHost>;
   const markup: MarkupHost = {

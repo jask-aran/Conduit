@@ -3,7 +3,7 @@ import type { EditorView } from "@tiptap/pm/view";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js";
 import { createEditorTransaction } from "solid-tiptap";
 import { IconButton, Icons } from "@/components/ui";
-import { DocumentDropLine, DocumentHandle, documentBlockIcons, documentToolIcons } from "@/components/ui/document";
+import { DocumentDropLine, DocumentHandle, documentBlockIcons, documentToneIcons, documentToolIcons } from "@/components/ui/document";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/ui/menus";
 import { addUnder, blockAt, blockById, blockRange, blockStarts, caretBlockAt, caretInto, deleteBlock, duplicateBlock, moveBlock, shiftBlock } from "./blocks";
 import { DOCUMENT_TURNABLE, type DocumentBlockKind } from "./host";
@@ -112,6 +112,9 @@ export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: r
   const turn = (tool: Tool) => act((view, at) => { caretInto(view, at); tool.run(); });
   const comment = act((view, at) => { const about = blockRange(view, at), told = options.onComment(); if (about && told) { refocus = false; told(about); } });
   const keep = (event: MouseEvent) => event.preventDefault();
+  // A callout's tone is chosen from its menu, where callouts are offered.
+  const tone = createMemo(() => { const at = from(), node = at === null ? null : doc()?.nodeAt(at); return node?.type.name === "callout" && tools.some((tool) => tool.name === "callout") ? node.attrs.tone as keyof typeof documentToneIcons : null; });
+  const tones = [["note", "Note"], ["warning", "Warning"]] as const;
 
   const view = <>
     <DocumentHandle ref={(element) => { handle = element; }} top={place()?.top} inside={place()?.inside}>
@@ -128,6 +131,10 @@ export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: r
               <MenuSubTrigger icon={<documentBlockIcons.text />}>Turn into</MenuSubTrigger>
               <MenuSubContent width="sm"><For each={tools.filter((tool) => (DOCUMENT_TURNABLE as readonly string[]).includes(tool.name))}>{(tool) => <MenuRow icon={tool.icon()} onSelect={turn(tool)}>{tool.label}</MenuRow>}</For></MenuSubContent>
             </MenuSub>
+            <Show when={tone()}>{(now) => <MenuSub>
+              <MenuSubTrigger icon={<documentBlockIcons.callout />}>Tone</MenuSubTrigger>
+              <MenuSubContent width="sm"><For each={tones}>{([name, label]) => { const Icon = documentToneIcons[name]; return <MenuRow icon={<Icon />} checked={now() === name} onSelect={act((on, at) => on.dispatch(on.state.tr.setNodeAttribute(at, "tone", name)))}>{label}</MenuRow>; }}</For></MenuSubContent>
+            </MenuSub>}</Show>
             <Show when={options.onComment()}><MenuRow icon={<documentToolIcons.comment />} onSelect={comment}>Comment</MenuRow></Show>
             <MenuRow destructive icon={<Icons.Delete />} onSelect={act(deleteBlock)}>Delete</MenuRow>
           </MenuSection>

@@ -6,12 +6,12 @@
  */
 import type { JSX } from "solid-js";
 
-/** A kind of block the editor can make of where the caret is. */
-export type DocumentBlockKind = "heading-1" | "heading-2" | "heading-3" | "bullets" | "numbers" | "checklist" | "quote" | "code" | "table" | "divider" | "text";
-export const DOCUMENT_BLOCKS: readonly DocumentBlockKind[] = ["text", "heading-1", "heading-2", "heading-3", "bullets", "numbers", "checklist", "quote", "code", "table", "divider"];
-/** A kind a block of text can be turned into ("Turn into", a bar's block kinds); a table or a divider is made beside text, never of it. */
-export type DocumentTurnableKind = Exclude<DocumentBlockKind, "table" | "divider">;
-export const DOCUMENT_TURNABLE: readonly DocumentTurnableKind[] = ["text", "heading-1", "heading-2", "heading-3", "bullets", "numbers", "checklist", "quote", "code"];
+/** A kind of block the editor can make of where the caret is. `date` is the one put in the line at the caret (and typed as `@today`, `@tomorrow`). */
+export type DocumentBlockKind = "heading-1" | "heading-2" | "heading-3" | "bullets" | "numbers" | "checklist" | "quote" | "callout" | "toggle" | "code" | "table" | "image" | "divider" | "date" | "text";
+export const DOCUMENT_BLOCKS: readonly DocumentBlockKind[] = ["text", "heading-1", "heading-2", "heading-3", "bullets", "numbers", "checklist", "quote", "callout", "toggle", "code", "table", "image", "divider", "date"];
+/** A kind a block of text can be turned into ("Turn into", a bar's block kinds); a table, an image, a divider or a date is made beside text, never of it. */
+export type DocumentTurnableKind = Exclude<DocumentBlockKind, "table" | "image" | "divider" | "date">;
+export const DOCUMENT_TURNABLE: readonly DocumentTurnableKind[] = ["text", "heading-1", "heading-2", "heading-3", "bullets", "numbers", "checklist", "quote", "callout", "toggle", "code"];
 
 /** A mark the editor can put on the text selected. */
 export type DocumentMarkKind = "bold" | "italic" | "strike" | "code";
@@ -29,6 +29,12 @@ export interface DocumentHost {
   tools?: readonly DocumentToolName[];
   /** A pressed `@name` in the text (its block's id and the name, no `@`): show what it asked. Without it a mention is drawn but does nothing. */
   showMention?(block: string, name: string): void;
+  /**
+   * Images kept beside the document, which an image block names (document-format.js IMAGE_NAME), never holding the bytes. `keep`: the file sent to
+   * the hub, the name it is kept under given back (rejected, it was not kept, and the host has told the person why). `src`: what an <img> draws a
+   * kept name from. Without it no image is offered, whatever `tools` says.
+   */
+  images?: { keep(file: File): Promise<string>; src(name: string): string | Promise<string> };
 }
 
 /** Each text mark, on where the selection is; `can`: a mark would apply now (a selection, or a caret in a block of text). */
