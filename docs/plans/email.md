@@ -24,7 +24,7 @@ Executor is too slow and too narrow for a client: a client needs a synced local 
 ## Decisions
 
 - **One mail primitive, an adapter per source.** Account, thread, message, draft, label are Conduit shapes; nothing
-  Gmail-specific (label ids, history ids, API error shapes) reaches the browser. Phase 1 builds the Gmail adapter;
+  Gmail-specific (X-GM ids, label names, IMAP errors) reaches the browser. Phase 1 builds the Gmail adapter;
   phase 2 adds jbot's mailbox as a second account. The same IMAP adapter later serves non-Gmail accounts.
 - **IMAP and SMTP with a Gmail app password**, chosen 2026-11-15 as the least setup: no Google Cloud project, no
   consent screen, nothing that expires until revoked. Needs 2-Step Verification on; the owner creates the password at
