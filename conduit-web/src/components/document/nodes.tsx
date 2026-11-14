@@ -8,7 +8,7 @@ import { render } from "solid-js/web";
 import { Input } from "@/components/ui";
 import { DocumentDate, DocumentFold, DocumentImage, DocumentToneMark, documentBlockClass } from "@/components/ui/document";
 import { Popover, PopoverContent } from "@/components/ui/menus";
-import { IMAGE_NAME, documentExtensions, isDay } from "@/document-format.js";
+import { IMAGE_NAME, documentExtensions, fitted, isDay } from "@/document-format.js";
 import { caretBlockAt } from "./blocks";
 import type { DocumentHost } from "./host";
 
@@ -94,7 +94,7 @@ const markdown = () => (manager ??= new MarkdownManager({ extensions: documentEx
 const MARKDOWN = /^(?: {0,3}#{1,6}\s|\s*[-*+]\s|\s*\d+[.)]\s|\s*>|\s*```|\s*~~~|\s*\|.*\|\s*$|!\[)|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\([^)\s]+\)/m;
 /** Markdown put in at the caret as blocks; one paragraph's worth goes into the line as text does. */
 export const insertMarkdown = (editor: Editor, text: string) => {
-  const blocks = (markdown().parse(text).content ?? []) as { type: string; content?: unknown[] }[];
+  const blocks = (fitted(markdown().parse(text)).content ?? []) as { type: string; content?: unknown[] }[];
   const content = blocks.length === 1 && blocks[0]!.type === "paragraph" ? blocks[0]!.content ?? [] : blocks;
   return editor.chain().focus().insertContent(content as never).run();
 };

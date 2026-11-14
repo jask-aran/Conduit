@@ -114,7 +114,16 @@ export interface MarkupMarginHost {
   watch(listener: (pressed?: string) => void): () => void;
   /** Where the surface keeps what an agent changed to answer a comment: whether there is such a change (read where it is drawn, so it follows), and taking it back. */
   revert?: { can(key: string): boolean; run(key: string): Promise<unknown> };
+  /** Who is at work on a comment now and what they are doing (thinking, reading, writing), read where drawn so it follows; undefined while no one is. */
+  working?(key: string): { by: string; state: string } | undefined;
+  /** Changes an agent has proposed to the surface and not made, each a card of its own in the margin, in the order of their places: `list` read where drawn,
+   *  `place` where each is now (as `place` above), and the person taking or declining it. */
+  suggestions?: { list(): MarkupSuggestion[]; place(key: string): { left: number; top: number; width: number; height: number } | null; accept(key: string): unknown; reject(key: string): unknown };
+  /** Gives the keyboard back to the surface, as a card is shut from it. */
+  focus?(): void;
 }
+/** A proposed change, as a margin shows it: who proposed it, when, and what it would do. */
+export type MarkupSuggestion = { key: string; by: string; at: string; summary: string };
 
 /** One of the host's own tools: what it is called, its icon, and doing it; read where it is drawn, so getters follow. `menu`: on the ribbon, the tools of one menu
  *  are one control (a document's block kinds), `active` the one the surface is now (a heading where the caret is). A tool of no menu is a toggle, `pressed` while

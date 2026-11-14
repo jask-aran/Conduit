@@ -3,7 +3,7 @@ import { defineTool } from "@earendil-works/pi-durable";
 import { callingChat } from "./conduit-mcp.js";
 
 const text = (words, isError = false) => ({ output: [{ type: "text", text: words }], ...(isError ? { isError: true } : {}) });
-const ACTIONS = ["list", "new", "read", "replace", "insert", "delete", "set", "comments", "reply", "resolve"];
+const ACTIONS = ["list", "new", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve"];
 
 /** Papers for an agent: the hub's document service (server/documents.js) as one tool, with the verbs `conduit-markup` has. */
 export function PaperTool(runtime) {
@@ -16,6 +16,8 @@ export function PaperTool(runtime) {
       + "set (name, text) writes one property of its front matter (the name: value lines read shows first); no text removes it. "
       + "replace (block, markdown: the first block written keeps the id), insert (block: the one to write after, or `start`; markdown) and delete (block) change it at once, for everyone who has it open. "
       + "To answer a comment by changing the paper, pass `for: \"<item>/<n>\"`: the person then sees what changed for that comment and can take it back. "
+      + "Pass `suggest: true` instead when the person asked for proposals rather than changes: the edit stands as a suggestion they accept or reject (with `suggestion`, it adds to that one). "
+      + "suggestions lists those standing (the person's and agents'); accept and reject (suggestion) settle one, when the person asks you to. "
       + "comments lists what the person asked on the paper that is not settled (item ids, comment numbers, the text each is about). "
       + "reply (item, n?, text) answers in the margin beside the text; resolve (item, n) marks a comment done, which the person then confirms. "
       + "A project also holds sites: one HTML file each (`<name>.site.html`) that the person sees drawn in a pane and marks up. new with kind `site` makes one (so does writing such a file); "
@@ -29,6 +31,8 @@ export function PaperTool(runtime) {
       block: Type.Optional(Type.String({ description: "A block's id, from read." })),
       markdown: Type.Optional(Type.String()),
       for: Type.Optional(Type.String({ description: "The comment an edit answers, as <item>/<n>." })),
+      suggest: Type.Optional(Type.Boolean({ description: "replace, insert, delete: make the edit a suggestion." })),
+      suggestion: Type.Optional(Type.String({ description: "A suggestion's key (suggestion/<id>), from suggestions or an earlier suggest: accept, reject, or add to it with suggest." })),
       item: Type.Optional(Type.String({ description: "reply, resolve: a markup item's id." })),
       n: Type.Optional(Type.Integer({ description: "A comment's number in its item." })),
       text: Type.Optional(Type.String({ description: "reply: what to say." })),
@@ -51,8 +55,14 @@ export function PaperTool(runtime) {
         if (args.action === "read") { void documents.seat(paper, by, { state: "reading" }); return text(await documents.read(paper)); }
         if (args.action === "set") return text(`Its properties: ${JSON.stringify((await documents.edit(paper, { op: "set", block: args.name, markdown: args.text ?? "", by })).properties)}`);
         if (args.action === "replace" || args.action === "insert" || args.action === "delete") {
-          const { blocks } = await documents.edit(paper, { op: args.action, block: args.block, markdown: args.markdown, by, for: args.for });
-          return text(args.action === "delete" ? `Deleted ${args.block}.` : `Wrote ${blocks.length === 1 ? "block" : "blocks"} ${blocks.join(", ")}.`);
+          const { blocks, suggestion } = await documents.edit(paper, { op: args.action, block: args.block, markdown: args.markdown, by, for: args.for, suggest: args.suggest ? args.suggestion ?? true : undefined });
+          return text(`${args.action === "delete" ? `Deleted ${args.block}.` : `Wrote ${blocks.length === 1 ? "block" : "blocks"} ${blocks.join(", ")}.`}${suggestion ? ` As the suggestion ${suggestion}.` : ""}`);
+        }
+        if (args.action === "suggestions") return text((await documents.suggestions(paper)).map((one) => `${one.key} by ${one.by}, blocks ${one.blocks.join(", ")}\n  before: ${one.before || "(nothing)"}\n  now: ${one.after || "(removed)"}`).join("\n\n") || "No suggestions stand in this paper.");
+        if (args.action === "accept" || args.action === "reject") {
+          if (!args.suggestion) throw new Error("Say which suggestion.");
+          await documents[args.action](paper, args.suggestion);
+          return text(`${args.action === "accept" ? "Accepted" : "Rejected"} ${args.suggestion}.`);
         }
         const markup = await documents.markup(paper);
         if (args.action === "comments") {

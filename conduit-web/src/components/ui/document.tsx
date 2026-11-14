@@ -1,8 +1,8 @@
 import { BaselineIcon, BetweenHorizontalEndIcon, BetweenVerticalEndIcon, BoldIcon, CalendarIcon, ChevronRightIcon, CodeIcon, ExternalLinkIcon, Grid2x2XIcon, GripVerticalIcon, Heading1Icon, Heading2Icon, Heading3Icon, HighlighterIcon, ImageIcon, ImageOffIcon, InfoIcon, ItalicIcon, LinkIcon, ListChecksIcon, ListCollapseIcon, ListIcon, ListOrderedIcon,
-  MessageSquarePlusIcon, MinusIcon, PencilIcon, PilcrowIcon, StrikethroughIcon, TableColumnsSplitIcon, TableIcon, TableRowsSplitIcon, TextQuoteIcon, TriangleAlertIcon, UnlinkIcon } from "lucide-solid";
+  MessageSquarePlusIcon, MinusIcon, PencilIcon, PencilLineIcon, PilcrowIcon, StrikethroughIcon, TableColumnsSplitIcon, TableIcon, TableRowsSplitIcon, TextQuoteIcon, TriangleAlertIcon, UnlinkIcon } from "lucide-solid";
 import { For, Show, splitProps, type JSX } from "solid-js";
 // Through the barrel, as markup.tsx does, so the editor's chunk takes the header from the app's own.
-import { FindBar, IconButton, Icons, PaneHeader, Row } from "./index";
+import { Button, FindBar, Frost, IconButton, Icons, PaneHeader, Row } from "./index";
 import "./styles/document.css";
 
 /* Not in the library's barrel: the document editor imports this file, so the app's first load does not carry it. */
@@ -13,8 +13,36 @@ export const documentTextClass = "ui-answer ui-document-text";
 /** What marks in a document's text wear: a run of text a comment is about, a block one is about, a block an agent changed that is not yet accepted, and what stands where a block was deleted. */
 export const documentMarkClass = { comment: "ui-document-comment", commented: "ui-document-commented", changed: "ui-document-changed", removed: "ui-document-removed" };
 /** What the editor draws over its own text: an `@name` (a chip that shows what it asked), a match of find and the current one, a block just revealed. */
-/** An agent at work (a seat): the blocks it holds, its name and what it is doing, and what it is heard writing. */
-export const documentSeatClass = { held: "ui-document-seat-held", label: "ui-document-seat", writing: "ui-document-seat-writing" };
+/**
+ * An agent at work (a seat), drawn by the editor as decorations, so as plain elements: `held`, a block it holds (`data-seat` what it is doing,
+ * `data-op="replace"` while it is being written over, `data-seat-ink` its ink). The rest are made by the functions under.
+ */
+export const documentSeatClass = { held: "ui-document-seat-held" };
+/** The inks agents are drawn in, one each (Markup's of those names, MARKUP_INKS); red is left out, since it says something is wrong. */
+export const DOCUMENT_SEAT_INKS = ["plain", "green", "amber", "blue"] as const;
+export type DocumentSeatInk = typeof DOCUMENT_SEAT_INKS[number];
+const made = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string, more: Partial<HTMLElementTagNameMap[K]> = {}) => Object.assign(document.createElement(tag), { className, ...more });
+/** An agent's caret, as another writer's is drawn: a bar in its ink, `label` (its name, and what it is doing) on a tag over it. In a line of text it stands where it is put. */
+export const documentSeatCaret = (label: string) => { const caret = made("span", "ui-document-seat-caret"); caret.append(made("span", "ui-document-seat-name", { textContent: label })); return caret; };
+/** The caret of an agent at work on a block, put at the start of the block's first line: it takes no room, so nothing moves as it comes and goes. */
+export const documentSeatFlag = (label: string, ink: DocumentSeatInk) => {
+  const flag = made("span", "ui-document-seat-flag", { contentEditable: "false" });
+  flag.dataset.seatInk = ink;
+  flag.append(documentSeatCaret(label));
+  return flag;
+};
+/** What an agent is heard writing, drawn as the blocks it will be, quiet until it is the paper's: `body` holds them, its caret at their end. */
+export const documentSeatStream = (ink: DocumentSeatInk) => {
+  const root = made("div", "ui-document-seat-stream", { contentEditable: "false" }), body = made("div", "ui-document-seat-body");
+  root.dataset.seatInk = ink;
+  root.append(body);
+  return { root, body };
+};
+/** Pinned to the sheet's edge while an agent at work is out of view above or below: what it is doing and where; pressed, the text goes to it. */
+export const DocumentSeatJump = (props: { label: string; below: boolean; ink: DocumentSeatInk; onJump: () => void }) =>
+  <Frost as="button" type="button" class="ui-document-seat-jump" data-at={props.below ? "below" : "above"} data-seat-ink={props.ink} onClick={() => props.onJump()}>
+    <Show when={props.below} fallback={<Icons.ArrowUp />}><Icons.ArrowDown /></Show><span>{props.label}</span>
+  </Frost>;
 export const documentDrawClass = { mention: "ui-document-mention", match: "ui-document-match", currentMatch: "ui-document-match-current", revealed: "ui-document-revealed" };
 
 /** Each kind of block's icon. Here, not in the library's icons, so only the editor's chunk carries them. */
@@ -25,6 +53,18 @@ export const documentToneIcons = { note: InfoIcon, warning: TriangleAlertIcon };
 /** What can be done to the text selected (its marks, a link, a comment) and to the table the caret is in. */
 export const documentToolIcons = { bold: BoldIcon, italic: ItalicIcon, strike: StrikethroughIcon, code: CodeIcon, color: BaselineIcon, highlight: HighlighterIcon, link: LinkIcon, unlink: UnlinkIcon, open: ExternalLinkIcon, edit: PencilIcon, comment: MessageSquarePlusIcon,
   grip: GripVerticalIcon, "row-below": BetweenHorizontalEndIcon, "column-right": BetweenVerticalEndIcon, "delete-row": TableRowsSplitIcon, "delete-column": TableColumnsSplitIcon, "delete-table": Grid2x2XIcon };
+
+/** How the reader writes (DocumentWriting): Editing, final; Suggesting, each change standing until it is accepted. */
+export const documentWritingIcons = { editing: PencilIcon, suggesting: PencilLineIcon };
+
+/** A suggestion's own controls, standing over its first block where nothing beside the text draws them: who suggested it, Accept (its text stays) and Reject (taken back). */
+export const DocumentSuggested = (props: { by: string; onAccept: () => void; onReject: () => void }) => {
+  const keep = (event: MouseEvent) => event.preventDefault();
+  return <div class="ui-document-suggested" role="group" aria-label={`Suggested by ${props.by}`}><span>Suggested by {props.by}</span>
+    <Button variant="ghost" size="sm" onMouseDown={keep} onClick={() => props.onAccept()}><Icons.Check />Accept</Button>
+    <Button variant="ghost" size="sm" onMouseDown={keep} onClick={() => props.onReject()}><Icons.Undo />Reject</Button>
+  </div>;
+};
 
 /** An empty paragraph's hint, its words in `data-hint`; `data-empty`: the document holds nothing else, so it shows without the caret. */
 export const documentHintClass = "ui-document-hint";
@@ -41,9 +81,10 @@ export type DocumentWidth = "narrow" | "wide" | "full";
  *  `ref` is where its text goes. `head`: what stands over the text (DocumentHead), `foot` under it (DocumentCount); `over`: what floats beside its blocks
  *  (DocumentHandle, DocumentDropLine, DocumentTableEdges), placed from the top of the text's column. `onHover`: the pointer over the column, null as it leaves.
  *  `margin`: what stands beside the text (its comments), and under it where the page is too narrow for both; `marginEmpty`: it holds nothing now, so it takes no room and the text stands centred. `bare`: it is in a pane, whose header is its bar.
- *  `width`: how wide the text runs (narrow, unsaid). `find`: a DocumentFind, at the sheet's top right. `scroller`: the element that scrolls. */
+ *  `width`: how wide the text runs (narrow, unsaid). `find`: a DocumentFind, at the sheet's top right. `scroller`: the element that scrolls. `edge`: what is pinned
+ *  to the sheet's edge over the column whatever is scrolled (DocumentSeatJump). */
 export function DocumentSheet(props: { ref?: (element: HTMLDivElement) => void; name: string; state?: string; actions?: JSX.Element; margin?: JSX.Element; marginEmpty?: boolean; bare?: boolean; head?: JSX.Element; foot?: JSX.Element; over?: JSX.Element;
-  width?: DocumentWidth; find?: JSX.Element; scroller?: (element: HTMLDivElement) => void; onHover?: (event: PointerEvent | null) => void; children?: JSX.Element }) {
+  width?: DocumentWidth; find?: JSX.Element; edge?: JSX.Element; scroller?: (element: HTMLDivElement) => void; onHover?: (event: PointerEvent | null) => void; children?: JSX.Element }) {
   return <section class="ui-document" aria-label={props.name} data-bare={props.bare ? "" : undefined} data-width={props.width ?? "narrow"}>
     <Show when={!props.bare}><PaneHeader kind="tool" name={props.name} place={props.state} actions={props.actions} /></Show>
     {props.find}
@@ -51,6 +92,7 @@ export function DocumentSheet(props: { ref?: (element: HTMLDivElement) => void; 
       <div class="ui-document-body">{props.head}<div ref={props.ref} class="ui-document-content">{props.children}</div>{props.over}{props.foot}</div>
       <Show when={props.margin}><aside class="ui-document-margin" aria-label="Comments">{props.margin}</aside></Show>
     </div></div>
+    {props.edge}
   </section>;
 }
 

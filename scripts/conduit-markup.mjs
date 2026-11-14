@@ -21,7 +21,8 @@
 // commands are a paper's alone). `read` prints the document as
 // Markdown, each block under a comment that gives its id; the others change one block, taking Markdown from their last
 // arguments or from stdin, and print the ids of the blocks written. `--as <name>` says who writes; `--for <item>/<n>`
-// says which comment the edit answers.
+// says which comment the edit answers; `--suggest` makes it a suggestion the person accepts or rejects (`--suggest <key>`
+// adds to that one). `suggestions <id>` lists those standing; `accept|reject <id> <key>` settles one.
 //
 // `wait <name> --stay` does not end: it prints one line for each thing that comes, so a session whose harness wakes it
 // on a line of output (Claude Code's Monitor) stays listed the whole time. Plain `wait` ends at the first, for a
@@ -197,11 +198,18 @@ if (command === "wait") {
   const named = rest.indexOf("--as"), by = named < 0 ? path.basename(process.cwd()) : rest.splice(named, 2)[1];
   const answers = rest.indexOf("--for"), answering = answers < 0 ? undefined : rest.splice(answers, 2)[1];
   if (answering !== undefined && !/^[\w-]+\/\d+$/.test(answering)) { console.error(`--for takes <item>/<n> (an item id and a comment number), not ${answering}`); process.exit(1); }
+  const suggests = rest.indexOf("--suggest"), suggest = suggests < 0 ? undefined : /^suggestion\//.test(rest[suggests + 1] ?? "") ? rest.splice(suggests, 2)[1] : (rest.splice(suggests, 1), true);
   const [id, block, ...words] = rest;
   const markdown = argument === "read" || argument === "delete" ? undefined : argument === "set" || words.length ? words.join(" ") : await (await import("node:stream/consumers")).text(process.stdin);
   const route = `/v0/document/${encodeURIComponent(id)}${argument === "read" ? "" : "/blocks"}`;
   try {
-    process.stdout.write(execFileSync(process.execPath, [new URL("./conduit-auth.mjs", import.meta.url).pathname, "api", argument === "read" ? "GET" : "POST", route, ...(argument === "read" ? [] : [JSON.stringify({ op: argument, block, markdown, by, for: answering })])], { encoding: "utf8" }));
+    process.stdout.write(execFileSync(process.execPath, [new URL("./conduit-auth.mjs", import.meta.url).pathname, "api", argument === "read" ? "GET" : "POST", route, ...(argument === "read" ? [] : [JSON.stringify({ op: argument, block, markdown, by, for: answering, suggest })])], { encoding: "utf8" }));
+  } catch (error) { process.stderr.write(error.stdout || `${error.message}\n`); process.exit(1); }
+} else if (command === "document" && rest[0] && (argument === "suggestions" || ((argument === "accept" || argument === "reject") && rest[1]))) {
+  const { execFileSync } = await import("node:child_process");
+  const [id, key] = rest, settle = argument !== "suggestions";
+  try {
+    process.stdout.write(execFileSync(process.execPath, [new URL("./conduit-auth.mjs", import.meta.url).pathname, "api", settle ? "POST" : "GET", `/v0/document/${encodeURIComponent(id)}/${settle ? "changes" : "suggestions"}`, ...(settle ? [JSON.stringify({ op: argument, key })] : [])], { encoding: "utf8" }));
   } catch (error) { process.stderr.write(error.stdout || `${error.message}\n`); process.exit(1); }
 } else if (command === "list") {
   for (const entry of await items()) {
@@ -213,7 +221,7 @@ if (command === "wait") {
     if (waiter && alive(waiter.id)) console.log(`waiter   ${waiter.name}  (${waiter.cwd}, since ${waiter.since})`);
   }
 } else {
-  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document list <project> | document new <name> --project <id> [--folder <path>] [--kind site] | document read <id> | document set <id> <name> [value] | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block>   (--as <name>; --for <item>/<n> names the comment an edit answers; Markdown from stdin when not given)");
+  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document list <project> | document new <name> --project <id> [--folder <path>] [--kind site] | document read <id> | document set <id> <name> [value] | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block> | document suggestions <id> | document accept|reject <id> <key>   (--as <name>; --for <item>/<n> names the comment an edit answers; --suggest [key] makes it a suggestion; Markdown from stdin when not given)");
   // Asked for (`document` alone, as an item's `change` tells an agent to run it), usage is an answer, not a failure.
   process.exit(command && !(command === "document" && !argument) ? 1 : 0);
 }

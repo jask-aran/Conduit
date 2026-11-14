@@ -1,8 +1,8 @@
 import names from "virtual:ui-pieces";
 import { createEffect, createResource, createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import { DocumentEditor, type DocumentControls, type DocumentHost, type DocumentMarks } from "@/components/document";
-import { MarkupMargin, MarkupTool, httpTransport, type MarkupHost, type MarkupMarginControl, type MarkupMode } from "@/components/markup";
-import { Button, Empty, HeaderButton, Icons, SheetFill, StatusDot } from "@/components/ui";
+import { MarkupMargin, MarkupTool, httpTransport, type MarkupHost, type MarkupMarginControl, type MarkupMarginEntry, type MarkupMode } from "@/components/markup";
+import { Button, Dot, Empty, HeaderButton, Icons, SheetFill, StatusDot } from "@/components/ui";
 import { DocumentOutline, type DocumentWidth } from "@/components/ui/document";
 import { MarkupRibbonRoom } from "@/components/ui/markup";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
@@ -17,6 +17,10 @@ import { ARTIFACT_CAPABILITIES } from "./artifact-capabilities";
 import { connect, connectedTo, disconnect } from "./connections";
 import SitePane from "./site-pane";
 
+/** What the paper's editor offers, with what another builder's side may not have added yet. */
+type Marks = DocumentMarks & Partial<{ seats(): { name: string; state: string; for?: string }[] }>;
+const STATES: Record<MarkupMarginEntry["state"], string> = { waiting: "Waiting", working: "Working", answered: "Answered", resolved: "Agent resolved", suggested: "Suggested" };
+
 /*
  * An artifact in a pane (the view `artifact:<id>`): a paper's editor and margin, or a site's frame (SitePane), with
  * Markup's bar over the pane, wired as /document wires the test document. `quiet`: the app's own interface feedback
@@ -29,10 +33,12 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
   const changed = () => void refetch();
   window.addEventListener("conduit:artifacts-changed", changed);
   onCleanup(() => window.removeEventListener("conduit:artifacts-changed", changed));
-  const [mode, setMode] = createSignal<MarkupMode>("use"), [sent, setSent] = createSignal(0), [away, setAway] = createSignal(false);
+  const [mode, setMode] = createSignal<MarkupMode>("use"), [sent, setSent] = createSignal(0), [away, setAway] = createSignal(false), [stale, setStale] = createSignal(false);
   const base = () => `/v0/document/${encodeURIComponent(props.id)}`;
   const client = `document-${Math.random().toString(36).slice(2, 10)}`;
-  let frame: HTMLDivElement | undefined, room: HTMLDivElement | undefined, marks: DocumentMarks | undefined, was: Artifact["kind"] | undefined;
+  let frame: HTMLDivElement | undefined, room: HTMLDivElement | undefined, marks: Marks | undefined, was: Artifact["kind"] | undefined;
+  // Also as a signal, so what the margin reads of the editor live (its seats, its suggestions) follows once the editor is made.
+  const [marked, setMarked] = createSignal<Marks>();
   // What the open tool offers the paper's `@`: who is listening, and a comment for one of them.
   const [offer, setOffer] = createSignal<Parameters<NonNullable<MarkupHost["asks"]>>[0]>(null);
   const ask = (about: Range, name?: string) => offer()?.ask(about, name);
@@ -65,7 +71,7 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
     src: (name) => pictures.get(name) ?? pictures.set(name, authorizedFetch(httpUrl(`${base()}/images/${name}`)).then(async (response) => { if (!response.ok) throw new Error(String(response.status)); return URL.createObjectURL(await response.blob()); })).get(name)!,
   };
   onCleanup(() => pictures.forEach((made) => void made.then(URL.revokeObjectURL, () => {})));
-  const editing: DocumentHost = { images, tools: ARTIFACT_CAPABILITIES.paper.edit, socket: async (id) => new WebSocket(await webSocketUrl(`/v0/document/${id}/live`)), author: () => "person" };
+  const editing: DocumentHost = { images, suggest: ARTIFACT_CAPABILITIES.paper.suggest, tools: ARTIFACT_CAPABILITIES.paper.edit, socket: async (id) => new WebSocket(await webSocketUrl(`/v0/document/${id}/live`)), author: () => "person" };
   const shared = { names, transport: httpTransport(api, `${base()}/markup`), clientId: () => client, capturePage, frame: () => room ?? frame,
     notify: (outcome, message) => outcome === "sent" ? toast.success(message) : toast.error(message) } satisfies Partial<MarkupHost>;
   const markup: MarkupHost = {
@@ -77,12 +83,35 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
     margin: {
       anchors: (list) => marks?.anchors(list), place: (key) => marks?.place(key) ?? null, watch: (listener) => marks?.watch(listener) ?? (() => {}),
       revert: { can: (key) => marks?.changed(key) ?? false, run: (key) => api(`${base()}/changes`, { method: "POST", body: JSON.stringify({ op: "revert", thread: key }) }) },
+      working: (key) => { const seat = marked()?.seats?.().find((one) => one.for === key); return seat && { by: seat.name, state: seat.state }; },
+      suggestions: { list: () => marked()?.suggestions() ?? [], place: (key) => marks?.place(key) ?? null, accept: (key) => marks?.accept(key), reject: (key) => marks?.reject(key) },
+      focus: () => frame?.querySelector<HTMLElement>(".ui-document-text")?.focus({ preventScroll: true }),
     },
     tools: () => marks?.tools() ?? [],
     history: { undo: () => marks?.history.undo() ?? false, redo: () => marks?.history.redo() ?? false, canUndo: () => marks?.history.canUndo() ?? false, canRedo: () => marks?.history.canRedo() ?? false },
     asking: () => marks?.selection() ?? null,
     asks: (offered) => setOffer(() => offered),
     sent: () => setSent((count) => count + 1),
+  };
+  // Every card of the margin, in the order of their places: those waiting on the person (answered, resolved by the agent) or all, then the suggestions.
+  const [needsMe, setNeedsMe] = createSignal(true);
+  const commentList = (margin: MarkupMarginControl) => {
+    const entries = () => margin.list(), notes = () => entries().filter((one) => one.kind === "comment"), suggested = () => entries().filter((one) => one.kind === "suggestion");
+    const waiting = () => notes().filter((one) => one.state === "answered" || one.state === "resolved"), done = () => notes().filter((one) => one.state === "resolved").length;
+    const row = (entry: MarkupMarginEntry) => <MenuRow icon={entry.unread ? <Dot tone="unread" aria-label="Unread" /> : undefined} detail={entry.by ?? undefined} meta={STATES[entry.state]} onSelect={() => margin.go(entry.key)}>{entry.about || "Comment"}</MenuRow>;
+    return <Show when={entries().length}><DropdownMenu modal={false} placement="bottom-end">
+      <MenuControl as={Button} variant="ghost" size="sm" title="Comments">{margin.open() ? `${margin.open()} open` : `${entries().length} to review`}</MenuControl>
+      <MenuContent width="md" height="lg">
+        <MenuSection title="Show">
+          <MenuRow closeOnSelect={false} checked={needsMe()} meta={String(waiting().length)} onSelect={() => setNeedsMe(true)}>Needs me</MenuRow>
+          <MenuRow closeOnSelect={false} checked={!needsMe()} meta={String(notes().length)} onSelect={() => setNeedsMe(false)}>All</MenuRow>
+        </MenuSection>
+        <MenuSection title="Comments" note={(needsMe() ? waiting() : notes()).length ? undefined : needsMe() ? "Nothing waiting on you" : "No comments"}><For each={needsMe() ? waiting() : notes()}>{row}</For></MenuSection>
+        <Show when={suggested().length}><MenuSection title="Suggestions"><For each={suggested()}>{(entry) => <MenuRow detail={entry.by ?? undefined} onSelect={() => margin.go(entry.key)}
+          actions={[{ label: "Reject", icon: <Icons.Close />, onSelect: () => marks?.reject(entry.key) }, { label: "Accept", icon: <Icons.Check />, onSelect: () => marks?.accept(entry.key) }]}>{entry.about}</MenuRow>}</For></MenuSection></Show>
+        <Show when={done()}><MenuSection><MenuRow icon={<Icons.Check />} meta={String(done())} onSelect={() => void margin.resolveDone()}>Resolve all the agent resolved</MenuRow></MenuSection></Show>
+      </MenuContent>
+    </DropdownMenu></Show>;
   };
   const tool = (host: MarkupHost) => <Show when={!props.quiet}><MarkupTool host={host} mode={mode()} onMode={setMode} onClose={() => setMode("use")} /></Show>;
   // `latest`: asked again, it stays as it was until the hub answers, so its editor is not made anew.
@@ -100,16 +129,16 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
     </MenuSection></MenuContent>
   </DropdownMenu>;
   return <SheetFill ref={(element) => { frame = element; }} class="pane-artifact">
-    {props.header(<><Show when={found()?.trouble}>{(why) => <StatusDot label={why()} title={why()} tone="warn" />}</Show><Show when={away()}><StatusDot label="Reconnecting to the hub" title="Reconnecting to the hub" tone="warn" spinning /></Show><Show when={found()?.kind === "paper" && !props.quiet && comments()?.open()}>{(open) => <Button variant="ghost" size="sm" title="Go to the next open comment" onClick={() => comments()?.next()}>{open()} open</Button>}</Show>
+    {props.header(<><Show when={found()?.trouble}>{(why) => <StatusDot label={why()} title={why()} tone="warn" />}</Show><Show when={stale()}><Button variant="secondary" size="sm" onClick={() => location.reload()}>Reload: this page is older than the paper</Button></Show><Show when={away()}><StatusDot label="Reconnecting to the hub" title="Reconnecting to the hub" tone="warn" spinning /></Show><Show when={found()?.kind === "paper" && !props.quiet && comments()}>{(margin) => commentList(margin())}</Show>
       <Show when={found()?.kind === "paper" && controls()}>{(edits) => <DropdownMenu modal={false} placement="bottom-end">
         <MenuControl as={HeaderButton} ref={(element: HTMLButtonElement) => { outlining = element; }} label="Outline" icon={<Icons.Sidebar />} />
-        <MenuContent width="md"><MenuSection title="Outline"><Show when={edits().outline().length} fallback={<MenuRow disabled>No headings yet</MenuRow>}><DocumentOutline headings={edits().outline()} current={edits().current()} onPick={edits().reveal} /></Show></MenuSection></MenuContent>
+        <MenuContent width="md"><MenuSection title="Outline" note={edits().outline().length ? undefined : "No headings yet"}><Show when={edits().outline().length}><DocumentOutline headings={edits().outline()} current={edits().current()} onPick={edits().reveal} /></Show></MenuSection></MenuContent>
       </DropdownMenu>}</Show>
       <Show when={found()}>{connecting}</Show></>)}
     <Show when={!props.quiet && found()}><MarkupRibbonRoom ref={(element) => { room = element; }} /></Show>
     <Show when={!about.error} fallback={<Empty role="alert">This {kind()} could not be opened: {String((about.error as Error)?.message || "the hub did not say why").replace(/\.$/, "")}.</Empty>}>
       <Show when={found()?.id} keyed fallback={<Empty role="status">Opening the {kind()}…</Empty>}>{(id) => found()?.kind === "site" ? <SitePane about={() => found()!} host={shared} tool={tool} /> : <>
-        <DocumentEditor host={editing} id={id} name={found()?.name ?? ""} bare onAway={setAway} marks={(offered) => { marks = offered; }} mentions={() => props.quiet ? [] : offer()?.names() ?? []} onMention={ask} onRename={(name) => renameArtifact(id, name)} count={paperCounted()} width={width()} controls={setControls} onComment={props.quiet ? undefined : ask} margin={<MarkupMargin host={markup} sent={sent()} control={setComments} onCards={setCards} />} marginEmpty={!cards()} />
+        <DocumentEditor host={editing} id={id} name={found()?.name ?? ""} bare onAway={setAway} onStale={setStale} marks={(offered) => { marks = offered; setMarked(() => offered); }} mentions={() => props.quiet ? [] : offer()?.names() ?? []} onMention={ask} onRename={(name) => renameArtifact(id, name)} count={paperCounted()} width={width()} controls={setControls} onComment={props.quiet ? undefined : ask} margin={<MarkupMargin host={markup} sent={sent()} control={setComments} onCards={setCards} />} marginEmpty={!cards()} />
         {tool(markup)}
       </>}</Show>
     </Show>

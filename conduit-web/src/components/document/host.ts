@@ -35,7 +35,17 @@ export interface DocumentHost {
    * kept name from. Without it no image is offered, whatever `tools` says.
    */
   images?: { keep(file: File): Promise<string>; src(name: string): string | Promise<string> };
+  /**
+   * Suggesting offered beside Editing (unsaid: Editing only). `controls`: who draws each suggestion's Accept and Reject: the editor, `inline` at its
+   * first block, or a layer over it (`margin`, from DocumentMarks.suggestions).
+   */
+  suggest?: { controls: "inline" | "margin" };
 }
+
+/** How the reader writes in a paper: `editing` is final; in `suggesting` each burst of writing stands as a suggestion until accepted or rejected. Each reader's, per paper, never written to it. */
+export type DocumentWriting = "editing" | "suggesting";
+/** A suggestion standing in the document (document-format.js SUGGESTION): its key, who made it and when, its blocks (in order, then those it deleted), and what it does in words. */
+export type DocumentSuggestion = { key: string; by: string; at: string; blocks: string[]; summary: string };
 
 /** Each text mark, on where the selection is; `can`: a mark would apply now (a selection, or a caret in a block of text). */
 export type DocumentMarking = { can: boolean; on: Record<DocumentMarkKind, boolean> };
@@ -57,8 +67,8 @@ export type DocumentControls = {
   find(): void;
 };
 
-/** How this copy stands with the hub's: `away` keeps what is written and sends it when the hub answers again. */
-export type DocumentState = "connecting" | "live" | "away";
+/** How this copy stands with the hub's: `away` keeps what is written and sends it when the hub answers again; `stale`, the hub refuses this page as older than the paper, so it is read only until reloaded. */
+export type DocumentState = "connecting" | "live" | "away" | "stale";
 
 /** A comment the editor marks in the text: `under.blocks` is the ids of the blocks it was made on, `quote` the run of text in them (found again in its block; the block itself when the text has changed). */
 export type DocumentAnchor = { key: string; quote?: string; under?: Record<string, string | number | boolean>; current: boolean; resolved: boolean };
@@ -85,4 +95,10 @@ export type DocumentMarks = {
   place(key: string): { left: number; top: number; width: number; height: number } | null;
   watch(listener: (pressed?: string) => void): () => void;
   changed(key: string): boolean;
+  /** The suggestions standing, oldest first, read where drawn. `place` finds one by its key. `accept`: its text stays and stops standing as suggested; `reject`: taken back. */
+  suggestions(): DocumentSuggestion[];
+  accept(key: string): void;
+  reject(key: string): void;
+  /** The agents at work in the document now, as the hub tells them; read where drawn. */
+  seats(): DocumentSeat[];
 };

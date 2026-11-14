@@ -636,7 +636,7 @@ for (const adapter of backends.instances()) {
   });
   adapter.on?.("removed", ({ id, chatId }) => runtimeHub.publishProcessRemoved(id, chatId));
   if (adapter.sessions) adapter.sessions.onTurn = (record) => publishProcessChange(adapter.view(record), record, "turn");
-  adapter.on?.("tool_input", ({ chatId, name, input }) => { if (name === "conduit_paper") void artifactHeard(chatId, input); });
+  adapter.on?.("tool_input", ({ chatId, name, input, call, done }) => { if (name === "conduit_paper") void artifactHeard(chatId, input, call, done); });
 }
 registerDraftRoutes(app, { drafts, knownChat: async (chatId) => Boolean(await findChatContext(chatId)) });
 registerContextRoutes(app, { contextStore });
@@ -651,7 +651,7 @@ const paperChats = () => (paperChatHost ??= createChatHost({ registry, projects,
 const documents = lifetime.own("documents", createDocuments({ dataRoot: config.dataRoot, projects, devices: (project) => projectWorkspace(project, nodeHub), changed: (projectId) => runtimeHub.publish({ type: "artifacts_changed", projectId }),
   chats: () => ({ open: (asked) => paperChats().openChat(asked), notify: (id, text) => paperChats().deliverApproval(id, text), get: (id) => { const chat = registry.metadata(id); return chat ? chatView(chat) : null; }, working: (id) => isGeneratingRecord(backends.getByChatId(id)) }) }), (owned) => owned.close());
 artifactTurned = (chat) => documents.turned(chat);
-artifactHeard = (chat, input) => documents.heard(chat, input).catch(() => {});
+artifactHeard = (chat, input, call, done) => documents.heard(chat, input, call, done).catch(() => {});
 registerDocumentRoutes(app, documents);
 mcpRuntime.documents = documents;
 onWorkspaceChange((projectIds) => documents.filesChanged(projectIds));

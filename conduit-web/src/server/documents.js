@@ -10,7 +10,7 @@ import { WebSocketServer } from "ws";
 import { updateYFragment, yXmlFragmentToProseMirrorRootNode } from "y-prosemirror";
 import * as Y from "yjs";
 import { excludeConduitFromGit } from "../attachment-store.js";
-import { AUTHORS, BLOCK_TYPES, CHANGES, FORMAT, FRAGMENT, FRAME, IMAGE_NAME, PROPERTIES, blockId, documentExtensions, frame } from "../document-format.js";
+import { AUTHORS, BLOCK_TYPES, CHANGES, FORMAT, FRAGMENT, FRAME, IMAGE_NAME, PROPERTIES, SUGGESTION, blockId, documentExtensions, fitted, frame, isSuggestion } from "../document-format.js";
 import { remoteNode } from "../place.js";
 import { writePrivateFile } from "../private-file.js";
 import { createMarkupStore } from "./markup-store.js";
@@ -46,8 +46,73 @@ import { startWebSocketKeepalive } from "./ws-keepalive.js";
  * keeps `wait`.
  */
 // A seat with no word from its agent is left after SEAT_IDLE_MS (a turn that ended unheard), and one whose chat has no turn running SEAT_START_MS after a
-// comment was handed to it is left then; pages are told of seats at most once each SEAT_TELL_MS.
-const SEAT_IDLE_MS = 600_000, SEAT_TELL_MS = 80, SEAT_START_MS = 5_000;
+// comment was handed to it is left then; pages are told of more of what it writes at most once each SEAT_TELL_MS, and a seat heard writing that then
+// goes SEAT_QUIET_MS with no more of it and no edit landing (a call cut off, a tool that failed) is thinking again.
+const SEAT_IDLE_MS = 600_000, SEAT_TELL_MS = 80, SEAT_START_MS = 5_000, SEAT_QUIET_MS = 5_000;
+const ESCAPES = { '"': '"', "\\": "\\", "/": "/", b: "\b", f: "\f", n: "\n", r: "\r", t: "\t" };
+/**
+ * What can be read of a JSON object a model is still writing: its top-level string values as far as they are written (`values`), and `open`, the
+ * key whose value is cut off (null once each read value is whole). Read as JSON is, never by pattern, so a key's name inside a value is only
+ * text, and keys come in any order. An escape cut mid-way, and half a surrogate pair, are held back until the rest comes; anything that is not
+ * JSON ends the read where it starts.
+ */
+export function readPartial(input) {
+  const values = {}, text = String(input);
+  let at = 0;
+  const space = () => { while (/\s/.test(text[at] ?? "")) at += 1; };
+  // A string from its opening quote: its text so far, and whether its closing quote came.
+  const string = () => {
+    let out = "";
+    for (at += 1; at < text.length; at += 1) {
+      const c = text[at];
+      if (c === '"') { at += 1; return { out, whole: true }; }
+      if (c !== "\\") { out += c; continue; }
+      const next = text[at + 1];
+      if (next === undefined) break;
+      if (next === "u") {
+        const hex = text.slice(at + 2, at + 6);
+        if (hex.length < 4) break;
+        if (!/^[0-9a-f]{4}$/i.test(hex)) return null;
+        out += String.fromCharCode(parseInt(hex, 16)); at += 5; continue;
+      }
+      if (!(next in ESCAPES)) return null;
+      out += ESCAPES[next]; at += 1;
+    }
+    return { out: /[\ud800-\udbff]$/.test(out) ? out.slice(0, -1) : out, whole: false };
+  };
+  // Any other value, passed over: to the comma or brace that ends it, strings and nesting included.
+  const skip = () => {
+    let depth = 0;
+    while (at < text.length) {
+      const c = text[at];
+      if (c === '"') { if (!string()?.whole) return false; continue; }
+      if (c === "{" || c === "[") depth += 1;
+      else if (c === "}" || c === "]") { if (!depth) return true; depth -= 1; }
+      else if (c === "," && !depth) return true;
+      at += 1;
+    }
+    return false;
+  };
+  space();
+  if (text[at] !== "{") return { values, open: null };
+  at += 1;
+  for (;;) {
+    space();
+    if (text[at] === ",") { at += 1; space(); }
+    if (text[at] !== '"') return { values, open: null };
+    const key = string();
+    if (!key?.whole) return { values, open: null };
+    space();
+    if (text[at] !== ":") return { values, open: null };
+    at += 1; space();
+    if (at >= text.length) return { values, open: key.out };
+    if (text[at] !== '"') { if (!skip()) return { values, open: null }; continue; }
+    const value = string();
+    if (!value) return { values, open: null };
+    values[key.out] = value.out;
+    if (!value.whole) return { values, open: key.out };
+  }
+}
 const SAVE_AFTER_MS = 500, LOOK_EVERY_MS = 2_000, SCAN_AFTER_MS = 3_000, FAR_SCAN_MS = 15_000;
 const MATED = "conduit", SCRIPT = path.resolve(import.meta.dirname, "../../../scripts/conduit-markup.mjs");
 const KINDS = { paper: ".paper", site: ".site.html" }, ID = /^[a-z0-9-]{1,64}$/, WALK = { entries: 20_000, depth: 6 };
@@ -161,7 +226,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   const folder = path.join(dataRoot, "documents"), extensions = documentExtensions(), schema = getSchema(extensions), markdown = new MarkdownManager({ extensions });
   const sockets = new WebSocketServer({ noServer: true }), rooms = new Map(), known = new Map(), scans = new Map(), rescans = new Map(), scanned = new Map();
   const withIds = (node) => ({ ...node, ...(BLOCK_TYPES.includes(node.type) ? { attrs: { ...node.attrs, id: node.attrs?.id ?? blockId() } } : {}), ...(node.content ? { content: node.content.map(withIds) } : {}) });
-  const parse = (text) => [...schema.nodeFromJSON(withIds(markdown.parse(text))).content.content];
+  const parse = (text) => [...schema.nodeFromJSON(withIds(fitted(markdown.parse(text)))).content.content];
   const blocksOf = (room) => [...yXmlFragmentToProseMirrorRootNode(room.blocks, schema).content.content];
   const empty = () => schema.nodes.paragraph.create({ id: blockId() });
   /** The document becomes these blocks. `by` names the agent writing: its changes are made under a Yjs client id of its own, so they stay told apart from the hub's and each person's. `also`: what else is written with them, as one change. */
@@ -341,13 +406,37 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     room.seats ??= new Map(); room.leaving ??= new Map();
     clearTimeout(room.leaving.get(name));
     if (!change) { room.leaving.delete(name); if (room.seats.delete(name)) seated(room); return; }
-    room.seats.set(name, { blocks: [], ...room.seats.get(name), ...change, name });
+    const was = room.seats.get(name), now = { blocks: [], ...was, ...change, name };
+    room.seats.set(name, now);
     const idle = setTimeout(() => sit(room, name, null), SEAT_IDLE_MS); idle.unref?.(); room.leaving.set(name, idle);
-    // Told at most once each SEAT_TELL_MS: a model writes many times a second.
-    room.telling ??= setTimeout(() => { room.telling = null; seated(room); }, SEAT_TELL_MS);
+    // A seat that moves or changes what it does is told at once, so it follows the edit it lands with in the same breath (the update goes out first);
+    // more of what it is writing waits, told at most once each SEAT_TELL_MS: a model writes many times a second.
+    if (was?.state === now.state && was.op === now.op && String(was.blocks) === String(now.blocks)) room.telling ??= setTimeout(() => { room.telling = null; seated(room); }, SEAT_TELL_MS);
+    else { clearTimeout(room.telling); room.telling = null; seated(room); }
   };
   /** Only a listener the hub holds has a seat, and only while it has one already or its chat has a turn running: a script that edits under a name is not at work for the person. */
   const sits = (id, name, room) => { const one = heldFor(id).find((held) => held.name === name); return Boolean(one && (room?.seats?.has(name) || chats()?.working?.(one.chat))); };
+  /** What is heard of each chat's conduit_paper call as the model writes it (`heard`): the call, its latest input, and once read, where it writes. */
+  const hearing = new Map();
+  const hear = async (one, documents) => {
+    const { values, open } = readPartial(one.input), whole = (key) => key in values && open !== key ? values[key] : undefined;
+    one.action ??= whole("action"); one.block ??= whole("block"); one.for ??= whole("for");
+    one.papers ??= documents.of(one.chat).papers;
+    one.paper ??= whole("paper") ?? (one.papers.length === 1 ? one.papers[0].id : undefined);
+    one.as ??= one.papers.find((paper) => paper.id === one.paper)?.as;
+    if (!one.as || !one.block || (one.action !== "replace" && one.action !== "insert")) return;
+    await documents.seat(one.paper, one.as, { state: "writing", op: one.action, blocks: [one.block], text: values.markdown ?? "", ...(one.for ? { for: one.for } : {}) });
+    clearTimeout(one.hush);
+    one.hush = setTimeout(() => quiet(one), SEAT_QUIET_MS); one.hush.unref?.();
+  };
+  /** A call heard no more, its edit not landed (cut off, superseded, failed): its seat, still writing what it was heard writing, is thinking again. */
+  const quiet = (one) => {
+    clearTimeout(one.reading); clearTimeout(one.hush);
+    if (one.as) void rooms.get(one.paper)?.then((room) => {
+      const seat = room?.seats?.get(one.as);
+      if (seat?.state === "writing" && seat.op === one.action && String(seat.blocks) === one.block) sit(room, one.as, { state: "thinking", op: undefined, text: undefined });
+    }, () => {});
+  };
 
   /**
    * What the hub does for a listener it holds, as the CLI's `wait` does for a session: the item is taken in its name,
@@ -362,8 +451,14 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     const comments = JSON.parse(await fs.readFile(path.join(dir, "item.json"), "utf8")).comments ?? [];
     const card = (comment, words, said) => handoff({ artifact: room.id, kind: room.entry.kind, name: room.entry.name.replace(/\s+/g, " ").slice(0, 120), item, n: comment?.n, block: String(comment?.under?.blocks ?? "").split(" ")[0] || undefined, said }, comment?.quote, words);
     const about = (list) => [...new Set(list.flatMap((comment) => String(comment?.under?.blocks ?? "").split(" ").filter(Boolean)))];
-    if (room.doc && said) sit(room, to.name, { state: "thinking", blocks: about([comments.find((comment) => comment.n === said.n)]), for: `${item}/${said.n ?? 1}`, text: undefined });
-    if (said) return host().notify(chat, `${card(comments.find((comment) => comment.n === said.n) ?? { n: said.n }, said.text, said.text ? "reply" : "reopened")}\nOn the ${room.entry.kind} ${name}, markup item ${item}: ${said.text ? `the person wrote back${Number.isInteger(said.n) ? ` on comment ${said.n}` : ""}: ${said.text}` : `the person reopened comment ${said.n}.`}\nThe item is ${path.join(dir, "item.json")}; answer with \`node ${SCRIPT} reply ${item} [n] "<words>"\`.`);
+    // Seated once the chat has been told, never before: a chat that could not be told is not at work. One that is already reading or writing keeps that;
+    // and one whose chat answered before it was seated, or never began a turn, has no turn end to leave by, so it leaves SEAT_START_MS on.
+    const seat = (blocks, about) => {
+      if (!room.doc) return;
+      if (!["reading", "writing"].includes(room.seats?.get(to.name)?.state)) sit(room, to.name, { state: "thinking", blocks, for: about, text: undefined });
+      setTimeout(() => { if (!chats()?.working?.(chat)) sit(room, to.name, null); }, SEAT_START_MS).unref?.();
+    };
+    if (said) return host().notify(chat, `${card(comments.find((comment) => comment.n === said.n) ?? { n: said.n }, said.text, said.text ? "reply" : "reopened")}\nOn the ${room.entry.kind} ${name}, markup item ${item}: ${said.text ? `the person wrote back${Number.isInteger(said.n) ? ` on comment ${said.n}` : ""}: ${said.text}` : `the person reopened comment ${said.n}.`}\nThe item is ${path.join(dir, "item.json")}; answer with \`node ${SCRIPT} reply ${item} [n] "<words>"\`.`).then(() => seat(about([comments.find((comment) => comment.n === said.n)]), `${item}/${said.n ?? 1}`));
     // Taken once: a session that took it first (a `wait` under the same name) keeps it, and the chat is told nothing.
     const mine = await fs.writeFile(taken, `${JSON.stringify({ name: to.name, held: true, chat, at })}\n`, { flag: "wx" }).then(() => true, async () => (await fs.readFile(taken, "utf8").then(JSON.parse).catch(() => null))?.held === true);
     if (!mine) return;
@@ -375,9 +470,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     await host().notify(chat, `${fresh.map((comment) => card(comment, comment.comment)).join("\n")}\n${fresh.length === comments.length ? "The person" : "The person added to what they"} sent you ${fresh.length === 1 ? "a comment" : `${fresh.length} comments`} on the ${room.entry.kind} ${name}${fresh.length === comments.length ? "" : ` (${fresh.map((comment) => comment.n).join(", ")})`}. Read ${path.join(dir, "item.json")} (its \`read\` says how) and do what it asks. The person reads the ${room.entry.kind}'s margin, not this chat: say what you did, or ask what you need to know, with \`reply\` on the comment, in a line or two; what you write here is only your own log.${to.name === MATED && room.entry.kind === "paper" ? ` Write in it as \`${MATED}\`: the tool \`conduit_paper\` does, and the CLI's \`document\` commands take \`--as ${MATED}\`.` : ""}`)
       .catch(async (error) => { if (!told.size) await fs.rm(taken, { force: true }); throw error; });
     await fs.appendFile(path.join(dir, "thread.jsonl"), fresh.map((comment) => `${JSON.stringify({ at, from: "agent", by: to.name, n: comment.n, working: true })}\n`).join(""));
-    if (room.doc) sit(room, to.name, { state: "thinking", blocks: about(fresh), for: `${item}/${fresh[0].n}`, text: undefined });
-    // A chat that answered before it was seated, or never began a turn, has no turn end to leave by.
-    if (room.doc) setTimeout(() => { if (!chats()?.working?.(chat)) sit(room, to.name, null); }, SEAT_START_MS).unref?.();
+    seat(about(fresh), `${item}/${fresh[0].n}`);
   }
 
   /** The file is the paper: what it holds that the live copy does not is taken, as the smallest change that makes the live copy so. */
@@ -489,9 +582,9 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     room.owed = await fs.readFile(path.join(entry.side, "unwritten"), "utf8").catch(() => null);
     await take(room);
     // A change is accepted when the person resolves its comment (a session's resolve accepts nothing); read on every look at the open threads, which hold every comment the person has not resolved.
-    room.markup = markupOf(room, () => `(document ${id})`, () => [`An image block reads as \`![caption](name)\`; its picture is the file ${path.join(room.entry.side, "images")}/<name>.`, "If you have the tool `conduit_paper`, it does the same without a shell: read, replace, insert, delete (with `for`), reply and resolve.", "To answer a comment by changing the document, add `--for <this item's id>/<n>` to `document replace`, `insert` or `delete`: the person then sees which blocks changed for comment n and can take the change back. Resolving the comment yourself does not accept the change for the person: the comment stays in their margin, marked as resolved by you, with the change shown, until they resolve it too."], (items) => {
+    room.markup = markupOf(room, () => `(document ${id})`, () => [`An image block reads as \`![caption](name)\`; its picture is the file ${path.join(room.entry.side, "images")}/<name>.`, "If you have the tool `conduit_paper`, it does the same without a shell: read, replace, insert, delete (with `for`), reply and resolve.", "To answer a comment by changing the document, add `--for <this item's id>/<n>` to `document replace`, `insert` or `delete`: the person then sees which blocks changed for comment n and can take the change back. Resolving the comment yourself does not accept the change for the person: the comment stays in their margin, marked as resolved by you, with the change shown, until they resolve it too.", "Where the person asked for proposals rather than changes, add `--suggest` instead: the edit stands as a suggestion they accept or reject (`--suggest <key>` adds to one; `document suggestions <id>` lists them)."], (items) => {
       const unsettled = new Set(items.flatMap((item) => item.comments.filter((comment) => !(comment.resolved && comment.resolvedBy === "person")).map((comment) => `${item.id}/${comment.n}`)));
-      const settled = [...room.changes.entries()].filter(([, change]) => !unsettled.has(change.for));
+      const settled = [...room.changes.entries()].filter(([, change]) => !isSuggestion(change.for) && !unsettled.has(change.for));
       if (settled.length) doc.transact(() => { for (const [block] of settled) room.changes.delete(block); });
     });
     doc.on("update", (update, origin) => {
@@ -584,17 +677,25 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     /** A listener the hub holds read the paper (`reading`), or is heard writing a change to it before it is made (`writing`, with the block and the Markdown so far). */
     async seat(id, by, change) { const room = await rooms.get(id)?.catch(() => null); if (room?.doc && sits(id, by, room)) sit(room, by, { text: undefined, ...change }); },
     /**
-     * A chat is heard writing a call to conduit_paper: `input` is its JSON so far, cut wherever the model has got to. What can be read of it (the
-     * action, the block, the Markdown up to its last whole character) seats the chat's agent on that block, writing.
+     * A chat is heard writing a call to conduit_paper: `input` is its JSON so far, cut wherever the model has got to; `call` names the call in its turn,
+     * and `done` says its input is whole. What can be read of it (readPartial: the action, the block, the Markdown so far) seats the chat's agent on
+     * that block, writing. The latest input is read at most once each SEAT_TELL_MS, and where a call writes is read once.
      */
-    async heard(chat, input) {
-      const said = (key) => { const found = new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)`).exec(input)?.[1]; if (found === undefined) return undefined; try { return JSON.parse(`"${found.replace(/\\(u[0-9a-f]{0,3})?$/i, "")}"`); } catch { return undefined; } };
-      const action = said("action"), block = said("block"), mine = this.of(chat), paper = said("paper") ?? (mine.papers.length === 1 ? mine.papers[0].id : null), as = mine.papers.find((one) => one.id === paper)?.as;
-      if (as && block && (action === "replace" || action === "insert")) await this.seat(paper, as, { state: "writing", op: action, blocks: [block], text: said("markdown") ?? "" });
+    async heard(chat, input, call = "", done = false) {
+      let one = hearing.get(chat);
+      // A new call: what the last one was heard writing is not what this one writes.
+      if (one?.call !== call) { if (one) quiet(one); one = { chat, call }; hearing.set(chat, one); }
+      if (one.done) return;
+      Object.assign(one, { input, done });
+      if (!done) { one.reading ??= setTimeout(() => { one.reading = null; void hear(one, this).catch(() => {}); }, SEAT_TELL_MS); return; }
+      clearTimeout(one.reading); one.reading = null;
+      await hear(one, this);
     },
     /** A chat's turn ended or began: the seats it holds are left when it is no longer at work. */
     async left(chat) {
       if (chats()?.working?.(chat)) return;
+      const one = hearing.get(chat);
+      if (one) { clearTimeout(one.reading); clearTimeout(one.hush); hearing.delete(chat); }
       for (const entry of known.values()) { const as = heldFor(entry.id).find((one) => one.chat === chat)?.name, room = as && await rooms.get(entry.id)?.catch(() => null); if (room?.seats?.has(as)) sit(room, as, null); }
     },
     turned(chat) {
@@ -672,8 +773,9 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
      * One block changed: `replace` it with the Markdown's blocks (the first keeps its id), `insert` them after it (after `start`: first), or `delete` it.
      * `set` writes its front matter instead.
      * `for` ("<item>/<n>") is the comment it answers: what it changes is then kept in the document's changes until that comment is resolved.
+     * `suggest`: the edit is a suggestion instead, kept the same way until the person accepts or rejects it; true starts one, a suggestion's key adds to it.
      */
-    async edit(id, { op, block, markdown: text = "", by, for: about } = {}) {
+    async edit(id, { op, block, markdown: text = "", by, for: about, suggest } = {}) {
       const kept = await current(id), now = blocksOf(kept), at = now.findIndex((candidate) => candidate.attrs.id === block);
       // `set`: one property of its front matter (`block` its name, the Markdown its value as plain text; none removes it).
       if (op === "set") {
@@ -685,11 +787,16 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       if (!["replace", "insert", "delete", "set"].includes(op)) throw fault(400, "op is replace, insert, delete or set");
       if (at < 0 && !(op === "insert" && block === "start")) throw fault(404, `No block ${block} in ${id}: read it again for its blocks as they are now (the person may be typing in it)`);
       const fresh = op === "delete" ? [] : parse(String(text));
+      // Markdown that reads as blocks the paper cannot hold is refused here, never left to fail when someone next types in them.
+      for (const made of fresh) { try { made.check(); } catch (error) { throw fault(400, `That Markdown makes a block the paper cannot hold (${error.message}): write it another way`); } }
       if (op === "replace" && fresh[0]) fresh[0] = fresh[0].type.create({ ...fresh[0].attrs, id: block }, fresh[0].content);
       const next = [...now.slice(0, op === "insert" ? at + 1 : at), ...fresh, ...now.slice(at + 1)], name = typeof by === "string" && by ? by.slice(0, 80) : "agent";
+      if (suggest && about !== undefined) throw fault(400, "An edit either answers a comment (for) or is a suggestion (suggest), not both");
+      if (suggest && suggest !== true && ![...kept.changes.values()].some((change) => change.for === suggest)) throw fault(404, `No suggestion ${suggest} in ${id}: suggestions lists them`);
+      const suggestion = suggest ? suggest === true ? `${SUGGESTION}${blockId()}` : String(suggest) : undefined, key = suggestion ?? (about === undefined ? undefined : String(about));
       if (about !== undefined) await kept.markup.thread(String(about).split("/")[0]);
-      set(kept, next.length ? next : [empty()], name, about === undefined ? undefined : () => {
-        const stamp = { for: String(about), by: name, at: new Date().toISOString() }, had = kept.changes.get(block), gone = op !== "insert" && !fresh.length;
+      set(kept, next.length ? next : [empty()], name, key === undefined ? undefined : () => {
+        const stamp = { for: key, by: name, at: new Date().toISOString() }, had = kept.changes.get(block), gone = op !== "insert" && !fresh.length;
         // The first `before` is the one kept: what is taken back is everything done for the comment, not its last step. A block made for a comment and then deleted leaves nothing to show.
         if (gone && had?.before === null) kept.changes.delete(block);
         else if (op !== "insert") kept.changes.set(block, { ...stamp, before: now[at].toJSON(), ...had, ...(gone ? { after: now[at - 1]?.attrs.id ?? null, at: stamp.at } : {}) });
@@ -697,7 +804,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       });
       // Its seat moves to what it wrote, and what it was heard writing is the paper's now.
       if (sits(id, name, kept)) sit(kept, name, { state: "thinking", blocks: fresh.length ? fresh.map((made) => made.attrs.id) : [], text: undefined, ...(about === undefined ? {} : { for: String(about) }) });
-      return { blocks: fresh.map((made) => made.attrs.id) };
+      return { blocks: fresh.map((made) => made.attrs.id), ...(suggestion ? { suggestion } : {}) };
     },
     /** Everything changed for one comment is put back as it was: a changed block is its `before` again, a new one goes, a deleted one returns after the block it followed. */
     async revert(id, thread) {
@@ -710,6 +817,36 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       }
       set(kept, blocks.length ? blocks : [empty()], undefined, () => { for (const [block] of mine) kept.changes.delete(block); });
       return { blocks: mine.map(([block]) => block) };
+    },
+    /** The suggestions standing in the paper, oldest first: who made each, its blocks (in the paper's order, then those it deleted), and their text before and now. */
+    async suggestions(id) {
+      const kept = await current(id), blocks = blocksOf(kept), found = new Map(), clip = (text) => text.length > 200 ? `${text.slice(0, 199)}…` : text;
+      const order = new Map(blocks.map((block, nth) => [block.attrs.id, nth]));
+      for (const [block, change] of kept.changes.entries()) {
+        // A block made for a suggestion and deleted since is not part of it.
+        if (!isSuggestion(change.for) || (change.before === null && !order.has(block))) continue;
+        const one = found.get(change.for) ?? found.set(change.for, { key: change.for, by: change.by, at: change.at, entries: [] }).get(change.for);
+        if (String(change.at) < String(one.at)) one.at = change.at;
+        one.entries.push([block, change]);
+      }
+      return [...found.values()].sort((a, b) => String(a.at).localeCompare(b.at)).map(({ entries, ...one }) => {
+        entries.sort((a, b) => (order.get(a[0]) ?? Infinity) - (order.get(b[0]) ?? Infinity));
+        const was = entries.flatMap(([, change]) => change.before ? [schema.nodeFromJSON(change.before).textContent] : []), now = entries.flatMap(([block]) => order.has(block) ? [blocks[order.get(block)].textContent] : []);
+        return { ...one, blocks: entries.map(([block]) => block), before: clip(was.join("\n")), after: clip(now.join("\n")) };
+      });
+    },
+    /** A suggestion is accepted: its blocks stay as they are and stop standing as suggested. */
+    async accept(id, key) {
+      const kept = await current(id), mine = [...kept.changes.entries()].filter(([, change]) => change.for === key);
+      if (!isSuggestion(key) || !mine.length) throw fault(404, `No suggestion ${key} in ${id}: suggestions lists them (a comment's change is accepted by resolving the comment)`);
+      kept.doc.transact(() => { for (const [block] of mine) kept.changes.delete(block); });
+      return { blocks: mine.map(([block]) => block) };
+    },
+    /** A suggestion is rejected: taken back, as a comment's change is. */
+    async reject(id, key) {
+      const kept = await current(id);
+      if (!isSuggestion(key) || ![...kept.changes.values()].some((change) => change.for === key)) throw fault(404, `No suggestion ${key} in ${id}: suggestions lists them`);
+      return this.revert(id, key);
     },
     /** An image is kept beside the paper, under a name its block holds in place of the bytes. */
     async keepImage(id, bytes) {
@@ -790,8 +927,11 @@ export function registerDocumentRoutes(app, documents) {
     const { bytes, type } = await documents.image(request.params.id, request.params.name);
     response.set({ "content-type": type, "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; sandbox", "cache-control": "private, max-age=31536000, immutable" }).send(bytes);
   });
+  app.get("/v0/document/:id/suggestions", async (request, response) => response.json({ suggestions: await documents.suggestions(request.params.id) }));
   app.post("/v0/document/:id/changes", async (request, response) => {
-    if (request.body?.op !== "revert" || typeof request.body.thread !== "string") throw fault(400, "A change is taken back with { op: \"revert\", thread: \"<item>/<n>\" }");
-    response.json(await documents.revert(request.params.id, request.body.thread));
+    const { op, thread, key } = request.body ?? {};
+    if ((op === "accept" || op === "reject") && typeof key === "string") return response.json(await documents[op](request.params.id, key));
+    if (op !== "revert" || typeof thread !== "string") throw fault(400, "A change is taken back with { op: \"revert\", thread: \"<item>/<n>\" }, a suggestion settled with { op: \"accept\" | \"reject\", key: \"suggestion/<id>\" }");
+    response.json(await documents.revert(request.params.id, thread));
   });
 }

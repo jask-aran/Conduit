@@ -36,7 +36,8 @@ export const disconnect = (paper: string, chat: string) => send(paper, chat, "DE
 export interface MarkupHandoff { artifact: string; kind: "paper" | "site"; name: string; item: string; n?: number; block?: string; said?: "reply" | "reopened"; quote?: string; words: string }
 const unescaped = (text: string) => text.replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(Number(code)));
 export function markupHandoffs(text: string): MarkupHandoff[] {
-  if (!text.startsWith("<conduit_markup ")) return [];
+  // Only the hub's own hand-off is drawn as a comment: its tags, then its one sentence to the agent. Any other message that starts with the tag is shown whole, so nothing under it is hidden from the person.
+  if (!/^(?:<conduit_markup [^>]*>\n(?:<quote>[\s\S]*?<\/quote>\n)?(?:<words>[\s\S]*?<\/words>\n)?<\/conduit_markup>\n)+(?:The person |On the (?:paper|site) )[^\n]*$/.test(text)) return [];
   return [...text.matchAll(/<conduit_markup ([^>]*)>\n(?:<quote>([\s\S]*?)<\/quote>\n)?(?:<words>([\s\S]*?)<\/words>\n)?<\/conduit_markup>/g)].map(([, fields = "", quote, words]) => {
     const field = Object.fromEntries([...fields.matchAll(/(\w+)="([^"]*)"/g)].map(([, key = "", value = ""]) => [key, unescaped(value)]));
     const n = field.n ? Number(field.n) : undefined;

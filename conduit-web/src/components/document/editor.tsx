@@ -1,15 +1,15 @@
 import { Extension, type ChainedCommands, type Editor } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
-import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
+import { Plugin, PluginKey, TextSelection, type EditorState } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
-import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { createEditorTransaction, createTiptapEditor } from "solid-tiptap";
 import { redo, undo, ySyncPlugin, yUndoPlugin, yUndoPluginKey } from "y-prosemirror";
 import type { Map as YMap, XmlFragment } from "yjs";
 import { Button, Icons } from "@/components/ui";
 import { MARKUP_INKS } from "@/components/ui/markup";
-import { DocumentCount, DocumentSheet, DocumentStarts, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons, type DocumentWidth } from "@/components/ui/document";
-import { CHANGES, FRAGMENT, PROPERTIES, documentExtensions } from "@/document-format.js";
+import { DocumentCount, DocumentSeatJump, DocumentSheet, DocumentStarts, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons, documentWritingIcons, type DocumentWidth } from "@/components/ui/document";
+import { CHANGES, FRAGMENT, PROPERTIES, documentExtensions, isSuggestion } from "@/document-format.js";
 import { blockById, blockKeys, caretBlockAt, shiftBlock } from "./blocks";
 import { drawn, revealed } from "./drawn";
 import { createFind } from "./find";
@@ -18,7 +18,8 @@ import { PaperHead } from "./head";
 import { DOCUMENT_BLOCKS, DOCUMENT_MARKS, DOCUMENT_TURNABLE, type DocumentAnchor, type DocumentBlockKind, type DocumentControls, type DocumentHeading, type DocumentHost, type DocumentMarking, type DocumentMarks } from "./host";
 import { hinted } from "./hint";
 import { createLiveDocument } from "./live";
-import { seatsDrawn } from "./seats";
+import { createSeatsAway, seatsDrawn } from "./seats";
+import { createSuggesting, type Change } from "./suggest";
 import { dayFrom, insertMarkdown, paperTyping, pickImages, viewed } from "./nodes";
 import { INKED, INKS, inkSwatch, MARKS, putInk, SelectionTools, TableTools, selectedRange, type PaperInk } from "./toolbar";
 import { createSlash, menuKeys, TypedMenu, typing, type Typed, type Typing } from "./typed";
@@ -53,7 +54,6 @@ const merged = (blocks: XmlFragment) => Extension.create({
   addKeyboardShortcuts() { return { "Mod-z": () => undo(this.editor.state), "Mod-y": () => redo(this.editor.state), "Shift-Mod-z": () => redo(this.editor.state) }; },
 });
 
-type Change = { for: string; before: { type: string; text?: string; content?: unknown[] } | null; after?: string | null };
 const textOf = (node: { text?: string; content?: unknown[] }): string => node.text ?? (node.content ?? []).map((child) => textOf(child as { text?: string })).join(" ");
 /** Where a run of text is in a block (which starts at `from`), as positions in the document; null when the block no longer says it. */
 const within = (block: Node, from: number, quote: string) => {
@@ -70,7 +70,9 @@ const shown = new PluginKey<DecorationSet>("documentMarks");
  * when any of it may have moved, and of a press on a comment's mark.
  */
 const marked = (changes: YMap<Change>, told: { anchors: DocumentAnchor[]; moved: (pressed?: string) => void }) => {
-  const build = (doc: Node) => {
+  // The suggestion the caret is in shows what its blocks were, as a comment's change does while its card is open.
+  const focusOf = (state: EditorState) => { const { $from } = state.selection, id = $from.depth ? $from.node(1).attrs.id : undefined, change = id ? changes.get(id) : undefined; return change && isSuggestion(change.for) ? change.for : undefined; };
+  const build = (doc: Node, focus?: string) => {
     const found: Decoration[] = [], on = new Map<string, { keys: string[]; current: boolean; open: boolean }>(), at = new Map<string, { from: number; to: number; block: Node }>();
     doc.forEach((block, from) => { if (block.attrs.id) at.set(block.attrs.id, { from, to: from + block.nodeSize, block }); });
     for (const anchor of told.anchors) {
@@ -82,12 +84,12 @@ const marked = (changes: YMap<Change>, told: { anchors: DocumentAnchor[]; moved:
     }
     for (const [id, block] of at) {
       const had = on.get(id), changed = changes.has(id);
-      if (had || changed) found.push(Decoration.node(block.from, block.to, { class: [had?.open && documentMarkClass.commented, changed && documentMarkClass.changed].filter(Boolean).join(" "), ...(had?.keys.length ? { "data-comment": had.keys.join(" ") } : {}), ...(had?.current ? { "data-current": "" } : {}) }));
+      if (had || changed) found.push(Decoration.node(block.from, block.to, { class: [had?.open && documentMarkClass.commented, changed && documentMarkClass.changed].filter(Boolean).join(" "), ...(had?.keys.length ? { "data-comment": had.keys.join(" ") } : {}), ...(had?.current ? { "data-current": "" } : {}), ...(changed ? { "data-change": changes.get(id)!.for } : {}) }));
     }
     changes.forEach((change, id) => {
       // A block changed and still here shows what it was while its comment's card is open: the tint alone does not say what the agent took out.
-      if (!change.before || (at.has(id) && !told.anchors.some((anchor) => anchor.current && anchor.key === change.for))) return;
-      const line = () => Object.assign(document.createElement("div"), { className: documentMarkClass.removed, contentEditable: "false", textContent: textOf(change.before!) || "A block was removed" });
+      if (!change.before || (at.has(id) && change.for !== focus && !told.anchors.some((anchor) => anchor.current && anchor.key === change.for))) return;
+      const line = () => { const element = Object.assign(document.createElement("div"), { className: documentMarkClass.removed, contentEditable: "false", textContent: textOf(change.before!) || "A block was removed" }); element.dataset.change = change.for; return element; };
       found.push(Decoration.widget(at.get(id)?.from ?? (change.after === null ? 0 : at.get(change.after ?? "")?.to ?? doc.content.size), line, { key: id, side: -1 }));
     });
     return DecorationSet.create(doc, found);
@@ -96,7 +98,7 @@ const marked = (changes: YMap<Change>, told: { anchors: DocumentAnchor[]; moved:
     name: "documentMarks",
     addProseMirrorPlugins: () => [new Plugin({
       key: shown,
-      state: { init: (_, state) => build(state.doc), apply: (change, old) => change.docChanged || change.getMeta(shown) ? build(change.doc) : old },
+      state: { init: (_, state) => build(state.doc, focusOf(state)), apply: (change, old, was, state) => change.docChanged || change.getMeta(shown) || focusOf(was) !== focusOf(state) ? build(change.doc, focusOf(state)) : old },
       props: {
         decorations: (state) => shown.getState(state),
         handleClick: (_view, _pos, event) => { const key = (event.target as Element).closest?.("[data-comment]")?.getAttribute("data-comment")?.split(" ")[0]; if (key) told.moved(key); return false; },
@@ -116,7 +118,7 @@ const caretBlock = (view: EditorView) => { const { $from } = view.state.selectio
 
 /** `bare`: in a pane, whose header is the document's bar; `onAway` then tells that header when the hub's copy is out of reach. `width`: how wide the
  *  text runs. `controls`: told what the editor offers the app round it (DocumentControls), once. */
-export function DocumentEditor(props: { host: DocumentHost; id: string; name: string; actions?: JSX.Element; margin?: JSX.Element; marginEmpty?: boolean; bare?: boolean; onAway?: (away: boolean) => void; onReady?: () => void; marks?: (marks: DocumentMarks) => void;
+export function DocumentEditor(props: { host: DocumentHost; id: string; name: string; actions?: JSX.Element; margin?: JSX.Element; marginEmpty?: boolean; bare?: boolean; onAway?: (away: boolean) => void; /** The hub refused this page as older than the paper: only a reload mends it. */ onStale?: (stale: boolean) => void; onReady?: () => void; marks?: (marks: DocumentMarks) => void;
   width?: DocumentWidth; controls?: (controls: DocumentControls) => void;
   /** `mentions`: who `@` offers; picked, the typed `@…` goes and `onMention` is told the caret's block and the name. */
   mentions?: () => string[]; onMention?: (about: Range, name: string) => void;
@@ -151,8 +153,13 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   };
   const keys = (event: KeyboardEvent) => menuKeys(event, offered(), active(), setActive, pick, dismiss);
   // Ready is the hub's copy drawn, or the hub not answering: never a page still waiting.
-  createEffect(() => { if (editor() || copy.state() === "away") props.onReady?.(); });
+  createEffect(() => { if (editor() || copy.state() === "away" || copy.state() === "stale") props.onReady?.(); });
+  // A page the hub refuses as older than the paper is read only: what is typed in it could never reach the paper.
+  createEffect(() => editor()?.setEditable(copy.state() !== "stale"));
+  // Set on the view, not in the options the editor is made from: a renamed paper keeps its editor (caret, undo, find).
+  createEffect(() => editor()?.view.dom.setAttribute("aria-label", props.name));
   createEffect(() => props.onAway?.(copy.state() === "away"));
+  createEffect(() => props.onStale?.(copy.state() === "stale"));
   // Made once, `active` read where it is drawn: a list made again at each change would have its buttons redrawn under the press (the editor changes as it loses focus to one).
   // An image is offered only where the host keeps them.
   const tools = DOCUMENT_BLOCKS.filter((offered) => (props.host.tools ?? DOCUMENT_BLOCKS).includes(offered) && (offered !== "image" || props.host.images)).map((name) => {
@@ -160,6 +167,9 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     return { name, label: KINDS[name].label, icon: () => <Icon />, get active() { return kind() === name; }, run: () => { const made = editor(); if (made && name === "image") pickImages(made, props.host); else if (made) KINDS[name].make(made.chain().focus()).run(); } };
   });
   const offers = { dates: tools.some((tool) => tool.name === "date"), images: tools.some((tool) => tool.name === "image") };
+  const suggesting = createSuggesting(editor, copy.doc, changes, props.host, props.id);
+  // How the reader writes, as one menu on the ribbon's edit set, where the host offers Suggesting.
+  const writings = props.host.suggest ? (["editing", "suggesting"] as const).map((name) => { const Icon = documentWritingIcons[name]; return { name: `writing-${name}`, label: name === "editing" ? "Editing" : "Suggesting", icon: () => <Icon />, menu: "Writing", get active() { return suggesting.writing() === name; }, run: () => suggesting.setWriting(name) }; }) : [];
   const slash = createSlash(editor, tools), handle = createBlockHandle(editor, tools, { scroller, onComment: () => props.onComment, onAdded: slash.made }), find = createFind(editor, scroller);
   const counted = createEditorTransaction(editor, (made) => made?.state.doc);
   const count = createMemo(() => {
@@ -199,7 +209,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   // On the ribbon each inked mark is one menu of the inks and None, showing the one the selection wears.
   const inkOn = createEditorTransaction(editor, (made) => `${made?.getAttributes("color").ink ?? ""} ${made?.getAttributes("highlight").ink ?? ""}`);
   const inked = INKED.filter(([name]) => !props.host.tools || props.host.tools.includes(name)).flatMap(([name, menu, none, noun], nth) => [undefined, ...INKS].map((ink?: PaperInk) => ({
-    name: `${name}-${ink ?? "none"}`, label: ink ? `${MARKUP_INKS[ink].label} ${noun}` : none, icon: () => inkSwatch(ink), menu, compact: true,
+    name: `${name}-${ink ?? "none"}`, label: ink ? `${MARKUP_INKS[ink].label} ${noun}` : none, icon: () => { const Plain = documentToolIcons[name]; return ink ? inkSwatch(ink) : <Plain />; }, menu, compact: true,
     get active() { return inkOn().split(" ")[nth] === (ink ?? ""); }, get disabled() { return !marking().can; }, run: () => { const made = editor(); if (made) putInk(made.chain().focus(), name, ink); } })));
   // What can be taken back here is what was written here (the Yjs undo manager's stacks), read after each change.
   const stacks = createEditorTransaction(editor, (made) => { const manager = made ? yUndoPluginKey.getState(made.state)?.undoManager : undefined; return [manager?.undoStack.length ?? 0, manager?.redoStack.length ?? 0]; });
@@ -212,15 +222,17 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     },
     anchors: (list) => { told.anchors = list; redraw(); },
     place: (key) => {
-      const boxes = [...(column()?.querySelectorAll(`[data-comment~="${CSS.escape(key)}"]`) ?? [])].map((mark) => mark.getBoundingClientRect());
+      const boxes = [...(column()?.querySelectorAll(`[data-comment~="${CSS.escape(key)}"], [data-change="${CSS.escape(key)}"]`) ?? [])].map((mark) => mark.getBoundingClientRect());
       if (!boxes.length) return null;
       const left = Math.min(...boxes.map((box) => box.left)), top = Math.min(...boxes.map((box) => box.top));
       return { left, top, width: Math.max(...boxes.map((box) => box.right)) - left, height: Math.max(...boxes.map((box) => box.bottom)) - top };
     },
     watch: (listener) => { watching.add(listener); return () => watching.delete(listener); },
     changed: (key) => changed().includes(key),
+    seats: copy.seats,
+    suggestions: suggesting.suggestions, accept: suggesting.accept, reject: suggesting.reject,
     // A bar's block menu turns the caret's block into another kind: a kind that is only put in (a table, a divider) is listed while the caret is in one, to name it.
-    tools: () => [...tools.filter((tool) => (DOCUMENT_TURNABLE as readonly string[]).includes(tool.name) || tool.active).map((tool) => ({ ...tool, menu: "Block", get active() { return tool.active; } })), ...worn, ...inked],
+    tools: () => [...tools.filter((tool) => (DOCUMENT_TURNABLE as readonly string[]).includes(tool.name) || tool.active).map((tool) => ({ ...tool, menu: "Block", get active() { return tool.active; } })), ...worn, ...inked, ...writings],
     marking, history,
     selection: () => {
       const view = editor()?.view;
@@ -249,13 +261,15 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     view!.dispatch(view!.state.tr.setMeta(revealed, id));
     block.addEventListener("animationend", () => { const now = editor()?.view; if (now && revealed.getState(now.state) === id) now.dispatch(now.state.tr.setMeta(revealed, null)); }, { once: true });
   };
+  const away = createSeatsAway(editor, copy.seats, scroller);
   props.controls?.({
     openBlockMenu: handle.openMenu,
     moveBlock: (by) => { const view = editor()?.view, at = view ? caretBlockAt(view) : null; return at !== null && shiftBlock(view!, at, by); },
     outline, current, reveal, find: find.show,
   });
   return <>
-  <DocumentSheet ref={setColumn} scroller={setScroller} width={props.width} find={find.view()} name={props.name} state={copy.state() === "away" ? "Reconnecting" : undefined} margin={props.margin} marginEmpty={props.marginEmpty} actions={props.actions} bare={props.bare}
+  <DocumentSheet ref={setColumn} scroller={setScroller} width={props.width} find={find.view()} name={props.name} state={copy.state() === "away" ? "Reconnecting" : copy.state() === "stale" ? "Reload: this page is older than the paper" : undefined}
+    edge={<Show when={away()}>{(seat) => <DocumentSeatJump label={seat().label} below={seat().below} ink={seat().ink} onJump={() => reveal(seat().block)} />}</Show>} margin={props.margin} marginEmpty={props.marginEmpty} actions={props.actions} bare={props.bare}
     head={<Show when={copy.synced()}><PaperHead doc={copy.doc} name={props.name} onRename={props.onRename} onDown={() => editor()?.commands.focus("start")} /></Show>}
     over={<>{handle.view}<TableTools editor={editor} body={() => column()?.parentElement ?? undefined} moved={reflowed} />
       <Show when={starts() !== undefined}><DocumentStarts top={starts()} note={note()}>
@@ -264,7 +278,8 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
       </DocumentStarts></Show></>} onHover={handle.hover} foot={<Show when={count()}>{(line) => <DocumentCount>{line()}</DocumentCount>}</Show>}>
     {/* The editor is made only once the hub's copy is held: made before, its first empty block would be merged in as a block of its own. */}
     <Show when={copy.synced() && column()}>{(element) => {
-      const made = createTiptapEditor(() => ({ element: element(), extensions: [...viewed(documentExtensions(), props.host), paperTyping(props.host, offers), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), seatsDrawn(copy.seats, (redraw) => { redrawSeats = redraw; }), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), slash.extension(), blockKeys, drawn((block, name) => props.host.showMention?.(block, name)), find.extension(), ...(props.onMention ? [mentioning(anchor, setAsked, keys)] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name } } }));
+      // Untracked: a signal or prop read in what the editor is made from would make it again (caret, undo and find lost) each time it changed.
+      const made = createTiptapEditor(() => { const at = element(); return untrack(() => ({ element: at, extensions: [...viewed(documentExtensions(), props.host), paperTyping(props.host, offers), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), suggesting.extension(), seatsDrawn(copy.seats, (redraw) => { redrawSeats = redraw; }), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), slash.extension(), blockKeys, drawn((block, name) => props.host.showMention?.(block, name)), find.extension(), ...(props.onMention ? [mentioning(anchor, setAsked, keys)] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name } } })); });
       createEffect(() => setEditor(made()));
       return null;
     }}</Show>

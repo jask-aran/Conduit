@@ -1,6 +1,6 @@
 import { createSignal, type JSX } from "solid-js";
 import { Button, IconButton, Icons, Segmented, Swatch } from "@/components/ui";
-import { DocumentAddress, DocumentCount, DocumentDate, DocumentDropLine, DocumentField, DocumentFind, DocumentFold, DocumentHandle, DocumentHead, DocumentImage, DocumentOutline, DocumentProperty, DocumentSheet, DocumentStarts, DocumentTableEdges, DocumentTitle, DocumentToneMark, DocumentTools, documentBlockClass, documentDrawClass, documentHintClass, documentMarkClass, documentTextClass, documentToolIcons as Tools } from "@/components/ui/document"; // Comes with the editor: imported on its own, never from the barrel
+import { DocumentAddress, DocumentCount, DocumentDate, DocumentDropLine, DocumentField, DocumentFind, DocumentFold, DocumentHandle, DocumentHead, DocumentImage, DocumentOutline, DocumentProperty, DocumentSeatJump, DocumentSheet, DocumentStarts, DocumentSuggested, DocumentTableEdges, DocumentTitle, DocumentToneMark, DocumentTools, documentBlockClass, documentDrawClass, documentHintClass, documentMarkClass, documentSeatCaret, documentSeatClass, documentSeatFlag, documentSeatStream, documentTextClass, documentToolIcons as Tools, type DocumentSeatInk } from "@/components/ui/document"; // Comes with the editor: imported on its own, never from the barrel
 import { MARKUP_INKS, MarkupMarginNotes, MarkupNote } from "@/components/ui/markup";
 import { row, type Page } from "../model";
 import { noop } from "../demos";
@@ -10,7 +10,7 @@ const TEXT = `<h1>Trip plan</h1><p>Two weeks, three cities. What is <strong>book
 <blockquote><p>Leave the last day empty.</p></blockquote><pre><code>ferry  09:40  platform 2</code></pre><div class="tableWrapper"><table><tr><th>City</th><th>Nights</th></tr><tr><td>Osaka</td><td>4</td></tr></table></div>`;
 const MARKED = TEXT.replace("Two weeks, three cities", `<span class="${documentMarkClass.comment}">Two weeks, three cities</span>`).replace("<blockquote>", `<div class="${documentMarkClass.removed}">Decide on the last day by Friday.</div><blockquote class="${documentMarkClass.changed}">`);
 const MARKS = `<p>A <span class="${documentMarkClass.comment}">run a comment is about</span>, and <span class="${documentMarkClass.comment}" data-current>the one whose card is open</span>.</p><p class="${documentMarkClass.commented}">A whole block a comment is about.</p><p class="${documentMarkClass.commented}" data-current>The same, its card open.</p><p class="${documentMarkClass.changed}">A block an agent changed, not yet accepted.</p><div class="${documentMarkClass.removed}">A block that was deleted, where it stood.</div><p>Asked <span class="${documentDrawClass.mention}">@conduit</span> to check the dates.</p><p>Found <span class="${documentDrawClass.match}">three</span> and <span class="${documentDrawClass.match} ${documentDrawClass.currentMatch}">three</span> again.</p>`;
-type Parts = Pick<Parameters<typeof DocumentSheet>[0], "head" | "foot" | "over" | "width" | "find" | "ref">;
+type Parts = Pick<Parameters<typeof DocumentSheet>[0], "head" | "foot" | "over" | "width" | "find" | "ref" | "edge">;
 const sheet = (state?: string, text = TEXT, margin?: JSX.Element, parts: Parts = {}) => <DocumentSheet name="Trip plan" state={state} margin={margin} {...parts} actions={<><Button variant="ghost" size="sm">Text</Button><Button variant="ghost" size="sm">Mark up</Button></>}><div class={documentTextClass} innerHTML={text} /></DocumentSheet>;
 const add = () => ({ label: "Add a property", onClick: noop });
 const head = (empty?: boolean) => <DocumentHead add={add()}><DocumentTitle editable value="Trip plan" aria-label="Name" />
@@ -51,6 +51,9 @@ const toggle = (open: boolean) => {
 const starts = (note?: string) => drawn(<><p class={documentHintClass} data-hint="Write, / for blocks, @ to ask an agent" data-empty />
   <DocumentStarts note={note}><Button variant="ghost" size="sm"><Icons.Agent />Ask @conduit to draft…</Button><Button variant="ghost" size="sm"><Icons.Paste />Paste Markdown</Button></DocumentStarts></>);
 
+const suggested = () => drawn(<><p>Two weeks, three cities.</p><DocumentSuggested by="person" onAccept={noop} onReject={noop} />
+  <div class={documentMarkClass.removed}>Take the night train to Kyoto.</div><p class={documentMarkClass.changed}>Take the morning train to Kyoto.</p><p class={documentMarkClass.changed}>Book seats on the left for the view.</p></>);
+
 const tools = () => <DocumentTools label="Format">
   <IconButton label="Bold" aria-pressed><Tools.bold /></IconButton><IconButton label="Italic"><Tools.italic /></IconButton><IconButton label="Strikethrough"><Tools.strike /></IconButton><IconButton label="Code"><Tools.code /></IconButton><IconButton label="Text colour" aria-pressed><Tools.color /></IconButton><IconButton label="Highlight"><Tools.highlight /></IconButton><IconButton label="Link"><Tools.link /></IconButton><IconButton label="Comment"><Tools.comment /></IconButton>
 </DocumentTools>;
@@ -58,6 +61,22 @@ const tools = () => <DocumentTools label="Format">
 const INKS = (["red", "amber", "green", "blue"] as const).map((value) => ({ value, label: MARKUP_INKS[value].label, icon: <Swatch colour={MARKUP_INKS[value].colour} /> }));
 const inks = () => <>{drawn(<p>The ferry leaves at <span data-color="red">09:40 sharp</span>; <mark data-color="amber">bring the passports</mark>, and <mark data-color="green"><span data-color="blue">both</span></mark> at once.</p>)}
   <DocumentTools label="Text colour"><Segmented label="Text colour" icons size="sm" value="red" onChange={noop} options={[{ value: "none", label: "No colour", icon: <Swatch hollow /> }, ...INKS]} /></DocumentTools></>;
+
+/** Agents at work, made by the library's seat pieces as the editor puts them in its text: a block held (its caret at its start), and what one is heard writing. */
+const held = (text: string, state: "thinking" | "reading" | "writing", ink: DocumentSeatInk, name: string) => {
+  const block = Object.assign(document.createElement("p"), { className: documentSeatClass.held });
+  Object.assign(block.dataset, { seat: state, seatInk: ink }, state === "writing" ? { op: "replace" } : {});
+  block.append(documentSeatFlag(`${name} ${state === "writing" ? "is writing over this" : `is ${state}`}`, ink), text);
+  return block;
+};
+const heard = (ink: DocumentSeatInk, name: string, blocks: string, line: string) => {
+  const { root, body } = documentSeatStream(ink), tail = document.createElement("p");
+  body.innerHTML = blocks;
+  tail.append(line, documentSeatCaret(name));
+  body.append(tail);
+  return root;
+};
+const seated = (...blocks: (string | HTMLElement)[]) => drawn(<>{blocks.map((block) => typeof block === "string" ? <p>{block}</p> : block)}</>);
 
 export const documentPage: Page = {
   title: "Document",
@@ -84,9 +103,15 @@ export const documentPage: Page = {
     row("a date", "A day in the text, typed as @today or @tomorrow or put in from the block kinds (Date): a quiet chip in the reader's way of writing dates, kept as its ISO date; pressed, a date field changes it", () => drawn(<p>Book the ferry by <DocumentDate date="2026-11-20" onPress={noop} />, a day before we leave.</p>), { code: "<DocumentDate date onPress>", surfaces: ["ground"] }),
     row("starting points", "Under a new, empty paper's hint: ask the paper's agent to draft it (where it can be asked), or paste Markdown, which becomes blocks; gone at the first edit", () => starts(), { code: "<DocumentStarts top>", surfaces: ["ground"] }),
     row("starting points, pasting refused", "Where the clipboard cannot be read, the line says how to paste instead", () => starts("Press Ctrl+V to paste: Markdown becomes blocks"), { code: "<DocumentStarts note>", surfaces: ["ground"] }),
+    row("a suggestion", "Written in Suggesting (the ribbon's Writing menu): each block changed, added or deleted in one burst is one suggestion, tinted as an agent's change is, what it was shown while the caret is in it. Over its first block, where the margin does not draw it: who suggested it, Accept (the text stays) and Reject (taken back)", suggested, { code: "<DocumentSuggested by onAccept onReject>", surfaces: ["ground"] }),
     row("link tools", "With the caret in a link: its address, Open, Edit (the address asked for in place) and Remove", link, { code: "<DocumentTools><DocumentAddress href>", surfaces: ["frost"] }),
     row("text colour and highlight", "Text in one of Markup's inks, or washed in one; in Markdown <span data-color> and <mark data-color>. Text colour and Highlight in the selection tools each ask for the ink in place of the buttons (None takes it off); on the ribbon each is a menu of the inks", inks, { code: "document-format.js PAPER_INKS · <Segmented icons> of <Swatch>", surfaces: ["ground"] }),
+    row("an agent thinking", "A comment handed to an agent: the blocks it is about washed in its ink and breathing, its caret at the start of the first with its name and what it is doing, taking no room", () => seated("Two weeks, three cities.", held("Leave the last day empty.", "thinking", "plain", "conduit"), "Book the ferry by Friday."), { code: "documentSeatFlag(label, ink) · documentSeatClass.held", surfaces: ["ground"] }),
+    row("an agent reading", "The same while it reads the paper, the wash still", () => seated("Two weeks, three cities.", held("Leave the last day empty.", "reading", "plain", "conduit"), "Book the ferry by Friday."), { code: 'data-seat="reading"', surfaces: ["ground"] }),
+    row("an agent writing", "Mid-stream: the block it writes over stays, dimmed and struck; under it what it has written so far, drawn as the blocks it will be, the whole lines with their marks, the line being written as plain words, its caret at the end", () => seated("Two weeks, three cities.", held("Leave the last day empty.", "writing", "plain", "conduit"), heard("plain", "conduit", "<h2>The last day</h2><ul><li><p>Keep it <strong>empty</strong></p></li></ul>", "No plans after the **fer"), "Book the ferry by Friday."), { code: "documentSeatStream(ink) · documentSeatCaret(name)", surfaces: ["ground"] }),
+    row("two agents at once", "Each in its own ink, kept by its name: one thinking over a block, one writing new blocks after another (nothing of that block is held)", () => seated(held("Two weeks, three cities.", "thinking", "plain", "conduit"), "Leave the last day empty.", heard("green", "Trip planner", "", "Add a day in Nara for the d"), "Book the ferry by Friday."), { code: "seatInks(names)", surfaces: ["ground"] }),
+    row("an agent out of view", "Where an agent's block is scrolled out of view, a pill pinned to the sheet's edge says who, what and which way; pressed, the text goes there. The view never moves by itself", () => sheet(undefined, TEXT, undefined, { edge: <DocumentSeatJump label="conduit is writing below" below ink="plain" onJump={noop} /> }), { code: "<DocumentSheet edge={<DocumentSeatJump label below ink onJump>}>", surfaces: ["ground"] }),
     row("selection tools", "Clear above the lines selected, in a popover (under them where there is no room above): its marks, pressed where the selection wears them, a link and a comment. A link's address is asked for in place of the buttons", tools, { code: "<DocumentTools label>", surfaces: ["frost"] }),
   ],
-  api: ["DocumentSheet", "DocumentImage", "DocumentToneMark", "DocumentFold", "DocumentDate", "DocumentStarts", "DocumentHead", "DocumentTitle", "DocumentProperty", "DocumentField", "DocumentCount", "DocumentHandle", "DocumentDropLine", "DocumentTools", "DocumentAddress", "DocumentTableEdges", "DocumentOutline", "DocumentFind", "MarkupMarginNotes", "MarkupNote"],
+  api: ["DocumentSheet", "DocumentSeatJump", "documentSeatFlag", "documentSeatStream", "documentSeatCaret", "DocumentImage", "DocumentToneMark", "DocumentFold", "DocumentDate", "DocumentStarts", "DocumentSuggested", "DocumentHead", "DocumentTitle", "DocumentProperty", "DocumentField", "DocumentCount", "DocumentHandle", "DocumentDropLine", "DocumentTools", "DocumentAddress", "DocumentTableEdges", "DocumentOutline", "DocumentFind", "MarkupMarginNotes", "MarkupNote"],
 };

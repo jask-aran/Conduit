@@ -5,6 +5,8 @@ import type { DocumentHost, DocumentSeat, DocumentState } from "./host";
 
 const RETRY_BASE_MS = 500;
 const RETRY_CAP_MS = 15_000;
+// The close code the hub refuses a page with whose FORMAT is not the paper's (server/documents.js).
+const STALE = 4426;
 
 /** The hub's live copy of a document, held here too and merged with it while the socket is up. `synced`: it has held the hub's copy at least once, so it can be shown. */
 export function createLiveDocument(host: DocumentHost, id: string) {
@@ -28,14 +30,15 @@ export function createLiveDocument(host: DocumentHost, id: string) {
     next.onmessage = (event) => {
       const bytes = new Uint8Array(event.data as ArrayBuffer);
       if (bytes[0] === FRAME.have) return send(FRAME.update, Y.encodeStateAsUpdate(doc, bytes.subarray(1)));
-      if (bytes[0] === FRAME.seats) return void setSeats(JSON.parse(new TextDecoder().decode(bytes.subarray(1))) as DocumentSeat[]);
+      if (bytes[0] === FRAME.seats) { try { setSeats(JSON.parse(new TextDecoder().decode(bytes.subarray(1))) as DocumentSeat[]); } catch { setSeats([]); } return; }
       Y.applyUpdate(doc, bytes.subarray(1), hub);
       tries = 0;
       setState("live");
       setSynced(true);
     };
     // No one is seen at work through a socket that is down.
-    next.onclose = () => { setSeats([]); again(); };
+    // A page older than the paper is refused for good (4426): asking again would only be refused again, and what is typed in it could not be kept.
+    next.onclose = (event) => { setSeats([]); if (event.code !== STALE) return again(); over = true; setState("stale"); };
   };
   // What is written while the socket is down is not lost: the next `have` asks for it.
   doc.on("update", (update: Uint8Array, origin: unknown) => { if (origin !== hub) send(FRAME.update, update); });

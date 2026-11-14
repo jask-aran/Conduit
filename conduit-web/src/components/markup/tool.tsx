@@ -352,6 +352,8 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     const right = Math.min(innerWidth, Math.max(marks.left + marks.width, marks.left - reach.left + marks.width + reach.width) + CROP_MARGIN), bottom = Math.min(innerHeight, Math.max(marks.top + marks.height, marks.top - reach.top + marks.height + reach.height) + CROP_MARGIN);
     return { left: Math.round(left), top: Math.round(top), width: Math.round(right - left), height: Math.round(bottom - top) };
   };
+  /** On a surface with a margin a quote is what its card is about, said in its own words: no number or piece name heads it. */
+  const headOf = (selection: Selection) => !(inline && selection.quote);
   const titleOf = (selection: Selection) => selection.whole ? WHOLE : selection.general ? GENERAL : selection.quote ? `Text in ${nameOf(selection.elements)}`
     : selection.drawings ? (selection.drawings.length > 1 ? `${selection.drawings.length} drawings` : `${DRAWN[selection.drawings[0]!.kind]} over ${nameOf(selection.elements)}`) : nameOf(selection.elements);
 
@@ -607,7 +609,8 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (sending()) return;
-    if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && canSend()) { event.preventDefault(); event.stopImmediatePropagation(); return void send(); }
+    // Not from a margin card's field, where Ctrl Enter is its Reply.
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && canSend() && !(event.target instanceof Element && event.target.closest(".ui-markup-margin"))) { event.preventDefault(); event.stopImmediatePropagation(); return void send(); }
     if (own(event.target) && (event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLInputElement)) {
       // The tool's own fields keep their keys; the app's shortcuts do not run on them.
       event.stopImmediatePropagation();
@@ -878,27 +881,27 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
       </Show>
       <Show when={alone() && thread()}>{(item) => <>
         <MarkupNotes lift={barLift()}>
-          <Show when={saidOf(null).length || replyTo() === null}><MarkupNote ref={(element) => { noteField = element; }} open={replyTo() === null} tag="" name={item().by ?? "The item"} said={saidOf(null)} state={item().working ? { label: "Working on it", busy: true } : undefined} placeholder="Write back" value={reply()} onOpen={() => { setReply(""); setReplyTo(null); queueMicrotask(() => noteField?.focus()); }} onInput={setReply} onSay={() => void answer()} /></Show>
-          <For each={item().comments}>{(comment) => <MarkupNote ref={(element) => { noteField = element; }} open={replyTo() === comment.n} tag={String(comment.n)} name={comment.name} words={comment.comment} said={saidOf(comment.n)} state={stateOf(comment.n)} placeholder="Write back" resolved={comment.resolved}
+          <Show when={saidOf(null).length || replyTo() === null}><MarkupNote ref={(element) => { noteField = element; }} open={replyTo() === null} tag="" name={item().by ?? "The item"} said={saidOf(null)} by={item().by ?? undefined} state={item().working ? { label: "Working on it", busy: true } : undefined} placeholder="Write back" value={reply()} onOpen={() => { setReply(""); setReplyTo(null); queueMicrotask(() => noteField?.focus()); }} onInput={setReply} onSay={() => void answer()} /></Show>
+          <For each={item().comments}>{(comment) => <MarkupNote ref={(element) => { noteField = element; }} open={replyTo() === comment.n} tag={String(comment.n)} name={comment.name} words={comment.comment} said={saidOf(comment.n)} by={item().by ?? undefined} state={stateOf(comment.n)} placeholder="Write back" resolved={comment.resolved}
             value={reply()} onOpen={() => { setReply(""); setReplyTo(comment.n); queueMicrotask(() => noteField?.focus()); }} onInput={setReply} onSay={() => void answer()} onResolve={(resolved) => settle(comment.n, resolved)} />}</For>
         </MarkupNotes>
         <MarkupBar thin={can.thin} thread onBack={leave} view="use" onView={() => {}} tool="select" onTool={() => {}} onNote={() => {}} status={standing()} canSend={false} onSend={() => {}} onClose={props.onClose} />
       </>}</Show>
       <Show when={!capturing() && !alone() && !listing()}>
         <Show when={floats(open()) && open()} keyed>{(selection) =>
-          <MarkupNote ref={(element) => { noteField = element; }} float={noteAt() ? { left: `${noteAt()!.left}px`, top: `${noteAt()!.top}px` } : { opacity: 0 }} open tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)} state={forWhom(selection)}
+          <MarkupNote ref={(element) => { noteField = element; }} float={noteAt() ? { left: `${noteAt()!.left}px`, top: `${noteAt()!.top}px` } : { opacity: 0 }} open tag={headOf(selection) ? tagOf(selection) : ""} name={headOf(selection) ? titleOf(selection) : ""} quote={selection.quote?.text} source={sourceLine(selection)} state={forWhom(selection)}
             value={selection.comment} onOpen={() => {}} onInput={write(selection)} onDone={() => openNote(null)} onRemove={() => remove(selection.id)} sendNow={offersLive ? live() : undefined} onSendNow={agent() ? (on) => { keepLive(on); noteField?.focus({ preventScroll: true }); } : undefined} />}
         </Show>
         <For each={selections}>{(selection) => <Show when={stands(selection)}>
-          <MarkupNote key={`unsent-${selection.id}`} float={standsAt()[selection.id] ? { left: `${standsAt()[selection.id]!.left}px`, top: `${standsAt()[selection.id]!.top}px`, width: standsAt()[selection.id]!.width === undefined ? undefined : `${standsAt()[selection.id]!.width}px` } : { opacity: 0 }} open={false} tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)}
+          <MarkupNote key={`unsent-${selection.id}`} float={standsAt()[selection.id] ? { left: `${standsAt()[selection.id]!.left}px`, top: `${standsAt()[selection.id]!.top}px`, width: standsAt()[selection.id]!.width === undefined ? undefined : `${standsAt()[selection.id]!.width}px` } : { opacity: 0 }} open={false} tag={headOf(selection) ? tagOf(selection) : ""} name={headOf(selection) ? titleOf(selection) : ""} quote={selection.quote?.text} source={sourceLine(selection)}
             value={selection.comment} onOpen={() => openNote(selection.id)} onInput={write(selection)} onRemove={() => remove(selection.id)} state={forWhom(selection) ?? { label: "Not sent" }} />
         </Show>}</For>
         <Show when={selections.some((selection) => !stands(selection) && (!floats(selection) || selection.id !== openId()))}>
           <MarkupNotes lift={barLift()}><For each={selections}>{(selection) => <Show when={!stands(selection) && (!floats(selection) || selection.id !== openId())}>
             <Show when={selection.sent} fallback={<>
-            <MarkupNote ref={(element) => { noteField = element; }} open={openId() === selection.id} tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)} picture={selection.whole ? picture()?.url : selection.preview}
+            <MarkupNote ref={(element) => { noteField = element; }} open={openId() === selection.id} tag={tagOf(selection)} name={titleOf(selection)} quote={selection.quote?.text} source={sourceLine(selection)} picture={selection.whole ? picture()?.url : selection.preview}
               value={selection.comment} onOpen={() => { if (floats(selection) && props.mode === "select") show(selection.on); openNote(selection.id); }} onInput={write(selection)} onRemove={() => remove(selection.id)} state={forWhom(selection) ?? (lastSent() || offersLive ? { label: "Not sent" } : undefined)} />
-            </>}>{(n) => <MarkupNote ref={(element) => { noteField = element; }} open={replyTo() === n()} tag={tagOf(selection)} name={titleOf(selection)} picture={selection.preview} words={selection.comment} said={saidOf(n())} state={stateOf(n())} placeholder="Write back"
+            </>}>{(n) => <MarkupNote ref={(element) => { noteField = element; }} open={replyTo() === n()} tag={tagOf(selection)} name={titleOf(selection)} picture={selection.preview} words={selection.comment} said={saidOf(n())} by={thread()?.by ?? undefined} state={stateOf(n())} placeholder="Write back"
               value={reply()} onOpen={() => startReply(n())} onInput={setReply} resolved={resolvedOf(n())} onSay={() => void answer()} onResolve={(resolved) => settle(n(), resolved)} />}</Show>
           </Show>}</For></MarkupNotes>
         </Show>

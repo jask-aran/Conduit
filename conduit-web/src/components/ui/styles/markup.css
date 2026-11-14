@@ -50,24 +50,35 @@
 .ui-markup-notes[data-lifted] { bottom: calc(var(--space-lg) + var(--markup-bar-height) + var(--space-sm)); }
 .ui-markup-notes > :first-child { margin-top: auto; }
 .ui-markup-note { flex: none; }
-/* What was said of a sent comment: the person's words plain, the agent's set in from a rule. */
-.ui-markup-note .ui-card > .ui-markup-said { margin: 0; overflow: visible; color: var(--foreground); font-family: var(--font-sans); font-size: var(--text-caption); white-space: pre-wrap; overflow-wrap: anywhere; }
-.ui-markup-note .ui-card > .ui-markup-said[data-from="agent"] { border-left: var(--stroke) solid var(--primary); padding-left: var(--space-sm); }
-.ui-markup-note .ui-card > .ui-markup-said[data-from="person"] { color: var(--muted-foreground); }
-/* Shut, a thread is its comment's line and the latest said of it, cut to two lines; the rest is a press away. */
-.ui-markup-latest > .ui-markup-said { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.ui-markup-latest > .ui-markup-said > time { display: none; }
+/* A card reads as a short conversation: what it is about, the person's words, then each line said since under who said it, and where it stands. */
+.ui-markup-talk { display: flex; min-width: 0; flex-direction: column; gap: var(--space-sm); font-family: var(--font-sans); font-size: var(--text-caption); }
+.ui-markup-talk > * { margin: 0; }
+.ui-markup-quote { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; border-left: var(--stroke) solid var(--tint); padding-left: var(--space-sm); color: var(--muted-foreground); overflow-wrap: anywhere; }
+.ui-markup-source { overflow: hidden; color: var(--muted-foreground); font-family: var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
+.ui-markup-words { color: var(--foreground); font-size: var(--text-body); line-height: var(--leading-row); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-markup-said { display: flex; flex-direction: column; gap: var(--space-2xs); }
+.ui-markup-said > p { margin: 0; color: var(--foreground); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-markup-who { display: flex; align-items: baseline; gap: var(--space-sm); color: var(--muted-foreground); font-weight: var(--weight-strong); }
+.ui-markup-who > time { font-family: var(--font-data); font-weight: var(--weight-rest); opacity: var(--opacity-faint); }
+/* Shut, the comment and the latest said of it are cut short; the rest is a press away. */
+.ui-markup-note:not([data-open]) :is(.ui-markup-words, .ui-markup-said > p) { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+/* Under the corner's Resolve or Remove where no title takes that room. */
+.ui-markup-note:not([data-head]) .ui-card[data-close] > .ui-markup-talk > :first-child { padding-right: var(--space-4xl); }
 .ui-markup-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ui-markup-state { display: inline-flex; flex: none; align-items: center; gap: var(--space-xs); margin-left: auto; color: var(--muted-foreground); font-family: var(--font-sans); font-size: var(--text-caption); font-weight: var(--weight-regular); }
+.ui-markup-state { display: flex; align-items: center; gap: var(--space-xs); color: var(--muted-foreground); }
+/* The answer is one line, growing with what is written. */
+.ui-markup-note .ui-card .ui-textarea { min-height: 0; max-height: var(--measure-xs); padding: var(--space-sm) var(--space-md); resize: none; }
+/* One row: what undoes on the left, Resolve and Reply on the right. */
+.ui-markup-note .ui-card > .ui-actions { display: flex; width: auto; max-width: none; flex-wrap: wrap; align-items: center; gap: var(--space-xs); margin-left: 0; justify-content: flex-end; }
+.ui-markup-note .ui-card > .ui-actions > .ui-button { flex: none; white-space: nowrap; }
+.ui-markup-gap { flex: 1; }
 .ui-markup-now { display: inline-flex; align-items: center; gap: var(--space-sm); margin-right: auto; color: var(--muted-foreground); font-size: var(--text-caption); }
-.ui-markup-said > time { float: right; margin-left: var(--space-sm); color: var(--muted-foreground); opacity: var(--opacity-faint); }
 .ui-markup-note[data-float] { position: fixed; width: var(--measure-md); max-width: calc(100% - 2 * var(--space-lg)); }
 .ui-markup-note .ui-card-preview { overflow: hidden; }
 .ui-markup-note .ui-card-preview > img { display: block; max-width: 100%; max-height: var(--measure-2xs); margin-inline: auto; border-radius: var(--radius-inset); object-fit: contain; }
 .ui-markup-layer .ui-markup-note:not([data-open]) { cursor: pointer; }
 .ui-markup-note .ui-card { width: 100%; }
 .ui-markup-note .ui-card > h3 { display: flex; align-items: center; gap: var(--space-sm); font-family: var(--font-data); font-size: var(--text-row); }
-.ui-markup-note .ui-card > p { overflow: hidden; font-family: var(--font-data); text-overflow: ellipsis; white-space: nowrap; }
 
 /* The bar, and over it what the held tool draws with. Only the rails take the pointer. */
 /* A surface's margin: each card at the height of what it is about (margin.tsx sets `top`), or a list where the margin is not beside it. */
@@ -76,6 +87,8 @@
 .ui-markup-margin > .ui-markup-note:not([data-open]) { cursor: pointer; }
 /* A card is as tall as its thread: its own limit (its holder's height) would be measured against the card itself here. */
 .ui-markup-margin .ui-card { max-height: none; }
+/* Under the text rather than beside it, a card keeps a card's width. */
+.ui-markup-margin:not([data-beside]) > .ui-markup-note { width: 100%; max-width: var(--measure-lg); margin-inline: auto; }
 /* --markup-frame-*: the insets of what the tool is put over (a document's pane), where that is less than the window. */
 .ui-markup-rails { position: fixed; bottom: var(--space-lg); right: calc(var(--markup-frame-right, 0px) + var(--space-lg)); left: calc(var(--markup-frame-left, 0px) + var(--space-lg)); display: flex; flex-direction: column; align-items: center; gap: var(--space-xs); pointer-events: none; }
 .ui-markup-bar { display: flex; flex-wrap: wrap; justify-content: center; max-width: 100%; align-items: center; gap: var(--space-sm); border-radius: var(--radius-surface); padding: var(--space-xs); color: var(--foreground); font-size: var(--text-caption); }

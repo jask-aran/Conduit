@@ -11,12 +11,16 @@ import StarterKit from "@tiptap/starter-kit";
  * AUTHORS map names who wrote under each Yjs client id, so every character keeps its author. Its CHANGES map is what
  * agents changed to answer a comment and the person has not yet accepted: block id -> { for: "<item>/<n>" (the comment),
  * before: the block as it was (null: the block is new), after: the id of the block a deleted one followed (null: it
- * was first), by, at }. A change is gone once the person resolves its comment, or it is taken back.
+ * was first), by, at }. A change is gone once the person resolves its comment, or it is taken back. A suggestion is kept the same way under a key
+ * of its own (`for: "suggestion/<id>"`): a change made in Suggesting, by the person or an agent, that stands until it is accepted (its entries go) or
+ * rejected (taken back), whatever happens to the comments.
  */
 export const BLOCK_TYPES = ["paragraph", "heading", "blockquote", "codeBlock", "bulletList", "orderedList", "taskList", "listItem", "taskItem", "table", "horizontalRule", "image", "callout", "toggle"];
 export const FRAGMENT = "blocks";
 export const AUTHORS = "authors";
 export const CHANGES = "changes";
+export const SUGGESTION = "suggestion/";
+export const isSuggestion = (key) => typeof key === "string" && key.startsWith(SUGGESTION);
 // The paper's front matter: a Yjs map of name -> text (its status, who it is for, a date), shown under its title and written first in its file and its Markdown.
 export const PROPERTIES = "properties";
 export const blockId = () => Math.random().toString(36).slice(2, 10).padEnd(8, "0");
@@ -41,8 +45,8 @@ const Image = Node.create({
     name: "paperImage", level: "block", start: lineStart(/^!\[[^\]\n]*\]\([^)\s]+\)[ \t]*$/m),
     tokenize: (src) => { const found = /^!\[((?:\\.|[^\]\\\n])*)\]\(<?([^)\s>]+)>?\)[ \t]*(?:\n+|$)/.exec(src); return found ? { type: "paperImage", raw: found[0], alt: found[1].replace(/\\(.)/g, "$1"), src: found[2] } : undefined; },
   },
-  // An image inside a line of text is asked of this node too (by its name): it stays its caption's words there, since a block cannot stand in a line.
-  parseMarkdown: (token, h) => token.type === "paperImage" ? h.createNode("image", { src: token.src, alt: token.alt }) : token.text ? h.createTextNode(token.text) : [],
+  // An image inside a line of text is asked of this node too (by its name): it stays its Markdown there, as text, since a block cannot stand in a line and its address must not be lost.
+  parseMarkdown: (token, h) => token.type === "paperImage" ? h.createNode("image", { src: token.src, alt: token.alt }) : token.raw || token.text ? h.createTextNode(token.raw || token.text) : [],
   renderMarkdown: (node) => `![${String(node.attrs?.alt ?? "").replace(/[\\\]]/g, "\\$&").replace(/\n/g, " ")}](${node.attrs?.src ?? ""})`,
 });
 
@@ -63,7 +67,7 @@ const Callout = Node.create({
     },
   },
   parseMarkdown: (token, h) => { const blocks = h.parseChildren(token.tokens ?? []); return h.createNode("callout", { tone: token.tone }, blocks.length ? blocks : [h.createNode("paragraph", undefined, [])]); },
-  renderMarkdown: (node, h) => [`[!${String(node.attrs?.tone ?? "note").toUpperCase()}]`, ...h.renderChildren(node.content ?? [], "\n\n").split("\n")].map((line) => line.trim() ? `> ${line}` : ">").join("\n"),
+  renderMarkdown: (node, h) => [`[!${String(node.attrs?.tone ?? "note").toUpperCase()}]`, ...h.renderChildren(node.content ?? [], "\n\n").split("\n")].map((line) => line ? `> ${line}` : ">").join("\n"),
 });
 
 /** A summary line over blocks that fold under it (how far is each reader's own, never written): `<details><summary>…</summary>…</details>`. */
@@ -76,13 +80,22 @@ const Toggle = Node.create({
     name: "toggle", level: "block", start: lineStart(/^ {0,3}<details>/im),
     tokenize(src, _tokens, lexer) {
       if (!/^ {0,3}<details>/i.test(src)) return undefined;
-      // To its own closing tag: a toggle may hold toggles.
-      const tags = /<\/?details>/gi;
-      let depth = 0, end = -1;
-      for (const tag of src.matchAll(tags)) { depth += tag[0][1] === "/" ? -1 : 1; if (!depth) { end = tag.index + tag[0].length; break; } }
+      // To its own closing tag: a toggle may hold toggles. A tag in code (a fence, a code span) is the code's text; typed in text it is written escaped.
+      let depth = 0, end = -1, at = 0, fence = null;
+      lines: for (const line of src.split("\n")) {
+        const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+        if (fence) { if (marker && marker[0] === fence[0] && marker.length >= fence.length) fence = null; }
+        else if (marker && depth) fence = marker;
+        else for (const tag of line.replace(/`+[^`]*`+/g, (code) => " ".repeat(code.length)).matchAll(/<\/?details>/gi)) {
+          depth += tag[0][1] === "/" ? -1 : 1;
+          if (!depth) { end = at + tag.index + tag[0].length; break lines; }
+        }
+        at += line.length + 1;
+      }
       if (end < 0) return undefined;
       const raw = src.slice(0, end) + (/^[ \t]*(?:\n+|$)/.exec(src.slice(end))?.[0] ?? ""), inner = src.slice(src.indexOf(">") + 1, end - "</details>".length);
-      const summary = /^\s*<summary>([\s\S]*?)<\/summary>/i.exec(inner);
+      // The summary is written on a line of its own, so a `</summary>` in its code is not its end.
+      const summary = /^\s*<summary>(.*)<\/summary>[ \t]*(?=\n|$)/i.exec(inner) ?? /^\s*<summary>([\s\S]*?)<\/summary>/i.exec(inner);
       return { type: "toggle", raw, summary: lexer.inlineTokens(summary?.[1].trim() ?? ""), tokens: lexer.blockTokens(summary ? inner.slice(summary[0].length) : inner) };
     },
   },
@@ -127,6 +140,26 @@ const inked = (name, tag) => {
     parseMarkdown: (token, h) => PAPER_INKS.includes(token.ink) ? h.applyMark(name, h.parseInline(token.tokens ?? []), { ink: token.ink }) : h.parseInline(token.tokens ?? []),
     renderMarkdown: (node, h) => `<${tag} data-color="${node.attrs?.ink}">${h.renderChildren(node)}</${tag}>`,
   });
+};
+
+const ITEMS = new Set(["listItem", "taskItem"]);
+const imageText = (node) => ({ type: "paragraph", content: [{ type: "text", text: `![${String(node.attrs?.alt ?? "").replace(/[\\\]]/g, "\\$&")}](${node.attrs?.src ?? ""})` }] });
+/**
+ * Markdown read as blocks (MarkdownManager.parse), made to fit the schema where the list parser does not: an item's text stands in a paragraph, and an
+ * image alone in an item is its Markdown as text (an item starts with a line of text, and an empty one would not read back as an item).
+ */
+export const fitted = (node) => {
+  if (!node.content) return node;
+  let content = node.content.map(fitted);
+  if (ITEMS.has(node.type)) {
+    if (content[0]?.type === "paragraph" && !content[0].content?.length && content[1]?.type === "image") content.splice(0, 2, imageText(content[1]));
+    else if (content[0]?.type === "image") content[0] = imageText(content[0]);
+    const items = [];
+    for (const child of content) { const inline = child.type === "text" || child.type === "date"; if (inline && items.at(-1)?.run) items.at(-1).node.content.push(child); else items.push({ node: inline ? { type: "paragraph", content: [child] } : child, run: inline }); }
+    content = items.map((item) => item.node);
+    if (content[0]?.type !== "paragraph") content.unshift({ type: "paragraph", content: [] });
+  }
+  return { ...node, content };
 };
 
 // No trailing block: an editor that adds one writes it into the hub's copy, once for each page that has the document open.

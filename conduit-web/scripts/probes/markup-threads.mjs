@@ -48,7 +48,7 @@ try {
   const forName = (await note()).includes(`For ${name}`);
   await page.keyboard.press("Enter"); await wait(900);
   // The chat handed a comment is seen at work on the block it is about (its seat), before it has answered.
-  console.log("the chat's agent is seen at work in the paper (its seat):", await page.evaluate(() => { const seat = document.querySelector(".ui-document-seat"); return seat ? `${seat.textContent} | blocks held: ${document.querySelectorAll(".ui-document-seat-held").length}` : null; }));
+  console.log("the chat's agent is seen at work in the paper (its seat):", await page.evaluate(() => { const seat = document.querySelector(".ui-document-seat-name"); return seat ? `${seat.textContent} | blocks held: ${document.querySelectorAll(".ui-document-seat-held").length}` : null; }));
   await wait(2100);
   const named = (await api(`${paper}/markup/open`)).items.filter((one) => one.comments.some((comment) => comment.comment.startsWith("Thread probe: by")));
   extra.push(...named.map((one) => one.id));

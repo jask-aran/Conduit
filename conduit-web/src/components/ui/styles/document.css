@@ -7,7 +7,8 @@
 .ui-document-column { min-height: 0; flex: 1; overflow-y: auto; padding: var(--space-2xl) var(--space-lg) var(--measure-2xs); }
 /* The text, and the margin beside it. The margin wraps under the text at the width where the two no longer fit side by side, which is the text's own measure and the margin's. */
 .ui-document-page { display: flex; min-height: 100%; flex-wrap: wrap; justify-content: center; gap: var(--space-2xl); }
-.ui-document-body { position: relative; display: flex; min-width: 0; max-width: var(--document-width); flex: 1 1 var(--document-width); flex-direction: column; }
+/* The text gives up width before the margin goes under it: it wraps only where the text at its narrowest measure and the margin no longer fit side by side. */
+.ui-document-body { position: relative; display: flex; min-width: 0; max-width: var(--document-width); flex: 1 1 var(--measure-xl); flex-direction: column; }
 .ui-document-content { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 /* `min-width: 0`: a card whose quote is one long line is cut short in the margin, and never widens it past the row. */
 .ui-document-margin { min-width: 0; max-width: 100%; flex: 0 0 var(--measure-md); }
@@ -116,12 +117,36 @@
 .ui-document-starts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); margin-top: var(--space-md); }
 .ui-document-starts[data-placed] { position: absolute; right: 0; left: 0; }
 .ui-document-starts-note { flex-basis: 100%; margin: 0; color: var(--muted-foreground); font-size: var(--text-row); }
-/* An agent at work: its blocks washed in the accent and breathing while it thinks, its name over the first, and what it is writing under the block, quiet until it is the paper's. */
-.ui-document-text > .ui-document-seat-held { border-radius: var(--radius-inset); box-shadow: 0 0 0 var(--space-xs) var(--tint); background: var(--tint); }
-.ui-document-text > .ui-document-seat-held:not([data-seat="reading"]) { animation: ui-document-seat var(--duration-breathe) var(--ease-change) infinite alternate; }
-@keyframes ui-document-seat { to { background: transparent; } }
-@media (prefers-reduced-motion: reduce) { .ui-document-text > .ui-document-seat-held { animation: none; } }
-.ui-document-seat { margin-block: var(--space-sm) var(--space-2xs); color: var(--muted-foreground); font-size: var(--text-caption); user-select: none; }
-.ui-document-seat-writing { margin-block: var(--space-sm); border-inline-start: var(--stroke-thin) solid var(--border); padding-inline-start: var(--space-md); color: var(--muted-foreground); white-space: pre-wrap; }
+/* An agent at work, in its ink (DOCUMENT_SEAT_INKS, each Markup's of that name): the blocks it holds washed in it and breathing while it thinks, one being
+   written over dimmed and struck; its caret at the start of the first, its name on a tag over it; what it is writing drawn as the blocks it will be, quiet,
+   its caret at their end. Nothing of it takes room from the paper's text but what it writes, which stands where that will stand, aligned with it. */
+.ui-document [data-seat-ink="plain"] { --seat-ink: var(--primary); }
+.ui-document [data-seat-ink="green"] { --seat-ink: var(--status-success); }
+.ui-document [data-seat-ink="amber"] { --seat-ink: var(--status-warn); }
+.ui-document [data-seat-ink="blue"] { --seat-ink: var(--status-unread); }
+.ui-document-text > .ui-document-seat-held { --seat-wash: color-mix(in oklch, var(--seat-ink), transparent 88%); border-radius: var(--radius-inset); box-shadow: 0 0 0 var(--space-xs) var(--seat-wash); background: var(--seat-wash); }
+.ui-document-text > .ui-document-seat-held[data-seat="thinking"] { animation: ui-document-seat var(--duration-breathe) var(--ease-change) infinite alternate; }
+.ui-document-text > .ui-document-seat-held[data-op="replace"] { opacity: var(--opacity-muted); text-decoration: line-through var(--hairline) var(--seat-ink); }
+@keyframes ui-document-seat { to { box-shadow: 0 0 0 var(--space-xs) transparent; background: transparent; } }
+.ui-document-seat-flag { position: absolute; z-index: 1; pointer-events: none; user-select: none; }
+.ui-document-seat-flag > .ui-document-seat-caret { position: absolute; top: 0; right: 100%; margin-inline-end: var(--space-2xs); }
+.ui-document-seat-caret { position: relative; display: inline-block; width: var(--stroke); height: 1lh; vertical-align: top; border-radius: var(--radius-round); background: var(--seat-ink); }
+.ui-document-seat-name { position: absolute; bottom: 100%; left: 0; border-radius: var(--radius-inset); background: var(--seat-ink); padding: 0 var(--space-2xs); color: var(--background); font-size: var(--text-caption); font-weight: var(--weight-strong); line-height: var(--leading-tight); text-decoration: none; white-space: nowrap; }
+.ui-document-text > .ui-document-seat-stream { position: relative; color: var(--muted-foreground); pointer-events: none; user-select: none; }
+.ui-document-text > * + .ui-document-seat-stream[data-lead="heading"] { margin-top: var(--space-3xl); }
+.ui-document-seat-stream::before { position: absolute; top: 0; right: 100%; bottom: 0; width: var(--stroke); margin-inline-end: var(--space-sm); border-radius: var(--radius-round); background: var(--seat-ink); content: ""; }
+.ui-document-seat-body > * + * { margin-top: var(--answer-gap); }
+.ui-document-seat-body > * + :is(h1, h2, h3) { margin-top: var(--space-3xl); }
+.ui-document-seat-body .ui-document-seat-caret { margin-inline-start: var(--hairline); animation: ui-document-seat-caret var(--duration-pulse) var(--ease-change) infinite alternate; }
+@keyframes ui-document-seat-caret { to { background: transparent; } }
+.ui-document-seat-jump { position: absolute; z-index: 3; left: 50%; display: flex; align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-round); padding: var(--space-xs) var(--space-md); color: var(--foreground); font: inherit; font-size: var(--text-row); cursor: pointer; translate: -50% 0; animation: ui-document-seat-jump var(--duration-gentle) var(--ease-arrive); }
+.ui-document-seat-jump[data-at="above"] { top: calc(var(--header-height) + var(--space-md)); }
+.ui-document[data-bare] > .ui-document-seat-jump[data-at="above"] { top: var(--space-md); }
+.ui-document-seat-jump[data-at="below"] { bottom: var(--space-lg); }
+.ui-document-seat-jump > svg { width: var(--icon); height: var(--icon); flex: none; color: var(--seat-ink); }
+@keyframes ui-document-seat-jump { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ui-document-text > .ui-document-seat-held, .ui-document-seat-body .ui-document-seat-caret, .ui-document-seat-jump { animation: none; } }
+.ui-document-suggested { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); margin-block: var(--space-sm) var(--space-2xs); color: var(--muted-foreground); font-size: var(--text-caption); user-select: none; }
+.ui-document-suggested > span { margin-inline-end: var(--space-xs); }
 /* A margin with no comment in it takes no room, so the text stands centred in the column. */
 .ui-document-page[data-margin="none"] > .ui-document-margin { display: none; }

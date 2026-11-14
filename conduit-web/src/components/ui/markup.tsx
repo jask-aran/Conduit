@@ -1,6 +1,6 @@
 import { createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 // Through the barrel, so the tool's chunk takes these from the app's own and the build splits nothing new out of it.
-import { Button, Card, ColourPicker, CardPreview, CloseButton, Frost, IconButton, Icons, Segmented, Spinner, Swatch, Switch, TextArea } from "./index";
+import { Button, Card, ColourPicker, CardPreview, CloseButton, Dot, Frost, IconButton, Icons, Segmented, Spinner, Swatch, Switch, TextArea } from "./index";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "./menus";
 import { clockTime } from "./time";
 import "./styles/markup.css";
@@ -88,35 +88,50 @@ const saidWhen = (at: string) => {
 };
 
 type Said = { from: "agent" | "person"; text: string; at?: string };
-const said = (line: Said) => <p class="ui-markup-said" data-from={line.from}><Show when={line.at}>{(at) => <time dateTime={at()}>{saidWhen(at())}</time>}</Show>{line.text}</p>;
 
-/** One comment. `float`: where it sits beside what it is about; open, it is written there, with Done (and a quiet Remove); shut, a press opens it again. `sendNow` is whether Done also
- *  sends it (`onSendNow` changes that; none: it cannot be, as with no session listening). In the stack, shut, it shows its words on a line and its
- *  `picture`, and a press opens it. `state` says where it stands (not sent, sent, being worked on, answered, resolved). Once sent it is a thread:
- *  `words` is the comment and `said` what the agent and the person have written about it since, each with when. Shut, it shows the comment on a line
- *  and the latest of those; open, all of it, and the field is the person's answer (`placeholder`, sent by Reply: `onSay`). It is not removed: its
- *  corner settles it (`onResolve`), and `resolved` it folds to the comment's line until it is opened and reopened. `onRevert`: an agent changed
- *  something to answer it, which this takes back. `key`: what a margin knows it by. */
-export function MarkupNote(props: { ref?: (element: HTMLTextAreaElement) => void; key?: string; float?: JSX.CSSProperties; open: boolean; tag: string; name: string; source?: string; value: string; picture?: string; words?: string; said?: Said[]; state?: { label: string; busy?: boolean };
-  placeholder?: string; resolved?: boolean; sendNow?: boolean; onSendNow?: (on: boolean) => void; onOpen: () => void; onInput: (value: string) => void; onDone?: () => void; onRemove?: () => void; onSay?: () => void; onResolve?: (resolved: boolean) => void; onRevert?: () => void }) {
+/** One comment, read as a short conversation: what it is about (`quote`, in the text's own face, a line or two), the person's words, then what was said since, each under who said it, and where it stands on one quiet line.
+ *  `float`: where it sits beside what it is about; open, it is written there, with Done (and a quiet Remove); shut, a press opens it again. `sendNow` is whether Done also
+ *  sends it (`onSendNow` changes that; none: it cannot be, as with no session listening). In the stack, shut, it shows its words and its
+ *  `picture`, and a press opens it. `tag` and `name` head it where it is about a piece of the interface (its number, the piece's name); `source` is where that piece is written.
+ *  `state` says where it stands (not sent, sent, being worked on, answered, resolved), `unread` an answer not yet opened. Once sent it is a thread:
+ *  `words` is the comment and `said` what the agent (`by`) and the person have written about it since, each with when. Shut, it shows the comment and the latest of those,
+ *  each cut short; open, all of it, the field is the person's answer (`placeholder`, sent by Reply: `onSay`), and Resolve stands with Reply. Shut, its corner resolves it (`onResolve`);
+ *  `resolved` it folds to the comment until it is opened and reopened. `onRevert`: an agent changed something to answer it, which this takes back.
+ *  `onAccept` and `onReject`: it is a proposed change, which is taken or declined, with no field. `key`: what a margin knows it by. */
+export function MarkupNote(props: { ref?: (element: HTMLTextAreaElement) => void; key?: string; float?: JSX.CSSProperties; open: boolean; tag: string; name: string; quote?: string; source?: string; value: string; picture?: string; words?: string; said?: Said[]; by?: string; state?: { label: string; busy?: boolean }; unread?: boolean;
+  placeholder?: string; resolved?: boolean; sendNow?: boolean; onSendNow?: (on: boolean) => void; onOpen: () => void; onInput: (value: string) => void; onDone?: () => void; onRemove?: () => void; onSay?: () => void; onResolve?: (resolved: boolean) => void; onRevert?: () => void; onAccept?: () => void; onReject?: () => void }) {
   const thread = () => props.said !== undefined;
-  const settle = () => props.onResolve && !props.resolved ? () => props.onResolve!(true) : undefined;
-  return <div class="ui-markup-note" data-key={props.key} style={props.float} data-float={props.float ? "" : undefined} data-open={props.open ? "" : undefined} onClick={(event) => { if (!props.open && !(event.target as Element).closest("button")) props.onOpen(); }}>
-    <Card size="compact" role="group" label={props.tag ? `Comment ${props.tag}` : props.name}
-      title={<><Show when={props.tag}><b class="ui-markup-number">{props.tag}</b></Show><span class="ui-markup-name">{props.name}</span><Show when={props.state}>{(state) => <span class="ui-markup-state"><Show when={state().busy}><Spinner /></Show>{state().label}</span>}</Show></>}
-      detail={thread() ? (props.open ? undefined : props.words) : props.open ? props.source : props.value.trim() || (props.picture ? undefined : "No comment yet")}
-      close={props.float ? undefined : thread() ? settle() : props.onRemove} closeLabel={thread() ? "Resolve" : "Remove"} closeIcon={thread() ? <Icons.Check /> : undefined}
-      actions={props.float && props.open ? <><Show when={props.sendNow !== undefined}><label class="ui-markup-now" title={props.onSendNow ? undefined : "Needs a session listening"}>Send now<Switch label="Send this comment as it is Done" checked={Boolean(props.sendNow)} disabled={!props.onSendNow} onChange={props.onSendNow} /></label></Show><Button variant="ghost" size="sm" onClick={props.onRemove}>Remove</Button><Button variant="primary" outline size="sm" onClick={props.onDone}>Done</Button></>
-        : props.open && props.onSay ? <><Show when={props.onRevert}><Button variant="ghost" size="sm" title="Put back what the agent changed for this comment" onClick={props.onRevert}>Revert</Button></Show><Show when={props.resolved && props.onResolve}><Button variant="ghost" size="sm" onClick={() => props.onResolve!(false)}>Reopen</Button></Show><Button variant="primary" outline size="sm" disabled={!props.value.trim()} onClick={props.onSay}>Reply</Button></> : undefined}>
-      <Show when={props.picture && !props.float && !thread()}><CardPreview><img src={props.picture} alt="" /></CardPreview></Show>
-      <Show when={thread()}>
-        <Show when={props.open} fallback={<Show when={!props.resolved && props.said![props.said!.length - 1]} keyed>{(latest) => <div class="ui-markup-latest">{said(latest)}</div>}</Show>}>
-          <Show when={props.picture}><CardPreview><img src={props.picture} alt="" /></CardPreview></Show>
-          <Show when={props.words}><p class="ui-markup-said" data-from="person">{props.words}</p></Show>
-          <For each={props.said}>{said}</For>
-        </Show>
-      </Show>
-      <Show when={props.open}><TextArea ref={props.ref} rows={2} placeholder={props.placeholder ?? "What should change?"} value={props.value} onInput={(event) => props.onInput(event.currentTarget.value)} /></Show>
+  const head = () => Boolean(props.tag || props.name);
+  const proposed = () => Boolean(props.onAccept || props.onReject);
+  const latest = () => props.resolved ? undefined : props.said?.[props.said.length - 1];
+  const words = () => thread() || proposed() ? props.words : props.open ? undefined : props.value.trim() || (props.picture ? undefined : "No comment yet");
+  const corner = () => props.float || proposed() ? undefined : thread() ? (!props.open && props.onResolve && !props.resolved ? () => props.onResolve!(true) : undefined) : props.onRemove;
+  const entry = (line: Said) => <div class="ui-markup-said" data-from={line.from}><span class="ui-markup-who">{line.from === "agent" ? props.by ?? "Agent" : "You"}<Show when={line.at}>{(at) => <time dateTime={at()}>{saidWhen(at())}</time>}</Show></span><p>{line.text}</p></div>;
+  const actions = () => {
+    if (proposed()) return <><Show when={props.onReject}><Button variant="ghost" size="sm" onClick={props.onReject}>Reject</Button></Show><Show when={props.onAccept}><Button variant="primary" outline size="sm" onClick={props.onAccept}>Accept</Button></Show></>;
+    if (props.float && props.open) return <><Show when={props.sendNow !== undefined}><label class="ui-markup-now" title={props.onSendNow ? undefined : "Needs a session listening"}>Send now<Switch label="Send this comment as it is Done" checked={Boolean(props.sendNow)} disabled={!props.onSendNow} onChange={props.onSendNow} /></label></Show><Button variant="ghost" size="sm" onClick={props.onRemove}>Remove</Button><Button variant="primary" outline size="sm" onClick={props.onDone}>Done</Button></>;
+    if (props.open && props.onSay) return <>
+      <Show when={props.onRevert}><Button variant="ghost" size="sm" title="Put back what the agent changed for this comment" onClick={props.onRevert}>Revert</Button></Show>
+      <Show when={props.resolved && props.onResolve}><Button variant="ghost" size="sm" onClick={() => props.onResolve!(false)}>Reopen</Button></Show>
+      <span class="ui-markup-gap" />
+      <Show when={!props.resolved && props.onResolve}><Button variant="ghost" size="sm" aria-label="Resolve" onClick={() => props.onResolve!(true)}><Icons.Check />Resolve</Button></Show>
+      <Button variant="primary" outline size="sm" title="Reply (Enter)" disabled={!props.value.trim()} onClick={props.onSay}>Reply</Button>
+    </>;
+    return undefined;
+  };
+  return <div class="ui-markup-note" data-key={props.key} style={props.float} data-float={props.float ? "" : undefined} data-open={props.open ? "" : undefined} data-head={head() ? "" : undefined} data-proposed={proposed() ? "" : undefined} onClick={(event) => { if (!props.open && !(event.target as Element).closest("button")) props.onOpen(); }}>
+    <Card size="compact" role="group" label={props.tag ? `Comment ${props.tag}` : props.name || props.quote || (proposed() ? "Suggestion" : "Comment")}
+      title={head() ? <><Show when={props.tag}><b class="ui-markup-number">{props.tag}</b></Show><span class="ui-markup-name">{props.name}</span></> : undefined}
+      close={corner()} closeLabel={thread() ? "Resolve" : "Remove"} closeIcon={thread() ? <Icons.Check /> : undefined} actions={actions()}>
+      <div class="ui-markup-talk">
+        <Show when={props.quote}><p class="ui-markup-quote">{props.quote}</p></Show>
+        <Show when={!props.quote && !thread() && props.open && props.source}><p class="ui-markup-source">{props.source}</p></Show>
+        <Show when={props.picture && !props.float && (!thread() || props.open)}><CardPreview><img src={props.picture} alt="" /></CardPreview></Show>
+        <Show when={words()}><p class="ui-markup-words">{words()}</p></Show>
+        <Show when={thread()}><Show when={props.open} fallback={<Show when={latest()} keyed>{entry}</Show>}><For each={props.said}>{entry}</For></Show></Show>
+        <Show when={props.state || props.unread}><p class="ui-markup-state"><Show when={props.unread}><Dot tone="unread" aria-label="Unread" /></Show><Show when={props.state?.busy}><Spinner /></Show>{props.state?.label ?? "Unread"}</p></Show>
+      </div>
+      <Show when={props.open}><TextArea ref={props.ref} rows={1} placeholder={props.placeholder ?? "What should change?"} value={props.value} onInput={(event) => props.onInput(event.currentTarget.value)} /></Show>
     </Card>
   </div>;
 }

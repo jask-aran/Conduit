@@ -1143,7 +1143,9 @@ export class DurableAdapter extends EventEmitter {
           seq: ++record.generationSeq, messageId, contentIndex: change.contentIndex, blockKind, delta: change.delta });
         // A tool's input as the model writes it, for a tool whose work the person watches (a paper shows what is being written to it).
         const call = turn.calls?.get(change.contentIndex);
-        if (call && change.delta) { call.input += change.delta; this.emit("tool_input", { chatId: record.chatId, name: call.name, input: call.input }); }
+        // `call` tells two calls in one turn apart; `done`: the model has finished writing this one's input.
+        const done = change.type === "toolcall_end";
+        if (call && (change.delta || done)) { call.input += change.delta ?? ""; this.emit("tool_input", { chatId: record.chatId, name: call.name, input: call.input, call: `${messageId} ${change.contentIndex}`, done }); }
         continue;
       }
       send(change.contentIndex, blockKind, change.delta);
