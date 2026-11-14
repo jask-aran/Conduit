@@ -65,10 +65,10 @@ try {
   await until("Bold makes the selection bold, and its button says so", async () => await page.evaluate(() => [...document.querySelectorAll(".ui-document-text > blockquote strong")].some((bold) => bold.textContent === "Quoted by the probe")) && await format.locator("button[aria-label='Bold']").getAttribute("aria-pressed") === "true");
   added.push(...ids(cli("read", "test")).filter((id) => !ids(before).includes(id) && !added.includes(id)));
 
-  // The block handle, beside the block the mouse is over; its menu's Duplicate writes a copy under it with an id of its own.
+  // The block handle, beside the block the mouse is over (inside its left edge where the gutter is narrower than the handle); its menu's Duplicate writes a copy under it with an id of its own.
   const typed = await page.locator(`.ui-document-text > [data-id="${added[1]}"]`).boundingBox();
   await page.mouse.move(typed.x + 8, typed.y + typed.height / 2);
-  await until("the handle shows beside the block pointed at", () => page.evaluate((box) => { const handle = document.querySelector(".ui-document-handle[data-shown]")?.getBoundingClientRect(); return Boolean(handle) && handle.right <= box.x && handle.bottom > box.y && handle.top < box.y + box.height; }, typed));
+  await until("the handle shows beside the block pointed at", () => page.evaluate((box) => { const handle = document.querySelector(".ui-document-handle[data-shown]")?.getBoundingClientRect(); return Boolean(handle) && handle.left <= box.x && handle.bottom > box.y && handle.top < box.y + box.height; }, typed));
   await page.locator(".ui-document-handle[data-shown] [data-grip]").click();
   await page.getByRole("menuitem", { name: "Duplicate" }).click();
   await until("Duplicate writes a copy under the block, with an id of its own", () => {

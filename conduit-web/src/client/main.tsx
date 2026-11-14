@@ -68,7 +68,8 @@ import { Transcript } from "./chat/transcript";
 import { hasTranscriptFind, openTranscriptFind } from "./chat/transcript-find";
 import { landTranscriptCursor } from "./chat/transcript-cursor";
 import { isChatContentActivity } from "./chat/transcript-source";
-import { COMMAND_IDS, commandRegistry, FEEDBACK_CONTEXTS, getCommandDefinition, LEADER_STROKE } from "./commands/command-registry";
+import { ARTIFACT_COMMANDS, COMMAND_IDS, commandRegistry, FEEDBACK_CONTEXTS, getCommandDefinition, LEADER_STROKE, type ArtifactCommand } from "./commands/command-registry";
+import { focusedArtifact } from "./document/focused-artifact";
 import { CommandMenu } from "./navigation/command-menu";
 import { LeaderPalette } from "./navigation/leader-palette";
 import { KeyboardTour, keyboardTourActive, startKeyboardTour, watchForTourOffer } from "./tour/keyboard-tour";
@@ -2889,7 +2890,7 @@ function App() {
           <RiderButton show="label" icon={<Icons.NewChat />} label="New chat" onClick={() => void fill("page:dashboard")} />
           <RiderButton show="label" icon={<Icons.Terminal />} label="New terminal" onClick={() => void terminal()} />
           <RiderButton show="label" icon={<Icons.Browser />} label="Browser" onClick={() => void fill("browser:hub")} />
-          <RiderButton show="label" icon={<Icons.WriteFile />} label="New artifact" onClick={() => void fill("artifact:new")} />
+          <RiderButton show="label" icon={<Icons.WriteFile />} label="New artifact" onClick={() => void fill(dockProject() ? `artifact:new:${dockProject()!.id}` : "artifact:new")} />
         </Actions>
         <Show when={recent().length}>
           <Group kind="dash" id="Continue" heading={<GroupHeading>Continue</GroupHeading>}>
@@ -2940,7 +2941,7 @@ function App() {
     <PaneHeader actions={paneTabActions(pane)}><Show when={documentTab(pane)} fallback={<HeaderCrumb title="New artifact" />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>
     <ArtifactCreator project={id.slice("new:".length) || undefined} projects={catalogue.projects().filter((item) => item.id === id.slice("new:".length) || homeProjects().includes(item))}
       onBack={() => void setPaneView(pane, "home")} onMade={(made) => void setPaneView(pane, `artifact:${made.id}`).then(() => focusAnyPane(pane))} />
-  </SheetFill> : <ArtifactPane id={id} quiet={feedbackMode() !== null} onAbout={(found, label) => nameArtifact(`artifact:${id}`, found.name, label)}
+  </SheetFill> : <ArtifactPane id={id} quiet={feedbackMode() !== null} onThread={() => void showThread(pane, id)} onShortcuts={() => openSettings("shortcuts")} onAbout={(found, label) => nameArtifact(`artifact:${id}`, found.name, label)}
     chats={(project) => (catalogue.projects().find((item) => item.id === project)?.sessions ?? []).map((chat) => ({ id: chat.id, title: chat.title || "Untitled chat" }))}
     header={(extra) => <PaneHeader modes={paperModes(pane, id, "paper")} actions={<>{extra}{paneTabActions(pane)}</>}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`artifact:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />;
   const renderBrowserDocument = (pane: PaneKey, id: string) => <SheetFill class="pane-browser">
@@ -4607,6 +4608,7 @@ function App() {
     nativeApp,
     devClient: Boolean(devClient()),
     chatId: focusedChatId(),
+    artifact: focusedArtifact(),
     project: dockProject(),
     projects: catalogue.projects(),
     templates: templates(),
@@ -4664,6 +4666,7 @@ function App() {
     logout: () => { void logout(); },
     newChat: (project, launch) => void createChat(project ?? undefined, launch ?? {}),
     newArtifact: () => runSidebar("new-artifact", { project: dockProject() ?? undefined }),
+    artifact: (command) => focusedArtifact()?.offers[command]?.(),
     newFolder: () => runSidebar("new-folder"),
     newWorkspace: () => runSidebar("new-workspace"),
     attach: () => focusedSession().openAttachments(),
@@ -4970,6 +4973,7 @@ function App() {
         void startNewChat();
       }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleSidebar, "application", () => runSidebar("toggle-sidebar")),
+      ...(Object.keys(ARTIFACT_COMMANDS) as ArtifactCommand[]).map((name) => shortcutManager.registerHandler(ARTIFACT_COMMANDS[name][0], "application", () => focusedArtifact()?.offers[name]?.(), { when: () => Boolean(focusedArtifact()?.offers[name]) })),
       shortcutManager.registerHandler(COMMAND_IDS.toggleWorkspacePanel, "application", togglePanel),
       shortcutManager.registerHandler(COMMAND_IDS.focusSidebar, "application", goToSidebar),
       shortcutManager.registerHandler(COMMAND_IDS.maximizeWorkspacePanel, "application", maximizeWorkspacePanel),

@@ -1,5 +1,5 @@
 import { ColourPicker } from "@/components/ui/controls";
-import { documentBlockIcons } from "@/components/ui/document";
+import { documentBlockIcons, documentToolIcons } from "@/components/ui/document";
 import { MarkupBar, MarkupDrawing, MarkupLayer, MarkupMark, MarkupNote, MarkupNotes, MarkupText } from "@/components/ui/markup";
 import { row, token, type Page } from "../model";
 import { noop } from "../demos";
@@ -92,6 +92,9 @@ export const markupPage: Page = {
     row("bar, using the app", "the pointer goes to the app; the marks stay", scene(() => <>{bar({ view: "use", tool: "pen", status: "Using the app" })}</>), { surfaces: ["ground"] }),
     row("bar, using a document", "the host's own tools (a document's block kinds, the caret's lit) in a rail over the bar, with Ask the agent about what is selected", scene(() => <>{bar({ view: "use", tool: "pen", status: "Using the app", onAsk: noop,
       own: ([["text", "Text"], ["heading-1", "Heading 1"], ["heading-2", "Heading 2"], ["bullets", "Bullet list"], ["checklist", "Checklist"]] as const).map(([name, label]) => ({ name, label, icon: () => { const Icon = documentBlockIcons[name]; return <Icon />; }, active: name === "heading-1", run: noop })) })}</>), { surfaces: ["ground"] }),
+    row("ribbon", "on an artifact, at the head of its pane: the edit set (the block kind, as wide as its widest; marks full strength, Bold on, Code not to be done here) and Markup's, each captioned; folded to Format and Annotate menus where the pane is narrower than both", scene(() => <>{bar({ ribbon: true, view: "use", tool: "pen", hand: true, agent: "Thread", tools: ["quote", "highlight", "pen", "shape", "text", "erase", "note"],
+      own: [...([["text", "Text"], ["heading-1", "Heading 1"], ["heading-2", "Heading 2"], ["table", "Table"]] as const).map(([name, label]) => ({ name, label, menu: "Block", icon: () => { const Icon = documentBlockIcons[name]; return <Icon />; }, active: name === "heading-1", disabled: name === "table", run: noop })),
+        ...([["bold", "Bold", ["Ctrl", "B"]], ["italic", "Italic", ["Ctrl", "I"]], ["strike", "Strikethrough", undefined], ["code", "Code", ["Ctrl", "E"]]] as const).map(([name, label, keys]) => ({ name, label, keys: keys && [...keys], icon: () => { const Icon = documentToolIcons[name]; return <Icon />; }, pressed: name === "bold", disabled: name === "code", run: noop }))] })}</>), { surfaces: ["ground"] }),
     row("bar, sending", "Send turns while the item goes", scene(() => <>{bar({ sending: true })}</>), { surfaces: ["ground"] }),
   ],
   tokens: [{ title: "Its lines and layer", tokens: [

@@ -1,14 +1,24 @@
 /* A Conduit document on its page (document.tsx). Its text is an answer's (.ui-answer, transcript.css); here is only what a page and editing add. */
-.ui-document { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; background: var(--background); }
+.ui-document { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; background: var(--background); --document-width: var(--reading-width); }
+.ui-document[data-width="wide"] { --document-width: var(--measure-3xl); }
+.ui-document[data-width="full"] { --document-width: 100%; }
+/* In a pane the sheet has no header of its own, so find stands at its top. */
+.ui-document[data-bare] > .ui-find-bar { top: var(--space-md); }
 .ui-document-column { min-height: 0; flex: 1; overflow-y: auto; padding: var(--space-2xl) var(--space-lg) var(--measure-2xs); }
 /* The text, and the margin beside it. The margin wraps under the text at the width where the two no longer fit side by side, which is the text's own measure and the margin's. */
 .ui-document-page { display: flex; min-height: 100%; flex-wrap: wrap; justify-content: center; gap: var(--space-2xl); }
-.ui-document-body { position: relative; display: flex; min-width: 0; max-width: var(--reading-width); flex: 1 1 var(--reading-width); flex-direction: column; }
+.ui-document-body { position: relative; display: flex; min-width: 0; max-width: var(--document-width); flex: 1 1 var(--document-width); flex-direction: column; }
 .ui-document-content { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .ui-document-margin { max-width: 100%; flex: 0 0 var(--measure-md); }
 .ui-document-text { box-sizing: border-box; flex: 1; outline: 0; }
 .ui-document-comment { border-radius: var(--radius-inset); background: color-mix(in oklch, var(--status-warn), transparent 78%); cursor: pointer; }
 .ui-document-comment[data-current] { background: color-mix(in oklch, var(--status-warn), transparent 55%); }
+.ui-document-mention { border-radius: var(--radius-inset); background: var(--tint); padding-inline: var(--space-2xs); cursor: pointer; }
+.ui-document-match { border-radius: var(--radius-inset); background: var(--border); }
+.ui-document-match-current { background: color-mix(in oklch, var(--foreground), transparent var(--tone-quiet)); color: var(--background); }
+.ui-document-revealed { animation: ui-document-revealed var(--duration-flash) var(--ease-leave); }
+@keyframes ui-document-revealed { from { background: var(--accent); box-shadow: 0 0 0 var(--space-xs) var(--accent); } }
+@media (prefers-reduced-motion: reduce) { .ui-document-revealed { animation: none; } }
 .ui-document-text > :is(.ui-document-commented, .ui-document-changed) { border-radius: var(--radius-inset); box-shadow: 0 0 0 var(--space-xs) var(--document-mark); background: var(--document-mark); }
 .ui-document-commented { --document-mark: color-mix(in oklch, var(--status-warn), transparent 88%); }
 .ui-document-commented[data-current] { --document-mark: color-mix(in oklch, var(--status-warn), transparent 72%); }
@@ -16,11 +26,10 @@
 .ui-document-text > .ui-document-changed { --document-mark: color-mix(in oklch, var(--status-success), transparent 86%); }
 .ui-document-removed { margin-block: var(--space-md); border-radius: var(--radius-inset); background: color-mix(in oklch, var(--destructive), transparent 88%); padding: var(--space-xs) var(--space-sm); color: var(--muted-foreground); font-size: var(--text-caption); text-decoration: line-through; }
 .ui-document-text pre { overflow-x: auto; border-radius: var(--radius-control); background: var(--tint); padding: var(--space-md) var(--space-lg); font: var(--text-caption)/var(--leading-reading) var(--font-code); }
-/* A document has more levels of heading than an answer needs, and a heading under text opens a part of it. */
+/* A document has more levels of heading than an answer needs, each a step under the title's, and a heading under text opens a part of it. */
 .ui-document-text > * + :is(h1, h2, h3) { margin-top: var(--space-3xl); }
-.ui-document-text h1 { font-size: var(--text-display); }
-.ui-document-text h2 { font-size: var(--text-heading); }
-.ui-document-text h3 { font-size: var(--text-title); }
+.ui-document-text h1 { font-size: var(--text-heading); }
+.ui-document-text h2 { font-size: var(--text-title); }
 .ui-document-text ul[data-type="taskList"] { list-style: none; padding-left: 0; }
 .ui-document-text ul[data-type="taskList"] > li { display: flex; gap: var(--space-md); }
 .ui-document-text ul[data-type="taskList"] > li > div { min-width: 0; flex: 1; margin-top: 0; }
@@ -28,31 +37,46 @@
 .ui-document-text ul[data-type="taskList"] > li > label { display: flex; height: 1lh; flex: none; align-items: center; }
 .ui-document-text input[type="checkbox"] { width: var(--icon); height: var(--icon); margin: 0; accent-color: var(--primary); cursor: pointer; }
 .ui-document-text li[data-checked="true"] > div { color: var(--muted-foreground); }
-/* An answer's table scrolls inside itself; an edited one sits in the wrapper ProseMirror gives it, which scrolls. */
-.ui-document-text .tableWrapper { overflow-x: auto; }
-.ui-document-text table { display: table; overflow: visible; }
+/* An answer's table scrolls inside itself; an edited one fills the column in the wrapper ProseMirror gives it, which scrolls. The room above it
+   holds its tools while the caret is in it, so they never stand over the block above. */
+.ui-document-text .tableWrapper { overflow-x: auto; padding-top: var(--control-tool); }
+.ui-document-text table { display: table; width: 100%; overflow: visible; }
+.ui-document-text :is(th, td) { max-width: none; }
 .ui-document-text .selectedCell { background: var(--accent); }
 .ui-document-text.ProseMirror-focused .ui-document-hint::before, .ui-document-hint[data-empty]::before { content: attr(data-hint); float: left; height: 0; color: var(--muted-foreground); pointer-events: none; }
 .ui-document-tools { display: flex; align-items: center; gap: var(--space-2xs); }
 .ui-document-tools > .ui-input { min-width: var(--measure-xs); flex: 1; }
+.ui-document-address { max-width: var(--measure-sm); overflow: hidden; padding-inline: var(--space-sm); color: var(--muted-foreground); font-family: var(--font-data); font-size: var(--text-caption); text-overflow: ellipsis; white-space: nowrap; }
 /* The bar is as wide as its tools, not a menu's least width. */
 .ui-menu:has(> .ui-document-tools) { min-width: 0; }
-/* Over the text: its title, as large as its first heading, then its properties, one line each. */
-.ui-document-head { display: flex; flex-direction: column; gap: var(--space-2xs); margin-bottom: var(--space-2xl); }
+/* Over the text: its title, a step over its largest heading, then its properties, one line each, ruled off from the text. */
+.ui-document-head { display: flex; flex-direction: column; gap: var(--space-2xs); margin-bottom: var(--space-2xl); border-bottom: var(--hairline) solid var(--border); padding-bottom: var(--space-lg); }
 .ui-document-title { width: 100%; margin: 0; border: 0; background: transparent; padding: 0; color: var(--foreground); font-family: inherit; font-size: var(--text-display); font-weight: var(--weight-strong); line-height: var(--leading-tight); outline: 0; overflow-wrap: anywhere; }
 .ui-document-title + * { margin-top: var(--space-md); }
 .ui-document-property { display: flex; min-height: var(--control-xs); align-items: center; gap: var(--space-lg); font-size: var(--text-row); }
 .ui-document-property-name { display: flex; min-width: 0; flex: 0 0 var(--measure-2xs); overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
 .ui-document-field { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0; color: var(--foreground); font: inherit; outline: 0; }
 .ui-document-field::placeholder { color: var(--muted-foreground); }
-.ui-document-add { display: flex; }
-.ui-document-head[data-empty] > .ui-document-add { opacity: 0; transition: opacity var(--duration-quick) var(--ease-change); }
-.ui-document-head[data-empty]:focus-within > .ui-document-add { opacity: 1; }
-@media (hover: hover) { .ui-document-head[data-empty]:hover > .ui-document-add { opacity: 1; } }
-@media (hover: none) { .ui-document-head[data-empty] > .ui-document-add { opacity: 1; } }
+/* Quiet, as a property's name is: a row of the head, washed as a target. */
+.ui-document-add { display: flex; width: fit-content; min-height: var(--control-xs); align-items: center; gap: var(--space-sm); margin-inline: calc(-1 * var(--space-xs)); border: 0; border-radius: var(--radius-control); background: transparent; padding: 0 var(--space-xs); color: var(--muted-foreground); font: inherit; font-size: var(--text-row); cursor: pointer; }
+.ui-document-add > svg { width: var(--icon-sm); height: var(--icon-sm); }
+.ui-document-add:focus-visible { background: var(--accent); color: var(--foreground); }
+@media (hover: hover) { .ui-document-add:hover { background: var(--accent); color: var(--foreground); } }
 .ui-document-count { margin: var(--space-2xl) 0 0; color: var(--muted-foreground); font-family: var(--font-data); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
 /* In the gutter beside the block pointed at; not there, it takes no focus. */
 .ui-document-handle { position: absolute; top: 0; right: 100%; display: flex; margin-right: var(--space-xs); gap: var(--space-2xs); opacity: 0; user-select: none; visibility: hidden; transition: opacity var(--duration-quick) var(--ease-leave), visibility 0s linear var(--duration-quick); }
 .ui-document-handle[data-shown] { opacity: 1; visibility: visible; transition: opacity var(--duration-quick) var(--ease-arrive); }
+/* Where the gutter is too narrow for it, over the column's left edge, on the pane's ground so the text under it does not show through. */
+.ui-document-handle[data-inside] { right: auto; left: 0; margin-right: 0; border-radius: var(--radius-control); background: var(--background); }
 .ui-document-handle > [data-grip] { cursor: grab; touch-action: none; }
 .ui-document-drop { position: absolute; right: 0; left: 0; height: var(--stroke); border-radius: var(--radius-round); background: color-mix(in oklch, var(--foreground), transparent var(--tone-rest)); pointer-events: none; translate: 0 -50%; }
+/* A table's controls: its tools on its top edge, in the room the wrapper keeps over it; a row added on its bottom edge, a column on its right. */
+.ui-document-table { position: absolute; pointer-events: none; }
+.ui-document-table > * { pointer-events: auto; }
+.ui-document-table-tools { position: absolute; right: 0; bottom: 100%; }
+.ui-document-table > [data-edge] { position: absolute; }
+.ui-document-table > [data-edge="row"] { top: 100%; left: 50%; translate: -50% -50%; }
+.ui-document-table > [data-edge="column"] { top: 50%; left: 100%; translate: -50% -50%; }
+.ui-document-outline { display: flex; flex-direction: column; }
+.ui-document-outline > .ui-row[aria-current="page"] { color: var(--foreground); font-weight: var(--weight-current); }
+.ui-document-outline > .ui-row:focus-visible { background: var(--tint); color: var(--foreground); }

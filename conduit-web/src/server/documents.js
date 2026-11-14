@@ -50,6 +50,12 @@ const KINDS = { paper: ".paper", site: ".site.html" }, ID = /^[a-z0-9-]{1,64}$/,
 const kindOf = (at) => Object.keys(KINDS).find((kind) => at.endsWith(KINDS[kind])), nameOf = (at) => path.basename(at, KINDS[kindOf(at)]);
 const SITE_ID = /<meta\s+name=["']conduit-artifact["']\s+content=["']([a-z0-9-]{1,64})["']/i;
 const escaped = (text) => text.replace(/[&<>"]/g, (character) => `&#${character.charCodeAt(0)};`);
+/**
+ * One comment as a chat is handed it: the person's words and what they are about, which the transcript draws as their
+ * comment (`markupHandoffs`, client/document/connections.ts) and the agent reads as given; `said`: "reply" or "reopened"
+ * for what the person wrote back on an item already handed over.
+ */
+const handoff = (fields, quote, words) => `<conduit_markup ${Object.entries(fields).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => `${key}="${escaped(String(value))}"`).join(" ")}>\n${quote ? `<quote>${escaped(quote)}</quote>\n` : ""}${words ? `<words>${escaped(words)}</words>\n` : ""}</conduit_markup>`;
 /** A new site: a page that says what it is, in the colours of whoever looks at it, for an agent to write over. */
 const SITE = (id, name) => `<!doctype html>
 <html lang="en">
@@ -277,14 +283,38 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   /** Who the hub holds a paper's comments for: its mated thread first, then each connected chat by its title (the first to have a title keeps it). */
   const heldFor = (id) => {
     const entry = known.get(id), names = new Set([MATED]);
-    if (!entry || !chats()) return [];
-    return [{ name: MATED, chat: entry.links.thread }, ...entry.links.connections.flatMap((chat) => {
+    if (!entry) return [];
+    // The mated thread is the artifact's own and is listed before the hub's chats are read: it is never "no listener".
+    return [{ name: MATED, chat: entry.links.thread }, ...(chats() ? entry.links.connections : []).flatMap((chat) => {
       const title = chats().get(chat)?.title, name = title && !names.has(title) ? title : `chat ${chat.slice(0, 8)}`;
       if (!chats().get(chat) || names.has(name)) return [];
       names.add(name);
       return [{ name, chat }];
     })];
   };
+  /**
+   * How many of an artifact's comments the person has not settled (a session's resolve leaves one standing until they
+   * confirm it), as its listing says. Read with a store of its own, so a list loads no paper; a change seen in an open
+   * item (a pane looks every few seconds, the hub after each send, reply and resolve) tells the project's clients.
+   */
+  const counted = new Map(), counters = new Map();
+  const unsettled = (items) => items.reduce((sum, item) => sum + item.comments.filter((comment) => !(comment.resolved && comment.resolvedBy === "person")).length, 0);
+  const recount = (id, items) => {
+    const entry = known.get(id), open = unsettled(items);
+    if (!entry || counted.get(id) === open) return;
+    const told = counted.has(id);
+    counted.set(id, open);
+    if (told) changed(entry.project);
+  };
+  const openOf = async (entry) => {
+    if (!counters.has(entry.id)) counters.set(entry.id, createMarkupStore({ folder: path.join(entry.side, "markup") }));
+    const open = unsettled(await counters.get(entry.id).open().catch(() => []));
+    counted.set(entry.id, open);
+    return open;
+  };
+  /** Whether a mated thread has a turn running: `chats().working`, told of each change through `turned`. */
+  const working = new Map();
+  const workingOf = (entry) => Boolean(entry.links.thread && chats()?.working?.(entry.links.thread));
   /**
    * What the hub does for a listener it holds, as the CLI's `wait` does for a session: the item is taken in its name,
    * each comment is marked as being worked on, and the chat is told where the item is. `said`: what the person wrote
@@ -295,16 +325,18 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     const dir = path.join(room.entry.side, "markup", item), chat = to.name === MATED ? (await mated(room.id)).id : to.chat, at = new Date().toISOString();
     // The name is the file's, which anyone who can write the folder chooses: it reaches the agent as a quoted name, never as lines of its own.
     const name = JSON.stringify(room.entry.name.replace(/\s+/g, " ").slice(0, 120)), taken = path.join(dir, "taken.json");
-    if (said) return host().notify(chat, `On the ${room.entry.kind} ${name}, markup item ${item}: ${said}\nThe item is ${path.join(dir, "item.json")}; answer with \`node ${SCRIPT} reply ${item} [n] "<words>"\`.`);
+    const comments = JSON.parse(await fs.readFile(path.join(dir, "item.json"), "utf8")).comments ?? [];
+    const card = (comment, words, said) => handoff({ artifact: room.id, kind: room.entry.kind, name: room.entry.name.replace(/\s+/g, " ").slice(0, 120), item, n: comment?.n, block: String(comment?.under?.blocks ?? "").split(" ")[0] || undefined, said }, comment?.quote, words);
+    if (said) return host().notify(chat, `${card(comments.find((comment) => comment.n === said.n) ?? { n: said.n }, said.text, said.text ? "reply" : "reopened")}\nOn the ${room.entry.kind} ${name}, markup item ${item}: ${said.text ? `the person wrote back${Number.isInteger(said.n) ? ` on comment ${said.n}` : ""}: ${said.text}` : `the person reopened comment ${said.n}.`}\nThe item is ${path.join(dir, "item.json")}; answer with \`node ${SCRIPT} reply ${item} [n] "<words>"\`.`);
     // Taken once: a session that took it first (a `wait` under the same name) keeps it, and the chat is told nothing.
     const mine = await fs.writeFile(taken, `${JSON.stringify({ name: to.name, held: true, chat, at })}\n`, { flag: "wx" }).then(() => true, async () => (await fs.readFile(taken, "utf8").then(JSON.parse).catch(() => null))?.held === true);
     if (!mine) return;
     // What the chat has not been told of yet: the comments with no line saying one is being worked on.
     const told = new Set((await fs.readFile(path.join(dir, "thread.jsonl"), "utf8").catch(() => "")).split("\n").filter(Boolean).map((line) => JSON.parse(line)).filter((line) => line.working).map((line) => line.n));
-    const comments = JSON.parse(await fs.readFile(path.join(dir, "item.json"), "utf8")).comments ?? [], fresh = comments.filter((comment) => !told.has(comment.n));
+    const fresh = comments.filter((comment) => !told.has(comment.n));
     if (!fresh.length) return;
     // A chat that cannot be told has not taken it: the item goes back to waiting, which is what the person then reads.
-    await host().notify(chat, `${fresh.length === comments.length ? "The person" : "The person added to what they"} sent you ${fresh.length === 1 ? "a comment" : `${fresh.length} comments`} on the ${room.entry.kind} ${name}${fresh.length === comments.length ? "" : ` (${fresh.map((comment) => comment.n).join(", ")})`}. Read ${path.join(dir, "item.json")} (its \`read\` says how) and do what it asks.`)
+    await host().notify(chat, `${fresh.map((comment) => card(comment, comment.comment)).join("\n")}\n${fresh.length === comments.length ? "The person" : "The person added to what they"} sent you ${fresh.length === 1 ? "a comment" : `${fresh.length} comments`} on the ${room.entry.kind} ${name}${fresh.length === comments.length ? "" : ` (${fresh.map((comment) => comment.n).join(", ")})`}. Read ${path.join(dir, "item.json")} (its \`read\` says how) and do what it asks.${to.name === MATED && room.entry.kind === "paper" ? ` Write in it as \`${MATED}\`: the tool \`conduit_paper\` does, and the CLI's \`document\` commands take \`--as ${MATED}\`.` : ""}`)
       .catch(async (error) => { if (!told.size) await fs.rm(taken, { force: true }); throw error; });
     await fs.appendFile(path.join(dir, "thread.jsonl"), fresh.map((comment) => `${JSON.stringify({ at, from: "agent", by: to.name, n: comment.n, working: true })}\n`).join(""));
   }
@@ -375,7 +407,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       about: () => [`Where a line here says \`node scripts/conduit-markup.mjs\`, run \`node ${SCRIPT}\`: it works from any folder.`, ...about()],
       log: (line) => console.log(JSON.stringify({ ...line, type: "conduit.document.markup", document: id })),
     });
-    const open = async () => { const items = await store.open(); seen(items); return items; };
+    const open = async () => { const items = await store.open(); seen(items); recount(room.id, items); return items; };
     // What is sent to a listener the hub holds, or written back on an item one of them took, is handed to its chat. The person's page is answered first: a chat that cannot be started is said in the log, and the item stays in the folder.
     // Who holds an item is the chat that took it, whatever it is called now: a chat's listener name is its title, which changes.
     const held = async (name, item) => {
@@ -384,11 +416,12 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     };
     const failed = (error) => console.error(`Could not hand a comment on the ${entry.kind} ${room.entry.name} to its chat: ${error.message}`);
     return { ...store, open,
-      send: async (item, body) => { const sent = await store.send(item, body), to = await held(sent.handed?.to?.name, sent.id); if (to) void hand(room, sent.id, to).catch(failed); return sent; },
+      send: async (item, body) => { const sent = await store.send(item, body), to = await held(sent.handed?.to?.name, sent.id); if (to) void hand(room, sent.id, to).catch(failed); void open().catch(() => {}); return sent; },
+      answer: async (item, body) => { const answered = await store.answer(item, body); void open().catch(() => {}); return answered; },
       say: async (item, body) => {
         const said = await store.say(item, body), to = await held(said.by, item);
         await open();
-        if (to && (body?.text || body?.resolved === false)) void hand(room, item, to, body.text ? `the person wrote back${Number.isInteger(body.n) ? ` on comment ${body.n}` : ""}: ${String(body.text).trim()}` : `the person reopened comment ${body.n}.`).catch(failed);
+        if (to && (body?.text || body?.resolved === false)) void hand(room, item, to, { n: Number.isInteger(body.n) ? body.n : null, text: body.text ? String(body.text).trim() : "" }).catch(failed);
         return said;
       } };
   }
@@ -465,7 +498,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       // A folder on this disk is cheap to ask about each paper. One on a device is read again, behind the answer, when it was last read a while ago: its changes are not told to the hub, and reading it is a call to the device for each directory.
       if (!remoteNode(of)) { if (!(await Promise.all(mine().map((entry) => entry.disk.stat(entry.path).catch(() => null)))).every(Boolean)) await again(of.id); }
       else if (Date.now() - (scanned.get(of.id) ?? 0) > FAR_SCAN_MS) { scanned.set(of.id, Date.now()); void again(of.id); }
-      return mine().map(shown).sort((a, b) => a.name.localeCompare(b.name));
+      return (await Promise.all(mine().map(async (entry) => ({ ...shown(entry), open: await openOf(entry), working: workingOf(entry) })))).sort((a, b) => a.name.localeCompare(b.name));
     },
     /** A new artifact (a paper, empty, or a site that says what it is), in a folder of the project (unsaid: its root). */
     async create(project, { kind = "paper", name, folder: into = "" } = {}) {
@@ -490,10 +523,11 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       // Pressing a paper the hub already knows changes nothing, so nobody is told.
       return listing(of.id) === before ? shown(entry) : told(entry);
     },
-    /** `trouble`: why what a paper's pane shows may not be what its file holds. */
+    /** `trouble`: why what a paper's pane shows may not be what its file holds; `edited`: a paper's, false until anyone (a person, an agent, a hand edit of the file) has changed it since it was made. */
     async about(id) {
-      const entry = await entryOf(id), room = await rooms.get(id)?.catch(() => null);
-      return { ...shown(entry), trouble: troubleOf(room) };
+      const entry = await entryOf(id), room = await (entry.kind === "paper" ? held(id) : rooms.get(id))?.catch(() => null);
+      // Made, its blocks are written under one Yjs client; any later change is written under another.
+      return { ...shown(entry), trouble: troubleOf(room), ...(room?.doc ? { edited: room.doc.store.clients.size > 1 } : {}) };
     },
     /** A site's HTML as its file holds it now, with a revision that changes when the file does; `have`: the revision the asker shows, which is not sent again. */
     async site(id, have) {
@@ -506,6 +540,13 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       await entry.disk.inside(entry.path);
       const revision = String(stat.mtimeMs);
       return revision === have ? { revision } : { revision, html: await entry.disk.read(entry.path) };
+    },
+    /** A chat's turn started or ended: where it is an artifact's mated thread, that project's clients are told. */
+    turned(chat) {
+      const entry = [...known.values()].find((one) => one.links.thread === chat);
+      if (!entry || working.get(entry.id) === workingOf(entry)) return;
+      working.set(entry.id, workingOf(entry));
+      changed(entry.project);
     },
     /** The paper's mated thread, as a chat's summary. */
     thread: async (id) => ({ chat: await mated(id), project: (await entryOf(id)).project }),
@@ -586,7 +627,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
         return { properties: kept.properties.toJSON() };
       }
       if (!["replace", "insert", "delete", "set"].includes(op)) throw fault(400, "op is replace, insert, delete or set");
-      if (at < 0 && !(op === "insert" && block === "start")) throw fault(404, `No block ${block} in ${id}`);
+      if (at < 0 && !(op === "insert" && block === "start")) throw fault(404, `No block ${block} in ${id}: read it again for its blocks as they are now (the person may be typing in it)`);
       const fresh = op === "delete" ? [] : parse(String(text));
       if (op === "replace" && fresh[0]) fresh[0] = fresh[0].type.create({ ...fresh[0].attrs, id: block }, fresh[0].content);
       const next = [...now.slice(0, op === "insert" ? at + 1 : at), ...fresh, ...now.slice(at + 1)], name = typeof by === "string" && by ? by.slice(0, 80) : "agent";

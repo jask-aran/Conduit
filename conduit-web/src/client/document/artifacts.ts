@@ -10,8 +10,12 @@ import { httpUrl } from "../api/transport";
  * (`<name>.site.html`, one HTML file an agent writes, shown in a frame that can reach nothing of Conduit's).
  */
 export type ArtifactKind = "paper" | "site";
-/** `trouble`: why what is shown may not be what the file holds (it cannot be read, or its device is away); only `artifactAbout` says it. */
-export interface Artifact { id: string; kind: ArtifactKind; name: string; path: string; project: string; trouble?: string | null }
+/**
+ * `trouble`: why what is shown may not be what the file holds (it cannot be read, or its device is away); `edited`: a
+ * paper's, false until anyone has changed it since it was made. Only `artifactAbout` says these.
+ * `open`: how many comments on it the person has not settled; `working`: its mated thread has a turn running. Only a list says these.
+ */
+export interface Artifact { id: string; kind: ArtifactKind; name: string; path: string; project: string; trouble?: string | null; edited?: boolean; open?: number; working?: boolean }
 /** The kinds the artifact creator offers, and what each is called where it is named (a tab with no name yet, the pane's switch). */
 export const ARTIFACT_KINDS = [
   { kind: "paper", label: "Paper", says: "Blocks of text you and agents write together, with comments in the margin." },
@@ -54,11 +58,16 @@ export const deleteArtifact = (id: string) => api<void>(`/v0/document/${encodeUR
 export const siteContent = (id: string, have?: string) => api<{ revision: string; html?: string }>(`/v0/document/${encodeURIComponent(id)}?as=site${have ? `&have=${encodeURIComponent(have)}` : ""}`);
 /** Where its Markdown is read from, for Export. */
 export const artifactMarkdownPath = (id: string) => `/v0/document/${encodeURIComponent(id)}?as=markdown`;
+const markdownOf = async (id: string) => {
+  const response = await authorizedFetch(httpUrl(artifactMarkdownPath(id)));
+  if (!response.ok) throw new Error(String((await response.json().catch(() => ({})) as { error?: string }).error || "Its Markdown could not be read"));
+  return response.blob();
+};
+/** Puts a paper's Markdown on the clipboard. */
+export const copyArtifactMarkdown = async (artifact: Pick<Artifact, "id">) => navigator.clipboard.writeText(await (await markdownOf(artifact.id)).text());
 /** Saves its Markdown as `<name>.md`, as the file viewer saves a file. */
-export const exportArtifactMarkdown = async (artifact: Artifact) => {
-  const response = await authorizedFetch(httpUrl(artifactMarkdownPath(artifact.id)));
-  if (!response.ok) throw new Error(String((await response.json().catch(() => ({})) as { error?: string }).error || "Export failed"));
-  const url = URL.createObjectURL(await response.blob());
+export const exportArtifactMarkdown = async (artifact: Pick<Artifact, "id" | "name">) => {
+  const url = URL.createObjectURL(await markdownOf(artifact.id));
   const link = document.createElement("a");
   link.href = url;
   link.download = `${artifact.name}.md`;

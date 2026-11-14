@@ -47,14 +47,17 @@ export const deleteBlock = (view: EditorView, from: number) => {
 };
 /** The caret into a block, so a command on the caret's block acts on it. */
 export const caretInto = (view: EditorView, from: number) => view.dispatch(view.state.tr.setSelection(Selection.near(view.state.doc.resolve(from + 1))));
-/** An empty paragraph under a block, the caret in it with `/` typed, so the block kinds are offered as when one types it. */
+/** An empty paragraph under a block, the caret in it with `/` typed, so the block kinds are offered as when one types it. Returns the new block's id. */
 export const addUnder = (view: EditorView, from: number) => {
   const { state } = view, node = state.doc.nodeAt(from);
   if (!node) return;
   const at = from + node.nodeSize, tr = state.tr.insert(at, state.schema.nodes.paragraph!.create(null, state.schema.text("/")));
   view.dispatch(tr.setSelection(TextSelection.create(tr.doc, at + 2)).scrollIntoView());
   view.focus();
+  return view.state.doc.nodeAt(at)?.attrs.id as string | undefined;
 };
+/** Where the top-level block with this id starts, or null. */
+export const blockById = (doc: Node, id: string) => { let found: number | null = null; doc.forEach((node, at) => { if (node.attrs.id === id) found = at; }); return found; };
 /** A block as it is drawn, for what asks about it. */
 export const blockRange = (view: EditorView, from: number) => { const block = view.nodeDOM(from); if (!block) return null; const range = document.createRange(); range.selectNodeContents(block); return range; };
 

@@ -89,6 +89,15 @@
 .ui-markup-rails[data-ribbon] > [data-set="markup"] { order: 2; }
 .ui-markup-break { order: 3; flex-basis: 100%; height: 0; margin-top: calc(-1 * var(--space-xs)); }
 .ui-markup-rails[data-ribbon] > :not([data-set], .ui-markup-break) { order: 4; }
+/* Each bar keeps its one line and its natural width, which MarkupBar measures to fold the ribbon to its frame. */
+.ui-markup-rails[data-ribbon] > .ui-markup-bar { flex: none; flex-wrap: nowrap; max-width: none; }
+.ui-markup-caption { padding-inline: var(--space-xs); white-space: nowrap; }
+/* The edit set is the paper's own tools, usable at rest: full strength, washed while on, dimmed only when not to be done. */
+.ui-markup-bar[data-set="edit"] .ui-icon-button:not(:disabled) { color: var(--foreground); }
+/* A menu control as wide as its widest choice: each is drawn unseen in the same cell. */
+.ui-markup-steady { display: inline-grid; }
+.ui-markup-steady > * { grid-area: 1 / 1; }
+.ui-markup-steady > [aria-hidden] { visibility: hidden; }
 .ui-markup-room { flex: none; height: calc(var(--control-sm) + 4 * var(--space-xs)); }
 .ui-markup-rails[data-compact] { right: calc(var(--markup-frame-right, 0px) + var(--space-2xs)); left: calc(var(--markup-frame-left, 0px) + var(--space-2xs)); }
 .ui-markup-rails[data-compact] > .ui-markup-bar { gap: 0; }

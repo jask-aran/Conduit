@@ -10,6 +10,7 @@ import { clearDock } from "@/components/ui/dock-inset";
 import { AttachmentCards } from "./attachments";
 import { ReviewCommentCards } from "./review-comment-cards";
 import { parseReviewComments } from "./review-comments";
+import { markupHandoffs, showHandoff } from "../document/connections";
 import { type ContextText, TraceStarting, TurnTrace } from "./turn-trace";
 import { jumpToSpawn, openAgentChat, openRun, TurnReports } from "./agents";
 import { createTimelineStore } from "../state/timeline-store";
@@ -40,7 +41,7 @@ import {
 import { captureTranscriptAnchor, restoreTranscriptAnchor } from "./transcript-anchor";
 import { api } from "../api/client";
 import { requestTurnArtifactNavigation } from "./turn-artifact-navigation";
-import { ApprovalCard, haptic, type ApprovalChoice, type ApprovalLine, type ApprovalState, ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, ConduitAdded, Failure, HarnessPrompt, Inbound, LoadingEarlier, Message as LibraryMessage, MessageFoot, Outbound, RiderButton, StopLine, TranscriptList, TranscriptRow, type TranscriptFlow, Turn } from "@/components/ui";
+import { ApprovalCard, haptic, type ApprovalChoice, type ApprovalLine, type ApprovalState, ChatEmpty, ChatScroller, Welcome, Answer, Button as LibraryButton, Changes, CopyButton, ConduitAdded, Failure, HarnessPrompt, Inbound, LoadingEarlier, Reference, References, Message as LibraryMessage, MessageFoot, Outbound, RiderButton, StopLine, TranscriptList, TranscriptRow, type TranscriptFlow, Turn } from "@/components/ui";
 import { ChatMarkdown } from "./lazy-markdown";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow } from "@/components/ui/menus";
 import { FindBar } from "@/components/ui/find";
@@ -888,7 +889,9 @@ export function Transcript(props: { readOnly?: boolean; chat: TranscriptSource; 
           }
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
-          const review = createMemo(() => user() ? parseReviewComments(message().content || "") : { text: message().content || "", comments: [] });
+          // A comment sent on an artifact is shown as the person wrote it; the agent was handed the rest.
+          const handed = createMemo(() => user() ? markupHandoffs(message().content || "") : []);
+          const review = createMemo(() => handed().length ? { text: handed().map((one) => one.words).join("\n\n"), comments: [] } : user() ? parseReviewComments(message().content || "") : { text: message().content || "", comments: [] });
           const failed = createMemo(() => !user() && message().stopReason === "error");
           // Once its own generation has said it finished, the row is not live again: the saved message takes it over
           // before the turn settles, and the chat's streaming flag would make it live once more for a frame.
@@ -982,6 +985,8 @@ export function Transcript(props: { readOnly?: boolean; chat: TranscriptSource; 
                 under={<>
                   <Show when={message().attachments?.length}><AttachmentCards items={message().attachments!} chatId={props.chat.loadedId()} label="Message attachments" /></Show>
                   <Show when={review().comments.length}><ReviewCommentCards items={review().comments} chatId={props.chat.loadedId() ?? ""} label="Code references" /></Show>
+                  <Show when={handed().length}><References label="Commented on"><For each={handed()}>{(one) => <Reference icon={one.kind === "site" ? <Icons.Browser /> : <Icons.FileText />} name={one.name} at={one.n ? `comment ${one.n}` : undefined}
+                    note={one.quote} title={one.quote} label={`Show in the ${one.kind}`} onOpen={() => showHandoff(one)} />}</For></References></Show>
                 </>} />}>
                 <Inbound icon={<Icons.Permissions aria-hidden="true" />} from="Conduit" meta={approvalMeta(message().content || "")} time={clock(message().timestamp)} noted={message().notes}
                   dateTime={message().timestamp || undefined} title={message().timestamp ? fullDateTime(message().timestamp) : undefined}>

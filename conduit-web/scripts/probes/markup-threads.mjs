@@ -66,7 +66,7 @@ try {
   await tool({ action: "reply", item, n: 1, text: "Hello from the tool" });
   console.log("its reply is in the thread:", (await api(`${paper}/markup/items/${item}`)).messages.some((message) => message.from === "agent" && message.text === "Hello from the tool"));
   await page.goto(`${origin}/chat/${chat}`); await page.waitForSelector(".chat-main textarea", { timeout: 15000 }); await wait(2500);
-  console.log("the chat reads the notice:", await page.evaluate(() => document.querySelector(".chat-main")?.textContent.includes('on the paper "Test document"') ?? false));
+  console.log("the chat shows the comment, on the paper:", await page.evaluate(() => { const main = document.querySelector(".chat-main"); return Boolean(main?.textContent.includes("Thread probe: say hello") && [...main.querySelectorAll(".ui-reference")].some((one) => one.textContent.includes("Test document"))); }));
   const rider = page.getByRole("button", { name: "Open Test document" });
   console.log("the chat shows the connection as a rider:", await rider.count() === 1);
   await rider.click(); await page.waitForSelector(".pane-artifact .ui-document-text [data-id]", { timeout: 15000 });

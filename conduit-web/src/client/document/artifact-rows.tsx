@@ -1,11 +1,11 @@
 import { createSignal, For, Show, type JSX } from "solid-js";
-import { Actions, Icons, Row } from "@/components/ui";
+import { Actions, Icons, Row, StatusDot } from "@/components/ui";
 import { CardForm } from "@/components/ui/card";
 import { Button, Field, Input } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
-import { artifactsOf, artifactsRead, artifactView, countPapers, deleteArtifact, exportArtifactMarkdown, paperCounted, renameArtifact, type Artifact } from "./artifacts";
+import { artifactsOf, artifactsRead, artifactView, copyArtifactMarkdown, countPapers, deleteArtifact, exportArtifactMarkdown, paperCounted, renameArtifact, type Artifact } from "./artifacts";
 
 /** An artifact's mark in a row: a site is a page, a paper a document. */
 export const ArtifactIcon = (props: { kind: Artifact["kind"] }) => props.kind === "site" ? <Icons.Browser /> : <Icons.FileText />;
@@ -27,14 +27,17 @@ export default function ArtifactRows(props: { project: string; empty?: JSX.Eleme
   return <>
     <Show when={artifactsRead(props.project) && !artifactsOf(props.project).length}>{props.empty}</Show>
     <For each={artifactsOf(props.project)}>{(artifact) => <ContextMenu placement={props.placement}>
-      <ContextMenuTrigger density="nav" element="button" as={Row} indent lead={<ArtifactIcon kind={artifact.kind} />} current={props.current === artifactView(artifact.id)}
+      <ContextMenuTrigger density="nav" element="button" as={Row} indent current={props.current === artifactView(artifact.id)}
+        lead={artifact.working ? <StatusDot label="Its thread is working" tone="active" spinning /> : <ArtifactIcon kind={artifact.kind} />}
+        meta={artifact.open ? <span aria-label={`${artifact.open} open ${artifact.open === 1 ? "comment" : "comments"}`}>{artifact.open}</span> : undefined}
         draggable="true" data-doc-view={artifactView(artifact.id)} onClick={() => props.onOpen(artifact)}>{artifact.name}</ContextMenuTrigger>
       <ContextMenuContent>
         <MenuSection>
           <MenuRow icon={<ArtifactIcon kind={artifact.kind} />} onSelect={() => props.onOpen(artifact)}>Open</MenuRow>
           <Show when={!props.phone}><MenuRow icon={<Icons.Split />} onSelect={() => props.onOpen(artifact, true)}>Open beside</MenuRow></Show>
           <MenuRow icon={<Icons.Edit />} onSelect={() => { setName(artifact.name); setRenaming(artifact); }}>Rename</MenuRow>
-          <Show when={artifact.kind === "paper"}><><MenuRow icon={<Icons.Download />} onSelect={() => void exportArtifactMarkdown(artifact).catch(failed)}>Export Markdown</MenuRow><MenuRow icon={<Icons.FileText />} picked={paperCounted()} onSelect={() => countPapers(!paperCounted())}>Count blocks and words</MenuRow></></Show>
+          <Show when={artifact.kind === "paper"}><><MenuRow icon={<Icons.Copy />} onSelect={() => void copyArtifactMarkdown(artifact).then(() => toast.success("Copied as Markdown"), failed)}>Copy as Markdown</MenuRow>
+            <MenuRow icon={<Icons.Download />} onSelect={() => void exportArtifactMarkdown(artifact).catch(failed)}>Download Markdown</MenuRow><MenuRow icon={<Icons.FileText />} picked={paperCounted()} onSelect={() => countPapers(!paperCounted())}>Count blocks and words</MenuRow></></Show>
         </MenuSection>
         <MenuSection>
           <MenuRow destructive icon={<Icons.Delete />} onSelect={() => setDeleting(artifact)}>Delete</MenuRow>

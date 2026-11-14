@@ -1,6 +1,6 @@
-import type { JSX } from "solid-js";
+import { createSignal, type JSX } from "solid-js";
 import { Button, IconButton, Icons } from "@/components/ui";
-import { DocumentCount, DocumentDropLine, DocumentField, DocumentHandle, DocumentHead, DocumentProperty, DocumentSheet, DocumentTitle, DocumentTools, documentHintClass, documentMarkClass, documentTextClass, documentToolIcons as Tools } from "@/components/ui/document"; // Comes with the editor: imported on its own, never from the barrel
+import { DocumentAddress, DocumentCount, DocumentDropLine, DocumentField, DocumentFind, DocumentHandle, DocumentHead, DocumentOutline, DocumentProperty, DocumentSheet, DocumentTableEdges, DocumentTitle, DocumentTools, documentDrawClass, documentHintClass, documentMarkClass, documentTextClass, documentToolIcons as Tools } from "@/components/ui/document"; // Comes with the editor: imported on its own, never from the barrel
 import { MarkupMarginNotes, MarkupNote } from "@/components/ui/markup";
 import { row, type Page } from "../model";
 import { noop } from "../demos";
@@ -9,11 +9,11 @@ const TEXT = `<h1>Trip plan</h1><p>Two weeks, three cities. What is <strong>book
 <ul data-type="taskList"><li><label><input type="checkbox" checked></label><div><p>Book the ferry</p></div></li><li><label><input type="checkbox"></label><div><p>Choose a day for the hike</p></div></li></ul>
 <blockquote><p>Leave the last day empty.</p></blockquote><pre><code>ferry  09:40  platform 2</code></pre><div class="tableWrapper"><table><tr><th>City</th><th>Nights</th></tr><tr><td>Osaka</td><td>4</td></tr></table></div>`;
 const MARKED = TEXT.replace("Two weeks, three cities", `<span class="${documentMarkClass.comment}">Two weeks, three cities</span>`).replace("<blockquote>", `<div class="${documentMarkClass.removed}">Decide on the last day by Friday.</div><blockquote class="${documentMarkClass.changed}">`);
-const MARKS = `<p>A <span class="${documentMarkClass.comment}">run a comment is about</span>, and <span class="${documentMarkClass.comment}" data-current>the one whose card is open</span>.</p><p class="${documentMarkClass.commented}">A whole block a comment is about.</p><p class="${documentMarkClass.commented}" data-current>The same, its card open.</p><p class="${documentMarkClass.changed}">A block an agent changed, not yet accepted.</p><div class="${documentMarkClass.removed}">A block that was deleted, where it stood.</div>`;
-type Parts = Pick<Parameters<typeof DocumentSheet>[0], "head" | "foot" | "over">;
+const MARKS = `<p>A <span class="${documentMarkClass.comment}">run a comment is about</span>, and <span class="${documentMarkClass.comment}" data-current>the one whose card is open</span>.</p><p class="${documentMarkClass.commented}">A whole block a comment is about.</p><p class="${documentMarkClass.commented}" data-current>The same, its card open.</p><p class="${documentMarkClass.changed}">A block an agent changed, not yet accepted.</p><div class="${documentMarkClass.removed}">A block that was deleted, where it stood.</div><p>Asked <span class="${documentDrawClass.mention}">@conduit</span> to check the dates.</p><p>Found <span class="${documentDrawClass.match}">three</span> and <span class="${documentDrawClass.match} ${documentDrawClass.currentMatch}">three</span> again.</p>`;
+type Parts = Pick<Parameters<typeof DocumentSheet>[0], "head" | "foot" | "over" | "width" | "find" | "ref">;
 const sheet = (state?: string, text = TEXT, margin?: JSX.Element, parts: Parts = {}) => <DocumentSheet name="Trip plan" state={state} margin={margin} {...parts} actions={<><Button variant="ghost" size="sm">Text</Button><Button variant="ghost" size="sm">Mark up</Button></>}><div class={documentTextClass} innerHTML={text} /></DocumentSheet>;
-const add = () => <Button variant="ghost" size="sm"><Icons.Add />Add a property</Button>;
-const head = (empty?: boolean) => <DocumentHead empty={empty} add={add()}><DocumentTitle editable value="Trip plan" aria-label="Name" />
+const add = () => ({ label: "Add a property", onClick: noop });
+const head = (empty?: boolean) => <DocumentHead add={add()}><DocumentTitle editable value="Trip plan" aria-label="Name" />
   {empty ? null : <><DocumentProperty name="Status"><DocumentField aria-label="Status" value="Booking" /></DocumentProperty><DocumentProperty name="For"><DocumentField aria-label="For" value="Sam and Alex" /></DocumentProperty></>}
 </DocumentHead>;
 const handle = () => <><DocumentHandle top={0}><IconButton label="Add a block below"><Icons.Add /></IconButton><IconButton label="Drag to move, press for more" data-grip=""><Tools.grip /></IconButton></DocumentHandle><DocumentDropLine top={0} /></>;
@@ -23,6 +23,21 @@ const margin = () => <MarkupMarginNotes beside={false}>
   {thread({ name: "“Leave the last day empty.”", open: true, words: "Make this a note to self.", state: { label: "Changed" }, said: [{ from: "agent", text: "Put it in a quote and took out the line above it." }], placeholder: "Write back", onSay: noop, onRevert: noop })}
   {thread({ name: "“Osaka”", words: "Add the hotel to the table.", state: { label: "Working on it", busy: true } })}
 </MarkupMarginNotes>;
+
+const OUTLINE = [{ id: "a", level: 1, text: "Trip plan" }, { id: "b", level: 2, text: "To do" }, { id: "c", level: 3, text: "Ferry" }, { id: "d", level: 2, text: "Cities" }];
+const find = () => <DocumentFind query="three" count="2 of 2" onQuery={noop} onNext={noop} onPrevious={noop} onEscape={noop} onClose={noop} />;
+const TABLE = `<p>Where we stay.</p><div class="tableWrapper"><table><tr><th>City</th><th>Nights</th></tr><tr><td>Osaka</td><td>4</td></tr><tr><td>Kyoto</td><td>3</td></tr></table></div>`;
+/** The edges are placed from the table as drawn, as the editor places them. */
+const table = () => {
+  const [box, setBox] = createSignal<{ top: number; left: number; width: number; height: number }>();
+  const place = (content: HTMLDivElement) => requestAnimationFrame(() => {
+    const drawn = content.querySelector("table")?.getBoundingClientRect(), body = content.parentElement?.getBoundingClientRect();
+    if (drawn && body) setBox({ top: drawn.top - body.top, left: drawn.left - body.left, width: drawn.width, height: drawn.height });
+  });
+  const edges = <DocumentTableEdges box={box()} onAddRow={noop} onAddColumn={noop} tools={<DocumentTools label="Table">{([["delete-row", "Delete the row"], ["delete-column", "Delete the column"], ["delete-table", "Delete the table"]] as const).map(([name, label]) => { const Icon = Tools[name]; return <IconButton label={label}><Icon /></IconButton>; })}</DocumentTools>} />;
+  return sheet(undefined, TABLE, undefined, { ref: place, over: edges });
+};
+const link = () => <DocumentTools label="Link"><DocumentAddress href="https://example.com/ferry/timetable" /><IconButton label="Open the link"><Tools.open /></IconButton><IconButton label="Edit the link"><Tools.edit /></IconButton><IconButton label="Remove the link"><Tools.unlink /></IconButton></DocumentTools>;
 
 const tools = () => <DocumentTools label="Format">
   <IconButton label="Bold" aria-pressed><Tools.bold /></IconButton><IconButton label="Italic"><Tools.italic /></IconButton><IconButton label="Strikethrough"><Tools.strike /></IconButton><IconButton label="Code"><Tools.code /></IconButton><IconButton label="Link"><Tools.link /></IconButton><IconButton label="Comment"><Tools.comment /></IconButton>
@@ -36,13 +51,18 @@ export const documentPage: Page = {
     row("a document", "The bar names it and holds what can be done to it: the caret's block kind, which opens the kinds, and Mark up", () => sheet(), { code: "<DocumentSheet name actions>", surfaces: ["ground"] }),
     row("away from the hub", "The bar says so beside the name; with the hub answering it says nothing", () => sheet("Reconnecting"), { code: "<DocumentSheet state>", surfaces: ["ground"] }),
     row("with its margin", "Each comment's thread beside the text: answered and shut, changed and open (Revert takes the change back, Reply, the tick resolves it), being worked on. In the app each stands at the height of what it is about (beside); here they flow as a list", () => sheet(undefined, MARKED, margin()), { code: "<DocumentSheet margin={<MarkupMarginNotes beside>…}>", surfaces: ["ground"] }),
-    row("marks in the text", "comment: a run of text a comment is about, with data-current while its card is open; commented: a whole block, the same; changed: a block an agent changed that is not yet accepted; removed: the line where a block was deleted", () => sheet(undefined, MARKS), { code: "documentMarkClass", surfaces: ["ground"] }),
-    row("an empty document", "Its one paragraph says what it is for (documentHintClass, its words in data-hint); in the app the caret's empty paragraph says it too, while the editor has focus", () => sheet(undefined, `<p class="${documentHintClass}" data-hint="Write, / for blocks, @ to ask an agent" data-empty></p>`), { code: "documentHintClass", surfaces: ["ground"] }),
+    row("marks in the text", "comment: a run of text a comment is about, with data-current while its card is open; commented: a whole block, the same; changed: a block an agent changed that is not yet accepted; removed: the line where a block was deleted. Drawn by the editor (documentDrawClass): mention, an @name that shows what it asked when pressed; match and currentMatch, what find found", () => sheet(undefined, MARKS), { code: "documentMarkClass · documentDrawClass", surfaces: ["ground"] }),
+    row("its width", "How wide the text runs: narrow, its reading measure (unsaid); wide; full, all its column has", () => sheet(undefined, TEXT, undefined, { width: "wide" }), { code: '<DocumentSheet width="wide">', surfaces: ["ground"] }),
+    row("finding in it", "Mod-F with the text focused: the bar at the sheet's top right, how many it found and which is current, each match drawn and the current one apart", () => sheet(undefined, MARKS, undefined, { find: find() }), { code: "<DocumentSheet find={<DocumentFind query count>}>", surfaces: ["ground"] }),
+    row("a table's edges", "While the caret is in a table: its tools on its top edge, in the room kept over it; + on its bottom edge adds a row, on its right a column", table, { code: "<DocumentTableEdges box tools onAddRow onAddColumn>", surfaces: ["ground"] }),
+    row("its outline", "Its headings, stepped in by level, the one being read current; pressed, the text scrolls to it and flashes it", () => <DocumentOutline headings={OUTLINE} current="b" onPick={noop} />, { code: "<DocumentOutline headings current onPick>", surfaces: ["ground"] }),
+    row("an empty document", "Its one paragraph says what it is for (documentHintClass, its words in data-hint); in the app, while the editor has focus, the caret's empty paragraph says it too and every other empty block what it is", () => sheet(undefined, `<p class="${documentHintClass}" data-hint="Write, / for blocks, @ to ask an agent" data-empty></p>`), { code: "documentHintClass", surfaces: ["ground"] }),
     row("its head", "Over the text: the document's name as its title (DocumentTitle, a field where it can be renamed, else plain text), then its properties, a name and a value written in place (DocumentProperty, DocumentField)", () => sheet(undefined, TEXT, undefined, { head: head() }), { code: "<DocumentHead add><DocumentTitle editable /><DocumentProperty name>…", surfaces: ["ground"] }),
-    row("a head with no properties", "Only the title; Add a property stays quiet until the head is pointed at or has focus (shown here: always on touch)", () => sheet(undefined, TEXT, undefined, { head: head(true) }), { code: "<DocumentHead empty add>", surfaces: ["ground"] }),
-    row("the block handle", "In the gutter beside the block the mouse is over: + adds a block under it, the grip drags it (the line says where it lands) or, pressed, opens what can be done to it. Here on the first block, its line over it", () => sheet(undefined, TEXT, undefined, { over: handle() }), { code: "<DocumentHandle top><DocumentDropLine top>", surfaces: ["ground"] }),
+    row("a head with no properties", "The title, and Add a property, a quiet row always there", () => sheet(undefined, TEXT, undefined, { head: head(true) }), { code: "<DocumentHead empty add>", surfaces: ["ground"] }),
+    row("the block handle", "In the gutter beside the block the mouse is over: + adds a block under it, the grip drags it (the line says where it lands) or, pressed, opens what can be done to it; a touch held on a block opens the same. Where the gutter is too narrow it stands inside the column's left edge (inside). Here on the first block, its line over it", () => sheet(undefined, TEXT, undefined, { over: handle() }), { code: "<DocumentHandle top><DocumentDropLine top>", surfaces: ["ground"] }),
     row("its count", "A quiet line under the text, where the document is set to show it", () => sheet(undefined, TEXT, undefined, { foot: <DocumentCount>9 blocks · 41 words</DocumentCount> }), { code: "<DocumentCount>", surfaces: ["ground"] }),
-    row("selection tools", "Over the text selected, in a popover: its marks, pressed where the selection wears them, a link and a comment; in a table, its rows and columns. A link's address is asked for in place of the buttons", tools, { code: "<DocumentTools label>", surfaces: ["frost"] }),
+    row("link tools", "With the caret in a link: its address, Open, Edit (the address asked for in place) and Remove", link, { code: "<DocumentTools><DocumentAddress href>", surfaces: ["frost"] }),
+    row("selection tools", "Clear above the lines selected, in a popover (under them where there is no room above): its marks, pressed where the selection wears them, a link and a comment. A link's address is asked for in place of the buttons", tools, { code: "<DocumentTools label>", surfaces: ["frost"] }),
   ],
-  api: ["DocumentSheet", "DocumentHead", "DocumentTitle", "DocumentProperty", "DocumentField", "DocumentCount", "DocumentHandle", "DocumentDropLine", "DocumentTools", "MarkupMarginNotes", "MarkupNote"],
+  api: ["DocumentSheet", "DocumentHead", "DocumentTitle", "DocumentProperty", "DocumentField", "DocumentCount", "DocumentHandle", "DocumentDropLine", "DocumentTools", "DocumentAddress", "DocumentTableEdges", "DocumentOutline", "DocumentFind", "MarkupMarginNotes", "MarkupNote"],
 };

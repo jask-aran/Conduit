@@ -1,10 +1,11 @@
 import { Extension, type Editor } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import { createEffect, createMemo, createSignal, For, type Accessor, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, type Accessor, type JSX } from "solid-js";
 import { ySyncPluginKey } from "y-prosemirror";
 import { Popover, PopoverContent } from "@/components/ui/menus";
 import { Item, Section } from "@/components/ui/popover";
+import { blockById } from "./blocks";
 
 /** A trigger typed and what follows it up to the caret (`from`..`to`, the trigger included). */
 export type Typed = { from: number; to: number; query: string };
@@ -59,14 +60,29 @@ export function TypedMenu<T>(props: { label: string; anchor: HTMLElement; items:
 
 type Tool = { label: string; icon: () => JSX.Element; run(): void };
 const slashed = new PluginKey<Typing>("slash");
-/** The block kinds, offered as `/` is typed where a word may start and filtered by what follows it; picked, the typed `/…` goes and the caret's block becomes that kind. */
+/**
+ * The block kinds, offered as `/` is typed where a word may start and filtered by what follows it; picked, the typed `/…` goes and the caret's block
+ * becomes that kind. `made`: a block made only to offer them (the block handle's "+"), which goes again if the menu shuts with nothing but its `/`.
+ */
 export function createSlash(editor: Accessor<Editor | undefined>, tools: readonly Tool[]) {
   const anchor = document.createElement("span"), [asked, setAsked] = createSignal<Typed | null>(null, { equals: sameTyped }), [active, setActive] = createSignal(0);
   const offered = createMemo(() => { const query = asked()?.query.toLowerCase(); return query === undefined ? [] : tools.filter((tool) => tool.label.toLowerCase().includes(query)); });
   createEffect(() => { asked(); setActive(0); });
+  let made: string | undefined;
+  // After the transaction that shut it, never inside it.
+  createEffect(on(asked, (now) => {
+    const id = made;
+    if (now || !id) return;
+    made = undefined;
+    queueMicrotask(() => {
+      const view = editor()?.view, at = view ? blockById(view.state.doc, id) : null, node = at === null ? null : view!.state.doc.nodeAt(at);
+      if (node?.textContent === "/") view!.dispatch(view!.state.tr.delete(at!, at! + node.nodeSize));
+    });
+  }, { defer: true }));
   const dismiss = () => { const view = editor()?.view; if (view && asked()) view.dispatch(view.state.tr.setMeta(slashed, true)); };
   const pick = (tool: Tool) => { const view = editor()?.view, at = asked(); if (!view || !at) return; view.dispatch(view.state.tr.delete(at.from, at.to)); tool.run(); };
   return {
+    made: (id: string | undefined) => { made = id; },
     extension: () => typing("slash", slashed, /(?<!\S)\/([^\s/]*)$/, anchor, setAsked, (event) => menuKeys(event, offered(), active(), setActive, pick, dismiss)),
     menu: () => <TypedMenu label="Blocks" anchor={anchor} items={offered()} name={(tool) => tool.label} icon={(tool) => tool.icon()} active={active()} onCursor={setActive} onPick={pick} onDismiss={dismiss} />,
   };

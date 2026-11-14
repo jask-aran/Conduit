@@ -1,6 +1,6 @@
 import type { ChatSummary, Project, Template } from "../api/contracts";
 import {
-  COMMAND_IDS, getCommandDefinition,
+  ARTIFACT_COMMANDS, COMMAND_IDS, getCommandDefinition, type ArtifactCommand,
 } from "../commands/command-registry.ts";
 import { chatSortStamp, compareChatsBySort } from "../preferences/chat-sort.ts";
 import { PHONE_LAYOUT_QUERY } from "../../components/ui/layout.ts";
@@ -10,6 +10,8 @@ export interface PaletteContext {
   /** A development client: the only kind the UI feedback tool is on. */
   devClient: boolean;
   chatId: string | null;
+  /** The artifact whose pane is being worked in, and which of ARTIFACT_COMMANDS it offers: its commands are listed in the chat's place. */
+  artifact?: { offers: Partial<Record<ArtifactCommand, unknown>> } | null;
   project?: Project;
   projects: Project[];
   templates: Template[];
@@ -30,6 +32,7 @@ export interface PaletteActions {
   logout: () => void;
   newChat: (project?: Project | null, launch?: { templateId?: string }) => void;
   newArtifact: () => void;
+  artifact: (command: ArtifactCommand) => void;
   newFolder: () => void;
   newWorkspace: () => void;
   attach: () => void;
@@ -112,6 +115,7 @@ export interface PalettePage {
 }
 
 export const PALETTE_GROUPS: PaletteGroup[] = [
+  { id: "artifact", heading: "This artifact" },
   { id: "chat", heading: "This chat" },
   { id: "navigation", heading: "Go to" },
   { id: "create", heading: "Create" },
@@ -125,6 +129,7 @@ export const PALETTE_GROUPS: PaletteGroup[] = [
 ];
 
 const INTENT_GROUPS: Record<string, string> = {
+  ...Object.fromEntries(Object.values(ARTIFACT_COMMANDS).map(([id]) => [id, "artifact"])),
   [COMMAND_IDS.renameChat]: "chat", [COMMAND_IDS.autoNameChat]: "chat", [COMMAND_IDS.moveChat]: "chat",
   [COMMAND_IDS.stopResponse]: "chat", [COMMAND_IDS.stopProcess]: "chat", [COMMAND_IDS.regenerateResponse]: "chat",
   [COMMAND_IDS.compactContext]: "chat", [COMMAND_IDS.copyResponse]: "chat",
@@ -197,7 +202,7 @@ export const PALETTE_PAGES: Record<string, PalettePage> = {
   }),
 };
 
-const hasChat = (context: PaletteContext) => Boolean(context.chatId);
+const hasChat = (context: PaletteContext) => Boolean(context.chatId) && !context.artifact;
 const isNamedFolder = (context: PaletteContext) => Boolean(context.project && context.project.slug !== "chat");
 
 interface PaletteCommandRuntime {
@@ -206,6 +211,8 @@ interface PaletteCommandRuntime {
 }
 
 const paletteCommandRuntime: Record<string, PaletteCommandRuntime> = {
+  ...Object.fromEntries((Object.keys(ARTIFACT_COMMANDS) as ArtifactCommand[]).map((name) => [ARTIFACT_COMMANDS[name][0],
+    { isAvailable: (context: PaletteContext) => Boolean(context.artifact?.offers[name]), run: (actions: PaletteActions) => actions.artifact(name) }])),
   [COMMAND_IDS.logout]: { isAvailable: () => true, run: (actions) => actions.logout() },
   [COMMAND_IDS.newChat]: { isAvailable: () => true, run: (actions) => actions.newChat() },
   [COMMAND_IDS.newArtifact]: { isAvailable: (context) => Boolean(context.project), run: (actions) => actions.newArtifact() },

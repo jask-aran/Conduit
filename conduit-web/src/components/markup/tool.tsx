@@ -4,6 +4,7 @@ import { Portal } from "solid-js/web";
 import { drawingBox, MarkupBar, MarkupDrawing, MarkupLayer, MarkupMark, MarkupNote, MarkupNotes, MarkupText, markupInkColour, MARKUP_INKS, type MarkupBox, type MarkupDrawingKind, type MarkupInk, type MarkupPoint, type MarkupShape, type MarkupToolKind, type MarkupWeight } from "@/components/ui/markup";
 import { captureHeld, captureScreen, cropAreas, previewOf, type Capture } from "./capture";
 import { MARKUP_CAPABILITIES, type MarkupHost, type MarkupListener, type MarkupSent, type MarkupThread } from "./host";
+import { marginColumn } from "./margin";
 import { createPieces } from "./pieces";
 
 /** What a comment was made on: a screenshot of the page, or the live page. Its marks show on that one. */
@@ -184,7 +185,9 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   const [handing, setHand] = createSignal((() => { try { return localStorage.getItem(HAND_KEY) !== "off"; } catch { return true; } })());
   const hand = () => can.bar === "ribbon" || handing();
   const keepHand = (on: boolean) => { setHand(on); try { localStorage.setItem(HAND_KEY, on ? "on" : "off"); } catch { /* this session only */ } };
-  const [waiters, { refetch: askWaiters }] = createResource(() => can.listeners ? transport.listening().catch(() => [] as Waiter[]) : [] as Waiter[]);
+  // A failed ask keeps who was last heard of: "No listener" is only ever what the receiver answered.
+  let heard: Waiter[] | undefined;
+  const [waiters, { refetch: askWaiters }] = createResource(() => can.listeners ? transport.listening().then((all) => heard = all, () => heard) : [] as Waiter[]);
   const [agentName, setAgentName] = createSignal<string | null>(null);
   const agent = () => waiters.latest?.find((waiter) => waiter.name === agentName()) ?? waiters.latest?.[0] ?? null;
   const nextAgent = () => { const all = waiters.latest ?? []; setAgentName(all[(all.findIndex((waiter) => waiter.name === agent()?.name) + 1) % all.length]?.name ?? null); };
@@ -314,7 +317,9 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   // Where sent comments stand in the host's margin, one written and not yet sent stands beside what it is about too, never in the corner.
   const inline = can.sent === "margin";
   const stands = (selection: Selection) => inline && floats(selection) && !selection.sent && selection.id !== openId();
-  const [standsAt, setStandingAt] = createSignal<Record<number, { left: number; top: number }>>({});
+  const [standsAt, setStandingAt] = createSignal<Record<number, { left: number; top: number; width?: number }>>({});
+  /** Where the margin's column last put each, by id: read on the next frame. */
+  const columned: Record<number, { left: number; top: number; width: number }> = {};
   const numbered = () => selections.filter((selection) => !selection.whole);
   // What has gone keeps the number it went under; the rest are numbered after.
   const unsent = () => numbered().filter((selection) => !selection.sent);
@@ -432,7 +437,13 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   const asNow = () => unwrap(selections).filter((selection) => !fixed(selection)).map((selection) => ({ ...selection, elements: [...selection.elements], drawings: selection.drawings?.map((drawing) => ({ ...drawing })), preview: undefined }));
   const counted = () => { setUndoable(history.length); setRedoable(undone.length); };
   /** Before a change: it can be gone back from, and what was undone before it can no longer be done again. */
-  const keep = () => { history.push(asNow()); undone.length = 0; counted(); };
+  const keep = () => { history.push(asNow()); undone.length = 0; counted(); setMarkedLast(true); };
+  /** Whether the last thing done was a mark, not the host's own (typing, or one of its tools): the bar's Undo and Redo step Markup's history then, else the host's (where it has one). */
+  const [markedLast, setMarkedLast] = createSignal(false);
+  const surface = host.history;
+  const stepsOwn = (own: number, theirs?: () => boolean) => Boolean(own) && (markedLast() || !theirs?.());
+  const undoAny = () => stepsOwn(undoable(), surface?.canUndo) ? undo() : void surface?.undo();
+  const redoAny = () => stepsOwn(redoable(), surface?.canRedo) ? redo() : void surface?.redo();
   const remove = (id: number) => {
     keep();
     const preview = selections.find((selection) => selection.id === id)?.preview;
@@ -591,6 +602,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     }
   };
   // Focus going into the tool's own note (or leaving something for it) is not focus leaving a menu or a dialog: neither hears of it, so neither shuts nor takes it back.
+  const typed = (event: Event) => { if (!own(event.target)) setMarkedLast(false); };
   const quietFocus = (event: FocusEvent) => { if (own(event.type === "focusout" ? event.relatedTarget : event.target)) event.stopImmediatePropagation(); };
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -633,6 +645,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     onCleanup(() => host.asks?.(null));
     for (const type of POINTER_EVENTS) window.addEventListener(type, swallow, { capture: true, passive: false });
     window.addEventListener("keydown", onKeyDown, { capture: true });
+    window.addEventListener("beforeinput", typed, { capture: true });
     for (const type of ["focusin", "focusout"] as const) window.addEventListener(type, quietFocus, { capture: true });
     let handle = requestAnimationFrame(function tick() {
       setFrame((value) => value + 1);
@@ -649,18 +662,28 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
       const under = notes ? [...layer!.querySelectorAll(".ui-markup-bar")].map((rail) => rail.getBoundingClientRect()).filter((rail) => rail.right > notes.left) : [];
       const lift = under.length ? Math.max(...under.map((rail) => rail.bottom)) - Math.min(...under.map((rail) => rail.top)) : 0;
       if (lift !== barLift()) setBarLift(lift);
-      // Those waiting to be sent: at the edge of the piece each is about (a paper's text column, so in its margin), at the height of its marks, one under another where they would cross.
+      // Those waiting to be sent: in the margin's column with the sent ones, as one, where the host has it beside the text; else at the edge of the piece each is about,
+      // at the height of its marks, one under another where they would cross.
       if (inline) {
-        let foot = 0;
-        const next: Record<number, { left: number; top: number }> = {};
+        let foot = 0, moved = false;
+        const fallback: Record<number, { left: number; top: number }> = {}, column = marginColumn(host), keys = new Set<string>();
         for (const waiting of selections.filter(stands).map((one) => ({ one, marks: extent(one) })).sort((a, b) => a.marks.top - b.marks.top)) {
-          const card = layer?.querySelector<HTMLElement>(`.ui-markup-note[data-key="unsent-${waiting.one.id}"]`), width = card?.offsetWidth ?? 0, edge = boxOf(waiting.one.elements);
+          const key = `unsent-${waiting.one.id}`, card = layer?.querySelector<HTMLElement>(`.ui-markup-note[data-key="${key}"]`), width = card?.offsetWidth ?? 0, height = card?.offsetHeight ?? 0, edge = boxOf(waiting.one.elements);
           const left = Math.max(NOTE_GAP, Math.min(edge.left + edge.width + NOTE_GAP, innerWidth - width - NOTE_GAP)), top = Math.max(waiting.marks.top, foot);
-          next[waiting.one.id] = { left, top };
-          foot = top + (card?.offsetHeight ?? 0) + NOTE_GAP;
+          fallback[waiting.one.id] = { left, top };
+          foot = top + height + NOTE_GAP;
+          if (!column) continue;
+          keys.add(key);
+          const was = column.waiting.get(key);
+          if (was?.want !== waiting.marks.top || was.height !== height) { moved = true; column.waiting.set(key, { want: waiting.marks.top, height, at: (place) => { if (place) columned[waiting.one.id] = place; else delete columned[waiting.one.id]; } }); }
         }
+        if (column) for (const key of column.waiting.keys()) if (!keys.has(key)) { column.waiting.delete(key); delete columned[+key.slice("unsent-".length)]; moved = true; }
+        // Laid out now, so a card follows its place in the frame the place moves.
+        if (moved) column?.lay();
+        const next: Record<number, { left: number; top: number; width?: number }> = {};
+        for (const id of Object.keys(fallback)) next[+id] = columned[+id] ?? fallback[+id]!;
         const now = standsAt(), ids = Object.keys(next);
-        if (ids.length !== Object.keys(now).length || ids.some((id) => now[+id]?.left !== next[+id]!.left || now[+id]?.top !== next[+id]!.top)) setStandingAt(next);
+        if (ids.length !== Object.keys(now).length || ids.some((id) => now[+id]?.left !== next[+id]!.left || now[+id]?.top !== next[+id]!.top || now[+id]?.width !== next[+id]!.width)) setStandingAt(next);
       }
       // The note being written sits beside what it is about: to its right, else its left, else under or over it.
       const selection = open(), note = layer?.querySelector<HTMLElement>(".ui-markup-note[data-float]");
@@ -700,6 +723,9 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   onCleanup(() => {
     for (const type of POINTER_EVENTS) window.removeEventListener(type, swallow, { capture: true });
     window.removeEventListener("keydown", onKeyDown, { capture: true });
+    window.removeEventListener("beforeinput", typed, { capture: true });
+    const column = marginColumn(host);
+    if (column) { column.waiting.clear(); column.lay(); }
     for (const type of ["focusin", "focusout"] as const) window.removeEventListener(type, quietFocus, { capture: true });
     for (const url of [picture()?.url, ...selections.map((selection) => selection.preview)]) if (url) URL.revokeObjectURL(url);
     if (!sent) void marked.then((mark) => mark && transport.drop(mark.id).catch(() => {}));
@@ -864,7 +890,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
             value={selection.comment} onOpen={() => {}} onInput={write(selection)} onDone={() => openNote(null)} onRemove={() => remove(selection.id)} sendNow={offersLive ? live() : undefined} onSendNow={agent() ? (on) => { keepLive(on); noteField?.focus({ preventScroll: true }); } : undefined} />}
         </Show>
         <For each={selections}>{(selection) => <Show when={stands(selection)}>
-          <MarkupNote key={`unsent-${selection.id}`} float={standsAt()[selection.id] ? { left: `${standsAt()[selection.id]!.left}px`, top: `${standsAt()[selection.id]!.top}px` } : { opacity: 0 }} open={false} tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)}
+          <MarkupNote key={`unsent-${selection.id}`} float={standsAt()[selection.id] ? { left: `${standsAt()[selection.id]!.left}px`, top: `${standsAt()[selection.id]!.top}px`, width: standsAt()[selection.id]!.width === undefined ? undefined : `${standsAt()[selection.id]!.width}px` } : { opacity: 0 }} open={false} tag={tagOf(selection)} name={titleOf(selection)} source={sourceLine(selection)}
             value={selection.comment} onOpen={() => openNote(selection.id)} onInput={write(selection)} onRemove={() => remove(selection.id)} state={forWhom(selection) ?? { label: "Not sent" }} />
         </Show>}</For>
         <Show when={selections.some((selection) => !stands(selection) && (!floats(selection) || selection.id !== openId()))}>
@@ -876,11 +902,11 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
               value={reply()} onOpen={() => startReply(n())} onInput={setReply} resolved={resolvedOf(n())} onSay={() => void answer()} onResolve={(resolved) => settle(n(), resolved)} />}</Show>
           </Show>}</For></MarkupNotes>
         </Show>
-        <MarkupBar thin={can.thin} ribbon={can.bar === "ribbon"} own={host.tools?.()} onAsk={host.asking && offered("quote") ? () => { const range = host.asking!(); if (range) addQuote(range); } : undefined} view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onTool={(tool) => { if (props.mode === "use") look("page"); setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); }} onNote={() => { if (props.mode === "use") look("page"); note(); }}
-          status={status()} compact={touchOnly} keys={touchOnly ? undefined : props.keys?.()} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} shape={shape()} onShape={setShape} onUndo={undoable() ? undo : undefined} onRedo={redoable() ? redo : undefined}
+        <MarkupBar thin={can.thin} ribbon={can.bar === "ribbon"} own={host.tools?.()} onOwn={() => setMarkedLast(false)} onAsk={host.asking && offered("quote") ? () => { const range = host.asking!(); if (range) addQuote(range); } : undefined} view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onTool={(tool) => { if (props.mode === "use") look("page"); setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); }} onNote={() => { if (props.mode === "use") look("page"); note(); }}
+          status={status()} compact={touchOnly} keys={touchOnly ? undefined : props.keys?.()} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} shape={shape()} onShape={setShape} onUndo={undoable() || surface?.canUndo() ? undoAny : undefined} onRedo={redoable() || surface?.canRedo() ? redoAny : undefined}
           replies={unread().reduce((sum, item) => sum + item.unread, 0)} sent={thread() ? 0 : earlier.latest?.length} onReplies={sentBefore}
           outstanding={unsent().filter((selection) => selection.comment.trim()).length} standing={thread() ? standing() : undefined}
-          hand={hand()} onHand={can.listeners ? keepHand : undefined} agent={agent()?.name} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
+          hand={hand()} onHand={can.listeners ? keepHand : undefined} agent={agent()?.name} heard={waiters.latest !== undefined} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}
           canSend={canSend()} sending={sending()} onSend={() => void send()} onClose={props.onClose} />
       </Show>
     </MarkupLayer>

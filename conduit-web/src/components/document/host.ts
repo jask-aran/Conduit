@@ -9,6 +9,9 @@ import type { JSX } from "solid-js";
 /** A kind of block the editor can make of where the caret is. */
 export type DocumentBlockKind = "heading-1" | "heading-2" | "heading-3" | "bullets" | "numbers" | "checklist" | "quote" | "code" | "table" | "divider" | "text";
 export const DOCUMENT_BLOCKS: readonly DocumentBlockKind[] = ["text", "heading-1", "heading-2", "heading-3", "bullets", "numbers", "checklist", "quote", "code", "table", "divider"];
+/** A kind a block of text can be turned into ("Turn into", a bar's block kinds); a table or a divider is made beside text, never of it. */
+export type DocumentTurnableKind = Exclude<DocumentBlockKind, "table" | "divider">;
+export const DOCUMENT_TURNABLE: readonly DocumentTurnableKind[] = ["text", "heading-1", "heading-2", "heading-3", "bullets", "numbers", "checklist", "quote", "code"];
 
 /** A mark the editor can put on the text selected. */
 export type DocumentMarkKind = "bold" | "italic" | "strike" | "code";
@@ -24,7 +27,29 @@ export interface DocumentHost {
   author(): string;
   /** The edit tools offered here (block kinds and text marks), in the rail, the slash menu, a block's menu and over a selection; every one where it declares none. */
   tools?: readonly DocumentToolName[];
+  /** A pressed `@name` in the text (its block's id and the name, no `@`): show what it asked. Without it a mention is drawn but does nothing. */
+  showMention?(block: string, name: string): void;
 }
+
+/** Each text mark, on where the selection is; `can`: a mark would apply now (a selection, or a caret in a block of text). */
+export type DocumentMarking = { can: boolean; on: Record<DocumentMarkKind, boolean> };
+
+/** A heading in the document, for an outline. */
+export type DocumentHeading = { id: string; level: 1 | 2 | 3; text: string };
+
+/**
+ * What the editor offers the app round it, to bind to its commands and draw beside it. `openBlockMenu`: the caret block's menu, the keyboard in it.
+ * `moveBlock`: the caret's block up or down one (false at an end). `outline`: the headings, in order; `current`: the one being read (the last above
+ * the top of the view). `reveal`: scroll to a block and flash it. `find`: open the find bar.
+ */
+export type DocumentControls = {
+  openBlockMenu(): void;
+  moveBlock(by: -1 | 1): boolean;
+  outline(): DocumentHeading[];
+  current(): string | undefined;
+  reveal(block: string): void;
+  find(): void;
+};
 
 /** How this copy stands with the hub's: `away` keeps what is written and sends it when the hub answers again. */
 export type DocumentState = "connecting" | "live" | "away";
@@ -38,10 +63,13 @@ export type DocumentAnchor = { key: string; quote?: string; under?: Record<strin
  * told, where each is now, and word of when they may have moved or one was pressed. `changed`: blocks stand changed
  * for that comment (document-format.js CHANGES), read where it is drawn so it follows. `tools`: the block kinds
  * offered, each making the caret's block that kind (`active`: it is that kind now, read where it is drawn). `selection`:
- * the text selected, else the caret's block; null before the editor is made.
+ * the text selected, else the caret's block; null before the editor is made. `marking`: the text marks where the selection is, read where drawn.
  */
 export type DocumentMarks = {
-  tools(): { name: string; label: string; icon: () => JSX.Element; active: boolean; menu?: string; run(): void }[];
+  tools(): { name: string; label: string; icon: () => JSX.Element; active: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; run(): void }[];
+  marking(): DocumentMarking;
+  /** What was written here, taken back and put back; `canUndo` and `canRedo` are read where drawn. */
+  history: { undo(): boolean; redo(): boolean; canUndo(): boolean; canRedo(): boolean };
   selection(): Range | null;
   subject(): Record<string, string>;
   under(box: { left: number; top: number; width: number; height: number }): Record<string, string> | null;

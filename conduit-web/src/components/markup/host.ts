@@ -116,8 +116,13 @@ export interface MarkupMarginHost {
   revert?: { can(key: string): boolean; run(key: string): Promise<unknown> };
 }
 
-/** One of the host's own tools: what it is called, its icon, whether it is what the surface is now (a heading where the caret is), and doing it. */
-export type MarkupHostTool = { name: string; label: string; icon: () => JSX.Element; active?: boolean; run(): void };
+/** One of the host's own tools: what it is called, its icon, and doing it; read where it is drawn, so getters follow. `menu`: on the ribbon, the tools of one menu
+ *  are one control (a document's block kinds), `active` the one the surface is now (a heading where the caret is). A tool of no menu is a toggle, `pressed` while
+ *  it is on (a mark the selection wears; unsaid, `active`). `disabled`: not to be done here now (a menu dims and strikes it). `keys`: its shortcut, for its tooltip. */
+export type MarkupHostTool = { name: string; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; run(): void };
+
+/** The surface's own undo history (a paper's typing), which the bar's Undo and Redo step where Markup has no mark of its own newer. Read where drawn, so `can…` follow. */
+export type MarkupHostHistory = { undo(): boolean; redo(): boolean; canUndo(): boolean; canRedo(): boolean };
 
 export interface MarkupHost {
   /** What differs from MARKUP_CAPABILITIES here. */
@@ -142,6 +147,8 @@ export interface MarkupHost {
   margin?: MarkupMarginHost;
   /** Tools of the host's own (a document's block kinds), shown in a rail of their own above the bar while the app is in use; read where they are drawn, so `active` follows. */
   tools?(): MarkupHostTool[];
+  /** The surface's own undo history, where it has one. */
+  history?: MarkupHostHistory;
   /** What a comment asked for from that rail is about: the surface's selection, or where its caret is; null when there is neither. */
   asking?(): Range | null;
   /** Given, as the tool opens (null as it closes), who is listening and opening a comment on a range for one of them: for a surface that asks itself (a paper's `@`). */

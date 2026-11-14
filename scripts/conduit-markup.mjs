@@ -214,5 +214,6 @@ if (command === "wait") {
   }
 } else {
   console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document list <project> | document new <name> --project <id> [--folder <path>] [--kind site] | document read <id> | document set <id> <name> [value] | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block>   (--as <name>; --for <item>/<n> names the comment an edit answers; Markdown from stdin when not given)");
-  process.exit(command ? 1 : 0);
+  // Asked for (`document` alone, as an item's `change` tells an agent to run it), usage is an answer, not a failure.
+  process.exit(command && !(command === "document" && !argument) ? 1 : 0);
 }

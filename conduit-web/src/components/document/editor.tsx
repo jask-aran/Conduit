@@ -1,20 +1,22 @@
 import { Extension, type ChainedCommands, type Editor } from "@tiptap/core";
 import type { Node } from "@tiptap/pm/model";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { createEffect, createMemo, createSignal, onCleanup, Show, type JSX } from "solid-js";
 import { createEditorTransaction, createTiptapEditor } from "solid-tiptap";
-import { redo, undo, ySyncPlugin, yUndoPlugin } from "y-prosemirror";
+import { redo, undo, ySyncPlugin, yUndoPlugin, yUndoPluginKey } from "y-prosemirror";
 import type { Map as YMap, XmlFragment } from "yjs";
-import { DocumentCount, DocumentSheet, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons } from "@/components/ui/document";
+import { DocumentCount, DocumentSheet, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons, type DocumentWidth } from "@/components/ui/document";
 import { CHANGES, FRAGMENT, documentExtensions } from "@/document-format.js";
-import { blockKeys } from "./blocks";
+import { blockById, blockKeys, caretBlockAt, shiftBlock } from "./blocks";
+import { drawn, revealed } from "./drawn";
+import { createFind } from "./find";
 import { createBlockHandle } from "./handle";
 import { PaperHead } from "./head";
-import { DOCUMENT_BLOCKS, type DocumentAnchor, type DocumentBlockKind, type DocumentHost, type DocumentMarks } from "./host";
+import { DOCUMENT_BLOCKS, DOCUMENT_MARKS, DOCUMENT_TURNABLE, type DocumentAnchor, type DocumentBlockKind, type DocumentControls, type DocumentHeading, type DocumentHost, type DocumentMarking, type DocumentMarks } from "./host";
 import { hinted } from "./hint";
 import { createLiveDocument } from "./live";
-import { MARKS, SelectionTools, selectedRange } from "./toolbar";
+import { MARKS, SelectionTools, TableTools, selectedRange } from "./toolbar";
 import { createSlash, menuKeys, TypedMenu, typing, type Typed, type Typing } from "./typed";
 
 /** What the caret's block is, read in this order (a list inside a quote is a list), and how a block is made that kind. */
@@ -33,6 +35,7 @@ const KINDS: Record<DocumentBlockKind, { label: string; is?: [string, Record<str
 };
 const kindAt = (editor: Editor | undefined) => (Object.keys(KINDS) as DocumentBlockKind[]).find((kind) => { const is = KINDS[kind].is; return is && editor?.isActive(...is); }) ?? "text";
 
+const MARK_KEYS: Record<string, string[]> = { bold: ["Ctrl", "B"], italic: ["Ctrl", "I"], strike: ["Ctrl", "Shift", "S"], code: ["Ctrl", "E"] };
 /** The editor's text is the Yjs document's blocks, each change merged as it is made; undo takes back only what was written here. */
 const merged = (blocks: XmlFragment) => Extension.create({
   name: "liveDocument",
@@ -100,8 +103,10 @@ const mentioning = (anchor: HTMLElement, told: (at: Mention | null) => void, key
 /** The caret's top-level block, as it is drawn. */
 const caretBlock = (view: EditorView) => { const { $from } = view.state.selection, block = $from.depth ? view.nodeDOM($from.before(1)) : null; if (!block) return null; const range = document.createRange(); range.selectNodeContents(block); return range; };
 
-/** `bare`: in a pane, whose header is the document's bar; `onAway` then tells that header when the hub's copy is out of reach. */
+/** `bare`: in a pane, whose header is the document's bar; `onAway` then tells that header when the hub's copy is out of reach. `width`: how wide the
+ *  text runs. `controls`: told what the editor offers the app round it (DocumentControls), once. */
 export function DocumentEditor(props: { host: DocumentHost; id: string; name: string; actions?: JSX.Element; margin?: JSX.Element; bare?: boolean; onAway?: (away: boolean) => void; onReady?: () => void; marks?: (marks: DocumentMarks) => void;
+  width?: DocumentWidth; controls?: (controls: DocumentControls) => void;
   /** `mentions`: who `@` offers; picked, the typed `@…` goes and `onMention` is told the caret's block and the name. */
   mentions?: () => string[]; onMention?: (about: Range, name: string) => void;
   /** `onComment`: the selection tools' Comment, told the text selected, and the block handle's, told the block. */
@@ -109,14 +114,15 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   /** `onRename`: the title renames the document; refused (rejected), it shows the name it had. Without it the title is plain text. `count`: a line under the text says how many blocks and words it holds. */
   onRename?: (name: string) => Promise<unknown> | void; count?: boolean }) {
   const copy = createLiveDocument(props.host, props.id);
-  const [column, setColumn] = createSignal<HTMLDivElement>(), [editor, setEditor] = createSignal<Editor>();
+  const [column, setColumn] = createSignal<HTMLDivElement>(), [scroller, setScroller] = createSignal<HTMLDivElement>(), [editor, setEditor] = createSignal<Editor>();
+  const [reflowed, setReflowed] = createSignal(0);
   const changes = copy.doc.getMap<Change>(CHANGES), [changed, setChanged] = createSignal<string[]>([]);
   const watching = new Set<(pressed?: string) => void>(), told = { anchors: [] as DocumentAnchor[], moved: (pressed?: string) => { for (const listener of watching) listener(pressed); } };
   const redraw = () => { const view = editor()?.view; if (view) view.dispatch(view.state.tr.setMeta(shown, true)); };
   // Redrawn after the merge has reached the editor, never inside it: a change to the editor made before then is written back to the document as it was, undoing what was merged.
   changes.observe(() => queueMicrotask(() => { setChanged([...changes.values()].map((change) => change.for)); redraw(); }));
   // The text reflows when its column changes width, with no change to the document.
-  createEffect(() => { const element = column(); if (!element) return; const sized = new ResizeObserver(() => told.moved()); sized.observe(element); onCleanup(() => sized.disconnect()); });
+  createEffect(() => { const element = column(); if (!element) return; const sized = new ResizeObserver(() => { told.moved(); setReflowed((n) => n + 1); }); sized.observe(element); onCleanup(() => sized.disconnect()); });
   const kind = createEditorTransaction(editor, kindAt);
   const anchor = document.createElement("span"), [asked, setAsked] = createSignal<Mention | null>(null, { equals: (a, b) => a?.from === b?.from && a?.query === b?.query }), [active, setActive] = createSignal(0);
   const offered = createMemo(() => { const at = asked(), query = at?.query.toLowerCase() ?? ""; return at ? (props.mentions?.() ?? []).filter((name) => name.toLowerCase().includes(query)) : []; });
@@ -138,7 +144,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     const Icon = documentBlockIcons[name];
     return { name, label: KINDS[name].label, icon: () => <Icon />, get active() { return kind() === name; }, run: () => { const made = editor(); if (made) KINDS[name].make(made.chain().focus()).run(); } };
   });
-  const slash = createSlash(editor, tools), handle = createBlockHandle(editor, tools, () => props.onComment);
+  const slash = createSlash(editor, tools), handle = createBlockHandle(editor, tools, { scroller, onComment: () => props.onComment, onAdded: slash.made }), find = createFind(editor, scroller);
   const counted = createEditorTransaction(editor, (made) => made?.state.doc);
   const count = createMemo(() => {
     const doc = counted();
@@ -148,7 +154,14 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   });
   // The marks the selection wears, for a bar that is always there; the tools over a selection offer them too.
   const wears = createEditorTransaction(editor, (made) => MARKS.filter(([name]) => made?.isActive(name)).map(([name]) => name).join(" "));
-  const worn = MARKS.filter(([name]) => !props.host.tools || props.host.tools.includes(name)).map(([name, label]) => { const Icon = documentToolIcons[name]; return { name, label, icon: () => <Icon />, get active() { return wears().includes(name); }, run: () => { editor()?.chain().focus().toggleMark(name).run(); } }; });
+  const marking = createEditorTransaction(editor, (made): DocumentMarking => {
+    const { selection } = made?.state ?? {}, block = selection?.$from.parent;
+    return { can: Boolean(made?.isEditable && selection instanceof TextSelection && block?.isTextblock && !block.type.spec.code), on: Object.fromEntries(DOCUMENT_MARKS.map((name) => [name, Boolean(made?.isActive(name))])) as DocumentMarking["on"] };
+  });
+  const worn = MARKS.filter(([name]) => !props.host.tools || props.host.tools.includes(name)).map(([name, label]) => { const Icon = documentToolIcons[name]; return { name, label, icon: () => <Icon />, get active() { return wears().includes(name); }, get pressed() { return marking().on[name]; }, get disabled() { return !marking().can; }, keys: MARK_KEYS[name], run: () => { editor()?.chain().focus().toggleMark(name).run(); } }; });
+  // What can be taken back here is what was written here (the Yjs undo manager's stacks), read after each change.
+  const stacks = createEditorTransaction(editor, (made) => { const manager = made ? yUndoPluginKey.getState(made.state)?.undoManager : undefined; return [manager?.undoStack.length ?? 0, manager?.redoStack.length ?? 0]; });
+  const history = { undo: () => Boolean(editor() && undo(editor()!.state)), redo: () => Boolean(editor() && redo(editor()!.state)), canUndo: () => stacks()[0]! > 0, canRedo: () => stacks()[1]! > 0 };
   props.marks?.({
     subject: () => ({ kind: "document", name: props.name, document: props.id }),
     under: (box) => {
@@ -164,20 +177,48 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     },
     watch: (listener) => { watching.add(listener); return () => watching.delete(listener); },
     changed: (key) => changed().includes(key),
-    tools: () => [...tools.map((tool) => ({ ...tool, menu: "Block", get active() { return tool.active; } })), ...worn],
+    // A bar's block menu turns the caret's block into another kind: a kind that is only put in (a table, a divider) is listed while the caret is in one, to name it.
+    tools: () => [...tools.filter((tool) => (DOCUMENT_TURNABLE as readonly string[]).includes(tool.name) || tool.active).map((tool) => ({ ...tool, menu: "Block", get active() { return tool.active; } })), ...worn],
+    marking, history,
     selection: () => {
       const view = editor()?.view;
       if (!view) return null;
       return view.state.selection.empty ? caretBlock(view) : selectedRange(view);
     },
   });
+  const outline = createMemo(() => {
+    const headings: DocumentHeading[] = [];
+    counted()?.forEach((node) => { if (node.type.name === "heading" && node.attrs.id) headings.push({ id: node.attrs.id, level: node.attrs.level, text: node.textContent }); });
+    return headings;
+  });
+  // The heading being read: the last whose top is above the top of the view, read again as it scrolls.
+  const [scrolled, setScrolled] = createSignal(0);
+  createEffect(() => { const element = scroller(); if (!element) return; const moved = () => setScrolled((n) => n + 1); element.addEventListener("scroll", moved, { passive: true }); onCleanup(() => element.removeEventListener("scroll", moved)); });
+  const current = createMemo(() => {
+    scrolled(); reflowed();
+    const top = scroller()?.getBoundingClientRect().top, view = editor()?.view;
+    if (top === undefined || !view) return undefined;
+    return outline().findLast((heading) => { const at = blockById(view.state.doc, heading.id); return at !== null && (view.nodeDOM(at) as HTMLElement | null)?.getBoundingClientRect().top! <= top + 1; })?.id ?? outline()[0]?.id;
+  });
+  const reveal = (id: string) => {
+    const view = editor()?.view, at = view ? blockById(view.state.doc, id) : null, block = at === null ? null : view!.nodeDOM(at) as HTMLElement | null;
+    if (!block) return;
+    block.scrollIntoView({ block: "center" });
+    view!.dispatch(view!.state.tr.setMeta(revealed, id));
+    block.addEventListener("animationend", () => { const now = editor()?.view; if (now && revealed.getState(now.state) === id) now.dispatch(now.state.tr.setMeta(revealed, null)); }, { once: true });
+  };
+  props.controls?.({
+    openBlockMenu: handle.openMenu,
+    moveBlock: (by) => { const view = editor()?.view, at = view ? caretBlockAt(view) : null; return at !== null && shiftBlock(view!, at, by); },
+    outline, current, reveal, find: find.show,
+  });
   return <>
-  <DocumentSheet ref={setColumn} name={props.name} state={copy.state() === "away" ? "Reconnecting" : undefined} margin={props.margin} actions={props.actions} bare={props.bare}
+  <DocumentSheet ref={setColumn} scroller={setScroller} width={props.width} find={find.view()} name={props.name} state={copy.state() === "away" ? "Reconnecting" : undefined} margin={props.margin} actions={props.actions} bare={props.bare}
     head={<Show when={copy.synced()}><PaperHead doc={copy.doc} name={props.name} onRename={props.onRename} onDown={() => editor()?.commands.focus("start")} /></Show>}
-    over={handle.view} onHover={handle.hover} foot={<Show when={count()}>{(line) => <DocumentCount>{line()}</DocumentCount>}</Show>}>
+    over={<>{handle.view}<TableTools editor={editor} body={() => column()?.parentElement ?? undefined} moved={reflowed} /></>} onHover={handle.hover} foot={<Show when={count()}>{(line) => <DocumentCount>{line()}</DocumentCount>}</Show>}>
     {/* The editor is made only once the hub's copy is held: made before, its first empty block would be merged in as a block of its own. */}
     <Show when={copy.synced() && column()}>{(element) => {
-      const made = createTiptapEditor(() => ({ element: element(), extensions: [...documentExtensions(), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), slash.extension(), blockKeys, ...(props.onMention ? [mentioning(anchor, setAsked, keys)] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name } } }));
+      const made = createTiptapEditor(() => ({ element: element(), extensions: [...documentExtensions(), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), slash.extension(), blockKeys, drawn((block, name) => props.host.showMention?.(block, name)), find.extension(), ...(props.onMention ? [mentioning(anchor, setAsked, keys)] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name } } }));
       createEffect(() => setEditor(made()));
       return null;
     }}</Show>
@@ -185,6 +226,6 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     {/* Menus and tools beside the sheet, never in it: the sheet's column is the editor's to fill, and a child of it that comes and goes clears it. */}
     <TypedMenu label="Ask" anchor={anchor} items={offered()} name={(name) => name} active={active()} onCursor={setActive} onPick={pick} onDismiss={dismiss} />
     {slash.menu()}
-    <SelectionTools editor={editor} marks={props.host.tools} onComment={props.onComment} />
+    <SelectionTools editor={editor} bounds={scroller} marks={props.host.tools} onComment={props.onComment} />
   </>;
 }

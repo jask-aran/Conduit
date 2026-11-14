@@ -516,7 +516,8 @@ export class DurableRuntime {
     const extensions = [...new Set(["conduit", "conduit-mcp", "skills", roaming ? "device-tools" : "coding-tools", ...template.extensions.map(named).filter(Boolean),
       ...(delegates ? ["subagents"] : []), ...(roaming ? ["handoff"] : []), ...(codes ? ["codemode", "browser"] : []), ...(connects ? ["connectors"] : []), ...(isAgent ? ["agent"] : [])])]
       .map((name) => this.extensions.get(name)).filter(Boolean);
-    const wanted = new Set([...ALWAYS, "conduit_ui", ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : []),
+    // conduit_paper for every profile: a project's default profile is whatever the person chose, and a paper's mated thread runs on it.
+    const wanted = new Set([...ALWAYS, "conduit_ui", "conduit_paper", ...template.tools, ...(roaming ? ["devices", "handoff"] : []), ...(delegates ? ["subagent"] : []),
       ...(connects ? ["codemode", "approved"] : [])]);
     // Codemode's own helpers (`pi.codemode.*`) come with it: its scripts call them.
     const tools = extensions.flatMap((extension) => extension.tools || [])

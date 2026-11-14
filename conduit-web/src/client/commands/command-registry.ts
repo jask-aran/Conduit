@@ -25,6 +25,10 @@ export const COMMAND_IDS = {
   openWorkspaceViews: "open-workspace-views",
   newChat: "new-chat",
   newArtifact: "new-artifact",
+  artifactRename: "artifact-rename", artifactCopyMarkdown: "artifact-copy-markdown", artifactCount: "artifact-count", artifactFind: "artifact-find",
+  artifactOutline: "artifact-outline", artifactWidth: "artifact-width", artifactBlockMenu: "artifact-block-menu", artifactBlockUp: "artifact-block-up",
+  artifactBlockDown: "artifact-block-down", artifactNextComment: "artifact-next-comment", artifactPreviousComment: "artifact-previous-comment",
+  artifactThread: "artifact-thread", artifactShortcuts: "artifact-shortcuts",
   newFolder: "new-folder",
   newWorkspace: "new-workspace",
   attachFiles: "attach",
@@ -130,7 +134,28 @@ const command = (
   ...definition,
 });
 
+/** What an artifact's pane can offer the palette and the shortcuts (client/document/focused-artifact.ts); a pane offers the ones its kind has. */
+export const ARTIFACT_COMMANDS = {
+  rename: [COMMAND_IDS.artifactRename, "Rename artifact", "Change its name", "rename", ["title"]],
+  copyMarkdown: [COMMAND_IDS.artifactCopyMarkdown, "Copy as Markdown", "Copy this paper's text", "copy-transcript", ["export"]],
+  count: [COMMAND_IDS.artifactCount, "Count blocks and words", "Show or hide the count", "rename", ["length"]],
+  find: [COMMAND_IDS.artifactFind, "Find in paper", "Search its text", "search", []],
+  outline: [COMMAND_IDS.artifactOutline, "Outline", "Jump to a heading", "sidebar", ["headings"]],
+  width: [COMMAND_IDS.artifactWidth, "Page width", "Narrow, wide or full", "workspace-panel", []],
+  blockMenu: [COMMAND_IDS.artifactBlockMenu, "Block menu", "Open the caret's block menu", "settings", ["turn into"], stroke("Slash", "/", ["primary"])],
+  blockUp: [COMMAND_IDS.artifactBlockUp, "Move block up", "Move the caret's block up", "move", [], stroke("ArrowUp", "ArrowUp", ["alt", "shift"])],
+  blockDown: [COMMAND_IDS.artifactBlockDown, "Move block down", "Move the caret's block down", "move", [], stroke("ArrowDown", "ArrowDown", ["alt", "shift"])],
+  nextComment: [COMMAND_IDS.artifactNextComment, "Next comment", "Go to the next open comment", "chat", [], stroke("KeyJ", "J", ["alt"])],
+  previousComment: [COMMAND_IDS.artifactPreviousComment, "Previous comment", "Go to the open comment before", "chat", [], stroke("KeyK", "K", ["alt"])],
+  thread: [COMMAND_IDS.artifactThread, "Show the artifact's thread", "The thread that answers its comments", "chat", ["agent"]],
+  shortcuts: [COMMAND_IDS.artifactShortcuts, "Paper shortcuts", "Open the shortcut settings", "settings", ["keys"]],
+} as const satisfies Record<string, readonly [id: string, label: string, description: string, icon: string, keywords: readonly string[], key?: ReturnType<typeof stroke>]>;
+export type ArtifactCommand = keyof typeof ARTIFACT_COMMANDS;
+
 export const commandRegistry: ShortcutCommandDefinition[] = [
+  ...Object.values(ARTIFACT_COMMANDS).map(([id, label, description, icon, keywords, key]) => command({
+    id, label, description, group: "commands", icon, keywords: [...keywords], contexts: ["application", "palette.root"], palette: true, defaultBindings: key ? [binding(key)] : [],
+  })),
   command({
     id: COMMAND_IDS.openCommandPalette,
     label: "Open command palette",
