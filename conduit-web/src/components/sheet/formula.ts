@@ -124,3 +124,7 @@ export function finish(text: string) {
   }
   return (out.trim() + ")".repeat(depth)).trim();
 }
+
+/** The calls whose function the engine does not have (`known`: its names, upper-cased). */
+export const unknownCalls = (text: string, tokens: readonly FormulaToken[], known: ReadonlySet<string>) =>
+  tokens.filter((token) => token.kind === "call" && !known.has(text.slice(token.from, token.to).toUpperCase()));

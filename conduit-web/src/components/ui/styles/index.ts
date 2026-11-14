@@ -54,6 +54,7 @@ import "./connection.css";
 
 import "./browser.css";
 import "./sheet.css";
+import "./sheet-foot.css";
 
 import "./marks.css";
 import "./voice.css";

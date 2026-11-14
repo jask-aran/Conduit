@@ -19,6 +19,11 @@ export const CONFIG: Record<string, unknown>;
 export type Range = { top: number; left: number; bottom: number; right: number };
 /** A column's type in `look` (`type:<colId>`); the page draws "boolean" as a checkbox. */
 export type ColumnType = "string" | "number" | "boolean" | "date";
+/**
+ * The keys of `look` that size a tab: a column's width (`width:<colId>`) and a row's height (`height:<rowId>`), in pixels; a row or column with none
+ * is the default size. sheet.json writes them by column letter (`width:B`) and row number (`height:5`), per tab.
+ */
+export type SizeKey = `width:${string}` | `height:${string}`;
 export function rowId(): string;
 export function colId(): string;
 export function key(row: string, col: string): string;

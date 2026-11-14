@@ -4,6 +4,7 @@
  * the sheet format the hub shares (sheet-format.js), Yjs, and a grid drawn on a canvas, which is a React island
  * loaded only with a sheet (grid.ts).
  */
+import type { SheetTabOp } from "@/sheet-format.js";
 
 /** Cells by position, 0-based and inclusive (sheet-format.js parseRange). */
 export type SheetRange = { top: number; left: number; bottom: number; right: number };
@@ -16,11 +17,12 @@ export type SheetKey = Pick<KeyboardEvent, "key" | "shiftKey" | "ctrlKey" | "met
 /** A box in the viewport's pixels. */
 export type SheetBox = { left: number; top: number; width: number; height: number };
 
-/** What only the hub may do to a sheet (sheet-format: structure, and a fill whose formulas are adjusted per cell), as POST /v0/document/:id/cells takes it. */
+/** What only the hub may do to a sheet (sheet-format: structure, a fill whose formulas are adjusted per cell, and its tabs), as POST /v0/document/:id/cells takes it. `tab`: an id or a name; unsaid, the first. */
 export type SheetCellsOp =
-  | { op: "set"; at: string; value: string }
-  | { op: "fill"; range: string; values?: string[][]; value?: string }
-  | { op: "insert-rows" | "insert-cols" | "delete-rows" | "delete-cols"; at: number; count?: number };
+  | { op: "set"; at: string; value: string; tab?: string }
+  | { op: "fill"; range: string; values?: string[][]; value?: string; tab?: string }
+  | { op: "insert-rows" | "insert-cols" | "delete-rows" | "delete-cols"; at: number; count?: number; tab?: string }
+  | SheetTabOp;
 
 export interface SheetHost {
   /** The hub's live socket for the sheet, opened with the app's own sign-in. */
@@ -40,9 +42,9 @@ export type SheetState = "connecting" | "live" | "away" | "stale";
 export const ASK_KEY = "KeyM";
 /**
  * A range as the place a comment is about, in the shape Markup's host asks for (MarkupPlace): its values row by row (`text`), its A1 address (`label`),
- * `under` its corners by ids (`cells`, the hub's contract) and its address when chosen (`range`), and its box now, found by those ids.
+ * `under` its corners by ids (`cells`, the hub's contract), its address when chosen (`range`, `Data!B2:C3` where the workbook has several tabs) and that tab's name, and its box now, found by those ids.
  */
-export type SheetPlace = { text: string; label: string; under: { cells: string; range: string }; boxes(): SheetBox[] };
+export type SheetPlace = { text: string; label: string; under: { cells: string; range: string; tab?: string }; boxes(): SheetBox[] };
 
 /** A comment the sheet marks: `under.cells` is the two corners of its range by ids ("<rowId>:<colId> <rowId>:<colId>"). */
 export type SheetAnchor = { key: string; quote?: string; under?: Record<string, string | number | boolean>; current: boolean; resolved: boolean };
@@ -79,11 +81,19 @@ export interface SheetGrid {
   references(list: readonly SheetReference[]): void;
   /** Scrolls a cell into view without selecting it. */
   show(row: number, col: number): void;
+  /** Selects the whole columns, or rows, the selection covers. */
+  whole(kind: "cols" | "rows"): void;
+  /** The row whose lower edge, beside its number, is under a point of the viewport (and the top of that row), as a drag to size it starts. */
+  rowEdge(x: number, y: number): { row: number; top: number } | null;
+  /** A row drawn at a height while it is dragged, before the look holds it. */
+  height(row: number, height: number): void;
   /** A range's box on screen, clipped to the grid's; null when none of it is in view. */
   bounds(range: SheetRange): SheetBox | null;
   /** The cell under a point of the viewport. */
   cellAt(x: number, y: number): { row: number; col: number } | null;
   theme(look: SheetLook): void;
+  /** The first cell in view; given one, it is scrolled to the top left first. */
+  scroll(to?: { row: number; col: number }): { row: number; col: number };
   focus(): void;
   destroy(): void;
 }

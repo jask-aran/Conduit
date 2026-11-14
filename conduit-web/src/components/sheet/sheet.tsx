@@ -3,11 +3,15 @@ import * as Y from "yjs";
 import { Empty, Icons } from "@/components/ui";
 import { Input } from "@/components/ui/controls";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
-import { CELLS, LOOK, a1, createSheetModel, key, parseRange, rangeA1, type SheetModel } from "@/sheet-format.js";
+import { CELLS, LOOK, a1, key, parseRange, rangeA1, type SheetModel } from "@/sheet-format.js";
+import { SheetFoot } from "./foot";
+import { createSheetTabs } from "./tabs";
 import { ASK_KEY, type SheetAnchor, type SheetBox, type SheetGrid, type SheetGridEvents, type SheetHost, type SheetMarks, type SheetPlace, type SheetRange, type SheetState } from "./host";
 import { createLiveSheet } from "./live";
 import { readLook } from "./theme";
 import { createFormulaEditor, FormulaField, FormulaHelp } from "./formula-editor";
+import { createSequenceKeys, SequenceHint, SizePrompt, type SizeQuestion } from "./sequences";
+import { createSheetSizes, dragRowEdges } from "./sizes";
 
 // Cells written into the text a comment quotes, and how much of each: enough to read.
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
@@ -24,6 +28,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   // The grid's element is a signal: the menu trigger that makes it may make it again, and the grid then mounts in the one that stands.
   const [island, setIsland] = createSignal<HTMLDivElement>(), [slot, setSlot] = createSignal<HTMLDivElement>();
   let root: HTMLElement | undefined, anchors: SheetAnchor[] = [];
+  const tabs = createSheetTabs({ doc: live.doc, host: props.host, id: props.id, name: props.name, grid, at });
   const watchers = new Set<(pressed?: string) => void>(), moved = (pressed?: string) => watchers.forEach((listener) => listener(pressed));
   createEffect(() => props.onState?.(live.state()));
   onCleanup(() => history.destroy());
@@ -34,13 +39,16 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     // A cell past the sheet's edge has no row or column of its own yet: the hub makes them as it sets it.
     const past: { row: number; col: number; input: string }[] = [];
     live.doc.transact(() => { for (const { row, col, input } of list) { const rowId = sheet.rowAt(row), colId = sheet.colAt(col); if (!rowId || !colId) { if (input) past.push({ row, col, input }); continue; } if (input) cells.set(key(rowId, colId), input); else cells.delete(key(rowId, colId)); } });
-    for (const { row, col, input } of past) void props.host.cells({ op: "set", at: a1(row, col), value: input }).catch((error: Error) => props.host.failed(error.message));
+    for (const { row, col, input } of past) void tabs.cells({ op: "set", at: a1(row, col), value: input }).catch((error: Error) => props.host.failed(error.message));
   };
-  const hub = (op: Parameters<SheetHost["cells"]>[0]) => void props.host.cells(op).catch((error: Error) => props.host.failed(error.message));
+  const hub = (op: Parameters<SheetHost["cells"]>[0]) => void tabs.cells(op).catch((error: Error) => props.host.failed(error.message));
   const editor = createFormulaEditor({
     grid, input: (row, col) => model()?.input(row, col) ?? "", functions: () => model()?.engine.getRegisteredFunctionNames() ?? [],
     write: (row, col, input) => write([{ row, col, input }]),
+    selected: () => { changed(); const area = at(); return area && { row: area.top, col: area.left }; }, error: (row, col) => model()?.error(row, col) ?? null,
   });
+  const sizes = createSheetSizes(look, model), [question, setQuestion] = createSignal<SizeQuestion | null>(null);
+  const sequences = createSequenceKeys((sequence) => sequence.run({ selection: at, sizes, look: () => readLook(root!), ask: setQuestion }));
   const events: SheetGridEvents = {
     selected: setAt,
     write,
@@ -51,6 +59,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     drawn: () => props.onDrawn?.(),
     pressed: (row, col) => { const hit = anchors.find((anchor) => { const range = rangeOf(anchor); return range && row >= range.top && row <= range.bottom && col >= range.left && col <= range.right; }); if (hit) moved(hit.key); },
     key: (event, row, col) => {
+      if (event.key === " " && event.ctrlKey !== event.shiftKey && !event.altKey && !event.metaKey) { event.preventDefault(); grid()?.whole(event.ctrlKey ? "cols" : "rows"); return true; }
       // AltGr is Ctrl and Alt together: what it types is typed.
       if ((event.ctrlKey || event.metaKey) && !(event.ctrlKey && event.altKey)) return false;
       if (event.key === "Enter" || event.key === "F2") { event.preventDefault(); editor.begin({ row, col }, "edit", "cell"); return true; }
@@ -65,7 +74,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   // The model is made once the hub's copy is held, so it is built once from it and not cell by cell as it arrives.
   createEffect(() => {
     if (!live.synced() || untrack(model)) return;
-    const sheet = createSheetModel(live.doc);
+    const sheet = tabs.open();
     setModel(sheet);
     onCleanup(() => sheet.destroy());
   });
@@ -77,7 +86,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (over) return;
       made = mountGrid(into, { model: sheet, events, look: readLook(root!), columns: {
         width: (col) => { const width = look.get(`width:${sheet.colAt(col)}`); return typeof width === "number" ? width : undefined; },
-        type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; },
+        type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; }, heights: sizes.heights,
       } });
       setGrid(made);
     }, (error: Error) => { setFailed(error.message); props.onDrawn?.(); });
@@ -102,7 +111,14 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   // The references of the formula being edited, outlined on the grid in their inks.
   createEffect(() => grid()?.references(editor.references()));
   // The cell editor stands over its cell, and may grow over the neighbours to its right as far as the grid's edge.
-  let body: HTMLDivElement | undefined;
+  let body: HTMLDivElement | undefined, formula: HTMLDivElement | undefined;
+  // Key sequences and row edges are the grid's while it has the keyboard and the pointer (sequences.tsx, sizes.ts).
+  createEffect(() => {
+    const into = island();
+    if (!into) return;
+    const offKeys = sequences.attach(into), offEdges = dragRowEdges(into, grid, (row, height) => sizes.setHeights([row], height));
+    onCleanup(() => { offKeys(); offEdges(); });
+  });
   const cellBox = createMemo<JSX.CSSProperties>((was) => {
     scrolled();
     const now = editor.editing(), made = grid(), into = island();
@@ -147,7 +163,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   /** A range by its corners' ids and by its A1 address; null where it runs past the sheet's own rows or columns, which have no ids yet. */
   const named = (range: SheetRange) => {
     const sheet = model(), ids = sheet && [sheet.rowAt(range.top), sheet.colAt(range.left), sheet.rowAt(range.bottom), sheet.colAt(range.right)];
-    return ids?.every(Boolean) ? { cells: `${key(ids[0]!, ids[1]!)} ${key(ids[2]!, ids[3]!)}`, range: rangeA1(range) } : null;
+    return ids?.every(Boolean) ? { cells: `${key(ids[0]!, ids[1]!)} ${key(ids[2]!, ids[3]!)}`, ...tabs.where(range) } : null;
   };
   /** A range as the place a comment is about: its values, row by row, as its quote; its box found again by its corners' ids, so it follows rows and columns put in or taken out. */
   const placeOf = (range: SheetRange): SheetPlace | null => {
@@ -179,11 +195,12 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     slot,
     anchors: (list) => {
       anchors = list;
+      tabs.follow(list);
       grid()?.highlight(list.filter((anchor) => !anchor.resolved).flatMap((anchor) => { const range = rangeOf(anchor); return range ? [{ range, current: anchor.current }] : []; }));
     },
     where: (name) => { const anchor = anchors.find((one) => one.key === name), range = anchor && rangeOf(anchor); return range ? grid()?.bounds(range) ?? null : null; },
     watch: (listener) => { watchers.add(listener); return () => watchers.delete(listener); },
-    reveal: (address) => { const range = parseRange(address); if (range) grid()?.select(range, true); },
+    reveal: (address) => { const range = parseRange(tabs.reveal(address)); if (range) grid()?.select(range, true); },
     focus: () => grid()?.focus(),
     history: { undo: () => Boolean(history.undo()), redo: () => Boolean(history.redo()), canUndo: () => history.canUndo(), canRedo: () => history.canRedo() },
   };
@@ -196,6 +213,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   return <section ref={root} class="ui-spreadsheet" aria-label={props.name} data-margin={props.marginEmpty ? "none" : "beside"}
     onKeyDown={(event) => {
       if (!(event.ctrlKey || event.metaKey) || !island()?.contains(event.target as Node)) return;
+      if (tabs.key(event)) return;
       if (event.altKey && event.code === ASK_KEY) { event.preventDefault(); return props.onAsk?.(); }
       // The grid has no history of its own: what this page wrote is undone here, never what others wrote.
       const redo = event.key === "y" || (event.key === "z" && event.shiftKey);
@@ -207,7 +225,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       <Input class="ui-spreadsheet-address" aria-label="Cell" spellcheck={false} value={address() ?? (at() ? rangeA1(at()!) : "")} onFocus={(event) => event.currentTarget.select()} onInput={(event) => setAddress(event.currentTarget.value)}
         onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); go(); } else if (event.key === "Escape") { setAddress(null); grid()?.focus(); } }} onBlur={() => setAddress(null)} />
       {/* The formula bar edits the selected cell: focused, it opens the cell to edit as F2 does. */}
-      <div class="ui-input ui-spreadsheet-formula" onFocusIn={() => { const area = at(); if (area && !editor.editing()) editor.begin({ row: area.top, col: area.left }, "edit", "bar"); }}>
+      <div ref={formula} class="ui-input ui-spreadsheet-formula" onFocusIn={() => { const area = at(); if (area && !editor.editing()) editor.begin({ row: area.top, col: area.left }, "edit", "bar"); }}>
         <FormulaField editor={editor} place="bar" label="Formula" class="ui-formula-text" idle={input} disabled={!at()} />
       </div>
       {/* Room at the row's end for what a layer over the sheet puts there (Markup's bar, where its kind says so); empty, it takes none. */}
@@ -232,9 +250,12 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         </ContextMenu>
         <div class="ui-spreadsheet-editor" data-open={editor.editing() ? "" : undefined} style={cellBox()}><FormulaField editor={editor} place="cell" label="Cell" class="ui-formula-text" /></div>
         <FormulaHelp editor={editor} frame={() => body} />
+        <SequenceHint typed={sequences.typed} next={sequences.next} anchor={() => formula} />
+        <SizePrompt question={question()} onClose={() => { setQuestion(null); grid()?.focus(); }} />
         <Show when={!model()}><Empty role="status" class="ui-spreadsheet-waiting">Opening the sheet…</Empty></Show>
       </Show>
       <Show when={props.margin}><aside class="ui-spreadsheet-margin" aria-label="Comments">{props.margin}</aside></Show>
     </div>
+    <SheetFoot tabs={tabs} id={props.id} />
   </section>;
 }

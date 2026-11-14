@@ -8,8 +8,8 @@ import { batch, createEffect, createMemo, createSignal, For, onCleanup, Show, un
 import { Item, Match, Section } from "@/components/ui";
 import { Popover, PopoverContent } from "@/components/ui/menus";
 import { a1, rangeA1 } from "@/sheet-format.js";
-import { contextAt, cycleAnchors, finish, INKS, inksOf, isFormula, tokenize, type FormulaContext, type FormulaToken } from "./formula";
-import { argumentAt, FUNCTION_HELP } from "./functions";
+import { contextAt, cycleAnchors, finish, INKS, inksOf, isFormula, tokenize, unknownCalls, type FormulaContext, type FormulaToken } from "./formula";
+import { argumentAt, FUNCTION_HELP, functionOffers, nearestFunctions, type FunctionOffer } from "./functions";
 import type { SheetGrid, SheetReference } from "./host";
 
 type Cell = { row: number; col: number };
@@ -26,7 +26,13 @@ export type FormulaEditorHost = {
   /** Every function the engine has registered, custom ones included. */
   functions(): readonly string[];
   write(row: number, col: number, input: string): void;
+  /** The cell selected, read again when its value changes. */
+  selected(): Cell | null;
+  /** An error cell's message, else null. */
+  error(row: number, col: number): string | null;
 };
+/** A function name the engine does not have, held at commit: where it stands in `text`, and the real names nearest it. */
+export type FormulaDoubt = { text: string; name: string; from: number; to: number; near: readonly FunctionOffer[] };
 
 /** One edit, which every FormulaField given it shows; the sheet drives it from the grid (keys, presses, drags). */
 export interface FormulaEditor {
@@ -38,18 +44,22 @@ export interface FormulaEditor {
   inks: Accessor<ReadonlyMap<string, number>>;
   references: Accessor<readonly SheetReference[]>;
   context: Accessor<FormulaContext>;
-  /** Functions offered for the name being typed, and the one the arrows are on. */
-  offered: Accessor<readonly string[]>;
+  /** Functions offered for the name being typed (or, held, the real ones nearest it), and the one the arrows are on. */
+  offered: Accessor<readonly FunctionOffer[]>;
   active: Accessor<number>;
   /** The call the caret is in, for its signature. */
   hint: Accessor<{ name: string; arg: number } | null>;
+  /** The unknown name a commit was held at, while the text is as it was then: Enter again commits it as typed. */
+  doubt: Accessor<FormulaDoubt | null>;
+  /** While nothing is edited, why the selected cell shows an error. */
+  fault: Accessor<{ text: string; near: readonly FunctionOffer[] } | null>;
   place: Accessor<FormulaPlace>;
   /** The field of the place last typed in, which the help stands under. */
   anchor(): HTMLElement | undefined;
   field(place: FormulaPlace, element: HTMLElement): void;
   begin(cell: Cell, mode: FormulaMode, place: FormulaPlace): void;
-  /** Writes the edit and ends it; `move` the selection by rows and columns; `focus` hands the keyboard back to the grid. */
-  commit(move?: readonly [number, number], focus?: boolean): void;
+  /** Writes the edit and ends it; `move` the selection by rows and columns; `focus` hands the keyboard back to the grid; `check` holds it at a function name the engine does not have. */
+  commit(move?: readonly [number, number], focus?: boolean, check?: boolean): void;
   cancel(): void;
   typed(text: string, caret: number): void;
   caretAt(caret: number): void;
@@ -59,7 +69,7 @@ export interface FormulaEditor {
   /** A press on a cell while editing: true when it was pointed into the formula (with Shift, as the far corner from the last one pointed at). */
   press(cell: Cell, extend: boolean): boolean;
   drag(cell: Cell): void;
-  accept(name: string): void;
+  accept(offer: FunctionOffer): void;
 }
 
 const OFFERED = 8;
@@ -82,21 +92,33 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
     for (const token of tokens()) if (token.ref && token.key && !seen.has(token.key)) { seen.add(token.key); list.push({ range: token.ref, ink: ink.get(token.key)!, pointing: pointed?.from === token.from }); }
     return list;
   }, [], { equals: (a, b) => a.length === b.length && a.every((one, at) => sameReference(one, b[at])) });
-  const names = createMemo(() => [...host.functions()].sort());
-  const offered = createMemo(() => {
-    const word = context().word;
-    if (!editing() || !word || shut() === text()) return [];
-    const typed = word.text.toUpperCase();
-    return names().filter((name) => name.startsWith(typed)).slice(0, OFFERED);
+  const known = createMemo(() => new Set(host.functions().map((name) => name.toUpperCase()))), names = createMemo(() => [...known()].sort());
+  const [held, setHeld] = createSignal<FormulaDoubt | null>(null), doubt = () => { const was = held(); return was && was.text === text() ? was : null; };
+  const offered = createMemo<readonly FunctionOffer[]>(() => {
+    if (!editing()) return [];
+    const was = doubt(), word = context().word;
+    if (was) return was.near;
+    return word && shut() !== text() ? functionOffers(word.text, names(), known(), OFFERED) : [];
   });
   const hint = createMemo(() => editing() ? context().call : null, null, { equals: (a, b) => a?.name === b?.name && a?.arg === b?.arg });
   createEffect(() => { offered(); setActive(0); });
+  const fault = createMemo(() => {
+    const cell = editing() ? null : host.selected(), message = cell && host.error(cell.row, cell.col);
+    if (!cell || message === null || message === undefined) return null;
+    const input = host.input(cell.row, cell.col), unknown = unknownCalls(input, tokenize(input), known())[0];
+    if (!unknown) return { text: message, near: [] };
+    const name = input.slice(unknown.from, unknown.to).toUpperCase();
+    return { text: `${name} is not a function`, near: nearestFunctions(name, names(), known(), 3) };
+  });
 
   const put = (next: string, at: number) => batch(() => { setText(next); setCaret(at); });
-  const end = () => batch(() => { setEditing(null); setPointing(null); setShut(null); });
-  const commit = (move?: readonly [number, number], focus = true) => {
+  const end = () => batch(() => { setEditing(null); setPointing(null); setShut(null); setHeld(null); });
+  const commit = (move?: readonly [number, number], focus = true, check = false) => {
     const now = editing();
     if (!now) return;
+    // A function the engine does not have would be saved as #NAME? with no word why: the edit stays, the name marked, the nearest real ones offered.
+    const unknown = check && isFormula(text()) && !doubt() ? unknownCalls(text(), tokens(), known())[0] : undefined;
+    if (unknown) { const name = text().slice(unknown.from, unknown.to); setHeld({ text: text(), name, from: unknown.from, to: unknown.to, near: nearestFunctions(name, names(), known(), OFFERED) }); return; }
     const input = finish(text()), grid = host.grid();
     end();
     if (input !== host.input(now.row, now.col)) host.write(now.row, now.col, input);
@@ -115,11 +137,11 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
     return true;
   };
   const canPoint = () => isFormula(text()) && Boolean(pointing() || context().point);
-  const accept = (name: string) => {
-    const word = context().word, now = text();
-    if (!word) return;
-    const rest = now.slice(word.to);
-    put(now.slice(0, word.from) + name + (rest.startsWith("(") ? "" : "(") + rest, word.from + name.length + 1);
+  const accept = (offer: FunctionOffer) => {
+    const span = doubt() ?? context().word, now = text();
+    if (!span) return;
+    const rest = now.slice(span.to);
+    batch(() => { setHeld(null); put(now.slice(0, span.from) + offer.name + (rest.startsWith("(") ? "" : "(") + rest, span.from + offer.name.length + 1); });
   };
   const turnAnchors = () => {
     const spot = context().point, now = text();
@@ -129,9 +151,9 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
   };
 
   return {
-    editing, text, caret, tokens, inks, references, context, offered, active, hint, place, accept,
+    editing, text, caret, tokens, inks, references, context, offered, active, hint, doubt, fault, place, accept,
     field: (where, element) => { fields[where] = element; },
-    anchor: () => fields[place()],
+    anchor: () => fields[editing() ? place() : "bar"],
     begin: (cell, mode, where) => {
       if (editing()) return;
       const was = mode === "enter" ? "" : host.input(cell.row, cell.col);
@@ -150,10 +172,11 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
       if (!now || event.isComposing) return;
       const take = () => event.preventDefault();
       if (list.length && step && !step[1]) { take(); setActive((at) => Math.min(list.length - 1, Math.max(0, at + step[0]))); return; }
-      if (list.length && (event.key === "Tab" || event.key === "Enter") && !event.shiftKey) { take(); accept(list[active()]!); return; }
-      if (list.length && event.key === "Escape") { take(); setShut(text()); return; }
+      // Held at an unknown name, Tab takes a real one and Enter keeps what was typed.
+      if (list.length && (event.key === "Tab" || (event.key === "Enter" && !doubt())) && !event.shiftKey) { take(); accept(list[active()]!); return; }
+      if (list.length && event.key === "Escape") { take(); if (doubt()) setHeld(null); else setShut(text()); return; }
       if (event.key === "Enter" && event.altKey) { take(); const at = caret(); put(text().slice(0, at) + "\n" + text().slice(at), at + 1); return; }
-      if (event.key === "Enter" || event.key === "Tab") { take(); const back = event.shiftKey ? -1 : 1; commit(event.key === "Enter" ? [back, 0] : [0, back]); return; }
+      if (event.key === "Enter" || event.key === "Tab") { take(); const back = event.shiftKey ? -1 : 1; commit(event.key === "Enter" ? [back, 0] : [0, back], true, true); return; }
       if (event.key === "Escape") { take(); cancel(); return; }
       if (event.key === "F4") { take(); turnAnchors(); return; }
       if (event.key === "F2") { take(); setEditing({ ...now, mode: now.mode === "enter" ? "edit" : "enter" }); return; }
@@ -188,12 +211,14 @@ const placeCaret = (element: HTMLElement, at: number) => {
   }
   getSelection()?.collapse(element, element.childNodes.length);
 };
-/** The text as runs: plain text, or a reference's text and its ink. */
-const runsOf = (text: string, tokens: readonly FormulaToken[] | null, inks: ReadonlyMap<string, number> | null) => {
-  const runs: [string, number | null][] = [];
+/** A run's look: a reference's ink, an unknown function's mark, or plain. */
+type Ink = number | "fault" | null;
+/** The text as runs: plain text, or a reference's text and its ink, or the unknown name a commit was held at (`fault`: where it starts). */
+const runsOf = (text: string, tokens: readonly FormulaToken[] | null, inks: ReadonlyMap<string, number> | null, fault?: number) => {
+  const runs: [string, Ink][] = [];
   let run = "";
   for (const token of tokens ?? []) {
-    const part = text.slice(token.from, token.to), ink = token.key === undefined ? undefined : inks?.get(token.key);
+    const part = text.slice(token.from, token.to), ink = token.from === fault ? "fault" : token.key === undefined ? undefined : inks?.get(token.key);
     if (ink === undefined) { run += part; continue; }
     if (run) { runs.push([run, null]); run = ""; }
     runs.push([part, ink]);
@@ -203,16 +228,17 @@ const runsOf = (text: string, tokens: readonly FormulaToken[] | null, inks: Read
   return runs;
 };
 /** Whether the field already shows these runs: what the browser typed into a run that stays one (most keys) needs no drawing again. */
-const shows = (element: HTMLElement, runs: readonly [string, number | null][]) => {
+const shows = (element: HTMLElement, runs: readonly [string, Ink][]) => {
   const nodes = element.childNodes;
   if (nodes.length !== runs.length) return false;
   return runs.every(([text, ink], at) => { const node = nodes[at]!; return node.textContent === text && (ink === null ? node.nodeType === Node.TEXT_NODE : (node as HTMLElement).dataset.ink === String(ink)); });
 };
-const paint = (element: HTMLElement, runs: readonly [string, number | null][]) => {
+const paint = (element: HTMLElement, runs: readonly [string, Ink][]) => {
   element.replaceChildren(...runs.map(([text, ink]) => {
     if (ink === null) return text;
     const span = document.createElement("span");
-    span.dataset.ink = String(ink); span.style.color = `var(${INKS[ink]})`; span.textContent = text;
+    span.dataset.ink = String(ink); span.textContent = text;
+    if (ink !== "fault") span.style.color = `var(${INKS[ink]})`;
     return span;
   }));
 };
@@ -223,7 +249,7 @@ export function FormulaField(props: { editor: FormulaEditor; place: FormulaPlace
   let element!: HTMLDivElement, composing = false;
   createEffect(() => {
     const live = editor.editing() !== null, text = live ? editor.text() : props.idle?.() ?? "", tokens = live ? editor.tokens() : null, inks = live ? editor.inks() : null;
-    const runs = runsOf(text, tokens, inks);
+    const runs = runsOf(text, tokens, inks, live ? editor.doubt()?.from : undefined);
     if (composing || shows(element, runs)) return;
     paint(element, runs);
     if (live && document.activeElement === element) placeCaret(element, untrack(editor.caret));
@@ -247,19 +273,25 @@ export function FormulaHelp(props: { editor: FormulaEditor; frame: () => HTMLEle
   const editor = props.editor, keep = (event: MouseEvent) => event.preventDefault();
   const signature = () => { const call = editor.hint(); return call ? { ...call, help: FUNCTION_HELP[call.name] } : null; };
   // Open while the edit has something to offer: a press outside (pointing at a cell) leaves it, and Escape is the field's to read.
-  return <Popover open={editor.offered().length > 0 || signature() !== null} anchorRef={props.frame} anchorRect={() => editor.anchor()?.getBoundingClientRect()} placement="bottom-start" kept>
+  // The selected cell's error says why, under the formula field.
+  const fault = () => <Show when={editor.fault()}>{(why) => <div class="ui-formula-hint" onMouseDown={keep}>
+    <span>{why().text}</span><Show when={why().near.length}><small>Did you mean {why().near.map((one) => one.name).join(" or ")}?</small></Show>
+  </div>}</Show>;
+  return <Popover open={editor.offered().length > 0 || signature() !== null || editor.fault() !== null} anchorRef={props.frame} anchorRect={() => editor.anchor()?.getBoundingClientRect()} placement="bottom-start" kept>
     <PopoverContent aria-label="Functions" width="md" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}>
-      <Show when={editor.offered().length} fallback={<Show when={signature()}>{(call) => {
+      <Show when={editor.offered().length} fallback={<Show when={signature()} fallback={fault()}>{(call) => {
         const at = () => call().help ? argumentAt(call().help!, call().arg) : -1;
         return <div class="ui-formula-hint" onMouseDown={keep}>
           <span>{call().name}(<For each={call().help?.args}>{(arg, index) => <>{index() ? ", " : ""}<Show when={index() === at()} fallback={arg}><b>{arg}</b></Show></>}</For>)</span>
           <Show when={call().help}>{(help) => <small>{help().about}</small>}</Show>
         </div>;
       }}</Show>}>
-        <Section role="listbox"><For each={editor.offered()}>{(name, at) =>
-          <Item role="option" aria-selected={editor.active() === at()} active={editor.active() === at()} onMouseDown={keep} onClick={() => editor.accept(name)} detail={FUNCTION_HELP[name]?.about}>
-            <Match text={name} query={editor.context().word?.text ?? ""} />
-          </Item>}</For></Section>
+        <Section role="listbox" title={editor.doubt() ? `${editor.doubt()!.name.toUpperCase()} is not a function` : undefined} note={editor.doubt() ? "Tab uses one · Enter keeps it" : undefined}>
+          <For each={editor.offered()}>{(offer, at) =>
+            <Item role="option" aria-selected={editor.active() === at()} active={editor.active() === at()} onMouseDown={keep} onClick={() => editor.accept(offer)} detail={FUNCTION_HELP[offer.name]?.about} meta={offer.typedFor ? `for ${offer.typedFor}` : undefined}>
+              <Match text={offer.name} query={editor.doubt() ? "" : editor.context().word?.text ?? ""} />
+            </Item>}</For>
+        </Section>
       </Show>
     </PopoverContent>
   </Popover>;

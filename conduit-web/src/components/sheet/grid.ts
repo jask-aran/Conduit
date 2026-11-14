@@ -10,8 +10,10 @@ import { createRoot } from "react-dom/client";
 import { colName, type SheetModel, COL_LIMIT } from "@/sheet-format.js";
 import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange, SheetReference } from "./host";
 
-/** What the grid reads of the sheet besides its cells: each column's width and type (`look`). */
-export type SheetColumns = { width(col: number): number | undefined; type(col: number): string | undefined };
+/** What the grid reads of the sheet besides its cells: each column's width and type, and the rows whose height is not the default (`look`). */
+export type SheetColumns = { width(col: number): number | undefined; type(col: number): string | undefined; heights(): ReadonlyMap<number, number> };
+// How near a row's lower edge, beside its number, a press takes the edge to drag.
+const EDGE_SLOP = 3;
 type GridOptions = { model: SheetModel; columns: SheetColumns; events: SheetGridEvents; look: SheetLook };
 type Highlight = NonNullable<DataEditorProps["highlightRegions"]>[number];
 
@@ -49,7 +51,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   if (!document.getElementById("portal")) document.body.append(Object.assign(document.createElement("div"), { id: "portal" }));
   let editor: DataEditorRef | null = null, view: Rectangle = { x: 0, y: 0, width: 0, height: 0 };
   // Set as the component mounts: the editor drives the island through these.
-  const drive: { select?(selection: GridSelection): void; width?(col: number, width: number): void; marks?(list: DataEditorProps["highlightRegions"]): void; look?(look: SheetLook): void; structure?(): void } = {};
+  const drive: { select?(selection: GridSelection): void; width?(col: number, width: number): void; height?(row: number, height: number): void; marks?(list: DataEditorProps["highlightRegions"]): void; look?(look: SheetLook): void; structure?(): void } = {};
   let look = options.look, comments: Highlight[] = [], references: Highlight[] = [];
   const marks = () => drive.marks?.(comments.length || references.length ? [...references, ...comments] : undefined);
 
@@ -96,7 +98,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     onKeyDown: (event) => { const cell = current.current?.cell; if (cell && events.key(event, cell[1], cell[0])) event.cancel(); },
     editOnType: false, cellActivationBehavior: "double-click",
     onVisibleRegionChanged: (region) => { view = region; events.moved(); },
-    rowMarkers: "number", smoothScrollX: true, smoothScrollY: true, width: "100%", height: "100%", fillHandle: true, getCellsForSelection: true, keybindings: { search: false },
+    // Its own Ctrl+Space and Shift+Space take only the current cell's column or row; the sheet's take the whole selection's (`whole`).
+    rowMarkers: "number", smoothScrollX: true, smoothScrollY: true, width: "100%", height: "100%", fillHandle: true, getCellsForSelection: true, keybindings: { search: false, selectColumn: false, selectRow: false },
     // The grid's own description of every cell for a screen reader is rebuilt on each move and scroll. Drawn off screen and copied whole, an
     // arrow-key move that scrolls costs a third less and a wheel step half (measured: p95 8.6 to 5.7 ms, 6.4 to 2.5 ms).
     experimental: { disableAccessibilityTree: true, renderStrategy: "double-buffer" },
@@ -105,11 +108,12 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
 
   function Grid() {
     const [selection, setSelection] = useState<GridSelection>(NO_SELECTION), [marks, setMarks] = useState<DataEditorProps["highlightRegions"]>(), [shape, setShape] = useState(0), [theme, setTheme] = useState(look);
-    const [widths, setWidths] = useState<Record<number, number>>({});
+    const [widths, setWidths] = useState<Record<number, number>>({}), [heights, setHeights] = useState<Record<number, number>>({});
     current = selection;
     useEffect(() => {
       drive.select = setSelection; drive.marks = setMarks; drive.look = setTheme; drive.width = (col, width) => setWidths((was) => ({ ...was, [col]: width }));
-      drive.structure = () => { size = reach(); setWidths({}); setShape((n) => n + 1); };
+      drive.height = (row, height) => setHeights((was) => ({ ...was, [row]: height }));
+      drive.structure = () => { size = reach(); setWidths({}); setHeights({}); setShape((n) => n + 1); };
       // Mounted, the grid has drawn in its layout effects; the frame after is on screen.
       requestAnimationFrame(() => events.drawn());
     }, []);
@@ -129,7 +133,12 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         return new TextCell(row, col, input, shown(value), typeof value === "number" || type === "number" ? "right" : undefined, fault ? error : undefined);
       };
     }, [types, theme]);
-    const props: DataEditorProps = { ...handlers, columns, rows, getCellContent: content, theme: theme.grid as Partial<Theme>, rowHeight: theme.row, headerHeight: theme.header, gridSelection: selection, highlightRegions: marks };
+    // One number while every row is the default height: the grid then sums no heights to scroll.
+    const rowHeight = useMemo(() => {
+      const kept = options.columns.heights();
+      return kept.size || Object.keys(heights).length ? (row: number) => heights[row] ?? kept.get(row) ?? theme.row : theme.row;
+    }, [shape, heights, theme]);
+    const props: DataEditorProps = { ...handlers, columns, rows, getCellContent: content, theme: theme.grid as Partial<Theme>, rowHeight, headerHeight: theme.header, gridSelection: selection, highlightRegions: marks };
     return createElement(DataEditor, { ...props, ref: made });
   }
 
@@ -169,7 +178,22 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       for (let at = view.y; at < view.y + view.height + 1 && row < 0; at++) { const cell = box(view.x, at); if (cell && y >= cell.y && y < cell.y + cell.height) row = at; }
       return col < 0 || row < 0 ? null : { row, col };
     },
+    whole: (kind) => {
+      const area = selected(current, size);
+      if (!area) return;
+      const picked = CompactSelection.fromSingleSelection(kind === "cols" ? [area.left, area.right + 1] : [area.top, area.bottom + 1]);
+      const next: GridSelection = { columns: kind === "cols" ? picked : CompactSelection.empty(), rows: kind === "rows" ? picked : CompactSelection.empty() };
+      drive.select?.(next); events.selected(selected(next, size));
+    },
+    rowEdge: (x, y) => {
+      const numbers = box(-1, view.y);
+      if (!numbers || x < numbers.x || x >= numbers.x + numbers.width) return null;
+      for (let at = view.y; at < view.y + view.height + 1; at++) { const cell = box(-1, at); if (cell && Math.abs(y - (cell.y + cell.height)) <= EDGE_SLOP) return { row: at, top: cell.y }; }
+      return null;
+    },
+    height: (row, height) => drive.height?.(row, height),
     theme: (next) => { look = next; drive.look?.(look); },
+    scroll: (to) => { if (to) editor?.scrollTo(to.col, to.row, "both", 0, 0, { hAlign: "start", vAlign: "start" }); return { row: view.y, col: view.x }; },
     focus: () => editor?.focus(),
     destroy: () => root.unmount(),
   };

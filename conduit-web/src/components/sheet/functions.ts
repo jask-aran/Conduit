@@ -100,5 +100,51 @@ export const FUNCTION_HELP: Readonly<Record<string, FunctionHelp>> = {
   PMT: help("rate, periods, present_value, [future_value], [type]", "The payment each period on a loan."),
 };
 
+/** A function offered: its name, and the other name it was typed as (WRONG_NAMES), shown as "for" that. */
+export type FunctionOffer = { name: string; typedFor?: string };
+
+// Most used first: a name typed is offered the common function it starts, never the rare one before it in the alphabet.
+const POPULAR = ["SUM", "AVERAGE", "IF", "COUNT", "MAX", "MIN", "ROUND", "VLOOKUP", "COUNTIF", "SUMIF", "IFERROR", "AND", "OR", "CONCATENATE", "LEFT", "RIGHT", "MID", "LEN", "TRIM",
+  "UPPER", "LOWER", "TODAY", "NOW", "DATE", "YEAR", "MONTH", "DAY", "INDEX", "MATCH", "XLOOKUP", "ABS", "INT", "MOD", "COUNTA", "SUMIFS", "COUNTIFS", "AVERAGEIF", "IFS", "NOT", "TEXT",
+  "VALUE", "SUMPRODUCT", "MEDIAN", "ROUNDUP", "ROUNDDOWN", "POWER", "SQRT", "SUBSTITUTE", "FIND", "SEARCH"];
+const RANK = new Map([...POPULAR, ...Object.keys(FUNCTION_HELP)].filter((name, at, all) => all.indexOf(name) === at).map((name, at) => [name, at]));
+
+/** Names people type for a function the engine calls otherwise; each is offered only where the engine has the real one and not the typed one. */
+export const WRONG_NAMES: Readonly<Record<string, string>> = {
+  AVG: "AVERAGE", MEAN: "AVERAGE", STDDEV: "STDEV", CONCAT: "CONCATENATE", LENGTH: "LEN", STRLEN: "LEN", SUBSTR: "MID", SUBSTRING: "MID", CEIL: "CEILING", POW: "POWER",
+  IFNULL: "IFERROR", NVL: "IFERROR", LCASE: "LOWER", UCASE: "UPPER", INSTR: "FIND", ISEMPTY: "ISBLANK", TRUNCATE: "TRUNC", DISTINCT: "UNIQUE", COUNTDISTINCT: "COUNTUNIQUE",
+  TOTAL: "SUM", RANK: "RANK.EQ", MODE: "MODE.SNGL", REPLACEALL: "SUBSTITUTE", DATEADD: "EDATE",
+};
+const wrongFor = (typed: string, names: ReadonlySet<string>) => Object.entries(WRONG_NAMES).filter(([wrong, real]) => wrong.startsWith(typed) && names.has(real) && !names.has(wrong));
+
+/** The functions to offer for a name being typed: the help table's that it starts, most used first; then the real names of wrong ones it starts; then the engine's other names it starts; then those it is inside. `names`: sorted. */
+export function functionOffers(typed: string, names: readonly string[], known: ReadonlySet<string>, limit: number): FunctionOffer[] {
+  const upper = typed.toUpperCase(), out: FunctionOffer[] = [], seen = new Set<string>();
+  const add = (name: string, typedFor?: string) => { if (out.length < limit && !seen.has(name)) { seen.add(name); out.push(typedFor ? { name, typedFor } : { name }); } };
+  const starts = names.filter((name) => name.startsWith(upper));
+  for (const name of starts.filter((one) => RANK.has(one)).sort((a, b) => RANK.get(a)! - RANK.get(b)!)) add(name);
+  for (const [wrong, real] of wrongFor(upper, known)) add(real, wrong);
+  for (const name of starts) add(name);
+  if (upper.length > 1 && out.length < limit) for (const name of names) if (name.includes(upper)) add(name);
+  return out;
+}
+
+const distance = (a: string, b: string) => {
+  let row = Array.from({ length: b.length + 1 }, (_, at) => at);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j]! + 1, next[j - 1]! + 1, row[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+    row = next;
+  }
+  return row[b.length]!;
+};
+/** The real names nearest a name the engine does not have: the one it is a wrong name for, alone; else those a few edits from it, most used first among equals. */
+export function nearestFunctions(name: string, names: readonly string[], known: ReadonlySet<string>, limit: number): FunctionOffer[] {
+  const upper = name.toUpperCase(), real = WRONG_NAMES[upper], most = Math.max(2, Math.floor(upper.length / 3));
+  if (real && known.has(real)) return [{ name: real, typedFor: upper }];
+  return names.map((one) => ({ one, far: distance(upper, one) })).filter(({ far }) => far <= most)
+    .sort((a, b) => a.far - b.far || (RANK.get(a.one) ?? Infinity) - (RANK.get(b.one) ?? Infinity)).slice(0, limit).map(({ one }) => ({ name: one }));
+}
+
 /** The argument a position in a call stands for: past the last, the last again where it repeats. */
 export const argumentAt = (help: FunctionHelp, at: number) => at < help.args.length ? at : help.args.at(-1)?.includes("…") ? help.args.length - 1 : -1;

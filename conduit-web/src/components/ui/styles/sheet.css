@@ -15,12 +15,16 @@
 .ui-spreadsheet-editor { position: absolute; display: flex; align-items: center; width: max-content; background: var(--background); box-shadow: inset 0 0 0 var(--stroke) var(--foreground); }
 .ui-spreadsheet-editor:not([data-open]) { display: none; }
 .ui-spreadsheet-editor > .ui-formula-text { padding: var(--space-xs) var(--space-md); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* A function name the engine does not have, where a commit was held. */
+.ui-formula-text [data-ink="fault"] { color: var(--destructive); text-decoration: underline wavy var(--destructive); }
 .ui-formula-hint { display: flex; flex-direction: column; gap: var(--space-xs); padding: var(--space-sm) var(--space-md); color: var(--muted-foreground); font-family: var(--font-data); }
 .ui-formula-hint b { color: var(--foreground); font-weight: var(--weight-strong); }
 .ui-formula-hint small { font-family: var(--font-sans); }
 .ui-spreadsheet-slot { display: flex; flex: 0 1 auto; min-width: 0; margin-inline-start: auto; }
 .ui-spreadsheet-body { position: relative; display: flex; flex: 1; min-height: 0; }
 .ui-spreadsheet-grid { position: relative; flex: 1; min-width: 0; }
+/* Over a row's lower edge beside its number, a drag sizes the row (components/sheet/sizes.ts); the grid sets its canvas's own cursor inline. */
+.ui-spreadsheet-grid[data-row-edge] canvas { cursor: row-resize !important; }
 .ui-spreadsheet-waiting { position: absolute; inset: 0; }
 .ui-spreadsheet-margin { flex: 0 0 var(--measure-md); min-width: 0; overflow-y: auto; padding: 0 var(--space-md); }
 .ui-spreadsheet[data-margin="none"] .ui-spreadsheet-margin { display: none; }

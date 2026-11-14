@@ -1,0 +1,8 @@
+/* A sheet's foot (components/sheet/foot.tsx): the library's tool bar ruled off under the grid, holding the tab strip, which scrolls sideways
+ * inside itself, and the figures of the cells selected at its end, which fold (to the sum, then to none) before the strip gives way. */
+.ui-spreadsheet > .ui-tool-bar { font-size: var(--text-row); }
+.ui-spreadsheet-tabs { display: flex; min-width: 0; height: var(--control-sm); flex: 0 1 auto; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+.ui-spreadsheet-tabs > .ui-pane-tabs { flex: none; overflow: visible; }
+.ui-spreadsheet-tab-name { width: var(--measure-2xs); height: var(--control-sm); flex: none; }
+.ui-spreadsheet-figures { display: flex; min-width: 0; flex: none; gap: var(--space-md); margin-inline-start: auto; padding-inline: var(--space-xs); white-space: nowrap; }
+.ui-spreadsheet > .ui-tool-bar[data-folded="1"] .ui-dash-path:not(:first-child), .ui-spreadsheet > .ui-tool-bar[data-folded="2"] .ui-spreadsheet-figures { display: none; }

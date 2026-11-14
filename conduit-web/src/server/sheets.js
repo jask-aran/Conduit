@@ -92,13 +92,14 @@ export function sheetKind(hub) {
     if (!Number.isInteger(value) || value < 0 || value > most) throw fault(400, `at is the 0-based index of the ${what}, from 0 to ${most}`);
     return value;
   };
-  /** A tab's formulas by address, and its look by column letter, cell address, or alone for the tab's own. */
+  /** A tab's formulas by address, and its look by row number (a height), column letter, cell address, or alone for the tab's own. */
   const formulasOf = (sheet) => { const out = {}; sheet.inputs().forEach((row, r) => row.forEach((input, c) => { if (input.startsWith("=")) out[a1(r, c)] = input; })); return out; };
   const lookOf = (room, sheet) => {
     const out = {};
     for (const [name, value] of room.look.entries()) {
       const [what, ...ids] = name.split(":");
       if (ids.length === 1 && ids[0] === sheet.id) out[what] = value;
+      else if (ids.length === 1 && sheet.indexOfRow(ids[0]) >= 0) out[`${what}:${sheet.indexOfRow(ids[0]) + 1}`] = value;
       else if (ids.length === 1 && sheet.indexOfCol(ids[0]) >= 0) out[`${what}:${colName(sheet.indexOfCol(ids[0]))}`] = value;
       else if (ids.length === 2 && sheet.indexOfRow(ids[0]) >= 0 && sheet.indexOfCol(ids[1]) >= 0) out[`${what}:${a1(sheet.indexOfRow(ids[0]), sheet.indexOfCol(ids[1]))}`] = value;
     }
@@ -106,9 +107,10 @@ export function sheetKind(hub) {
   };
   const restoreLook = (room, sheet, tab, kept) => {
     for (const [name, value] of Object.entries(kept ?? {})) {
-      const [what, at, more] = name.split(":"), col = /^[A-Z]{1,3}$/.test(at ?? "") ? colIndex(at) : -1, cell = at ? parseA1(at) : null, { rows, cols } = sheet.size();
+      const [what, at, more] = name.split(":"), col = /^[A-Z]{1,3}$/.test(at ?? "") ? colIndex(at) : -1, row = /^\d+$/.test(at ?? "") ? Number(at) - 1 : -1, cell = at ? parseA1(at) : null, { rows, cols } = sheet.size();
       if (!what || more !== undefined) continue;
       if (at === undefined) room.look.set(`${what}:${tab}`, value);
+      else if (row >= 0 && row < rows) room.look.set(`${what}:${sheet.rowAt(row)}`, value);
       else if (col >= 0 && col < cols) room.look.set(`${what}:${sheet.colAt(col)}`, value);
       else if (cell && cell.row < rows && cell.col < cols) room.look.set(`${what}:${key(sheet.rowAt(cell.row), sheet.colAt(cell.col))}`, value);
     }

@@ -40,8 +40,8 @@ export function Dashboard(props: {
   </section>;
 }
 
-export const DashPath = (props: { path?: string; copied?: boolean; onCopy: () => void }) =>
-  <button type="button" class="ui-dash-path" title="Copy working path" onClick={() => props.onCopy()}><code>{props.copied ? "Copied" : props.path || "Working path unavailable"}</code></button>;
+export const DashPath = (props: { path?: string; copied?: boolean; title?: string; onCopy: () => void }) =>
+  <button type="button" class="ui-dash-path" title={props.title ?? "Copy working path"} onClick={() => props.onCopy()}><code>{props.copied ? "Copied" : props.path || "Working path unavailable"}</code></button>;
 
 export function DashHeader(props: { title: string; glyph?: JSX.Element; context?: Array<JSX.Element | false | null | undefined> }) {
   const items = () => (props.context ?? []).filter(Boolean);
