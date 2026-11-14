@@ -169,6 +169,14 @@ const VIEWS: ReadonlyArray<{ value: MarkupView; label: string; icon: () => JSX.E
 /** A host's own tool in the bar, read where it is drawn (so a getter follows). `menu`: on the ribbon, those of one menu stand as one control under that name, `active` the one
  *  that is so now. A tool of no menu is a toggle, `pressed` while it is on (a mark the selection wears; unsaid, `active`). `disabled`: not to be done here.
  *  `keys`: its shortcut, as its tooltip says it. */
+/** The bar's own tools: one frosted bar, or (parted) a row of them, each part a bar of its own. */
+function Sets(props: { parted: boolean; children: JSX.Element }) {
+  return <Show when={props.parted} fallback={<Frost lift="raised" class="ui-markup-bar" data-set="markup" role="toolbar" aria-label="UI markup">{props.children}</Frost>}><div class="ui-markup-sets">{props.children}</div></Show>;
+}
+function Part(props: { parted: boolean; label: string; children: JSX.Element }) {
+  return <Show when={props.parted} fallback={props.children}><Frost lift="raised" class="ui-markup-bar" role="toolbar" aria-label={props.label}>{props.children}</Frost></Show>;
+}
+
 export type MarkupOwnTool = { name: string; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; /** Its menu's control shows the icon alone (a swatch says its colour). */ compact?: boolean; /** The colour it puts on, where it is one of a set of inks. */ swatch?: string; /** It puts on any colour, the one handed it: the last of a set of inks, chosen with the colour picker. */ pick?: (hex: string) => void; /** It is a way the surface is worked on, one of a few: `review` is the one Markup's own tools belong to, entered as one is taken. */ mode?: "edit" | "review"; run: () => void };
 
 const named = (label: string, keys?: readonly string[]) => keys?.length ? `${label} (${keys.join(" ")})` : label;
@@ -287,6 +295,8 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   onCleanup(() => { sizes.disconnect(); sets.disconnect(); document.removeEventListener("keydown", shut, { capture: true }); });
   const caption = (words: string) => <Show when={props.ribbon && fold() < 1}><span class="ui-title-text ui-markup-caption">{words}</span></Show>;
 
+  // Over an interface the bar is in parts, as a paper's ribbon is: what is marked up, the tools, and sending. A phone's and a thread's stay one bar.
+  const parted = () => !props.ribbon && !props.compact && !props.thread;
   return <div ref={rails} class="ui-markup-rails" data-ribbon={props.ribbon ? "" : undefined} data-compact={props.compact ? "" : undefined} data-thin={props.thin === false ? undefined : ""}>
   <Show when={picking() && options() && props.ink?.startsWith("#") && inks()}><Frost lift="raised" class="ui-markup-bar ui-markup-picker">
     <ColourPicker label="Any colour" value={own()} onChange={(hex) => { setOwn(hex as MarkupInk); props.onInk?.(own()); }} />
@@ -322,23 +332,31 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     {caption("Edit")}<Show when={fold() < 2} fallback={format()}>{owned()}</Show>
   </Frost></Show>
   <Show when={props.ribbon}><span class="ui-markup-break" /></Show>
-  <Frost lift="raised" class="ui-markup-bar" data-set="markup" role="toolbar" aria-label="UI markup">
+  <Sets parted={parted()}>
     <Show when={props.thread && props.onBack}><IconButton label="Back to marking up" onClick={props.onBack}><Icons.Back /></IconButton></Show>
     <Show when={!props.thread}>
       {caption("Mark up")}
       {/* With no screenshot to be had, a tool is all it takes to annotate the live page. */}
-      <Show when={!props.ribbon && props.screenshots}><span class="ui-markup-with" role="group" aria-label="Mode"><For each={VIEWS}>{(option) =>
-        <IconButton label={option.label} aria-pressed={props.view === option.value} onClick={() => props.onView(props.view === option.value ? "use" : option.value)}>{option.icon()}</IconButton>}</For></span></Show>
-      <Show when={fold() < FOLDS} fallback={annotate()}>
-        <span class="ui-markup-with" role="group" aria-label="Annotate with"><For each={offered()}>{(option) => <IconButton label={option.label} aria-pressed={!using() && option.value === props.tool} onClick={() => pick(option)}>{option.icon}</IconButton>}</For></span>
-      </Show>
+      {/* What is marked up, the live page or a picture of it, with the steps back and forward, as a paper's ribbon has its modes. */}
+      <Part parted={parted()} label="Mode">
+        <Show when={!props.ribbon && props.screenshots}><span class="ui-markup-with" role="group" aria-label="Mode"><For each={VIEWS}>{(option) =>
+          <IconButton label={option.label} aria-pressed={props.view === option.value} onClick={() => props.onView(props.view === option.value ? "use" : option.value)}>{option.icon()}</IconButton>}</For></span></Show>
+        <Show when={parted()}><Show when={props.onRetake && props.view === "screenshot"}><IconButton label="Take the screenshot again" onClick={props.onRetake}><Icons.Camera /></IconButton></Show><span class="ui-markup-with">{undo()}{redo()}</span></Show>
+      </Part>
+      <Part parted={parted()} label="UI markup">
+        <Show when={parted()}><span class="ui-title-text ui-markup-caption">Mark up</span></Show>
+        <Show when={fold() < FOLDS} fallback={annotate()}>
+          <span class="ui-markup-with" role="group" aria-label="Annotate with"><For each={offered()}>{(option) => <IconButton label={option.label} aria-pressed={!using() && option.value === props.tool} onClick={() => pick(option)}>{option.icon}</IconButton>}</For></span>
+        </Show>
+      </Part>
     </Show>
-    <Show when={!props.thread && !props.compact && !props.ribbon}><span class="ui-markup-with">{undo()}{redo()}</span></Show>
+    <Part parted={parted()} label="Send">
+    <Show when={!props.thread && !props.compact && !props.ribbon && !parted()}><span class="ui-markup-with">{undo()}{redo()}</span></Show>
     <Show when={props.status && (props.thread || !(props.compact || props.ribbon))}><span class="ui-markup-status">{props.status}</span></Show>
     <Show when={(props.replies || props.sent) && !props.thread}><IconButton label={props.replies ? `${props.replies} unread from the agent, on what was sent before` : "What was sent before"} count={props.replies || undefined} onClick={props.onReplies}><Icons.Inbox /></IconButton></Show>
     <Show when={!props.thread}>
     <span class="ui-markup-with">
-      <Show when={props.onRetake && props.view === "screenshot"}><IconButton label="Take the screenshot again" onClick={props.onRetake}><Icons.Camera /></IconButton></Show>
+      <Show when={props.onRetake && props.view === "screenshot" && !parted()}><IconButton label="Take the screenshot again" onClick={props.onRetake}><Icons.Camera /></IconButton></Show>
       {/* Until the receiver has said who listens, nothing is said of it: "No listener" is only ever what it answered. */}
       {/* On an artifact's ribbon the bar is only the tools: who listens is its pane's to say, and Send stands with its comments there. */}
       <Show when={props.onHand && props.heard !== false && !props.ribbon}>
@@ -354,6 +372,7 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     </Show></Show>
     </Show>
     <Show when={!props.ribbon}><CloseButton size="sm" label="Close markup" onClick={props.onClose} /></Show>
-  </Frost>
+    </Part>
+  </Sets>
   </div>;
 }

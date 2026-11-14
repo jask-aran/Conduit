@@ -93,7 +93,7 @@ export type MarkupCapabilities = {
   sent: "corner" | "margin";
   /** The bar is thinner than the library's frost, to show the interface being looked at under it; a document's needs no such thing. */
   thin: boolean;
-  /** Where the bar stands: at the `foot` of what is marked up, opened and closed; or a `ribbon` at the head of the host's frame, always there, the host's own tools in it beside Markup's: an artifact's, which is edited and marked up in one place. */
+  /** Where the bar stands: at the `foot` of what is marked up, opened and closed, in parts side by side (what is marked up, the tools, sending; one bar on a phone); or a `ribbon` at the head of the host's frame, always there, the host's own tools in it beside Markup's: an artifact's, which is edited and marked up in one place. */
   bar: "foot" | "ribbon";
   /** What the tool stands over may be light (a site in a frame), where frost alone cannot be read: its bar and cards then have a dark ground of their own. */
   grounded: boolean;
