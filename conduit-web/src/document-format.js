@@ -122,22 +122,25 @@ const Day = Node.create({
   renderMarkdown: (node) => node.attrs?.date ?? "",
 });
 
-/** The inks text may wear, named as Markup names them (components/ui/markup.tsx MARKUP_INKS) and never a colour, so each theme draws its own; plain is no mark. */
+/** The inks text may wear, named as Markup names them (components/ui/markup.tsx MARKUP_INKS) so each theme draws its own; plain is no mark. */
 export const PAPER_INKS = ["red", "amber", "green", "blue"];
+/** Any other colour is written as itself, `#rrggbb`, and is the same in every theme. */
+const OWN_INK = /^#[0-9a-f]{6}$/i;
+export const paperInk = (ink) => PAPER_INKS.includes(ink) || OWN_INK.test(ink ?? "");
 /**
  * Text in an ink (`color`, `<span data-color="red">…</span>`) or washed in one (`highlight`, `<mark data-color="amber">…</mark>`). Either with an ink
- * not in PAPER_INKS is read as its words alone.
+ * that is neither (paperInk) is read as its words alone.
  */
 const inked = (name, tag) => {
   const token = `paper-${name}`, found = new RegExp(`^<${tag} data-color="([^"<>]*)">([\\s\\S]*?)</${tag}>`);
   return Mark.create({
     name,
-    addAttributes: () => ({ ink: { default: null, parseHTML: (element) => element.getAttribute("data-color"), renderHTML: (attrs) => ({ "data-color": attrs.ink }) } }),
-    parseHTML: () => [{ tag: `${tag}[data-color]`, getAttrs: (element) => PAPER_INKS.includes(element.getAttribute("data-color")) && null }],
+    addAttributes: () => ({ ink: { default: null, parseHTML: (element) => element.getAttribute("data-color"), renderHTML: (attrs) => ({ "data-color": attrs.ink, ...(OWN_INK.test(attrs.ink ?? "") ? { style: `--document-ink: ${attrs.ink}` } : {}) }) } }),
+    parseHTML: () => [{ tag: `${tag}[data-color]`, getAttrs: (element) => paperInk(element.getAttribute("data-color")) && null }],
     renderHTML: ({ HTMLAttributes }) => [tag, HTMLAttributes, 0],
     markdownTokenName: token,
     markdownTokenizer: { name: token, level: "inline", start: (src) => src.indexOf(`<${tag} data-color="`), tokenize: (src, _tokens, lexer) => { const at = found.exec(src); return at ? { type: token, raw: at[0], ink: at[1], tokens: lexer.inlineTokens(at[2]) } : undefined; } },
-    parseMarkdown: (token, h) => PAPER_INKS.includes(token.ink) ? h.applyMark(name, h.parseInline(token.tokens ?? []), { ink: token.ink }) : h.parseInline(token.tokens ?? []),
+    parseMarkdown: (token, h) => paperInk(token.ink) ? h.applyMark(name, h.parseInline(token.tokens ?? []), { ink: token.ink }) : h.parseInline(token.tokens ?? []),
     renderMarkdown: (node, h) => `<${tag} data-color="${node.attrs?.ink}">${h.renderChildren(node)}</${tag}>`,
   });
 };

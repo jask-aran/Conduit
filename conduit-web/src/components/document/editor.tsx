@@ -214,9 +214,12 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   const worn = MARKS.filter(([name]) => !props.host.tools || props.host.tools.includes(name)).map(([name, label]) => { const Icon = documentToolIcons[name]; return { name, label, icon: () => <Icon />, get active() { return wears().includes(name); }, get pressed() { return marking().on[name]; }, get disabled() { return !marking().can; }, keys: MARK_KEYS[name], run: () => { editor()?.chain().focus().toggleMark(name).run(); } }; });
   // On the ribbon each inked mark is one menu of the inks and None, showing the one the selection wears.
   const inkOn = readEditor(editor, "caret", (made) => `${markAttrs(made, "color").ink ?? ""} ${markAttrs(made, "highlight").ink ?? ""}`);
-  const inked = INKED.filter(([name]) => !props.host.tools || props.host.tools.includes(name)).flatMap(([name, menu, none, noun], nth) => [undefined, ...INKS].map((ink?: PaperInk) => ({
+  const inked = INKED.filter(([name]) => !props.host.tools || props.host.tools.includes(name)).flatMap(([name, menu, none, noun], nth) => [...[undefined, ...INKS].map((ink?: PaperInk) => ({
     name: `${name}-${ink ?? "none"}`, label: ink ? `${MARKUP_INKS[ink].label} ${noun}` : none, icon: () => { const Plain = documentToolIcons[name]; return ink ? inkSwatch(ink) : <Plain />; }, menu, compact: true, swatch: ink ? MARKUP_INKS[ink].colour : undefined,
-    get active() { return inkOn().split(" ")[nth] === (ink ?? ""); }, get disabled() { return !marking().can; }, run: () => { const made = editor(); if (made) putInk(made.chain().focus(), name, ink); } })));
+    get active() { return inkOn().split(" ")[nth] === (ink ?? ""); }, get disabled() { return !marking().can; }, run: () => { const made = editor(); if (made) putInk(made.chain().focus(), name, ink); } })),
+    // Any other colour, written into the paper as itself.
+    { name: `${name}-any`, label: "Any colour", icon: () => inkSwatch(), menu, compact: true, get swatch() { const on = inkOn().split(" ")[nth]; return on?.startsWith("#") ? on : undefined; }, get active() { return Boolean(inkOn().split(" ")[nth]?.startsWith("#")); }, get disabled() { return !marking().can; },
+      run: () => {}, pick: (hex: string) => { const made = editor(); if (made) putInk(made.chain().focus(), name, hex as `#${string}`); } }]);
   // What can be taken back here is what was written here (the Yjs undo manager's stacks), read after each change.
   const manager = (made: Editor | undefined) => made ? yUndoPluginKey.getState(made.state)?.undoManager : undefined;
   const undoable = probeEditor(editor, (made) => Boolean(manager(made)?.undoStack.length)), redoable = probeEditor(editor, (made) => Boolean(manager(made)?.redoStack.length));

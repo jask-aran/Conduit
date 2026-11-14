@@ -27,7 +27,7 @@ export type PaperInk = Exclude<keyof typeof MARKUP_INKS, "plain">;
 export const INKS = PAPER_INKS as PaperInk[];
 export const inkSwatch = (ink?: PaperInk) => ink ? <Swatch colour={MARKUP_INKS[ink].colour} /> : <Swatch hollow />;
 /** The ink put on the text selected, or the mark taken off it (none). */
-export const putInk = (chain: ChainedCommands, mark: InkedMark, ink?: PaperInk) => (ink ? chain.setMark(mark, { ink }) : chain.unsetMark(mark)).run();
+export const putInk = (chain: ChainedCommands, mark: InkedMark, ink?: PaperInk | `#${string}`) => (ink ? chain.setMark(mark, { ink }) : chain.unsetMark(mark)).run();
 const TABLE = [["delete-row", "Delete the row", "deleteRow"], ["delete-column", "Delete the column", "deleteColumn"], ["delete-table", "Delete the table", "deleteTable"]] as const;
 // The app's own writing of a chord is passed in (`chord`); without it, the ribbon's.
 const ribbonChord = (keys: string) => keys.split("-").map((key) => key === "Mod" ? "Ctrl" : key.length === 1 ? key.toUpperCase() : key).join(" ");
