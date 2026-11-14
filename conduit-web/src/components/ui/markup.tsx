@@ -269,7 +269,7 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     <Show when={props.compact}><IconButton label="Undo" disabled={!props.onUndo} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton></Show>
   </Frost></Show>
   <Show when={props.ribbon && !props.thread}><Frost lift="raised" class="ui-markup-bar" data-set="mode" role="toolbar" aria-label="Mode">
-    <Show when={modes().length}><Segmented label="Mode" size="sm" value={(modes().find((tool) => tool.active) ?? modes()[0]!).name} onChange={(name) => press(modes().find((tool) => tool.name === name)!)} options={modes().map((tool) => ({ value: tool.name, label: tool.label }))} /></Show>
+    <Show when={modes().length}><Segmented label="Mode" icons size="sm" value={(modes().find((tool) => tool.active) ?? modes()[0]!).name} onChange={(name) => press(modes().find((tool) => tool.name === name)!)} options={modes().map((tool) => ({ value: tool.name, label: tool.label, icon: tool.icon() }))} /></Show>
     <span class="ui-markup-with">{undo()}{redo()}</span>
   </Frost></Show>
   {/* Only while the app is in use, as the options are only while annotating: the two never stand together. */}
