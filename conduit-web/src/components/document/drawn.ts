@@ -7,15 +7,24 @@ import { blockAt, blockById } from "./blocks";
 
 // `@` where a word may start, then a name (dots only inside it, so a sentence's full stop is not the name's).
 const MENTION = /(?<!\S)@([\p{L}\p{N}_-]+(?:\.[\p{L}\p{N}_-]+)*)/gu;
-const mentions = (doc: Node) => {
-  const found: Decoration[] = [];
-  doc.descendants((node, pos) => {
+// Found once for each block and kept by the block itself: a keystroke makes one new block, and the rest are the nodes they were.
+const found = new WeakMap<Node, [number, number, string][]>();
+const mentionsIn = (block: Node) => {
+  let runs = found.get(block);
+  if (runs) return runs;
+  found.set(block, runs = []);
+  block.descendants((node, pos) => {
     if (node.type.spec.code) return false;
     if (!node.isText || node.marks.some((mark) => mark.type.spec.code)) return true;
-    for (const match of node.text!.matchAll(MENTION)) found.push(Decoration.inline(pos + match.index, pos + match.index + match[0].length, { class: documentDrawClass.mention, "data-mention": match[1]! }));
+    for (const match of node.text!.matchAll(MENTION)) runs!.push([pos + match.index, pos + match.index + match[0].length, match[1]!]);
     return false;
   });
-  return DecorationSet.create(doc, found);
+  return runs;
+};
+const mentions = (doc: Node) => {
+  const drawn: Decoration[] = [];
+  doc.forEach((block, at) => { if (!block.type.spec.code) for (const [from, to, name] of mentionsIn(block)) drawn.push(Decoration.inline(at + 1 + from, at + 1 + to, { class: documentDrawClass.mention, "data-mention": name })); });
+  return DecorationSet.create(doc, drawn);
 };
 const mentioned = new PluginKey<DecorationSet>("mentions");
 export const revealed = new PluginKey<string | null>("revealed");

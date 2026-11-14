@@ -1,7 +1,7 @@
 import type { Editor } from "@tiptap/core";
 import type { EditorView } from "@tiptap/pm/view";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js";
-import { createEditorTransaction } from "solid-tiptap";
+import { readEditor } from "./read";
 import { IconButton, Icons } from "@/components/ui";
 import { DocumentDropLine, DocumentHandle, documentBlockIcons, documentToneIcons, documentToolIcons } from "@/components/ui/document";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/ui/menus";
@@ -21,7 +21,7 @@ const DRAG_SLOP_PX = 4;
 export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: readonly Tool[], options: { scroller: Accessor<HTMLElement | undefined>; onComment: () => ((about: Range) => void) | undefined; onAdded: (id: string | undefined) => void }) {
   const [hovered, setHovered] = createSignal<string | null>(null), [open, setOpen] = createSignal(false), [drop, setDrop] = createSignal<{ to: number; top: number } | null>(null), [touched, setTouched] = createSignal(false);
   let handle: HTMLDivElement | undefined, pressing = false, dragging = false, frame = 0, refocus = true;
-  const doc = createEditorTransaction(editor, (made) => made?.state.doc);
+  const doc = readEditor(editor, (made) => made?.state.doc);
   const from = createMemo(() => { const id = hovered(), now = doc(); return id && now ? blockById(now, id) : null; });
   const origin = () => (handle?.offsetParent as HTMLElement | null)?.getBoundingClientRect() ?? null;
   const place = createMemo(() => {
@@ -57,7 +57,7 @@ export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: r
   const openMenu = () => { const view = editor()?.view; if (view) openOn(view, caretBlockAt(view)); };
 
   // After a touch the handle follows the caret's block: a tap puts the caret there, and the handle is how its menu is reached.
-  const caret = createEditorTransaction(editor, (made) => { const view = made?.view, at = view ? caretBlockAt(view) : null; return at === null ? null : view!.state.doc.nodeAt(at)?.attrs.id as string | null ?? null; });
+  const caret = readEditor(editor, (made) => { const view = made?.view, at = view ? caretBlockAt(view) : null; return at === null ? null : view!.state.doc.nodeAt(at)?.attrs.id as string | null ?? null; });
   createEffect(() => { if (touched() && !open()) setHovered(caret()); });
   createEffect(() => {
     const dom = editor()?.view.dom;

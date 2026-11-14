@@ -4,7 +4,7 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js";
 import { render } from "solid-js/web";
-import { createEditorTransaction } from "solid-tiptap";
+import { readEditor } from "./read";
 import { ySyncPluginKey } from "y-prosemirror";
 import type { Doc, Map as YMap } from "yjs";
 import { DocumentSuggested } from "@/components/ui/document";
@@ -105,7 +105,7 @@ export function createSuggesting(editor: Accessor<Editor | undefined>, doc: Doc,
   const bump = () => queueMicrotask(() => setVersion((n) => n + 1));
   changes.observe(bump);
   onCleanup(() => changes.unobserve(bump));
-  const current = createEditorTransaction(editor, (made) => made?.state.doc);
+  const current = readEditor(editor, (made) => made?.state.doc);
   const suggestions = createMemo((): DocumentSuggestion[] => {
     version();
     const now = current(), schema = editor()?.schema;

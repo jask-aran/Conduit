@@ -3,7 +3,7 @@ import type { Node } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { createSignal, Show, type Accessor } from "solid-js";
-import { createEditorTransaction } from "solid-tiptap";
+import { readEditor } from "./read";
 import { DocumentFind, documentDrawClass } from "@/components/ui/document";
 
 type Found = { query: string; current: number; matches: { from: number; to: number }[]; drawn: DecorationSet };
@@ -30,7 +30,7 @@ const draw = (doc: Node, matches: Found["matches"], current: number) =>
 export function createFind(editor: Accessor<Editor | undefined>, scroller: Accessor<HTMLElement | undefined>) {
   const [open, setOpen] = createSignal(false);
   let field: HTMLInputElement | undefined;
-  const state = createEditorTransaction(editor, (made) => made ? found.getState(made.state) : undefined);
+  const state = readEditor(editor, (made) => made ? found.getState(made.state) : undefined);
   const set = (change: { query?: string; current?: number }) => { const view = editor()?.view; if (view) view.dispatch(view.state.tr.setMeta(found, change)); };
   const inView = () => {
     const view = editor()?.view, now = state(), match = now?.matches[now.current], box = scroller()?.getBoundingClientRect();
