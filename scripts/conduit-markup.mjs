@@ -19,8 +19,8 @@
 // `document <list|new|read|replace|insert|delete|set> …` is the one part that needs the hub running: the hub holds a paper
 // (a Conduit document, a .paper file in a project's folder) and is the only way to it, so these sign in as
 // `conduit-auth api` does. `list <project>` prints a project's artifacts, each id first; `new <name> --project <id>`
-// makes a paper and prints its id (`--kind site`: a site, one HTML file an agent then edits as a file; the block
-// commands are a paper's alone). `read` prints the document as
+// makes a paper and prints its id (`--kind markdown`: a Markdown file, a paper whose file is a plain .md; `--kind site`: a site,
+// one HTML file an agent then edits as a file, which the block commands do not take). `read` prints the document as
 // Markdown, each block under a comment that gives its id; the others change one block, taking Markdown from their last
 // arguments or from stdin, and print the ids of the blocks written. `--as <name>` says who writes; `--for <item>/<n>`
 // says which comment the edit answers; `--suggest` makes it a suggestion the person accepts or rejects (`--suggest <key>`
@@ -288,7 +288,7 @@ if (command === "wait") {
     if (waiter && alive(waiter.id)) console.log(`waiter   ${waiter.name}  (${waiter.cwd}, since ${waiter.since})`);
   }
 } else {
-  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | answer <id> [n] --json '{\"edits\":[{\"op\":\"replace\",\"at\":\"<block>\",\"markdown\":\"…\"}],\"reply\":\"…\",\"resolve\":true}' | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document list <project> | document new <name> --project <id> [--folder <path>] [--kind site] | document read <id> | document set <id> <name> [value] | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block> | document suggestions <id> | document accept|reject <id> <key>   (--as <name>, by default the name this folder's wait listens under; --for <item>/<n> names the comment an edit answers, <item> alone its one comment; --suggest [key] makes it a suggestion; --json '{…}' gives any of block, markdown, as, for, suggest; Markdown piped in when not given)");
+  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | answer <id> [n] --json '{\"edits\":[{\"op\":\"replace\",\"at\":\"<block>\",\"markdown\":\"…\"}],\"reply\":\"…\",\"resolve\":true}' | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document list <project> | document new <name> --project <id> [--folder <path>] [--kind markdown|site] | document read <id> | document set <id> <name> [value] | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block> | document suggestions <id> | document accept|reject <id> <key>   (--as <name>, by default the name this folder's wait listens under; --for <item>/<n> names the comment an edit answers, <item> alone its one comment; --suggest [key] makes it a suggestion; --json '{…}' gives any of block, markdown, as, for, suggest; Markdown piped in when not given)");
   // Asked for (`document` alone, as an item's `change` tells an agent to run it), usage is an answer, not a failure.
   process.exit(command && !(command === "document" && !argument) ? 1 : 0);
 }

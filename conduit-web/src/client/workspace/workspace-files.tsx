@@ -4,6 +4,8 @@ import { Icons, Empty, IconButton } from "@/components/ui";
 import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { unitPx } from "@/components/ui/layout";
 import { batch, createEffect, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js";
+import { Dynamic } from "solid-js/web";
+import { ARTIFACT_KINDS, opensAs } from "../document/artifact-kinds";
 import { ChevronsUpIcon, FilePlusIcon, FolderUpIcon, MoveIcon } from "lucide-solid";
 import { toast } from "@/components/ui/notifications";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
@@ -639,6 +641,8 @@ export function FilesView(props: {
   onSaved: () => void;
   onShowDiff: (slot: FileSlotId, staged: boolean, beside?: boolean) => void;
   onOpenBeside?: (path: string) => void;
+  /** Opens a file as the artifact kind it may be when asked (artifact-kinds `opens`). */
+  onOpenAs?: (path: string) => void;
   onBrowseDirectory?: (path: string) => void;
   onBrowseParent?: () => void;
   navigatorOnly?: boolean;
@@ -780,6 +784,7 @@ export function FilesView(props: {
               <Show when={entry.type === "file"}>
                 <MenuRow onSelect={() => c.openFile(entry.path)} icon={<FileTypeIcon name={entry.name} />}>Open preview</MenuRow>
                 <Show when={props.onOpenBeside}><MenuRow onSelect={() => props.onOpenBeside?.(entry.path)} icon={<Icons.Split />}>Open beside</MenuRow></Show>
+                <Show when={props.onOpenAs && opensAs(entry.path)}>{(kind) => <MenuRow onSelect={() => props.onOpenAs?.(entry.path)} icon={<Dynamic component={ARTIFACT_KINDS[kind()].icon} />}>Open as {ARTIFACT_KINDS[kind()].label}</MenuRow>}</Show>
                 <MenuRow onSelect={() => c.editFile(entry.path)} icon={<Icons.Edit />}>Edit</MenuRow>
                 <MenuRow onSelect={() => void c.downloadPath(entry.path)} icon={<Icons.Download />}>Download</MenuRow>
 

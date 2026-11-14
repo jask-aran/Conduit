@@ -2,9 +2,10 @@ import { Extension, type Editor } from "@tiptap/core";
 import { DOMSerializer, type Node, type Schema } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
+import { createComponent, createEffect, createSignal, onCleanup, untrack } from "solid-js";
+import { render } from "solid-js/web";
 import { ySyncPluginKey } from "y-prosemirror";
-import { DOCUMENT_SEAT_INKS, documentBlockClass, documentSeatCaret, documentSeatClass, documentSeatFlag, documentSeatStream, type DocumentSeatInk } from "@/components/ui/document";
+import { DOCUMENT_SEAT_INKS, DocumentAtWork, documentBlockClass, documentSeatCaret, documentSeatClass, documentSeatFlag, documentSeatStream, type DocumentSeatInk } from "@/components/ui/document";
 import { markdownFor } from "@/document-format.js";
 import { blockById } from "./blocks";
 import type { DocumentSeat } from "./host";
@@ -117,22 +118,31 @@ const later = (frames: number, then: () => void) => {
  * the paper's text. `seats` is read on each call; `told` hands back how to say they changed. More words only change the stream's own elements; a
  * transaction is dispatched only when what is drawn where changes.
  */
-export const seatsDrawn = (seats: () => DocumentSeat[], told: (redraw: () => void) => void) => {
-  const streams = new Map<string, Stream>();
+export const seatsDrawn = (seats: () => DocumentSeat[], told: (redraw: () => void) => void, stop: () => ((key: string) => void) | undefined) => {
+  const streams = new Map<string, Stream>(), rows = new WeakMap<globalThis.Node, () => void>();
   let made = 0;
   // Untracked: the plugin is made while the editor is, inside what makes it, and a seat changing must redraw, never make the editor again.
   const now = () => untrack(seats);
+  const row = (seat: DocumentSeat, ink: DocumentSeatInk) => {
+    const element = Object.assign(document.createElement("div"), { contentEditable: "false" });
+    rows.set(element, render(() => createComponent(DocumentAtWork, { by: seat.name, state: seat.state, ink, onStop: () => stop()?.(seat.for!) }), element));
+    return element;
+  };
   const build = (doc: Node) => {
     if (!streams.size && !now().length) return DecorationSet.empty;
-    const found: Decoration[] = [], at = new Map<string, { from: number; to: number; node: Node }>(), list = now(), inks = seatInks(list.map((seat) => seat.name));
+    const found: Decoration[] = [], at = new Map<string, { from: number; to: number; node: Node }>(), list = now(), inks = seatInks(list.map((seat) => seat.name)), stoppable = Boolean(stop());
     doc.forEach((block, from) => { if (block.attrs.id) at.set(block.attrs.id, { from, to: from + block.nodeSize, node: block }); });
     for (const seat of list) {
       const ink = inks.get(seat.name)!, stream = streams.get(seat.name), streaming = Boolean(stream && !stream.landed && writes(seat) && stream.key === keyOf(seat));
       const held = seat.blocks.flatMap((id) => at.get(id) ?? []), first = held[0];
       if (stream) stream.root.dataset.seatInk = ink;
+      // At work for a comment it can be stopped on: a row under what it holds (under what it is heard writing, while it writes) says who and what, with Stop, in place of its caret.
+      const end = streaming ? (stream!.block === "start" ? 0 : at.get(stream!.block)?.to) : held.at(-1)?.to, rowed = stoppable && Boolean(seat.for) && end !== undefined;
+      if (rowed) found.push(Decoration.widget(end!, () => row(seat, ink), { key: `work ${seat.name} ${seat.for} ${seat.state} ${ink}`, side: 2, ignoreSelection: true, stopEvent: () => true, destroy: (element) => rows.get(element)?.() }));
       // A block written after is only where the new ones go: it is not being changed.
       if (!first || (streaming && seat.op === "insert")) continue;
       for (const block of held) found.push(Decoration.node(block.from, block.to, { class: documentSeatClass.held, "data-seat": seat.state, "data-seat-ink": ink, ...(streaming ? { "data-op": "replace" } : {}) }));
+      if (rowed) continue;
       // At the start of the first line of text in the block, else (an image, a divider) just before it.
       let line = first.node.isTextblock ? first.from + 1 : -1;
       if (line < 0) first.node.descendants((node, offset) => { if (line >= 0) return false; if (node.isTextblock) { line = first.from + offset + 2; return false; } return true; });
@@ -186,7 +196,7 @@ export const seatsDrawn = (seats: () => DocumentSeat[], told: (redraw: () => voi
           if (!stream.landed) paint(stream, schema, seat.text ?? "");
         }
         // Only what is drawn where: more words alone were painted into the stream above.
-        const next = JSON.stringify(list.map(({ text: _, ...rest }) => [rest, inks.get(rest.name)]));
+        const next = JSON.stringify([Boolean(stop()), list.map(({ text: _, ...rest }) => [rest, inks.get(rest.name)])]);
         if (moved || next !== shape) { shape = next; dispatch(); }
       };
       told(redraw);

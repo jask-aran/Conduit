@@ -5,7 +5,7 @@ import { callingChat } from "./conduit-mcp.js";
 const text = (words, isError = false) => ({ output: [{ type: "text", text: words }], ...(isError ? { isError: true } : {}) });
 const ACTIONS = ["answer", "list", "new", "show", "lead", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve"];
 
-/** Artifacts for an agent (papers and sites): the hub's document service (server/documents.js) as one tool, with the verbs `conduit-markup` has. */
+/** Artifacts for an agent (papers, Markdown files and sites): the hub's document service (server/documents.js) as one tool, with the verbs `conduit-markup` has. */
 export function PaperTool(runtime) {
   return defineTool({
     name: "conduit_artifact",
@@ -13,7 +13,8 @@ export function PaperTool(runtime) {
       + "`paper` is a paper's id; omit it in a paper's own thread, or in a chat connected to one paper. "
       + "answer (item, n: omit it for an item with one comment; edits: [{ op: replace | insert | delete, at: a block id, markdown }]; reply; resolve) answers a comment in one call: every edit is made for it, all or none, then the reply and the resolve. "
       + "A comment handed to you carries its text and the blocks it is on, so answer needs no read first; an edit on a block that has gone writes nothing and says what the comment is on now. "
-      + "list (project: id or slug, default this chat's) and new (name, kind: paper or site, project) give ids. "
+      + "list (project: id or slug, default this chat's) and new (name, kind: paper, markdown or site, project) give ids. "
+      + "A Markdown file (kind `markdown`, a `.md` file) is a paper whose file is plain Markdown, for other tools to read too: every action a paper's takes works on it but set, since its front matter is kept as the file has it. "
       + "new also makes this chat the artifact's lead (the person's comments on it come here, not to a thread of its own) and shows it to them beside this chat (show: false leaves it closed). "
       + "show opens one for the person. lead takes the lead on one that exists, when the person asks you to work on it. "
       + "read prints the paper as Markdown, each block under `<!-- block <id> -->`. "
@@ -31,7 +32,7 @@ export function PaperTool(runtime) {
       paper: Type.Optional(Type.String({ description: "A paper's id." })),
       project: Type.Optional(Type.String({ description: "list, new: a project's id or slug." })),
       name: Type.Optional(Type.String({ description: "new: the paper's name." })),
-      kind: Type.Optional(Type.Union([Type.Literal("paper"), Type.Literal("site")], { description: "new: paper (the default) or site." })),
+      kind: Type.Optional(Type.Union([Type.Literal("paper"), Type.Literal("markdown"), Type.Literal("site")], { description: "new: paper (the default), markdown (a plain .md file) or site." })),
       block: Type.Optional(Type.String({ description: "A block's id, from read." })),
       markdown: Type.Optional(Type.String()),
       for: Type.Optional(Type.String({ description: "The comment an edit answers, as <item>/<n>." })),
@@ -61,7 +62,7 @@ export function PaperTool(runtime) {
           const project = args.project ?? mine.project;
           if (!project) throw new Error("Say which project.");
           const found = args.action === "list" ? await documents.list(project) : [await documents.create(project, { kind: args.kind, name: args.name })];
-          if (args.action === "list") return text(found.map((one) => `${one.id}  ${one.path}`).join("\n") || "No papers or sites in this project.");
+          if (args.action === "list") return text(found.map((one) => `${one.id}  ${one.path}`).join("\n") || "No papers, Markdown files or sites in this project.");
           // Whoever makes an artifact leads it: what the person says of it comes to the chat that knows why it was made.
           if (chat) await documents.lead(found[0].id, chat);
           return text(`${found[0].id}  ${found[0].path}${chat ? "\nThis chat leads it: the person's comments on it come here." : ""}${args.show === false ? "" : `\n${await show(found[0].id)}`}`);

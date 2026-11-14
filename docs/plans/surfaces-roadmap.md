@@ -122,4 +122,7 @@ What still knows a paper's blocks outside the paper's two entries:
   the kind; `main.tsx` names the two file endings and passes "paper" as every artifact's modes; `connections.ts` types a hand-off's
   kind as the two.
 - [ ] A kind this client does not know has no entry, where it used to be drawn as a paper.
-- [ ] The paper as a plain Markdown file (the owner's direction, not started): `identify`, `made` and its places as the kind's own.
+- [ ] The paper as a plain Markdown file (the owner's direction). The `markdown` kind (`.md`) is its first step: a paper's room, verbs and
+  comments over a file of Markdown alone. Its block ids and its id are kept beside it, matched to the file's blocks by content when the file
+  changes outside Conduit; front matter and what its schema cannot hold stay the file's text. A `.md` is one only when made or opened as one.
+  Still the paper's own: properties, the extras, and a home beside the file for what Markdown cannot say.

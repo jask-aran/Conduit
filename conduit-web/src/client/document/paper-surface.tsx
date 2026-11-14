@@ -1,5 +1,5 @@
-import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
-import { DocumentEditor, type DocumentControls, type DocumentHost, type DocumentMarks } from "@/components/document";
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js";
+import { DocumentEditor, type DocumentAnswers, type DocumentControls, type DocumentHost, type DocumentMarks } from "@/components/document";
 import type { DocumentToolName } from "@/components/document/host";
 import { PAPER_KEYS, PaperShortcuts, type PaperKeyGroup, type PaperKeyRow } from "@/components/document/shortcuts";
 import { HeaderButton, Icons } from "@/components/ui";
@@ -45,6 +45,9 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
   // Also as a signal, so what the margin reads of the editor live (its seats, its suggestions) follows once the editor is made.
   const [marked, setMarked] = createSignal<Marks>();
   const [controls, setControls] = createSignal<DocumentControls>(), [away, setAway] = createSignal(false), [stale, setStale] = createSignal(false);
+  // The margin's answer acts reach the editor once both are made, whichever is first.
+  const [answers, setAnswers] = createSignal<DocumentAnswers | null>(null);
+  createEffect(() => marked()?.answers(answers()));
   const ask = (about: Range, name?: string, words?: string) => props.offer()?.ask(about, name, words);
   // Read again each time the sheet opens, so a key rebound since shows.
   const [showingKeys, setShowingKeys] = createSignal(false);
@@ -77,6 +80,7 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
         suggestions: { list: () => marked()?.suggestions() ?? [], place: (key) => marks?.place(key) ?? null, accept: (key) => marks?.accept(key), reject: (key) => marks?.reject(key), acceptAll: (by) => marks?.acceptAll(by), rejectAll: (by) => marks?.rejectAll(by) },
         column: () => props.pane()?.querySelector<HTMLElement>(".ui-document-text")?.getBoundingClientRect() ?? null,
         focus: () => props.pane()?.querySelector<HTMLElement>(".ui-document-text")?.focus({ preventScroll: true }),
+        answers: (acts) => setAnswers(() => acts),
       },
       tools: () => marks?.tools() ?? [],
       history: { undo: () => marks?.history.undo() ?? false, redo: () => marks?.history.redo() ?? false, canUndo: () => marks?.history.canUndo() ?? false, canRedo: () => marks?.history.canRedo() ?? false },

@@ -3,20 +3,21 @@ import type { Node } from "@tiptap/pm/model";
 import { Plugin, PluginKey, TextSelection, type EditorState } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
+import { render } from "solid-js/web";
 import { createTiptapEditor } from "solid-tiptap";
 import { isOn, markAttrs, probeEditor, readEditor, sameJson } from "./read";
 import { lateSync, settle } from "./sync";
 import { redo, undo, ySyncPlugin, yUndoPlugin, yUndoPluginKey } from "y-prosemirror";
 import type { Doc, Map as YMap, XmlFragment } from "yjs";
 import { MARKUP_INKS } from "@/components/ui/markup";
-import { DocumentAsk, DocumentCount, DocumentSeatJump, DocumentSheet, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons, documentWritingIcons, type DocumentWidth } from "@/components/ui/document";
+import { DocumentAnswered, DocumentAsk, DocumentCount, DocumentSeatJump, DocumentSheet, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons, documentWritingIcons, type DocumentWidth } from "@/components/ui/document";
 import { CHANGES, FRAGMENT, documentExtensions, isSuggestion } from "@/document-format.js";
 import { blockById, blockKeys, caretBlockAt, shiftBlock } from "./blocks";
 import { drawn, revealed } from "./drawn";
 import { createFind } from "./find";
 import { createBlockHandle } from "./handle";
 import { PaperHead } from "./head";
-import { DOCUMENT_BLOCKS, DOCUMENT_MARKS, DOCUMENT_TURNABLE, type DocumentAnchor, type DocumentBlockKind, type DocumentControls, type DocumentHeading, type DocumentHost, type DocumentMarking, type DocumentMarks } from "./host";
+import { DOCUMENT_BLOCKS, DOCUMENT_MARKS, DOCUMENT_TURNABLE, type DocumentAnchor, type DocumentAnswers, type DocumentBlockKind, type DocumentControls, type DocumentHeading, type DocumentHost, type DocumentMarking, type DocumentMarks } from "./host";
 import { hinted } from "./hint";
 import { createLiveDocument } from "./live";
 import { createSeatsAway, seatsDrawn } from "./seats";
@@ -101,7 +102,17 @@ const shown = new PluginKey<DecorationSet>("documentMarks");
  */
 /** How long a block says who changed it, after the change lands; a paper opened later shows the tint alone. */
 const FRESH_MS = 5000;
-const marked = (changes: YMap<Change>, told: { anchors: DocumentAnchor[]; moved: (pressed?: string) => void }) => {
+/** What the marks are told: the comments, the acts on an answer and the comments an agent is at work on now (`working`). */
+type Told = { anchors: DocumentAnchor[]; acts: DocumentAnswers | null; working: Set<string>; moved: (pressed?: string) => void };
+// A row's Solid root goes with its element, which a redraw may keep.
+const rendered = new WeakMap<globalThis.Node, () => void>();
+/** An answer's row, its acts read as pressed so a row kept through a redraw does what is offered now. */
+const answered = (told: Told, key: string, by: string) => {
+  const element = Object.assign(document.createElement("div"), { contentEditable: "false" });
+  rendered.set(element, render(() => <DocumentAnswered by={by} onKeep={() => told.acts?.keep(key)} onRevert={() => told.acts?.revert(key)} onRetry={() => told.acts?.retry(key)} />, element));
+  return element;
+};
+const marked = (changes: YMap<Change>, told: Told) => {
   // The suggestion the caret is in shows what its blocks were, as a comment's change does while its card is open.
   const focusOf = (state: EditorState) => { const { $from } = state.selection, id = $from.depth ? $from.node(1).attrs.id : undefined, change = id ? changes.get(id) : undefined; return change && isSuggestion(change.for) ? change.for : undefined; };
   const build = (doc: Node, focus?: string) => {
@@ -115,10 +126,14 @@ const marked = (changes: YMap<Change>, told: { anchors: DocumentAnchor[]; moved:
       // A comment about several blocks is found by its first; the rest are only marked.
       else blocks.forEach((id, nth) => { const had = on.get(id) ?? on.set(id, { keys: [], current: false, open: false }).get(id)!; if (!nth) had.keys.push(anchor.key); had.current ||= anchor.current; had.open ||= !anchor.resolved; });
     }
+    // An answer the person has yet to settle, with no one at work on it again, has Keep, Revert and Try again under its last block, which says whose it is: the line saying so as it lands would say it twice.
+    const settling = new Set(told.acts ? told.anchors.filter((anchor) => !anchor.resolved && !told.working.has(anchor.key)).map((anchor) => anchor.key) : []), last = new Map<string, { to: number; by: string }>();
     for (const [id, block] of at) {
-      const had = on.get(id), changed = changes.has(id);
-      if (had || changed) found.push(Decoration.node(block.from, block.to, { class: [had?.open && documentMarkClass.commented, changed && documentMarkClass.changed].filter(Boolean).join(" "), ...(had?.keys.length ? { "data-comment": had.keys.join(" ") } : {}), ...(had?.current ? { "data-current": "" } : {}), ...(changed ? { "data-change": changes.get(id)!.for, ...(changes.get(id)!.by !== "person" && Date.now() - Date.parse(changes.get(id)!.at) < FRESH_MS ? { "data-change-by": changes.get(id)!.by } : {}) } : {}) }));
+      const had = on.get(id), change = changes.get(id);
+      if (change && settling.has(change.for)) last.set(change.for, { to: block.to, by: change.by });
+      if (had || change) found.push(Decoration.node(block.from, block.to, { class: [had?.open && documentMarkClass.commented, change && documentMarkClass.changed].filter(Boolean).join(" "), ...(had?.keys.length ? { "data-comment": had.keys.join(" ") } : {}), ...(had?.current ? { "data-current": "" } : {}), ...(change ? { "data-change": change.for, ...(change.by !== "person" && !settling.has(change.for) && Date.now() - Date.parse(change.at) < FRESH_MS ? { "data-change-by": change.by } : {}) } : {}) }));
     }
+    for (const [key, { to, by }] of last) found.push(Decoration.widget(to, () => answered(told, key, by), { key: `answered ${key} ${by}`, side: 1, ignoreSelection: true, stopEvent: () => true, destroy: (element) => rendered.get(element)?.() }));
     changes.forEach((change, id) => {
       // A block changed and still here shows what it was while its comment's card is open: the tint alone does not say what the agent took out.
       if (!change.before || (at.has(id) && change.for !== focus && !told.anchors.some((anchor) => anchor.current && anchor.key === change.for))) return;
@@ -170,8 +185,11 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   const [column, setColumn] = createSignal<HTMLDivElement>(), [scroller, setScroller] = createSignal<HTMLDivElement>(), [editor, setEditor] = createSignal<Editor>();
   const [reflowed, setReflowed] = createSignal(0);
   const changes = copy.doc.getMap<Change>(CHANGES), [changed, setChanged] = createSignal<string[]>([]);
-  const watching = new Set<(pressed?: string) => void>(), told = { anchors: [] as DocumentAnchor[], moved: (pressed?: string) => { for (const listener of watching) listener(pressed); } };
+  const watching = new Set<(pressed?: string) => void>(), told: Told = { anchors: [], acts: null, working: new Set(), moved: (pressed?: string) => { for (const listener of watching) listener(pressed); } };
   const redraw = () => { const view = editor()?.view; if (view) view.dispatch(view.state.tr.setMeta(shown, true)); };
+  // Who is at work on which comment, changing far less often than what they are heard writing.
+  const working = createMemo(() => copy.seats().flatMap((seat) => seat.for ? [seat.for] : []).sort().join(" "));
+  createEffect(() => { told.working = new Set(working().split(" ").filter(Boolean)); redraw(); });
   // Redrawn after the merge has reached the editor, never inside it: a change to the editor made before then is written back to the document as it was, undoing what was merged.
   changes.observe(() => queueMicrotask(() => { setChanged([...changes.values()].map((change) => change.for)); redraw(); }));
   // The text reflows when its column changes width, with no change to the document.
@@ -279,6 +297,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     watch: (listener) => { watching.add(listener); return () => watching.delete(listener); },
     changed: (key) => changed().includes(key),
     seats: copy.seats,
+    answers: (acts) => { told.acts = acts; redraw(); redrawSeats(); },
     suggestions: suggesting.suggestions, accept: suggesting.accept, reject: suggesting.reject, acceptAll: suggesting.acceptAll, rejectAll: suggesting.rejectAll,
     // A bar's block menu turns the caret's block into another kind: a kind that is only put in (a table, a divider) is listed while the caret is in one, to name it.
     tools: listed,
@@ -327,7 +346,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     {/* The editor is made only once the hub's copy is held: made before, its first empty block would be merged in as a block of its own. */}
     <Show when={copy.synced() && column()}>{(element) => {
       // Untracked: a signal or prop read in what the editor is made from would make it again (caret, undo and find lost) each time it changed.
-      const made = createTiptapEditor(() => { const at = element(); return untrack(() => ({ element: at, extensions: [...viewed(documentExtensions(props.host.holds), props.host), paperTyping(props.host, offers), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), suggesting.extension(), seatsDrawn(copy.seats, (redraw) => { redrawSeats = redraw; }), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), slash.extension(), blockKeys, drawn((block, name) => props.host.showMention?.(block, name)), find.extension(), collapsing, ...(props.onMention ? [mentioning(anchor, setAsked, keys), commentKey] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name, "data-own-keys": OWN_KEYS } } })); });
+      const made = createTiptapEditor(() => { const at = element(); return untrack(() => ({ element: at, extensions: [...viewed(documentExtensions(props.host.holds), props.host), paperTyping(props.host, offers), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), suggesting.extension(), seatsDrawn(copy.seats, (redraw) => { redrawSeats = redraw; }, () => told.acts?.stop), hinted(props.onMention ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), slash.extension(), blockKeys, drawn((block, name) => props.host.showMention?.(block, name)), find.extension(), collapsing, ...(props.onMention ? [mentioning(anchor, setAsked, keys), commentKey] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name, "data-own-keys": OWN_KEYS } } })); });
       createEffect(() => setEditor(made()));
       return null;
     }}</Show>

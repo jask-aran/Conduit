@@ -24,7 +24,7 @@ export function PaperHead(props: { /** Whether it holds properties (DocumentHost
   };
   const added = (name: string, value: string) => { if (value.trim()) map.set(name, value.trim()); setAdding(null); };
   const focus = (field: HTMLInputElement) => queueMicrotask(() => field.focus());
-  return <DocumentHead add={adding() ? undefined : { label: "Add a property", onClick: () => setAdding({}) }}>
+  return <DocumentHead add={adding() || props.properties === false ? undefined : { label: "Add a property", onClick: () => setAdding({}) }}>
     <DocumentTitle editable={Boolean(props.onRename)} aria-label="Name" value={draft() ?? props.name} onInput={(event) => setDraft(event.currentTarget.value)} onBlur={(event) => void rename(event.currentTarget)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === "ArrowDown") { event.preventDefault(); props.onDown(); }

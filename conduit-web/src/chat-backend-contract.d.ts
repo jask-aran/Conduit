@@ -264,7 +264,7 @@ export type TurnOutcome = "complete" | "interrupted" | "failed";
  * `rev`: a site's revision when it was handed (a paper's live copy has none).
  */
 export interface MarkupHandoff {
-  artifact: string; kind: "paper" | "site"; name: string; item: string;
+  artifact: string; kind: "paper" | "markdown" | "site"; name: string; item: string;
   n?: number; block?: string; said?: "reply" | "reopened"; quote?: string; words?: string;
   context?: { id?: string; md: string; target?: true }[]; rev?: string;
 }

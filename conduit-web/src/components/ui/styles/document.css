@@ -165,8 +165,9 @@
 .ui-document-seat-jump > svg { width: var(--icon); height: var(--icon); flex: none; color: var(--seat-ink); }
 @keyframes ui-document-seat-jump { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .ui-document-text > .ui-document-seat-held, .ui-document-seat-body .ui-document-seat-caret, .ui-document-seat-jump { animation: none; } }
-.ui-document-suggested { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); margin-block: var(--space-sm) var(--space-2xs); color: var(--muted-foreground); font-size: var(--text-caption); user-select: none; }
-.ui-document-suggested > span { margin-inline-end: var(--space-xs); }
+.ui-document-block-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); margin-block: var(--space-sm) var(--space-2xs); color: var(--muted-foreground); font-size: var(--text-caption); user-select: none; }
+.ui-document-block-foot > span { margin-inline-end: var(--space-xs); }
+.ui-document-block-foot[data-seat-ink] > span { border-radius: var(--radius-inset); background: var(--seat-ink); padding: 0 var(--space-2xs); color: var(--background); font-weight: var(--weight-strong); }
 /* A suggested block shows its words: taken out struck, standing in the text but no part of it; put in washed. Its tint gives way to them. */
 .ui-document-text > .ui-document-changed.ui-document-diff { --document-mark: transparent; }
 .ui-document-diff-added { border-radius: var(--radius-inset); background: color-mix(in oklch, var(--status-success), transparent 72%); }

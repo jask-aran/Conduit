@@ -1,12 +1,14 @@
 import { createEffect, createMemo, createSignal, For, on, onCleanup, onMount } from "solid-js";
 import { createStore, reconcile, unwrap } from "solid-js/store";
 import { MarkupMarginNotes, MarkupNote } from "@/components/ui/markup";
-import type { MarkupHost, MarkupThread } from "./host";
+import type { MarkupAnswerActs, MarkupHost, MarkupThread } from "./host";
 
 const OPEN_EVERY_MS = 3000;
 const split = (key: string) => { const at = key.lastIndexOf("/"); return [key.slice(0, at), Number(key.slice(at + 1))] as const; };
 /** A suggestion's card is known in the column by its key under this, so it never meets a comment's "<item>/<n>". */
 const SUGGESTED = "suggestion:";
+/** One author's suggestions as one card, known by this and who; it stands at the margin's head, over every place. */
+const BY = "suggested-by:", HEAD = -Number.MAX_VALUE;
 /** How many lines of a comment's thread the person has seen, kept per browser so a card answered since reads as unread. */
 const SEEN = "conduit.markup.seen.";
 const seenOf = (key: string) => { try { return Number(localStorage.getItem(SEEN + key) ?? -1); } catch { return -1; } };
@@ -65,6 +67,8 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
 
   const suggestions = () => margin?.suggestions?.list() ?? [];
   const suggestionOf = (key: string) => suggestions().find((one) => one.key === key);
+  /** Who has more than one suggestion standing, and how many: theirs are one card that settles them all, each block keeping its own Accept and Reject. */
+  const many = createMemo(() => { const count = new Map<string, number>(); for (const one of suggestions()) count.set(one.by, (count.get(one.by) ?? 0) + 1); return new Map([...count].filter(([, n]) => n > 1)); });
   const placeOf = (key: string) => key.startsWith(SUGGESTED) ? margin?.suggestions?.place(key.slice(SUGGESTED.length)) ?? null : margin?.place(key) ?? null;
   /** The place a comment is about where the surface says (a paper's first block under it); else it is a place of its own. */
   const blockOf = (key: string) => String(commentOf(key)?.under?.blocks ?? "").split(" ")[0] || key;
@@ -88,7 +92,7 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
     const cards = [
       // Tucked, every card of a place stands where its first does, so stepping through them holds still;
       // and an open one stands under what it is about, never over it.
-      ...([...column.children] as HTMLElement[]).map((card) => { const at = placeOf(tuck ? placed(card.dataset.key ?? "")[0]! : card.dataset.key ?? ""); return { want: at ? at.top + (tuck && card.hasAttribute("data-open") ? at.height + gap : 0) : null, height: () => card.offsetHeight,
+      ...([...column.children] as HTMLElement[]).map((card) => { const key = card.dataset.key ?? "", head = key.startsWith(BY), at = head ? null : placeOf(tuck ? placed(key)[0]! : key); return { want: head ? HEAD : at ? at.top + (tuck && card.hasAttribute("data-open") ? at.height + gap : 0) : null, height: () => card.offsetHeight,
         put: (top: number | null, order: number) => { card.style.top = top === null ? "" : `${top}px`; card.style.order = top === null ? String(order) : ""; const over = tuck && card.hasAttribute("data-open") ? margin?.column?.() : null; card.style.left = over ? `${over.left - box.left}px` : ""; card.style.width = over ? `${over.width}px` : ""; } }; }),
       ...[...waiting.values()].map((one) => ({ want: one.want as number | null, height: () => one.height, put: (top: number | null) => one.at(top === null ? null : { left: box.left, top: box.top + top, width: box.width }) })),
     ].sort((a, b) => (a.want ?? Number.MAX_VALUE) - (b.want ?? Number.MAX_VALUE));
@@ -116,9 +120,14 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
     setReply("");
     void transport.say(split(key)[0], split(key)[1], words).then(took, failed("Not said"));
   };
-  /** The comment asked again of whoever has its item: what the agent changed for it put back, then its own words said once more on its thread. */
-  const retry = (key: string) => { const words = commentOf(key)?.comment; if (words && margin?.revert) void margin.revert.run(key).then(() => transport.say(split(key)[0], split(key)[1], words)).then(took, failed("Not asked again")); };
   const settle = (key: string, resolved: boolean) => { if (resolved && openKey() === key) open(null); void transport.resolve(split(key)[0], split(key)[1], resolved).then((thread) => { took(thread); ask(); }, failed(resolved ? "Not resolved" : "Not reopened")); };
+  // The card's and the surface's alike (MarkupMarginHost.answers). Try again puts back what the agent changed, then says the comment's own words once more on its thread.
+  const acts: MarkupAnswerActs = {
+    keep: (key) => settle(key, true),
+    revert: (key) => void margin?.revert?.run(key).catch(failed("Not taken back")),
+    retry: (key) => { const words = commentOf(key)?.comment; if (words && margin?.revert) void margin.revert.run(key).then(() => transport.say(split(key)[0], split(key)[1], words)).then(took, failed("Not asked again")); },
+    stop: (key) => void margin?.stop?.(key).catch(failed("Not stopped")),
+  };
   const resolveDone = async () => {
     const done = keys().filter((key) => commentOf(key)?.resolved && !putAway(key));
     let resolved = 0;
@@ -134,7 +143,12 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
   const openKeys = createMemo(() => keys().filter((key) => !commentOf(key)?.resolved));
   const byPlace = (list: string[]) => [...list].sort((a, b) => (placeOf(a)?.top ?? Number.MAX_VALUE) - (placeOf(b)?.top ?? Number.MAX_VALUE));
   /** A card opened and brought into view, beside its mark. */
-  const go = (named: string) => { const key = keys().includes(named) ? named : SUGGESTED + named; open(key); requestAnimationFrame(() => column?.querySelector(`[data-key="${CSS.escape(key)}"]`)?.scrollIntoView({ block: "center" })); };
+  const go = (named: string) => {
+    const key = keys().includes(named) ? named : SUGGESTED + named, by = suggestionOf(named)?.by;
+    open(key);
+    // A suggestion of one with several stands in their card.
+    requestAnimationFrame(() => (column?.querySelector(`[data-key="${CSS.escape(key)}"]`) ?? (by === undefined ? null : column?.querySelector(`[data-key="${CSS.escape(BY + by)}"]`)))?.scrollIntoView({ block: "center" }));
+  };
   /** The next open comment after the one open now (or the first), in the order of their places. */
   const step = (by: 1 | -1) => {
     const list = byPlace(openKeys());
@@ -155,7 +169,8 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
   onMount(() => {
     ask();
     columns.set(host, { waiting, lay });
-    onCleanup(() => columns.delete(host));
+    margin?.answers?.(acts);
+    onCleanup(() => { columns.delete(host); margin?.answers?.(null); });
     const asking = setInterval(ask, OPEN_EVERY_MS);
     const sized = new ResizeObserver(soon), cards = new MutationObserver(() => { for (const card of column!.children) sized.observe(card); soon(); });
     sized.observe(column!); cards.observe(column!, { childList: true });
@@ -177,9 +192,11 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
   return <MarkupMarginNotes ref={(element) => { column = element; }} beside={beside()}>
     <For each={keys()}>{(key) => <MarkupNote ref={(element) => { field = element; }} key={key} open={openKey() === key} tag="" name="" quote={commentOf(key)?.quote} words={commentOf(key)?.comment} said={saidOf(key)} by={itemOf(key)?.by ?? undefined} state={stateOf(key)} unread={unread(key)}
       placeholder="Write back" resolved={putAway(key)} value={openKey() === key ? reply() : ""} onOpen={() => open(key)} onInput={setReply} onSay={answer} onResolve={(resolved) => settle(key, resolved)}
-      onStop={margin?.stop && stateOf(key).busy ? () => void margin.stop!(key).catch(failed("Not stopped")) : undefined} onRevert={margin?.revert?.can(key) ? () => void margin.revert!.run(key).catch(failed("Not taken back")) : undefined} onRetry={margin?.revert?.can(key) && commentOf(key)?.comment ? () => retry(key) : undefined}
+      onStop={margin?.stop && stateOf(key).busy ? () => acts.stop(key) : undefined} onRevert={margin?.revert?.can(key) ? () => acts.revert(key) : undefined} onRetry={margin?.revert?.can(key) && commentOf(key)?.comment ? () => acts.retry(key) : undefined}
       count={tucked() ? placed(key).length : undefined} stacked={stacked(key)} cycle={cycle(key)} />}</For>
-    <For each={suggestions().map((one) => one.key)}>{(key) => <MarkupNote key={SUGGESTED + key} open={false} tag="" name="" words={suggestionOf(key)?.summary} state={{ label: `${MARKUP_STATES.suggested} by ${who(suggestionOf(key)?.by) ?? "an agent"}` }} value="" onOpen={() => {}} onInput={() => {}}
+    <For each={[...many().keys()]}>{(by) => <MarkupNote key={BY + by} open={false} tag="" name={`${many().get(by) ?? 0} from ${who(by)}`} value="" onOpen={() => {}} onInput={() => {}} all
+      onAccept={() => margin?.suggestions?.acceptAll?.(by)} onReject={() => margin?.suggestions?.rejectAll?.(by)} />}</For>
+    <For each={suggestions().filter((one) => !many().has(one.by)).map((one) => one.key)}>{(key) => <MarkupNote key={SUGGESTED + key} open={false} tag="" name="" words={suggestionOf(key)?.summary} state={{ label: `${MARKUP_STATES.suggested} by ${who(suggestionOf(key)?.by) ?? "an agent"}` }} value="" onOpen={() => {}} onInput={() => {}}
       onAccept={() => margin?.suggestions?.accept(key)} onReject={() => margin?.suggestions?.reject(key)} />}</For>
   </MarkupMarginNotes>;
 }

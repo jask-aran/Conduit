@@ -127,7 +127,11 @@ export interface MarkupMarginHost {
   suggestions?: { list(): MarkupSuggestion[]; place(key: string): { left: number; top: number; width: number; height: number } | null; accept(key: string): unknown; reject(key: string): unknown; acceptAll?(by?: string): unknown; rejectAll?(by?: string): unknown };
   /** Gives the keyboard back to the surface, as a card is shut from it. */
   focus?(): void;
+  /** Handed the card's own answer acts as the margin mounts (null as it goes), for a surface that offers them on what a comment is about as well (a paper's block). */
+  answers?(acts: MarkupAnswerActs | null): void;
 }
+/** What a comment's card does with its answer, each saying so itself where it fails: Keep (the comment resolved, what the agent changed kept), Revert, Try again (put back and asked once more), Stop. */
+export type MarkupAnswerActs = { keep(key: string): void; revert(key: string): void; retry(key: string): void; stop(key: string): void };
 /** A proposed change, as a margin shows it: who proposed it, when, and what it would do. */
 export type MarkupSuggestion = { key: string; by: string; at: string; summary: string };
 

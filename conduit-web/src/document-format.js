@@ -3,6 +3,7 @@ import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
 import { UniqueID } from "@tiptap/extension-unique-id";
 import { MarkdownManager } from "@tiptap/markdown";
+import { Marked } from "marked";
 import StarterKit from "@tiptap/starter-kit";
 
 /*
@@ -176,11 +177,13 @@ export const documentExtensions = (holds) => {
     ...(has("callout") ? [Callout] : []), ...(has("toggle") ? [Toggle] : []), ...(has("date") ? [Day] : []), ...(has("color") ? [inked("color", "span")] : []), ...(has("highlight") ? [inked("highlight", "mark")] : []),
     UniqueID.configure({ types: BLOCK_TYPES, generateID: blockId })];
 };
+/** The schema a list of extras makes, as one word to compare: two editors of the same word hold the same nodes and marks. */
+export const holding = (holds) => EXTRAS.filter((extra) => !Array.isArray(holds) || holds.includes(extra)).join(" ");
 const managers = new Map();
 /** The Markdown reader and writer for a schema documentExtensions made: of the same extras, so nothing is read that the schema cannot hold. */
 export const markdownFor = (schema) => {
   const holds = EXTRAS.filter((extra) => schema.nodes[extra] || schema.marks[extra]), key = holds.join(" ");
-  if (!managers.has(key)) managers.set(key, new MarkdownManager({ extensions: documentExtensions(holds) }));
+  if (!managers.has(key)) managers.set(key, new MarkdownManager({ extensions: documentExtensions(holds), marked: new Marked() }));
   return managers.get(key);
 };
 

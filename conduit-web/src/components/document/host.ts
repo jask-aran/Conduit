@@ -116,4 +116,8 @@ export type DocumentMarks = {
   rejectAll(by?: string): void;
   /** The agents at work in the document now, as the hub tells them; read where drawn. */
   seats(): DocumentSeat[];
+  /** What the layer over the editor does with a comment's answer (null: nothing), offered on the block: Keep, Revert and Try again under the last block an agent changed for a comment it was told of and not resolved, Stop where an agent is at work for one. */
+  answers(acts: DocumentAnswers | null): void;
 };
+/** A comment's answer, as the layer over the editor settles it, by the comment's key: what the agent changed kept (the comment resolved), put back, put back and asked again; or the agent stopped. */
+export type DocumentAnswers = { keep(key: string): void; revert(key: string): void; retry(key: string): void; stop(key: string): void };

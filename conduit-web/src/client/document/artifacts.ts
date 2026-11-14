@@ -48,7 +48,8 @@ const send = (path: string, method: string, body?: unknown) => api<Artifact>(pat
 /** A new one, in a folder of the project (unsaid: its root). The hub refuses a name already there. */
 export const makeArtifact = (project: string, made: { kind: Artifact["kind"]; name: string; folder?: string }) => send(`/v0/projects/${encodeURIComponent(project)}/artifacts`, "POST", made);
 /** The artifact a file of the project is (one pressed in the file tree). */
-export const artifactAt = (project: string, path: string) => send(`/v0/projects/${encodeURIComponent(project)}/artifacts`, "POST", { path });
+/** The artifact a file is. `adopt`: a file of a kind that is one only when asked (artifact-kinds `opens`) becomes one. */
+export const artifactAt = (project: string, path: string, adopt?: boolean) => send(`/v0/projects/${encodeURIComponent(project)}/artifacts`, "POST", { path, ...(adopt ? { adopt: true } : {}) });
 export const renameArtifact = (id: string, name: string) => send(`/v0/document/${encodeURIComponent(id)}`, "PATCH", { name });
 export const deleteArtifact = (id: string) => api<void>(`/v0/document/${encodeURIComponent(id)}`, { method: "DELETE" });
 /** A site's HTML as its file holds it now. `have`: the revision already shown; the hub then sends the HTML only when the file has changed since. */

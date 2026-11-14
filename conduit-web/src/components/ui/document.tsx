@@ -119,14 +119,28 @@ export const documentToolIcons = { bold: BoldIcon, italic: ItalicIcon, strike: S
 /** How the reader writes (DocumentWriting): Editing, final; Suggesting, each change standing until it is accepted. */
 export const documentWritingIcons = { editing: PencilIcon, suggesting: FileDiffIcon };
 
+/** A quiet row the editor stands by a block, never part of its text: what stands on it (`label`), then what can be done there. `ink`: the label is an agent at work's name, in its ink as its caret's tag is.
+ *  A press in it leaves the text's caret where it was. */
+export const DocumentBlockFoot = (props: { label: string; ink?: DocumentSeatInk; children: JSX.Element }) =>
+  <div class="ui-document-block-foot" role="group" aria-label={props.label} data-seat-ink={props.ink} onMouseDown={(event) => event.preventDefault()}><span>{props.label}</span>{props.children}</div>;
 /** A suggestion's own controls, standing over its first block where nothing beside the text draws them: who suggested it, Accept (its text stays) and Reject (taken back). */
-export const DocumentSuggested = (props: { by: string; onAccept: () => void; onReject: () => void }) => {
-  const keep = (event: MouseEvent) => event.preventDefault();
-  return <div class="ui-document-suggested" role="group" aria-label={`Suggested by ${props.by}`}><span>Suggested by {props.by}</span>
-    <Button variant="ghost" size="sm" onMouseDown={keep} onClick={() => props.onAccept()}><Icons.Check />Accept</Button>
-    <Button variant="ghost" size="sm" onMouseDown={keep} onClick={() => props.onReject()}><Icons.Undo />Reject</Button>
-  </div>;
-};
+export const DocumentSuggested = (props: { by: string; onAccept: () => void; onReject: () => void }) =>
+  <DocumentBlockFoot label={`Suggested by ${props.by}`}>
+    <Button variant="ghost" size="sm" onClick={() => props.onAccept()}><Icons.Check />Accept</Button>
+    <Button variant="ghost" size="sm" onClick={() => props.onReject()}><Icons.Undo />Reject</Button>
+  </DocumentBlockFoot>;
+/** Under the last block an agent changed to answer a comment, until the comment is resolved: who changed it, Keep (the change stays and the comment is resolved), Revert (taken back) and Try again (taken back and asked once more), as the comment's card has them. */
+export const DocumentAnswered = (props: { by: string; onKeep: () => void; onRevert: () => void; onRetry: () => void }) =>
+  <DocumentBlockFoot label={`${props.by} changed this`}>
+    <Button variant="primary" outline size="sm" title="Keep what the agent changed, and resolve the comment" onClick={() => props.onKeep()}><Icons.Check />Keep</Button>
+    <Button variant="ghost" size="sm" title="Put back what the agent changed for this comment" onClick={() => props.onRevert()}>Revert</Button>
+    <Button variant="ghost" size="sm" title="Put back what the agent changed and ask again" onClick={() => props.onRetry()}>Try again</Button>
+  </DocumentBlockFoot>;
+/** Under the blocks an agent holds for a comment (under what it is heard writing, while it writes) in place of its caret: who, what it is doing, and Stop. */
+export const DocumentAtWork = (props: { by: string; state: string; ink: DocumentSeatInk; onStop: () => void }) =>
+  <DocumentBlockFoot label={`${props.by} · ${props.state}`} ink={props.ink}>
+    <Button variant="ghost" size="sm" title="Stop the agent working on this comment" onClick={() => props.onStop()}>Stop</Button>
+  </DocumentBlockFoot>;
 
 /** An empty paragraph's hint, its words in `data-hint`; `data-empty`: the document holds nothing else, so it shows without the caret. */
 export const documentHintClass = "ui-document-hint";

@@ -164,10 +164,8 @@ export function createSuggesting(editor: Accessor<Editor | undefined>, doc: Doc,
   const acceptAll = (by?: string) => doc.transact(() => standing(by).forEach(accept));
   const rejectAll = (by?: string) => standing(by).forEach(reject);
 
-  // Whether any suggestion stands, kept as the changes change, so writing with none reads nothing more of them.
-  let some = anySuggested();
   const [version, setVersion] = createSignal(0);
-  const bump = () => { some = anySuggested(); queueMicrotask(() => setVersion((n) => n + 1)); };
+  const bump = () => queueMicrotask(() => setVersion((n) => n + 1));
   changes.observe(bump);
   onCleanup(() => changes.unobserve(bump));
   // One list for none, read with the text only while there are some: a new empty list each keystroke is told on to all that shows them.
@@ -228,13 +226,13 @@ export function createSuggesting(editor: Accessor<Editor | undefined>, doc: Doc,
     </>, element));
     return element;
   };
-  /** Each suggested block's words taken out (struck, standing in the text but no part of it) and put in (washed), and its suggestion's Accept and Reject at the end of its last block. */
+  /** Each changed block's words taken out (struck, standing in the text but no part of it) and put in (washed), a suggestion's or an agent's for a comment alike; and a suggestion's Accept and Reject at the end of its last block. */
   const diffed = (state: { doc: Node }, found: Decoration[]) => {
     const last = new Map<string, { from: number; block: Node; by: string }>();
     state.doc.forEach((block, from) => {
       const id = block.attrs.id as string | undefined, change = id ? changes.get(id) : undefined;
-      if (!change || !isSuggestion(change.for)) return;
-      last.set(change.for, { from, block, by: change.by });
+      if (!change) return;
+      if (isSuggestion(change.for)) last.set(change.for, { from, block, by: change.by });
       const runs = change.before && blockDiff(block, change.before);
       if (!runs) return;
       found.push(Decoration.node(from, from + block.nodeSize, { class: "ui-document-diff" }));
@@ -247,7 +245,7 @@ export function createSuggesting(editor: Accessor<Editor | undefined>, doc: Doc,
     for (const [key, { from, block, by }] of last) if (block.isTextblock) found.push(Decoration.widget(from + block.nodeSize - 1, () => acts(key, by), { key: `acts ${key} ${by}`, side: 1, marks: [], ignoreSelection: true, stopEvent: () => true, destroy: (element) => parts.get(element)?.() }));
   };
   const controls = (state: { doc: Node }) => {
-    if (!some) return DecorationSet.empty;
+    if (!changes.size) return DecorationSet.empty;
     const found: Decoration[] = [];
     cards(state, found);
     diffed(state, found);

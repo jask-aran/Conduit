@@ -74,6 +74,8 @@ export type ArtifactKindClient = {
   /** The hub gives its Markdown (`?as=markdown`): its row offers Copy and Download Markdown. `count`: it can say how many blocks and words it has. */
   markdown?: boolean;
   count?: boolean;
+  /** The ending of the files that are this kind only when asked: one opens in the file viewer until it is opened as this (artifactAt with `adopt`). */
+  opens?: string;
   /** Draws it in its pane. Lazy, so a kind's code is fetched only once one is opened, and the pane waits for it with the artifact itself. */
   Surface: Component<ArtifactSurfaceProps> & { preload(): Promise<unknown> };
 };
@@ -98,10 +100,11 @@ export const ARTIFACT_KINDS: Record<ArtifactKind, ArtifactKindClient> = {
   markdown: {
     label: "Markdown",
     says: "A plain Markdown file you and agents write together, with comments in the margin.",
+    opens: ".md",
     icon: Icons.File,
     edit: ["text", "heading-1", "heading-2", "heading-3", "bullets", "numbers", "checklist", "quote", "code", "table", "image", "divider", "bold", "italic", "strike"], // "code" names both the block and the mark
     suggest: { controls: "margin" },
-    holds: [],
+    holds: ["callout", "toggle"], // What common Markdown says itself: an alert and a <details>. Colour, highlight, underline and dates wait for the styling layer beside the file.
     markup: PAPER_MARKUP,
     markdown: true, count: true,
     Surface: paperSurface,
@@ -115,3 +118,5 @@ export const ARTIFACT_KINDS: Record<ArtifactKind, ArtifactKindClient> = {
     Surface: lazy(() => import("./site-surface")),
   },
 };
+/** The kind a file may be opened as when asked, if any. */
+export const opensAs = (path: string) => (Object.keys(ARTIFACT_KINDS) as ArtifactKind[]).find((kind) => { const ending = ARTIFACT_KINDS[kind].opens; return ending !== undefined && path.endsWith(ending); });
