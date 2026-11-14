@@ -1,5 +1,6 @@
-import { createSignal, onCleanup, Show } from "solid-js";
+import { createMemo, createSignal, onCleanup, Show } from "solid-js";
 import { DocumentEditor, type DocumentControls, type DocumentHost, type DocumentMarks } from "@/components/document";
+import { PAPER_KEYS, PaperShortcuts, type PaperKeyGroup, type PaperKeyRow } from "@/components/document/shortcuts";
 import { HeaderButton, Icons } from "@/components/ui";
 import { DocumentOutline, type DocumentWidth } from "@/components/ui/document";
 import { DropdownMenu, MenuContent, MenuControl, MenuSection } from "@/components/ui/menus";
@@ -7,12 +8,34 @@ import { toast } from "@/components/ui/notifications";
 import { api } from "../api/client";
 import { authorizedFetch } from "../api/native-auth-client";
 import { httpUrl, webSocketUrl } from "../api/transport.js";
+import { ARTIFACT_COMMANDS, type ArtifactCommand } from "../commands/command-registry";
+import type { ShortcutManager } from "../shortcuts/shortcut-manager";
+import { formatShortcutBinding, formatShortcutStroke } from "../shortcuts/shortcut-normalize";
+import type { ShortcutModifier } from "../shortcuts/shortcut-types";
 import { ARTIFACT_KINDS, type ArtifactSurfaceProps } from "./artifact-kinds";
 import { copyArtifactMarkdown, countPapers, paperCounted, renameArtifact } from "./artifacts";
 
 /** What the paper's editor offers, with what another builder's side may not have added yet. */
 type Marks = DocumentMarks & Partial<{ seats(): { name: string; state: string; for?: string }[] }>;
 const WIDTHS: DocumentWidth[] = ["narrow", "wide", "full"];
+
+// The group each palette command stands in on the shortcuts sheet; one not named here is the paper's.
+const COMMAND_GROUPS: Partial<Record<ArtifactCommand, PaperKeyGroup>> = { blockMenu: "Blocks", blockUp: "Blocks", blockDown: "Blocks", nextComment: "Comments", previousComment: "Comments" };
+const MODIFIERS: Record<string, ShortcutModifier> = { Mod: "primary", Ctrl: "control", Alt: "alt", Shift: "shift" };
+/** The sheet's rows: the editor's keys (PAPER_KEYS) written as the app writes a key, each palette command with the keys it is bound to now. */
+const keyGroups = (manager: ShortcutManager): [PaperKeyGroup, PaperKeyRow[]][] => {
+  const chord = (keys: string) => { const parts = keys.split("-"), key = parts.pop()!; return formatShortcutStroke({ code: key, key, modifiers: parts.map((part) => MODIFIERS[part]!) }, manager.environment); };
+  const bound = (name: ArtifactCommand) => manager.effectiveBindings(ARTIFACT_COMMANDS[name][0]).map((binding) => formatShortcutBinding(binding, manager.environment));
+  const named = Object.values(PAPER_KEYS).flat().flatMap((row) => "command" in row ? [row.command] : []);
+  return (Object.keys(PAPER_KEYS) as PaperKeyGroup[]).map((group) => {
+    const rows: PaperKeyRow[] = PAPER_KEYS[group].map((row) => {
+      const command = "command" in row ? row.command as ArtifactCommand : undefined;
+      return { does: "does" in row ? row.does : ARTIFACT_COMMANDS[command!][1], keys: [...new Set([...command ? bound(command) : [], ...(row.keys ?? []).map(chord)])], typed: row.typed, space: row.space };
+    });
+    for (const name of Object.keys(ARTIFACT_COMMANDS) as ArtifactCommand[]) if ((COMMAND_GROUPS[name] ?? "Paper") === group && !named.includes(name)) rows.push({ does: ARTIFACT_COMMANDS[name][1], keys: bound(name) });
+    return [group, rows.filter((row) => row.keys.length || row.typed)];
+  });
+};
 
 /** A paper in its pane: the hub's live copy in the paper's editor, the comment margin beside its text. */
 export default function PaperSurface(props: ArtifactSurfaceProps) {
@@ -22,6 +45,9 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
   const [marked, setMarked] = createSignal<Marks>();
   const [controls, setControls] = createSignal<DocumentControls>(), [away, setAway] = createSignal(false), [stale, setStale] = createSignal(false);
   const ask = (about: Range, name?: string) => props.offer()?.ask(about, name);
+  // Read again each time the sheet opens, so a key rebound since shows.
+  const [showingKeys, setShowingKeys] = createSignal(false);
+  const shownKeys = createMemo<[PaperKeyGroup, PaperKeyRow[]][]>((was) => showingKeys() && props.shortcuts ? keyGroups(props.shortcuts) : was, []);
   const widthKey = `conduit.paper.width.${id}`;
   const [width, setWidth] = createSignal<DocumentWidth>((() => { try { const kept = localStorage.getItem(widthKey) as DocumentWidth | null; return kept && WIDTHS.includes(kept) ? kept : "narrow"; } catch { return "narrow"; } })());
   const widen = () => { const next = WIDTHS[(WIDTHS.indexOf(width()) + 1) % WIDTHS.length]!; setWidth(next); try { localStorage.setItem(widthKey, next); } catch { /* this session only */ } };
@@ -57,7 +83,7 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
       const edits = controls();
       return {
         rename: () => props.pane()?.querySelector<HTMLInputElement>("input.ui-document-title")?.select(),
-        copyMarkdown: () => void copyArtifactMarkdown({ id }), count: () => countPapers(!paperCounted()), width: widen, shortcuts: props.onShortcuts,
+        copyMarkdown: () => void copyArtifactMarkdown({ id }), count: () => countPapers(!paperCounted()), width: widen, ...(props.shortcuts ? { shortcuts: () => setShowingKeys(true) } : {}),
         ...(edits ? { find: edits.find, blockMenu: edits.openBlockMenu, blockUp: () => void edits.moveBlock(-1), blockDown: () => void edits.moveBlock(1), outline: () => outlining?.click() } : {}),
       };
     },
@@ -68,5 +94,7 @@ export default function PaperSurface(props: ArtifactSurfaceProps) {
     away, stale,
     reveal: () => controls()?.reveal,
   });
-  return <DocumentEditor host={editing} id={id} name={props.about().name} bare onAway={setAway} onStale={setStale} marks={(offered) => { marks = offered; setMarked(() => offered); }} mentions={() => props.quiet ? [] : props.offer()?.names() ?? []} onMention={ask} onRename={(name) => renameArtifact(id, name)} count={paperCounted()} width={width()} controls={setControls} onComment={props.quiet ? undefined : ask} margin={props.margin} marginEmpty={props.marginEmpty} />;
+  return <><DocumentEditor host={editing} id={id} name={props.about().name} bare onAway={setAway} onStale={setStale} marks={(offered) => { marks = offered; setMarked(() => offered); }} mentions={() => props.quiet ? [] : props.offer()?.names() ?? []} onMention={ask} onRename={(name) => renameArtifact(id, name)} count={paperCounted()} width={width()} controls={setControls} onComment={props.quiet ? undefined : ask} margin={props.margin} marginEmpty={props.marginEmpty} />
+    <PaperShortcuts open={showingKeys()} onOpenChange={setShowingKeys} groups={shownKeys()} />
+  </>;
 }

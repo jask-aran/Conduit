@@ -149,6 +149,9 @@
 /* conventions-ok: the hues themselves */
 .ui-slider-input[data-hue]::-moz-range-track { background: linear-gradient(to right, hsl(0 100% 50%), hsl(60 100% 50%), hsl(120 100% 50%), hsl(180 100% 50%), hsl(240 100% 50%), hsl(300 100% 50%), hsl(360 100% 50%)); }
 .ui-slider-input[data-hue]::-moz-range-progress { background: transparent; }
+.ui-stepper { display: flex; align-items: center; gap: var(--space-xs); padding: 0 var(--space-sm); }
+.ui-stepper > .ui-input { min-width: 0; flex: 1; height: var(--control-sm); font-family: var(--font-data); text-align: center; }
+.ui-stepper-unit { color: var(--muted-foreground); font: var(--text-caption)/1 var(--font-data); }
 .ui-colour-row { display: flex; align-items: center; gap: var(--space-sm); }
 .ui-colour-row > .ui-swatch { width: var(--control-2xs); height: var(--control-2xs); }
 .ui-colour-row > .ui-input { min-width: 0; flex: 1; font-family: var(--font-data); }

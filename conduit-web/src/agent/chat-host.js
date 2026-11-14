@@ -166,18 +166,14 @@ export function createChatHost({ registry, projects, backends, chatLogs, findCha
       else await submitPrompt(chatId, text);
     },
 
-    /** A notice written into a chat by Conduit, which starts the chat's agent on it (or steers it where it is busy). */
-    async deliverApproval(chatId, text) {
+    /** A notice written into a chat by Conduit, which starts the chat's agent on it (or steers it where it is busy); `markup`: the hand-offs it carries. */
+    async deliverApproval(chatId, text, { markup } = {}) {
       const context = await findChatContext(chatId);
       if (!context?.chat) throw new Error("Chat not found");
       if (!backends.getByChatId(chatId)) await launchLiveSession({ chatId, requestedProject: context.project.id });
       const record = backends.getByChatId(chatId);
       if (!record) throw new Error("This chat has no live agent process");
-      if (isGeneratingRecord(record)) {
-        const adapter = backends.forChat(context.chat);
-        if (!adapter.getCapabilities().steer) throw new Error("This harness cannot steer a busy chat");
-        await adapter.queue(record.id, "steer", text, { notice: true });
-      } else await submitPrompt(chatId, text, { notice: true });
+      await submitPrompt(chatId, text, { notice: true, markup, steer: isGeneratingRecord(record) });
     },
 
     async steerChat(chatId, message, { from } = {}) {

@@ -7,7 +7,7 @@ import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/
 import { toast } from "@/components/ui/notifications";
 import { api } from "../api/client";
 import { capturePage } from "../feedback/conduit-feedback";
-import { ARTIFACT_KINDS, type ArtifactSurface, type MarkupOffer } from "./artifact-kinds";
+import { ARTIFACT_KINDS, type ArtifactSurface, type ArtifactSurfaceProps, type MarkupOffer } from "./artifact-kinds";
 import { artifactAbout, artifactKnown, artifactLabel, type Artifact } from "./artifacts";
 import { holdArtifact, placeShown, placeWanted } from "./focused-artifact";
 import { connect, connectedTo, disconnect } from "./connections";
@@ -20,7 +20,7 @@ const STATES: Record<MarkupMarginEntry["state"], string> = { waiting: "Waiting",
  * one bar. `header` is the pane's, given what the artifact adds to its actions: why what is shown may not be the
  * file, "Mark up" while its bar is closed, and "Connect a chat" over `chats`, the project's.
  */
-export default function ArtifactPane(props: { id: string; quiet?: boolean; chats?: (project: string) => { id: string; title: string }[]; onAbout?: (about: Artifact, label: string) => void; onThread?: () => void; onShortcuts?: () => void; header: (actions: JSX.Element) => JSX.Element }) {
+export default function ArtifactPane(props: { id: string; quiet?: boolean; chats?: (project: string) => { id: string; title: string }[]; onAbout?: (about: Artifact, label: string) => void; onThread?: () => void; shortcuts?: ArtifactSurfaceProps["shortcuts"]; header: (actions: JSX.Element) => JSX.Element }) {
   // The kind's surface is fetched before the artifact is said to be found, so "Opening the …" stands until it can be drawn.
   const [about, { refetch }] = createResource(() => props.id, (id) => artifactAbout(id).then((found) => { last = found; props.onAbout?.(found, artifactLabel(found.kind)); return ARTIFACT_KINDS[found.kind].Surface.preload().then(() => found); }));
   // Renamed, it takes its new name; deleted, it says so, where its surface would only wait for the hub; and the hub says when its trouble starts and ends.
@@ -85,7 +85,7 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; chats
     const kind = ARTIFACT_KINDS[found()!.kind], Surface = kind.Surface;
     const made = (part: ArtifactSurface) => { setSurface(part); setHost({ ...shared, capabilities: kind.markup, ...part.markup }); };
     return <>
-      <Surface about={() => found() ?? last!} quiet={props.quiet} offer={offer} pane={() => frame} onShortcuts={props.onShortcuts} onSurface={made} marginEmpty={!cards()}
+      <Surface about={() => found() ?? last!} quiet={props.quiet} offer={offer} pane={() => frame} shortcuts={props.shortcuts} onSurface={made} marginEmpty={!cards()}
         margin={<Show when={host()}>{(over) => <MarkupMargin host={over()} sent={sent()} control={setComments} onCards={setCards} />}</Show>} />
       <Show when={!props.quiet && host()}>{(over) => <MarkupTool host={over()} mode={mode()} onMode={setMode} onClose={() => setMode("use")} />}</Show>
     </>;

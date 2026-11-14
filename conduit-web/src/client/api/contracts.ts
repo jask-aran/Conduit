@@ -6,7 +6,7 @@ export type BooleanCapability = {
 }[keyof ChatCapabilities];
 
 import type { UiPreferences } from "../preferences/ui-preferences";
-import type { ChatCapabilities, ToolKind, TurnOutcome } from "../../chat-backend-contract.js";
+import type { ChatCapabilities, MarkupHandoff, ToolKind, TurnOutcome } from "../../chat-backend-contract.js";
 export type { ChatCapabilities };
 
 export interface HarnessCommand {
@@ -341,6 +341,8 @@ export interface Message {
   /** What Conduit added to a prompt it delivered for the agent (the decision it asks for): shown apart, never hidden. */
   appended?: string;
   attachments?: Attachment[];
+  /** The comments on artifacts this prompt hands the chat, from the hub. */
+  markup?: MarkupHandoff[];
   order?: number;
 }
 

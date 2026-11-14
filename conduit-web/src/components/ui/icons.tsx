@@ -80,6 +80,7 @@ import {
   PinIcon,
   PinOffIcon,
   PlayIcon,
+  MinusIcon,
   PlusIcon,
   QrCodeIcon,
   RefreshCwIcon,
@@ -122,6 +123,7 @@ export const Clock = AlarmClockIcon;
 export const Inbox = InboxIcon;
 export const Quiet = MoonIcon;
 export const Add = PlusIcon;
+export const Less = MinusIcon;
 export const ArrowDown = ArrowDownIcon;
 export const ArrowDownLeft = ArrowDownLeftIcon;
 export const Context = ScrollTextIcon;

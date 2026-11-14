@@ -126,11 +126,11 @@ const sniff = (bytes) => {
 };
 const escaped = (text) => text.replace(/[&<>"]/g, (character) => `&#${character.charCodeAt(0)};`);
 /**
- * One comment as a chat is handed it: the person's words and what they are about, which the transcript draws as their
- * comment (`markupHandoffs`, client/document/connections.ts) and the agent reads as given; `said`: "reply" or "reopened"
- * for what the person wrote back on an item already handed over.
+ * One comment as the agent reads it, from the hand-off (`MarkupHandoff`, chat-backend-contract.d.ts) the chat is also
+ * given beside the text for its transcript to draw; `said`: "reply" or "reopened" for what the person wrote back on an
+ * item already handed over.
  */
-const handoff = (fields, quote, words) => `<conduit_markup ${Object.entries(fields).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => `${key}="${escaped(String(value))}"`).join(" ")}>\n${quote ? `<quote>${escaped(quote)}</quote>\n` : ""}${words ? `<words>${escaped(words)}</words>\n` : ""}</conduit_markup>`;
+const handoff = ({ quote, words, ...fields }) => `<conduit_markup ${Object.entries(fields).map(([key, value]) => `${key}="${escaped(String(value))}"`).join(" ")}>\n${quote ? `<quote>${escaped(quote)}</quote>\n` : ""}${words ? `<words>${escaped(words)}</words>\n` : ""}</conduit_markup>`;
 /** A new site: a page that says what it is, in the colours of whoever looks at it, for an agent to write over. */
 const SITE = (id, name) => `<!doctype html>
 <html lang="en">
@@ -219,7 +219,7 @@ const hash = (text) => crypto.createHash("sha256").update(text).digest("hex");
 const shown = ({ id, kind, name, path: at, project }) => ({ id, kind, name, path: at, project });
 
 /**
- * `chats`: () => the hub's chats, once it has them: `open({ workspace, title, mark })` makes one, `get(id)` is its summary, `notify(id, text)` writes a notice into it.
+ * `chats`: () => the hub's chats, once it has them: `open({ workspace, title, mark })` makes one, `get(id)` is its summary, `notify(id, text, markup)` writes a notice into it, `markup` its hand-offs.
  * `devices`: (project) => the host of a folder on another device.
  */
 export function createDocuments({ dataRoot, projects, changed = () => {}, chats = () => null, devices = null }) {
@@ -448,7 +448,8 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     const name = JSON.stringify(room.entry.name.replace(/\s+/g, " ").slice(0, 120)), taken = path.join(dir, "taken.json");
     const comments = JSON.parse(await fs.readFile(path.join(dir, "item.json"), "utf8")).comments ?? [];
     const kind = KINDS[room.entry.kind];
-    const card = (comment, words, said) => handoff({ artifact: room.id, kind: room.entry.kind, name: room.entry.name.replace(/\s+/g, " ").slice(0, 120), item, n: comment?.n, ...kind.where?.(comment?.under), said }, comment?.quote, words);
+    const handed = (comment, words, said) => Object.fromEntries(Object.entries({ artifact: room.id, kind: room.entry.kind, name: room.entry.name.replace(/\s+/g, " ").slice(0, 120), item, n: comment?.n, ...kind.where?.(comment?.under), said,
+      quote: comment?.quote || undefined, words: words || undefined }).filter(([, value]) => value !== undefined && value !== null));
     const about = (list) => [...new Set(list.flatMap((comment) => kind.places?.(comment?.under) ?? []))];
     // Seated once the chat has been told, never before: a chat that could not be told is not at work. One that is already reading or writing keeps that;
     // and one whose chat answered before it was seated, or never began a turn, has no turn end to leave by, so it leaves SEAT_START_MS on.
@@ -457,7 +458,8 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       if (!["reading", "writing"].includes(room.seats?.get(to.name)?.state)) sit(room, to.name, { state: "thinking", blocks, for: about, text: undefined });
       setTimeout(() => { if (!chats()?.working?.(chat)) sit(room, to.name, null); }, SEAT_START_MS).unref?.();
     };
-    if (said) return host().notify(chat, `${card(comments.find((comment) => comment.n === said.n) ?? { n: said.n }, said.text, said.text ? "reply" : "reopened")}\nOn the ${room.entry.kind} ${name}, markup item ${item}: ${said.text ? `the person wrote back${Number.isInteger(said.n) ? ` on comment ${said.n}` : ""}: ${said.text}` : `the person reopened comment ${said.n}.`}\nThe item is ${path.join(dir, "item.json")}; answer with \`node ${SCRIPT} reply ${item} [n] "<words>"\`.`).then(() => seat(about([comments.find((comment) => comment.n === said.n)]), `${item}/${said.n ?? 1}`));
+    const back = said && handed(comments.find((comment) => comment.n === said.n) ?? { n: said.n }, said.text, said.text ? "reply" : "reopened");
+    if (said) return host().notify(chat, `${handoff(back)}\nOn the ${room.entry.kind} ${name}, markup item ${item}: ${said.text ? `the person wrote back${Number.isInteger(said.n) ? ` on comment ${said.n}` : ""}: ${said.text}` : `the person reopened comment ${said.n}.`}\nThe item is ${path.join(dir, "item.json")}; answer with \`node ${SCRIPT} reply ${item} [n] "<words>"\`.`, [back]).then(() => seat(about([comments.find((comment) => comment.n === said.n)]), `${item}/${said.n ?? 1}`));
     // Taken once: a session that took it first (a `wait` under the same name) keeps it, and the chat is told nothing.
     const mine = await fs.writeFile(taken, `${JSON.stringify({ name: to.name, held: true, chat, at })}\n`, { flag: "wx" }).then(() => true, async () => (await fs.readFile(taken, "utf8").then(JSON.parse).catch(() => null))?.held === true);
     if (!mine) return;
@@ -466,7 +468,8 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     const fresh = comments.filter((comment) => !told.has(comment.n));
     if (!fresh.length) return;
     // A chat that cannot be told has not taken it: the item goes back to waiting, which is what the person then reads.
-    await host().notify(chat, `${fresh.map((comment) => card(comment, comment.comment)).join("\n")}\n${fresh.length === comments.length ? "The person" : "The person added to what they"} sent you ${fresh.length === 1 ? "a comment" : `${fresh.length} comments`} on the ${room.entry.kind} ${name}${fresh.length === comments.length ? "" : ` (${fresh.map((comment) => comment.n).join(", ")})`}. Read ${path.join(dir, "item.json")} (its \`read\` says how) and do what it asks. The person reads the ${room.entry.kind}'s margin, not this chat: say what you did, or ask what you need to know, with \`reply\` on the comment, in a line or two; what you write here is only your own log.${to.name === MATED ? kind.signing?.(MATED) ?? "" : ""}`)
+    const cards = fresh.map((comment) => handed(comment, comment.comment));
+    await host().notify(chat, `${cards.map((one) => handoff(one)).join("\n")}\n${fresh.length === comments.length ? "The person" : "The person added to what they"} sent you ${fresh.length === 1 ? "a comment" : `${fresh.length} comments`} on the ${room.entry.kind} ${name}${fresh.length === comments.length ? "" : ` (${fresh.map((comment) => comment.n).join(", ")})`}. Read ${path.join(dir, "item.json")} (its \`read\` says how) and do what it asks. The person reads the ${room.entry.kind}'s margin, not this chat: say what you did, or ask what you need to know, with \`reply\` on the comment, in a line or two; what you write here is only your own log.${to.name === MATED ? kind.signing?.(MATED) ?? "" : ""}`, cards)
       .catch(async (error) => { if (!told.size) await fs.rm(taken, { force: true }); throw error; });
     await fs.appendFile(path.join(dir, "thread.jsonl"), fresh.map((comment) => `${JSON.stringify({ at, from: "agent", by: to.name, n: comment.n, working: true })}\n`).join(""));
     seat(about(fresh), `${item}/${fresh[0].n}`);

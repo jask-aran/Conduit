@@ -1,7 +1,7 @@
 import type { Editor } from "@tiptap/core";
 import type { EditorView } from "@tiptap/pm/view";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type Accessor, type JSX } from "solid-js";
-import { readEditor } from "./read";
+import { readEditor, track } from "./read";
 import { IconButton, Icons } from "@/components/ui";
 import { DocumentDropLine, DocumentHandle, documentBlockIcons, documentToneIcons, documentToolIcons } from "@/components/ui/document";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/ui/menus";
@@ -21,8 +21,8 @@ const DRAG_SLOP_PX = 4;
 export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: readonly Tool[], options: { scroller: Accessor<HTMLElement | undefined>; onComment: () => ((about: Range) => void) | undefined; onAdded: (id: string | undefined) => void }) {
   const [hovered, setHovered] = createSignal<string | null>(null), [open, setOpen] = createSignal(false), [drop, setDrop] = createSignal<{ to: number; top: number } | null>(null), [touched, setTouched] = createSignal(false);
   let handle: HTMLDivElement | undefined, pressing = false, dragging = false, frame = 0, refocus = true;
-  const doc = readEditor(editor, (made) => made?.state.doc);
-  const from = createMemo(() => { const id = hovered(), now = doc(); return id && now ? blockById(now, id) : null; });
+  // Read with the text only while a block is pointed at.
+  const from = createMemo(() => { const id = hovered(), made = editor(); if (!id || !made) return null; track(made, "doc"); return blockById(made.state.doc, id); });
   const origin = () => (handle?.offsetParent as HTMLElement | null)?.getBoundingClientRect() ?? null;
   const place = createMemo(() => {
     const pos = from(), view = editor()?.view, block = pos === null ? null : view?.nodeDOM(pos) as HTMLElement | null, body = origin(), scroller = options.scroller();
@@ -57,7 +57,7 @@ export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: r
   const openMenu = () => { const view = editor()?.view; if (view) openOn(view, caretBlockAt(view)); };
 
   // After a touch the handle follows the caret's block: a tap puts the caret there, and the handle is how its menu is reached.
-  const caret = readEditor(editor, (made) => { const view = made?.view, at = view ? caretBlockAt(view) : null; return at === null ? null : view!.state.doc.nodeAt(at)?.attrs.id as string | null ?? null; });
+  const caret = readEditor(editor, "caret", (made) => { const view = made?.view, at = view ? caretBlockAt(view) : null; return at === null ? null : view!.state.doc.nodeAt(at)?.attrs.id as string | null ?? null; });
   createEffect(() => { if (touched() && !open()) setHovered(caret()); });
   createEffect(() => {
     const dom = editor()?.view.dom;
@@ -101,7 +101,7 @@ export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: r
   const comment = act((view, at) => { const about = blockRange(view, at), told = options.onComment(); if (about && told) { refocus = false; told(about); } });
   const keep = (event: MouseEvent) => event.preventDefault();
   // A callout's tone is chosen from its menu, where callouts are offered.
-  const tone = createMemo(() => { const at = from(), node = at === null ? null : doc()?.nodeAt(at); return node?.type.name === "callout" && tools.some((tool) => tool.name === "callout") ? node.attrs.tone as keyof typeof documentToneIcons : null; });
+  const tone = createMemo(() => { const at = from(), made = editor(); if (at === null || !made) return null; track(made, "doc"); const node = made.state.doc.nodeAt(at); return node?.type.name === "callout" && tools.some((tool) => tool.name === "callout") ? node.attrs.tone as keyof typeof documentToneIcons : null; });
   const tones = [["note", "Note"], ["warning", "Warning"]] as const;
 
   const view = <>

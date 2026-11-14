@@ -1,6 +1,6 @@
 import { createSignal, createUniqueId, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 // Through the barrel, so the tool's chunk takes these from the app's own and the build splits nothing new out of it.
-import { Button, Card, ColourPicker, CardPreview, CloseButton, Dot, Frost, IconButton, Icons, Segmented, Spinner, Swatch, Switch, TextArea } from "./index";
+import { Button, Card, ColourPicker, CardPreview, CloseButton, Dot, Frost, IconButton, Icons, Spinner, Stepper, Swatch, Switch, TextArea } from "./index";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "./menus";
 import { clockTime } from "./time";
 import "./styles/markup.css";
@@ -22,7 +22,7 @@ export const MarkupLayer = (props: { select: boolean; text?: boolean; frozen?: s
   </div>;
 
 /** `quote`: one line of a run of text the person selected. */
-export const MarkupMark = (props: { box: MarkupBox; kind: "cursor" | "chosen" | "member" | "marquee" | "drawn" | "quote"; tag?: string; name?: string; current?: boolean; onOpen?: () => void }) =>
+export const MarkupMark = (props: { box: MarkupBox; kind: "cursor" | "chosen" | "member" | "marquee" | "drawn" | "quote" | "asked"; tag?: string; name?: string; current?: boolean; onOpen?: () => void }) =>
   <div class="ui-markup-mark" data-kind={props.kind} data-current={props.current ? "" : undefined} style={place(props.box)}>
     <Show when={props.tag || props.name}><span class="ui-markup-tag" data-press={props.onOpen ? "" : undefined} onClick={() => props.onOpen?.()} data-inside={props.box.top < TAG_ROOM ? "" : undefined} data-end={props.box.left + TAG_ROOM * 8 > window.innerWidth ? "" : undefined}><Show when={props.tag}><b>{props.tag}</b></Show><Show when={props.name}><span>{props.name}</span></Show></span></Show>
   </div>;
@@ -34,9 +34,9 @@ export const MARKUP_INKS = { plain: { label: "Plain", colour: "var(--primary)" }
 export type MarkupInk = keyof typeof MARKUP_INKS | `#${string}`;
 export const markupInkColour = (ink: MarkupInk = "plain") => ink in MARKUP_INKS ? MARKUP_INKS[ink as keyof typeof MARKUP_INKS].colour : ink;
 const inked = (ink?: MarkupInk): JSX.CSSProperties => ({ "--markup-ink": markupInkColour(ink) });
-/** How thick a drawing's line is; a highlighter's is wider on its own scale. */
-export const MARKUP_WEIGHTS = { thin: { label: "Thin" }, medium: { label: "Medium" }, thick: { label: "Thick" } } as const;
-export type MarkupWeight = keyof typeof MARKUP_WEIGHTS;
+/** How thick a drawing's line is, in px; a highlighter's is wider on its own scale. */
+export const MARKUP_WEIGHT = { min: 1, max: 12, rest: 2 } as const;
+export type MarkupWeight = number;
 /** `highlight`: a wide see-through line, drawn as the pen's is. */
 export type MarkupDrawingKind = "pen" | "highlight" | MarkupShape;
 /** What the Shape tool draws from the press to the release. */
@@ -57,7 +57,7 @@ export function MarkupDrawing(props: { kind: MarkupDrawingKind; points: readonly
     const box = drawingBox(ends());
     return `M${box.left} ${box.top}h${box.width}v${box.height}h${-box.width}z`;
   };
-  return <svg class="ui-markup-drawing" data-kind={props.kind} data-weight={props.weight ?? "medium"} data-current={props.current ? "" : undefined} style={{ ...inked(props.ink), translate: props.shift ? `${props.shift.x}px ${props.shift.y}px` : undefined }} aria-hidden="true">
+  return <svg class="ui-markup-drawing" data-kind={props.kind} data-current={props.current ? "" : undefined} style={{ ...inked(props.ink), "--markup-weight": `${props.weight ?? MARKUP_WEIGHT.rest}px`, translate: props.shift ? `${props.shift.x}px ${props.shift.y}px` : undefined }} aria-hidden="true">
     {/* The head is sized in line widths (markerUnits is strokeWidth), so it follows the line's token. */}
     <Show when={props.kind === "arrow"}><defs><marker id={head} viewBox="0 0 6 6" refX="5" refY="3" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L6 3L0 6z" /></marker></defs></Show>
     <Show when={props.points.length}><path d={path()} marker-end={props.kind === "arrow" ? `url(#${head})` : undefined} /></Show>
@@ -127,7 +127,7 @@ export function MarkupNote(props: { ref?: (element: HTMLTextAreaElement) => void
         <Show when={props.quote}><p class="ui-markup-quote">{props.quote}</p></Show>
         <Show when={!props.quote && !thread() && props.open && props.source}><p class="ui-markup-source">{props.source}</p></Show>
         <Show when={props.picture && !props.float && (!thread() || props.open)}><CardPreview><img src={props.picture} alt="" /></CardPreview></Show>
-        <Show when={words()}><p class="ui-markup-words">{words()}</p></Show>
+        <Show when={words()}><Show when={thread()} fallback={<p class="ui-markup-words">{words()}</p>}><div class="ui-markup-said" data-from="person"><span class="ui-markup-who">You</span><p>{words()}</p></div></Show></Show>
         <Show when={thread()}><Show when={props.open} fallback={<Show when={latest()} keyed>{entry}</Show>}><For each={props.said}>{entry}</For></Show></Show>
         <Show when={props.state || props.unread}><p class="ui-markup-state"><Show when={props.unread}><Dot tone="unread" aria-label="Unread" /></Show><Show when={props.state?.busy}><Spinner /></Show>{props.state?.label ?? "Unread"}</p></Show>
       </div>
@@ -212,6 +212,19 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
       <Show when={toggles().length}><MenuSection><For each={toggles()}>{(tool) => choice(tool, pressed(tool))}</For></MenuSection></Show>
     </MenuContent>
   </DropdownMenu>;
+  // What the held tool draws with is one menu, as the paper's own colours are: a menu opened closes any other.
+  const look = () => <DropdownMenu modal={false} placement="bottom-start">
+    <MenuControl as={Button} variant="ghost" size="sm" aria-label="Ink and line" title="Ink and line"><Swatch colour={markupInkColour(props.ink)} /><Icons.ChevronDown /></MenuControl>
+    <MenuContent width="sm">
+      <Show when={props.tool === "shape" && props.onShape}>{(onShape) => <MenuSection title="Shape"><For each={SHAPES}>{(shape) => <MenuRow icon={shape.icon} checked={(props.shape ?? "arrow") === shape.value || undefined} onSelect={() => onShape()(shape.value)}>{shape.label}</MenuRow>}</For></MenuSection>}</Show>
+      <Show when={inks()}>{(onInk) => <MenuSection title="Colour (C)">
+        <For each={PRESETS}>{(value) => <MenuRow icon={<Swatch colour={MARKUP_INKS[value].colour} />} checked={(props.ink ?? "plain") === value || undefined} onSelect={() => { setPicking(false); onInk()(value); }}>{MARKUP_INKS[value].label}</MenuRow>}</For>
+        {/* Any other colour; the last one chosen is kept to come back to. */}
+        <MenuRow icon={<span class="ui-markup-any"><Swatch colour={own() === props.ink ? own() : undefined} /></span>} checked={own() === props.ink || undefined} onSelect={() => { setPicking(true); onInk()(own()); }}>Any colour</MenuRow>
+      </MenuSection>}</Show>
+      <Show when={lined()}>{(onWeight) => <MenuSection title={props.tool === "highlight" ? "Width" : "Line"}><Stepper label="Line thickness" unit="px" min={MARKUP_WEIGHT.min} max={MARKUP_WEIGHT.max} value={props.weight ?? MARKUP_WEIGHT.rest} onChange={onWeight()} /></MenuSection>}</Show>
+    </MenuContent>
+  </DropdownMenu>;
   const pick = (option: { value: MarkupToolKind | "note" }) => !using() && option.value === props.tool ? props.onView("use") : option.value === "note" ? props.onNote() : props.onTool(option.value);
   const keep = (event: MouseEvent) => { if (props.ribbon) event.preventDefault(); };
   const undo = () => <IconButton label="Undo (Ctrl Z)" disabled={!props.onUndo || (using() && !props.ribbon)} onMouseDown={keep} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton>;
@@ -248,17 +261,7 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   <Show when={picking() && options() && props.ink?.startsWith("#") && inks()}><Frost lift="raised" class="ui-markup-bar ui-markup-picker">
     <ColourPicker label="Any colour" value={own()} onChange={(hex) => { setOwn(hex as MarkupInk); props.onInk?.(own()); }} />
   </Frost></Show>
-  <Show when={options()}><Frost lift="raised" class="ui-markup-bar" role="toolbar" aria-label="Tool options">
-    <Show when={props.tool === "shape" && props.onShape}>{(onShape) => <Segmented label="Shape" icons size="sm" value={props.shape ?? "arrow"} onChange={onShape()} options={SHAPES} />}</Show>
-    <Show when={inks()}>{(onInk) => <>
-      <Segmented label="Ink (C)" icons size="sm" value={props.ink ?? "plain"} onChange={onInk()} options={PRESETS.map((value) => ({ value, label: MARKUP_INKS[value].label, icon: <Swatch colour={MARKUP_INKS[value].colour} /> }))} />
-      {/* Any other colour; the last one chosen is kept to come back to. */}
-      <IconButton data-any="" label="Any colour" aria-pressed={own() === props.ink} aria-expanded={picking()} onClick={() => { setPicking(own() !== props.ink || !picking()); onInk()(own()); }}><Swatch colour={own() === props.ink ? own() : undefined} /></IconButton>
-    </>}</Show>
-    <Show when={lined()}>{(onWeight) => <Segmented label="Line" icons size="sm" value={props.weight ?? "medium"} onChange={onWeight()} options={(Object.keys(MARKUP_WEIGHTS) as MarkupWeight[]).map((value) => ({ value, label: MARKUP_WEIGHTS[value].label,
-      icon: <span class="ui-markup-weight" data-weight={value} data-kind={props.tool === "highlight" ? "highlight" : undefined} style={inked(props.ink)} /> }))} />}</Show>
-    <Show when={props.compact}><IconButton label="Undo" disabled={!props.onUndo} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton></Show>
-  </Frost></Show>
+  <Show when={options() && props.compact}><Frost lift="raised" class="ui-markup-bar" role="toolbar" aria-label="Tool options"><IconButton label="Undo" disabled={!props.onUndo} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton></Frost></Show>
   {/* Only while the app is in use, as the options are only while annotating: the two never stand together. */}
   <Show when={(props.ribbon || using()) && !props.thread && (props.own?.length || (props.onAsk && !props.ribbon))}><Frost lift="raised" class="ui-markup-bar" data-set="edit" role="toolbar" aria-label="Document tools">
     {caption("Edit")}<Show when={fold() < 2} fallback={format()}>{owned()}</Show>
@@ -274,6 +277,7 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
       <Show when={fold() < FOLDS} fallback={annotate()}>
         <span class="ui-markup-with" role="group" aria-label="Annotate with"><For each={offered()}>{(option) => <IconButton label={option.label} aria-pressed={!using() && option.value === props.tool} onClick={() => pick(option)}>{option.icon}</IconButton>}</For></span>
       </Show>
+      <Show when={options() && inks()}>{look()}</Show>
     </Show>
     <Show when={!props.thread && !props.compact && !(props.ribbon && fold() >= FOLDS)}><span class="ui-markup-with">{undo()}{redo()}</span></Show>
     <Show when={props.status && (props.thread || !(props.compact || props.ribbon))}><span class="ui-markup-status">{props.status}</span></Show>

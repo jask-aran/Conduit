@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { messageDrop } from "../harnesses/transcript-ops.js";
 import { parseAttachmentEnvelope } from "../attachment-envelope.js";
 import { manifestForImplementation } from "../harnesses/index.js";
@@ -119,7 +120,7 @@ export function createLiveSessionStream({
   }
 
   async function sendPrompt(record, prepared, options) {
-    const { sourceCheckpointId = null, messageId = null, ...promptOptions } = options || {};
+    const { sourceCheckpointId = null, messageId = null, markup = null, ...promptOptions } = options || {};
     const namingOwner = manifestForImplementation(record.adapterImplementation)?.nameGeneration;
     // A headless run is in no list, and naming costs a model call.
     const run = prepared.context.chat.run;
@@ -151,7 +152,7 @@ export function createLiveSessionStream({
     const generationId = typeof accepted === "string" ? accepted : accepted?.generationId;
     // Without this, a reopened chat puts the message's files back in the composer.
     await attachments.recordMessage(prepared.context.project, prepared.context.chat.id,
-      (typeof accepted === "object" ? accepted?.attachmentIdentity : null) || (messageId ? { messageId } : null), prepared.attachments);
+      (typeof accepted === "object" ? accepted?.attachmentIdentity : null) || (messageId ? { messageId } : null), prepared.attachments, markup);
     if (checkpoint && generationId) {
       const messageId = typeof accepted === "object" ? accepted?.attachmentIdentity?.messageId : null;
       try { await turnCheckpoints.assignTurn(checkpoint, generationId, messageId); }
@@ -334,7 +335,12 @@ export function createLiveSessionStream({
     });
   }
 
-  async function submitPrompt(chatId, message, { model = "", thinkingLevel = "", notice = false } = {}) {
+  /**
+   * `markup`: the hand-offs a notice carries (`hand`, server/documents.js), kept in the send ledger beside the text the
+   * model reads, and laid on the prompt as it is stated (`record.marked`, harnesses/session-records.js). `steer`: the
+   * chat is busy, and the notice steers it.
+   */
+  async function submitPrompt(chatId, message, { model = "", thinkingLevel = "", notice = false, markup = null, steer = false } = {}) {
     if (registry.metadata(chatId)?.status === "subagent") throw Object.assign(new Error("subagent_read_only"), { code: "subagent_read_only", status: 409 });
     return lifecycle.run(chatId, async () => {
       const context = await findChatContext(chatId);
@@ -342,8 +348,20 @@ export function createLiveSessionStream({
       lifecycle.assertAvailable(chatId, context.project.id);
       const record = backends.getByChatId(chatId);
       if (!record) throw Object.assign(new Error("This chat has no live agent process"), { code: "no_live_process", status: 409 });
+      const messageId = markup?.length ? `m_${crypto.randomUUID()}` : null;
+      if (messageId) (record.marked ??= new Map()).set(messageId, markup);
+      if (steer) {
+        const adapter = adapterFor(record);
+        if (!adapter.getCapabilities().steer) throw new Error("This harness cannot steer a busy chat");
+        const accepted = await adapter.queue(record.id, "steer", message, { notice, ...(messageId ? { messageId } : {}) });
+        // A harness that names the steer itself (Codex) is found by its own id.
+        const named = accepted?.attachmentIdentity?.messageId;
+        if (messageId && named) record.marked.set(named, markup);
+        await attachments.recordMessage(context.project, chatId, accepted?.attachmentIdentity || null, [], markup);
+        return null;
+      }
       const prepared = await withComposerModel(record, { model, thinkingLevel }, promptForChat(record, { attachmentIds: [] }, String(message || "")));
-      return sendPrompt(record, prepared, { notice });
+      return sendPrompt(record, prepared, { notice, messageId, markup });
     });
   }
 

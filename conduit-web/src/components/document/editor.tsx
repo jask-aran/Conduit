@@ -4,7 +4,7 @@ import { Plugin, PluginKey, TextSelection, type EditorState } from "@tiptap/pm/s
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { createTiptapEditor } from "solid-tiptap";
-import { isOn, markAttrs, readEditor, sameJson } from "./read";
+import { isOn, markAttrs, probeEditor, readEditor, sameJson } from "./read";
 import { lateSync, settle } from "./sync";
 import { redo, undo, ySyncPlugin, yUndoPlugin, yUndoPluginKey } from "y-prosemirror";
 import type { Doc, Map as YMap, XmlFragment } from "yjs";
@@ -91,6 +91,7 @@ const marked = (changes: YMap<Change>, told: { anchors: DocumentAnchor[]; moved:
   // The suggestion the caret is in shows what its blocks were, as a comment's change does while its card is open.
   const focusOf = (state: EditorState) => { const { $from } = state.selection, id = $from.depth ? $from.node(1).attrs.id : undefined, change = id ? changes.get(id) : undefined; return change && isSuggestion(change.for) ? change.for : undefined; };
   const build = (doc: Node, focus?: string) => {
+    if (!told.anchors.length && !changes.size) return DecorationSet.empty;
     const found: Decoration[] = [], on = new Map<string, { keys: string[]; current: boolean; open: boolean }>(), at = new Map<string, { from: number; to: number; block: Node }>();
     doc.forEach((block, from) => { if (block.attrs.id) at.set(block.attrs.id, { from, to: from + block.nodeSize, block }); });
     for (const anchor of told.anchors) {
@@ -157,7 +158,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   changes.observe(() => queueMicrotask(() => { setChanged([...changes.values()].map((change) => change.for)); redraw(); }));
   // The text reflows when its column changes width, with no change to the document.
   createEffect(() => { const element = column(); if (!element) return; const sized = new ResizeObserver(() => { told.moved(); setReflowed((n) => n + 1); }); sized.observe(element); onCleanup(() => sized.disconnect()); });
-  const kind = readEditor(editor, kindAt);
+  const kind = readEditor(editor, "caret", kindAt);
   const anchor = document.createElement("span"), [asked, setAsked] = createSignal<Mention | null>(null, { equals: (a, b) => a?.from === b?.from && a?.query === b?.query }), [active, setActive] = createSignal(0);
   const offered = createMemo(() => { const at = asked(), query = at?.query.toLowerCase() ?? ""; return at ? (props.mentions?.() ?? []).filter((name) => name.toLowerCase().includes(query)) : []; });
   createEffect(() => { asked(); setActive(0); });
@@ -189,10 +190,11 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   // How the reader writes, as one menu on the ribbon's edit set, where the host offers Suggesting.
   const writings = props.host.suggest ? (["editing", "suggesting"] as const).map((name) => { const Icon = documentWritingIcons[name]; return { name: `writing-${name}`, label: name === "editing" ? "Editing" : "Suggesting", icon: () => <Icon />, menu: "Writing", get active() { return suggesting.writing() === name; }, run: () => suggesting.setWriting(name) }; }) : [];
   const slash = createSlash(editor, tools), handle = createBlockHandle(editor, tools, { scroller, onComment: () => props.onComment, onAdded: slash.made }), find = createFind(editor, scroller);
-  const counted = readEditor(editor, (made) => made?.state.doc);
+  const counted = readEditor(editor, "doc", (made) => made?.state.doc);
   const count = createMemo(() => {
+    if (!props.count) return null;
     const doc = counted();
-    if (!props.count || !doc) return null;
+    if (!doc) return null;
     let words = 0;
     // Counted once for each block and kept by the block: a keystroke makes one new block.
     doc.forEach((block) => { let had = wordsIn.get(block); if (had === undefined) wordsIn.set(block, had = block.textBetween(0, block.content.size, " ", " ").split(/\s+/).filter(Boolean).length); words += had; });
@@ -204,8 +206,9 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   const kept = () => setBare(properties.size === 0);
   properties.observe(kept);
   onCleanup(() => properties.unobserve(kept));
-  const blank = createMemo(() => { const doc = counted(); return Boolean(doc && doc.childCount === 1 && doc.firstChild!.type.name === "paragraph" && !doc.firstChild!.content.size); });
-  createEffect(() => { if (counted() && (!blank() || !bare())) setStarted(true); });
+  // Read only until the paper is started: nothing after asks.
+  const blank = createMemo(() => { if (started()) return false; const doc = counted(); return Boolean(doc && doc.childCount === 1 && doc.firstChild!.type.name === "paragraph" && !doc.firstChild!.content.size); });
+  createEffect(() => { if (!started() && counted() && (!blank() || !bare())) setStarted(true); });
   const asker = () => props.onMention ? props.mentions?.()[0] : undefined;
   const paste = async () => {
     const made = editor();
@@ -221,20 +224,21 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     return first && body ? first.getBoundingClientRect().bottom - body.getBoundingClientRect().top : undefined;
   });
   // The marks the selection wears, for a bar that is always there; the tools over a selection offer them too.
-  const wears = readEditor(editor, (made) => MARKS.filter(([name]) => isOn(made, name)).map(([name]) => name).join(" "));
-  const marking = readEditor(editor, (made): DocumentMarking => {
+  const wears = readEditor(editor, "caret", (made) => MARKS.filter(([name]) => isOn(made, name)).map(([name]) => name).join(" "));
+  const marking = readEditor(editor, "caret", (made): DocumentMarking => {
     const { selection } = made?.state ?? {}, block = selection?.$from.parent;
     return { can: Boolean(made?.isEditable && selection instanceof TextSelection && block?.isTextblock && !block.type.spec.code), on: Object.fromEntries(DOCUMENT_MARKS.map((name) => [name, Boolean(isOn(made, name))])) as DocumentMarking["on"] };
   }, sameJson);
   const worn = MARKS.filter(([name]) => !props.host.tools || props.host.tools.includes(name)).map(([name, label]) => { const Icon = documentToolIcons[name]; return { name, label, icon: () => <Icon />, get active() { return wears().includes(name); }, get pressed() { return marking().on[name]; }, get disabled() { return !marking().can; }, keys: MARK_KEYS[name], run: () => { editor()?.chain().focus().toggleMark(name).run(); } }; });
   // On the ribbon each inked mark is one menu of the inks and None, showing the one the selection wears.
-  const inkOn = readEditor(editor, (made) => `${markAttrs(made, "color").ink ?? ""} ${markAttrs(made, "highlight").ink ?? ""}`);
+  const inkOn = readEditor(editor, "caret", (made) => `${markAttrs(made, "color").ink ?? ""} ${markAttrs(made, "highlight").ink ?? ""}`);
   const inked = INKED.filter(([name]) => !props.host.tools || props.host.tools.includes(name)).flatMap(([name, menu, none, noun], nth) => [undefined, ...INKS].map((ink?: PaperInk) => ({
     name: `${name}-${ink ?? "none"}`, label: ink ? `${MARKUP_INKS[ink].label} ${noun}` : none, icon: () => { const Plain = documentToolIcons[name]; return ink ? inkSwatch(ink) : <Plain />; }, menu, compact: true,
     get active() { return inkOn().split(" ")[nth] === (ink ?? ""); }, get disabled() { return !marking().can; }, run: () => { const made = editor(); if (made) putInk(made.chain().focus(), name, ink); } })));
   // What can be taken back here is what was written here (the Yjs undo manager's stacks), read after each change.
-  const stacks = readEditor(editor, (made) => { const manager = made ? yUndoPluginKey.getState(made.state)?.undoManager : undefined; return [manager?.undoStack.length ?? 0, manager?.redoStack.length ?? 0]; }, sameJson);
-  const history = { undo: () => Boolean(editor() && step(editor()!, copy.doc, undo)), redo: () => Boolean(editor() && step(editor()!, copy.doc, redo)), canUndo: () => stacks()[0]! > 0, canRedo: () => stacks()[1]! > 0 };
+  const manager = (made: Editor | undefined) => made ? yUndoPluginKey.getState(made.state)?.undoManager : undefined;
+  const undoable = probeEditor(editor, (made) => Boolean(manager(made)?.undoStack.length)), redoable = probeEditor(editor, (made) => Boolean(manager(made)?.redoStack.length));
+  const history = { undo: () => Boolean(editor() && step(editor()!, copy.doc, undo)), redo: () => Boolean(editor() && step(editor()!, copy.doc, redo)), canUndo: undoable, canRedo: redoable };
   // One list until a kind that is only put in comes or goes: a bar draws a row for each, and a new list would redraw them all.
   const listed = createMemo(() => [...tools.filter((tool) => (DOCUMENT_TURNABLE as readonly string[]).includes(tool.name) || tool.active).map((tool) => ({ ...tool, menu: "Block", get active() { return tool.active; } })), ...worn, ...inked, ...writings]);
   props.marks?.({

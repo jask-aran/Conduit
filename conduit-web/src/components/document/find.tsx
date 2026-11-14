@@ -3,7 +3,7 @@ import type { Node } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { createSignal, Show, type Accessor } from "solid-js";
-import { readEditor } from "./read";
+import { probeEditor } from "./read";
 import { DocumentFind, documentDrawClass } from "@/components/ui/document";
 
 type Found = { query: string; current: number; matches: { from: number; to: number }[]; drawn: DecorationSet };
@@ -30,7 +30,7 @@ const draw = (doc: Node, matches: Found["matches"], current: number) =>
 export function createFind(editor: Accessor<Editor | undefined>, scroller: Accessor<HTMLElement | undefined>) {
   const [open, setOpen] = createSignal(false);
   let field: HTMLInputElement | undefined;
-  const state = readEditor(editor, (made) => made ? found.getState(made.state) : undefined);
+  const state = probeEditor(editor, (made) => made ? found.getState(made.state) : undefined);
   const set = (change: { query?: string; current?: number }) => { const view = editor()?.view; if (view) view.dispatch(view.state.tr.setMeta(found, change)); };
   const inView = () => {
     const view = editor()?.view, now = state(), match = now?.matches[now.current], box = scroller()?.getBoundingClientRect();
@@ -60,7 +60,8 @@ export function createFind(editor: Accessor<Editor | undefined>, scroller: Acces
           init: () => ({ query: "", current: 0, matches: [], drawn: DecorationSet.empty }),
           apply: (tr, old) => {
             const change = tr.getMeta(found) as { query?: string; current?: number } | undefined;
-            if (!change && !tr.docChanged) return old;
+            // With nothing asked, the text changing finds nothing new: the state is kept, and what reads it is not told.
+            if (!change && (!tr.docChanged || !old.query)) return old;
             const query = change?.query ?? old.query, matches = tr.docChanged || change?.query !== undefined ? search(tr.doc, query) : old.matches;
             const current = Math.min(change?.current ?? old.current, Math.max(0, matches.length - 1));
             return { query, current, matches, drawn: draw(tr.doc, matches, current) };

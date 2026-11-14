@@ -3,7 +3,7 @@ import { TextSelection } from "@tiptap/pm/state";
 import { addColumn, addRow, TableMap } from "@tiptap/pm/tables";
 import type { EditorView } from "@tiptap/pm/view";
 import { createEffect, createMemo, createSignal, For, on, Show, type Accessor } from "solid-js";
-import { isOn, markAttrs, readEditor, sameJson } from "./read";
+import { isOn, markAttrs, sameJson, track } from "./read";
 import { IconButton, Input, Segmented, Swatch } from "@/components/ui";
 import { DocumentAddress, DocumentTableEdges, DocumentTools, documentToolIcons as Icons } from "@/components/ui/document";
 import { MARKUP_INKS } from "@/components/ui/markup";
@@ -48,14 +48,18 @@ const linesOf = (view: EditorView, from: number, to: number) => {
 export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bounds: Accessor<HTMLElement | undefined>; /** The marks offered (every one, unsaid). */ marks?: readonly string[]; onComment?: (about: Range) => void }) {
   const [linking, setLinking] = createSignal(false), [inking, setInking] = createSignal<typeof INKED[number]>(), [shut, setShut] = createSignal<string>();
   let tools: HTMLElement | undefined;
-  const state = readEditor(props.editor, (made) => {
+  // Where the selection is matters only while there is something to stand over: a caret in plain text has nothing, and typing there reads none of this.
+  const state = createMemo(() => {
+    const made = props.editor();
+    track(made, "caret");
     if (!made?.isEditable) return null;
     const { selection } = made.state, text = selection instanceof TextSelection && !selection.empty, link = markAttrs(made, "link").href as string | undefined;
     if (!text && !(selection.empty && link)) return null;
     const { from, to } = text ? selection : { from: selection.from, to: selection.from };
+    track(made, "selection");
     return { text, focused: made.isFocused, key: `${from} ${to}`, link, marks: Object.fromEntries([...MARKS, ...INKED].map(([name]) => [name, isOn(made, name)])) as Record<string, boolean>,
       inks: { color: markAttrs(made, "color").ink, highlight: markAttrs(made, "highlight").ink } as Record<InkedMark, PaperInk | undefined>, lines: () => linesOf(made.view, from, to) };
-  }, sameJson);
+  }, undefined, { equals: sameJson });
   // Placed again only when what it is over changes.
   const lines = createMemo(on(() => state()?.key, () => state()?.lines));
   const placement = createMemo(on(() => state()?.key, () => {
@@ -100,9 +104,15 @@ export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bo
  * reflowed with no change to the document.
  */
 export function TableTools(props: { editor: Accessor<Editor | undefined>; body: Accessor<HTMLElement | undefined>; moved: Accessor<unknown> }) {
-  // With the document, so a row or column added places it again.
-  const read = readEditor(props.editor, (made) => { const pos = made?.isEditable && made.isFocused ? findParentNode((node) => node.type.name === "table")(made.state.selection)?.pos : undefined; return pos === undefined ? null : { pos, doc: made!.state.doc }; }, (a, b) => a?.pos === b?.pos && a?.doc === b?.doc);
-  const table = createMemo(read, null, { equals: (a, b) => a?.pos === b?.pos && a?.doc === b?.doc });
+  // With the document while the caret is in a table, so a row or column added places it again.
+  const table = createMemo(() => {
+    const made = props.editor();
+    track(made, "caret");
+    const pos = made?.isEditable && made.isFocused ? findParentNode((node) => node.type.name === "table")(made.state.selection)?.pos : undefined;
+    if (pos === undefined) return null;
+    track(made, "doc");
+    return { pos, doc: made!.state.doc };
+  }, null, { equals: (a, b) => a?.pos === b?.pos && a?.doc === b?.doc });
   const box = createMemo(() => {
     props.moved();
     const pos = table()?.pos ?? null, view = props.editor()?.view, body = props.body()?.getBoundingClientRect(), wrapper = pos === null ? null : view?.nodeDOM(pos) as HTMLElement | null;

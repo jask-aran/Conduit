@@ -148,7 +148,7 @@ export const ARTIFACT_COMMANDS = {
   nextComment: [COMMAND_IDS.artifactNextComment, "Next comment", "Go to the next open comment", "chat", [], stroke("KeyJ", "J", ["alt"])],
   previousComment: [COMMAND_IDS.artifactPreviousComment, "Previous comment", "Go to the open comment before", "chat", [], stroke("KeyK", "K", ["alt"])],
   thread: [COMMAND_IDS.artifactThread, "Show the artifact's thread", "The thread that answers its comments", "chat", ["agent"]],
-  shortcuts: [COMMAND_IDS.artifactShortcuts, "Paper shortcuts", "Open the shortcut settings", "settings", ["keys"]],
+  shortcuts: [COMMAND_IDS.artifactShortcuts, "Paper shortcuts", "The keys that work in a paper", "settings", ["keys"]],
 } as const satisfies Record<string, readonly [id: string, label: string, description: string, icon: string, keywords: readonly string[], key?: ReturnType<typeof stroke>]>;
 export type ArtifactCommand = keyof typeof ARTIFACT_COMMANDS;
 

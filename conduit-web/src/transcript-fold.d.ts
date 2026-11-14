@@ -12,6 +12,7 @@ export interface ProtocolMessage {
   context?: Message["context"];
   notes?: string;
   unseen?: boolean;
+  markup?: Message["markup"];
 }
 
 export interface TranscriptOp {

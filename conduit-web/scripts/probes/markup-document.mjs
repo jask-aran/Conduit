@@ -126,7 +126,7 @@ try {
   const tools = () => page.evaluate(() => JSON.stringify([...document.querySelectorAll(".ui-markup-bar [role=radio]")].map((button) => button.getAttribute("aria-label").split(" ")[0] + (button.getAttribute("aria-checked") === "true" ? "*" : ""))));
   console.log("Markup's bar while the app is in use:", await tools());
   await page.locator(".ui-markup-bar button[aria-label^='Highlighter']").click(); await page.waitForTimeout(400);
-  console.log("after pressing Highlighter from Use:", await tools(), "| layer selecting:", await page.evaluate(() => document.querySelector(".ui-markup-layer").hasAttribute("data-select")), "| thin:", await page.evaluate(() => document.querySelector(".ui-markup-rails").hasAttribute("data-thin")));
+  console.log("after pressing Highlighter from Use, its ink menu:", await page.locator(".ui-markup-bar button[aria-label='Ink and line']").count(), "| layer selecting:", await page.evaluate(() => document.querySelector(".ui-markup-layer").hasAttribute("data-select")), "| thin:", await page.evaluate(() => document.querySelector(".ui-markup-rails").hasAttribute("data-thin")));
   await page.screenshot({ path: "/tmp/markup-probe-document.png" });
   console.log("errors:", JSON.stringify(errors));
 } finally {

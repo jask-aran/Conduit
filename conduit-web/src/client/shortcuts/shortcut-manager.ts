@@ -259,6 +259,10 @@ export class ShortcutManager {
 
   handleKeydown = (event: KeyboardEvent): boolean => {
     if (event.defaultPrevented || event.isComposing) return false;
+    // Typing in text, the common case: a stroke with no modifier is refused there by eventAllowedForMatch unless a
+    // context owns the target, so with no sequence open and a modified leader nothing below could match.
+    if (!this.pending && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key !== "Escape"
+      && this.leader?.modifiers.length !== 0 && isEditableTarget(event.target) && !this.anyContextOwnsEditableTarget()) return false;
     const stroke = normalizeKeyboardEvent(event, this.environment);
     if (!stroke) return false;
     if (!this.pending && keptByTarget(event.target, stroke)) return false;
@@ -356,6 +360,11 @@ export class ShortcutManager {
     if (isElement(target) && target.closest("[data-shortcut-leader-palette]")) return;
     this.clearPendingSequence();
   };
+
+  private anyContextOwnsEditableTarget(): boolean {
+    for (const active of this.activeContexts.values()) if (active.options.ownsEditableTarget) return true;
+    return false;
+  }
 
   private orderedActiveContexts(): ActiveContext[] {
     const newestByContext = new Map<ShortcutContext, ActiveContext>();

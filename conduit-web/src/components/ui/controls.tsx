@@ -112,6 +112,17 @@ const hsvOf = (hex: string): Hsv | null => {
   const h = !spread ? 0 : v === r ? ((g - b) / spread + 6) % 6 : v === g ? (b - r) / spread + 2 : (r - g) / spread + 4;
   return { h: h * 60, s: v ? spread / v : 0, v };
 };
+/** A whole number between `min` and `max`, typed or stepped by one. */
+export function Stepper(props: { label: string; value: number; min: number; max: number; unit?: string; onChange: (value: number) => void }) {
+  const set = (to: number) => { if (Number.isFinite(to)) props.onChange(Math.max(props.min, Math.min(props.max, Math.round(to)))); };
+  return <span class="ui-stepper" role="group" aria-label={props.label}>
+    <IconButton label="Less" disabled={props.value <= props.min} onClick={() => set(props.value - 1)}><Icons.Less /></IconButton>
+    {/* Its keys are its own: a menu it stands in would read them as a search of its rows. */}
+    <Input inputMode="numeric" aria-label={props.label} value={props.value} onKeyDown={(event) => event.stopPropagation()} onChange={(event) => { set(Number(event.currentTarget.value)); event.currentTarget.value = String(props.value); }} />
+    <Show when={props.unit}><span class="ui-stepper-unit">{props.unit}</span></Show>
+    <IconButton label="More" disabled={props.value >= props.max} onClick={() => set(props.value + 1)}><Icons.Add /></IconButton>
+  </span>;
+}
 /** Any colour: its shade on a field of its hue, the hue on a track, and its hex to read or type. `value` and what `onChange` gives are `#rrggbb`. */
 export function ColourPicker(props: { label: string; value: string; onChange: (hex: string) => void }) {
   // Kept as hue, shade and light: a grey's hex has no hue to come back to.

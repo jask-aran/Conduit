@@ -64,6 +64,7 @@ export function applyTranscriptOp(messages, event) {
         ...(incoming.sender ? { sender: incoming.sender } : {}),
         ...(incoming.appended ? { appended: incoming.appended } : {}),
         ...(incoming.run ? { run: incoming.run } : {}),
+        ...(incoming.markup ? { markup: incoming.markup } : {}),
       },
     event.after ?? null);
   }

@@ -120,9 +120,33 @@ export const pickImages = (editor: Editor, host: DocumentHost) => {
 };
 
 /**
+ * Whether the caret is already where the view's own scroll to it (prosemirror-view's scrollRectIntoView) would leave everything as it is: inside each
+ * box round it, every ancestor up to the body, and the window's visible part, tested as that scroll tests them. That scroll reads each ancestor's
+ * computed style as it goes, which is most of a keystroke's scrolling; any doubt falls back to it.
+ */
+const up = (node: globalThis.Node) => { const parent = (node as Element).assignedSlot ?? node.parentNode; return parent instanceof ShadowRoot ? parent.host : parent; };
+const caretInView = (view: EditorView) => {
+  const { selection } = view.state, doc = view.dom.ownerDocument, start = (view.root as Document).getSelection()?.focusNode;
+  if (!(selection instanceof TextSelection) || !start || view.someProp("scrollThreshold")) return false;
+  const caret = view.coordsAtPos(selection.head, 1);
+  for (let node: globalThis.Node | null = start; node; node = up(node)) {
+    if (!(node instanceof Element)) continue;
+    if (node === doc.body) {
+      const seen = doc.defaultView?.visualViewport, width = seen ? seen.width : doc.documentElement.clientWidth, height = seen ? seen.height : doc.documentElement.clientHeight;
+      return !(caret.top < 0 || caret.bottom > height || caret.left < 0 || caret.right > width);
+    }
+    // An inline element has no box to scroll: the view's scroll of it moves nothing.
+    if (!node.clientWidth && !node.clientHeight && !node.scrollWidth && !node.scrollHeight) continue;
+    const box = node.getBoundingClientRect(), x = box.width / (node as HTMLElement).offsetWidth || 1, y = box.height / (node as HTMLElement).offsetHeight || 1;
+    if (caret.top < box.top || caret.bottom > box.top + node.clientHeight * y || caret.left < box.left || caret.right > box.left + node.clientWidth * x) return false;
+  }
+  return true;
+};
+
+/**
  * What the paper's own blocks bring to typing: `@today` and `@tomorrow` become a date (`dates`); an image pasted or dropped is kept and put in
  * (`images`); Markdown pasted as text becomes blocks (not in code, and not where the clipboard holds a page's own blocks, which ProseMirror reads
- * itself); and a folded toggle opens when the caret goes into what it folds.
+ * itself); a folded toggle opens when the caret goes into what it folds; and a caret already in view is not scrolled to (`caretInView`).
  */
 export const paperTyping = (host: DocumentHost, offers: { dates: boolean; images: boolean }) => Extension.create({
   name: "paperTyping",
@@ -135,6 +159,7 @@ export const paperTyping = (host: DocumentHost, offers: { dates: boolean; images
     const editor = this.editor;
     return [new Plugin({
       props: {
+        handleScrollToSelection: caretInView,
         handlePaste: (view, event) => {
           const files = imagesIn(event.clipboardData);
           if (files.length && offers.images) { void putImages(editor, host, files); return true; }

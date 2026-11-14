@@ -125,6 +125,7 @@ export const seatsDrawn = (seats: () => DocumentSeat[], told: (redraw: () => voi
   // Untracked: the plugin is made while the editor is, inside what makes it, and a seat changing must redraw, never make the editor again.
   const now = () => untrack(seats);
   const build = (doc: Node) => {
+    if (!streams.size && !now().length) return DecorationSet.empty;
     const found: Decoration[] = [], at = new Map<string, { from: number; to: number; node: Node }>(), list = now(), inks = seatInks(list.map((seat) => seat.name));
     doc.forEach((block, from) => { if (block.attrs.id) at.set(block.attrs.id, { from, to: from + block.nodeSize, node: block }); });
     for (const seat of list) {
@@ -220,7 +221,8 @@ export function createSeatsAway(editor: () => Editor | undefined, seats: () => D
     return undefined;
   };
   let frame = 0;
-  const check = () => { frame ||= requestAnimationFrame(() => { frame = 0; setAway(untrack(measure)); }); };
+  // With no agent at work and none said, nothing is measured: a keystroke would otherwise lay the page out early to find none.
+  const check = () => { if (!untrack(seats).length && !untrack(away)) return; frame ||= requestAnimationFrame(() => { frame = 0; setAway(untrack(measure)); }); };
   createEffect(() => { seats(); check(); });
   createEffect(() => { const element = scroller(); if (!element) return; element.addEventListener("scroll", check, { passive: true }); onCleanup(() => element.removeEventListener("scroll", check)); });
   createEffect(() => { const made = editor(); if (!made) return; made.on("transaction", check); onCleanup(() => made.off("transaction", check)); });

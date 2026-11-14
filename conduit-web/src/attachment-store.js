@@ -121,12 +121,13 @@ export class AttachmentStore {
     return { root, attachments: path.join(root, "attachments"), partial: path.join(root, ".partial"), messages: path.join(root, "attachment-messages.jsonl") };
   }
 
-  async recordMessage(project, chatId, identity, items) {
-    if (!items?.length) return;
+  /** `markup`: a notice's hand-offs, kept here because this ledger is the one record of a sent message every harness has. */
+  async recordMessage(project, chatId, identity, items, markup) {
+    if (!items?.length && !markup?.length) return;
     const { root, messages } = this.directories(project, chatId);
     await fsp.mkdir(root, { recursive: true });
-    const attachments = items.map(({ id, name, size, type }) => ({ id, name, size, type }));
-    await fsp.appendFile(messages, `${JSON.stringify({ identity, attachments, createdAt: new Date().toISOString() })}\n`, "utf8");
+    const attachments = (items || []).map(({ id, name, size, type }) => ({ id, name, size, type }));
+    await fsp.appendFile(messages, `${JSON.stringify({ identity, attachments, ...(markup?.length ? { markup } : {}), createdAt: new Date().toISOString() })}\n`, "utf8");
   }
 
   async discardMessages(project, chatId, identities) {
@@ -179,10 +180,10 @@ export class AttachmentStore {
       if (candidate?.id) byId.set(candidate.id, row);
     }
     return (transcript || []).map((item) => {
-      if (item.role !== "user" || item.attachments?.length) return item;
+      if (item.role !== "user") return item;
       const native = byId.get(item.id);
-      if (native) return { ...item, attachments: native.attachments || [] };
-      if (!fromStart) return item;
+      if (native) return { ...item, ...(item.attachments?.length ? {} : { attachments: native.attachments || [] }), ...(native.markup ? { markup: native.markup } : {}) };
+      if (item.attachments?.length || !fromStart) return item;
       // Older records carry message text instead of a harness id.
       const index = activeRows.findIndex((row, candidate) => !used.has(candidate) && row.message === item.content);
       if (index < 0) return item;

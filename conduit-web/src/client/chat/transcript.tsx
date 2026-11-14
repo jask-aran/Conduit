@@ -890,7 +890,7 @@ export function Transcript(props: { readOnly?: boolean; chat: TranscriptSource; 
           const message = createMemo(() => item.value);
           const user = createMemo(() => message().role === "user");
           // A comment sent on an artifact is shown as the person wrote it; the agent was handed the rest.
-          const handed = createMemo(() => user() ? markupHandoffs(message().content || "") : []);
+          const handed = createMemo(() => user() ? markupHandoffs(message()) : []);
           const review = createMemo(() => handed().length ? { text: handed().map((one) => one.words).join("\n\n"), comments: [] } : user() ? parseReviewComments(message().content || "") : { text: message().content || "", comments: [] });
           const failed = createMemo(() => !user() && message().stopReason === "error");
           // Once its own generation has said it finished, the row is not live again: the saved message takes it over

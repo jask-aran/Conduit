@@ -257,11 +257,21 @@ export interface RuntimeStateEvent extends EventBase {
 export type TurnOutcome = "complete" | "interrupted" | "failed";
 
 /**
+ * A comment on an artifact as the hub hands it to a chat (`hand`, server/documents.js), on the prompt's message as
+ * `markup` and never in the text the model reads. `block`: the first block of a paper it is about; `said`: what the
+ * person wrote back on an item already handed over ("reply"), or a comment they reopened.
+ */
+export interface MarkupHandoff {
+  artifact: string; kind: "paper" | "site"; name: string; item: string;
+  n?: number; block?: string; said?: "reply" | "reopened"; quote?: string; words?: string;
+}
+
+/**
  * A harness that leaves out `answers` or `interim` is refused rather than guessed at. `after` is filled in by the
  * chat's log, not by the adapter: the log knows what the transcript's last word was.
  */
 export type TranscriptOpEvent = EventBase & { type: "transcript_op" } & (
-  | { op: "message.open"; message: { id: string; role: "user" | "assistant"; [field: string]: unknown };
+  | { op: "message.open"; message: { id: string; role: "user" | "assistant"; markup?: MarkupHandoff[]; [field: string]: unknown };
       answers: string | null; after?: string | null }
   | { op: "message.close"; messageId: string; stopReason: string | null; interim: boolean;
       content: string; blocks: unknown[]; discarded?: true;

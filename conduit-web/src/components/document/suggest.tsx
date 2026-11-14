@@ -4,7 +4,7 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { createMemo, createSignal, onCleanup, untrack, type Accessor } from "solid-js";
 import { render } from "solid-js/web";
-import { readEditor } from "./read";
+import { track } from "./read";
 import { ySyncPluginKey } from "y-prosemirror";
 import type { Doc, Map as YMap } from "yjs";
 import { DocumentSuggested } from "@/components/ui/document";
@@ -23,6 +23,7 @@ const clip = (text: string) => text.length > CLIP ? `${text.slice(0, CLIP - 1)}â
 const textOf = (node: Json): string => node.text ?? (node.content ?? []).map(textOf).join(" ");
 const settled = new PluginKey<DecorationSet>("suggesting");
 const storeKey = (id: string) => `conduit.paper-writing.${id}`;
+const NONE: DocumentSuggestion[] = [];
 
 /** Each top-level block by id, with the nearest block before it that `kept` still holds (null: none). */
 const tops = (doc: Node, kept?: Map<string, unknown>) => {
@@ -117,12 +118,13 @@ export function createSuggesting(editor: Accessor<Editor | undefined>, doc: Doc,
   const bump = () => queueMicrotask(() => setVersion((n) => n + 1));
   changes.observe(bump);
   onCleanup(() => changes.unobserve(bump));
-  const current = readEditor(editor, (made) => made?.state.doc);
+  // One list for none, read with the text only while there are some: a new empty list each keystroke is told on to all that shows them.
   const suggestions = createMemo((): DocumentSuggestion[] => {
     version();
-    const now = current(), schema = editor()?.schema;
-    if (!now || !schema) return [];
-    if (!anySuggested()) return [];
+    const made = editor();
+    if (!made || !anySuggested()) return NONE;
+    track(made, "doc");
+    const now = made.state.doc;
     const order = new Map<string, number>();
     now.forEach((node, _at, nth) => { if (node.attrs.id) order.set(node.attrs.id, nth); });
     const found = new Map<string, { key: string; by: string; at: string; entries: [string, Change][] }>();
@@ -148,10 +150,11 @@ export function createSuggesting(editor: Accessor<Editor | undefined>, doc: Doc,
   // Untracked, so a suggestion changing redraws the controls and never makes the editor again. A control's Solid root goes with its element, which a redraw may keep.
   const parts = new WeakMap<globalThis.Node, () => void>();
   const controls = (state: { doc: Node }) => {
-    if (host.suggest?.controls !== "inline") return DecorationSet.empty;
+    const list = untrack(suggestions);
+    if (host.suggest?.controls !== "inline" || !list.length) return DecorationSet.empty;
     const at = new Map<string, { from: number; to: number }>(), found: Decoration[] = [];
     state.doc.forEach((node, from) => { if (node.attrs.id) at.set(node.attrs.id, { from, to: from + node.nodeSize }); });
-    for (const one of untrack(suggestions)) {
+    for (const one of list) {
       const first = one.blocks.find((block) => at.has(block)), change = changes.get(one.blocks[0]!);
       const pos = first ? at.get(first)!.from : change?.after === null ? 0 : at.get(change?.after ?? "")?.to ?? state.doc.content.size;
       found.push(Decoration.widget(pos, () => {

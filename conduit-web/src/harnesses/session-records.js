@@ -149,6 +149,9 @@ export class SessionRecords {
     }
     // A turn that ran no tools changed nothing in its workspace.
     if ((event?.type === "transcript_op" && event.op === "tool.open") || (event?.type === "tool_activity" && event.phase === "start")) record.ranTools = true;
+    // A notice's hand-offs are the hub's, not the harness's: laid on its prompt here, where every harness states it.
+    const marked = event?.type === "transcript_op" && event.op === "message.open" && record.marked?.get(event.message?.id);
+    if (marked) event = { ...event, message: { ...event.message, markup: marked } };
     // Numbered before it is buffered or sent, so the replay a reconnecting
     // browser reads carries the same sequence the live stream did.
     const log = this.logFor(record);

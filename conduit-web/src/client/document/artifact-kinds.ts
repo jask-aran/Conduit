@@ -1,6 +1,7 @@
 import { lazy, type Component, type JSX } from "solid-js";
 import { DOCUMENT_TOOLS, type DocumentHost, type DocumentToolName } from "@/components/document/host";
 import type { MarkupCapabilities, MarkupHost } from "@/components/markup";
+import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { Icons } from "@/components/ui";
 import type { Artifact, ArtifactKind } from "./artifacts";
 import type { FocusedArtifact } from "./focused-artifact";
@@ -46,8 +47,8 @@ export type ArtifactSurfaceProps = {
   marginEmpty: boolean;
   /** The pane's element, which holds what the surface draws: for finding its own parts. */
   pane(): HTMLElement | undefined;
-  /** Opens the app's shortcut settings, for a kind with keys of its own to offer them. */
-  onShortcuts?(): void;
+  /** The app's shortcuts, for a kind that lists its keys: what each of the palette's commands is bound to now. */
+  shortcuts?: ShortcutManager;
   /** Called once, as the surface is made and before it reads `margin`. */
   onSurface(surface: ArtifactSurface): void;
 };
