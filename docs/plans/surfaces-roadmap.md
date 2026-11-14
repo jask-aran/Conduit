@@ -126,3 +126,6 @@ What still knows a paper's blocks outside the paper's two entries:
   comments over a file of Markdown alone. Its block ids and its id are kept beside it, matched to the file's blocks by content when the file
   changes outside Conduit; front matter and what its schema cannot hold stay the file's text. A `.md` is one only when made or opened as one.
   Still the paper's own: properties, the extras, and a home beside the file for what Markdown cannot say.
+- [ ] The `sheet` kind (`.csv`, `server/sheets.js`, `sheet-format.js`): cells in a Yjs room computed by the same formula engine on the hub and
+  the page; the file holds values, `sheet.json` beside it the formulas. Not yet: seats, suggestions, and keeping what an agent changed for a
+  comment to take back; a column's `date` type is not read from text, and one tab per file.

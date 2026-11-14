@@ -19,12 +19,16 @@
 // `document <list|new|read|replace|insert|delete|set> …` is the one part that needs the hub running: the hub holds a paper
 // (a Conduit document, a .paper file in a project's folder) and is the only way to it, so these sign in as
 // `conduit-auth api` does. `list <project>` prints a project's artifacts, each id first; `new <name> --project <id>`
-// makes a paper and prints its id (`--kind markdown`: a Markdown file, a paper whose file is a plain .md; `--kind site`: a site,
+// makes a paper and prints its id (`--kind markdown`: a Markdown file, a paper whose file is a plain .md; `--kind sheet`: a sheet; `--kind site`: a site,
 // one HTML file an agent then edits as a file, which the block commands do not take). `read` prints the document as
 // Markdown, each block under a comment that gives its id; the others change one block, taking Markdown from their last
 // arguments or from stdin, and print the ids of the blocks written. `--as <name>` says who writes; `--for <item>/<n>`
 // says which comment the edit answers; `--suggest` makes it a suggestion the person accepts or rejects (`--suggest <key>`
 // adds to that one). `suggestions <id>` lists those standing; `accept|reject <id> <key>` settles one.
+//
+// A sheet (`--kind sheet`, a .csv whose cells can hold formulas) has its own commands: `document cells <id> [range] [--values]` prints it as CSV
+// of what was typed (`--values`: of what formulas compute); `document set <id> <A1> <value>`, `document fill <id> <range> [value]` (or
+// --json '{"values":[[…]]}'), and `document rows|cols <id> insert|delete <row number|column letter> [count]` change it, with --as and --for.
 //
 // `wait <name> --stay` does not end: it prints one line for each thing that comes, so a session whose harness wakes it
 // on a line of output (Claude Code's Monitor) stays listed the whole time. Plain `wait` ends at the first, for a
@@ -141,6 +145,24 @@ const jsonFlag = (args) => {
   try { const read = JSON.parse(text ?? ""); if (read && typeof read === "object" && !Array.isArray(read)) return read; } catch { /* said below */ }
   return fail(`--json takes one JSON object, as in --json '{"markdown":"…"}'`);
 };
+/** `--for`'s comment as <item>/<n>: an item alone names its one comment. */
+const answerFor = async (answering) => {
+  if (answering !== undefined && /^[\w-]+$/.test(String(answering))) {
+    const entry = await find(String(answering)), comments = entry ? JSON.parse(await fs.readFile(entry.item, "utf8")).comments ?? [] : [];
+    if (comments.length !== 1) fail(`--for takes <item>/<n>${entry ? `: ${answering} has comments ${comments.map((comment) => comment.n).join(", ")}` : `, and there is no markup item ${answering}`}`);
+    return `${answering}/${comments[0].n}`;
+  }
+  if (answering !== undefined && !/^[\w-]+\/\d+$/.test(String(answering))) fail(`--for takes <item>/<n> (an item id and a comment number), not ${answering}`);
+  return answering;
+};
+/** The arguments that are not flags (each flag here but --values and --suggest takes a value). */
+const positional = (args) => args.filter((arg, at) => !arg.startsWith("--") && !["--as", "--for", "--json", "--project", "--folder", "--kind"].includes(args[at - 1]));
+const A1 = /^\$?[A-Za-z]{1,3}\$?[1-9]\d*$/;
+/** Whether an artifact's cells are what changes in it (a sheet), as the hub says. */
+const hasCells = async (id) => {
+  const { execFileSync } = await import("node:child_process");
+  try { return JSON.parse(execFileSync(process.execPath, [new URL("./conduit-auth.mjs", import.meta.url).pathname, "api", "GET", `/v0/document/${encodeURIComponent(id)}?as=about`], { encoding: "utf8" })).changes === "cells"; } catch { return false; }
+};
 /** What every comment of an item is now, by what the thread last said of it. */
 const allResolved = async (dir) => {
   const settled = new Map((await thread(dir)).filter((message) => typeof message.resolved === "boolean").map((message) => [message.n, message.resolved]));
@@ -253,18 +275,26 @@ if (command === "wait") {
     const answer = JSON.parse(execFileSync(process.execPath, [new URL("./conduit-auth.mjs", import.meta.url).pathname, "api", argument === "list" ? "GET" : "POST", `/v0/projects/${encodeURIComponent(project)}/artifacts`, ...(argument === "list" ? [] : [JSON.stringify({ kind, name: rest.join(" "), folder: into })])], { encoding: "utf8" }));
     for (const made of answer.artifacts ?? [answer]) console.log(`${made.id}  ${made.path}`);
   } catch (error) { process.stderr.write(error.stdout || `${error.message}\n`); process.exit(1); }
+} else if (command === "document" && (["cells", "fill", "rows", "cols"].includes(argument) || (argument === "set" && A1.test(positional(rest)[1] ?? "") && await hasCells(positional(rest)[0])))) {
+  const usage = `Usage: node ${script} document ${{ cells: "cells <id> [range] [--values]", set: "set <id> <A1> <value>", fill: "fill <id> <range> [value], or --json '{\"values\":[[\"…\"]]}'", rows: "rows <id> insert|delete <row number> [count]", cols: "cols <id> insert|delete <column letter> [count]" }[argument]}${argument === "cells" ? "" : " [--for <item>/<n>] [--as <name>]"}`;
+  const body = jsonFlag(rest), flag = (name) => { const at = rest.indexOf(name); return at < 0 ? undefined : rest.splice(at, 2)[1]; };
+  const by = flag("--as") ?? body.as ?? body.by ?? await nameHere(), answering = await answerFor(flag("--for") ?? body.for), computed = rest.includes("--values");
+  const [id, first, ...more] = rest.filter((arg) => arg !== "--values"), route = `/v0/document/${encodeURIComponent(id ?? "")}`;
+  if (!id) fail(usage);
+  if (argument === "cells") await hub("GET", `${route}?${new URLSearchParams({ ...(first ? { range: first } : {}), ...(computed ? { as: "values" } : {}) })}`);
+  else if (argument === "set" || argument === "fill") {
+    const value = body.value ?? (more.length ? more.join(" ") : undefined);
+    if (!(first ?? body.range ?? body.at) || (value === undefined && body.values === undefined)) fail(usage);
+    await hub("POST", `${route}/cells`, { op: argument, ...(argument === "set" ? { at: first ?? body.at } : { range: first ?? body.range, values: body.values }), value, by, for: answering });
+  } else {
+    const label = more[0] ?? "", at = argument === "rows" ? (/^\d+$/.test(label) ? Number(label) - 1 : NaN) : /^[A-Za-z]{1,3}$/.test(label) ? [...label.toUpperCase()].reduce((sum, letter) => sum * 26 + letter.charCodeAt(0) - 64, 0) - 1 : NaN;
+    if (!["insert", "delete"].includes(first) || !(at >= 0)) fail(usage);
+    await hub("POST", `${route}/cells`, { op: `${first}-${argument}`, at, count: more[1] ? Number(more[1]) : 1, by, for: answering });
+  }
 } else if (command === "document" && ["read", "replace", "insert", "delete", "set"].includes(argument)) {
   const usage = `Usage: node ${script} document ${argument} <id>${argument === "read" ? "" : ` ${argument === "set" ? "<name> [value]" : `<block${argument === "insert" ? "|start" : ""}>${argument === "delete" ? "" : " [markdown]"}`} [--for <item>/<n>] [--as <name>], or --json '{"block":"…"${argument === "delete" ? "" : ',"markdown":"…"'}}'`}`;
   const body = jsonFlag(rest), named = rest.indexOf("--as"), by = named < 0 ? body.as ?? body.by ?? await nameHere() : rest.splice(named, 2)[1];
-  const answers = rest.indexOf("--for");
-  let answering = answers < 0 ? body.for : rest.splice(answers, 2)[1];
-  // An item alone names its one comment.
-  if (answering !== undefined && /^[\w-]+$/.test(String(answering))) {
-    const entry = await find(String(answering)), comments = entry ? JSON.parse(await fs.readFile(entry.item, "utf8")).comments ?? [] : [];
-    if (comments.length !== 1) fail(`--for takes <item>/<n>${entry ? `: ${answering} has comments ${comments.map((comment) => comment.n).join(", ")}` : `, and there is no markup item ${answering}`}`);
-    answering = `${answering}/${comments[0].n}`;
-  }
-  if (answering !== undefined && !/^[\w-]+\/\d+$/.test(String(answering))) fail(`--for takes <item>/<n> (an item id and a comment number), not ${answering}`);
+  const answers = rest.indexOf("--for"), answering = await answerFor(answers < 0 ? body.for : rest.splice(answers, 2)[1]);
   const suggests = rest.indexOf("--suggest"), suggest = suggests < 0 ? body.suggest : /^suggestion\//.test(rest[suggests + 1] ?? "") ? rest.splice(suggests, 2)[1] : (rest.splice(suggests, 1), true);
   const id = rest.shift() ?? body.id, block = body.block ?? rest.shift(), words = rest;
   if (!id || (argument !== "read" && !block)) fail(usage);
@@ -288,7 +318,7 @@ if (command === "wait") {
     if (waiter && alive(waiter.id)) console.log(`waiter   ${waiter.name}  (${waiter.cwd}, since ${waiter.since})`);
   }
 } else {
-  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | answer <id> [n] --json '{\"edits\":[{\"op\":\"replace\",\"at\":\"<block>\",\"markdown\":\"…\"}],\"reply\":\"…\",\"resolve\":true}' | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document list <project> | document new <name> --project <id> [--folder <path>] [--kind markdown|site] | document read <id> | document set <id> <name> [value] | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block> | document suggestions <id> | document accept|reject <id> <key>   (--as <name>, by default the name this folder's wait listens under; --for <item>/<n> names the comment an edit answers, <item> alone its one comment; --suggest [key] makes it a suggestion; --json '{…}' gives any of block, markdown, as, for, suggest; Markdown piped in when not given)");
+  console.log("Usage: conduit-markup wait [name] [--stay] | take <id> | answer <id> [n] --json '{\"edits\":[{\"op\":\"replace\",\"at\":\"<block>\",\"markdown\":\"…\"}],\"reply\":\"…\",\"resolve\":true}' | reply <id> [n] <words> | resolve <id> <n> | done <id> | list | serve [port] [one-way]\n       conduit-markup document list <project> | document new <name> --project <id> [--folder <path>] [--kind markdown|sheet|site] | document read <id> | document set <id> <name> [value] | document replace <id> <block> [markdown] | document insert <id> <block|start> [markdown] | document delete <id> <block> | document suggestions <id> | document accept|reject <id> <key> | document cells <id> [range] [--values] | document set <id> <A1> <value> | document fill <id> <range> [value] | document rows|cols <id> insert|delete <row|letter> [count]   (--as <name>, by default the name this folder's wait listens under; --for <item>/<n> names the comment an edit answers, <item> alone its one comment; --suggest [key] makes it a suggestion; --json '{…}' gives any of block, markdown, as, for, suggest; Markdown piped in when not given)");
   // Asked for (`document` alone, as an item's `change` tells an agent to run it), usage is an answer, not a failure.
   process.exit(command && !(command === "document" && !argument) ? 1 : 0);
 }

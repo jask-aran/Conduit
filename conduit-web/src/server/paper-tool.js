@@ -1,11 +1,12 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-durable";
+import { colIndex } from "../sheet-format.js";
 import { callingChat } from "./conduit-mcp.js";
 
 const text = (words, isError = false) => ({ output: [{ type: "text", text: words }], ...(isError ? { isError: true } : {}) });
-const ACTIONS = ["answer", "list", "new", "show", "lead", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve"];
+const ACTIONS = ["answer", "list", "new", "show", "lead", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve", "cells", "fill", "rows", "cols"];
 
-/** Artifacts for an agent (papers, Markdown files and sites): the hub's document service (server/documents.js) as one tool, with the verbs `conduit-markup` has. */
+/** Artifacts for an agent (papers, Markdown files, sheets and sites): the hub's document service (server/documents.js) as one tool, with the verbs `conduit-markup` has. */
 export function PaperTool(runtime) {
   return defineTool({
     name: "conduit_artifact",
@@ -26,13 +27,16 @@ export function PaperTool(runtime) {
       + "comments lists what the person asked on the paper that is not settled (item ids, comment numbers, the text each is about). "
       + "reply (item, n?, text) answers in the margin beside the text; resolve (item, n) marks a comment done, which the person then confirms. "
       + "A project also holds sites: one HTML file each (`<name>.site.html`) that the person sees drawn in a pane and marks up. new with kind `site` makes one (so does writing such a file); "
-      + "change it by editing the file with your own tools, not with read, replace, insert or delete. list, comments, reply and resolve take a site's id as they take a paper's.",
+      + "change it by editing the file with your own tools, not with read, replace, insert or delete. list, comments, reply and resolve take a site's id as they take a paper's. "
+      + "A sheet (kind `sheet`, a `.csv` file whose cells can hold formulas; `paper` is its id too) is changed only through this tool: cells (range: optional, A1 such as B2:C5; computed: true for what formulas compute) reads it as CSV of what was typed; "
+      + "set (at: one cell such as B4, value: text, a number, TRUE/FALSE or a formula starting with =; \"\" clears it) and fill (range, values: rows of cells' text repeated over the range, a formula's relative references moved per cell as a spreadsheet's fill does; or value for every cell; a range past the edge grows the sheet) write cells; "
+      + "rows and cols (op: insert | delete, at: the row number or column letter to insert before or to delete from, count) change its shape, rewriting formulas that refer to moved cells. They take `for` as an edit does; answer then takes reply and resolve, not edits.",
     parameters: Type.Object({
       action: Type.Union(ACTIONS.map((value) => Type.Literal(value))),
       paper: Type.Optional(Type.String({ description: "A paper's id." })),
       project: Type.Optional(Type.String({ description: "list, new: a project's id or slug." })),
       name: Type.Optional(Type.String({ description: "new: the paper's name." })),
-      kind: Type.Optional(Type.Union([Type.Literal("paper"), Type.Literal("markdown"), Type.Literal("site")], { description: "new: paper (the default), markdown (a plain .md file) or site." })),
+      kind: Type.Optional(Type.Union([Type.Literal("paper"), Type.Literal("markdown"), Type.Literal("sheet"), Type.Literal("site")], { description: "new: paper (the default), markdown (a plain .md file), sheet (a .csv, 20 rows x 8 columns) or site." })),
       block: Type.Optional(Type.String({ description: "A block's id, from read." })),
       markdown: Type.Optional(Type.String()),
       for: Type.Optional(Type.String({ description: "The comment an edit answers, as <item>/<n>." })),
@@ -49,6 +53,13 @@ export function PaperTool(runtime) {
       reply: Type.Optional(Type.String({ description: "answer: what the person reads beside the comment." })),
       show: Type.Optional(Type.Boolean({ description: "new: false leaves the new artifact closed." })),
       resolve: Type.Optional(Type.Boolean({ description: "answer: mark the comment done." })),
+      at: Type.Optional(Type.String({ description: "set: a cell (B4); rows: a row number (5); cols: a column letter (C)." })),
+      range: Type.Optional(Type.String({ description: "cells, fill: an A1 range (B2:C5) or one cell." })),
+      values: Type.Optional(Type.Array(Type.Array(Type.String()), { description: "fill: rows of cells' text." })),
+      value: Type.Optional(Type.String({ description: "set, fill: one cell's text." })),
+      op: Type.Optional(Type.Union([Type.Literal("insert"), Type.Literal("delete")], { description: "rows, cols." })),
+      count: Type.Optional(Type.Integer({ description: "rows, cols: how many (1)." })),
+      computed: Type.Optional(Type.Boolean({ description: "cells: what formulas compute, as the file holds it." })),
     }),
     replay: "unsafe",
     execute: async (args, api = {}, context) => {
@@ -62,7 +73,7 @@ export function PaperTool(runtime) {
           const project = args.project ?? mine.project;
           if (!project) throw new Error("Say which project.");
           const found = args.action === "list" ? await documents.list(project) : [await documents.create(project, { kind: args.kind, name: args.name })];
-          if (args.action === "list") return text(found.map((one) => `${one.id}  ${one.path}`).join("\n") || "No papers, Markdown files or sites in this project.");
+          if (args.action === "list") return text(found.map((one) => `${one.id}  ${one.path}`).join("\n") || "No papers, Markdown files, sheets or sites in this project.");
           // Whoever makes an artifact leads it: what the person says of it comes to the chat that knows why it was made.
           if (chat) await documents.lead(found[0].id, chat);
           return text(`${found[0].id}  ${found[0].path}${chat ? "\nThis chat leads it: the person's comments on it come here." : ""}${args.show === false ? "" : `\n${await show(found[0].id)}`}`);
@@ -78,6 +89,17 @@ export function PaperTool(runtime) {
           return text(`Answered ${done.item}${done.n ? `, comment ${done.n}` : ""}: ${did.join("; ")}.`);
         }
         if (args.action === "read") { void documents.seat(paper, by, { state: "reading" }); return text(await documents.read(paper)); }
+        if (args.action === "cells") { const read = await documents.read(paper, args.computed ? "values" : undefined, args.range); return text(typeof read === "string" ? read : JSON.stringify(read)); }
+        if (args.action === "fill" || (args.action === "set" && args.at !== undefined)) {
+          const done = await documents.cells(paper, { op: args.action, at: args.at, range: args.range, values: args.values, value: args.value ?? args.text, by, for: args.for });
+          return text(`Wrote ${done.cells.join(", ")}; the sheet is ${done.rows} rows x ${done.cols} columns.`);
+        }
+        if (args.action === "rows" || args.action === "cols") {
+          const rows = args.action === "rows", label = String(args.at ?? "").trim(), at = rows ? (/^\d+$/.test(label) ? Number(label) - 1 : NaN) : /^[A-Za-z]{1,3}$/.test(label) ? colIndex(label) : NaN;
+          if (!args.op || !Number.isInteger(at) || at < 0) throw new Error(`${args.action} takes op (insert or delete) and at: ${rows ? "a row number, as 5" : "a column letter, as C"}.`);
+          const done = await documents.cells(paper, { op: `${args.op}-${args.action}`, at, count: args.count ?? 1, by, for: args.for });
+          return text(`The sheet is ${done.rows} rows x ${done.cols} columns.`);
+        }
         if (args.action === "set") return text(`Its properties: ${JSON.stringify((await documents.edit(paper, { op: "set", block: args.name, markdown: args.text ?? "", by })).properties)}`);
         if (args.action === "replace" || args.action === "insert" || args.action === "delete") {
           const { blocks, suggestion } = await documents.edit(paper, { op: args.action, block: args.block, markdown: args.markdown, by, for: args.for, suggest: args.suggest ? args.suggestion ?? true : undefined });
