@@ -79,15 +79,19 @@
 @keyframes ui-word-in { from { color: transparent; } }
 /* Selected text is washed in the text's own colour, everywhere. */
 ::selection { background: color-mix(in oklch, var(--foreground), transparent var(--tone-line)); }
-/* The caret breathes where the browser lets a page drive it; elsewhere it blinks as the browser has it. --caret: its colour, where a surface gives it one.
-   A field's by this animation; an editable region's from components/ui/caret.ts, in steps: the caret's colour is inherited, and animated here it would
-   restyle everything under the region every frame. */
+/* The caret breathes. --caret: its colour, where a surface gives it one. A field's is the browser's own, faded by its colour where the browser lets a
+   page drive it (elsewhere it blinks as the browser has it). An editable region's is drawn over it (components/ui/caret.ts) and fades by opacity, which
+   costs the page nothing: its colour is inherited, and animated it would restyle everything under the region every frame. */
 @keyframes ui-caret { 50% { caret-color: color-mix(in oklch, var(--caret, var(--foreground)), transparent var(--tone-wash)); } }
 @supports (caret-animation: manual) {
-  :is(input, textarea, [contenteditable="true"]):focus { caret-color: var(--caret, var(--foreground)); caret-animation: manual; }
-  :is(input, textarea):focus { animation: ui-caret var(--duration-breathe) var(--ease-room) infinite; }
-  @media (prefers-reduced-motion: reduce) { :is(input, textarea, [contenteditable="true"]):focus { caret-animation: auto; animation: none; } }
+  :is(input, textarea):focus { caret-color: var(--caret, var(--foreground)); caret-animation: manual; animation: ui-caret var(--duration-breathe) var(--ease-room) infinite; }
+  @media (prefers-reduced-motion: reduce) { :is(input, textarea):focus { caret-animation: auto; animation: none; } }
 }
+[contenteditable="true"][data-caret] { caret-color: transparent; }
+@keyframes ui-caret-breathe { 50% { opacity: 0; } }
+.ui-caret { position: absolute; top: 0; left: 0; z-index: 2; width: var(--stroke); border-radius: var(--radius-round); background: var(--caret, var(--foreground)); pointer-events: none; will-change: transform, opacity; }
+/* Solid for a moment after it moves (caret.ts starts this again), then fading out and in. */
+@media (prefers-reduced-motion: no-preference) { .ui-caret { animation: ui-caret-breathe var(--duration-pulse) ease var(--duration-spin) infinite; } }
 @media (prefers-reduced-motion: reduce) {
   :is(.ui-menu, .ui-card, .ui-toast, .ui-overlay, .ui-rider, .ui-chip, .ui-scrim, .ui-step-item, .ui-message, .ui-message-foot, .ui-rider-button, .ui-trace-fold, .ui-transcript-row):is([data-entering], [data-leaving]), .ui-message[data-entering] > *, .ui-answer-word, .ui-answer-math-in, .ui-toolbar-primary > *, .ui-toolbar-end > [aria-pressed="true"] { animation: none; }
   .ui-fold-chevron, .ui-rider-button, .ui-menu, .ui-composer-slot > .ui-composer-under, .ui-composer-slot > .ui-composer-stack, .ui-composer-slot > .ui-composer-stack > *, .ui-toolbar-end > .ui-toolbar-aside { transition: none; }
