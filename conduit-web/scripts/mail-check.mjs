@@ -123,7 +123,7 @@ try {
   const withFile = (await mail.search({ account, q: "label:receipts" }))[0];
   const receipt = mail.thread(withFile.id).messages[0];
   const receiptBody = await mail.body(receipt.id);
-  assert.ok(receiptBody.html && !/<style|<script/i.test(receiptBody.html) && receiptBody.attachments.length);
+  assert.ok(receiptBody.html && !/<script/i.test(receiptBody.html) && receiptBody.attachments.length);
   assert.ok((await mail.attachment(receipt.id, 0)).content.length > 0);
   step(`bodies: an old one fetched and held; HTML cleaned; attachment ${receiptBody.attachments[0].filename} read`);
 

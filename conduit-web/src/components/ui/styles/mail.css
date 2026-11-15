@@ -30,3 +30,10 @@
 .ui-composer-line { display: flex; min-width: 0; align-items: center; gap: var(--space-sm); padding: var(--space-xs) var(--space-lg); border-bottom: var(--hairline) solid var(--tint); font-size: var(--text-row); line-height: var(--leading-row); }
 .ui-composer-line > label { flex: none; color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-composer-line > input { min-width: 0; flex: 1; border: 0; background: transparent; padding: 0; color: var(--foreground); font: inherit; outline: none; }
+
+/* conventions-ok: a message is drawn as sent, on the white ground mail is made for, whatever the theme */
+.ui-mail-page { display: block; width: 100%; height: var(--control); border: 0; border-radius: var(--radius-card); background: #fff; color-scheme: light; }
+
+/* The bars over the two columns stand as high as a sheet's formula bar, so the rule under them runs level across panes. */
+.ui-reader-split { --split-bar: calc(var(--control) + var(--space-sm) + var(--hairline)); }
+.ui-reader-split > section > .ui-tool-bar { min-height: var(--split-bar); }

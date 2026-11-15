@@ -2,7 +2,7 @@ import PostalMime from "postal-mime";
 import { Parser, parseDocument } from "htmlparser2";
 import { removeElement } from "domutils";
 import render from "dom-serializer";
-import { cleanEmailHtml, readMail } from "../agent/mail-pipeline.js";
+import { readMail } from "../agent/mail-pipeline.js";
 import { splitQuoted } from "../email-quote.js";
 
 const SKIP = new Set(["script", "style", "head", "title"]);
@@ -33,7 +33,7 @@ const bytes = (part) => typeof part.content === "string"
 export const parseMail = async (raw) => holdable(await PostalMime.parse(raw));
 
 /*
- * cleanEmailHtml takes out scripts, trackers and hidden parts; this takes out what could act or leave the frame:
+ * What is taken out of a message shown as sent: what could act or leave the frame:
  * handlers, script URLs, frames, embeds, forms (their content kept) and anything that changes where links resolve.
  */
 const DROP = new Set(["iframe", "frame", "frameset", "object", "embed", "applet", "base", "meta", "link", "script", "input", "button", "select", "textarea", "portal"]);
@@ -45,7 +45,9 @@ export function safeHtml(html) {
       if (node.type === "script" || node.type === "directive") { removeElement(node); continue; }
       if (node.type !== "tag") continue;
       const name = node.name.toLowerCase();
-      if (DROP.has(name)) { removeElement(node); continue; }
+      // A one-pixel picture is only there to report the message was opened.
+      const pixel = name === "img" && (/^[01](px)?$/.test(node.attribs.width || "") || /^[01](px)?$/.test(node.attribs.height || "") || /(width|height)\s*:\s*[01]px/i.test(node.attribs.style || ""));
+      if (DROP.has(name) || pixel) { removeElement(node); continue; }
       if (name === "form") node.name = "div";
       for (const attribute of Object.keys(node.attribs)) {
         const key = attribute.toLowerCase();
@@ -69,7 +71,8 @@ export async function readBody(raw) {
   return {
     markdown: withoutImages(read.quoted ? read.own : read.markdown),
     quoted: read.quoted ? quoted : "",
-    html: read.mail.html ? safeHtml(cleanEmailHtml(read.mail.html)) : null,
+    // As sent, its own styles and layout kept: cleanEmailHtml is for reading it as Markdown, and strips both.
+    html: read.mail.html ? safeHtml(read.mail.html) : null,
     attachments: read.attachments.map((item, index) => ({ index, filename: item.filename, mimeType: item.mimeType, size: item.size })),
     hold: holdable(read.mail),
   };

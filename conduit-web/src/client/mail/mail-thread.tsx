@@ -1,8 +1,9 @@
 import { createSignal, For, onCleanup, Show, Suspense, type JSX } from "solid-js";
 import type { MailBody, MailDraft, MailLabel, MailMessage, MailParty, MailThread } from "@/mail/mail";
-import { Answer, Button, EmailItem, Empty, HeaderButton, IconButton, Icons, Loading, ReadingScroll, ReadingTitle, Row, Spinner, ToolBar, WebPage, clockTime } from "@/components/ui";
+import { Answer, Button, EmailItem, Empty, HeaderButton, IconButton, Icons, Loading, ReadingScroll, ReadingTitle, Row, Spinner, ToolBar, clockTime } from "@/components/ui";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
+import { MailPage } from "@/components/ui/mail-page";
 import { ChatMarkdown } from "../chat/lazy-markdown";
 import { createLatest } from "../state/latest";
 import { downloadAttachment, failure, mailApi } from "./mail-api";
@@ -42,9 +43,10 @@ export const labelRows = (thread: MailThread, labels: MailLabel[], list: MailLis
   <For each={labels.filter((label) => !label.role && label.id !== "all")}>{(label) => <MenuRow closeOnSelect={false} checked={thread.labels.includes(label.id)}
     onSelect={() => void list.triage([thread], thread.labels.includes(label.id) ? { remove: [label.id] } : { add: [label.id] }, onThreads)}>{label.name}</MenuRow>}</For>;
 
-/** The sender's own HTML, in a frame that runs nothing and reaches nothing; images only when asked for. */
-const original = (html: string, images: boolean) =>
-  `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:${images ? " https:" : ""}">${html}`;
+// A message is shown with its pictures, as other mail readers show it; a sender learns from them that it was opened, so they can be turned off on this device.
+const IMAGES = "conduit:mail-images";
+const [images, setImages] = createSignal((() => { try { return localStorage.getItem(IMAGES) !== "0"; } catch { return true; } })());
+const keepImages = (on: boolean) => { setImages(on); try { localStorage.setItem(IMAGES, on ? "1" : "0"); } catch { /* this session only */ } };
 
 /**
  * An open thread: its subject, earlier messages folded to a line, the newest and any unread open, each with its verbs; the
@@ -57,7 +59,8 @@ export function MailThreadView(props: { id: string; own: string; labels: MailLab
   const [bodies, setBodies] = createSignal<Record<string, MailBody>>({});
   const [open, setOpen] = createSignal<string[]>([]);
   const [failed, setFailed] = createSignal("");
-  const [showing, setShowing] = createSignal<{ message: string; images: boolean } | null>(null);
+  // Messages read as plain text though they have a page of their own.
+  const [plain, setPlain] = createSignal<string[]>([]);
   const latest = createLatest();
 
   const fetchBodies = async (ids: string[]) => {
@@ -134,14 +137,19 @@ export function MailThreadView(props: { id: string; own: string; labels: MailLab
           <Button variant="ghost" outline size="sm" onClick={() => void write({ reply: item.id, replyAll: true })}><Icons.ReplyAll />Reply all</Button>
           <Button variant="ghost" outline size="sm" onClick={() => void write({ forward: item.id })}><Icons.MailForward />Forward</Button>
         </Show>}><Button variant="ghost" outline size="sm" onClick={() => void write({ adopt: item.id })}><Icons.Edit />Edit</Button></Show>
-        <Show when={body()?.html}><Button variant="ghost" size="sm" onClick={() => setShowing({ message: item.id, images: false })}>Original</Button></Show>
+        <Show when={body()?.html}>
+          <Button variant="ghost" size="sm" onClick={() => setPlain(plain().includes(item.id) ? plain().filter((id) => id !== item.id) : [...plain(), item.id])}>{plain().includes(item.id) ? "As sent" : "Plain text"}</Button>
+          <Show when={!plain().includes(item.id) && /<img\b/i.test(body()!.html!)}><Button variant="ghost" size="sm" onClick={() => keepImages(!images())}>{images() ? "Hide images" : "Load images"}</Button></Show>
+        </Show>
       </>}>
-      <Answer><Suspense fallback={<Spinner />}><ChatMarkdown streaming={false}>{body()?.markdown ?? ""}</ChatMarkdown></Suspense></Answer>
+      <Show when={body()?.html && !plain().includes(item.id)} fallback={<Answer><Suspense fallback={<Spinner />}><ChatMarkdown streaming={false}>{body()?.markdown ?? ""}</ChatMarkdown></Suspense></Answer>}>
+        <MailPage title={`Message from ${named(item.from, props.own)}`} html={body()!.html!} images={images()} onLink={(url) => window.open(url, "_blank", "noopener,noreferrer")} />
+      </Show>
     </EmailItem>;
   };
 
   return <Show when={thread()} fallback={<>{bar()}<Show when={failed()} fallback={<Loading kind="pane"><Spinner />Opening the thread</Loading>}><Empty role="alert">{failed()}</Empty></Show></>}>{(current) =>
-    <Show when={showing()} fallback={<>
+    <>
       {bar(verbs(current()))}
       <ReadingScroll>
         <ReadingTitle>{current().subject || "(no subject)"}</ReadingTitle>
@@ -149,10 +157,5 @@ export function MailThreadView(props: { id: string; own: string; labels: MailLab
         <For each={drafts()}>{(draft) => <DraftComposer draft={draft} autofocus subject={Boolean(draft.forward)}
           onDone={() => setDrafts(drafts().filter((one) => one.id !== draft.id))} />}</For>
       </ReadingScroll>
-    </>}>{(view) => <>
-      <ToolBar end={<Button variant="ghost" size="sm" disabled={view().images} onClick={() => setShowing({ ...view(), images: true })}>Load images</Button>}>
-        <HeaderButton label="Back to the thread" icon={<Icons.Back />} onClick={() => setShowing(null)} /><small>Original</small>
-      </ToolBar>
-      <WebPage title="The message as it was sent" sandbox="" srcdoc={original(bodies()[view().message]?.html ?? "", view().images)} />
-    </>}</Show>}</Show>;
+    </>}</Show>;
 }
