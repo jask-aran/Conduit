@@ -11,13 +11,18 @@ export const SHEET_INKS = ["red", "amber", "green", "blue"];
 export const SHEET_BORDERS = ["all", "outer", "top", "bottom", "left", "right", "none"];
 
 // Each attribute's code in the packed string, in the order it is written; a flag stands alone (`b`), a value after `=` (`c=red`), and `-` before
-// either is its default set on purpose, over what would be worn from beneath (`-b`: not bold in a bold column).
+// either is its default set on purpose, over what would be worn from beneath (`-b`: not bold in a bold column). A colour is an ink or, as a workbook
+// brings it, `#rrggbb`: data, drawn as it is (components/sheet/shade.ts fits it to the theme); `bc` and `bw` are the colour and weight of every edge drawn.
 const FLAGS = { bold: "b", italic: "i", underline: "u", strike: "s", wrap: "w" };
 const EDGES = { top: "bt", right: "br", bottom: "bb", left: "bl" };
-const VALUES = { color: "c", fill: "f", align: "h", valign: "v" };
-const WORDS = { c: SHEET_INKS, f: SHEET_INKS, h: ["left", "center", "right"], v: ["top", "middle", "bottom"] };
+const VALUES = { color: "c", fill: "f", align: "h", valign: "v", borderColor: "bc", borderWeight: "bw", size: "z" };
+const HEX = /^#[0-9a-f]{6}$/;
+const colour = (word) => SHEET_INKS.includes(word) || HEX.test(word);
+const WORDS = { h: ["left", "center", "right"], v: ["top", "middle", "bottom"], bw: ["medium", "thick"] };
+const VALID = { ...Object.fromEntries(Object.entries(WORDS).map(([code, words]) => [code, (word) => words.includes(word)])), c: colour, f: colour, bc: (word) => HEX.test(word), z: (word) => /^\d{1,3}(\.\d)?$/.test(word) && Number(word) >= 1 && Number(word) <= 409 };
+const INK = `${SHEET_INKS.join(", ")} or #rrggbb`, SAID = { c: INK, f: INK, bc: "#rrggbb", z: "a size in points, 1 to 409" };
 const ORDER = [...Object.values(FLAGS), ...Object.values(VALUES), ...Object.values(EDGES)];
-const valued = (code) => Object.hasOwn(WORDS, code);
+const valued = (code) => Object.hasOwn(VALID, code);
 const fault = (message) => Object.assign(new Error(message), { status: 400 });
 
 /** A packed style as attributes by code: true or false for a flag or an edge, a word or null (the default) for a value. */
@@ -28,7 +33,7 @@ export function decodeStyle(text) {
     if (!ORDER.includes(code)) continue;
     if (off) out[code] = valued(code) ? null : false;
     else if (!valued(code)) out[code] = true;
-    else if (WORDS[code].includes(word)) out[code] = word;
+    else if (VALID[code](word)) out[code] = word;
   }
   return out;
 }
@@ -41,11 +46,11 @@ export function styleAttrs(style) {
   const out = {};
   for (const [field, value] of Object.entries(style)) {
     if (Object.hasOwn(FLAGS, field)) { if (typeof value !== "boolean") throw fault(`${field} is true or false`); out[FLAGS[field]] = value; }
-    else if (Object.hasOwn(VALUES, field)) { const code = VALUES[field]; if (value !== null && !WORDS[code].includes(value)) throw fault(`${field} is one of ${WORDS[code].join(", ")}, or null for the default`); out[code] = value; }
+    else if (Object.hasOwn(VALUES, field)) { const code = VALUES[field]; const word = typeof value === "number" ? String(value) : typeof value === "string" ? value.toLowerCase() : value; if (word !== null && (typeof word !== "string" || !VALID[code](word))) throw fault(`${field} is ${SAID[code] ?? `one of ${WORDS[code].join(", ")}`}, or null for the default`); out[code] = word; }
     else if (field === "borders") {
       if (!value || typeof value !== "object") throw fault("borders is { top, right, bottom, left }, each true or false");
       for (const [edge, on] of Object.entries(value)) { if (!Object.hasOwn(EDGES, edge) || typeof on !== "boolean") throw fault("borders is { top, right, bottom, left }, each true or false"); out[EDGES[edge]] = on; }
-    } else throw fault(`A style has bold, italic, underline, strike, wrap, color, fill, align, valign and borders, not ${field}`);
+    } else throw fault(`A style has bold, italic, underline, strike, wrap, color, fill, align, valign, borderColor, borderWeight, size and borders, not ${field}`);
   }
   return out;
 }
@@ -53,7 +58,7 @@ export function styleAttrs(style) {
 export function styleOf(attrs) {
   const out = {}, borders = {};
   for (const [field, code] of Object.entries(FLAGS)) if (attrs[code] !== undefined) out[field] = attrs[code];
-  for (const [field, code] of Object.entries(VALUES)) if (attrs[code] !== undefined) out[field] = attrs[code];
+  for (const [field, code] of Object.entries(VALUES)) if (attrs[code] !== undefined) out[field] = code === "z" && attrs[code] !== null ? Number(attrs[code]) : attrs[code];
   for (const [edge, code] of Object.entries(EDGES)) if (attrs[code] !== undefined) borders[edge] = attrs[code];
   return Object.keys(borders).length ? { ...out, borders } : out;
 }

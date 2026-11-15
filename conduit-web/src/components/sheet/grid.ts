@@ -15,7 +15,9 @@ import type { SheetCellStyle } from "./styles";
 import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange, SheetReference } from "./host";
 
 /** What the grid reads of the sheet besides its cells: each column's width and type, the rows whose height is not the default (`look`), a value as its cell's number format draws it (formats.ts), a cell's style (styles.ts), and whether an import froze it. */
-export type SheetColumns = { width(col: number): number | undefined; type(col: number): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean; freeze(): { rows: number; cols: number }; hidden(): ReadonlySet<number> };
+export type SheetColumns = { width(col: number): number | undefined; type(col: number): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean; freeze(): { rows: number; cols: number }; hidden(): ReadonlySet<number>;
+  /** A filter's mark on a header cell (0 none, 1 a filter, 2 one keeping only some values) and a table's banded rows (filter.tsx). */
+  mark(row: number, col: number): number; banded(row: number, col: number): boolean };
 // How near a row's lower edge, beside its number, a press takes the edge to drag.
 const EDGE_SLOP = 3;
 // How often (ms) a drag held past the grid's edge scrolls it on by a column.
@@ -92,7 +94,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   const { model, events } = options;
   /** What a cell shows; what was typed into it is read only when the grid asks (editing, copying), since drawing never does. */
   class TextCell {
-    readonly kind = GridCellKind.Text; readonly allowOverlay = false;
+    readonly kind = GridCellKind.Text; readonly allowOverlay = false; mark = 0;
     constructor(private row: number, private col: number, private typed: string | null, readonly displayData: string, readonly contentAlign?: "left" | "center" | "right", readonly themeOverride?: Partial<Theme>, readonly worn?: SheetCellStyle, readonly frozen?: boolean) {}
     get data() { return this.typed ??= model.input(this.row, this.col); }
     get copyData() { return this.data; }
@@ -104,6 +106,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   // Set as the component mounts: the editor drives the island through these.
   const drive: { width?(col: number, width: number): void; height?(row: number, height: number): void; marks?(): void; look?(look: SheetLook): void; structure?(): void; owner?(part: Part): void } = {};
   let look = options.look, comments: Mark[] = [], references: Mark[] = [], owner = body;
+  // Find's matches (find.tsx) in amber's wash, as a highlighter marks them; coloured as drawn, so they follow the theme.
+  let found: readonly { range: SheetRange; current: boolean }[] = [];
+  const findMarks = (): Mark[] => found.map((one) => ({ color: look.palette.amber.fill, range: one.range, style: one.current ? "solid-outline" : "no-outline" }));
 
   // The grid runs on past what the sheet holds, as a spreadsheet's does: a cell written out there makes the sheet reach it (the hub's `set`).
   // The rows frozen are the head's; the body hides them, as it does the rows hidden.
@@ -122,8 +127,16 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     const within = p === head ? (area.top < frozenRows ? { ...area, bottom: Math.min(area.bottom, frozenRows - 1) } : null) : (area.bottom >= frozenRows ? { ...area, top: Math.max(area.top, frozenRows) } : null);
     return within && p.map.toDrawn(within);
   };
+  /** The focus cell's bands, in a part's drawn rows: the active cell's row (in its own part) and column (in both), the cell itself left clear. */
+  const focusOf = (p: Part): Highlight[] => {
+    const cell = look.focus ? owner.current.current?.cell : undefined;
+    if (!cell) return [];
+    const [col, row] = cell, rows = p === head ? size.head : size.rows, band = (x: number, y: number, width: number, height: number): Highlight[] => width > 0 && height > 0 ? [{ color: look.focus, range: { x, y, width, height }, style: "no-outline" }] : [];
+    if (p !== owner) return band(col, 0, 1, rows);
+    return [...band(0, row, col, 1), ...band(col + 1, row, size.cols - col - 1, 1), ...band(col, 0, 1, row), ...band(col, row + 1, 1, rows - row - 1)];
+  };
   const marksOf = (p: Part): Highlight[] | undefined => {
-    const list = [...references, ...comments].flatMap((one) => { const drawn = clip(p, one.range); return drawn ? [{ color: one.color, range: rect({ ...drawn, right: Math.min(drawn.right, size.cols - 1) }), style: one.style }] : []; });
+    const list = [...focusOf(p), ...[...references, ...findMarks(), ...comments].flatMap((one) => { const drawn = clip(p, one.range); return drawn ? [{ color: one.color, range: rect({ ...drawn, right: Math.min(drawn.right, size.cols - 1) }), style: one.style }] : []; })];
     return list.length ? list : undefined;
   };
   /**
@@ -207,7 +220,13 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       events.menu(col < 0 ? { rows } : { rows, cols });
     },
     // A press on the cell already selected moves nothing, so the grid would not take the keyboard back from the pane, which takes it on any press.
-    onCellClicked: ([col, row]) => { p.editor?.focus(); events.pressed(p.map.sheet(row), col); },
+    // A press on a filter's mark, in its header cell's right end, opens the filter.
+    onCellClicked: ([col, row], event) => {
+      p.editor?.focus();
+      const at = p.map.sheet(row), cell = options.columns.mark(at, col) && event.localEventX >= event.bounds.width - Number(look.grid.headerIconSize) - 2 * Number(look.grid.cellHorizontalPadding) ? box(p, col, row) : undefined;
+      if (cell) events.filter?.(at, col, { left: cell.x, top: cell.y, width: cell.width, height: cell.height });
+      events.pressed(at, col);
+    },
     onCellActivated: ([col, row]) => events.activated(p.map.sheet(row), col),
     onKeyDown: (event) => {
       const cell = p.current.current?.cell;
@@ -272,19 +291,24 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     const cellLook = useMemo(() => createCellLook(theme), [theme]);
     const contentOf = (p: Part) => {
       const hues = { destructive: theme.error, live: theme.live, warn: theme.warn }, { theme: themed } = cellLook;
+      // A table's banded rows are washed where a cell has no fill of its own; made once a look, as the grid compares them by identity.
+      const washes = new Map<Partial<Theme> | undefined, Partial<Theme>>(), washed = (made?: Partial<Theme>) => made?.bgCell ? made : washes.get(made) ?? washes.set(made, { ...made, bgCell: theme.mark }).get(made)!;
+      const withMark = (cell: TextCell, mark: number) => { cell.mark = mark; return cell; };
       return ([col, at]: Item): GridCell => {
-        const row = p.map.sheet(at), value = model.value(row, col), type = types[col];
-        if (type === "boolean") return { kind: GridCellKind.Boolean, data: value === true, allowOverlay: false, copyData: model.input(row, col) };
+        const row = p.map.sheet(at), value = model.value(row, col), type = types[col], mark = options.columns.mark(row, col), striped = options.columns.banded(row, col);
+        // A filter's header cell in a column of checkboxes is drawn as text, so its mark shows.
+        if (type === "boolean" && !mark) return { kind: GridCellKind.Boolean, data: value === true, allowOverlay: false, copyData: model.input(row, col) };
         // An empty value is an empty cell but for a formula that gives nothing.
         const input = value === null || typeof value === "string" ? model.input(row, col) : null;
         const style = options.columns.style(row, col);
         // An empty cell is drawn for its fill and edges alone.
-        if (input === "") return style ? new TextCell(row, col, "", "", undefined, themed(style), style) : EMPTY;
+        if (input === "") return style || mark || striped ? withMark(new TextCell(row, col, "", "", undefined, striped ? washed(themed(style)) : themed(style), style), mark) : EMPTY;
         // An error is shown by its code, as the engine names it; only a value that could be one is asked whether it is.
         const fault = typeof value === "string" && value.startsWith("#") && model.error(row, col) !== null;
         const drawn = fault || value === null || typeof value === "boolean" ? null : options.columns.draw(row, col, value);
-        return new TextCell(row, col, input, drawn ? drawn.text : shown(value), style?.align ?? (typeof value === "number" || type === "number" ? "right" : undefined), themed(style, fault ? theme.error : drawn?.hue && hues[drawn.hue]), style,
-          input !== null && !input.startsWith("=") && options.columns.frozen(row, col) || undefined);
+        const worn = themed(style, fault ? theme.error : drawn?.hue && hues[drawn.hue]);
+        return withMark(new TextCell(row, col, input, drawn ? drawn.text : shown(value), style?.align ?? (typeof value === "number" || type === "number" ? "right" : undefined), striped ? washed(worn) : worn, style,
+          input !== null && !input.startsWith("=") && options.columns.frozen(row, col) || undefined), mark);
       };
     };
     const content = useMemo(() => ({ head: contentOf(head), body: contentOf(body) }), [types, theme, cellLook]);
@@ -293,10 +317,23 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     const rowHeight = useMemo(() => ({ head: heightOf(head), body: heightOf(body) }), [shape, heights, theme]);
     // The columns frozen stand at the left as the rest scroll; never all of those in view, or nothing could scroll.
     const freezeColumns = useMemo(() => { frozenCols = Math.min(options.columns.freeze().cols, cols - 1); return frozenCols; }, [shape, cols]);
-    const marks = useMemo(() => ({ head: marksOf(head), body: marksOf(body) }), [marked, shape]);
+    // The focus cell follows the active cell; while it is off the key stays the same, so a move draws no marks again.
+    const focused = theme.focus && owner.current.current ? `${owner === head ? "head" : "body"}:${owner.current.current.cell.join()}` : "";
+    const marks = useMemo(() => ({ head: marksOf(head), body: marksOf(body) }), [marked, shape, focused, theme.focus]);
     // A whole column's letter, picked, is washed as its cells are; the grid would fill it in the accent its fill handle and ring keep.
     const drawHeader: DataEditorProps["drawHeader"] = (args, draw) => { if (args.isSelected) { const { ctx, rect: box } = args, inset = args.columnIndex ? 1 : 0; for (const fill of [theme.grid.bgHeader, theme.picked]) { ctx.fillStyle = String(fill); ctx.fillRect(box.x + inset, box.y, box.width - inset, box.height); } } draw(); };
-    const shared = { ...core, columns, freezeColumns, drawCell: cellLook.draw, drawHeader, theme: theme.grid as Partial<Theme> };
+    // A filter's mark at its header cell's right: a caret, under a bar (a funnel) where the column keeps only some values.
+    const drawCell = useMemo<NonNullable<DataEditorProps["drawCell"]>>(() => (args, content) => {
+      cellLook.draw(args, content);
+      const mark = (args.cell as { mark?: number }).mark;
+      if (!mark) return;
+      const { ctx, rect: box } = args, ink = ctx.fillStyle, wide = Number(theme.grid.headerIconSize) / 2, x = box.x + box.width - Number(theme.grid.cellHorizontalPadding) - wide, y = box.y + box.height / 2 - wide / 4;
+      ctx.fillStyle = String(mark === 2 ? theme.grid.textDark : theme.grid.textMedium);
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + wide, y); ctx.lineTo(x + wide / 2, y + wide / 2); ctx.closePath(); ctx.fill();
+      if (mark === 2) ctx.fillRect(x, y - wide / 4, wide, 1);
+      ctx.fillStyle = ink;
+    }, [cellLook, theme]);
+    const shared = { ...core, columns, freezeColumns, drawCell, drawHeader, theme: theme.grid as Partial<Theme> };
     // The head is as tall as its letters and rows: it never scrolls up or down.
     const headRows = size.head, headHeight = theme.header + Array.from({ length: headRows }, (_, drawn) => { const h = rowHeight.head; return typeof h === "number" ? h : h(drawn); }).reduce((sum, h) => sum + h, 0);
     // Sideways, the two parts scroll as one: a scroll of either moves the other, and the wheel over the head scrolls the body. Listened for on
@@ -393,6 +430,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     highlight: (list) => { comments = list.map((one) => ({ color: one.current ? look.markCurrent : look.mark, range: one.range, style: one.current ? "solid-outline" : "no-outline" })); drive.marks?.(); },
     // A whole column or row runs to the grid's end.
     references: (list: readonly SheetReference[]) => { references = list.map((one) => ({ color: look.inks[one.ink] ?? look.mark, range: one.range, style: one.pointing ? "dashed" : "solid" })); drive.marks?.(); },
+    found: (list) => { found = list; drive.marks?.(); },
     // The region's edge cells may be cut off: those are scrolled to, the rest left where they are.
     show: (at, col) => {
       const p = partOf(at), drawn = clip(p, { top: at, bottom: at, left: col, right: col }), { view } = p, cell = p.current.current?.cell;

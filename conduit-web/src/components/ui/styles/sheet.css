@@ -38,3 +38,11 @@
 .ui-spreadsheet-rows { position: relative; flex: 1; min-height: 0; }
 /* The frozen part scrolls sideways only with the rest, so it shows no scrollbar of its own. */
 .ui-spreadsheet-frozen .dvn-scroller { scrollbar-width: none; }
+/* Find and replace (components/sheet/find.tsx): the library's find bar over the grid's top right, clear of the comment margin, its options and the
+   replace field in rows under the find field. */
+.ui-spreadsheet-find { position: absolute; z-index: 3; top: var(--space-md); right: var(--space-lg); width: min(var(--measure-lg), calc(100% - 2 * var(--space-lg))); }
+.ui-spreadsheet-find[data-beside] { right: calc(var(--measure-md) + var(--space-lg)); width: min(var(--measure-lg), calc(100% - var(--measure-md) - 2 * var(--space-lg))); }
+.ui-spreadsheet-find > .ui-frost.ui-find-bar { position: static; width: auto; flex-wrap: wrap; }
+.ui-spreadsheet-find-rows { display: flex; flex-basis: 100%; flex-direction: column; gap: var(--space-2xs); order: 1; }
+.ui-spreadsheet-find-row { display: flex; align-items: center; gap: var(--space-2xs); }
+.ui-spreadsheet-find-row > .ui-lead-input { flex: 1; min-width: var(--control-lg); }

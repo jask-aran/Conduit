@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { HyperFormula } from "hyperformula";
-import { CALL_LIMIT, CELLS, COLS, COL_LIMIT, LOOK, MAIN, ROWS, SHEET_FORMAT, SHEET_LIMIT, TAB, TABS, WORKBOOK_LIMIT, a1, colId, colIndex, colName, colsOf, fromCsv, key, parseA1, parseRange, parseRef, rangeA1, rowId, rowsOf, tabName, tabNameFault, tabRef, toCsv, valueText } from "../sheet-format.js";
+import { CALL_LIMIT, CELLS, COLS, COL_LIMIT, LOOK, MAIN, ROWS, SHEET_FORMAT, SHEET_LIMIT, TAB, TABS, WORKBOOK_LIMIT, a1, colId, filterHides, rangedArea, colIndex, colName, colsOf, fromCsv, key, parseA1, parseRange, parseRef, rangeA1, rowId, rowsOf, tabName, tabNameFault, tabRef, toCsv, valueText } from "../sheet-format.js";
 import { CONFIG, createWorkbookModel } from "../sheet-engine.js";
 import { listFormats, writeFormat } from "../sheet-formats.js";
 import { listStyles, writeStyle } from "../sheet-styles.js";
@@ -22,6 +22,8 @@ export const tabOfFile = (file) => file.slice(0, -4).replace(/%([0-9A-F]{2})/gi,
 
 export function sheetKind(hub) {
   const { fault } = hub, START = { rows: 20, cols: 8 }, SIDE = "sheet.json";
+  /** The tab's look that names a range by its corners' ids (`filter:<tabId>`, `table:<tabId>`, sheet-format.d.ts SheetRangedLook). */
+  const RANGED = ["filter", "table"];
   const blank = (rows, cols) => Array.from({ length: rows }, () => new Array(cols).fill(""));
   const isFolder = (room) => room.entry.path.endsWith(FOLDER);
   /** Tabs are named wherever one is addressed once there are several (or the sheet is a workbook folder). */
@@ -73,11 +75,15 @@ export function sheetKind(hub) {
    * Each cell of the range from `values` repeated over it; a formula is moved as a spreadsheet's fill moves it (its relative references follow the cell),
    * worked out in an engine of its own holding only the values, where they stand, beside empty tabs of the workbook's names (so `Data!A1` moves too).
    */
+  const scratch = (room, sheet) => {
+    const engine = HyperFormula.buildFromSheets(Object.fromEntries(room.book.tabs().map((tab) => [room.book.tab(tab.id).engine.getSheetName(room.book.tab(tab.id).sheet), []])), CONFIG);
+    return { engine, here: engine.getSheetId(sheet.engine.getSheetName(sheet.sheet)) };
+  };
   const filled = (room, sheet, values, range) => {
     const height = values.length, width = Math.max(...values.map((row) => row.length)), at = (r, c) => values[r % height][c % width] ?? "";
     const moved = values.some((row) => row.some((value) => value.startsWith("="))) && (range.bottom - range.top + 1 > height || range.right - range.left + 1 > width)
       ? (() => {
-        const engine = HyperFormula.buildFromSheets(Object.fromEntries(room.book.tabs().map((tab) => [room.book.tab(tab.id).engine.getSheetName(room.book.tab(tab.id).sheet), []])), CONFIG), here = engine.getSheetId(sheet.engine.getSheetName(sheet.sheet));
+        const { engine, here } = scratch(room, sheet);
         try {
           engine.setCellContents({ sheet: here, row: range.top, col: range.left }, values.map((row) => Array.from({ length: width }, (_, c) => row[c] || null)));
           return engine.getFillRangeData({ start: { sheet: here, row: range.top, col: range.left }, end: { sheet: here, row: range.top + height - 1, col: range.left + width - 1 } }, { start: { sheet: here, row: range.top, col: range.left }, end: { sheet: here, row: range.bottom, col: range.right } });
@@ -90,6 +96,70 @@ export function sheetKind(hub) {
     }
     return out;
   };
+  // As a spreadsheet sorts: numbers, then text (case aside), then TRUE and FALSE, then errors, each the other way round descending; blanks last either way.
+  const rankOf = (sheet, row, col) => { const value = sheet.value(row, col); return value === null || value === "" ? [4, 0] : sheet.error(row, col) !== null ? [3, 0] : [typeof value === "number" ? 0 : typeof value === "string" ? 1 : 2, value]; };
+  const sortedRows = (sheet, top, bottom, col, descending) => {
+    const rows = Array.from({ length: bottom - top + 1 }, (_, n) => ({ row: top + n, rank: rankOf(sheet, top + n, col) })), sign = descending ? -1 : 1;
+    return rows.sort(({ rank: [a, x] }, { rank: [b, y] }) => a === 4 || b === 4 ? a - b : sign * (a - b || (a === 1 ? String(x).localeCompare(String(y), undefined, { sensitivity: "base" }) : a === 0 || a === 2 ? Number(x) - Number(y) : 0))).map(({ row }) => row);
+  };
+  /**
+   * Columns `left`..`right` of the rows from `top` in the order given (old positions), as a spreadsheet sorts: only those cells move, each with its
+   * own look (`<what>:<rowId>:<colId>`: a style, a number format) and a formula moved as a fill moves it. Rows and their look stay. Only what changes
+   * is written, so an edit elsewhere in the rows meanwhile is kept.
+   */
+  const reorder = (room, sheet, top, order, left, right) => {
+    const typed = sheet.inputs(), cols = Array.from({ length: right - left + 1 }, (_, c) => left + c), rowOf = new Map(order.map((_, n) => [sheet.rowAt(top + n), top + n])), colOf = new Map(cols.map((c) => [sheet.colAt(c), c]));
+    const worn = new Map(), cell = (row, col) => key(sheet.rowAt(row), sheet.colAt(col)), one = (row, col, here) => ({ start: { sheet: here, row, col }, end: { sheet: here, row, col } });
+    for (const [name, value] of room.look.entries()) {
+      const [what, row, col, more] = name.split(":"), at = `${rowOf.get(row)}:${colOf.get(col)}`;
+      if (more === undefined && rowOf.has(row) && colOf.has(col)) (worn.get(at) ?? worn.set(at, new Map()).get(at)).set(what, value);
+    }
+    const { engine, here } = scratch(room, sheet);
+    try {
+      order.forEach((was, n) => {
+        const to = top + n;
+        if (was !== to) for (const c of cols) {
+          const input = typed[was][c] ?? "", place = cell(to, c);
+          if (input.startsWith("=")) engine.setCellContents({ sheet: here, row: was, col: c }, input);
+          const moved = input.startsWith("=") ? String(engine.getFillRangeData(one(was, c, here), one(to, c, here))[0]?.[0] ?? input) : input;
+          if (moved !== (typed[to][c] ?? "")) { if (moved) room.cells.set(place, moved); else room.cells.delete(place); }
+          const want = worn.get(`${was}:${c}`) ?? new Map(), had = worn.get(`${to}:${c}`) ?? new Map();
+          for (const [what, value] of want) if (had.get(what) !== value) room.look.set(`${what}:${place}`, value);
+          for (const what of had.keys()) if (!want.has(what)) room.look.delete(`${what}:${place}`);
+        }
+      });
+    } finally { engine.destroy(); }
+  };
+  /** The tab's filter applied again (its `hide`), written only where that changes. */
+  const refilter = (room, sheet, by) => {
+    const name = `filter:${sheet.id}`, text = room.look.get(name);
+    let filter;
+    try { filter = JSON.parse(String(text)); } catch { return; }
+    const hide = filterHides(sheet, filter), next = JSON.stringify({ ...filter, hide: hide.length ? hide : undefined });
+    if (next !== text) hub.as(room, by, (sign) => room.doc.transact(() => { room.look.set(name, next); sign(); }));
+  };
+  /**
+   * Before rows or columns are deleted: each filter's and table's corner on one of them moves to the nearest one left inside its range, and one with
+   * none left is taken off, so deleting its header or last row keeps it.
+   */
+  const keepCorners = (room, sheet, isRows, at, count) => {
+    const out = [], gone = (n) => n >= at && n < at + count;
+    for (const what of RANGED) {
+      const name = `${what}:${sheet.id}`;
+      let ranged;
+      try { ranged = JSON.parse(String(room.look.get(name))); } catch { continue; }
+      const area = rangedArea(sheet, ranged);
+      if (!area) { out.push([name, null]); continue; }
+      let [lo, hi] = isRows ? [area.top, area.bottom] : [area.left, area.right];
+      while (lo <= hi && gone(lo)) lo++;
+      while (hi >= lo && gone(hi)) hi--;
+      if (lo > hi) { out.push([name, null]); continue; }
+      const id = (n) => isRows ? sheet.rowAt(n) : sheet.colAt(n), corner = (text, n) => { const [row, col] = String(text).split(":"); return isRows ? key(id(n), col) : key(row, id(n)); };
+      const next = { ...ranged, from: corner(ranged.from, lo), to: corner(ranged.to, hi) };
+      if (next.from !== ranged.from || next.to !== ranged.to) out.push([name, JSON.stringify(next)]);
+    }
+    return () => { for (const [name, value] of out) if (value === null) room.look.delete(name); else room.look.set(name, value); };
+  };
   const text = (value) => value === null || value === undefined ? "" : typeof value === "string" ? value : typeof value === "number" || typeof value === "boolean" ? String(value).toUpperCase() : (() => { throw fault(400, "A cell's value is text: what is typed in it (a number, TRUE or FALSE, or a formula starting with =)"); })();
   const index = (value, most, what) => {
     if (!Number.isInteger(value) || value < 0 || value > most) throw fault(400, `at is the 0-based index of the ${what}, from 0 to ${most}`);
@@ -97,11 +167,30 @@ export function sheetKind(hub) {
   };
   /** A tab's formulas by address, and its look by row number (a height), column letter, cell address, or alone for the tab's own. */
   const formulasOf = (sheet) => { const out = {}; sheet.inputs().forEach((row, r) => row.forEach((input, c) => { if (input.startsWith("=")) out[a1(r, c)] = input; })); return out; };
+  /** A filter's or table's look by A1 (`{ range: "A1:D20", keep: { B: [...] } }`), from its JSON by ids (`from`/`to` corners, `keep` by column id); undefined where a corner is gone. */
+  const rangedA1 = (sheet, text) => {
+    try {
+      const ranged = JSON.parse(String(text)), { keep, hide } = ranged, rest = Object.fromEntries(Object.entries(ranged).filter(([name]) => !["from", "to", "keep", "hide"].includes(name))), area = rangedArea(sheet, ranged);
+      if (!area) return undefined;
+      const kept = keep && Object.fromEntries(Object.entries(keep).flatMap(([col, values]) => sheet.indexOfCol(col) >= 0 ? [[colName(sheet.indexOfCol(col)), values]] : []));
+      const hidden = Array.isArray(hide) ? hide.map((id) => sheet.indexOfRow(id) + 1).filter(Boolean) : [];
+      return { ...rest, range: rangeA1(area), ...(kept ? { keep: kept } : {}), ...(hidden.length ? { hide: hidden } : {}) };
+    } catch { return undefined; }
+  };
+  const rangedIds = (sheet, value) => {
+    const area = parseRange(String(value?.range ?? "")), { rows, cols } = sheet.size();
+    if (!area || area.bottom >= rows || area.right >= cols) return undefined;
+    const { keep, hide } = value, rest = Object.fromEntries(Object.entries(value).filter(([name]) => !["range", "keep", "hide"].includes(name))), colOf = (letter) => /^[A-Z]{1,3}$/.test(letter) && colIndex(letter) < cols ? sheet.colAt(colIndex(letter)) : undefined;
+    const kept = keep && typeof keep === "object" ? Object.fromEntries(Object.entries(keep).flatMap(([letter, values]) => colOf(letter) && Array.isArray(values) ? [[colOf(letter), values.map(String)]] : [])) : undefined;
+    return JSON.stringify({ ...rest, from: key(sheet.rowAt(area.top), sheet.colAt(area.left)), to: key(sheet.rowAt(area.bottom), sheet.colAt(area.right)), ...(kept ? { keep: kept } : {}),
+      ...(Array.isArray(hide) ? { hide: hide.flatMap((row) => Number.isInteger(row) && row >= 1 && row <= rows ? [sheet.rowAt(row - 1)] : []) } : {}) });
+  };
   const lookOf = (room, sheet) => {
     const out = {};
     for (const [name, value] of room.look.entries()) {
       const [what, ...ids] = name.split(":");
-      if (ids.length === 1 && ids[0] === sheet.id) out[what] = value;
+      if (ids.length === 1 && ids[0] === sheet.id && RANGED.includes(what)) { const said = rangedA1(sheet, value); if (said) out[what] = said; }
+      else if (ids.length === 1 && ids[0] === sheet.id) out[what] = value;
       else if (ids.length === 1 && sheet.indexOfRow(ids[0]) >= 0) out[`${what}:${sheet.indexOfRow(ids[0]) + 1}`] = value;
       else if (ids.length === 1 && sheet.indexOfCol(ids[0]) >= 0) out[`${what}:${colName(sheet.indexOfCol(ids[0]))}`] = value;
       else if (ids.length === 2 && sheet.indexOfRow(ids[0]) >= 0 && sheet.indexOfCol(ids[1]) >= 0) out[`${what}:${a1(sheet.indexOfRow(ids[0]), sheet.indexOfCol(ids[1]))}`] = value;
@@ -112,7 +201,8 @@ export function sheetKind(hub) {
     for (const [name, value] of Object.entries(kept ?? {})) {
       const [what, at, more] = name.split(":"), col = /^[A-Z]{1,3}$/.test(at ?? "") ? colIndex(at) : -1, row = /^\d+$/.test(at ?? "") ? Number(at) - 1 : -1, cell = at ? parseA1(at) : null, { rows, cols } = sheet.size();
       if (!what || more !== undefined) continue;
-      if (at === undefined) room.look.set(`${what}:${tab}`, value);
+      if (at === undefined && RANGED.includes(what)) { const ids = rangedIds(sheet, value); if (ids) room.look.set(`${what}:${tab}`, ids); }
+      else if (at === undefined) room.look.set(`${what}:${tab}`, value);
       else if (row >= 0 && row < rows) room.look.set(`${what}:${sheet.rowAt(row)}`, value);
       else if (col >= 0 && col < cols) room.look.set(`${what}:${sheet.colAt(col)}`, value);
       else if (cell && cell.row < rows && cell.col < cols) room.look.set(`${what}:${key(sheet.rowAt(cell.row), sheet.colAt(cell.col))}`, value);
@@ -283,7 +373,7 @@ export function sheetKind(hub) {
         return `${head}${part}\n${toCsv(clip(typed, area))}`;
       },
       /** One change of cells, of rows and columns, or of tabs (contract: POST /v0/document/:id/cells). `for` is checked, and nothing is kept of it yet. */
-      async edit(room, { op, tab, at, range, values, value, format, style, borders, count = 1, name: called, hidden, by, for: about } = {}) {
+      async edit(room, { op, tab, at, range, values, value, format, style, borders, column, header, descending, count = 1, name: called, hidden, by, for: about } = {}) {
         const name = typeof by === "string" && by ? by.slice(0, 80) : "agent";
         if (about !== undefined) {
           if (!/^[\w-]+\/\d+$/.test(String(about))) throw fault(400, `for is the comment answered, as <item>/<n>, not ${about}`);
@@ -336,14 +426,24 @@ export function sheetKind(hub) {
           }));
           return { cells: [label(room, sheet, area)], ...(op === "format" ? { formats: listFormats(room.look, sheet, area) } : { styles: listStyles(room.look, sheet, area) }), ...(many(room) ? { tab: sheet.name } : {}) };
         }
-        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, insert-rows, insert-cols, delete-rows, delete-cols, add-tab, rename-tab, delete-tab, move-tab or hide-tab");
+        if (op === "sort") {
+          const ref = parseRef(range ?? at), sheet = pick(room, tab, ref.tab ?? undefined), area = parseRange(ref.range), { rows, cols } = sheet.size();
+          if (!area) throw fault(400, `range is an A1 range such as A1:D20 (or Data!A1:D20), not ${range ?? at}`);
+          const col = typeof column === "string" && /^[A-Za-z]{1,3}$/.test(column) ? colIndex(column) : -1, top = area.top + (header === true ? 1 : 0), bottom = Math.min(area.bottom, rows - 1);
+          if (col < area.left || col > area.right) throw fault(400, `column is the letter of a column of ${rangeA1(area)} to sort by, not ${column}`);
+          if (top < bottom) hub.as(room, name, (sign) => room.doc.transact(() => { reorder(room, sheet, top, sortedRows(sheet, top, bottom, col, descending === true), area.left, Math.min(area.right, cols - 1)); sign(); }));
+          refilter(room, sheet, name);
+          return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}) };
+        }
+        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, sort, insert-rows, insert-cols, delete-rows, delete-cols, add-tab, rename-tab, delete-tab, move-tab or hide-tab");
         const sheet = pick(room, tab), { rows, cols } = sheet.size(), isRows = op.endsWith("rows"), size = isRows ? rows : cols, what = isRows ? "row" : "column", removing = op.startsWith("delete");
         if (!Number.isInteger(count) || count < 1 || count > CALL_LIMIT) throw fault(400, "count is how many, 1 or more");
         index(at, removing ? size - 1 : size, `${what} to ${removing ? "delete" : "insert before"} (${size} ${what}s now)`);
         if (removing && at + count > size) throw fault(400, `There are ${size - at} ${what}s from ${at}: count is at most that`);
         if (removing && count >= size) throw fault(400, `A tab keeps at least one ${what}`);
         if (!removing) sized(room, sheet, isRows ? rows + count : rows, isRows ? cols : cols + count);
-        return { ...hub.as(room, name, (sign) => sheet.structure(op, at, count, sign)), ...(many(room) ? { tab: sheet.name } : {}) };
+        const corners = removing ? keepCorners(room, sheet, isRows, at, count) : () => {};
+        return { ...hub.as(room, name, (sign) => sheet.structure(op, at, count, () => { corners(); sign(); })), ...(many(room) ? { tab: sheet.name } : {}) };
       },
     },
   };

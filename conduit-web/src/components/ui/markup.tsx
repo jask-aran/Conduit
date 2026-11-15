@@ -234,7 +234,7 @@ function Part(props: { parted: boolean; label: string; children: JSX.Element }) 
   return <Show when={props.parted} fallback={props.children}><Bar class="ui-markup-bar" role="toolbar" aria-label={props.label}>{props.children}</Bar></Show>;
 }
 
-export type MarkupOwnTool = { name: string; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; /** The key that presses it next in a key sequence being typed (a sheet's Alt sequences), drawn on it. */ tip?: string; menu?: string; /** Its menu's control shows the icon alone (a swatch says its colour). */ compact?: boolean; /** The colour it puts on, where it is one of a set of inks. */ swatch?: string; /** It puts on any colour, the one handed it: the last of a set of inks, chosen with the colour picker. */ pick?: (hex: string) => void; /** It is a way the surface is worked on, one of a few: `review` is the one Markup's own tools belong to, entered as one is taken. */ mode?: "edit" | "review"; run: () => void };
+export type MarkupOwnTool = { name: string; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; /** The key that presses it next in a key sequence being typed (a sheet's Alt sequences), drawn on it. */ tip?: string; menu?: string; /** Its menu's control shows the icon alone (a swatch says its colour). */ compact?: boolean; /** The colour it puts on, where it is one of a set of inks. */ swatch?: string; /** It puts on any colour, the one handed it: the last of a set of inks, chosen with the colour picker. */ pick?: (hex: string) => void; /** Its menu's control shows this glyph and the menu's name alone, not the one that is so now: its tools are each worn or done on their own (text styles), not one of a set. */ glyph?: () => JSX.Element; /** It is a way the surface is worked on, one of a few: `review` is the one Markup's own tools belong to, entered as one is taken. */ mode?: "edit" | "review"; run: () => void };
 
 const named = (label: string, keys?: readonly string[]) => keys?.length ? `${label} (${keys.join(" ")})` : label;
 /** How far the ribbon has folded to fit its frame: 1 drops the captions, 2 makes the edit set one Format menu, 3 Markup's tools one Annotate menu too. */
@@ -301,8 +301,8 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   // A menu's control shows a key only where every one of its tools is pressed next by that key (a sequence that opens the menu); within it, the host says them.
   const shared = (menu: string) => { const tips = new Set(of(menu).map((tool) => tool.tip)); return tips.size === 1 ? [...tips][0] : undefined; };
   const tip = (key?: string) => <Show when={key}><Keycap class="ui-markup-tip">{key!}</Keycap></Show>;
-  // A key sequence typed into a menu (its tools' next keys differ) opens it, each key on its row; the keyboard stays where the sequence is typed, the menu taking it neither as it opens nor as it shuts.
-  const keyed = () => menus().find((menu) => of(menu).some((tool) => tool.tip) && !shared(menu));
+  // A key sequence typed into a menu (its tools' next keys differ, and no other control draws a key, so the sequence leads nowhere else on the bar) opens it, each key on its row; the keyboard stays where the sequence is typed, the menu taking it neither as it opens nor as it shuts.
+  const keyed = () => toggles().some((tool) => tool.tip) || menus().some(shared) ? undefined : menus().find((menu) => of(menu).some((tool) => tool.tip));
   let inkedByKeys: string | null = null, keyedMenu: string | null = null, returnTo: HTMLElement | null = null;
   const inkButtons = new Map<string, HTMLElement>();
   createEffect(() => {
@@ -311,10 +311,10 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     if (menu && inkSet(menu)) { inkedByKeys = menu; anchor = inkButtons.get(menu); setPickingOwn(false); setInking(menu); }
     else if (inkedByKeys) { if (untrack(inking) === inkedByKeys) setInking(null); inkedByKeys = null; }
   });
-  const kinds = (menu: string) => { const now = () => of(menu).find((tool) => tool.active) ?? of(menu)[0]!;
+  const kinds = (menu: string) => { const now = () => of(menu).find((tool) => tool.active) ?? of(menu)[0]!; const glyph = () => of(menu).find((tool) => tool.glyph)?.glyph;
     if (inkSet(menu)) return <IconButton ref={(button: HTMLButtonElement) => inkButtons.set(menu, button)} label={`${menu}: ${now().label}`} aria-pressed={inking() === menu} aria-expanded={inking() === menu} disabled={of(menu).every((tool) => tool.disabled)} style={{ color: now().swatch }} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { if (!using()) props.onView("use"); anchor = event.currentTarget; setPickingOwn(false); setInking(inking() === menu ? null : menu); }}>{of(menu)[0]!.icon()}{tip(shared(menu))}</IconButton>;
     return <DropdownMenu modal={false} placement="bottom-start" open={keyed() === menu ? true : undefined} onOpenChange={(open) => { if (!open) return; setInking(null); if (!using()) props.onView("use"); }}>
-    <MenuControl as={IconButton} label={`${menu}: ${now().label}`} onFocus={() => { if (keyedMenu !== menu || keyed() === menu) return; const back = returnTo; keyedMenu = returnTo = null; back?.focus({ preventScroll: true }); }}>{now().icon()}{tip(shared(menu))}</MenuControl>
+    <MenuControl as={IconButton} label={glyph() ? menu : `${menu}: ${now().label}`} onFocus={() => { if (keyedMenu !== menu || keyed() === menu) return; const back = returnTo; keyedMenu = returnTo = null; back?.focus({ preventScroll: true }); }}>{(glyph() ?? now().icon)()}{tip(shared(menu))}</MenuControl>
     <MenuContent width="sm" keep={() => keyedMenu === menu} onOpenAutoFocus={(event) => { if (keyedMenu === menu) event.preventDefault(); }} onCloseAutoFocus={(event) => { if (keyedMenu === menu) event.preventDefault(); }}><MenuSection title={menu}><For each={of(menu)}>{(tool) => choice(tool)}</For></MenuSection></MenuContent>
   </DropdownMenu>; };
   const owned = () => <>

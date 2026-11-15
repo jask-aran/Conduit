@@ -2350,6 +2350,10 @@ function App() {
     setSettingsLoaded(true);
     setSettingsOpen(true);
   };
+  // A surface the app hands no props (an artifact's) opens Settings by event.
+  const openSettingsFromEvent = (event: Event) => openSettings((event as CustomEvent<string>).detail);
+  window.addEventListener("conduit:open-settings", openSettingsFromEvent);
+  onCleanup(() => window.removeEventListener("conduit:open-settings", openSettingsFromEvent));
   // Float's notification (screen context to set up) opens a section from outside the page's own controls, once the
   // first route is up (opened earlier, it is lost under the connecting screen).
   let floatSettingsWired = false;

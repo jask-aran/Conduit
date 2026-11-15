@@ -6,6 +6,7 @@ import type { ArtifactSurfaceProps } from "./artifact-kinds";
 import { api } from "../api/client";
 import { ARTIFACT_KINDS } from "./artifact-kinds";
 import { sheetCells } from "./artifacts";
+import { sheetDisplay } from "../preferences/sheet-display";
 
 /** A sheet in its pane: the hub's live copy in the sheet editor, comments on ranges of cells in the margin beside it. It declares no seats, suggestions or answer acts (Keep, Revert), which a sheet does not have yet. */
 export default function SheetSurface(props: ArtifactSurfaceProps) {
@@ -15,6 +16,7 @@ export default function SheetSurface(props: ArtifactSurfaceProps) {
     socket: async (sheet) => new WebSocket(await webSocketUrl(`/v0/document/${sheet}/live`)), author: () => "person",
     cells: (op) => sheetCells(id, op), failed: (message) => toast.error(message), tools: ARTIFACT_KINDS.sheet.cells,
     frozen: () => api<{ report: { frozen?: SheetFrozen } | null }>(`/v0/document/${encodeURIComponent(id)}?as=import`).then(({ report }) => report?.frozen ?? null, () => null),
+    display: sheetDisplay, openSettings: () => window.dispatchEvent(new CustomEvent("conduit:open-settings", { detail: "artifacts" })),
   };
   props.onSurface({
     markup: {

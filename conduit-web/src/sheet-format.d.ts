@@ -61,6 +61,23 @@ export type SheetTabOp =
   | { op: "delete-tab"; tab: string }
   | { op: "move-tab"; tab: string; at: number }
   | { op: "hide-tab"; tab: string; hidden: boolean };
+/**
+ * POST /v0/document/:id/cells: the rows of `range` (below its first, with `header`) sorted by `column` (its letter), blanks last, as a spreadsheet
+ * sorts: only the range's cells move, each with its own look (style, number format), a formula moved as a fill moves it. Rows, their heights and
+ * comments stay where they are. The filter is applied again after.
+ */
+export type SheetSortOp = { op: "sort"; range: string; column: string; descending?: boolean; header?: boolean; tab?: string };
+/**
+ * `look`'s `filter:<tabId>` and `table:<tabId>`, JSON: a range by its corners (`<rowId>:<colId>`), its first row the header. A filter's `keep` holds,
+ * by column id, the values (as valueText writes them, "" for blank) its rows under the header may show; a column without one keeps every row; `hide`
+ * is the rows it left out when last applied (filterHides), by id, so every page hides the same ones. A table's `name` is its own; it is drawn with a
+ * bold header and banded rows, and turns the filter on over it. sheet.json writes them by A1: `{ range: "A1:D20", keep: { B: ["x"] }, hide: [3, 5] }`.
+ */
+export type SheetRangedLook = { from: string; to: string; keep?: Record<string, string[]>; hide?: string[]; name?: string };
+/** Its range in `view`; null where a corner is gone. */
+export function rangedArea(view: Pick<SheetView, "indexOfRow" | "indexOfCol">, ranged: Partial<SheetRangedLook> | null | undefined): Range | null;
+/** The rows under a filter's header its kept values leave out, by id: its `hide` as applied now. */
+export function filterHides(view: SheetView, filter: SheetRangedLook): string[];
 export type SheetTabSize = Tab & { rows: number; cols: number };
 /** `tab`: the id of the tab acted on (the new one for add-tab). GET /v0/document/:id?as=tabs answers { tabs } alone. */
 export type SheetTabsResult = { tab: string; tabs: SheetTabSize[] };

@@ -11,6 +11,10 @@ import type { SheetRange } from "./host";
 
 /** A colour a format's section names, as the token the grid draws it in; one with no token here (blue, magenta…) draws as text. */
 export type SheetHue = "destructive" | "live" | "warn";
+/** Where a format's `*` fill stands in a drawn value, followed by the character it repeats: the grid draws what is before it at the cell's left and what is after at its right, as accounting formats put `$` and the figure (cell-draw.ts). */
+export const SHEET_FILL = "\u0001";
+/** A drawn value's text as words carry it (the foot's figures, find): its fill's mark gone. */
+export const unfilled = (text: string) => text.includes(SHEET_FILL) ? text.replace(/\u0001[^]/g, "").trim() : text;
 /** A value as its format draws it. */
 export type SheetDrawn = { text: string; hue?: SheetHue };
 /** A format the person picks by name (`code`: the key under Ctrl+Shift, as Excel has it). */
@@ -39,7 +43,7 @@ const compile = (pattern: string): Compiled | null => {
     // Text is drawn through a format only where it has a section for text (`@`).
     text: pattern.replace(LITERAL, "").includes("@"),
     draw: (value) => {
-      try { const colour = coloured ? formatColor(pattern, value) : undefined; return { text: render(pattern, value), hue: typeof colour === "string" ? HUES[colour.toLowerCase()] : undefined }; } catch { return null; }
+      try { const colour = coloured ? formatColor(pattern, value) : undefined; return { text: render(pattern, value, { fillChar: SHEET_FILL }), hue: typeof colour === "string" ? HUES[colour.toLowerCase()] : undefined }; } catch { return null; }
     },
   } : null;
   compiled.set(pattern, made);
@@ -145,6 +149,6 @@ export function createSheetFormats(look: Y.Map<number | string>, model: Accessor
       set(range, preset.format);
       return true;
     },
-    figure(range) { const pattern = range && this.uniform(range), made = pattern ? compile(pattern) : null; return made && ((value) => made.draw(value)?.text ?? String(value)); },
+    figure(range) { const pattern = range && this.uniform(range), made = pattern ? compile(pattern) : null; return made && ((value) => unfilled(made.draw(value)?.text ?? String(value))); },
   };
 }

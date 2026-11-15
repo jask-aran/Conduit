@@ -77,6 +77,18 @@ export function fromCsv(text) {
 export const isError = (value) => value !== null && typeof value === "object";
 /** A computed value as the file writes it. */
 export const valueText = (value) => value === null || value === undefined ? "" : typeof value === "boolean" ? (value ? "TRUE" : "FALSE") : isError(value) ? value.value : String(value);
+export const rangedArea = (view, ranged) => {
+  const at = (corner) => { const text = String(corner ?? ""), cut = text.indexOf(":"); return cut < 0 ? [-1, -1] : [view.indexOfRow(text.slice(0, cut)), view.indexOfCol(text.slice(cut + 1))]; };
+  const [top, left] = at(ranged?.from), [bottom, right] = at(ranged?.to);
+  return top >= 0 && left >= 0 && bottom >= top && right >= left ? { top, left, bottom, right } : null;
+};
+export const filterHides = (view, filter) => {
+  const area = rangedArea(view, filter), out = [];
+  if (!area || !filter.keep) return out;
+  const cols = Object.entries(filter.keep).flatMap(([id, list]) => { const col = view.indexOfCol(id); return col >= area.left && col <= area.right ? [[col, new Set(list)]] : []; });
+  if (cols.length) for (let row = area.top + 1; row <= area.bottom; row++) if (cols.some(([col, list]) => !list.has(valueText(view.value(row, col))))) out.push(view.rowAt(row));
+  return out;
+};
 /** A tab not there (yet): what a model or view of it reads. */
 export const NONE = Object.freeze({ id: undefined, rowIds: [], colIds: [], rowIndex: new Map(), colIndex: new Map(), typed: [], sheet: -1 });
 /** The tabs' ids in order: a doc with no `tabs` is the one tab `main`. */

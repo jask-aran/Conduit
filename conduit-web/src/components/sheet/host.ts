@@ -5,7 +5,7 @@
  * loaded only with a sheet (grid.ts).
  */
 import type { JSX } from "solid-js";
-import type { SheetTabOp } from "@/sheet-format.js";
+import type { SheetSortOp, SheetTabOp } from "@/sheet-format.js";
 import type { SheetFormatOp } from "@/sheet-formats.js";
 import type { SheetBorders, SheetInk, SheetStyleOp } from "@/sheet-styles.js";
 
@@ -15,7 +15,8 @@ export type SheetRange = { top: number; left: number; bottom: number; right: num
  * The grid's look, read from the app's tokens (theme.ts): Glide's theme object, sizes in pixels, and the inks it draws itself (`inks`: a formula's references, formula.ts INKS; `live` and `warn`: a number format's green and yellow).
  * For styles (styles.ts): `strong`, a bold cell's weight; `edge`, a border's colour; `palette`, each ink as text and as a cell's fill; `corner`, the size of the mark on a cell an import froze (in `warn`).
  */
-export type SheetLook = { grid: Record<string, string | number>; row: number; header: number; picked: string; width: number; error: string; live: string; warn: string; mark: string; markCurrent: string; inks: string[];
+/** `focus`: the wash over the active cell's row and column, empty while the focus cell is off. */
+export type SheetLook = { grid: Record<string, string | number>; row: number; header: number; picked: string; width: number; error: string; live: string; warn: string; mark: string; markCurrent: string; focus: string; inks: string[];
   strong: string; edge: string; corner: number; palette: Record<SheetInk, { text: string; fill: string }> };
 /** A reference in the formula being edited, outlined on the grid in its ink; `pointing`: the one being pointed at with the mouse or arrows. */
 export type SheetReference = { range: SheetRange; ink: number; pointing: boolean };
@@ -31,6 +32,7 @@ export type SheetCellsOp =
   | { op: "insert-rows" | "insert-cols" | "delete-rows" | "delete-cols"; at: number; count?: number; tab?: string }
   | SheetFormatOp
   | SheetStyleOp
+  | SheetSortOp
   | SheetTabOp;
 
 /** A cell an import could not compute, as GET /v0/document/:id?as=import reports it (server/sheet-xlsx.js): the file's formula, why, and the value it holds instead. By tab name, then A1. */
@@ -40,12 +42,13 @@ export type SheetFrozen = Record<string, Record<string, { formula: string; why: 
  * The edit tools a sheet offers on its ribbon, as its kind declares them (client/document/artifact-kinds.ts). Each draws as one or more tools named
  * `<tool>` (a toggle) or `<tool>-<choice>` (one of a menu): SheetToolId, the stable names a key sequence is bound to. Undo and Redo are the ribbon's own.
  */
-export type SheetToolName = "bold" | "italic" | "underline" | "strike" | "wrap" | "color" | "fill" | "borders" | "align" | "valign" | "format" | "decimals";
-export const SHEET_TOOLS: readonly SheetToolName[] = ["bold", "italic", "underline", "strike", "wrap", "color", "fill", "borders", "align", "valign", "format", "decimals"];
-export type SheetToolId = "bold" | "italic" | "underline" | "strike" | "wrap" | `color-${SheetInk | "none"}` | `fill-${SheetInk | "none"}` | `borders-${SheetBorders}`
+export type SheetToolName = "bold" | "italic" | "underline" | "strike" | "wrap" | "clear" | "color" | "fill" | "borders" | "align" | "valign" | "format" | "decimals" | "spread";
+export const SHEET_TOOLS: readonly SheetToolName[] = ["bold", "italic", "underline", "strike", "wrap", "clear", "color", "fill", "borders", "align", "valign", "format", "decimals", "spread"];
+/** `clear`: Clear formatting (styles and number formats). `spread-down` and `spread-right`: Fill down and Fill right, named apart from `fill`, the fill colour. */
+export type SheetToolId = "bold" | "italic" | "underline" | "strike" | "wrap" | "clear" | `spread-${"down" | "right"}` | `color-${SheetInk | "none"}` | `fill-${SheetInk | "none"}` | `borders-${SheetBorders}`
   | `align-${"left" | "center" | "right"}` | `valign-${"top" | "middle" | "bottom"}` | `format-${"general" | "number" | "currency" | "percent" | "date" | "time"}` | `decimals-${"more" | "fewer"}`;
-/** One tool as the ribbon draws it (Markup's MarkupHostTool): read where drawn, so getters follow. `menu`: the tools of one stand as one control; `compact` with `swatch`: a set of inks. */
-export type SheetTool = { name: SheetToolId; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; compact?: boolean; swatch?: string; tip?: string; run(): void };
+/** One tool as the ribbon draws it (Markup's MarkupHostTool): read where drawn, so getters follow. `menu`: the tools of one stand as one control (showing `glyph` where one says it); `compact` with `swatch`: a set of inks. */
+export type SheetTool = { name: SheetToolId; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; compact?: boolean; swatch?: string; glyph?: () => JSX.Element; tip?: string; run(): void };
 
 export interface SheetHost {
   /** The hub's live socket for the sheet, opened with the app's own sign-in. */
@@ -60,7 +63,14 @@ export interface SheetHost {
   frozen?(): Promise<SheetFrozen | null>;
   /** The edit tools offered on its ribbon (every one where it declares none). */
   tools?: readonly SheetToolName[];
+  /** How the grid is drawn here, read where drawn so it follows (unsaid: gridlines, 100%, no focus cell). */
+  display?(): SheetDisplay;
+  /** Opens the app's settings for how a sheet is drawn. */
+  openSettings?(): void;
 }
+
+/** `zoom`: what the grid's sizes are drawn at (1 is 100%); the sizes a sheet keeps stay its own. `focusCell`: the active cell's row and column are washed. */
+export type SheetDisplay = { gridlines: boolean; zoom: number; focusCell: boolean };
 
 /** How this copy stands with the hub's, as a paper's (DocumentState). */
 export type SheetState = "connecting" | "live" | "away" | "stale";
@@ -108,6 +118,8 @@ export interface SheetGrid {
   highlight(list: readonly { range: SheetRange; current: boolean }[]): void;
   /** The formula being edited's references, drawn over the comments' highlights. */
   references(list: readonly SheetReference[]): void;
+  /** Find's matches, washed (`current`: the one it stands on, outlined as well); none while the find bar is shut. */
+  found(list: readonly { range: SheetRange; current: boolean }[]): void;
   /** Scrolls a cell into view without selecting it. */
   show(row: number, col: number): void;
   /** Selects the whole columns, or rows, the selection covers. */
@@ -144,6 +156,8 @@ export type SheetGridEvents = {
   key(event: SheetKey, row: number, col: number): boolean;
   /** A cell double-clicked: it is opened to edit. */
   activated(row: number, col: number): void;
+  /** A filter's mark pressed on its header cell (SheetColumns `mark`), with the cell's box. */
+  filter?(row: number, col: number, box: SheetBox): void;
   /** Its first frame with the sheet's cells is painted. */
   drawn(): void;
 };

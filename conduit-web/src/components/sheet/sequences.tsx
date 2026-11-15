@@ -12,11 +12,12 @@ import { Dialog } from "@/components/ui/dialog";
 import { Popover, PopoverContent } from "@/components/ui/menus";
 import type { SheetLook, SheetRange, SheetToolId } from "./host";
 import type { SheetSizes } from "./sizes";
+import type { SheetFilterKeys } from "./filter";
 
 /** A size asked for in pixels, prefilled with what it is now; `apply` is given the number set. */
 export type SizeQuestion = { title: string; value: number; apply(size: number): void };
-/** What a sequence acts on. `selection`: the cells selected, whole rows or columns included. */
-export type SheetSequenceContext = { selection(): SheetRange | null; sizes: SheetSizes; look(): SheetLook; ask(question: SizeQuestion): void };
+/** What a sequence acts on. `selection`: the cells selected, whole rows or columns included. `filters`: sorting, the filter and the table (filter.tsx). */
+export type SheetSequenceContext = { selection(): SheetRange | null; sizes: SheetSizes; look(): SheetLook; ask(question: SizeQuestion): void; filters: SheetFilterKeys };
 /** `keys`: the keys after Alt, letters upper-case. `tool`: the ribbon tool it presses, named as the ribbon names it; else `run`, with its own `label`. */
 export type SheetSequence = { keys: string } & ({ tool: SheetToolId } | { label: string; run(ctx: SheetSequenceContext): void });
 
@@ -26,7 +27,8 @@ const colsOf = (ctx: SheetSequenceContext) => { const area = ctx.selection(); re
 
 const INKS = [["R", "red"], ["A", "amber"], ["G", "green"], ["B", "blue"], ["N", "none"]] as const;
 export const SHEET_SEQUENCES: readonly SheetSequence[] = [
-  { keys: "H1", tool: "bold" }, { keys: "H2", tool: "italic" }, { keys: "H3", tool: "underline" }, { keys: "HW", tool: "wrap" },
+  { keys: "H1", tool: "bold" }, { keys: "H2", tool: "italic" }, { keys: "H3", tool: "underline" }, { keys: "HW", tool: "wrap" }, { keys: "HEF", tool: "clear" },
+  { keys: "HFID", tool: "spread-down" }, { keys: "HFIR", tool: "spread-right" },
   { keys: "HAL", tool: "align-left" }, { keys: "HAC", tool: "align-center" }, { keys: "HAR", tool: "align-right" },
   { keys: "HAT", tool: "valign-top" }, { keys: "HAM", tool: "valign-middle" }, { keys: "HAB", tool: "valign-bottom" },
   { keys: "HBA", tool: "borders-all" }, { keys: "HBS", tool: "borders-outer" }, { keys: "HBP", tool: "borders-top" }, { keys: "HBO", tool: "borders-bottom" },
@@ -43,9 +45,11 @@ export const SHEET_SEQUENCES: readonly SheetSequence[] = [
   { keys: "WFR", label: "Freeze top row", run: (ctx) => ctx.sizes.setFreeze(1, ctx.sizes.freeze().cols) },
   { keys: "WFC", label: "Freeze first column", run: (ctx) => ctx.sizes.setFreeze(ctx.sizes.freeze().rows, 1) },
   { keys: "HOD", label: "Default width", run: (ctx) => ctx.ask({ title: "Default width", value: ctx.sizes.standard() ?? ctx.look().width, apply: (size) => ctx.sizes.setStandard(size) }) },
+  { keys: "HSS", label: "Sort A–Z", run: (ctx) => ctx.filters.sort(false) }, { keys: "HSO", label: "Sort Z–A", run: (ctx) => ctx.filters.sort(true) },
+  { keys: "HSF", label: "Filter", run: (ctx) => ctx.filters.filter() }, { keys: "HT", label: "Format as table", run: (ctx) => ctx.filters.table() },
 ];
 /** What a sequence's first letters lead to, named as the next keys are listed. */
-export const SEQUENCE_GROUPS: Readonly<Record<string, string>> = { H: "Home", HO: "Format", HA: "Align", HB: "Borders", HH: "Fill colour", HF: "Font", HFC: "Text colour", HN: "Number format", W: "View", WF: "Freeze panes" };
+export const SEQUENCE_GROUPS: Readonly<Record<string, string>> = { H: "Home", HO: "Format", HA: "Align", HB: "Borders", HH: "Fill colour", HE: "Clear", HF: "Font", HFC: "Text colour", HFI: "Fill", HN: "Number format", HS: "Sort & filter", W: "View", WF: "Freeze panes" };
 
 /** The sequence typed so far (null when none is), the keys that may come next, and the grid's key listeners. `named`: a tool's label, as its ribbon says it. */
 export function createSequenceKeys(run: (sequence: SheetSequence) => void, named: (tool: SheetToolId) => string) {

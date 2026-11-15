@@ -1,6 +1,6 @@
 import { SHEET_INKS, type SheetInk } from "@/sheet-styles.js";
 import { INKS } from "./formula";
-import type { SheetLook } from "./host";
+import type { SheetDisplay, SheetLook } from "./host";
 
 // A colour as the canvas draws it: the grid mixes its colours itself and reads only rgb, where the tokens are oklch and color-mix.
 const paint = (() => {
@@ -31,16 +31,21 @@ const COLOURS = {
   linkColor: "var(--foreground)", resizeIndicatorColor: "var(--foreground)",
 } as const;
 
-/** The grid's look from the app's tokens as they stand where it is drawn (its surface, the Interface size); read again when either changes. */
-export function readLook(where: HTMLElement): SheetLook {
+/**
+ * The grid's look from the app's tokens as they stand where it is drawn (its surface, the Interface size); read again when either changes.
+ * Drawn `as` the place shows sheets; unsaid, at 100% as the sizes a sheet keeps are measured, so a look that sizes rows and columns is never zoomed.
+ */
+export function readLook(where: HTMLElement, as: SheetDisplay = { gridlines: true, zoom: 1, focusCell: false }): SheetLook {
   const probe = document.createElement("i");
   probe.style.cssText = "position:absolute;visibility:hidden;pointer-events:none";
   where.append(probe);
   const colour = (value: string) => { probe.style.color = value; return paint(getComputedStyle(probe).color); };
-  const length = (value: string) => { probe.style.width = value; return Math.round(probe.getBoundingClientRect().width); };
+  const length = (value: string) => { probe.style.width = value; return Math.round(probe.getBoundingClientRect().width * as.zoom); };
   const token = (name: string) => getComputedStyle(probe).getPropertyValue(name).trim();
   const text = length("var(--text-row)"), weight = token("--weight-rest") || "400";
   const grid: Record<string, string | number> = Object.fromEntries(Object.entries(COLOURS).map(([name, value]) => [name, colour(value)]));
+  // The rule under the column letters stays: it is where the sheet starts.
+  if (!as.gridlines) Object.assign(grid, { borderColor: "transparent", horizontalBorderColor: "transparent" });
   Object.assign(grid, {
     fontFamily: token("--font-sans"), baseFontStyle: `${weight} ${text}px`, headerFontStyle: `${weight} ${text}px`, markerFontStyle: `${weight} ${text}px`, editorFontSize: `${text}px`,
     cellHorizontalPadding: length("var(--space-md)"), cellVerticalPadding: length("var(--space-xs)"), headerIconSize: length("var(--icon-sm)"), lineHeight: 1.4,
@@ -48,7 +53,7 @@ export function readLook(where: HTMLElement): SheetLook {
   const look: SheetLook = {
     grid, row: length("var(--control-sm)"), header: length("var(--control-sm)"),
     picked: colour(wash("--tone-line")), width: length("var(--measure-2xs)"),
-    error: colour("var(--destructive)"), live: colour("var(--live)"), warn: colour("var(--warn)"), mark: colour(wash("--tone-wash")), markCurrent: colour(wash("--tone-line")),
+    error: colour("var(--destructive)"), live: colour("var(--live)"), warn: colour("var(--warn)"), mark: colour(wash("--tone-wash")), markCurrent: colour(wash("--tone-line")), focus: as.focusCell ? colour(wash("--tone-wash")) : "",
     // A wash of each ink: the grid fills a reference with it and outlines it in the ink itself.
     inks: INKS.map((ink) => colour(`color-mix(in oklch, var(${ink}), transparent var(--tone-wash))`)),
     strong: token("--weight-strong") || "600", edge: colour("var(--muted-foreground)"), corner: length("var(--space-sm)"),

@@ -5,25 +5,28 @@ import type { FormatSheet } from "./sheet-formats.js";
 /** Cells one call gives a style of their own; more is a whole column's or row's. */
 export const STYLE_CELL_LIMIT: number;
 export type SheetInk = "red" | "amber" | "green" | "blue";
+/** A colour as a workbook gives it, lower case. */
+export type SheetHex = `#${string}`;
 export const SHEET_INKS: readonly SheetInk[];
 /** A border choice for a range: every edge of every cell, the range's outline, one side of it, or none. */
 export type SheetBorders = "all" | "outer" | "top" | "bottom" | "left" | "right" | "none";
 export const SHEET_BORDERS: readonly SheetBorders[];
 /**
  * A cell's style as an agent says and reads it. A field left out is left as it is (read: worn from the row or column, else the default); false or null
- * is the default set on purpose (not bold in a bold column). `color` is the text's ink, `fill` the cell's; `borders` its own edges.
+ * is the default set on purpose (not bold in a bold column). `color` is the text's ink, `fill` the cell's, each an ink or a workbook's own `#rrggbb`;
+ * `borders` its own edges, drawn in `borderColor` (else the grid's) at `borderWeight` (else thin); `size` its text's in points (else the sheet's).
  */
 export type SheetStyle = {
   bold?: boolean; italic?: boolean; underline?: boolean; strike?: boolean; wrap?: boolean;
-  color?: SheetInk | null; fill?: SheetInk | null; align?: "left" | "center" | "right" | null; valign?: "top" | "middle" | "bottom" | null;
+  color?: SheetInk | SheetHex | null; fill?: SheetInk | SheetHex | null; borderColor?: SheetHex | null; borderWeight?: "medium" | "thick" | null; size?: number | null; align?: "left" | "center" | "right" | null; valign?: "top" | "middle" | "bottom" | null;
   borders?: { top?: boolean; right?: boolean; bottom?: boolean; left?: boolean };
 };
 /**
- * The packed form in `look` (`style:<colId>`, `style:<rowId>`, `style:<rowId>:<colId>`): codes by space, `b i u s w` flags, `c= f= h= v=` values
- * (`h=center`), `bt br bb bl` edges, `-` before one for its default set on purpose: "b c=red f=amber h=center bt bb", "-b".
+ * The packed form in `look` (`style:<colId>`, `style:<rowId>`, `style:<rowId>:<colId>`): codes by space, `b i u s w` flags, `c= f= h= v= bc= bw= z=` values
+ * (`h=center`, `c=#0070c0`, `bw=medium`, `z=9`), `bt br bb bl` edges, `-` before one for its default set on purpose: "b c=red f=amber h=center bt bb", "-b".
  * As attributes: each code to true or false (a flag or an edge), or a word or null (a value).
  */
-export type StyleAttrs = Partial<Record<"b" | "i" | "u" | "s" | "w" | "bt" | "br" | "bb" | "bl", boolean> & Record<"c" | "f" | "h" | "v", string | null>>;
+export type StyleAttrs = Partial<Record<"b" | "i" | "u" | "s" | "w" | "bt" | "br" | "bb" | "bl", boolean> & Record<"c" | "f" | "h" | "v" | "bc" | "bw" | "z", string | null>>;
 export function decodeStyle(text: unknown): StyleAttrs;
 export function encodeStyle(attrs: StyleAttrs): string;
 /** A fault is an Error with status 400. */

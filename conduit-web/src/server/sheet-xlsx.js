@@ -1,9 +1,11 @@
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 import { HyperFormula } from "hyperformula";
 import * as XLSX from "xlsx";
-import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colName, tabName, toCsv, valueText } from "../sheet-format.js";
+import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colIndex, colName, tabName, toCsv, valueText } from "../sheet-format.js";
 import { CONFIG } from "../sheet-engine.js";
 import { NAMES } from "../sheet-functions.js";
+import { decodeStyle, encodeStyle } from "../sheet-styles.js";
+import { ownOver, readStyles, sheetStyles, writeStyles } from "./xlsx-styles.js";
 
 /*
  * An .xlsx read as a workbook's files (docs/plans/sheet-xlsx-and-tabs.md): each tab's CSV of values, its formulas by address and its look, as
@@ -14,17 +16,17 @@ import { NAMES } from "../sheet-functions.js";
 /** @typedef {{ name: string, hidden: boolean, csv: string, inputs: Record<string, string>, look: Record<string, unknown>, rows: number, cols: number, formulas: number }} ImportedTab */
 /** @typedef {{ tabs: { name: string, rows: number, cols: number, formulas: number }[], skipped: string[], computed: { same: number, frozen: number, noCache: number, volatile: number }, frozen: Record<string, Record<string, { formula: string, why: string, kept?: string }>>, reasons: Record<string, number>, dropped: Record<string, number> }} ImportReport */
 
-// How much of a sheet's XML is read for its pane: `sheetViews` stands before its cells.
-const PANE_BYTES = 8192;
 const PT_PER_PX = 0.75;
+// Pixels to a character of a column's width, Excel's for its default font: SheetJS's own guess makes them double on read and six on write.
+const PX_PER_CHAR = 7, STYLES_PER_TAB = 20_000;
 const VOLATILE = /\b(?:TODAY|NOW|RAND|RANDBETWEEN|RANDARRAY)\s*\(/i, FORMATS_PER_TAB = 2000, PASSES = 4;
 const ERROR_TEXT = { 0: "#NULL!", 7: "#DIV/0!", 15: "#VALUE!", 23: "#REF!", 29: "#NAME?", 36: "#NUM!", 42: "#N/A", 43: "#GETTING_DATA" };
 const fault = (message) => Object.assign(new Error(message), { status: 422 });
 const isError = (value) => value !== null && typeof value === "object";
-// SheetJS reads and writes no frozen panes: they are read from, and written into, each sheet's own XML.
+// SheetJS reads and writes no frozen panes or styles: they are read from, and written into, the workbook's own XML parts.
 const unescaped = (text) => text.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 const attr = (tag, name) => { const found = new RegExp(`\\s${name}="([^"]*)"`).exec(tag); return found ? unescaped(found[1]) : undefined; };
-/** The rows and columns a sheet's view freezes, from the head of its XML, where `sheetViews` stands. */
+/** The rows and columns a sheet's view freezes, from its XML. */
 const paneOf = (xml) => {
   const pane = /<pane\b[^>]*>/.exec(xml)?.[0];
   if (!pane || !/^frozen/.test(attr(pane, "state") ?? "")) return null;
@@ -33,18 +35,19 @@ const paneOf = (xml) => {
 };
 /** A frozen view as a sheet's XML says it, `rows` and `cols` frozen at the top and left. */
 const paneXml = (rows, cols) => `<sheetView workbookViewId="0"><pane${cols ? ` xSplit="${cols}"` : ""}${rows ? ` ySplit="${rows}"` : ""} topLeftCell="${a1(rows, cols)}" activePane="${rows && cols ? "bottomRight" : rows ? "bottomLeft" : "topRight"}" state="frozen"/></sheetView>`;
-/** A written workbook with each sheet's XML changed by `edit` (its index in the book and its XML); the zip is written again only where one changed. */
-const editSheets = (bytes, edit) => {
-  const zip = XLSX.CFB.read(bytes, { type: "buffer" });
+/** A written workbook with its XML parts changed by `edit` (each part's path in the zip, its XML and all of them by path); the zip is written again only where one changed. */
+const editParts = (bytes, edit) => {
+  const zip = XLSX.CFB.read(bytes, { type: "buffer" }), files = new Map();
+  zip.FullPaths.forEach((path, i) => { if (path.endsWith(".xml")) files.set(path.replace(/^Root Entry\//, ""), zip.FileIndex[i]); });
+  const xml = Object.fromEntries([...files].map(([path, file]) => [path, Buffer.from(file.content).toString("utf8")]));
   let changed = false;
-  zip.FullPaths.forEach((path, i) => {
-    const n = /^Root Entry\/xl\/worksheets\/sheet(\d+)\.xml$/.exec(path)?.[1], file = zip.FileIndex[i];
-    if (!n) return;
-    const xml = Buffer.from(file.content).toString("utf8"), next = edit(Number(n) - 1, xml);
-    if (next !== xml) { file.content = Buffer.from(next, "utf8"); file.size = file.content.length; changed = true; }
-  });
+  for (const [path, file] of files) {
+    const next = edit(path, xml[path], xml);
+    if (next !== xml[path]) { file.content = Buffer.from(next, "utf8"); file.size = file.content.length; changed = true; }
+  }
   return changed ? XLSX.CFB.write(zip, { fileType: "zip", type: "buffer", compression: true }) : bytes;
 };
+const sheetOf = (path) => { const n = /^xl\/worksheets\/sheet(\d+)\.xml$/.exec(path)?.[1]; return n ? Number(n) - 1 : -1; };
 /** A formula as this engine reads it: the prefixes a newer function is stored under are taken off. */
 const translated = (formula) => `=${formula.replace(/_xlfn\.|_xlws\.|_xlpm\./g, "")}`;
 const kept = (cell) => cell.t === "e" ? ERROR_TEXT[cell.v] ?? "#VALUE!" : cell.t === "b" ? (cell.v ? "TRUE" : "FALSE") : cell.t === "d" ? "" : String(cell.v ?? "");
@@ -70,9 +73,10 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   const wanted = only?.length ? new Set(only.map((name) => name.toLowerCase())) : null, meta = book.Workbook?.Sheets ?? [];
   const dropped = {}, drop = (what, count = 1) => { if (count) dropped[what] = (dropped[what] ?? 0) + count; };
   const skipped = [], read = [], names = new Set();
-  // Each tab's XML part, by the workbook's own list and its links; only its head is read, for the pane.
-  const part = (path) => book.files?.[path]?.content, text = (path, length) => { const bytes = part(path); return bytes ? Buffer.from(bytes.subarray(0, length ?? bytes.length)).toString("utf8") : ""; };
+  // Each tab's XML part, by the workbook's own list and its links, read for its pane and styles.
+  const part = (path) => book.files?.[path]?.content, text = (path) => { const bytes = part(path); return bytes ? Buffer.from(bytes).toString("utf8") : ""; };
   const targets = Object.fromEntries((text("xl/_rels/workbook.xml.rels").match(/<Relationship\b[^>]*>/g) ?? []).map((tag) => [attr(tag, "Id"), attr(tag, "Target") ?? ""]));
+  const formatsOf = readStyles(text("xl/styles.xml"), text(Object.values(targets).find((target) => /theme\d*\.xml$/.test(target))?.replace(/^\/?(xl\/)?/, "xl/") ?? ""));
   const xmlOf = Object.fromEntries((text("xl/workbook.xml").match(/<sheet\b[^>]*>/g) ?? []).map((tag) => { const target = targets[attr(tag, "r:id")] ?? ""; return [attr(tag, "name"), target.startsWith("/") ? target.slice(1) : `xl/${target}`]; }));
   book.SheetNames.forEach((called, index) => {
     const sheet = book.Sheets[called], data = sheet?.["!data"];
@@ -82,9 +86,13 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     names.add(name.toLowerCase());
     let rows = 0, cols = 0;
     data.forEach((row, r) => row?.forEach((cell, c) => { if (cell && (cell.f || (cell.t !== "z" && cell.v !== "" && cell.v !== undefined))) { rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1); } }));
-    read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, rows: Math.max(1, rows), cols: Math.max(1, cols), pane: paneOf(text(xmlOf[called] ?? "", PANE_BYTES)) });
+    const xml = text(xmlOf[called] ?? "");
+    read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, rows: Math.max(1, rows), cols: Math.max(1, cols), pane: paneOf(xml), styles: sheetStyles(xml, { rows: Math.max(1, rows), cols: Math.max(1, cols) }) });
     drop("merged ranges", sheet["!merges"]?.length ?? 0);
     drop("hidden columns", sheet["!cols"]?.filter((col) => col?.hidden).length ?? 0);
+    drop("notes", data.reduce((sum, row) => sum + (row?.filter((cell) => cell?.c?.length).length ?? 0), 0));
+    drop("conditional formats", xml.match(/<conditionalFormatting\b/g)?.length ?? 0);
+    drop("validation rules", xml.match(/<dataValidation\b/g)?.length ?? 0);
   });
   if (!read.length) throw fault(wanted ? `None of those tabs is in the workbook: its tabs are ${book.SheetNames.join(", ")}` : "That workbook has no tabs with cells");
   const sizes = () => read.map((tab) => `${tab.name} ${tab.rows}x${tab.cols}`).join(", ");
@@ -165,7 +173,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
         if (typeof typed === "string" && typed.startsWith("=")) { inputs[a1(r, c)] = typed; return valueText(values[r]?.[c]); }
         return typed === null ? "" : String(typed);
       }));
-      (tab.sheet["!cols"] ?? []).forEach((col, c) => { if (c < tab.cols && col?.wpx) look[`width:${colName(c)}`] = Math.round(col.wpx); });
+      (tab.sheet["!cols"] ?? []).forEach((col, c) => { if (c < tab.cols && (col?.width || col?.wpx)) look[`width:${colName(c)}`] = Math.round(col.width ? col.width * PX_PER_CHAR : col.wpx); });
       (tab.sheet["!rows"] ?? []).forEach((row, r) => { if (r < tab.rows && row?.hidden) look[`hidden:${r + 1}`] = 1; });
       // A number format is kept for a column where most of its numbers share it, and for the cells that differ, up to a count.
       tab.data.forEach((row, r) => row?.forEach((cell, c) => { if (cell?.t === "n" && r < tab.rows && c < tab.cols) (formats.get(c) ?? formats.set(c, new Map()).get(c)).set(r, typeof cell.z === "string" ? cell.z : "General"); }));
@@ -176,6 +184,16 @@ export function importXlsx(bytes, { tabs: only } = {}) {
         const [most] = [...counts].sort((a, b) => b[1] - a[1])[0];
         if (most !== "General") look[`fmt:${colName(c)}`] = most;
         for (const [r, format] of column) if (format !== most) { if (single < FORMATS_PER_TAB) { look[`fmt:${a1(r, c)}`] = format; single += 1; } else drop("number formats"); }
+      }
+      // Each column's and row's own style, and each cell's where it says other than what it would wear from them, up to a count.
+      const { cols: colStyles, rows: rowStyles, cells: cellStyles } = tab.styles, worn = new Map(), attrs = (index) => worn.get(index) ?? worn.set(index, decodeStyle(formatsOf[index] ?? "")).get(index);
+      for (const [c, index] of colStyles) if (c < tab.cols && formatsOf[index]) look[`style:${colName(c)}`] = formatsOf[index];
+      for (const [r, index] of rowStyles) if (r < tab.rows && formatsOf[index]) look[`style:${r + 1}`] = formatsOf[index];
+      let styled = 0;
+      for (const [r, c, index] of cellStyles) {
+        const under = { ...attrs(colStyles.get(c)), ...attrs(rowStyles.get(r)) }, own = encodeStyle(ownOver(under, attrs(index)));
+        if (!own) continue;
+        if (styled < STYLES_PER_TAB) { look[`style:${a1(r, c)}`] = own; styled += 1; } else drop("cell styles");
       }
       if (tab.pane?.rows) look.freezeRows = tab.pane.rows;
       if (tab.pane?.cols) look.freezeCols = tab.pane.cols;
@@ -192,7 +210,7 @@ export function importSummary(report) {
     `Tabs: ${report.tabs.map((tab) => `${tab.name} (${tab.rows}x${tab.cols}, ${tab.formulas} formulas)`).join(", ")}.${report.skipped.length ? ` Not imported: ${report.skipped.join(", ")}.` : ""}`,
     total ? `Of ${total} formulas, ${same + noCache + volatile} compute here as they did${volatile ? ` (${volatile} depend on the date or a random number and were not compared)` : ""}${frozen ? `; ${frozen} do not and hold the value the file kept, as plain values: ${Object.entries(report.reasons).map(([why, count]) => `${count} ${why}`).join(", ")}` : ""}.` : "It has no formulas.",
     ...(listed.length ? [`Frozen: ${listed.slice(0, 20).join("; ")}${listed.length > 20 ? `; and ${listed.length - 20} more (GET /v0/document/<id>?as=import lists all)` : ""}.`] : []),
-    ...(Object.keys(report.dropped).length ? [`Left out: ${Object.entries(report.dropped).map(([what, count]) => `${count} ${what}`).join(", ")}; also any charts, fills, borders, fonts, validation, conditional formats and notes, which are not read.`] : ["Charts, fills, borders, fonts, validation, conditional formats and notes are not read."]),
+    ...(Object.keys(report.dropped).length ? [`Left out: ${Object.entries(report.dropped).map(([what, count]) => `${count} ${what}`).join(", ")}; also any charts, images and pivot tables, which are not read.`] : ["Charts, images and pivot tables are not read."]),
   ].join("\n");
 }
 // Functions an .xlsx stores under a prefix: without it a spreadsheet shows #NAME? until the cell is entered again.
@@ -202,7 +220,7 @@ const stored = (formula) => formula.slice(1).split(/("(?:[^"]|"")*")/).map((part
 const ERROR_CODE = Object.fromEntries(Object.entries(ERROR_TEXT).map(([code, text]) => [text, Number(code)]));
 /**
  * A workbook written as an .xlsx: each formula with the value it computes here, number formats, column widths, row heights, hidden rows, frozen panes and hidden tabs. A cell an import
- * froze gets its formula back where it still holds what the import left in it. No fills, fonts or borders are written.
+ * froze gets its formula back where it still holds what the import left in it. Styles are written into the parts SheetJS wrote (xlsx-styles.js).
  * @param {{ name: string, hidden: boolean, typed: string[][], values: unknown[][], look: Record<string, unknown> }[]} tabs  `values`: what each cell computes
  * @param {ImportReport | null} [imported]
  * @returns {Buffer}
@@ -223,16 +241,45 @@ export function exportXlsx(tabs, imported) {
     }));
     sheet["!ref"] = `A1:${a1(Math.max(0, tab.typed.length - 1), cols - 1)}`;
     // A column without its own width takes the tab's default (`width` alone), where it has one.
-    sheet["!cols"] = Array.from({ length: cols }, (_, c) => { const width = tab.look[`width:${colName(c)}`] ?? tab.look.width; return typeof width === "number" ? { wpx: width } : {}; });
+    sheet["!cols"] = Array.from({ length: cols }, (_, c) => { const width = tab.look[`width:${colName(c)}`] ?? tab.look.width; return typeof width === "number" ? { width: width / PX_PER_CHAR } : {}; });
     // Each row's height where it has its own, in points (SheetJS writes pixels as points), and the rows hidden.
-    sheet["!rows"] = tab.typed.map((_, r) => { const height = tab.look[`height:${r + 1}`]; return { ...(typeof height === "number" ? { hpt: height * PT_PER_PX } : {}), ...(tab.look[`hidden:${r + 1}`] ? { hidden: true } : {}) }; });
+    // The rows hidden, and those the filter hid when last applied.
+    const filteredOut = new Set(tab.look.filter?.hide ?? []);
+    sheet["!rows"] = tab.typed.map((_, r) => { const height = tab.look[`height:${r + 1}`]; return { ...(typeof height === "number" ? { hpt: height * PT_PER_PX } : {}), ...(tab.look[`hidden:${r + 1}`] || filteredOut.has(r + 1) ? { hidden: true } : {}) }; });
+    // A table is written as its filter alone: SheetJS writes no tables.
+    const filtered = tab.look.filter?.range ?? tab.look.table?.range;
+    if (typeof filtered === "string") sheet["!autofilter"] = { ref: filtered };
     XLSX.utils.book_append_sheet(book, sheet, tab.name);
   }
   book.Workbook = { Sheets: tabs.map((tab) => ({ Hidden: tab.hidden ? 1 : 0 })) };
   const written = XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true }), count = (value) => typeof value === "number" && value > 0 ? value : 0;
-  const panes = tabs.map((tab) => [count(tab.look.freezeRows), count(tab.look.freezeCols)]);
-  return panes.some(([rows, cols]) => rows || cols) ? editSheets(written, (n, xml) => { const [rows, cols] = panes[n] ?? [0, 0]; return rows || cols ? xml.replace(/<sheetView workbookViewId="0"\/>/, paneXml(rows, cols)) : xml; }) : written;
+  const panes = tabs.map((tab) => [count(tab.look.freezeRows), count(tab.look.freezeCols)]), styled = tabs.some((tab) => Object.keys(tab.look).some((name) => name.startsWith("style:")));
+  if (!styled && !panes.some(([rows, cols]) => rows || cols)) return written;
+  let restyled = null;
+  return editParts(written, (path, xml, all) => {
+    if (styled && !restyled) {
+      const sheets = tabs.map((tab, n) => ({ xml: all[`xl/worksheets/sheet${n + 1}.xml`] ?? "", styleAt: styleOf(tab.look), size: { rows: tab.typed.length, cols: Math.max(1, ...tab.typed.map((row) => row.length)) } }));
+      restyled = writeStyles(all["xl/styles.xml"] ?? "", sheets);
+    }
+    if (path === "xl/styles.xml") return restyled?.styles ?? xml;
+    const n = sheetOf(path), [rows, cols] = panes[n] ?? [0, 0], sheet = n >= 0 && restyled ? restyled.sheets[n] : xml;
+    return rows || cols ? sheet.replace(/<sheetView workbookViewId="0"\/>/, paneXml(rows, cols)) : sheet;
+  });
 }
+/** The style each cell of a tab wears, packed (empty for none), from its look by letter, row number and address: its own over its row's over its column's. */
+const styleOf = (look) => {
+  const cols = new Map(), rows = new Map(), cells = new Map(), made = new Map();
+  for (const [name, value] of Object.entries(look)) {
+    const at = /^style:(?:([A-Z]+)|(\d+)|([A-Z]+\d+))$/.exec(name);
+    if (at && typeof value === "string") (at[1] ? cols.set(colIndex(at[1]), value) : at[2] ? rows.set(Number(at[2]) - 1, value) : cells.set(at[3], value));
+  }
+  return (r, c) => {
+    const parts = [cols.get(c) ?? "", rows.get(r) ?? "", cells.size ? cells.get(a1(r, c)) ?? "" : ""], id = parts.join("|");
+    if (id === "||") return "";
+    if (!made.has(id)) made.set(id, encodeStyle(Object.fromEntries(Object.entries(Object.assign({}, ...parts.map(decodeStyle))).filter(([, value]) => value !== false && value !== null))));
+    return made.get(id);
+  };
+};
 const IMPORT_MS = 180_000, IMPORT_HEAP_MB = 2048;
 /** `importXlsx` on a thread of its own, so the hub answers while a large workbook computes; it is ended after three minutes. */
 export function importXlsxApart(bytes, options = {}) {

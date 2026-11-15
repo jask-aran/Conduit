@@ -5,14 +5,20 @@
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 import type * as Y from "yjs";
 import { key, valueText, type SheetView } from "@/sheet-format.js";
-import { decodeStyle, writeStyle, type SheetBorders, type SheetInk, type SheetStyle, type StyleAttrs } from "@/sheet-styles.js";
+import { decodeStyle, writeStyle, type SheetBorders, type SheetHex, type SheetInk, type SheetStyle, type StyleAttrs } from "@/sheet-styles.js";
 import type { SheetLook, SheetRange } from "./host";
 import { widthOf } from "./sizes";
 import { wrapLines } from "./wrap";
 
-/** What a cell is drawn with, its column's, row's and own style together. `edges`: top 1, right 2, bottom 4, left 8. `custom`: the grid draws its text itself (cell-draw.ts). */
-export type SheetCellStyle = { bold: boolean; italic: boolean; underline: boolean; strike: boolean; wrap: boolean; color?: SheetInk; fill?: SheetInk; align?: "left" | "center" | "right"; valign: "top" | "middle" | "bottom"; edges: number; custom: boolean };
-const PLAIN: SheetCellStyle = { bold: false, italic: false, underline: false, strike: false, wrap: false, valign: "middle", edges: 0, custom: false };
+/**
+ * What a cell is drawn with, its column's, row's and own style together. `color`, `fill` and `edgeColor`: an ink or a workbook's `#rrggbb`. `edges`: top 1,
+ * right 2, bottom 4, left 8, `edgeWeight` px wide. `size`: points. `custom`: the grid draws its text itself (cell-draw.ts).
+ */
+export type SheetCellStyle = { bold: boolean; italic: boolean; underline: boolean; strike: boolean; wrap: boolean; color?: SheetInk | SheetHex; fill?: SheetInk | SheetHex; align?: "left" | "center" | "right"; valign: "top" | "middle" | "bottom"; edges: number; edgeColor?: SheetHex; edgeWeight: number; size?: number; custom: boolean };
+export const PLAIN: SheetCellStyle = { bold: false, italic: false, underline: false, strike: false, wrap: false, valign: "middle", edges: 0, edgeWeight: 1, custom: false };
+const WEIGHTS: Readonly<Record<string, number>> = { medium: 2, thick: 3 };
+/** The grid's text size (`13px`) for a cell of `points`: the sheet's text is the 11 points a workbook's is by default. */
+export const textSize = (base: string, points?: number) => points ? `${Math.round(parseFloat(base) * points / 11 * 10) / 10}px` : base;
 // Excel's: Ctrl with B, I, U, and 5 for a line through.
 const KEYS: Readonly<Record<string, "bold" | "italic" | "underline" | "strike">> = { KeyB: "bold", KeyI: "italic", KeyU: "underline", Digit5: "strike" };
 
@@ -24,6 +30,8 @@ export interface SheetStyles {
   /** Only what `style` names changes: whole columns (top to the tab's last row) or rows (its first column to its last) their own, else each cell. */
   set(range: SheetRange, style: SheetStyle): void;
   borders(range: SheetRange, kind: SheetBorders): void;
+  /** Every style the range wears its own, borders too, taken off (Clear formatting). */
+  clear(range: SheetRange): void;
   /** Ctrl with B, I, U or 5 toggles that on the range, from what its first cell wears. True when taken. */
   key(event: KeyboardEvent, range: SheetRange | null): boolean;
   /** How many lines a cell's text takes: wrapped to its column's width where it wraps (sizes.ts fits a row by it). */
@@ -50,10 +58,11 @@ export function createSheetStyles(look: Y.Map<number | string>, model: Accessor<
 
   const make = (attrs: StyleAttrs): SheetCellStyle | null => {
     const on = (code: keyof StyleAttrs) => attrs[code] === true, edges = (on("bt") ? 1 : 0) | (on("br") ? 2 : 0) | (on("bb") ? 4 : 0) | (on("bl") ? 8 : 0);
-    const style: SheetCellStyle = { bold: on("b"), italic: on("i"), underline: on("u"), strike: on("s"), wrap: on("w"), color: (attrs.c ?? undefined) as SheetInk | undefined, fill: (attrs.f ?? undefined) as SheetInk | undefined,
-      align: (attrs.h ?? undefined) as SheetCellStyle["align"], valign: (attrs.v ?? "middle") as SheetCellStyle["valign"], edges, custom: false };
+    const style: SheetCellStyle = { bold: on("b"), italic: on("i"), underline: on("u"), strike: on("s"), wrap: on("w"), color: (attrs.c ?? undefined) as SheetCellStyle["color"], fill: (attrs.f ?? undefined) as SheetCellStyle["fill"],
+      align: (attrs.h ?? undefined) as SheetCellStyle["align"], valign: (attrs.v ?? "middle") as SheetCellStyle["valign"], edges, edgeColor: (attrs.bc ?? undefined) as SheetHex | undefined, edgeWeight: WEIGHTS[attrs.bw ?? ""] ?? 1,
+      size: attrs.z ? Number(attrs.z) : undefined, custom: false };
     style.custom = style.wrap || style.underline || style.strike || style.valign !== "middle";
-    return style.custom || style.bold || style.italic || style.color || style.fill || style.align || edges ? style : null;
+    return style.custom || style.bold || style.italic || style.color || style.fill || style.align || style.size || edges ? style : null;
   };
   // Each mix made once, by the three styles' own objects, so a frame's draws make nothing new (formats.ts says why).
   const mix = (col: StyleAttrs, row: StyleAttrs, own: StyleAttrs) => {
@@ -84,7 +93,8 @@ export function createSheetStyles(look: Y.Map<number | string>, model: Accessor<
     if (!style?.wrap) return text.split("\n").length;
     measure ??= document.createElement("canvas").getContext("2d");
     if (!measure) return 1;
-    const width = widthOf(look, model(), col), font = `${style.italic ? "italic " : ""}${style.bold ? sheetLook.strong : String(sheetLook.grid.baseFontStyle).split(" ")[0]} ${String(sheetLook.grid.baseFontStyle).split(" ")[1]} ${sheetLook.grid.fontFamily}`;
+    const width = widthOf(look, model(), col), [weight, size] = String(sheetLook.grid.baseFontStyle).split(" ") as [string, string];
+    const font = `${style.italic ? "italic " : ""}${style.bold ? sheetLook.strong : weight} ${textSize(size, style.size)} ${sheetLook.grid.fontFamily}`;
     measure.font = font;
     return wrapLines(measure, text, font, (width ?? sheetLook.width) - 2 * Number(sheetLook.grid.cellHorizontalPadding)).length;
   };
@@ -92,6 +102,7 @@ export function createSheetStyles(look: Y.Map<number | string>, model: Accessor<
     at, worn,
     set: (range, style) => write(range, { style }),
     borders: (range, kind) => write(range, { borders: kind }),
+    clear: (range) => write(range, { style: { bold: false, italic: false, underline: false, strike: false, wrap: false, color: null, fill: null, align: null, valign: null, size: null, borderColor: null, borderWeight: null }, borders: "none" }),
     key: (event, range) => {
       const name = (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey ? KEYS[event.code] : undefined;
       if (!name || !range) return false;

@@ -1,8 +1,11 @@
-import { ArrowDownToLineIcon, ArrowUpToLineIcon, BaselineIcon, BoldIcon, DecimalsArrowLeftIcon, DecimalsArrowRightIcon, FoldVerticalIcon, Grid2x2Icon, HashIcon, ItalicIcon, PaintBucketIcon, StrikethroughIcon, TextAlignCenterIcon, TextAlignEndIcon, TextAlignStartIcon, UnderlineIcon, WrapTextIcon } from "lucide-solid";
+import { ArrowDownAZIcon, ArrowDownZAIcon, FunnelIcon, Table2Icon, ArrowDownFromLineIcon, ArrowDownToLineIcon, ArrowRightFromLineIcon, ArrowUpToLineIcon, BaselineIcon, BoldIcon, DecimalsArrowLeftIcon, DecimalsArrowRightIcon, FoldVerticalIcon, Grid2x2Icon, HashIcon, ItalicIcon, PaintBucketIcon, RemoveFormattingIcon, StrikethroughIcon, TextAlignCenterIcon, TextAlignEndIcon, TextAlignStartIcon, TypeIcon, UnderlineIcon, WrapTextIcon } from "lucide-solid";
 
 /** A sheet's edit tools on its ribbon (components/sheet/tools.tsx), by tool, and by choice where a tool's choices each have a mark. */
 export const sheetToolIcons = {
-  bold: BoldIcon, italic: ItalicIcon, underline: UnderlineIcon, strike: StrikethroughIcon, wrap: WrapTextIcon, color: BaselineIcon, fill: PaintBucketIcon, borders: Grid2x2Icon, format: HashIcon,
+  bold: BoldIcon, italic: ItalicIcon, underline: UnderlineIcon, strike: StrikethroughIcon, wrap: WrapTextIcon, "text-style": TypeIcon, clear: RemoveFormattingIcon, "spread-down": ArrowDownFromLineIcon, "spread-right": ArrowRightFromLineIcon, color: BaselineIcon, fill: PaintBucketIcon, borders: Grid2x2Icon, format: HashIcon,
   "align-left": TextAlignStartIcon, "align-center": TextAlignCenterIcon, "align-right": TextAlignEndIcon, "valign-top": ArrowUpToLineIcon, "valign-middle": FoldVerticalIcon, "valign-bottom": ArrowDownToLineIcon,
   "decimals-more": DecimalsArrowRightIcon, "decimals-fewer": DecimalsArrowLeftIcon,
 };
+
+/** The sheet's sort, filter and table rows (context menu, filter popover). */
+export const sheetSortIcons = { ascending: ArrowDownAZIcon, descending: ArrowDownZAIcon, filter: FunnelIcon, table: Table2Icon };

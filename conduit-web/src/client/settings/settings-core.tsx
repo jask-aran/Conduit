@@ -6,6 +6,7 @@ import { BotIcon, ChartColumnIcon, LaptopIcon, Mic2Icon, NetworkIcon, Smartphone
 import { AboutSettingsFooter } from "./about-settings";
 import { TitleBarSettings } from "./title-bar-settings";
 import { BackgroundSettings } from "./background-settings";
+import { ArtifactsSettings } from "./artifacts-settings";
 import { DevicesSettingsTile } from "./devices-settings";
 import { ServerSettings } from "./server-settings";
 import { BlocksSettings, createContextData, PromptsSettings } from "./context-settings";
@@ -82,7 +83,7 @@ import { uiPreferenceSaves } from "../preferences/ui-preferences";
 import { conduitFloat, type FloatHoldTarget, type FloatStatus } from "../platform/float";
 
 const allSectionGroups = [
-  { label: "Personal", sections: [{ id: "account", label: "Account", icon: Icons.User }, { id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
+  { label: "Personal", sections: [{ id: "account", label: "Account", icon: Icons.User }, { id: "ui", label: "Appearance", icon: Icons.Monitor }, { id: "artifacts", label: "Artifacts", icon: Icons.Shapes }, { id: "shortcuts", label: "Shortcuts", icon: Icons.Keyboard }] },
   { label: "AI", sections: [{ id: "models", label: "Models", icon: BotIcon }, { id: "prompts", label: "Prompts", icon: Icons.FileText }, { id: "blocks", label: "Blocks", icon: Icons.Boxes }, { id: "tools", label: "Tools", icon: Icons.Tool }, { id: "skills", label: "Skills", icon: SparklesIcon }, { id: "agent", label: "Agent", icon: Icons.Agent }] },
   { label: "System", sections: [{ id: "server", label: "Server", icon: Icons.Server }, { id: "device", label: "This device", icon: installedClientKind === "android" ? SmartphoneIcon : LaptopIcon }, { id: "devices", label: "Network", icon: NetworkIcon }, { id: "usage", label: "Usage", icon: ChartColumnIcon }] },
   { label: "Services", sections: [{ id: "voice", label: "Voice", icon: Mic2Icon }, { id: "search", label: "Web search", icon: Icons.Search }, { id: "browser", label: "Hub browser", icon: Icons.Browser }, { id: "mail", label: "Mail", icon: Icons.Mail }, { id: "integrations", label: "Integrations", icon: Icons.ExternalLink }] },
@@ -1475,6 +1476,7 @@ export function Settings(props: {
             </>
           </Show>
           <Show when={section() === "agent"}><agentSettings.Page /></Show>
+          <Show when={section() === "artifacts"}><ArtifactsSettings /></Show>
           <Show when={section() === "tools"}><ToolsSettings /></Show>
           <Show when={section() === "skills"}><SkillsSettings context={context} skillId={openSkill()} onSkill={setOpenSkill} onOpenDocument={(id) => { setContextDocument(id); openSection("prompts"); }} /></Show>
           <Show when={section() === "account"}><AccountSettings /></Show>
@@ -1944,7 +1946,7 @@ export function Settings(props: {
     attach();
     onCleanup(() => { over = true; watcher.disconnect(); clearTimeout(timer); });
   });
-  const SWEPT: Section[] = ["ui", "account", "models", "agent", "server", "device", "devices", "voice", "search", "browser", "integrations"];
+  const SWEPT: Section[] = ["ui", "artifacts", "account", "models", "agent", "server", "device", "devices", "voice", "search", "browser", "integrations"];
   const [sweeping, setSweeping] = createSignal(false);
   createEffect(() => {
     if (props.harvest || !props.open || sweeping() || Date.now() - sweptAt < 5 * 60_000) return;

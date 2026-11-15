@@ -151,6 +151,7 @@ export function paletteGroupOf(command: { id?: string; group?: string; destructi
 export const SETTINGS_SECTIONS = [
   { id: "account", label: "Account", keywords: ["account", "name", "profile", "picture", "avatar", "me", "time zone", "home", "connectors", "executor", "gmail", "integrations"] },
   { id: "ui", label: "Appearance", keywords: ["interface", "ui", "renderer", "markdown", "sidebar", "chats"] },
+  { id: "artifacts", label: "Artifacts", keywords: ["sheet", "spreadsheet", "zoom", "gridlines", "focus cell"] },
   { id: "shortcuts", label: "Shortcuts", keywords: ["keyboard", "keys", "bindings", "commands", "browser"] },
   { id: "models", label: "Models", keywords: ["model", "llm", "provider", "auth", "account", "profile", "session naming"] },
   { id: "prompts", label: "Prompts", keywords: ["prompt", "system prompt", "context", "instructions"] },

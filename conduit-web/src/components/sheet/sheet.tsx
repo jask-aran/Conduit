@@ -1,6 +1,7 @@
-import { createEffect, createMemo, createResource, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
+import { createEffect, createMemo, createResource, createSignal, on, onCleanup, Show, untrack, type JSX } from "solid-js";
 import * as Y from "yjs";
 import { Empty, Frost, Icons, Notice } from "@/components/ui";
+import { sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
 import { Input } from "@/components/ui/controls";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
 import { CELLS, COL_LIMIT, LOOK, a1, colIndex, colName, key, parseRange, rangeA1, type SheetView } from "@/sheet-format.js";
@@ -11,15 +12,21 @@ import { createLiveSheet } from "./live";
 import { readLook } from "./theme";
 import { createArtWindow } from "@/components/ui/chat-art";
 import { createFormulaEditor, FormulaField, FormulaHelp } from "./formula-editor";
+import { tokenize } from "./formula";
 import { createSequenceKeys, SequenceHint, SHEET_SEQUENCES, SizePrompt, type SheetSequence, type SizeQuestion } from "./sequences";
 import { createSheetSizes, dragRowEdges } from "./sizes";
+import { createSheetFilter, FilterMenu } from "./filter";
 import { createSheetFormats } from "./formats";
 import { createSheetStyles } from "./styles";
 import { createSheetTools } from "./tools";
+import { createSheetFind } from "./find";
 import { FormatMenu } from "./format-menu";
 
 // Cells written into the text a comment quotes, and how much of each: enough to read.
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
+// A formula moved down `by` rows, as the hub's fill moves one: each reference's rows not held by `$`.
+const lowered = (input: string, by: number) => tokenize(input).map((token) => { const text = input.slice(token.from, token.to); return token.kind === "ref" ? text.replace(/(\$?)(\d+)/g, (all, held: string, row: string) => held ? all : String(Number(row) + by)) : text; }).join("");
+const runsOf = (rows: readonly number[]) => rows.reduce<number[][]>((out, row) => { const last = out.at(-1); if (last && last.at(-1) === row - 1) last.push(row); else out.push([row]); return out; }, []);
 type Menu = { rows?: SheetRange; cols?: SheetRange };
 
 /** A sheet: the hub's live copy drawn in the grid, a formula bar over it, the comment margin beside it. */
@@ -63,8 +70,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const frozenAt = (row: number, col: number) => frozen().size ? frozen().get(row * COL_LIMIT + col) : undefined;
   const frozenHere = () => { changed(); const area = at(), cell = area && frozenAt(area.top, area.left); return cell && !model()?.input(area!.top, area!.left).startsWith("=") ? cell : undefined; };
   createEffect(() => { if (frozen().size) grid()?.update(null); });
-  const sizes = createSheetSizes(look, model, styles.lines), [question, setQuestion] = createSignal<SizeQuestion | null>(null);
-  const sequences = createSequenceKeys((sequence) => "tool" in sequence ? tools.find((one) => one.name === sequence.tool)?.run() : sequence.run({ selection: at, sizes, look: () => readLook(root!), ask: setQuestion }),
+  const filters = createSheetFilter(look, model, at, hub, (row, col) => Boolean(styles.at(row, col)?.bold)), [filtering, setFiltering] = createSignal<{ col: number; box: SheetBox } | null>(null);
+  const sizes = createSheetSizes(look, model, styles.lines, filters.hidden), [question, setQuestion] = createSignal<SizeQuestion | null>(null);
+  const sequences = createSequenceKeys((sequence) => "tool" in sequence ? tools.find((one) => one.name === sequence.tool)?.run() : sequence.run({ selection: at, sizes, look: () => readLook(root!), ask: setQuestion, filters: filters.keys }),
     (name) => tools.find((one) => one.name === name)?.label ?? name);
   // One edge dragged sizes every whole row or column selected with it, as a spreadsheet does.
   const wholeOf = (area: SheetRange, kind: "rows" | "cols") => { const size = model()?.size(); return Boolean(size && (kind === "cols" ? area.top === 0 && area.bottom >= size.rows - 1 : area.left === 0 && area.right >= size.cols - 1)); };
@@ -75,11 +83,14 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     const whole = area && wholeOf(area, kind) && one >= from && one <= to && to > from;
     return whole ? Array.from({ length: to - from + 1 }, (_, n) => from + n) : [one];
   };
+  // The grid draws at this place's zoom; the sizes the sheet keeps, and every look that measures them, are at 100%.
+  const zoom = () => props.host.display?.().zoom ?? 1;
+  const drawnLook = () => readLook(root!, props.host.display?.());
   const events: SheetGridEvents = {
     selected: setAt,
     write,
     fill: (range, values) => hub({ op: "fill", range: rangeA1(range), values }),
-    resized: (col, width) => sizes.setWidths(span("cols", col), width),
+    resized: (col, width) => sizes.setWidths(span("cols", col), width / zoom()),
     menu: setMenu,
     moved: () => { setScrolled((n) => n + 1); moved(); },
     drawn: () => props.onDrawn?.(),
@@ -95,6 +106,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       return true;
     },
     activated: (row, col) => editor.begin({ row, col }, "edit", "cell"),
+    filter: (_, col, box) => { filters.reapply(); setFiltering({ col, box }); },
   };
 
   // The model is made once the hub's copy is held, so it is built once from it and not cell by cell as it arrives.
@@ -110,9 +122,10 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     let made: SheetGrid | undefined, over = false;
     void import("./grid").then(({ mountGrid }) => {
       if (over) return;
-      made = mountGrid(into, { model: sheet, events, look: readLook(root!), columns: {
-        width: sizes.width, freeze: sizes.freeze, hidden: sizes.hidden,
-        type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; }, heights: sizes.heights, draw: formats.draw, style: styles.at, frozen: (row, col) => Boolean(frozenAt(row, col)),
+      made = mountGrid(into, { model: sheet, events, look: untrack(drawnLook), columns: {
+        width: (col) => { const width = sizes.width(col); return width === undefined ? undefined : Math.round(width * zoom()); }, freeze: sizes.freeze, hidden: sizes.hidden,
+        heights: () => { const by = zoom(), kept = sizes.heights(); return by === 1 ? kept : new Map([...kept].map(([row, height]) => [row, Math.round(height * by)])); },
+        type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; }, draw: formats.draw, style: (row, col) => filters.style(styles.at(row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded,
       } });
       setGrid(made);
     }, (error: Error) => { setFailed(error.message); props.onDrawn?.(); });
@@ -123,6 +136,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       const area = at();
       if (!cells || (area && cells.some(({ row, col }) => row === area.top && col === area.left))) setChanged((n) => n + 1);
       if (!cells) moved();
+      if (change.structure) setFiltering(null);
     });
     const restyled = () => { made?.update(null); moved(); };
     look.observe(restyled);
@@ -130,9 +144,11 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   });
   const art = createArtWindow(true);
   // The app's tokens change with the Interface size and the theme, each set on the root element.
-  const relook = new MutationObserver(() => { const made = grid(); if (made && root) made.theme(readLook(root)); });
+  const relook = new MutationObserver(() => { const made = grid(); if (made && root) made.theme(untrack(drawnLook)); });
   relook.observe(document.documentElement, { attributes: true });
   onCleanup(() => relook.disconnect());
+  // Drawn at another zoom, what stands where has moved.
+  createEffect(on(() => props.host.display?.(), () => { const made = untrack(grid); if (made && root) { made.theme(drawnLook()); moved(); } }, { defer: true }));
 
   const input = () => { changed(); const area = at(), sheet = model(); return area && sheet ? sheet.input(area.top, area.left) : ""; };
   // The references of the formula being edited, outlined on the grid in their inks.
@@ -143,7 +159,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   createEffect(() => {
     const into = island();
     if (!into) return;
-    const offKeys = sequences.attach(into), offEdges = dragRowEdges(into, grid, (row, height) => sizes.setHeights(span("rows", row), height));
+    const offKeys = sequences.attach(into), offEdges = dragRowEdges(into, grid, (row, height) => sizes.setHeights(span("rows", row), height / zoom()));
     onCleanup(() => { offKeys(); offEdges(); });
   });
   const cellBox = createMemo<JSX.CSSProperties>((was) => {
@@ -213,7 +229,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     }
     return { text: lines.join("\n"), label: corners.range, under: corners, boxes: () => { const now = rangeOf({ under: corners }), box = now && grid()?.bounds(now); return box ? [box] : []; } };
   };
-  const tools = createSheetTools({ tip: sequences.tip, at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(),
+  const find = createSheetFind({ model, grid, at, hidden: sizes.hidden, draw: formats.draw, write });
+  const tools = createSheetTools({ tip: sequences.tip, at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(), spread: (range, way) => spread(range, way),
     fit: (range) => sizes.fitRows(Array.from({ length: range.bottom - range.top + 1 }, (_, n) => range.top + n), readLook(root!)) });
   const marks: SheetMarks = {
     subject: () => ({ ...model()?.size() }),
@@ -250,7 +267,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const rows = () => menu().rows, cols = () => menu().cols;
   // The menu's own doings, over what it was opened on: a sequence's (sizes), and the cells' cut, copy, paste and clearing.
   const picked = (): SheetRange | null => { const r = rows(), c = cols(); return r && c ? { top: r.top, bottom: r.bottom, left: c.left, right: c.right } : null; };
-  const sized = (keys: string, selection: SheetRange) => SHEET_SEQUENCES.find((sequence): sequence is Extract<SheetSequence, { run: unknown }> => sequence.keys === keys && "run" in sequence)?.run({ selection: () => selection, sizes, look: () => readLook(root!), ask: setQuestion });
+  const sized = (keys: string, selection: SheetRange) => SHEET_SEQUENCES.find((sequence): sequence is Extract<SheetSequence, { run: unknown }> => sequence.keys === keys && "run" in sequence)?.run({ selection: () => selection, sizes, look: () => readLook(root!), ask: setQuestion, filters: filters.keys });
   // What a range's cuts, clears, pastes and deletes reach: its rows shown, never one hidden, which is out of sight.
   const shownRows = (range: SheetRange) => { const hidden = sizes.hidden(); return Array.from({ length: range.bottom - range.top + 1 }, (_, r) => range.top + r).filter((row) => !hidden.has(row)); };
   const shownFrom = (top: number, count: number) => { const hidden = sizes.hidden(), out: number[] = []; for (let row = top; out.length < count; row++) if (!hidden.has(row)) out.push(row); return out; };
@@ -261,14 +278,48 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     write(lines.flatMap((line, r) => line.split("\t").map((input, c) => ({ row: rows[r]!, col: range.left + c, input })))); }, (error: Error) => props.host.failed(error.message));
   // Each run of shown rows on its own, the last first, so the runs above keep their places.
   const deleteRows = (range: SheetRange) => { const rows = shownRows(range); for (let end = rows.length - 1; end >= 0;) { let start = end; while (start > 0 && rows[start - 1] === rows[start]! - 1) start--; structure("delete-rows", rows[start]!, end - start + 1); end = start - 1; } };
+  // Fill down and Fill right: the selection's first shown row (or its first column) into the rest of it, from the shown row above (or the column left) where it is
+  // one deep, as a spreadsheet's; the hub moves the formulas. Each run of shown rows is a fill of its own, its formulas first moved to where the run starts.
+  const spread = (picked: SheetRange, way: "down" | "right") => {
+    const sheet = model();
+    if (!sheet) return;
+    // Whole columns or rows reach the grid's spare room past the data; filling it would grow the tab on every press.
+    const size = sheet.size(), range = { ...picked, bottom: Math.min(picked.bottom, Math.max(picked.top, size.rows - 1)), right: Math.min(picked.right, Math.max(picked.left, size.cols - 1)) }, shown = shownRows(range);
+    if (!shown.length) return;
+    if (way === "right") {
+      const left = range.left === range.right ? range.left - 1 : range.left;
+      if (left >= 0) for (const run of runsOf(shown)) hub({ op: "fill", range: rangeA1({ top: run[0]!, bottom: run.at(-1)!, left, right: range.right }), values: run.map((row) => [sheet.input(row, left)]) });
+      return;
+    }
+    const hidden = sizes.hidden();
+    let source = range.top === range.bottom ? range.top - 1 : shown[0]!;
+    while (source >= 0 && hidden.has(source)) source--;
+    if (source < 0) return;
+    const cols = Array.from({ length: range.right - range.left + 1 }, (_, c) => range.left + c);
+    for (const run of runsOf([...new Set([source, ...shown])])) if (run.length > 1 || run[0] !== source)
+      hub({ op: "fill", range: rangeA1({ top: run[0]!, bottom: run.at(-1)!, left: range.left, right: range.right }), values: [cols.map((col) => lowered(sheet.input(source, col), run[0]! - source))] });
+  };
   const hiddenIn = (range: SheetRange) => shownRows(range).length < range.bottom - range.top + 1;
   // A header's menu is its whole columns, a row number's its whole rows (formats.ts clips both to the tab).
   const formatted = () => { const { rows, cols } = menu(), most = Number.MAX_SAFE_INTEGER; return rows || cols ? { top: rows?.top ?? 0, bottom: rows?.bottom ?? most, left: cols?.left ?? 0, right: cols?.right ?? most } : null; };
   const count = (from: number, to: number) => to - from + 1;
+  const filteredBy = (col: number) => { const on = filters.filter(); return on && col >= on.range.left && col <= on.range.right ? on.range : null; };
+  const inTable = () => { const on = filters.table(), area = at(); return Boolean(on && area && area.top >= on.range.top && area.top <= on.range.bottom && area.left >= on.range.left && area.left <= on.range.right); };
+  // Opened once the menu has shut and given focus back (its onCloseAutoFocus), which would shut a popover opened sooner. The filter's header cell is
+  // selected, which scrolls it into view, and the filter opens over it once drawn there.
+  let opening: (() => void) | undefined;
+  const openFilter = (range: SheetRange, col: number) => {
+    const cell = { top: range.top, bottom: range.top, left: col, right: col };
+    opening = () => { grid()?.select(cell); grid()?.focus(); requestAnimationFrame(() => { const box = grid()?.bounds(cell); if (box) { filters.reapply(); setFiltering({ col, box }); } }); };
+  };
+  createEffect(() => { if (!filters.filter()) setFiltering(null); });
+  createEffect(on(tabs.shown, () => setFiltering(null), { defer: true }));
   return <section ref={(element) => { root = element; art(element); }} class="ui-spreadsheet" aria-label={props.name} data-margin={props.marginEmpty ? "none" : "beside"}
     onKeyDown={(event) => {
       if (!(event.ctrlKey || event.metaKey) || !island()?.contains(event.target as Node)) return;
-      if (tabs.key(event) || formats.key(event, at()) || styles.key(event, at())) return;
+      if (find.keys(event) || tabs.key(event) || formats.key(event, at()) || styles.key(event, at()) || filters.key(event)) return;
+      // Ctrl+D and Ctrl+R are the grid's only while it has the keyboard: elsewhere the browser keeps them.
+      if (!event.shiftKey && !event.altKey && (event.code === "KeyD" || event.code === "KeyR")) { event.preventDefault(); const area = at(); if (area) spread(area, event.code === "KeyD" ? "down" : "right"); return; }
       if (event.altKey && event.code === ASK_KEY) { event.preventDefault(); return props.onAsk?.(); }
       // The grid has no history of its own: what this page wrote is undone here, never what others wrote.
       const redo = event.key === "y" || (event.key === "z" && event.shiftKey);
@@ -291,7 +342,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       <Show when={!failed()} fallback={<Empty role="alert">The sheet could not be drawn: {failed()}</Empty>}>
         <ContextMenu placement="bottom-start">
           <ContextMenuTrigger as="div" ref={setIsland} class="ui-spreadsheet-grid" />
-          <ContextMenuContent>
+          <ContextMenuContent onCloseAutoFocus={(event) => { const open = opening; opening = undefined; if (open) { event.preventDefault(); open(); } }}>
             <Show when={picked()}>{(range) => <MenuSection>
               <MenuRow icon={<Icons.Cut />} keys={["Ctrl", "X"]} onSelect={() => void copy(range()).then(() => clear(range()))}>Cut</MenuRow>
               <MenuRow icon={<Icons.Copy />} keys={["Ctrl", "C"]} onSelect={() => void copy(range())}>Copy</MenuRow>
@@ -305,7 +356,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
               <MenuRow icon={<Icons.Hide />} onSelect={() => sizes.setHidden(Array.from({ length: count(range().top, range().bottom) }, (_, r) => range().top + r), true)}>Hide {count(range().top, range().bottom) > 1 ? `rows ${range().top + 1}–${range().bottom + 1}` : `row ${range().top + 1}`}</MenuRow>
               <MenuRow icon={<Icons.Pin />} onSelect={() => sizes.setFreeze(range().bottom + 1, sizes.freeze().cols)}>Freeze {range().bottom ? `rows 1–${range().bottom + 1}` : "row 1"}</MenuRow>
               <Show when={sizes.freeze().rows}><MenuRow icon={<Icons.PinOff />} onSelect={() => sizes.setFreeze(0, sizes.freeze().cols)}>Unfreeze rows</MenuRow></Show>
-              <Show when={hiddenIn(range())}><MenuRow icon={<Icons.Preview />} onSelect={() => sizes.setHidden(Array.from({ length: count(range().top, range().bottom) }, (_, r) => range().top + r), false)}>Unhide rows</MenuRow></Show>
+              <Show when={hiddenIn(range())}><MenuRow icon={<Icons.Preview />} onSelect={() => { const rows = Array.from({ length: count(range().top, range().bottom) }, (_, r) => range().top + r); look.doc!.transact(() => { sizes.setHidden(rows, false); filters.show(rows); }); }}>Unhide rows</MenuRow></Show>
               <MenuRow destructive icon={<Icons.Delete />} onSelect={() => deleteRows(range())}>Delete {count(range().top, range().bottom) > 1 ? `rows ${range().top + 1}–${range().bottom + 1}` : `row ${range().top + 1}`}</MenuRow>
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "H"]} onSelect={() => sized("HOH", range())}>Row height…</MenuRow>
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "A"]} onSelect={() => sized("HOA", range())}>Fit row height</MenuRow>
@@ -319,14 +370,22 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "D"]} onSelect={() => sized("HOD", range())}>Default width…</MenuRow>
               <MenuRow icon={<Icons.Pin />} onSelect={() => sizes.setFreeze(sizes.freeze().rows, range().right + 1)}>Freeze {range().right ? `columns A–${colName(range().right)}` : "column A"}</MenuRow>
               <Show when={sizes.freeze().cols}><MenuRow icon={<Icons.PinOff />} onSelect={() => sizes.setFreeze(sizes.freeze().rows, 0)}>Unfreeze columns</MenuRow></Show>
+              <MenuRow icon={<SortIcons.ascending />} keys={["Alt", "H", "S", "S"]} onSelect={() => filters.keys.sort(false, range().left)}>Sort A–Z</MenuRow>
+              <MenuRow icon={<SortIcons.descending />} keys={["Alt", "H", "S", "O"]} onSelect={() => filters.keys.sort(true, range().left)}>Sort Z–A</MenuRow>
+              <MenuRow icon={<SortIcons.filter />} keys={["Ctrl", "Shift", "L"]} onSelect={filters.keys.filter}>{filters.filter() ? "Remove filter" : "Filter"}</MenuRow>
+              <Show when={filteredBy(range().left)}>{(over) => <MenuRow icon={<SortIcons.filter />} onSelect={() => openFilter(over(), range().left)}>Filter column…</MenuRow>}</Show>
+              <MenuRow icon={<SortIcons.table />} keys={["Alt", "H", "T"]} onSelect={filters.keys.table}>{inTable() ? "Remove table" : "Format as table"}</MenuRow>
             </MenuSection>}</Show>
             <Show when={formatted()}>{(range) => <FormatMenu formats={formats} range={range()} />}</Show>
+            <Show when={props.host.openSettings}>{(open) => <MenuSection><MenuRow icon={<Icons.Settings />} onSelect={() => open()()}>View settings…</MenuRow></MenuSection>}</Show>
           </ContextMenuContent>
         </ContextMenu>
         <div class="ui-spreadsheet-editor" data-open={editor.editing() ? "" : undefined} style={cellBox()}><FormulaField editor={editor} place="cell" label="Cell" class="ui-formula-text" /></div>
         <FormulaHelp editor={editor} frame={() => body} />
         <SequenceHint typed={sequences.typed} next={sequences.next} anchor={slot} />
         <SizePrompt question={question()} onClose={() => { setQuestion(null); grid()?.focus(); }} />
+        <FilterMenu filter={filters} at={filtering()} frame={() => body} onClose={() => { setFiltering(null); grid()?.focus(); }} />
+        <find.view beside={Boolean(props.margin) && !props.marginEmpty} />
         <Show when={!model()}><Empty role="status" class="ui-spreadsheet-waiting">Opening the sheet…</Empty></Show>
       </Show>
       <Show when={props.margin}><aside class="ui-spreadsheet-margin" aria-label="Comments">{props.margin}</aside></Show>
