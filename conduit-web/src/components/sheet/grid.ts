@@ -227,13 +227,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       write(cells.map(({ location: [col, row], value }) => ({ row: p.map.sheet(row), col, input: value.kind === GridCellKind.Boolean ? (value.data ? "TRUE" : "FALSE") : value.kind === GridCellKind.Text ? value.data : "" })));
       return true;
     },
-    onPaste: (target, given) => {
-      // Into the rows shown, a hidden one keeping what it holds; what was copied here has its formulas moved with it.
-      const [col, row] = target, values = moved(given, p.map.sheet(row), col), bottom = p.map.sheet(row + values.length - 1), right = col + Math.max(...values.map((line) => line.length)) - 1;
-      if (bottom >= model.size().rows || right >= model.size().cols) events.fill({ top: p.map.sheet(row), left: col, bottom, right }, values.map((line) => [...line]));
-      else write(values.flatMap((line, y) => line.map((input, x) => ({ row: p.map.sheet(row + y), col: col + x, input }))));
-      return false;
-    },
+    // What was copied here has its formulas moved with it.
+    onPaste: (target, given) => { pasteInto(p, target, moved(given, p.map.sheet(target[1]), target[0])); return false; },
     onDelete: (cleared) => {
       const area = selected(cleared, size), list: { row: number; col: number; input: string }[] = [];
       if (area) for (let drawn = area.top; drawn <= area.bottom; drawn++) { const row = p.map.sheet(drawn); for (let col = area.left; col <= area.right; col++) if (model.input(row, col)) list.push({ row, col, input: "" }); }
@@ -276,6 +271,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       const cell = p.current.current?.cell;
       if (!cell) return;
       if (events.key(event, p.map.sheet(cell[1]), cell[0])) return event.cancel();
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === "v" && copied) { event.cancel(); event.preventDefault(); pasteInto(p, cell, copied.values); return; }
       // An arrow from whole columns or rows goes on from their active cell, to one cell.
       const step = ({ ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] } as Record<string, [number, number]>)[event.key];
       if (step && !(event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) && (p.current.columns.length || p.current.rows.length)) {
@@ -499,9 +495,17 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   addEventListener("pointerup", ctrl, true);
   // What was last copied from this grid, as typed (its rows shown), and where from: pasted as it is, its relative references move as a
   // spreadsheet's do. A cut moves cells, whose references stay.
-  let copied: { top: number; left: number; text: string } | null = null;
+  let copied: { top: number; left: number; text: string; values: string[][] } | null = null;
+  // Ctrl+Shift+V pastes what the cells copied showed, their values, not their formulas.
+  const valuesIn = (area: SheetRange) => { const hidden = options.columns.hidden(), lines: string[][] = []; for (let row = area.top; row <= area.bottom; row++) if (!hidden.has(row)) lines.push(Array.from({ length: area.right - area.left + 1 }, (_, c) => { const value = model.value(row, area.left + c); return value === null ? "" : typeof value === "boolean" ? (value ? "TRUE" : "FALSE") : String(value); })); return lines; };
+  // Into the rows shown, a hidden one keeping what it holds.
+  const pasteInto = (p: Part, [col, row]: Item, values: readonly (readonly string[])[]) => {
+    const bottom = p.map.sheet(row + values.length - 1), right = col + Math.max(...values.map((line) => line.length)) - 1;
+    if (bottom >= model.size().rows || right >= model.size().cols) events.fill({ top: p.map.sheet(row), left: col, bottom, right }, values.map((line) => [...line]));
+    else write(values.flatMap((line, y) => line.map((input, x) => ({ row: p.map.sheet(row + y), col: col + x, input }))));
+  };
   const typedIn = (area: SheetRange) => { const hidden = options.columns.hidden(), lines: string[] = []; for (let row = area.top; row <= area.bottom; row++) if (!hidden.has(row)) lines.push(Array.from({ length: area.right - area.left + 1 }, (_, c) => model.input(row, area.left + c)).join("\t")); return lines.join("\n"); };
-  const clipped = (event: ClipboardEvent) => { if (!parts.some((p) => p.host?.contains(document.activeElement))) return; const area = event.type === "copy" ? picked() : null; copied = area && { top: area.top, left: area.left, text: typedIn(area) }; };
+  const clipped = (event: ClipboardEvent) => { if (!parts.some((p) => p.host?.contains(document.activeElement))) return; const area = event.type === "copy" ? picked() : null; copied = area && { top: area.top, left: area.left, text: typedIn(area), values: valuesIn(area) }; };
   addEventListener("copy", clipped, true); addEventListener("cut", clipped, true);
   const moved = (values: readonly (readonly string[])[], top: number, left: number): string[][] => {
     const same = copied && values.map((line) => line.join("\t")).join("\n") === copied.text;
