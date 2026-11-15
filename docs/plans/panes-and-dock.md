@@ -19,14 +19,8 @@ inferred from view changes (`reconcileTabs`, `keepNext`) with no stored active t
 
 ## Steps
 
-1. **Stored pane model** (`src/client/panes/`): a pure store of panes `{ id, kind: session | document, tabs, active }`
-   and places `{ row: id[], dock: id | null, summon }`, with `open(view, verb)`, `close`, `move`, `swap`, history
-   (undo/redo of whole layouts) and the URL encoding. No DOM, no router.
-2. **main.tsx on the store**: every pane, pane A included, reads its views from the store; the route only seeds the
-   first layout and follows the focused pane. `reconcileTabs`, `keepNext`, `paneAOverride`, `slotViews`/`slotOrder`
-   and the `tabs=`/`pane=`/`a=` params go. Verbs take an explicit `{ beside, tab }` read at the event, never later.
-3. **Verbs and undo**: plain replaces (session tabs go with it; notice with Undo), Ctrl tabs into the nearest
-   session pane, Alt beside; Undo/Redo pane change in the command registry; documents lose tabs.
+Steps 1-3 (store, main.tsx on it, verbs and undo) landed; follow-ups are in `panes-handoff.md`.
+
 4. **The dock as one slot plus summons**: remove docked slots (`dockedSlots`, `dockSlot`, `dock=`, `docked-1..3`,
    rail docked buttons), tool splits (`file`, `shell:`, tool in pane A, `splitHost`, `bindSplit`), the dock's tab strip
    and Chat tool; summons for jbot, Files, terminal; overflow becomes the row's "more panes" control.
