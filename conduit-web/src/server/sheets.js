@@ -165,6 +165,14 @@ export function sheetKind(hub) {
       const next = moved(ranged);
       if (!next) out.push([name, null]); else if (next.from !== ranged.from || next.to !== ranged.to) out.push([name, JSON.stringify(next)]);
     }
+    // A merge shrinks as a filter does; one left a single cell goes.
+    let merges;
+    try { merges = JSON.parse(String(room.look.get(`merges:${sheet.id}`))); } catch { merges = null; }
+    if (Array.isArray(merges)) {
+      const left = (area) => { const [lo, hi] = isRows ? [area.top, area.bottom] : [area.left, area.right]; let n = 0; for (let at = lo; at <= hi; at++) if (!gone(at)) n++; return n; };
+      const next = merges.flatMap((one) => { const kept = moved(one), area = kept && rangedArea(sheet, kept); return area && (left(area) > 1 || (isRows ? area.right > area.left : area.bottom > area.top)) ? [kept] : []; });
+      if (JSON.stringify(next) !== JSON.stringify(merges)) out.push([`merges:${sheet.id}`, next.length ? JSON.stringify(next) : null]);
+    }
     // A conditional format's ranges each as a filter's; one left with none goes.
     const rules = readRules(room.look.get(`rules:${sheet.id}`));
     if (rules.length) {
@@ -205,6 +213,7 @@ export function sheetKind(hub) {
     for (const [name, value] of room.look.entries()) {
       const [what, ...ids] = name.split(":");
       if (ids.length === 1 && ids[0] === sheet.id && what === "merges") { const said = mergesA1(sheet, value); if (said.length) out.merges = said; }
+      else if (ids.length === 1 && ids[0] === sheet.id && what === "rules") { const said = rulesA1(sheet, value); if (said.length) out.rules = said; else if (Array.isArray(value)) out.rules = value; }
       else if (ids.length === 1 && ids[0] === sheet.id && RANGED.includes(what)) { const said = rangedA1(sheet, value); if (said) out[what] = said; }
       else if (ids.length === 1 && ids[0] === sheet.id) out[what] = value;
       else if (ids.length === 1 && sheet.indexOfRow(ids[0]) >= 0) out[`${what}:${sheet.indexOfRow(ids[0]) + 1}`] = value;
@@ -218,6 +227,7 @@ export function sheetKind(hub) {
       const [what, at, more] = name.split(":"), col = /^[A-Z]{1,3}$/.test(at ?? "") ? colIndex(at) : -1, row = /^\d+$/.test(at ?? "") ? Number(at) - 1 : -1, cell = at ? parseA1(at) : null, { rows, cols } = sheet.size();
       if (!what || more !== undefined) continue;
       if (at === undefined && what === "merges") { const ids = Array.isArray(value) ? value.flatMap((range) => { const one = rangedIds(sheet, { range }); return one ? [JSON.parse(one)] : []; }) : []; if (ids.length) room.look.set(`merges:${tab}`, JSON.stringify(ids)); }
+      else if (at === undefined && what === "rules") { const ids = rulesIds(sheet, value); if (ids) room.look.set(`rules:${tab}`, ids); }
       else if (at === undefined && RANGED.includes(what)) { const ids = rangedIds(sheet, value); if (ids) room.look.set(`${what}:${tab}`, ids); }
       else if (at === undefined) room.look.set(`${what}:${tab}`, value);
       else if (row >= 0 && row < rows) room.look.set(`${what}:${sheet.rowAt(row)}`, value);

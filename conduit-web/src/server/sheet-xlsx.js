@@ -207,7 +207,8 @@ export function importXlsx(bytes, { tabs: only } = {}) {
         if (styled < STYLES_PER_TAB) { look[`style:${a1(r, c)}`] = own; styled += 1; } else drop("cell styles");
       }
       // Merged ranges inside the tab, a lone cell being none.
-      const merges = (tab.sheet["!merges"] ?? []).filter(({ s, e }) => e.r < tab.rows && e.c < tab.cols && (e.r > s.r || e.c > s.c));
+      // A merge reaching past the tab's last value is cut at its edge; one left a single cell is dropped.
+      const merges = (tab.sheet["!merges"] ?? []).map(({ s, e }) => ({ s, e: { r: Math.min(e.r, tab.rows - 1), c: Math.min(e.c, tab.cols - 1) } })).filter(({ s, e }) => e.r >= s.r && e.c >= s.c && (e.r > s.r || e.c > s.c));
       drop("merged ranges past the tab's last value", (tab.sheet["!merges"]?.length ?? 0) - merges.length);
       if (merges.length) look.merges = merges.map((range) => XLSX.utils.encode_range(range));
       if (tab.rules.length) look.rules = tab.rules;
@@ -271,7 +272,7 @@ export function exportXlsx(tabs, imported) {
   book.Workbook = { Sheets: tabs.map((tab) => ({ Hidden: tab.hidden ? 1 : 0 })) };
   const written = XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true }), count = (value) => typeof value === "number" && value > 0 ? value : 0;
   const panes = tabs.map((tab) => [count(tab.look.freezeRows), count(tab.look.freezeCols)]), styled = tabs.some((tab) => Object.keys(tab.look).some((name) => name.startsWith("style:")));
-  const ruled = tabs.some((tab) => tab.look.rules?.length), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(`=${formula}`)) : null;
+  const ruled = tabs.some((tab) => Array.isArray(tab.look.rules) && tab.look.rules.length), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(`=${formula}`)) : null;
   if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols)) return written;
   let restyled = null;
   return editParts(written, (path, xml, all) => {

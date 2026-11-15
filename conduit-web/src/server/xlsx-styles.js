@@ -220,7 +220,7 @@ export function writeRules(tabsRules, formula) {
     return dxfs.length - 1;
   };
   let priority = 0;
-  const sheets = tabsRules.map((rules) => (rules ?? []).map((rule) => {
+  const sheets = tabsRules.map((rules) => (Array.isArray(rules) ? rules : []).map((rule) => {
     const formulas = [rule.a, ...(rule.kind === "value" && rule.op?.endsWith("etween") ? [rule.b ?? ""] : [])].map((text) => `<formula>${escaped(formula(text))}</formula>`).join("");
     const kind = rule.kind === "formula" ? 'type="expression"' : `type="cellIs" operator="${OPERATOR[rule.op]}"`;
     return `<conditionalFormatting sqref="${escaped(rule.ranges)}"><cfRule ${kind} dxfId="${dxfOf(rule.style ?? "")}" priority="${++priority}">${formulas}</cfRule></conditionalFormatting>`;
