@@ -1,9 +1,9 @@
 import { createSignal, type Accessor } from "solid-js";
 import type * as Y from "yjs";
-import { createWorkbookModel, parseRange, parseRef, rangeA1, tabRef, type SheetChange, type SheetModel, type SheetTabOp, type SheetTabsResult, type Tab, type WorkbookModel } from "@/sheet-format.js";
+import { createSheetView, parseRange, parseRef, rangeA1, tabRef, type SheetBook, type SheetChange, type SheetTabOp, type SheetTabsResult, type SheetView, type Tab } from "@/sheet-format.js";
 import type { SheetAnchor, SheetCellsOp, SheetGrid, SheetHost, SheetRange } from "./host";
 
-/** What the foot needs of the editor: the workbook's tabs (hidden ones too), the one shown, showing one, the hub's tab verbs, the cells selected and the shown tab's model. */
+/** What the foot needs of the editor: the workbook's tabs (hidden ones too), the one shown, showing one, the hub's tab verbs, the cells selected, the shown tab and whether values are still being computed. */
 export interface SheetTabs {
   tabs(): Tab[];
   shown(): string | undefined;
@@ -11,7 +11,8 @@ export interface SheetTabs {
   /** Done by the hub; refused, its words are shown and the answer is null. */
   op(op: SheetTabOp): Promise<SheetTabsResult | null>;
   selection(): SheetRange | null;
-  model(): SheetModel | undefined;
+  model(): SheetView | undefined;
+  computing(): boolean;
   /** Whether a tab holds anything typed. */
   filled(id: string): boolean;
   focus(): void;
@@ -19,8 +20,10 @@ export interface SheetTabs {
 }
 /** The editor's half: the model the grid draws (whichever tab is shown, the same object throughout), cell ops sent for the shown tab, addresses with their tab. */
 export interface SheetTabsControl extends SheetTabs {
-  /** Made once the hub's copy is held; its `destroy` ends the workbook. */
-  open(): SheetModel;
+  /** Made once the hub's copy is held; its `destroy` ends the workbook and its engine. */
+  open(): SheetView;
+  /** The engine's function names, custom ones included ([] until its worker says). */
+  functions(): readonly string[];
   cells(op: SheetCellsOp): Promise<unknown>;
   /** A range as a comment says it: with its tab where the workbook has several. */
   where(range: SheetRange): { range: string; tab?: string };
@@ -38,21 +41,21 @@ const A1: SheetRange = { top: 0, left: 0, bottom: 0, right: 0 };
 
 /** The workbook behind one sheet editor, and which of its tabs the grid shows: chosen per artifact on this browser, each tab's selection and scroll kept for the session. */
 export function createSheetTabs(options: { doc: Y.Doc; host: SheetHost; id: string; name: string; grid: Accessor<SheetGrid | undefined>; at: Accessor<SheetRange | null> }): SheetTabsControl {
-  const [tabs, setTabs] = createSignal<Tab[]>([]), [shown, setShown] = createSignal<string>(), [model, setModel] = createSignal<SheetModel>();
+  const [tabs, setTabs] = createSignal<Tab[]>([]), [shown, setShown] = createSignal<string>(), [model, setModel] = createSignal<SheetView>();
+  const [computing, setComputing] = createSignal(true), [functions, setFunctions] = createSignal<readonly string[]>([]);
   const kept = new Map<string, Kept>(), listeners = new Set<(change: SheetChange) => void>();
-  let book: WorkbookModel | undefined, views = new Map<string, SheetModel>(), current: SheetModel | undefined, off = () => {}, waiting: string | undefined, followed: string | undefined;
+  let book: SheetBook | undefined, worker: Worker | undefined, views = new Map<string, SheetView>(), current: SheetView | undefined, off = () => {}, waiting: string | undefined, followed: string | undefined;
   const view = (id: string) => views.get(id) ?? views.set(id, book!.tab(id)).get(id)!;
   const visible = () => tabs().filter((tab) => !tab.hidden);
   const stored = () => { try { return localStorage.getItem(STORE + options.id) ?? undefined; } catch { return undefined; } };
 
   // The grid's model stands for whichever tab is shown, so a switch draws the other tab in the same grid: nothing is mounted again.
-  const proxy: SheetModel = {
-    get engine() { return current!.engine; }, get sheet() { return current!.sheet; }, get id() { return current?.id; }, get name() { return current?.name ?? ""; },
+  const proxy: SheetView = {
+    get id() { return current?.id; }, get name() { return current?.name ?? ""; },
     size: () => current!.size(), input: (r, c) => current!.input(r, c), inputs: () => current!.inputs(), value: (r, c) => current!.value(r, c), error: (r, c) => current!.error(r, c),
     rowAt: (i) => current!.rowAt(i), colAt: (i) => current!.colAt(i), indexOfRow: (id) => current!.indexOfRow(id), indexOfCol: (id) => current!.indexOfCol(id),
     onChange: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
-    structure: (op, at, count, write) => current!.structure(op, at, count, write),
-    destroy: () => { off(); listeners.clear(); book?.destroy(); },
+    destroy: () => { off(); listeners.clear(); book?.destroy(); worker?.terminate(); },
   };
   const emit = (change: SheetChange) => { for (const listener of listeners) listener(change); };
 
@@ -100,13 +103,15 @@ export function createSheetTabs(options: { doc: Y.Doc; host: SheetHost; id: stri
   };
 
   return {
-    tabs, shown, show: soon, op, model, selection: options.at,
+    tabs, shown, show: soon, op, model, computing, functions, selection: options.at,
     filled: (id) => { const tab = book?.tab(id); if (!tab) return false; const { rows, cols } = tab.size(); for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (tab.input(r, c)) return true; return false; },
     focus: () => options.grid()?.focus(),
     failed: (message) => options.host.failed(message),
     open: () => {
-      book = createWorkbookModel(options.doc, { name: options.name });
-      book.onChange((change) => { if (change.tabs) settle(); });
+      worker = new Worker(new URL("./engine-worker.ts", import.meta.url), { type: "module", name: "Sheet engine" });
+      worker.addEventListener("error", (event) => options.host.failed(`The sheet's formulas could not be computed: ${event.message}`));
+      const made = book = createSheetView(options.doc, worker, { name: options.name });
+      made.onChange((change) => { if (change.tabs) settle(); if (change.computing) setComputing(made.computing()); if (change.functions) setFunctions(made.functions()); });
       const list = book.tabs(), saved = list.find((tab) => tab.id === stored() && !tab.hidden) ?? list.find((tab) => !tab.hidden) ?? list[0]!;
       setTabs(list);
       current = view(saved.id);

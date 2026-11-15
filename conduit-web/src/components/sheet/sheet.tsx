@@ -3,7 +3,7 @@ import * as Y from "yjs";
 import { Empty, Icons } from "@/components/ui";
 import { Input } from "@/components/ui/controls";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
-import { CELLS, LOOK, a1, key, parseRange, rangeA1, type SheetModel } from "@/sheet-format.js";
+import { CELLS, LOOK, a1, key, parseRange, rangeA1, type SheetView } from "@/sheet-format.js";
 import { SheetFoot } from "./foot";
 import { createSheetTabs } from "./tabs";
 import { ASK_KEY, type SheetAnchor, type SheetBox, type SheetGrid, type SheetGridEvents, type SheetHost, type SheetMarks, type SheetPlace, type SheetRange, type SheetState } from "./host";
@@ -13,6 +13,8 @@ import { createFormulaEditor, FormulaField, FormulaHelp } from "./formula-editor
 import { createSequenceKeys, SequenceHint, SHEET_SEQUENCES, SizePrompt, type SizeQuestion } from "./sequences";
 import { createSheetSizes, dragRowEdges } from "./sizes";
 
+import { createSheetFormats } from "./formats";
+import { FormatMenu } from "./format-menu";
 // Cells written into the text a comment quotes, and how much of each: enough to read.
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
 type Menu = { rows?: SheetRange; cols?: SheetRange };
@@ -22,10 +24,11 @@ type Menu = { rows?: SheetRange; cols?: SheetRange };
 export function SheetEditor(props: { host: SheetHost; id: string; name: string; margin?: JSX.Element; marginEmpty?: boolean; marks?(marks: SheetMarks): void; onState?(state: SheetState): void; onDrawn?(): void; onAsk?(): void }) {
   const live = createLiveSheet(props.host, props.id), cells = live.doc.getMap<string>(CELLS), look = live.doc.getMap<number | string>(LOOK);
   const history = new Y.UndoManager([cells, look]);
-  const [model, setModel] = createSignal<SheetModel>(), [grid, setGrid] = createSignal<SheetGrid>(), [failed, setFailed] = createSignal<string>();
+  const [model, setModel] = createSignal<SheetView>(), [grid, setGrid] = createSignal<SheetGrid>(), [failed, setFailed] = createSignal<string>();
   const [at, setAt] = createSignal<SheetRange | null>(null), [changed, setChanged] = createSignal(0), [address, setAddress] = createSignal<string | null>(null), [scrolled, setScrolled] = createSignal(0);
   const [menu, setMenu] = createSignal<Menu>({});
   // The grid's element is a signal: the menu trigger that makes it may make it again, and the grid then mounts in the one that stands.
+  const formats = createSheetFormats(look, model, props.host.failed);
   const [island, setIsland] = createSignal<HTMLDivElement>(), [slot, setSlot] = createSignal<HTMLDivElement>();
   let root: HTMLElement | undefined, anchors: SheetAnchor[] = [];
   const tabs = createSheetTabs({ doc: live.doc, host: props.host, id: props.id, name: props.name, grid, at });
@@ -43,7 +46,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   };
   const hub = (op: Parameters<SheetHost["cells"]>[0]) => void tabs.cells(op).catch((error: Error) => props.host.failed(error.message));
   const editor = createFormulaEditor({
-    grid, input: (row, col) => model()?.input(row, col) ?? "", functions: () => model()?.engine.getRegisteredFunctionNames() ?? [],
+    grid, input: (row, col) => model()?.input(row, col) ?? "", functions: tabs.functions,
     write: (row, col, input) => write([{ row, col, input }]),
     selected: () => { changed(); const area = at(); return area && { row: area.top, col: area.left }; }, error: (row, col) => model()?.error(row, col) ?? null,
   });
@@ -86,7 +89,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (over) return;
       made = mountGrid(into, { model: sheet, events, look: readLook(root!), columns: {
         width: (col) => { const width = look.get(`width:${sheet.colAt(col)}`); return typeof width === "number" ? width : undefined; },
-        type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; }, heights: sizes.heights,
+        type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; }, heights: sizes.heights, draw: formats.draw,
       } });
       setGrid(made);
     }, (error: Error) => { setFailed(error.message); props.onDrawn?.(); });
@@ -209,8 +212,6 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   props.marks?.(marks);
 
   const rows = () => menu().rows, cols = () => menu().cols;
-  const count = (from: number, to: number) => to - from + 1;
-  return <section ref={root} class="ui-spreadsheet" aria-label={props.name} data-margin={props.marginEmpty ? "none" : "beside"}
   // The menu's own doings, over what it was opened on: a sequence's (sizes), and the cells' cut, copy, paste and clearing.
   const picked = (): SheetRange | null => { const r = rows(), c = cols(); return r && c ? { top: r.top, bottom: r.bottom, left: c.left, right: c.right } : null; };
   const sized = (keys: string, selection: SheetRange) => SHEET_SEQUENCES.find((sequence) => sequence.keys === keys)?.run({ selection: () => selection, sizes, look: () => readLook(root!), ask: setQuestion });
@@ -220,7 +221,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const paste = (range: SheetRange) => void navigator.clipboard.readText().then((text) => write(text.replace(/\r?\n$/, "").split(/\r?\n/).flatMap((line, r) => line.split("\t").map((input, c) => ({ row: range.top + r, col: range.left + c, input })))), (error: Error) => props.host.failed(error.message));
     onKeyDown={(event) => {
       if (!(event.ctrlKey || event.metaKey) || !island()?.contains(event.target as Node)) return;
-      if (tabs.key(event)) return;
+      if (tabs.key(event) || formats.key(event, at())) return;
       if (event.altKey && event.code === ASK_KEY) { event.preventDefault(); return props.onAsk?.(); }
       // The grid has no history of its own: what this page wrote is undone here, never what others wrote.
       const redo = event.key === "y" || (event.key === "z" && event.shiftKey);
@@ -243,8 +244,6 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         <ContextMenu placement="bottom-start">
           <ContextMenuTrigger as="div" ref={setIsland} class="ui-spreadsheet-grid" />
           <ContextMenuContent>
-            <Show when={rows()}>{(range) => <MenuSection>
-              <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-rows", range().top, count(range().top, range().bottom))}>Insert {count(range().top, range().bottom) > 1 ? `${count(range().top, range().bottom)} rows` : "row"} above</MenuRow>
             <Show when={picked()}>{(range) => <MenuSection>
               <MenuRow icon={<Icons.Cut />} keys={["Ctrl", "X"]} onSelect={() => void copy(range()).then(() => clear(range()))}>Cut</MenuRow>
               <MenuRow icon={<Icons.Copy />} keys={["Ctrl", "C"]} onSelect={() => void copy(range())}>Copy</MenuRow>
@@ -254,16 +253,16 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
             </MenuSection>}</Show>
               <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-rows", range().bottom + 1, count(range().top, range().bottom))}>Insert {count(range().top, range().bottom) > 1 ? `${count(range().top, range().bottom)} rows` : "row"} below</MenuRow>
               <MenuRow destructive icon={<Icons.Delete />} onSelect={() => structure("delete-rows", range().top, count(range().top, range().bottom))}>Delete {count(range().top, range().bottom) > 1 ? `rows ${range().top + 1}–${range().bottom + 1}` : `row ${range().top + 1}`}</MenuRow>
-            </MenuSection>}</Show>
-            <Show when={cols()}>{(range) => <MenuSection>
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "H"]} onSelect={() => sized("HOH", range())}>Row height…</MenuRow>
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "A"]} onSelect={() => sized("HOA", range())}>Fit row height</MenuRow>
+            <Show when={rows()}>{(range) => <MenuSection>
+              <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-rows", range().top, count(range().top, range().bottom))}>Insert {count(range().top, range().bottom) > 1 ? `${count(range().top, range().bottom)} rows` : "row"} above</MenuRow>
               <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-cols", range().left, count(range().left, range().right))}>Insert {count(range().left, range().right) > 1 ? `${count(range().left, range().right)} columns` : "column"} left</MenuRow>
               <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-cols", range().right + 1, count(range().left, range().right))}>Insert {count(range().left, range().right) > 1 ? `${count(range().left, range().right)} columns` : "column"} right</MenuRow>
               <MenuRow destructive icon={<Icons.Delete />} onSelect={() => structure("delete-cols", range().left, count(range().left, range().right))}>Delete {count(range().left, range().right) > 1 ? "columns" : "column"} {rangeA1({ ...range(), top: 0, bottom: 0 }).replace(/1/g, "")}</MenuRow>
-            </MenuSection>}</Show>
-          </ContextMenuContent>
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "W"]} onSelect={() => sized("HOW", range())}>Column width…</MenuRow>
+            </MenuSection>}</Show>
+            <Show when={cols()}>{(range) => <MenuSection>
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "I"]} onSelect={() => sized("HOI", range())}>Fit column width</MenuRow>
         </ContextMenu>
         <div class="ui-spreadsheet-editor" data-open={editor.editing() ? "" : undefined} style={cellBox()}><FormulaField editor={editor} place="cell" label="Cell" class="ui-formula-text" /></div>
@@ -271,9 +270,12 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         <SequenceHint typed={sequences.typed} next={sequences.next} anchor={() => formula} />
         <SizePrompt question={question()} onClose={() => { setQuestion(null); grid()?.focus(); }} />
         <Show when={!model()}><Empty role="status" class="ui-spreadsheet-waiting">Opening the sheet…</Empty></Show>
+            </MenuSection>}</Show>
+            <Show when={formatted()}>{(range) => <FormatMenu formats={formats} range={range()} />}</Show>
+          </ContextMenuContent>
       </Show>
       <Show when={props.margin}><aside class="ui-spreadsheet-margin" aria-label="Comments">{props.margin}</aside></Show>
     </div>
-    <SheetFoot tabs={tabs} id={props.id} />
+    <SheetFoot tabs={tabs} id={props.id} format={() => formats.figure(at())} />
   </section>;
 }

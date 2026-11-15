@@ -1,5 +1,6 @@
-import { createEffect, createSignal, For, mergeProps, Show, type JSX } from "solid-js";
-import { DashPath, IconButton, Icons, Input, PaneTab, PaneTabs, ToolBar } from "@/components/ui";
+import { createEffect, createSignal, For, mergeProps, onCleanup, Show, type JSX } from "solid-js";
+import { DashPath, IconButton, Icons, Input, Notice, PaneTab, PaneTabs, ToolBar } from "@/components/ui";
+import { duration } from "@/components/ui/motion";
 import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { createFolds } from "@/components/ui/fit";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
@@ -19,7 +20,8 @@ const FIGURES: { name: string; of(figures: SheetFigures): number | null }[] = [
 ];
 
 /** The sheet's foot: its tabs, to show, add, rename, move, hide and delete, and the figures of the cells selected. */
-export function SheetFoot(props: { tabs: SheetTabs; id: string }) {
+/** `format`: how the selection's figures but its count are drawn, where it has one number format throughout (formats.ts). */
+export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: () => ((value: number) => string) | null }) {
   const tabs = props.tabs, decide = createDecisionScope(() => props.id);
   const [renaming, setRenaming] = createSignal<string>(), [draft, setDraft] = createSignal("");
   const figures = createFigures(tabs.model, tabs.selection);
@@ -28,7 +30,11 @@ export function SheetFoot(props: { tabs: SheetTabs; id: string }) {
   let strip: HTMLDivElement | undefined;
   const folds = createFolds(2, { over: () => strip ? strip.scrollWidth - strip.clientWidth : 0, content: true });
   // Folded by an attribute, never by taking them out, so a change of figures is all the fold watches for.
-  const listed = () => FIGURES.flatMap((figure) => { const value = figures() && figure.of(figures()!); return value === null || value === undefined ? [] : [{ name: figure.name, value }]; });
+  const listed = () => { const format = figures() && props.format?.(); return FIGURES.flatMap((figure) => { const value = figures() && figure.of(figures()!); return value === null || value === undefined ? [] : [{ name: figure.name, value, text: format && figure.name !== "Count" ? format(value) : shown(value) }]; }); };
+
+  // Computing is said once it has taken a whole turn of the spinner, so a change computed at once never flashes it.
+  const [slow, setSlow] = createSignal(false);
+  createEffect(() => { if (!tabs.computing()) return setSlow(false); const wait = setTimeout(() => setSlow(true), duration("--duration-spin")); onCleanup(() => clearTimeout(wait)); });
 
   // The shown tab is kept in view in the strip.
   createEffect(() => { const id = tabs.shown(); queueMicrotask(() => strip?.querySelector<HTMLElement>(`[data-tab="${CSS.escape(id ?? "")}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" })); });
@@ -95,7 +101,8 @@ export function SheetFoot(props: { tabs: SheetTabs; id: string }) {
     </div>
     <IconButton label="Add a tab" onClick={add}><Icons.Add /></IconButton>
     <span class="ui-spreadsheet-figures" aria-live="polite">
-      <For each={listed()}>{(figure) => <DashPath title={`Copy the ${figure.name.toLowerCase()}`} path={`${figure.name} ${shown(figure.value)}`} onCopy={() => copy(figure.name, figure.value)} />}</For>
+      <For each={listed()}>{(figure) => <DashPath title={`Copy the ${figure.name.toLowerCase()}`} path={`${figure.name} ${figure.text}`} onCopy={() => copy(figure.name, figure.value)} />}</For>
     </span>
+    <Show when={slow()}><Notice kind="tool" busy live>Computing</Notice></Show>
   </ToolBar>;
 }

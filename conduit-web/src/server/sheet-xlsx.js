@@ -1,7 +1,8 @@
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 import { HyperFormula } from "hyperformula";
 import * as XLSX from "xlsx";
-import { COL_LIMIT, CONFIG, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colName, tabName, toCsv, valueText } from "../sheet-format.js";
+import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colName, tabName, toCsv, valueText } from "../sheet-format.js";
+import { CONFIG } from "../sheet-engine.js";
 import { NAMES } from "../sheet-functions.js";
 
 /*

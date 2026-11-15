@@ -4,7 +4,7 @@ import { colIndex } from "../sheet-format.js";
 import { callingChat } from "./conduit-mcp.js";
 
 const text = (words, isError = false) => ({ output: [{ type: "text", text: words }], ...(isError ? { isError: true } : {}) });
-const ACTIONS = ["answer", "list", "new", "show", "lead", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve", "cells", "fill", "rows", "cols", "tabs", "import", "export"];
+const ACTIONS = ["answer", "list", "new", "show", "lead", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve", "cells", "fill", "format", "rows", "cols", "tabs", "import", "export"];
 const TAB_OPS = { add: "add-tab", rename: "rename-tab", delete: "delete-tab", move: "move-tab", hide: "hide-tab", show: "hide-tab" };
 
 /** Artifacts for an agent (papers, Markdown files, sheets and sites): the hub's document service (server/documents.js) as one tool, with the verbs `conduit-markup` has. */
@@ -35,7 +35,8 @@ export function PaperTool(runtime) {
       + "A sheet can have tabs: each of those actions takes `tab` (a tab's name; the first tab unsaid), or an address that names one (at: \"Data!B4\", range: \"'My data'!A1:C3\"), and a formula reads another tab as Data!A1. "
       + "import (project, from: an .xlsx file's path in the project's folder; name; only: the tabs to take) makes a workbook of an Excel file and says which formulas could not be computed here (those hold the file's value) and what was left out. "
       + "export (paper, to: a path in the project's folder; replace: true to write over a file) writes a sheet as an .xlsx file. "
-      + "tabs lists them with their sizes; tabs with op add (name, at: its place, 1 first; last unsaid), rename (tab, name: the new one; formulas naming it are rewritten), delete (tab; formulas naming it then show #REF!), move (tab, at), hide or show (tab) changes them.",
+      + "tabs lists them with their sizes; tabs with op add (name, at: its place, 1 first; last unsaid), rename (tab, name: the new one; formulas naming it are rewritten), delete (tab; formulas naming it then show #REF!), move (tab, at), hide or show (tab) changes them. "
+      + "format (range: A1 such as B2:C5, or whole columns such as B:D; format: an Excel number format such as $#,##0.00, 0.0%, d/m/yyyy or General) lists the range's number formats, setting format first when given; cells and its computed read stay raw values.",
     parameters: Type.Object({
       action: Type.Union(ACTIONS.map((value) => Type.Literal(value))),
       paper: Type.Optional(Type.String({ description: "A paper's id." })),
@@ -70,6 +71,7 @@ export function PaperTool(runtime) {
       op: Type.Optional(Type.Union(["insert", "delete", "add", "rename", "move", "hide", "show"].map((value) => Type.Literal(value)), { description: "rows, cols: insert or delete; tabs: add, rename, delete, move, hide or show." })),
       count: Type.Optional(Type.Integer({ description: "rows, cols: how many (1)." })),
       computed: Type.Optional(Type.Boolean({ description: "cells: what formulas compute, as the file holds it." })),
+      format: Type.Optional(Type.String({ description: "format: the number format to set (General for none)." })),
     }),
     replay: "unsafe",
     execute: async (args, api = {}, context) => {
@@ -113,6 +115,10 @@ export function PaperTool(runtime) {
         }
         if (args.action === "read") { void documents.seat(paper, by, { state: "reading" }); return text(await documents.read(paper)); }
         if (args.action === "cells") { const read = await documents.read(paper, args.computed ? "values" : undefined, args.range, args.tab); return text(typeof read === "string" ? read : JSON.stringify(read)); }
+        if (args.action === "format") {
+          const done = await documents.cells(paper, { op: "format", tab: args.tab, range: args.range ?? args.at, format: args.format, by, for: args.for }), listed = Object.entries(done.formats);
+          return text(`${args.format === undefined ? "" : `Set ${args.format} on ${done.cells[0]}. `}${listed.length ? `Number formats in ${done.cells[0]} (a column's by its letter, a cell's own by its address; a cell with neither is General):\n${listed.map(([at, format]) => `${at}  ${format}`).join("\n")}` : `${done.cells[0]} is all General.`}`);
+        }
         if (args.action === "fill" || (args.action === "set" && args.at !== undefined)) {
           const done = await documents.cells(paper, { op: args.action, tab: args.tab, at: args.at, range: args.range, values: args.values, value: args.value ?? args.text, by, for: args.for });
           return text(`Wrote ${done.cells.join(", ")}; the ${done.tab ? `tab ${done.tab}` : "sheet"} is ${done.rows} rows x ${done.cols} columns.`);

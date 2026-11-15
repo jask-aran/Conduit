@@ -7,14 +7,15 @@ import { CompactSelection, DataEditor, GridCellKind, type DataEditorProps, type 
 import "@glideapps/glide-data-grid/dist/index.css";
 import { createElement, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { colName, type SheetModel, COL_LIMIT } from "@/sheet-format.js";
+import { colName, type SheetView, COL_LIMIT } from "@/sheet-format.js";
+import type { SheetDrawn } from "./formats";
 import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange, SheetReference } from "./host";
 
-/** What the grid reads of the sheet besides its cells: each column's width and type, and the rows whose height is not the default (`look`). */
-export type SheetColumns = { width(col: number): number | undefined; type(col: number): string | undefined; heights(): ReadonlyMap<number, number> };
+/** What the grid reads of the sheet besides its cells: each column's width and type, the rows whose height is not the default (`look`), and a value as its cell's number format draws it (formats.ts). */
+export type SheetColumns = { width(col: number): number | undefined; type(col: number): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null };
 // How near a row's lower edge, beside its number, a press takes the edge to drag.
 const EDGE_SLOP = 3;
-type GridOptions = { model: SheetModel; columns: SheetColumns; events: SheetGridEvents; look: SheetLook };
+type GridOptions = { model: SheetView; columns: SheetColumns; events: SheetGridEvents; look: SheetLook };
 type Highlight = NonNullable<DataEditorProps["highlightRegions"]>[number];
 
 const NO_SELECTION: GridSelection = { columns: CompactSelection.empty(), rows: CompactSelection.empty() };
@@ -121,7 +122,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     const columns = useMemo(() => Array.from({ length: cols }, (_, col) => ({ id: model.colAt(col) ?? String(col), title: colName(col), width: widths[col] ?? options.columns.width(col) ?? theme.width })), [shape, cols, widths, theme]);
     const types = useMemo(() => Array.from({ length: cols }, (_, col) => options.columns.type(col)), [shape, cols]);
     const content = useMemo(() => {
-      const error = { textDark: theme.error };
+      const error = { textDark: theme.error }, hues = { destructive: error, live: { textDark: theme.live }, warn: { textDark: theme.warn } };
       return ([col, row]: Item): GridCell => {
         const value = model.value(row, col), type = types[col];
         if (type === "boolean") return { kind: GridCellKind.Boolean, data: value === true, allowOverlay: false, copyData: model.input(row, col) };
@@ -130,7 +131,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         if (input === "") return EMPTY;
         // An error is shown by its code, as the engine names it; only a value that could be one is asked whether it is.
         const fault = typeof value === "string" && value.startsWith("#") && model.error(row, col) !== null;
-        return new TextCell(row, col, input, shown(value), typeof value === "number" || type === "number" ? "right" : undefined, fault ? error : undefined);
+        const drawn = fault || value === null || typeof value === "boolean" ? null : options.columns.draw(row, col, value);
+        return new TextCell(row, col, input, drawn ? drawn.text : shown(value), typeof value === "number" || type === "number" ? "right" : undefined, fault ? error : drawn?.hue && hues[drawn.hue]);
       };
     }, [types, theme]);
     // One number while every row is the default height: the grid then sums no heights to scroll.

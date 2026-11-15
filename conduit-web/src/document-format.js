@@ -25,7 +25,8 @@ export const SUGGESTION = "suggestion/";
 export const isSuggestion = (key) => typeof key === "string" && key.startsWith(SUGGESTION);
 // The paper's front matter: a Yjs map of name -> text (its status, who it is for, a date), shown under its title and written first in its file and its Markdown.
 export const PROPERTIES = "properties";
-export const blockId = () => Math.random().toString(36).slice(2, 10).padEnd(8, "0");
+import { blockId } from "./block-id.js";
+export { blockId };
 
 /** The name the hub keeps an image under beside its paper: its hash and what it is. An image block holds this, never the bytes. */
 export const IMAGE_NAME = /^[a-f0-9]{16}\.(?:png|jpg|gif|webp|avif)$/;

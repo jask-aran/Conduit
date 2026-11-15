@@ -1,5 +1,5 @@
 import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js";
-import type { SheetModel } from "@/sheet-format.js";
+import type { SheetView } from "@/sheet-format.js";
 import type { SheetRange } from "./host";
 
 /** A selection's figures: `count` of cells with anything, the rest over its numbers only (none where it has no number). */
@@ -10,7 +10,7 @@ const SETTLE_MS = 120, SLICE_MS = 3;
 const yieldTask = () => new Promise<void>((resolve) => { const channel = new MessageChannel(); channel.port1.onmessage = () => resolve(); channel.port2.postMessage(null); });
 
 /** The figures of the cells selected, read from the model's computed values off the per-key path; null for one cell or none. Whole rows or columns count only the tab's own cells. */
-export function createFigures(model: Accessor<SheetModel | undefined>, selection: Accessor<SheetRange | null>): Accessor<SheetFigures | null> {
+export function createFigures(model: Accessor<SheetView | undefined>, selection: Accessor<SheetRange | null>): Accessor<SheetFigures | null> {
   const [figures, setFigures] = createSignal<SheetFigures | null>(null);
   const [changed, setChanged] = createSignal(0);
   createEffect(() => { const sheet = model(); if (sheet) onCleanup(sheet.onChange(() => setChanged((n) => n + 1))); });

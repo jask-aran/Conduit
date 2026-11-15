@@ -3,7 +3,7 @@
  * are put in), and what sets them: a row's edge dragged beside its number, a key sequence, fitting to what the cells show.
  */
 import type * as Y from "yjs";
-import { valueText, type SheetModel, type SizeKey } from "@/sheet-format.js";
+import { valueText, type SheetView, type SizeKey } from "@/sheet-format.js";
 import type { SheetGrid, SheetLook } from "./host";
 
 /** The fewest pixels a row or column is given. */
@@ -23,7 +23,7 @@ export interface SheetSizes {
   fitRows(rows: readonly number[], look: SheetLook): void;
 }
 
-export function createSheetSizes(look: Y.Map<number | string>, model: () => SheetModel | undefined): SheetSizes {
+export function createSheetSizes(look: Y.Map<number | string>, model: () => SheetView | undefined): SheetSizes {
   const keyOf = (what: "width" | "height", id: string): SizeKey => `${what}:${id}`;
   const sized = (what: "width" | "height", id: string | undefined) => { const size = id && look.get(keyOf(what, id)); return typeof size === "number" ? size : undefined; };
   const set = (what: "width" | "height", ids: (string | undefined)[], size: number | null) => look.doc!.transact(() => {

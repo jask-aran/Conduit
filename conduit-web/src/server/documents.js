@@ -481,7 +481,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     const found = await Promise.all(mine.map(async (at) => ({ at, born: (await disk.stat(at).catch((error) => disk.far ? Promise.reject(error) : null))?.born }))), kept = new Set();
     // A paper whose file cannot be read just now (a merge's conflict in it) is still that paper, at that path.
     const still = (at) => [...known.values()].find((entry) => entry.project === project.id && entry.path === at)?.id;
-    for (const { at } of found.filter((file) => file.born !== undefined).sort((a, b) => a.born - b.born)) kept.add(await adopt(project, at).then((entry) => entry?.id,(error) => disk.far && !error.status ? Promise.reject(error) : still(at)));
+    for (const { at } of found.filter((file) => file.born !== undefined).sort((a, b) => a.born - b.born)) kept.add(await adopt(project, at).then((entry) => entry?.id,(error) => { if (disk.far && !error.status) throw error; console.error(`Could not read the artifact ${at} of ${project.name}`, error); return still(at); }));
     for (const [id, entry] of known) if (entry.project === project.id && !kept.has(id)) known.delete(id);
     scanned.set(project.id, Date.now());
     await tell();

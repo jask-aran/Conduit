@@ -5,11 +5,12 @@
  * loaded only with a sheet (grid.ts).
  */
 import type { SheetTabOp } from "@/sheet-format.js";
+import type { SheetFormatOp } from "@/sheet-formats.js";
 
 /** Cells by position, 0-based and inclusive (sheet-format.js parseRange). */
 export type SheetRange = { top: number; left: number; bottom: number; right: number };
-/** The grid's look, read from the app's tokens (theme.ts): Glide's theme object, sizes in pixels, and the inks it draws itself (`inks`: a formula's references, formula.ts INKS). */
-export type SheetLook = { grid: Record<string, string | number>; row: number; header: number; width: number; error: string; mark: string; markCurrent: string; inks: string[] };
+/** The grid's look, read from the app's tokens (theme.ts): Glide's theme object, sizes in pixels, and the inks it draws itself (`inks`: a formula's references, formula.ts INKS; `live` and `warn`: a number format's green and yellow). */
+export type SheetLook = { grid: Record<string, string | number>; row: number; header: number; width: number; error: string; live: string; warn: string; mark: string; markCurrent: string; inks: string[] };
 /** A reference in the formula being edited, outlined on the grid in its ink; `pointing`: the one being pointed at with the mouse or arrows. */
 export type SheetReference = { range: SheetRange; ink: number; pointing: boolean };
 /** A key pressed on the grid, as the editor is asked whether it takes it. */
@@ -22,6 +23,7 @@ export type SheetCellsOp =
   | { op: "set"; at: string; value: string; tab?: string }
   | { op: "fill"; range: string; values?: string[][]; value?: string; tab?: string }
   | { op: "insert-rows" | "insert-cols" | "delete-rows" | "delete-cols"; at: number; count?: number; tab?: string }
+  | SheetFormatOp
   | SheetTabOp;
 
 export interface SheetHost {
