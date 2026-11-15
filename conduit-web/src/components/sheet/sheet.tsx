@@ -64,7 +64,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     if (!sheet) return;
     // A cell past the sheet's edge has no row or column of its own yet: the hub makes them as it sets it.
     const past: { row: number; col: number; input: string }[] = [];
-    live.doc.transact(() => { for (const { row, col, input } of list) { const rowId = sheet.rowAt(row), colId = sheet.colAt(col); if (!rowId || !colId) { if (input) past.push({ row, col, input }); continue; } if (input) cells.set(key(rowId, colId), input); else cells.delete(key(rowId, colId)); } });
+    // A merge shows only its upper-left cell: a value written under the rest would be kept unseen (emptying them, as Merge does, is let through).
+    const hiddenIn = (row: number, col: number) => { const one = merges.at(row, col); return one !== undefined && (row !== one.top || col !== one.left); };
+    live.doc.transact(() => { for (const { row, col, input } of list) { if (input && hiddenIn(row, col)) continue; const rowId = sheet.rowAt(row), colId = sheet.colAt(col); if (!rowId || !colId) { if (input) past.push({ row, col, input }); continue; } if (input) cells.set(key(rowId, colId), input); else cells.delete(key(rowId, colId)); } });
     for (const { row, col, input } of past) hub({ op: "set", at: a1(row, col), value: input });
   };
   const hub = (op: Parameters<SheetHost["cells"]>[0]) => void history.hub(op).catch((error: Error) => props.host.failed(error.message));
