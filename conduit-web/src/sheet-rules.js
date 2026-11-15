@@ -125,8 +125,9 @@ export function compileRule(rule) {
 }
 
 /** A formula's relative references moved by `rows` and `cols`, outside its strings: as a fill moves them. */
-export const shiftRefs = (formula, rows, cols) => !rows && !cols ? formula : String(formula).split(/("(?:[^"]|"")*")/).map((part, nth) => nth % 2 ? part
-  : part.replace(/(?<![\w.$!])(\$?)([A-Za-z]{1,3})(\$?)(\d+)(?![\w(.!])/g, (all, colHeld, letters, rowHeld, digits) => {
+// A string ("…") and a quoted tab's name ('Q1 2024') are left as they are; a reference after a tab's name (Data!B2) moves as any.
+export const shiftRefs = (formula, rows, cols) => !rows && !cols ? formula : String(formula).split(/("(?:[^"]|"")*"|'(?:[^']|'')*')/).map((part, nth) => nth % 2 ? part
+  : part.replace(/(?<![\w.$])(\$?)([A-Za-z]{1,3})(\$?)(\d+)(?![\w(.!])/g, (all, colHeld, letters, rowHeld, digits) => {
     const col = colHeld ? colIndex(letters) : colIndex(letters) + cols, row = rowHeld ? Number(digits) - 1 : Number(digits) - 1 + rows;
     return row < 0 || col < 0 ? "#REF!" : `${colHeld}${a1(0, col).replace(/\d+$/, "")}${rowHeld}${row + 1}`;
   })).join("");
