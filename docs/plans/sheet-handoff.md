@@ -58,6 +58,13 @@ Builders running when this was written each keep an uncommitted resume note besi
 - `handoff-sheet-merges.md`: merged cells;
 - `handoff-sheet-series.md`: the fill handle's series.
 
+State at the pause, 2026-11-15:
+- **Undo:** built but not yet reviewed, run in a browser or committed. Its review was stopped part-way; rerun it.
+- **Merges, rules and series:** stopped mid-build. The working tree does not typecheck; `sheet.tsx` lacks `merges`.
+- **In-cell editor zoom:** done (the editor's text box is zoomed by `--sheet-zoom`), but uncommitted.
+
+Before you restart: finish the builds, typecheck, review, then `start-conduit.sh restart`.
+
 To continue one, start a fresh builder from its note and the working tree, not the old thread. Delete each note once its work is
 committed.
 
