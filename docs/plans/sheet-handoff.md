@@ -59,9 +59,12 @@ overlapping merges in a sheet.json are left out; Fill past hidden rows keeps a t
 
 Then keys, as Excel's: Ctrl+arrow to the data's edge (Shift selects), Ctrl+End to the last cell used, Alt+= AutoSum, Ctrl+; today,
 Ctrl+Shift+= / Ctrl+- insert and delete whole rows or columns; the grid keeps Ctrl+- and Ctrl+Shift+1..5 from the application's chords
-(`data-own-keys`). `review-sheet-fixes.md`'s #1, 2, 4 and 3 are fixed (`570f4bcca`); its 5-10 are open.
+(`data-own-keys`). Copy and paste in the grid move a formula's relative references (`shiftRefs`; a cut keeps them; another tab's
+references don't move yet), and Ctrl+Shift+V pastes values. Merges: nothing writes into their hidden cells (a hub `set` there is refused),
+and the merge question holds its corners by ids. `review-sheet-fixes.md` is done but for #6 (quadratic import growth), #7 (Undo gives up on
+an op after 9 s) and #9 (deleting a merge's top row leaves it empty, as Excel's does).
 
-Still open: the fill handle and `set` can write into a merge's hidden cells (paste and typing can't); arrows at a frozen merge's edge; prefix sums for tall
+Still open: the context menu's Paste reads the clipboard and moves no references, and has no Paste values row; arrows at a frozen merge's edge; prefix sums for tall
 merges; the low xlsx ones (row/column crossings outside the grid, `<c r=` attribute order); rules can't be edited or reordered, only added
 and deleted. Notes from xlsx are waiting on the owner: sheet comments are markup items sent to a listener, so 16 imported notes would hand
 16 items to agents. Phone width is still unchecked (the headless probe opened with the sidebar drawer over the pane).
