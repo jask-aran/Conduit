@@ -160,9 +160,10 @@ function paint(sceneFrame = true) {
 const motion = new Set<Animation>();
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const run = () => {
-  cancelAnimationFrame(frame);
-  if (!look || !slices.size || document.hidden) return;
+  if (!look || !slices.size || document.hidden) { cancelAnimationFrame(frame); frame = 0; return; }
+  if (frame) return;
   const tick = () => {
+    frame = 0;
     paint();
     for (const animation of motion) if (animation.playState !== "running" && !animation.pending) motion.delete(animation);
     if ((look?.scene && !reducedMotion.matches) || motion.size) frame = requestAnimationFrame(tick);
