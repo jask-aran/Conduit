@@ -21,8 +21,8 @@ For the next agent. The model is DESIGN.md "Places and panes", "Focus and openin
   storage key, Undo/Redo pane change (Ctrl+Alt+Z / Ctrl+Alt+Shift+Z), "Closed N tabs" notice with Undo.
 - `76010fa44`: opening an artifact through `openView` left the pane `data-pending` (hidden) forever, because `gate`
   marked it arriving and nothing cleared it. This was the user's "sheet or paper sits on opening for ages". `gate`
-  now calls `leaves(pane)` when it passes. Verified by the builder on a preview build (pending clears, paper and
-  sheet, 1x and 6x CPU); not yet seen on the phone.
+  now calls `leaves(pane)` when it passes. Verified in Chrome on :4310 (below) and by a builder at 6x CPU; not yet seen on the
+  phone.
 - `9698a03ea`: overlay scrollbars show for any fine pointer (`any-pointer: fine`), for a mouse in Samsung DeX.
 
 ## Checking in Chrome :9222
@@ -33,7 +33,7 @@ A new tab there is served the previous client by the service worker (`sw.js`) af
 
 ## Open items
 
-1. Landed (`8c7df5786`→`96…`, `e0fd7908a`): docking shows the docked pane at once, docking over a held pane gates
+1. Landed (`57274bdd4`, `e0fd7908a`): docking shows the docked pane at once, docking over a held pane gates
    unsaved edits, Ctrl from a document pane joins the nearest session pane (store `openRules`), focus kept on the
    paper/thread switch, old-model leftovers removed. Unfixed: a thread's header names its place "Chats" in pane B but
    the project in pane A. Not run: Ctrl-opening jbot, jbot in a side pane.
