@@ -52,3 +52,7 @@ button.ui-header-place { cursor: pointer; }
   .ui-pane-header:where([data-header="pane"]) [data-only="phone"] { display: inline-grid; }
   .ui-pane-header:where([data-header="pane"]) [data-only="desktop"] { display: none; }
 }
+[data-art-window] .ui-pane-header:where([data-header="pane"], [data-header="tool"]):not([data-frost]), [data-art-window] .ui-pane-header:where([data-header="tool"])[data-frost] { position: relative; z-index: 2; background: none; }
+/* conventions-ok: not the Frost material: what scrolls under the strip blurred away, in place of the ground a pane without the picture has */
+[data-art-window] .ui-pane-header:where([data-header="pane"], [data-header="tool"])::before { position: absolute; inset: 0 0 calc(-1 * var(--space-xl)) 0; z-index: -1; -webkit-backdrop-filter: var(--frost-blur); backdrop-filter: var(--frost-blur);
+  -webkit-mask-image: linear-gradient(to bottom, #000 40%, transparent); mask-image: linear-gradient(to bottom, #000 40%, transparent); content: ""; pointer-events: none; }

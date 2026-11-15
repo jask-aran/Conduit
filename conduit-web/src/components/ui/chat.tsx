@@ -1,13 +1,15 @@
 import { createSignal, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import { Ledge, LedgeStack, PanelBody, PanelHead, Tray } from "./tray";
 import { ChatDrawingProvider, createChatDrawing } from "./chat-drawing";
+import { createArtWindow } from "./chat-art";
 import { cn } from "@/lib/utils";
 
 export function ChatView(props: JSX.HTMLAttributes<HTMLElement> & { empty?: boolean; sending?: boolean; opening?: boolean }) {
-  const [local, rest] = splitProps(props, ["class", "empty", "sending", "opening", "children"]);
+  const [local, rest] = splitProps(props, ["class", "empty", "sending", "opening", "children", "ref"]);
   // Held unseen (opening) while a TranscriptList in it is still drawing what is on screen too, then faded in.
   const { drawing, pending } = createChatDrawing();
-  return <section aria-label="Conversation" {...rest} class={cn("ui-chat", local.class)} data-empty={local.empty ? "" : undefined}
+  const art = createArtWindow();
+  return <section aria-label="Conversation" {...rest} ref={(element) => { art(element); if (typeof local.ref === "function") local.ref(element); }} class={cn("ui-chat", local.class)} data-empty={local.empty ? "" : undefined}
     data-sending={local.sending ? "" : undefined} data-opening={local.opening || pending() ? "" : undefined}>
     <ChatDrawingProvider value={drawing}>{local.children}</ChatDrawingProvider>
   </section>;

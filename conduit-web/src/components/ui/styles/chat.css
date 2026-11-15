@@ -1,4 +1,17 @@
-.ui-chat { position: relative; z-index: var(--stack-transcript); display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
+/* One picture, fitted to the app window; each pane that is a window onto it draws the part it stands over. */
+.ui-chat-art { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; border-radius: inherit; pointer-events: none; }
+/* Where a scene's engine draws: the size of the window, measured by the engine, seen only through the panes. */
+.ui-chat-art-host { position: fixed; inset: 0; z-index: -1; width: 100%; height: 100%; font-family: var(--font-data); visibility: hidden; pointer-events: none; }
+[data-art-window] { isolation: isolate; }
+/* A grid covers its pane and its canvas cannot be seen through, so its dark ground is screened over the picture,
+   which is dimmed a long way for it. */
+[data-art-dim] > .ui-chat-art { opacity: 0.35; }
+.dark [data-art-window][data-art-dim] .ui-spreadsheet-grid { mix-blend-mode: screen; }
+/* What stood on the pane's ground stands on the picture. Every header in a window is the same: no ground, and what
+   scrolls beneath it blurs away towards the top. The blur is the header's own, never a mask on what scrolls: a mask
+   there would cut the frost of everything inside it off from the picture. A paper keeps its own page. */
+[data-art-window] :is(.ui-chat-beside-main, .ui-document) { background: transparent; }
+.ui-chat { position: relative; z-index: var(--stack-transcript); display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; background: transparent; }
 
 /* The column restates the header's clearance as top padding, so the first message starts below the bar. */
 .ui-chat-scroller { position: relative; z-index: var(--stack-transcript); min-height: 0; margin-top: calc(-1 * var(--header-height)); flex: 1; overflow: hidden; }

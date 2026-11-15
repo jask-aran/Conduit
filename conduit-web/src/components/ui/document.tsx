@@ -3,6 +3,7 @@ import { BaselineIcon, BetweenHorizontalEndIcon, BetweenVerticalEndIcon, BoldIco
 import { createEffect, createSignal, onCleanup, Show, splitProps, type JSX } from "solid-js";
 // Through the barrel, as markup.tsx does, so the editor's chunk takes the header from the app's own.
 import { Button, FindBar, Frost, IconButton, Icons, PaneHeader, Spinner } from "./index";
+import { createArtWindow } from "./chat-art";
 import "./styles/document.css";
 
 /* Not in the library's barrel: the document editor imports this file, so the app's first load does not carry it. */
@@ -131,7 +132,7 @@ export function DocumentSheet(props: { ref?: (element: HTMLDivElement) => void; 
   onCleanup(() => sized.disconnect());
   // A new measure or a margin come or gone changes each fold's need: read before the frame is drawn, never in the script that changed it, which would lay the paper out twice.
   createEffect(() => { props.width; props.marginEmpty; const frame = requestAnimationFrame(fit); onCleanup(() => cancelAnimationFrame(frame)); });
-  return <section class="ui-document" aria-label={props.name} data-bare={props.bare ? "" : undefined} data-width={props.width ?? "narrow"}>
+  return <section ref={createArtWindow()} class="ui-document" aria-label={props.name} data-bare={props.bare ? "" : undefined} data-width={props.width ?? "narrow"}>
     <Show when={!props.bare}><PaneHeader kind="tool" name={props.name} place={props.state} actions={props.actions} /></Show>
     {props.find}
     <div ref={(element) => { column = element; sized.observe(element); props.scroller?.(element); }} class="ui-document-column" data-snug={fold() === SNUG ? "" : undefined} onPointerMove={(event) => props.onHover?.(event)} onPointerLeave={() => props.onHover?.(null)}><div class="ui-document-page" data-margin={props.marginEmpty ? "none" : fold() === TUCKED ? "tucked" : "beside"}>

@@ -80,7 +80,7 @@ One grammar for every list, menu, picker, palette, tab and setting, taken from t
 The app is locked to dark; the light tokens are leftovers, never painted. The charcoal is cool-neutral at a very low chroma, and that grey is the brand: do not raise it to "read as blue".
 
 - **Near-monochrome.** Muted text for timestamps, hints, empty states and icons at rest. `border` hairlines for inputs, a header or footer rule and dividers; grouping is a heading and space, with at most one hairline between groups, never a box or a fill. `card` solids are left on tool cards only. `primary` is the one bright action.
-- **Hue only for state:** `destructive` for errors and destructive actions, `live` and `warn` as small dots and glyphs (never fills, rails or washes). Workspace glyph colours and git dots are data, kept on the glyph.
+- **Chat Pane artwork** may carry colour behind the transcript, shaded for readability; the Frame and controls retain their neutral materials. **Hue only for state outside artwork:** `destructive` for errors and destructive actions, `live` and `warn` as small dots and glyphs (never fills, rails or washes). Workspace glyph colours and git dots are data, kept on the glyph.
 - **No blue anywhere** -- not for selection, focus, links, status, audio, waveforms or "active" surfaces, and no cool accent or slate tint; leftover blue is removed when touched. Connecting states are muted; success is foreground or `live`. Two exceptions: syntax highlighting inside code, and a status dot's own colour. Frost is the signature, not an accent colour.
 
 # Typography, scale and shape

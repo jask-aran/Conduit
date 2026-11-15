@@ -6,6 +6,7 @@ import "@/components/ui/styles";
 import { ChatScreen } from "./stories";
 import { Row, Group } from "@/components/ui";
 import { SidebarScreen } from "./sidebar-story";
+import { BackgroundReferences } from "./backgrounds";
 import { TypeLens } from "./type-lens";
 
 // The gallery is all library: its rules that the app keeps to library pieces (no focus ring) hold on the whole page.
@@ -112,6 +113,7 @@ function Canvas() {
     </nav>
     <section class="g-left" ref={left}>
       <div class="g-bar">
+        <a href="gallery.html?frame=backgrounds">Backgrounds</a>
         <button type="button" aria-pressed={tuning()} onClick={() => setTuning(!tuning())}>Tune CSS</button>
         <button type="button" aria-pressed={lens()} onClick={toggleLens}>Type lens</button>
         <button type="button" aria-pressed={!app()} onClick={toggleApp}>{app() ? "Hide app" : "Show app"}</button>
@@ -162,7 +164,8 @@ export function mount(frame: string | null) {
   const root = document.getElementById("root")!;
   applyFaces(document);
   applyScale(document);
-  if (frame === "sidebar") { document.body.classList.add("g-solo-body"); render(() => <SidebarScreen />, root); }
+  if (frame === "backgrounds") { document.body.classList.add("g-solo-body"); render(() => <BackgroundReferences />, root); }
+  else if (frame === "sidebar") { document.body.classList.add("g-solo-body"); render(() => <SidebarScreen />, root); }
   else if (frame === "live") { document.body.classList.add("g-solo-body"); const chat = new URLSearchParams(location.search).get("chat") ?? ""; void import("./live-chat").then(({ LiveChatScreen }) => render(() => <LiveChatScreen chatId={chat} />, root)); }
   else if (frame) { document.body.classList.add("g-solo-body"); render(() => <><ChatScreen /><PhoneOverlay /></>, root); }
   else {

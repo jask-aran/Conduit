@@ -1,0 +1,251 @@
+<title>Conduit Wide Tuner</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a proofing bench. The wordmark sits on a drafting sheet with its guide lines; the controls are a rail beside it (below it on a phone). */
+:root {
+  --paper: #f6f6f3; --sheet: #ffffff; --ink: #0d0d0c; --muted: #6c6c66; --rule: #dcdcd6; --guide: #1f8fd6; --guide-soft: #1f8fd633;
+  --dark-ground: #121211; --dark-ink: #f2f2ee; --light-ground: #ffffff;
+  --sans: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --paper: #10100f; --sheet: #171716; --ink: #f2f2ee; --muted: #9a9a92; --rule: #2c2c29; --guide: #4fb3ff; --guide-soft: #4fb3ff33; color-scheme: dark } }
+:root[data-theme="dark"] { --paper: #10100f; --sheet: #171716; --ink: #f2f2ee; --muted: #9a9a92; --rule: #2c2c29; --guide: #4fb3ff; --guide-soft: #4fb3ff33; color-scheme: dark }
+body { background: var(--paper); color: var(--ink); font: 14px/1.45 var(--sans); }
+.bench { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; padding-block: 20px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 1500px; margin: 0 auto; }
+@media (max-width: 900px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+.stage { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.eyebrow { font: 500 11px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.sheet { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 18px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.toggles { display: flex; gap: 14px; flex-wrap: wrap; }
+.toggles label { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; cursor: pointer; }
+svg { display: block; max-width: 100%; height: auto; }
+.mark-word { fill: var(--ink); }
+.guide { stroke: var(--guide); stroke-width: 3; vector-effect: non-scaling-stroke; }
+.guide-label { fill: var(--guide); font: 500 56px var(--mono); }
+.handle { stroke: var(--guide); stroke-width: 1; vector-effect: non-scaling-stroke; fill: none; }
+.node { fill: var(--sheet); stroke: var(--guide); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.in-use { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 600px) { .in-use { grid-template-columns: minmax(0, 1fr); } }
+.tile { border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-height: 120px; border: 1px solid var(--rule); }
+.tile.light { background: var(--light-ground); color: #0d0d0c; }
+.tile.dark { background: var(--dark-ground); color: var(--dark-ink); }
+.tile .eyebrow { color: inherit; opacity: 0.55; }
+.tile svg path { fill: currentColor; }
+.brandrow { display: flex; align-items: center; gap: 10px; }
+.mark-tile { display: flex; gap: 16px; align-items: center; }
+.mark-box { width: 72px; height: 72px; border-radius: 16px; background: var(--dark-ink); color: var(--dark-ground); display: grid; place-items: center; flex: none; }
+.mark-box.small { width: 32px; height: 32px; border-radius: 8px; }
+.directions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 700px) { .directions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.direction { appearance: none; text-align: left; background: var(--sheet); color: var(--ink); border: 1px solid var(--rule); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; font: inherit; }
+.direction:hover { border-color: var(--muted); }
+.direction:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--guide); outline-offset: 2px; }
+.direction svg path { fill: var(--ink); }
+.direction b { font-weight: 600; font-size: 13px; }
+.direction span { color: var(--muted); font-size: 12px; }
+.rail { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+@media (min-width: 901px) { .rail { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); align-self: start; max-height: calc(100vh - 24px); overflow-y: auto; padding-right: 4px; } }
+.group { background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.control { display: flex; flex-direction: column; gap: 4px; }
+.control-top { display: flex; justify-content: space-between; gap: 8px; }
+.control-top label { font-weight: 500; }
+.value { font: 12px var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); }
+.about { color: var(--muted); font-size: 12px; }
+input[type="range"] { width: 100%; accent-color: var(--ink); }
+.pairs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+textarea { width: 100%; min-height: 84px; resize: vertical; font: 13px/1.4 var(--sans); background: var(--paper); color: var(--ink); border: 1px solid var(--rule); border-radius: 4px; padding: 8px; box-sizing: border-box; }
+.actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+button.primary, button.quiet { font: 500 13px var(--sans); border-radius: 4px; padding: 8px 14px; cursor: pointer; border: 1px solid var(--ink); }
+button.primary { background: var(--ink); color: var(--sheet); }
+button.quiet { background: transparent; color: var(--ink); border-color: var(--rule); }
+button:disabled { opacity: 0.5; cursor: default; }
+.status { color: var(--muted); font-size: 12px; }
+.sample-input { width: 100%; font: 400 15px var(--sans); color: var(--ink); background: transparent; border: 1px solid var(--rule); border-radius: 4px; padding: 8px 10px; }
+</style>
+
+<div class="bench">
+  <main class="stage">
+    <section class="sheet" aria-label="Wordmark">
+      <div class="sheet-head">
+        <span class="eyebrow">Conduit Wide · wordmark</span>
+        <div class="toggles">
+          <label><input type="checkbox" id="show-guides" checked> Guide lines</label>
+          <label><input type="checkbox" id="show-points"> Points</label>
+        </div>
+      </div>
+      <svg id="big" role="img" aria-label="Conduit set in Conduit Wide"></svg>
+    </section>
+
+    <section class="in-use" aria-label="In use">
+      <div class="tile dark"><span class="eyebrow">Sidebar, dark</span><div class="brandrow"><span class="mark-box small" data-mark="22"></span><span data-word="19"></span></div></div>
+      <div class="tile light"><span class="eyebrow">Sidebar, light</span><div class="brandrow"><span class="mark-box small" data-mark="22" style="background:#0d0d0c;color:#fff"></span><span data-word="19"></span></div></div>
+      <div class="tile dark"><span class="eyebrow">The mark</span><div class="mark-tile"><span class="mark-box" data-mark="52"></span><span data-word="34"></span></div></div>
+    </section>
+
+    <section class="sheet" aria-label="Every letter">
+      <span class="eyebrow">Every glyph</span>
+      <svg id="letters" role="img" aria-label="Every glyph in Conduit Wide"></svg>
+    </section>
+
+    <section class="sheet" aria-label="Try any text">
+      <label class="eyebrow" for="sample-text">Try any text</label>
+      <input id="sample-text" class="sample-input" value="The quick brown fox jumps over the lazy dog">
+      <svg id="sample" role="img" aria-label="Your text set in Conduit Wide"></svg>
+    </section>
+
+    <section aria-label="Directions" style="display:flex;flex-direction:column;gap:10px">
+      <span class="eyebrow">Directions · tap one to start from it</span>
+      <div class="directions" id="directions"></div>
+    </section>
+  </main>
+
+  <aside class="rail" id="rail" aria-label="Settings">
+    <div class="group">
+      <span class="eyebrow">Your notes</span>
+      <textarea id="note" placeholder="Anything easier said than set: “the C feels too open”, “more like the Druk D”…"></textarea>
+      <div class="actions">
+        <button class="primary" id="save">Save for Claude</button>
+        <button class="quiet" id="reset">Back to Druk proportions</button>
+        <span class="status" id="status"></span>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script type="module">
+import { SETTINGS, PAIRS, DEFAULTS, CAP, CHARSET, draw, layout, svgPath } from "./glyphs.mjs";
+
+const GROUPS = [
+  ["Weight", ["weight", "contrast", "xHeight"]],
+  ["Width", ["stretch", "straightShare"]],
+  ["Shape", ["counter", "flat", "squareness", "shoulderDrop", "aperture"]],
+  ["Spacing", ["spacing", "tracking", "dotGap"]],
+];
+const DIRECTIONS = [
+  { name: "Druk proportions", about: "Where we start", set: {} },
+  { name: "Stretched", about: "Round letters pulled long", set: { stretch: 260, straightShare: 0.3, flat: 180 } },
+  { name: "Bigger holes", about: "Lighter, more open", set: { weight: 330, counter: 300, contrast: 0.43 } },
+  { name: "Squarer", about: "Flatter sides, tighter curves", set: { squareness: 0.8, flat: 220 } },
+];
+let state = { ...DEFAULTS };
+const $ = (id) => document.getElementById(id);
+
+// Draw text into an svg at a given height in px (or fill its width for the big one).
+function word(text, p, { guides = false, points = false, pad = 40 } = {}) {
+  const glyphs = draw(p), { placed, width } = layout(text, p, glyphs);
+  const top = CAP + 60, bottom = 230, h = top + bottom, w = width + 2 * pad;
+  let body = placed.map(({ x, glyph }) => `<path class="mark-word" d="${svgPath(glyph.segments, x + pad, top)}"/>`).join("");
+  if (guides) {
+    const line = (y, label) => `<line class="guide" x1="0" x2="${w}" y1="${top - y}" y2="${top - y}"/><text class="guide-label" x="6" y="${top - y - 10}">${label}</text>`;
+    body = line(0, "baseline") + line(p.xHeight, "x-height") + line(CAP, "cap height") + body;
+  }
+  if (points) body += placed.map(({ x, glyph }) => glyph.segments.flat().map((s) => {
+    const pt = ([px, py]) => [px + x + pad, top - py];
+    if (s[0] === "L") { const [a, b] = pt(s[1]); return `<circle class="node" cx="${a}" cy="${b}" r="7"/>`; }
+    const [c1, c2, e] = [pt(s[1]), pt(s[2]), pt(s[3])];
+    return `<path class="handle" d="M${c1}L${c2}"/><circle class="node" cx="${c1[0]}" cy="${c1[1]}" r="4"/><circle class="node" cx="${c2[0]}" cy="${c2[1]}" r="4"/><circle class="node" cx="${e[0]}" cy="${e[1]}" r="7"/>`;
+  }).join("")).join("");
+  return { body, w, h };
+}
+// Several lines stacked, each its own baseline.
+const ROWS = [CHARSET.slice(0, 26), CHARSET.slice(26, 52), CHARSET.slice(52)].map((row) => [...row].join(" "));
+function lines(rows, p) {
+  const drawn = rows.map((row) => word(row, p, { pad: 20 }));
+  const w = Math.max(...drawn.map((d) => d.w));
+  let y = 0, body = "";
+  for (const d of drawn) { body += `<g transform="translate(0 ${y})">${d.body}</g>`; y += d.h + 60; }
+  return { body, w, h: y - 60 };
+}
+const fit = (svg, { body, w, h }) => { svg.setAttribute("viewBox", `0 0 ${w} ${h}`); svg.innerHTML = body; };
+const sized = (el, text, px, p) => {
+  const { body, w, h } = word(text, p, { pad: 0 });
+  const scale = px / 1000;
+  el.innerHTML = `<svg viewBox="0 -60 ${w} 1000" width="${(w * scale).toFixed(1)}" height="${px}">${body}</svg>`;
+};
+
+function render() {
+  fit($("big"), word("Conduit", state, { guides: $("show-guides").checked, points: $("show-points").checked }));
+  fit($("letters"), lines(ROWS, state));
+  fit($("sample"), word($("sample-text").value || " ", state));
+  document.querySelectorAll("[data-word]").forEach((el) => sized(el, "Conduit", Number(el.dataset.word), state));
+  document.querySelectorAll("[data-mark]").forEach((el) => sized(el, "C", Number(el.dataset.mark), state));
+  for (const s of SETTINGS) { const input = $(`s-${s.key}`); if (input) { input.value = state[s.key]; $(`v-${s.key}`).textContent = state[s.key]; } }
+  for (const pair of PAIRS) { $(`s-kern_${pair}`).value = state[`kern_${pair}`]; $(`v-kern_${pair}`).textContent = state[`kern_${pair}`]; }
+}
+
+function control(key, label, min, max, step, about) {
+  const wrap = document.createElement("div");
+  wrap.className = "control";
+  wrap.innerHTML = `<div class="control-top"><label for="s-${key}">${label}</label><span class="value" id="v-${key}"></span></div><input type="range" id="s-${key}" min="${min}" max="${max}" step="${step}">${about ? `<span class="about">${about}</span>` : ""}`;
+  wrap.querySelector("input").addEventListener("input", (e) => { state[key] = Number(e.target.value); dirty(); scheduleRender(); });
+  return wrap;
+}
+let frame = 0;
+const scheduleRender = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; render(); }); };
+
+const rail = $("rail");
+for (const [title, keys] of GROUPS) {
+  const group = document.createElement("div");
+  group.className = "group";
+  group.innerHTML = `<span class="eyebrow">${title}</span>`;
+  for (const key of keys) { const s = SETTINGS.find((x) => x.key === key); group.append(control(s.key, s.label, s.min, s.max, s.step, s.about)); }
+  rail.append(group);
+}
+const kern = document.createElement("div");
+kern.className = "group";
+kern.innerHTML = `<span class="eyebrow">Kerning · per pair</span><div class="pairs"></div>`;
+for (const pair of PAIRS) kern.querySelector(".pairs").append(control(`kern_${pair}`, pair, -200, 200, 2, ""));
+rail.append(kern);
+
+for (const d of DIRECTIONS) {
+  const button = document.createElement("button");
+  button.className = "direction";
+  const p = { ...DEFAULTS, ...d.set };
+  const { body, w, h } = word("Conduit", p, { pad: 20 });
+  button.innerHTML = `<svg viewBox="0 0 ${w} ${h}">${body}</svg><b>${d.name}</b><span>${d.about}</span>`;
+  button.addEventListener("click", () => { state = { ...state, ...DEFAULTS, ...d.set }; dirty(); render(); });
+  $("directions").append(button);
+}
+$("show-guides").addEventListener("change", render);
+$("show-points").addEventListener("change", render);
+$("sample-text").addEventListener("input", scheduleRender);
+$("reset").addEventListener("click", () => { state = { ...DEFAULTS }; dirty(); render(); });
+$("note").addEventListener("input", dirty);
+
+const status = (text) => { $("status").textContent = text; };
+function dirty() { status(store ? "Not saved" : ""); }
+render();
+
+// Saving: one shared document Claude reads back.
+let store = null;
+const save = $("save");
+save.disabled = true;
+(async () => {
+  let db = null;
+  try { db = await window.claude?.use?.("db"); } catch { db = null; }
+  if (!db) { status("Saving isn't available here"); return; }
+  store = db.doc("tuning/current");
+  try {
+    const snap = await store.get();
+    if (snap.exists) {
+      const saved = snap.data();
+      state = { ...DEFAULTS, ...(saved.settings ?? {}) };
+      $("note").value = saved.note ?? "";
+      render();
+      status(`Saved ${new Date(saved.savedAt).toLocaleString()}`);
+    }
+  } catch { status("Couldn't load what was saved"); }
+  save.disabled = false;
+})();
+save.addEventListener("click", async () => {
+  if (!store) return;
+  save.disabled = true;
+  try {
+    await store.set({ settings: state, note: $("note").value, savedAt: Date.now() });
+    status("Saved. Tell Claude when you're ready.");
+  } catch (e) { status(`Not saved: ${e?.message ?? "try again"}`); }
+  save.disabled = false;
+});
+</script>

@@ -59,6 +59,7 @@ import { createErrorDiagnostic, formatDiagnosticPrompt, type ErrorDiagnostic, ty
 import { Composer } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
 import { applyTabFrost } from "./preferences/tab-frost";
+import { applyChatArt } from "./preferences/chat-art";
 import { watchStrayFrost } from "./platform/stray-frost";
 import { applyStreamFade } from "./preferences/stream-fade";
 import { installFocusShown } from "./preferences/focus-shown";
@@ -219,8 +220,8 @@ const TerminalPane = lazy(() => import("./remotes/terminal-pane").then((module) 
 const TerminalRoute = lazy(() => import("./remotes/terminal-route").then((module) => ({ default: module.TerminalRoute })));
 const Settings = lazy(() => import("./settings/settings").then((module) => ({ default: module.Settings })));
 const BrowserPane = lazy(() => import("./browser/browser-pane").then((module) => ({ default: module.BrowserPane })));
-const prefetchProjectDashboard = (project: Project) => void import("./project/dashboard").then((module) => module.prefetchProjectDashboard(project)).catch(() => {});
 const MailPane = lazy(() => import("./mail/mail-pane"));
+const prefetchProjectDashboard = (project: Project) => void import("./project/dashboard").then((module) => module.prefetchProjectDashboard(project)).catch(() => {});
 const prefetchWorkspaceTerminal = () => void import("./workspace/workspace-panel");
 
 const ConnectDialog = lazy(() => import("./navigation/pair-dialog").then((module) => ({ default: module.ConnectDialog })));
@@ -645,6 +646,7 @@ function App() {
   };
   const [workspaceViewRequest, setWorkspaceViewRequest] = createSignal<{ tab: WorkspaceView; terminalId?: string; nonce: number } | null>(null);
   applyTabFrost();
+  applyChatArt();
   applyStreamFade();
   watchStrayFrost();
   installFocusShown();
@@ -2922,9 +2924,9 @@ function App() {
           <RiderButton show="label" icon={<Icons.NewChat />} label="New chat" onClick={() => void fill("page:dashboard")} />
           <RiderButton show="label" icon={<Icons.Terminal />} label="New terminal" onClick={() => void terminal()} />
           <RiderButton show="label" icon={<Icons.Browser />} label="Browser" onClick={() => void fill("browser:hub")} />
+          <RiderButton show="label" icon={<Icons.Mail />} label="Mail" onClick={() => void fill("mail:default")} />
           <RiderButton show="label" icon={<Icons.WriteFile />} label="New artifact" onClick={() => void fill(dockProject() ? `artifact:new:${dockProject()!.id}` : "artifact:new")} />
         </Actions>
-          <RiderButton show="label" icon={<Icons.Mail />} label="Mail" onClick={() => void fill("mail:default")} />
         <Show when={recent().length}>
           <Group kind="dash" id="Continue" heading={<GroupHeading>Continue</GroupHeading>}>
             <For each={recent()}>{(item) => <Row density="list" element="button" lead={<Icons.Chat />} label={item.chat.title || "New chat"} context={placeLabelOf(item.project.id)} onClick={() => void fill(`chat:${item.chat.id}`)} />}</For>
@@ -3593,9 +3595,9 @@ function App() {
     if (files) return files.length ? files.map((entry) => entry.path.split("/").pop()).join(", ") : "File viewer";
     if (view.startsWith("term:")) return termTitles()[view] || "Terminal";
     if (view.startsWith("browser:")) return browserTitles()[view] || "Browser";
+    if (view.startsWith("mail:")) return "Mail";
     if (view === "artifact:new" || view.startsWith("artifact:new:")) return "New artifact";
     if (view.startsWith("artifact:")) { askArtifactName(view); return artifactNames()[view]?.name || "Artifact"; }
-    if (view.startsWith("mail:")) return "Mail";
     return isPanelTab(view) ? WORKSPACE_TOOL_LABELS[view] : "Pane";
   };
   type PaneTabs = { ids: string[]; used: string[] };
@@ -4199,9 +4201,9 @@ function App() {
         <Show when={parseFileView(slotView(slot))}>{renderFileViewer(slot)}</Show>
         <Show when={slotView(slot)?.startsWith("term:") ? slotView(slot)!.slice("term:".length) : undefined} keyed>{(shell) => renderTerminalDocument(slot, shell)}</Show>
         <Show when={slotView(slot)?.startsWith("browser:") ? slotView(slot)!.slice("browser:".length) : undefined} keyed>{(id) => renderBrowserDocument(slot, id)}</Show>
+        <Show when={slotView(slot)?.startsWith("mail:") ? slotView(slot)!.slice("mail:".length) : undefined} keyed>{(account) => renderMailDocument(slot, account)}</Show>
         <For each={artifactsIn(slot)}>{(id) => renderArtifactDocument(slot, id)}</For>
         <Show when={slotView(slot) === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome(slot)}</SheetFill></Show>
-        <Show when={slotView(slot)?.startsWith("mail:") ? slotView(slot)!.slice("mail:".length) : undefined} keyed>{(account) => renderMailDocument(slot, account)}</Show>
         <Show when={page() === "computer"}>
           <SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderPaneComputer(slot)}</SheetFill>
         </Show>
@@ -5070,9 +5072,9 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.nextPane, "application", () => stepPane(1), { when: () => splitShown() && !isMobileLayout() }),
       shortcutManager.registerHandler(COMMAND_IDS.newPane, "application", () => openEmptyPane(), { when: () => !isMobileLayout() }),
       shortcutManager.registerHandler(COMMAND_IDS.openBrowser, "application", () => openBrowser()),
+      shortcutManager.registerHandler(COMMAND_IDS.openMail, "application", () => openMail()),
       shortcutManager.registerHandler(COMMAND_IDS.previousPane, "application", () => stepPane(-1), { when: () => splitShown() && !isMobileLayout() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "application", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
-      shortcutManager.registerHandler(COMMAND_IDS.openMail, "application", () => openMail()),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "chat", toggleChatWorkspaceFocus, { when: () => Boolean(workspacePanelScope()) && hasComposer() }),
       shortcutManager.registerHandler(COMMAND_IDS.toggleChatWorkspaceFocus, "workspace-panel", toggleChatWorkspaceFocus),
       shortcutManager.registerHandler(COMMAND_IDS.workspaceMoveToMain, "workspace-panel", () => openBeside(dockTool()), { when: () => !isMobileLayout() && panelOpen() && !document.activeElement?.closest(".main-split") }),
@@ -5726,9 +5728,9 @@ function App() {
       <Show when={parseFileView(paneAOverride())}>{renderFileViewer("main")}</Show>
       <Show when={paneAOverride()?.startsWith("term:") ? paneAOverride()!.slice("term:".length) : undefined} keyed>{(shell) => renderTerminalDocument("main", shell)}</Show>
       <Show when={paneAOverride()?.startsWith("browser:") ? paneAOverride()!.slice("browser:".length) : undefined} keyed>{(id) => renderBrowserDocument("main", id)}</Show>
+      <Show when={paneAOverride()?.startsWith("mail:") ? paneAOverride()!.slice("mail:".length) : undefined} keyed>{(account) => renderMailDocument("main", account)}</Show>
       <For each={artifactsIn("main")}>{(id) => renderArtifactDocument("main", id)}</For>
       <Show when={paneAOverride() === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome("main")}</SheetFill></Show>
-      <Show when={paneAOverride()?.startsWith("mail:") ? paneAOverride()!.slice("mail:".length) : undefined} keyed>{(account) => renderMailDocument("main", account)}</Show>
       <Show when={toolInPaneA()}><SheetFill ref={(element) => { setPaneAToolHost(element); onCleanup(() => setPaneAToolHost(undefined)); }} class="pane-a-tool-host" /></Show>
       <Show when={!paneAOverride() && routeBootstrap() === "ready"} fallback={paneAOverride() ? null : <Empty role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")

@@ -5,6 +5,7 @@ import { formatShortcutBinding } from "../shortcuts/shortcut-normalize";
 import { BotIcon, ChartColumnIcon, LaptopIcon, Mic2Icon, NetworkIcon, SmartphoneIcon, SparklesIcon } from "lucide-solid";
 import { AboutSettingsFooter } from "./about-settings";
 import { TitleBarSettings } from "./title-bar-settings";
+import { BackgroundSettings } from "./background-settings";
 import { DevicesSettingsTile } from "./devices-settings";
 import { ServerSettings } from "./server-settings";
 import { BlocksSettings, createContextData, PromptsSettings } from "./context-settings";
@@ -14,8 +15,8 @@ import { AccountSettings } from "./account-settings";
 import { BrowserSettings } from "./browser-settings";
 import { SkillsSettings } from "./skills-settings";
 import { IntegrationsSettings } from "./connectors-settings";
-import { UsageSettings } from "./usage-settings";
 import { MailSettings } from "./mail-settings";
+import { UsageSettings } from "./usage-settings";
 import { agentView } from "../state/agent";
 import { createLatest } from "../state/latest";
 import { createSingleFlight } from "../state/single-flight";
@@ -32,7 +33,7 @@ import { createVoiceWaveformController } from "../chat/voice-waveform";
 import { VoiceWaveform } from "@/components/ui/voice";
 import { ModelSelector } from "../chat/model-selector";
 import { saveTabFrost, tabFrost } from "../preferences/tab-frost";
-import { saveTranscriptFont, TRANSCRIPT_FONT_OPTIONS, transcriptFont, type TranscriptFont } from "../preferences/transcript-font";
+import { saveTranscriptFont, TRANSCRIPT_FONT_OPTIONS, transcriptFont } from "../preferences/transcript-font";
 import { RUN_FORMS, runForm, saveRunForm, type RunForm } from "../preferences/run-form";
 import { saveTranscriptScale, TRANSCRIPT_SCALE_OPTIONS, transcriptScale, type TranscriptScale } from "../preferences/transcript-scale";
 import { MOTION_SCALE_OPTIONS, motionScale, saveMotionScale, type MotionScale } from "../preferences/motion-scale";
@@ -1350,19 +1351,22 @@ export function Settings(props: {
           <Show when={section() === "blocks"}><BlocksSettings context={context} blockId={contextBlock()} onBlock={setContextBlock} onOpenDocument={(id) => { setContextDocument(id); openSection("prompts"); }} /></Show>
           <Show when={section() === "ui"}>
             <>
+              {/* Each group is laid out in Columns: a scale is a Slider in a cell of its own, a few fixed choices a Segmented,
+                  a long or named list a Select, on or off a Switch; small lines share a cell. */}
+              <BackgroundSettings meteorField={props.meteorField} onMeteorFieldChange={props.onMeteorFieldChange} />
               {/* This device's own: its screen and hand differ from the next one's. The other groups are taste. */}
               <Group title="Display" scope="This device">
-                  <SettingLine label="Interface size">
-                    <Select id="interface-scale" aria-label="Interface size" value={props.interfaceScale} onChange={(event) => props.onInterfaceScaleChange(parseUiScale(event.currentTarget.value))}>
-                      <For each={UI_SCALE_OPTIONS}>{(scale) => <option value={scale}>{Math.round(scale * 100)}%</option>}</For>
-                    </Select>
-                  </SettingLine>
-                  <SettingLine label="Animation speed" title="Slows every animation on this device, to look at one closely.">
-                    <Select id="motion-scale" aria-label="Animation speed" value={String(motionScaleChoice())} onChange={(event) => setMotionScaleChoice(saveMotionScale(Number(event.currentTarget.value) as MotionScale))}>
-                      <For each={MOTION_SCALE_OPTIONS}>{(scale) => <option value={String(scale)}>{scale === 1 ? "Normal" : `${scale}× slower`}</option>}</For>
-                    </Select>
-                  </SettingLine>
+                <Columns>
+                  <Group kind="column">
+                    <Slider label="Interface size" value={String(props.interfaceScale)} options={UI_SCALE_OPTIONS.map((scale) => ({ value: String(scale), label: `${Math.round(scale * 100)}%` }))} onChange={(value) => props.onInterfaceScaleChange(parseUiScale(value))} />
+                  </Group>
+                  <Group kind="column">
+                    <SettingLine label="Animation speed" title="Slows every animation on this device, to look at one closely.">
+                      <Segmented label="Animation speed" size="sm" value={String(motionScaleChoice())} options={MOTION_SCALE_OPTIONS.map((scale) => ({ value: String(scale), label: scale === 1 ? "Normal" : `${scale}×`, title: scale === 1 ? undefined : `${scale}× slower` }))} onChange={(value) => setMotionScaleChoice(saveMotionScale(Number(value) as MotionScale))} />
+                    </SettingLine>
                 <SettingLine plain label="Hardware acceleration"><SettingValue>{gpuRendering() === false ? "Off" : gpuRendering() ? "On" : "Unknown"}</SettingValue></SettingLine>
+                  </Group>
+                </Columns>
                 <Show when={gpuRendering() === false}><Note>This browser draws without the graphics card, so motion and blur run slowly. Turn on “Use graphics acceleration when available” in its settings, then relaunch it.</Note></Show>
               </Group>
               <TitleBarSettings />
@@ -1381,6 +1385,8 @@ export function Settings(props: {
                 </Group>
               </Show>
               <Group title="Interface">
+                <Columns>
+                  <Group kind="column">
                   <SettingLine label="Terminal font">
                     <Select id="terminal-font" aria-label="Terminal font" value={terminalFontChoice()} onChange={(event) => setTerminalFontChoice(saveTerminalFont(event.currentTarget.value as TerminalFont))}>
                       <For each={TERMINAL_FONT_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
@@ -1391,49 +1397,26 @@ export function Settings(props: {
                       <For each={countSteps(SIDEBAR_CHAT_STEPS, props.sidebarChatLimit).filter((count) => count >= MIN_SIDEBAR_CHAT_LIMIT && count <= MAX_SIDEBAR_CHAT_LIMIT)}>{(count) => <option value={String(count)}>{count}</option>}</For>
                     </Select>
                   </SettingLine>
+                  </Group>
+                  <Group kind="column">
+                    <SettingLine label="Panel drag">
+                      <Segmented label="Panel drag" size="sm" value={props.panelMotion} options={PANEL_MOTION_OPTIONS} onChange={(value) => props.onPanelMotionChange(value)} />
+                    </SettingLine>
                   <SettingLine label="Tab row">
                     <Switch id="tab-frost" label="Frosted tab row" checked={frosted()} onChange={(on) => setFrosted(saveTabFrost(on))} />
                   </SettingLine>
-                  <SettingLine label="Panel drag">
-                    <Select id="panel-motion" aria-label="Panel drag" title={PANEL_MOTION_OPTIONS.find((option) => option.value === props.panelMotion)?.label} value={props.panelMotion} onChange={(event) => props.onPanelMotionChange(event.currentTarget.value as PanelMotionMode)}>
-                      <For each={PANEL_MOTION_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </SettingLine>
-                  <SettingLine label="Meteor field">
-                    <Switch id="meteor-field" label="Ambient meteor field" checked={props.meteorField} onChange={props.onMeteorFieldChange} />
-                  </SettingLine>
+                  </Group>
+                </Columns>
               </Group>
               <Group title="Reading">
-                  <SettingLine label="Transcript size" title="Messages and answers, on top of the Interface size; the chrome around them keeps its size.">
-                    <Select id="transcript-scale" aria-label="Transcript size" value={String(transcriptScaleChoice())} onChange={(event) => setTranscriptScaleChoice(saveTranscriptScale(Number(event.currentTarget.value) as TranscriptScale))}>
-                      <For each={TRANSCRIPT_SCALE_OPTIONS}>{(scale) => <option value={String(scale)}>{scale === 1 ? "As the interface" : `${Math.round(scale * 100)}%`}</option>}</For>
-                    </Select>
-                  </SettingLine>
-                  <SettingLine label="Transcript font">
-                    <Select id="transcript-font" aria-label="Transcript font" value={transcriptFontChoice()} onChange={(event) => setTranscriptFontChoice(saveTranscriptFont(event.currentTarget.value as TranscriptFont))}>
-                      <For each={TRANSCRIPT_FONT_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </SettingLine>
-                  <SettingLine label="Transcript width">
-                    <Select id="transcript-width" aria-label="Transcript width" value={props.transcriptWidth} onChange={(event) => props.onTranscriptWidthChange(event.currentTarget.value as TranscriptWidthMode)}>
-                      <For each={TRANSCRIPT_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </SettingLine>
-                  <Show when={agentView()?.enabled}><SettingLine label={`${agentView()?.settings?.name || "The agent"}'s message view`} title="How wide its page's messages are: as the transcript, or its own width.">
-                    <Select id="agent-messages-width" aria-label={`${agentView()?.settings?.name || "The agent"}'s message view width`} value={agentMessagesWidth()} onChange={(event) => saveAgentMessagesWidth(event.currentTarget.value as AgentMessagesWidthMode)}>
-                      <For each={AGENT_MESSAGES_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </SettingLine></Show>
-                  <SettingLine label="Wide blocks">
-                    <Select id="transcript-wide-blocks" aria-label="Wide blocks" value={props.transcriptWideBlocks} onChange={(event) => props.onTranscriptWideBlocksChange(event.currentTarget.value as TranscriptWideBlocksMode)}>
-                      <For each={TRANSCRIPT_WIDE_BLOCKS_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </SettingLine>
-                  <SettingLine label="Code width">
-                    <Select id="code-block-width" aria-label="Code block width" value={props.codeBlockWidth} onChange={(event) => props.onCodeBlockWidthChange(event.currentTarget.value as CodeBlockWidthMode)}>
-                      <For each={CODE_BLOCK_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
-                    </Select>
-                  </SettingLine>
+                <Columns>
+                  <Group kind="column">
+                    <Slider label="Transcript size" value={String(transcriptScaleChoice())} options={TRANSCRIPT_SCALE_OPTIONS.map((scale) => ({ value: String(scale), label: scale === 1 ? "As the interface" : `${Math.round(scale * 100)}%` }))} onChange={(value) => setTranscriptScaleChoice(saveTranscriptScale(Number(value) as TranscriptScale))} />
+                  </Group>
+                  <Group kind="column">
+                    <SettingLine label="Transcript font">
+                      <Segmented label="Transcript font" size="sm" value={transcriptFontChoice()} options={TRANSCRIPT_FONT_OPTIONS} onChange={(value) => setTranscriptFontChoice(saveTranscriptFont(value))} />
+                    </SettingLine>
                   <SettingLine label="Word fade">
                     <Select id="stream-fade" aria-label="Word fade time" value={fadeMs()} onChange={(event) => setFadeMs(saveStreamFade(Number(event.currentTarget.value)))}>
                       <For each={STREAM_FADE_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
@@ -1442,7 +1425,25 @@ export function Settings(props: {
                   <SettingLine label="Fade formulas in when complete">
                     <Switch id="stream-math-fade" label="Fade formulas in when complete" checked={streamMathFade()} onChange={saveStreamMathFade} />
                   </SettingLine>
+                  </Group>
+                </Columns>
+                <SettingLine label="Transcript width">
+                  <Segmented label="Transcript width" size="sm" value={props.transcriptWidth} options={TRANSCRIPT_WIDTH_OPTIONS} onChange={(value) => props.onTranscriptWidthChange(value)} />
+                </SettingLine>
+                  <Show when={agentView()?.enabled}><SettingLine label={`${agentView()?.settings?.name || "The agent"}'s message view`} title="How wide its page's messages are: as the transcript, or its own width.">
+                    <Select id="agent-messages-width" aria-label={`${agentView()?.settings?.name || "The agent"}'s message view width`} value={agentMessagesWidth()} onChange={(event) => saveAgentMessagesWidth(event.currentTarget.value as AgentMessagesWidthMode)}>
+                      <For each={AGENT_MESSAGES_WIDTH_OPTIONS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
+                    </Select>
+                  </SettingLine></Show>
+                <SettingLine label="Wide blocks">
+                  <Segmented label="Wide blocks" size="sm" value={props.transcriptWideBlocks} options={TRANSCRIPT_WIDE_BLOCKS_OPTIONS} onChange={(value) => props.onTranscriptWideBlocksChange(value)} />
+                </SettingLine>
+                <SettingLine label="Code width">
+                  <Segmented label="Code width" size="sm" value={props.codeBlockWidth} options={CODE_BLOCK_WIDTH_OPTIONS} onChange={(value) => props.onCodeBlockWidthChange(value)} />
+                </SettingLine>
               </Group>
+              <Columns kind="lists">
+                <Column>
               <Group title="Reasoning & tool use">
                   <SettingLine label="Work between texts" title={RUN_FORMS.find((option) => option.value === runForm())?.description}>
                     <Select id="run-form" aria-label="Work between texts" value={runForm()} onChange={(event) => saveRunForm(event.currentTarget.value as RunForm)}>
@@ -1450,6 +1451,8 @@ export function Settings(props: {
                     </Select>
                   </SettingLine>
               </Group>
+                </Column>
+                <Column>
               <Group title="Collapse">
                   <SettingLine label="Code blocks">
                     <Select id="code-block-collapse" aria-label="Collapse code blocks" value={props.codeBlockCollapse} onChange={(event) => props.onCodeBlockCollapseChange(event.currentTarget.value as CodeBlockCollapseMode)}>
@@ -1467,6 +1470,8 @@ export function Settings(props: {
                     </Select>
                   </SettingLine>
               </Group>
+                </Column>
+              </Columns>
             </>
           </Show>
           <Show when={section() === "agent"}><agentSettings.Page /></Show>
@@ -1474,9 +1479,9 @@ export function Settings(props: {
           <Show when={section() === "skills"}><SkillsSettings context={context} skillId={openSkill()} onSkill={setOpenSkill} onOpenDocument={(id) => { setContextDocument(id); openSection("prompts"); }} /></Show>
           <Show when={section() === "account"}><AccountSettings /></Show>
           <Show when={section() === "browser"}><BrowserSettings /></Show>
+          <Show when={section() === "mail"}><MailSettings /></Show>
           <Show when={section() === "integrations"}><>
             <Group title="Model providers">
-          <Show when={section() === "mail"}><MailSettings /></Show>
               <Dialog open={Boolean(authAttempt()?.owned && (authAttempt()!.active || authAttempt()!.error))} onOpenChange={(open) => { if (!open) { if (authAttempt()?.active) void cancelOAuth(); else { attemptWrites.drop(); setAuthAttempt(null); } } }}
                 title={`Sign in to ${authAttempt()?.providerLabel || "the provider"}`} description={authAttempt()?.message} close busy={authLoading()}>
                 <Show when={authAttempt()}>{(current) => <>

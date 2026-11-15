@@ -307,3 +307,5 @@ html, body { background: var(--frame, #050607); color: var(--foreground); }
 .g-flow-scene .ui-transcript-row[data-flow="exchange"]::before { height: var(--flow-exchange); }
 .g-flow-scene .ui-transcript-row[data-flow="turn"]::before { height: var(--flow-turn); }
 .g-workbench { display: flex; width: 100%; height: 520px; flex-direction: column; }
+
+.g-background-reference { display: flex; width: 100%; height: 100dvh; min-height: 0; flex-direction: column; }

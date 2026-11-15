@@ -9,6 +9,7 @@ import { createSheetTabs } from "./tabs";
 import { ASK_KEY, type SheetAnchor, type SheetBox, type SheetGrid, type SheetGridEvents, type SheetHost, type SheetMarks, type SheetPlace, type SheetRange, type SheetState } from "./host";
 import { createLiveSheet } from "./live";
 import { readLook } from "./theme";
+import { createArtWindow } from "@/components/ui/chat-art";
 import { createFormulaEditor, FormulaField, FormulaHelp } from "./formula-editor";
 import { createSequenceKeys, SequenceHint, SHEET_SEQUENCES, SizePrompt, type SizeQuestion } from "./sequences";
 import { createSheetSizes, dragRowEdges } from "./sizes";
@@ -105,6 +106,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     look.observe(restyled);
     onCleanup(() => { over = true; off(); look.unobserve(restyled); made?.destroy(); setGrid(undefined); });
   });
+  const art = createArtWindow(true);
   // The app's tokens change with the Interface size and the theme, each set on the root element.
   const relook = new MutationObserver(() => { const made = grid(); if (made && root) made.theme(readLook(root)); });
   relook.observe(document.documentElement, { attributes: true });
@@ -222,7 +224,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   // A header's menu is its whole columns, a row number's its whole rows (formats.ts clips both to the tab).
   const formatted = () => { const { rows, cols } = menu(), most = Number.MAX_SAFE_INTEGER; return rows || cols ? { top: rows?.top ?? 0, bottom: rows?.bottom ?? most, left: cols?.left ?? 0, right: cols?.right ?? most } : null; };
   const count = (from: number, to: number) => to - from + 1;
-  return <section ref={(element) => { root = element; }} class="ui-spreadsheet" aria-label={props.name} data-margin={props.marginEmpty ? "none" : "beside"}
+  return <section ref={(element) => { root = element; art(element); }} class="ui-spreadsheet" aria-label={props.name} data-margin={props.marginEmpty ? "none" : "beside"}
     onKeyDown={(event) => {
       if (!(event.ctrlKey || event.metaKey) || !island()?.contains(event.target as Node)) return;
       if (tabs.key(event) || formats.key(event, at())) return;

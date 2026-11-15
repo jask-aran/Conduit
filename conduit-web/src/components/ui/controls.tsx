@@ -1,5 +1,5 @@
 import { Frost } from "./frost";
-import { IconButton } from "./actions";
+import { CloseButton, IconButton } from "./actions";
 import * as Icons from "./icons";
 import { createEffect, createSignal, createUniqueId, For, Show, splitProps, untrack, type JSX } from "solid-js";
 
@@ -100,6 +100,26 @@ export function Gauge(props: { value: number; tone?: "idle" | "normal" | "warnin
     <circle cx="12" cy="12" r="9" pathLength="100" /><circle cx="12" cy="12" r="9" pathLength="100" style={{ "stroke-dasharray": `${props.value || 0} 100` }} />
   </svg>;
 }
+
+/** Pictures to choose one from, each shown small. An option with no image is a plain tile saying its label, or shows its
+    `preview` live; one
+    with `onRemove` can be taken away; `add` is a last tile that takes a new picture. */
+export function PictureChoice(props: { label: string; value: string; options: ReadonlyArray<{ value: string; label: string; image?: string; preview?: JSX.Element; onRemove?: () => void }>; onChange: (value: string) => void; add?: { label: string; onClick: () => void }; haptic?: HapticProp }) {
+  return <div class="ui-picture-choice" role="radiogroup" aria-label={props.label}>
+    <For each={props.options}>{(option) => <div class="ui-picture-tile">
+      <button type="button" role="radio" aria-checked={option.value === props.value} title={option.label} data-plain={option.image || option.preview ? undefined : ""}
+        style={option.image ? { "background-image": `url("${option.image}")` } : undefined} onClick={() => { if (option.value !== props.value) { feel(props.haptic, "select"); props.onChange(option.value); } }}>
+        <Show when={option.preview}><i class="ui-picture-preview" aria-hidden="true">{option.preview}</i></Show>
+        <span>{option.label}</span>
+      </button>
+      <Show when={option.onRemove}>{(remove) => <CloseButton size="xs" label={`Remove ${option.label}`} onClick={() => remove()()} />}</Show>
+    </div>}</For>
+    <Show when={props.add}>{(add) => <div class="ui-picture-tile"><button type="button" data-plain="" data-add="" onClick={() => add().onClick()}><Icons.Upload /><span>{add().label}</span></button></div>}</Show>
+  </div>;
+}
+
+/** A PictureChoice preview of the meteor field: a few streaks crossing the tile, not the field itself, which is drawn for a whole pane. */
+export const MeteorsPreview = () => <span class="ui-meteors-preview"><i /><i /><i /></span>;
 
 export const Swatch = (props: { colour?: string; hollow?: boolean; fill?: boolean }) => <i class="ui-swatch" data-hollow={props.hollow ? "" : undefined} data-fill={props.fill ? "" : undefined} style={{ background: props.hollow ? undefined : props.colour }} aria-hidden="true" />;
 

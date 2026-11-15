@@ -3,6 +3,7 @@ import type { MailAccount, MailDraft, MailLabel, MailThread } from "@/mail/mail"
 import { Button, DashDay, Empty, HeaderButton, Icons, LeadInput, Loading, MailRow, ReaderSplit, ReadingScroll, ReadingTitle, SelectTrigger, SheetFill, Spinner, StatusDot, ToolBar } from "@/components/ui";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
+import { createArtWindow } from "@/components/ui/chat-art";
 import { failure, mailApi } from "./mail-api";
 import { DraftComposer } from "./mail-compose";
 import { createMailList } from "./mail-list";
@@ -39,6 +40,10 @@ export default function MailPane(props: {
   // Read as .latest: a refetch must not suspend the pane.
   const labels = () => labelsRead.latest ?? [];
   const [label, setLabel] = createSignal("inbox");
+  // The view last chosen for an account is where its mail opens next, on this device.
+  const viewKey = (id: string) => `conduit:mail-view:${id}`;
+  createEffect(on(() => account()?.id, (id) => { try { const kept = id && localStorage.getItem(viewKey(id)); if (kept) setLabel(kept); } catch { /* opens on the inbox */ } }));
+  createEffect(on(label, (now) => { const id = account()?.id; try { if (id) localStorage.setItem(viewKey(id), now); } catch { /* this session only */ } }, { defer: true }));
   const list = createMailList(() => account()?.id ?? null, label);
   createEffect(on([() => account()?.id, label], ([id]) => { if (id) void list.load().then(() => setTrouble(""), (reason) => setTrouble(failure(reason))); }));
 
@@ -150,7 +155,7 @@ export default function MailPane(props: {
     backToList();
   };
 
-  return <SheetFill class="pane-mail" onKeyDown={escape}>
+  return <SheetFill ref={createArtWindow(true)} class="pane-mail" onKeyDown={escape}>
     {props.header(headerActions())}
     <Show when={!accounts.loading || accounts.latest} fallback={<Loading kind="pane"><Spinner />Loading mail</Loading>}>
       <Show when={account()} fallback={trouble() ? <Empty role="alert">{trouble()}</Empty> : <Empty><div><Icons.Mail /><p>Mail is set up in Settings.</p><Button variant="ghost" outline size="sm" onClick={() => props.onSettings()}>Open Settings</Button></div></Empty>}>

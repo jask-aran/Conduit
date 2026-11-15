@@ -6,6 +6,7 @@ import { Row, type RowProps } from "./row";
 import { feel, type HapticProp } from "./haptics";
 import { callHandler } from "./shared";
 import { Count } from "./controls";
+import { createArtWindow } from "./chat-art";
 
 
 export function Dashboard(props: {
@@ -25,7 +26,8 @@ export function Dashboard(props: {
   aside?: JSX.Element;
   dock?: JSX.Element;
 }) {
-  return <section ref={props.ref} class="ui-dash" data-compact={props.compact ? "" : undefined} data-one-column={props.oneColumn ? "" : undefined} data-stacked={props.stacked ? "" : undefined} data-headless={props.head || props.actions ? undefined : ""} data-room={props.room ? "" : undefined} data-page={props.page} aria-label={props.label}>
+  const art = createArtWindow();
+  return <section ref={(element) => { art(element); props.ref?.(element); }} class="ui-dash" data-compact={props.compact ? "" : undefined} data-one-column={props.oneColumn ? "" : undefined} data-stacked={props.stacked ? "" : undefined} data-headless={props.head || props.actions ? undefined : ""} data-room={props.room ? "" : undefined} data-page={props.page} aria-label={props.label}>
     <div class="ui-dash-body">
       <Show when={props.head || props.actions}><header class="ui-dash-head">{props.head}{props.actions}</header></Show>
       <Show when={props.notice}><div class="ui-dash-notice">{props.notice}</div></Show>

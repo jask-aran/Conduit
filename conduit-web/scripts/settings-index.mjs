@@ -6,7 +6,7 @@ import path from "node:path";
  * findable the moment it is written and never through a list kept by hand. What only the running app knows (provider
  * accounts, shortcut commands, documents) is added in settings-core.tsx.
  */
-const ROWS = ["SettingLine", "Switch", "SettingCredential", "SettingLink", "SettingDetails", "RuleList"];
+const ROWS = ["SettingLine", "Slider", "PictureChoice", "Switch", "SettingCredential", "SettingLink", "SettingDetails", "RuleList"];
 const TAG = new RegExp(`<(${[...ROWS, "Group"].join("|")})\\b`, "g");
 
 function tagEnd(source, from) {
