@@ -19,7 +19,8 @@ export type Verb = { beside?: boolean; tab?: boolean };
 export const ROW_MAX = 3;
 export const TAB_CAP = 5;
 
-export const sessionView = (view: View) => view === "home" || view === "page:jbot" || view.startsWith("chat:") || view.startsWith("term:");
+/** The new-chat pages (the dashboard, a project's page) are a chat not yet begun, so they are session tabs too. */
+export const sessionView = (view: View) => view === "home" || view === "page:jbot" || view === "page:dashboard" || view.startsWith("page:project:") || view.startsWith("chat:") || view.startsWith("term:");
 export const kindOf = (pane: Pane): PaneKind => pane.views.every(sessionView) ? "session" : "document";
 export const shownView = (pane: Pane) => pane.views[pane.active] ?? pane.views[0]!;
 
@@ -43,8 +44,9 @@ const dropPane = (layout: Layout, id: string): Layout => {
   return { ...layout, panes, row, dock, used, focus: layout.focus === id ? used[0] ?? row[0]! : layout.focus };
 };
 
-/** Where a view already stands, if anywhere: a view is open once. */
+/** Where a view already stands, if anywhere: a view is open once (the launcher excepted). */
 export function findView(layout: Layout, view: View) {
+  if (view === "home") return null;
   for (const id of placed(layout)) {
     const index = layout.panes[id]!.views.indexOf(view);
     if (index >= 0) return { id, index };
@@ -55,19 +57,22 @@ export function findView(layout: Layout, view: View) {
 /** The session pane a Ctrl-opened tab joins: the focused one if it is a session pane, else the last one used. */
 const sessionPaneFor = (layout: Layout) => layout.used.find((id) => kindOf(layout.panes[id]!) === "session");
 
-/** Adds a tab, dropping the one used longest ago (never the shown one) past the cap. */
-function withTab(pane: Pane, view: View): Pane {
+/** Adds a tab, dropping the first past the cap that is neither shown nor `held` (a tab with a draft). */
+function withTab(pane: Pane, view: View, held: (view: View) => boolean = () => false): Pane {
   let views = [...pane.views, view];
-  if (views.length > TAB_CAP) views = views.filter((_, index) => index !== (pane.active === 0 ? 1 : 0));
+  if (views.length > TAB_CAP) {
+    const drop = views.findIndex((other, index) => index !== pane.active && index !== views.length - 1 && !held(other));
+    if (drop >= 0) views = views.filter((_, index) => index !== drop);
+  }
   return { ...pane, views, active: views.length - 1 };
 }
 
-export function open(layout: Layout, view: View, verb: Verb = {}): Layout {
+export function open(layout: Layout, view: View, verb: Verb = {}, held?: (view: View) => boolean): Layout {
   const at = findView(layout, view);
   if (at) return focusing(withPane(layout, { ...layout.panes[at.id]!, active: at.index }), at.id);
   if (verb.tab && sessionView(view)) {
     const target = sessionPaneFor(layout);
-    if (target) return focusing(withPane(layout, withTab(layout.panes[target]!, view)), target);
+    if (target) return focusing(withPane(layout, withTab(layout.panes[target]!, view, held)), target);
   }
   if (verb.beside || verb.tab) {
     const pane = paneOf([view]);
@@ -83,6 +88,60 @@ export function open(layout: Layout, view: View, verb: Verb = {}): Layout {
   }
   // Plain replaces what the focused pane shows, whatever kind it is, keeping its place and id.
   return withPane(layout, paneOf([view], 0, layout.focus));
+}
+
+/** Changes what one pane shows in place, without the verbs: a file column, a mode, a page turning into its chat. A
+ *  session pane keeps its other tabs while the view is a session view; anything else stands alone. */
+export function show(layout: Layout, id: string, view: View): Layout {
+  const pane = layout.panes[id];
+  if (!pane) return layout;
+  const index = pane.views.indexOf(view);
+  if (index >= 0) return index === pane.active ? layout : withPane(layout, { ...pane, active: index });
+  if (!sessionView(view) || kindOf(pane) !== "session") return withPane(layout, paneOf([view], 0, id));
+  return withPane(layout, { ...pane, views: pane.views.map((other, at) => at === pane.active ? view : other) });
+}
+
+/** A new pane in the row at `at`, as a drop on a pane's edge makes it; nothing when the row is full. */
+export function place(layout: Layout, view: View, at: number): Layout {
+  if (layout.row.length >= ROW_MAX) return layout;
+  const pane = paneOf([view]);
+  const row = [...layout.row];
+  row.splice(Math.max(0, Math.min(at, row.length)), 0, pane.id);
+  return focusing({ ...withPane(layout, pane), row }, pane.id);
+}
+
+/** Moves some of a pane's tabs to another pane (`to` an id) or to a new pane in the row at `to` (an index). */
+export function moveViews(layout: Layout, from: string, views: View[], to: string | number): Layout {
+  const source = layout.panes[from];
+  if (!source || (typeof to === "number" && layout.row.length >= ROW_MAX) || to === from) return layout;
+  const moving = source.views.filter((view) => views.includes(view));
+  if (!moving.length) return layout;
+  const shown = shownView(source);
+  const left = source.views.filter((view) => !moving.includes(view));
+  let next = left.length ? withPane(layout, { ...source, views: left, active: Math.max(0, left.indexOf(shown)) }) : layout;
+  if (typeof to === "number") {
+    const pane = paneOf(moving, moving.length - 1);
+    const row = [...next.row];
+    row.splice(Math.max(0, Math.min(to, row.length)), 0, pane.id);
+    next = focusing({ ...withPane(next, pane), row }, pane.id);
+  } else {
+    const target = next.panes[to];
+    if (!target) return layout;
+    const joined = [...target.views, ...moving].slice(-TAB_CAP);
+    next = focusing(withPane(next, { ...target, views: joined, active: joined.length - 1 }), to);
+  }
+  return left.length ? next : closePane(next, from);
+}
+
+/** `next` with `current`'s pane ids where the same place holds a pane, so a restored layout keeps each pane's state. */
+export function adopt(current: Layout, next: Layout): Layout {
+  const was = placed(current), now = placed(next);
+  const ids = new Map(now.map((id, index) => [id, was[index] ?? id]));
+  const rename = (id: string) => ids.get(id) ?? id;
+  return {
+    panes: Object.fromEntries(Object.values(next.panes).map((pane) => [rename(pane.id), { ...pane, id: rename(pane.id) }])),
+    row: next.row.map(rename), dock: next.dock && rename(next.dock), summon: next.summon, focus: rename(next.focus), used: next.used.map(rename),
+  };
 }
 
 export const switchTab = (layout: Layout, id: string, index: number): Layout => focusing(withPane(layout, { ...layout.panes[id]!, active: index }), id);

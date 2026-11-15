@@ -18,7 +18,7 @@ import { focusSplitSection, splitSections } from "./dashboard/primitives/split-c
 import { isConduitManagedProject } from "./navigation/sidebar-preferences";
 import type { ItemActions } from "./navigation/item-menus";
 import type { ComputerLocation, ComputerPrefetchPayload, PreferencesPayload, ProjectsPayload, Pty, PtysPayload, RuntimeProcess, ShareOriginPayload } from "./api/contracts";
-import { batch, createEffect, createMemo, createRenderEffect, createResource, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, untrack, useContext, type ComponentProps, type JSX } from "solid-js";
+import { batch, createEffect, createMemo, createRenderEffect, createResource, createRoot, createSignal, ErrorBoundary, For, lazy, on, onCleanup, onMount, Show, untrack, useContext, type ComponentProps, type JSX } from "solid-js";
 import { Portal, render } from "solid-js/web";
 import { androidShell, desktopShell, desktopTitleBar, isInstalledClient } from "./platform/installed-client.ts";
 import { setWindowDrags, TitleBar, WindowControls } from "@/components/ui/window";
@@ -116,6 +116,7 @@ import type { FileSlotHandle, FileSummary } from "./workspace/workspace-file-slo
 import { dropScope, pruneWorkspacePanelStorage, readSetting, WORKSPACE_PANEL_GLOBAL_SCOPE, writeSetting } from "./workspace/workspace-panel-storage";
 import { PANE_LAYOUTS, readToolDrag, TOOL_DRAG_TYPE, WORKSPACE_TOOL_LABELS, WorkspaceRail } from "./workspace/workspace-rail";
 import { isPanelTab, isSplitView, type SplitView } from "./workspace/workspace-types";
+import * as Layouts from "./panes/pane-store";
 import { minArtifactPaneWidth, minMainPaneWidth, minSplitPaneWidth } from "./layout-geometry";
 import { dispatchPanelGeometryMotion } from "./panel-motion";
 import { publishUiPreference, queueUiPreferenceSave, uiPreferenceSaves, UI_PREFERENCE_CHANGE_EVENT, type ClientPreference, type UiPreferenceKey, type UiPreferences } from "./preferences/ui-preferences";
@@ -656,24 +657,46 @@ function App() {
   const [matedThreads, setMatedThreads] = createSignal<Record<string, string>>((() => { try { return JSON.parse(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "mated") || "{}") as Record<string, string>; } catch { return {}; } })());
   const matedPaper = (view: string | null | undefined) => view?.startsWith("chat:") ? matedThreads()[view.slice("chat:".length)] : undefined;
   const paperOf = <View extends string | null>(view: View) => { const paper = matedPaper(view); return paper ? `artifact:${paper}` as const : view; };
-  // The address of a thread opens its paper in the first pane; the other panes, the dock and the tabs it names are kept.
-  { const paper = matedPaper(`chat:${pathChatId()}`), url = new URL(location.href); if (paper) { url.pathname = "/"; url.searchParams.set("a", `artifact:${paper}`); history.replaceState({}, "", url); } }
   const launchUrl = new URL(location.href);
-  const urlNamesPanes = launchUrl.searchParams.has("pane") || launchUrl.searchParams.has("a");
   const atStart = launchUrl.pathname === "/" && !launchUrl.search;
   const SLOT_IDS = [0, 1, 2, 3, 4];
-  const MAX_DOCKED = 3;
-  const storedViews = (urlNamesPanes ? launchUrl.searchParams.getAll("pane").slice(0, 2)
-    : atStart ? [readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split"), readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-2")] : [])
-    .map((value) => isSplitView(value) ? paperOf(value) : null);
-  const storedDocked = (urlNamesPanes ? launchUrl.searchParams.getAll("dock") : atStart ? (readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-docked") || "").split("\n") : []).filter(isSplitView).map(paperOf).slice(0, MAX_DOCKED);
-  const initialViews: (SplitView | null)[] = [...(storedViews[0] ? [storedViews[0], storedViews[1] ?? null] : [storedViews[1] ?? null, null]), ...[0, 1, 2].map((index) => storedDocked[index] ?? null)];
-  const storedPaneA = urlNamesPanes ? launchUrl.searchParams.get("a") : atStart ? readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-a") : null;
-  const [paneAOverride, setPaneAOverrideState] = createSignal<SplitView | null>(isSplitView(storedPaneA) && !/^(chat|page):/.test(storedPaneA) ? storedPaneA : null);
-  const setPaneAOverride = (view: SplitView | null) => { setPaneAOverrideState(view); writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-a", view ?? ""); };
-  const [slotViews, setSlotViews] = createSignal(initialViews);
-  const [slotOrder, setSlotOrder] = createSignal<number[]>(SLOT_IDS.filter((slot) => initialViews[slot]));
-  const [dockedSlots, setDockedSlots] = createSignal<number[]>([2, 3, 4].filter((slot) => initialViews[slot]));
+  /** A layout read from an address or storage, its views as the panes hold them: a mated thread as its paper. */
+  const readLayout = (params: URLSearchParams) => {
+    const found = Layouts.decode(params, isSplitView);
+    if (!found) return null;
+    for (const pane of Object.values(found.panes)) pane.views = pane.views.map(paperOf).filter((view, index, all) => all.indexOf(view) === index);
+    return found;
+  };
+  // Pane A draws the route, so the first layout's pane A is what the address names until the route settles.
+  const panes = Layouts.createPaneStore((() => {
+    const seed = readLayout(launchUrl.searchParams) ?? (atStart ? readLayout(new URLSearchParams(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-layout") || "")) : null)
+      ?? Layouts.layoutOf(pathChatId() ? `chat:${pathChatId()}` : "page:dashboard");
+    // The address of a thread opens its paper in pane A; the other panes, the dock and the tabs it names are kept.
+    const paper = matedPaper(`chat:${pathChatId()}`);
+    if (!paper) return seed;
+    const url = new URL(location.href);
+    url.pathname = "/";
+    history.replaceState({}, "", url);
+    return Layouts.show(seed, seed.row[0]!, `artifact:${paper}`);
+  })());
+  const layout = panes.layout;
+  const paneAShown = createMemo(() => Layouts.shownView(layout().panes[layout().row[0]!]!));
+  // Pane A is the row's first pane, drawn by the route; every other placed pane keeps a numbered slot (its `SideChat`)
+  // for as long as it is open, so swapping or closing beside it never reloads a pane that did not move.
+  const slotOfId = new Map<string, number>();
+  const slotIds = createMemo(() => {
+    const { row, dock } = layout();
+    const others = [...row.slice(1), ...(dock ? [dock] : [])];
+    for (const id of [...slotOfId.keys()]) if (!others.includes(id)) slotOfId.delete(id);
+    for (const id of others) if (!slotOfId.has(id)) slotOfId.set(id, SLOT_IDS.find((slot) => ![...slotOfId.values()].includes(slot))!);
+    return new Map(slotOfId);
+  }, new Map<string, number>(), { equals: (a, b) => a.size === b.size && [...a].every(([id, slot]) => b.get(id) === slot) });
+  const keyOf = (id: string): PaneKey | null => layout().row[0] === id ? "main" : slotIds().get(id) ?? null;
+  const idOf = (pane: PaneKey) => pane === "main" ? layout().row[0]! : [...slotIds()].find(([, slot]) => slot === pane)?.[0] ?? null;
+  const paneData = (pane: PaneKey) => { const id = idOf(pane); return id ? layout().panes[id] ?? null : null; };
+  const sameList = <T,>(a: T[], b: T[]) => a.length === b.length && a.every((item, index) => item === b[index]);
+  const slotOrder = createMemo(() => { const { row, dock } = layout(); return [...row.slice(1), ...(dock ? [dock] : [])].map((id) => slotIds().get(id)!).filter((slot) => slot !== undefined); }, [], { equals: sameList });
+  const dockedSlots = createMemo(() => { const dock = layout().dock; const slot = dock ? slotIds().get(dock) : undefined; return slot === undefined ? [] : [slot]; }, [], { equals: sameList });
   const [dockSlot, setDockSlot] = createSignal<number | null>(null);
   const isDocked = (slot: PaneKey) => slot !== "main" && dockedSlots().includes(slot);
   const dockContents = () => [...dockedSlots(), ...foldedSlots()];
@@ -1480,7 +1503,7 @@ function App() {
     const id = (await refreshAgent())?.home?.chatId;
     if (!id) return openJbot("none");
     const target = await agentChat(id);
-    await openChatFromPage(target.chat, target.project);
+    await openChatHere(target.chat, target.project);
   };
   onMount(() => { if (location.pathname === JBOT_THREAD_PATH && !initialRouteId) void openJbotThread().catch(showError); });
 
@@ -1586,7 +1609,7 @@ function App() {
   };
 
   const renderEnvironment = (nodeId: string, slot: number | "main") => <EnvironmentPage nodeId={nodeId} projects={catalogue.projects()}
-    header={(title) => <ChatHeader title={title} tabActions={paneTabActions(slot)} tabs={documentTab(slot, title)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />}
+    header={(title) => <ChatHeader title={title} tabActions={paneTabActions(slot)} tabs={documentTab(slot)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />}
     onOpenWorkspace={(project) => void openProjectHere(project)}
     onMount={(path) => void addProject({ mode: "node", nodeId, path })}
     onOpenTerminal={() => void openDeviceTerminal({ id: nodeId })} />;
@@ -1616,7 +1639,7 @@ function App() {
     if (!location()) void browse();
     return <>
       <ChatHeader title={activeServer()?.name || "Hub"} tabActions={paneTabActions(slot)} tabs={documentTab(slot)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />
-      <ComputerDashboard projects={catalogue.projects()} location={location()} loading={loading()} error={error()} onOpenHarnessHere={(id) => setSlotView(slot, `page:harness:${encodeURIComponent(id)}`)} onOpenHarness={(id) => setSlotView(slot, `page:harness:${encodeURIComponent(id)}`)} onBrowse={(path) => void browse(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => { const here = location(); if (here) void createComputerWorkspace(here.project.workingRoot); }} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProjectHere(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={async (path) => { const here = location(); if (here) await openFileDocument({ projectId: here.project.id, path }, { beside: altActivation(), edit: false }); }} />
+      <ComputerDashboard projects={catalogue.projects()} location={location()} loading={loading()} error={error()} onOpenHarnessHere={(id) => setSlotView(slot, `page:harness:${encodeURIComponent(id)}`)} onOpenHarness={(id) => setSlotView(slot, `page:harness:${encodeURIComponent(id)}`)} onBrowse={(path) => void browse(path)} onPrefetch={prefetchComputerFolder} onMakeWorkspace={() => { const here = location(); if (here) void createComputerWorkspace(here.project.workingRoot); }} onCreateWorkspace={(path) => void createComputerWorkspace(path)} onOpenWorkspace={(project) => void openProjectHere(project)} onManageWorkspace={(action, project) => { if (action === "rename") runSidebar("rename-folder", { project }); else if (action === "identity") openWorkspaceIdentity(project); else runSidebar("delete-project", { project }); }} onStartWorkspaceAction={(action, path) => runSidebar(action === "created" ? "new-workspace-created" : "new-workspace-cloned", { path })} onOpenView={openWorkspaceView} onOpenTerminalView={() => openTerminalRoute()} onOpenTerminalHere={() => void openComputerTerminalHere()} onOpenFile={async (path) => { const here = location(); if (here) await openFileDocument({ projectId: here.project.id, path }, { ...verbNow(), edit: false }); }} />
     </>;
   };
   const HarnessDraftComposer = (props: {
@@ -1910,7 +1933,7 @@ function App() {
   let previewTimer = 0;
   const previewBase = () => {
     if (previewFrom) return previewFrom;
-    if (!isMobileLayout() || !mobileSidebarOpen() || routeKind() !== "chat" || paneAOverride() !== null) return null;
+    if (!isMobileLayout() || !mobileSidebarOpen() || routeKind() !== "chat" || paneADocument() !== null) return null;
     if (chat.presentation().kind !== "ready" || chat.generation() !== "idle" || chat.draft().trim() || currentDraftId()) return null;
     const fromId = catalogue.selectedId();
     const fromProject = fromId ? catalogue.projects().find((item) => item.sessions.some((session) => session.id === fromId)) : undefined;
@@ -2398,8 +2421,8 @@ function App() {
     setWorkspaceExpanded(true);
     focusWorkspacePanel();
   };
-  const openWorkspaceView = async (view: WorkspaceView, terminalId?: string) => {
-    if (view === "terminal" && terminalId && altActivation() && canOpenFilePanes()) return await openTerminalDocument(terminalId, true);
+  const openWorkspaceView = async (view: WorkspaceView, terminalId?: string, verb: Layouts.Verb = {}) => {
+    if (view === "terminal" && terminalId && (verb.beside || verb.tab) && canOpenFilePanes()) return await openTerminalDocument(terminalId, verb);
     if (!workspacePanelScope()) return;
     setDockSlot(null);
     setWorkspaceViewRequest({ tab: view, ...(terminalId ? { terminalId } : {}), nonce: Date.now() });
@@ -2407,9 +2430,9 @@ function App() {
     setPanelOpenForChat(true);
   };
   const dockAvailable = () => routeKind() === "computer" ? Boolean(computerLocation()) : ["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && Boolean(dockHome()) && Boolean(workspacePanelScope());
-  const slotView = (slot: number) => slotViews()[slot] ?? null;
-  const rowSlots = () => slotOrder().filter((slot) => slotView(slot) && !isDocked(slot));
-  const freeSlot = (docked = false) => (docked ? dockedSlots().length < MAX_DOCKED : rowSlots().length < 2) ? SLOT_IDS.find((slot) => !slotOrder().includes(slot)) ?? null : null;
+  const slotView = (slot: number) => { const pane = paneData(slot); return pane ? Layouts.shownView(pane) : null; };
+  const rowSlots = () => slotOrder().filter((slot) => !isDocked(slot));
+  const rowFull = () => layout().row.length >= Layouts.ROW_MAX;
   const dockMinWidth = () => { const slot = dockSlot(); return slot !== null && inDock(slot) ? viewMinWidth(slotView(slot)) : minSplitPaneWidth(); };
   const isPaneView = (view: SplitView | null) => Boolean(view && /^(chat|page):/.test(view));
   const [agentPageNeed, setAgentPageNeed] = createSignal(0);
@@ -2434,8 +2457,8 @@ function App() {
   const splitShown = () => shownSlots().length > 0;
   const isToolView = (view: SplitView | null) => Boolean(view && view !== "home" && !isPaneView(view) && !/^(files|term|browser|mail|artifact):/.test(view));
   const toolSlot = () => shownSlots().find((slot) => isToolView(slotView(slot))) ?? null;
-  const toolInPaneA = () => isToolView(paneAOverride());
-  const toolView = () => { if (toolInPaneA()) return paneAOverride(); const slot = toolSlot(); return slot === null ? null : slotView(slot); };
+  const toolInPaneA = () => isToolView(paneADocument());
+  const toolView = () => { if (toolInPaneA()) return paneADocument(); const slot = toolSlot(); return slot === null ? null : slotView(slot); };
   const toolHost = () => { if (toolInPaneA()) return paneAToolHost(); const slot = toolSlot(); return slot === null ? undefined : paneSlot(slot).host(); };
   const splitToolShown = () => { const view = toolView(); return isPanelTab(view) ? view : null; };
   const weightsFor = (count: number) => count === 3 ? splitRatios3() : count === 2 ? [1 - splitRatio(), splitRatio()] : [1];
@@ -2447,12 +2470,6 @@ function App() {
     releaseSplitFile = release;
     return () => { if (releaseSplitFile === release) releaseSplitFile = undefined; };
   };
-  const persistSlots = () => {
-    const views = rowSlots().map(slotView);
-    writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split", views[0] ?? "");
-    writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-split-2", views[1] ?? "");
-    writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-docked", dockedSlots().map(slotView).filter(Boolean).join("\n"));
-  };
   const fileHandles = new Map<PaneKey, (FileSlotHandle | undefined)[]>();
   const [handlesChanged, setHandlesChanged] = createSignal(0);
   const handlesOf = (pane: PaneKey) => { let list = fileHandles.get(pane); if (!list) fileHandles.set(pane, list = []); return list; };
@@ -2460,42 +2477,51 @@ function App() {
   let movingDocuments = false;
   const leavesUnsaved = (current: SplitView | null, next: SplitView | null, pane: PaneKey) => !movingDocuments && Boolean(parseFileView(current)) && !next?.startsWith("files:")
     && handlesOf(pane).some((handle) => handle?.hasUnsavedChanges());
-  const setSlotView = async (slot: number, next: SplitView | null, toDock = false, position?: number) => {
-    const previous = slotView(slot);
-    if (slotView(slot) === "file" && next !== "file" && releaseSplitFile && !(await releaseSplitFile(toDock))) return false;
-    if (leavesUnsaved(previous, next, slot) && !(await confirmDialog("Discard unsaved changes and close this file?", { destructive: true, confirmLabel: "Discard", valid: () => slotView(slot) === previous }))) return false;
-    if (slotView(slot) !== previous) return false;
-    if (arrives(slot, previous, next) && !(await arrive(slot, next!, () => slotView(slot) === previous))) return false;
+  /** What stands before a pane stops showing its view: a split file's release, unsaved edits, an artifact arriving. */
+  const gate = async (pane: PaneKey, next: SplitView | null, toDock = false) => {
+    const previous = viewOf(pane);
+    if (previous === "file" && next !== "file" && releaseSplitFile && !(await releaseSplitFile(toDock))) return false;
+    if (leavesUnsaved(previous, next, pane) && !(await confirmDialog("Discard unsaved changes and close this file?", { destructive: true, confirmLabel: "Discard", valid: () => viewOf(pane) === previous }))) return false;
+    if (viewOf(pane) !== previous) return false;
+    if (arrives(pane, previous, next) && !(await arrive(pane, next!, () => viewOf(pane) === previous))) return false;
+    return true;
+  };
+  // Pane A draws the route: a change that leaves it showing a route view sends the route there, one drive at a time.
+  let drivingRoute = false;
+  const followPaneA = async (before: SplitView | null, inPaneA?: () => unknown) => {
+    const after = paneAView();
+    if (!after || after === before || !isPaneView(after) || after === settledRoute()) return;
+    drivingRoute = true;
+    try { await (inPaneA ? inPaneA() : openInPaneA(after)); } finally { drivingRoute = false; }
+    // A route that did not follow (a harness thread kept, a chat gone): pane A goes back to what the route shows.
+    const route = settledRoute();
+    if (route && route !== after && paneAView() === after) panes.replace((current) => fromRoute(current, route));
+  };
+  /** Every change to the layout: `record` makes it a step Undo pane change goes back over. */
+  const changeLayout = async (change: (current: Layouts.Layout) => Layouts.Layout, options: { record?: boolean; inPaneA?: () => unknown } = {}) => {
+    const before = paneAView();
+    if (options.record === false) panes.replace(change); else panes.apply(change);
+    await followPaneA(before, options.inPaneA);
+  };
+  /** Shows `next` in a pane in place (no step in pane history), or closes it (`null`, a step). */
+  const setSlotView = async (slot: number, next: SplitView | null, toDock = false) => {
+    if (!(await gate(slot, next, toDock))) return false;
+    const id = idOf(slot);
+    if (!id) return false;
     batch(() => {
       leaves(slot);
-      if (!next && isDocked(slot)) {
-        setDockedSlots((current) => current.filter((item) => item !== slot));
-        if (dockSlot() === slot) { setDockSlot(null); closePanel(); }
-      }
-      setSlotViews((current) => current.map((view, index) => index === slot ? next : view));
-      setSlotOrder((current) => {
-        if (!next) return current.filter((item) => item !== slot);
-        if (current.includes(slot)) return current;
-        const order = [...current];
-        order.splice(position ?? order.length, 0, slot);
-        return order;
-      });
+      if (!next && dockSlot() === slot) { setDockSlot(null); closePanel(); }
+      if (next) panes.replace((current) => Layouts.show(current, id, next)); else panes.apply((current) => Layouts.closePane(current, id));
     });
-    persistSlots();
     return true;
   };
   const viewOf = (pane: PaneKey) => pane === "main" ? paneAView() : slotView(pane);
   const panesShown = (): PaneKey[] => ["main", ...shownSlots()];
   const setPaneView = async (pane: PaneKey, next: SplitView | null, toDock = false) => {
     if (pane !== "main") return await setSlotView(pane, next, toDock);
-    const previous = paneAOverride();
-    if (leavesUnsaved(previous, next, "main") && !(await confirmDialog("Discard unsaved changes and close this file?", { destructive: true, confirmLabel: "Discard", valid: () => paneAOverride() === previous }))) return false;
-    if (paneAOverride() !== previous) return false;
-    if (arrives("main", paneAView(), next) && !(await arrive("main", next!, () => paneAOverride() === previous))) return false;
-    if (!next || isPaneView(next)) {
-      setPaneAOverride(null);
-      if (next) void openInPaneA(next);
-    } else batch(() => { leaves("main"); setPaneAOverride(next); });
+    if (!(await gate("main", next))) return false;
+    leaves("main");
+    await changeLayout((current) => next ? Layouts.show(current, current.row[0]!, next) : Layouts.closePane(current, current.row[0]!), { record: !next });
     return true;
   };
   // An artifact taking the place of what a pane shows is made behind it (pending) and takes its place in the frame it is
@@ -2537,41 +2563,87 @@ function App() {
     focusFirst(content);
     if (!content?.contains(document.activeElement)) content?.focus({ preventScroll: true });
   });
-  const [keyboardPane, setKeyboardPane] = createSignal<PaneKey>("main");
+  const keyboardPane = createMemo<PaneKey>(() => keyOf(layout().focus) ?? "main");
+  const setKeyboardPane = (pane: PaneKey) => { const id = idOf(pane); if (id && id !== untrack(layout).focus) panes.replace((current) => Layouts.focus(current, id)); };
   const keyboardSlot = () => { const pane = keyboardPane(); return pane !== "main" && (shownSlots().includes(pane) || (dockSlot() === pane && inDock(pane))) && isPaneView(slotView(pane)) ? pane : null; };
   const sideHasKeyboard = () => keyboardSlot() !== null;
   const slotHasKeyboard = (slot: number) => keyboardSlot() === slot;
   const focusPane = (slot: number) => { setKeyboardPane(slot); focusSplit(slot); };
-  const openBeside = async (view: SplitView, focus = true, again = false): Promise<number | void> => {
-    const shown = shownSlots();
-    const showing = again ? undefined : shown.find((slot) => slotView(slot) === view);
-    if (showing !== undefined) return focusPane(showing);
-    const from = paneOf(document.activeElement);
-    const pane = from ?? keyboardPane();
-    const position = pane === "main" ? 0 : Math.max(0, shown.indexOf(pane) + 1);
-    if (isToolView(view) && toolInPaneA()) { setPaneAOverride(view); if (panelOpen() && dockTool() === view) closePanel(); return; }
-    if (!again && switchToTab(view)) return;
-    if (tabbable(view) && panesShown().includes(pane) && activeTabOf(pane) && (shown.length >= 2 || !viewsFit([...shown.map(slotView), view]))) {
-      keepNext.add(String(pane));
-      if (pane === "main") void openInPaneA(view); else await setSlotView(pane, view);
-      if (focus) focusAnyPane(pane);
-      return;
+  /** The modifiers of the click or key being handled. Called only as a handler's first, synchronous step: after an
+   *  await the event is gone. */
+  const verbNow = (): Layouts.Verb => {
+    const event = window.event;
+    if (isMobileLayout() || !(event instanceof MouseEvent || event instanceof KeyboardEvent)) return {};
+    return event.altKey ? { beside: true } : event.ctrlKey || event.metaKey ? { tab: true } : {};
+  };
+  const heldTab = (view: SplitView) => view.startsWith("chat:") && Boolean(drafts.draftFor(view.slice("chat:".length)));
+  /** Opening, from anywhere: plain replaces what the focused pane shows (its tabs with it, offering Undo), `tab` adds a
+   *  chat or terminal as a tab of the nearest session pane, `beside` opens a pane beside and leaves the keyboard. A
+   *  view open already is gone to. `inPaneA` draws pane A's route when the caller has more than its view to go on. */
+  const openView = async (view: SplitView, verb: Layouts.Verb, inPaneA?: () => unknown) => {
+    if (isMobileLayout()) { verb = {}; setKeyboardPane("main"); }
+    const before = layout();
+    const focused = before.panes[before.focus]!;
+    const focusedPane = keyOf(before.focus) ?? "main";
+    asked(focusedPane, view);
+    const after = Layouts.open(before, view, verb, heldTab);
+    const at = Layouts.findView(before, view);
+    if (!at) {
+      // The pane giving up what it shows: the focused one replaced, or a full row's neighbour.
+      const gone = Layouts.findView(after, Layouts.shownView(focused)) ? Object.keys(before.panes).find((id) => !after.panes[id]) : before.focus;
+      const pane = gone ? keyOf(gone) : null;
+      if (pane !== null && !(await gate(pane, gone === before.focus ? view : null))) return;
     }
-    let slot = isToolView(view) ? toolSlot() : null;
-    if (slot === null && (shown.length >= 2 || !viewsFit([...shown.map(slotView), view]))) slot = shown[position] ?? shown[position - 1] ?? shown[shown.length - 1] ?? null;
-    const displaced = slot === null ? null : slotView(slot);
-    if (slot === null) slot = freeSlot();
-    if (slot === null) return;
-    if (!(await setSlotView(slot, view, false, slotOrder().includes(slot) ? undefined : position))) return;
-    if (panelOpen() && dockTool() === view) closePanel();
-    if (from !== null && from !== "main" && displaced !== view && isPanelTab(displaced)) await openWorkspaceView(displaced);
-    if (focus) focusPane(slot);
-    return slot;
+    await changeLayout((current) => Layouts.open(current, view, verb, heldTab), { record: !at, inPaneA });
+    const now = layout();
+    if (!at && !verb.beside && now.focus === before.focus && Layouts.kindOf(focused) === "session" && focused.views.length > 1 && !now.panes[before.focus]?.views.includes(Layouts.shownView(focused))) {
+      toast(`Closed ${focused.views.length} tabs`, { action: { label: "Undo", onClick: () => void stepPanes(-1) } });
+    }
+    if (verb.beside && !at) return;
+    const target = keyOf(now.focus);
+    if (target === null) return;
+    if (target !== "main" && now.dock === now.focus) return showDocked(target);
+    focusAnyPane(target);
+    if (target !== "main" && !at) void keepKeyboard(target, view);
+  };
+  /** The document arriving can take the focused element with it; the pane keeps the keyboard, unless the person has
+   *  since gone elsewhere. */
+  const keepKeyboard = async (slot: number, view: SplitView) => {
+    const id = view.startsWith("chat:") ? view.slice("chat:".length) : null;
+    let moved = false;
+    const note = () => { moved = true; };
+    window.addEventListener("pointerdown", note, true);
+    window.addEventListener("keydown", note, true);
+    const session = paneSlot(slot).session.chat;
+    const drafting = view === "page:dashboard" || view.startsWith("page:project:");
+    await waitFor(() => id ? session.loadedId() === id && session.presentation().kind === "ready" && chatDrawn(slot)
+      : !drafting || Boolean(paneSlot(slot).draft && session.loadedId() === paneSlot(slot).draft!.id), 3000);
+    window.removeEventListener("pointerdown", note, true);
+    window.removeEventListener("keydown", note, true);
+    if (!moved && shownSlots().includes(slot) && !paneElement(slot)?.contains(document.activeElement)) focusPane(slot);
+  };
+  /** Pane undo and redo step whole layouts, through the same gates as any change. */
+  const stepPanes = async (step: -1 | 1) => {
+    const before = paneAView();
+    if (step < 0 ? !panes.canUndo() : !panes.canRedo()) return;
+    if (step < 0) panes.undo(); else panes.redo();
+    await followPaneA(before);
+    focusAnyPane(keyboardPane());
+  };
+  /** Beside, for the tools and the places that always open beside; a tool takes the place of a tool already in a pane. */
+  const openBeside = async (view: SplitView, focus = true): Promise<PaneKey | undefined> => {
+    const tool = isToolView(view) ? (toolInPaneA() ? "main" : toolSlot()) : null;
+    if (tool !== null) await setPaneView(tool, view); else await openView(view, { beside: true });
+    if (isToolView(view) && panelOpen() && dockTool() === view) closePanel();
+    const at = Layouts.findView(layout(), view);
+    const pane = at ? keyOf(at.id) ?? undefined : undefined;
+    if (focus && pane !== undefined) focusAnyPane(pane);
+    return pane;
   };
   const moveToDock = async (view: SplitView) => {
-    const slot = slotOrder().find((candidate) => slotView(candidate) === view);
-    if (paneAOverride() === view) setPaneAOverride(null);
-    else if (slot !== undefined && !(await setSlotView(slot, null, true))) return;
+    const at = Layouts.findView(layout(), view);
+    const pane = at ? keyOf(at.id) : null;
+    if (pane !== null && !(pane === "main" ? await setPaneView("main", null) : await setSlotView(pane, null, true))) return;
     await openWorkspaceView(view === "file" ? "files" : isPanelTab(view) ? view : "terminal", view.startsWith("shell:") ? view.slice("shell:".length) : undefined);
     focusWorkspacePanel();
   };
@@ -2604,8 +2676,8 @@ function App() {
       for (const animation of fade) animation.cancel();
     }));
   };
-  const closeSplit = async (focus = true) => toolInPaneA() ? void setPaneAOverride(null) : (await closeSlot(toolSlot(), focus));
-  const chooseRailTool = async (tool: WorkspaceView) => {
+  const closeSplit = async (focus = true) => toolInPaneA() ? void await setPaneView("main", null) : (await closeSlot(toolSlot(), focus));
+  const chooseRailTool = async (tool: WorkspaceView, beside: boolean) => {
     // Picked by hand: what Ctrl+J would give back is no longer what the dock showed.
     dockBeforeJbot = null;
     const jbotPane = tool === "jbot" ? shownSlots().find((slot) => slotView(slot) === "page:jbot") : undefined;
@@ -2613,8 +2685,8 @@ function App() {
     if (splitToolShown() === tool && toolInPaneA()) focusFirst(paneAToolHost()?.querySelector<HTMLElement>(".ui-tool-content"));
     else if (splitToolShown() === tool) focusSplit(toolSlot());
     else if (panelOpen() && dockSlot() === null && dockTool() === tool) closePanel();
-    else if (dockSlot() !== null && !(tool === "terminal" && altActivation())) { setDockSlot(null); await openWorkspaceView(tool); }
-    else if (tool === "terminal" && altActivation() && canOpenFilePanes()) void openTerminalTool(true);
+    else if (dockSlot() !== null && !(tool === "terminal" && beside)) { setDockSlot(null); await openWorkspaceView(tool); }
+    else if (tool === "terminal" && beside && canOpenFilePanes()) void openTerminalTool(true);
     else await openWorkspaceView(tool);
   };
   const [filePane, setFilePane] = createSignal<PaneKey | null>(null);
@@ -2627,23 +2699,15 @@ function App() {
   createEffect(() => { const pane = keyboardPane(); if (parseFileView(viewOf(pane))) setFilePane(pane); });
   const focusFileEntry = (pane: PaneKey, index: number) => setFileFocus((current) => ({ ...current, [String(pane)]: index }));
   const canOpenFilePanes = () => dockAvailable() && !isMobileLayout() && splitFits(1);
-  const openTerminalDocument = async (id: string, beside: boolean) => {
-    const view: SplitView = `term:${id}`;
-    const showing = panesShown().find((pane) => viewOf(pane) === view);
-    if (showing !== undefined) return focusAnyPane(showing);
-    const pane = beside ? undefined : panesShown().find((candidate) => viewOf(candidate)?.startsWith("term:"));
-    if (pane !== undefined) { if ((await setPaneView(pane, view))) focusAnyPane(pane); return; }
-    await openBeside(view, true);
-  };
+  const openTerminalDocument = (id: string, verb: Layouts.Verb) => openView(`term:${id}`, verb);
   const openTerminalTool = async (beside: boolean) => {
     const showing = panesShown().find((pane) => viewOf(pane)?.startsWith("term:"));
     if (!beside && showing !== undefined) {
       focusAnyPane(showing);
       return void document.querySelector<HTMLElement>(`${paneSelector(showing)} .pane-terminal .xterm-helper-textarea`)?.focus({ preventScroll: true });
     }
-    if (shownSlots().length >= 2 || !viewsFit([...shownSlots().map(slotView), "term:"])) return void toast.info("There is no room for another pane.");
     const id = await pickShell();
-    if (id) await openBeside(`term:${id}`, true);
+    if (id) await openView(`term:${id}`, beside ? { beside: true } : {});
   };
   const pickShell = async (): Promise<string | null> => {
     const computer = routeKind() === "computer";
@@ -2764,7 +2828,7 @@ function App() {
       : draggedPane !== null ? { text: `Swap with ${named(viewOf(pane))}`, icon: "swap" }
       : draggedGroup ? { text: "Move these tabs here", icon: "tab" }
       : panesShown().some((other) => viewOf(other) === draggedView) ? { text: "Already open: go to it", icon: "here" }
-      : tabbable(draggedView) && activeTabOf(pane) ? { text: "Add as a tab here", icon: "tab" }
+      : Layouts.sessionView(draggedView as SplitView) && tabsOf(pane) ? { text: "Add as a tab here", icon: "tab" }
       : parseFileView(viewOf(pane))?.length === 0 ? { text: "Open in this pane", icon: "here" }
       : { text: `Open here in place of ${named(viewOf(pane))}`, icon: "here" };
     setDragHint({ x: event.clientX, y: event.clientY, ...hint });
@@ -2798,36 +2862,17 @@ function App() {
     const panes = panesShown();
     return zone === (panes.indexOf(from) < panes.indexOf(pane) ? "left" : "right");
   };
-  const moveTabGroup = async (group: { pane: PaneKey; ids: string[] }, target: { pane: PaneKey; zone: "left" | "middle" | "right" }, recent: string) => {
-    const source = tabsOf(group.pane);
-    if (!source) return;
-    const remaining = source.ids.filter((id) => !group.ids.includes(id));
-    let pane: PaneKey = target.pane;
-    // Moving: the new pane briefly shows the chat its source still shows.
-    swappingPanes = true;
-    try {
-      if (target.zone !== "middle") {
-        const free = freeSlot() ?? undefined;
-        if (free === undefined) return;
-        const index = panesShown().indexOf(target.pane);
-        pane = free;
-        if (!(await setSlotView(free, `chat:${recent}`, false, target.zone === "right" ? index : Math.max(0, index - 1)))) return;
-      }
-      const held = pane === target.pane ? tabsOf(pane)?.ids.filter((id) => !group.ids.includes(id)) ?? [] : [];
-      const ids = [...held, ...group.ids].slice(-TAB_CAP);
-      setPaneTabs((current) => ({
-        ...current,
-        [String(group.pane)]: { ids: remaining, used: source.used.filter((id) => remaining.includes(id)) },
-        [String(pane)]: { ids, used: [recent, ...ids.filter((id) => id !== recent)] },
-      }));
-      if (remaining.length && group.ids.includes(activeTabOf(group.pane) ?? "")) await switchTab(group.pane, source.used.find((id) => remaining.includes(id)) ?? remaining[0]!);
-      if (pane === target.pane) await switchTab(pane, recent);
-    } finally {
-      swappingPanes = false;
-    }
-    if (!remaining.length) await closePane(group.pane);
-    reconcileTabs();
-    focusAnyPane(pane);
+  /** A tab group dragged out of its pane: into a session pane's tabs (the middle), or a new pane on an edge. */
+  const moveTabGroup = async (group: { pane: PaneKey; ids: string[] }, target: { pane: PaneKey; zone: "left" | "middle" | "right" }, recent: SplitView) => {
+    const from = idOf(group.pane), to = idOf(target.pane);
+    if (!from || !to || (target.zone === "middle" && !tabsOf(target.pane))) return;
+    const at = layout().row.indexOf(to);
+    await changeLayout((current) => Layouts.moveViews(current, from, group.ids as SplitView[], target.zone === "middle" ? to : target.zone === "right" ? at + 1 : at));
+    const placed = Layouts.findView(layout(), recent);
+    if (!placed) return;
+    await changeLayout((current) => Layouts.switchTab(current, placed.id, placed.index), { record: false });
+    const pane = keyOf(placed.id);
+    if (pane !== null) focusAnyPane(pane);
   };
   const onDocDrop = async (event: DragEvent) => {
     const target = docDrop();
@@ -2861,7 +2906,7 @@ function App() {
     }
     const placed = { ...target, zone: target.zone };
     if (fromPane !== null) return void await movePaneDocument(fromPane, placed);
-    if (group) return void await moveTabGroup(group, placed, view.slice("chat:".length));
+    if (group) return void await moveTabGroup(group, placed, view as SplitView);
     if (fileTab) {
       await dropDocument(placed, view);
       return await leaveSide(fileTab.pane, fileTab.side, fileTab.key);
@@ -2877,26 +2922,22 @@ function App() {
       if (target.pane === docked) return focusPane(docked);
       return void await movePaneDocument(docked, target);
     }
-    const showing = panesShown().find((pane) => viewOf(pane) === next);
-    if (showing !== undefined) return focusAnyPane(showing);
+    if (Layouts.findView(layout(), next)) return void await openView(next, {});
     if (isToolView(next) && panelOpen() && dockTool() === next) closePanel();
     if (target.zone === "middle") {
       const held = parseFileView(viewOf(target.pane));
       const adding = parseFileView(next);
-      if (held?.length === 1 && adding && !sameFileEntry(held[0]!, adding[0]!)) await setPaneView(target.pane, formatFileView([held[0]!, adding[0]!]));
-      else {
-        if (tabbable(next) && activeTabOf(target.pane)) keepNext.add(String(target.pane));
-        await setPaneView(target.pane, next);
-      }
-      return focusAnyPane(target.pane);
+      if (held?.length === 1 && adding && !sameFileEntry(held[0]!, adding[0]!)) { await setPaneView(target.pane, formatFileView([held[0]!, adding[0]!])); return focusAnyPane(target.pane); }
+      setKeyboardPane(target.pane);
+      return void await openView(next, Layouts.sessionView(next) && tabsOf(target.pane) ? { tab: true } : {});
     }
-    const free = freeSlot() ?? undefined;
-    if (free === undefined) return;
-    const index = panesShown().indexOf(target.pane);
-    if (target.zone === "right") { if ((await setSlotView(free, next, false, index))) focusPane(free); return; }
-    if (index > 0) { if ((await setSlotView(free, next, false, index - 1))) focusPane(free); return; }
-    if ((await setSlotView(free, next, false, 0))) await swapPanes("main", false, undefined, true, "main");
-    focusAnyPane("main");
+    const id = idOf(target.pane);
+    if (!id) return;
+    const at = layout().row.indexOf(id);
+    await changeLayout((current) => Layouts.place(current, next, target.zone === "right" ? at + 1 : at));
+    const placed = Layouts.findView(layout(), next);
+    const pane = placed ? keyOf(placed.id) : null;
+    if (pane !== null) focusAnyPane(pane);
   };
   document.addEventListener("dragstart", onDocDragStart);
   document.addEventListener("dragover", onDocDragOver);
@@ -2975,7 +3016,7 @@ function App() {
     onChange={(next) => { if (next !== shown) void (next === "thread" ? showThread(pane, paper) : setPaneView(pane, `artifact:${paper}`)); }} />;
   /** The switch on a chat's header, where the chat is a paper's mated thread. */
   const threadModes = (pane: PaneKey) => { const paper = matedPaper(viewOf(pane)); return paper ? paperModes(pane, paper, "thread") : undefined; };
-  const openArtifactFromEvent = (event: Event) => { const { id, beside } = (event as CustomEvent<{ id: string; beside?: boolean }>).detail; void openArtifact(id, beside); };
+  const openArtifactFromEvent = (event: Event) => { const { id, beside } = (event as CustomEvent<{ id: string; beside?: boolean }>).detail; void openArtifact(id, beside ? { beside } : {}); };
   window.addEventListener("conduit:open-artifact", openArtifactFromEvent);
   onCleanup(() => window.removeEventListener("conduit:open-artifact", openArtifactFromEvent));
   // `artifact:new[:<project>]` is the creator, so it is a tab with a name that survives a reload; ids are hex, so never "new".
@@ -2985,7 +3026,7 @@ function App() {
       onBack={() => void setPaneView(pane, "home")} onMade={(made) => void setPaneView(pane, `artifact:${made.id}`).then(() => focusAnyPane(pane))} />
   </SheetFill> : <ArtifactPane id={id} pending={arriving()[pane] === id} said={said()[pane] === id} moving={paneMotion()?.slot === pane} onDrawn={() => drawnArtifacts.add(`${pane}:${id}`)} onThread={() => void showThread(pane, id)} shortcuts={shortcutManager} onAbout={(found, label) => nameArtifact(`artifact:${id}`, found.name, label)}
     chats={(project) => (catalogue.projects().find((item) => item.id === project)?.sessions ?? []).map((chat) => ({ id: chat.id, title: chat.title || "Untitled chat" }))}
-    header={(extra) => <PaneHeader modes={paperModes(pane, id, "paper")} actions={<>{extra}{paneTabActions(pane)}</>}><Show when={documentTab(pane, arriving()[pane] === id ? viewName(`artifact:${id}`) : undefined)} fallback={<HeaderCrumb title={viewName(`artifact:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />);
+    header={(extra) => <PaneHeader modes={paperModes(pane, id, "paper")} actions={<>{extra}{paneTabActions(pane)}</>}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`artifact:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />);
   const renderBrowserDocument = (pane: PaneKey, id: string) => <SheetFill class="pane-browser">
     <BrowserPane id={id} onTitle={(title) => setBrowserTitles((current) => ({ ...current, [`browser:${id}`]: title }))}
       header={<PaneHeader actions={paneTabActions(pane)}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`browser:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />
@@ -3045,14 +3086,14 @@ function App() {
     requestAnimationFrame(land);
   }
   const [fileReveal, setFileReveal] = createSignal<{ entry: FileEntry; request: ReviewNavigationRequest } | null>(null);
-  const openFileDocument = async (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest; /** Open it as the artifact kind it may be when asked (artifact-kinds `opens`). */ adopt?: boolean }) => {
-    const keepTab = tabActivation();
+  const openFileDocument = async (entry: FileEntry, options: { beside?: boolean; tab?: boolean; edit: boolean; reveal?: ReviewNavigationRequest; /** Open it as the artifact kind it may be when asked (artifact-kinds `opens`). */ adopt?: boolean }) => {
+    const keepTab = options.tab;
     // A paper or a site is an artifact: its file opens as the artifact, never in the file viewer.
     if (options.adopt || entry.path.endsWith(".paper") || entry.path.endsWith(".site.html")) return void await import("./document/artifacts").then(({ artifactAt }) => artifactAt(entry.projectId, entry.path, options.adopt)).then(
-      ({ id }) => openArtifact(id, options.beside),
+      ({ id }) => openArtifact(id, { beside: options.beside }),
       (error) => toast.error(error instanceof Error ? error.message : String(error)));
     // A file that is an artifact only once asked (a Markdown file) opens as one if it already is; otherwise in the file viewer.
-    if (!options.edit && !options.reveal && opensAs(entry.path)) { const made = await import("./document/artifacts").then(({ artifactFor }) => artifactFor(entry.projectId, entry.path)); if (made) return void openArtifact(made.id, options.beside); }
+    if (!options.edit && !options.reveal && opensAs(entry.path)) { const made = await import("./document/artifacts").then(({ artifactFor }) => artifactFor(entry.projectId, entry.path)); if (made) return void openArtifact(made.id, { beside: options.beside }); }
     // Every open sets it, so one without edit retires an earlier edit's that never loaded.
     pendingFileEdit = options.edit ? entry : null;
     setFileReveal(options.reveal ? { entry, request: options.reveal } : null);
@@ -3079,7 +3120,7 @@ function App() {
     const pane = options.beside ? null : shownFilePane();
     if (pane === null) {
       const view = formatFileView([entry]);
-      await openBeside(view, false);
+      await openView(view, { beside: true });
       const placed = shownSlots().find((slot) => slotView(slot) === view);
       if (placed !== undefined) focusColumn(placed, 0);
       return;
@@ -3198,13 +3239,8 @@ function App() {
   document.addEventListener("pointerdown", notePanePress, true);
   window.addEventListener("blur", noteFrameFocus);
   onCleanup(() => { document.removeEventListener("focusin", noteKeyboardSide); document.removeEventListener("pointerdown", notePanePress, true); window.removeEventListener("blur", noteFrameFocus); });
-  const mainChatId = () => routeKind() === "chat" && !paneAOverride() ? catalogue.selectedId() : null;
-  const openChatBeside = async (target: ChatSummary, project: Project) => {
-    if (isMobileLayout()) return void openChat(target, project);
-    if (target.id === mainChatId()) return;
-    markChatRead(catalogue, target);
-    await openBeside(`chat:${target.id}`, false);
-  };
+  const mainChatId = () => routeKind() === "chat" && !paneADocument() ? catalogue.selectedId() : null;
+  const openChatBeside = (target: ChatSummary, project: Project) => openChatHere(target, project, { beside: true });
   const openSubagentChat = async (chatId: string) => {
     try {
       const summary = hiddenChats().get(chatId)?.chat || await api<ChatSummary>(`/v0/chats/${encodeURIComponent(chatId)}`);
@@ -3234,77 +3270,23 @@ function App() {
     const parent = parentId ? catalogue.projects().flatMap((project) => project.sessions.map((item) => ({ chat: item, project }))).find((item) => item.chat.id === parentId) || hiddenChats().get(parentId) : null;
     return { title: parent?.chat.title || "another chat", open: parent ? () => void openChatHere(parent.chat, parent.project) : undefined };
   };
-  // Alt on the click or key that opened a chat, from a page that has no way
-  // to say so itself.
-  const altActivation = () => { const event = window.event; return (event instanceof MouseEvent || event instanceof KeyboardEvent) && event.altKey; };
-  const tabActivation = () => { const event = window.event; return !isMobileLayout() && (event instanceof MouseEvent || event instanceof KeyboardEvent) && (event.ctrlKey || event.metaKey); };
-  const openChatAsTab = async (target: ChatSummary, project: Project) => {
-    const view: SplitView = `chat:${target.id}`;
-    if (target.id === mainChatId() || focusPaneShowing(view) || switchToTab(view)) return true;
-    const pane = keyboardPaneSlot() ?? "main";
-    if (!activeTabOf(pane)) return false;
-    markChatRead(catalogue, target);
-    keepNext.add(String(pane));
-    if (pane === "main") void openChat(target, project); else await setSlotView(pane, view);
-    focusAnyPane(pane);
-    return true;
+  const openChatHere = async (target: ChatSummary, project: Project, verb: Layouts.Verb = {}) => {
+    if (keyboardPane() !== "main" || verb.beside || verb.tab) markChatRead(catalogue, target);
+    await openView(`chat:${target.id}`, verb, () => openChat(target, project));
   };
-  const focusPaneShowing = (view: SplitView) => {
-    if (keyboardPaneSlot() !== null && viewOf("main") === view) { asked("main", view); setKeyboardPane("main"); enterMainPane(); return true; }
-    const slot = shownSlots().find((candidate) => slotView(candidate) === view);
-    if (slot === undefined) return false;
-    asked(slot, view);
-    focusPane(slot);
-    return true;
-  };
-  const keyboardPaneSlot = () => { const pane = keyboardPane(); return pane !== "main" && shownSlots().includes(pane) ? pane : null; };
-  const openInFocusedPane = async (view: SplitView, inPaneA: () => unknown) => {
-    asked(keyboardPaneSlot() ?? "main", view);
-    if (focusPaneShowing(view) || switchToTab(view)) return;
-    const slot = keyboardPaneSlot();
-    if (tabActivation() && tabbable(view) && activeTabOf(slot ?? "main")) keepNext.add(String(slot ?? "main"));
-    // Pane A goes by its route, and the route changing clears what showed
-    // over it; only going to the route it already has needs clearing here.
-    if (slot === null) {
-      if (paneAOverride() && view === paneARouteView()) setPaneAOverride(null);
-      return void await inPaneA();
-    }
-    if (!(await setSlotView(slot, view))) return;
-    focusPane(slot);
-    // The document arriving can take the focused element with it; the pane
-    // keeps the keyboard, unless the person has since gone elsewhere.
-    const id = view.startsWith("chat:") ? view.slice("chat:".length) : null;
-    let moved = false;
-    const note = () => { moved = true; };
-    window.addEventListener("pointerdown", note, true);
-    window.addEventListener("keydown", note, true);
-    const session = paneSlot(slot).session.chat;
-    const drafts = view === "page:dashboard" || view.startsWith("page:project:");
-    await waitFor(() => id ? session.loadedId() === id && session.presentation().kind === "ready" && chatDrawn(slot)
-      : !drafts || Boolean(paneSlot(slot).draft && session.loadedId() === paneSlot(slot).draft!.id), 3000);
-    window.removeEventListener("pointerdown", note, true);
-    window.removeEventListener("keydown", note, true);
-    if (!moved && shownSlots().includes(slot) && !paneElement(slot)?.contains(document.activeElement)) focusPane(slot);
-  };
-  const openChatHere = async (target: ChatSummary, project: Project) => {
-    if (tabActivation() && (await openChatAsTab(target, project))) return;
-    if (keyboardPaneSlot() !== null && target.id === mainChatId()) { setKeyboardPane("main"); return enterMainPane(); }
-    if (keyboardPaneSlot() !== null) markChatRead(catalogue, target);
-    await openInFocusedPane(`chat:${target.id}`, () => openChat(target, project));
-  };
-  const openProjectHere = (project: Project) => openInFocusedPane(`page:project:${project.id}`, () => openProject(project));
-  const openDashboardHere = () => openInFocusedPane("page:dashboard", () => openDashboard());
-  const openComputerHere = () => openInFocusedPane("page:computer", () => openComputer());
-  const openArtifact = async (id: string, beside = false) => {
+  const openProjectHere = (project: Project, verb: Layouts.Verb = {}) => openView(`page:project:${project.id}`, verb, () => openProject(project));
+  const openDashboardHere = (verb: Layouts.Verb = {}) => openView("page:dashboard", verb, () => openDashboard());
+  const openComputerHere = (verb: Layouts.Verb = {}) => openView("page:computer", verb, () => openComputer());
+  const openArtifact = async (id: string, verb: Layouts.Verb = {}) => {
     const view = `artifact:${id}` as const;
     const threaded = (["main", ...slotOrder()] as PaneKey[]).find((pane) => matedPaper(viewOf(pane)) === id);
     if (threaded !== undefined) { await setPaneView(threaded, view); return focusAnyPane(threaded); }
-    if ((beside || altActivation()) && !isMobileLayout()) await openBeside(view, false); else await openInFocusedPane(view, () => setPaneView("main", view));
+    await openView(view, verb);
   };
-  const openHarnessHere = (id: string) => openInFocusedPane(`page:harness:${encodeURIComponent(id)}`, () => openComputerHarness(id));
-  const openAgentHere = () => openInFocusedPane("page:agent", () => openAgent());
-  const openJbotHere = () => openInFocusedPane("page:jbot", () => openJbot());
-  const openEnvironmentHere = (id: string) => openInFocusedPane(`page:environment:${encodeURIComponent(id)}`, () => openEnvironment(id));
+  const openHarnessHere = (id: string, verb: Layouts.Verb = {}) => openView(`page:harness:${encodeURIComponent(id)}`, verb, () => openComputerHarness(id));
+  const openAgentHere = (verb: Layouts.Verb = {}) => openView("page:agent", verb, () => openAgent());
+  const openJbotHere = (verb: Layouts.Verb = {}) => openView("page:jbot", verb, () => openJbot());
+  const openEnvironmentHere = (id: string, verb: Layouts.Verb = {}) => openView(`page:environment:${encodeURIComponent(id)}`, verb, () => openEnvironment(id));
   const warmJbot = () => {
     prefetchJbotMessages();
     const home = agentView()?.home?.chatId;
@@ -3317,9 +3299,8 @@ function App() {
     if (!isMobileLayout() || !mobileSidebarOpen()) { setMobileSidebarOpen(false); return; }
     handDrawerOnto({ opening, open: mobileSidebarOpen, shut: () => setMobileSidebarOpen(false), drawn: () => shown() && pageDrawn(), at: () => `${routeKind()}:${mainChatId()}` });
   };
-  const openChatFromPage = async (target: ChatSummary, project: Project) => {
-    if (altActivation()) await openChatBeside(target, project); else await openChatHere(target, project);
-  };
+  /** For the pages' chat lists, which hand over the chat alone; called from their click. */
+  const openChatFromPage = (target: ChatSummary, project: Project) => openChatHere(target, project, verbNow());
   for (const pane of paneSlots) {
     const slot = pane.index;
     const side = pane.session;
@@ -3342,8 +3323,8 @@ function App() {
         queueMicrotask(async () => {
           if (slotChatId(slot) !== id || !catalogue.loaded() || hiddenChats().has(id)
             || catalogue.projects().some((project) => project.sessions.some((item) => item.id === id))) return;
-          if ((tabsOf(slot)?.ids.length ?? 0) > 1) void closeTab(slot, tabKey(`chat:${id}`));
-          else await setSlotView(slot, null);
+          const at = Layouts.findView(layout(), `chat:${id}`);
+          if (at) panes.replace((current) => Layouts.closeTab(current, at.id, at.index));
         });
         return;
       }
@@ -3388,8 +3369,6 @@ function App() {
     await setSlotView(pane.index, `chat:${id}`);
     await side.chat.send();
   };
-  const openPageBeside = async (page: "dashboard" | "agent" | "jbot" | "computer" | `project:${string}` | `harness:${string}` | `environment:${string}`) => { if (!isMobileLayout()) await openBeside(`page:${page}`, false); };
-  createEffect(() => { const id = mainChatId(); if (swappingPanes) return; for (const slot of shownSlots()) if (id && slotChatId(slot) === id) setSlotView(slot, null); });
   const focusedSlot = () => { const slot = keyboardSlot(); return slot !== null && paneSlot(slot).session.selectedId() ? paneSlot(slot) : null; };
   const focusedSession = (): ChatSession => focusedSlot()?.session ?? session;
   const focusedChat = () => focusedSession().chat;
@@ -3400,7 +3379,7 @@ function App() {
   type PlaceSelection = { project: Project } | NonNullable<ReturnType<ReturnType<typeof paneSlot>["session"]["selected"]>>;
   const placeOf = (pane: PaneKey): PlaceSelection | "route" | null => {
     if (!panesShown().includes(pane)) return null;
-    if (pane === "main" && !paneAOverride()) return "route";
+    if (pane === "main" && !paneADocument()) return "route";
     const view = viewOf(pane);
     const byId = (id: string | undefined) => catalogue.projects().find((item) => item.id === id);
     const files = parseFileView(view);
@@ -3421,7 +3400,22 @@ function App() {
   const dockProject = () => dockSelection()?.project ?? dockHome();
   const dockScope = () => dockSelection() ? `project:${dockSelection()!.project.id}` : workspacePanelScope();
   let swappingPanes = false;
-  function paneAView(): SplitView | null { return paneAOverride() ?? paneARouteView(); }
+  function paneAView(): SplitView { return paneAShown(); }
+  /** What pane A draws itself rather than through the route. */
+  const paneADocument = () => { const view = paneAView(); return isPaneView(view) ? null : view; };
+  /** The route's view once it has settled; jbot's home thread is its page's, never a chat of its own (leaving the page
+   *  for a chat, the route turns to the chat a moment before the selection does). */
+  const settledRoute = createMemo(() => {
+    const settling = (routeKind() === "project" && !selectedProject()) || (routeKind() === "chat" && !catalogue.selectedId() && !catalogue.loaded());
+    const view = routeBootstrap() === "ready" && !settling ? paneARouteView() : null;
+    return view && view === `chat:${agentView()?.home?.chatId}` ? null : view;
+  });
+  /** Pane A showing the route's view, which stands nowhere else: a view is open once. */
+  const fromRoute = (current: Layouts.Layout, route: SplitView) => {
+    const at = Layouts.findView(current, route);
+    const cleared = at && at.id !== current.row[0] ? Layouts.closeTab(current, at.id, at.index) : current;
+    return Layouts.show(cleared, cleared.row[0]!, route);
+  };
   function paneARouteView(): SplitView | null {
     if (routeKind() === "chat" && catalogue.selectedId()) return `chat:${catalogue.selectedId()}`;
     if (routeKind() === "dashboard") return "page:dashboard";
@@ -3544,28 +3538,26 @@ function App() {
     try {
       if (leftPane === "main") {
         const slot = rightPane as number;
-        const aView = paneAView()!;
-        const bView = slotView(slot)!;
+        const aView = paneAView();
         const unsaved = [...handlesOf("main"), ...handlesOf(slot)].some((handle) => handle?.hasUnsavedChanges());
         if (unsaved && !(await confirmDialog("Discard unsaved changes to swap these panes?"))) return;
         movingDocuments = true;
         swapTabs("main", slot);
-        const placeRight = async () => {
-          await setSlotView(slot, aView);
+        const a = layout().row[0]!, b = idOf(slot)!;
+        // One change trades both: the slot (kept by the pane moving out of A) loads A's view, and A's route follows.
+        const trade = async () => {
+          await changeLayout((current) => Layouts.swap(current, a, b));
           const id = aView.startsWith("chat:") ? aView.slice("chat:".length) : null;
           await waitFor(() => !id || (paneSlot(slot).session.chat.loadedId() === id && chatDrawn(slot)), 1500);
         };
-        const placeLeft = async () => { if (isPaneView(bView)) { setPaneAOverride(null); await openInPaneA(bView); } else await setPaneView("main", bView); };
-        if (slide) await animateSwap(left, right, false, placeRight, async () => { await placeLeft(); settleFocus(); });
-        else if (!fade) await Promise.all([placeRight(), placeLeft()]);
-        else await crossfadeSwap(left, right, async () => { await Promise.all([placeRight(), placeLeft()]); settleFocus(); });
+        if (slide) await animateSwap(left, right, false, trade, settleFocus);
+        else if (!fade) await trade();
+        else await crossfadeSwap(left, right, async () => { await trade(); settleFocus(); });
       } else {
-        const a = leftPane as number;
-        const b = rightPane as number;
+        const a = idOf(leftPane)!, b = idOf(rightPane)!;
         const reorder = () => {
           const restore = holdScroll([left, right]);
-          setSlotOrder((order) => order.map((slot) => slot === a ? b : slot === b ? a : slot));
-          persistSlots();
+          panes.apply((current) => Layouts.swap(current, a, b));
           restore();
         };
         if (slide) await animateSwap(left, right, true, reorder, settleFocus);
@@ -3575,7 +3567,6 @@ function App() {
     } finally {
       swappingPanes = false;
       movingDocuments = false;
-      reconcileTabs();
       if (fade || slide) settleFocus();
     }
   };
@@ -3605,103 +3596,25 @@ function App() {
     if (view.startsWith("artifact:")) { askArtifactName(view); return artifactNames()[view]?.name || "Artifact"; }
     return isPanelTab(view) ? WORKSPACE_TOOL_LABELS[view] : "Pane";
   };
-  type PaneTabs = { ids: string[]; used: string[] };
-  const TAB_CAP = 5;
-  const launchTabs = () => {
-    if (urlNamesPanes || !atStart) return tabsFromParams(launchUrl.searchParams);
-    const params = new URLSearchParams();
-    for (const view of initialViews) if (view) params.append("pane", view);
-    for (const value of (readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-tabs") || "").split("|").filter(Boolean)) params.append("tabs", value);
-    return tabsFromParams(params);
+  /** A session pane's tabs are its views; a document pane (a paper's thread among them) has none. */
+  const tabsOf = (pane: PaneKey) => { const data = paneData(pane); return data && data.views.every((view) => Layouts.sessionView(view) && !matedPaper(view)) ? data.views : null; };
+  const chatOfTab = (view: SplitView) => view.startsWith("chat:") ? view.slice("chat:".length) : null;
+  const tabPlace = (view: SplitView) => {
+    if (view.startsWith("page:project:")) return view.slice("page:project:".length);
+    const id = chatOfTab(view);
+    if (!id) return `doc:${view.split(":")[0]}`;
+    return hiddenChats().get(id)?.chat.status === "subagent" ? `sub:${hiddenChats().get(id)!.chat.backend?.parentChatId ?? ""}`
+      : catalogue.projects().find((item) => item.sessions.some((chat) => chat.id === id))?.id ?? "chats";
   };
-  const [paneTabs, setPaneTabs] = createSignal<Record<string, PaneTabs>>(launchTabs());
-  const tabsOf = (pane: PaneKey) => paneTabs()[String(pane)] ?? null;
-  const tabbable = (view: string | null | undefined): view is SplitView => Boolean(view && (view === "home" || /^(chat|page|browser|mail|term|artifact):/.test(view)));
-  const tabKey = (view: SplitView) => view.startsWith("chat:") ? matedPaper(view) ? paperOf(view) : view.slice("chat:".length) : view;
-  const tabView = (key: string) => (key === "home" || key.includes(":") ? key : `chat:${key}`) as SplitView;
-  const tabPlace = (id: string) => id === "home" ? "doc:page" : id.startsWith("page:project:") ? id.slice("page:project:".length)
-    : id.includes(":") ? `doc:${id.split(":")[0]}`
-    : hiddenChats().get(id)?.chat.status === "subagent" ? `sub:${hiddenChats().get(id)!.chat.backend?.parentChatId ?? ""}`
-    : catalogue.projects().find((item) => item.sessions.some((chat) => chat.id === id))?.id ?? "chats";
-  const activeTabOf = (pane: PaneKey) => { const view = viewOf(pane); return tabbable(view) ? tabKey(view) : null; };
-  const keepNext = new Set<string>();
-  function tabsFromParams(params: URLSearchParams): Record<string, PaneTabs> {
-    const order = params.getAll("pane").filter(isSplitView).map((_, index) => index);
-    const found: Record<string, PaneTabs> = {};
-    for (const value of params.getAll("tabs")) {
-      const split = value.indexOf(":");
-      const position = value.slice(0, split);
-      const list = split < 0 ? "" : value.slice(split + 1);
-      const at = Number(position);
-      const key = at === 0 ? "main" : order[at - 1] === undefined ? null : String(order[at - 1]);
-      if (key === null || !list) continue;
-      const ids = list.split(",").filter(Boolean).slice(0, TAB_CAP);
-      found[key] = { ids, used: [...ids] };
-    }
-    return found;
-  }
-  const tabParams = () => {
-    const panes: PaneKey[] = ["main", ...slotOrder().filter((slot) => slotView(slot))];
-    return panes.flatMap((pane, position) => {
-      const tabs = tabsOf(pane);
-      return tabs && tabs.ids.length > 1 ? [`${position}:${tabs.ids.join(",")}`] : [];
-    });
-  };
-  const reconcileTabs = () => {
-    const next = { ...untrack(paneTabs) };
-    const panes: PaneKey[] = ["main", ...untrack(slotOrder).filter((slot) => untrack(() => slotView(slot)))];
-    for (const key of Object.keys(next)) if (!panes.some((pane) => String(pane) === key)) delete next[key];
-    for (const pane of panes) {
-      const view = untrack(() => viewOf(pane));
-      const key = String(pane);
-      if (pane === "main" && !view) continue;
-      if (!tabbable(view)) { delete next[key]; continue; }
-      const id = tabKey(view);
-      // jbot's home thread is the messages page's (page:jbot), never a chat tab of its own: leaving the page for a chat,
-      // the route turns to the chat a moment before the selection does, and that moment would take a tab's place.
-      if (id === untrack(() => agentView()?.home?.chatId)) continue;
-      const tabs = next[key] ?? { ids: [], used: [] };
-      if (tabs.ids.includes(id)) { if (tabs.used[0] !== id) next[key] = { ...tabs, used: [id, ...tabs.used.filter((item) => item !== id)] }; continue; }
-      let ids = [...tabs.ids];
-      let used = tabs.used.filter((item) => ids.includes(item));
-      const adding = keepNext.delete(key);
-      const replaced = adding ? undefined : used.find((item) => ids.includes(item));
-      if (replaced) {
-        ids = ids.filter((item) => item !== replaced);
-        used = used.filter((item) => item !== replaced);
-      }
-      const place = tabPlace(id);
-      const lastOf = (placeId: string) => ids.reduce((last, item, index) => tabPlace(item) === placeId ? index : last, -1);
-      const current = used.find((item) => ids.includes(item));
-      const at = current && tabPlace(current) === place ? ids.indexOf(current) + 1
-        : lastOf(place) >= 0 ? lastOf(place) + 1
-        : current ? lastOf(tabPlace(current)) + 1 : ids.length;
-      ids.splice(at, 0, id);
-      used = [id, ...used];
-      while (ids.length > TAB_CAP) {
-        const drop = [...used].reverse().find((item) => item !== id && !drafts.draftFor(item));
-        if (!drop) { toast.info("Every tab in this pane has an unsent draft; close one to open another."); break; }
-        ids = ids.filter((item) => item !== drop);
-        used = used.filter((item) => item !== drop);
-      }
-      next[key] = { ids, used };
-      for (const [other, list] of Object.entries(next)) {
-        if (other === key || id === "home" || !list.ids.includes(id)) continue;
-        next[other] = { ids: list.ids.filter((item) => item !== id), used: list.used.filter((item) => item !== id) };
-      }
-    }
-    setPaneTabs(next);
-    reconcileFileTabs();
-  };
-  createEffect(on(() => [paneAView(), slotOrder().map((slot) => `${slot}=${slotView(slot)}`).join()] as const, () => { if (!swappingPanes) reconcileTabs(); }));
-  createEffect(on(() => tabParams().join("|"), (value) => writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-tabs", value), { defer: true }));
+  createEffect(on(() => [paneAView(), slotOrder().map((slot) => `${slot}=${slotView(slot)}`).join()] as const, () => { if (!swappingPanes) reconcileFileTabs(); }));
+  const keyboardPaneSlot = () => { const pane = keyboardPane(); return pane !== "main" && shownSlots().includes(pane) ? pane : null; };
   const fileTabsToStep = () => {
     const pane: PaneKey = keyboardPaneSlot() ?? "main";
     const shown = parseFileView(viewOf(pane)) ?? [];
     const items = shown.flatMap((entry, side) => (fileTabsOf(pane, side)?.entries ?? [entry]).map((item) => ({ side, key: fileEntryKey(item) })));
     return !isMobileLayout() && items.length > 1 ? { pane, shown, items } : null;
   };
-  const tabsToStep = () => { const pane: PaneKey = keyboardPaneSlot() ?? "main"; const list = tabsOf(pane); return !isMobileLayout() && list && list.ids.length > 1 && list.ids.includes(activeTabOf(pane) ?? "") ? { pane, list } : null; };
+  const tabsToStep = () => { const pane: PaneKey = keyboardPaneSlot() ?? "main"; const list = tabsOf(pane); return !isMobileLayout() && list && list.length > 1 ? { pane, list } : null; };
   const stepTab = async (step: number) => {
     const files = fileTabsToStep();
     if (files) {
@@ -3712,52 +3625,28 @@ function App() {
     }
     const found = tabsToStep();
     if (!found) return;
-    const at = found.list.ids.indexOf(activeTabOf(found.pane)!);
-    void switchTab(found.pane, found.list.ids[(at + step + found.list.ids.length) % found.list.ids.length]!);
+    const at = paneData(found.pane)!.active;
+    void switchTab(found.pane, (at + step + found.list.length) % found.list.length);
   };
   const stepPane = (step: number) => { if (!cyclePaneFocus(step)) focusAnyPane("main"); };
 
-  const switchTab = async (pane: PaneKey, id: string) => {
-    setKeyboardPane(pane);
-    const view = tabView(id);
-    if (!view.startsWith("chat:")) await setPaneView(pane, view);
-    else if (pane === "main") await openInPaneA(view);
-    else await setSlotView(pane, view);
+  const switchTab = async (pane: PaneKey, index: number) => {
+    const id = idOf(pane);
+    if (!id || !(await gate(pane, paneData(pane)?.views[index] ?? null))) return;
+    await changeLayout((current) => Layouts.switchTab(current, id, index), { record: false });
     focusAnyPane(pane);
   };
-  const closeTab = async (pane: PaneKey, id: string) => {
-    const tabs = tabsOf(pane);
-    if (!tabs || tabs.ids.length < 2) return await closeDocument(pane);
-    if (activeTabOf(pane) === id) {
-      await switchTab(pane, tabs.used.find((item) => item !== id && tabs.ids.includes(item)) ?? tabs.ids.find((item) => item !== id)!);
-    }
-    setPaneTabs((current) => {
-      const list = current[String(pane)];
-      return list ? { ...current, [String(pane)]: { ids: list.ids.filter((item) => item !== id), used: list.used.filter((item) => item !== id) } } : current;
-    });
-  };
-  const switchToTab = (view: SplitView) => {
-    if (!tabbable(view)) return false;
-    const id = tabKey(view);
-    const pane = panesShown().find((candidate) => tabsOf(candidate)?.ids.includes(id) && activeTabOf(candidate) !== id);
-    if (pane === undefined) return false;
-    void switchTab(pane, id);
-    return true;
-  };
-  const swapKeys = <T,>(current: Record<string, T>, a: PaneKey, b: PaneKey) => {
-    const next = { ...current };
-    const first = current[String(a)];
-    const second = current[String(b)];
-    delete next[String(a)];
-    delete next[String(b)];
-    if (second) next[String(a)] = second;
-    if (first) next[String(b)] = first;
-    return next;
+  const closeTab = async (pane: PaneKey, index: number) => {
+    const id = idOf(pane);
+    const data = paneData(pane);
+    if (!id || !data) return;
+    if (data.views.length < 2) return await closeDocument(pane);
+    if (index === data.active && !(await gate(pane, data.views[index === 0 ? 1 : index - 1] ?? null))) return;
+    await changeLayout((current) => Layouts.closeTab(current, id, index));
   };
   const swapTabs = (a: PaneKey, b: PaneKey) => batch(() => {
-    setPaneTabs((current) => swapKeys(current, a, b));
     for (const side of [0, 1]) {
-      setFileTabs((current) => swapKeys(current, sideKey(a, side) as unknown as PaneKey, sideKey(b, side) as unknown as PaneKey));
+      setFileTabs((current) => swapRecordKeys(current, sideKey(a, side), sideKey(b, side)));
       const first = lastShownFiles.get(sideKey(a, side));
       const second = lastShownFiles.get(sideKey(b, side));
       lastShownFiles.delete(sideKey(a, side));
@@ -3768,9 +3657,8 @@ function App() {
   });
   const sideKey = (pane: PaneKey, side: number) => `${pane}#${side}`;
   const launchFileTabs = () => {
-    if (urlNamesPanes || !atStart) return fileTabsFromParams(launchUrl.searchParams);
+    if (!atStart) return fileTabsFromParams(launchUrl.searchParams);
     const params = new URLSearchParams();
-    for (const view of initialViews) if (view) params.append("pane", view);
     for (const value of (readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-file-tabs") || "").split("\n").filter(Boolean)) params.append("ftabs", value);
     return fileTabsFromParams(params);
   };
@@ -3901,13 +3789,16 @@ function App() {
   const moveSideToPane = async (pane: PaneKey, side: number) => {
     const shown = parseFileView(viewOf(pane)) ?? [];
     const entry = shown[side];
-    const free = freeSlot() ?? undefined;
-    if (!entry || free === undefined) return;
+    const id = idOf(pane);
+    if (!entry || !id || rowFull()) return;
     const tabs = fileTabsOf(pane, side);
     if (handlesOf(pane)[side]?.hasUnsavedChanges() && !(await confirmDialog("Discard unsaved changes and move this side?", { destructive: true, confirmLabel: "Discard", valid: () => formatFileView(shown) === viewOf(pane) }))) return;
     handlesOf(pane)[side]?.discardChanges();
     const view = formatFileView([entry]);
-    if (!(await setSlotView(free, view, false, panesShown().indexOf(pane)))) return;
+    await changeLayout((current) => Layouts.place(current, view, current.row.indexOf(id) + 1));
+    const placed = Layouts.findView(layout(), view);
+    const free = placed ? keyOf(placed.id) : null;
+    if (typeof free !== "number") return;
     if (tabs) setFileTabs((current) => ({ ...current, [sideKey(free, 0)]: tabs }));
     lastShownFiles.set(sideKey(free, 0), entry);
     await closeSide(pane, side);
@@ -4005,31 +3896,38 @@ function App() {
   };
   const placeLabelOf = (projectId: string) => { const project = catalogue.projects().find((item) => item.id === projectId); return !project || project.slug === "chat" ? "Chats" : project.name || project.slug; };
   const paneTabRow = (pane: PaneKey) => {
+    const views = () => tabsOf(pane) ?? [];
     const row = createTabStrip({
-      keys: () => { const list = tabsOf(pane); return list && list.ids.length && !isMobileLayout() ? list.ids : null; },
-      place: tabPlace,
-      placeLabel: (id) => { const place = tabPlace(id); return place === "doc:browser" ? "Browser" : place === "doc:mail" ? "Mail" : place === "doc:term" ? "Terminal" : place.startsWith("doc:") ? "Conduit" : place.startsWith("sub:") ? subagentParent(id).title : placeLabelOf(place); },
-      title: (id) => viewName(tabView(id)),
-      icon: (id) => hiddenChats().get(id)?.chat.status === "subagent" ? <Icons.Agent /> : undefined,
-      lit: () => activeTabOf(pane),
-      used: () => tabsOf(pane)?.used ?? [],
-      live: (id) => (!id.includes(":") && Boolean(runtime.getProcess(id))) || Boolean(termLive()[tabView(id)]),
-      select: (id) => void switchTab(pane, id),
-      close: (id) => void closeTab(pane, id),
+      keys: () => { const list = tabsOf(pane); return list && !isMobileLayout() ? list : null; },
+      place: (view) => tabPlace(view as SplitView),
+      placeLabel: (view) => { const place = tabPlace(view as SplitView); return place === "doc:term" ? "Terminal" : place.startsWith("doc:") ? "Conduit" : place.startsWith("sub:") ? subagentParent(chatOfTab(view as SplitView)).title : placeLabelOf(place); },
+      title: (view) => viewName(view as SplitView),
+      icon: (view) => hiddenChats().get(chatOfTab(view as SplitView) ?? "")?.chat.status === "subagent" ? <Icons.Agent /> : undefined,
+      lit: () => { const data = paneData(pane); return data ? Layouts.shownView(data) : null; },
+      used: () => { const data = paneData(pane); return data ? [Layouts.shownView(data), ...data.views] : []; },
+      live: (view) => Boolean(runtime.getProcess(chatOfTab(view as SplitView) ?? "")) || Boolean(termLive()[view]),
+      select: (view) => void switchTab(pane, views().indexOf(view as SplitView)),
+      close: (view) => void closeTab(pane, views().indexOf(view as SplitView)),
       add: () => void newTab(pane),
-      dragView: (id) => tabView(id),
-      groupDrag: (ids) => ({ "data-tab-group": ids.join(",") }),
+      dragView: (view) => view,
+      groupDrag: (keys) => ({ "data-tab-group": keys.join(",") }),
     });
     return { get tabs() { return row(); } };
   };
-  const documentTab = (pane: PaneKey, title?: string) => isMobileLayout() ? undefined
-    : <Show when={(tabsOf(pane)?.ids.length ?? 0) > 1} fallback={<PaneTabs><PaneTab lit live={termLive()[viewOf(pane) ?? ""]} title={title ?? viewName(viewOf(pane))} onClose={() => void closeDocument(pane)} />
-        <Show when={viewOf(pane) !== "home"}><IconButton kind="pane" label="New tab" onClick={() => void newTab(pane)}><Icons.Add /></IconButton></Show></PaneTabs>}>{paneTabRow(pane).tabs}</Show>;
+  // One strip per pane for the headers that take it, made once: rebuilt on each layout change it would lose its folding.
+  const strips = new Map<PaneKey, ReturnType<typeof paneTabRow>>();
+  const stripOf = (pane: PaneKey) => { let strip = strips.get(pane); if (!strip) createRoot(() => strips.set(pane, strip = paneTabRow(pane))); return strip!; };
+  /** The tab row a header takes: a session pane's; a document's header is its own. */
+  const documentTab = (pane: PaneKey) => tabsOf(pane) && !isMobileLayout() ? stripOf(pane).tabs : undefined;
+  /** The launcher, as a new tab of a session pane. */
   const newTab = async (pane: PaneKey) => {
-    if (isMobileLayout()) return;
-    if (tabsOf(pane)?.ids.includes("home")) return void switchTab(pane, "home");
-    keepNext.add(String(pane));
-    if (await setPaneView(pane, "home")) focusAnyPane(pane);
+    const id = idOf(pane);
+    if (isMobileLayout() || !id) return;
+    const at = paneData(pane)!.views.indexOf("home");
+    if (at >= 0) return void switchTab(pane, at);
+    panes.replace((current) => Layouts.focus(current, id));
+    await changeLayout((current) => Layouts.open(current, "home", { tab: true }, heldTab));
+    focusAnyPane(pane);
   };
   const closeDocument = async (pane: PaneKey) => {
     if (viewOf(pane) === "home") return await closePane(pane);
@@ -4080,18 +3978,16 @@ function App() {
   };
   const windowControls = (kind: "bar" | "rail") => desktopShell && <WindowControls kind={kind} maximized={windowMaximized()}
     onMinimize={() => void desktopShell!.window.minimize()} onMaximize={() => void desktopShell!.window.toggleMaximize()} onClose={() => void desktopShell!.window.close()} />;
-  const openBrowser = () => {
-    if (paneAOverride() === "browser:hub") return focusAnyPane("main");
-    void openBeside("browser:hub");
-  };
+  const openBrowser = () => void openBeside("browser:hub");
   const openMail = () => {
-    const at = shownSlots().find((slot) => slotView(slot)?.startsWith("mail:"));
-    if (paneAOverride()?.startsWith("mail:") || at !== undefined) return focusAnyPane(at ?? "main");
+    const at = layout().row.find((id) => Layouts.shownView(layout().panes[id]!).startsWith("mail:"));
+    const pane = at ? keyOf(at) : null;
+    if (pane !== null) return focusAnyPane(pane);
     void openBeside("mail:default");
   };
   const openEmptyPane = () => {
-    if (shownSlots().length >= 2 || !viewsFit([...shownSlots().map(slotView), "home"])) return void toast.info("There is no room for another pane.");
-    void openBeside("home", true, true);
+    if (rowFull() || !viewsFit([...shownSlots().map(slotView), "home"])) return void toast.info("There is no room for another pane.");
+    void openBeside("home");
   };
   const closePane = async (pane: PaneKey) => {
     if (pane !== "main") return await closeSlot(pane);
@@ -4105,47 +4001,28 @@ function App() {
       target.unshift(0);
       easePaneWeights(normalized(target), async () => {
         leaving.cancel();
-        const next = shownSlots()[0]!;
-        const view = slotView(next);
-        const beside = paneSlot(next).host();
-        if (!view || !beside) { await closePaneA(); setWeightOverride(null); setPaneMotion(null); return; }
-        swappingPanes = true;
-        swapTabs("main", next);
+        const beside = paneSlot(shownSlots()[0]!).host();
+        // Pane A takes the next pane's place at once, under a ghost of it that alone fades: two layers crossfading each
+        // at half opacity let the background through.
+        const ghost = beside ? ghostOf(beside) : null;
         try {
-          if (isPaneView(view)) { setPaneAOverride(null); await openInPaneA(view); } else setPaneAOverride(view);
-          const id = view.startsWith("chat:") ? view.slice("chat:".length) : null;
+          const closing = closePaneA();
+          batch(() => { setWeightOverride(null); setPaneMotion(null); });
+          await closing;
+          const id = chatOfTab(paneAView());
           await waitFor(() => !id || (chat.loadedId() === id && chatDrawn("main")), 1500);
-          const ghost = ghostOf(beside);
-          batch(() => {
-            movingDocuments = true;
-            setSlotView(next, null);
-            movingDocuments = false;
-            setWeightOverride(null);
-            setPaneMotion(null);
-          });
-          // Pane A is whole under the ghost, which alone fades: two layers
-          // crossfading each at half opacity let the background through.
-          await ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive"), fill: "forwards" }).finished.catch(() => undefined);
-          ghost.remove();
-        } finally {
-          swappingPanes = false;
-          reconcileTabs();
-        }
+          await ghost?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: duration("--duration-follow"), easing: easing("--ease-arrive"), fill: "forwards" }).finished.catch(() => undefined);
+        } finally { ghost?.remove(); }
       });
     });
   };
+  /** Pane A closing: the pane beside it becomes pane A, its file tabs with it. */
   const closePaneA = async () => {
-    const next = shownSlots()[0];
-    const view = next === undefined ? null : slotView(next);
-    if (next === undefined || !view) return;
-    swappingPanes = true;
+    const next = rowSlots()[0];
+    if (next === undefined) return;
     swapTabs("main", next);
     movingDocuments = true;
-    await setSlotView(next, null);
-    movingDocuments = false;
-    if (!isPaneView(view)) { setPaneAOverride(view); swappingPanes = false; reconcileTabs(); return; }
-    setPaneAOverride(null);
-    void Promise.resolve(openInPaneA(view)).finally(() => { swappingPanes = false; reconcileTabs(); });
+    try { await changeLayout((current) => Layouts.closePane(current, current.row[0]!)); } finally { movingDocuments = false; }
   };
   createAgentUiBridge({
     connection: connectionId,
@@ -4171,16 +4048,17 @@ function App() {
           // The hub has checked it against the declared views; this is the client's own check of its form.
           if (!view || !isSplitView(view)) throw new Error(`Not something a pane can show: ${String(view)}.`);
           if (command.beside || !(isPaneView(view) || view === "page:dashboard")) {
-            const slot = await openBeside(view, true);
+            const placed = await openBeside(view, true);
             await new Promise((resolve) => requestAnimationFrame(resolve));
             const at = panesShown().find((candidate) => viewOf(candidate) === view);
             if (at !== undefined) return `Opened ${viewName(view)} in pane ${String(at)}.`;
-            return typeof slot === "number" ? `Opened ${viewName(view)} in the dock: the window has no room for another pane beside.` : `Could not open ${viewName(view)} beside.`;
+            return typeof placed === "number" ? `Opened ${viewName(view)} in the dock: the window has no room for another pane beside.` : `Could not open ${viewName(view)} beside.`;
           }
-          if (pane === "main" || !shown.includes(pane)) { await openInPaneA(view); focusAnyPane("main"); return `Opened ${viewName(view)} in pane main.`; }
-          await setSlotView(pane as number, view);
-          focusAnyPane(pane);
-          return `Opened ${viewName(view)} in pane ${String(pane)}.`;
+          const into = shown.includes(pane) ? pane : "main";
+          setKeyboardPane(into);
+          await openView(view, {});
+          const at = Layouts.findView(layout(), view);
+          return `Opened ${viewName(view)} in pane ${String(at ? keyOf(at.id) : into)}.`;
         },
       };
     })(),
@@ -4250,8 +4128,7 @@ function App() {
       </Sheet>;
   };
   // Pane A always shows something, so it docks only while another pane can take its place.
-  const canDock = (pane: PaneKey) => !isMobileLayout() && dockAvailable() && !isDocked(pane)
-    && dockedSlots().length < MAX_DOCKED && (pane !== "main" || (shownSlots()[0] !== undefined && Boolean(paneAView())));
+  const canDock = (pane: PaneKey) => !isMobileLayout() && dockAvailable() && !isDocked(pane) && (pane !== "main" || layout().row.length > 1);
   const freshlyDocked = new Set<number>();
   const [dockWidthRequest, setDockWidthRequest] = createSignal<{ width: number; nonce: number } | null>(null);
   const showDocked = (slot: number) => {
@@ -4262,33 +4139,26 @@ function App() {
     });
     requestAnimationFrame(() => focusPane(slot));
   };
+  /** The dock holds one pane: docking another sends the one it held away. */
   const dockPane = async (pane: PaneKey) => {
-    if (!canDock(pane)) return void toast.info(pane === "main" ? "Pane A docks only while another pane can take its place." : "The dock holds three panes at most.");
-    if (pane !== "main") {
-      freshlyDocked.add(pane);
-      setDockedSlots((current) => [...current, pane]);
-      persistSlots();
-      return focusChatPane();
-    }
-    const free = freeSlot(true)!;
-    freshlyDocked.add(free);
+    const id = idOf(pane);
+    if (!canDock(pane) || !id) return void toast.info("Pane A docks only while another pane can take its place.");
+    // Pane A docking: the pane beside it becomes pane A, and the docked pane takes that pane's slot, file tabs and all.
+    if (pane === "main") swapTabs("main", rowSlots()[0]!);
     movingDocuments = true;
-    batch(() => {
-      setSlotView(free, paneAView());
-      setDockedSlots((current) => [...current, free]);
-    });
-    movingDocuments = false;
-    swapTabs("main", free);
-    await closePaneA();
-    persistSlots();
+    try { await changeLayout((current) => Layouts.moveToDock(current, id)); } finally { movingDocuments = false; }
+    const slot = keyOf(id);
+    if (typeof slot === "number") freshlyDocked.add(slot);
+    focusChatPane();
   };
   const undockPane = (slot: number, focus = true) => {
-    if (rowSlots().length >= 2) { toast.info("There is no room for another pane."); return false; }
+    const id = idOf(slot);
+    if (!id) return false;
+    if (rowFull()) { toast.info("There is no room for another pane."); return false; }
     batch(() => {
-      setDockedSlots((current) => current.filter((item) => item !== slot));
       if (dockSlot() === slot) { setDockSlot(null); closePanel(); }
+      panes.apply((current) => Layouts.moveToRow(current, id));
     });
-    persistSlots();
     if (focus && shownSlots().includes(slot)) focusPane(slot);
     return true;
   };
@@ -4337,18 +4207,16 @@ function App() {
       <Show when={pane !== "main" || shownSlots()[0] !== undefined}><IconButton kind="pane" aria-label="Close this pane" title="Close" onClick={() => closePane(pane)}><Icons.Close /></IconButton></Show>
     </Actions>
   </Show>;
-  // Every address the app writes goes through here, so a route change carries the panes and Back restores them.
-  const PANE_PARAMS = ["a", "pane", "dock", "tabs", "ftabs", "focus"];
+  // Every address the app writes goes through here, so a route change carries the panes and Back restores them. A lone
+  // pane showing the route says nothing the path does not.
+  const PANE_PARAMS = ["panes", "dock", "summon", "focus", "ftabs", "a", "pane", "tabs"];
   const withPanes = (address: string | URL) => {
     const url = new URL(address, location.href);
     for (const name of PANE_PARAMS) url.searchParams.delete(name);
-    if (paneAOverride()) url.searchParams.set("a", paneAOverride()!);
-    for (const view of rowSlots().map(slotView)) if (view) url.searchParams.append("pane", view);
-    for (const slot of dockedSlots()) { const view = slotView(slot); if (view) url.searchParams.append("dock", view); }
-    for (const value of tabParams()) url.searchParams.append("tabs", value);
+    const current = layout();
+    const lone = current.row.length === 1 && !current.dock && current.panes[current.row[0]!]!.views.length === 1 && isPaneView(paneAView());
+    if (!lone) for (const [name, value] of Layouts.encode(current)) url.searchParams.set(name, value);
     for (const value of fileTabParams()) url.searchParams.append("ftabs", value);
-    const focus = panesShown().indexOf(keyboardPane());
-    if (focus > 0) url.searchParams.set("focus", String(focus));
     return `${url.pathname}${url.search}${url.hash}`;
   };
   const routeAddress = () => { const url = new URL(location.href); for (const name of PANE_PARAMS) url.searchParams.delete(name); return `${url.pathname}${url.search}`; };
@@ -4357,42 +4225,37 @@ function App() {
   history.pushState = (data, unused, url) => nativePushState(data, unused, url == null ? url : withPanes(url));
   history.replaceState = (data, unused, url) => nativeReplaceState(data, unused, url == null ? url : withPanes(url));
   onCleanup(() => { history.pushState = nativePushState; history.replaceState = nativeReplaceState; });
-  createEffect(on(() => [paneAOverride(), slotOrder().map(slotView).join("\n"), dockedSlots().join(), keyboardPane(), shownSlots().length, tabParams().join(), fileTabParams().join()] as const, () => {
+  // While pane A's route is on its way the address is the old route's, and keeps the layout it had.
+  createEffect(on(() => [Layouts.encode(layout()).toString(), fileTabParams().join(), settledRoute()] as const, ([encoded, , route]) => {
+    writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-layout", encoded);
+    if (route && isPaneView(paneAView()) && paneAView() !== route) return;
     const next = withPanes(location.href);
     if (next !== `${location.pathname}${location.search}${location.hash}`) nativeReplaceState(history.state, "", next);
   }, { defer: true }));
-  let paneARoute: string | null = null;
-  // Back or forward restoring an address sets pane A's route and what shows
-  // over it together; the route changing then is not pane A being sent away.
+  // Back or forward restoring an address sets pane A's route and the layout together; the route changing then is not
+  // pane A being sent away.
   let restoringPanes = false;
-  createEffect(() => {
-    // Only a settled route counts: a project or chat still resolving (as on
-    // the first open, the catalogue arriving) is not pane A being sent away.
-    const settling = (routeKind() === "project" && !selectedProject()) || (routeKind() === "chat" && !catalogue.selectedId() && !catalogue.loaded());
-    const key = routeBootstrap() === "ready" && !settling ? `${routeKind()}:${routeKind() === "chat" ? catalogue.selectedId() : routeKind() === "project" ? selectedProject()?.id : ""}:${harnessThread() ? "thread" : ""}` : null;
-    if (key === null) return;
-    if (paneARoute !== null && key !== paneARoute && !swappingPanes && !restoringPanes && untrack(paneAOverride)) setPaneAOverride(null);
-    paneARoute = key;
-  });
+  let routeSeen: SplitView | null = null;
+  // A route reached other than through the panes (a link, a new chat, a chat deleted) is what pane A shows. The first
+  // settled route leaves a document pane A was restored with in place.
+  createEffect(on(settledRoute, (route) => {
+    if (!route) return;
+    const first = routeSeen === null, moved = route !== routeSeen;
+    routeSeen = route;
+    if (drivingRoute || restoringPanes || swappingPanes) return;
+    const shown = untrack(paneAView);
+    if (shown === route || (!isPaneView(shown) && (first || !moved))) return;
+    panes.replace((current) => fromRoute(current, route));
+  }));
   const applyPanesFromUrl = () => {
     const params = new URLSearchParams(location.search);
-    const views = params.getAll("pane").filter(isSplitView).slice(0, 2);
-    const docked = params.getAll("dock").filter(isSplitView).slice(0, MAX_DOCKED);
-    const a = params.get("a");
+    const found = readLayout(params) ?? Layouts.layoutOf(pathChatId() ? `chat:${pathChatId()}` : "page:dashboard");
     batch(() => {
-      const next = [views[0] ?? null, views[1] ?? null, ...[0, 1, 2].map((index) => docked[index] ?? null)];
-      setSlotViews(next);
-      setSlotOrder(SLOT_IDS.filter((slot) => next[slot]));
-      setDockedSlots([2, 3, 4].filter((slot) => next[slot]));
-      if (dockSlot() !== null && !next[dockSlot()!]) setDockSlot(null);
-      setPaneAOverride(isSplitView(a) && !/^(chat|page):/.test(a) ? a : null);
-      setPaneTabs(tabsFromParams(params));
+      panes.replace((current) => Layouts.adopt(current, found));
+      if (dockSlot() !== null && !dockedSlots().includes(dockSlot()!)) setDockSlot(null);
       setFileTabs(fileTabsFromParams(params));
     });
-    persistSlots();
   };
-  const launchFocus = Number(launchUrl.searchParams.get("focus")) || 0;
-  if (launchFocus > 0) createEffect(on(() => shownSlots().length, (count) => { const slot = shownSlots()[launchFocus - 1]; if (count && slot !== undefined) setKeyboardPane(slot); }));
   const paneOrder = createMemo((): PaneKey[] => {
     const docked = [...dockedSlots(), ...foldedSlots()].filter((slot) => slotView(slot) && !shownSlots().includes(slot));
     return ["main", ...shownSlots(), ...docked];
@@ -4401,13 +4264,13 @@ function App() {
   const chatPlaces = createMemo(() => {
     const places = new Map<string, { pane: string; shown: boolean }>();
     paneOrder().forEach((pane, index) => {
-      const letter = String.fromCharCode(65 + index);
-      const active = activeTabOf(pane);
-      for (const id of tabsOf(pane)?.ids ?? (active ? [active] : [])) {
-        if (id === "home" || id.includes(":") || places.has(id)) continue;
-        places.set(id, { pane: letter, shown: id === active });
+      const data = paneData(pane);
+      if (!data) return;
+      const shown = Layouts.shownView(data);
+      for (const view of data.views) {
+        const id = chatOfTab(view);
+        if (id && (!places.has(id) || view === shown)) places.set(id, { pane: String.fromCharCode(65 + index), shown: view === shown });
       }
-      if (active && !active.includes(":") && active !== "home") places.set(active, { pane: letter, shown: true });
     });
     return places;
   });
@@ -5076,6 +4939,8 @@ function App() {
       shortcutManager.registerHandler(COMMAND_IDS.previousTab, "application", () => stepTab(-1), { when: () => Boolean(tabsToStep() || fileTabsToStep()) }),
       shortcutManager.registerHandler(COMMAND_IDS.nextPane, "application", () => stepPane(1), { when: () => splitShown() && !isMobileLayout() }),
       shortcutManager.registerHandler(COMMAND_IDS.newPane, "application", () => openEmptyPane(), { when: () => !isMobileLayout() }),
+      shortcutManager.registerHandler(COMMAND_IDS.undoPaneChange, "application", () => void stepPanes(-1), { when: () => !isMobileLayout() && panes.canUndo() }),
+      shortcutManager.registerHandler(COMMAND_IDS.redoPaneChange, "application", () => void stepPanes(1), { when: () => !isMobileLayout() && panes.canRedo() }),
       shortcutManager.registerHandler(COMMAND_IDS.openBrowser, "application", () => openBrowser()),
       shortcutManager.registerHandler(COMMAND_IDS.openMail, "application", () => openMail()),
       shortcutManager.registerHandler(COMMAND_IDS.previousPane, "application", () => stepPane(-1), { when: () => splitShown() && !isMobileLayout() }),
@@ -5095,11 +4960,11 @@ function App() {
         const closeTabHere = async (pane: PaneKey) => {
           const files = parseFileView(viewOf(pane));
           if (files?.length) { const side = shownFileSide(pane); return await closeFileTab(pane, side, fileEntryKey(files[side]!)); }
-          const active = activeTabOf(pane);
-          if (active && (tabsOf(pane)?.ids.length ?? 0) > 1 && tabsOf(pane)!.ids.includes(active)) return await closeTab(pane, active);
+          const tabs = tabsOf(pane);
+          if (tabs && tabs.length > 1) return await closeTab(pane, paneData(pane)!.active);
           await closeDocument(pane);
         };
-        const hasTab = (pane: PaneKey) => Boolean(parseFileView(viewOf(pane))?.length || tabsOf(pane)?.ids.length || !viewOf(pane)?.startsWith("chat:"));
+        const hasTab = (pane: PaneKey) => Boolean(parseFileView(viewOf(pane))?.length || tabsOf(pane)?.length || !viewOf(pane)?.startsWith("chat:"));
         const canClosePane = (pane: PaneKey) => inDock(pane) || (splitShown() && (pane !== "main" || shownSlots()[0] !== undefined));
         const canSwap = (pane: PaneKey) => splitShown() && !inDock(pane) && swapPartner(pane) !== null;
         const layouts = () => PANE_LAYOUTS[splitShown() ? shownSlots().length + 1 : 1];
@@ -5428,26 +5293,21 @@ function App() {
       onSendDraft={props.onSendDraft}
     />;
   };
-  const agentHeader = (slot: number | "main") => (title: string, pill?: JSX.Element, actions?: JSX.Element) => <ChatHeader title={title} pill={pill} actions={actions} tabActions={actions ? undefined : paneTabActions(slot)} tabs={documentTab(slot, title)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />;
+  const agentHeader = (slot: number | "main") => (title: string, pill?: JSX.Element, actions?: JSX.Element) => <ChatHeader title={title} pill={pill} actions={actions} tabActions={actions ? undefined : paneTabActions(slot)} tabs={documentTab(slot)} panelOpen={panelOpen()} mobileSidebarOpen={mobileSidebarOpen()} onToggleMobileSidebar={() => setMobileSidebar(!mobileSidebarOpen())} onNewChat={() => void startNewChat()} onOpenPalette={() => openPalette(null)} onOpenSearch={toggleSearchPalette} onTogglePanel={togglePanel} onShare={() => {}} appDashboard alone />;
   const openAgentThread = () => {
     const id = agentView()?.home?.chatId;
-    if (id) void agentChat(id).then((target) => openChatFromPage(target.chat, target.project)).catch(showError);
+    if (id) void agentChat(id).then((target) => openChatHere(target.chat, target.project)).catch(showError);
   };
   const openAgentChatFromPage = (id: string, event?: MouseEvent) => {
-    const beside = Boolean(event?.altKey);
-    const tab = Boolean(event && (event.ctrlKey || event.metaKey));
-    void agentChat(id).then(async (target) => {
-      if (beside) await openChatBeside(target.chat, target.project);
-      else if (tab && !isMobileLayout() && await openChatAsTab(target.chat, target.project)) return;
-      else await openChatFromPage(target.chat, target.project);
-    }).catch(showError);
+    const verb: Layouts.Verb = event?.altKey ? { beside: true } : event && (event.ctrlKey || event.metaKey) ? { tab: true } : {};
+    void agentChat(id).then((target) => openChatHere(target.chat, target.project, verb)).catch(showError);
   };
   const renderAgent = (slot: number | "main") => <AgentPage
     onNeed={(width) => { if (!isMobileLayout()) setAgentPageNeed(Math.ceil(width)); }}
     header={agentHeader(slot)}
     onOpenThread={agentView()?.home?.chatId ? openAgentThread : undefined}
-    onOpenMessages={() => { if (altActivation()) void openPageBeside("jbot"); else void openJbotHere(); }}
-    onOpenFile={(path) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { beside: altActivation(), edit: false }); }}
+    onOpenMessages={() => void openJbotHere(verbNow())}
+    onOpenFile={(path) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { ...verbNow(), edit: false }); }}
     onOpenSettings={() => openSettings("agent")}
     onOpenChat={openAgentChatFromPage} />;
   const renderJbot = (slot: number | "main" | "tool") => {
@@ -5469,7 +5329,7 @@ function App() {
         if (active && !current.chat.navigatingId()) return current.chat.select(target.chat, target.project, { history: "none" });
       }).catch(showError).finally(() => { loading = null; });
     }));
-    const openFile = (path: string) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { beside: altActivation(), edit: false }); };
+    const openFile = (path: string) => { const projectId = agentView()?.projectId; if (projectId) void openFileDocument({ projectId, path }, { ...verbNow(), edit: false }); };
     const jbotPill = () => { const control = useContext(JbotPanelControl); return <HeaderPill opens label={agentName()}
       count={control?.needs && control.needs.count() ? { value: control.needs.count(), label: `${control.needs.count()} need you`, open: control.needs.open(), onClick: control.needs.toggle } : undefined}
       icon={<HarnessMark id="conduit" />} aria-expanded={control?.open()} aria-label={`${agentName()}'s panel`} onClick={() => control?.toggle()} />; };
@@ -5565,9 +5425,9 @@ function App() {
       onContextAction={(type, target) => runSidebar(type, target)}
       isPinned={isSidebarPinned}
       onOpenView={(view) => openWorkspaceView(view)}
-      onOpenFile={canOpenFilePanes() ? (path) => openFileDocument({ projectId: props.project.id, path }, { beside: altActivation(), edit: false }) : undefined}
+      onOpenFile={canOpenFilePanes() ? (path) => openFileDocument({ projectId: props.project.id, path }, { ...verbNow(), edit: false }) : undefined}
       fileView={canOpenFilePanes() ? (path) => formatFileView([{ projectId: props.project.id, path }]) : undefined}
-      onOpenTerminal={(terminal) => openWorkspaceView("terminal", terminal.id)}
+      onOpenTerminal={(terminal) => openWorkspaceView("terminal", terminal.id, verbNow())}
       onOpenTerminalMaximized={async (terminal) => { await openWorkspaceView("terminal", terminal.id); setWorkspaceExpanded(true); }}
       onPrefetchTerminal={prefetchWorkspaceTerminal}
       onSearchChats={() => openPalette("chat-search", `in:${props.project.id} `, true)}
@@ -5618,14 +5478,14 @@ function App() {
         <Show when={workspaceIdentityProject()}>{(project) => <WorkspaceAppearanceEditor compact value={project().workspaceAppearance} saving={workspaceIdentitySaving()} onSave={(appearance) => void saveWorkspaceIdentity(appearance)} />}</Show>
     </Dialog>
     <Show when={routeKind() !== "terminal"}>
-    <Sidebar onPreviewChat={previewChat} onPreviewJbot={previewJbot} onPreviewRelease={releasePreview} projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} placeOf={(id: string) => chatPlaces().get(id)} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} focusedView={viewOf(keyboardPane())} onOpenArtifact={(artifact, beside) => openArtifact(artifact.id, beside)} onNewPane={isMobileLayout() ? undefined : openEmptyPane} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneAOverride()} agent={routeKind() === "jbot" && !paneAOverride()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneAOverride()} routeCovered={paneAOverride() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
+    <Sidebar onPreviewChat={previewChat} onPreviewJbot={previewJbot} onPreviewRelease={releasePreview} projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} placeOf={(id: string) => chatPlaces().get(id)} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} focusedView={viewOf(keyboardPane())} onOpenArtifact={(artifact, beside) => openArtifact(artifact.id, beside ? { beside } : verbNow())} onNewPane={isMobileLayout() ? undefined : openEmptyPane} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneADocument()} agent={routeKind() === "jbot" && !paneADocument()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneADocument()} routeCovered={paneADocument() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       serverInTitleBar={Boolean(desktopShell) && desktopTitleBar() === "conduit" && titleBarShows("server")}
       mobileOpen={mobileSidebarOpen()} onMobileOpenChange={setMobileSidebar}
       onMobileShutOnto={(opening) => shutDrawerOnto(opening, () => routeKind() !== "chat" || !mainChatId() || chat.loadedId() === mainChatId())}
       onWorkspaceSuggestionsNeeded={() => void loadWorkspaceSuggestions()}
-      onNewChat={async (project) => { await startNewChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={openChatHere} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout() && !document.activeElement?.closest(".main-split") && keyboardPaneSlot() === null) enterMainPane(); }} onOpenProject={async (project) => { if (altActivation()) await openPageBeside(`project:${project.id}`); else await openProjectHere(project); }} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
+      onNewChat={async (project) => { await startNewChat(project); }} onPrefetchChat={chat.prefetch} onOpenChat={(target, project) => openChatHere(target, project, verbNow())} onFocusMainPane={focusMainPane} onEnterMainPane={() => { if (!isMobileLayout() && !document.activeElement?.closest(".main-split") && keyboardPaneSlot() === null) enterMainPane(); }} onOpenProject={(project) => openProjectHere(project, verbNow())} onAddProject={addProject} onRenameChat={renameChat} onRenameProject={renameProject}
       onOpenProjectMaximized={openProjectWithMaximizedWorkspace}
       onMoveChat={moveChat} onMoveChats={moveChats} onMoveProjectChats={moveProjectChats} onCopyTranscript={copyTranscript} onCopyChatLinks={copyChatLinks}
       onDeleteChat={deleteChat} onDeleteChats={deleteChats} onDeleteProject={deleteProject}
@@ -5647,14 +5507,14 @@ function App() {
           if (created) await openWorkspaceView("terminal", terminal.id);
         });
       }}
-      onOpenComputer={async () => { if (altActivation()) await openPageBeside("computer"); else void openComputerHere(); }}
-      onOpenHarness={async (id) => { if (altActivation()) await openPageBeside(`harness:${encodeURIComponent(id)}`); else void openHarnessHere(id); }}
+      onOpenComputer={() => openComputerHere(verbNow())}
+      onOpenHarness={(id) => openHarnessHere(id, verbNow())}
       onOpenEnvironmentTerminal={(id) => void openDeviceTerminal({ id })}
-      onOpenEnvironment={async (id) => { if (altActivation()) await openPageBeside(`environment:${encodeURIComponent(id)}`); else void openEnvironmentHere(id); }}
-      environment={routeKind() === "computer" && !computerHarness() ? computerEnvironment() || undefined : undefined} selectedHarness={paneAOverride() ? undefined : computerHarness()}
+      onOpenEnvironment={(id) => openEnvironmentHere(id, verbNow())}
+      environment={routeKind() === "computer" && !computerHarness() ? computerEnvironment() || undefined : undefined} selectedHarness={paneADocument() ? undefined : computerHarness()}
       onOpenTerminalView={() => openTerminalRoute()}
-      onOpenAgent={async () => { if (isMobileLayout()) void openJbotHere(); else if (altActivation()) await openPageBeside("jbot"); else await showJbot(); }}
-      onOpenDashboard={async () => { if (altActivation()) await openPageBeside("dashboard"); else void openDashboardHere(); }}
+      onOpenAgent={() => { const verb = verbNow(); return isMobileLayout() || verb.beside || verb.tab ? openJbotHere(verb) : showJbot(); }}
+      onOpenDashboard={() => openDashboardHere(verbNow())}
       onOpenWorkspaceIdentity={openWorkspaceIdentity} onOpenSettings={openSettings} onOpenPalette={(page, initialQuery) => openPalette(page || null, initialQuery || "", page === "chat-search")}
       onUpdatePwa={() => void runPwaUpdate()} pwaUpdating={pwaUpdating()}
       updateState={updateState()} onTakeUpdate={() => void takePwaUpdate(true)}
@@ -5728,16 +5588,16 @@ function App() {
         </>} />
     </Show>
     <AppShell class="workspace-layout" settling={panesSettling()} drawer={mobileSidebarOpen() ? "open" : "shut"} ref={(element) => { meteors.observe(element); const observer = new ResizeObserver(() => setLayoutWidth(element.clientWidth)); observer.observe(element); onCleanup(() => observer.disconnect()); }}>
-    <Sheet as="main" lead under={workspaceExpanded()} pane={paneLetter("main")} data-moving={paneMotion()?.slot === "main" ? paneMotion()!.phase : undefined} backdrop={<Show when={!paneAOverride() && routeBootstrap() === "ready" && ["chat", "dashboard", "project", "agent", "jbot"].includes(routeKind()) && meteorField() && (revealing() || arrived())}><meteors.Window /></Show>} data-slot="sidebar-inset" data-region={paneAOverride() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} data-files-split={parseFileView(paneAOverride()) ? filesSplit("main") : undefined} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class="chat-main" style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0, ...(paneMotion()!.width ? { "--pane-document-width": `${paneMotion()!.width}px` } : {}) } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
+    <Sheet as="main" lead under={workspaceExpanded()} pane={paneLetter("main")} data-moving={paneMotion()?.slot === "main" ? paneMotion()!.phase : undefined} backdrop={<Show when={!paneADocument() && routeBootstrap() === "ready" && ["chat", "dashboard", "project", "agent", "jbot"].includes(routeKind()) && meteorField() && (revealing() || arrived())}><meteors.Window /></Show>} data-slot="sidebar-inset" data-region={paneADocument() ? "workspace-panel" : routeKind() === "chat" || harnessThread() ? "chat" : routeKind() === "terminal" ? "terminal" : "dashboard"} data-files-split={parseFileView(paneADocument()) ? filesSplit("main") : undefined} tabIndex={-1} onPointerDown={focusChatSurface} onKeyDown={paneKeydown} class="chat-main" style={{ ...(splitShown() ? { flex: `${paneWeights()[0]} 1 0`, "min-width": paneMotion()?.slot === "main" ? "0px" : `${paneMinWidth("main")}px` } : {}), ...(paneMotion()?.slot === "main" ? { opacity: 0, ...(paneMotion()!.width ? { "--pane-document-width": `${paneMotion()!.width}px` } : {}) } : {}), ...(paneMotion()?.slot === "main" && paneMotion()!.collapsed ? { "margin-left": "0px", "margin-right": "0px" } : {}) }} {...mainDropHandlers}>
       <Show when={splitDropActive()}><DropWash within /></Show>
-      <Show when={parseFileView(paneAOverride())}>{renderFileViewer("main")}</Show>
-      <Show when={paneAOverride()?.startsWith("term:") ? paneAOverride()!.slice("term:".length) : undefined} keyed>{(shell) => renderTerminalDocument("main", shell)}</Show>
-      <Show when={paneAOverride()?.startsWith("browser:") ? paneAOverride()!.slice("browser:".length) : undefined} keyed>{(id) => renderBrowserDocument("main", id)}</Show>
-      <Show when={paneAOverride()?.startsWith("mail:") ? paneAOverride()!.slice("mail:".length) : undefined} keyed>{(account) => renderMailDocument("main", account)}</Show>
+      <Show when={parseFileView(paneADocument())}>{renderFileViewer("main")}</Show>
+      <Show when={paneADocument()?.startsWith("term:") ? paneADocument()!.slice("term:".length) : undefined} keyed>{(shell) => renderTerminalDocument("main", shell)}</Show>
+      <Show when={paneADocument()?.startsWith("browser:") ? paneADocument()!.slice("browser:".length) : undefined} keyed>{(id) => renderBrowserDocument("main", id)}</Show>
+      <Show when={paneADocument()?.startsWith("mail:") ? paneADocument()!.slice("mail:".length) : undefined} keyed>{(account) => renderMailDocument("main", account)}</Show>
       <For each={artifactsIn("main")}>{(id) => renderArtifactDocument("main", id)}</For>
-      <Show when={paneAOverride() === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome("main")}</SheetFill></Show>
+      <Show when={paneADocument() === "home"}><SheetFill tabIndex={-1} onPointerDown={focusChatSurface}>{renderHome("main")}</SheetFill></Show>
       <Show when={toolInPaneA()}><SheetFill ref={(element) => { setPaneAToolHost(element); onCleanup(() => setPaneAToolHost(undefined)); }} class="pane-a-tool-host" /></Show>
-      <Show when={!paneAOverride() && routeBootstrap() === "ready"} fallback={paneAOverride() ? null : <Empty role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
+      <Show when={!paneADocument() && routeBootstrap() === "ready"} fallback={paneADocument() ? null : <Empty role={routeBootstrap() === "error" ? "alert" : "status"}>{routeBootstrap() === "error"
         ? routeBootstrapError() || (routeKind() === "project" ? "This project could not be loaded." : "This chat could not be loaded.")
         : routeKind() === "project" ? "Loading project…" : routeKind() === "dashboard" ? "Loading Conduit…" : (routeKind() === "agent" || routeKind() === "jbot") ? "Loading…" : "Loading chat…"}</Empty>}>
         <Show when={routeKind() === "dashboard"}>
@@ -5808,8 +5668,8 @@ function App() {
     {/* Docked panes stay mounted, so each keeps its state and tabs; the dock shows one. */}
     <Show when={dockDocHost()} keyed>{(host) =>
       <For each={dockContents()}>{(slot) => <Portal mount={host}>{renderSlot(slot, () => 0, true)}</Portal>}</For>}</Show>
-    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel jbotView={() => renderJbot("tool")} connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
-    <Show when={["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && Boolean(dockHome()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? openFileDocument : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={() => { dockBeforeJbot = null; closePanel(); }} shortcuts={shortcutManager}
+    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel jbotView={() => renderJbot("tool")} connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? (entry, options) => void openFileDocument(entry, { ...options, tab: Boolean(verbNow().tab) }) : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={closePanel} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
+    <Show when={["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && Boolean(dockHome()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} splitView={toolView} splitHost={toolHost} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onOpenBeside={isMobileLayout() ? undefined : openBeside} onMoveToDock={moveToDock} onCloseSplit={closeSplit} bindSplit={bindSplit} onOpenFile={canOpenFilePanes() ? (entry, options) => void openFileDocument(entry, { ...options, tab: Boolean(verbNow().tab) }) : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={() => { dockBeforeJbot = null; closePanel(); }} shortcuts={shortcutManager}
       jbotView={() => renderJbot("tool")}
  /></Show>
     </AppShell>
@@ -5820,9 +5680,9 @@ function App() {
       panes={splitShown() ? shownSlots().length + 1 : 1} onLayout={applyPaneLayout}
       docked={dockContents().filter((slot) => slotView(slot)).map((slot) => ({ slot, view: slotView(slot)!, name: isDocked(slot) ? viewName(slotView(slot)) : `${viewName(slotView(slot))} (no room; returns when there is)` }))} currentDocked={panelOpen() ? dockSlot() : null} onChooseDocked={chooseDocked} dockOverlay={dockOverlay()} onToggleDockOverlay={toggleDockOverlay}
       jbot={agentView()?.enabled ? { name: agentName(), needs: agentNeeds(), current: jbotShownInDock(),
-        onOpen: () => { if (agentNeeds()) { wantNeeds(); if (jbotShownInDock()) return; } void chooseRailTool("jbot"); } } : undefined}
+        onOpen: () => { if (agentNeeds()) { wantNeeds(); if (jbotShownInDock()) return; } void chooseRailTool("jbot", false); } } : undefined}
       feedback={devClient() ? { open: feedbackMode() !== null, onToggle: () => setFeedbackMode(feedbackMode() ? null : "select") } : undefined}
-      current={panelOpen() && dockSlot() === null ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={chooseRailTool} />
+      current={panelOpen() && dockSlot() === null ? dockTool() : null} inSplit={splitToolShown()} onDock={moveToDock} sourceControlEnabled={routeKind() === "computer" ? Boolean(computerLocation()?.repository) : dockProject()?.kind === "workspace"} onChoose={(tool) => void chooseRailTool(tool, Boolean(verbNow().beside))} />
     </Show>
     <Show when={routeKind() === "terminal" && routeBootstrap() === "ready"}>
       <TerminalRoute terminalId={terminalRouteId()} connectivity={runtime.connectivity} onOpenConduit={leaveTerminalRoute} />

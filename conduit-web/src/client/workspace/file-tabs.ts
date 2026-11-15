@@ -1,18 +1,17 @@
 import { fileEntryKey, formatFileView, parseFileView, type FileEntry } from "./file-documents.ts";
-import { isSplitView } from "./workspace-types.ts";
 
 /** `entries` in strip order, `used` most recently shown first. Kept free of signals so the rules are testable. */
 export type FileTabs = { entries: FileEntry[]; used: string[] };
 export const FILE_TAB_CAP = 5;
 
-/** `ftabs=<position>.<side>:<entries>`, position 0 pane A, then the shown panes beside it in order. */
+/** `ftabs=<position>.<side>:<entries>`, position 0 pane A, then the panes beside it and the dock's in order, which take
+ *  the slots from 0 as a layout is first read. */
 export function fileTabsFromParams(params: URLSearchParams): Record<string, FileTabs> {
-  const order = params.getAll("pane").filter(isSplitView).map((_, index) => index);
   const found: Record<string, FileTabs> = {};
   for (const value of params.getAll("ftabs")) {
     const at = value.indexOf(":");
     const [position, side] = value.slice(0, at).split(".").map(Number);
-    const pane = position === 0 ? "main" : order[position! - 1] === undefined ? null : String(order[position! - 1]);
+    const pane = position === 0 ? "main" : Number.isInteger(position) && position! > 0 ? String(position! - 1) : null;
     const entries = value.slice(at + 1).split("|").map((part) => parseFileView(`files:${part}`)?.[0]).filter((entry): entry is FileEntry => Boolean(entry)).slice(0, FILE_TAB_CAP);
     if (pane !== null && entries.length) found[`${pane}#${side || 0}`] = { entries, used: entries.map(fileEntryKey) };
   }
