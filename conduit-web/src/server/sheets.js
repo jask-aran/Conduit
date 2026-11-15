@@ -48,8 +48,15 @@ export function sheetKind(hub) {
     const now = sheet ? sheet.size() : { rows: 0, cols: 0 }, total = room.book.cellCount() - now.rows * now.cols + rows * cols;
     if (total > WORKBOOK_LIMIT) throw fault(400, `A workbook holds at most ${WORKBOOK_LIMIT} cells over its tabs; that would make it ${total}`);
   };
-  const writeCells = (room, sheet, written, by) => hub.as(room, by, (sign) => room.doc.transact(() => {
+  /** The tab's merges where they are now. */
+  const mergeAreas = (room, sheet) => { try { const list = JSON.parse(String(room.look.get(`merges:${sheet.id}`))); return Array.isArray(list) ? list.flatMap((one) => { const area = rangedArea(sheet, one); return area ? [area] : []; }) : []; } catch { return []; } };
+  /** The merge a cell is hidden under (inside one, not its upper-left), if any. */
+  const hiddenUnder = (areas, r, c) => areas.find((one) => r >= one.top && r <= one.bottom && c >= one.left && c <= one.right && (r !== one.top || c !== one.left));
+  // A value an op writes under a merge's hidden cells would be kept unseen: it is left out (emptying one goes through). A file read again keeps all.
+  const writeCells = (room, sheet, written, by, guarded = false) => hub.as(room, by, (sign) => room.doc.transact(() => {
+    const areas = guarded ? mergeAreas(room, sheet) : [];
     for (const [r, c, input] of written) {
+      if (input && areas.length && hiddenUnder(areas, r, c)) continue;
       const cell = key(sheet.rowAt(r), sheet.colAt(c));
       if (!input) room.cells.delete(cell); else if (room.cells.get(cell) !== input) room.cells.set(cell, input);
     }
@@ -444,8 +451,10 @@ export function sheetKind(hub) {
           if (count > CALL_LIMIT) throw fault(400, `That is ${count} cells; one call writes at most ${CALL_LIMIT}: split it`);
           const source = op === "fill" && from !== undefined ? parseRange(from) : undefined;
           if (source === null) throw fault(400, `from is the fill's source on its tab, an A1 range such as B2:C3, not ${from}`);
+          const under = op === "set" && hiddenUnder(mergeAreas(room, sheet), area.top, area.left);
+          if (under) throw fault(400, `${a1(area.top, area.left)} is inside the merged ${rangeA1(under)}: its value is ${a1(under.top, under.left)}'s`);
           grow(room, sheet, area, name);
-          writeCells(room, sheet, filled(room, sheet, grid, area, source), name);
+          writeCells(room, sheet, filled(room, sheet, grid, area, source), name, true);
           return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}), ...sheet.size() };
         }
         // A range's number formats (sheet-formats.js) or styles (sheet-styles.js), set first when given; whole columns (B:D), or for styles rows (3:5), set theirs.
