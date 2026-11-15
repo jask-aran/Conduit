@@ -89,7 +89,7 @@ export function useJbotMessages(changed: () => unknown) {
   return { messages, loaded, refresh };
 }
 
-export function JbotMessages(props: { messages: LogMessage[]; name: string; working?: boolean;
+export function JbotMessages(props: { listRef?: (list: HTMLDivElement) => void; messages: LogMessage[]; name: string; working?: boolean;
   live?: TurnTraceData | null;
   /** What the person just sent in the home thread, drawn at once until the log has it (it reads it a moment later). */
   sent?: { text: string; at: string } | null }) {
@@ -239,15 +239,6 @@ export function JbotMessages(props: { messages: LogMessage[]; name: string; work
   let primed = false;
   createEffect(on(rows, (list) => { for (const row of list) if (row.kind === "message" || row.kind === "run") seen.add(row.kind === "run" ? row.run.id : row.message.id); if (list.length) primed = true; }));
   const arriving = (id: string) => untrack(() => primed && !seen.has(id));
-  // Each row is drawn once in full before it may be skipped off screen (data-drawn), with the height it was drawn at as
-  // its stand-in: skipped before the browser has kept a size of its own, it is still its own height.
-  let list: HTMLDivElement | undefined;
-  createEffect(on(rows, () => requestAnimationFrame(() => {
-    const fresh = [...list?.querySelectorAll<HTMLElement>(":scope > .ui-transcript-row:not([data-drawn])") ?? []];
-    // Fractions kept: a whole-pixel stand-in would move what is under it by a pixel as it is skipped.
-    const heights = fresh.map((row) => row.getBoundingClientRect().height);
-    fresh.forEach((row, index) => { if (!heights[index]) return; row.style.containIntrinsicSize = `auto ${heights[index]}px`; row.dataset.drawn = ""; });
-  })));
   const now = useNow(() => rows().some((row) => row.kind === "run" && row.run.live));
   const agentRow = (run: LogRun) => {
     // Read where it is drawn, so what it is doing changes in place rather than making a new row.
@@ -257,7 +248,7 @@ export function JbotMessages(props: { messages: LogMessage[]; name: string; work
       time={run.live || run.endedAt ? span(run.startedAt ?? undefined, run.live ? null : run.endedAt, now()) : undefined} onOpen={() => openRun(run.id)} />;
   };
   const transcript = () => <Show when={props.messages.length || props.working} fallback={<Empty kind="dash">Nothing said yet. Say something to {props.name}.</Empty>}>
-        <TranscriptList data-times="shown" each={rows()} of="jbot" ref={(element) => { list = element; }}
+        <TranscriptList data-times="shown" each={rows()} of="jbot" ref={props.listRef}
           after={<>
             <Show when={leavingTrace()}>{(gone) => <TranscriptRow flow="exchange" {...motionOf("removing")}>{trace(() => gone().trace)}</TranscriptRow>}</Show>
             <Show when={unsent()}>{(sent) => <TranscriptRow flow={props.messages.length ? "turn" : undefined}><Message at={sent().at}>{sent().text}</Message></TranscriptRow>}</Show>

@@ -183,11 +183,6 @@ svg.lucide { stroke-width: 2.4; }
 
 .file-viewer-surface:focus { outline: none; }
 
-/* The jbot chat's messages are all drawn (no transcript-visibility windowing), so rows off screen are skipped from
-   layout and paint, or a resize would lay out every message ever said. */
-/* Only a row drawn once (data-drawn): one never drawn has no size kept, so skipped it shows for a frame
-   as an empty box of the placeholder size -- a new row at the foot, or an old one first skipped as rows come in. */
-[data-jbot-room] .ui-transcript > .ui-transcript-row[data-drawn] { content-visibility: auto; }
 /* In jbot's chat the orb is not hung in the gutter: its left edge is the transcript's (and the composer's), the
    trace's lines beside it. So it is drawn on a phone too, where a thread's has no gutter to hang in and is left out. */
 [data-jbot-room] .ui-trace[data-orb] { padding-inline-start: calc(var(--icon-xl) + var(--row-gap)); }

@@ -6,10 +6,9 @@ import { JbotDial, JbotPanelControl } from "./jbot-status";
 import { JBOT_TABS, type JbotTab } from "./agent-page";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { dropLatestScroller, setLatestScroller, tellLatestAway } from "../chat/latest-away";
+import { mountTranscriptVisibility } from "../chat/transcript-visibility";
 import { SplitEmpty } from "./primitives/split";
 import type { TurnTraceData } from "../turn-rows";
-
-const PANEL_BUILD_DELAY_MS = 1500;
 
 export function JbotRoom(props: {
   header: (title: string) => JSX.Element;
@@ -40,13 +39,7 @@ export function JbotRoom(props: {
   // A desktop never raises a sheet (a thumb's): without room beside, the panel fades in just above the composer.
   const desktop = !isMobileLayout();
   const [above, setAbove] = createSignal<number>();
-  // The panel is built after the dock's slide (or when it is first asked for), not with the chat: the jbot chat opens
-  // in the dock as it slides open, and the hidden panel's groups cost the slide its frames.
   const [built, setBuilt] = createSignal(false);
-  onMount(() => {
-    const handle = window.setTimeout(() => setBuilt(true), PANEL_BUILD_DELAY_MS);
-    onCleanup(() => window.clearTimeout(handle));
-  });
   const toggle = () => {
     if (!wide()) { setNeedsOpen(false); return void setOver(!over()); }
     const next = !beside();
@@ -56,6 +49,7 @@ export function JbotRoom(props: {
   const [needsMount, setNeedsMount] = createSignal<HTMLElement>();
   const mountNeeds = (element: HTMLElement) => { setNeedsMount(element); onCleanup(() => { if (needsMount() === element) setNeedsMount(undefined); }); };
   const [needsOpen, setNeedsOpen] = createSignal(false);
+  createEffect(() => { if (open() || needsOpen()) setBuilt(true); });
   createEffect(() => { if (!agentNeeds() || wide()) setNeedsOpen(false); });
   createEffect(() => {
     if (!needsWanted() || !agentNeeds()) return;
@@ -76,7 +70,17 @@ export function JbotRoom(props: {
     const tick = window.setInterval(() => { if (document.visibilityState === "visible") void refreshAgent(); }, 10_000);
     onCleanup(() => window.clearInterval(tick));
   });
-  const follow = createTranscriptFollow({ viewport: () => viewport });
+  let visibility: ReturnType<typeof mountTranscriptVisibility> | undefined;
+  const follow = createTranscriptFollow({ viewport: () => viewport, holding: () => Boolean(visibility?.moving() || visibility?.refreshing()) });
+  const manageLog = (list: HTMLDivElement) => {
+    const owner = getOwner();
+    queueMicrotask(() => runWithOwner(owner, () => {
+      if (!viewport || !list.isConnected) return;
+      const mounted = mountTranscriptVisibility(viewport, list, (delta) => follow.readerScroll(follow.scrollTop() + delta), ".ui-transcript-row");
+      visibility = mounted;
+      onCleanup(() => { mounted.destroy(); if (visibility === mounted) visibility = undefined; });
+    }));
+  };
   const away = follow.latestAway;
   let latest: HTMLButtonElement | undefined;
   const anchorLatest = () => {
@@ -129,7 +133,7 @@ export function JbotRoom(props: {
           <ChatScroller ref={(element) => { root = element; }} viewportRef={(element) => { viewport = element; }} columnRef={attachFollow}
             over={<RiderButton ref={(element: HTMLButtonElement) => { latest = element; }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
               hidden={!desktop || !away() || (!wide() && over())} onMouseDown={(event) => event.preventDefault()} onClick={jumpToLatest} />}>
-            <JbotMessages messages={log.messages()} name={name()} working={props.working} live={props.live} sent={props.sent} />
+            <JbotMessages listRef={manageLog} messages={log.messages()} name={name()} working={props.working} live={props.live} sent={props.sent} />
           </ChatScroller>
           <Show when={props.composer}><ComposerDock ref={clearUnderComposer}>{props.composer}</ComposerDock></Show>
         </ChatView>

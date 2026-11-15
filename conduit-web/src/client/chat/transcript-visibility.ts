@@ -46,6 +46,7 @@ export function mountTranscriptVisibility(
   thread: HTMLElement,
   /** The viewport has no scroll anchoring. */
   shiftScroll: (delta: number) => void = (delta) => { viewport.scrollTop += delta; },
+  rowSelector = ROW_SELECTOR,
 ) {
   const activeIds = new Map<PanelGeometryMotionSource, number>();
   const managed = new Set<HTMLElement>();
@@ -290,7 +291,7 @@ export function mountTranscriptVisibility(
     if (rows) {
       for (const row of rows) syncRow(row);
     } else {
-      const present = new Set(thread.querySelectorAll<HTMLElement>(ROW_SELECTOR));
+      const present = new Set(thread.querySelectorAll<HTMLElement>(rowSelector));
       for (const row of [...rowElements.keys()]) if (!present.has(row)) syncRow(row);
       for (const row of present) syncRow(row);
     }
@@ -462,7 +463,7 @@ export function mountTranscriptVisibility(
       // The block itself counts: a heading losing the caret's placeholder is a change to its own children.
       if (hidden && managed.has(hidden) && !unwrapsFade(record)) (changedHidden ??= new Set()).add(hidden);
       if (withinBlock(record) || !rows) continue;
-      const row = record.target === thread ? null : (record.target as Element).closest?.(ROW_SELECTOR) as HTMLElement | null;
+      const row = record.target === thread ? null : (record.target as Element).closest?.(rowSelector) as HTMLElement | null;
       // Outside any row (a row added or removed): every row syncs. The records after it are still read for changes to
       // hidden blocks.
       if (!row) { rows = null; continue; }
