@@ -128,30 +128,30 @@ Desktop is a darker frame with inset rounded panes; the frame's margin is also t
 
 The panes smoke asserts these; a change to a rule changes it.
 
-**Documents and room**
+**Places and panes**
 
-- **A pane holds one document** (chat, page, file viewer, tool, shell). The first pane holds the route; panes beside it are opened, never navigated to.
+- **Two places: the row and the dock.** The row holds panes side by side. The dock holds one pane at a time, beside the row or over it (one setting, the rail foot's two-state button). Any pane can move between them, keeping its document and state.
+- **Two kinds of pane.** A session pane holds chats, terminals and jbot's log as tabs, its header the tab row. A document pane holds one paper, sheet, site, mail, browser or folder viewer and no tabs: the whole top edge is that document's header, its modes and tools.
+- **Summons lay over the dock**: the rail summons jbot, Files (the folder viewer) and a terminal (the focused workspace's last, else a new one) over whatever the dock holds; dismissing goes back to it. Pressing the shown summon dismisses it.
+- **The folder viewer** is a tree and the file it opens, with Files and Changes as its modes. In the dock it follows the focused pane's workspace; moved to the row it keeps its own. Alt opens a file as a pane of its own.
 - **A document declares its minimum width**, in the unit so it grows with the Interface size; containers lay out from those, never their own guesses. A window too narrow for the sidebar beside a chat at its minimum scrolls sideways; the chat is never drawn narrower.
-- **Room runs out in one order.** The dock narrows first, then panes move to the dock, last first, document and state kept, and come back when the width holds them. A dragged edge takes room from its neighbour down to its minimum, then the next. Up to three panes, with Equalise and presets at the rail's foot; not on a phone.
+- **Room runs out in one order.** Panes narrow to their minimums, then the last fold into a "more panes" control at the row's edge, state kept, and come back when the width holds them. A dragged edge takes room from its neighbour down to its minimum, then the next. Up to three panes, with Equalise and presets at the rail's foot; not on a phone.
 
 **Focus and opening**
 
-- **One pane has the keyboard**; a click anywhere in it gives it. Everything that acts "here" acts on it: the palette, the leader, the model selector, the composer's keys and dictation, the dock's Files. Going round panes lands where each one's focus last was. In a pane with columns, the current column receives what opens.
-- **One verb per modifier** from every place you open from: plain replaces what the focused pane shows, Ctrl keeps it as a tab, Alt opens it beside (a new pane when the width holds it, else the neighbour) and leaves the keyboard where it was. A document is open once; opening it again goes to it.
-- **A pane says it is loading**, never shows an empty chat meanwhile. Opening a chat hands focus to its composer; a file viewer takes the keyboard once drawn, unless focus has moved.
+- **One pane has the keyboard**; a click anywhere in it gives it. Everything that acts "here" acts on it: the palette, the leader, the model selector, the composer's keys and dictation, the folder viewer in the dock. Going round panes lands where each one's focus last was.
+- **One verb per modifier** from every place you open from: plain replaces what the focused pane shows, whatever kind it is (a session pane's tabs go with it; a notice offers Undo); Ctrl adds a chat or terminal as a tab of the nearest session pane; Alt opens beside (a new pane when the width holds it, else the neighbour) and leaves the keyboard where it was. A document is open once; opening it again goes to it.
+- **Pane changes undo**: opening, replacing, closing and moving panes step back and forward instantly (Undo pane change, Redo pane change in the shortcut manager), separate from text undo.
+- **A pane says it is loading**, never shows an empty chat meanwhile. Opening a chat hands focus to its composer; a document takes the keyboard once drawn, unless focus has moved.
 
 **Tabs**
 
-- **A pane of chats or a viewer's column holds documents as tabs**, its header the tab row; a lone document is a row of one. The active tab is the current weight with its ×, the others grey.
-- **Switching moves nothing**: tabs keep their order and width; drafts and scroll are kept per document.
-- **Chat tabs group by place**, the place named once. A full row drops the tab used longest ago, never the one showing or one with a draft; closing the active tab goes to the one used last. Headers fold, then truncate.
-- **A file viewer can stand empty** and split into two columns; a chat pane cannot stand empty.
+- **Only a session pane has tabs.** The active tab is the current weight with its ×, the others grey; a live shell or run wears its dot. Switching moves nothing: tabs keep their order and width; drafts and scroll are kept per document. **Chat tabs group by place**, the place named once. A full row drops the tab used longest ago, never the one showing or one with a draft; closing the active tab goes to the one used last. Headers fold, then truncate. A session pane cannot stand empty.
 
-**Dragging, the dock and the window**
+**Dragging and the window**
 
-- **Anything that opens can be dragged**, and a drop says what it will do: the target washes the band it lands in and a pill names the result. An edge opens a new pane; the middle replaces, joins as a tab, or swaps two panes; a drop that would do nothing does not wash.
-- **The rail opens the dock**, one tool at a time; pressing the open tool closes it. Tools open in the dock by default; Alt or dragging opens one as a pane. Files follows the pane with the keyboard. Any pane can move into the dock (its header, the leader, or dragging) and back, keeping its document, state and tabs, with a rail icon of its own; the first pane docks only while another can take its place. The dock sits beside the panes or over them, per device.
-- **The layout is in the address**: every pane, tab and column is in the URL; Back restores it, a copied link reproduces it.
+- **Anything that opens can be dragged**, and a drop says what it will do: the target washes the band it lands in and a pill names the result. An edge opens a new pane; the middle replaces, joins a session pane as a tab, or swaps two panes; the dock takes what is dropped on it; a drop that would do nothing does not wash.
+- **The layout is in the address**: every pane and tab is in the URL; Back restores it, a copied link reproduces it.
 - **Resizing holds the content still.** Pressing a handle moves nothing. While dragging, a transcript keeps its shape and slides to stay centred until it would clip, then reflows keeping the reader's place; releasing lays it out once.
 - **Panes ease; documents don't travel.** Opening eases the others to their new widths, then fades the pane in; closing fades it out, then the rest ease into its room; a swap holds both panes' last frames until loaded, then crossfades. None of this on first load, Back, a phone or reduced motion.
 
