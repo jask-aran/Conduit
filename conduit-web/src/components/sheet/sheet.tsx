@@ -129,6 +129,21 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     pressed: (row, col) => { const hit = anchors.find((anchor) => { const range = rangeOf(anchor); return range && row >= range.top && row <= range.bottom && col >= range.left && col <= range.right; }); if (hit) moved(hit.key); },
     key: (event, row, col) => {
       if (event.key === " " && event.ctrlKey !== event.shiftKey && !event.altKey && !event.metaKey) { event.preventDefault(); grid()?.whole(event.ctrlKey ? "cols" : "rows"); return true; }
+      // As a spreadsheet's: Alt+= opens a SUM of the numbers just above (else just left), Ctrl+; today's date, each to be finished in the cell.
+      const sum = event.altKey && !event.ctrlKey && !event.metaKey && event.key === "=", today = event.ctrlKey && !event.altKey && !event.shiftKey && event.key === ";";
+      if (sum || today) {
+        event.preventDefault();
+        const number = (r: number, c: number) => typeof model()?.value(r, c) === "number";
+        let text = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+        if (sum) {
+          let top = row, left = col;
+          while (top > 0 && number(top - 1, col)) top--;
+          if (top === row) while (left > 0 && number(row, left - 1)) left--;
+          text = top < row ? `=SUM(${a1(top, col)}:${a1(row - 1, col)})` : left < col ? `=SUM(${a1(row, left)}:${a1(row, col - 1)})` : "=SUM()";
+        }
+        editor.begin({ row, col }, "enter", "cell"); editor.typed(text, text.endsWith("()") ? text.length - 1 : text.length);
+        return true;
+      }
       // AltGr is Ctrl and Alt together: what it types is typed.
       if ((event.ctrlKey || event.metaKey) && !(event.ctrlKey && event.altKey)) return false;
       if (event.key === "Enter" || event.key === "F2") { event.preventDefault(); editor.begin({ row, col }, "edit", "cell"); return true; }
