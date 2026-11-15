@@ -26,6 +26,8 @@ export type FormulaEditorHost = {
   /** Every function the engine has registered, custom ones included. */
   functions(): readonly string[];
   write(row: number, col: number, input: string): void;
+  /** The merged range a cell is in, if any: a move leaves it from its far edge. */
+  merged(row: number, col: number): { top: number; left: number; bottom: number; right: number } | undefined;
   /** The cell selected, read again when its value changes. */
   selected(): Cell | null;
   /** An error cell's message, else null. */
@@ -123,7 +125,8 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
     end();
     if (input !== host.input(now.row, now.col)) host.write(now.row, now.col, input);
     // Moved as an arrow key moves the selection: scrolled only as far as it must be.
-    if (move) { const row = Math.max(0, now.row + move[0]), col = Math.max(0, now.col + move[1]); grid?.select({ top: row, bottom: row, left: col, right: col }); grid?.show(row, col); }
+    if (move) { const one = host.merged(now.row, now.col), from: [number, number] = one ? [move[0] > 0 ? one.bottom : one.top, move[1] > 0 ? one.right : one.left] : [now.row, now.col];
+      const row = Math.max(0, from[0] + move[0]), col = Math.max(0, from[1] + move[1]); grid?.select({ top: row, bottom: row, left: col, right: col }); grid?.show(row, col); }
     if (focus) grid?.focus();
   };
   const cancel = () => { if (!editing()) return; end(); host.grid()?.focus(); };

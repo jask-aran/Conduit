@@ -67,7 +67,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const labelOf = (list: readonly { row: number; col: number; input: string }[]) => list.every(({ input }) => !input) ? "Clear contents" : list.length === 1 ? `Typing in ${a1(list[0]!.row, list[0]!.col)}` : "Paste";
   const writes = (label: string) => (list: readonly { row: number; col: number; input: string }[]) => history.act(label || labelOf(list), () => write(list));
   const editor = createFormulaEditor({
-    grid, input: (row, col) => model()?.input(row, col) ?? "", functions: tabs.functions,
+    grid, input: (row, col) => model()?.input(row, col) ?? "", functions: tabs.functions, merged: (row, col) => merges.at(row, col),
     write: (row, col, input) => writes("")([{ row, col, input }]),
     selected: () => { changed(); const area = at(); return area && { row: area.top, col: area.left }; }, error: (row, col) => model()?.error(row, col) ?? null,
   });
@@ -88,12 +88,14 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const merge = (kind: SheetMergeKind | null, area = at()) => {
     if (!area) return;
     if (kind === null || (kind === "center" && merges.is(area))) return void history.act("Unmerge cells", () => merges.unmerge(area));
-    const losing = merges.losing(area, kind), run = () => history.act(kind === "center" ? "Merge & Center" : kind === "across" ? "Merge across" : "Merge cells", () => {
+    // The cells emptied are found again as it runs: the sheet may have changed while the question was open.
+    const run = () => history.act(kind === "center" ? "Merge & Center" : kind === "across" ? "Merge across" : "Merge cells", () => {
+      const losing = merges.losing(area, kind);
       if (!merges.merge(area, kind)) return;
       write(losing.map((cell) => ({ ...cell, input: "" })));
       if (kind === "center") styles.set(area, { align: "center" });
     });
-    if (!losing.length) return run();
+    if (!merges.losing(area, kind).length) return run();
     void decisions.confirm("Merging keeps only the upper-left value", { confirmLabel: "Merge" }).then((yes) => { if (yes) run(); grid()?.focus(); });
   };
   const sequences = createSequenceKeys((sequence) => "tool" in sequence ? tools.find((one) => one.name === sequence.tool)?.run() : sequence.run({ selection: at, sizes, look: () => readLook(root!), ask: setQuestion, filters: filters.keys, merge }),
