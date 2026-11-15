@@ -34,6 +34,9 @@ export interface SheetSizes {
   /** How many rows and columns stand still at the top and left as the rest scrolls (`freezeRows:<tabId>`, `freezeCols:<tabId>`). */
   freeze(): { rows: number; cols: number };
   setFreeze(rows: number, cols: number): void;
+  /** The rows hidden (`hidden:<rowId>`), by position. */
+  hidden(): ReadonlySet<number>;
+  setHidden(rows: readonly number[], hidden: boolean): void;
 }
 
 /** `lines`: how many lines a cell's text takes where its style wraps it (styles.ts); unsaid, its own line breaks. */
@@ -56,6 +59,12 @@ export function createSheetSizes(look: Y.Map<number | string>, model: () => Shee
     },
     freeze: () => { const id = model()?.id, count = (what: string) => { const n = id && look.get(`${what}:${id}`); return typeof n === "number" ? n : 0; }; return { rows: count("freezeRows"), cols: count("freezeCols") }; },
     setFreeze: (rows, cols) => { const id = model()?.id; if (id) look.doc!.transact(() => { for (const [what, n] of [["freezeRows", rows], ["freezeCols", cols]] as const) if (n > 0) look.set(`${what}:${id}`, n); else look.delete(`${what}:${id}`); }); },
+    hidden: () => {
+      const sheet = model(), out = new Set<number>();
+      if (sheet) for (const name of look.keys()) if (name.startsWith("hidden:")) { const row = sheet.indexOfRow(name.slice(7)); if (row >= 0) out.add(row); }
+      return out;
+    },
+    setHidden: (rows, hidden) => look.doc!.transact(() => { for (const id of rows.map((row) => model()?.rowAt(row))) if (id) { if (hidden) look.set(`hidden:${id}`, 1); else look.delete(`hidden:${id}`); } }),
     setWidths: (cols, width) => set("width", cols.map((col) => model()?.colAt(col)), width),
     setHeights: (rows, height) => set("height", rows.map((row) => model()?.rowAt(row)), height),
     fitColumns: (cols, sheetLook) => {

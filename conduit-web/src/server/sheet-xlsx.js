@@ -16,6 +16,7 @@ import { NAMES } from "../sheet-functions.js";
 
 // How much of a sheet's XML is read for its pane: `sheetViews` stands before its cells.
 const PANE_BYTES = 8192;
+const PT_PER_PX = 0.75;
 const VOLATILE = /\b(?:TODAY|NOW|RAND|RANDBETWEEN|RANDARRAY)\s*\(/i, FORMATS_PER_TAB = 2000, PASSES = 4;
 const ERROR_TEXT = { 0: "#NULL!", 7: "#DIV/0!", 15: "#VALUE!", 23: "#REF!", 29: "#NAME?", 36: "#NUM!", 42: "#N/A", 43: "#GETTING_DATA" };
 const fault = (message) => Object.assign(new Error(message), { status: 422 });
@@ -83,7 +84,6 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     data.forEach((row, r) => row?.forEach((cell, c) => { if (cell && (cell.f || (cell.t !== "z" && cell.v !== "" && cell.v !== undefined))) { rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1); } }));
     read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, rows: Math.max(1, rows), cols: Math.max(1, cols), pane: paneOf(text(xmlOf[called] ?? "", PANE_BYTES)) });
     drop("merged ranges", sheet["!merges"]?.length ?? 0);
-    drop("hidden rows", sheet["!rows"]?.filter((row) => row?.hidden).length ?? 0);
     drop("hidden columns", sheet["!cols"]?.filter((col) => col?.hidden).length ?? 0);
   });
   if (!read.length) throw fault(wanted ? `None of those tabs is in the workbook: its tabs are ${book.SheetNames.join(", ")}` : "That workbook has no tabs with cells");
@@ -166,6 +166,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
         return typed === null ? "" : String(typed);
       }));
       (tab.sheet["!cols"] ?? []).forEach((col, c) => { if (c < tab.cols && col?.wpx) look[`width:${colName(c)}`] = Math.round(col.wpx); });
+      (tab.sheet["!rows"] ?? []).forEach((row, r) => { if (r < tab.rows && row?.hidden) look[`hidden:${r + 1}`] = 1; });
       // A number format is kept for a column where most of its numbers share it, and for the cells that differ, up to a count.
       tab.data.forEach((row, r) => row?.forEach((cell, c) => { if (cell?.t === "n" && r < tab.rows && c < tab.cols) (formats.get(c) ?? formats.set(c, new Map()).get(c)).set(r, typeof cell.z === "string" ? cell.z : "General"); }));
       let single = 0;
@@ -200,7 +201,7 @@ const SCOPED = new Set(["FILTER", "SORT"]);
 const stored = (formula) => formula.slice(1).split(/("(?:[^"]|"")*")/).map((part, nth) => nth % 2 ? part : part.replace(/([A-Za-z][A-Za-z0-9.]*)\(/g, (all, name) => PREFIXED.has(name.toUpperCase()) ? `_xlfn.${all}` : SCOPED.has(name.toUpperCase()) ? `_xlfn._xlws.${all}` : all)).join("");
 const ERROR_CODE = Object.fromEntries(Object.entries(ERROR_TEXT).map(([code, text]) => [text, Number(code)]));
 /**
- * A workbook written as an .xlsx: each formula with the value it computes here, number formats, column widths, frozen panes and hidden tabs. A cell an import
+ * A workbook written as an .xlsx: each formula with the value it computes here, number formats, column widths, row heights, hidden rows, frozen panes and hidden tabs. A cell an import
  * froze gets its formula back where it still holds what the import left in it. No fills, fonts or borders are written.
  * @param {{ name: string, hidden: boolean, typed: string[][], values: unknown[][], look: Record<string, unknown> }[]} tabs  `values`: what each cell computes
  * @param {ImportReport | null} [imported]
@@ -223,6 +224,8 @@ export function exportXlsx(tabs, imported) {
     sheet["!ref"] = `A1:${a1(Math.max(0, tab.typed.length - 1), cols - 1)}`;
     // A column without its own width takes the tab's default (`width` alone), where it has one.
     sheet["!cols"] = Array.from({ length: cols }, (_, c) => { const width = tab.look[`width:${colName(c)}`] ?? tab.look.width; return typeof width === "number" ? { wpx: width } : {}; });
+    // Each row's height where it has its own, in points (SheetJS writes pixels as points), and the rows hidden.
+    sheet["!rows"] = tab.typed.map((_, r) => { const height = tab.look[`height:${r + 1}`]; return { ...(typeof height === "number" ? { hpt: height * PT_PER_PX } : {}), ...(tab.look[`hidden:${r + 1}`] ? { hidden: true } : {}) }; });
     XLSX.utils.book_append_sheet(book, sheet, tab.name);
   }
   book.Workbook = { Sheets: tabs.map((tab) => ({ Hidden: tab.hidden ? 1 : 0 })) };

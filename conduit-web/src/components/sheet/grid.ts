@@ -3,7 +3,7 @@
  * the sheet editor imports this, lazily, so React and the grid never reach the app's first load. TSX here compiles
  * to Solid, so the island is written with createElement.
  */
-import { CompactSelection, DataEditor, GridCellKind, type DataEditorProps, type DataEditorRef, type GridCell, type GridSelection, type Item, type Rectangle, type Theme } from "@glideapps/glide-data-grid";
+import { AllCellRenderers, CompactSelection, DataEditorCore, GridCellKind, ImageWindowLoaderImpl, markerCellRenderer, sprites, type DataEditorProps, type DataEditorRef, type GridCell, type GridSelection, type Item, type Rectangle, type Theme } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
 import { createElement, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -14,11 +14,13 @@ import type { SheetCellStyle } from "./styles";
 import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange, SheetReference } from "./host";
 
 /** What the grid reads of the sheet besides its cells: each column's width and type, the rows whose height is not the default (`look`), a value as its cell's number format draws it (formats.ts), a cell's style (styles.ts), and whether an import froze it. */
-export type SheetColumns = { width(col: number): number | undefined; type(col: number): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean ; freeze(): { rows: number; cols: number } };
+export type SheetColumns = { width(col: number): number | undefined; type(col: number): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean; freeze(): { rows: number; cols: number }; hidden(): ReadonlySet<number> };
 // How near a row's lower edge, beside its number, a press takes the edge to drag.
 const EDGE_SLOP = 3;
 // How often (ms) a drag held past the grid's edge scrolls it on by a column.
 const SWEEP_STEP = 60;
+// How thick (px) the line under a row number is where rows after it are hidden.
+const HIDDEN_LINE = 2;
 // How near a column's side (px) a press takes the edge to size it: the grid's own reach.
 const COL_EDGE = 5;
 type GridOptions = { model: SheetView; columns: SheetColumns; events: SheetGridEvents; look: SheetLook };
@@ -44,6 +46,40 @@ const selected = (selection: GridSelection, size: { rows: number; cols: number }
   return null;
 };
 
+/**
+ * The rows the grid draws and the sheet's rows they are: a hidden row is not drawn, so the grid's row n is the sheet's nth shown row, and past
+ * the sheet's own rows they run on one for one. Everything the grid says of a row is turned into the sheet's here, and back.
+ */
+function createRowMap() {
+  let shown: Int32Array | null = null, at: Int32Array | null = null, held = 0;
+  const same = (one: Int32Array | null, two: Int32Array | null) => one === two || (one !== null && two !== null && one.length === two.length && one.every((row, n) => row === two[n]));
+  const map = {
+    /** Counts each change of which rows are hidden. */
+    version: 0,
+    /** `rows`: how many the sheet holds; `hidden`: which of those are not drawn. */
+    set(hidden: ReadonlySet<number>, rows: number) {
+      const was = shown;
+      held = rows; shown = at = null;
+      if ([...hidden].some((row) => row < rows)) {
+        const list: number[] = [];
+        at = new Int32Array(rows);
+        for (let row = 0; row < rows; row++) { at[row] = list.length; if (!hidden.has(row)) list.push(row); }
+        shown = Int32Array.from(list);
+      }
+      if (!same(was, shown)) map.version++;
+    },
+    hiddenCount: () => shown ? held - shown.length : 0,
+    sheet: (drawn: number) => !shown ? drawn : drawn < shown.length ? shown[drawn]! : held + drawn - shown.length,
+    /** A hidden row gives the first shown row after it. */
+    drawn: (row: number) => !at || !shown ? row : row < held ? at[row]! : shown.length + row - held,
+    hidden: (row: number) => Boolean(at && shown && row < held && shown[at[row]!] !== row),
+    toSheet: (area: SheetRange | null): SheetRange | null => area && { ...area, top: map.sheet(area.top), bottom: map.sheet(area.bottom) },
+    /** Null where every row of it is hidden. */
+    toDrawn: (area: SheetRange): SheetRange | null => { const top = map.drawn(area.top), bottom = map.drawn(area.bottom) - (map.hidden(area.bottom) ? 1 : 0); return bottom < top ? null : { ...area, top, bottom }; },
+  };
+  return map;
+}
+
 /** Mounts the grid in `element` and gives the editor its controls; the grid's whole state is here, kept as React's. */
 export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid {
   const { model, events } = options;
@@ -63,46 +99,49 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   const marks = () => drive.marks?.(comments.length || references.length ? [...references, ...comments] : undefined);
 
   // The grid runs on past what the sheet holds, as a spreadsheet's does: a cell written out there makes the sheet reach it (the hub's `set`).
-  const reach = () => { const held = model.size(); return { rows: Math.max(held.rows + ROOM.rows, ROOM.least.rows), cols: Math.min(COL_LIMIT, Math.max(held.cols + ROOM.cols, ROOM.least.cols)) }; };
+  const rowMap = createRowMap();
+  const reach = () => { const held = model.size(); rowMap.set(options.columns.hidden(), held.rows); return { rows: Math.max(held.rows - rowMap.hiddenCount() + ROOM.rows, ROOM.least.rows), cols: Math.min(COL_LIMIT, Math.max(held.cols + ROOM.cols, ROOM.least.cols)) }; };
   let size = reach(), current = NO_SELECTION, frozenCols = 0;
   const write = (list: { row: number; col: number; input: string }[]) => { if (list.length) events.write(list); };
   // Made once: a new function or object for the grid on each render has it work everything out again, the cost of each arrow-key move.
   const handlers: Partial<DataEditorProps> = {
-    onGridSelectionChange: (next) => { drive.select?.(next); events.selected(selected(next, size)); },
+    onGridSelectionChange: (next) => { drive.select?.(next); events.selected(picked(next)); },
     onCellsEdited: (cells) => {
-      write(cells.map(({ location: [col, row], value }) => ({ row, col, input: value.kind === GridCellKind.Boolean ? (value.data ? "TRUE" : "FALSE") : value.kind === GridCellKind.Text ? value.data : "" })));
+      write(cells.map(({ location: [col, row], value }) => ({ row: rowMap.sheet(row), col, input: value.kind === GridCellKind.Boolean ? (value.data ? "TRUE" : "FALSE") : value.kind === GridCellKind.Text ? value.data : "" })));
       return true;
     },
     onPaste: (target, values) => {
-      const [col, row] = target, bottom = row + values.length - 1, right = col + Math.max(...values.map((line) => line.length)) - 1;
-      if (bottom >= model.size().rows || right >= model.size().cols) events.fill({ top: row, left: col, bottom, right }, values.map((line) => [...line]));
-      else write(values.flatMap((line, y) => line.map((input, x) => ({ row: row + y, col: col + x, input }))));
+      // Into the rows shown, a hidden one keeping what it holds.
+      const [col, row] = target, bottom = rowMap.sheet(row + values.length - 1), right = col + Math.max(...values.map((line) => line.length)) - 1;
+      if (bottom >= model.size().rows || right >= model.size().cols) events.fill({ top: rowMap.sheet(row), left: col, bottom, right }, values.map((line) => [...line]));
+      else write(values.flatMap((line, y) => line.map((input, x) => ({ row: rowMap.sheet(row + y), col: col + x, input }))));
       return false;
     },
     onDelete: (cleared) => {
       const area = selected(cleared, size), list: { row: number; col: number; input: string }[] = [];
-      if (area) for (let row = area.top; row <= area.bottom; row++) for (let col = area.left; col <= area.right; col++) if (model.input(row, col)) list.push({ row, col, input: "" });
+      if (area) for (let drawn = area.top; drawn <= area.bottom; drawn++) { const row = rowMap.sheet(drawn); for (let col = area.left; col <= area.right; col++) if (model.input(row, col)) list.push({ row, col, input: "" }); }
       write(list);
       return false;
     },
     // A fill is the hub's, so a formula's references move per cell as a spreadsheet's fill does.
     onFillPattern: ({ patternSource, fillDestination, preventDefault }) => {
       preventDefault();
-      const source = range(patternSource);
-      events.fill(range(fillDestination), Array.from({ length: patternSource.height }, (_, y) => Array.from({ length: patternSource.width }, (_, x) => model.input(source.top + y, source.left + x))));
+      // From the rows shown into the rows shown: each run of them between hidden rows is filled on its own.
+      const source = range(patternSource), into = range(fillDestination), values = Array.from({ length: patternSource.height }, (_, y) => Array.from({ length: patternSource.width }, (_, x) => model.input(rowMap.sheet(source.top + y), source.left + x)));
+      for (let from = into.top, drawn = into.top; drawn <= into.bottom; drawn++) if (drawn === into.bottom || rowMap.sheet(drawn + 1) !== rowMap.sheet(drawn) + 1) { events.fill({ ...into, top: rowMap.sheet(from), bottom: rowMap.sheet(drawn) }, values); from = drawn + 1; }
     },
     onColumnResize: (_, width, col) => drive.width?.(col, width),
     onColumnResizeEnd: (_, width, col) => events.resized(col, width),
-    onHeaderContextMenu: (col) => { const area = selected(current, size); events.menu({ cols: current.columns.hasIndex(col) && area ? area : { top: 0, bottom: 0, left: col, right: col } }); },
-    onCellContextMenu: ([col, row]) => {
-      const area = selected(current, size), inside = area && row >= area.top && row <= area.bottom && (col < 0 || (col >= area.left && col <= area.right));
+    onHeaderContextMenu: (col) => { const area = picked(current); events.menu({ cols: current.columns.hasIndex(col) && area ? area : { top: 0, bottom: 0, left: col, right: col } }); },
+    onCellContextMenu: ([col, drawn]) => {
+      const row = rowMap.sheet(drawn), area = picked(current), inside = area && row >= area.top && row <= area.bottom && (col < 0 || (col >= area.left && col <= area.right));
       const rows = inside ? { ...area, left: 0, right: 0 } : { top: row, bottom: row, left: 0, right: 0 }, cols = inside && col >= 0 ? { ...area, top: 0, bottom: 0 } : { top: 0, bottom: 0, left: col, right: col };
       events.menu(col < 0 ? { rows } : { rows, cols });
     },
     // A press on the cell already selected moves nothing, so the grid would not take the keyboard back from the pane, which takes it on any press.
-    onCellClicked: ([col, row]) => { editor?.focus(); events.pressed(row, col); },
-    onCellActivated: ([col, row]) => events.activated(row, col),
-    onKeyDown: (event) => { const cell = current.current?.cell; if (cell && events.key(event, cell[1], cell[0])) event.cancel(); },
+    onCellClicked: ([col, row]) => { editor?.focus(); events.pressed(rowMap.sheet(row), col); },
+    onCellActivated: ([col, row]) => events.activated(rowMap.sheet(row), col),
+    onKeyDown: (event) => { const cell = current.current?.cell; if (cell && events.key(event, rowMap.sheet(cell[1]), cell[0])) event.cancel(); },
     editOnType: false, cellActivationBehavior: "double-click",
     onVisibleRegionChanged: (region) => { view = region; events.moved(); },
     // Its own Ctrl+Space and Shift+Space take only the current cell's column or row; the sheet's take the whole selection's (`whole`).
@@ -112,6 +151,15 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     experimental: { disableAccessibilityTree: true, renderStrategy: "double-buffer" },
   };
   const made = (instance: DataEditorRef | null) => { editor = instance; };
+  // Each row's number is the sheet's, and a line under it says rows after it are hidden. The grid's core is used for this, as its usual wrapper
+  // sets its own renderers; what else the wrapper gives (its icons, an image loader) is given here once.
+  const core = { headerIcons: sprites, imageWindowLoader: new ImageWindowLoaderImpl() };
+  const renderers = AllCellRenderers.map((one) => one !== markerCellRenderer ? one : { ...one, draw: (args: Parameters<typeof one.draw>[0], cell: Parameters<typeof one.draw>[1]) => {
+    if (!("markerKind" in cell)) return;
+    const drawn = cell.row - 1, row = rowMap.sheet(drawn), { ctx, rect: box, theme: drawnTheme } = args;
+    markerCellRenderer.draw({ ...args, cell: { ...cell, row: row + 1 } }, { ...cell, row: row + 1 });
+    if (rowMap.sheet(drawn + 1) > row + 1) { ctx.fillStyle = drawnTheme.textMedium; ctx.fillRect(box.x, box.y + box.height - HIDDEN_LINE, box.width, HIDDEN_LINE); }
+  } });
 
   function Grid() {
     const [selection, setSelection] = useState<GridSelection>(NO_SELECTION), [marks, setMarks] = useState<DataEditorProps["highlightRegions"]>(), [shape, setShape] = useState(0), [theme, setTheme] = useState(look);
@@ -130,8 +178,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     const cellLook = useMemo(() => createCellLook(theme), [theme]);
     const content = useMemo(() => {
       const hues = { destructive: theme.error, live: theme.live, warn: theme.warn }, { theme: themed } = cellLook;
-      return ([col, row]: Item): GridCell => {
-        const value = model.value(row, col), type = types[col];
+      return ([col, at]: Item): GridCell => {
+        const row = rowMap.sheet(at), value = model.value(row, col), type = types[col];
         if (type === "boolean") return { kind: GridCellKind.Boolean, data: value === true, allowOverlay: false, copyData: model.input(row, col) };
         // An empty value is an empty cell but for a formula that gives nothing.
         const input = value === null || typeof value === "string" ? model.input(row, col) : null;
@@ -148,19 +196,20 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     // One number while every row is the default height: the grid then sums no heights to scroll.
     const rowHeight = useMemo(() => {
       const kept = options.columns.heights();
-      return kept.size || Object.keys(heights).length ? (row: number) => heights[row] ?? kept.get(row) ?? theme.row : theme.row;
+      return kept.size || Object.keys(heights).length ? (row: number) => heights[row] ?? kept.get(rowMap.sheet(row)) ?? theme.row : theme.row;
     }, [shape, heights, theme]);
     // The columns frozen stand at the left as the rest scroll; never all of those in view, or nothing could scroll.
     const freezeColumns = useMemo(() => { frozenCols = Math.min(options.columns.freeze().cols, cols - 1); return frozenCols; }, [shape, cols]);
     const props: DataEditorProps = { ...handlers, columns, rows, freezeColumns, getCellContent: content, drawCell: cellLook.draw,
       // A whole column's letter, picked, is washed as its cells are; the grid would fill it in the accent its fill handle and ring keep.
       drawHeader: (args, draw) => { if (args.isSelected) { const { ctx, rect } = args, inset = args.columnIndex ? 1 : 0; for (const fill of [theme.grid.bgHeader, theme.picked]) { ctx.fillStyle = String(fill); ctx.fillRect(rect.x + inset, rect.y, rect.width - inset, rect.height); } } draw(); }, theme: theme.grid as Partial<Theme>, rowHeight, headerHeight: theme.header, gridSelection: selection, highlightRegions: marks };
-    return createElement(DataEditor, { ...props, ref: made });
+    return createElement(DataEditorCore, { ...props, ...core, renderers, ref: made });
   }
 
   const root = createRoot(element);
   root.render(createElement(Grid));
   const box = (col: number, row: number) => editor?.getBounds(col, row);
+  const picked = (selection: GridSelection) => rowMap.toSheet(selected(selection, size));
   // The frozen columns first: they stand in view whatever the scroll.
   const colAt = (x: number) => { for (let at = frozenCols ? 0 : view.x; at < view.x + view.width + 1; at = at + 1 === frozenCols ? Math.max(view.x, frozenCols) : at + 1) { const cell = box(at, view.y); if (cell && x >= cell.x && x < cell.x + cell.width) return at; } return -1; };
   const rowAt = (y: number) => { for (let at = view.y; at < view.y + view.height + 1; at++) { const cell = box(view.x, at); if (cell && y >= cell.y && y < cell.y + cell.height) return at; } return -1; };
@@ -187,9 +236,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       // The next line on from the one at the edge, found by its own bounds: the grid tells its visible region only once a scroll settles.
       if (past && now - stepped > SWEEP_STEP) { stepped = now; const next = Math.min(Math.max(to + past, 0), (across ? size.cols : size.rows) - 1);
         if (across) editor?.scrollTo(next, view.y, "horizontal"); else editor?.scrollTo(view.x, next, "vertical"); }
-      const picked = CompactSelection.fromSingleSelection([Math.min(from, to), Math.max(from, to) + 1]);
-      if (picked.equals(across ? current.columns : current.rows)) return;
-      current = { columns: across ? picked : CompactSelection.empty(), rows: across ? CompactSelection.empty() : picked }; drive.select?.(current); events.selected(selected(current, size)); };
+      const lines = CompactSelection.fromSingleSelection([Math.min(from, to), Math.max(from, to) + 1]);
+      if (lines.equals(across ? current.columns : current.rows)) return;
+      current = { columns: across ? lines : CompactSelection.empty(), rows: across ? CompactSelection.empty() : lines }; drive.select?.(current); events.selected(picked(current)); };
     const move = (moved: PointerEvent) => { place = across ? moved.clientX : moved.clientY; };
     const up = () => { cancelAnimationFrame(frame); removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", up); };
     stop(); stop = up;
@@ -198,27 +247,40 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   element.addEventListener("pointerdown", sweep);
   return {
     update: (changed) => {
-      if (!changed) return drive.structure?.();
+      if (!changed) {
+        // The selection is held as the grid draws it: kept on the same sheet rows when rows are hidden or shown.
+        const was = picked(current), rows = current.rows.length > 0, cell = current.current && rowMap.sheet(current.current.cell[1]), version = rowMap.version;
+        drive.structure?.();
+        const now = was && rowMap.toDrawn(was);
+        if (!was || current.columns.length || version === rowMap.version) return;
+        current = !now ? NO_SELECTION : rows ? { columns: CompactSelection.empty(), rows: CompactSelection.fromSingleSelection([now.top, now.bottom + 1]) }
+          : { ...current, current: { cell: [current.current!.cell[0], Math.min(Math.max(rowMap.drawn(cell!), now.top), now.bottom)], range: rect(now), rangeStack: [] } };
+        drive.select?.(current);
+        return;
+      }
       // Only what is in view is drawn again; the rest is read as it scrolls in.
-      const near = changed.filter(({ row, col }) => row >= view.y && row < view.y + view.height + 1 && col >= view.x && col < view.x + view.width + 1);
-      if (near.length) editor?.updateCells(near.map(({ row, col }) => ({ cell: [col, row] })));
+      const near = changed.flatMap(({ row: at, col }) => { const row = rowMap.drawn(at); return !rowMap.hidden(at) && row >= view.y && row < view.y + view.height + 1 && col >= view.x && col < view.x + view.width + 1 ? [{ cell: [col, row] as Item }] : []; });
+      if (near.length) editor?.updateCells(near);
     },
     select: (to, scroll) => {
       // Held at once, not at React's next render: `whole` and the grid's own focus read it straight after.
-      current = to ? { columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: { cell: [to.left, to.top], range: rect(to), rangeStack: [] } } : NO_SELECTION;
+      const drawn = to && rowMap.toDrawn(to);
+      current = drawn ? { columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: { cell: [drawn.left, drawn.top], range: rect(drawn), rangeStack: [] } } : NO_SELECTION;
       drive.select?.(current);
       events.selected(to);
-      if (to && scroll) editor?.scrollTo(to.left, to.top, "both", 0, 0, { vAlign: "center", hAlign: "center" });
+      if (drawn && scroll) editor?.scrollTo(drawn.left, drawn.top, "both", 0, 0, { vAlign: "center", hAlign: "center" });
     },
-    highlight: (list) => { comments = list.map((one) => ({ color: one.current ? look.markCurrent : look.mark, range: rect(one.range), style: one.current ? "solid-outline" : "no-outline" })); marks(); },
+    highlight: (list) => { comments = list.flatMap((one) => { const drawn = rowMap.toDrawn(one.range); return drawn ? [{ color: one.current ? look.markCurrent : look.mark, range: rect(drawn), style: one.current ? "solid-outline" as const : "no-outline" as const }] : []; }); marks(); },
     // A whole column or row runs to the grid's end.
     references: (list: readonly SheetReference[]) => {
-      references = list.map((one) => ({ color: look.inks[one.ink] ?? look.mark, range: rect({ ...one.range, bottom: Math.min(one.range.bottom, size.rows - 1), right: Math.min(one.range.right, size.cols - 1) }), style: one.pointing ? "dashed" : "solid" }));
+      references = list.flatMap((one) => { const drawn = rowMap.toDrawn(one.range); return drawn ? [{ color: look.inks[one.ink] ?? look.mark, range: rect({ ...drawn, bottom: Math.min(drawn.bottom, size.rows - 1), right: Math.min(drawn.right, size.cols - 1) }), style: one.pointing ? "dashed" as const : "solid" as const }] : []; });
       marks();
     },
     // The region's edge cells may be cut off: those are scrolled to, the rest left where they are.
-    show: (row, col) => { if (col <= view.x || col >= view.x + view.width - 1 || row <= view.y || row >= view.y + view.height - 1) editor?.scrollTo(col, row); },
-    bounds: (area) => {
+    show: (at, col) => { const row = rowMap.drawn(at); if (col <= view.x || col >= view.x + view.width - 1 || row <= view.y || row >= view.y + view.height - 1) editor?.scrollTo(col, row); },
+    bounds: (whole) => {
+      const area = rowMap.toDrawn(whole);
+      if (!area) return null;
       const first = box(area.left, area.top), last = box(area.right, area.bottom), numbers = box(-1, area.top), frame = element.getBoundingClientRect();
       if (!first || !last || !numbers) return null;
       // Clipped to the cells' part of the grid, under the header and beside the row numbers, or the frozen columns where it scrolls under them.
@@ -228,19 +290,19 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     },
     cellAt: (x, y) => {
       const col = colAt(x), row = rowAt(y);
-      return col < 0 || row < 0 ? null : { row, col };
+      return col < 0 || row < 0 ? null : { row: rowMap.sheet(row), col };
     },
     whole: (kind) => {
       const area = selected(current, size);
       if (!area) return;
-      const picked = CompactSelection.fromSingleSelection(kind === "cols" ? [area.left, area.right + 1] : [area.top, area.bottom + 1]);
-      const next: GridSelection = { columns: kind === "cols" ? picked : CompactSelection.empty(), rows: kind === "rows" ? picked : CompactSelection.empty() };
-      drive.select?.(next); events.selected(selected(next, size));
+      const lines = CompactSelection.fromSingleSelection(kind === "cols" ? [area.left, area.right + 1] : [area.top, area.bottom + 1]);
+      const next: GridSelection = { columns: kind === "cols" ? lines : CompactSelection.empty(), rows: kind === "rows" ? lines : CompactSelection.empty() };
+      drive.select?.(next); events.selected(picked(next));
     },
-    rowEdge,
-    height: (row, height) => drive.height?.(row, height),
+    rowEdge: (x, y) => { const edge = rowEdge(x, y); return edge && { ...edge, row: rowMap.sheet(edge.row) }; },
+    height: (row, height) => drive.height?.(rowMap.drawn(row), height),
     theme: (next) => { look = next; drive.look?.(look); },
-    scroll: (to) => { if (to) editor?.scrollTo(to.col, to.row, "both", 0, 0, { hAlign: "start", vAlign: "start" }); return { row: view.y, col: view.x }; },
+    scroll: (to) => { if (to) editor?.scrollTo(to.col, rowMap.drawn(to.row), "both", 0, 0, { hAlign: "start", vAlign: "start" }); return { row: rowMap.sheet(view.y), col: view.x }; },
     focus: () => editor?.focus(),
     destroy: () => { stop(); element.removeEventListener("pointerdown", sweep); root.unmount(); },
   };

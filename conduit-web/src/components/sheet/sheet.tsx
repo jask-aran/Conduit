@@ -111,7 +111,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     void import("./grid").then(({ mountGrid }) => {
       if (over) return;
       made = mountGrid(into, { model: sheet, events, look: readLook(root!), columns: {
-        width: sizes.width, freeze: sizes.freeze,
+        width: sizes.width, freeze: sizes.freeze, hidden: sizes.hidden,
         type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; }, heights: sizes.heights, draw: formats.draw, style: styles.at, frozen: (row, col) => Boolean(frozenAt(row, col)),
       } });
       setGrid(made);
@@ -251,10 +251,17 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   // The menu's own doings, over what it was opened on: a sequence's (sizes), and the cells' cut, copy, paste and clearing.
   const picked = (): SheetRange | null => { const r = rows(), c = cols(); return r && c ? { top: r.top, bottom: r.bottom, left: c.left, right: c.right } : null; };
   const sized = (keys: string, selection: SheetRange) => SHEET_SEQUENCES.find((sequence): sequence is Extract<SheetSequence, { run: unknown }> => sequence.keys === keys && "run" in sequence)?.run({ selection: () => selection, sizes, look: () => readLook(root!), ask: setQuestion });
-  const within = (range: SheetRange) => Array.from({ length: range.bottom - range.top + 1 }, (_, r) => Array.from({ length: range.right - range.left + 1 }, (_, c) => ({ row: range.top + r, col: range.left + c })));
+  // What a range's cuts, clears, pastes and deletes reach: its rows shown, never one hidden, which is out of sight.
+  const shownRows = (range: SheetRange) => { const hidden = sizes.hidden(); return Array.from({ length: range.bottom - range.top + 1 }, (_, r) => range.top + r).filter((row) => !hidden.has(row)); };
+  const shownFrom = (top: number, count: number) => { const hidden = sizes.hidden(), out: number[] = []; for (let row = top; out.length < count; row++) if (!hidden.has(row)) out.push(row); return out; };
+  const within = (range: SheetRange) => shownRows(range).map((row) => Array.from({ length: range.right - range.left + 1 }, (_, c) => ({ row, col: range.left + c })));
   const copy = (range: SheetRange) => navigator.clipboard.writeText(within(range).map((row) => row.map(({ row: r, col }) => String(model()?.value(r, col) ?? "")).join("\t")).join("\n")).catch((error: Error) => props.host.failed(error.message));
   const clear = (range: SheetRange) => write(within(range).flat().map((cell) => ({ ...cell, input: "" })));
-  const paste = (range: SheetRange) => void navigator.clipboard.readText().then((text) => write(text.replace(/\r?\n$/, "").split(/\r?\n/).flatMap((line, r) => line.split("\t").map((input, c) => ({ row: range.top + r, col: range.left + c, input })))), (error: Error) => props.host.failed(error.message));
+  const paste = (range: SheetRange) => void navigator.clipboard.readText().then((text) => { const lines = text.replace(/\r?\n$/, "").split(/\r?\n/), rows = shownFrom(range.top, lines.length);
+    write(lines.flatMap((line, r) => line.split("\t").map((input, c) => ({ row: rows[r]!, col: range.left + c, input })))); }, (error: Error) => props.host.failed(error.message));
+  // Each run of shown rows on its own, the last first, so the runs above keep their places.
+  const deleteRows = (range: SheetRange) => { const rows = shownRows(range); for (let end = rows.length - 1; end >= 0;) { let start = end; while (start > 0 && rows[start - 1] === rows[start]! - 1) start--; structure("delete-rows", rows[start]!, end - start + 1); end = start - 1; } };
+  const hiddenIn = (range: SheetRange) => shownRows(range).length < range.bottom - range.top + 1;
   // A header's menu is its whole columns, a row number's its whole rows (formats.ts clips both to the tab).
   const formatted = () => { const { rows, cols } = menu(), most = Number.MAX_SAFE_INTEGER; return rows || cols ? { top: rows?.top ?? 0, bottom: rows?.bottom ?? most, left: cols?.left ?? 0, right: cols?.right ?? most } : null; };
   const count = (from: number, to: number) => to - from + 1;
@@ -295,7 +302,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
             <Show when={rows()}>{(range) => <MenuSection>
               <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-rows", range().top, count(range().top, range().bottom))}>Insert {count(range().top, range().bottom) > 1 ? `${count(range().top, range().bottom)} rows` : "row"} above</MenuRow>
               <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-rows", range().bottom + 1, count(range().top, range().bottom))}>Insert {count(range().top, range().bottom) > 1 ? `${count(range().top, range().bottom)} rows` : "row"} below</MenuRow>
-              <MenuRow destructive icon={<Icons.Delete />} onSelect={() => structure("delete-rows", range().top, count(range().top, range().bottom))}>Delete {count(range().top, range().bottom) > 1 ? `rows ${range().top + 1}–${range().bottom + 1}` : `row ${range().top + 1}`}</MenuRow>
+              <MenuRow icon={<Icons.Hide />} onSelect={() => sizes.setHidden(Array.from({ length: count(range().top, range().bottom) }, (_, r) => range().top + r), true)}>Hide {count(range().top, range().bottom) > 1 ? `rows ${range().top + 1}–${range().bottom + 1}` : `row ${range().top + 1}`}</MenuRow>
+              <Show when={hiddenIn(range())}><MenuRow icon={<Icons.Preview />} onSelect={() => sizes.setHidden(Array.from({ length: count(range().top, range().bottom) }, (_, r) => range().top + r), false)}>Unhide rows</MenuRow></Show>
+              <MenuRow destructive icon={<Icons.Delete />} onSelect={() => deleteRows(range())}>Delete {count(range().top, range().bottom) > 1 ? `rows ${range().top + 1}–${range().bottom + 1}` : `row ${range().top + 1}`}</MenuRow>
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "H"]} onSelect={() => sized("HOH", range())}>Row height…</MenuRow>
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "A"]} onSelect={() => sized("HOA", range())}>Fit row height</MenuRow>
             </MenuSection>}</Show>
