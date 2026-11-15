@@ -7,6 +7,8 @@ import { JBOT_TABS, type JbotTab } from "./agent-page";
 import { isMobileLayout } from "../navigation/mobile-layout";
 import { dropLatestScroller, setLatestScroller, tellLatestAway } from "../chat/latest-away";
 import { mountTranscriptVisibility } from "../chat/transcript-visibility";
+import { createTranscriptFind } from "../chat/transcript-find";
+import { FindBar } from "@/components/ui/find";
 import { SplitEmpty } from "./primitives/split";
 import type { TurnTraceData } from "../turn-rows";
 
@@ -72,11 +74,15 @@ export function JbotRoom(props: {
   });
   let visibility: ReturnType<typeof mountTranscriptVisibility> | undefined;
   const follow = createTranscriptFollow({ viewport: () => viewport, holding: () => Boolean(visibility?.moving() || visibility?.refreshing()) });
+  let thread: HTMLElement | undefined;
+  const find = createTranscriptFind({ viewport: () => viewport!, thread: () => thread!, scrollTo: (top) => follow.readerScroll(top), row: ".ui-transcript-row" });
   const manageLog = (list: HTMLDivElement) => {
     const owner = getOwner();
     queueMicrotask(() => runWithOwner(owner, () => {
       if (!viewport || !list.isConnected) return;
       const mounted = mountTranscriptVisibility(viewport, list, (delta) => follow.readerScroll(follow.scrollTop() + delta), ".ui-transcript-row");
+      thread = list;
+      find.register(viewport);
       visibility = mounted;
       onCleanup(() => { mounted.destroy(); if (visibility === mounted) visibility = undefined; });
     }));
@@ -131,8 +137,9 @@ export function JbotRoom(props: {
         {/* With its composer: a page drawn without it moves up as it comes. */}
         <ChatView aria-label={`Messages with ${name()}`} opening={!log.loaded() || props.composerReady === false}>
           <ChatScroller ref={(element) => { root = element; }} viewportRef={(element) => { viewport = element; }} columnRef={attachFollow}
-            over={<RiderButton ref={(element: HTMLButtonElement) => { latest = element; }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
-              hidden={!desktop || !away() || (!wide() && over())} onMouseDown={(event) => event.preventDefault()} onClick={jumpToLatest} />}>
+            over={<><RiderButton ref={(element: HTMLButtonElement) => { latest = element; }} ride="centre" icon={<Icons.ArrowDown />} label="Scroll to latest"
+              hidden={!desktop || !away() || (!wide() && over())} onMouseDown={(event) => event.preventDefault()} onClick={jumpToLatest} />
+              <Show when={find.open()}><FindBar query={find.query()} count={find.count()} inputRef={find.setInput} onQuery={find.setQuery} onNext={find.next} onPrevious={find.previous} onEscape={find.escape} onClose={find.close} /></Show></>}>
             <JbotMessages listRef={manageLog} messages={log.messages()} name={name()} working={props.working} live={props.live} sent={props.sent} />
           </ChatScroller>
           <Show when={props.composer}><ComposerDock ref={clearUnderComposer}>{props.composer}</ComposerDock></Show>

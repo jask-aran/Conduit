@@ -1,6 +1,7 @@
 import { batch, createSignal, onCleanup } from "solid-js";
 import { foldFindOf } from "@/components/ui/transcript";
 import { createLatest } from "../state/latest";
+import { visibleBand } from "./transcript-cursor";
 
 /*
  * Searches the thread's text as drawn: the transcript's virtualization is content-visibility, not unmounting, so text
@@ -33,11 +34,11 @@ const rowFolds = (row: HTMLElement) => [...row.querySelectorAll<HTMLElement>(FOL
 });
 
 /** A match never spans two rows. */
-export function findMatches(thread: HTMLElement, query: string): Entry[] {
+export function findMatches(thread: HTMLElement, query: string, rowSelector = ROW): Entry[] {
   const needle = query.toLowerCase();
   if (!needle) return [];
   const matches: Entry[] = [];
-  for (const row of thread.querySelectorAll<HTMLElement>(`:scope > ${ROW}`)) {
+  for (const row of thread.querySelectorAll<HTMLElement>(`:scope > ${rowSelector}`)) {
     const drawn: FindMatch[] = [];
     const nodes: Text[] = [], starts: number[] = [];
     let text = "";
@@ -110,8 +111,29 @@ export function openTranscriptFind(viewport: HTMLElement | null | undefined) {
 }
 export const hasTranscriptFind = (viewport: HTMLElement | null | undefined) => Boolean(viewport && finders.has(viewport));
 
-/** reveal: brings a match on screen as the reader's own scroll (the transcript owns its scrolling and the tail). */
-export function createTranscriptFind(options: { viewport: () => HTMLElement; thread: () => HTMLElement; reveal: (match: FindMatch) => void }) {
+/** scrollTo: the reader's own scroll (the transcript owns its scrolling and the tail). */
+export function createTranscriptFind(options: { viewport: () => HTMLElement; thread: () => HTMLElement; scrollTo: (top: number) => void; row?: string }) {
+  // A match's text may be in a block the visibility pass hides: the block, or its row, is brought on screen first and
+  // the match measured once shown.
+  const show = (match: FindMatch) => {
+    const viewport = options.viewport();
+    let tries = 0;
+    const centre = (rect: DOMRect) => {
+      const band = visibleBand(viewport, options.thread());
+      if (rect.top >= band.top && rect.bottom <= band.bottom) return;
+      options.scrollTo(viewport.scrollTop + rect.top + rect.height / 2 - (band.top + band.bottom) / 2);
+    };
+    const attempt = () => {
+      if (!match.range.startContainer.isConnected) return;
+      const hidden = match.range.startContainer.parentElement?.closest<HTMLElement>("[data-transcript-visibility]");
+      const rect = match.range.getBoundingClientRect();
+      if (!hidden && (rect.width || rect.height)) { centre(rect); return; }
+      if (tries++ >= 4) return;
+      centre((hidden?.getAttribute("data-transcript-visibility") === "hidden" ? hidden : match.row).getBoundingClientRect());
+      requestAnimationFrame(() => requestAnimationFrame(attempt));
+    };
+    attempt();
+  };
   const owner = Symbol("find");
   const [open, setOpen] = createSignal(false);
   const [query, setQueryValue] = createSignal("");
@@ -144,12 +166,12 @@ export function createTranscriptFind(options: { viewport: () => HTMLElement; thr
     setIndex(next);
     paint();
     if (!reveal || !entry) return;
-    if (!inFold(entry)) return options.reveal(entry);
+    if (!inFold(entry)) return show(entry);
     const current = opening.next();
     foldFindOf(entry.fold)?.open();
     requestAnimationFrame(() => requestAnimationFrame(() => {
       if (!current() || !open()) return;
-      matches = findMatches(options.thread(), query());
+      matches = findMatches(options.thread(), query(), options.row);
       setTotal(matches.length);
       const inside = matches.flatMap((match, at) => entry.fold.contains(inFold(match) ? match.fold : match.range.startContainer) ? [at] : []);
       const stuck = entry.fold.isConnected && entry.fold.hasAttribute("data-find-fold");
@@ -165,7 +187,7 @@ export function createTranscriptFind(options: { viewport: () => HTMLElement; thr
     // A fold still opening for the last search's step is not this one's to finish.
     opening.drop();
     const previous = matches[index()];
-    matches = findMatches(options.thread(), query());
+    matches = findMatches(options.thread(), query(), options.row);
     setTotal(matches.length);
     if (!matches.length) return go(-1, false);
     if (!keep || !previous) return go(nearest());

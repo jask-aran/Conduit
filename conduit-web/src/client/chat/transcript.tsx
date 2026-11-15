@@ -45,8 +45,8 @@ import { ApprovalCard, haptic, type ApprovalChoice, type ApprovalLine, type Appr
 import { ChatMarkdown } from "./lazy-markdown";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow } from "@/components/ui/menus";
 import { FindBar } from "@/components/ui/find";
-import { mountTranscriptCursor, visibleBand } from "./transcript-cursor";
-import { createTranscriptFind, type FindMatch } from "./transcript-find";
+import { mountTranscriptCursor } from "./transcript-cursor";
+import { createTranscriptFind } from "./transcript-find";
 import { fullDateTime } from "./full-date-time";
 import { elapsed } from "./tool-card";
 
@@ -165,27 +165,7 @@ export function Transcript(props: { readOnly?: boolean; chat: TranscriptSource; 
   const [turnMenu, setTurnMenu] = createSignal<{ row: HTMLElement; actions: TurnAction[] } | null>(null);
   let turnCursor: ReturnType<typeof mountTranscriptCursor> | null = null;
   let readerScroll = (top: number) => { viewport.scrollTop = top; };
-  // A match's text may be in a block the visibility pass hides: the block, or its row, is brought on screen first and
-  // the match measured once shown.
-  const revealMatch = (match: FindMatch) => {
-    let tries = 0;
-    const centre = (rect: DOMRect) => {
-      const band = visibleBand(viewport, thread);
-      if (rect.top >= band.top && rect.bottom <= band.bottom) return;
-      readerScroll(viewport.scrollTop + rect.top + rect.height / 2 - (band.top + band.bottom) / 2);
-    };
-    const attempt = () => {
-      if (!match.range.startContainer.isConnected) return;
-      const hidden = match.range.startContainer.parentElement?.closest<HTMLElement>("[data-transcript-visibility]");
-      const rect = match.range.getBoundingClientRect();
-      if (!hidden && (rect.width || rect.height)) { centre(rect); return; }
-      if (tries++ >= 4) return;
-      centre((hidden?.getAttribute("data-transcript-visibility") === "hidden" ? hidden : match.row).getBoundingClientRect());
-      requestAnimationFrame(() => requestAnimationFrame(attempt));
-    };
-    attempt();
-  };
-  const find = createTranscriptFind({ viewport: () => viewport, thread: () => thread, reveal: revealMatch });
+  const find = createTranscriptFind({ viewport: () => viewport, thread: () => thread, scrollTo: (top) => readerScroll(top) });
   const openTurnMenu = (row: HTMLElement) => {
     const actions = turnActions.get(row)?.() ?? [];
     if (!actions.length) return false;
