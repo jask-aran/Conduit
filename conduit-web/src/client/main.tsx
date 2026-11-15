@@ -2488,6 +2488,8 @@ function App() {
     if (leavesUnsaved(previous, next, pane) && !(await confirmDialog("Discard unsaved changes and close this file?", { destructive: true, confirmLabel: "Discard", valid: () => viewOf(pane) === previous }))) return false;
     if (viewOf(pane) !== previous) return false;
     if (arrives(pane, previous, next) && !(await arrive(pane, next!, () => viewOf(pane) === previous))) return false;
+    // Passed: the artifact made behind takes the pane with the change the caller makes next, so it is no longer arriving.
+    leaves(pane);
     return true;
   };
   // Pane A draws the route: a change that leaves it showing a route view sends the route there, one drive at a time.
