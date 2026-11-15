@@ -47,8 +47,7 @@ export function readLook(where: HTMLElement): SheetLook {
   });
   const look: SheetLook = {
     grid, row: length("var(--control-sm)"), header: length("var(--control-sm)"),
-    // A whole column's letter, picked: washed as the cells under it are, not filled in the accent the selection ring keeps.
-    picked: { accentColor: colour(wash("--tone-line")), accentFg: colour("var(--foreground)") }, width: length("var(--measure-2xs)"),
+    picked: colour(wash("--tone-line")), width: length("var(--measure-2xs)"),
     error: colour("var(--destructive)"), live: colour("var(--live)"), warn: colour("var(--warn)"), mark: colour(wash("--tone-wash")), markCurrent: colour(wash("--tone-line")),
     // A wash of each ink: the grid fills a reference with it and outlines it in the ink itself.
     inks: INKS.map((ink) => colour(`color-mix(in oklch, var(${ink}), transparent var(--tone-wash))`)),

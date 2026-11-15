@@ -19,6 +19,8 @@ export type SheetColumns = { width(col: number): number | undefined; type(col: n
 const EDGE_SLOP = 3;
 // How often (ms) a drag held past the grid's edge scrolls it on by a column.
 const SWEEP_STEP = 60;
+// How near a column's side (px) a press takes the edge to size it: the grid's own reach.
+const COL_EDGE = 5;
 type GridOptions = { model: SheetView; columns: SheetColumns; events: SheetGridEvents; look: SheetLook };
 type Highlight = NonNullable<DataEditorProps["highlightRegions"]>[number];
 
@@ -123,7 +125,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       requestAnimationFrame(() => events.drawn());
     }, []);
     const { rows, cols } = size;
-    const columns = useMemo(() => Array.from({ length: cols }, (_, col) => ({ id: model.colAt(col) ?? String(col), title: colName(col), width: widths[col] ?? options.columns.width(col) ?? theme.width, themeOverride: theme.picked })), [shape, cols, widths, theme]);
+    const columns = useMemo(() => Array.from({ length: cols }, (_, col) => ({ id: model.colAt(col) ?? String(col), title: colName(col), width: widths[col] ?? options.columns.width(col) ?? theme.width })), [shape, cols, widths, theme]);
     const types = useMemo(() => Array.from({ length: cols }, (_, col) => options.columns.type(col)), [shape, cols]);
     const cellLook = useMemo(() => createCellLook(theme), [theme]);
     const content = useMemo(() => {
@@ -148,26 +150,32 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       const kept = options.columns.heights();
       return kept.size || Object.keys(heights).length ? (row: number) => heights[row] ?? kept.get(row) ?? theme.row : theme.row;
     }, [shape, heights, theme]);
-    const props: DataEditorProps = { ...handlers, columns, rows, getCellContent: content, drawCell: cellLook.draw, theme: theme.grid as Partial<Theme>, rowHeight, headerHeight: theme.header, gridSelection: selection, highlightRegions: marks };
+    const props: DataEditorProps = { ...handlers, columns, rows, getCellContent: content, drawCell: cellLook.draw,
+      // A whole column's letter, picked, is washed as its cells are; the grid would fill it in the accent its fill handle and ring keep.
+      drawHeader: (args, draw) => { if (args.isSelected) { const { ctx, rect } = args, inset = args.columnIndex ? 1 : 0; for (const fill of [theme.grid.bgHeader, theme.picked]) { ctx.fillStyle = String(fill); ctx.fillRect(rect.x + inset, rect.y, rect.width - inset, rect.height); } } draw(); }, theme: theme.grid as Partial<Theme>, rowHeight, headerHeight: theme.header, gridSelection: selection, highlightRegions: marks };
     return createElement(DataEditor, { ...props, ref: made });
   }
 
   const root = createRoot(element);
   root.render(createElement(Grid));
-  // The grid takes every press on the window by where it lands, so a press on what stands over it (the ribbon's line of inks, a menu) would
-  // select the column under it too: such a press never reaches the window.
-  const over = (event: MouseEvent | TouchEvent) => { const at = "touches" in event ? event.touches[0] : event, frame = element.getBoundingClientRect();
-    if (at && !element.contains(event.target as Node) && at.clientX >= frame.left && at.clientX < frame.right && at.clientY >= frame.top && at.clientY < frame.bottom) event.stopPropagation(); };
-  for (const kind of ["mousedown", "touchstart"] as const) document.addEventListener(kind, over);
   const box = (col: number, row: number) => editor?.getBounds(col, row);
   const colAt = (x: number) => { for (let at = view.x; at < view.x + view.width + 1; at++) { const cell = box(at, view.y); if (cell && x >= cell.x && x < cell.x + cell.width) return at; } return -1; };
   const rowAt = (y: number) => { for (let at = view.y; at < view.y + view.height + 1; at++) { const cell = box(view.x, at); if (cell && y >= cell.y && y < cell.y + cell.height) return at; } return -1; };
+  const rowEdge = (x: number, y: number) => {
+    const numbers = box(-1, view.y);
+    if (!numbers || x < numbers.x || x >= numbers.x + numbers.width) return null;
+    for (let at = view.y; at < view.y + view.height + 1; at++) { const cell = box(-1, at); if (cell && Math.abs(y - (cell.y + cell.height)) <= EDGE_SLOP) return { row: at, top: cell.y }; }
+    return null;
+  };
+  let stop = () => {};
   // Dragged along the column letters or down the row numbers, the columns or rows between are picked.
   const sweep = (event: PointerEvent) => {
     const frame0 = element.getBoundingClientRect(), numbers = box(-1, view.y), top = frame0.top + look.header, left = numbers ? numbers.x + numbers.width : frame0.left;
     const across = event.clientY >= frame0.top && event.clientY < top, down = !across && Boolean(numbers) && event.clientX < left;
     const at = across ? colAt : rowAt, [lo, hi] = across ? [left, frame0.right] : [top, frame0.bottom], from = at(across ? event.clientX : event.clientY);
-    if (event.button !== 0 || event.shiftKey || !(across || down) || from < 0) return;
+    // A press on an edge sizes (the grid's own columns, sizes.ts's rows); Shift and Ctrl add to the selection, as the grid does.
+    const cell = across ? box(from, view.y) : undefined, onEdge = cell ? cell.x + cell.width - event.clientX <= COL_EDGE || (from > 0 && event.clientX - cell.x <= COL_EDGE) : rowEdge(event.clientX, event.clientY);
+    if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || !(across || down) || from < 0 || onEdge) return;
     // Each frame, not each move: held past an edge, the grid scrolls a line at a time under a still pointer and the pick runs on with it.
     let to = from, place = across ? event.clientX : event.clientY, frame = 0, stepped = 0;
     const pick = (now: number) => { frame = requestAnimationFrame(pick);
@@ -180,8 +188,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       if (picked.equals(across ? current.columns : current.rows)) return;
       current = { columns: across ? picked : CompactSelection.empty(), rows: across ? CompactSelection.empty() : picked }; drive.select?.(current); events.selected(selected(current, size)); };
     const move = (moved: PointerEvent) => { place = across ? moved.clientX : moved.clientY; };
-    const up = () => { cancelAnimationFrame(frame); removeEventListener("pointermove", move); removeEventListener("pointerup", up); };
-    addEventListener("pointermove", move); addEventListener("pointerup", up); frame = requestAnimationFrame(pick);
+    const up = () => { cancelAnimationFrame(frame); removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", up); };
+    stop(); stop = up;
+    addEventListener("pointermove", move); addEventListener("pointerup", up); addEventListener("pointercancel", up); frame = requestAnimationFrame(pick);
   };
   element.addEventListener("pointerdown", sweep);
   return {
@@ -224,16 +233,11 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       const next: GridSelection = { columns: kind === "cols" ? picked : CompactSelection.empty(), rows: kind === "rows" ? picked : CompactSelection.empty() };
       drive.select?.(next); events.selected(selected(next, size));
     },
-    rowEdge: (x, y) => {
-      const numbers = box(-1, view.y);
-      if (!numbers || x < numbers.x || x >= numbers.x + numbers.width) return null;
-      for (let at = view.y; at < view.y + view.height + 1; at++) { const cell = box(-1, at); if (cell && Math.abs(y - (cell.y + cell.height)) <= EDGE_SLOP) return { row: at, top: cell.y }; }
-      return null;
-    },
+    rowEdge,
     height: (row, height) => drive.height?.(row, height),
     theme: (next) => { look = next; drive.look?.(look); },
     scroll: (to) => { if (to) editor?.scrollTo(to.col, to.row, "both", 0, 0, { hAlign: "start", vAlign: "start" }); return { row: view.y, col: view.x }; },
     focus: () => editor?.focus(),
-    destroy: () => { for (const kind of ["mousedown", "touchstart"] as const) document.removeEventListener(kind, over); root.unmount(); },
+    destroy: () => { stop(); element.removeEventListener("pointerdown", sweep); root.unmount(); },
   };
 }
