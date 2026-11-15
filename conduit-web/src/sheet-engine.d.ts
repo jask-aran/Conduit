@@ -47,7 +47,7 @@ export interface WorkbookModel {
   destroy(): void;
 }
 /** `name`: what the one tab of a doc with no tabs is called (its file's name); formulas still read it as Sheet1 until a second tab names it. */
-export function createWorkbookModel(doc: Y.Doc, options?: { name?: string }): WorkbookModel;
+export function createWorkbookModel(doc: Y.Doc, options?: { name?: string; owner?: boolean }): WorkbookModel;
 /** The first tab, computed with the whole workbook; its `destroy` ends the workbook. */
 export function createSheetModel(doc: Y.Doc): SheetModel;
 /** In a worker: computes the workbook whose doc a page's `createSheetView` posts it, answering with SheetEngineMessage. */

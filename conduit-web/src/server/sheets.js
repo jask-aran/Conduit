@@ -341,7 +341,7 @@ export function sheetKind(hub) {
     },
     live: {
       format: SHEET_FORMAT,
-      open: (doc, kind, entry) => ({ rows: doc.getArray(ROWS), cols: doc.getArray(COLS), cells: doc.getMap(CELLS), look: doc.getMap(LOOK), book: createWorkbookModel(doc, { name: entry?.name }) }),
+      open: (doc, kind, entry) => ({ rows: doc.getArray(ROWS), cols: doc.getArray(COLS), cells: doc.getMap(CELLS), look: doc.getMap(LOOK), book: createWorkbookModel(doc, { name: entry?.name, owner: true }) }),
       empty: (room) => !room.book.cellCount(),
       close: (room) => room.book.destroy(),
       /** The file read (a folder's: its tab files, by name): the first time (no live copy yet) by `start`, after that by `retake`. */

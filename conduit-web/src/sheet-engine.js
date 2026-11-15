@@ -40,7 +40,7 @@ const refused = (message) => Object.assign(new Error(message), { status: 400 });
  * The whole workbook in one engine, a sheet of it per tab (so `Data!A1` and `'My Data'!A1` compute), and a SheetModel for each tab (`tab`).
  * `name`: what a tab never named (the one tab of a format-1 doc) is called, its file's name on the hub.
  */
-export function createWorkbookModel(doc, { name: called } = {}) {
+export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
   const order = doc.getArray(TABS), meta = doc.getMap(TAB), cells = doc.getMap(CELLS), look = doc.getMap(LOOK), self = {}, listeners = new Set();
   let engine, ids = [], tabs = new Map(), bySheet = new Map(), rowTab = new Map(), colTab = new Map(), named = new Map(), names = "", watched = [], pending = null, written = null;
   const nameOf = (id) => meta.get(`name:${id}`) ?? (id === MAIN ? called ?? FIRST : id);
@@ -112,6 +112,7 @@ export function createWorkbookModel(doc, { name: called } = {}) {
     }
     const moved = [...new Set([...now.rows.keys(), ...now.cols.keys()])].filter((id) => tabs.has(id)), structure = moved.length > 0;
     let changed = null;
+    const kept = [];
     const retype = (done) => {
       const places = [];
       for (const cell of now.keys) { if (done?.has(cell)) continue; const place = placeOf(cell); if (place) { const input = cells.get(cell); place.t.typed[place.at.row][place.at.col] = input ?? ""; places.push([place.at, raw(input)]); } }
@@ -133,10 +134,18 @@ export function createWorkbookModel(doc, { name: called } = {}) {
         // here while the hub made the change, which the engine rewrote but the hub never saw, goes back to what the doc holds. Any tab's formula
         // may refer to the moved cells.
         for (const [place, input] of retype()) if (!(structure && input?.startsWith("="))) engine.setCellContents(place, input);
-        if (structure) eachFormula((t, row, col, input) => { const place = { sheet: t.sheet, row, col }; if (engine.getCellFormula(place) !== input) engine.setCellContents(place, input); });
+        // But a formula this change did not write itself (one typed since the rows an undo takes back were made) keeps the engine's rewrite, as the
+        // hub's own change would have made it; the hub (`owner`) writes those so every copy follows.
+        if (structure) eachFormula((t, row, col, input) => {
+          const place = { sheet: t.sheet, row, col }, rewritten = engine.getCellFormula(place);
+          if (rewritten === input) return;
+          const cell = key(t.rowIds[row], t.colIds[col]);
+          if (owner && rewritten && !now.keys.has(cell)) { t.typed[row][col] = rewritten; kept.push([cell, input, rewritten]); } else engine.setCellContents(place, input);
+        });
       } finally { changed = engine.resumeEvaluation().flatMap((change) => change.address && bySheet.has(change.address.sheet) ? [{ tab: bySheet.get(change.address.sheet).id, row: change.address.row, col: change.address.col }] : []); }
     }
     emit({ tabs: now.tabs, structure: moved, cells: changed });
+    if (kept.length) queueMicrotask(() => doc.transact(() => { written = new Set(); for (const [cell, was, after] of kept) if (cells.get(cell) === was) { cells.set(cell, after); written.add(cell); } }, self));
   };
   order.observe(onTabs); meta.observe(onTabs); cells.observe(onCells);
   doc.on("afterTransaction", flush);
