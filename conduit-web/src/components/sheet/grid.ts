@@ -573,6 +573,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       const p = partAt(y), col = colAt(p, x), row = rowAt(p, y);
       return col < 0 || row < 0 ? null : { row: p.map.sheet(row), col };
     },
+    moved,
     whole: (kind) => {
       const area = picked();
       if (!area) return;

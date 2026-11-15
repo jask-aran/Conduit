@@ -329,8 +329,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const within = (range: SheetRange) => shownRows(range).map((row) => Array.from({ length: range.right - range.left + 1 }, (_, c) => ({ row, col: range.left + c })));
   const copy = (range: SheetRange) => navigator.clipboard.writeText(within(range).map((row) => row.map(({ row: r, col }) => String(model()?.value(r, col) ?? "")).join("\t")).join("\n")).catch((error: Error) => props.host.failed(error.message));
   const clear = (range: SheetRange, label = "Clear contents") => writes(label)(within(range).flat().map((cell) => ({ ...cell, input: "" })));
-  const paste = (range: SheetRange) => void navigator.clipboard.readText().then((text) => { const lines = text.replace(/\r?\n$/, "").split(/\r?\n/), rows = shownFrom(range.top, lines.length);
-    writes("Paste")(lines.flatMap((line, r) => line.split("\t").map((input, c) => ({ row: rows[r]!, col: range.left + c, input })))); }, (error: Error) => props.host.failed(error.message));
+  const paste = (range: SheetRange) => void navigator.clipboard.readText().then((text) => { const split = text.replace(/\r?\n$/, "").split(/\r?\n/).map((line) => line.split("\t")), lines = grid()?.moved(split, range.top, range.left) ?? split, rows = shownFrom(range.top, lines.length);
+    writes("Paste")(lines.flatMap((line, r) => line.map((input, c) => ({ row: rows[r]!, col: range.left + c, input })))); }, (error: Error) => props.host.failed(error.message));
   // Each run of shown rows on its own, the last first, so the runs above keep their places.
   const deleteRows = (range: SheetRange) => history.act(`Delete ${range.bottom > range.top ? "rows" : "row"}`, () => { const rows = shownRows(range); for (let end = rows.length - 1; end >= 0;) { let start = end; while (start > 0 && rows[start - 1] === rows[start]! - 1) start--; structure("delete-rows", rows[start]!, end - start + 1); end = start - 1; } });
   // Fill down and Fill right: the selection's first shown row (or its first column) into the rest of it, from the shown row above (or the column left) where it is

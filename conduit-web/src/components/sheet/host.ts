@@ -127,6 +127,8 @@ export interface SheetGrid {
   show(row: number, col: number): void;
   /** Selects the whole columns, or rows, the selection covers. */
   whole(kind: "cols" | "rows"): void;
+  /** Text pasted at a cell: what was copied from this grid has its formulas' relative references moved there. */
+  moved(values: readonly (readonly string[])[], top: number, left: number): string[][];
   /** The row whose lower edge, beside its number, is under a point of the viewport (and the top of that row), as a drag to size it starts. */
   rowEdge(x: number, y: number): { row: number; top: number } | null;
   /** A row drawn at a height while it is dragged, before the look holds it. */
