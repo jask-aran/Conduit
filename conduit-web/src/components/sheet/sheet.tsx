@@ -19,6 +19,7 @@ import { createSheetSizes, dragRowEdges } from "./sizes";
 import { createSheetFilter, FilterMenu } from "./filter";
 import { createSheetFormats } from "./formats";
 import { createSheetStyles } from "./styles";
+import { createSheetRules, RulePrompt } from "./rules";
 import { createSheetTools } from "./tools";
 import { createSheetFind } from "./find";
 import { createSheetHistory } from "./history";
@@ -83,7 +84,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   createEffect(() => { if (frozen().size) grid()?.update(null); });
   const filters = createSheetFilter(look, model, at, hub, (row, col) => Boolean(styles.at(row, col)?.bold)), [filtering, setFiltering] = createSignal<{ col: number; box: SheetBox } | null>(null);
   const sizes = createSheetSizes(look, model, styles.lines, filters.hidden), [question, setQuestion] = createSignal<SizeQuestion | null>(null);
-  const merges = createSheetMerges(look, model), decisions = createDecisionScope(() => props.id);
+  const merges = createSheetMerges(look, model), rules = createSheetRules(look, model), [ruling, setRuling] = createSignal<SheetRange | null>(null), decisions = createDecisionScope(() => props.id);
   // As a spreadsheet's: Merge & Center on a merge unmerges it, and a merge emptying cells that hold values asks first.
   const merge = (kind: SheetMergeKind | null, area = at()) => {
     if (!area) return;
@@ -98,7 +99,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     if (!merges.losing(area, kind).length) return run();
     void decisions.confirm("Merging keeps only the upper-left value", { confirmLabel: "Merge" }).then((yes) => { if (yes) run(); grid()?.focus(); });
   };
-  const sequences = createSequenceKeys((sequence) => "tool" in sequence ? tools.find((one) => one.name === sequence.tool)?.run() : sequence.run({ selection: at, sizes, look: () => readLook(root!), ask: setQuestion, filters: filters.keys, merge }),
+  const sequences = createSequenceKeys((sequence) => "tool" in sequence ? tools.find((one) => one.name === sequence.tool)?.run() : sequence.run({ selection: at, sizes, look: () => readLook(root!), ask: setQuestion, filters: filters.keys, merge, rules: () => setRuling(at()) }),
     (name) => tools.find((one) => one.name === name)?.label ?? name);
   // One edge dragged sizes every whole row or column selected with it, as a spreadsheet does.
   const wholeOf = (area: SheetRange, kind: "rows" | "cols") => { const size = model()?.size(); return Boolean(size && (kind === "cols" ? area.top === 0 && area.bottom >= size.rows - 1 : area.left === 0 && area.right >= size.cols - 1)); };
@@ -151,13 +152,14 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       made = mountGrid(into, { model: sheet, events, look: untrack(drawnLook), columns: {
         width: (col) => { const width = sizes.width(col); return width === undefined ? undefined : Math.round(width * zoom()); }, freeze: sizes.freeze, hidden: sizes.hidden,
         heights: () => { const by = zoom(), kept = sizes.heights(); return by === 1 ? kept : new Map([...kept].map(([row, height]) => [row, Math.round(height * by)])); },
-        type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; }, draw: formats.draw, dated: formats.dated, style: (row, col) => filters.style(styles.at(row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded, merges: merges.list,
+        type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; }, draw: formats.draw, dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded, merges: merges.list,
       } });
       setGrid(made);
     }, (error: Error) => { setFailed(error.message); props.onDrawn?.(); });
     const off = sheet.onChange((change) => {
       const cells = change.structure ? null : change.cells;
-      made?.update(cells);
+      rules.changed();
+      made?.update(rules.wide() ? null : cells);
       // The formula bar reads the selected cell again only when it may have changed.
       const area = at();
       if (!cells || (area && cells.some(({ row, col }) => row === area.top && col === area.left))) setChanged((n) => n + 1);
@@ -293,7 +295,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const rows = () => menu().rows, cols = () => menu().cols;
   // The menu's own doings, over what it was opened on: a sequence's (sizes), and the cells' cut, copy, paste and clearing.
   const picked = (): SheetRange | null => { const r = rows(), c = cols(); return r && c ? { top: r.top, bottom: r.bottom, left: c.left, right: c.right } : null; };
-  const sized = (keys: string, selection: SheetRange) => SHEET_SEQUENCES.find((sequence): sequence is Extract<SheetSequence, { run: unknown }> => sequence.keys === keys && "run" in sequence)?.run({ selection: () => selection, sizes, look: () => readLook(root!), ask: setQuestion, filters: filters.keys, merge });
+  const sized = (keys: string, selection: SheetRange) => SHEET_SEQUENCES.find((sequence): sequence is Extract<SheetSequence, { run: unknown }> => sequence.keys === keys && "run" in sequence)?.run({ selection: () => selection, sizes, look: () => readLook(root!), ask: setQuestion, filters: filters.keys, merge, rules: () => setRuling(at()) });
   // What a range's cuts, clears, pastes and deletes reach: its rows shown, never one hidden, which is out of sight.
   const shownRows = (range: SheetRange) => { const hidden = sizes.hidden(); return Array.from({ length: range.bottom - range.top + 1 }, (_, r) => range.top + r).filter((row) => !hidden.has(row)); };
   const shownFrom = (top: number, count: number) => { const hidden = sizes.hidden(), out: number[] = []; for (let row = top; out.length < count; row++) if (!hidden.has(row)) out.push(row); return out; };
@@ -422,6 +424,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         <FormulaHelp editor={editor} frame={() => body} />
         <SequenceHint typed={sequences.typed} next={sequences.next} anchor={slot} />
         <SizePrompt question={question()} onClose={() => { setQuestion(null); grid()?.focus(); }} />
+        <RulePrompt area={ruling()} rules={rules} act={(label, run) => history.act(label, run)} onClose={() => { setRuling(null); grid()?.focus(); }} />
         <FilterMenu filter={filters} at={filtering()} frame={() => body} onClose={() => { setFiltering(null); grid()?.focus(); }} />
         <find.view beside={Boolean(props.margin) && !props.marginEmpty} />
         <Show when={!model()}><Empty role="status" class="ui-spreadsheet-waiting">Opening the sheet…</Empty></Show>

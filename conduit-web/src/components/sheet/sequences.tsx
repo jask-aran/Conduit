@@ -20,7 +20,9 @@ export type SizeQuestion = { title: string; value: number; apply(size: number): 
 /** What a sequence acts on. `selection`: the cells selected, whole rows or columns included. `filters`: sorting, the filter and the table (filter.tsx). */
 export type SheetSequenceContext = { selection(): SheetRange | null; sizes: SheetSizes; look(): SheetLook; ask(question: SizeQuestion): void; filters: SheetFilterKeys;
   /** Merges the selection (merges.ts); null unmerges it. */
-  merge(kind: SheetMergeKind | null): void };
+  merge(kind: SheetMergeKind | null): void;
+  /** Asks for a conditional formatting rule on the selection (rules.tsx). */
+  rules(): void };
 /** `keys`: the keys after Alt, letters upper-case. `tool`: the ribbon tool it presses, named as the ribbon names it; else `run`, with its own `label`. */
 export type SheetSequence = { keys: string } & ({ tool: SheetToolId } | { label: string; run(ctx: SheetSequenceContext): void });
 
@@ -50,6 +52,7 @@ export const SHEET_SEQUENCES: readonly SheetSequence[] = [
   { keys: "HOD", label: "Default width", run: (ctx) => ctx.ask({ title: "Default width", value: ctx.sizes.standard() ?? ctx.look().width, apply: (size) => ctx.sizes.setStandard(size) }) },
   { keys: "HSS", label: "Sort A–Z", run: (ctx) => ctx.filters.sort(false) }, { keys: "HSO", label: "Sort Z–A", run: (ctx) => ctx.filters.sort(true) },
   { keys: "HSF", label: "Filter", run: (ctx) => ctx.filters.filter() }, { keys: "HT", label: "Format as table", run: (ctx) => ctx.filters.table() },
+  { keys: "HL", label: "Conditional formatting", run: (ctx) => ctx.rules() },
   { keys: "HMC", label: "Merge & Center", run: (ctx) => ctx.merge("center") }, { keys: "HMA", label: "Merge across", run: (ctx) => ctx.merge("across") },
   { keys: "HMM", label: "Merge cells", run: (ctx) => ctx.merge("cells") }, { keys: "HMU", label: "Unmerge cells", run: (ctx) => ctx.merge(null) },
 ];
