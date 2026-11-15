@@ -52,6 +52,15 @@ and key sequences are the reference unless there is a reason to differ. Storage,
   - `ascent-override`/`descent-override` on its `@font-face`, but that applies app-wide;
   - `text-box: trim-both cap alphabetic`, which works on the formula text but not inside an `<input>`.
 
+Builders running when this was written each keep an uncommitted resume note beside this file:
+- `handoff-sheet-undo.md`: the undo history;
+- `handoff-sheet-rules.md`: conditional formatting;
+- `handoff-sheet-merges.md`: merged cells;
+- `handoff-sheet-series.md`: the fill handle's series.
+
+To continue one, start a fresh builder from its note and the working tree, not the old thread. Delete each note once its work is
+committed.
+
 ## Open, in rough order
 
 1. **Undo** (above). After it, every new hub op must land on that history as one named step.
