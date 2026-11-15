@@ -89,6 +89,7 @@ export function readStyles(stylesXml, themeXml) {
  * the rows and columns the tab grows to for the seen cells, rows and columns touching it, stopping at a gap; `heights`: each row's own height in points
  * (one set by hand, or one well over the default, which Excel sized to its text).
  */
+const HEIGHTS = 20_000;
 export function sheetStyles(sheetXml, size, shows) {
   const cols = new Map(), rows = new Map(), heights = new Map(), cells = [], reach = { rows: 0, cols: 0 };
   for (const tag of sheetXml.match(/<col\b[^>]*>/g) ?? []) { const style = attr(tag, "style"); if (style && style !== "0") for (let c = Number(attr(tag, "min")) - 1; c < Math.min(Number(attr(tag, "max")), 16384); c++) cols.set(c, Number(style)); }
@@ -96,7 +97,8 @@ export function sheetStyles(sheetXml, size, shows) {
   for (const tag of sheetXml.match(/<row\b[^>]*>/g) ?? []) {
     const r = Number(attr(tag, "r")) - 1, height = Number(attr(tag, "ht"));
     if (attr(tag, "customFormat") === "1" && attr(tag, "s")) rows.set(r, Number(attr(tag, "s")));
-    if (attr(tag, "customHeight") === "1" ? height && height !== usual : height > 1.25 * usual) heights.set(r, height);
+    // At most as many as a tab keeps cell styles: a file setting every row's height keeps its first.
+    if ((["1", "true"].includes(attr(tag, "customHeight")) ? height && height !== usual : height > 1.25 * usual) && heights.size < HEIGHTS) heights.set(r, height);
   }
   const shown = [];
   for (const found of sheetXml.matchAll(cols.size || rows.size ? /<c r="([A-Z]+)(\d+)"([^>]*?)\/?>/g : /<c r="([A-Z]+)(\d+)"([^>]*?\ss="[1-9]\d*"[^>]*?)\/?>/g)) {
@@ -238,7 +240,7 @@ export function sheetRules(sheetXml, dxfs) {
       if (style === undefined || !formulas.length || (type === "cellIs" ? !op || (op.endsWith("etween") && formulas.length < 2) : type !== "expression")) { unread[type] = (unread[type] ?? 0) + 1; continue; }
       if (style.lossy) unread["number format or border of a rule"] = (unread["number format or border of a rule"] ?? 0) + 1;
       // Excel stops at a rule that holds and says so, the rules below it unread for that cell.
-      const said = { style: String(style), ...(attr(rule, "stopIfTrue") === "1" ? { stop: true } : {}) };
+      const said = { style: String(style), ...(["1", "true"].includes(attr(rule, "stopIfTrue")) ? { stop: true } : {}) };
       found.push({ priority: Number(attr(rule, "priority")) || Infinity, rule: type === "cellIs" ? { ranges, kind: "value", op, a: formulas[0], ...(op.endsWith("etween") ? { b: formulas[1] } : {}), ...said } : { ranges, kind: "formula", a: formulas[0], ...said } });
     }
   }
