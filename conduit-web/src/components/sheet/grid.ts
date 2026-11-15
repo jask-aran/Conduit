@@ -574,6 +574,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       return col < 0 || row < 0 ? null : { row: p.map.sheet(row), col };
     },
     moved,
+    copiedValues: () => copied?.values ?? null,
     whole: (kind) => {
       const area = picked();
       if (!area) return;

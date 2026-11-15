@@ -413,6 +413,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
               <MenuRow icon={<Icons.Cut />} keys={["Ctrl", "X"]} onSelect={() => void copy(range()).then(() => clear(range(), "Cut"))}>Cut</MenuRow>
               <MenuRow icon={<Icons.Copy />} keys={["Ctrl", "C"]} onSelect={() => void copy(range())}>Copy</MenuRow>
               <MenuRow icon={<Icons.Paste />} keys={["Ctrl", "V"]} onSelect={() => paste(range())}>Paste</MenuRow>
+              <Show when={grid()?.copiedValues()}>{(values) => <MenuRow icon={<Icons.Paste />} keys={["Ctrl", "Shift", "V"]} onSelect={() => { const rows = shownFrom(range().top, values().length); writes("Paste values")(values().flatMap((line, r) => line.map((input, c) => ({ row: rows[r]!, col: range().left + c, input })))); }}>Paste values</MenuRow>}</Show>
               <MenuRow icon={<Icons.Delete />} keys={["Delete"]} onSelect={() => clear(range())}>Clear contents</MenuRow>
               <Show when={props.onAsk}><MenuRow icon={<Icons.Chat />} onSelect={() => { grid()?.select(range()); props.onAsk?.(); }}>Comment</MenuRow></Show>
             </MenuSection>}</Show>
