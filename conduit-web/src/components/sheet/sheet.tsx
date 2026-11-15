@@ -93,11 +93,16 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const sizes = createSheetSizes(look, model, styles.lines, filters.hidden), [question, setQuestion] = createSignal<SizeQuestion | null>(null);
   const merges = createSheetMerges(look, model), rules = createSheetRules(look, model), [ruling, setRuling] = createSignal<SheetRange | null>(null), decisions = createDecisionScope(() => props.id);
   // As a spreadsheet's: Merge & Center on a merge unmerges it, and a merge emptying cells that hold values asks first.
-  const merge = (kind: SheetMergeKind | null, area = at()) => {
-    if (!area) return;
+  const merge = (kind: SheetMergeKind | null, asked = at()) => {
+    if (!asked) return;
+    let area = asked;
     if (kind === null || (kind === "center" && merges.is(area))) return void history.act("Unmerge cells", () => merges.unmerge(area));
-    // The cells emptied are found again as it runs: the sheet may have changed while the question was open.
+    // Held by its corners' ids, the merge and the cells it empties are found again as it runs: rows may have moved while the question was open.
+    const sheet = model(), ids = sheet && [sheet.rowAt(area.top), sheet.colAt(area.left), sheet.rowAt(area.bottom), sheet.colAt(area.right)];
     const run = () => history.act(kind === "center" ? "Merge & Center" : kind === "across" ? "Merge across" : "Merge cells", () => {
+      const now = model(), found = ids && now && ids.every(Boolean) ? { top: now.indexOfRow(ids[0]!), left: now.indexOfCol(ids[1]!), bottom: now.indexOfRow(ids[2]!), right: now.indexOfCol(ids[3]!) } : area;
+      if (Object.values(found).some((n) => n < 0)) return;
+      area = found;
       const losing = merges.losing(area, kind);
       if (!merges.merge(area, kind)) return;
       write(losing.map((cell) => ({ ...cell, input: "" })));
