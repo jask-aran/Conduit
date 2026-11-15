@@ -60,6 +60,7 @@ import { Composer } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
 import { applyTabFrost } from "./preferences/tab-frost";
 import { applyChatArt } from "./preferences/chat-art";
+import { createArtWindow } from "@/components/ui/chat-art";
 import { watchStrayFrost } from "./platform/stray-frost";
 import { applyStreamFade } from "./preferences/stream-fade";
 import { installFocusShown } from "./preferences/focus-shown";
@@ -3000,7 +3001,7 @@ function App() {
       .catch(() => setRecord(null));
     const placeName = (projectId: string) => projectId === "computer" || projectId.startsWith("computer:") ? "Computer" : catalogue.projects().find((item) => item.id === projectId)?.name || "Chats";
     const tabbed = () => !inDock(pane) && !isMobileLayout();
-    return <SheetFill class="pane-terminal">
+    return <SheetFill ref={createArtWindow(true)} class="pane-terminal">
       <Show when={tabbed()}>
         <PaneHeader actions={paneTabActions(pane)}><Show when={documentTab(pane)}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>
       </Show>

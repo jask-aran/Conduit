@@ -38,3 +38,9 @@
 .terminal-canvas[data-active="false"] {
   visibility: hidden;
 }
+
+/* Over a background picture the opaque screen (its text drawn as ever) is screened over the dimmed picture, as a
+   sheet's grid is; the grounds under it are cleared, the viewport's inline one too. */
+[data-art-window] :is(.terminal-pane, .terminal-pane-body, .terminal-canvas) { background: transparent; }
+[data-art-window] .terminal-canvas :is(.xterm-viewport, .xterm-scrollable-element) { background-color: transparent !important; }
+.dark [data-art-window] .terminal-pane-body .xterm-screen { mix-blend-mode: screen; }
