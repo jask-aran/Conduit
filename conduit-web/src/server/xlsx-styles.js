@@ -215,7 +215,8 @@ export function readDxfs(stylesXml, themeXml) {
     const ink = colourOf(first(font, "color"), theme), fill = pattern && attr(pattern, "patternType") !== "none" ? colourOf(first(pattern, "bgColor"), theme) ?? colourOf(first(pattern, "fgColor"), theme) : undefined;
     if (ink) out.c = inkOf(ink, 0);
     if (fill) out.f = inkOf(fill, 1);
-    return encodeStyle(out);
+    // A sheet's style has no number format or edge of a rule's own: a rule setting them loses them, and is counted as losing them.
+    return Object.assign(new String(encodeStyle(out)), { lossy: /<numFmt\b|<(left|right|top|bottom)\b[^>]*\bstyle=/.test(dxf) });
   });
 }
 /**
@@ -230,7 +231,10 @@ export function sheetRules(sheetXml, dxfs) {
       const type = attr(rule, "type"), formulas = all(rule, "formula").map((tag) => unescaped(within(tag, "formula")).replace(/_xlfn\.|_xlws\./g, "")), style = dxfs[Number(attr(rule, "dxfId"))];
       const op = CELL_IS[attr(rule, "operator") ?? ""];
       if (style === undefined || !formulas.length || (type === "cellIs" ? !op || (op.endsWith("etween") && formulas.length < 2) : type !== "expression")) { unread[type] = (unread[type] ?? 0) + 1; continue; }
-      found.push({ priority: Number(attr(rule, "priority")) || Infinity, rule: type === "cellIs" ? { ranges, kind: "value", op, a: formulas[0], ...(op.endsWith("etween") ? { b: formulas[1] } : {}), style } : { ranges, kind: "formula", a: formulas[0], style } });
+      if (style.lossy) unread["number format or border of a rule"] = (unread["number format or border of a rule"] ?? 0) + 1;
+      // Excel stops at a rule that holds and says so, the rules below it unread for that cell.
+      const said = { style: String(style), ...(attr(rule, "stopIfTrue") === "1" ? { stop: true } : {}) };
+      found.push({ priority: Number(attr(rule, "priority")) || Infinity, rule: type === "cellIs" ? { ranges, kind: "value", op, a: formulas[0], ...(op.endsWith("etween") ? { b: formulas[1] } : {}), ...said } : { ranges, kind: "formula", a: formulas[0], ...said } });
     }
   }
   for (const block of sheetXml.match(/<x14:cfRule\b[^>]*>/g) ?? []) { const type = attr(block, "type"); unread[type] = (unread[type] ?? 0) + 1; }
@@ -251,7 +255,7 @@ export function writeRules(tabsRules, formula) {
   const sheets = tabsRules.map((rules) => (Array.isArray(rules) ? rules : []).map((rule) => {
     const formulas = [rule.a, ...(rule.kind === "value" && rule.op?.endsWith("etween") ? [rule.b ?? ""] : [])].map((text) => `<formula>${escaped(formula(text))}</formula>`).join("");
     const kind = rule.kind === "formula" ? 'type="expression"' : `type="cellIs" operator="${OPERATOR[rule.op]}"`;
-    return `<conditionalFormatting sqref="${escaped(rule.ranges)}"><cfRule ${kind} dxfId="${dxfOf(rule.style ?? "")}" priority="${++priority}">${formulas}</cfRule></conditionalFormatting>`;
+    return `<conditionalFormatting sqref="${escaped(rule.ranges)}"><cfRule ${kind} dxfId="${dxfOf(rule.style ?? "")}" priority="${++priority}"${rule.stop ? ' stopIfTrue="1"' : ""}>${formulas}</cfRule></conditionalFormatting>`;
   }).join(""));
   return { dxfs: `<dxfs count="${dxfs.length}">${dxfs.join("")}</dxfs>`, sheets };
 }
