@@ -57,7 +57,11 @@ Then: undoing an insert or delete of rows moves formulas typed since (the hub's 
 conditional-format rules draw, and Alt H L adds one and lists the tab's rules with Delete (`rules.tsx`); a sort across a merge is refused;
 overlapping merges in a sheet.json are left out; Fill past hidden rows keeps a tab name's digits.
 
-Still open: paste, the fill handle and `set` can write into a merge's hidden cells; arrows at a frozen merge's edge; prefix sums for tall
+Then keys, as Excel's: Ctrl+arrow to the data's edge (Shift selects), Ctrl+End to the last cell used, Alt+= AutoSum, Ctrl+; today,
+Ctrl+Shift+= / Ctrl+- insert and delete whole rows or columns; the grid keeps Ctrl+- and Ctrl+Shift+1..5 from the application's chords
+(`data-own-keys`). `review-sheet-fixes.md`'s #1, 2, 4 and 3 are fixed (`570f4bcca`); its 5-10 are open.
+
+Still open: the fill handle and `set` can write into a merge's hidden cells (paste and typing can't); arrows at a frozen merge's edge; prefix sums for tall
 merges; the low xlsx ones (row/column crossings outside the grid, `<c r=` attribute order); rules can't be edited or reordered, only added
 and deleted. Notes from xlsx are waiting on the owner: sheet comments are markup items sent to a listener, so 16 imported notes would hand
 16 items to agents. Phone width is still unchecked (the headless probe opened with the sidebar drawer over the pane).
