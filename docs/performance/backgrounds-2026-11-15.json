@@ -1,7 +1,9 @@
 {
-  "at": "2026-11-15T03:06:17.530Z",
+  "at": "2026-11-15T03:10:40.962Z",
+  "cpuSlowdown": 1,
+  "harness": "Two isolated styled panes; no gallery fetch or media emulation",
   "baseline": "566894326cc81b2141829018f5a519b89abd9d2e",
-  "current": "6c086b6fcc0a8bebb3af272e939624c45442da59",
+  "current": "5bb506553fec14ac11ebf4bd994cd71cbc6edd16",
   "viewport": [
     1440,
     900,
@@ -17,37 +19,16 @@
       "frames": 120,
       "intervalMs": {
         "p50": 7,
-        "p95": 7.1,
+        "p95": 7,
         "max": 7.1
       },
       "resizeUpdateMs": {
-        "p50": 0.7,
-        "p95": 1
+        "p50": 0.6,
+        "p95": 0.9
       },
       "copies": 236,
       "shaders": 0,
       "resizeWrites": 464,
-      "source": [
-        1440,
-        900
-      ]
-    },
-    {
-      "background": "picture",
-      "renderer": "after",
-      "frames": 120,
-      "intervalMs": {
-        "p50": 7,
-        "p95": 7.1,
-        "max": 34.8
-      },
-      "resizeUpdateMs": {
-        "p50": 0.7,
-        "p95": 1
-      },
-      "copies": 0,
-      "shaders": 0,
-      "resizeWrites": 0,
       "source": [
         1440,
         900
@@ -76,16 +57,37 @@
     },
     {
       "background": "picture",
-      "renderer": "before",
+      "renderer": "after",
       "frames": 120,
       "intervalMs": {
         "p50": 7,
-        "p95": 7.1,
+        "p95": 7,
         "max": 7.2
       },
       "resizeUpdateMs": {
         "p50": 0.7,
         "p95": 1
+      },
+      "copies": 0,
+      "shaders": 0,
+      "resizeWrites": 0,
+      "source": [
+        1440,
+        900
+      ]
+    },
+    {
+      "background": "picture",
+      "renderer": "before",
+      "frames": 120,
+      "intervalMs": {
+        "p50": 7,
+        "p95": 7.1,
+        "max": 7.1
+      },
+      "resizeUpdateMs": {
+        "p50": 0.6,
+        "p95": 0.9
       },
       "copies": 238,
       "shaders": 0,
@@ -100,12 +102,12 @@
       "renderer": "before",
       "frames": 120,
       "intervalMs": {
-        "p50": 7,
-        "p95": 7,
+        "p50": 6.9,
+        "p95": 7.1,
         "max": 7.1
       },
       "resizeUpdateMs": {
-        "p50": 0.7,
+        "p50": 0.6,
         "p95": 0.9
       },
       "copies": 478,
@@ -126,7 +128,7 @@
         "max": 7.1
       },
       "resizeUpdateMs": {
-        "p50": 0.7,
+        "p50": 0.6,
         "p95": 0.9
       },
       "copies": 240,
@@ -147,8 +149,8 @@
         "max": 7.1
       },
       "resizeUpdateMs": {
-        "p50": 0.7,
-        "p95": 1
+        "p50": 0.6,
+        "p95": 0.9
       },
       "copies": 240,
       "shaders": 120,
@@ -164,12 +166,12 @@
       "frames": 120,
       "intervalMs": {
         "p50": 7,
-        "p95": 7.1,
-        "max": 7.1
+        "p95": 7,
+        "max": 7
       },
       "resizeUpdateMs": {
-        "p50": 0.7,
-        "p95": 1.1
+        "p50": 0.6,
+        "p95": 0.9
       },
       "copies": 478,
       "shaders": 239,
