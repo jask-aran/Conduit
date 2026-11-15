@@ -28,6 +28,8 @@ import { FormatMenu } from "./format-menu";
 // Cells written into the text a comment quotes, and how much of each: enough to read.
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
 // A formula moved down `by` rows, as the hub's fill moves one: each reference's rows not held by `$`.
+// The grid keeps a spreadsheet's chords the application binds elsewhere: Ctrl+- deletes rows, Ctrl+Shift+1..5 are number formats.
+const OWN_KEYS = ["primary+Minus", ...[1, 2, 3, 4, 5].map((n) => `primary+shift+Digit${n}`)].join(" ");
 const lowered = (input: string, by: number) => tokenize(input).map((token) => { const text = input.slice(token.from, token.to); if (token.kind !== "ref") return text;
   // Only the address moves: a tab's name (Sheet2!, 'Q1 2024'!) keeps its digits.
   const at = text.lastIndexOf("!") + 1;
@@ -370,6 +372,15 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (find.keys(event) || tabs.key(event) || history.act(tool, () => formats.key(event, at()) || styles.key(event, at())) || filters.key(event)) return;
       // Ctrl+D and Ctrl+R are the grid's only while it has the keyboard: elsewhere the browser keeps them.
       if (!event.shiftKey && !event.altKey && (event.code === "KeyD" || event.code === "KeyR")) { event.preventDefault(); const area = at(); if (area) spread(area, event.code === "KeyD" ? "down" : "right"); return; }
+      // Ctrl+Shift+= and Ctrl+- insert and delete whole rows or columns picked, as a spreadsheet's (a block of cells is left alone).
+      if (!event.altKey && (event.key === "-" || (event.shiftKey && (event.key === "+" || event.code === "Equal")))) {
+        const area = at(), size = model()?.size(), adding = event.key !== "-";
+        const lines = area && size ? (area.left === 0 && area.right >= size.cols - 1 ? "rows" : area.top === 0 && area.bottom >= size.rows - 1 ? "cols" : null) : null;
+        if (!area || !lines) return;
+        event.preventDefault();
+        if (lines === "rows") return void (adding ? structure("insert-rows", area.top, count(area.top, area.bottom)) : deleteRows(area));
+        return void structure(adding ? "insert-cols" : "delete-cols", area.left, count(area.left, area.right));
+      }
       if (event.altKey && event.code === ASK_KEY) { event.preventDefault(); return props.onAsk?.(); }
       // The grid has no history of its own: what this page did is undone here, never what others did.
       const redo = event.key === "y" || (event.key === "z" && event.shiftKey);
@@ -391,7 +402,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     <div ref={body} class="ui-spreadsheet-body">
       <Show when={!failed()} fallback={<Empty role="alert">The sheet could not be drawn: {failed()}</Empty>}>
         <ContextMenu placement="bottom-start">
-          <ContextMenuTrigger as="div" ref={setIsland} class="ui-spreadsheet-grid" />
+          <ContextMenuTrigger as="div" ref={setIsland} class="ui-spreadsheet-grid" data-own-keys={OWN_KEYS} />
           <ContextMenuContent onCloseAutoFocus={(event) => { const open = opening; opening = undefined; if (open) { event.preventDefault(); open(); } }}>
             <Show when={picked()}>{(range) => <MenuSection>
               <MenuRow icon={<Icons.Cut />} keys={["Ctrl", "X"]} onSelect={() => void copy(range()).then(() => clear(range(), "Cut"))}>Cut</MenuRow>
