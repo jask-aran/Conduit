@@ -7,7 +7,7 @@ const KEY = "conduit:chat-art";
 const LONGEST = 2560;
 /** `art` is an id from chatArtSet or chatArtScenes, "upload" (the person's own image) or "none". */
 export type ChatArtChoice = Omit<ChatArtLook, "image"> & { art: string };
-const first: ChatArtChoice = { ...chatArtLook, art: chatArtSet[0]!.id };
+const first: ChatArtChoice = { ...chatArtLook, art: "waves" };
 
 function saved(): ChatArtChoice {
   try { return { ...first, ...JSON.parse(localStorage.getItem(KEY) || "{}") as Partial<ChatArtChoice> }; } catch { return first; }

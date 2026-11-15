@@ -3,7 +3,7 @@ import { MeteorsPreview, PictureChoice, Segmented, Slider, Switch } from "@/comp
 import { SettingLine } from "@/components/ui/overlay";
 import { Columns, Group } from "@/components/ui/group";
 import { Note } from "@/components/ui/state";
-import { chatArtScenes, chatArtSet } from "@/components/ui/chat-art";
+import { chatArtScenes, chatArtSet, wavePalettes, waveColours } from "@/components/ui/chat-art";
 import { chatArtChoice, chatArtUpload, removeChatArtUpload, saveChatArt, uploadChatArt, type ChatArtChoice } from "../preferences/chat-art";
 
 const percents = (from: number, to: number, step: number) => Array.from({ length: Math.round((to - from) / step) + 1 }, (_, index) => ({ value: String(from + index * step), label: `${from + index * step}%` }));
@@ -31,11 +31,28 @@ export function BackgroundSettings(props: { meteorField: boolean; onMeteorFieldC
     </Group>
     <Group kind="column" title="Animated">
       <PictureChoice label="Animated background" value={shown()} onChange={choose}
-        options={[{ value: "meteors", label: "Meteor field", preview: <MeteorsPreview /> }, ...chatArtScenes.map((item) => ({ value: item.id, label: item.label, image: item.image }))]} />
+        options={[{ value: "meteors", label: "Meteor field", preview: <MeteorsPreview />, source: "https://github.com/jask-aran/solid-components" }, ...chatArtScenes.map((item) => ({ value: item.id, label: item.label, image: item.image, source: item.id === "waves" ? "https://github.com/jask-aran/Conduit/blob/main/conduit-web/src/components/ui/chat-art-draw.ts" : item.id === "stacked-dither" ? "https://github.com/stackedlol/stacked-dither" : `https://github.com/stackedlol/ascii-${item.id}` }))]} />
     </Group>
     <Show when={chatArtChoice().art !== "none"}>
       <Columns>
         <Group kind="column">{dial("brightness", "Brightness", BRIGHTNESS)}</Group>
+        <Show when={scene()}>
+          <Show when={shown() === "waves" || shown() === "stacked-dither"}>
+            <Group kind="column"><Slider label="Speed" options={[0.25, 0.5, 1, 1.5, 2].map((value) => ({ value: String(value), label: `${value}×` }))} value={String(chatArtChoice().speed)} onChange={(value) => saveChatArt({ speed: Number(value) })} />
+              <Slider label="Cell size" options={[1, 2, 3, 4, 6, 8].map((value) => ({ value: String(value), label: `${value} px` }))} value={String(chatArtChoice().cell)} onChange={(value) => saveChatArt({ cell: Number(value) })} /></Group>
+          </Show>
+          <Show when={shown() === "waves"}><Group kind="column"><SettingLine label="Colour"><Segmented label="Wave colour" size="sm" value={chatArtChoice().waveColour} options={waveColours.map((value) => ({ value, label: value.charAt(0).toUpperCase() + value.slice(1) }))} onChange={(value) => { const waveColour = waveColours.find((item) => item === value); if (waveColour) saveChatArt({ waveColour }); }} /></SettingLine></Group></Show>
+          <Show when={shown() === "stacked-dither"}>
+            <Group kind="column"><SettingLine label="Palette"><Segmented label="Palette" size="sm" value={chatArtChoice().palette} options={wavePalettes.map((value) => ({ value, label: value.charAt(0).toUpperCase() + value.slice(1) }))} onChange={(value) => { const palette = wavePalettes.find((item) => item === value); if (palette) saveChatArt({ palette }); }} /></SettingLine>
+              <Slider label="Quiet centre" options={FADE} value={String(Math.round(chatArtChoice().well * 100))} onChange={(value) => saveChatArt({ well: Number(value) / 100 })} /></Group>
+          </Show>
+          <Show when={shown() === "sharks"}><Group kind="column"><Slider label="Sharks" options={[1, 2, 4, 6, 8].map((value) => ({ value: String(value), label: String(value) }))} value={String(chatArtChoice().sharks)} onChange={(value) => saveChatArt({ sharks: Number(value) })} /></Group></Show>
+          <Show when={shown() === "spiders"}><Group kind="column">
+            <Slider label="Webs" options={[0, 2, 4, 6, 8, 12].map((value) => ({ value: String(value), label: String(value) }))} value={String(chatArtChoice().webs)} onChange={(value) => saveChatArt({ webs: Number(value) })} />
+            <Slider label="Flies" options={[0, 12, 24, 48, 96].map((value) => ({ value: String(value), label: String(value) }))} value={String(chatArtChoice().flies)} onChange={(value) => saveChatArt({ flies: Number(value) })} />
+            <SettingLine label="Jumping spider"><Switch label="Jumping spider" checked={chatArtChoice().jumper} onChange={(jumper) => saveChatArt({ jumper })} /></SettingLine>
+          </Group></Show>
+        </Show>
         {/* A scene is its own picture: it is dimmed, never faded or dithered. */}
         <Show when={!scene()}><Group kind="column">{dial("fade", "Bottom fade", FADE)}</Group>
         <Group kind="column">

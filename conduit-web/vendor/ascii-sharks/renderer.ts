@@ -394,11 +394,10 @@ export class AsciiRenderer {
   private paintBackground() {
     const g = this.bg.getContext("2d");
     if (!g) return;
-    const { width: W, height: H, dpr, cw, ch } = this;
+    const { width: W, height: H, dpr } = this;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.fillStyle = "#000";
     g.fillRect(0, 0, W, H);
-    paintGrid(g, W, H, cw, ch, dpr);
   }
 
   render(world: World, dt: number) {

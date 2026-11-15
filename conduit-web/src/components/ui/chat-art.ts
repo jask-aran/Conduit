@@ -5,16 +5,20 @@ import pineLake from "./assets/art/pine-lake.webp";
 import summerHills from "./assets/art/summer-hills.webp";
 import peachTide from "./assets/art/peach-tide.webp";
 import blackHole from "./assets/art/black-hole.webp";
+import stackedDither from "./assets/art/stacked-dither.gif";
 import sceneWaves from "./assets/art/scene-waves.webp";
 import sceneSharks from "./assets/art/scene-sharks.webp";
 import sceneSpiders from "./assets/art/scene-spiders.webp";
 
 /** A background that moves and is its own picture: never dithered over, only dimmed. */
-export type ChatArtScene = "waves" | "sharks" | "spiders";
+export type ChatArtScene = "waves" | "stacked-dither" | "sharks" | "spiders";
 /** `image` is a still of the scene, for choosing it by. */
-export const chatArtScenes: { id: ChatArtScene; label: string; image: string }[] = [{ id: "waves", label: "Dither waves", image: sceneWaves }, { id: "sharks", label: "Sharks", image: sceneSharks }, { id: "spiders", label: "Spiders", image: sceneSpiders }];
-export type ChatArtLook = { image: string; scene?: ChatArtScene; dither: boolean; dot: number; levels: number; strength: number; brightness: number; fade: number };
-export const chatArtLook: Omit<ChatArtLook, "image"> = { dither: true, dot: 2, levels: 4, strength: 1, brightness: 0.6, fade: 0.6 };
+export const chatArtScenes: { id: ChatArtScene; label: string; image: string }[] = [{ id: "waves", label: "Waves", image: sceneWaves }, { id: "stacked-dither", label: "Stacked dither", image: stackedDither }, { id: "sharks", label: "Sharks", image: sceneSharks }, { id: "spiders", label: "Spiders", image: sceneSpiders }];
+export const wavePalettes = ["midnight", "peach", "ember", "moss", "lilac", "mono"] as const;
+export const waveColours = ["blue", "purple", "green", "amber", "rose", "mono"] as const;
+export type AnimationOptions = { waveColour: typeof waveColours[number]; speed: number; cell: number; palette: typeof wavePalettes[number]; well: number; sharks: number; webs: number; flies: number; jumper: boolean };
+export type ChatArtLook = AnimationOptions & { image: string; scene?: ChatArtScene; dither: boolean; dot: number; levels: number; strength: number; brightness: number; fade: number };
+export const chatArtLook: Omit<ChatArtLook, "image"> = { waveColour: "blue", speed: 1, cell: 2, palette: "midnight", well: 0, sharks: 4, webs: 6, flies: 24, jumper: true, dither: true, dot: 2, levels: 4, strength: 1, brightness: 0.6, fade: 0.6 };
 
 export const chatArtSet = [
   { id: "anime-clouds", label: "Anime clouds", image: animeClouds },

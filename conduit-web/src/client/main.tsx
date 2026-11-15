@@ -203,7 +203,7 @@ export type UpdateState =
   | { kind: "working"; label: string; onCancel?: () => void };
 type WorkspaceView = "files" | "diff" | "chat" | "terminal" | "jbot";
 const METEOR_FIELD_STORAGE_KEY = "conduit:meteor-field";
-const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY) !== "false";
+const selectedMeteorField = () => localStorage.getItem(METEOR_FIELD_STORAGE_KEY) === "true";
 const WorkspacePanel = lazy(() => import("./workspace/workspace-panel"));
 const FileViewer = lazy(() => import("./workspace/workspace-file-viewer"));
 const FileTypeIcon = lazy(() => import("@/components/ui/file-marks").then((module) => ({ default: module.FileTypeIcon })));
@@ -2337,7 +2337,6 @@ function App() {
   const switchMeteorField = (enabled: boolean) => {
     setMeteorField(enabled);
     localStorage.setItem(METEOR_FIELD_STORAGE_KEY, String(enabled));
-    publishUiPreference("meteorField", enabled);
   };
   const switchSidebarChatLimit = (next: number) => {
     const value = clampSidebarChatLimit(next);
@@ -4986,7 +4985,7 @@ function App() {
         apply: (value) => { if (Array.isArray(value)) setSidebarPins(value.filter((item): item is string => typeof item === "string")); },
       },
     } satisfies { [K in UiPreferenceKey]: ClientPreference<K> };
-    const preferenceKeys = Object.keys(clientPreferences) as UiPreferenceKey[];
+    const preferenceKeys = (Object.keys(clientPreferences) as UiPreferenceKey[]).filter((key) => key !== "meteorField");
     const preferenceRow = <K extends UiPreferenceKey>(key: K) => clientPreferences[key] as ClientPreference<K>;
     const localPreferences = Object.fromEntries(preferenceKeys.map((key) => [key, preferenceRow(key).local()])) as UiPreferences;
     const applyPreference = <K extends UiPreferenceKey>(key: K, value: UiPreferences[K]) => {

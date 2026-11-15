@@ -1,5 +1,6 @@
 /* One picture, fitted to the app window; each pane that is a window onto it draws the part it stands over. */
-.ui-chat-art { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; border-radius: inherit; pointer-events: none; }
+.ui-chat-art.ui-sheet-backdrop { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; border-radius: inherit; pointer-events: none; }
+.ui-chat-art > canvas { position: absolute; top: 0; left: 0; max-width: none; }
 /* Where a scene's engine draws: the size of the window, measured by the engine, seen only through the panes. */
 .ui-chat-art-host { position: fixed; inset: 0; z-index: -1; width: 100%; height: 100%; font-family: var(--font-data); visibility: hidden; pointer-events: none; }
 [data-art-window] { isolation: isolate; }

@@ -1,0 +1,3 @@
+2da616c6de3cb25ccd4bc3d1645b23bda36dc1fa
+https://github.com/stackedlol/stacked-dither
+Local change: preserveDrawingBuffer so pane canvases can copy the rendered WebGL frame.

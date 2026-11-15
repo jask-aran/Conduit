@@ -1,3 +1,4 @@
+import { HarnessMark } from "./marks";
 import { Frost } from "./frost";
 import { CloseButton, IconButton } from "./actions";
 import * as Icons from "./icons";
@@ -104,7 +105,7 @@ export function Gauge(props: { value: number; tone?: "idle" | "normal" | "warnin
 /** Pictures to choose one from, each shown small. An option with no image is a plain tile saying its label, or shows its
     `preview` live; one
     with `onRemove` can be taken away; `add` is a last tile that takes a new picture. */
-export function PictureChoice(props: { label: string; value: string; options: ReadonlyArray<{ value: string; label: string; image?: string; preview?: JSX.Element; onRemove?: () => void }>; onChange: (value: string) => void; add?: { label: string; onClick: () => void }; haptic?: HapticProp }) {
+export function PictureChoice(props: { label: string; value: string; options: ReadonlyArray<{ value: string; label: string; image?: string; preview?: JSX.Element; source?: string; onRemove?: () => void }>; onChange: (value: string) => void; add?: { label: string; onClick: () => void }; haptic?: HapticProp }) {
   return <div class="ui-picture-choice" role="radiogroup" aria-label={props.label}>
     <For each={props.options}>{(option) => <div class="ui-picture-tile">
       <button type="button" role="radio" aria-checked={option.value === props.value} title={option.label} data-plain={option.image || option.preview ? undefined : ""}
@@ -112,6 +113,7 @@ export function PictureChoice(props: { label: string; value: string; options: Re
         <Show when={option.preview}><i class="ui-picture-preview" aria-hidden="true">{option.preview}</i></Show>
         <span>{option.label}</span>
       </button>
+      <Show when={option.source}>{(source) => <Button variant="ghost" size="icon-sm" aria-label={`${option.label} on GitHub`} title={`${option.label} on GitHub`} onClick={() => window.open(source(), "_blank", "noopener,noreferrer")}><HarnessMark id="github" /></Button>}</Show>
       <Show when={option.onRemove}>{(remove) => <CloseButton size="xs" label={`Remove ${option.label}`} onClick={() => remove()()} />}</Show>
     </div>}</For>
     <Show when={props.add}>{(add) => <div class="ui-picture-tile"><button type="button" data-plain="" data-add="" onClick={() => add().onClick()}><Icons.Upload /><span>{add().label}</span></button></div>}</Show>
