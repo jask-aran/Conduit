@@ -3041,13 +3041,13 @@ function App() {
   }
   const [fileReveal, setFileReveal] = createSignal<{ entry: FileEntry; request: ReviewNavigationRequest } | null>(null);
   const openFileDocument = async (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest; /** Open it as the artifact kind it may be when asked (artifact-kinds `opens`). */ adopt?: boolean }) => {
+    const keepTab = tabActivation();
     // A paper or a site is an artifact: its file opens as the artifact, never in the file viewer.
     if (options.adopt || entry.path.endsWith(".paper") || entry.path.endsWith(".site.html")) return void await import("./document/artifacts").then(({ artifactAt }) => artifactAt(entry.projectId, entry.path, options.adopt)).then(
       ({ id }) => openArtifact(id, options.beside),
       (error) => toast.error(error instanceof Error ? error.message : String(error)));
     // A file that is an artifact only once asked (a Markdown file) opens as one if it already is; otherwise in the file viewer.
     if (!options.edit && !options.reveal && opensAs(entry.path)) { const made = await import("./document/artifacts").then(({ artifactFor }) => artifactFor(entry.projectId, entry.path)); if (made) return void openArtifact(made.id, options.beside); }
-    const keepTab = tabActivation();
     // Every open sets it, so one without edit retires an earlier edit's that never loaded.
     pendingFileEdit = options.edit ? entry : null;
     setFileReveal(options.reveal ? { entry, request: options.reveal } : null);
