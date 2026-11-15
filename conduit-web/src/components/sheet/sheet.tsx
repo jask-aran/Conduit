@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createResource, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
 import * as Y from "yjs";
-import { Empty, Icons, Notice } from "@/components/ui";
+import { Empty, Frost, Icons, Notice } from "@/components/ui";
 import { Input } from "@/components/ui/controls";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
 import { CELLS, COL_LIMIT, LOOK, a1, colIndex, key, parseRange, rangeA1, type SheetView } from "@/sheet-format.js";
@@ -267,12 +267,12 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (redo) history.redo(); else history.undo();
     }}>
     <div class="ui-spreadsheet-bar">
-      <Input class="ui-spreadsheet-address" aria-label="Cell" spellcheck={false} value={address() ?? (at() ? rangeA1(at()!) : "")} onFocus={(event) => event.currentTarget.select()} onInput={(event) => setAddress(event.currentTarget.value)}
+      <Input class="ui-spreadsheet-address ui-frost ui-frost-raised" aria-label="Cell" spellcheck={false} value={address() ?? (at() ? rangeA1(at()!) : "")} onFocus={(event) => event.currentTarget.select()} onInput={(event) => setAddress(event.currentTarget.value)}
         onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); go(); } else if (event.key === "Escape") { setAddress(null); grid()?.focus(); } }} onBlur={() => setAddress(null)} />
       {/* The formula bar edits the selected cell: focused, it opens the cell to edit as F2 does. */}
-      <div ref={formula} class="ui-input ui-spreadsheet-formula" onFocusIn={() => { const area = at(); if (area && !editor.editing()) editor.begin({ row: area.top, col: area.left }, "edit", "bar"); }}>
+      <Frost lift="raised" ref={formula} class="ui-input ui-spreadsheet-formula" onFocusIn={() => { const area = at(); if (area && !editor.editing()) editor.begin({ row: area.top, col: area.left }, "edit", "bar"); }}>
         <FormulaField editor={editor} place="bar" label="Formula" class="ui-formula-text" idle={input} disabled={!at()} />
-      </div>
+      </Frost>
       {/* The ribbon (Markup's bar with the sheet's tools) stands here, at the row's end, folding to the room the formula field leaves it. */}
       <div ref={setSlot} class="ui-spreadsheet-slot" />
       <Show when={frozenHere()}>{(cell) => <Notice kind="tool" title={`${cell().formula}: ${cell().why}`}>Frozen on import: ={cell().formula.replace(/^=/, "")}</Notice>}</Show>

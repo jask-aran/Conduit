@@ -1,4 +1,4 @@
-import { createContext, createEffect, createMemo, createSignal, createUniqueId, For, onCleanup, onMount, Show, useContext, type JSX } from "solid-js";
+import { createContext, untrack, createEffect, createMemo, createSignal, createUniqueId, For, onCleanup, onMount, Show, useContext, type JSX } from "solid-js";
 // Through the barrel, so the tool's chunk takes these from the app's own and the build splits nothing new out of it.
 import { Button, Card, ColourPicker, CardPreview, CloseButton, Count, Dot, Frost, IconButton, Icons, Item, Keycap, Section, Segmented, Spinner, Stepper, Swatch, Switch, TextArea } from "./index";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection, Popover, PopoverContent } from "./menus";
@@ -271,7 +271,7 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   const of = (menu: string) => props.own!.filter((tool) => tool.menu === menu);
   const toggles = () => props.own?.filter((tool) => !tool.mode && !menus().includes(tool.menu ?? "")) ?? [];
   const pressed = (tool: MarkupOwnTool) => tool.pressed ?? tool.active;
-  const choice = (tool: MarkupOwnTool, on = tool.active) => <MenuRow icon={tool.icon()} checked={on || undefined} disabled={tool.disabled} keys={tool.keys} onSelect={() => press(tool)}>{tool.label}</MenuRow>;
+  const choice = (tool: MarkupOwnTool, on = tool.active) => <MenuRow icon={tool.icon()} checked={on || undefined} disabled={tool.disabled} keys={tool.tip ? [tool.tip] : tool.keys} onSelect={() => press(tool)}>{tool.label}</MenuRow>;
   // One control a menu, as wide as any other tool of the bar and showing the one that is so now by its icon: the bars hold still as the caret moves.
   // A set of inks is chosen as Markup's own are: its control opens a line of swatches under the bars, one line at a time, and shows its own icon in the ink that is on.
   const [inking, setInking] = createSignal<string | null>(null);
@@ -301,11 +301,21 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   // A menu's control shows a key only where every one of its tools is pressed next by that key (a sequence that opens the menu); within it, the host says them.
   const shared = (menu: string) => { const tips = new Set(of(menu).map((tool) => tool.tip)); return tips.size === 1 ? [...tips][0] : undefined; };
   const tip = (key?: string) => <Show when={key}><Keycap class="ui-markup-tip">{key!}</Keycap></Show>;
+  // A key sequence typed into a menu (its tools' next keys differ) opens it, each key on its row; the keyboard stays where the sequence is typed, the menu taking it neither as it opens nor as it shuts.
+  const keyed = () => menus().find((menu) => of(menu).some((tool) => tool.tip) && !shared(menu));
+  let inkedByKeys: string | null = null, keyedMenu: string | null = null, returnTo: HTMLElement | null = null;
+  const inkButtons = new Map<string, HTMLElement>();
+  createEffect(() => {
+    const menu = keyed();
+    if (menu && !inkSet(menu) && keyedMenu !== menu) { keyedMenu = menu; returnTo = document.activeElement as HTMLElement | null; }
+    if (menu && inkSet(menu)) { inkedByKeys = menu; anchor = inkButtons.get(menu); setPickingOwn(false); setInking(menu); }
+    else if (inkedByKeys) { if (untrack(inking) === inkedByKeys) setInking(null); inkedByKeys = null; }
+  });
   const kinds = (menu: string) => { const now = () => of(menu).find((tool) => tool.active) ?? of(menu)[0]!;
-    if (inkSet(menu)) return <IconButton label={`${menu}: ${now().label}`} aria-pressed={inking() === menu} aria-expanded={inking() === menu} disabled={of(menu).every((tool) => tool.disabled)} style={{ color: now().swatch }} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { if (!using()) props.onView("use"); anchor = event.currentTarget; setPickingOwn(false); setInking(inking() === menu ? null : menu); }}>{of(menu)[0]!.icon()}{tip(shared(menu))}</IconButton>;
-    return <DropdownMenu modal={false} placement="bottom-start" onOpenChange={(open) => { if (!open) return; setInking(null); if (!using()) props.onView("use"); }}>
-    <MenuControl as={IconButton} label={`${menu}: ${now().label}`}>{now().icon()}{tip(shared(menu))}</MenuControl>
-    <MenuContent width="sm"><MenuSection title={menu}><For each={of(menu)}>{(tool) => choice(tool)}</For></MenuSection></MenuContent>
+    if (inkSet(menu)) return <IconButton ref={(button: HTMLButtonElement) => inkButtons.set(menu, button)} label={`${menu}: ${now().label}`} aria-pressed={inking() === menu} aria-expanded={inking() === menu} disabled={of(menu).every((tool) => tool.disabled)} style={{ color: now().swatch }} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { if (!using()) props.onView("use"); anchor = event.currentTarget; setPickingOwn(false); setInking(inking() === menu ? null : menu); }}>{of(menu)[0]!.icon()}{tip(shared(menu))}</IconButton>;
+    return <DropdownMenu modal={false} placement="bottom-start" open={keyed() === menu ? true : undefined} onOpenChange={(open) => { if (!open) return; setInking(null); if (!using()) props.onView("use"); }}>
+    <MenuControl as={IconButton} label={`${menu}: ${now().label}`} onFocus={() => { if (keyedMenu !== menu || keyed() === menu) return; const back = returnTo; keyedMenu = returnTo = null; back?.focus({ preventScroll: true }); }}>{now().icon()}{tip(shared(menu))}</MenuControl>
+    <MenuContent width="sm" keep={() => keyedMenu === menu} onOpenAutoFocus={(event) => { if (keyedMenu === menu) event.preventDefault(); }} onCloseAutoFocus={(event) => { if (keyedMenu === menu) event.preventDefault(); }}><MenuSection title={menu}><For each={of(menu)}>{(tool) => choice(tool)}</For></MenuSection></MenuContent>
   </DropdownMenu>; };
   const owned = () => <>
     <For each={menus()}>{kinds}</For>
@@ -397,7 +407,7 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     return <div ref={under} class="ui-markup-under">
       <Bar class="ui-markup-bar" role="toolbar" aria-label={menu}>
         <Segmented label={menu} icons size="sm" value={(named().find((tool) => tool.active) ?? (any()?.active ? any()! : named()[0]!)).name} onChange={(name) => { setPickingOwn(false); press(named().find((tool) => tool.name === name)!); }}
-          options={named().map((tool) => ({ value: tool.name, label: tool.label, disabled: tool.disabled, icon: <Swatch colour={tool.swatch} hollow={!tool.swatch} /> }))} />
+          options={named().map((tool) => ({ value: tool.name, label: tool.label, disabled: tool.disabled, icon: <><Swatch colour={tool.swatch} hollow={!tool.swatch} />{tip(tool.tip)}</> }))} />
         <Show when={any()}>{(tool) => <IconButton data-any="" label={tool().label} disabled={tool().disabled} aria-pressed={tool().active} aria-expanded={pickingOwn()} onMouseDown={(event) => event.preventDefault()} onClick={() => { setPickingOwn(!tool().active || !pickingOwn()); tool().pick!(own()); }}><Swatch colour={tool().swatch} /></IconButton>}</Show>
       </Bar>
       <Show when={pickingOwn() && any()}>{(tool) => <Bar class="ui-markup-bar ui-markup-picker"><ColourPicker label={tool().label} value={own()} onChange={(hex) => { setOwnInk({ ...ownInk(), [menu]: hex }); tool().pick!(hex); }} /></Bar>}</Show>

@@ -97,11 +97,11 @@ export function createSequenceKeys(run: (sequence: SheetSequence) => void, named
   return { typed, next, attach, end, tip };
 }
 
-/** The keys that may come next and are not drawn on a tool of the ribbon in `anchor` (its keytips): within a menu, sizes, a folded ribbon. Under the ribbon's end. */
+/** The keys that may come next and are not drawn on a tool of the ribbon in `anchor` (its keytips) or a row of the menu a sequence opened: sizes, a folded ribbon. Under the ribbon's end. */
 export function SequenceHint(props: { typed: Accessor<string | null>; next: Accessor<{ key: string; label: string }[]>; anchor: () => HTMLElement | undefined }) {
   // Read once the ribbon has drawn its keytips for what is typed.
   const [drawn, setDrawn] = createSignal<ReadonlySet<string>>(new Set());
-  createEffect(() => { props.typed(); requestAnimationFrame(() => setDrawn(new Set([...props.anchor()?.querySelectorAll(".ui-markup-tip") ?? []].map((tip) => tip.textContent ?? "")))); });
+  createEffect(() => { props.typed(); requestAnimationFrame(() => setDrawn(new Set([...props.anchor()?.querySelectorAll(".ui-markup-tip") ?? [], ...document.querySelectorAll("[data-piece=MenuContent] .ui-keycap")].map((tip) => tip.textContent ?? "")))); });
   const rest = () => props.next().filter((one) => !drawn().has(one.key));
   return <Popover open={props.typed() !== null && rest().length > 0} anchorRef={props.anchor} placement="bottom-end">
     <PopoverContent aria-label="Keys" width="sm" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}>
