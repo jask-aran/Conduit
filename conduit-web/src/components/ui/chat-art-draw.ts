@@ -104,7 +104,8 @@ let drawn: unknown[] = [], revision = 0;
 const tints = [[-1, 0, 0], [1.35, 0.65, 1.8], [0.5, 1.35, 0.8], [1.8, 1.05, 0.3], [1.8, 0.65, 0.95], [1, 1, 1]];
 function paint(sceneFrame = true) {
   if (!look || !slices.size || !(look.scene || picture)) return;
-  const rects = [...slices].filter(([pane]) => !pane.closest('[aria-hidden="true"], .ui-tool-kept:not([data-shown])'))
+  // inert, not aria-hidden: a modal popover hides the rest of the app from screen readers, which it still shows.
+  const rects = [...slices].filter(([pane]) => !pane.closest("[inert]"))
     .map(([pane, slice]) => ({ slice, rect: pane.getBoundingClientRect() }))
     .filter(({ rect }) => rect.width && rect.height && rect.right > 0 && rect.bottom > 0 && rect.left < innerWidth && rect.top < innerHeight);
   if (!rects.length) return;
