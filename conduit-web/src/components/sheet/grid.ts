@@ -161,7 +161,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       if (near.length) editor?.updateCells(near.map(({ row, col }) => ({ cell: [col, row] })));
     },
     select: (to, scroll) => {
-      drive.select?.(to ? { columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: { cell: [to.left, to.top], range: rect(to), rangeStack: [] } } : NO_SELECTION);
+      // Held at once, not at React's next render: `whole` and the grid's own focus read it straight after.
+      current = to ? { columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: { cell: [to.left, to.top], range: rect(to), rangeStack: [] } } : NO_SELECTION;
+      drive.select?.(current);
       events.selected(to);
       if (to && scroll) editor?.scrollTo(to.left, to.top, "both", 0, 0, { vAlign: "center", hAlign: "center" });
     },

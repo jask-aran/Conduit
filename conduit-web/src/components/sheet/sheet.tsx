@@ -3,7 +3,7 @@ import * as Y from "yjs";
 import { Empty, Icons, Notice } from "@/components/ui";
 import { Input } from "@/components/ui/controls";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
-import { CELLS, COL_LIMIT, LOOK, a1, key, parseRange, rangeA1, type SheetView } from "@/sheet-format.js";
+import { CELLS, COL_LIMIT, LOOK, a1, colIndex, key, parseRange, rangeA1, type SheetView } from "@/sheet-format.js";
 import { SheetFoot } from "./foot";
 import { createSheetTabs } from "./tabs";
 import { ASK_KEY, type SheetAnchor, type SheetBox, type SheetGrid, type SheetGridEvents, type SheetHost, type SheetMarks, type SheetPlace, type SheetRange, type SheetState } from "./host";
@@ -65,11 +65,17 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   createEffect(() => { if (frozen().size) grid()?.update(null); });
   const sizes = createSheetSizes(look, model, styles.lines), [question, setQuestion] = createSignal<SizeQuestion | null>(null);
   const sequences = createSequenceKeys((sequence) => sequence.run({ selection: at, sizes, look: () => readLook(root!), ask: setQuestion }));
+  // One edge dragged sizes every whole row or column selected with it, as a spreadsheet does.
+  const span = (kind: "rows" | "cols", one: number) => {
+    const area = at(), size = model()?.size(), [from, to] = !area ? [one, one] : kind === "cols" ? [area.left, area.right] : [area.top, area.bottom];
+    const whole = area && size && (kind === "cols" ? area.top === 0 && area.bottom >= size.rows - 1 : area.left === 0 && area.right >= size.cols - 1) && one >= from && one <= to && to > from;
+    return whole ? Array.from({ length: to - from + 1 }, (_, n) => from + n) : [one];
+  };
   const events: SheetGridEvents = {
     selected: setAt,
     write,
     fill: (range, values) => hub({ op: "fill", range: rangeA1(range), values }),
-    resized: (col, width) => { const id = model()?.colAt(col); if (id) look.set(`width:${id}`, Math.round(width)); },
+    resized: (col, width) => sizes.setWidths(span("cols", col), width),
     menu: setMenu,
     moved: () => { setScrolled((n) => n + 1); moved(); },
     drawn: () => props.onDrawn?.(),
@@ -133,7 +139,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   createEffect(() => {
     const into = island();
     if (!into) return;
-    const offKeys = sequences.attach(into), offEdges = dragRowEdges(into, grid, (row, height) => sizes.setHeights([row], height));
+    const offKeys = sequences.attach(into), offEdges = dragRowEdges(into, grid, (row, height) => sizes.setHeights(span("rows", row), height));
     onCleanup(() => { offKeys(); offEdges(); });
   });
   const cellBox = createMemo<JSX.CSSProperties>((was) => {
@@ -166,7 +172,16 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     for (const kind of ["mousedown", "mouseup", "click"] as const) into.addEventListener(kind, hold, true);
     onCleanup(() => { up(); into.removeEventListener("pointerdown", press, true); for (const kind of ["mousedown", "mouseup", "click"] as const) into.removeEventListener(kind, hold, true); });
   });
-  const go = () => { const range = parseRange(address() ?? ""); setAddress(null); if (range) grid()?.select(range, true); grid()?.focus(); };
+  // `Data!B2` shows its tab; `B:D` and `3:9` are whole columns and rows.
+  const go = () => {
+    const typed = (address() ?? "").trim(), local = typed ? tabs.reveal(typed).replace(/\$/g, "") : "", cols = /^([A-Za-z]{1,3}):([A-Za-z]{1,3})$/.exec(local), rows = /^(\d+):(\d+)$/.exec(local);
+    const range = cols ? { top: 0, bottom: 0, left: Math.min(colIndex(cols[1]!), colIndex(cols[2]!)), right: Math.max(colIndex(cols[1]!), colIndex(cols[2]!)) }
+      : rows ? { left: 0, right: 0, top: Math.max(0, Math.min(+rows[1]!, +rows[2]!) - 1), bottom: Math.max(+rows[1]!, +rows[2]!) - 1 } : parseRange(local);
+    setAddress(null);
+    if (range) { grid()?.select(range, true); if (cols || rows) grid()?.whole(cols ? "cols" : "rows"); }
+    // After the grid has drawn the selection: focused with none, it selects its first cell.
+    requestAnimationFrame(() => grid()?.focus());
+  };
   const structure = (op: "insert-rows" | "insert-cols" | "delete-rows" | "delete-cols", at: number, count = 1) => hub({ op, at, count });
 
   const rangeOf = (anchor: Pick<SheetAnchor, "under">): SheetRange | null => {
