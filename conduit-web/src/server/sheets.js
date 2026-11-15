@@ -460,6 +460,11 @@ export function sheetKind(hub) {
           if (!area) throw fault(400, `range is an A1 range such as A1:D20 (or Data!A1:D20), not ${range ?? at}`);
           const col = typeof column === "string" && /^[A-Za-z]{1,3}$/.test(column) ? colIndex(column) : -1, top = area.top + (header === true ? 1 : 0), bottom = Math.min(area.bottom, rows - 1);
           if (col < area.left || col > area.right) throw fault(400, `column is the letter of a column of ${rangeA1(area)} to sort by, not ${column}`);
+          // As a spreadsheet's: a sort would pull a merge's rows apart, so one in the way stops it.
+          let merged = [];
+          try { merged = JSON.parse(String(room.look.get(`merges:${sheet.id}`))); } catch {}
+          const across = Array.isArray(merged) ? merged.map((one) => rangedArea(sheet, one)).find((one) => one && one.bottom >= top && one.top <= bottom && one.right >= area.left && one.left <= area.right) : undefined;
+          if (across) throw fault(400, `${rangeA1(across)} is merged: unmerge it to sort ${rangeA1(area)}`);
           if (top < bottom) hub.as(room, name, (sign) => room.doc.transact(() => { reorder(room, sheet, top, sortedRows(sheet, top, bottom, col, descending === true), area.left, Math.min(area.right, cols - 1)); sign(); }));
           refilter(room, sheet, name);
           return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}) };
