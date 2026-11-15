@@ -72,6 +72,10 @@ async function benchmark() {
       for (let i = 0; i < 15; i++) await frame();
       const intervals = [], updates = [], visible = visibilityChanges;
       if (document.hidden) throw new Error("Benchmark tab must remain foreground.");
+      // Long frames (over 50ms) say where their time went: tasks, frame callbacks, then style, layout and paint.
+      const long = [];
+      const loaf = new PerformanceObserver((list) => long.push(...list.getEntries()));
+      loaf.observe({ type: "long-animation-frame" });
       tell("begin", 722);
       let last;
       for (let index = 0; index < frames; index++) {
@@ -83,10 +87,21 @@ async function benchmark() {
         updates.push(performance.now() - start);
       }
       tell("end", Number.parseFloat(dock.style.width));
+      long.push(...loaf.takeRecords()); loaf.disconnect();
+      const scripts = new Map();
+      for (const entry of long) for (const script of entry.scripts) {
+        const key = `${script.invokerType} ${script.invoker} ${script.sourceFunctionName || "?"} ${script.sourceURL.split("/").pop()}:${script.sourceCharPosition}`;
+        scripts.set(key, (scripts.get(key) ?? 0) + script.duration);
+      }
+      const longFrames = { count: long.length, medianMs: {
+        tasks: percentile(long.map((entry) => (entry.renderStart || entry.startTime + entry.duration) - entry.startTime), .5),
+        frameCallbacks: percentile(long.map((entry) => entry.renderStart ? entry.styleAndLayoutStart - entry.renderStart : 0), .5),
+        styleLayoutPaint: percentile(long.map((entry) => entry.styleAndLayoutStart ? entry.startTime + entry.duration - entry.styleAndLayoutStart : 0), .5),
+      }, topScriptsMs: [...scripts].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([key, ms]) => [key, Math.round(ms)]) };
       const endRows = surface.querySelectorAll(".ui-transcript-row").length;
       if (endRows !== previousRows) throw new Error(`Log still mounted during resize: ${previousRows} to ${endRows} rows`);
       if (visibilityChanges !== visible) throw new Error("Foreground changed during benchmark; discard this run.");
-      trials.push({ version, frames, rows: previousRows, domNodes: surface.querySelectorAll("*").length, hiddenBlocks: surface.querySelectorAll('[data-transcript-visibility="hidden"]').length, intervalMs: { p50: percentile(intervals, .5), p95: percentile(intervals, .95), max: Math.round(Math.max(...intervals) * 100) / 100 }, resizeUpdateMs: { p50: percentile(updates, .5), p95: percentile(updates, .95) } });
+      trials.push({ version, frames, rows: previousRows, domNodes: surface.querySelectorAll("*").length, hiddenBlocks: surface.querySelectorAll('[data-transcript-visibility="hidden"]').length, intervalMs: { p50: percentile(intervals, .5), p95: percentile(intervals, .95), max: Math.round(Math.max(...intervals) * 100) / 100 }, resizeUpdateMs: { p50: percentile(updates, .5), p95: percentile(updates, .95) }, longFrames });
       dispose(); dispose = undefined;
     }
     return { viewport: [innerWidth, innerHeight, devicePixelRatio], fixture: { messages: messages.messages.length, runs: messages.runs?.length ?? 0, source: "One live backend snapshot replayed identically; message contents are not saved" }, userAgent: navigator.userAgent, trials };

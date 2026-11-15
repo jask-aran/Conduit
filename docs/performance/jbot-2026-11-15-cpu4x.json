@@ -1,9 +1,9 @@
 {
-  "at": "2026-11-15T03:55:53.301Z",
+  "at": "2026-11-15T04:04:13.305Z",
   "cpuSlowdown": 4,
   "harness": "Actual JbotRoom and log, fixed header/composer, no backgrounds or populated side panel",
   "baseline": "566894326cc81b2141829018f5a519b89abd9d2e",
-  "current": "397f0669b93c87e889afd926891acaf359c2e0d1",
+  "current": "9665b31459faf62c097f46dac61374968f1c1746",
   "viewport": [
     1440,
     900,
@@ -20,64 +20,122 @@
       "version": "before",
       "frames": 45,
       "rows": 159,
-      "domNodes": 2195,
+      "domNodes": 2185,
       "hiddenBlocks": 0,
       "intervalMs": {
-        "p50": 194.8,
-        "p95": 382.4,
-        "max": 403.3
+        "p50": 173.8,
+        "p95": 319.9,
+        "max": 354.7
       },
       "resizeUpdateMs": {
-        "p50": 27.4,
-        "p95": 158.1
+        "p50": 128.7,
+        "p95": 162.4
+      },
+      "longFrames": {
+        "count": 26,
+        "medianMs": {
+          "tasks": 0.6,
+          "frameCallbacks": 139.4,
+          "styleLayoutPaint": 132.1
+        },
+        "topScriptsMs": [
+          [
+            "user-callback FrameRequestCallback ? :-1",
+            3687
+          ],
+          [
+            "resolve-promise Response.text.then ? client.ts:1905",
+            32
+          ]
+        ]
       }
     },
     {
       "version": "after",
       "frames": 45,
       "rows": 159,
-      "domNodes": 2195,
+      "domNodes": 2185,
       "hiddenBlocks": 172,
       "intervalMs": {
-        "p50": 83.5,
-        "p95": 104.3,
-        "max": 118.2
+        "p50": 41.8,
+        "p95": 55.6,
+        "max": 62.6
       },
       "resizeUpdateMs": {
-        "p50": 27.9,
-        "p95": 34.4
+        "p50": 26.6,
+        "p95": 35.8
+      },
+      "longFrames": {
+        "count": 0,
+        "medianMs": {
+          "tasks": null,
+          "frameCallbacks": null,
+          "styleLayoutPaint": null
+        },
+        "topScriptsMs": []
       }
     },
     {
       "version": "after",
       "frames": 45,
       "rows": 159,
-      "domNodes": 2195,
+      "domNodes": 2185,
       "hiddenBlocks": 172,
       "intervalMs": {
-        "p50": 83.6,
-        "p95": 111.2,
-        "max": 125.1
+        "p50": 41.7,
+        "p95": 48.8,
+        "max": 55.7
       },
       "resizeUpdateMs": {
-        "p50": 27.3,
-        "p95": 37.3
+        "p50": 26.3,
+        "p95": 34
+      },
+      "longFrames": {
+        "count": 0,
+        "medianMs": {
+          "tasks": null,
+          "frameCallbacks": null,
+          "styleLayoutPaint": null
+        },
+        "topScriptsMs": []
       }
     },
     {
       "version": "before",
       "frames": 45,
       "rows": 159,
-      "domNodes": 2195,
+      "domNodes": 2185,
       "hiddenBlocks": 0,
       "intervalMs": {
-        "p50": 201.7,
-        "p95": 375.6,
-        "max": 389.4
+        "p50": 278.1,
+        "p95": 312.8,
+        "max": 347.7
       },
       "resizeUpdateMs": {
-        "p50": 117.9,
-        "p95": 165.9
+        "p50": 131.5,
+        "p95": 152.7
+      },
+      "longFrames": {
+        "count": 35,
+        "medianMs": {
+          "tasks": 0.8,
+          "frameCallbacks": 138.4,
+          "styleLayoutPaint": 134
+        },
+        "topScriptsMs": [
+          [
+            "user-callback FrameRequestCallback ? :-1",
+            4725
+          ],
+          [
+            "user-callback ResizeObserverCallback ? transcript-follow.ts:8692",
+            2252
+          ],
+          [
+            "resolve-promise Response.text.then ? client.ts:1905",
+            31
+          ]
+        ]
       }
     }
   ]
