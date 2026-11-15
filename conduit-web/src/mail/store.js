@@ -11,7 +11,9 @@ import { splitQuoted } from "../email-quote.js";
 const SNIPPET = 200;
 const TEXT_MAX = 100_000;
 const CHUNK = 500;
-const ROLES = ["inbox", "starred", "important", "sent", "drafts"];
+const ROLES = ["inbox", "category", "starred", "important", "sent", "drafts"];
+// A source's own sorting of the inbox (Gmail's tabs), in the order it shows them; a label's id is `category-<name>`.
+const CATEGORIES = ["primary", "promotions", "social", "updates", "forums"];
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS messages (
@@ -71,6 +73,7 @@ export function openMailStore({ dir }) {
   const db = new DatabaseSync(path.join(dir, "mail.db"));
   db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = OFF;");
   db.exec(SCHEMA);
+  if (!db.prepare("SELECT 1 FROM pragma_table_info('messages') WHERE name = 'category'").get()) db.exec("ALTER TABLE messages ADD COLUMN category TEXT");
   // A subject match outranks a sender's, which outranks the body's; `rank` is the one place bm25 can be read in a GROUP BY.
   db.exec("INSERT INTO search (search, rank) VALUES ('rank', 'bm25(8, 4, 2, 1)')");
   const rawDir = (account) => path.join(dir, "raw", account);
@@ -131,6 +134,8 @@ export function openMailStore({ dir }) {
     const shown = visible.length ? visible : all;
     const newest = shown[shown.length - 1];
     const labels = [...new Set(all.flatMap((row) => json(row.labels)))];
+    // A category sorts the inbox: a thread is in one only while it is in the inbox.
+    if (labels.includes("inbox")) for (const row of all) if (row.category && !labels.includes(`category-${row.category}`)) labels.push(`category-${row.category}`);
     const parties = new Map();
     for (const row of shown) {
       const party = json(row.sender);
@@ -287,6 +292,19 @@ export function openMailStore({ dir }) {
       }
     },
 
+    /** These messages (by `seq`) are in this category at the source; returns the threads it changed. */
+    setCategory(account, category, seqs) {
+      return tx(() => {
+        const threads = new Set();
+        for (let at = 0; at < seqs.length; at += 500) {
+          const page = seqs.slice(at, at + 500);
+          for (const row of q(`UPDATE messages SET category = ? WHERE account = ? AND seq IN (${page.map(() => "?").join(",")}) AND category IS NOT ? RETURNING thread`)
+            .all(category, account, ...page, category)) threads.add(row.thread);
+        }
+        return rollupAll(account, [...threads]);
+      });
+    },
+
     putLabels(account, labels) {
       tx(() => {
         q("DELETE FROM labels WHERE account = ?").run(account);
@@ -335,7 +353,7 @@ export function openMailStore({ dir }) {
 
     labels(account) {
       const unread = new Map(q("SELECT label, count(*) AS n FROM thread_labels WHERE account = ? AND unread > 0 GROUP BY label").all(account).map((row) => [row.label, row.n]));
-      const order = (label) => label.role ? ROLES.indexOf(label.role) : ROLES.length;
+      const order = (label) => label.role ? ROLES.indexOf(label.role) + CATEGORIES.indexOf(label.id.slice("category-".length)) / 10 : ROLES.length;
       return q("SELECT id, name, role FROM labels WHERE account = ?").all(account)
         .map((row) => ({ id: row.id, name: row.name, role: row.role || null, unread: unread.get(row.id) || 0 }))
         .sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name));

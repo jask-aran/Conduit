@@ -42,8 +42,8 @@ export interface MailHeld {
 }
 export interface MailAccount { id: string; kind: MailAccountKind; address: string; name: string; status: MailStatus; sync: MailSync; held: MailHeld }
 
-/** What a label is for, where every source has one; a label the person made has none. */
-export type MailLabelRole = "inbox" | "sent" | "drafts" | "starred" | "important";
+/** What a label is for, where every source has one; a label the person made has none. "category": the source's own sorting of the inbox (id `category-<name>`), which only the source sets. */
+export type MailLabelRole = "inbox" | "sent" | "drafts" | "starred" | "important" | "category";
 /** `id` is the role for a label with one ("inbox"), else an id of the hub's; `name` is what the person reads. */
 export interface MailLabel { id: string; name: string; role: MailLabelRole | null; unread: number }
 
@@ -170,6 +170,8 @@ export interface MailStore {
   /** Keys of the messages whose text is held, after `after` in key order. */
   heldKeys(account: string, after: string, limit: number): string[];
   rawOf(account: string, key: string): Buffer | null;
+  /** The messages with these `seq` are in this category of the inbox at the source ("primary", "promotions", "social", "updates", "forums"). */
+  setCategory(account: string, category: string, seqs: number[]): StoreChange;
   putLabels(account: string, labels: Omit<MailLabel, "unread">[]): void;
   /** The adapter's own sync state, by name: JSON, kept with the account. */
   cursor<T = unknown>(account: string, name: string): T | null;

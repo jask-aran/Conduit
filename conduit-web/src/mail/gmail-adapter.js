@@ -60,6 +60,8 @@ function toMailError(err) {
 // Gmail's system labels as X-GM-LABELS names them; a label the person made travels as its name in base64url.
 const ROLES = { "\\Inbox": "inbox", "\\Sent": "sent", "\\Draft": "drafts", "\\Starred": "starred", "\\Important": "important" };
 const ROLE_NAMES = { inbox: "Inbox", sent: "Sent", drafts: "Drafts", starred: "Starred", important: "Important" };
+// Gmail does not list its inbox tabs among a message's labels over IMAP: each is asked for by search.
+const CATEGORIES = { primary: "Primary", promotions: "Promotions", social: "Social", updates: "Updates", forums: "Forums" };
 const GMAIL_OF = Object.fromEntries(Object.entries(ROLES).map(([gmail, id]) => [id, gmail]));
 const USER = "l-";
 const labelId = (gmail) => ROLES[gmail] ?? (gmail.startsWith("\\") ? null : USER + Buffer.from(gmail).toString("base64url"));
@@ -250,6 +252,7 @@ export function createGmailAdapter(ctx, deps = {}) {
       const own = boxes.filter((b) => b.path.toUpperCase() !== "INBOX" && !NOT_LABELS.some((f) => hasFlag(b, f)));
       write(s, () => store.putLabels(account, [
         ...Object.entries(ROLE_NAMES).map(([id, name]) => ({ id, name, role: id })),
+        ...Object.entries(CATEGORIES).map(([id, name]) => ({ id: `category-${id}`, name, role: "category" })),
         ...own.map((b) => ({ id: labelId(b.path), name: b.path, role: null })),
       ]));
       const box = await s.work.mailboxOpen(s.boxes.all);
@@ -491,6 +494,13 @@ export function createGmailAdapter(ctx, deps = {}) {
       if (modseq) cur.modseq = String(modseq);
       saveCursor(s);
       changed(s, { threads: [...threads] });
+      if (threads.size || !s.sorted) {
+        s.sorted = true;
+        for (const category of Object.keys(CATEGORIES)) {
+          const uids = await c.search({ gmraw: `in:inbox category:${category}` }, { uid: true }).catch((err) => { if (!c.usable) throw err; return null; });
+          if (uids?.length) changed(s, write(s, () => store.setCategory(account, category, uids)));
+        }
+      }
     });
   }
 
