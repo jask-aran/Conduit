@@ -71,7 +71,8 @@ export function createCellLook(look: SheetLook) {
     if (style?.edges) {
       const w = style.edgeWeight;
       ctx.fillStyle = style.edgeColor ? shade(style.edgeColor, "edge") : look.edge;
-      if (style.edges & 1) ctx.fillRect(x, y, width, w);
+      // The first row's top is under the column letters' line: its top edge is drawn just inside.
+      if (style.edges & 1) ctx.fillRect(x, args.row === 0 ? y + 1 : y, width, w);
       if (style.edges & 2) ctx.fillRect(x + width - w, y, w, height);
       if (style.edges & 4) ctx.fillRect(x, y + height - w, width, w);
       if (style.edges & 8) ctx.fillRect(x, y, w, height);
