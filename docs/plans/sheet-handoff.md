@@ -58,12 +58,15 @@ Builders running when this was written each keep an uncommitted resume note besi
 - `handoff-sheet-merges.md`: merged cells;
 - `handoff-sheet-series.md`: the fill handle's series.
 
-State at the pause, 2026-11-15:
-- **Undo:** built but not yet reviewed, run in a browser or committed. Its review was stopped part-way; rerun it.
-- **Merges, rules and series:** stopped mid-build. The working tree does not typecheck; `sheet.tsx` lacks `merges`.
-- **In-cell editor zoom:** done (the editor's text box is zoomed by `--sheet-zoom`), but uncommitted.
+State at the pause, 2026-11-15: everything is committed in `993391e5d`. It typechecks, it runs on :4310, and the headless
+smoke test passes.
 
-Before you restart: finish the builds, typecheck, review, then `start-conduit.sh restart`.
+- **Undo:** works in the browser. Ctrl+D followed by Ctrl+Z and Ctrl+Y on probe-sheet checked out. Its code review is still owed.
+- **Merges, rules and series:** part-built, with what is left in each note.
+  - The rules are imported and exported, but the page doesn't draw them yet.
+  - Series has its module, but it is not wired to the fill handle.
+
+Continue each with a fresh builder from its note. That beats resuming the old threads, which are large.
 
 To continue one, start a fresh builder from its note and the working tree, not the old thread. Delete each note once its work is
 committed.
