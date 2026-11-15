@@ -54,8 +54,17 @@ export function findView(layout: Layout, view: View) {
   return null;
 }
 
-/** The session pane a Ctrl-opened tab joins: the focused one if it is a session pane, else the last one used. */
-const sessionPaneFor = (layout: Layout) => layout.used.find((id) => kindOf(layout.panes[id]!) === "session");
+/** What a caller knows that views alone do not: `held` tabs (a draft) are never dropped; a `document` chat (a paper's
+ *  thread) stands in a document pane. */
+export type Rules = { held?: (view: View) => boolean; document?: (view: View) => boolean };
+
+/** The session pane a Ctrl-opened tab joins: the focused one, else the one used last, else the nearest in the row (a
+ *  restored layout has used only the focused pane). */
+function sessionPaneFor(layout: Layout, session: (view: View) => boolean) {
+  const at = Math.max(0, layout.row.indexOf(layout.focus));
+  const near = [...layout.row].sort((a, b) => Math.abs(layout.row.indexOf(a) - at) - Math.abs(layout.row.indexOf(b) - at));
+  return [...layout.used, ...near].find((id) => layout.panes[id]!.views.every(session));
+}
 
 /** Adds a tab, dropping the first past the cap that is neither shown nor `held` (a tab with a draft). */
 function withTab(pane: Pane, view: View, held: (view: View) => boolean = () => false): Pane {
@@ -67,24 +76,27 @@ function withTab(pane: Pane, view: View, held: (view: View) => boolean = () => f
   return { ...pane, views, active: views.length - 1 };
 }
 
-export function open(layout: Layout, view: View, verb: Verb = {}, held?: (view: View) => boolean): Layout {
+export function open(layout: Layout, view: View, verb: Verb = {}, rules: Rules = {}): Layout {
   const at = findView(layout, view);
   if (at) return focusing(withPane(layout, { ...layout.panes[at.id]!, active: at.index }), at.id);
-  if (verb.tab && sessionView(view)) {
-    const target = sessionPaneFor(layout);
-    if (target) return focusing(withPane(layout, withTab(layout.panes[target]!, view, held)), target);
+  const session = (other: View) => sessionView(other) && !rules.document?.(other);
+  if (verb.tab && session(view)) {
+    const target = sessionPaneFor(layout, session);
+    if (target) return focusing(withPane(layout, withTab(layout.panes[target]!, view, rules.held)), target);
   }
   if (verb.beside || verb.tab) {
     const pane = paneOf([view]);
     const after = layout.row.indexOf(layout.focus);
+    // A tab with no session pane to join is a session pane of its own, given the keyboard as a joined tab would be.
+    const placing = (next: Layout) => verb.beside ? next : focusing(next, pane.id);
     if (layout.row.length < ROW_MAX) {
       const row = [...layout.row];
       row.splice(after < 0 ? row.length : after + 1, 0, pane.id);
-      return { ...withPane(layout, pane), row };
+      return placing({ ...withPane(layout, pane), row });
     }
     // A full row: beside means the neighbour, replaced.
     const neighbour = layout.row[after + 1] ?? layout.row[after - 1] ?? layout.row[0]!;
-    return { ...withPane(dropPane(layout, neighbour), pane), row: layout.row.map((id) => id === neighbour ? pane.id : id) };
+    return placing({ ...withPane(dropPane(layout, neighbour), pane), row: layout.row.map((id) => id === neighbour ? pane.id : id) });
   }
   // Plain replaces what the focused pane shows, whatever kind it is, keeping its place and id.
   return withPane(layout, paneOf([view], 0, layout.focus));
