@@ -39,8 +39,12 @@ const colourOf = (tag, theme) => {
   const hex = rgb ? rgb.slice(-6).toLowerCase() : index !== undefined ? theme[Number(index)] : legacy !== undefined ? INDEXED[Number(legacy)] : undefined;
   return hex && /^[0-9a-f]{6}$/.test(hex) ? `#${tinted(hex, Number(attr(tag, "tint") ?? 0))}` : undefined;
 };
-const HEAVY = { medium: "medium", mediumDashed: "medium", mediumDashDot: "medium", mediumDashDotDot: "medium", slantDashDot: "medium", thick: "thick", double: "thick" };
+const HEAVY = { thick: 2, double: 2, slantDashDot: 1 };
 const SIDES = [["left", "bl"], ["right", "br"], ["top", "bt"], ["bottom", "bb"]];
+
+// The ribbon's inks as a workbook writes them, as text and as a fill (Excel's Bad, Neutral, Good and a light accent); read back as the inks.
+const INKS = { red: ["c00000", "ffc7ce"], amber: ["9c5700", "ffeb9c"], green: ["006100", "c6efce"], blue: ["0070c0", "ddebf7"] };
+const inkOf = (hex, fill) => Object.keys(INKS).find((ink) => `#${INKS[ink][fill]}` === hex) ?? hex;
 
 /** Each cell format of a workbook's `styles.xml` as a packed style (sheet-styles.js), by its index. */
 export function readStyles(stylesXml, themeXml) {
@@ -49,11 +53,11 @@ export function readStyles(stylesXml, themeXml) {
   const fontOf = fonts.map((font) => {
     const out = {}, size = Number(attr(first(font, "sz"), "val")), ink = colourOf(first(font, "color"), theme);
     for (const [name, code] of [["b", "b"], ["i", "i"], ["u", "u"], ["strike", "s"]]) if (on(font, name)) out[code] = true;
-    if (ink && ink !== baseInk && ink !== "#000000") out.c = ink;
+    if (ink && ink !== baseInk && ink !== "#000000") out.c = inkOf(ink, 0);
     if (size && size !== baseSize) out.z = String(Math.round((size * 11) / baseSize * 10) / 10);
     return out;
   });
-  const fillOf = all(within(stylesXml, "fills"), "fill").map((fill) => { const pattern = first(fill, "patternFill"), ink = /patternType="(?!none)/.test(pattern ?? "") ? colourOf(first(pattern, "fgColor"), theme) : undefined; return ink ? { f: ink } : {}; });
+  const fillOf = all(within(stylesXml, "fills"), "fill").map((fill) => { const pattern = first(fill, "patternFill"), ink = /patternType="(?!none)/.test(pattern ?? "") ? colourOf(first(pattern, "fgColor"), theme) : undefined; return ink ? { f: inkOf(ink, 1) } : {}; });
   const borderOf = all(within(stylesXml, "borders"), "border").map((border) => {
     const out = {};
     let weight = 0, ink;
@@ -61,7 +65,7 @@ export function readStyles(stylesXml, themeXml) {
       const tag = first(border, side), kind = attr(tag, "style");
       if (!kind || kind === "none") continue;
       out[code] = true;
-      weight = Math.max(weight, HEAVY[kind] === "thick" ? 2 : HEAVY[kind] ? 1 : 0);
+      weight = Math.max(weight, HEAVY[kind] ?? (kind.startsWith("medium") ? 1 : 0));
       ink ??= colourOf(first(tag, "color"), theme);
     }
     if (weight) out.bw = weight === 2 ? "thick" : "medium";
@@ -80,20 +84,28 @@ export function readStyles(stylesXml, themeXml) {
 }
 
 /**
- * A sheet's styles by where they stand, within its first `size` rows and columns: each column's and row's own (`<col style>`, `<row s customFormat>`), and
- * each cell's `s` that could show (one with none counts only over a row's or column's), as cell format indexes.
+ * A sheet's styles by where they stand: each column's and row's own (`<col style>`, `<row s customFormat>`), and each cell's `s` (one with none counts
+ * only over a row's or column's) within `size` or where `shows` says its format can be seen empty (a fill or an edge), as cell format indexes. `reach`:
+ * the rows and columns those seen cells take; `heights`: the rows well over the sheet's default height, in points.
  */
-export function sheetStyles(sheetXml, size) {
-  const cols = new Map(), rows = new Map(), cells = [];
+export function sheetStyles(sheetXml, size, shows) {
+  const cols = new Map(), rows = new Map(), heights = new Map(), cells = [], reach = { rows: 0, cols: 0 };
   for (const tag of sheetXml.match(/<col\b[^>]*>/g) ?? []) { const style = attr(tag, "style"); if (style && style !== "0") for (let c = Number(attr(tag, "min")) - 1; c < Math.min(Number(attr(tag, "max")), 16384); c++) cols.set(c, Number(style)); }
-  for (const tag of sheetXml.match(/<row\b[^>]*>/g) ?? []) if (attr(tag, "customFormat") === "1" && attr(tag, "s")) rows.set(Number(attr(tag, "r")) - 1, Number(attr(tag, "s")));
-  const any = cols.size || rows.size;
-  for (const found of sheetXml.matchAll(any ? /<c r="([A-Z]+)(\d+)"([^>]*?)\/?>/g : /<c r="([A-Z]+)(\d+)"([^>]*?\ss="[1-9]\d*"[^>]*?)\/?>/g)) {
-    const r = Number(found[2]) - 1, c = colIndex(found[1]);
-    if (r < size.rows && c < size.cols) cells.push([r, c, Number(attr(found[3], "s") ?? 0)]);
+  const tall = 1.25 * (Number(attr(/<sheetFormatPr\b[^>]*>/.exec(sheetXml)?.[0], "defaultRowHeight")) || 15);
+  for (const tag of sheetXml.match(/<row\b[^>]*>/g) ?? []) {
+    const r = Number(attr(tag, "r")) - 1, height = Number(attr(tag, "ht"));
+    if (attr(tag, "customFormat") === "1" && attr(tag, "s")) rows.set(r, Number(attr(tag, "s")));
+    if (height > tall) heights.set(r, height);
   }
-  return { cols, rows, cells };
+  for (const found of sheetXml.matchAll(cols.size || rows.size ? /<c r="([A-Z]+)(\d+)"([^>]*?)\/?>/g : /<c r="([A-Z]+)(\d+)"([^>]*?\ss="[1-9]\d*"[^>]*?)\/?>/g)) {
+    const r = Number(found[2]) - 1, c = colIndex(found[1]), s = Number(attr(found[3], "s") ?? 0);
+    if (shows[s]) { reach.rows = Math.max(reach.rows, r + 1); reach.cols = Math.max(reach.cols, c + 1); }
+    if (shows[s] || (r < size.rows && c < size.cols)) cells.push([r, c, s]);
+  }
+  return { cols, rows, heights, cells, reach };
 }
+/** Whether a packed style can be seen on an empty cell. */
+export const seen = (packed) => /(^| )(f=|b[trbl](?= |$))/.test(packed);
 
 /** What a cell's own style must say over what it would wear from beneath: what differs, and the defaults of what beneath sets. */
 export const ownOver = (under, own) => {
@@ -102,16 +114,14 @@ export const ownOver = (under, own) => {
   return out;
 };
 
-// The ribbon's inks as a workbook writes them, as text and as a fill (Excel's Bad, Neutral, Good and a light accent).
-const INKS = { red: ["c00000", "ffc7ce"], amber: ["9c5700", "ffeb9c"], green: ["006100", "c6efce"], blue: ["0070c0", "ddebf7"] };
 const rgbOf = (colour, fill) => (colour.startsWith("#") ? colour.slice(1) : INKS[colour]?.[fill ? 1 : 0] ?? "000000").toUpperCase();
 const STROKE = { 1: "thin", medium: "medium", thick: "thick" };
 const FACE = '<name val="Calibri"/><family val="2"/><scheme val="minor"/>';
 
 /**
  * A written workbook's `styles.xml` and sheets given the look's styles: `styles` the part SheetJS wrote (its number formats are kept), `sheets` each tab's
- * XML with `styleAt(r, c)`, the packed style a cell wears (empty for none), and `size`, the tab's rows and columns. Each cell's `s` is rewritten, and a
- * cell with a style but nothing in it is added.
+ * XML with `styleAt(r, c)`, the packed style a cell wears (empty for none), `cols` and `rows`, each line's own, and `size`, the tab's rows and columns.
+ * A line's style is written on its `<col>` or `<row>`; each cell's `s` is rewritten, and an empty cell is added only where it wears other than its line's.
  */
 export function writeStyles(styles, sheets) {
   const formats = all(within(styles, "cellXfs"), "xf").map((xf) => Number(attr(xf, "numFmtId") ?? 0));
@@ -132,22 +142,30 @@ export function writeStyles(styles, sheets) {
     xfOf.set(name, id);
     return id;
   };
-  const written = sheets.map(({ xml, styleAt, size }) => {
+  const written = sheets.map(({ xml, styleAt, cols, rows: across, size }) => {
     const rows = new Map(), data = within(xml, "sheetData");
     for (const row of all(data, "row")) {
       const r = Number(attr(row, "r")) - 1, cells = new Map();
       for (const found of within(row, "row").matchAll(/<c r="([A-Z]+)\d+"([^>]*?)(\/>|>[\s\S]*?<\/c>)/g)) cells.set(colIndex(found[1]), found[0]);
       rows.set(r, { open: /<row\b[^>]*?(?=\/?>)/.exec(row)[0], cells });
     }
+    const rowOf = (r) => rows.get(r) ?? rows.set(r, { open: `<row r="${r + 1}"`, cells: new Map() }).get(r);
+    for (const [r, packed] of across) rowOf(r).open += ` s="${xfFor(0, packed)}" customFormat="1"`;
     for (let r = 0; r < size.rows; r++) for (let c = 0; c < size.cols; c++) {
+      // What an empty cell shows without one: its row's style, else its column's.
       const packed = styleAt(r, c), cell = rows.get(r)?.cells.get(c);
-      if (!packed && !cell) continue;
+      if (!cell && packed === (across.get(r) ?? cols.get(c) ?? "")) continue;
       const open = cell && /^<c\b[^>]*?(?=\/?>)/.exec(cell)[0], s = xfFor(open ? formats[Number(attr(open, "s") ?? 0)] ?? 0 : 0, packed), worn = s ? ` s="${s}"` : "";
-      const row = rows.get(r) ?? rows.set(r, { open: `<row r="${r + 1}"`, cells: new Map() }).get(r);
-      row.cells.set(c, open ? `${open.replace(/\s+s="\d+"/, "")}${worn}${cell.slice(open.length)}` : `<c r="${colName(c)}${r + 1}"${worn}/>`);
+      rowOf(r).cells.set(c, open ? `${open.replace(/\s+s="\d+"/, "")}${worn}${cell.slice(open.length)}` : `<c r="${colName(c)}${r + 1}"${worn}/>`);
     }
+    // One <col> a column: SheetJS's, with the column's style.
+    const kept = new Map();
+    for (const tag of xml.match(/<col\b[^>]*>/g) ?? []) for (let c = Number(attr(tag, "min")) - 1; c < Number(attr(tag, "max")); c++) kept.set(c, tag.replace(/<col|\s(min|max|style)="[^"]*"|\/?>/g, ""));
+    for (const c of cols.keys()) if (!kept.has(c)) kept.set(c, ' width="9.140625"');
+    const columns = [...kept].sort((a, b) => a[0] - b[0]).map(([c, rest]) => `<col min="${c + 1}" max="${c + 1}"${rest}${cols.has(c) ? ` style="${xfFor(0, cols.get(c))}"` : ""}/>`).join("");
+    const lined = columns ? (/<cols>[\s\S]*?<\/cols>/.test(xml) ? xml.replace(/<cols>[\s\S]*?<\/cols>/, () => `<cols>${columns}</cols>`) : xml.replace("<sheetData", () => `<cols>${columns}</cols><sheetData`)) : xml;
     const body = [...rows].sort((a, b) => a[0] - b[0]).map(([, row]) => `${row.open}>${[...row.cells].sort((a, b) => a[0] - b[0]).map(([, cell]) => cell).join("")}</row>`).join("");
-    return xml.replace(/<sheetData\/>|<sheetData>[\s\S]*<\/sheetData>/, () => `<sheetData>${body}</sheetData>`);
+    return lined.replace(/<sheetData\/>|<sheetData>[\s\S]*<\/sheetData>/, () => `<sheetData>${body}</sheetData>`);
   });
   const block = (kind, tag) => `<${tag} count="${lists[kind].length}">${lists[kind].join("")}</${tag}>`;
   const out = styles.replace(/<fonts\b[\s\S]*?<\/fonts>/, () => block("font", "fonts")).replace(/<fills\b[\s\S]*?<\/fills>/, () => block("fill", "fills")).replace(/<borders\b[\s\S]*?<\/borders>/, () => block("border", "borders")).replace(/<cellXfs\b[\s\S]*?<\/cellXfs>/, () => block("xf", "cellXfs"));

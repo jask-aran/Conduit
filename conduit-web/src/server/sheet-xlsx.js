@@ -5,7 +5,7 @@ import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colIndex, colName, tabName,
 import { CONFIG } from "../sheet-engine.js";
 import { NAMES } from "../sheet-functions.js";
 import { decodeStyle, encodeStyle } from "../sheet-styles.js";
-import { ownOver, readStyles, sheetStyles, writeStyles } from "./xlsx-styles.js";
+import { ownOver, readStyles, seen, sheetStyles, writeStyles } from "./xlsx-styles.js";
 
 /*
  * An .xlsx read as a workbook's files (docs/plans/sheet-xlsx-and-tabs.md): each tab's CSV of values, its formulas by address and its look, as
@@ -74,7 +74,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   const dropped = {}, drop = (what, count = 1) => { if (count) dropped[what] = (dropped[what] ?? 0) + count; };
   const skipped = [], read = [], names = new Set();
   // Each tab's XML part, by the workbook's own list and its links, read for its pane and styles.
-  const part = (path) => book.files?.[path]?.content, text = (path) => { const bytes = part(path); return bytes ? Buffer.from(bytes).toString("utf8") : ""; };
+  const part = (path) => book.files?.[path]?.content, text = (path) => { const bytes = part(path); return bytes ? Buffer.from(bytes.buffer, bytes.byteOffset, bytes.length).toString("utf8") : ""; };
   const targets = Object.fromEntries((text("xl/_rels/workbook.xml.rels").match(/<Relationship\b[^>]*>/g) ?? []).map((tag) => [attr(tag, "Id"), attr(tag, "Target") ?? ""]));
   const formatsOf = readStyles(text("xl/styles.xml"), text(Object.values(targets).find((target) => /theme\d*\.xml$/.test(target))?.replace(/^\/?(xl\/)?/, "xl/") ?? ""));
   const xmlOf = Object.fromEntries((text("xl/workbook.xml").match(/<sheet\b[^>]*>/g) ?? []).map((tag) => { const target = targets[attr(tag, "r:id")] ?? ""; return [attr(tag, "name"), target.startsWith("/") ? target.slice(1) : `xl/${target}`]; }));
@@ -86,13 +86,10 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     names.add(name.toLowerCase());
     let rows = 0, cols = 0;
     data.forEach((row, r) => row?.forEach((cell, c) => { if (cell && (cell.f || (cell.t !== "z" && cell.v !== "" && cell.v !== undefined))) { rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1); } }));
-    const xml = text(xmlOf[called] ?? "");
-    read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, rows: Math.max(1, rows), cols: Math.max(1, cols), pane: paneOf(xml), styles: sheetStyles(xml, { rows: Math.max(1, rows), cols: Math.max(1, cols) }) });
+    read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, rows: Math.max(1, rows), cols: Math.max(1, cols) });
     drop("merged ranges", sheet["!merges"]?.length ?? 0);
     drop("hidden columns", sheet["!cols"]?.filter((col) => col?.hidden).length ?? 0);
     drop("notes", data.reduce((sum, row) => sum + (row?.filter((cell) => cell?.c?.length).length ?? 0), 0));
-    drop("conditional formats", xml.match(/<conditionalFormatting\b/g)?.length ?? 0);
-    drop("validation rules", xml.match(/<dataValidation\b/g)?.length ?? 0);
   });
   if (!read.length) throw fault(wanted ? `None of those tabs is in the workbook: its tabs are ${book.SheetNames.join(", ")}` : "That workbook has no tabs with cells");
   const sizes = () => read.map((tab) => `${tab.name} ${tab.rows}x${tab.cols}`).join(", ");
@@ -101,6 +98,16 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   const total = read.reduce((sum, tab) => sum + tab.rows * tab.cols, 0);
   if (total > WORKBOOK_LIMIT) throw fault(`That workbook is too large for a sheet (${total} cells over its tabs; at most ${WORKBOOK_LIMIT}). Import some of its tabs (tabs): ${sizes()}`);
   drop("defined names", (book.Workbook?.Names ?? []).filter((name) => !name.Name.startsWith("_xlnm.")).length);
+  // Read once the workbook fits: a tab grows to take in the empty cells a fill or an edge shows on, while it still fits.
+  const shows = formatsOf.map(seen);
+  let room = WORKBOOK_LIMIT - total;
+  for (const tab of read) {
+    const xml = text(xmlOf[tab.called] ?? ""), styles = sheetStyles(xml, tab, shows), rows = Math.max(tab.rows, styles.reach.rows), cols = Math.max(tab.cols, styles.reach.cols), more = rows * cols - tab.rows * tab.cols;
+    if (more && cols <= COL_LIMIT && rows * cols <= SHEET_LIMIT && more <= room) { room -= more; Object.assign(tab, { rows, cols }); }
+    Object.assign(tab, { pane: paneOf(xml), styles });
+    drop("conditional formats", xml.match(/<conditionalFormatting\b/g)?.length ?? 0);
+    drop("validation rules", xml.match(/<dataValidation\b/g)?.length ?? 0);
+  }
 
   // What is typed in each cell, and where the formulas are. 
   const formulas = [], spilt = [];
@@ -186,11 +193,13 @@ export function importXlsx(bytes, { tabs: only } = {}) {
         for (const [r, format] of column) if (format !== most) { if (single < FORMATS_PER_TAB) { look[`fmt:${a1(r, c)}`] = format; single += 1; } else drop("number formats"); }
       }
       // Each column's and row's own style, and each cell's where it says other than what it would wear from them, up to a count.
-      const { cols: colStyles, rows: rowStyles, cells: cellStyles } = tab.styles, worn = new Map(), attrs = (index) => worn.get(index) ?? worn.set(index, decodeStyle(formatsOf[index] ?? "")).get(index);
+      const { cols: colStyles, rows: rowStyles, cells: cellStyles, heights } = tab.styles, worn = new Map(), attrs = (index) => worn.get(index) ?? worn.set(index, decodeStyle(formatsOf[index] ?? "")).get(index);
       for (const [c, index] of colStyles) if (c < tab.cols && formatsOf[index]) look[`style:${colName(c)}`] = formatsOf[index];
       for (const [r, index] of rowStyles) if (r < tab.rows && formatsOf[index]) look[`style:${r + 1}`] = formatsOf[index];
       let styled = 0;
+      for (const [r, height] of heights) if (r < tab.rows) look[`height:${r + 1}`] = Math.round(height / PT_PER_PX);
       for (const [r, c, index] of cellStyles) {
+        if (r >= tab.rows || c >= tab.cols) { drop("styled cells past the tab's last value"); continue; }
         const under = { ...attrs(colStyles.get(c)), ...attrs(rowStyles.get(r)) }, own = encodeStyle(ownOver(under, attrs(index)));
         if (!own) continue;
         if (styled < STYLES_PER_TAB) { look[`style:${a1(r, c)}`] = own; styled += 1; } else drop("cell styles");
@@ -258,7 +267,7 @@ export function exportXlsx(tabs, imported) {
   let restyled = null;
   return editParts(written, (path, xml, all) => {
     if (styled && !restyled) {
-      const sheets = tabs.map((tab, n) => ({ xml: all[`xl/worksheets/sheet${n + 1}.xml`] ?? "", styleAt: styleOf(tab.look), size: { rows: tab.typed.length, cols: Math.max(1, ...tab.typed.map((row) => row.length)) } }));
+      const sheets = tabs.map((tab, n) => ({ xml: all[`xl/worksheets/sheet${n + 1}.xml`] ?? "", ...styleOf(tab.look), size: { rows: tab.typed.length, cols: Math.max(1, ...tab.typed.map((row) => row.length)) } }));
       restyled = writeStyles(all["xl/styles.xml"] ?? "", sheets);
     }
     if (path === "xl/styles.xml") return restyled?.styles ?? xml;
@@ -266,19 +275,22 @@ export function exportXlsx(tabs, imported) {
     return rows || cols ? sheet.replace(/<sheetView workbookViewId="0"\/>/, paneXml(rows, cols)) : sheet;
   });
 }
-/** The style each cell of a tab wears, packed (empty for none), from its look by letter, row number and address: its own over its row's over its column's. */
+/** The style each cell of a tab wears, packed (empty for none), from its look by letter, row number and address: its own over its row's over its column's; and each line's own. */
 const styleOf = (look) => {
   const cols = new Map(), rows = new Map(), cells = new Map(), made = new Map();
+  const worn = (...parts) => encodeStyle(Object.fromEntries(Object.entries(Object.assign({}, ...parts.map(decodeStyle))).filter(([, value]) => value !== false && value !== null)));
   for (const [name, value] of Object.entries(look)) {
     const at = /^style:(?:([A-Z]+)|(\d+)|([A-Z]+\d+))$/.exec(name);
     if (at && typeof value === "string") (at[1] ? cols.set(colIndex(at[1]), value) : at[2] ? rows.set(Number(at[2]) - 1, value) : cells.set(at[3], value));
   }
-  return (r, c) => {
+  const own = (lines) => new Map([...lines].map(([at, value]) => [at, worn(value)]).filter(([, packed]) => packed));
+  const styleAt = (r, c) => {
     const parts = [cols.get(c) ?? "", rows.get(r) ?? "", cells.size ? cells.get(a1(r, c)) ?? "" : ""], id = parts.join("|");
     if (id === "||") return "";
-    if (!made.has(id)) made.set(id, encodeStyle(Object.fromEntries(Object.entries(Object.assign({}, ...parts.map(decodeStyle))).filter(([, value]) => value !== false && value !== null))));
+    if (!made.has(id)) made.set(id, worn(...parts));
     return made.get(id);
   };
+  return { styleAt, cols: own(cols), rows: own(rows) };
 };
 const IMPORT_MS = 180_000, IMPORT_HEAP_MB = 2048;
 /** `importXlsx` on a thread of its own, so the hub answers while a large workbook computes; it is ended after three minutes. */

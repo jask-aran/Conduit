@@ -29,7 +29,7 @@ const fault = (message) => Object.assign(new Error(message), { status: 400 });
 export function decodeStyle(text) {
   const out = {};
   for (const token of String(text ?? "").split(" ")) {
-    const off = token.startsWith("-"), [code, word] = (off ? token.slice(1) : token).split("=");
+    const off = token.startsWith("-"), [code, said] = (off ? token.slice(1) : token).split("="), word = said?.toLowerCase();
     if (!ORDER.includes(code)) continue;
     if (off) out[code] = valued(code) ? null : false;
     else if (!valued(code)) out[code] = true;
