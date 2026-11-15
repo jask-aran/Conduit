@@ -20,7 +20,6 @@
 .ui-formula-hint { display: flex; flex-direction: column; gap: var(--space-xs); padding: var(--space-sm) var(--space-md); color: var(--muted-foreground); font-family: var(--font-data); }
 .ui-formula-hint b { color: var(--foreground); font-weight: var(--weight-strong); }
 .ui-formula-hint small { font-family: var(--font-sans); }
-.ui-spreadsheet-slot { display: flex; flex: 0 1 auto; min-width: 0; margin-inline-start: auto; }
 .ui-spreadsheet-body { position: relative; display: flex; flex: 1; min-height: 0; }
 .ui-spreadsheet-grid { position: relative; flex: 1; min-width: 0; }
 /* Over a row's lower edge beside its number, a drag sizes the row (components/sheet/sizes.ts); the grid sets its canvas's own cursor inline. */

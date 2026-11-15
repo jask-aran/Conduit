@@ -4,13 +4,19 @@
  * the sheet format the hub shares (sheet-format.js), Yjs, and a grid drawn on a canvas, which is a React island
  * loaded only with a sheet (grid.ts).
  */
+import type { JSX } from "solid-js";
 import type { SheetTabOp } from "@/sheet-format.js";
 import type { SheetFormatOp } from "@/sheet-formats.js";
+import type { SheetBorders, SheetInk, SheetStyleOp } from "@/sheet-styles.js";
 
 /** Cells by position, 0-based and inclusive (sheet-format.js parseRange). */
 export type SheetRange = { top: number; left: number; bottom: number; right: number };
-/** The grid's look, read from the app's tokens (theme.ts): Glide's theme object, sizes in pixels, and the inks it draws itself (`inks`: a formula's references, formula.ts INKS; `live` and `warn`: a number format's green and yellow). */
-export type SheetLook = { grid: Record<string, string | number>; row: number; header: number; width: number; error: string; live: string; warn: string; mark: string; markCurrent: string; inks: string[] };
+/**
+ * The grid's look, read from the app's tokens (theme.ts): Glide's theme object, sizes in pixels, and the inks it draws itself (`inks`: a formula's references, formula.ts INKS; `live` and `warn`: a number format's green and yellow).
+ * For styles (styles.ts): `strong`, a bold cell's weight; `edge`, a border's colour; `palette`, each ink as text and as a cell's fill; `corner`, the size of the mark on a cell an import froze (in `warn`).
+ */
+export type SheetLook = { grid: Record<string, string | number>; row: number; header: number; width: number; error: string; live: string; warn: string; mark: string; markCurrent: string; inks: string[];
+  strong: string; edge: string; corner: number; palette: Record<SheetInk, { text: string; fill: string }> };
 /** A reference in the formula being edited, outlined on the grid in its ink; `pointing`: the one being pointed at with the mouse or arrows. */
 export type SheetReference = { range: SheetRange; ink: number; pointing: boolean };
 /** A key pressed on the grid, as the editor is asked whether it takes it. */
@@ -24,7 +30,22 @@ export type SheetCellsOp =
   | { op: "fill"; range: string; values?: string[][]; value?: string; tab?: string }
   | { op: "insert-rows" | "insert-cols" | "delete-rows" | "delete-cols"; at: number; count?: number; tab?: string }
   | SheetFormatOp
+  | SheetStyleOp
   | SheetTabOp;
+
+/** A cell an import could not compute, as GET /v0/document/:id?as=import reports it (server/sheet-xlsx.js): the file's formula, why, and the value it holds instead. By tab name, then A1. */
+export type SheetFrozen = Record<string, Record<string, { formula: string; why: string; kept?: string }>>;
+
+/**
+ * The edit tools a sheet offers on its ribbon, as its kind declares them (client/document/artifact-kinds.ts). Each draws as one or more tools named
+ * `<tool>` (a toggle) or `<tool>-<choice>` (one of a menu): SheetToolId, the stable names a key sequence is bound to. Undo and Redo are the ribbon's own.
+ */
+export type SheetToolName = "bold" | "italic" | "underline" | "strike" | "wrap" | "color" | "fill" | "borders" | "align" | "valign" | "format" | "decimals";
+export const SHEET_TOOLS: readonly SheetToolName[] = ["bold", "italic", "underline", "strike", "wrap", "color", "fill", "borders", "align", "valign", "format", "decimals"];
+export type SheetToolId = "bold" | "italic" | "underline" | "strike" | "wrap" | `color-${SheetInk | "none"}` | `fill-${SheetInk | "none"}` | `borders-${SheetBorders}`
+  | `align-${"left" | "center" | "right"}` | `valign-${"top" | "middle" | "bottom"}` | `format-${"general" | "number" | "currency" | "percent" | "date" | "time"}` | `decimals-${"more" | "fewer"}`;
+/** One tool as the ribbon draws it (Markup's MarkupHostTool): read where drawn, so getters follow. `menu`: the tools of one stand as one control; `compact` with `swatch`: a set of inks. */
+export type SheetTool = { name: SheetToolId; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; compact?: boolean; swatch?: string; run(): void };
 
 export interface SheetHost {
   /** The hub's live socket for the sheet, opened with the app's own sign-in. */
@@ -35,6 +56,10 @@ export interface SheetHost {
   cells(op: SheetCellsOp): Promise<unknown>;
   /** Tells the person something failed, in the hub's words. */
   failed(message: string): void;
+  /** The cells its import froze, where it was imported (asked once); null where it was not. */
+  frozen?(): Promise<SheetFrozen | null>;
+  /** The edit tools offered on its ribbon (every one where it declares none). */
+  tools?: readonly SheetToolName[];
 }
 
 /** How this copy stands with the hub's, as a paper's (DocumentState). */
@@ -55,7 +80,7 @@ export type SheetAnchor = { key: string; quote?: string; under?: Record<string, 
  * What the editor tells a layer that marks it up, in the shape Markup's host asks for. `under`: the cells a box lies
  * over, by ids and by A1 address. `place`: the cells selected, as a place; `placeAt`: the cells from one point to another
  * (a press: the one cell), which it selects. `where`: where a comment's range is now. `reveal`: scroll to a range (A1) and
- * select it. `slot`: the end of the formula bar, where a layer may put its own controls. Not offered, because a sheet
+ * select it. `tools`: its edit tools, for the layer's ribbon. Not offered, because a sheet
  * does not have them yet: agents' seats, suggestions, and Keep or Revert of an agent's change.
  */
 export type SheetMarks = {
@@ -63,7 +88,7 @@ export type SheetMarks = {
   under(box: SheetBox): Record<string, string> | null;
   place(): SheetPlace | null;
   placeAt(from: { x: number; y: number }, to: { x: number; y: number } | null): SheetPlace | null;
-  slot(): HTMLElement | undefined;
+  tools(): SheetTool[];
   anchors(list: SheetAnchor[]): void;
   where(key: string): SheetBox | null;
   watch(listener: (pressed?: string) => void): () => void;

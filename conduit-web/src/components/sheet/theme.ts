@@ -1,3 +1,4 @@
+import { SHEET_INKS, type SheetInk } from "@/sheet-styles.js";
 import { INKS } from "./formula";
 import type { SheetLook } from "./host";
 
@@ -15,7 +16,11 @@ const paint = (() => {
   };
 })();
 
-const wash = (tone: string) => `color-mix(in oklch, var(--foreground), transparent var(${tone}))`;
+const wash = (tone: string, of = "--foreground") => `color-mix(in oklch, var(${of}), transparent var(${tone}))`;
+/** Each ink a cell's text or fill wears, as the token a paper's ink of that name is (components/ui/styles/document.css). */
+export const SHEET_INK_TOKENS: Readonly<Record<SheetInk, string>> = { red: "--destructive", amber: "--status-warn", green: "--status-success", blue: "--status-unread" };
+/** A fill washes its ink over the cell, as a paper's highlight does, so text over it reads in either theme. */
+export const sheetFill = (ink: SheetInk) => wash("--tone-line", SHEET_INK_TOKENS[ink]);
 const COLOURS = {
   accentColor: "var(--foreground)", accentFg: "var(--background)", accentLight: wash("--tone-wash"),
   textDark: "var(--foreground)", textMedium: "var(--muted-foreground)", textLight: "var(--muted-foreground)", textBubble: "var(--foreground)",
@@ -45,6 +50,8 @@ export function readLook(where: HTMLElement): SheetLook {
     error: colour("var(--destructive)"), live: colour("var(--live)"), warn: colour("var(--warn)"), mark: colour(wash("--tone-wash")), markCurrent: colour(wash("--tone-line")),
     // A wash of each ink: the grid fills a reference with it and outlines it in the ink itself.
     inks: INKS.map((ink) => colour(`color-mix(in oklch, var(${ink}), transparent var(--tone-wash))`)),
+    strong: token("--weight-strong") || "600", edge: colour("var(--muted-foreground)"), corner: length("var(--space-sm)"),
+    palette: Object.fromEntries(SHEET_INKS.map((ink) => [ink, { text: colour(`var(${SHEET_INK_TOKENS[ink]})`), fill: colour(sheetFill(ink)) }])) as SheetLook["palette"],
   };
   probe.remove();
   return look;

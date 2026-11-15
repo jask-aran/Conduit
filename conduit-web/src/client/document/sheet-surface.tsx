@@ -1,8 +1,10 @@
 import { createSignal } from "solid-js";
-import { SheetEditor, type SheetHost, type SheetMarks } from "@/components/sheet";
+import { SheetEditor, type SheetFrozen, type SheetHost, type SheetMarks } from "@/components/sheet";
 import { toast } from "@/components/ui/notifications";
 import { webSocketUrl } from "../api/transport.js";
 import type { ArtifactSurfaceProps } from "./artifact-kinds";
+import { api } from "../api/client";
+import { ARTIFACT_KINDS } from "./artifact-kinds";
 import { sheetCells } from "./artifacts";
 
 /** A sheet in its pane: the hub's live copy in the sheet editor, comments on ranges of cells in the margin beside it. It declares no seats, suggestions or answer acts (Keep, Revert), which a sheet does not have yet. */
@@ -11,7 +13,8 @@ export default function SheetSurface(props: ArtifactSurfaceProps) {
   const [marks, setMarks] = createSignal<SheetMarks>(), [away, setAway] = createSignal(false), [stale, setStale] = createSignal(false), [drawn, setDrawn] = createSignal(false);
   const host: SheetHost = {
     socket: async (sheet) => new WebSocket(await webSocketUrl(`/v0/document/${sheet}/live`)), author: () => "person",
-    cells: (op) => sheetCells(id, op), failed: (message) => toast.error(message),
+    cells: (op) => sheetCells(id, op), failed: (message) => toast.error(message), tools: ARTIFACT_KINDS.sheet.cells,
+    frozen: () => api<{ report: { frozen?: SheetFrozen } | null }>(`/v0/document/${encodeURIComponent(id)}?as=import`).then(({ report }) => report?.frozen ?? null, () => null),
   };
   props.onSurface({
     markup: {
@@ -26,7 +29,7 @@ export default function SheetSurface(props: ArtifactSurfaceProps) {
       history: { undo: () => marks()?.history.undo() ?? false, redo: () => marks()?.history.redo() ?? false, canUndo: () => marks()?.history.canUndo() ?? false, canRedo: () => marks()?.history.canRedo() ?? false },
       place: () => props.quiet ? null : marks()?.place() ?? null,
       placeAt: (from, to) => marks()?.placeAt(from, to) ?? null,
-      slot: () => marks()?.slot(),
+      tools: () => marks()?.tools() ?? [],
     },
     away, stale, drawn,
     reveal: () => { const show = marks()?.reveal; return show && ((place) => { if (place.cells) show(place.cells); }); },

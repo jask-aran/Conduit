@@ -1,9 +1,9 @@
-import { createEffect, createMemo, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
+import { createEffect, createMemo, createResource, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js";
 import * as Y from "yjs";
-import { Empty, Icons } from "@/components/ui";
+import { Empty, Icons, Notice } from "@/components/ui";
 import { Input } from "@/components/ui/controls";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
-import { CELLS, LOOK, a1, key, parseRange, rangeA1, type SheetView } from "@/sheet-format.js";
+import { CELLS, COL_LIMIT, LOOK, a1, key, parseRange, rangeA1, type SheetView } from "@/sheet-format.js";
 import { SheetFoot } from "./foot";
 import { createSheetTabs } from "./tabs";
 import { ASK_KEY, type SheetAnchor, type SheetBox, type SheetGrid, type SheetGridEvents, type SheetHost, type SheetMarks, type SheetPlace, type SheetRange, type SheetState } from "./host";
@@ -14,6 +14,8 @@ import { createFormulaEditor, FormulaField, FormulaHelp } from "./formula-editor
 import { createSequenceKeys, SequenceHint, SHEET_SEQUENCES, SizePrompt, type SizeQuestion } from "./sequences";
 import { createSheetSizes, dragRowEdges } from "./sizes";
 import { createSheetFormats } from "./formats";
+import { createSheetStyles } from "./styles";
+import { createSheetTools } from "./tools";
 import { FormatMenu } from "./format-menu";
 
 // Cells written into the text a comment quotes, and how much of each: enough to read.
@@ -28,9 +30,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const [model, setModel] = createSignal<SheetView>(), [grid, setGrid] = createSignal<SheetGrid>(), [failed, setFailed] = createSignal<string>();
   const [at, setAt] = createSignal<SheetRange | null>(null), [changed, setChanged] = createSignal(0), [address, setAddress] = createSignal<string | null>(null), [scrolled, setScrolled] = createSignal(0);
   const [menu, setMenu] = createSignal<Menu>({});
-  const formats = createSheetFormats(look, model, props.host.failed);
+  const formats = createSheetFormats(look, model, props.host.failed), styles = createSheetStyles(look, model, props.host.failed);
   // The grid's element is a signal: the menu trigger that makes it may make it again, and the grid then mounts in the one that stands.
-  const [island, setIsland] = createSignal<HTMLDivElement>(), [slot, setSlot] = createSignal<HTMLDivElement>();
+  const [island, setIsland] = createSignal<HTMLDivElement>();
   let root: HTMLElement | undefined, anchors: SheetAnchor[] = [];
   const tabs = createSheetTabs({ doc: live.doc, host: props.host, id: props.id, name: props.name, grid, at });
   const watchers = new Set<(pressed?: string) => void>(), moved = (pressed?: string) => watchers.forEach((listener) => listener(pressed));
@@ -51,7 +53,17 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     write: (row, col, input) => write([{ row, col, input }]),
     selected: () => { changed(); const area = at(); return area && { row: area.top, col: area.left }; }, error: (row, col) => model()?.error(row, col) ?? null,
   });
-  const sizes = createSheetSizes(look, model), [question, setQuestion] = createSignal<SizeQuestion | null>(null);
+  // The cells its import froze, by tab name then position (a row's index times COL_LIMIT, plus its column's): marked while they hold what the import left.
+  const [report] = createResource(() => props.host.frozen?.() ?? null);
+  const frozen = createMemo(() => {
+    const name = tabs.tabs().find((tab) => tab.id === tabs.shown())?.name, listed = name ? report()?.[name] : undefined, out = new Map<number, { formula: string; why: string }>();
+    for (const [address, cell] of Object.entries(listed ?? {})) { const range = parseRange(address); if (range) out.set(range.top * COL_LIMIT + range.left, cell); }
+    return out;
+  });
+  const frozenAt = (row: number, col: number) => frozen().size ? frozen().get(row * COL_LIMIT + col) : undefined;
+  const frozenHere = () => { changed(); const area = at(), cell = area && frozenAt(area.top, area.left); return cell && !model()?.input(area!.top, area!.left).startsWith("=") ? cell : undefined; };
+  createEffect(() => { if (frozen().size) grid()?.update(null); });
+  const sizes = createSheetSizes(look, model, styles.lines), [question, setQuestion] = createSignal<SizeQuestion | null>(null);
   const sequences = createSequenceKeys((sequence) => sequence.run({ selection: at, sizes, look: () => readLook(root!), ask: setQuestion }));
   const events: SheetGridEvents = {
     selected: setAt,
@@ -90,7 +102,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (over) return;
       made = mountGrid(into, { model: sheet, events, look: readLook(root!), columns: {
         width: (col) => { const width = look.get(`width:${sheet.colAt(col)}`); return typeof width === "number" ? width : undefined; },
-        type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; }, heights: sizes.heights, draw: formats.draw,
+        type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; }, heights: sizes.heights, draw: formats.draw, style: styles.at, frozen: (row, col) => Boolean(frozenAt(row, col)),
       } });
       setGrid(made);
     }, (error: Error) => { setFailed(error.message); props.onDrawn?.(); });
@@ -182,6 +194,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     }
     return { text: lines.join("\n"), label: corners.range, under: corners, boxes: () => { const now = rangeOf({ under: corners }), box = now && grid()?.bounds(now); return box ? [box] : []; } };
   };
+  const tools = createSheetTools({ at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(),
+    fit: (range) => sizes.fitRows(Array.from({ length: range.bottom - range.top + 1 }, (_, n) => range.top + n), readLook(root!)) });
   const marks: SheetMarks = {
     subject: () => ({ ...model()?.size() }),
     under: (box: SheetBox) => {
@@ -197,7 +211,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       made.select(range);
       return placeOf(range);
     },
-    slot,
+    tools: () => tools,
     anchors: (list) => {
       anchors = list;
       tabs.follow(list);
@@ -227,7 +241,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   return <section ref={(element) => { root = element; art(element); }} class="ui-spreadsheet" aria-label={props.name} data-margin={props.marginEmpty ? "none" : "beside"}
     onKeyDown={(event) => {
       if (!(event.ctrlKey || event.metaKey) || !island()?.contains(event.target as Node)) return;
-      if (tabs.key(event) || formats.key(event, at())) return;
+      if (tabs.key(event) || formats.key(event, at()) || styles.key(event, at())) return;
       if (event.altKey && event.code === ASK_KEY) { event.preventDefault(); return props.onAsk?.(); }
       // The grid has no history of its own: what this page wrote is undone here, never what others wrote.
       const redo = event.key === "y" || (event.key === "z" && event.shiftKey);
@@ -242,8 +256,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       <div ref={formula} class="ui-input ui-spreadsheet-formula" onFocusIn={() => { const area = at(); if (area && !editor.editing()) editor.begin({ row: area.top, col: area.left }, "edit", "bar"); }}>
         <FormulaField editor={editor} place="bar" label="Formula" class="ui-formula-text" idle={input} disabled={!at()} />
       </div>
-      {/* Room at the row's end for what a layer over the sheet puts there (Markup's bar, where its kind says so); empty, it takes none. */}
-      <div ref={setSlot} class="ui-spreadsheet-slot" />
+      <Show when={frozenHere()}>{(cell) => <Notice kind="tool" title={`${cell().formula}: ${cell().why}`}>Frozen on import: ={cell().formula.replace(/^=/, "")}</Notice>}</Show>
     </div>
     <div ref={body} class="ui-spreadsheet-body">
       <Show when={!failed()} fallback={<Empty role="alert">The sheet could not be drawn: {failed()}</Empty>}>

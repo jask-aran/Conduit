@@ -8,11 +8,13 @@ import "@glideapps/glide-data-grid/dist/index.css";
 import { createElement, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { colName, type SheetView, COL_LIMIT } from "@/sheet-format.js";
+import { createCellLook } from "./cell-draw";
 import type { SheetDrawn } from "./formats";
+import type { SheetCellStyle } from "./styles";
 import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange, SheetReference } from "./host";
 
-/** What the grid reads of the sheet besides its cells: each column's width and type, the rows whose height is not the default (`look`), and a value as its cell's number format draws it (formats.ts). */
-export type SheetColumns = { width(col: number): number | undefined; type(col: number): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null };
+/** What the grid reads of the sheet besides its cells: each column's width and type, the rows whose height is not the default (`look`), a value as its cell's number format draws it (formats.ts), a cell's style (styles.ts), and whether an import froze it. */
+export type SheetColumns = { width(col: number): number | undefined; type(col: number): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean };
 // How near a row's lower edge, beside its number, a press takes the edge to drag.
 const EDGE_SLOP = 3;
 type GridOptions = { model: SheetView; columns: SheetColumns; events: SheetGridEvents; look: SheetLook };
@@ -44,7 +46,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   /** What a cell shows; what was typed into it is read only when the grid asks (editing, copying), since drawing never does. */
   class TextCell {
     readonly kind = GridCellKind.Text; readonly allowOverlay = false;
-    constructor(private row: number, private col: number, private typed: string | null, readonly displayData: string, readonly contentAlign?: "right", readonly themeOverride?: Partial<Theme>) {}
+    constructor(private row: number, private col: number, private typed: string | null, readonly displayData: string, readonly contentAlign?: "left" | "center" | "right", readonly themeOverride?: Partial<Theme>, readonly worn?: SheetCellStyle, readonly frozen?: boolean) {}
     get data() { return this.typed ??= model.input(this.row, this.col); }
     get copyData() { return this.data; }
   }
@@ -121,26 +123,30 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     const { rows, cols } = size;
     const columns = useMemo(() => Array.from({ length: cols }, (_, col) => ({ id: model.colAt(col) ?? String(col), title: colName(col), width: widths[col] ?? options.columns.width(col) ?? theme.width })), [shape, cols, widths, theme]);
     const types = useMemo(() => Array.from({ length: cols }, (_, col) => options.columns.type(col)), [shape, cols]);
+    const cellLook = useMemo(() => createCellLook(theme), [theme]);
     const content = useMemo(() => {
-      const error = { textDark: theme.error }, hues = { destructive: error, live: { textDark: theme.live }, warn: { textDark: theme.warn } };
+      const hues = { destructive: theme.error, live: theme.live, warn: theme.warn }, { theme: themed } = cellLook;
       return ([col, row]: Item): GridCell => {
         const value = model.value(row, col), type = types[col];
         if (type === "boolean") return { kind: GridCellKind.Boolean, data: value === true, allowOverlay: false, copyData: model.input(row, col) };
         // An empty value is an empty cell but for a formula that gives nothing.
         const input = value === null || typeof value === "string" ? model.input(row, col) : null;
-        if (input === "") return EMPTY;
+        const style = options.columns.style(row, col);
+        // An empty cell is drawn for its fill and edges alone.
+        if (input === "") return style ? new TextCell(row, col, "", "", undefined, themed(style), style) : EMPTY;
         // An error is shown by its code, as the engine names it; only a value that could be one is asked whether it is.
         const fault = typeof value === "string" && value.startsWith("#") && model.error(row, col) !== null;
         const drawn = fault || value === null || typeof value === "boolean" ? null : options.columns.draw(row, col, value);
-        return new TextCell(row, col, input, drawn ? drawn.text : shown(value), typeof value === "number" || type === "number" ? "right" : undefined, fault ? error : drawn?.hue && hues[drawn.hue]);
+        return new TextCell(row, col, input, drawn ? drawn.text : shown(value), style?.align ?? (typeof value === "number" || type === "number" ? "right" : undefined), themed(style, fault ? theme.error : drawn?.hue && hues[drawn.hue]), style,
+          input !== null && !input.startsWith("=") && options.columns.frozen(row, col) || undefined);
       };
-    }, [types, theme]);
+    }, [types, theme, cellLook]);
     // One number while every row is the default height: the grid then sums no heights to scroll.
     const rowHeight = useMemo(() => {
       const kept = options.columns.heights();
       return kept.size || Object.keys(heights).length ? (row: number) => heights[row] ?? kept.get(row) ?? theme.row : theme.row;
     }, [shape, heights, theme]);
-    const props: DataEditorProps = { ...handlers, columns, rows, getCellContent: content, theme: theme.grid as Partial<Theme>, rowHeight, headerHeight: theme.header, gridSelection: selection, highlightRegions: marks };
+    const props: DataEditorProps = { ...handlers, columns, rows, getCellContent: content, drawCell: cellLook.draw, theme: theme.grid as Partial<Theme>, rowHeight, headerHeight: theme.header, gridSelection: selection, highlightRegions: marks };
     return createElement(DataEditor, { ...props, ref: made });
   }
 

@@ -1,5 +1,6 @@
 import { lazy, type Component, type JSX } from "solid-js";
 import { DOCUMENT_EXTRAS, DOCUMENT_TOOLS, type DocumentHost, type DocumentToolName } from "@/components/document/host";
+import { SHEET_TOOLS, type SheetToolName } from "@/components/sheet/host";
 import type { MarkupCapabilities, MarkupHost } from "@/components/markup";
 import type { ShortcutManager } from "../shortcuts/shortcut-manager";
 import { Icons } from "@/components/ui";
@@ -73,6 +74,8 @@ export type ArtifactKindClient = {
    * not drawn and cannot be called. The interface's own feedback declares its Markup in client/feedback/conduit-feedback.tsx.
    */
   edit: readonly DocumentToolName[];
+  /** A sheet's own edit tools on its ribbon (SheetHost.tools). */
+  cells?: readonly SheetToolName[];
   suggest?: DocumentHost["suggest"];
   /** For a kind drawn in the document editor, what its file holds beyond plain Markdown (DocumentHost.holds). */
   holds?: DocumentHost["holds"];
@@ -126,7 +129,7 @@ export const ARTIFACT_KINDS: Record<ArtifactKind, ArtifactKindClient> = {
     Surface: lazy(() => import("./site-surface")),
   },
   // Cells, with comments on ranges of them. A comment quotes the selected cells (`quote`); a drawing over the canvas could not follow it as it scrolls, so there is no ink.
-  // The grid draws a range commented on itself, and Markup's bar stands at the end of the formula bar while the sheet has no toolbar of its own (`bar: "ribbon"` puts it back over the pane).
+  // The grid draws a range commented on itself; its ribbon carries its own edit tools (`cells`) beside Markup's.
   sheet: {
     label: "Sheet",
     says: "Rows and columns with formulas, kept as a CSV file, with comments on cells in the margin.",
@@ -134,7 +137,8 @@ export const ARTIFACT_KINDS: Record<ArtifactKind, ArtifactKindClient> = {
     icon: TableIcon,
     xlsx: true,
     edit: [],
-    markup: { deliveries: ["batched", "live"], tools: ["quote", "note"], screenshot: false, sent: "margin", thin: false, bar: "slot", marks: "surface" },
+    cells: SHEET_TOOLS,
+    markup: { deliveries: ["batched", "live"], tools: ["quote", "note"], screenshot: false, sent: "margin", thin: false, bar: "ribbon", marks: "surface" },
     Surface: lazy(() => import("./sheet-surface")),
   },
 };

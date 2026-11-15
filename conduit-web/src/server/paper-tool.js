@@ -1,10 +1,11 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-durable";
 import { colIndex } from "../sheet-format.js";
+import { SHEET_BORDERS, SHEET_INKS as INKS } from "../sheet-styles.js";
 import { callingChat } from "./conduit-mcp.js";
 
 const text = (words, isError = false) => ({ output: [{ type: "text", text: words }], ...(isError ? { isError: true } : {}) });
-const ACTIONS = ["answer", "list", "new", "show", "lead", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve", "cells", "fill", "format", "rows", "cols", "tabs", "import", "export"];
+const ACTIONS = ["answer", "list", "new", "show", "lead", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve", "cells", "fill", "format", "style", "rows", "cols", "tabs", "import", "export"];
 const TAB_OPS = { add: "add-tab", rename: "rename-tab", delete: "delete-tab", move: "move-tab", hide: "hide-tab", show: "hide-tab" };
 
 /** Artifacts for an agent (papers, Markdown files, sheets and sites): the hub's document service (server/documents.js) as one tool, with the verbs `conduit-markup` has. */
@@ -36,7 +37,9 @@ export function PaperTool(runtime) {
       + "import (project, from: an .xlsx file's path in the project's folder; name; only: the tabs to take) makes a workbook of an Excel file and says which formulas could not be computed here (those hold the file's value) and what was left out. "
       + "export (paper, to: a path in the project's folder; replace: true to write over a file) writes a sheet as an .xlsx file. "
       + "tabs lists them with their sizes; tabs with op add (name, at: its place, 1 first; last unsaid), rename (tab, name: the new one; formulas naming it are rewritten), delete (tab; formulas naming it then show #REF!), move (tab, at), hide or show (tab) changes them. "
-      + "format (range: A1 such as B2:C5, or whole columns such as B:D; format: an Excel number format such as $#,##0.00, 0.0%, d/m/yyyy or General) lists the range's number formats, setting format first when given; cells and its computed read stay raw values.",
+      + "format (range: A1 such as B2:C5, or whole columns such as B:D; format: an Excel number format such as $#,##0.00, 0.0%, d/m/yyyy or General) lists the range's number formats, setting format first when given; cells and its computed read stay raw values. "
+      + "style (range: A1, whole columns B:D or whole rows 3:5; style: any of bold, italic, underline, strike, wrap (true or false), color and fill (red, amber, green, blue, or null), align (left, center, right), valign (top, middle, bottom), borders ({ top, right, bottom, left }: a cell's own edges); "
+      + "borders: all, outer, top, bottom, left, right or none over the range) lists the range's styles, setting what is given first; a field left out stays as it is, false or null sets the default.",
     parameters: Type.Object({
       action: Type.Union(ACTIONS.map((value) => Type.Literal(value))),
       paper: Type.Optional(Type.String({ description: "A paper's id." })),
@@ -65,13 +68,20 @@ export function PaperTool(runtime) {
       show: Type.Optional(Type.Boolean({ description: "new: false leaves the new artifact closed." })),
       resolve: Type.Optional(Type.Boolean({ description: "answer: mark the comment done." })),
       at: Type.Optional(Type.String({ description: "set: a cell (B4, or Data!B4); rows: a row number (5); cols: a column letter (C); tabs add, move: a tab's place (1 first)." })),
-      range: Type.Optional(Type.String({ description: "cells, fill: an A1 range (B2:C5) or one cell." })),
+      range: Type.Optional(Type.String({ description: "cells, fill, format, style: an A1 range (B2:C5) or one cell."})),
       values: Type.Optional(Type.Array(Type.Array(Type.String()), { description: "fill: rows of cells' text." })),
       value: Type.Optional(Type.String({ description: "set, fill: one cell's text." })),
       op: Type.Optional(Type.Union(["insert", "delete", "add", "rename", "move", "hide", "show"].map((value) => Type.Literal(value)), { description: "rows, cols: insert or delete; tabs: add, rename, delete, move, hide or show." })),
       count: Type.Optional(Type.Integer({ description: "rows, cols: how many (1)." })),
       computed: Type.Optional(Type.Boolean({ description: "cells: what formulas compute, as the file holds it." })),
       format: Type.Optional(Type.String({ description: "format: the number format to set (General for none)." })),
+      style: Type.Optional(Type.Object({
+        bold: Type.Optional(Type.Boolean()), italic: Type.Optional(Type.Boolean()), underline: Type.Optional(Type.Boolean()), strike: Type.Optional(Type.Boolean()), wrap: Type.Optional(Type.Boolean()),
+        color: Type.Optional(Type.Union([...INKS.map((ink) => Type.Literal(ink)), Type.Null()])), fill: Type.Optional(Type.Union([...INKS.map((ink) => Type.Literal(ink)), Type.Null()])),
+        align: Type.Optional(Type.Union([Type.Literal("left"), Type.Literal("center"), Type.Literal("right"), Type.Null()])), valign: Type.Optional(Type.Union([Type.Literal("top"), Type.Literal("middle"), Type.Literal("bottom"), Type.Null()])),
+        borders: Type.Optional(Type.Object({ top: Type.Optional(Type.Boolean()), right: Type.Optional(Type.Boolean()), bottom: Type.Optional(Type.Boolean()), left: Type.Optional(Type.Boolean()) })),
+      }, { description: "style: what to set on the range." })),
+      borders: Type.Optional(Type.Union(SHEET_BORDERS.map((value) => Type.Literal(value)), { description: "style: a border choice over the range." })),
     }),
     replay: "unsafe",
     execute: async (args, api = {}, context) => {
@@ -118,6 +128,10 @@ export function PaperTool(runtime) {
         if (args.action === "format") {
           const done = await documents.cells(paper, { op: "format", tab: args.tab, range: args.range ?? args.at, format: args.format, by, for: args.for }), listed = Object.entries(done.formats);
           return text(`${args.format === undefined ? "" : `Set ${args.format} on ${done.cells[0]}. `}${listed.length ? `Number formats in ${done.cells[0]} (a column's by its letter, a cell's own by its address; a cell with neither is General):\n${listed.map(([at, format]) => `${at}  ${format}`).join("\n")}` : `${done.cells[0]} is all General.`}`);
+        }
+        if (args.action === "style") {
+          const done = await documents.cells(paper, { op: "style", tab: args.tab, range: args.range ?? args.at, style: args.style, borders: args.borders, by, for: args.for }), listed = Object.entries(done.styles);
+          return text(`${args.style || args.borders ? `Styled ${done.cells[0]}. ` : ""}${listed.length ? `Styles in ${done.cells[0]} (a column's by its letter, a row's by its number, a cell's own by its address; a cell wears its own, else its row's, else its column's):\n${listed.map(([at, style]) => `${at}  ${JSON.stringify(style)}`).join("\n")}` : `${done.cells[0]} has no styles.`}`);
         }
         if (args.action === "fill" || (args.action === "set" && args.at !== undefined)) {
           const done = await documents.cells(paper, { op: args.action, tab: args.tab, at: args.at, range: args.range, values: args.values, value: args.value ?? args.text, by, for: args.for });

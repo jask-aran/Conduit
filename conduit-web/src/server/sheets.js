@@ -4,6 +4,7 @@ import { HyperFormula } from "hyperformula";
 import { CALL_LIMIT, CELLS, COLS, COL_LIMIT, LOOK, MAIN, ROWS, SHEET_FORMAT, SHEET_LIMIT, TAB, TABS, WORKBOOK_LIMIT, a1, colId, colIndex, colName, colsOf, fromCsv, key, parseA1, parseRange, parseRef, rangeA1, rowId, rowsOf, tabName, tabNameFault, tabRef, toCsv, valueText } from "../sheet-format.js";
 import { CONFIG, createWorkbookModel } from "../sheet-engine.js";
 import { listFormats, writeFormat } from "../sheet-formats.js";
+import { listStyles, writeStyle } from "../sheet-styles.js";
 import { writePrivateFile } from "../private-file.js";
 
 /*
@@ -249,7 +250,7 @@ export function sheetKind(hub) {
         isFolder(room) ? `It is the workbook folder ${room.entry.path} in its project's folder, a sheet with tabs (${listed(room)}), one CSV file each: change it through the cells actions, not by writing the files (the hub holds its live copy and its formulas; the files hold what they compute).`
           : `It is the CSV file ${room.entry.path} in its project's folder, a sheet: change it through the cells actions, not by writing the file (the hub holds its live copy and its formulas; the file holds what they compute).`,
         "A comment's `under.cells` names the two corners of the range it is on by row and column ids; its hand-off says that range by A1 address as it is now (with its tab where the sheet has several).",
-        `If you have the tool \`conduit_artifact\`, its actions cells, set, fill, format, rows, cols and tabs read and change the sheet (with \`for\`: the comment's <item>/<n>; \`tab\` or an address such as Data!B4 names a tab; format lists or sets a range's number formats, which cells leaves out), and answer replies and resolves; the CLI's \`document cells|set|fill|format|rows|cols|tabs\` do the same.`,
+        `If you have the tool \`conduit_artifact\`, its actions cells, set, fill, format, style, rows, cols and tabs read and change the sheet (with \`for\`: the comment's <item>/<n>; \`tab\` or an address such as Data!B4 names a tab; format and style list or set a range's number formats and its bold, colours, fill, borders and alignment, which cells leaves out), and answer replies and resolves; the CLI's \`document cells|set|fill|format|style|rows|cols|tabs\` do the same.`,
       ],
     },
     cells: {
@@ -282,7 +283,7 @@ export function sheetKind(hub) {
         return `${head}${part}\n${toCsv(clip(typed, area))}`;
       },
       /** One change of cells, of rows and columns, or of tabs (contract: POST /v0/document/:id/cells). `for` is checked, and nothing is kept of it yet. */
-      async edit(room, { op, tab, at, range, values, value, format, count = 1, name: called, hidden, by, for: about } = {}) {
+      async edit(room, { op, tab, at, range, values, value, format, style, borders, count = 1, name: called, hidden, by, for: about } = {}) {
         const name = typeof by === "string" && by ? by.slice(0, 80) : "agent";
         if (about !== undefined) {
           if (!/^[\w-]+\/\d+$/.test(String(about))) throw fault(400, `for is the comment answered, as <item>/<n>, not ${about}`);
@@ -320,16 +321,22 @@ export function sheetKind(hub) {
           writeCells(room, sheet, filled(room, sheet, grid, area), name);
           return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}), ...sheet.size() };
         }
-        // A range's number formats (sheet-formats.js), set first when `format` is given; whole columns (B:D) set their columns'.
-        if (op === "format") {
-          const ref = parseRef(range ?? at), sheet = pick(room, tab, ref.tab ?? undefined), { rows, cols } = sheet.size(), whole = /^\$?([A-Za-z]{1,3}):\$?([A-Za-z]{1,3})$/.exec(ref.range);
-          const area = whole ? { top: 0, bottom: rows - 1, left: Math.min(colIndex(whole[1]), colIndex(whole[2])), right: Math.max(colIndex(whole[1]), colIndex(whole[2])) } : parseRange(ref.range);
-          if (!area) throw fault(400, `range is an A1 range such as B2:C5, or whole columns such as B:D (Data!B:D for a tab), not ${range ?? at}`);
+        // A range's number formats (sheet-formats.js) or styles (sheet-styles.js), set first when given; whole columns (B:D), or for styles rows (3:5), set theirs.
+        if (op === "format" || op === "style") {
+          const ref = parseRef(range ?? at), sheet = pick(room, tab, ref.tab ?? undefined), { rows, cols } = sheet.size();
+          const columns = /^\$?([A-Za-z]{1,3}):\$?([A-Za-z]{1,3})$/.exec(ref.range), lines = op === "style" ? /^\$?(\d+):\$?(\d+)$/.exec(ref.range) : null;
+          const area = columns ? { top: 0, bottom: rows - 1, left: Math.min(colIndex(columns[1]), colIndex(columns[2])), right: Math.max(colIndex(columns[1]), colIndex(columns[2])) }
+            : lines ? { top: Math.min(lines[1], lines[2]) - 1, bottom: Math.max(lines[1], lines[2]) - 1, left: 0, right: cols - 1 } : parseRange(ref.range);
+          if (!area || area.top < 0) throw fault(400, `range is an A1 range such as B2:C5, or whole columns such as B:D${op === "style" ? " or rows such as 3:5" : ""} (Data!B:D for a tab), not ${range ?? at}`);
           if (area.top >= rows || area.left >= cols) throw fault(400, `${rangeA1(area)} is past the tab's edge: it is ${rows} rows x ${cols} columns`);
-          if (format !== undefined) hub.as(room, name, (sign) => room.doc.transact(() => { try { writeFormat(room.look, sheet, area, format, Boolean(whole)); } catch (error) { throw fault(400, error.message); } sign(); }));
-          return { cells: [label(room, sheet, area)], formats: listFormats(room.look, sheet, area), ...(many(room) ? { tab: sheet.name } : {}) };
+          const whole = columns ? "cols" : lines ? "rows" : null, set = op === "format" ? format !== undefined : style !== undefined || borders !== undefined;
+          if (set) hub.as(room, name, (sign) => room.doc.transact(() => {
+            try { if (op === "format") writeFormat(room.look, sheet, area, format, Boolean(whole)); else writeStyle(room.look, sheet, area, { style, borders }, whole); } catch (error) { throw fault(400, error.message); }
+            sign();
+          }));
+          return { cells: [label(room, sheet, area)], ...(op === "format" ? { formats: listFormats(room.look, sheet, area) } : { styles: listStyles(room.look, sheet, area) }), ...(many(room) ? { tab: sheet.name } : {}) };
         }
-        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, insert-rows, insert-cols, delete-rows, delete-cols, add-tab, rename-tab, delete-tab, move-tab or hide-tab");
+        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, insert-rows, insert-cols, delete-rows, delete-cols, add-tab, rename-tab, delete-tab, move-tab or hide-tab");
         const sheet = pick(room, tab), { rows, cols } = sheet.size(), isRows = op.endsWith("rows"), size = isRows ? rows : cols, what = isRows ? "row" : "column", removing = op.startsWith("delete");
         if (!Number.isInteger(count) || count < 1 || count > CALL_LIMIT) throw fault(400, "count is how many, 1 or more");
         index(at, removing ? size - 1 : size, `${what} to ${removing ? "delete" : "insert before"} (${size} ${what}s now)`);

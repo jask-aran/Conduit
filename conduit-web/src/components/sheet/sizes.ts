@@ -23,7 +23,8 @@ export interface SheetSizes {
   fitRows(rows: readonly number[], look: SheetLook): void;
 }
 
-export function createSheetSizes(look: Y.Map<number | string>, model: () => SheetView | undefined): SheetSizes {
+/** `lines`: how many lines a cell's text takes where its style wraps it (styles.ts); unsaid, its own line breaks. */
+export function createSheetSizes(look: Y.Map<number | string>, model: () => SheetView | undefined, lines?: (row: number, col: number, text: string, look: SheetLook) => number): SheetSizes {
   const keyOf = (what: "width" | "height", id: string): SizeKey => `${what}:${id}`;
   const sized = (what: "width" | "height", id: string | undefined) => { const size = id && look.get(keyOf(what, id)); return typeof size === "number" ? size : undefined; };
   const set = (what: "width" | "height", ids: (string | undefined)[], size: number | null) => look.doc!.transact(() => {
@@ -60,9 +61,9 @@ export function createSheetSizes(look: Y.Map<number | string>, model: () => Shee
       const line = parseFloat(String(sheetLook.grid.editorFontSize)) * Number(sheetLook.grid.lineHeight), padding = 2 * Number(sheetLook.grid.cellVerticalPadding), cols = sheet.size().cols;
       look.doc!.transact(() => {
         for (const row of rows) {
-          let lines = 1;
-          for (let col = 0; col < cols; col++) lines = Math.max(lines, valueText(sheet.value(row, col)).split("\n").length);
-          set("height", [sheet.rowAt(row)], lines > 1 ? Math.max(sheetLook.row, Math.ceil(lines * line + padding)) : null);
+          let most = 1;
+          for (let col = 0; col < cols; col++) { const text = valueText(sheet.value(row, col)); if (text) most = Math.max(most, lines ? lines(row, col, text, sheetLook) : text.split("\n").length); }
+          set("height", [sheet.rowAt(row)], most > 1 ? Math.max(sheetLook.row, Math.ceil(most * line + padding)) : null);
         }
       });
     },
