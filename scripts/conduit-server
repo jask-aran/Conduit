@@ -213,8 +213,9 @@ start() {
 
 stop() {
   load_env
+  [[ "${1:-}" == --wait ]] && wait_for_answers
   case "$(service_kind)" in
-    systemd) systemctl --user stop "$NAME" 2>/dev/null || true ;;
+    systemd) systemctl --user stop "$NAME" || return ;;
     launchd) launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true ;;
     process) if pid_alive; then kill "$(cat "$PID_FILE")"; rm -f "$PID_FILE"; fi ;;
   esac
@@ -222,13 +223,17 @@ stop() {
 }
 
 # A restart waits for answers still being written, up to ten minutes.
-restart() {
-  load_env
+wait_for_answers() {
   local waited=0 turns drain_port="${1:-$CONDUIT_PORT}"
   while turns="$(active_turns "$drain_port")" && [[ -n "$turns" && "$turns" -gt 0 && $waited -lt 600 ]]; do
     (( waited == 0 )) && note "Waiting for $turns answer(s) to finish"
     sleep 2; waited=$((waited + 2))
   done
+}
+
+restart() {
+  load_env
+  wait_for_answers "$@"
   prepare_browsers
   start
 }

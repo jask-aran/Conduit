@@ -5,8 +5,8 @@
 # touching it: the VPS's dev server, which jbot lives on. Run it on a timer (a systemd user timer every minute: see
 # docs/DEPLOYMENT.md, A server that follows main); each run is a no-op unless origin/main moved.
 #
-# A run fast-forwards the clone, installs what the lockfiles now ask for, builds the client and restarts through the
-# server's own CLI (`conduit-server restart`: it waits for answers in flight and readies connected browsers). Only
+# A run waits for answers and stops the server before updating its clone or dependencies, then builds and restarts
+# through the server CLI. Rollbacks also stop before replacing files. Only
 # changes that touch what the server runs restart it; a docs-only push just moves the clone. A build that fails or a
 # server that does not come back is rolled back to the commit that was running, and that origin/main is not tried
 # again until it moves.
@@ -58,12 +58,16 @@ healthy() {
 back() {
   log "$1; back to ${old:0:8}"
   echo "$new" >"$FAILED"
+  server stop --wait >>"$LOG" 2>&1 || return 1
   git reset -q --hard "$old"
   build || log "the rebuild of ${old:0:8} failed too"
   server restart >>"$LOG" 2>&1 || true
 }
 
 log "updating ${old:0:8} -> ${new:0:8} ($(git log --format=%s -1 "$new"))"
+if touches '^(conduit-web|scripts|templates)/'; then
+  server stop --wait >>"$LOG" 2>&1
+fi
 git merge -q --ff-only "$new"
 if ! touches '^(conduit-web|scripts|templates)/'; then log "nothing the server runs changed"; exit 0; fi
 if ! build; then back "build of ${new:0:8} failed"; exit 1; fi
