@@ -14,7 +14,8 @@ export function scrollbarGeometry(view: number, content: number, position: numbe
 
 export function bindOverlayScrollbars() {
   if (!("showPopover" in HTMLElement.prototype)) return () => {};
-  const media = matchMedia("(hover: hover) and (pointer: fine) and (forced-colors: none)");
+  // Any mouse, not the primary pointer: in Samsung DeX the touch screen stays primary while a mouse drives the app.
+  const media = matchMedia("(any-hover: hover) and (any-pointer: fine) and (forced-colors: none)");
   /*
    * Touch gets no overlay, but its native scrollbar is still hidden: on a phone that is a classic one, and a list
    * growing past the viewport would shift every row sideways.
