@@ -86,23 +86,51 @@ export function readStyles(stylesXml, themeXml) {
 /**
  * A sheet's styles by where they stand: each column's and row's own (`<col style>`, `<row s customFormat>`), and each cell's `s` (one with none counts
  * only over a row's or column's) within `size` or where `shows` says its format can be seen empty (a fill or an edge), as cell format indexes. `reach`:
- * the rows and columns those seen cells take; `heights`: the rows well over the sheet's default height, in points.
+ * the rows and columns the tab grows to for the seen cells, rows and columns touching it, stopping at a gap; `heights`: each row's own height in points
+ * (one set by hand, or one well over the default, which Excel sized to its text).
  */
 export function sheetStyles(sheetXml, size, shows) {
   const cols = new Map(), rows = new Map(), heights = new Map(), cells = [], reach = { rows: 0, cols: 0 };
   for (const tag of sheetXml.match(/<col\b[^>]*>/g) ?? []) { const style = attr(tag, "style"); if (style && style !== "0") for (let c = Number(attr(tag, "min")) - 1; c < Math.min(Number(attr(tag, "max")), 16384); c++) cols.set(c, Number(style)); }
-  const tall = 1.25 * (Number(attr(/<sheetFormatPr\b[^>]*>/.exec(sheetXml)?.[0], "defaultRowHeight")) || 15);
+  const usual = Number(attr(/<sheetFormatPr\b[^>]*>/.exec(sheetXml)?.[0], "defaultRowHeight")) || 15;
   for (const tag of sheetXml.match(/<row\b[^>]*>/g) ?? []) {
     const r = Number(attr(tag, "r")) - 1, height = Number(attr(tag, "ht"));
     if (attr(tag, "customFormat") === "1" && attr(tag, "s")) rows.set(r, Number(attr(tag, "s")));
-    if (height > tall) heights.set(r, height);
+    if (attr(tag, "customHeight") === "1" ? height && height !== usual : height > 1.25 * usual) heights.set(r, height);
   }
+  const shown = [];
   for (const found of sheetXml.matchAll(cols.size || rows.size ? /<c r="([A-Z]+)(\d+)"([^>]*?)\/?>/g : /<c r="([A-Z]+)(\d+)"([^>]*?\ss="[1-9]\d*"[^>]*?)\/?>/g)) {
     const r = Number(found[2]) - 1, c = colIndex(found[1]), s = Number(attr(found[3], "s") ?? 0);
-    if (shows[s]) { reach.rows = Math.max(reach.rows, r + 1); reach.cols = Math.max(reach.cols, c + 1); }
-    if (shows[s] || (r < size.rows && c < size.cols)) cells.push([r, c, s]);
+    if (shows[s]) shown.push([r, c, s]);
+    else if (r < size.rows && c < size.cols) cells.push([r, c, s]);
   }
-  return { cols, rows, heights, cells, reach };
+  // A run of one style from the values to past column AMJ is a whole row's style written cell by cell (as LibreOffice writes one): it is the row's.
+  const byRow = new Map();
+  for (const [r, c, s] of shown) (byRow.get(r) ?? byRow.set(r, new Map()).get(r)).set(c, s);
+  for (const [r, at] of byRow) {
+    let end = -1;
+    for (const c of at.keys()) end = Math.max(end, c);
+    if (end < 1023) continue;
+    const s = at.get(end);
+    let start = end;
+    while (at.get(start - 1) === s) start--;
+    if (start > size.cols) continue;
+    for (let c = start; c <= end; c++) at.delete(c);
+    if (!rows.has(r)) rows.set(r, s);
+  }
+  for (const [r, at] of byRow) for (const [c, s] of at) cells.push([r, c, s]);
+  // The tab grows through what can be seen touching it, a step at a time; a column style counts unless it runs to the sheet's edge.
+  const wide = new Set();
+  for (const tag of sheetXml.match(/<col\b[^>]*>/g) ?? []) if (Number(attr(tag, "max")) >= 16384) for (let c = Number(attr(tag, "min")) - 1; c < 16384; c++) wide.add(c);
+  const seenCells = cells.filter(([, , s]) => shows[s]).sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+  reach.rows = size.rows; reach.cols = size.cols;
+  for (let was = -1; was !== reach.rows * 16384 + reach.cols;) {
+    was = reach.rows * 16384 + reach.cols;
+    for (const [r, c] of seenCells) if (r <= reach.rows && c <= reach.cols) { reach.rows = Math.max(reach.rows, r + 1); reach.cols = Math.max(reach.cols, c + 1); }
+    while (shows[rows.get(reach.rows)]) reach.rows++;
+    while (!wide.has(reach.cols) && shows[cols.get(reach.cols)]) reach.cols++;
+  }
+  return { cols, rows, heights, cells, reach, wide };
 }
 /** Whether a packed style can be seen on an empty cell. */
 export const seen = (packed) => /(^| )(f=|b[trbl](?= |$))/.test(packed);

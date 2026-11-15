@@ -102,8 +102,11 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   const shows = formatsOf.map(seen);
   let room = WORKBOOK_LIMIT - total;
   for (const tab of read) {
-    const xml = text(xmlOf[tab.called] ?? ""), styles = sheetStyles(xml, tab, shows), rows = Math.max(tab.rows, styles.reach.rows), cols = Math.max(tab.cols, styles.reach.cols), more = rows * cols - tab.rows * tab.cols;
-    if (more && cols <= COL_LIMIT && rows * cols <= SHEET_LIMIT && more <= room) { room -= more; Object.assign(tab, { rows, cols }); }
+    // As far as the limits let it, columns first, by no more empty cells than a tab keeps styles for.
+    const xml = text(xmlOf[tab.called] ?? ""), styles = sheetStyles(xml, tab, shows), had = tab.rows * tab.cols, most = Math.min(SHEET_LIMIT, room + had, had + STYLES_PER_TAB);
+    const cols = Math.max(tab.cols, Math.min(styles.reach.cols, COL_LIMIT, Math.floor(most / tab.rows)));
+    const rows = Math.max(tab.rows, Math.min(styles.reach.rows, Math.floor(most / cols)));
+    room -= rows * cols - had; Object.assign(tab, { rows, cols });
     Object.assign(tab, { pane: paneOf(xml), styles });
     const ruled = sheetRules(xml, dxfs);
     tab.rules = ruled.rules;
@@ -196,8 +199,8 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       }
       // Each column's and row's own style, and each cell's where it says other than what it would wear from them, up to a count.
       const { cols: colStyles, rows: rowStyles, cells: cellStyles, heights } = tab.styles, worn = new Map(), attrs = (index) => worn.get(index) ?? worn.set(index, decodeStyle(formatsOf[index] ?? "")).get(index);
-      for (const [c, index] of colStyles) if (c < tab.cols && formatsOf[index]) look[`style:${colName(c)}`] = formatsOf[index];
-      for (const [r, index] of rowStyles) if (r < tab.rows && formatsOf[index]) look[`style:${r + 1}`] = formatsOf[index];
+      for (const [c, index] of colStyles) if (formatsOf[index]) { if (c < tab.cols) look[`style:${colName(c)}`] = formatsOf[index]; else if (shows[index] && !tab.styles.wide.has(c)) drop("column styles past the tab's edge"); }
+      for (const [r, index] of rowStyles) if (formatsOf[index]) { if (r < tab.rows) look[`style:${r + 1}`] = formatsOf[index]; else if (shows[index]) drop("row styles past the tab's edge"); }
       let styled = 0;
       for (const [r, height] of heights) if (r < tab.rows) look[`height:${r + 1}`] = Math.round(height / PT_PER_PX);
       for (const [r, c, index] of cellStyles) {
