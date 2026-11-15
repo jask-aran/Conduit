@@ -12,18 +12,21 @@ const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", 
 const NAMES = [MONTHS, DAYS].map((list) => ({ list, long: new Map(list.map((name, n) => [name.toLowerCase(), n])), short: new Map(list.map((name, n) => [name.slice(0, 3).toLowerCase(), n])) }));
 // Excel's serial day 0 (1899-12-30) is this many days before 1970-01-01.
 const EPOCH = 25569, DAY = 864e5;
-const NUMBER = /^\s*[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?\s*$/i, COUNTED = /^(.*?)(\d+)$/;
+const NUMBER = /^\s*[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?\s*$/i, COUNTED = /^(.*?)(\d+)$/, ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 type Kind =
   | { kind: "copy" }
   | { kind: "number"; n: number }
-  | { kind: "date"; n: number }
+  | { kind: "date"; n: number; iso?: boolean }
   | { kind: "counted"; stem: string; n: number; width: number }
   | { kind: "named"; names: number; n: number; long: boolean; caps: "upper" | "lower" | "title" };
 
 const kindOf = ({ input, value, dated }: SeriesCell): Kind => {
   if (!input || input.startsWith("=")) return { kind: "copy" };
   if (NUMBER.test(input)) return dated && typeof value === "number" ? { kind: "date", n: value } : { kind: "number", n: Number(input) };
+  // A date typed as 2026-01-30 is text to the engine, but a date to whoever typed it: it steps by days, months or years, written as it was.
+  const iso = ISO.exec(input), day = iso && Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+  if (day !== null && day !== undefined && civil(day / DAY + EPOCH).toISOString().slice(0, 10) === input) return { kind: "date", n: day / DAY + EPOCH, iso: true };
   const lower = input.toLowerCase();
   for (const [names, { long, short }] of NAMES.entries()) {
     const n = long.get(lower) ?? short.get(lower);
@@ -63,7 +66,7 @@ const continueRun = (run: Kind[], inputs: string[], p: number, unit: number, cou
   const at = k === 1 ? (q: number) => ns[0]! + unit * q : trend(ns);
   switch (first.kind) {
     case "number": return String(tidy(at(p)));
-    case "date": return String(tidy(((k > 1 ? byMonth(ns) : null) ?? at)(p)));
+    case "date": { const n = tidy(((k > 1 ? byMonth(ns) : null) ?? at)(p)); return first.iso ? civil(Math.round(n)).toISOString().slice(0, 10) : String(n); }
     case "counted": { const n = String(Math.abs(Math.round(at(p)))); return first.stem + n.padStart(first.width, "0"); }
     case "named": {
       const { list } = NAMES[first.names]!, size = list.length, step = k === 1 ? unit : ((ns[1]! - ns[0]!) % size + size) % size;
