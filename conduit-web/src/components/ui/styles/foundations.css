@@ -84,7 +84,9 @@
    costs the page nothing: its colour is inherited, and animated it would restyle everything under the region every frame. */
 @keyframes ui-caret { 50% { caret-color: color-mix(in oklch, var(--caret, var(--foreground)), transparent var(--tone-wash)); } }
 @supports (caret-animation: manual) {
-  :is(input, textarea):focus { caret-color: var(--caret, var(--foreground)); caret-animation: manual; animation: ui-caret var(--duration-breathe) var(--ease-room) infinite; }
+  /* Stepped: caret-color is restyled on the main thread, so a smooth curve restyled every frame (1ms at 144Hz) while a
+     field had focus; between steps there is nothing to do. */
+  :is(input, textarea):focus { caret-color: var(--caret, var(--foreground)); caret-animation: manual; animation: ui-caret var(--duration-breathe) steps(12, jump-none) infinite; }
   @media (prefers-reduced-motion: reduce) { :is(input, textarea):focus { caret-animation: auto; animation: none; } }
 }
 /* Neither is set as a region takes focus or changes its way of writing: the caret's colour is inherited, so changing it on a region restyles everything
