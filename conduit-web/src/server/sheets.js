@@ -226,7 +226,15 @@ export function sheetKind(hub) {
     for (const [name, value] of Object.entries(kept ?? {})) {
       const [what, at, more] = name.split(":"), col = /^[A-Z]{1,3}$/.test(at ?? "") ? colIndex(at) : -1, row = /^\d+$/.test(at ?? "") ? Number(at) - 1 : -1, cell = at ? parseA1(at) : null, { rows, cols } = sheet.size();
       if (!what || more !== undefined) continue;
-      if (at === undefined && what === "merges") { const ids = Array.isArray(value) ? value.flatMap((range) => { const one = rangedIds(sheet, { range }); return one ? [JSON.parse(one)] : []; }) : []; if (ids.length) room.look.set(`merges:${tab}`, JSON.stringify(ids)); }
+      // A merge overlapping one before it is left out: a workbook holding both is one a spreadsheet repairs.
+      if (at === undefined && what === "merges") {
+        const areas = [], ids = Array.isArray(value) ? value.flatMap((range) => {
+          const one = rangedIds(sheet, { range }), area = one && parseRange(String(range));
+          if (!area || areas.some((was) => was.top <= area.bottom && area.top <= was.bottom && was.left <= area.right && area.left <= was.right)) return [];
+          areas.push(area); return [JSON.parse(one)];
+        }) : [];
+        if (ids.length) room.look.set(`merges:${tab}`, JSON.stringify(ids));
+      }
       else if (at === undefined && what === "rules") { const ids = rulesIds(sheet, value); if (ids) room.look.set(`rules:${tab}`, ids); }
       else if (at === undefined && RANGED.includes(what)) { const ids = rangedIds(sheet, value); if (ids) room.look.set(`${what}:${tab}`, ids); }
       else if (at === undefined) room.look.set(`${what}:${tab}`, value);
