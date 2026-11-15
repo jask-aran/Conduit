@@ -145,6 +145,8 @@ export class SpiderEngine {
     else this.raf = requestAnimationFrame(this.frame);
   }
 
+  /** Renders drawn, so a reader copying the canvas can skip frames with nothing new. (Conduit) */
+  frames = 0;
   private frame = (now: number) => {
     this.tick(now);
     this.raf = requestAnimationFrame(this.frame);
@@ -161,7 +163,8 @@ export class SpiderEngine {
       steps++;
     }
     if (steps === MAX_STEPS) this.acc = 0;
-    this.renderer.render(this.world);
+    // Conduit: drawn only when the world has stepped (60 a second); a faster display would redraw the same frame.
+    if (steps) { this.renderer.render(this.world); this.frames++; }
   }
 
   private onMotionPreference = () => {

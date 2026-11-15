@@ -79,7 +79,8 @@ if (gl) {
 
 // A scene drawn by an engine of its own (ASCII on a 2D canvas): the engine keeps a window-sized canvas nobody sees,
 // and the panes are cut from that.
-type Engine = { destroy(): void };
+/** frames, where an engine counts its renders: a display frame it drew nothing new in copies nothing. */
+type Engine = { destroy(): void; frames?: number };
 let host: HTMLCanvasElement | undefined, engine: Engine | undefined, frame = 0;
 function cast(scene: ChatArtLook["scene"]) {
   engine?.destroy(); host?.remove(); engine = host = undefined;
@@ -100,7 +101,7 @@ function cast(scene: ChatArtLook["scene"]) {
 
 // The picture is fitted to the app window and stays put: a pane is drawn the part it stands over, device pixel for
 // device pixel, so panes moving or a sidebar opening never move it.
-let drawn: unknown[] = [], revision = 0;
+let drawn: unknown[] = [], revision = 0, copied: number | undefined;
 const tints = [[-1, 0, 0], [1.35, 0.65, 1.8], [0.5, 1.35, 0.8], [1.8, 1.05, 0.3], [1.8, 0.65, 0.95], [1, 1, 1]];
 function paint(sceneFrame = true) {
   if (!look || !slices.size || !(look.scene || picture)) return;
@@ -111,7 +112,8 @@ function paint(sceneFrame = true) {
   if (!rects.length) return;
   const width = Math.round(innerWidth * devicePixelRatio), height = Math.round(innerHeight * devicePixelRatio);
   const now = [look, picture, width, height, lost];
-  const fresh = Boolean(look.scene && sceneFrame) || now.some((value, index) => value !== drawn[index]);
+  const fresh = Boolean(look.scene && sceneFrame && (engine?.frames === undefined || engine.frames !== copied)) || now.some((value, index) => value !== drawn[index]);
+  copied = engine?.frames;
   drawn = now;
   let from: HTMLCanvasElement = stage;
   if (host) { if (!engine || !host.width) return; from = host; }

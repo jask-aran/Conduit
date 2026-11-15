@@ -77,10 +77,14 @@ export class OceanEngine {
     this.raf = requestAnimationFrame(this.frame);
   }
 
+  /** Renders drawn, so a reader copying the canvas can skip frames with nothing new. (Conduit) */
+  frames = 0;
+  private unrendered = 0;
   private frame = (now: number) => {
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     this.acc += dt;
+    this.unrendered += dt;
     let steps = 0;
     while (this.acc >= STEP && steps < MAX_STEPS) {
       this.world.step(STEP);
@@ -88,7 +92,8 @@ export class OceanEngine {
       steps++;
     }
     if (steps === MAX_STEPS) this.acc = 0;
-    this.renderer.render(this.world, dt);
+    // Conduit: drawn only when the world has stepped (60 a second); a faster display would redraw the same frame.
+    if (steps) { this.renderer.render(this.world, this.unrendered); this.unrendered = 0; this.frames++; }
     this.raf = requestAnimationFrame(this.frame);
   };
 
