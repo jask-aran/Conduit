@@ -53,12 +53,14 @@ commit (`611ec8dfa`..`2e8bfc8b9`):
 - Undo waits for every tagged update a hub op sent (the hub's reply counts them as `tagged`); deleting a tab clears the history;
 - the fill handle steps a typed `2026-01-30` by days.
 
-Still open from the reviews: undoing a structure change leaves other people's later formulas pointing at shifted cells
-(`sheet-engine.js:128-136`); nothing guards a merge's hidden cells (paste, fill, sort); arrows at a frozen merge's edge; prefix sums for tall
-merges; the low xlsx ones (row/column crossings outside the grid, `<c r=` attribute order).
+Then: undoing an insert or delete of rows moves formulas typed since (the hub's model is `owner`, keeps its engine's rewrite and writes it);
+conditional-format rules draw, and Alt H L adds one and lists the tab's rules with Delete (`rules.tsx`); a sort across a merge is refused;
+overlapping merges in a sheet.json are left out; Fill past hidden rows keeps a tab name's digits.
 
-A builder is drawing conditional-format rules (`handoff-sheet-rules.md`). Notes from xlsx are waiting on the owner: sheet comments are markup
-items sent to a listener, so 16 imported notes would hand 16 items to agents.
+Still open: paste, the fill handle and `set` can write into a merge's hidden cells; arrows at a frozen merge's edge; prefix sums for tall
+merges; the low xlsx ones (row/column crossings outside the grid, `<c r=` attribute order); rules can't be edited or reordered, only added
+and deleted. Notes from xlsx are waiting on the owner: sheet comments are markup items sent to a listener, so 16 imported notes would hand
+16 items to agents. Phone width is still unchecked (the headless probe opened with the sidebar drawer over the pane).
 
 ## Open, in rough order
 
@@ -92,7 +94,7 @@ items sent to a listener, so 16 imported notes would hand 16 items to agents.
 - **Restarts are refused at a budget.** `bash scripts/start-conduit.sh restart` will not start the server when the initial JS
   bundle is over 437,000 B gzip. Sheet-only icons go in `components/ui/sheet-icons.tsx`, which loads lazily, never in the library's
   `icons.tsx`.
-- **The source ceiling.** It is `sourceLines` in `conduit-web/scripts/check-conventions.mjs`, now 132,400. It may be raised for
+- **The source ceiling.** It is `sourceLines` in `conduit-web/scripts/check-conventions.mjs`, now 132,700. It may be raised for
   planned feature work.
 - **Testing.** Headless Chromium via `conduit-web/scripts/probes/lib.mjs` `open()`, on the owner's test sheet "probe-sheet"
   (`/?panes=artifact%3A802d93d7cfbe2968`):
