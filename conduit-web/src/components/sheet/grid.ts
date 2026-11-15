@@ -281,6 +281,35 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         const col = Math.min(Math.max(cell[0] + step[0], 0), size.cols - 1), drawn = cell[1] + step[1];
         if (drawn >= 0 && drawn < (p === head ? size.head : size.rows)) { event.cancel(); const row = p.map.sheet(drawn); api.select({ top: row, bottom: row, left: col, right: col }); return; }
       }
+      // Ctrl and an arrow go as a spreadsheet's: from a value along a run of values to its last, else on to the next value, else to the edge; Shift
+      // moves the selection's far edge so, the active cell kept. Within the part, past its hidden rows.
+      if (step && (event.ctrlKey || event.metaKey) && !event.altKey) {
+        event.cancel();
+        const range = p.current.current?.range, filled = (col: number, drawn: number) => model.input(p.map.sheet(drawn), col) !== "";
+        const vertical = step[1] !== 0, dir = vertical ? step[1] : step[0], end = vertical ? (p === head ? size.head : size.rows) : size.cols;
+        const far = !event.shiftKey || !range ? cell : [range.x === cell[0] ? range.x + range.width - 1 : range.x, range.y === cell[1] ? range.y + range.height - 1 : range.y] as const;
+        const at = (n: number) => vertical ? filled(far[0], n) : filled(n, far[1]);
+        let n = vertical ? far[1] : far[0];
+        if (n + dir >= 0 && n + dir < end) {
+          if (at(n) && at(n + dir)) while (n + dir >= 0 && n + dir < end && at(n + dir)) n += dir;
+          else { n += dir; while (!at(n) && n + dir >= 0 && n + dir < end) n += dir; }
+        }
+        const to: [number, number] = vertical ? [far[0], n] : [n, far[1]];
+        if (!event.shiftKey) { const row = p.map.sheet(to[1]); api.select({ top: row, bottom: row, left: to[0], right: to[0] }); return; }
+        const drawn = { x: Math.min(cell[0], to[0]), y: Math.min(cell[1], to[1]), width: Math.abs(cell[0] - to[0]) + 1, height: Math.abs(cell[1] - to[1]) + 1 };
+        choose(p, { columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: { cell: [cell[0], cell[1]], range: drawn, rangeStack: [] } });
+        asked = null; events.selected(picked()); api.show(p.map.sheet(to[1]), to[0]);
+        return;
+      }
+      // Ctrl+End goes to the last row and column holding anything, not the grid's run-on end.
+      if (event.key === "End" && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey) {
+        event.cancel();
+        const { rows, cols } = model.size();
+        let bottom = 0, right = 0;
+        for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) if (model.input(row, col) !== "") { bottom = Math.max(bottom, row); right = Math.max(right, col); }
+        api.select({ top: bottom, bottom, left: right, right });
+        return;
+      }
       // An arrow from a merge steps past its edge, from its top-left.
       const home = step && !(event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) ? mergeAt(p.map.sheet(cell[1]), cell[0]) : undefined, inPart = home && clip(p, home);
       if (step && inPart) {
