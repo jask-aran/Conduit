@@ -84,6 +84,8 @@ export interface SheetFormats {
   key(event: KeyboardEvent, range: SheetRange | null): boolean;
   /** How the range's figures (its sum, average…) are drawn: in its one format, or null where it has none or several. */
   figure(range: SheetRange | null): ((value: number) => string) | null;
+  /** Whether a cell's format draws a date: the fill handle steps its number by days, months or years. */
+  dated(row: number, col: number): boolean;
 }
 
 export function createSheetFormats(look: Y.Map<number | string>, model: Accessor<SheetView | undefined>, failed: (message: string) => void): SheetFormats {
@@ -112,6 +114,7 @@ export function createSheetFormats(look: Y.Map<number | string>, model: Accessor
   };
   return {
     at,
+    dated: (row, col) => { const pattern = at(row, col); return Boolean(pattern && isDateFormat(pattern)); },
     draw: (row, col, value) => {
       const pattern = at(row, col), made = pattern ? compile(pattern) : null;
       return made && (typeof value === "number" || made.text) ? made.draw(value) : null;

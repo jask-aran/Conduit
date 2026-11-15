@@ -254,7 +254,7 @@ const FOLDS = 3;
  *  On the ribbon what is sent is always handed on, so who it goes to is said and not a choice to turn off; Undo and Redo work while the app is in use (the tool decides whose history they step).
  *  `own`: the host's own tools (a document's block kinds), `onOwn` told as one is pressed, and `onAsk` a comment about where the surface's selection or caret is: a rail above the bar while the app is in use.
  *  `out`: what it stands over is moving, so the bars fade out until it stops. */
-export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnTool[]; onOwn?: () => void; onAsk?: () => void; ribbon?: boolean; screenshots?: boolean; onView: (view: MarkupView) => void; tools?: readonly (MarkupToolKind | "note")[]; tool: MarkupToolKind; onTool: (tool: MarkupToolKind) => void; onNote: () => void; outstanding?: number; standing?: string; thin?: boolean; thread?: boolean; onBack?: () => void; replies?: number; sent?: number; onReplies?: () => void; ink?: MarkupInk; onInk?: (ink: MarkupInk) => void; weight?: MarkupWeight; onWeight?: (weight: MarkupWeight) => void; size?: number; onSize?: (size: number) => void; shape?: MarkupShape; onShape?: (shape: MarkupShape) => void; onUndo?: () => void; onRedo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; heard?: boolean; onNextAgent?: () => void; onRetake?: () => void;
+export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnTool[]; onOwn?: () => void; onAsk?: () => void; ribbon?: boolean; screenshots?: boolean; onView: (view: MarkupView) => void; tools?: readonly (MarkupToolKind | "note")[]; tool: MarkupToolKind; onTool: (tool: MarkupToolKind) => void; onNote: () => void; outstanding?: number; standing?: string; thin?: boolean; thread?: boolean; onBack?: () => void; replies?: number; sent?: number; onReplies?: () => void; ink?: MarkupInk; onInk?: (ink: MarkupInk) => void; weight?: MarkupWeight; onWeight?: (weight: MarkupWeight) => void; size?: number; onSize?: (size: number) => void; shape?: MarkupShape; onShape?: (shape: MarkupShape) => void; onUndo?: () => void; onRedo?: () => void; undoSteps?: readonly string[]; redoSteps?: readonly string[]; onSteps?: (back: boolean, count: number) => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; heard?: boolean; onNextAgent?: () => void; onRetake?: () => void;
   canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void; out?: boolean; slot?: HTMLElement }) {
   const using = () => props.view === "use";
   // What the chosen tool draws with stands over the bar while that tool is held, so the bar itself stays the tools.
@@ -338,8 +338,14 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     return option.value === "note" ? props.onNote() : props.onTool(option.value);
   };
   const keep = (event: MouseEvent) => { if (props.ribbon) event.preventDefault(); };
-  const undo = () => <IconButton label="Undo (Ctrl Z)" disabled={!props.onUndo || (using() && !props.ribbon)} onMouseDown={keep} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton>;
-  const redo = () => <IconButton label="Redo (Ctrl Shift Z)" disabled={!props.onRedo || (using() && !props.ribbon)} onMouseDown={keep} onClick={() => props.onRedo?.()}><Icons.Redo /></IconButton>;
+  // The host's latest steps under each, as a spreadsheet lists them: choosing one steps back (or forward) through it.
+  const listed = (back: boolean) => { const steps = () => (back ? props.undoSteps : props.redoSteps) ?? [], name = back ? "Undo" : "Redo";
+    return <Show when={steps().length && props.onSteps}><DropdownMenu modal={false} placement="bottom-start">
+      <MenuControl as={IconButton} label={`${name} several`} onMouseDown={keep}><Icons.ChevronDown /></MenuControl>
+      <MenuContent width="sm"><MenuSection title={name}><For each={steps()}>{(step, at) => <MenuRow onSelect={() => props.onSteps?.(back, at() + 1)}>{step}</MenuRow>}</For></MenuSection></MenuContent>
+    </DropdownMenu></Show>; };
+  const undo = () => <><IconButton label="Undo (Ctrl Z)" disabled={!props.onUndo || (using() && !props.ribbon)} onMouseDown={keep} onClick={() => props.onUndo?.()}><Icons.Undo /></IconButton>{listed(true)}</>;
+  const redo = () => <><IconButton label="Redo (Ctrl Shift Z)" disabled={!props.onRedo || (using() && !props.ribbon)} onMouseDown={keep} onClick={() => props.onRedo?.()}><Icons.Redo /></IconButton>{listed(false)}</>;
   const annotate = () => <DropdownMenu modal={false} placement="bottom-start">
     <MenuControl as={Button} variant="ghost" size="sm" aria-label="Annotate" title="Annotate"><Icons.Feedback />Annotate<Icons.ChevronDown /></MenuControl>
     <MenuContent width="sm">

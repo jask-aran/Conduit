@@ -171,3 +171,62 @@ export function writeStyles(styles, sheets) {
   const out = styles.replace(/<fonts\b[\s\S]*?<\/fonts>/, () => block("font", "fonts")).replace(/<fills\b[\s\S]*?<\/fills>/, () => block("fill", "fills")).replace(/<borders\b[\s\S]*?<\/borders>/, () => block("border", "borders")).replace(/<cellXfs\b[\s\S]*?<\/cellXfs>/, () => block("xf", "cellXfs"));
   return { styles: out, sheets: written };
 }
+
+const CELL_IS = { lessThan: "<", greaterThan: ">", lessThanOrEqual: "<=", greaterThanOrEqual: ">=", equal: "=", notEqual: "<>", between: "between", notBetween: "notBetween" };
+const OPERATOR = Object.fromEntries(Object.entries(CELL_IS).map(([word, op]) => [op, word]));
+const escaped = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+// What follows conditional formats in a sheet's part, in the schema's order: they go before the first of these there is.
+const AFTER_RULES = /<(?:dataValidations|hyperlinks|printOptions|pageMargins|pageSetup|headerFooter|rowBreaks|colBreaks|customProperties|cellWatches|ignoredErrors|smartTags|drawing|legacyDrawing|legacyDrawingHF|picture|oleObjects|controls|webPublishItems|tableParts|extLst)\b|<\/worksheet>/;
+
+/** Each conditional format's style of a workbook's `styles.xml` (`dxfs`) as a packed style: text colour, fill, bold, italic, underline, a line through. */
+export function readDxfs(stylesXml, themeXml) {
+  const theme = themeColours(themeXml ?? "");
+  return all(within(stylesXml, "dxfs"), "dxf").map((dxf) => {
+    const font = first(dxf, "font") ?? "", pattern = first(dxf, "patternFill"), out = {};
+    for (const [name, code] of [["b", "b"], ["i", "i"], ["u", "u"], ["strike", "s"]]) if (on(font, name)) out[code] = true;
+    const ink = colourOf(first(font, "color"), theme), fill = pattern && attr(pattern, "patternType") !== "none" ? colourOf(first(pattern, "bgColor"), theme) ?? colourOf(first(pattern, "fgColor"), theme) : undefined;
+    if (ink) out.c = inkOf(ink, 0);
+    if (fill) out.f = inkOf(fill, 1);
+    return encodeStyle(out);
+  });
+}
+/**
+ * A sheet's conditional formats as a look's rules by A1 (sheet-rules.d.ts SheetRuleA1), the first over the rest: cell-value comparisons and formulas.
+ * `unread`: the rules of other kinds (colour scales, data bars, icon sets…) by kind, which are left out.
+ */
+export function sheetRules(sheetXml, dxfs) {
+  const found = [], unread = {};
+  for (const block of all(sheetXml, "conditionalFormatting")) {
+    const ranges = attr(block, "sqref") ?? "";
+    for (const rule of all(block, "cfRule")) {
+      const type = attr(rule, "type"), formulas = all(rule, "formula").map((tag) => unescaped(within(tag, "formula")).replace(/_xlfn\.|_xlws\./g, "")), style = dxfs[Number(attr(rule, "dxfId"))];
+      const op = CELL_IS[attr(rule, "operator") ?? ""];
+      if (style === undefined || !formulas.length || (type === "cellIs" ? !op || (op.endsWith("etween") && formulas.length < 2) : type !== "expression")) { unread[type] = (unread[type] ?? 0) + 1; continue; }
+      found.push({ priority: Number(attr(rule, "priority")) || Infinity, rule: type === "cellIs" ? { ranges, kind: "value", op, a: formulas[0], ...(op.endsWith("etween") ? { b: formulas[1] } : {}), style } : { ranges, kind: "formula", a: formulas[0], style } });
+    }
+  }
+  for (const block of sheetXml.match(/<x14:cfRule\b[^>]*>/g) ?? []) { const type = attr(block, "type"); unread[type] = (unread[type] ?? 0) + 1; }
+  return { rules: found.sort((a, b) => a.priority - b.priority).map(({ rule }) => rule), unread };
+}
+/** Each tab's rules (SheetRuleA1[], or none) as a sheet part's `<conditionalFormatting>` blocks, and the `dxfs` they name, for `withRules`. `formula`: a formula as the file stores it. */
+export function writeRules(tabsRules, formula) {
+  const dxfs = [], ids = new Map(), dxfOf = (packed) => {
+    if (ids.has(packed)) return ids.get(packed);
+    const a = decodeStyle(packed), flag = (code, tag) => (a[code] ? `<${tag}/>` : "");
+    const font = `${flag("b", "b")}${flag("i", "i")}${flag("u", "u")}${flag("s", "strike")}${a.c ? `<color rgb="FF${rgbOf(a.c)}"/>` : ""}`;
+    // A conditional format's solid fill is its background colour, as Excel writes it.
+    dxfs.push(`<dxf>${font ? `<font>${font}</font>` : ""}${a.f ? `<fill><patternFill patternType="solid"><bgColor rgb="FF${rgbOf(a.f, true)}"/></patternFill></fill>` : ""}</dxf>`);
+    ids.set(packed, dxfs.length - 1);
+    return dxfs.length - 1;
+  };
+  let priority = 0;
+  const sheets = tabsRules.map((rules) => (rules ?? []).map((rule) => {
+    const formulas = [rule.a, ...(rule.kind === "value" && rule.op?.endsWith("etween") ? [rule.b ?? ""] : [])].map((text) => `<formula>${escaped(formula(text))}</formula>`).join("");
+    const kind = rule.kind === "formula" ? 'type="expression"' : `type="cellIs" operator="${OPERATOR[rule.op]}"`;
+    return `<conditionalFormatting sqref="${escaped(rule.ranges)}"><cfRule ${kind} dxfId="${dxfOf(rule.style ?? "")}" priority="${++priority}">${formulas}</cfRule></conditionalFormatting>`;
+  }).join(""));
+  return { dxfs: `<dxfs count="${dxfs.length}">${dxfs.join("")}</dxfs>`, sheets };
+}
+/** A styles part given the rules' `dxfs`, and a sheet part its rules, in their places by the schema. */
+export const withDxfs = (stylesXml, dxfs) => /<dxfs\b[^>]*\/>|<dxfs\b[\s\S]*?<\/dxfs>/.test(stylesXml) ? stylesXml.replace(/<dxfs\b[^>]*\/>|<dxfs\b[\s\S]*?<\/dxfs>/, () => dxfs) : stylesXml.replace(/<tableStyles\b|<\/styleSheet>/, (at) => `${dxfs}${at}`);
+export const withRules = (sheetXml, blocks) => blocks ? sheetXml.replace(AFTER_RULES, (at) => `${blocks}${at}`) : sheetXml;

@@ -438,6 +438,8 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   const reviewing = () => host.tools?.().find((tool) => tool.mode === "review")?.active ?? true;
   const undoAny = () => reviewing() && stepsOwn(undoable(), surface?.canUndo) ? undo() : void surface?.undo();
   const redoAny = () => reviewing() && stepsOwn(redoable(), surface?.canRedo) ? redo() : void surface?.redo();
+  // The surface's steps are listed only where its history is what the pair steps.
+  const surfaceSteps = (back: boolean) => reviewing() && stepsOwn(back ? undoable() : redoable(), back ? surface?.canUndo : surface?.canRedo) ? undefined : surface?.steps?.()[back ? "undo" : "redo"];
   const remove = (id: number) => {
     keep();
     const preview = selections.find((selection) => selection.id === id)?.preview;
@@ -876,6 +878,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     // The quote tool taken up while a place is chosen comments on it.
     onTool={(tool) => { const took = props.mode === "use" || pointerTool() !== tool; if (props.mode === "use") look("page"); setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); const place = took && tool === "quote" ? host.place?.() : null; if (place) addQuote(place); }}
     status={status()} compact={touchOnly} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} size={textSize()} onSize={can.inks ? setTextSize : undefined} shape={shape()} onShape={setShape} onUndo={(reviewing() && undoable()) || surface?.canUndo() ? undoAny : undefined} onRedo={(reviewing() && redoable()) || surface?.canRedo() ? redoAny : undefined}
+    undoSteps={surfaceSteps(true)} redoSteps={surfaceSteps(false)} onSteps={(back, count) => void (back ? surface?.undo(count) : surface?.redo(count))}
     replies={unread().reduce((sum, item) => sum + item.unread, 0)} sent={thread() ? 0 : earlier.latest?.length} onReplies={sentBefore}
     outstanding={unsent().filter((selection) => selection.comment.trim()).length} standing={thread() ? standing() : undefined}
     hand={hand()} onHand={can.listeners ? keepHand : undefined} agent={agent()?.name} heard={waiters.latest !== undefined} onNextAgent={(waiters.latest?.length ?? 0) > 1 ? nextAgent : undefined}

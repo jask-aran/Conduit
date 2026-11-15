@@ -28,7 +28,7 @@ export default function SheetSurface(props: ArtifactSurfaceProps) {
         anchors: (list) => marks()?.anchors(list), place: (key) => marks()?.where(key) ?? null, watch: (listener) => marks()?.watch(listener) ?? (() => {}),
         focus: () => marks()?.focus(),
       },
-      history: { undo: () => marks()?.history.undo() ?? false, redo: () => marks()?.history.redo() ?? false, canUndo: () => marks()?.history.canUndo() ?? false, canRedo: () => marks()?.history.canRedo() ?? false },
+      history: { undo: (count) => marks()?.history.undo(count) ?? false, redo: (count) => marks()?.history.redo(count) ?? false, canUndo: () => marks()?.history.canUndo() ?? false, canRedo: () => marks()?.history.canRedo() ?? false, steps: () => marks()?.history.steps() ?? { undo: [], redo: [] } },
       place: () => props.quiet ? null : marks()?.place() ?? null,
       placeAt: (from, to) => marks()?.placeAt(from, to) ?? null,
       tools: () => marks()?.tools() ?? [],

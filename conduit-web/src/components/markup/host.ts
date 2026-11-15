@@ -158,8 +158,9 @@ export type MarkupSuggestion = { key: string; by: string; at: string; summary: s
  *  it is on (a mark the selection wears; unsaid, `active`). `disabled`: not to be done here now (a menu dims and strikes it). `keys`: its shortcut, for its tooltip. */
 export type MarkupHostTool = { name: string; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; compact?: boolean; swatch?: string; tip?: string; pick?(hex: string): void; mode?: "edit" | "review"; run(): void };
 
-/** The surface's own undo history (a paper's typing), which the bar's Undo and Redo step where Markup has no mark of its own newer. Read where drawn, so `can…` follow. */
-export type MarkupHostHistory = { undo(): boolean; redo(): boolean; canUndo(): boolean; canRedo(): boolean };
+/** The surface's own undo history (a paper's typing), which the bar's Undo and Redo step where Markup has no mark of its own newer. Read where drawn, so `can…` follow.
+ *  `steps`: the names of its latest steps, newest first, listed under Undo and Redo, where choosing one steps `count` back or forward to it. */
+export type MarkupHostHistory = { undo(count?: number): boolean; redo(count?: number): boolean; canUndo(): boolean; canRedo(): boolean; steps?(): { undo: readonly string[]; redo: readonly string[] } };
 
 export interface MarkupHost {
   /** What differs from MARKUP_CAPABILITIES here. */

@@ -19,13 +19,13 @@ const BORDER_LABELS: Readonly<Record<SheetBorders, string>> = { all: "All border
 const ALIGNS = [["left", "Align left"], ["center", "Align centre"], ["right", "Align right"]] as const;
 const VALIGNS = [["top", "Align top"], ["middle", "Align middle"], ["bottom", "Align bottom"]] as const;
 
-/** `done`: after a tool has run (the grid takes focus back). `fit`: the rows of a range whose wrapping changed are fitted to their lines. `spread`: Fill down or Fill right (sheet.tsx). */
-export function createSheetTools(options: { tip(name: SheetToolId): string | undefined; at: Accessor<SheetRange | null>; styles: SheetStyles; formats: SheetFormats; offered?: readonly SheetToolName[]; fit(range: SheetRange): void; spread(range: SheetRange, way: "down" | "right"): void; done(): void }): SheetTool[] {
+/** `done`: after a tool has run (the grid takes focus back). `fit`: the rows of a range whose wrapping changed are fitted to their lines. `spread`: Fill down or Fill right (sheet.tsx). `act`: a tool's run is one step of the history, by its label. */
+export function createSheetTools(options: { tip(name: SheetToolId): string | undefined; at: Accessor<SheetRange | null>; styles: SheetStyles; formats: SheetFormats; offered?: readonly SheetToolName[]; fit(range: SheetRange): void; spread(range: SheetRange, way: "down" | "right"): void; act(label: string, run: () => void): void; done(): void }): SheetTool[] {
   const { at, styles, formats } = options, offered = options.offered ?? SHEET_TOOLS;
   const worn = () => { const range = at(); return range && styles.worn(range.top, range.left); };
   const tool = (name: SheetToolId, label: string, icon: SheetTool["icon"], run: (range: SheetRange) => void, rest: Partial<SheetTool> & { on?(): boolean } = {}): SheetTool => {
     const { on, ...more } = rest;
-    return { name, label, icon, ...more, get tip() { return options.tip(name); }, get active() { return on?.() ?? false; }, get pressed() { return on && !more.menu ? on() : undefined; }, get disabled() { return !at(); }, run: () => { const range = at(); if (range) run(range); options.done(); } };
+    return { name, label, icon, ...more, get tip() { return options.tip(name); }, get active() { return on?.() ?? false; }, get pressed() { return on && !more.menu ? on() : undefined; }, get disabled() { return !at(); }, run: () => { const range = at(); if (range) options.act(label, () => run(range)); options.done(); } };
   };
   const mark = (name: keyof typeof sheetToolIcons) => { const Icon = sheetToolIcons[name]; return () => <Icon />; };
   const inks = (name: "color" | "fill", menu: string, none: string, noun: string) => [undefined, ...SHEET_INKS].map((ink?: SheetInk) => tool(`${name}-${ink ?? "none"}`, ink ? `${INK_LABELS[ink]} ${noun}` : none,

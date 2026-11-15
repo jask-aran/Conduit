@@ -5,6 +5,7 @@ import { CALL_LIMIT, CELLS, COLS, COL_LIMIT, LOOK, MAIN, ROWS, SHEET_FORMAT, SHE
 import { CONFIG, createWorkbookModel } from "../sheet-engine.js";
 import { listFormats, writeFormat } from "../sheet-formats.js";
 import { listStyles, writeStyle } from "../sheet-styles.js";
+import { readRules, rulesA1, rulesIds } from "../sheet-rules.js";
 import { writePrivateFile } from "../private-file.js";
 
 /*
@@ -74,19 +75,23 @@ export function sheetKind(hub) {
   /**
    * Each cell of the range from `values` repeated over it; a formula is moved as a spreadsheet's fill moves it (its relative references follow the cell),
    * worked out in an engine of its own holding only the values, where they stand, beside empty tabs of the workbook's names (so `Data!A1` moves too).
+   * `from`, the fill handle's source on the tab: `values` cover the range (its series worked out on the page), and each formula among them is the
+   * source's own, moved from it, so a fill upward or leftward moves them as one downward does.
    */
   const scratch = (room, sheet) => {
     const engine = HyperFormula.buildFromSheets(Object.fromEntries(room.book.tabs().map((tab) => [room.book.tab(tab.id).engine.getSheetName(room.book.tab(tab.id).sheet), []])), CONFIG);
     return { engine, here: engine.getSheetId(sheet.engine.getSheetName(sheet.sheet)) };
   };
-  const filled = (room, sheet, values, range) => {
+  const filled = (room, sheet, values, range, from) => {
     const height = values.length, width = Math.max(...values.map((row) => row.length)), at = (r, c) => values[r % height][c % width] ?? "";
-    const moved = values.some((row) => row.some((value) => value.startsWith("="))) && (range.bottom - range.top + 1 > height || range.right - range.left + 1 > width)
+    const moved = values.some((row) => row.some((value) => value.startsWith("="))) && (from || range.bottom - range.top + 1 > height || range.right - range.left + 1 > width)
       ? (() => {
-        const { engine, here } = scratch(room, sheet);
+        const { engine, here } = scratch(room, sheet), block = from ?? { top: range.top, left: range.left, bottom: range.top + height - 1, right: range.left + width - 1 };
         try {
-          engine.setCellContents({ sheet: here, row: range.top, col: range.left }, values.map((row) => Array.from({ length: width }, (_, c) => row[c] || null)));
-          return engine.getFillRangeData({ start: { sheet: here, row: range.top, col: range.left }, end: { sheet: here, row: range.top + height - 1, col: range.left + width - 1 } }, { start: { sheet: here, row: range.top, col: range.left }, end: { sheet: here, row: range.bottom, col: range.right } });
+          engine.setCellContents({ sheet: here, row: block.top, col: block.left }, from
+            ? Array.from({ length: from.bottom - from.top + 1 }, (_, r) => Array.from({ length: from.right - from.left + 1 }, (_, c) => sheet.input(from.top + r, from.left + c) || null))
+            : values.map((row) => Array.from({ length: width }, (_, c) => row[c] || null)));
+          return engine.getFillRangeData({ start: { sheet: here, row: block.top, col: block.left }, end: { sheet: here, row: block.bottom, col: block.right } }, { start: { sheet: here, row: range.top, col: range.left }, end: { sheet: here, row: range.bottom, col: range.right } });
         } finally { engine.destroy(); }
       })() : null;
     const out = [];
@@ -144,19 +149,27 @@ export function sheetKind(hub) {
    */
   const keepCorners = (room, sheet, isRows, at, count) => {
     const out = [], gone = (n) => n >= at && n < at + count;
+    const id = (n) => isRows ? sheet.rowAt(n) : sheet.colAt(n), corner = (text, n) => { const [row, col] = String(text).split(":"); return isRows ? key(id(n), col) : key(row, id(n)); };
+    const moved = (ranged) => {
+      const area = rangedArea(sheet, ranged);
+      if (!area) return null;
+      let [lo, hi] = isRows ? [area.top, area.bottom] : [area.left, area.right];
+      while (lo <= hi && gone(lo)) lo++;
+      while (hi >= lo && gone(hi)) hi--;
+      return lo > hi ? null : { ...ranged, from: corner(ranged.from, lo), to: corner(ranged.to, hi) };
+    };
     for (const what of RANGED) {
       const name = `${what}:${sheet.id}`;
       let ranged;
       try { ranged = JSON.parse(String(room.look.get(name))); } catch { continue; }
-      const area = rangedArea(sheet, ranged);
-      if (!area) { out.push([name, null]); continue; }
-      let [lo, hi] = isRows ? [area.top, area.bottom] : [area.left, area.right];
-      while (lo <= hi && gone(lo)) lo++;
-      while (hi >= lo && gone(hi)) hi--;
-      if (lo > hi) { out.push([name, null]); continue; }
-      const id = (n) => isRows ? sheet.rowAt(n) : sheet.colAt(n), corner = (text, n) => { const [row, col] = String(text).split(":"); return isRows ? key(id(n), col) : key(row, id(n)); };
-      const next = { ...ranged, from: corner(ranged.from, lo), to: corner(ranged.to, hi) };
-      if (next.from !== ranged.from || next.to !== ranged.to) out.push([name, JSON.stringify(next)]);
+      const next = moved(ranged);
+      if (!next) out.push([name, null]); else if (next.from !== ranged.from || next.to !== ranged.to) out.push([name, JSON.stringify(next)]);
+    }
+    // A conditional format's ranges each as a filter's; one left with none goes.
+    const rules = readRules(room.look.get(`rules:${sheet.id}`));
+    if (rules.length) {
+      const next = rules.map((rule) => ({ ...rule, ranges: rule.ranges.flatMap(([from, to]) => { const one = moved({ from, to }); return one ? [[one.from, one.to]] : []; }) })).filter((rule) => rule.ranges.length);
+      if (JSON.stringify(next) !== JSON.stringify(rules)) out.push([`rules:${sheet.id}`, next.length ? JSON.stringify(next) : null]);
     }
     return () => { for (const [name, value] of out) if (value === null) room.look.delete(name); else room.look.set(name, value); };
   };
@@ -177,6 +190,8 @@ export function sheetKind(hub) {
       return { ...rest, range: rangeA1(area), ...(kept ? { keep: kept } : {}), ...(hidden.length ? { hide: hidden } : {}) };
     } catch { return undefined; }
   };
+  /** A tab's merged ranges (`merges:<tabId>`, a list of corners by ids) by A1, those whose corners are gone left out. */
+  const mergesA1 = (sheet, text) => { try { const list = JSON.parse(String(text)); return Array.isArray(list) ? list.flatMap((one) => { const area = rangedArea(sheet, one); return area ? [rangeA1(area)] : []; }) : []; } catch { return []; } };
   const rangedIds = (sheet, value) => {
     const area = parseRange(String(value?.range ?? "")), { rows, cols } = sheet.size();
     if (!area || area.bottom >= rows || area.right >= cols) return undefined;
@@ -189,7 +204,8 @@ export function sheetKind(hub) {
     const out = {};
     for (const [name, value] of room.look.entries()) {
       const [what, ...ids] = name.split(":");
-      if (ids.length === 1 && ids[0] === sheet.id && RANGED.includes(what)) { const said = rangedA1(sheet, value); if (said) out[what] = said; }
+      if (ids.length === 1 && ids[0] === sheet.id && what === "merges") { const said = mergesA1(sheet, value); if (said.length) out.merges = said; }
+      else if (ids.length === 1 && ids[0] === sheet.id && RANGED.includes(what)) { const said = rangedA1(sheet, value); if (said) out[what] = said; }
       else if (ids.length === 1 && ids[0] === sheet.id) out[what] = value;
       else if (ids.length === 1 && sheet.indexOfRow(ids[0]) >= 0) out[`${what}:${sheet.indexOfRow(ids[0]) + 1}`] = value;
       else if (ids.length === 1 && sheet.indexOfCol(ids[0]) >= 0) out[`${what}:${colName(sheet.indexOfCol(ids[0]))}`] = value;
@@ -201,7 +217,8 @@ export function sheetKind(hub) {
     for (const [name, value] of Object.entries(kept ?? {})) {
       const [what, at, more] = name.split(":"), col = /^[A-Z]{1,3}$/.test(at ?? "") ? colIndex(at) : -1, row = /^\d+$/.test(at ?? "") ? Number(at) - 1 : -1, cell = at ? parseA1(at) : null, { rows, cols } = sheet.size();
       if (!what || more !== undefined) continue;
-      if (at === undefined && RANGED.includes(what)) { const ids = rangedIds(sheet, value); if (ids) room.look.set(`${what}:${tab}`, ids); }
+      if (at === undefined && what === "merges") { const ids = Array.isArray(value) ? value.flatMap((range) => { const one = rangedIds(sheet, { range }); return one ? [JSON.parse(one)] : []; }) : []; if (ids.length) room.look.set(`merges:${tab}`, JSON.stringify(ids)); }
+      else if (at === undefined && RANGED.includes(what)) { const ids = rangedIds(sheet, value); if (ids) room.look.set(`${what}:${tab}`, ids); }
       else if (at === undefined) room.look.set(`${what}:${tab}`, value);
       else if (row >= 0 && row < rows) room.look.set(`${what}:${sheet.rowAt(row)}`, value);
       else if (col >= 0 && col < cols) room.look.set(`${what}:${sheet.colAt(col)}`, value);
@@ -373,7 +390,7 @@ export function sheetKind(hub) {
         return `${head}${part}\n${toCsv(clip(typed, area))}`;
       },
       /** One change of cells, of rows and columns, or of tabs (contract: POST /v0/document/:id/cells). `for` is checked, and nothing is kept of it yet. */
-      async edit(room, { op, tab, at, range, values, value, format, style, borders, column, header, descending, count = 1, name: called, hidden, by, for: about } = {}) {
+      async edit(room, { op, tab, at, range, from, values, value, format, style, borders, column, header, descending, count = 1, name: called, hidden, by, for: about } = {}) {
         const name = typeof by === "string" && by ? by.slice(0, 80) : "agent";
         if (about !== undefined) {
           if (!/^[\w-]+\/\d+$/.test(String(about))) throw fault(400, `for is the comment answered, as <item>/<n>, not ${about}`);
@@ -407,8 +424,10 @@ export function sheetKind(hub) {
           else if (height > area.bottom - area.top + 1 || width > area.right - area.left + 1) throw fault(400, `values is ${height} rows x ${width} columns, more than ${rangeA1(area)} holds: give a range that large, or its first cell alone`);
           const count = (area.bottom - area.top + 1) * (area.right - area.left + 1);
           if (count > CALL_LIMIT) throw fault(400, `That is ${count} cells; one call writes at most ${CALL_LIMIT}: split it`);
+          const source = op === "fill" && from !== undefined ? parseRange(from) : undefined;
+          if (source === null) throw fault(400, `from is the fill's source on its tab, an A1 range such as B2:C3, not ${from}`);
           grow(room, sheet, area, name);
-          writeCells(room, sheet, filled(room, sheet, grid, area), name);
+          writeCells(room, sheet, filled(room, sheet, grid, area, source), name);
           return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}), ...sheet.size() };
         }
         // A range's number formats (sheet-formats.js) or styles (sheet-styles.js), set first when given; whole columns (B:D), or for styles rows (3:5), set theirs.

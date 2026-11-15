@@ -25,15 +25,18 @@ export type SheetKey = Pick<KeyboardEvent, "key" | "shiftKey" | "ctrlKey" | "met
 /** A box in the viewport's pixels. */
 export type SheetBox = { left: number; top: number; width: number; height: number };
 
-/** What only the hub may do to a sheet (sheet-format: structure, a fill whose formulas are adjusted per cell, and its tabs), as POST /v0/document/:id/cells takes it. `tab`: an id or a name; unsaid, the first. */
-export type SheetCellsOp =
+/**
+ * What only the hub may do to a sheet (sheet-format: structure, a fill whose formulas are adjusted per cell, and its tabs), as POST /v0/document/:id/cells takes it. `tab`: an id or a name; unsaid, the first.
+ * `client` (the page's Yjs client id) and `step`: the hub sends that page the change's updates tagged with the step (document-format.js FRAME.own), for its history.
+ */
+export type SheetCellsOp = { client?: number; step?: number } & (
   | { op: "set"; at: string; value: string; tab?: string }
-  | { op: "fill"; range: string; values?: string[][]; value?: string; tab?: string }
+  | { op: "fill"; range: string; values?: string[][]; value?: string; from?: string; tab?: string }
   | { op: "insert-rows" | "insert-cols" | "delete-rows" | "delete-cols"; at: number; count?: number; tab?: string }
   | SheetFormatOp
   | SheetStyleOp
   | SheetSortOp
-  | SheetTabOp;
+  | SheetTabOp);
 
 /** A cell an import could not compute, as GET /v0/document/:id?as=import reports it (server/sheet-xlsx.js): the file's formula, why, and the value it holds instead. By tab name, then A1. */
 export type SheetFrozen = Record<string, Record<string, { formula: string; why: string; kept?: string }>>;
@@ -105,8 +108,8 @@ export type SheetMarks = {
   watch(listener: (pressed?: string) => void): () => void;
   reveal(place: string): void;
   focus(): void;
-  /** What this page wrote, taken back and put back (never another's writing); `canUndo` and `canRedo` are read where drawn. */
-  history: { undo(): boolean; redo(): boolean; canUndo(): boolean; canRedo(): boolean };
+  /** What this page did, taken back and put back `count` steps at a time (never another's writing); `steps`: the latest steps' names, newest first. Read where drawn. */
+  history: { undo(count?: number): boolean; redo(count?: number): boolean; canUndo(): boolean; canRedo(): boolean; steps(): { undo: string[]; redo: string[] } };
 };
 
 /** The grid island (grid.ts) as the editor drives it: it draws and reports, the editor decides. */
@@ -144,8 +147,8 @@ export type SheetGridEvents = {
   selected(range: SheetRange | null): void;
   /** What was typed into a cell, or pasted, as inputs by position; the editor writes them. */
   write(cells: readonly { row: number; col: number; input: string }[]): void;
-  /** A paste or a fill dragged past the sheet's edge, or a fill whose formulas move: the hub's fill. */
-  fill(range: SheetRange, values: string[][]): void;
+  /** A paste or a fill dragged past the sheet's edge, or a fill whose formulas move: the hub's fill. `from`: the fill handle's source, whose formulas the hub moves into `values`. */
+  fill(range: SheetRange, values: string[][], from?: SheetRange): void;
   resized(col: number, width: number): void;
   /** A press on a header, a row number or a cell, before the context menu opens over it. */
   menu(target: { rows?: SheetRange; cols?: SheetRange }): void;

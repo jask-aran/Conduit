@@ -196,6 +196,7 @@ export const markdownFor = (schema) => {
  * it cannot draw and writes that back, so the hub lets in only this one.
  */
 export const FORMAT = 3;
-/** `seats` is not Yjs: its bytes are JSON, the agents at work in the document now (server/documents.js: a seat), told whole each time one changes and never kept. */
-export const FRAME = { have: 0, update: 1, seats: 2 };
+/** `seats` is not Yjs: its bytes are JSON, the agents at work in the document now (server/documents.js: a seat), told whole each time one changes and never kept.
+ *  `own` is an update the hub made for this page's own change (POST …/cells with its `client` and `step`): the step as 4 bytes (little-endian), then the update. */
+export const FRAME = { have: 0, update: 1, seats: 2, own: 3 };
 export const frame = (kind, bytes) => { const out = new Uint8Array(bytes.length + 1); out[0] = kind; out.set(bytes, 1); return out; };

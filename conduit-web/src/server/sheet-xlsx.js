@@ -5,7 +5,7 @@ import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colIndex, colName, tabName,
 import { CONFIG } from "../sheet-engine.js";
 import { NAMES } from "../sheet-functions.js";
 import { decodeStyle, encodeStyle } from "../sheet-styles.js";
-import { ownOver, readStyles, seen, sheetStyles, writeStyles } from "./xlsx-styles.js";
+import { ownOver, readDxfs, readStyles, seen, sheetRules, sheetStyles, withDxfs, withRules, writeRules, writeStyles } from "./xlsx-styles.js";
 
 /*
  * An .xlsx read as a workbook's files (docs/plans/sheet-xlsx-and-tabs.md): each tab's CSV of values, its formulas by address and its look, as
@@ -76,7 +76,8 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   // Each tab's XML part, by the workbook's own list and its links, read for its pane and styles.
   const part = (path) => book.files?.[path]?.content, text = (path) => { const bytes = part(path); return bytes ? Buffer.from(bytes.buffer, bytes.byteOffset, bytes.length).toString("utf8") : ""; };
   const targets = Object.fromEntries((text("xl/_rels/workbook.xml.rels").match(/<Relationship\b[^>]*>/g) ?? []).map((tag) => [attr(tag, "Id"), attr(tag, "Target") ?? ""]));
-  const formatsOf = readStyles(text("xl/styles.xml"), text(Object.values(targets).find((target) => /theme\d*\.xml$/.test(target))?.replace(/^\/?(xl\/)?/, "xl/") ?? ""));
+  const stylesXml = text("xl/styles.xml"), themeXml = text(Object.values(targets).find((target) => /theme\d*\.xml$/.test(target))?.replace(/^\/?(xl\/)?/, "xl/") ?? "");
+  const formatsOf = readStyles(stylesXml, themeXml), dxfs = readDxfs(stylesXml, themeXml);
   const xmlOf = Object.fromEntries((text("xl/workbook.xml").match(/<sheet\b[^>]*>/g) ?? []).map((tag) => { const target = targets[attr(tag, "r:id")] ?? ""; return [attr(tag, "name"), target.startsWith("/") ? target.slice(1) : `xl/${target}`]; }));
   book.SheetNames.forEach((called, index) => {
     const sheet = book.Sheets[called], data = sheet?.["!data"];
@@ -87,7 +88,6 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     let rows = 0, cols = 0;
     data.forEach((row, r) => row?.forEach((cell, c) => { if (cell && (cell.f || (cell.t !== "z" && cell.v !== "" && cell.v !== undefined))) { rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1); } }));
     read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, rows: Math.max(1, rows), cols: Math.max(1, cols) });
-    drop("merged ranges", sheet["!merges"]?.length ?? 0);
     drop("hidden columns", sheet["!cols"]?.filter((col) => col?.hidden).length ?? 0);
     drop("notes", data.reduce((sum, row) => sum + (row?.filter((cell) => cell?.c?.length).length ?? 0), 0));
   });
@@ -105,7 +105,9 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     const xml = text(xmlOf[tab.called] ?? ""), styles = sheetStyles(xml, tab, shows), rows = Math.max(tab.rows, styles.reach.rows), cols = Math.max(tab.cols, styles.reach.cols), more = rows * cols - tab.rows * tab.cols;
     if (more && cols <= COL_LIMIT && rows * cols <= SHEET_LIMIT && more <= room) { room -= more; Object.assign(tab, { rows, cols }); }
     Object.assign(tab, { pane: paneOf(xml), styles });
-    drop("conditional formats", xml.match(/<conditionalFormatting\b/g)?.length ?? 0);
+    const ruled = sheetRules(xml, dxfs);
+    tab.rules = ruled.rules;
+    for (const [type, count] of Object.entries(ruled.unread)) drop(`conditional formats (${type})`, count);
     drop("validation rules", xml.match(/<dataValidation\b/g)?.length ?? 0);
   }
 
@@ -204,6 +206,11 @@ export function importXlsx(bytes, { tabs: only } = {}) {
         if (!own) continue;
         if (styled < STYLES_PER_TAB) { look[`style:${a1(r, c)}`] = own; styled += 1; } else drop("cell styles");
       }
+      // Merged ranges inside the tab, a lone cell being none.
+      const merges = (tab.sheet["!merges"] ?? []).filter(({ s, e }) => e.r < tab.rows && e.c < tab.cols && (e.r > s.r || e.c > s.c));
+      drop("merged ranges past the tab's last value", (tab.sheet["!merges"]?.length ?? 0) - merges.length);
+      if (merges.length) look.merges = merges.map((range) => XLSX.utils.encode_range(range));
+      if (tab.rules.length) look.rules = tab.rules;
       if (tab.pane?.rows) look.freezeRows = tab.pane.rows;
       if (tab.pane?.cols) look.freezeCols = tab.pane.cols;
       return { name: tab.name, hidden: tab.hidden, csv: toCsv(csv), inputs, look, rows: tab.rows, cols: tab.cols, formulas: Object.keys(inputs).length };
@@ -258,20 +265,22 @@ export function exportXlsx(tabs, imported) {
     // A table is written as its filter alone: SheetJS writes no tables.
     const filtered = tab.look.filter?.range ?? tab.look.table?.range;
     if (typeof filtered === "string") sheet["!autofilter"] = { ref: filtered };
+    if (Array.isArray(tab.look.merges)) sheet["!merges"] = tab.look.merges.map((range) => XLSX.utils.decode_range(String(range)));
     XLSX.utils.book_append_sheet(book, sheet, tab.name);
   }
   book.Workbook = { Sheets: tabs.map((tab) => ({ Hidden: tab.hidden ? 1 : 0 })) };
   const written = XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true }), count = (value) => typeof value === "number" && value > 0 ? value : 0;
   const panes = tabs.map((tab) => [count(tab.look.freezeRows), count(tab.look.freezeCols)]), styled = tabs.some((tab) => Object.keys(tab.look).some((name) => name.startsWith("style:")));
-  if (!styled && !panes.some(([rows, cols]) => rows || cols)) return written;
+  const ruled = tabs.some((tab) => tab.look.rules?.length), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(`=${formula}`)) : null;
+  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols)) return written;
   let restyled = null;
   return editParts(written, (path, xml, all) => {
     if (styled && !restyled) {
       const sheets = tabs.map((tab, n) => ({ xml: all[`xl/worksheets/sheet${n + 1}.xml`] ?? "", ...styleOf(tab.look), size: { rows: tab.typed.length, cols: Math.max(1, ...tab.typed.map((row) => row.length)) } }));
       restyled = writeStyles(all["xl/styles.xml"] ?? "", sheets);
     }
-    if (path === "xl/styles.xml") return restyled?.styles ?? xml;
-    const n = sheetOf(path), [rows, cols] = panes[n] ?? [0, 0], sheet = n >= 0 && restyled ? restyled.sheets[n] : xml;
+    if (path === "xl/styles.xml") return rules ? withDxfs(restyled?.styles ?? xml, rules.dxfs) : restyled?.styles ?? xml;
+    const n = sheetOf(path), [rows, cols] = panes[n] ?? [0, 0], sheet = withRules(n >= 0 && restyled ? restyled.sheets[n] : xml, rules?.sheets[n]);
     return rows || cols ? sheet.replace(/<sheetView workbookViewId="0"\/>/, paneXml(rows, cols)) : sheet;
   });
 }

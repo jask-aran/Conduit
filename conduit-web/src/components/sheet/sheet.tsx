@@ -1,10 +1,11 @@
 import { createEffect, createMemo, createResource, createSignal, on, onCleanup, Show, untrack, type JSX } from "solid-js";
-import * as Y from "yjs";
 import { Empty, Frost, Icons, Notice } from "@/components/ui";
-import { sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
+import { sheetMergeIcons as MergeIcons, sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
+import { createDecisionScope } from "@/components/ui/decision-dialog";
+import { createSheetMerges, type SheetMergeKind } from "./merges";
 import { Input } from "@/components/ui/controls";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
-import { CELLS, COL_LIMIT, LOOK, a1, colIndex, colName, key, parseRange, rangeA1, type SheetView } from "@/sheet-format.js";
+import { CELLS, COLS, COL_LIMIT, LOOK, ROWS, a1, colIndex, colName, colsOf, key, parseRange, rangeA1, rowsOf, type SheetView } from "@/sheet-format.js";
 import { SheetFoot } from "./foot";
 import { createSheetTabs } from "./tabs";
 import { ASK_KEY, type SheetAnchor, type SheetBox, type SheetGrid, type SheetGridEvents, type SheetHost, type SheetMarks, type SheetPlace, type SheetRange, type SheetState } from "./host";
@@ -20,6 +21,7 @@ import { createSheetFormats } from "./formats";
 import { createSheetStyles } from "./styles";
 import { createSheetTools } from "./tools";
 import { createSheetFind } from "./find";
+import { createSheetHistory } from "./history";
 import { FormatMenu } from "./format-menu";
 
 // Cells written into the text a comment quotes, and how much of each: enough to read.
@@ -33,7 +35,6 @@ type Menu = { rows?: SheetRange; cols?: SheetRange };
 /** `onAsk`: the ask key (ASK_KEY) was pressed in the grid. */
 export function SheetEditor(props: { host: SheetHost; id: string; name: string; margin?: JSX.Element; marginEmpty?: boolean; marks?(marks: SheetMarks): void; onState?(state: SheetState): void; onDrawn?(): void; onAsk?(): void }) {
   const live = createLiveSheet(props.host, props.id), cells = live.doc.getMap<string>(CELLS), look = live.doc.getMap<number | string>(LOOK);
-  const history = new Y.UndoManager([cells, look]);
   const [model, setModel] = createSignal<SheetView>(), [grid, setGrid] = createSignal<SheetGrid>(), [failed, setFailed] = createSignal<string>();
   const [at, setAt] = createSignal<SheetRange | null>(null), [changed, setChanged] = createSignal(0), [address, setAddress] = createSignal<string | null>(null), [scrolled, setScrolled] = createSignal(0);
   const [menu, setMenu] = createSignal<Menu>({});
@@ -42,6 +43,11 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const [island, setIsland] = createSignal<HTMLDivElement>(), [slot, setSlot] = createSignal<HTMLDivElement>();
   let root: HTMLElement | undefined, anchors: SheetAnchor[] = [];
   const tabs = createSheetTabs({ doc: live.doc, host: props.host, id: props.id, name: props.name, grid, at });
+  // Every tab's rows and columns are in it, so a row put in or taken out is undone with the formulas the hub moved for it.
+  const history = createSheetHistory(live.doc, [cells, look, live.doc.getArray(ROWS), live.doc.getArray(COLS)], (op) => tabs.cells(op)), [stepped, setStepped] = createSignal(0);
+  live.own(history.origin);
+  history.onChange(() => setStepped((n) => n + 1));
+  createEffect(() => history.scope(tabs.tabs().flatMap((tab) => [live.doc.getArray(rowsOf(tab.id)), live.doc.getArray(colsOf(tab.id))])));
   const watchers = new Set<(pressed?: string) => void>(), moved = (pressed?: string) => watchers.forEach((listener) => listener(pressed));
   createEffect(() => props.onState?.(live.state()));
   onCleanup(() => history.destroy());
@@ -52,12 +58,14 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     // A cell past the sheet's edge has no row or column of its own yet: the hub makes them as it sets it.
     const past: { row: number; col: number; input: string }[] = [];
     live.doc.transact(() => { for (const { row, col, input } of list) { const rowId = sheet.rowAt(row), colId = sheet.colAt(col); if (!rowId || !colId) { if (input) past.push({ row, col, input }); continue; } if (input) cells.set(key(rowId, colId), input); else cells.delete(key(rowId, colId)); } });
-    for (const { row, col, input } of past) void tabs.cells({ op: "set", at: a1(row, col), value: input }).catch((error: Error) => props.host.failed(error.message));
+    for (const { row, col, input } of past) hub({ op: "set", at: a1(row, col), value: input });
   };
-  const hub = (op: Parameters<SheetHost["cells"]>[0]) => void tabs.cells(op).catch((error: Error) => props.host.failed(error.message));
+  const hub = (op: Parameters<SheetHost["cells"]>[0]) => void history.hub(op).catch((error: Error) => props.host.failed(error.message));
+  const labelOf = (list: readonly { row: number; col: number; input: string }[]) => list.every(({ input }) => !input) ? "Clear contents" : list.length === 1 ? `Typing in ${a1(list[0]!.row, list[0]!.col)}` : "Paste";
+  const writes = (label: string) => (list: readonly { row: number; col: number; input: string }[]) => history.act(label || labelOf(list), () => write(list));
   const editor = createFormulaEditor({
     grid, input: (row, col) => model()?.input(row, col) ?? "", functions: tabs.functions,
-    write: (row, col, input) => write([{ row, col, input }]),
+    write: (row, col, input) => writes("")([{ row, col, input }]),
     selected: () => { changed(); const area = at(); return area && { row: area.top, col: area.left }; }, error: (row, col) => model()?.error(row, col) ?? null,
   });
   // The cells its import froze, by tab name then position (a row's index times COL_LIMIT, plus its column's): marked while they hold what the import left.
@@ -72,7 +80,20 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   createEffect(() => { if (frozen().size) grid()?.update(null); });
   const filters = createSheetFilter(look, model, at, hub, (row, col) => Boolean(styles.at(row, col)?.bold)), [filtering, setFiltering] = createSignal<{ col: number; box: SheetBox } | null>(null);
   const sizes = createSheetSizes(look, model, styles.lines, filters.hidden), [question, setQuestion] = createSignal<SizeQuestion | null>(null);
-  const sequences = createSequenceKeys((sequence) => "tool" in sequence ? tools.find((one) => one.name === sequence.tool)?.run() : sequence.run({ selection: at, sizes, look: () => readLook(root!), ask: setQuestion, filters: filters.keys }),
+  const merges = createSheetMerges(look, model), decisions = createDecisionScope(() => props.id);
+  // As a spreadsheet's: Merge & Center on a merge unmerges it, and a merge emptying cells that hold values asks first.
+  const merge = (kind: SheetMergeKind | null, area = at()) => {
+    if (!area) return;
+    if (kind === null || (kind === "center" && merges.is(area))) return void history.act("Unmerge cells", () => merges.unmerge(area));
+    const losing = merges.losing(area, kind), run = () => history.act(kind === "center" ? "Merge & Center" : kind === "across" ? "Merge across" : "Merge cells", () => {
+      if (!merges.merge(area, kind)) return;
+      write(losing.map((cell) => ({ ...cell, input: "" })));
+      if (kind === "center") styles.set(area, { align: "center" });
+    });
+    if (!losing.length) return run();
+    void decisions.confirm("Merging keeps only the upper-left value", { confirmLabel: "Merge" }).then((yes) => { if (yes) run(); grid()?.focus(); });
+  };
+  const sequences = createSequenceKeys((sequence) => "tool" in sequence ? tools.find((one) => one.name === sequence.tool)?.run() : sequence.run({ selection: at, sizes, look: () => readLook(root!), ask: setQuestion, filters: filters.keys, merge }),
     (name) => tools.find((one) => one.name === name)?.label ?? name);
   // One edge dragged sizes every whole row or column selected with it, as a spreadsheet does.
   const wholeOf = (area: SheetRange, kind: "rows" | "cols") => { const size = model()?.size(); return Boolean(size && (kind === "cols" ? area.top === 0 && area.bottom >= size.rows - 1 : area.left === 0 && area.right >= size.cols - 1)); };
@@ -88,9 +109,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const drawnLook = () => readLook(root!, props.host.display?.());
   const events: SheetGridEvents = {
     selected: setAt,
-    write,
-    fill: (range, values) => hub({ op: "fill", range: rangeA1(range), values }),
-    resized: (col, width) => sizes.setWidths(span("cols", col), width / zoom()),
+    write: writes(""),
+    fill: (range, values, from) => hub({ op: "fill", range: rangeA1(range), values, ...(from ? { from: rangeA1(from) } : {}) }),
+    resized: (col, width) => history.act("Column width", () => sizes.setWidths(span("cols", col), width / zoom())),
     menu: setMenu,
     moved: () => { setScrolled((n) => n + 1); moved(); },
     drawn: () => props.onDrawn?.(),
@@ -125,7 +146,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       made = mountGrid(into, { model: sheet, events, look: untrack(drawnLook), columns: {
         width: (col) => { const width = sizes.width(col); return width === undefined ? undefined : Math.round(width * zoom()); }, freeze: sizes.freeze, hidden: sizes.hidden,
         heights: () => { const by = zoom(), kept = sizes.heights(); return by === 1 ? kept : new Map([...kept].map(([row, height]) => [row, Math.round(height * by)])); },
-        type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; }, draw: formats.draw, style: (row, col) => filters.style(styles.at(row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded,
+        type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; }, draw: formats.draw, dated: formats.dated, style: (row, col) => filters.style(styles.at(row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded, merges: merges.list,
       } });
       setGrid(made);
     }, (error: Error) => { setFailed(error.message); props.onDrawn?.(); });
@@ -159,7 +180,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   createEffect(() => {
     const into = island();
     if (!into) return;
-    const offKeys = sequences.attach(into), offEdges = dragRowEdges(into, grid, (row, height) => sizes.setHeights(span("rows", row), height / zoom()));
+    const offKeys = sequences.attach(into), offEdges = dragRowEdges(into, grid, (row, height) => history.act("Row height", () => sizes.setHeights(span("rows", row), height / zoom())));
     onCleanup(() => { offKeys(); offEdges(); });
   });
   const cellBox = createMemo<JSX.CSSProperties>((was) => {
@@ -229,8 +250,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     }
     return { text: lines.join("\n"), label: corners.range, under: corners, boxes: () => { const now = rangeOf({ under: corners }), box = now && grid()?.bounds(now); return box ? [box] : []; } };
   };
-  const find = createSheetFind({ model, grid, at, hidden: sizes.hidden, draw: formats.draw, write });
-  const tools = createSheetTools({ tip: sequences.tip, at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(), spread: (range, way) => spread(range, way),
+  const find = createSheetFind({ model, grid, at, hidden: sizes.hidden, draw: formats.draw, write: (list) => writes(list.length === 1 ? "Replace" : "Replace all")(list) });
+  const tools = createSheetTools({ tip: sequences.tip, at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(), spread: (range, way) => spread(range, way), act: history.act,
     fit: (range) => sizes.fitRows(Array.from({ length: range.bottom - range.top + 1 }, (_, n) => range.top + n), readLook(root!)) });
   const marks: SheetMarks = {
     subject: () => ({ ...model()?.size() }),
@@ -258,7 +279,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     watch: (listener) => { watchers.add(listener); return () => watchers.delete(listener); },
     reveal: (address) => { const range = parseRange(tabs.reveal(address)); if (range) grid()?.select(range); },
     focus: () => grid()?.focus(),
-    history: { undo: () => Boolean(history.undo()), redo: () => Boolean(history.redo()), canUndo: () => history.canUndo(), canRedo: () => history.canRedo() },
+    history: { undo: history.undo, redo: history.redo, canUndo: () => (stepped(), history.canUndo()), canRedo: () => (stepped(), history.canRedo()), steps: () => (stepped(), history.steps()) },
   };
   // Highlights are drawn by the grid: told again once it is made.
   createEffect(() => { if (grid()) marks.anchors(anchors); });
@@ -267,20 +288,20 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const rows = () => menu().rows, cols = () => menu().cols;
   // The menu's own doings, over what it was opened on: a sequence's (sizes), and the cells' cut, copy, paste and clearing.
   const picked = (): SheetRange | null => { const r = rows(), c = cols(); return r && c ? { top: r.top, bottom: r.bottom, left: c.left, right: c.right } : null; };
-  const sized = (keys: string, selection: SheetRange) => SHEET_SEQUENCES.find((sequence): sequence is Extract<SheetSequence, { run: unknown }> => sequence.keys === keys && "run" in sequence)?.run({ selection: () => selection, sizes, look: () => readLook(root!), ask: setQuestion, filters: filters.keys });
+  const sized = (keys: string, selection: SheetRange) => SHEET_SEQUENCES.find((sequence): sequence is Extract<SheetSequence, { run: unknown }> => sequence.keys === keys && "run" in sequence)?.run({ selection: () => selection, sizes, look: () => readLook(root!), ask: setQuestion, filters: filters.keys, merge });
   // What a range's cuts, clears, pastes and deletes reach: its rows shown, never one hidden, which is out of sight.
   const shownRows = (range: SheetRange) => { const hidden = sizes.hidden(); return Array.from({ length: range.bottom - range.top + 1 }, (_, r) => range.top + r).filter((row) => !hidden.has(row)); };
   const shownFrom = (top: number, count: number) => { const hidden = sizes.hidden(), out: number[] = []; for (let row = top; out.length < count; row++) if (!hidden.has(row)) out.push(row); return out; };
   const within = (range: SheetRange) => shownRows(range).map((row) => Array.from({ length: range.right - range.left + 1 }, (_, c) => ({ row, col: range.left + c })));
   const copy = (range: SheetRange) => navigator.clipboard.writeText(within(range).map((row) => row.map(({ row: r, col }) => String(model()?.value(r, col) ?? "")).join("\t")).join("\n")).catch((error: Error) => props.host.failed(error.message));
-  const clear = (range: SheetRange) => write(within(range).flat().map((cell) => ({ ...cell, input: "" })));
+  const clear = (range: SheetRange, label = "Clear contents") => writes(label)(within(range).flat().map((cell) => ({ ...cell, input: "" })));
   const paste = (range: SheetRange) => void navigator.clipboard.readText().then((text) => { const lines = text.replace(/\r?\n$/, "").split(/\r?\n/), rows = shownFrom(range.top, lines.length);
-    write(lines.flatMap((line, r) => line.split("\t").map((input, c) => ({ row: rows[r]!, col: range.left + c, input })))); }, (error: Error) => props.host.failed(error.message));
+    writes("Paste")(lines.flatMap((line, r) => line.split("\t").map((input, c) => ({ row: rows[r]!, col: range.left + c, input })))); }, (error: Error) => props.host.failed(error.message));
   // Each run of shown rows on its own, the last first, so the runs above keep their places.
-  const deleteRows = (range: SheetRange) => { const rows = shownRows(range); for (let end = rows.length - 1; end >= 0;) { let start = end; while (start > 0 && rows[start - 1] === rows[start]! - 1) start--; structure("delete-rows", rows[start]!, end - start + 1); end = start - 1; } };
+  const deleteRows = (range: SheetRange) => history.act(`Delete ${range.bottom > range.top ? "rows" : "row"}`, () => { const rows = shownRows(range); for (let end = rows.length - 1; end >= 0;) { let start = end; while (start > 0 && rows[start - 1] === rows[start]! - 1) start--; structure("delete-rows", rows[start]!, end - start + 1); end = start - 1; } });
   // Fill down and Fill right: the selection's first shown row (or its first column) into the rest of it, from the shown row above (or the column left) where it is
   // one deep, as a spreadsheet's; the hub moves the formulas. Each run of shown rows is a fill of its own, its formulas first moved to where the run starts.
-  const spread = (picked: SheetRange, way: "down" | "right") => {
+  const spread = (picked: SheetRange, way: "down" | "right") => history.act(`Fill ${way}`, () => {
     const sheet = model();
     if (!sheet) return;
     // Whole columns or rows reach the grid's spare room past the data; filling it would grow the tab on every press.
@@ -298,7 +319,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     const cols = Array.from({ length: range.right - range.left + 1 }, (_, c) => range.left + c);
     for (const run of runsOf([...new Set([source, ...shown])])) if (run.length > 1 || run[0] !== source)
       hub({ op: "fill", range: rangeA1({ top: run[0]!, bottom: run.at(-1)!, left: range.left, right: range.right }), values: [cols.map((col) => lowered(sheet.input(source, col), run[0]! - source))] });
-  };
+  });
   const hiddenIn = (range: SheetRange) => shownRows(range).length < range.bottom - range.top + 1;
   // A header's menu is its whole columns, a row number's its whole rows (formats.ts clips both to the tab).
   const formatted = () => { const { rows, cols } = menu(), most = Number.MAX_SAFE_INTEGER; return rows || cols ? { top: rows?.top ?? 0, bottom: rows?.bottom ?? most, left: cols?.left ?? 0, right: cols?.right ?? most } : null; };
@@ -317,11 +338,13 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   return <section ref={(element) => { root = element; art(element); }} class="ui-spreadsheet" aria-label={props.name} data-margin={props.marginEmpty ? "none" : "beside"}
     onKeyDown={(event) => {
       if (!(event.ctrlKey || event.metaKey) || !island()?.contains(event.target as Node)) return;
-      if (find.keys(event) || tabs.key(event) || formats.key(event, at()) || styles.key(event, at()) || filters.key(event)) return;
+      // A style's chord is its tool's step: Ctrl+B is Bold.
+      const tool = tools.find((one) => one.keys?.length === 2 && one.keys[1]!.toLowerCase() === event.key.toLowerCase())?.label ?? "";
+      if (find.keys(event) || tabs.key(event) || history.act(tool, () => formats.key(event, at()) || styles.key(event, at())) || filters.key(event)) return;
       // Ctrl+D and Ctrl+R are the grid's only while it has the keyboard: elsewhere the browser keeps them.
       if (!event.shiftKey && !event.altKey && (event.code === "KeyD" || event.code === "KeyR")) { event.preventDefault(); const area = at(); if (area) spread(area, event.code === "KeyD" ? "down" : "right"); return; }
       if (event.altKey && event.code === ASK_KEY) { event.preventDefault(); return props.onAsk?.(); }
-      // The grid has no history of its own: what this page wrote is undone here, never what others wrote.
+      // The grid has no history of its own: what this page did is undone here, never what others did.
       const redo = event.key === "y" || (event.key === "z" && event.shiftKey);
       if (event.key !== "z" && !redo) return;
       event.preventDefault();
@@ -344,19 +367,29 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
           <ContextMenuTrigger as="div" ref={setIsland} class="ui-spreadsheet-grid" />
           <ContextMenuContent onCloseAutoFocus={(event) => { const open = opening; opening = undefined; if (open) { event.preventDefault(); open(); } }}>
             <Show when={picked()}>{(range) => <MenuSection>
-              <MenuRow icon={<Icons.Cut />} keys={["Ctrl", "X"]} onSelect={() => void copy(range()).then(() => clear(range()))}>Cut</MenuRow>
+              <MenuRow icon={<Icons.Cut />} keys={["Ctrl", "X"]} onSelect={() => void copy(range()).then(() => clear(range(), "Cut"))}>Cut</MenuRow>
               <MenuRow icon={<Icons.Copy />} keys={["Ctrl", "C"]} onSelect={() => void copy(range())}>Copy</MenuRow>
               <MenuRow icon={<Icons.Paste />} keys={["Ctrl", "V"]} onSelect={() => paste(range())}>Paste</MenuRow>
               <MenuRow icon={<Icons.Delete />} keys={["Delete"]} onSelect={() => clear(range())}>Clear contents</MenuRow>
               <Show when={props.onAsk}><MenuRow icon={<Icons.Chat />} onSelect={() => { grid()?.select(range()); props.onAsk?.(); }}>Comment</MenuRow></Show>
             </MenuSection>}</Show>
+            <Show when={picked()}>{(range) => <Show when={range().bottom > range().top || range().right > range().left}><MenuSection>
+              <Show when={!merges.is(range())}>
+                <MenuRow icon={<MergeIcons.merge />} keys={["Alt", "H", "M", "C"]} onSelect={() => merge("center", range())}>Merge &amp; Center</MenuRow>
+                <Show when={range().right > range().left && range().bottom > range().top}><MenuRow icon={<MergeIcons.merge />} keys={["Alt", "H", "M", "A"]} onSelect={() => merge("across", range())}>Merge across</MenuRow></Show>
+                <MenuRow icon={<MergeIcons.merge />} keys={["Alt", "H", "M", "M"]} onSelect={() => merge("cells", range())}>Merge cells</MenuRow>
+              </Show>
+              <Show when={merges.list().some((one) => one.top <= range().bottom && one.bottom >= range().top && one.left <= range().right && one.right >= range().left)}>
+                <MenuRow icon={<MergeIcons.unmerge />} keys={["Alt", "H", "M", "U"]} onSelect={() => merge(null, range())}>Unmerge cells</MenuRow>
+              </Show>
+            </MenuSection></Show>}</Show>
             <Show when={rows()}>{(range) => <MenuSection>
               <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-rows", range().top, count(range().top, range().bottom))}>Insert {count(range().top, range().bottom) > 1 ? `${count(range().top, range().bottom)} rows` : "row"} above</MenuRow>
               <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-rows", range().bottom + 1, count(range().top, range().bottom))}>Insert {count(range().top, range().bottom) > 1 ? `${count(range().top, range().bottom)} rows` : "row"} below</MenuRow>
               <MenuRow icon={<Icons.Hide />} onSelect={() => sizes.setHidden(Array.from({ length: count(range().top, range().bottom) }, (_, r) => range().top + r), true)}>Hide {count(range().top, range().bottom) > 1 ? `rows ${range().top + 1}–${range().bottom + 1}` : `row ${range().top + 1}`}</MenuRow>
               <MenuRow icon={<Icons.Pin />} onSelect={() => sizes.setFreeze(range().bottom + 1, sizes.freeze().cols)}>Freeze {range().bottom ? `rows 1–${range().bottom + 1}` : "row 1"}</MenuRow>
               <Show when={sizes.freeze().rows}><MenuRow icon={<Icons.PinOff />} onSelect={() => sizes.setFreeze(0, sizes.freeze().cols)}>Unfreeze rows</MenuRow></Show>
-              <Show when={hiddenIn(range())}><MenuRow icon={<Icons.Preview />} onSelect={() => { const rows = Array.from({ length: count(range().top, range().bottom) }, (_, r) => range().top + r); look.doc!.transact(() => { sizes.setHidden(rows, false); filters.show(rows); }); }}>Unhide rows</MenuRow></Show>
+              <Show when={hiddenIn(range())}><MenuRow icon={<Icons.Preview />} onSelect={() => { const rows = Array.from({ length: count(range().top, range().bottom) }, (_, r) => range().top + r); history.act("Unhide rows", () => { sizes.setHidden(rows, false); filters.show(rows); }); }}>Unhide rows</MenuRow></Show>
               <MenuRow destructive icon={<Icons.Delete />} onSelect={() => deleteRows(range())}>Delete {count(range().top, range().bottom) > 1 ? `rows ${range().top + 1}–${range().bottom + 1}` : `row ${range().top + 1}`}</MenuRow>
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "H"]} onSelect={() => sized("HOH", range())}>Row height…</MenuRow>
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "A"]} onSelect={() => sized("HOA", range())}>Fit row height</MenuRow>
@@ -380,7 +413,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
             <Show when={props.host.openSettings}>{(open) => <MenuSection><MenuRow icon={<Icons.Settings />} onSelect={() => open()()}>View settings…</MenuRow></MenuSection>}</Show>
           </ContextMenuContent>
         </ContextMenu>
-        <div class="ui-spreadsheet-editor" data-open={editor.editing() ? "" : undefined} style={cellBox()}><FormulaField editor={editor} place="cell" label="Cell" class="ui-formula-text" /></div>
+        <div class="ui-spreadsheet-editor" data-open={editor.editing() ? "" : undefined} style={{ ...cellBox(), "--sheet-zoom": zoom() }}><FormulaField editor={editor} place="cell" label="Cell" class="ui-formula-text" /></div>
         <FormulaHelp editor={editor} frame={() => body} />
         <SequenceHint typed={sequences.typed} next={sequences.next} anchor={slot} />
         <SizePrompt question={question()} onClose={() => { setQuestion(null); grid()?.focus(); }} />

@@ -12,6 +12,8 @@ const STALE = 4426;
 /** The hub's live copy of a sheet over the paper's socket and frames (components/document/live.ts, whose handshake names the paper's format and what it holds): a sheet names SHEET_FORMAT and holds nothing more, and has no seats yet. */
 export function createLiveSheet(host: SheetHost, id: string) {
   const doc = new Y.Doc(), hub = Symbol("hub");
+  // What the hub made for one of this page's own changes is applied as that change's (history.ts): its step's origin.
+  let own: (step: number) => unknown = () => hub;
   const [state, setState] = createSignal<SheetState>("connecting"), [synced, setSynced] = createSignal(false);
   let socket: WebSocket | undefined, retry: ReturnType<typeof setTimeout> | undefined, tries = 0, over = false;
   const send = (kind: number, bytes: Uint8Array) => { if (socket?.readyState === WebSocket.OPEN) socket.send(frame(kind, bytes)); };
@@ -31,16 +33,18 @@ export function createLiveSheet(host: SheetHost, id: string) {
     next.onmessage = (event) => {
       const bytes = new Uint8Array(event.data as ArrayBuffer);
       if (bytes[0] === FRAME.have) return send(FRAME.update, Y.encodeStateAsUpdate(doc, bytes.subarray(1)));
-      if (bytes[0] !== FRAME.update) return;
-      Y.applyUpdate(doc, bytes.subarray(1), hub);
+      if (bytes[0] === FRAME.own) Y.applyUpdate(doc, bytes.subarray(5), own(new DataView(bytes.buffer, 1, 4).getUint32(0, true)));
+      else if (bytes[0] === FRAME.update) Y.applyUpdate(doc, bytes.subarray(1), hub);
+      else return;
       tries = 0;
       setState("live");
       setSynced(true);
     };
     next.onclose = (event) => { if (event.code !== STALE) return again(); over = true; setState("stale"); };
   };
-  doc.on("update", (update: Uint8Array, origin: unknown) => { if (origin !== hub) send(FRAME.update, update); });
+  // Only what was made here goes to the hub: a step's origin is the hub's update too.
+  doc.on("update", (update: Uint8Array, _: unknown, __: Y.Doc, transaction: Y.Transaction) => { if (transaction.local) send(FRAME.update, update); });
   void connect();
   onCleanup(() => { over = true; clearTimeout(retry); socket?.close(); doc.destroy(); });
-  return { doc, state, synced };
+  return { doc, state, synced, own: (origin: (step: number) => unknown) => { own = origin; } };
 }
