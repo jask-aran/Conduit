@@ -114,14 +114,14 @@ export function sheetStyles(sheetXml, size, shows) {
     const s = at.get(end);
     let start = end;
     while (at.get(start - 1) === s) start--;
-    if (start > size.cols) continue;
+    if (start > size.cols || (rows.has(r) && rows.get(r) !== s)) continue;
     for (let c = start; c <= end; c++) at.delete(c);
     if (!rows.has(r)) rows.set(r, s);
   }
   for (const [r, at] of byRow) for (const [c, s] of at) cells.push([r, c, s]);
   // The tab grows through what can be seen touching it, a step at a time; a column style counts unless it runs to the sheet's edge.
   const wide = new Set();
-  for (const tag of sheetXml.match(/<col\b[^>]*>/g) ?? []) if (Number(attr(tag, "max")) >= 16384) for (let c = Number(attr(tag, "min")) - 1; c < 16384; c++) wide.add(c);
+  for (const tag of sheetXml.match(/<col\b[^>]*>/g) ?? []) if (Number(attr(tag, "max")) >= 1024) for (let c = Number(attr(tag, "min")) - 1; c < 16384; c++) wide.add(c);
   const seenCells = cells.filter(([, , s]) => shows[s]).sort((x, y) => x[0] - y[0] || x[1] - y[1]);
   reach.rows = size.rows; reach.cols = size.cols;
   for (let was = -1; was !== reach.rows * 16384 + reach.cols;) {

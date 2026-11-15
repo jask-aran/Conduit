@@ -33,6 +33,8 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
     clearTimeout(late);
     if (out) return;
     if (owedFrames > 0) { late = setTimeout(() => { owedFrames = 0; settle(); }, WAIT_MS); return; }
+    // Nothing out: a count left below none (updates after a reply's error, or after giving up) is not carried into the next op.
+    owedFrames = 0;
     for (const run of owed.splice(0)) run();
   };
   const changed = () => listeners.forEach((listener) => listener());
@@ -80,7 +82,8 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
       }).finally(done);
     },
     // A tagged update applied (live.ts): one fewer owed, counted below none when it comes before its op's reply.
-    origin: (id: number) => { if (--owedFrames === 0) settle(); return steps.get(id) ?? new SheetStep(id, ""); },
+    // Asked for as the update is about to be applied (live.ts): settled after it, so a queued Undo sees it.
+    origin: (id: number) => { if (--owedFrames === 0) queueMicrotask(settle); return steps.get(id) ?? new SheetStep(id, ""); },
     // A tab gone takes its steps' cells with it: a step on it could not be undone.
     clear: () => { um.clear(); changed(); },
     undo: (count?: number) => walk(true, count),
