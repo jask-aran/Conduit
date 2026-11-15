@@ -1,5 +1,5 @@
 import * as Icons from "./icons";
-import { For, Show, splitProps, type JSX } from "solid-js";
+import { children, For, Show, splitProps, type JSX } from "solid-js";
 
 import { Button, Spinner } from "./controls";
 import { Expand } from "./expand";
@@ -8,12 +8,14 @@ import { Failure, foldBody, registerFoldFind } from "./transcript";
 
 /** live: the latest line's room is held while the turn runs, so the first step to arrive moves nothing below. */
 export function TraceHeader(props: { orb?: JSX.Element; status: string; time?: string; work?: string; latest?: JSX.Element; live?: boolean; tone?: "failed"; quiet?: boolean; opens?: boolean; open?: boolean; goes?: boolean; onToggle?: () => void }) {
-  return <button type="button" class="ui-trace" data-tone={props.tone} data-quiet={props.quiet ? "" : undefined} data-orb={props.orb ? "" : undefined} data-held-line={props.orb && props.live && !props.latest ? "" : undefined} aria-expanded={props.opens ? Boolean(props.open) : undefined} disabled={!props.opens && !props.goes} onClick={() => props.onToggle?.()}>
-    <span class="ui-trace-orb">{props.orb}</span>
+  // Resolved once: each read of a JSX prop builds it anew, and an orb built only to be tested draws unseen for good.
+  const orb = children(() => props.orb), latest = children(() => props.latest);
+  return <button type="button" class="ui-trace" data-tone={props.tone} data-quiet={props.quiet ? "" : undefined} data-orb={orb() ? "" : undefined} data-held-line={orb() && props.live && !latest() ? "" : undefined} aria-expanded={props.opens ? Boolean(props.open) : undefined} disabled={!props.opens && !props.goes} onClick={() => props.onToggle?.()}>
+    <span class="ui-trace-orb">{orb()}</span>
     <span class="ui-trace-line ui-truncate"><b>{props.status}</b><Show when={props.time}><span class="ui-trace-time">{"\u00a0· "}{props.time}</span></Show><Show when={props.work}><span>{"\u00a0· "}{props.work}</span></Show></span>
     <Show when={props.opens}><Icons.ChevronDown class="ui-disclosure-chevron ui-fold-chevron ui-size-icon-sm" data-turn="half" /></Show>
     <Show when={props.goes && !props.opens}><Icons.ChevronRight class="ui-disclosure-chevron ui-size-icon-sm" /></Show>
-    <Show when={props.latest || props.live}><span class="ui-trace-latest ui-truncate">{props.latest || "\u00a0"}</span></Show>
+    <Show when={latest() || props.live}><span class="ui-trace-latest ui-truncate">{latest() || "\u00a0"}</span></Show>
   </button>;
 }
 export function Trace(props: Parameters<typeof TraceHeader>[0] & { motion?: Motion; since?: number; pinned?: JSX.Element; find?: () => string; children?: JSX.Element }) {
