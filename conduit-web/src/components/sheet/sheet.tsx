@@ -182,7 +182,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     const range = cols ? { top: 0, bottom: 0, left: Math.min(colIndex(cols[1]!), colIndex(cols[2]!)), right: Math.max(colIndex(cols[1]!), colIndex(cols[2]!)) }
       : rows ? { left: 0, right: 0, top: Math.max(0, Math.min(+rows[1]!, +rows[2]!) - 1), bottom: Math.max(+rows[1]!, +rows[2]!) - 1 } : parseRange(local);
     setAddress(null);
-    if (range) { grid()?.select(range, true); if (cols || rows) grid()?.whole(cols ? "cols" : "rows"); }
+    if (range) { grid()?.select(range); if (cols || rows) grid()?.whole(cols ? "cols" : "rows"); }
     // After the grid has drawn the selection: focused with none, it selects its first cell.
     requestAnimationFrame(() => grid()?.focus());
   };
@@ -239,7 +239,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     },
     where: (name) => { const anchor = anchors.find((one) => one.key === name), range = anchor && rangeOf(anchor); return range ? grid()?.bounds(range) ?? null : null; },
     watch: (listener) => { watchers.add(listener); return () => watchers.delete(listener); },
-    reveal: (address) => { const range = parseRange(tabs.reveal(address)); if (range) grid()?.select(range, true); },
+    reveal: (address) => { const range = parseRange(tabs.reveal(address)); if (range) grid()?.select(range); },
     focus: () => grid()?.focus(),
     history: { undo: () => Boolean(history.undo()), redo: () => Boolean(history.redo()), canUndo: () => history.canUndo(), canRedo: () => history.canRedo() },
   };
@@ -297,12 +297,14 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
               <MenuRow icon={<Icons.Copy />} keys={["Ctrl", "C"]} onSelect={() => void copy(range())}>Copy</MenuRow>
               <MenuRow icon={<Icons.Paste />} keys={["Ctrl", "V"]} onSelect={() => paste(range())}>Paste</MenuRow>
               <MenuRow icon={<Icons.Delete />} keys={["Delete"]} onSelect={() => clear(range())}>Clear contents</MenuRow>
-              <Show when={props.onAsk}><MenuRow icon={<Icons.Chat />} onSelect={() => { grid()?.select(range(), false); props.onAsk?.(); }}>Comment</MenuRow></Show>
+              <Show when={props.onAsk}><MenuRow icon={<Icons.Chat />} onSelect={() => { grid()?.select(range()); props.onAsk?.(); }}>Comment</MenuRow></Show>
             </MenuSection>}</Show>
             <Show when={rows()}>{(range) => <MenuSection>
               <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-rows", range().top, count(range().top, range().bottom))}>Insert {count(range().top, range().bottom) > 1 ? `${count(range().top, range().bottom)} rows` : "row"} above</MenuRow>
               <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-rows", range().bottom + 1, count(range().top, range().bottom))}>Insert {count(range().top, range().bottom) > 1 ? `${count(range().top, range().bottom)} rows` : "row"} below</MenuRow>
               <MenuRow icon={<Icons.Hide />} onSelect={() => sizes.setHidden(Array.from({ length: count(range().top, range().bottom) }, (_, r) => range().top + r), true)}>Hide {count(range().top, range().bottom) > 1 ? `rows ${range().top + 1}–${range().bottom + 1}` : `row ${range().top + 1}`}</MenuRow>
+              <MenuRow icon={<Icons.Pin />} onSelect={() => sizes.setFreeze(range().bottom + 1, sizes.freeze().cols)}>Freeze {range().bottom ? `rows 1–${range().bottom + 1}` : "row 1"}</MenuRow>
+              <Show when={sizes.freeze().rows}><MenuRow icon={<Icons.PinOff />} onSelect={() => sizes.setFreeze(0, sizes.freeze().cols)}>Unfreeze rows</MenuRow></Show>
               <Show when={hiddenIn(range())}><MenuRow icon={<Icons.Preview />} onSelect={() => sizes.setHidden(Array.from({ length: count(range().top, range().bottom) }, (_, r) => range().top + r), false)}>Unhide rows</MenuRow></Show>
               <MenuRow destructive icon={<Icons.Delete />} onSelect={() => deleteRows(range())}>Delete {count(range().top, range().bottom) > 1 ? `rows ${range().top + 1}–${range().bottom + 1}` : `row ${range().top + 1}`}</MenuRow>
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "H"]} onSelect={() => sized("HOH", range())}>Row height…</MenuRow>

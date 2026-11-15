@@ -103,7 +103,8 @@ export type SheetMarks = {
 export interface SheetGrid {
   /** Cells whose value changed, or null for everything (a structural change: sizes, widths, types). */
   update(changed: readonly { row: number; col: number }[] | null): void;
-  select(range: SheetRange | null, scroll?: boolean): void;
+  /** The grid scrolls what it is given into view. */
+  select(range: SheetRange | null): void;
   highlight(list: readonly { range: SheetRange; current: boolean }[]): void;
   /** The formula being edited's references, drawn over the comments' highlights. */
   references(list: readonly SheetReference[]): void;

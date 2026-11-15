@@ -6,6 +6,7 @@
 import { AllCellRenderers, CompactSelection, DataEditorCore, GridCellKind, ImageWindowLoaderImpl, markerCellRenderer, sprites, type DataEditorProps, type DataEditorRef, type GridCell, type GridSelection, type Item, type Rectangle, type Theme } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
 import { createElement, useEffect, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { colName, type SheetView, COL_LIMIT } from "@/sheet-format.js";
 import { createCellLook } from "./cell-draw";
@@ -38,13 +39,14 @@ const edges = (picked: CompactSelection): [number, number] | null => { const all
 /** The cells a selection covers: a range, or whole rows or columns. */
 /** The empty rows and columns drawn past the sheet's own, and the fewest ever drawn. */
 const ROOM = { rows: 50, cols: 10, least: { rows: 100, cols: 26 } };
+// Whole columns or rows are what is selected, though a cell in them is the active one.
 const selected = (selection: GridSelection, size: { rows: number; cols: number }): SheetRange | null => {
-  if (selection.current) return range(selection.current.range);
   const cols = edges(selection.columns), rows = edges(selection.rows);
   if (cols) return { top: 0, bottom: size.rows - 1, left: cols[0], right: cols[1] };
   if (rows) return { top: rows[0], bottom: rows[1], left: 0, right: size.cols - 1 };
-  return null;
+  return selection.current ? range(selection.current.range) : null;
 };
+const one = (col: number, row: number): NonNullable<GridSelection["current"]> => ({ cell: [col, row], range: { x: col, y: row, width: 1, height: 1 }, rangeStack: [] });
 
 /**
  * The rows the grid draws and the sheet's rows they are: a hidden row is not drawn, so the grid's row n is the sheet's nth shown row, and past
@@ -80,6 +82,11 @@ function createRowMap() {
   return map;
 }
 
+type RowMap = ReturnType<typeof createRowMap>;
+/** One of the grid's two views: the head (the column letters and the rows frozen above the rest, there only while some are) and the body. */
+type Part = { editor: DataEditorRef | null; view: Rectangle; map: RowMap; current: GridSelection; host?: HTMLDivElement; select?(selection: GridSelection): void };
+type Mark = { color: string; range: SheetRange; style: "solid-outline" | "no-outline" | "dashed" | "solid" };
+
 /** Mounts the grid in `element` and gives the editor its controls; the grid's whole state is here, kept as React's. */
 export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid {
   const { model, events } = options;
@@ -92,34 +99,95 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   }
   // Typing into a cell opens the grid's own editor, which is drawn into an element of this id.
   if (!document.getElementById("portal")) document.body.append(Object.assign(document.createElement("div"), { id: "portal" }));
-  let editor: DataEditorRef | null = null, view: Rectangle = { x: 0, y: 0, width: 0, height: 0 };
+  const part = (): Part => ({ editor: null, view: { x: 0, y: 0, width: 0, height: 0 }, map: createRowMap(), current: NO_SELECTION });
+  const head = part(), body = part(), parts = [head, body] as const;
   // Set as the component mounts: the editor drives the island through these.
-  const drive: { select?(selection: GridSelection): void; width?(col: number, width: number): void; height?(row: number, height: number): void; marks?(list: DataEditorProps["highlightRegions"]): void; look?(look: SheetLook): void; structure?(): void } = {};
-  let look = options.look, comments: Highlight[] = [], references: Highlight[] = [];
-  const marks = () => drive.marks?.(comments.length || references.length ? [...references, ...comments] : undefined);
+  const drive: { width?(col: number, width: number): void; height?(row: number, height: number): void; marks?(): void; look?(look: SheetLook): void; structure?(): void; owner?(part: Part): void } = {};
+  let look = options.look, comments: Mark[] = [], references: Mark[] = [], owner = body;
 
   // The grid runs on past what the sheet holds, as a spreadsheet's does: a cell written out there makes the sheet reach it (the hub's `set`).
-  const rowMap = createRowMap();
-  const reach = () => { const held = model.size(); rowMap.set(options.columns.hidden(), held.rows); return { rows: Math.max(held.rows - rowMap.hiddenCount() + ROOM.rows, ROOM.least.rows), cols: Math.min(COL_LIMIT, Math.max(held.cols + ROOM.cols, ROOM.least.cols)) }; };
-  let size = reach(), current = NO_SELECTION, frozenCols = 0;
+  // The rows frozen are the head's; the body hides them, as it does the rows hidden.
+  let frozenRows = 0, frozenCols = 0;
+  const reach = () => {
+    const held = model.size(), hidden = options.columns.hidden();
+    frozenRows = Math.min(options.columns.freeze().rows, held.rows);
+    head.map.set(hidden, frozenRows);
+    body.map.set(frozenRows ? new Set([...hidden, ...Array.from({ length: frozenRows }, (_, row) => row)]) : hidden, held.rows);
+    return { rows: Math.max(held.rows - body.map.hiddenCount() + ROOM.rows, ROOM.least.rows), head: frozenRows - head.map.hiddenCount(), cols: Math.min(COL_LIMIT, Math.max(held.cols + ROOM.cols, ROOM.least.cols)) };
+  };
+  let size = reach();
+  const partOf = (row: number) => row < frozenRows ? head : body;
+  /** The part of a range of the sheet's rows a part holds, as it draws them; null where it holds none of it. */
+  const clip = (p: Part, area: SheetRange) => {
+    const within = p === head ? (area.top < frozenRows ? { ...area, bottom: Math.min(area.bottom, frozenRows - 1) } : null) : (area.bottom >= frozenRows ? { ...area, top: Math.max(area.top, frozenRows) } : null);
+    return within && p.map.toDrawn(within);
+  };
+  const marksOf = (p: Part): Highlight[] | undefined => {
+    const list = [...references, ...comments].flatMap((one) => { const drawn = clip(p, one.range); return drawn ? [{ color: one.color, range: rect({ ...drawn, right: Math.min(drawn.right, size.cols - 1) }), style: one.style }] : []; });
+    return list.length ? list : undefined;
+  };
+  /**
+   * The sheet's cells the selection covers, over both parts. A range the sheet gave (the address field, a menu) is kept as it was given while the
+   * parts still show it, so a hidden row at its edge stays in it.
+   */
+  let asked: { to: SheetRange; head: GridSelection; body: GridSelection } | null = null;
+  const picked = (): SheetRange | null => {
+    if (asked && asked.head === head.current && asked.body === body.current) return asked.to;
+    const columns = edges(owner.current.columns);
+    if (columns) return { top: 0, bottom: body.map.sheet(size.rows - 1), left: columns[0], right: columns[1] };
+    const areas = parts.flatMap((p) => { const area = p.map.toSheet(selected(p.current, size)); return area && (p === owner || frozenRows) ? [area] : []; });
+    return areas.length ? areas.reduce((one, two) => ({ top: Math.min(one.top, two.top), bottom: Math.max(one.bottom, two.bottom), left: Math.min(one.left, two.left), right: Math.max(one.right, two.right) })) : null;
+  };
+  /** Each part's share of a range of the sheet's, the cursor's part chosen first so the other keeps its share. */
+  const spread = (to: SheetRange, into: Part, share: (p: Part, drawn: SheetRange) => GridSelection) => {
+    for (const p of [into, into === head ? body : head]) {
+      const drawn = clip(p, to), next = drawn ? share(p, drawn) : NO_SELECTION;
+      if (p === into) choose(p, next); else if (frozenRows) { p.current = next; p.select?.(next); }
+    }
+    asked = { to, head: head.current, body: body.current };
+  };
+  /** A part's selection, given: a column picked is picked in both parts; anything else is the one part's. */
+  /**
+   * As a spreadsheet's, a selection always has an active cell: whole columns or rows picked keep the one there was where it is in them, else take
+   * the first of them in view, so the arrows go on from it and Escape comes back to it.
+   */
+  const active = (p: Part, given: GridSelection): GridSelection => {
+    // Rows picked while columns were (or the other way) come with both: the ones just picked are the selection.
+    const next = given.columns.length && given.rows.length ? (p.current.columns.equals(given.columns) ? { ...given, columns: CompactSelection.empty() } : { ...given, rows: CompactSelection.empty() }) : given;
+    if (next.current || !(next.columns.length || next.rows.length)) return next;
+    const was = p.current.current?.cell ?? owner.current.current?.cell, cols = edges(next.columns), rows = edges(next.rows), { view } = p;
+    if (cols) { const col = was && was[0] >= cols[0] && was[0] <= cols[1] ? was[0] : cols[0]; return { ...next, current: one(col, p === owner && was ? was[1] : p === head ? 0 : view.y) }; }
+    const [top, bottom] = rows!, row = was && p === owner && was[1] >= top && was[1] <= bottom ? was[1] : top;
+    return { ...next, current: one(was ? was[0] : frozenCols ? 0 : view.x, row) };
+  };
+  // Moved into the other part, it is drawn at once: a part focused before its selection is drawn selects its first cell.
+  const choose = (p: Part, given: GridSelection) => {
+    const next = active(p, given), other = p === head ? body : head, theirs = next.columns.length ? { columns: next.columns, rows: CompactSelection.empty() } : NO_SELECTION;
+    const apply = () => {
+      p.current = next; p.select?.(next);
+      if (frozenRows && (other.current !== NO_SELECTION || theirs !== NO_SELECTION)) { other.current = theirs; other.select?.(theirs); }
+      if (owner !== p) { owner = p; drive.owner?.(p); }
+    };
+    if (owner !== p) flushSync(apply); else apply();
+  };
   const write = (list: { row: number; col: number; input: string }[]) => { if (list.length) events.write(list); };
-  // Made once: a new function or object for the grid on each render has it work everything out again, the cost of each arrow-key move.
-  const handlers: Partial<DataEditorProps> = {
-    onGridSelectionChange: (next) => { drive.select?.(next); events.selected(picked(next)); },
+  // Made once a part: a new function or object for the grid on each render has it work everything out again, the cost of each arrow-key move.
+  const handlersOf = (p: Part): Partial<DataEditorProps> => ({
+    onGridSelectionChange: (next) => { choose(p, next); events.selected(picked()); },
     onCellsEdited: (cells) => {
-      write(cells.map(({ location: [col, row], value }) => ({ row: rowMap.sheet(row), col, input: value.kind === GridCellKind.Boolean ? (value.data ? "TRUE" : "FALSE") : value.kind === GridCellKind.Text ? value.data : "" })));
+      write(cells.map(({ location: [col, row], value }) => ({ row: p.map.sheet(row), col, input: value.kind === GridCellKind.Boolean ? (value.data ? "TRUE" : "FALSE") : value.kind === GridCellKind.Text ? value.data : "" })));
       return true;
     },
     onPaste: (target, values) => {
       // Into the rows shown, a hidden one keeping what it holds.
-      const [col, row] = target, bottom = rowMap.sheet(row + values.length - 1), right = col + Math.max(...values.map((line) => line.length)) - 1;
-      if (bottom >= model.size().rows || right >= model.size().cols) events.fill({ top: rowMap.sheet(row), left: col, bottom, right }, values.map((line) => [...line]));
-      else write(values.flatMap((line, y) => line.map((input, x) => ({ row: rowMap.sheet(row + y), col: col + x, input }))));
+      const [col, row] = target, bottom = p.map.sheet(row + values.length - 1), right = col + Math.max(...values.map((line) => line.length)) - 1;
+      if (bottom >= model.size().rows || right >= model.size().cols) events.fill({ top: p.map.sheet(row), left: col, bottom, right }, values.map((line) => [...line]));
+      else write(values.flatMap((line, y) => line.map((input, x) => ({ row: p.map.sheet(row + y), col: col + x, input }))));
       return false;
     },
     onDelete: (cleared) => {
       const area = selected(cleared, size), list: { row: number; col: number; input: string }[] = [];
-      if (area) for (let drawn = area.top; drawn <= area.bottom; drawn++) { const row = rowMap.sheet(drawn); for (let col = area.left; col <= area.right; col++) if (model.input(row, col)) list.push({ row, col, input: "" }); }
+      if (area) for (let drawn = area.top; drawn <= area.bottom; drawn++) { const row = p.map.sheet(drawn); for (let col = area.left; col <= area.right; col++) if (model.input(row, col)) list.push({ row, col, input: "" }); }
       write(list);
       return false;
     },
@@ -127,59 +195,85 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     onFillPattern: ({ patternSource, fillDestination, preventDefault }) => {
       preventDefault();
       // From the rows shown into the rows shown: each run of them between hidden rows is filled on its own.
-      const source = range(patternSource), into = range(fillDestination), values = Array.from({ length: patternSource.height }, (_, y) => Array.from({ length: patternSource.width }, (_, x) => model.input(rowMap.sheet(source.top + y), source.left + x)));
-      for (let from = into.top, drawn = into.top; drawn <= into.bottom; drawn++) if (drawn === into.bottom || rowMap.sheet(drawn + 1) !== rowMap.sheet(drawn) + 1) { events.fill({ ...into, top: rowMap.sheet(from), bottom: rowMap.sheet(drawn) }, values); from = drawn + 1; }
+      const source = range(patternSource), into = range(fillDestination), values = Array.from({ length: patternSource.height }, (_, y) => Array.from({ length: patternSource.width }, (_, x) => model.input(p.map.sheet(source.top + y), source.left + x)));
+      for (let from = into.top, drawn = into.top; drawn <= into.bottom; drawn++) if (drawn === into.bottom || p.map.sheet(drawn + 1) !== p.map.sheet(drawn) + 1) { events.fill({ ...into, top: p.map.sheet(from), bottom: p.map.sheet(drawn) }, values); from = drawn + 1; }
     },
     onColumnResize: (_, width, col) => drive.width?.(col, width),
     onColumnResizeEnd: (_, width, col) => events.resized(col, width),
-    onHeaderContextMenu: (col) => { const area = picked(current); events.menu({ cols: current.columns.hasIndex(col) && area ? area : { top: 0, bottom: 0, left: col, right: col } }); },
+    onHeaderContextMenu: (col) => { const area = picked(); events.menu({ cols: owner.current.columns.hasIndex(col) && area ? area : { top: 0, bottom: 0, left: col, right: col } }); },
     onCellContextMenu: ([col, drawn]) => {
-      const row = rowMap.sheet(drawn), area = picked(current), inside = area && row >= area.top && row <= area.bottom && (col < 0 || (col >= area.left && col <= area.right));
+      const row = p.map.sheet(drawn), area = picked(), inside = area && row >= area.top && row <= area.bottom && (col < 0 || (col >= area.left && col <= area.right));
       const rows = inside ? { ...area, left: 0, right: 0 } : { top: row, bottom: row, left: 0, right: 0 }, cols = inside && col >= 0 ? { ...area, top: 0, bottom: 0 } : { top: 0, bottom: 0, left: col, right: col };
       events.menu(col < 0 ? { rows } : { rows, cols });
     },
     // A press on the cell already selected moves nothing, so the grid would not take the keyboard back from the pane, which takes it on any press.
-    onCellClicked: ([col, row]) => { editor?.focus(); events.pressed(rowMap.sheet(row), col); },
-    onCellActivated: ([col, row]) => events.activated(rowMap.sheet(row), col),
-    onKeyDown: (event) => { const cell = current.current?.cell; if (cell && events.key(event, rowMap.sheet(cell[1]), cell[0])) event.cancel(); },
+    onCellClicked: ([col, row]) => { p.editor?.focus(); events.pressed(p.map.sheet(row), col); },
+    onCellActivated: ([col, row]) => events.activated(p.map.sheet(row), col),
+    onKeyDown: (event) => {
+      const cell = p.current.current?.cell;
+      if (!cell) return;
+      if (events.key(event, p.map.sheet(cell[1]), cell[0])) return event.cancel();
+      // An arrow from whole columns or rows goes on from their active cell, to one cell.
+      const step = ({ ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] } as Record<string, [number, number]>)[event.key];
+      if (step && !(event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) && (p.current.columns.length || p.current.rows.length)) {
+        const col = Math.min(Math.max(cell[0] + step[0], 0), size.cols - 1), drawn = cell[1] + step[1];
+        if (drawn >= 0 && drawn < (p === head ? size.head : size.rows)) { event.cancel(); const row = p.map.sheet(drawn); api.select({ top: row, bottom: row, left: col, right: col }); return; }
+      }
+      // Escape brings a selection of more than one cell back to its active cell; one cell, it is left to the pane.
+      const area = picked();
+      if (event.key === "Escape" && area && (area.top !== area.bottom || area.left !== area.right)) { event.cancel(); const row = p.map.sheet(cell[1]); api.select({ top: row, bottom: row, left: cell[0], right: cell[0] }); return; }
+      // An arrow across the frozen rows' edge goes on into the other part.
+      if (!frozenRows || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+      const into = event.key === "ArrowUp" && p === body && cell[1] === 0 && size.head ? head : event.key === "ArrowDown" && p === head && cell[1] === size.head - 1 ? body : null;
+      if (!into) return;
+      event.cancel();
+      const row = into === head ? head.map.sheet(size.head - 1) : body.map.sheet(0);
+      api.select({ top: row, bottom: row, left: cell[0], right: cell[0] });
+      into.editor?.focus();
+    },
     editOnType: false, cellActivationBehavior: "double-click",
-    onVisibleRegionChanged: (region) => { view = region; events.moved(); },
+    onVisibleRegionChanged: (region) => { p.view = region; events.moved(); },
     // Its own Ctrl+Space and Shift+Space take only the current cell's column or row; the sheet's take the whole selection's (`whole`).
-    rowMarkers: "clickable-number", smoothScrollX: true, smoothScrollY: true, width: "100%", height: "100%", fillHandle: true, getCellsForSelection: true, keybindings: { search: false, selectColumn: false, selectRow: false },
+    rowMarkers: "clickable-number", smoothScrollX: true, smoothScrollY: true, width: "100%", height: "100%", fillHandle: true, getCellsForSelection: true, keybindings: { search: false, selectColumn: false, selectRow: false, clear: false },
     // The grid's own description of every cell for a screen reader is rebuilt on each move and scroll. Drawn off screen and copied whole, an
     // arrow-key move that scrolls costs a third less and a wheel step half (measured: p95 8.6 to 5.7 ms, 6.4 to 2.5 ms).
     experimental: { disableAccessibilityTree: true, renderStrategy: "double-buffer" },
-  };
-  const made = (instance: DataEditorRef | null) => { editor = instance; };
-  // Each row's number is the sheet's, and a line under it says rows after it are hidden. The grid's core is used for this, as its usual wrapper
-  // sets its own renderers; what else the wrapper gives (its icons, an image loader) is given here once.
+  });
+  // Each row's number is the sheet's, and a line under it says rows after it are hidden. The grid's core is used, as its usual wrapper sets
+  // its own renderers; what else the wrapper gives (its icons, an image loader) is given here once.
   const core = { headerIcons: sprites, imageWindowLoader: new ImageWindowLoaderImpl() };
-  const renderers = AllCellRenderers.map((one) => one !== markerCellRenderer ? one : { ...one, draw: (args: Parameters<typeof one.draw>[0], cell: Parameters<typeof one.draw>[1]) => {
-    if (!("markerKind" in cell)) return;
-    const drawn = cell.row - 1, row = rowMap.sheet(drawn), { ctx, rect: box, theme: drawnTheme } = args;
-    markerCellRenderer.draw({ ...args, cell: { ...cell, row: row + 1 } }, { ...cell, row: row + 1 });
-    if (rowMap.sheet(drawn + 1) > row + 1) { ctx.fillStyle = drawnTheme.textMedium; ctx.fillRect(box.x, box.y + box.height - HIDDEN_LINE, box.width, HIDDEN_LINE); }
-  } });
+  function renderersOf(p: Part) {
+    return AllCellRenderers.map((one) => one !== markerCellRenderer ? one : { ...one, draw: (args: Parameters<typeof one.draw>[0], cell: Parameters<typeof one.draw>[1]) => {
+      if (!("markerKind" in cell)) return;
+      const drawn = cell.row - 1, row = p.map.sheet(drawn), { ctx, rect: box, theme: drawnTheme } = args;
+      markerCellRenderer.draw({ ...args, cell: { ...cell, row: row + 1 } }, { ...cell, row: row + 1 });
+      if (p.map.sheet(drawn + 1) > row + 1 && (p === body || drawn + 1 < size.head)) { ctx.fillStyle = drawnTheme.textMedium; ctx.fillRect(box.x, box.y + box.height - HIDDEN_LINE, box.width, HIDDEN_LINE); }
+    } });
+  }
+  const handlers = { head: handlersOf(head), body: handlersOf(body) }, renderers = { head: renderersOf(head), body: renderersOf(body) };
+  const refs = Object.fromEntries(([["head", head], ["body", body]] as const).map(([name, p]) => [name, { host: (into: HTMLDivElement | null) => { p.host = into ?? undefined; }, editor: (instance: DataEditorRef | null) => { p.editor = instance; } }])) as Record<"head" | "body", { host(into: HTMLDivElement | null): void; editor(instance: DataEditorRef | null): void }>;
 
   function Grid() {
-    const [selection, setSelection] = useState<GridSelection>(NO_SELECTION), [marks, setMarks] = useState<DataEditorProps["highlightRegions"]>(), [shape, setShape] = useState(0), [theme, setTheme] = useState(look);
+    const [headSelection, setHeadSelection] = useState<GridSelection>(NO_SELECTION), [bodySelection, setBodySelection] = useState<GridSelection>(NO_SELECTION);
+    const [marked, setMarked] = useState(0), [shape, setShape] = useState(0), [theme, setTheme] = useState(look), [, setOwner] = useState<Part>(owner);
     const [widths, setWidths] = useState<Record<number, number>>({}), [heights, setHeights] = useState<Record<number, number>>({});
-    current = selection;
+    // Each part's selection is held as it is set (`choose`); React's copy only draws it, and may be a render behind.
     useEffect(() => {
-      drive.select = setSelection; drive.marks = setMarks; drive.look = setTheme; drive.width = (col, width) => setWidths((was) => ({ ...was, [col]: width }));
+      head.select = setHeadSelection; body.select = setBodySelection; drive.marks = () => setMarked((n) => n + 1); drive.look = setTheme; drive.owner = setOwner;
+      drive.width = (col, width) => setWidths((was) => ({ ...was, [col]: width }));
       drive.height = (row, height) => setHeights((was) => ({ ...was, [row]: height }));
       drive.structure = () => { size = reach(); setWidths({}); setHeights({}); setShape((n) => n + 1); };
       // Mounted, the grid has drawn in its layout effects; the frame after is on screen.
       requestAnimationFrame(() => events.drawn());
     }, []);
-    const { rows, cols } = size;
+    const { rows, cols } = size, frozen = frozenRows > 0;
     const columns = useMemo(() => Array.from({ length: cols }, (_, col) => ({ id: model.colAt(col) ?? String(col), title: colName(col), width: widths[col] ?? options.columns.width(col) ?? theme.width })), [shape, cols, widths, theme]);
     const types = useMemo(() => Array.from({ length: cols }, (_, col) => options.columns.type(col)), [shape, cols]);
     const cellLook = useMemo(() => createCellLook(theme), [theme]);
-    const content = useMemo(() => {
+    const contentOf = (p: Part) => {
       const hues = { destructive: theme.error, live: theme.live, warn: theme.warn }, { theme: themed } = cellLook;
       return ([col, at]: Item): GridCell => {
-        const row = rowMap.sheet(at), value = model.value(row, col), type = types[col];
+        const row = p.map.sheet(at), value = model.value(row, col), type = types[col];
         if (type === "boolean") return { kind: GridCellKind.Boolean, data: value === true, allowOverlay: false, copyData: model.input(row, col) };
         // An empty value is an empty cell but for a formula that gives nothing.
         const input = value === null || typeof value === "string" ? model.input(row, col) : null;
@@ -192,118 +286,151 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         return new TextCell(row, col, input, drawn ? drawn.text : shown(value), style?.align ?? (typeof value === "number" || type === "number" ? "right" : undefined), themed(style, fault ? theme.error : drawn?.hue && hues[drawn.hue]), style,
           input !== null && !input.startsWith("=") && options.columns.frozen(row, col) || undefined);
       };
-    }, [types, theme, cellLook]);
-    // One number while every row is the default height: the grid then sums no heights to scroll.
-    const rowHeight = useMemo(() => {
-      const kept = options.columns.heights();
-      return kept.size || Object.keys(heights).length ? (row: number) => heights[row] ?? kept.get(rowMap.sheet(row)) ?? theme.row : theme.row;
-    }, [shape, heights, theme]);
+    };
+    const content = useMemo(() => ({ head: contentOf(head), body: contentOf(body) }), [types, theme, cellLook]);
+    // One number while every row is the default height: the grid then sums no heights to scroll. Heights set while a row's edge is dragged are by the sheet's row.
+    const heightOf = (p: Part) => { const kept = options.columns.heights(); return kept.size || Object.keys(heights).length ? (drawn: number) => { const row = p.map.sheet(drawn); return heights[row] ?? kept.get(row) ?? theme.row; } : theme.row; };
+    const rowHeight = useMemo(() => ({ head: heightOf(head), body: heightOf(body) }), [shape, heights, theme]);
     // The columns frozen stand at the left as the rest scroll; never all of those in view, or nothing could scroll.
     const freezeColumns = useMemo(() => { frozenCols = Math.min(options.columns.freeze().cols, cols - 1); return frozenCols; }, [shape, cols]);
-    const props: DataEditorProps = { ...handlers, columns, rows, freezeColumns, getCellContent: content, drawCell: cellLook.draw,
-      // A whole column's letter, picked, is washed as its cells are; the grid would fill it in the accent its fill handle and ring keep.
-      drawHeader: (args, draw) => { if (args.isSelected) { const { ctx, rect } = args, inset = args.columnIndex ? 1 : 0; for (const fill of [theme.grid.bgHeader, theme.picked]) { ctx.fillStyle = String(fill); ctx.fillRect(rect.x + inset, rect.y, rect.width - inset, rect.height); } } draw(); }, theme: theme.grid as Partial<Theme>, rowHeight, headerHeight: theme.header, gridSelection: selection, highlightRegions: marks };
-    return createElement(DataEditorCore, { ...props, ...core, renderers, ref: made });
+    const marks = useMemo(() => ({ head: marksOf(head), body: marksOf(body) }), [marked, shape]);
+    // A whole column's letter, picked, is washed as its cells are; the grid would fill it in the accent its fill handle and ring keep.
+    const drawHeader: DataEditorProps["drawHeader"] = (args, draw) => { if (args.isSelected) { const { ctx, rect: box } = args, inset = args.columnIndex ? 1 : 0; for (const fill of [theme.grid.bgHeader, theme.picked]) { ctx.fillStyle = String(fill); ctx.fillRect(box.x + inset, box.y, box.width - inset, box.height); } } draw(); };
+    const shared = { ...core, columns, freezeColumns, drawCell: cellLook.draw, drawHeader, theme: theme.grid as Partial<Theme> };
+    // The head is as tall as its letters and rows: it never scrolls up or down.
+    const headRows = size.head, headHeight = theme.header + Array.from({ length: headRows }, (_, drawn) => { const h = rowHeight.head; return typeof h === "number" ? h : h(drawn); }).reduce((sum, h) => sum + h, 0);
+    // Sideways, the two parts scroll as one: a scroll of either moves the other, and the wheel over the head scrolls the body. Listened for on
+    // each part's frame, as the grid makes its scroller once it is sized.
+    useEffect(() => {
+      const top = head.host, under = body.host, scroller = (into: HTMLElement) => into.querySelector<HTMLElement>(".dvn-scroller");
+      if (!frozen || !top || !under) return;
+      const follow = (to: HTMLElement) => (event: Event) => { const from = event.target as HTMLElement, into = scroller(to); if (from.classList.contains("dvn-scroller") && into && into.scrollLeft !== from.scrollLeft) into.scrollLeft = from.scrollLeft; };
+      const down = follow(top), up = follow(under), wheel = (event: WheelEvent) => { event.preventDefault(); scroller(under)?.scrollBy(event.deltaX, event.deltaY); };
+      under.addEventListener("scroll", down, true); top.addEventListener("scroll", up, true); top.addEventListener("wheel", wheel, { passive: false });
+      return () => { under.removeEventListener("scroll", down, true); top.removeEventListener("scroll", up, true); top.removeEventListener("wheel", wheel); };
+    }, [frozen]);
+    const view = (p: Part, props: Pick<DataEditorProps, "rows" | "getCellContent"> & Partial<DataEditorProps>) => createElement("div", { ref: refs[p === head ? "head" : "body"].host, className: p === head ? "ui-spreadsheet-frozen" : "ui-spreadsheet-rows", style: p === head ? { height: `${headHeight}px` } : undefined },
+      createElement(DataEditorCore, { ...handlers[p === head ? "head" : "body"], ...shared, ...props, drawFocusRing: owner === p, renderers: renderers[p === head ? "head" : "body"], ref: refs[p === head ? "head" : "body"].editor, ...props }));
+    return createElement("div", { className: "ui-spreadsheet-views" },
+      frozen ? view(head, { rows: headRows, getCellContent: content.head, rowHeight: rowHeight.head, headerHeight: theme.header, gridSelection: headSelection, highlightRegions: marks.head }) : null,
+      view(body, { rows, getCellContent: content.body, rowHeight: rowHeight.body, headerHeight: frozen ? 0 : theme.header, gridSelection: bodySelection, highlightRegions: marks.body }));
   }
 
   const root = createRoot(element);
   root.render(createElement(Grid));
-  const box = (col: number, row: number) => editor?.getBounds(col, row);
-  const picked = (selection: GridSelection) => rowMap.toSheet(selected(selection, size));
+  const box = (p: Part, col: number, row: number) => p.editor?.getBounds(col, row);
   // The frozen columns first: they stand in view whatever the scroll.
-  const colAt = (x: number) => { for (let at = frozenCols ? 0 : view.x; at < view.x + view.width + 1; at = at + 1 === frozenCols ? Math.max(view.x, frozenCols) : at + 1) { const cell = box(at, view.y); if (cell && x >= cell.x && x < cell.x + cell.width) return at; } return -1; };
-  const rowAt = (y: number) => { for (let at = view.y; at < view.y + view.height + 1; at++) { const cell = box(view.x, at); if (cell && y >= cell.y && y < cell.y + cell.height) return at; } return -1; };
-  const rowEdge = (x: number, y: number) => {
-    const numbers = box(-1, view.y);
+  const colAt = (p: Part, x: number) => { const { view } = p; for (let at = frozenCols ? 0 : view.x; at < view.x + view.width + 1; at = at + 1 === frozenCols ? Math.max(view.x, frozenCols) : at + 1) { const cell = box(p, at, view.y); if (cell && x >= cell.x && x < cell.x + cell.width) return at; } return -1; };
+  const rowAt = (p: Part, y: number) => { const { view } = p; for (let at = view.y; at < view.y + view.height + 1; at++) { const cell = box(p, view.x, at); if (cell && y >= cell.y && y < cell.y + cell.height) return at; } return -1; };
+  /** The part a point is over, by the parts' own frames. */
+  const partAt = (y: number) => frozenRows && head.host && y < head.host.getBoundingClientRect().bottom ? head : body;
+  const rowEdge = (p: Part, x: number, y: number) => {
+    const { view } = p, numbers = box(p, -1, view.y);
     if (!numbers || x < numbers.x || x >= numbers.x + numbers.width) return null;
-    for (let at = view.y; at < view.y + view.height + 1; at++) { const cell = box(-1, at); if (cell && Math.abs(y - (cell.y + cell.height)) <= EDGE_SLOP) return { row: at, top: cell.y }; }
+    for (let at = view.y; at < view.y + view.height + 1; at++) { const cell = box(p, -1, at); if (cell && Math.abs(y - (cell.y + cell.height)) <= EDGE_SLOP) return { row: at, top: cell.y }; }
     return null;
   };
   let stop = () => {};
   // Dragged along the column letters or down the row numbers, the columns or rows between are picked.
   const sweep = (event: PointerEvent) => {
-    const frame0 = element.getBoundingClientRect(), numbers = box(-1, view.y), top = frame0.top + look.header, left = numbers ? numbers.x + numbers.width : frame0.left;
-    const across = event.clientY >= frame0.top && event.clientY < top, down = !across && Boolean(numbers) && event.clientX < left;
-    const at = across ? colAt : rowAt, [lo, hi] = across ? [left, frame0.right] : [top, frame0.bottom], from = at(across ? event.clientX : event.clientY);
+    const p = partAt(event.clientY), letters = frozenRows ? head : body, frame0 = (p.host ?? element).getBoundingClientRect(), lettersTop = (letters.host ?? element).getBoundingClientRect().top;
+    const numbers = box(p, -1, p.view.y), top = p === letters ? frame0.top + look.header : frame0.top, left = numbers ? numbers.x + numbers.width : frame0.left;
+    const across = p === letters && event.clientY >= lettersTop && event.clientY < lettersTop + look.header, down = !across && Boolean(numbers) && event.clientX < left;
+    const at = (place: number) => across ? colAt(p, place) : rowAt(p, place), [lo, hi] = across ? [left, frame0.right] : [top, frame0.bottom], from = at(across ? event.clientX : event.clientY);
     // A press on an edge sizes (the grid's own columns, sizes.ts's rows); Shift and Ctrl add to the selection, as the grid does.
-    const cell = across ? box(from, view.y) : undefined, onEdge = cell ? cell.x + cell.width - event.clientX <= COL_EDGE || (from > 0 && event.clientX - cell.x <= COL_EDGE) : rowEdge(event.clientX, event.clientY);
+    const cell = across ? box(p, from, p.view.y) : undefined, onEdge = cell ? cell.x + cell.width - event.clientX <= COL_EDGE || (from > 0 && event.clientX - cell.x <= COL_EDGE) : rowEdge(p, event.clientX, event.clientY);
     if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || !(across || down) || from < 0 || onEdge) return;
     // Each frame, not each move: held past an edge, the grid scrolls a line at a time under a still pointer and the pick runs on with it.
+    // The body scrolls (the head never does up or down); a drag down the head's numbers stays in the head.
     let to = from, place = across ? event.clientX : event.clientY, frame = 0, stepped = 0;
     const pick = (now: number) => { frame = requestAnimationFrame(pick);
       const past = place >= hi ? 1 : place < lo ? -1 : 0, under = at(Math.min(Math.max(place, lo + 1), hi - 1));
       if (under >= 0) to = under;
       // The next line on from the one at the edge, found by its own bounds: the grid tells its visible region only once a scroll settles.
-      if (past && now - stepped > SWEEP_STEP) { stepped = now; const next = Math.min(Math.max(to + past, 0), (across ? size.cols : size.rows) - 1);
-        if (across) editor?.scrollTo(next, view.y, "horizontal"); else editor?.scrollTo(view.x, next, "vertical"); }
+      if (past && now - stepped > SWEEP_STEP && (across || p === body)) { stepped = now; const next = Math.min(Math.max(to + past, 0), (across ? size.cols : size.rows) - 1);
+        if (across) body.editor?.scrollTo(next, body.view.y, "horizontal"); else body.editor?.scrollTo(body.view.x, next, "vertical"); }
       const lines = CompactSelection.fromSingleSelection([Math.min(from, to), Math.max(from, to) + 1]);
-      if (lines.equals(across ? current.columns : current.rows)) return;
-      current = { columns: across ? lines : CompactSelection.empty(), rows: across ? CompactSelection.empty() : lines }; drive.select?.(current); events.selected(picked(current)); };
+      if (lines.equals(across ? p.current.columns : p.current.rows)) return;
+      choose(p, { columns: across ? lines : CompactSelection.empty(), rows: across ? CompactSelection.empty() : lines }); events.selected(picked()); };
     const move = (moved: PointerEvent) => { place = across ? moved.clientX : moved.clientY; };
     const up = () => { cancelAnimationFrame(frame); removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", up); };
     stop(); stop = up;
     addEventListener("pointermove", move); addEventListener("pointerup", up); addEventListener("pointercancel", up); frame = requestAnimationFrame(pick);
   };
   element.addEventListener("pointerdown", sweep);
-  return {
+  const api: SheetGrid = {
     update: (changed) => {
       if (!changed) {
-        // The selection is held as the grid draws it: kept on the same sheet rows when rows are hidden or shown.
-        const was = picked(current), rows = current.rows.length > 0, cell = current.current && rowMap.sheet(current.current.cell[1]), version = rowMap.version;
+        // A selection is held as a part draws it: kept on the same sheet rows when rows are hidden, shown or frozen.
+        const was = picked(), columns = owner.current.columns.length > 0, rows = owner.current.rows.length > 0, versions = parts.map((p) => p.map.version).join(), freeze = frozenRows;
+        const cell = owner.current.current && { row: owner.map.sheet(owner.current.current.cell[1]), col: owner.current.current.cell[0] };
         drive.structure?.();
-        const now = was && rowMap.toDrawn(was);
-        if (!was || current.columns.length || version === rowMap.version) return;
-        current = !now ? NO_SELECTION : rows ? { columns: CompactSelection.empty(), rows: CompactSelection.fromSingleSelection([now.top, now.bottom + 1]) }
-          : { ...current, current: { cell: [current.current!.cell[0], Math.min(Math.max(rowMap.drawn(cell!), now.top), now.bottom)], range: rect(now), rangeStack: [] } };
-        drive.select?.(current);
+        if (!was || columns || (versions === parts.map((p) => p.map.version).join() && freeze === frozenRows)) return;
+        if (rows) spread(was, partOf(was.top), (_, drawn) => ({ columns: CompactSelection.empty(), rows: CompactSelection.fromSingleSelection([drawn.top, drawn.bottom + 1]) }));
+        else api.select(was);
+        if (cell && !rows) { const into = partOf(cell.row), drawn = clip(into, { top: cell.row, bottom: cell.row, left: cell.col, right: cell.col }), held = into.current.current;
+          if (drawn && held) choose(into, { ...into.current, current: { ...held, cell: [cell.col, drawn.top] } }); }
         return;
       }
       // Only what is in view is drawn again; the rest is read as it scrolls in.
-      const near = changed.flatMap(({ row: at, col }) => { const row = rowMap.drawn(at); return !rowMap.hidden(at) && row >= view.y && row < view.y + view.height + 1 && col >= view.x && col < view.x + view.width + 1 ? [{ cell: [col, row] as Item }] : []; });
-      if (near.length) editor?.updateCells(near);
+      for (const p of parts) {
+        const { view } = p, near = changed.flatMap(({ row: at, col }) => { const drawn = partOf(at) === p ? clip(p, { top: at, bottom: at, left: col, right: col }) : null; return drawn && drawn.top >= view.y && drawn.top < view.y + view.height + 1 && col >= view.x && col < view.x + view.width + 1 ? [{ cell: [col, drawn.top] as Item }] : []; });
+        if (near.length) p.editor?.updateCells(near);
+      }
     },
-    select: (to, scroll) => {
-      // Held at once, not at React's next render: `whole` and the grid's own focus read it straight after.
-      const drawn = to && rowMap.toDrawn(to);
-      current = drawn ? { columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: { cell: [drawn.left, drawn.top], range: rect(drawn), rangeStack: [] } } : NO_SELECTION;
-      drive.select?.(current);
+    // The grid scrolls a selection given it into view itself, as it draws it: a scroll of ours as well would be counted twice.
+    select: (given) => {
+      // A single cell in a hidden row is the first shown row's after it, as a move down onto it lands there.
+      const lone = given && given.top === given.bottom && given.left === given.right ? partOf(given.top) : null, shownRow = lone && lone.map.hidden(given!.top) ? lone.map.sheet(lone.map.drawn(given!.top)) : null;
+      const to = given && shownRow !== null ? { ...given, top: shownRow, bottom: shownRow } : given;
+      // Held at once, not at React's next render: `whole` and the grid's own focus read it straight after. A range across the frozen rows' edge
+      // is drawn in both parts, the cursor in the part of its first row.
+      const into = to ? partOf(to.top) : body;
+      if (to) spread(to, into, (p, drawn) => ({ columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: { cell: [p === into ? to.left : drawn.left, drawn.top], range: rect(drawn), rangeStack: [] } }));
+      else for (const p of parts) choose(p, NO_SELECTION);
       events.selected(to);
-      if (drawn && scroll) editor?.scrollTo(drawn.left, drawn.top, "both", 0, 0, { vAlign: "center", hAlign: "center" });
     },
-    highlight: (list) => { comments = list.flatMap((one) => { const drawn = rowMap.toDrawn(one.range); return drawn ? [{ color: one.current ? look.markCurrent : look.mark, range: rect(drawn), style: one.current ? "solid-outline" as const : "no-outline" as const }] : []; }); marks(); },
+    highlight: (list) => { comments = list.map((one) => ({ color: one.current ? look.markCurrent : look.mark, range: one.range, style: one.current ? "solid-outline" : "no-outline" })); drive.marks?.(); },
     // A whole column or row runs to the grid's end.
-    references: (list: readonly SheetReference[]) => {
-      references = list.flatMap((one) => { const drawn = rowMap.toDrawn(one.range); return drawn ? [{ color: look.inks[one.ink] ?? look.mark, range: rect({ ...drawn, bottom: Math.min(drawn.bottom, size.rows - 1), right: Math.min(drawn.right, size.cols - 1) }), style: one.pointing ? "dashed" as const : "solid" as const }] : []; });
-      marks();
-    },
+    references: (list: readonly SheetReference[]) => { references = list.map((one) => ({ color: look.inks[one.ink] ?? look.mark, range: one.range, style: one.pointing ? "dashed" : "solid" })); drive.marks?.(); },
     // The region's edge cells may be cut off: those are scrolled to, the rest left where they are.
-    show: (at, col) => { const row = rowMap.drawn(at); if (col <= view.x || col >= view.x + view.width - 1 || row <= view.y || row >= view.y + view.height - 1) editor?.scrollTo(col, row); },
+    show: (at, col) => {
+      const p = partOf(at), drawn = clip(p, { top: at, bottom: at, left: col, right: col }), { view } = p, cell = p.current.current?.cell;
+      if (cell && drawn && cell[0] === col && cell[1] === drawn.top) return;
+      if (drawn && (col <= view.x || col >= view.x + view.width - 1 || (p === body && (drawn.top <= view.y || drawn.top >= view.y + view.height - 1)))) p.editor?.scrollTo(col, drawn.top, p === head ? "horizontal" : "both");
+    },
+    // The parts' boxes for a range, as one: clipped to the cells' part of each, under the letters and beside the row numbers, or the frozen columns where it scrolls under them.
     bounds: (whole) => {
-      const area = rowMap.toDrawn(whole);
-      if (!area) return null;
-      const first = box(area.left, area.top), last = box(area.right, area.bottom), numbers = box(-1, area.top), frame = element.getBoundingClientRect();
-      if (!first || !last || !numbers) return null;
-      // Clipped to the cells' part of the grid, under the header and beside the row numbers, or the frozen columns where it scrolls under them.
-      const pinned = area.left >= frozenCols && frozenCols ? box(frozenCols - 1, area.top) : undefined;
-      const left = Math.max(first.x, pinned ? pinned.x + pinned.width : numbers.x + numbers.width), top = Math.max(first.y, frame.top + look.header), right = Math.min(last.x + last.width, frame.right), bottom = Math.min(last.y + last.height, frame.bottom);
-      return right > left && bottom > top ? { left, top, width: right - left, height: bottom - top } satisfies SheetBox : null;
+      let out: SheetBox | null = null;
+      for (const p of parts) {
+        const area = clip(p, whole), frame = p.host?.getBoundingClientRect();
+        if (!area || !frame) continue;
+        const first = box(p, area.left, area.top), last = box(p, area.right, area.bottom), numbers = box(p, -1, area.top);
+        if (!first || !last || !numbers) continue;
+        const pinned = area.left >= frozenCols && frozenCols ? box(p, frozenCols - 1, area.top) : undefined, under = p === body && frozenRows ? frame.top : frame.top + look.header;
+        const left = Math.max(first.x, pinned ? pinned.x + pinned.width : numbers.x + numbers.width), top = Math.max(first.y, under), right = Math.min(last.x + last.width, frame.right), bottom = Math.min(last.y + last.height, frame.bottom);
+        if (right <= left || bottom <= top) continue;
+        out = out ? { left: Math.min(out.left, left), top: Math.min(out.top, top), width: Math.max(out.left + out.width, right) - Math.min(out.left, left), height: Math.max(out.top + out.height, bottom) - Math.min(out.top, top) } : { left, top, width: right - left, height: bottom - top };
+      }
+      return out;
     },
     cellAt: (x, y) => {
-      const col = colAt(x), row = rowAt(y);
-      return col < 0 || row < 0 ? null : { row: rowMap.sheet(row), col };
+      const p = partAt(y), col = colAt(p, x), row = rowAt(p, y);
+      return col < 0 || row < 0 ? null : { row: p.map.sheet(row), col };
     },
     whole: (kind) => {
-      const area = selected(current, size);
+      const area = picked();
       if (!area) return;
-      const lines = CompactSelection.fromSingleSelection(kind === "cols" ? [area.left, area.right + 1] : [area.top, area.bottom + 1]);
-      const next: GridSelection = { columns: kind === "cols" ? lines : CompactSelection.empty(), rows: kind === "rows" ? lines : CompactSelection.empty() };
-      drive.select?.(next); events.selected(picked(next));
+      if (kind === "cols") { const lines = CompactSelection.fromSingleSelection([area.left, area.right + 1]); choose(owner, { columns: lines, rows: CompactSelection.empty() }); }
+      else spread({ ...area, left: 0, right: size.cols - 1 }, partOf(area.top), (_, drawn) => ({ columns: CompactSelection.empty(), rows: CompactSelection.fromSingleSelection([drawn.top, drawn.bottom + 1]) }));
+      events.selected(picked());
     },
-    rowEdge: (x, y) => { const edge = rowEdge(x, y); return edge && { ...edge, row: rowMap.sheet(edge.row) }; },
-    height: (row, height) => drive.height?.(rowMap.drawn(row), height),
+    rowEdge: (x, y) => { const p = partAt(y), edge = rowEdge(p, x, y); return edge && { ...edge, row: p.map.sheet(edge.row) }; },
+    height: (row, height) => drive.height?.(row, height),
     theme: (next) => { look = next; drive.look?.(look); },
-    scroll: (to) => { if (to) editor?.scrollTo(to.col, rowMap.drawn(to.row), "both", 0, 0, { hAlign: "start", vAlign: "start" }); return { row: rowMap.sheet(view.y), col: view.x }; },
-    focus: () => editor?.focus(),
+    scroll: (to) => { if (to) { const drawn = clip(body, { top: to.row, bottom: to.row, left: to.col, right: to.col }); body.editor?.scrollTo(to.col, drawn?.top ?? 0, "both", 0, 0, { hAlign: "start", vAlign: "start" }); } return { row: body.map.sheet(body.view.y), col: body.view.x }; },
+    focus: () => owner.editor?.focus(),
     destroy: () => { stop(); element.removeEventListener("pointerdown", sweep); root.unmount(); },
   };
+  return api;
 }

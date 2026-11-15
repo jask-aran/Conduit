@@ -32,3 +32,9 @@
 .ui-spreadsheet-waiting { position: absolute; inset: 0; }
 .ui-spreadsheet-margin { flex: 0 0 var(--measure-md); min-width: 0; overflow-y: auto; padding: 0 var(--space-md); }
 .ui-spreadsheet[data-margin="none"] .ui-spreadsheet-margin { display: none; }
+/* The grid in two parts while rows are frozen (components/sheet/grid.ts): the letters and frozen rows, as tall as they are, over the rows that scroll. */
+.ui-spreadsheet-views { display: flex; height: 100%; flex-direction: column; }
+.ui-spreadsheet-frozen { position: relative; flex: none; }
+.ui-spreadsheet-rows { position: relative; flex: 1; min-height: 0; }
+/* The frozen part scrolls sideways only with the rest, so it shows no scrollbar of its own. */
+.ui-spreadsheet-frozen .dvn-scroller { scrollbar-width: none; }

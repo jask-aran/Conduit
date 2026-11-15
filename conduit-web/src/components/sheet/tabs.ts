@@ -62,7 +62,7 @@ export function createSheetTabs(options: { doc: Y.Doc; host: SheetHost; id: stri
   const show = (id: string, select?: SheetRange) => {
     if (!book || !book.tabs().some((tab) => tab.id === id)) return;
     const was = shown(), grid = options.grid();
-    if (was === id) { if (select) grid?.select(select, true); return; }
+    if (was === id) { if (select) grid?.select(select); return; }
     if (was && grid) kept.set(was, { range: options.at(), scroll: grid.scroll() });
     off();
     current = view(id);
@@ -76,7 +76,7 @@ export function createSheetTabs(options: { doc: Y.Doc; host: SheetHost; id: stri
     grid.select(select ?? back?.range ?? A1);
     // Scrolled in the frame before it is painted, in a task of its own (the switch and the scroll together run past a frame's budget); again a frame
     // later, should the grid not yet have had this tab's size.
-    const land = () => { if (shown() === id) { if (select) grid.select(select, true); else grid.scroll(place); } };
+    const land = () => { if (shown() === id) { if (select) grid.select(select); else grid.scroll(place); } };
     requestAnimationFrame(() => { land(); requestAnimationFrame(() => { const now = grid.scroll(); if (select || now.row !== place.row || now.col !== place.col) land(); }); });
   };
   // A switch pressed or keyed is made in a task of its own: inside an input event the grid's React renders at once, in the same task as the event.

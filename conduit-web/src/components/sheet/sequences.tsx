@@ -38,7 +38,9 @@ export const SHEET_SEQUENCES: readonly SheetSequence[] = [
   { keys: "HOW", label: "Column width", run: (ctx) => { const cols = colsOf(ctx); if (cols.length) ctx.ask({ title: "Column width", value: ctx.sizes.width(cols[0]!) ?? ctx.look().width, apply: (size) => ctx.sizes.setWidths(cols, size) }); } },
   { keys: "HOI", label: "Fit column width", run: (ctx) => ctx.sizes.fitColumns(colsOf(ctx), ctx.look()) },
   { keys: "HOA", label: "Fit row height", run: (ctx) => ctx.sizes.fitRows(rowsOf(ctx), ctx.look()) },
-  // Excel's View keys.
+  // Excel's View keys: Freeze panes freezes the rows above and the columns left of the selection, or unfreezes what is frozen.
+  { keys: "WFF", label: "Freeze panes", run: (ctx) => { const area = ctx.selection(), now = ctx.sizes.freeze(); if (now.rows || now.cols) ctx.sizes.setFreeze(0, 0); else if (area) ctx.sizes.setFreeze(area.top, area.left); } },
+  { keys: "WFR", label: "Freeze top row", run: (ctx) => ctx.sizes.setFreeze(1, ctx.sizes.freeze().cols) },
   { keys: "WFC", label: "Freeze first column", run: (ctx) => ctx.sizes.setFreeze(ctx.sizes.freeze().rows, 1) },
   { keys: "HOD", label: "Default width", run: (ctx) => ctx.ask({ title: "Default width", value: ctx.sizes.standard() ?? ctx.look().width, apply: (size) => ctx.sizes.setStandard(size) }) },
 ];
