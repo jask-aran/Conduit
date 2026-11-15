@@ -2,18 +2,14 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { root, directory, prepareHarness, runHeadedBenchmark } from "./headed-benchmark.mjs";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const baseline = process.argv[2] || "566894326";
 const cpu = Number(process.argv[3] || 1);
 if (!Number.isInteger(cpu) || cpu < 1 || cpu > 20) throw new Error("CPU slowdown must be an integer from 1 to 20.");
 if (!/^[a-f\d]{7,40}$/i.test(baseline)) throw new Error("Use a commit hash for the baseline.");
-const cli = (...args) => execFileSync(process.execPath, [path.join(root, "scripts/run-windows-chrome-devtools.mjs"), "cli", ...args], { cwd: root, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
-const directory = path.join(root, "conduit-web/.cptr/perf");
-await fs.mkdir(directory, { recursive: true });
+await prepareHarness();
 const previous = execFileSync("git", ["show", `${baseline}:conduit-web/src/components/ui/chat-art-draw.ts`], { cwd: root, encoding: "utf8" });
-await fs.writeFile(path.join(directory, "harness.html"), '<!doctype html><html lang="en" class="dark" data-library><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Conduit rendering benchmark</title></head><body><script type="module">import "/src/client/styles.css";import "/src/components/ui/styles/index.ts";window.harnessReady=true;</script></body></html>');
 await fs.writeFile(path.join(directory, "baseline-renderer.ts"), previous.replaceAll('"../../../vendor/', '"../../vendor/').replace('"./chat-art"', '"../../src/components/ui/chat-art"'));
 
 async function benchmark() {
@@ -99,22 +95,9 @@ async function benchmark() {
   }
 }
 
-const restore = cli("list_pages").match(/^(\d+):.*\[selected\]/m)?.[1];
-const opened = cli("new_page", "http://127.0.0.1:5181/.cptr/perf/harness.html");
-const page = opened.match(/^(\d+):.*\[selected\]/m)?.[1];
-if (!page) throw new Error(opened);
-try {
-  cli("select_page", page, "--bringToFront");
-  cli("emulate", "--viewport", "1440x900x1", "--cpuThrottlingRate", String(cpu));
-  const output = cli("evaluate_script", benchmark.toString());
-  const json = output.match(/```json\s*([\s\S]*?)```/)?.[1];
-  if (!json) throw new Error(output);
-  const result = { at: new Date().toISOString(), cpuSlowdown: cpu, harness: "Two isolated styled panes; no gallery fetch or media emulation", baseline: execFileSync("git", ["rev-parse", baseline], { cwd: root, encoding: "utf8" }).trim(), current: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(), ...JSON.parse(json) };
-  const report = path.join(root, `docs/performance/backgrounds-${result.at.slice(0, 10)}${cpu === 1 ? "" : `-cpu${cpu}x`}.json`);
-  await fs.mkdir(path.dirname(report), { recursive: true });
-  await fs.writeFile(report, JSON.stringify(result, null, 2) + "\n");
-  console.log(JSON.stringify(result, null, 2));
-} finally {
-  cli("close_page", page);
-  if (restore) cli("select_page", restore, "--bringToFront");
-}
+const measured = runHeadedBenchmark(benchmark, cpu);
+const result = { at: new Date().toISOString(), cpuSlowdown: cpu, harness: "Two isolated styled panes; no gallery fetch or media emulation", baseline: execFileSync("git", ["rev-parse", baseline], { cwd: root, encoding: "utf8" }).trim(), current: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(), ...measured };
+const report = path.join(root, `docs/performance/backgrounds-${result.at.slice(0, 10)}${cpu === 1 ? "" : `-cpu${cpu}x`}.json`);
+await fs.mkdir(path.dirname(report), { recursive: true });
+await fs.writeFile(report, JSON.stringify(result, null, 2) + "\n");
+console.log(JSON.stringify(result, null, 2));
