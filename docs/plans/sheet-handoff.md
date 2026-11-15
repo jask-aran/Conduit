@@ -64,9 +64,11 @@ references don't move yet), and Ctrl+Shift+V pastes values. Merges: nothing writ
 and the merge question holds its corners by ids. `review-sheet-fixes.md` is done but for #6 (quadratic import growth), #7 (Undo gives up on
 an op after 9 s) and #9 (deleting a merge's top row leaves it empty, as Excel's does).
 
-Still open: the context menu's Paste reads the clipboard and moves no references, and has no Paste values row; arrows at a frozen merge's edge; prefix sums for tall
-merges; the low xlsx ones (row/column crossings outside the grid, `<c r=` attribute order); rules can't be edited or reordered, only added
-and deleted. Notes from xlsx are waiting on the owner: sheet comments are markup items sent to a listener, so 16 imported notes would hand
+Later: the context menu's Paste moves references too (checked in the browser); rules can be edited and moved up; Ctrl+Shift+& outlines,
+Ctrl+Shift+_ takes borders off.
+
+Still open: no Paste values row in the context menu; a top border on row 1 is hidden under the column header's line; arrows at a frozen merge's edge; prefix sums for tall
+merges; the low xlsx ones (row/column crossings outside the grid, `<c r=` attribute order); Notes from xlsx are waiting on the owner: sheet comments are markup items sent to a listener, so 16 imported notes would hand
 16 items to agents. Phone width is still unchecked (the headless probe opened with the sidebar drawer over the pane).
 
 ## Open, in rough order
