@@ -9,9 +9,19 @@ import type { SheetGrid, SheetLook } from "./host";
 /** The fewest pixels a row or column is given. */
 const LEAST = 8;
 
+/** A column's width: its own (`width:<colId>`), else its tab's default (`width:<tabId>`); undefined for the grid's own. A column past the tab's own takes the default. */
+export function widthOf(look: Y.Map<number | string>, sheet: SheetView | undefined, col: number): number | undefined {
+  const own = sheet?.colAt(col), size = (own && look.get(`width:${own}`)) ?? (sheet?.id && look.get(`width:${sheet.id}`));
+  return typeof size === "number" ? size : undefined;
+}
+
 /** One tab's sizes. Rows and columns past the tab's own have no ids and keep the default. */
 export interface SheetSizes {
   width(col: number): number | undefined;
+  /** The tab's default column width, where it has one. */
+  standard(): number | undefined;
+  /** Sets the default; columns with their own width keep it. */
+  setStandard(width: number): void;
   height(row: number): number | undefined;
   /** Every row of the tab whose height is set, by position. */
   heights(): ReadonlyMap<number, number>;
@@ -32,7 +42,9 @@ export function createSheetSizes(look: Y.Map<number | string>, model: () => Shee
   });
   let measure: CanvasRenderingContext2D | null = null;
   return {
-    width: (col) => sized("width", model()?.colAt(col)),
+    width: (col) => widthOf(look, model(), col),
+    standard: () => sized("width", model()?.id),
+    setStandard: (width) => set("width", [model()?.id], width),
     height: (row) => sized("height", model()?.rowAt(row)),
     heights: () => {
       const sheet = model(), out = new Map<number, number>();

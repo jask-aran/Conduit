@@ -189,7 +189,8 @@ export function exportXlsx(tabs, imported) {
       sheet[at] = cell;
     }));
     sheet["!ref"] = `A1:${a1(Math.max(0, tab.typed.length - 1), cols - 1)}`;
-    sheet["!cols"] = Array.from({ length: cols }, (_, c) => typeof tab.look[`width:${colName(c)}`] === "number" ? { wpx: tab.look[`width:${colName(c)}`] } : {});
+    // A column without its own width takes the tab's default (`width` alone), where it has one.
+    sheet["!cols"] = Array.from({ length: cols }, (_, c) => { const width = tab.look[`width:${colName(c)}`] ?? tab.look.width; return typeof width === "number" ? { wpx: width } : {}; });
     XLSX.utils.book_append_sheet(book, sheet, tab.name);
   }
   book.Workbook = { Sheets: tabs.map((tab) => ({ Hidden: tab.hidden ? 1 : 0 })) };

@@ -1,6 +1,8 @@
 /*
  * Key sequences on the grid, as a spreadsheet's: Alt pressed and let go alone (or held with the first letter) starts one, each letter narrows it, and
- * Escape or a key that matches nothing ends it. A tool is one entry in SHEET_SEQUENCES.
+ * Escape or a key that matches nothing ends it. Each is one entry in SHEET_SEQUENCES: a ribbon tool by its name (tools.tsx), or a doing of its own.
+ * The keys are Excel's Home tab's where it has them; the letters choosing an ink (R, A, G, B, N) and a number format after Alt H N are Conduit's,
+ * since Excel picks those from a gallery with the arrows.
  */
 import { createMemo, createSignal, For, Show, type Accessor } from "solid-js";
 import { Actions, Item, Section } from "@/components/ui";
@@ -8,38 +10,49 @@ import { CardForm } from "@/components/ui/card";
 import { Button, Input } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { Popover, PopoverContent } from "@/components/ui/menus";
-import type { SheetLook, SheetRange } from "./host";
+import type { SheetLook, SheetRange, SheetToolId } from "./host";
 import type { SheetSizes } from "./sizes";
 
 /** A size asked for in pixels, prefilled with what it is now; `apply` is given the number set. */
 export type SizeQuestion = { title: string; value: number; apply(size: number): void };
 /** What a sequence acts on. `selection`: the cells selected, whole rows or columns included. */
 export type SheetSequenceContext = { selection(): SheetRange | null; sizes: SheetSizes; look(): SheetLook; ask(question: SizeQuestion): void };
-/** `keys`: the letters after Alt, upper-case. */
-export type SheetSequence = { keys: string; label: string; run(ctx: SheetSequenceContext): void };
+/** `keys`: the keys after Alt, letters upper-case. `tool`: the ribbon tool it presses, named as the ribbon names it; else `run`, with its own `label`. */
+export type SheetSequence = { keys: string } & ({ tool: SheetToolId } | { label: string; run(ctx: SheetSequenceContext): void });
 
 const span = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, at) => from + at);
 const rowsOf = (ctx: SheetSequenceContext) => { const area = ctx.selection(); return area ? span(area.top, area.bottom) : []; };
 const colsOf = (ctx: SheetSequenceContext) => { const area = ctx.selection(); return area ? span(area.left, area.right) : []; };
 
+const INKS = [["R", "red"], ["A", "amber"], ["G", "green"], ["B", "blue"], ["N", "none"]] as const;
 export const SHEET_SEQUENCES: readonly SheetSequence[] = [
+  { keys: "H1", tool: "bold" }, { keys: "H2", tool: "italic" }, { keys: "H3", tool: "underline" }, { keys: "HW", tool: "wrap" },
+  { keys: "HAL", tool: "align-left" }, { keys: "HAC", tool: "align-center" }, { keys: "HAR", tool: "align-right" },
+  { keys: "HAT", tool: "valign-top" }, { keys: "HAM", tool: "valign-middle" }, { keys: "HAB", tool: "valign-bottom" },
+  { keys: "HBA", tool: "borders-all" }, { keys: "HBS", tool: "borders-outer" }, { keys: "HBP", tool: "borders-top" }, { keys: "HBO", tool: "borders-bottom" },
+  { keys: "HBL", tool: "borders-left" }, { keys: "HBR", tool: "borders-right" }, { keys: "HBN", tool: "borders-none" },
+  ...INKS.map(([key, ink]) => ({ keys: `HH${key}`, tool: `fill-${ink}` as const })), ...INKS.map(([key, ink]) => ({ keys: `HFC${key}`, tool: `color-${ink}` as const })),
+  { keys: "HNG", tool: "format-general" }, { keys: "HNN", tool: "format-number" }, { keys: "HNC", tool: "format-currency" }, { keys: "HNP", tool: "format-percent" }, { keys: "HND", tool: "format-date" }, { keys: "HNT", tool: "format-time" },
+  { keys: "H0", tool: "decimals-more" }, { keys: "H9", tool: "decimals-fewer" },
   { keys: "HOH", label: "Row height", run: (ctx) => { const rows = rowsOf(ctx); if (rows.length) ctx.ask({ title: "Row height", value: ctx.sizes.height(rows[0]!) ?? ctx.look().row, apply: (size) => ctx.sizes.setHeights(rows, size) }); } },
   { keys: "HOW", label: "Column width", run: (ctx) => { const cols = colsOf(ctx); if (cols.length) ctx.ask({ title: "Column width", value: ctx.sizes.width(cols[0]!) ?? ctx.look().width, apply: (size) => ctx.sizes.setWidths(cols, size) }); } },
   { keys: "HOI", label: "Fit column width", run: (ctx) => ctx.sizes.fitColumns(colsOf(ctx), ctx.look()) },
   { keys: "HOA", label: "Fit row height", run: (ctx) => ctx.sizes.fitRows(rowsOf(ctx), ctx.look()) },
+  { keys: "HOD", label: "Default width", run: (ctx) => ctx.ask({ title: "Default width", value: ctx.sizes.standard() ?? ctx.look().width, apply: (size) => ctx.sizes.setStandard(size) }) },
 ];
 /** What a sequence's first letters lead to, named as the next keys are listed. */
-export const SEQUENCE_GROUPS: Readonly<Record<string, string>> = { H: "Home", HO: "Format" };
+export const SEQUENCE_GROUPS: Readonly<Record<string, string>> = { H: "Home", HO: "Format", HA: "Align", HB: "Borders", HH: "Fill colour", HF: "Font", HFC: "Text colour", HN: "Number format" };
 
-/** The sequence typed so far (null when none is), the keys that may come next, and the grid's key listeners. */
-export function createSequenceKeys(run: (sequence: SheetSequence) => void) {
+/** The sequence typed so far (null when none is), the keys that may come next, and the grid's key listeners. `named`: a tool's label, as its ribbon says it. */
+export function createSequenceKeys(run: (sequence: SheetSequence) => void, named: (tool: SheetToolId) => string) {
+  const label = (one: SheetSequence) => "tool" in one ? named(one.tool) : one.label;
   const [typed, setTyped] = createSignal<string | null>(null);
   let alt = false, used = false;
   const next = createMemo(() => {
     const now = typed(), keys = new Map<string, string>();
     if (now !== null) for (const one of SHEET_SEQUENCES) if (one.keys.startsWith(now) && one.keys.length > now.length) {
       const key = one.keys[now.length]!, whole = now + key;
-      if (!keys.has(key)) keys.set(key, one.keys === whole ? one.label : SEQUENCE_GROUPS[whole] ?? one.label);
+      if (!keys.has(key)) keys.set(key, one.keys === whole ? label(one) : SEQUENCE_GROUPS[whole] ?? label(one));
     }
     return [...keys].map(([key, label]) => ({ key, label }));
   });
@@ -48,7 +61,7 @@ export function createSequenceKeys(run: (sequence: SheetSequence) => void) {
     setTyped(done || !SHEET_SEQUENCES.some((one) => one.keys.startsWith(now)) ? null : now);
     if (done) run(done);
   };
-  const letter = (event: KeyboardEvent) => /^Key[A-Z]$/.test(event.code) ? event.code.slice(3) : null;
+  const letter = (event: KeyboardEvent) => /^(Key[A-Z]|Digit\d)$/.test(event.code) ? event.code.slice(-1) : null;
   const keydown = (event: KeyboardEvent) => {
     if (event.key === "Alt") { alt = true; used = false; return; }
     if (typed() !== null) {

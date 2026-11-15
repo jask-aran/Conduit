@@ -1,5 +1,6 @@
 import { For } from "solid-js";
 import { Icons } from "@/components/ui";
+import { PHONE_LAYOUT_QUERY } from "@/components/ui/layout";
 import { MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/ui/menus";
 import { SHEET_PRESETS, type SheetFormats } from "./formats";
 import type { SheetRange } from "./host";
@@ -11,7 +12,8 @@ export function FormatMenu(props: { formats: SheetFormats; range: SheetRange }) 
   const now = () => props.formats.uniform(props.range);
   const named = () => { const format = now(); return format === null ? undefined : SHEET_PRESETS.find((one) => one.format === (format ?? "General"))?.name ?? "Custom"; };
   return <MenuSection>
-    <MenuSub>
+    {/* On a phone it opens in the menu's place, as every submenu there does, not off its edge. */}
+    <MenuSub phone={matchMedia(PHONE_LAYOUT_QUERY).matches}>
       <MenuSubTrigger icon={<Icons.Label />} meta={named()}>Number format</MenuSubTrigger>
       <MenuSubContent>
         <MenuSection>

@@ -7,6 +7,7 @@ import type * as Y from "yjs";
 import { key, valueText, type SheetView } from "@/sheet-format.js";
 import { decodeStyle, writeStyle, type SheetBorders, type SheetInk, type SheetStyle, type StyleAttrs } from "@/sheet-styles.js";
 import type { SheetLook, SheetRange } from "./host";
+import { widthOf } from "./sizes";
 import { wrapLines } from "./wrap";
 
 /** What a cell is drawn with, its column's, row's and own style together. `edges`: top 1, right 2, bottom 4, left 8. `custom`: the grid draws its text itself (cell-draw.ts). */
@@ -83,9 +84,9 @@ export function createSheetStyles(look: Y.Map<number | string>, model: Accessor<
     if (!style?.wrap) return text.split("\n").length;
     measure ??= document.createElement("canvas").getContext("2d");
     if (!measure) return 1;
-    const width = look.get(`width:${model()?.colAt(col)}`), font = `${style.italic ? "italic " : ""}${style.bold ? sheetLook.strong : String(sheetLook.grid.baseFontStyle).split(" ")[0]} ${String(sheetLook.grid.baseFontStyle).split(" ")[1]} ${sheetLook.grid.fontFamily}`;
+    const width = widthOf(look, model(), col), font = `${style.italic ? "italic " : ""}${style.bold ? sheetLook.strong : String(sheetLook.grid.baseFontStyle).split(" ")[0]} ${String(sheetLook.grid.baseFontStyle).split(" ")[1]} ${sheetLook.grid.fontFamily}`;
     measure.font = font;
-    return wrapLines(measure, text, font, (typeof width === "number" ? width : sheetLook.width) - 2 * Number(sheetLook.grid.cellHorizontalPadding)).length;
+    return wrapLines(measure, text, font, (width ?? sheetLook.width) - 2 * Number(sheetLook.grid.cellHorizontalPadding)).length;
   };
   return {
     at, worn,

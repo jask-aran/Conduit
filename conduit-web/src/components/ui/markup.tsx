@@ -223,10 +223,9 @@ const VIEWS: ReadonlyArray<{ value: MarkupView; label: string; icon: () => JSX.E
 /** Whether the bars are out (MarkupBar `out`): each fades itself, since a frost faded through an ancestor blurs nothing until the fade ends. */
 const Out = createContext<() => boolean>(() => false);
 /** Whether the bars stand in a row of the surface's own (MarkupBar `slot`), which is no floating thing: there they are no frost. */
-const InRow = createContext(false);
 function Bar(props: JSX.HTMLAttributes<HTMLDivElement>) {
   const out = useContext(Out);
-  return <Frost lift="raised" plain={useContext(InRow)} {...props} data-move="fade" data-out={out() ? "" : undefined} />;
+  return <Frost lift="raised" {...props} data-move="fade" data-out={out() ? "" : undefined} />;
 }
 /** The bar's own tools: one frosted bar, or (parted) a row of them, each part a bar of its own. */
 function Sets(props: { parted: boolean; children: JSX.Element }) {
@@ -257,7 +256,7 @@ const FOLDS = 3;
  *  `own`: the host's own tools (a document's block kinds), `onOwn` told as one is pressed, and `onAsk` a comment about where the surface's selection or caret is: a rail above the bar while the app is in use.
  *  `out`: what it stands over is moving, so the bars fade out until it stops. */
 export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnTool[]; onOwn?: () => void; onAsk?: () => void; ribbon?: boolean; screenshots?: boolean; onView: (view: MarkupView) => void; tools?: readonly (MarkupToolKind | "note")[]; tool: MarkupToolKind; onTool: (tool: MarkupToolKind) => void; onNote: () => void; outstanding?: number; standing?: string; thin?: boolean; thread?: boolean; onBack?: () => void; replies?: number; sent?: number; onReplies?: () => void; ink?: MarkupInk; onInk?: (ink: MarkupInk) => void; weight?: MarkupWeight; onWeight?: (weight: MarkupWeight) => void; size?: number; onSize?: (size: number) => void; shape?: MarkupShape; onShape?: (shape: MarkupShape) => void; onUndo?: () => void; onRedo?: () => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; heard?: boolean; onNextAgent?: () => void; onRetake?: () => void;
-  canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void; out?: boolean; slot?: HTMLElement }) {
+  canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void; out?: boolean }) {
   const using = () => props.view === "use";
   // What the chosen tool draws with stands over the bar while that tool is held, so the bar itself stays the tools.
   const inks = () => OPTIONED.includes(props.tool) ? props.onInk : undefined, lined = () => props.tool !== "text" && inks() ? props.onWeight : undefined;
@@ -288,7 +287,7 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
       const at = anchor.getBoundingClientRect(), bar = anchor.closest(".ui-markup-bar")!.getBoundingClientRect(), frame = rails.getBoundingClientRect(), gap = parseFloat(getComputedStyle(rails).rowGap) || 0;
       if (props.ribbon) line.style.top = `${bar.bottom - frame.top + gap}px`; else line.style.bottom = `${frame.bottom - bar.top + gap}px`;
       // In a slot the rails are only as wide as the bars: the line is kept inside the window instead.
-      const least = props.slot ? -frame.left : 0, most = (props.slot ? innerWidth - frame.left : frame.width) - line.offsetWidth;
+      const least = 0, most = frame.width - line.offsetWidth;
       line.style.left = `${Math.max(least, Math.min(most, at.left + at.width / 2 - frame.left - line.offsetWidth / 2))}px`;
     };
     const seen = new ResizeObserver(place); seen.observe(line); if (rails) seen.observe(rails);
@@ -341,14 +340,7 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   const [fold, setFold] = createSignal(0);
   const needs: number[] = [];
   let rails: HTMLDivElement | undefined;
-  /** The room the bars have: the rails' own; in a slot, the row's less what its other items need at least (their width where they do not shrink), so the bars unfold as the row widens. */
-  const room = () => {
-    const row = props.slot?.parentElement;
-    if (!rails || !row) return rails?.clientWidth ?? 0;
-    const style = getComputedStyle(row), others = [...row.children].filter((item) => item !== props.slot);
-    const need = others.reduce((sum, item) => { const its = getComputedStyle(item); return sum + (its.flexShrink === "0" ? (item as HTMLElement).offsetWidth : parseFloat(its.minWidth) || 0); }, 0);
-    return row.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0) - others.length * (parseFloat(style.columnGap) || 0) - need;
-  };
+  const room = () => rails?.clientWidth ?? 0;
   const fit = () => {
     for (let tries = 0; rails && tries <= 2 * FOLDS; tries++) {
       const sets = [...rails.querySelectorAll<HTMLElement>(":scope > [data-set]")], gap = parseFloat(getComputedStyle(rails).columnGap) || 0, at = fold();
@@ -361,7 +353,7 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   };
   // A set that comes later (the host's tools, once its editor is made) is measured as it comes.
   const sizes = new ResizeObserver(fit), sets = new MutationObserver(fit);
-  onMount(() => { if (props.ribbon && rails) { sizes.observe(props.slot?.parentElement ?? rails); sets.observe(rails, { childList: true }); } });
+  onMount(() => { if (props.ribbon && rails) { sizes.observe(rails); sets.observe(rails, { childList: true }); } });
   // Escape shuts the innermost thing open under the bars: a colour picker, then the line of inks it stands under.
   const shut = (event: KeyboardEvent) => {
     const inner = event.key !== "Escape" ? undefined : pickingOwn() ? () => setPickingOwn(false) : inking() ? () => setInking(null) : picking() ? () => setPicking(false) : undefined;
@@ -374,7 +366,7 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
 
   // Over an interface the bar is in parts, as a paper's ribbon is: what is marked up, the tools, and sending. A phone's and a thread's stay one bar.
   const parted = () => !props.ribbon && !props.compact && !props.thread;
-  return <Out.Provider value={() => Boolean(props.out)}><InRow.Provider value={Boolean(props.slot)}><div ref={rails} class="ui-markup-rails" data-ribbon={props.ribbon ? "" : undefined} data-slot={props.slot ? "" : undefined} data-compact={props.compact ? "" : undefined} data-thin={props.thin === false ? undefined : ""}>
+  return <Out.Provider value={() => Boolean(props.out)}><div ref={rails} class="ui-markup-rails" data-ribbon={props.ribbon ? "" : undefined} data-compact={props.compact ? "" : undefined} data-thin={props.thin === false ? undefined : ""}>
   <Show when={options()}><div ref={props.compact ? undefined : held} class={props.compact ? "ui-markup-held" : "ui-markup-under"} data-over={props.ribbon ? undefined : ""}><Bar class="ui-markup-bar" role="toolbar" aria-label="Tool options">
     <Show when={props.tool === "shape" && props.onShape}>{(onShape) => <Segmented label="Shape" icons size="sm" value={props.shape ?? "arrow"} onChange={onShape()} options={SHAPES} />}</Show>
     <Show when={inks()}>{(onInk) => <>
@@ -456,5 +448,5 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     <Show when={!props.ribbon}><CloseButton size="sm" label="Close markup" onClick={props.onClose} /></Show>
     </Part>
   </Sets>
-  </div></InRow.Provider></Out.Provider>;
+  </div></Out.Provider>;
 }

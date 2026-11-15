@@ -11,7 +11,7 @@ import { createLiveSheet } from "./live";
 import { readLook } from "./theme";
 import { createArtWindow } from "@/components/ui/chat-art";
 import { createFormulaEditor, FormulaField, FormulaHelp } from "./formula-editor";
-import { createSequenceKeys, SequenceHint, SHEET_SEQUENCES, SizePrompt, type SizeQuestion } from "./sequences";
+import { createSequenceKeys, SequenceHint, SHEET_SEQUENCES, SizePrompt, type SheetSequence, type SizeQuestion } from "./sequences";
 import { createSheetSizes, dragRowEdges } from "./sizes";
 import { createSheetFormats } from "./formats";
 import { createSheetStyles } from "./styles";
@@ -64,7 +64,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const frozenHere = () => { changed(); const area = at(), cell = area && frozenAt(area.top, area.left); return cell && !model()?.input(area!.top, area!.left).startsWith("=") ? cell : undefined; };
   createEffect(() => { if (frozen().size) grid()?.update(null); });
   const sizes = createSheetSizes(look, model, styles.lines), [question, setQuestion] = createSignal<SizeQuestion | null>(null);
-  const sequences = createSequenceKeys((sequence) => sequence.run({ selection: at, sizes, look: () => readLook(root!), ask: setQuestion }));
+  const sequences = createSequenceKeys((sequence) => "tool" in sequence ? tools.find((one) => one.name === sequence.tool)?.run() : sequence.run({ selection: at, sizes, look: () => readLook(root!), ask: setQuestion }),
+    (name) => tools.find((one) => one.name === name)?.label ?? name);
   // One edge dragged sizes every whole row or column selected with it, as a spreadsheet does.
   const span = (kind: "rows" | "cols", one: number) => {
     const area = at(), size = model()?.size(), [from, to] = !area ? [one, one] : kind === "cols" ? [area.left, area.right] : [area.top, area.bottom];
@@ -107,7 +108,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     void import("./grid").then(({ mountGrid }) => {
       if (over) return;
       made = mountGrid(into, { model: sheet, events, look: readLook(root!), columns: {
-        width: (col) => { const width = look.get(`width:${sheet.colAt(col)}`); return typeof width === "number" ? width : undefined; },
+        width: sizes.width,
         type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; }, heights: sizes.heights, draw: formats.draw, style: styles.at, frozen: (row, col) => Boolean(frozenAt(row, col)),
       } });
       setGrid(made);
@@ -245,7 +246,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const rows = () => menu().rows, cols = () => menu().cols;
   // The menu's own doings, over what it was opened on: a sequence's (sizes), and the cells' cut, copy, paste and clearing.
   const picked = (): SheetRange | null => { const r = rows(), c = cols(); return r && c ? { top: r.top, bottom: r.bottom, left: c.left, right: c.right } : null; };
-  const sized = (keys: string, selection: SheetRange) => SHEET_SEQUENCES.find((sequence) => sequence.keys === keys)?.run({ selection: () => selection, sizes, look: () => readLook(root!), ask: setQuestion });
+  const sized = (keys: string, selection: SheetRange) => SHEET_SEQUENCES.find((sequence): sequence is Extract<SheetSequence, { run: unknown }> => sequence.keys === keys && "run" in sequence)?.run({ selection: () => selection, sizes, look: () => readLook(root!), ask: setQuestion });
   const within = (range: SheetRange) => Array.from({ length: range.bottom - range.top + 1 }, (_, r) => Array.from({ length: range.right - range.left + 1 }, (_, c) => ({ row: range.top + r, col: range.left + c })));
   const copy = (range: SheetRange) => navigator.clipboard.writeText(within(range).map((row) => row.map(({ row: r, col }) => String(model()?.value(r, col) ?? "")).join("\t")).join("\n")).catch((error: Error) => props.host.failed(error.message));
   const clear = (range: SheetRange) => write(within(range).flat().map((cell) => ({ ...cell, input: "" })));
@@ -298,6 +299,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
               <MenuRow destructive icon={<Icons.Delete />} onSelect={() => structure("delete-cols", range().left, count(range().left, range().right))}>Delete {count(range().left, range().right) > 1 ? "columns" : "column"} {rangeA1({ ...range(), top: 0, bottom: 0 }).replace(/1/g, "")}</MenuRow>
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "W"]} onSelect={() => sized("HOW", range())}>Column width…</MenuRow>
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "I"]} onSelect={() => sized("HOI", range())}>Fit column width</MenuRow>
+              <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "D"]} onSelect={() => sized("HOD", range())}>Default width…</MenuRow>
             </MenuSection>}</Show>
             <Show when={formatted()}>{(range) => <FormatMenu formats={formats} range={range()} />}</Show>
           </ContextMenuContent>

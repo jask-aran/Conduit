@@ -285,17 +285,6 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     createEffect(() => tell(selections.flatMap((selection) => selection.place && !selection.sent ? [{ key: `${UNSENT}${selection.id}`, quote: selection.quote, under: selection.place.under, current: openId() === selection.id, resolved: false }] : [])));
     onCleanup(() => tell([]));
   }
-  // A bar in the surface's own row stands under the layer: while the layer has the pointer, the bar and what stands under it are cut out of the layer, so they are pressed as themselves.
-  if (can.bar === "slot") createEffect(() => {
-    const slot = host.slot?.(), over = layer;
-    if (!slot || !over || !select()) return;
-    const cut = () => { over.style.clipPath = `path(evenodd, "M0 0H${innerWidth}V${innerHeight}H0Z${[...slot.querySelectorAll(".ui-markup-rails, .ui-markup-under, .ui-markup-held")].map((part) => { const box = part.getBoundingClientRect(); return `M${box.left} ${box.top}H${box.right}V${box.bottom}H${box.left}Z`; }).join("")}")`; };
-    const sized = new ResizeObserver(cut), parts = new MutationObserver(cut);
-    sized.observe(slot); if (slot.parentElement) sized.observe(slot.parentElement); parts.observe(slot, { childList: true, subtree: true });
-    window.addEventListener("resize", cut); window.addEventListener("transitionend", cut, true);
-    cut();
-    onCleanup(() => { sized.disconnect(); parts.disconnect(); window.removeEventListener("resize", cut); window.removeEventListener("transitionend", cut, true); over.style.clipPath = ""; });
-  });
   const open = () => selections.find((selection) => selection.id === openId()) ?? null;
   /** A comment about a place has its note beside the place while it is written; the others are written in the stack. */
   const floats = (selection: Selection | null) => Boolean(selection && !selection.general && !selection.whole);
@@ -872,7 +861,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   const sourceLine = (selection: Selection) => selection.whole ? "The whole page, as it was when this was taken." : selection.general ? "About nothing on the page in particular." : selection.quote ? `“${selection.quote}”` : selection.elements.length === 1 ? sourceOf(selection.elements[0]!) : undefined;
 
   // The bar: over the page in the layer, or in the slot the surface gives in a row of its own.
-  const bar = () => <MarkupBar out={props.moving} thin={can.thin} ribbon={can.bar !== "foot"} slot={can.bar === "slot" ? host.slot?.() ?? undefined : undefined} own={host.tools?.()} onOwn={() => setMarkedLast(false)} onAsk={host.place && offered("quote") ? () => { const place = host.place!(); if (place) addQuote(place); } : undefined} view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onNote={() => { if (props.mode === "use") look("page"); note(); }}
+  const bar = () => <MarkupBar out={props.moving} thin={can.thin} ribbon={can.bar !== "foot"} own={host.tools?.()} onOwn={() => setMarkedLast(false)} onAsk={host.place && offered("quote") ? () => { const place = host.place!(); if (place) addQuote(place); } : undefined} view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onNote={() => { if (props.mode === "use") look("page"); note(); }}
     // The quote tool taken up while a place is chosen comments on it.
     onTool={(tool) => { const took = props.mode === "use" || pointerTool() !== tool; if (props.mode === "use") look("page"); setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); const place = took && tool === "quote" ? host.place?.() : null; if (place) addQuote(place); }}
     status={status()} compact={touchOnly} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} size={textSize()} onSize={can.inks ? setTextSize : undefined} shape={shape()} onShape={setShape} onUndo={(reviewing() && undoable()) || surface?.canUndo() ? undoAny : undefined} onRedo={(reviewing() && redoable()) || surface?.canRedo() ? redoAny : undefined}
@@ -936,7 +925,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
               value={reply()} onOpen={() => startReply(n())} onInput={setReply} resolved={resolvedOf(n())} onSay={() => void answer()} onResolve={(resolved) => settle(n(), resolved)} />}</Show>
           </Show>}</For></MarkupNotes>
         </Show>
-        <Show when={can.bar === "slot"} fallback={bar()}><Show when={!props.hidden && host.slot?.()} keyed>{(slot) => <Portal mount={slot} ref={(element: HTMLDivElement) => { element.style.display = "contents"; }}>{bar()}</Portal>}</Show></Show>
+        {bar()}
       </Show>
     </MarkupLayer>
   </Portal>;
