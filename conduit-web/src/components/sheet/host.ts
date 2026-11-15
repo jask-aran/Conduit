@@ -15,7 +15,7 @@ export type SheetRange = { top: number; left: number; bottom: number; right: num
  * The grid's look, read from the app's tokens (theme.ts): Glide's theme object, sizes in pixels, and the inks it draws itself (`inks`: a formula's references, formula.ts INKS; `live` and `warn`: a number format's green and yellow).
  * For styles (styles.ts): `strong`, a bold cell's weight; `edge`, a border's colour; `palette`, each ink as text and as a cell's fill; `corner`, the size of the mark on a cell an import froze (in `warn`).
  */
-export type SheetLook = { grid: Record<string, string | number>; row: number; header: number; width: number; error: string; live: string; warn: string; mark: string; markCurrent: string; inks: string[];
+export type SheetLook = { grid: Record<string, string | number>; row: number; header: number; picked: { accentColor: string; accentFg: string }; width: number; error: string; live: string; warn: string; mark: string; markCurrent: string; inks: string[];
   strong: string; edge: string; corner: number; palette: Record<SheetInk, { text: string; fill: string }> };
 /** A reference in the formula being edited, outlined on the grid in its ink; `pointing`: the one being pointed at with the mouse or arrows. */
 export type SheetReference = { range: SheetRange; ink: number; pointing: boolean };

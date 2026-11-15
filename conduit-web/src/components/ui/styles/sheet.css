@@ -4,7 +4,8 @@
 /* While its pane moves (an edge dragged, panes easing), the sheet keeps its width and the grid is not drawn again each frame (artifact-pane.tsx: data-held). */
 .ui-sheet-fill[data-held] > .ui-spreadsheet { flex: none; width: var(--held-width); align-self: center; }
 .ui-spreadsheet-slot { display: flex; flex: 0 1 auto; min-width: 0; margin-inline-start: auto; }
-.ui-spreadsheet-bar { display: flex; flex: none; flex-wrap: wrap; align-items: flex-start; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); border-bottom: var(--hairline) solid var(--border); }
+/* Above the grid, which comes after it: what the ribbon opens under itself (a line of inks) stands over the column letters. */
+.ui-spreadsheet-bar { position: relative; z-index: 1; display: flex; flex: none; flex-wrap: wrap; align-items: flex-start; gap: var(--space-sm); padding: var(--space-sm) var(--space-md); border-bottom: var(--hairline) solid var(--border); }
 .ui-spreadsheet-bar > .ui-spreadsheet-address { flex: 0 0 var(--measure-2xs); font-family: var(--font-data); }
 /* The formula field gives way first, down to a field one can still read; what stands in the slot at the row's end folds only then, and where even folded it has no room (a phone), it takes a line of its own, at the end. */
 .ui-spreadsheet-bar > .ui-spreadsheet-formula { flex: 1; min-width: var(--measure-2xs); font-family: var(--font-data); }
