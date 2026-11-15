@@ -2986,10 +2986,10 @@ function App() {
     <BrowserPane id={id} onTitle={(title) => setBrowserTitles((current) => ({ ...current, [`browser:${id}`]: title }))}
       header={<PaneHeader actions={paneTabActions(pane)}><Show when={documentTab(pane)} fallback={<HeaderCrumb title={viewName(`browser:${id}`)} />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />
   </SheetFill>;
-  const renderTerminalDocument = (pane: PaneKey, shell: string) => {
-    const [record, setRecord] = createSignal<{ projectId: string; cwd?: string | null; title?: string | null } | null | undefined>(undefined);
   const renderMailDocument = (pane: PaneKey, account: string) => <MailPane account={account} onAccount={(id) => void setPaneView(pane, `mail:${id}`)} onSettings={() => openSettings("mail")}
     header={(actions) => <PaneHeader actions={<>{actions}{paneTabActions(pane)}</>}><Show when={documentTab(pane)} fallback={<HeaderCrumb title="Mail" />}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>} />;
+  const renderTerminalDocument = (pane: PaneKey, shell: string) => {
+    const [record, setRecord] = createSignal<{ projectId: string; cwd?: string | null; title?: string | null } | null | undefined>(undefined);
     void api<PtysPayload>("/v0/ptys")
       .then(({ ptys = [] }) => {
         const found = ptys.find((item) => item.id === shell && item.status === "running") ?? null;
@@ -4077,13 +4077,13 @@ function App() {
     if (paneAOverride() === "browser:hub") return focusAnyPane("main");
     void openBeside("browser:hub");
   };
-  const openEmptyPane = () => {
-    if (shownSlots().length >= 2 || !viewsFit([...shownSlots().map(slotView), "home"])) return void toast.info("There is no room for another pane.");
   const openMail = () => {
     const at = shownSlots().find((slot) => slotView(slot)?.startsWith("mail:"));
     if (paneAOverride()?.startsWith("mail:") || at !== undefined) return focusAnyPane(at ?? "main");
     void openBeside("mail:default");
   };
+  const openEmptyPane = () => {
+    if (shownSlots().length >= 2 || !viewsFit([...shownSlots().map(slotView), "home"])) return void toast.info("There is no room for another pane.");
     void openBeside("home", true, true);
   };
   const closePane = async (pane: PaneKey) => {
