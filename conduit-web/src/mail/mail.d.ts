@@ -25,7 +25,7 @@ export interface MailSync {
   paused: boolean;
   /** Messages newer than this are read in (headers, labels, threads); older mail is found by a search at the source (`remote`). Shortening it only stops reading further back: what is already held stays. Default 1095. */
   since: MailReach;
-  /** Messages newer than this have their text fetched, held and searchable; an older one's is fetched when it is opened. Shortening it fetches no more: text already held stays. Never further back than `since`. Default 90. */
+  /** Messages newer than this are kept whole and open at once. An older one (inside `since`) still has its text read in for search, a day.s share at a time, and is fetched again when it is opened. Shortening it fetches no more: text already held stays. Never further back than `since`. Default 90. */
   bodies: MailReach;
 }
 /** What the hub holds of an account, counted when asked. */
@@ -165,7 +165,8 @@ export interface MailStore {
   /** Every message of the account, its bodies with them (the source renumbered: UIDVALIDITY changed). Labels, cursors and hub drafts stay. */
   clearMessages(account: string): void;
   /** The message's raw RFC 822 bytes, kept on disk, and its text for search and the snippet. */
-  holdBody(account: string, key: string, raw: Buffer, parsed: { text: string; attachments: boolean }): StoreChange;
+  /** `keep` false: the text alone is held, for search, and the raw is not written. */
+  holdBody(account: string, key: string, raw: Buffer, parsed: { text: string; attachments: boolean }, keep?: boolean): StoreChange;
   /** Keys of the messages whose text is held, after `after` in key order. */
   heldKeys(account: string, after: string, limit: number): string[];
   rawOf(account: string, key: string): Buffer | null;
@@ -178,7 +179,8 @@ export interface MailStore {
   keysOfSeqs(account: string, seqs: number[]): { seq: number; key: string }[];
   seqsOfKeys(account: string, keys: string[]): { seq: number; key: string }[];
   /** Messages since `since` (ms) whose body is not held, newest first. */
-  bodiless(account: string, since: number, limit: number): { key: string; seq: number | null; size: number }[];
+  /** Messages since then whose raw is not kept, newest first; `unread`: only those with no text held either. */
+  bodiless(account: string, since: number, limit: number, unread?: boolean): { key: string; seq: number | null; size: number }[];
   count(account: string): number;
   /** Up to `limit` messages dated before `before` (ms), oldest first, taken out of the hub's copy as `removeMessages` does (a read-in again pages through every one); `count`: how many went. */
   prune(account: string, before: number, limit: number): StoreChange & { count: number };

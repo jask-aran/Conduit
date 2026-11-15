@@ -15,6 +15,10 @@ const WINDOW = 500;
 const PAGE = 500;
 const BODY_BATCH = 25;
 const BODY_MAX = 10 * 1024 * 1024;
+// Older mail is read for its text alone: the start of each message, where its text parts are, and no more in a day
+// than leaves room under Gmail's daily limit on what an account may download over IMAP.
+const TEXT_HEAD = 256 * 1024;
+const TEXT_DAY = 1024 * 1024 * 1024;
 const UPSERT_PAGE = 100;
 const POLL_MS = 45_000;
 const SWEEP_MS = 10 * 60_000;
@@ -416,14 +420,22 @@ export function createGmailAdapter(ctx, deps = {}) {
     if (s.backfilled) { progress(s); s.uids = null; }
   }
 
-  /** One recent message's raw body, newest first; false when none is left to read. */
+  const today = () => new Date().toISOString().slice(0, 10);
+  /** One message's body, newest first: whole for a recent one, the text alone for an older one; false when none is left to read now. */
   async function body(s) {
-    const next = write(s, () => store.bodiless(account, reachStart(ctx.sync().bodies) ?? 0, s.skip.size + 1)).find((b) => !s.skip.has(b.key));
+    let whole = true;
+    let next = write(s, () => store.bodiless(account, reachStart(ctx.sync().bodies) ?? 0, s.skip.size + 1)).find((b) => !s.skip.has(b.key));
+    if (!next) {
+      const read = write(s, () => store.cursor(account, "text-read"));
+      if (read?.day === today() && read.bytes >= TEXT_DAY) return false;
+      whole = false;
+      next = write(s, () => store.bodiless(account, reachStart(ctx.sync().since) ?? 0, s.skip.size + 1, true)).find((b) => !s.skip.has(b.key));
+    }
     if (!next) return false;
-    if (next.seq == null || next.size > BODY_MAX) { s.skip.add(next.key); return true; }
+    if (next.seq == null || (whole && next.size > BODY_MAX)) { s.skip.add(next.key); return true; }
     let raw;
     try {
-      raw = await later(s, (c) => inBox(c, s.boxes.all, () => c.fetchOne(String(next.seq), { source: true }, { uid: true })));
+      raw = await later(s, (c) => inBox(c, s.boxes.all, () => c.fetchOne(String(next.seq), { source: whole ? true : { start: 0, maxLength: TEXT_HEAD } }, { uid: true })));
     } catch (err) {
       if (!s.alive || !s.work.usable) throw err;
       s.skip.add(next.key);
@@ -437,7 +449,9 @@ export function createGmailAdapter(ctx, deps = {}) {
       s.skip.add(next.key);
       return true;
     }
-    changed(s, write(s, () => store.holdBody(account, next.key, raw.source, parsed)));
+    const done = write(s, () => store.holdBody(account, next.key, raw.source, parsed, whole));
+    if (whole) changed(s, done);
+    else write(s, () => { const read = store.cursor(account, "text-read"); store.setCursor(account, "text-read", { day: today(), bytes: (read?.day === today() ? read.bytes : 0) + raw.source.length }); });
     return true;
   }
 

@@ -261,15 +261,18 @@ export function openMailStore({ dir }) {
       fs.rmSync(rawDir(account), { recursive: true, force: true });
     },
 
-    holdBody(account, key, raw, parsed) {
+    // held: 1 with its raw file kept, 2 with its text alone (read for search; the raw is fetched again when it is opened).
+    holdBody(account, key, raw, parsed, keep = true) {
       const row = q("SELECT rowid, thread FROM messages WHERE account = ? AND key = ?").get(account, key);
       if (!row) return { threads: [] };
-      const file = rawFile(account, key);
-      fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-      fs.writeFileSync(file, raw, { mode: 0o600 });
+      if (keep) {
+        const file = rawFile(account, key);
+        fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+        fs.writeFileSync(file, raw, { mode: 0o600 });
+      }
       const text = String(parsed.text || "").slice(0, TEXT_MAX);
       return tx(() => {
-        q("UPDATE messages SET held = 1, snippet = ?, attachments = ? WHERE rowid = ?").run(snippetOf(text), parsed.attachments ? 1 : 0, row.rowid);
+        q("UPDATE messages SET held = CASE WHEN ? OR held = 1 THEN 1 ELSE 2 END, snippet = ?, attachments = max(attachments, ?) WHERE rowid = ?").run(keep ? 1 : 0, snippetOf(text), parsed.attachments ? 1 : 0, row.rowid);
         q("UPDATE search SET body = ? WHERE rowid = ?").run(text, row.rowid);
         return rollupAll(account, [row.thread]);
       });
@@ -304,7 +307,8 @@ export function openMailStore({ dir }) {
       q(`SELECT seq, key FROM messages WHERE account = ? AND seq IN (${marks(part)})`).all(account, ...part).map((row) => ({ seq: row.seq, key: row.key }))),
     seqsOfKeys: (account, keys) => chunks(keys).flatMap((part) =>
       q(`SELECT seq, key FROM messages WHERE account = ? AND key IN (${marks(part)})`).all(account, ...part).map((row) => ({ seq: row.seq, key: row.key }))),
-    bodiless: (account, since, limit) => q("SELECT key, seq, size FROM messages WHERE account = ? AND held = 0 AND date >= ? ORDER BY date DESC LIMIT ?")
+    // `unread`: those with no text at all; else those whose raw is not kept.
+    bodiless: (account, since, limit, unread = false) => q(`SELECT key, seq, size FROM messages WHERE account = ? AND ${unread ? "held = 0" : "held != 1"} AND date >= ? ORDER BY date DESC LIMIT ?`)
       .all(account, since, limit).map((row) => ({ key: row.key, seq: row.seq, size: row.size })),
     count: (account) => q("SELECT count(*) AS n FROM messages WHERE account = ?").get(account).n,
 
@@ -317,7 +321,7 @@ export function openMailStore({ dir }) {
       return {
         messages: one("SELECT count(*) AS n FROM messages WHERE account = ?").n,
         threads: one("SELECT count(*) AS n FROM threads WHERE account = ?").n,
-        bodies: one("SELECT count(*) AS n FROM messages WHERE account = ? AND held = 1").n,
+        bodies: one("SELECT count(*) AS n FROM messages WHERE account = ? AND held > 0").n,
         oldest: one("SELECT min(date) AS at FROM messages WHERE account = ?").at,
         // The raw files are the source's bytes, so their sizes add up to the held messages' own.
         raw: one("SELECT coalesce(sum(size), 0) AS n FROM messages WHERE account = ? AND held = 1").n,
