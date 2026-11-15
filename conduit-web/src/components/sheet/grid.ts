@@ -9,6 +9,7 @@ import { createElement, useEffect, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { colName, type SheetView, COL_LIMIT } from "@/sheet-format.js";
+import { shiftRefs } from "@/sheet-rules.js";
 import { createCellLook } from "./cell-draw";
 import { seriesFill } from "./series";
 import type { SheetDrawn } from "./formats";
@@ -226,9 +227,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       write(cells.map(({ location: [col, row], value }) => ({ row: p.map.sheet(row), col, input: value.kind === GridCellKind.Boolean ? (value.data ? "TRUE" : "FALSE") : value.kind === GridCellKind.Text ? value.data : "" })));
       return true;
     },
-    onPaste: (target, values) => {
-      // Into the rows shown, a hidden one keeping what it holds.
-      const [col, row] = target, bottom = p.map.sheet(row + values.length - 1), right = col + Math.max(...values.map((line) => line.length)) - 1;
+    onPaste: (target, given) => {
+      // Into the rows shown, a hidden one keeping what it holds; what was copied here has its formulas moved with it.
+      const [col, row] = target, values = moved(given, p.map.sheet(row), col), bottom = p.map.sheet(row + values.length - 1), right = col + Math.max(...values.map((line) => line.length)) - 1;
       if (bottom >= model.size().rows || right >= model.size().cols) events.fill({ top: p.map.sheet(row), left: col, bottom, right }, values.map((line) => [...line]));
       else write(values.flatMap((line, y) => line.map((input, x) => ({ row: p.map.sheet(row + y), col: col + x, input }))));
       return false;
@@ -496,6 +497,16 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   // Ctrl as the fill handle is let go (the grid fills on the mouseup after it) counts a lone number up, or copies a series.
   const ctrl = (event: PointerEvent) => { counting = event.ctrlKey; };
   addEventListener("pointerup", ctrl, true);
+  // What was last copied from this grid, as typed (its rows shown), and where from: pasted as it is, its relative references move as a
+  // spreadsheet's do. A cut moves cells, whose references stay.
+  let copied: { top: number; left: number; text: string } | null = null;
+  const typedIn = (area: SheetRange) => { const hidden = options.columns.hidden(), lines: string[] = []; for (let row = area.top; row <= area.bottom; row++) if (!hidden.has(row)) lines.push(Array.from({ length: area.right - area.left + 1 }, (_, c) => model.input(row, area.left + c)).join("\t")); return lines.join("\n"); };
+  const clipped = (event: ClipboardEvent) => { if (!parts.some((p) => p.host?.contains(document.activeElement))) return; const area = event.type === "copy" ? picked() : null; copied = area && { top: area.top, left: area.left, text: typedIn(area) }; };
+  addEventListener("copy", clipped, true); addEventListener("cut", clipped, true);
+  const moved = (values: readonly (readonly string[])[], top: number, left: number): string[][] => {
+    const same = copied && values.map((line) => line.join("\t")).join("\n") === copied.text;
+    return values.map((line) => line.map((input) => same && input.startsWith("=") ? shiftRefs(input, top - copied!.top, left - copied!.left) : input));
+  };
   const api: SheetGrid = {
     update: (changed) => {
       if (!changed) {
@@ -570,7 +581,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     theme: (next) => { look = next; drive.look?.(look); },
     scroll: (to) => { if (to) { const drawn = clip(body, { top: to.row, bottom: to.row, left: to.col, right: to.col }); body.editor?.scrollTo(to.col, drawn?.top ?? 0, "both", 0, 0, { hAlign: "start", vAlign: "start" }); } return { row: body.map.sheet(body.view.y), col: body.view.x }; },
     focus: () => owner.editor?.focus(),
-    destroy: () => { stop(); element.removeEventListener("pointerdown", sweep); removeEventListener("pointerup", ctrl, true); root.unmount(); },
+    destroy: () => { stop(); element.removeEventListener("pointerdown", sweep); removeEventListener("pointerup", ctrl, true); removeEventListener("copy", clipped, true); removeEventListener("cut", clipped, true); root.unmount(); },
   };
   return api;
 }
