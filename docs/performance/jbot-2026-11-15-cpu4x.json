@@ -1,0 +1,84 @@
+{
+  "at": "2026-11-15T03:55:53.301Z",
+  "cpuSlowdown": 4,
+  "harness": "Actual JbotRoom and log, fixed header/composer, no backgrounds or populated side panel",
+  "baseline": "566894326cc81b2141829018f5a519b89abd9d2e",
+  "current": "397f0669b93c87e889afd926891acaf359c2e0d1",
+  "viewport": [
+    1440,
+    900,
+    1
+  ],
+  "fixture": {
+    "messages": 100,
+    "runs": 27,
+    "source": "One live backend snapshot replayed identically; message contents are not saved"
+  },
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+  "trials": [
+    {
+      "version": "before",
+      "frames": 45,
+      "rows": 159,
+      "domNodes": 2195,
+      "hiddenBlocks": 0,
+      "intervalMs": {
+        "p50": 194.8,
+        "p95": 382.4,
+        "max": 403.3
+      },
+      "resizeUpdateMs": {
+        "p50": 27.4,
+        "p95": 158.1
+      }
+    },
+    {
+      "version": "after",
+      "frames": 45,
+      "rows": 159,
+      "domNodes": 2195,
+      "hiddenBlocks": 172,
+      "intervalMs": {
+        "p50": 83.5,
+        "p95": 104.3,
+        "max": 118.2
+      },
+      "resizeUpdateMs": {
+        "p50": 27.9,
+        "p95": 34.4
+      }
+    },
+    {
+      "version": "after",
+      "frames": 45,
+      "rows": 159,
+      "domNodes": 2195,
+      "hiddenBlocks": 172,
+      "intervalMs": {
+        "p50": 83.6,
+        "p95": 111.2,
+        "max": 125.1
+      },
+      "resizeUpdateMs": {
+        "p50": 27.3,
+        "p95": 37.3
+      }
+    },
+    {
+      "version": "before",
+      "frames": 45,
+      "rows": 159,
+      "domNodes": 2195,
+      "hiddenBlocks": 0,
+      "intervalMs": {
+        "p50": 201.7,
+        "p95": 375.6,
+        "max": 389.4
+      },
+      "resizeUpdateMs": {
+        "p50": 117.9,
+        "p95": 165.9
+      }
+    }
+  ]
+}

@@ -19,10 +19,19 @@ export function runHeadedBenchmark(run, cpu) {
   try {
     cli("select_page", page, "--bringToFront");
     cli("emulate", "--viewport", "1440x900x1", "--cpuThrottlingRate", String(cpu));
-    const output = cli("evaluate_script", run.toString());
-    const json = output.match(/```json\s*([\s\S]*?)```/)?.[1];
-    if (!json) throw new Error(output);
-    return JSON.parse(json);
+    cli("evaluate_script", `() => window.benchmarkCpu = ${cpu}`);
+    // Started in the page and polled: a throttled run outlasts one call's daemon timeout.
+    cli("evaluate_script", `() => { window.benchmarkResult = null; (${run})().then((result) => { window.benchmarkResult = { result }; }, (error) => { window.benchmarkResult = { error: String(error?.stack ?? error) }; }); return true; }`);
+    for (const started = Date.now(); Date.now() - started < 30 * 60_000;) {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5000);
+      const output = cli("evaluate_script", "() => window.benchmarkResult");
+      const json = output.match(/```json\s*([\s\S]*?)```/)?.[1];
+      const done = json && JSON.parse(json);
+      if (!done) continue;
+      if (done.error) throw new Error(done.error);
+      return done.result;
+    }
+    throw new Error("Benchmark did not finish in 30 minutes");
   } finally {
     cli("close_page", page);
     if (restore) cli("select_page", restore, "--bringToFront");

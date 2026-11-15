@@ -1,9 +1,9 @@
 {
-  "at": "2026-11-15T03:10:40.962Z",
+  "at": "2026-11-15T03:21:52.059Z",
   "cpuSlowdown": 1,
   "harness": "Two isolated styled panes; no gallery fetch or media emulation",
   "baseline": "566894326cc81b2141829018f5a519b89abd9d2e",
-  "current": "5bb506553fec14ac11ebf4bd994cd71cbc6edd16",
+  "current": "43d8554ffd25800dacf18590ea57ccf9560464ff",
   "viewport": [
     1440,
     900,
@@ -23,7 +23,7 @@
         "max": 7.1
       },
       "resizeUpdateMs": {
-        "p50": 0.6,
+        "p50": 0.5,
         "p95": 0.9
       },
       "copies": 236,
@@ -44,8 +44,8 @@
         "max": 7.1
       },
       "resizeUpdateMs": {
-        "p50": 0.7,
-        "p95": 0.9
+        "p50": 0.5,
+        "p95": 0.8
       },
       "copies": 0,
       "shaders": 0,
@@ -62,11 +62,11 @@
       "intervalMs": {
         "p50": 7,
         "p95": 7,
-        "max": 7.2
+        "max": 7.1
       },
       "resizeUpdateMs": {
-        "p50": 0.7,
-        "p95": 1
+        "p50": 0.5,
+        "p95": 0.8
       },
       "copies": 0,
       "shaders": 0,
@@ -82,11 +82,11 @@
       "frames": 120,
       "intervalMs": {
         "p50": 7,
-        "p95": 7.1,
+        "p95": 7,
         "max": 7.1
       },
       "resizeUpdateMs": {
-        "p50": 0.6,
+        "p50": 0.5,
         "p95": 0.9
       },
       "copies": 238,
@@ -102,13 +102,13 @@
       "renderer": "before",
       "frames": 120,
       "intervalMs": {
-        "p50": 6.9,
+        "p50": 7,
         "p95": 7.1,
-        "max": 7.1
+        "max": 7.3
       },
       "resizeUpdateMs": {
         "p50": 0.6,
-        "p95": 0.9
+        "p95": 0.8
       },
       "copies": 478,
       "shaders": 239,
@@ -128,8 +128,8 @@
         "max": 7.1
       },
       "resizeUpdateMs": {
-        "p50": 0.6,
-        "p95": 0.9
+        "p50": 0.5,
+        "p95": 0.8
       },
       "copies": 240,
       "shaders": 120,
@@ -145,12 +145,12 @@
       "frames": 120,
       "intervalMs": {
         "p50": 7,
-        "p95": 7.1,
+        "p95": 7,
         "max": 7.1
       },
       "resizeUpdateMs": {
-        "p50": 0.6,
-        "p95": 0.9
+        "p50": 0.5,
+        "p95": 0.8
       },
       "copies": 240,
       "shaders": 120,
@@ -167,7 +167,7 @@
       "intervalMs": {
         "p50": 7,
         "p95": 7,
-        "max": 7
+        "max": 7.1
       },
       "resizeUpdateMs": {
         "p50": 0.6,

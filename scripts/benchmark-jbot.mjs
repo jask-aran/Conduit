@@ -49,6 +49,7 @@ async function benchmark() {
   const changed = () => visibilityChanges++;
   document.addEventListener("visibilitychange", changed); window.addEventListener("blur", changed);
   const trials = [];
+  const frames = window.benchmarkCpu > 1 ? 45 : 90;
   try {
     for (const version of ["before", "after", "after", "before"]) {
       root.dataset.benchmarkVersion = version;
@@ -61,8 +62,8 @@ async function benchmark() {
         await frame();
         const rows = surface.querySelectorAll(".ui-transcript-row").length;
         if (rows !== previousRows) { previousRows = rows; stillSince = performance.now(); }
-        if (rows && !surface.querySelector(".ui-chat[data-opening]") && performance.now() - stillSince > 300) break;
-        if (performance.now() - started > 15000) throw new Error(`${version} Jbot did not settle`);
+        if (rows && !surface.querySelector(".ui-chat[data-opening]") && performance.now() - stillSince > 800) break;
+        if (performance.now() - started > 20000) throw new Error(`${version} Jbot did not settle`);
       }
       expectedRows ??= previousRows;
       if (previousRows !== expectedRows) throw new Error(`Different row counts: ${expectedRows} versus ${previousRows}`);
@@ -73,7 +74,7 @@ async function benchmark() {
       if (document.hidden) throw new Error("Benchmark tab must remain foreground.");
       tell("begin", 722);
       let last;
-      for (let index = 0; index < 90; index++) {
+      for (let index = 0; index < frames; index++) {
         const now = await frame(); if (last != null) intervals.push(now - last); last = now;
         const start = performance.now(), width = 600 + 100 * Math.sin(index / 8);
         dock.style.width = `${width}px`;
@@ -82,8 +83,10 @@ async function benchmark() {
         updates.push(performance.now() - start);
       }
       tell("end", Number.parseFloat(dock.style.width));
+      const endRows = surface.querySelectorAll(".ui-transcript-row").length;
+      if (endRows !== previousRows) throw new Error(`Log still mounted during resize: ${previousRows} to ${endRows} rows`);
       if (visibilityChanges !== visible) throw new Error("Foreground changed during benchmark; discard this run.");
-      trials.push({ version, frames: 90, rows: previousRows, domNodes: surface.querySelectorAll("*").length, hiddenBlocks: surface.querySelectorAll('[data-transcript-visibility="hidden"]').length, intervalMs: { p50: percentile(intervals, .5), p95: percentile(intervals, .95), max: Math.round(Math.max(...intervals) * 100) / 100 }, resizeUpdateMs: { p50: percentile(updates, .5), p95: percentile(updates, .95) } });
+      trials.push({ version, frames, rows: previousRows, domNodes: surface.querySelectorAll("*").length, hiddenBlocks: surface.querySelectorAll('[data-transcript-visibility="hidden"]').length, intervalMs: { p50: percentile(intervals, .5), p95: percentile(intervals, .95), max: Math.round(Math.max(...intervals) * 100) / 100 }, resizeUpdateMs: { p50: percentile(updates, .5), p95: percentile(updates, .95) } });
       dispose(); dispose = undefined;
     }
     return { viewport: [innerWidth, innerHeight, devicePixelRatio], fixture: { messages: messages.messages.length, runs: messages.runs?.length ?? 0, source: "One live backend snapshot replayed identically; message contents are not saved" }, userAgent: navigator.userAgent, trials };
