@@ -186,11 +186,16 @@ export function writeStyles(styles, sheets) {
       const open = cell && /^<c\b[^>]*?(?=\/?>)/.exec(cell)[0], s = xfFor(open ? formats[Number(attr(open, "s") ?? 0)] ?? 0 : 0, packed), worn = s ? ` s="${s}"` : "";
       rowOf(r).cells.set(c, open ? `${open.replace(/\s+s="\d+"/, "")}${worn}${cell.slice(open.length)}` : `<c r="${colName(c)}${r + 1}"${worn}/>`);
     }
-    // One <col> a column: SheetJS's, with the column's style.
+    // SheetJS's <col>s with each column's style, neighbours alike as one range.
     const kept = new Map();
     for (const tag of xml.match(/<col\b[^>]*>/g) ?? []) for (let c = Number(attr(tag, "min")) - 1; c < Number(attr(tag, "max")); c++) kept.set(c, tag.replace(/<col|\s(min|max|style)="[^"]*"|\/?>/g, ""));
     for (const c of cols.keys()) if (!kept.has(c)) kept.set(c, ' width="9.140625"');
-    const columns = [...kept].sort((a, b) => a[0] - b[0]).map(([c, rest]) => `<col min="${c + 1}" max="${c + 1}"${rest}${cols.has(c) ? ` style="${xfFor(0, cols.get(c))}"` : ""}/>`).join("");
+    const runs = [];
+    for (const [c, rest] of [...kept].sort((x, y) => x[0] - y[0])) {
+      const said = `${rest}${cols.has(c) ? ` style="${xfFor(0, cols.get(c))}"` : ""}`, last = runs.at(-1);
+      if (last && last.to === c - 1 && last.said === said) last.to = c; else runs.push({ from: c, to: c, said });
+    }
+    const columns = runs.map(({ from, to, said }) => `<col min="${from + 1}" max="${to + 1}"${said}/>`).join("");
     const lined = columns ? (/<cols>[\s\S]*?<\/cols>/.test(xml) ? xml.replace(/<cols>[\s\S]*?<\/cols>/, () => `<cols>${columns}</cols>`) : xml.replace("<sheetData", () => `<cols>${columns}</cols><sheetData`)) : xml;
     const body = [...rows].sort((a, b) => a[0] - b[0]).map(([, row]) => `${row.open}>${[...row.cells].sort((a, b) => a[0] - b[0]).map(([, cell]) => cell).join("")}</row>`).join("");
     return lined.replace(/<sheetData\/>|<sheetData>[\s\S]*<\/sheetData>/, () => `<sheetData>${body}</sheetData>`);
