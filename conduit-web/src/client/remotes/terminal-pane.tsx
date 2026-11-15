@@ -1022,6 +1022,37 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
 
   // Wherever it is hosted (a pane, the dock), the terminal shows the background picture dimmed, as mail and sheets do.
   const art = createArtWindow(true);
+  const shortcutBar = () => <>
+    <TermShortcuts aria-label="Terminal shortcuts">
+      <For each={shortcuts()}>{(shortcut) =>
+        <TermShortcut type="button" title={`${shortcut.target === "new" ? "New terminal" : "Current terminal"}: ${shortcut.command}`}
+          disabled={starting() || (shortcut.target === "current" && !writable())} onClick={() => runShortcut(shortcut)}>
+          {shortcut.label}
+        </TermShortcut>
+      }</For>
+      <DropdownMenu>
+        <MenuControl as={IconButton} aria-label="Edit terminal shortcuts" title="Edit terminal shortcuts"><Icons.Settings /></MenuControl>
+        <MenuContent>{shortcutRows()}</MenuContent>
+      </DropdownMenu>
+    </TermShortcuts>
+    <TermOverflow>
+      <DropdownMenu>
+        <MenuControl as={IconButton} aria-label="Terminal shortcuts" title="Terminal shortcuts"><Icons.More /></MenuControl>
+        <MenuContent>
+          <MenuSection title="Shortcuts">
+            <For each={shortcuts()}>{(shortcut) =>
+              <MenuRow {...{ textValue: shortcut.label }} detailData detail={`$ ${shortcut.command}`} disabled={starting() || (shortcut.target === "current" && !writable())} onSelect={() => runShortcut(shortcut)}>{shortcut.label}</MenuRow>
+            }</For>
+          </MenuSection>
+          <Rule />
+          <MenuSub>
+            <MenuSubTrigger icon={<Icons.Settings />}>Edit shortcuts</MenuSubTrigger>
+            <MenuSubContent>{shortcutRows()}</MenuSubContent>
+          </MenuSub>
+        </MenuContent>
+      </DropdownMenu>
+    </TermOverflow>
+  </>;
   const termActions = () => <Actions kind="term">
           <DropdownMenu onOpenChange={(open) => { if (open) void refreshSessions().catch((cause) => setError((cause as Error).message)); }}>
             <MenuControl as={TermButton} variant="ghost" size="sm" aria-label="Active terminal sessions" title="Active terminal sessions">
@@ -1127,68 +1158,12 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
         <Show when={pty()?.title}><strong>{pty()!.title}</strong></Show>
         <TermContext>{[props.projectName || "Chats", pty()?.currentCommand].filter(Boolean).join(" · ")}</TermContext>
       </TermIdentity>
-      <TermShortcuts aria-label="Terminal shortcuts">
-        <For each={shortcuts()}>{(shortcut) =>
-          <TermShortcut type="button" title={`${shortcut.target === "new" ? "New terminal" : "Current terminal"}: ${shortcut.command}`}
-            disabled={starting() || (shortcut.target === "current" && !writable())} onClick={() => runShortcut(shortcut)}>
-            {shortcut.label}
-          </TermShortcut>
-        }</For>
-        <DropdownMenu>
-          <MenuControl as={IconButton} aria-label="Edit terminal shortcuts" title="Edit terminal shortcuts"><Icons.Settings /></MenuControl>
-          <MenuContent>{shortcutRows()}</MenuContent>
-        </DropdownMenu>
-      </TermShortcuts>
-      <TermOverflow>
-        <DropdownMenu>
-          <MenuControl as={IconButton} aria-label="Terminal shortcuts" title="Terminal shortcuts"><Icons.More /></MenuControl>
-          <MenuContent>
-            <MenuSection title="Shortcuts">
-              <For each={shortcuts()}>{(shortcut) =>
-                <MenuRow {...{ textValue: shortcut.label }} detailData detail={`$ ${shortcut.command}`} disabled={starting() || (shortcut.target === "current" && !writable())} onSelect={() => runShortcut(shortcut)}>{shortcut.label}</MenuRow>
-              }</For>
-            </MenuSection>
-            <Rule />
-            <MenuSub>
-              <MenuSubTrigger icon={<Icons.Settings />}>Edit shortcuts</MenuSubTrigger>
-              <MenuSubContent>{shortcutRows()}</MenuSubContent>
-            </MenuSub>
-          </MenuContent>
-        </DropdownMenu>
-      </TermOverflow>
+      {shortcutBar()}
     </PaneHeader>}>{(header) => header()(<TermControls folded={folds.count()}>
       <Show when={headerStatus().tone !== "success"}>
         <TermStatus tone={headerStatus().tone} busy={headerStatus().tone === "busy"} label={headerStatus().label} title={headerStatus().title} aria-label={headerStatus().title} />
       </Show>
-      <TermShortcuts aria-label="Terminal shortcuts">
-        <For each={shortcuts()}>{(shortcut) =>
-          <TermShortcut type="button" title={`${shortcut.target === "new" ? "New terminal" : "Current terminal"}: ${shortcut.command}`}
-            disabled={starting() || (shortcut.target === "current" && !writable())} onClick={() => runShortcut(shortcut)}>
-            {shortcut.label}
-          </TermShortcut>
-        }</For>
-        <DropdownMenu>
-          <MenuControl as={IconButton} aria-label="Edit terminal shortcuts" title="Edit terminal shortcuts"><Icons.Settings /></MenuControl>
-          <MenuContent>{shortcutRows()}</MenuContent>
-        </DropdownMenu>
-      </TermShortcuts>
-      <TermOverflow>
-        <DropdownMenu>
-          <MenuControl as={IconButton} aria-label="Terminal shortcuts" title="Terminal shortcuts"><Icons.More /></MenuControl>
-          <MenuContent>
-            <MenuSection title="Shortcuts">
-              <For each={shortcuts()}>{(shortcut) =>
-                <MenuRow {...{ textValue: shortcut.label }} detailData detail={`$ ${shortcut.command}`} disabled={starting() || (shortcut.target === "current" && !writable())} onSelect={() => runShortcut(shortcut)}>{shortcut.label}</MenuRow>
-              }</For>
-            </MenuSection>
-            <Rule />
-            <MenuSub>
-              <MenuSubTrigger icon={<Icons.Settings />}>Edit shortcuts</MenuSubTrigger>
-              <MenuSubContent>{shortcutRows()}</MenuSubContent>
-            </MenuSub>
-          </MenuContent>
-        </DropdownMenu>
-      </TermOverflow>
+      {shortcutBar()}
       {termActions()}
     </TermControls>, folds.ref)}</Show>
     <div class="terminal-pane-body">
