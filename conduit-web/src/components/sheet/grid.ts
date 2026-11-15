@@ -152,6 +152,13 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
 
   const root = createRoot(element);
   root.render(createElement(Grid));
+  // The grid takes every press on the window by where it lands, so a press on what stands over it (the ribbon's line of inks, a menu) would
+  // select the column under it too: such a press never reaches the window.
+  const over = (event: MouseEvent | TouchEvent) => {
+    const at = "touches" in event ? event.touches[0] : event, frame = element.getBoundingClientRect();
+    if (at && !element.contains(event.target as Node) && at.clientX >= frame.left && at.clientX < frame.right && at.clientY >= frame.top && at.clientY < frame.bottom) event.stopPropagation();
+  };
+  for (const kind of ["mousedown", "touchstart"] as const) document.addEventListener(kind, over);
   const box = (col: number, row: number) => editor?.getBounds(col, row);
   return {
     update: (changed) => {
@@ -205,6 +212,6 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     theme: (next) => { look = next; drive.look?.(look); },
     scroll: (to) => { if (to) editor?.scrollTo(to.col, to.row, "both", 0, 0, { hAlign: "start", vAlign: "start" }); return { row: view.y, col: view.x }; },
     focus: () => editor?.focus(),
-    destroy: () => root.unmount(),
+    destroy: () => { for (const kind of ["mousedown", "touchstart"] as const) document.removeEventListener(kind, over); root.unmount(); },
   };
 }
