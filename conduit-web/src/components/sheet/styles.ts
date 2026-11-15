@@ -104,6 +104,9 @@ export function createSheetStyles(look: Y.Map<number | string>, model: Accessor<
     borders: (range, kind) => write(range, { borders: kind }),
     clear: (range) => write(range, { style: { bold: false, italic: false, underline: false, strike: false, wrap: false, color: null, fill: null, align: null, valign: null, size: null, borderColor: null, borderWeight: null }, borders: "none" }),
     key: (event, range) => {
+      // As a spreadsheet's: Ctrl+Shift+& draws the range's outline, Ctrl+Shift+_ takes its borders off.
+      const edge = (event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey ? ({ Digit7: "outer", Minus: "none" } as const)[event.code as "Digit7" | "Minus"] : undefined;
+      if (edge && range) { event.preventDefault(); write(range, { borders: edge }); return true; }
       const name = (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey ? KEYS[event.code] : undefined;
       if (!name || !range) return false;
       event.preventDefault();
