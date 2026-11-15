@@ -481,7 +481,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
           if (drawn && held) choose(into, { ...into.current, current: { ...held, cell: [cell.col, drawn.top] } }); }
         return;
       }
-      // Only what is in view is drawn again; the rest is read as it scrolls in.
+      // Only what is in view is drawn again; the rest is read as it scrolls in. A merge over rows is drawn by each of its rows.
+      if (merges.length) changed = changed.flatMap((cell) => { const one = mergeAt(cell.row, cell.col); return one && one.bottom > one.top ? Array.from({ length: one.bottom - one.top + 1 }, (_, n) => ({ row: one.top + n, col: one.left })) : [cell]; });
       for (const p of parts) {
         const { view } = p, near = changed.flatMap(({ row: at, col }) => { const drawn = partOf(at) === p ? clip(p, { top: at, bottom: at, left: col, right: col }) : null; return drawn && drawn.top >= view.y && drawn.top < view.y + view.height + 1 && col >= view.x && col < view.x + view.width + 1 ? [{ cell: [col, drawn.top] as Item }] : []; });
         if (near.length) p.editor?.updateCells(near);
