@@ -67,7 +67,10 @@ an op after 9 s) and #9 (deleting a merge's top row leaves it empty, as Excel's 
 Later: the context menu's Paste moves references too (checked in the browser); rules can be edited and moved up; Ctrl+Shift+& outlines,
 Ctrl+Shift+_ takes borders off.
 
-Still open: no Paste values row in the context menu; a top border on row 1 is hidden under the column header's line; arrows at a frozen merge's edge; prefix sums for tall
+Then Paste values in the cell menu, and row 1's top border drawn just inside the header's line.
+
+Still open: hidden columns (rows hide, columns can't; an import counts them dropped) need the grid's columns mapped as its rows are
+(`createRowMap`), a bigger change; arrows at a frozen merge's edge; prefix sums for tall
 merges; the low xlsx ones (row/column crossings outside the grid, `<c r=` attribute order); Notes from xlsx are waiting on the owner: sheet comments are markup items sent to a listener, so 16 imported notes would hand
 16 items to agents. Phone width is still unchecked (the headless probe opened with the sidebar drawer over the pane).
 
