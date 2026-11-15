@@ -74,7 +74,7 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
       queueMicrotask(() => { lone = null; });
       out++;
       let over = false;
-      const done = () => { if (over) return; over = true; clearTimeout(gaveUp); out--; settle(); }, gaveUp = setTimeout(done, WAIT_MS * 3);
+      const done = () => { if (over) return; over = true; clearTimeout(gaveUp); out--; settle(); }, gaveUp = setTimeout(done, WAIT_MS * 10);
       return send({ ...op, step: step.id, client: doc.clientID }).then((said) => {
         const tagged = (said as { tagged?: unknown } | null)?.tagged;
         if (typeof tagged === "number") owedFrames += tagged;
