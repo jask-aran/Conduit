@@ -17,6 +17,8 @@ import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange, Sheet
 export type SheetColumns = { width(col: number): number | undefined; type(col: number): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean };
 // How near a row's lower edge, beside its number, a press takes the edge to drag.
 const EDGE_SLOP = 3;
+// How often (ms) a drag held past the grid's edge scrolls it on by a column.
+const SWEEP_STEP = 60;
 type GridOptions = { model: SheetView; columns: SheetColumns; events: SheetGridEvents; look: SheetLook };
 type Highlight = NonNullable<DataEditorProps["highlightRegions"]>[number];
 
@@ -159,15 +161,27 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   for (const kind of ["mousedown", "touchstart"] as const) document.addEventListener(kind, over);
   const box = (col: number, row: number) => editor?.getBounds(col, row);
   const colAt = (x: number) => { for (let at = view.x; at < view.x + view.width + 1; at++) { const cell = box(at, view.y); if (cell && x >= cell.x && x < cell.x + cell.width) return at; } return -1; };
-  // Dragged along the column letters, the columns between are picked, as a drag down the row numbers picks rows (the grid does only that one).
+  const rowAt = (y: number) => { for (let at = view.y; at < view.y + view.height + 1; at++) { const cell = box(view.x, at); if (cell && y >= cell.y && y < cell.y + cell.height) return at; } return -1; };
+  // Dragged along the column letters or down the row numbers, the columns or rows between are picked.
   const sweep = (event: PointerEvent) => {
-    const frame = element.getBoundingClientRect(), from = colAt(event.clientX);
-    if (event.button !== 0 || event.shiftKey || from < 0 || event.clientY < frame.top || event.clientY >= frame.top + look.header) return;
-    const move = (moved: PointerEvent) => { const to = colAt(moved.clientX); if (to < 0) return;
-      const next: GridSelection = { columns: CompactSelection.fromSingleSelection([Math.min(from, to), Math.max(from, to) + 1]), rows: CompactSelection.empty() };
-      drive.select?.(next); events.selected(selected(next, size)); };
-    const up = () => { removeEventListener("pointermove", move); removeEventListener("pointerup", up); };
-    addEventListener("pointermove", move); addEventListener("pointerup", up);
+    const frame0 = element.getBoundingClientRect(), numbers = box(-1, view.y), top = frame0.top + look.header, left = numbers ? numbers.x + numbers.width : frame0.left;
+    const across = event.clientY >= frame0.top && event.clientY < top, down = !across && Boolean(numbers) && event.clientX < left;
+    const at = across ? colAt : rowAt, [lo, hi] = across ? [left, frame0.right] : [top, frame0.bottom], from = at(across ? event.clientX : event.clientY);
+    if (event.button !== 0 || event.shiftKey || !(across || down) || from < 0) return;
+    // Each frame, not each move: held past an edge, the grid scrolls a line at a time under a still pointer and the pick runs on with it.
+    let to = from, place = across ? event.clientX : event.clientY, frame = 0, stepped = 0;
+    const pick = (now: number) => { frame = requestAnimationFrame(pick);
+      const past = place >= hi ? 1 : place < lo ? -1 : 0, under = at(Math.min(Math.max(place, lo + 1), hi - 1));
+      if (under >= 0) to = under;
+      // The next line on from the one at the edge, found by its own bounds: the grid tells its visible region only once a scroll settles.
+      if (past && now - stepped > SWEEP_STEP) { stepped = now; const next = Math.min(Math.max(to + past, 0), (across ? size.cols : size.rows) - 1);
+        if (across) editor?.scrollTo(next, view.y, "horizontal"); else editor?.scrollTo(view.x, next, "vertical"); }
+      const picked = CompactSelection.fromSingleSelection([Math.min(from, to), Math.max(from, to) + 1]);
+      if (picked.equals(across ? current.columns : current.rows)) return;
+      current = { columns: across ? picked : CompactSelection.empty(), rows: across ? CompactSelection.empty() : picked }; drive.select?.(current); events.selected(selected(current, size)); };
+    const move = (moved: PointerEvent) => { place = across ? moved.clientX : moved.clientY; };
+    const up = () => { cancelAnimationFrame(frame); removeEventListener("pointermove", move); removeEventListener("pointerup", up); };
+    addEventListener("pointermove", move); addEventListener("pointerup", up); frame = requestAnimationFrame(pick);
   };
   element.addEventListener("pointerdown", sweep);
   return {
@@ -200,9 +214,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       return right > left && bottom > top ? { left, top, width: right - left, height: bottom - top } satisfies SheetBox : null;
     },
     cellAt: (x, y) => {
-      let col = -1, row = -1;
-      for (let at = view.x; at < view.x + view.width + 1 && col < 0; at++) { const cell = box(at, view.y); if (cell && x >= cell.x && x < cell.x + cell.width) col = at; }
-      for (let at = view.y; at < view.y + view.height + 1 && row < 0; at++) { const cell = box(view.x, at); if (cell && y >= cell.y && y < cell.y + cell.height) row = at; }
+      const col = colAt(x), row = rowAt(y);
       return col < 0 || row < 0 ? null : { row, col };
     },
     whole: (kind) => {

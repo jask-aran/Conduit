@@ -3,7 +3,7 @@ import * as Y from "yjs";
 import { Empty, Frost, Icons, Notice } from "@/components/ui";
 import { Input } from "@/components/ui/controls";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
-import { CELLS, COL_LIMIT, LOOK, a1, colIndex, key, parseRange, rangeA1, type SheetView } from "@/sheet-format.js";
+import { CELLS, COL_LIMIT, LOOK, a1, colIndex, colName, key, parseRange, rangeA1, type SheetView } from "@/sheet-format.js";
 import { SheetFoot } from "./foot";
 import { createSheetTabs } from "./tabs";
 import { ASK_KEY, type SheetAnchor, type SheetBox, type SheetGrid, type SheetGridEvents, type SheetHost, type SheetMarks, type SheetPlace, type SheetRange, type SheetState } from "./host";
@@ -67,9 +67,12 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const sequences = createSequenceKeys((sequence) => "tool" in sequence ? tools.find((one) => one.name === sequence.tool)?.run() : sequence.run({ selection: at, sizes, look: () => readLook(root!), ask: setQuestion }),
     (name) => tools.find((one) => one.name === name)?.label ?? name);
   // One edge dragged sizes every whole row or column selected with it, as a spreadsheet does.
+  const wholeOf = (area: SheetRange, kind: "rows" | "cols") => { const size = model()?.size(); return Boolean(size && (kind === "cols" ? area.top === 0 && area.bottom >= size.rows - 1 : area.left === 0 && area.right >= size.cols - 1)); };
+  // Whole columns and rows by their letters and numbers (C:G, 3:9), as the field takes them.
+  const addressOf = (area: SheetRange) => wholeOf(area, "cols") && !wholeOf(area, "rows") ? `${colName(area.left)}:${colName(area.right)}` : wholeOf(area, "rows") && !wholeOf(area, "cols") ? `${area.top + 1}:${area.bottom + 1}` : rangeA1(area);
   const span = (kind: "rows" | "cols", one: number) => {
-    const area = at(), size = model()?.size(), [from, to] = !area ? [one, one] : kind === "cols" ? [area.left, area.right] : [area.top, area.bottom];
-    const whole = area && size && (kind === "cols" ? area.top === 0 && area.bottom >= size.rows - 1 : area.left === 0 && area.right >= size.cols - 1) && one >= from && one <= to && to > from;
+    const area = at(), [from, to] = !area ? [one, one] : kind === "cols" ? [area.left, area.right] : [area.top, area.bottom];
+    const whole = area && wholeOf(area, kind) && one >= from && one <= to && to > from;
     return whole ? Array.from({ length: to - from + 1 }, (_, n) => from + n) : [one];
   };
   const events: SheetGridEvents = {
@@ -267,7 +270,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (redo) history.redo(); else history.undo();
     }}>
     <div class="ui-spreadsheet-bar">
-      <Input class="ui-spreadsheet-address ui-frost ui-frost-raised" aria-label="Cell" spellcheck={false} value={address() ?? (at() ? rangeA1(at()!) : "")} onFocus={(event) => event.currentTarget.select()} onInput={(event) => setAddress(event.currentTarget.value)}
+      <Input class="ui-spreadsheet-address ui-frost ui-frost-raised" aria-label="Cell" spellcheck={false} value={address() ?? (at() ? addressOf(at()!) : "")} onFocus={(event) => event.currentTarget.select()} onInput={(event) => setAddress(event.currentTarget.value)}
         onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); go(); } else if (event.key === "Escape") { setAddress(null); grid()?.focus(); } }} onBlur={() => setAddress(null)} />
       {/* The formula bar edits the selected cell: focused, it opens the cell to edit as F2 does. */}
       <Frost lift="raised" ref={formula} class="ui-input ui-spreadsheet-formula" onFocusIn={() => { const area = at(); if (area && !editor.editing()) editor.begin({ row: area.top, col: area.left }, "edit", "bar"); }}>
