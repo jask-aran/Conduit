@@ -54,9 +54,9 @@ type StandaloneTerminalControls = { onOpenConduit: () => void };
 type KeyboardLockNavigator = Navigator & { keyboard?: { lock?: (codes?: string[]) => Promise<void>; unlock?: () => void } };
 
 export function TerminalPane(props: { projectId: string; projectName?: string; workingRoot?: string; terminalId?: string; active?: boolean; autoStart?: boolean; focusRequest?: number; connectivity?: () => Connectivity; standaloneControls?: StandaloneTerminalControls; onOpenBeside?: (terminalId: string) => void; onShown?: (terminalId: string) => void; headerActions?: JSX.Element; onClose?: () => void;
-  /** The pane's own header (its tab row), given the terminal's controls and the fit that folds them; the tab says the
-      shell's name and place, so no identity is drawn. */
-  header?: (controls: JSX.Element, fit: (header: HTMLElement) => void) => JSX.Element; onLive?: (live: boolean) => void }) {
+  /** Where the controls go when a header of the host's holds them (a pane's tab row, the dock's tool header), which
+      says the shell's name and place, so no identity is drawn. */
+  header?: (controls: JSX.Element) => JSX.Element; onLive?: (live: boolean) => void }) {
   const [pty, setPty] = createSignal<Pty | null>(null);
   const [sessions, setSessions] = createSignal<Pty[]>([]);
   const [error, setError] = createSignal("");
@@ -1159,13 +1159,13 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
         <TermContext>{[props.projectName || "Chats", pty()?.currentCommand].filter(Boolean).join(" · ")}</TermContext>
       </TermIdentity>
       {shortcutBar()}
-    </PaneHeader>}>{(header) => header()(<TermControls folded={folds.count()}>
+    </PaneHeader>}>{(header) => header()(<TermControls folded={folds.count()} ref={(element) => queueMicrotask(() => { const header = element.closest<HTMLElement>(".ui-pane-header"); if (header) folds.ref(header); })}>
       <Show when={headerStatus().tone !== "success"}>
         <TermStatus tone={headerStatus().tone} busy={headerStatus().tone === "busy"} label={headerStatus().label} title={headerStatus().title} aria-label={headerStatus().title} />
       </Show>
       {shortcutBar()}
       {termActions()}
-    </TermControls>, folds.ref)}</Show>
+    </TermControls>)}</Show>
     <div class="terminal-pane-body">
       <div
         ref={host}

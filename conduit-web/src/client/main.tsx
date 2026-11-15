@@ -60,6 +60,7 @@ import { Composer } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
 import { applyTabFrost } from "./preferences/tab-frost";
 import { applyChatArt } from "./preferences/chat-art";
+import { createArtWindow } from "@/components/ui/chat-art";
 import { watchStrayFrost } from "./platform/stray-frost";
 import { applyStreamFade } from "./preferences/stream-fade";
 import { installFocusShown } from "./preferences/focus-shown";
@@ -3003,10 +3004,10 @@ function App() {
     const placeName = (projectId: string) => projectId === "computer" || projectId.startsWith("computer:") ? "Computer" : catalogue.projects().find((item) => item.id === projectId)?.name || "Chats";
     const tabbed = () => !inDock(pane) && !isMobileLayout();
     // One row: the tab row, the terminal's controls at its right (they fold before a tab's title cuts).
-    const tabRow = (controls?: JSX.Element, fit?: (header: HTMLElement) => void) =>
-      <PaneHeader ref={fit} actions={<>{controls}{paneTabActions(pane)}</>}><Show when={documentTab(pane)}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>;
+    const tabRow = (controls?: JSX.Element) =>
+      <PaneHeader actions={<>{controls}{paneTabActions(pane)}</>}><Show when={documentTab(pane)}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>;
     onCleanup(() => setTermLive((current) => { const { [`term:${shell}`]: _, ...rest } = current; return rest; }));
-    return <SheetFill class="pane-terminal">
+    return <SheetFill ref={createArtWindow(true)} class="pane-terminal">
       <Show when={tabbed() && !record()}>{tabRow()}</Show>
       <Show when={record()} fallback={<Show when={record() === null}>
         <Show when={!tabbed()}><PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title="Terminal" /></PaneHeader></Show><Empty>This terminal has ended.</Empty>

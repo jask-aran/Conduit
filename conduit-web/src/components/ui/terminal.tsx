@@ -26,8 +26,8 @@ export function TermLead(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class"
   return <div {...rest} class="ui-term-lead" data-phone={local.phone ? "" : undefined} />;
 }
 /** The terminal's controls when a pane's own header holds them; `folded` is how far they have folded. */
-export const TermControls = (props: { folded: number; children: JSX.Element }) =>
-  <div class="ui-term-controls" data-folded={["shortcuts", "labels"].slice(0, props.folded).join(" ") || undefined}>{props.children}</div>;
+export const TermControls = (props: { folded: number; ref?: (element: HTMLDivElement) => void; children: JSX.Element }) =>
+  <div ref={props.ref} class="ui-term-controls" data-folded={["shortcuts", "labels"].slice(0, props.folded).join(" ") || undefined}>{props.children}</div>;
 export const TermOverflow = (props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class">) => <div {...props} class="ui-term-overflow" />;
 export const TermActionLabel = (props: { children: JSX.Element }) => <span class="ui-term-action-label">{props.children}</span>;
 export function TermState(props: Omit<JSX.HTMLAttributes<HTMLDivElement>, "class"> & { empty?: boolean }) {

@@ -533,6 +533,9 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     }
     props.onCloseSplit?.();
   };
+  // A terminal's controls are drawn into its tool header, so it is one row.
+  const [termSlots, setTermSlots] = createSignal<Partial<Record<"dock" | "split", HTMLElement>>>({});
+  const termSlot = (where: "dock" | "split") => <span ref={(element) => { element.style.display = "contents"; setTermSlots((slots) => ({ ...slots, [where]: element })); }} />;
   const toolHeader = (tool: Accessor<SplitView>, where: "dock" | "split") => (
     <PaneHeader kind="tool" fit frost={tool() === "jbot"} draggable={!isMobileLayout() && tool() !== "jbot"}
       onDragStart={(event) => { event.dataTransfer?.setData(TOOL_DRAG_TYPE, JSON.stringify({ tool: tool(), from: where })); if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"; document.body.dataset.toolDrag = where; }}
@@ -544,14 +547,14 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
         <Show when={tool() === "chat"}><ChatModes control={chat} historyAvailable={Boolean(props.historyAvailable?.())} /></Show>
       </>}
       views={where === "dock" ? tabStrip() : undefined}
-      actions={<Show when={where === "dock"} fallback={<>
+      actions={<><Show when={tool() === "terminal" || tool().startsWith("shell:")}>{termSlot(where)}</Show><Show when={where === "dock"} fallback={<>
           <HeaderButton label="Move to dock" aria-label={`Move ${viewLabel(tool())} to the dock`} icon={<Icons.Workspace />} onClick={() => props.onMoveToDock?.(tool())} />
           <HeaderButton label={`Close ${viewLabel(tool())}`} icon={<Icons.Close />} onClick={() => closeSplitView(tool())} />
         </>}>
           <Show when={props.onOpenBeside && tool() !== "jbot" && !(tool() === "files" && props.onOpenFile)}><HeaderButton only="desktop" label="Move to main pane" aria-label={`Move ${viewLabel(tool())} to the main pane`} icon={<Icons.Split />} onClick={() => props.onOpenBeside?.(tool())} /></Show>
           <Show when={tool() === "terminal"}><HeaderButton label={props.expanded() ? "Restore" : "Maximise"} aria-label={props.expanded() ? "Restore workspace panel" : "Maximise workspace panel"} aria-pressed={props.expanded()} icon={<Show when={props.expanded()} fallback={<Icons.Maximize />}><Icons.Minimize /></Show>} onClick={props.onToggleExpanded} /></Show>
           <HeaderButton label="Close workspace panel" icon={<Icons.Close />} onClick={props.onClose} />
-        </Show>} />
+        </Show></>} />
   );
   const toolView = (tool: PanelTab, where: "dock" | "split") => tool === "files"
     ? <FilesView control={files} expanded={where === "dock" && props.expanded()} projectId={props.projectId()} workingRoot={props.workingRoot()}
@@ -567,12 +570,12 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       commentChatId={commentChatId()} reveal={reviewReveal()} onOpenWorkingFile={openWorkingFile} />
     : <TerminalView computer={props.settingsScope?.() === "computer"} projectId={props.projectId()} projectName={props.projectName()}
       workingRoot={props.workingRoot()} terminalId={props.requestedTab?.()?.terminalId} focusRequest={terminalFocusRequest()} connectivity={props.connectivity}
-      onOpenBeside={where === "dock" && props.onOpenBeside ? (id) => props.onOpenBeside!(`shell:${id}`) : undefined} />;
+      onOpenBeside={where === "dock" && props.onOpenBeside ? (id) => props.onOpenBeside!(`shell:${id}`) : undefined} controls={termSlots()[where]} />;
   const splitView = (view: SplitView) => view === "file"
     ? <FileBesideView control={files} projectId={props.projectId()} sourceControlEnabled={props.sourceControlEnabled()} gitFiles={sourceControl.diff()?.files ?? []}
       commentChatId={commentChatId()} reveal={reviewReveal()} onSaved={() => void sourceControl.loadDiff(false, false)} onShowDiff={showFileDiff} />
     : view.startsWith("shell:") ? <TerminalView computer={props.settingsScope?.() === "computer"} projectId={props.projectId()} projectName={props.projectName()}
-      workingRoot={props.workingRoot()} terminalId={view.slice("shell:".length)} focusRequest={0} connectivity={props.connectivity} />
+      workingRoot={props.workingRoot()} terminalId={view.slice("shell:".length)} focusRequest={0} connectivity={props.connectivity} controls={termSlots().split} />
     : toolView(view as PanelTab, "split");
   const dockDrop = {
     onDragOver: (event: DragEvent) => { if (document.body.dataset.toolDrag === "split" && event.dataTransfer?.types.includes(TOOL_DRAG_TYPE)) event.preventDefault(); },
