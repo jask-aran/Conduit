@@ -22,7 +22,8 @@ export function htmlText(html) {
 }
 
 const holdable = (mail) => ({
-  text: mail.text?.trim() ? mail.text.replace(/\r/g, "").trim() : htmlText(mail.html),
+  // The HTML part first: a sender's plain part is often its markup or bare tracking links.
+  text: (mail.html && htmlText(mail.html)) || (mail.text || "").replace(/\r/g, "").trim(),
   attachments: mail.attachments.some((attachment) => attachment.disposition !== "inline" || !attachment.related),
 });
 const bytes = (part) => typeof part.content === "string"
@@ -59,12 +60,14 @@ export function safeHtml(html) {
   walk(doc.children);
   return render(doc);
 }
+// Read as text: pictures are in Original, and a remote one would tell its sender the message was opened.
+const withoutImages = (markdown) => markdown.replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/\[\s*\]\([^)]*\)/g, "").replace(/\n{3,}/g, "\n\n").trim();
 /** A message as the pane reads it (MailBody without `message`), and what `holdBody` takes from the same parse. */
 export async function readBody(raw) {
   const read = await readMail(raw);
   const { quoted } = splitQuoted(read.markdown);
   return {
-    markdown: read.quoted ? read.own : read.markdown,
+    markdown: withoutImages(read.quoted ? read.own : read.markdown),
     quoted: read.quoted ? quoted : "",
     html: read.mail.html ? safeHtml(cleanEmailHtml(read.mail.html)) : null,
     attachments: read.attachments.map((item, index) => ({ index, filename: item.filename, mimeType: item.mimeType, size: item.size })),

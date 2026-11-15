@@ -275,6 +275,8 @@ export function openMailStore({ dir }) {
       });
     },
 
+    heldKeys: (account, after, limit) => q("SELECT key FROM messages WHERE account = ? AND held = 1 AND key > ? ORDER BY key LIMIT ?").all(account, after, limit).map((row) => row.key),
+
     rawOf(account, key) {
       try { return fs.readFileSync(rawFile(account, key)); } catch (error) {
         if (error.code === "ENOENT") return null;

@@ -112,7 +112,27 @@ export async function createMail({ dataRoot, changed }) {
     }));
     live.set(record.id, entry);
     entry.adapter?.start();
+    void retext(entry).catch((error) => console.warn("[mail] re-reading held text failed:", error.message));
     return entry;
+  }
+  // What a message's search text and snippet are read from changed (TEXT_READ): held ones are read again once, a page at a time.
+  const TEXT_READ = 2;
+  async function retext(entry) {
+    const id = entry.account.id;
+    let at = store.cursor(id, "text") ?? { read: 1, after: "" };
+    if (at.read >= TEXT_READ) return;
+    for (;;) {
+      const keys = store.heldKeys(id, at.after, 25);
+      for (const key of keys) {
+        if (entry.closed) return;
+        const raw = store.rawOf(id, key);
+        if (raw) store.holdBody(id, key, raw, await parseMail(raw));
+        await tick();
+      }
+      at = keys.length ? { read: at.read, after: keys.at(-1) } : { read: TEXT_READ, after: "" };
+      store.setCursor(id, "text", at);
+      if (!keys.length) return notify(id, { threads: [], all: true }, true);
+    }
   }
 
   const publicAccount = (entry) => ({ ...entry.account, held: heldOf(entry) });

@@ -166,6 +166,8 @@ export interface MailStore {
   clearMessages(account: string): void;
   /** The message's raw RFC 822 bytes, kept on disk, and its text for search and the snippet. */
   holdBody(account: string, key: string, raw: Buffer, parsed: { text: string; attachments: boolean }): StoreChange;
+  /** Keys of the messages whose text is held, after `after` in key order. */
+  heldKeys(account: string, after: string, limit: number): string[];
   rawOf(account: string, key: string): Buffer | null;
   putLabels(account: string, labels: Omit<MailLabel, "unread">[]): void;
   /** The adapter's own sync state, by name: JSON, kept with the account. */
