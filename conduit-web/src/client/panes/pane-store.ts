@@ -10,7 +10,8 @@ import type { SplitView } from "../workspace/workspace-types";
 export type View = SplitView;
 /** A session pane holds chats, terminals and jbot's log as tabs; a document pane holds one of anything else. */
 export type PaneKind = "session" | "document";
-export type Pane = { id: string; views: View[]; active: number };
+/** `recent`: the tabs shown, last first, so closing the shown tab goes back to the one before it. */
+export type Pane = { id: string; views: View[]; active: number; recent?: View[] };
 export type Summon = "jbot" | "files" | "terminal";
 export type Layout = { panes: Record<string, Pane>; row: string[]; dock: string | null; summon: Summon | null; focus: string; used: string[] };
 /** How a view was asked for: `beside` (Alt) opens a pane beside, `tab` (Ctrl) adds a session tab; neither replaces. */
@@ -23,6 +24,7 @@ export const TAB_CAP = 5;
 export const sessionView = (view: View) => view === "home" || view === "page:jbot" || view === "page:dashboard" || view.startsWith("page:project:") || view.startsWith("chat:") || view.startsWith("term:");
 export const kindOf = (pane: Pane): PaneKind => pane.views.every(sessionView) ? "session" : "document";
 export const shownView = (pane: Pane) => pane.views[pane.active] ?? pane.views[0]!;
+const showing = (pane: Pane, index: number): Pane => ({ ...pane, active: index, recent: [pane.views[index]!, ...(pane.recent ?? [shownView(pane)]).filter((view) => view !== pane.views[index])] });
 
 let made = 0;
 const newId = () => `p${Date.now().toString(36)}${(made++).toString(36)}`;
@@ -73,12 +75,12 @@ function withTab(pane: Pane, view: View, held: (view: View) => boolean = () => f
     const drop = views.findIndex((other, index) => index !== pane.active && index !== views.length - 1 && !held(other));
     if (drop >= 0) views = views.filter((_, index) => index !== drop);
   }
-  return { ...pane, views, active: views.length - 1 };
+  return showing({ ...pane, views }, views.length - 1);
 }
 
 export function open(layout: Layout, view: View, verb: Verb = {}, rules: Rules = {}): Layout {
   const at = findView(layout, view);
-  if (at) return focusing(withPane(layout, { ...layout.panes[at.id]!, active: at.index }), at.id);
+  if (at) return focusing(withPane(layout, showing(layout.panes[at.id]!, at.index)), at.id);
   const session = (other: View) => sessionView(other) && !rules.document?.(other);
   if (verb.tab && session(view)) {
     const target = sessionPaneFor(layout, session);
@@ -156,13 +158,14 @@ export function adopt(current: Layout, next: Layout): Layout {
   };
 }
 
-export const switchTab = (layout: Layout, id: string, index: number): Layout => focusing(withPane(layout, { ...layout.panes[id]!, active: index }), id);
+export const switchTab = (layout: Layout, id: string, index: number): Layout => focusing(withPane(layout, showing(layout.panes[id]!, index)), id);
 
 export function closeTab(layout: Layout, id: string, index: number): Layout {
   const pane = layout.panes[id]!;
   if (pane.views.length <= 1) return closePane(layout, id);
   const views = pane.views.filter((_, at) => at !== index);
-  return withPane(layout, { ...pane, views, active: Math.min(index < pane.active ? pane.active - 1 : pane.active, views.length - 1) });
+  const shown = index === pane.active ? pane.recent?.find((view) => views.includes(view)) ?? views[Math.min(index, views.length - 1)]! : shownView(pane);
+  return withPane(layout, { ...pane, views, active: views.indexOf(shown), recent: pane.recent?.filter((view) => views.includes(view)) });
 }
 
 /** The last pane in the row is never closed: it shows the launcher instead. */

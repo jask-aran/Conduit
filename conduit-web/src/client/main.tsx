@@ -2593,6 +2593,7 @@ function App() {
     const focusedPane = keyOf(before.focus) ?? "main";
     asked(focusedPane, view);
     const after = Layouts.open(before, view, verb, openRules);
+    if (Object.values(after.panes).some((pane) => pane.views.length > Layouts.TAB_CAP && pane.views.length > (before.panes[pane.id]?.views.length ?? 0))) return void toast.info("Every tab in this pane has an unsent draft; close one to open another.");
     const at = Layouts.findView(before, view);
     if (!at) {
       // The pane giving up what it shows: the focused one replaced, or a full row's neighbour.
