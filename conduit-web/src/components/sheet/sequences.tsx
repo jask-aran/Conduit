@@ -38,10 +38,12 @@ export const SHEET_SEQUENCES: readonly SheetSequence[] = [
   { keys: "HOW", label: "Column width", run: (ctx) => { const cols = colsOf(ctx); if (cols.length) ctx.ask({ title: "Column width", value: ctx.sizes.width(cols[0]!) ?? ctx.look().width, apply: (size) => ctx.sizes.setWidths(cols, size) }); } },
   { keys: "HOI", label: "Fit column width", run: (ctx) => ctx.sizes.fitColumns(colsOf(ctx), ctx.look()) },
   { keys: "HOA", label: "Fit row height", run: (ctx) => ctx.sizes.fitRows(rowsOf(ctx), ctx.look()) },
+  // Excel's View keys.
+  { keys: "WFC", label: "Freeze first column", run: (ctx) => ctx.sizes.setFreeze(ctx.sizes.freeze().rows, 1) },
   { keys: "HOD", label: "Default width", run: (ctx) => ctx.ask({ title: "Default width", value: ctx.sizes.standard() ?? ctx.look().width, apply: (size) => ctx.sizes.setStandard(size) }) },
 ];
 /** What a sequence's first letters lead to, named as the next keys are listed. */
-export const SEQUENCE_GROUPS: Readonly<Record<string, string>> = { H: "Home", HO: "Format", HA: "Align", HB: "Borders", HH: "Fill colour", HF: "Font", HFC: "Text colour", HN: "Number format" };
+export const SEQUENCE_GROUPS: Readonly<Record<string, string>> = { H: "Home", HO: "Format", HA: "Align", HB: "Borders", HH: "Fill colour", HF: "Font", HFC: "Text colour", HN: "Number format", W: "View", WF: "Freeze panes" };
 
 /** The sequence typed so far (null when none is), the keys that may come next, and the grid's key listeners. `named`: a tool's label, as its ribbon says it. */
 export function createSequenceKeys(run: (sequence: SheetSequence) => void, named: (tool: SheetToolId) => string) {

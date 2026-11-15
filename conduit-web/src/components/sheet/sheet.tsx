@@ -111,7 +111,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     void import("./grid").then(({ mountGrid }) => {
       if (over) return;
       made = mountGrid(into, { model: sheet, events, look: readLook(root!), columns: {
-        width: sizes.width,
+        width: sizes.width, freeze: sizes.freeze,
         type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; }, heights: sizes.heights, draw: formats.draw, style: styles.at, frozen: (row, col) => Boolean(frozenAt(row, col)),
       } });
       setGrid(made);
@@ -306,6 +306,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "W"]} onSelect={() => sized("HOW", range())}>Column width…</MenuRow>
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "I"]} onSelect={() => sized("HOI", range())}>Fit column width</MenuRow>
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "D"]} onSelect={() => sized("HOD", range())}>Default width…</MenuRow>
+              <MenuRow icon={<Icons.Pin />} onSelect={() => sizes.setFreeze(sizes.freeze().rows, range().right + 1)}>Freeze {range().right ? `columns A–${colName(range().right)}` : "column A"}</MenuRow>
+              <Show when={sizes.freeze().cols}><MenuRow icon={<Icons.PinOff />} onSelect={() => sizes.setFreeze(sizes.freeze().rows, 0)}>Unfreeze columns</MenuRow></Show>
             </MenuSection>}</Show>
             <Show when={formatted()}>{(range) => <FormatMenu formats={formats} range={range()} />}</Show>
           </ContextMenuContent>

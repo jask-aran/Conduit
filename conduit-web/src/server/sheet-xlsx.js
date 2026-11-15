@@ -14,10 +14,36 @@ import { NAMES } from "../sheet-functions.js";
 /** @typedef {{ name: string, hidden: boolean, csv: string, inputs: Record<string, string>, look: Record<string, unknown>, rows: number, cols: number, formulas: number }} ImportedTab */
 /** @typedef {{ tabs: { name: string, rows: number, cols: number, formulas: number }[], skipped: string[], computed: { same: number, frozen: number, noCache: number, volatile: number }, frozen: Record<string, Record<string, { formula: string, why: string, kept?: string }>>, reasons: Record<string, number>, dropped: Record<string, number> }} ImportReport */
 
+// How much of a sheet's XML is read for its pane: `sheetViews` stands before its cells.
+const PANE_BYTES = 8192;
 const VOLATILE = /\b(?:TODAY|NOW|RAND|RANDBETWEEN|RANDARRAY)\s*\(/i, FORMATS_PER_TAB = 2000, PASSES = 4;
 const ERROR_TEXT = { 0: "#NULL!", 7: "#DIV/0!", 15: "#VALUE!", 23: "#REF!", 29: "#NAME?", 36: "#NUM!", 42: "#N/A", 43: "#GETTING_DATA" };
 const fault = (message) => Object.assign(new Error(message), { status: 422 });
 const isError = (value) => value !== null && typeof value === "object";
+// SheetJS reads and writes no frozen panes: they are read from, and written into, each sheet's own XML.
+const unescaped = (text) => text.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+const attr = (tag, name) => { const found = new RegExp(`\\s${name}="([^"]*)"`).exec(tag); return found ? unescaped(found[1]) : undefined; };
+/** The rows and columns a sheet's view freezes, from the head of its XML, where `sheetViews` stands. */
+const paneOf = (xml) => {
+  const pane = /<pane\b[^>]*>/.exec(xml)?.[0];
+  if (!pane || !/^frozen/.test(attr(pane, "state") ?? "")) return null;
+  const count = (name) => Math.max(0, Math.floor(Number(attr(pane, name) ?? 0)) || 0);
+  return { rows: count("ySplit"), cols: count("xSplit") };
+};
+/** A frozen view as a sheet's XML says it, `rows` and `cols` frozen at the top and left. */
+const paneXml = (rows, cols) => `<sheetView workbookViewId="0"><pane${cols ? ` xSplit="${cols}"` : ""}${rows ? ` ySplit="${rows}"` : ""} topLeftCell="${a1(rows, cols)}" activePane="${rows && cols ? "bottomRight" : rows ? "bottomLeft" : "topRight"}" state="frozen"/></sheetView>`;
+/** A written workbook with each sheet's XML changed by `edit` (its index in the book and its XML); the zip is written again only where one changed. */
+const editSheets = (bytes, edit) => {
+  const zip = XLSX.CFB.read(bytes, { type: "buffer" });
+  let changed = false;
+  zip.FullPaths.forEach((path, i) => {
+    const n = /^Root Entry\/xl\/worksheets\/sheet(\d+)\.xml$/.exec(path)?.[1], file = zip.FileIndex[i];
+    if (!n) return;
+    const xml = Buffer.from(file.content).toString("utf8"), next = edit(Number(n) - 1, xml);
+    if (next !== xml) { file.content = Buffer.from(next, "utf8"); file.size = file.content.length; changed = true; }
+  });
+  return changed ? XLSX.CFB.write(zip, { fileType: "zip", type: "buffer", compression: true }) : bytes;
+};
 /** A formula as this engine reads it: the prefixes a newer function is stored under are taken off. */
 const translated = (formula) => `=${formula.replace(/_xlfn\.|_xlws\.|_xlpm\./g, "")}`;
 const kept = (cell) => cell.t === "e" ? ERROR_TEXT[cell.v] ?? "#VALUE!" : cell.t === "b" ? (cell.v ? "TRUE" : "FALSE") : cell.t === "d" ? "" : String(cell.v ?? "");
@@ -38,11 +64,15 @@ const same = (value, cell) => {
 export function importXlsx(bytes, { tabs: only } = {}) {
   let book;
   // sheetStubs: without it a formula whose kept value is empty is left out. cellStyles: column widths and hidden rows come only with it. xlfn: the prefixes stay, so `translated` is the one place they go.
-  try { book = XLSX.read(bytes, { type: "array", dense: true, cellFormula: true, cellNF: true, cellText: false, cellHTML: false, cellStyles: true, sheetStubs: true, xlfn: true }); }
+  try { book = XLSX.read(bytes, { type: "array", dense: true, cellFormula: true, cellNF: true, cellText: false, cellHTML: false, cellStyles: true, sheetStubs: true, xlfn: true, bookFiles: true }); }
   catch (error) { throw fault(`That file could not be read as an .xlsx: ${error?.message ?? error}`); }
   const wanted = only?.length ? new Set(only.map((name) => name.toLowerCase())) : null, meta = book.Workbook?.Sheets ?? [];
   const dropped = {}, drop = (what, count = 1) => { if (count) dropped[what] = (dropped[what] ?? 0) + count; };
   const skipped = [], read = [], names = new Set();
+  // Each tab's XML part, by the workbook's own list and its links; only its head is read, for the pane.
+  const part = (path) => book.files?.[path]?.content, text = (path, length) => { const bytes = part(path); return bytes ? Buffer.from(bytes.subarray(0, length ?? bytes.length)).toString("utf8") : ""; };
+  const targets = Object.fromEntries((text("xl/_rels/workbook.xml.rels").match(/<Relationship\b[^>]*>/g) ?? []).map((tag) => [attr(tag, "Id"), attr(tag, "Target") ?? ""]));
+  const xmlOf = Object.fromEntries((text("xl/workbook.xml").match(/<sheet\b[^>]*>/g) ?? []).map((tag) => { const target = targets[attr(tag, "r:id")] ?? ""; return [attr(tag, "name"), target.startsWith("/") ? target.slice(1) : `xl/${target}`]; }));
   book.SheetNames.forEach((called, index) => {
     const sheet = book.Sheets[called], data = sheet?.["!data"];
     if (!data || (wanted && !wanted.has(called.toLowerCase()))) { skipped.push(called); return; }
@@ -51,7 +81,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     names.add(name.toLowerCase());
     let rows = 0, cols = 0;
     data.forEach((row, r) => row?.forEach((cell, c) => { if (cell && (cell.f || (cell.t !== "z" && cell.v !== "" && cell.v !== undefined))) { rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1); } }));
-    read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, rows: Math.max(1, rows), cols: Math.max(1, cols) });
+    read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, rows: Math.max(1, rows), cols: Math.max(1, cols), pane: paneOf(text(xmlOf[called] ?? "", PANE_BYTES)) });
     drop("merged ranges", sheet["!merges"]?.length ?? 0);
     drop("hidden rows", sheet["!rows"]?.filter((row) => row?.hidden).length ?? 0);
     drop("hidden columns", sheet["!cols"]?.filter((col) => col?.hidden).length ?? 0);
@@ -146,6 +176,8 @@ export function importXlsx(bytes, { tabs: only } = {}) {
         if (most !== "General") look[`fmt:${colName(c)}`] = most;
         for (const [r, format] of column) if (format !== most) { if (single < FORMATS_PER_TAB) { look[`fmt:${a1(r, c)}`] = format; single += 1; } else drop("number formats"); }
       }
+      if (tab.pane?.rows) look.freezeRows = tab.pane.rows;
+      if (tab.pane?.cols) look.freezeCols = tab.pane.cols;
       return { name: tab.name, hidden: tab.hidden, csv: toCsv(csv), inputs, look, rows: tab.rows, cols: tab.cols, formulas: Object.keys(inputs).length };
     });
     return { tabs, report: { tabs: tabs.map(({ name, rows, cols, formulas: count }) => ({ name, rows, cols, formulas: count })), skipped, ...report, dropped } };
@@ -168,7 +200,7 @@ const SCOPED = new Set(["FILTER", "SORT"]);
 const stored = (formula) => formula.slice(1).split(/("(?:[^"]|"")*")/).map((part, nth) => nth % 2 ? part : part.replace(/([A-Za-z][A-Za-z0-9.]*)\(/g, (all, name) => PREFIXED.has(name.toUpperCase()) ? `_xlfn.${all}` : SCOPED.has(name.toUpperCase()) ? `_xlfn._xlws.${all}` : all)).join("");
 const ERROR_CODE = Object.fromEntries(Object.entries(ERROR_TEXT).map(([code, text]) => [text, Number(code)]));
 /**
- * A workbook written as an .xlsx: each formula with the value it computes here, number formats, column widths and hidden tabs. A cell an import
+ * A workbook written as an .xlsx: each formula with the value it computes here, number formats, column widths, frozen panes and hidden tabs. A cell an import
  * froze gets its formula back where it still holds what the import left in it. No fills, fonts or borders are written.
  * @param {{ name: string, hidden: boolean, typed: string[][], values: unknown[][], look: Record<string, unknown> }[]} tabs  `values`: what each cell computes
  * @param {ImportReport | null} [imported]
@@ -194,7 +226,9 @@ export function exportXlsx(tabs, imported) {
     XLSX.utils.book_append_sheet(book, sheet, tab.name);
   }
   book.Workbook = { Sheets: tabs.map((tab) => ({ Hidden: tab.hidden ? 1 : 0 })) };
-  return XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true });
+  const written = XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true }), count = (value) => typeof value === "number" && value > 0 ? value : 0;
+  const panes = tabs.map((tab) => [count(tab.look.freezeRows), count(tab.look.freezeCols)]);
+  return panes.some(([rows, cols]) => rows || cols) ? editSheets(written, (n, xml) => { const [rows, cols] = panes[n] ?? [0, 0]; return rows || cols ? xml.replace(/<sheetView workbookViewId="0"\/>/, paneXml(rows, cols)) : xml; }) : written;
 }
 const IMPORT_MS = 180_000, IMPORT_HEAP_MB = 2048;
 /** `importXlsx` on a thread of its own, so the hub answers while a large workbook computes; it is ended after three minutes. */

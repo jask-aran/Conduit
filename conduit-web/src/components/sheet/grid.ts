@@ -14,7 +14,7 @@ import type { SheetCellStyle } from "./styles";
 import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange, SheetReference } from "./host";
 
 /** What the grid reads of the sheet besides its cells: each column's width and type, the rows whose height is not the default (`look`), a value as its cell's number format draws it (formats.ts), a cell's style (styles.ts), and whether an import froze it. */
-export type SheetColumns = { width(col: number): number | undefined; type(col: number): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean };
+export type SheetColumns = { width(col: number): number | undefined; type(col: number): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean ; freeze(): { rows: number; cols: number } };
 // How near a row's lower edge, beside its number, a press takes the edge to drag.
 const EDGE_SLOP = 3;
 // How often (ms) a drag held past the grid's edge scrolls it on by a column.
@@ -64,7 +64,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
 
   // The grid runs on past what the sheet holds, as a spreadsheet's does: a cell written out there makes the sheet reach it (the hub's `set`).
   const reach = () => { const held = model.size(); return { rows: Math.max(held.rows + ROOM.rows, ROOM.least.rows), cols: Math.min(COL_LIMIT, Math.max(held.cols + ROOM.cols, ROOM.least.cols)) }; };
-  let size = reach(), current = NO_SELECTION;
+  let size = reach(), current = NO_SELECTION, frozenCols = 0;
   const write = (list: { row: number; col: number; input: string }[]) => { if (list.length) events.write(list); };
   // Made once: a new function or object for the grid on each render has it work everything out again, the cost of each arrow-key move.
   const handlers: Partial<DataEditorProps> = {
@@ -150,7 +150,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       const kept = options.columns.heights();
       return kept.size || Object.keys(heights).length ? (row: number) => heights[row] ?? kept.get(row) ?? theme.row : theme.row;
     }, [shape, heights, theme]);
-    const props: DataEditorProps = { ...handlers, columns, rows, getCellContent: content, drawCell: cellLook.draw,
+    // The columns frozen stand at the left as the rest scroll; never all of those in view, or nothing could scroll.
+    const freezeColumns = useMemo(() => { frozenCols = Math.min(options.columns.freeze().cols, cols - 1); return frozenCols; }, [shape, cols]);
+    const props: DataEditorProps = { ...handlers, columns, rows, freezeColumns, getCellContent: content, drawCell: cellLook.draw,
       // A whole column's letter, picked, is washed as its cells are; the grid would fill it in the accent its fill handle and ring keep.
       drawHeader: (args, draw) => { if (args.isSelected) { const { ctx, rect } = args, inset = args.columnIndex ? 1 : 0; for (const fill of [theme.grid.bgHeader, theme.picked]) { ctx.fillStyle = String(fill); ctx.fillRect(rect.x + inset, rect.y, rect.width - inset, rect.height); } } draw(); }, theme: theme.grid as Partial<Theme>, rowHeight, headerHeight: theme.header, gridSelection: selection, highlightRegions: marks };
     return createElement(DataEditor, { ...props, ref: made });
@@ -159,7 +161,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   const root = createRoot(element);
   root.render(createElement(Grid));
   const box = (col: number, row: number) => editor?.getBounds(col, row);
-  const colAt = (x: number) => { for (let at = view.x; at < view.x + view.width + 1; at++) { const cell = box(at, view.y); if (cell && x >= cell.x && x < cell.x + cell.width) return at; } return -1; };
+  // The frozen columns first: they stand in view whatever the scroll.
+  const colAt = (x: number) => { for (let at = frozenCols ? 0 : view.x; at < view.x + view.width + 1; at = at + 1 === frozenCols ? Math.max(view.x, frozenCols) : at + 1) { const cell = box(at, view.y); if (cell && x >= cell.x && x < cell.x + cell.width) return at; } return -1; };
   const rowAt = (y: number) => { for (let at = view.y; at < view.y + view.height + 1; at++) { const cell = box(view.x, at); if (cell && y >= cell.y && y < cell.y + cell.height) return at; } return -1; };
   const rowEdge = (x: number, y: number) => {
     const numbers = box(-1, view.y);
@@ -218,8 +221,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     bounds: (area) => {
       const first = box(area.left, area.top), last = box(area.right, area.bottom), numbers = box(-1, area.top), frame = element.getBoundingClientRect();
       if (!first || !last || !numbers) return null;
-      // Clipped to the cells' part of the grid, under the header and beside the row numbers.
-      const left = Math.max(first.x, numbers.x + numbers.width), top = Math.max(first.y, frame.top + look.header), right = Math.min(last.x + last.width, frame.right), bottom = Math.min(last.y + last.height, frame.bottom);
+      // Clipped to the cells' part of the grid, under the header and beside the row numbers, or the frozen columns where it scrolls under them.
+      const pinned = area.left >= frozenCols && frozenCols ? box(frozenCols - 1, area.top) : undefined;
+      const left = Math.max(first.x, pinned ? pinned.x + pinned.width : numbers.x + numbers.width), top = Math.max(first.y, frame.top + look.header), right = Math.min(last.x + last.width, frame.right), bottom = Math.min(last.y + last.height, frame.bottom);
       return right > left && bottom > top ? { left, top, width: right - left, height: bottom - top } satisfies SheetBox : null;
     },
     cellAt: (x, y) => {

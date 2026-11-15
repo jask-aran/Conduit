@@ -211,7 +211,7 @@ put Python on every hub and device, so it stays a test oracle in the scratch che
   names its tab. The hub checks new ids against the doc.
 - A version-1 doc has no `tabs`: it reads as `["main"]`, named after its file. **Migration writes nothing until a second
   tab is added.**
-- Tab-level look: `freeze:<tabId>`; and `fmt:<colId>` or `fmt:<rowId>:<colId>` for number formats.
+- Tab-level look: `freezeRows:<tabId>` and `freezeCols:<tabId>` (counts); and `fmt:<colId>` or `fmt:<rowId>:<colId>` for number formats.
 - Only the hub adds, renames, removes or moves tabs, as with rows today. A page may write `hidden:`.
 
 **HyperFormula.** One engine for the whole workbook (`buildFromSheets`), with each tab id mapped to the engine's sheet
