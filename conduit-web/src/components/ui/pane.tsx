@@ -14,13 +14,19 @@ export const PaneTabs = (props: { ref?: (element: HTMLDivElement) => void; onFol
   <div ref={(element) => { props.ref?.(element); if (props.onFold) fitTabs(element, props.onFold); }} class="ui-pane-tabs">{props.children}</div>;
 
 function fitTabs(strip: HTMLElement, onFold: (hidden: string[]) => void) {
-  let reported = "";
+  let reported = "", fittedStyle = "", fitsAt = Infinity;
   const report = (hidden: string[]) => { if (hidden.join() !== reported) { reported = hidden.join(); onFold(hidden); } };
   const fit = () => {
+    const style = getComputedStyle(strip);
+    const signature = [style.font, ...["--tab-gap", "--tab-place-gap", "--tab-label-gap", "--tab-more", "--tab-max"].map((key) => style.getPropertyValue(key))].join(";");
+    const room = strip.clientWidth;
+    if (!room) return;
+    if (signature === fittedStyle && room >= fitsAt) return;
+    fittedStyle = signature;
+    fitsAt = Infinity;
     const places = [...strip.querySelectorAll<HTMLElement>(".ui-tab-place")];
     const tabs = [...strip.querySelectorAll<HTMLElement>(".ui-tab")];
     // The row's spacing, as pane.css sets it (registered lengths, so they read back in px).
-    const style = getComputedStyle(strip);
     const tabGap = parseFloat(style.getPropertyValue("--tab-gap")) || 0;
     const placeGap = parseFloat(style.getPropertyValue("--tab-place-gap")) || 0;
     const moreWidth = parseFloat(style.getPropertyValue("--tab-more")) || 0;
@@ -28,7 +34,6 @@ function fitTabs(strip: HTMLElement, onFold: (hidden: string[]) => void) {
     for (const element of [...places, ...tabs]) element.style.display = "";
     for (const element of tabs) element.removeAttribute("data-lead");
     if (!tabs.length) return report([]);
-    const room = strip.clientWidth;
     // Tabs give way to a squeeze by cutting their titles, so each is measured with its whole title; a tab's own cap
     // (max-width) still holds.
     const whole = (tab: HTMLElement) => { const title = tab.querySelector<HTMLElement>(".ui-tab-title > span"); const width = tab.getBoundingClientRect().width; return Math.min(width + (title ? title.scrollWidth - title.clientWidth : 0), Math.max(width, parseFloat(getComputedStyle(tab).maxWidth) || Infinity)); };
@@ -39,7 +44,7 @@ function fitTabs(strip: HTMLElement, onFold: (hidden: string[]) => void) {
     const need = String(Math.ceil(staying.reduce((sum, tab) => sum + natural(tab) + tabGap, 0) + (staying.length < tabs.length ? moreWidth : 0)
       + places.filter((place) => staying.some((tab) => place.contains(tab))).reduce((sum, place) => sum + label(place), 0)));
     if (strip.dataset.need !== need) strip.dataset.need = need;
-    if (all <= room) return report([]);
+    if (all <= room) { fitsAt = all || Infinity; return report([]); }
     // Each tab with the gap and middot before it; each place with its label and the rule before it, paid once a tab of
     // it stays.
     const placeOf = (tab: HTMLElement) => places.findIndex((place) => place.contains(tab));
@@ -58,7 +63,10 @@ function fitTabs(strip: HTMLElement, onFold: (hidden: string[]) => void) {
     });
     report(hidden.map((tab) => tab.dataset.tab!));
   };
-  watchFit(strip, fit, { content: fit, attributes: ["data-lit", "data-shown"] });
+  const changed = () => { fitsAt = Infinity; fit(); };
+  watchFit(strip, fit, { content: changed, attributes: ["data-lit", "data-shown"] });
+  document.fonts.addEventListener("loadingdone", changed);
+  onCleanup(() => document.fonts.removeEventListener("loadingdone", changed));
   queueMicrotask(fit);
 }
 
