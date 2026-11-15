@@ -28,7 +28,10 @@ import { FormatMenu } from "./format-menu";
 // Cells written into the text a comment quotes, and how much of each: enough to read.
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
 // A formula moved down `by` rows, as the hub's fill moves one: each reference's rows not held by `$`.
-const lowered = (input: string, by: number) => tokenize(input).map((token) => { const text = input.slice(token.from, token.to); return token.kind === "ref" ? text.replace(/(\$?)(\d+)/g, (all, held: string, row: string) => held ? all : String(Number(row) + by)) : text; }).join("");
+const lowered = (input: string, by: number) => tokenize(input).map((token) => { const text = input.slice(token.from, token.to); if (token.kind !== "ref") return text;
+  // Only the address moves: a tab's name (Sheet2!, 'Q1 2024'!) keeps its digits.
+  const at = text.lastIndexOf("!") + 1;
+  return text.slice(0, at) + text.slice(at).replace(/(\$?)(\d+)/g, (all, held: string, row: string) => held ? all : String(Number(row) + by)); }).join("");
 const runsOf = (rows: readonly number[]) => rows.reduce<number[][]>((out, row) => { const last = out.at(-1); if (last && last.at(-1) === row - 1) last.push(row); else out.push([row]); return out; }, []);
 type Menu = { rows?: SheetRange; cols?: SheetRange };
 
