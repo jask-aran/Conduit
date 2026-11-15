@@ -350,12 +350,14 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         const one = mergeAt(row, col), cut = lineCut(p, at);
         if (!one) return cut ? Object.create(own(row, col), { line: { value: true } }) : own(row, col);
         const drawn = clip(p, one)!, height = rowHeights.get(p) ?? theme.row, sum = (from: number, to: number) => { let out = 0; for (let n = from; n < to; n++) out += typeof height === "number" ? height : height(n); return out; };
-        return Object.create(own(one.top, one.left), {
-          span: { value: [one.left, one.right] },
-          ...(row !== one.top || col !== one.left ? { data: { value: "" }, copyData: { value: "" } } : {}),
-          ...(one.bottom > one.top ? { block: { value: [sum(drawn.top, at), sum(drawn.top, drawn.bottom + 1)] } } : {}),
-          ...(cut && one.top >= p.map.sheet(at - 1) + 1 ? { line: { value: true } } : {}),
-        });
+        // Own fields only: with row numbers shown the grid copies a spanned cell as `{ ...cell, span }`, which keeps no prototype's.
+        const base = own(one.top, one.left) as GridCell & { data?: unknown; copyData?: string }, first = row === one.top && col === one.left;
+        return {
+          ...base, data: first ? base.data : "", copyData: first ? base.copyData : "",
+          span: [one.left, one.right],
+          ...(one.bottom > one.top ? { block: [sum(drawn.top, at), sum(drawn.top, drawn.bottom + 1)] } : {}),
+          ...(cut && one.top >= p.map.sheet(at - 1) + 1 ? { line: true } : {}),
+        } as GridCell;
       };
       const own = (row: number, col: number): GridCell => {
         const value = model.value(row, col), type = types[col], mark = options.columns.mark(row, col), striped = options.columns.banded(row, col);
