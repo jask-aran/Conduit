@@ -146,3 +146,10 @@
 .ui-markup-ask-asked > span { flex: none; margin-inline-start: var(--space-xs); }
 
 /* In a slot of the surface's own row (a sheet's formula bar): in the row's flow at its end, at its controls' height, the bars plain groups side by side; what a held tool draws with stands under them. */
+.ui-markup-rails[data-slot] { position: relative; inset: auto; flex-flow: row nowrap; justify-content: flex-end; gap: var(--space-xs); pointer-events: auto; }
+.ui-markup-rails[data-slot] > .ui-markup-bar { height: var(--control); padding: 0; }
+.ui-markup-rails[data-slot] .ui-icon-button:where([data-icon-button="tool"]) { width: var(--control); height: var(--control); }
+.ui-markup-rails[data-slot] > .ui-markup-break { display: none; }
+/* A key sequence's next key on the tool it presses (a sheet's Alt sequences), over the tool's corner as a keytip. */
+.ui-markup-bar :where(.ui-icon-button) { position: relative; }
+.ui-markup-tip { position: absolute; right: 0; bottom: 0; background: var(--foreground); color: var(--background); pointer-events: none; }

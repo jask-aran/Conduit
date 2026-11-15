@@ -4,7 +4,7 @@
  * The keys are Excel's Home tab's where it has them; the letters choosing an ink (R, A, G, B, N) and a number format after Alt H N are Conduit's,
  * since Excel picks those from a gallery with the arrows.
  */
-import { createMemo, createSignal, For, Show, type Accessor } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show, type Accessor } from "solid-js";
 import { Actions, Item, Section } from "@/components/ui";
 import { CardForm } from "@/components/ui/card";
 import { Button, Input } from "@/components/ui/controls";
@@ -87,15 +87,26 @@ export function createSequenceKeys(run: (sequence: SheetSequence) => void, named
     into.addEventListener("keydown", keydown, true); into.addEventListener("keyup", keyup, true); into.addEventListener("focusout", end);
     return () => { into.removeEventListener("keydown", keydown, true); into.removeEventListener("keyup", keyup, true); into.removeEventListener("focusout", end); };
   };
-  return { typed, next, attach, end };
+  /** The key that presses a ribbon tool next, while a sequence leading to it is typed (past Alt alone, where every tool's would be H). */
+  const tip = (tool: SheetToolId) => {
+    const now = typed();
+    if (!now) return undefined;
+    const one = SHEET_SEQUENCES.find((sequence) => "tool" in sequence && sequence.tool === tool);
+    return one && one.keys.length > now.length && one.keys.startsWith(now) ? one.keys[now.length] : undefined;
+  };
+  return { typed, next, attach, end, tip };
 }
 
-/** The keys that may come next in the sequence typed so far, under `anchor` (the formula field). */
+/** The keys that may come next and are not drawn on a tool of the ribbon in `anchor` (its keytips): within a menu, sizes, a folded ribbon. Under the ribbon's end. */
 export function SequenceHint(props: { typed: Accessor<string | null>; next: Accessor<{ key: string; label: string }[]>; anchor: () => HTMLElement | undefined }) {
-  return <Popover open={props.typed() !== null} anchorRef={props.anchor} placement="bottom-start">
+  // Read once the ribbon has drawn its keytips for what is typed.
+  const [drawn, setDrawn] = createSignal<ReadonlySet<string>>(new Set());
+  createEffect(() => { props.typed(); requestAnimationFrame(() => setDrawn(new Set([...props.anchor()?.querySelectorAll(".ui-markup-tip") ?? []].map((tip) => tip.textContent ?? "")))); });
+  const rest = () => props.next().filter((one) => !drawn().has(one.key));
+  return <Popover open={props.typed() !== null && rest().length > 0} anchorRef={props.anchor} placement="bottom-end">
     <PopoverContent aria-label="Keys" width="sm" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}>
       <Section title={["Alt", ...(props.typed() ?? "")].join(" ")}>
-        <For each={props.next()}>{(one) => <Item keys={[one.key]} keysFirst>{one.label}</Item>}</For>
+        <For each={rest()}>{(one) => <Item keys={[one.key]} keysFirst>{one.label}</Item>}</For>
       </Section>
     </PopoverContent>
   </Popover>;

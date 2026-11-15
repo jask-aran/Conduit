@@ -30,6 +30,7 @@ export default function SheetSurface(props: ArtifactSurfaceProps) {
       place: () => props.quiet ? null : marks()?.place() ?? null,
       placeAt: (from, to) => marks()?.placeAt(from, to) ?? null,
       tools: () => marks()?.tools() ?? [],
+      slot: () => marks()?.slot(),
     },
     away, stale, drawn,
     reveal: () => { const show = marks()?.reveal; return show && ((place) => { if (place.cells) show(place.cells); }); },

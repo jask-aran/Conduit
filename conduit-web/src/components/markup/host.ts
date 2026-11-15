@@ -96,8 +96,9 @@ export type MarkupCapabilities = {
   sent: "corner" | "margin";
   /** The bar is thinner than the library's frost, to show the interface being looked at under it; a document's needs no such thing. */
   thin: boolean;
-  /** Where the bar stands: at the `foot` of what is marked up, opened and closed, in parts side by side (what is marked up, the tools, sending; one bar on a phone); or a `ribbon` at the head of the host's frame, always there, the host's own tools in it beside Markup's: an artifact's, which is edited and marked up in one place. */
-  bar: "foot" | "ribbon";
+  /** Where the bar stands: at the `foot` of what is marked up, opened and closed, in parts side by side (what is marked up, the tools, sending; one bar on a phone); or a `ribbon` at the head of the host's frame, always there, the host's own tools in it beside Markup's: an artifact's, which is edited and marked up in one place;
+   *  or, as a ribbon is, in a `slot` the surface gives in a row of its own (`MarkupHost.slot`: a sheet's formula bar), at that row's height, folding to the room the row leaves it. */
+  bar: "foot" | "ribbon" | "slot";
   /** Who draws a place a comment is being written about: the tool's `layer`, over the place's boxes (text on a page); or the `surface` itself, told it among its margin's anchors as one not yet sent (a sheet's highlight over its canvas). */
   marks: "layer" | "surface";
   /** What the tool stands over may be light (a site in a frame), where frost alone cannot be read: its bar and cards then have a dark ground of their own. */
@@ -155,7 +156,7 @@ export type MarkupSuggestion = { key: string; by: string; at: string; summary: s
 /** One of the host's own tools: what it is called, its icon, and doing it; read where it is drawn, so getters follow. `menu`: on the ribbon, the tools of one menu
  *  are one control (a document's block kinds), `active` the one the surface is now (a heading where the caret is). A tool of no menu is a toggle, `pressed` while
  *  it is on (a mark the selection wears; unsaid, `active`). `disabled`: not to be done here now (a menu dims and strikes it). `keys`: its shortcut, for its tooltip. */
-export type MarkupHostTool = { name: string; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; compact?: boolean; swatch?: string; pick?(hex: string): void; mode?: "edit" | "review"; run(): void };
+export type MarkupHostTool = { name: string; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; compact?: boolean; swatch?: string; tip?: string; pick?(hex: string): void; mode?: "edit" | "review"; run(): void };
 
 /** The surface's own undo history (a paper's typing), which the bar's Undo and Redo step where Markup has no mark of its own newer. Read where drawn, so `can…` follow. */
 export type MarkupHostHistory = { undo(): boolean; redo(): boolean; canUndo(): boolean; canRedo(): boolean };
@@ -189,6 +190,8 @@ export interface MarkupHost {
   place?(): MarkupPlace | null;
   /** What a drag of the quote tool from `from` to `to` covers (`to` null: a press with no drag), where the surface is not the page's own text (a sheet's canvas). Unsaid, the text under the pointer. */
   placeAt?(from: MarkupAt, to: MarkupAt | null): MarkupPlace | null;
+  /** The element the bar is drawn in, where its capabilities say `slot`: the end of a row of the surface's own, whose other items give it room first. Read where drawn. */
+  slot?(): HTMLElement | null | undefined;
   /** Given, as the tool opens (null as it closes), who is listening, and the tool's ways to start on a place: for a surface that asks itself (a paper's `@`, a key).
    *  `comment`: a comment on it, written in its note. `ask`: the ask field at it, asking `to` (unsaid: the one comments go to) to do something there, sent as it is written.
    *  `unsent` and `send`: the comments written and not yet sent, for a host that shows Send with its own list of them. `to` and `hand`: which listener

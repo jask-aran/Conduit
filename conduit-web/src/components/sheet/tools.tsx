@@ -18,12 +18,12 @@ const ALIGNS = [["left", "Align left"], ["center", "Align centre"], ["right", "A
 const VALIGNS = [["top", "Align top"], ["middle", "Align middle"], ["bottom", "Align bottom"]] as const;
 
 /** `done`: after a tool has run (the grid takes focus back). `fit`: the rows of a range whose wrapping changed are fitted to their lines. */
-export function createSheetTools(options: { at: Accessor<SheetRange | null>; styles: SheetStyles; formats: SheetFormats; offered?: readonly SheetToolName[]; fit(range: SheetRange): void; done(): void }): SheetTool[] {
+export function createSheetTools(options: { tip(name: SheetToolId): string | undefined; at: Accessor<SheetRange | null>; styles: SheetStyles; formats: SheetFormats; offered?: readonly SheetToolName[]; fit(range: SheetRange): void; done(): void }): SheetTool[] {
   const { at, styles, formats } = options, offered = options.offered ?? SHEET_TOOLS;
   const worn = () => { const range = at(); return range && styles.worn(range.top, range.left); };
   const tool = (name: SheetToolId, label: string, icon: SheetTool["icon"], run: (range: SheetRange) => void, rest: Partial<SheetTool> & { on?(): boolean } = {}): SheetTool => {
     const { on, ...more } = rest;
-    return { name, label, icon, ...more, get active() { return on?.() ?? false; }, get pressed() { return on && !more.menu ? on() : undefined; }, get disabled() { return !at(); }, run: () => { const range = at(); if (range) run(range); options.done(); } };
+    return { name, label, icon, ...more, get tip() { return options.tip(name); }, get active() { return on?.() ?? false; }, get pressed() { return on && !more.menu ? on() : undefined; }, get disabled() { return !at(); }, run: () => { const range = at(); if (range) run(range); options.done(); } };
   };
   const mark = (name: keyof typeof sheetToolIcons) => { const Icon = sheetToolIcons[name]; return () => <Icon />; };
   const inks = (name: "color" | "fill", menu: string, none: string, noun: string) => [undefined, ...SHEET_INKS].map((ink?: SheetInk) => tool(`${name}-${ink ?? "none"}`, ink ? `${INK_LABELS[ink]} ${noun}` : none,

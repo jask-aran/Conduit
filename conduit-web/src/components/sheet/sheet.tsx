@@ -32,7 +32,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const [menu, setMenu] = createSignal<Menu>({});
   const formats = createSheetFormats(look, model, props.host.failed), styles = createSheetStyles(look, model, props.host.failed);
   // The grid's element is a signal: the menu trigger that makes it may make it again, and the grid then mounts in the one that stands.
-  const [island, setIsland] = createSignal<HTMLDivElement>();
+  const [island, setIsland] = createSignal<HTMLDivElement>(), [slot, setSlot] = createSignal<HTMLDivElement>();
   let root: HTMLElement | undefined, anchors: SheetAnchor[] = [];
   const tabs = createSheetTabs({ doc: live.doc, host: props.host, id: props.id, name: props.name, grid, at });
   const watchers = new Set<(pressed?: string) => void>(), moved = (pressed?: string) => watchers.forEach((listener) => listener(pressed));
@@ -210,7 +210,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     }
     return { text: lines.join("\n"), label: corners.range, under: corners, boxes: () => { const now = rangeOf({ under: corners }), box = now && grid()?.bounds(now); return box ? [box] : []; } };
   };
-  const tools = createSheetTools({ at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(),
+  const tools = createSheetTools({ tip: sequences.tip, at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(),
     fit: (range) => sizes.fitRows(Array.from({ length: range.bottom - range.top + 1 }, (_, n) => range.top + n), readLook(root!)) });
   const marks: SheetMarks = {
     subject: () => ({ ...model()?.size() }),
@@ -227,6 +227,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       made.select(range);
       return placeOf(range);
     },
+    slot,
     tools: () => tools,
     anchors: (list) => {
       anchors = list;
@@ -272,6 +273,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       <div ref={formula} class="ui-input ui-spreadsheet-formula" onFocusIn={() => { const area = at(); if (area && !editor.editing()) editor.begin({ row: area.top, col: area.left }, "edit", "bar"); }}>
         <FormulaField editor={editor} place="bar" label="Formula" class="ui-formula-text" idle={input} disabled={!at()} />
       </div>
+      {/* The ribbon (Markup's bar with the sheet's tools) stands here, at the row's end, folding to the room the formula field leaves it. */}
+      <div ref={setSlot} class="ui-spreadsheet-slot" />
       <Show when={frozenHere()}>{(cell) => <Notice kind="tool" title={`${cell().formula}: ${cell().why}`}>Frozen on import: ={cell().formula.replace(/^=/, "")}</Notice>}</Show>
     </div>
     <div ref={body} class="ui-spreadsheet-body">
@@ -306,7 +309,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         </ContextMenu>
         <div class="ui-spreadsheet-editor" data-open={editor.editing() ? "" : undefined} style={cellBox()}><FormulaField editor={editor} place="cell" label="Cell" class="ui-formula-text" /></div>
         <FormulaHelp editor={editor} frame={() => body} />
-        <SequenceHint typed={sequences.typed} next={sequences.next} anchor={() => formula} />
+        <SequenceHint typed={sequences.typed} next={sequences.next} anchor={slot} />
         <SizePrompt question={question()} onClose={() => { setQuestion(null); grid()?.focus(); }} />
         <Show when={!model()}><Empty role="status" class="ui-spreadsheet-waiting">Opening the sheet…</Empty></Show>
       </Show>

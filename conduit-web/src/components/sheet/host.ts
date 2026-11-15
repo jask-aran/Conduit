@@ -45,7 +45,7 @@ export const SHEET_TOOLS: readonly SheetToolName[] = ["bold", "italic", "underli
 export type SheetToolId = "bold" | "italic" | "underline" | "strike" | "wrap" | `color-${SheetInk | "none"}` | `fill-${SheetInk | "none"}` | `borders-${SheetBorders}`
   | `align-${"left" | "center" | "right"}` | `valign-${"top" | "middle" | "bottom"}` | `format-${"general" | "number" | "currency" | "percent" | "date" | "time"}` | `decimals-${"more" | "fewer"}`;
 /** One tool as the ribbon draws it (Markup's MarkupHostTool): read where drawn, so getters follow. `menu`: the tools of one stand as one control; `compact` with `swatch`: a set of inks. */
-export type SheetTool = { name: SheetToolId; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; compact?: boolean; swatch?: string; run(): void };
+export type SheetTool = { name: SheetToolId; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; compact?: boolean; swatch?: string; tip?: string; run(): void };
 
 export interface SheetHost {
   /** The hub's live socket for the sheet, opened with the app's own sign-in. */
@@ -80,7 +80,7 @@ export type SheetAnchor = { key: string; quote?: string; under?: Record<string, 
  * What the editor tells a layer that marks it up, in the shape Markup's host asks for. `under`: the cells a box lies
  * over, by ids and by A1 address. `place`: the cells selected, as a place; `placeAt`: the cells from one point to another
  * (a press: the one cell), which it selects. `where`: where a comment's range is now. `reveal`: scroll to a range (A1) and
- * select it. `tools`: its edit tools, for the layer's ribbon. Not offered, because a sheet
+ * select it. `slot`: the end of the formula bar, where the layer's ribbon stands. `tools`: its edit tools, for that ribbon. Not offered, because a sheet
  * does not have them yet: agents' seats, suggestions, and Keep or Revert of an agent's change.
  */
 export type SheetMarks = {
@@ -88,6 +88,7 @@ export type SheetMarks = {
   under(box: SheetBox): Record<string, string> | null;
   place(): SheetPlace | null;
   placeAt(from: { x: number; y: number }, to: { x: number; y: number } | null): SheetPlace | null;
+  slot(): HTMLElement | undefined;
   tools(): SheetTool[];
   anchors(list: SheetAnchor[]): void;
   where(key: string): SheetBox | null;

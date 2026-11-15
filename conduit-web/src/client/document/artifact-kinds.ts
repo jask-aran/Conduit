@@ -129,7 +129,7 @@ export const ARTIFACT_KINDS: Record<ArtifactKind, ArtifactKindClient> = {
     Surface: lazy(() => import("./site-surface")),
   },
   // Cells, with comments on ranges of them. A comment quotes the selected cells (`quote`); a drawing over the canvas could not follow it as it scrolls, so there is no ink.
-  // The grid draws a range commented on itself; its ribbon carries its own edit tools (`cells`) beside Markup's.
+  // The grid draws a range commented on itself; its ribbon, its own edit tools (`cells`) beside Markup's, stands at the end of the formula bar (`slot`).
   sheet: {
     label: "Sheet",
     says: "Rows and columns with formulas, kept as a CSV file, with comments on cells in the margin.",
@@ -138,7 +138,7 @@ export const ARTIFACT_KINDS: Record<ArtifactKind, ArtifactKindClient> = {
     xlsx: true,
     edit: [],
     cells: SHEET_TOOLS,
-    markup: { deliveries: ["batched", "live"], tools: ["quote", "note"], screenshot: false, sent: "margin", thin: false, bar: "ribbon", marks: "surface" },
+    markup: { deliveries: ["batched", "live"], tools: ["quote", "note"], screenshot: false, sent: "margin", thin: false, bar: "slot", marks: "surface" },
     Surface: lazy(() => import("./sheet-surface")),
   },
 };
