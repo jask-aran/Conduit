@@ -154,12 +154,22 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   root.render(createElement(Grid));
   // The grid takes every press on the window by where it lands, so a press on what stands over it (the ribbon's line of inks, a menu) would
   // select the column under it too: such a press never reaches the window.
-  const over = (event: MouseEvent | TouchEvent) => {
-    const at = "touches" in event ? event.touches[0] : event, frame = element.getBoundingClientRect();
-    if (at && !element.contains(event.target as Node) && at.clientX >= frame.left && at.clientX < frame.right && at.clientY >= frame.top && at.clientY < frame.bottom) event.stopPropagation();
-  };
+  const over = (event: MouseEvent | TouchEvent) => { const at = "touches" in event ? event.touches[0] : event, frame = element.getBoundingClientRect();
+    if (at && !element.contains(event.target as Node) && at.clientX >= frame.left && at.clientX < frame.right && at.clientY >= frame.top && at.clientY < frame.bottom) event.stopPropagation(); };
   for (const kind of ["mousedown", "touchstart"] as const) document.addEventListener(kind, over);
   const box = (col: number, row: number) => editor?.getBounds(col, row);
+  const colAt = (x: number) => { for (let at = view.x; at < view.x + view.width + 1; at++) { const cell = box(at, view.y); if (cell && x >= cell.x && x < cell.x + cell.width) return at; } return -1; };
+  // Dragged along the column letters, the columns between are picked, as a drag down the row numbers picks rows (the grid does only that one).
+  const sweep = (event: PointerEvent) => {
+    const frame = element.getBoundingClientRect(), from = colAt(event.clientX);
+    if (event.button !== 0 || event.shiftKey || from < 0 || event.clientY < frame.top || event.clientY >= frame.top + look.header) return;
+    const move = (moved: PointerEvent) => { const to = colAt(moved.clientX); if (to < 0) return;
+      const next: GridSelection = { columns: CompactSelection.fromSingleSelection([Math.min(from, to), Math.max(from, to) + 1]), rows: CompactSelection.empty() };
+      drive.select?.(next); events.selected(selected(next, size)); };
+    const up = () => { removeEventListener("pointermove", move); removeEventListener("pointerup", up); };
+    addEventListener("pointermove", move); addEventListener("pointerup", up);
+  };
+  element.addEventListener("pointerdown", sweep);
   return {
     update: (changed) => {
       if (!changed) return drive.structure?.();
