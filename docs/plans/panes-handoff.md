@@ -37,8 +37,8 @@ A new tab there is served the previous client by the service worker (`sw.js`) af
    unsaved edits, Ctrl from a document pane joins the nearest session pane (store `openRules`), focus kept on the
    paper/thread switch, old-model leftovers removed. Unfixed: a thread's header names its place "Chats" in pane B but
    the project in pane A. Not run: Ctrl-opening jbot, jbot in a side pane.
-2. Tabs: closing the active tab should go to the tab used last (needs a per-pane use order in the store), and the
-   "every tab has a draft" notice is gone; bring it back.
+2. Landed (`896bb060f`): closing the shown tab goes to the one shown before it (`Pane.recent`); a tab past five is
+   refused with the old notice when every tab holds a draft. Not clicked through in the browser.
 3. A pure test for the store's verbs, paid for by removing more test lines than it adds (`budgets.json`).
 4. Plan steps 4-6: the dock as one slot plus summons (jbot, Files, terminal), the folder viewer (Files | Changes,
    replacing FilesView/SourceControlView/file columns/`ftabs`), the rail foot button's two states, smoke rewritten.
