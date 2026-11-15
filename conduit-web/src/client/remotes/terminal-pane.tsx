@@ -1,5 +1,7 @@
 import { Icons, Note, Actions, IconButton, PaneHeader } from "@/components/ui";
-import { TermKeys, TermKey, TermStatus, TermIdentity, TermContext, TermShortcuts, TermShortcut, TermLead, TermOverflow, TermActionLabel, TermState } from "@/components/ui/terminal";
+import { createFolds } from "@/components/ui/fit";
+import { createArtWindow } from "@/components/ui/chat-art";
+import { TermKeys, TermKey, TermStatus, TermIdentity, TermContext, TermShortcuts, TermShortcut, TermLead, TermOverflow, TermActionLabel, TermState, TermControls } from "@/components/ui/terminal";
 import { Button as TermButton, Segmented, Switch } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { CardForm } from "@/components/ui/card";
@@ -51,7 +53,10 @@ function sessionMetadata(record: Pty) {
 type StandaloneTerminalControls = { onOpenConduit: () => void };
 type KeyboardLockNavigator = Navigator & { keyboard?: { lock?: (codes?: string[]) => Promise<void>; unlock?: () => void } };
 
-export function TerminalPane(props: { projectId: string; projectName?: string; workingRoot?: string; terminalId?: string; active?: boolean; autoStart?: boolean; focusRequest?: number; connectivity?: () => Connectivity; standaloneControls?: StandaloneTerminalControls; onOpenBeside?: (terminalId: string) => void; onShown?: (terminalId: string) => void; headerActions?: JSX.Element; onClose?: () => void }) {
+export function TerminalPane(props: { projectId: string; projectName?: string; workingRoot?: string; terminalId?: string; active?: boolean; autoStart?: boolean; focusRequest?: number; connectivity?: () => Connectivity; standaloneControls?: StandaloneTerminalControls; onOpenBeside?: (terminalId: string) => void; onShown?: (terminalId: string) => void; headerActions?: JSX.Element; onClose?: () => void;
+  /** The pane's own header (its tab row), given the terminal's controls and the fit that folds them; the tab says the
+      shell's name and place, so no identity is drawn. */
+  header?: (controls: JSX.Element, fit: (header: HTMLElement) => void) => JSX.Element; onLive?: (live: boolean) => void }) {
   const [pty, setPty] = createSignal<Pty | null>(null);
   const [sessions, setSessions] = createSignal<Pty[]>([]);
   const [error, setError] = createSignal("");
@@ -1015,6 +1020,53 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
     disposeRenderer();
   });
 
+  // Wherever it is hosted (a pane, the dock), the terminal shows the background picture dimmed, as mail and sheets do.
+  const art = createArtWindow(true);
+  const termActions = () => <Actions kind="term">
+          <DropdownMenu onOpenChange={(open) => { if (open) void refreshSessions().catch((cause) => setError((cause as Error).message)); }}>
+            <MenuControl as={TermButton} variant="ghost" size="sm" aria-label="Active terminal sessions" title="Active terminal sessions">
+              <Icons.Terminal /><span>{sessions().length}</span><Icons.ChevronDown />
+            </MenuControl>
+            <MenuContent>
+              <MenuSection title={`Active terminals · ${props.projectName || "Chats"}`}>
+                <Show when={sessions().length > 0} fallback={<Note kind="menu">No active terminals in {props.projectName || "Chats"}.</Note>}>
+                  <For each={sessions()}>{(session) => {
+                    const name = () => session.title || "Shell";
+                    return <MenuRow {...{ textValue: name() }} checked={pty()?.id === session.id} detailData detail={sessionMetadata(session)} onSelect={() => void attachSession(session)} actions={[
+                      ...(props.onOpenBeside ? [{ label: `Open ${name()} beside`, icon: <Icons.Split />, onSelect: () => props.onOpenBeside?.(session.id) }] : []),
+                      { label: `Rename ${name()}`, icon: <Icons.Edit />, onSelect: () => requestRename(session) },
+                      { label: `Detach from ${name()}`, icon: <UnplugIcon />, disabled: pty()?.id !== session.id || connectionState() !== "live", onSelect: () => detachSession(session) },
+                      { label: `Destroy ${name()}`, icon: <Icons.Delete />, destructive: true, disabled: sessionBusy() === session.id, onSelect: () => void removeSession(session) },
+                    ]}>{name()}</MenuRow>;
+                  }}</For>
+                </Show>
+              </MenuSection>
+              <Rule />
+              <MenuRow icon={<Icons.Add />} disabled={starting()} onSelect={() => void start()}>
+                {starting() ? "Starting…" : "New terminal"}
+              </MenuRow>
+            </MenuContent>
+          </DropdownMenu>
+          <Show when={pty()?.status === "running"}>
+            <TermButton
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label={terminalFocused() ? "Terminal focused" : "Focus terminal"}
+              aria-pressed={terminalFocused()}
+              title="Focus terminal to capture keyboard shortcuts"
+              disabled={!writable() || connectionState() !== "live"}
+              onClick={focusActiveTerminal}
+            >
+              <Icons.Focus /><TermActionLabel>{terminalFocused() ? "Focused" : "Focus"}</TermActionLabel>
+            </TermButton>
+          </Show>
+        </Actions>;
+  // In a pane's own header the shortcuts fold into the ⋯, then the labels go, once the header overflows or a tab's
+  // title would cut: the header folds before it truncates.
+  const folds = createFolds(2, { content: true, over: (header) => Math.max(header.scrollWidth - header.clientWidth,
+    [...header.querySelectorAll<HTMLElement>(".ui-tab-title > span")].reduce((cut, title) => cut + Math.max(0, title.scrollWidth - title.clientWidth), 0)) });
+  createEffect(() => props.onLive?.(headerStatus().tone === "success"));
   return <>
     <Dialog open={Boolean(renameSession())} onOpenChange={(open) => { if (!open) setRenameSession(null); }} title="Rename terminal" description="Choose the label shown in this Workspace terminal list.">
         <CardForm onSubmit={(event) => void submitRename(event)}>
@@ -1052,47 +1104,8 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
         </Actions>
       </CardForm>
     </Dialog>
-    <section ref={pane} class="terminal-pane" aria-label="Terminal pane" data-terminal-focused={terminalFocused() ? "true" : "false"} onKeyDown={scopeTerminalKeyboard}>
-    <PaneHeader kind="term" actions={<Actions kind="term">
-        <DropdownMenu onOpenChange={(open) => { if (open) void refreshSessions().catch((cause) => setError((cause as Error).message)); }}>
-          <MenuControl as={TermButton} variant="ghost" size="sm" aria-label="Active terminal sessions" title="Active terminal sessions">
-            <Icons.Terminal /><span>{sessions().length}</span><Icons.ChevronDown />
-          </MenuControl>
-          <MenuContent>
-            <MenuSection title={`Active terminals · ${props.projectName || "Chats"}`}>
-              <Show when={sessions().length > 0} fallback={<Note kind="menu">No active terminals in {props.projectName || "Chats"}.</Note>}>
-                <For each={sessions()}>{(session) => {
-                  const name = () => session.title || "Shell";
-                  return <MenuRow {...{ textValue: name() }} checked={pty()?.id === session.id} detailData detail={sessionMetadata(session)} onSelect={() => void attachSession(session)} actions={[
-                    ...(props.onOpenBeside ? [{ label: `Open ${name()} beside`, icon: <Icons.Split />, onSelect: () => props.onOpenBeside?.(session.id) }] : []),
-                    { label: `Rename ${name()}`, icon: <Icons.Edit />, onSelect: () => requestRename(session) },
-                    { label: `Detach from ${name()}`, icon: <UnplugIcon />, disabled: pty()?.id !== session.id || connectionState() !== "live", onSelect: () => detachSession(session) },
-                    { label: `Destroy ${name()}`, icon: <Icons.Delete />, destructive: true, disabled: sessionBusy() === session.id, onSelect: () => void removeSession(session) },
-                  ]}>{name()}</MenuRow>;
-                }}</For>
-              </Show>
-            </MenuSection>
-            <Rule />
-            <MenuRow icon={<Icons.Add />} disabled={starting()} onSelect={() => void start()}>
-              {starting() ? "Starting…" : "New terminal"}
-            </MenuRow>
-          </MenuContent>
-        </DropdownMenu>
-        <Show when={pty()?.status === "running"}>
-          <TermButton
-            type="button"
-            variant="ghost"
-            size="sm"
-            aria-label={terminalFocused() ? "Terminal focused" : "Focus terminal"}
-            aria-pressed={terminalFocused()}
-            title="Focus terminal to capture keyboard shortcuts"
-            disabled={!writable() || connectionState() !== "live"}
-            onClick={focusActiveTerminal}
-          >
-            <Icons.Focus /><TermActionLabel>{terminalFocused() ? "Focused" : "Focus"}</TermActionLabel>
-          </TermButton>
-        </Show>
-      </Actions>}>
+    <section ref={(element) => { pane = element; art(element); }} class="terminal-pane" aria-label="Terminal pane" data-terminal-focused={terminalFocused() ? "true" : "false"} onKeyDown={scopeTerminalKeyboard}>
+    <Show when={props.header} fallback={<PaneHeader kind="term" actions={termActions()}>
       <Show when={coarseInput()}>
         <TermLead phone>
           <TermButton variant="ghost" size="icon-sm" aria-label={mobileKeysVisible() ? "Hide terminal keys" : "Show terminal keys"}
@@ -1143,7 +1156,41 @@ export function TerminalPane(props: { projectId: string; projectName?: string; w
           </MenuContent>
         </DropdownMenu>
       </TermOverflow>
-    </PaneHeader>
+    </PaneHeader>}>{(header) => header()(<TermControls folded={folds.count()}>
+      <Show when={headerStatus().tone !== "success"}>
+        <TermStatus tone={headerStatus().tone} busy={headerStatus().tone === "busy"} label={headerStatus().label} title={headerStatus().title} aria-label={headerStatus().title} />
+      </Show>
+      <TermShortcuts aria-label="Terminal shortcuts">
+        <For each={shortcuts()}>{(shortcut) =>
+          <TermShortcut type="button" title={`${shortcut.target === "new" ? "New terminal" : "Current terminal"}: ${shortcut.command}`}
+            disabled={starting() || (shortcut.target === "current" && !writable())} onClick={() => runShortcut(shortcut)}>
+            {shortcut.label}
+          </TermShortcut>
+        }</For>
+        <DropdownMenu>
+          <MenuControl as={IconButton} aria-label="Edit terminal shortcuts" title="Edit terminal shortcuts"><Icons.Settings /></MenuControl>
+          <MenuContent>{shortcutRows()}</MenuContent>
+        </DropdownMenu>
+      </TermShortcuts>
+      <TermOverflow>
+        <DropdownMenu>
+          <MenuControl as={IconButton} aria-label="Terminal shortcuts" title="Terminal shortcuts"><Icons.More /></MenuControl>
+          <MenuContent>
+            <MenuSection title="Shortcuts">
+              <For each={shortcuts()}>{(shortcut) =>
+                <MenuRow {...{ textValue: shortcut.label }} detailData detail={`$ ${shortcut.command}`} disabled={starting() || (shortcut.target === "current" && !writable())} onSelect={() => runShortcut(shortcut)}>{shortcut.label}</MenuRow>
+              }</For>
+            </MenuSection>
+            <Rule />
+            <MenuSub>
+              <MenuSubTrigger icon={<Icons.Settings />}>Edit shortcuts</MenuSubTrigger>
+              <MenuSubContent>{shortcutRows()}</MenuSubContent>
+            </MenuSub>
+          </MenuContent>
+        </DropdownMenu>
+      </TermOverflow>
+      {termActions()}
+    </TermControls>, folds.ref)}</Show>
     <div class="terminal-pane-body">
       <div
         ref={host}

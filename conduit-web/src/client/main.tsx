@@ -60,7 +60,6 @@ import { Composer } from "./chat/composer";
 import { AppDashboard } from "./dashboard/app-dashboard";
 import { applyTabFrost } from "./preferences/tab-frost";
 import { applyChatArt } from "./preferences/chat-art";
-import { createArtWindow } from "@/components/ui/chat-art";
 import { watchStrayFrost } from "./platform/stray-frost";
 import { applyStreamFade } from "./preferences/stream-fade";
 import { installFocusShown } from "./preferences/focus-shown";
@@ -2942,6 +2941,8 @@ function App() {
   };
   const [browserTitles, setBrowserTitles] = createSignal<Record<string, string>>({});
   const [termTitles, setTermTitles] = createSignal<Record<string, string>>({});
+  /** Terminal views whose shell is live, for their tab's dot. */
+  const [termLive, setTermLive] = createSignal<Record<string, boolean>>({});
   const [artifactNames, setArtifactNames] = createSignal<Record<string, { name: string; label: string }>>({});
   const nameArtifact = (view: string, name: string, label: string) => setArtifactNames((current) => current[view]?.name === name && current[view]?.label === label ? current : { ...current, [view]: { name, label } });
   // A tab is named before its pane is first shown: the hub is asked, once, and again for every tab drawn when an artifact changes, as one not shown may be the one renamed.
@@ -3001,15 +3002,18 @@ function App() {
       .catch(() => setRecord(null));
     const placeName = (projectId: string) => projectId === "computer" || projectId.startsWith("computer:") ? "Computer" : catalogue.projects().find((item) => item.id === projectId)?.name || "Chats";
     const tabbed = () => !inDock(pane) && !isMobileLayout();
-    return <SheetFill ref={createArtWindow(true)} class="pane-terminal">
-      <Show when={tabbed()}>
-        <PaneHeader actions={paneTabActions(pane)}><Show when={documentTab(pane)}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>
-      </Show>
+    // One row: the tab row, the terminal's controls at its right (they fold before a tab's title cuts).
+    const tabRow = (controls?: JSX.Element, fit?: (header: HTMLElement) => void) =>
+      <PaneHeader ref={fit} actions={<>{controls}{paneTabActions(pane)}</>}><Show when={documentTab(pane)}>{(tabs) => <PaneTabRow>{tabs()}</PaneTabRow>}</Show></PaneHeader>;
+    onCleanup(() => setTermLive((current) => { const { [`term:${shell}`]: _, ...rest } = current; return rest; }));
+    return <SheetFill class="pane-terminal">
+      <Show when={tabbed() && !record()}>{tabRow()}</Show>
       <Show when={record()} fallback={<Show when={record() === null}>
         <Show when={!tabbed()}><PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title="Terminal" /></PaneHeader></Show><Empty>This terminal has ended.</Empty>
       </Show>}>{(found) =>
         <TerminalPane projectId={found().projectId} projectName={placeName(found().projectId)} workingRoot={found().cwd || undefined} terminalId={shell} onShown={(next) => { if (next !== shell) void setPaneView(pane, `term:${next}`); }}
-          headerActions={tabbed() ? undefined : paneTabActions(pane)}
+          headerActions={tabbed() ? undefined : paneTabActions(pane)} header={tabbed() ? tabRow : undefined}
+          onLive={(live) => setTermLive((current) => current[`term:${shell}`] === live ? current : { ...current, [`term:${shell}`]: live })}
           onClose={tabbed() || inDock(pane) || isMobileLayout() ? undefined : () => void closeDocument(pane)} />
       }</Show>
     </SheetFill>;
@@ -4008,7 +4012,7 @@ function App() {
       icon: (id) => hiddenChats().get(id)?.chat.status === "subagent" ? <Icons.Agent /> : undefined,
       lit: () => activeTabOf(pane),
       used: () => tabsOf(pane)?.used ?? [],
-      live: (id) => !id.includes(":") && Boolean(runtime.getProcess(id)),
+      live: (id) => (!id.includes(":") && Boolean(runtime.getProcess(id))) || Boolean(termLive()[tabView(id)]),
       select: (id) => void switchTab(pane, id),
       close: (id) => void closeTab(pane, id),
       add: () => void newTab(pane),
@@ -4018,7 +4022,7 @@ function App() {
     return { get tabs() { return row(); } };
   };
   const documentTab = (pane: PaneKey, title?: string) => isMobileLayout() ? undefined
-    : <Show when={(tabsOf(pane)?.ids.length ?? 0) > 1} fallback={<PaneTabs><PaneTab lit title={title ?? viewName(viewOf(pane))} onClose={() => void closeDocument(pane)} />
+    : <Show when={(tabsOf(pane)?.ids.length ?? 0) > 1} fallback={<PaneTabs><PaneTab lit live={termLive()[viewOf(pane) ?? ""]} title={title ?? viewName(viewOf(pane))} onClose={() => void closeDocument(pane)} />
         <Show when={viewOf(pane) !== "home"}><IconButton kind="pane" label="New tab" onClick={() => void newTab(pane)}><Icons.Add /></IconButton></Show></PaneTabs>}>{paneTabRow(pane).tabs}</Show>;
   const newTab = async (pane: PaneKey) => {
     if (isMobileLayout()) return;

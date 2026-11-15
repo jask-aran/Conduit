@@ -18,10 +18,12 @@
 .ui-term-status[data-tone="danger"], .ui-term-status[data-tone="danger"] .ui-term-status-mark { color: var(--destructive); }
 
 .ui-term-overflow { display: none; flex: none; align-items: center; }
-.ui-pane-header:where([data-header="term"])[data-folded~="shortcuts"] .ui-term-shortcuts { display: none; }
-.ui-pane-header:where([data-header="term"])[data-folded~="shortcuts"] .ui-term-overflow { display: flex; }
-.ui-pane-header:where([data-header="term"])[data-folded~="labels"] .ui-term-action-label { display: none; }
-.ui-pane-header:where([data-header="term"])[data-folded~="labels"] .ui-actions:where([data-actions="term"]) [data-slot="button"] { min-width: var(--control-tool); padding-inline: var(--space-xs); }
+/* In a pane's own header the terminal's controls are one group at its right, folding as the term header does. */
+.ui-term-controls { display: flex; min-width: 0; flex: none; align-items: center; gap: var(--space-sm); }
+:where(.ui-pane-header[data-header="term"], .ui-term-controls)[data-folded~="shortcuts"] .ui-term-shortcuts { display: none; }
+:where(.ui-pane-header[data-header="term"], .ui-term-controls)[data-folded~="shortcuts"] .ui-term-overflow { display: flex; }
+:where(.ui-pane-header[data-header="term"], .ui-term-controls)[data-folded~="labels"] .ui-term-action-label { display: none; }
+:where(.ui-pane-header[data-header="term"], .ui-term-controls)[data-folded~="labels"] .ui-actions:where([data-actions="term"]) [data-slot="button"] { min-width: var(--control-tool); padding-inline: var(--space-xs); }
 .ui-term-shortcuts [data-slot="button"] { min-height: var(--control-tool); height: var(--control-tool); flex: none; padding-inline: var(--space-md); font-size: var(--text-caption); }
 .ui-term-shortcuts > .ui-icon-button:where([data-icon-button="tool"]) { flex: none; }
 .ui-actions:where([data-actions="term"]) { display: flex; min-width: 0; flex: none; align-items: center; gap: var(--space-sm); }
@@ -34,6 +36,7 @@
 
 .ui-term-state { position: absolute; inset: 0; z-index: 2; display: grid; place-content: center; justify-items: center; gap: var(--space-md);
   padding: var(--space-3xl); background: color-mix(in oklch, var(--background), black 9%); text-align: center; }
+[data-art-window] .ui-term-state { background: transparent; }
 .ui-term-state strong { color: var(--foreground); font-size: var(--text-row); font-weight: var(--weight-strong); }
 .ui-term-state p { max-width: min(var(--measure-xl), 100%); margin: 0; color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--leading-row); }
 .ui-term-state[data-empty] { min-height: 0; flex: 1; gap: var(--space-md); padding: var(--space-4xl); color: var(--muted-foreground); }
