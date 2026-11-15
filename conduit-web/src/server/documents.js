@@ -780,7 +780,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     doc.on("update", (update, origin, _, transaction) => {
       const own = transaction.local && room.own, tagged = own && new Uint8Array(update.length + 4);
       if (tagged) { new DataView(tagged.buffer).setUint32(0, own.step, true); tagged.set(update, 4); }
-      for (const peer of room.peers) if (peer !== origin) peer.send(tagged && peer.author?.[0] === own.client ? frame(FRAME.own, tagged) : frame(FRAME.update, update));
+      for (const peer of room.peers) if (peer !== origin) { const mine = tagged && peer.author?.[0] === own.client; if (mine) own.sent++; peer.send(mine ? frame(FRAME.own, tagged) : frame(FRAME.update, update)); }
       clearTimeout(room.saving);
       room.saving = setTimeout(() => void room.work(() => save(room)).catch((error) => console.error(`Could not save the ${KINDS[room.entry.kind].noun} ${room.entry.name}`, error)), SAVE_AFTER_MS);
     });
@@ -1079,11 +1079,13 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
   };
   const blocks = async (id, op, ...args) => { const room = await current(id); return KINDS[room.entry.kind].blocks[op](room, ...args); };
   // A change a page asks for with its `client` and a `step` of its own reaches that page tagged, so its history holds it as its own: only while the change runs
-  // unbroken, so nothing written meanwhile is tagged.
+  // unbroken, so nothing written meanwhile is tagged. The reply says how many tagged updates were sent (`tagged`), so the page knows when it holds them all.
   const cells = async (id, op, ...args) => {
     const room = await current(id, "cells"), { client, step } = args[0] ?? {};
-    room.own = Number.isInteger(client) && Number.isInteger(step) && step >= 0 && step < 2 ** 32 ? { client: String(client), step } : null;
-    try { return KINDS[room.entry.kind].cells[op](room, ...args); } finally { room.own = null; }
+    const own = room.own = Number.isInteger(client) && Number.isInteger(step) && step >= 0 && step < 2 ** 32 ? { client: String(client), step, sent: 0 } : null;
+    let out;
+    try { out = KINDS[room.entry.kind].cells[op](room, ...args); } finally { room.own = null; }
+    return own ? Promise.resolve(out).then((said) => said && typeof said === "object" && !Array.isArray(said) ? { ...said, tagged: own.sent } : said) : out;
   };
   const looking = setInterval(() => { for (const loading of rooms.values()) void loading.then((room) => room.peers.size || room.away ? room.work(() => see(room)) : null).catch(() => {}); }, LOOK_EVERY_MS);
   looking.unref();

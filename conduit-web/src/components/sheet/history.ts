@@ -5,7 +5,7 @@ import type { SheetCellsOp } from "./host";
 export class SheetStep { constructor(readonly id: number, readonly label: string) {} }
 
 // Excel keeps 100 steps; the list shows the latest of them.
-const KEPT = 100, LISTED = 20, STEP = "step", LABEL = "label";
+const KEPT = 100, LISTED = 20, STEP = "step", LABEL = "label", WAIT_MS = 3000;
 // A change made outside any named step is named by the look it changed.
 const LOOKS: Record<string, string> = { style: "Format cells", fmt: "Number format", width: "Column width", height: "Row height", hidden: "Hide rows", freezeRows: "Freeze panes", freezeCols: "Freeze panes", filter: "Filter", table: "Table", type: "Column type" };
 const described = (changed: Map<unknown, readonly unknown[]>) => {
@@ -20,14 +20,21 @@ const opLabel = (op: SheetCellsOp) => {
 /**
  * The page's one history, as a spreadsheet's: every change made here, the hub's for it included, is a step; another person's or agent's never is.
  * `act` runs a change as one named step (its writes one transaction); `hub` sends an op whose updates come back tagged with the step (inside an `act`,
- * its step). Undo and redo are each one local transaction. While an op is out, Undo waits for it, so it never undoes the step before it.
+ * its step). Undo and redo are each one local transaction. While an op is out, or the tagged updates its reply counts (`tagged`) have not all come, Undo
+ * waits, so it never undoes the step before it; an op the hub never answers is given up on after a while.
  */
 // Any Yjs type, whatever its events.
 type Scoped = Y.AbstractType<any>;
 export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: SheetCellsOp) => Promise<unknown>) {
   const um = new Y.UndoManager(scope, { captureTimeout: 0, trackedOrigins: new Set<unknown>([null, SheetStep]) });
   const steps = new Map<number, SheetStep>(), listeners = new Set<() => void>(), owed: (() => void)[] = [];
-  let open: SheetStep | null = null, lone: SheetStep | null = null, next = 1, out = 0;
+  let open: SheetStep | null = null, lone: SheetStep | null = null, next = 1, out = 0, owedFrames = 0, late: ReturnType<typeof setTimeout> | undefined;
+  const settle = () => {
+    clearTimeout(late);
+    if (out) return;
+    if (owedFrames > 0) { late = setTimeout(() => { owedFrames = 0; settle(); }, WAIT_MS); return; }
+    for (const run of owed.splice(0)) run();
+  };
   const changed = () => listeners.forEach((listener) => listener());
   const begin = (label: string) => { const step = new SheetStep(next++, label); steps.set(step.id, step); if (steps.size > KEPT * 2) steps.delete(steps.keys().next().value!); return step; };
   um.on("stack-item-added", ({ stackItem, origin, changedParentTypes }) => {
@@ -46,7 +53,7 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
     changed();
   });
   const walk = (back: boolean, count = 1) => {
-    if (out) { owed.push(() => walk(back, count)); return true; }
+    if (out || owedFrames > 0) { owed.push(() => walk(back, count)); return true; }
     let done = false;
     for (let n = 0; n < count; n++) done = (back ? um.undo() : um.redo()) !== null || done;
     changed();
@@ -64,9 +71,18 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
       const step = open ?? lone ?? (lone = begin(opLabel(op)));
       queueMicrotask(() => { lone = null; });
       out++;
-      return send({ ...op, step: step.id, client: doc.clientID }).finally(() => { if (--out === 0) for (const run of owed.splice(0)) run(); });
+      let over = false;
+      const done = () => { if (over) return; over = true; clearTimeout(gaveUp); out--; settle(); }, gaveUp = setTimeout(done, WAIT_MS * 3);
+      return send({ ...op, step: step.id, client: doc.clientID }).then((said) => {
+        const tagged = (said as { tagged?: unknown } | null)?.tagged;
+        if (typeof tagged === "number") owedFrames += tagged;
+        return said;
+      }).finally(done);
     },
-    origin: (id: number) => steps.get(id) ?? new SheetStep(id, ""),
+    // A tagged update applied (live.ts): one fewer owed, counted below none when it comes before its op's reply.
+    origin: (id: number) => { if (--owedFrames === 0) settle(); return steps.get(id) ?? new SheetStep(id, ""); },
+    // A tab gone takes its steps' cells with it: a step on it could not be undone.
+    clear: () => { um.clear(); changed(); },
     undo: (count?: number) => walk(true, count),
     redo: (count?: number) => walk(false, count),
     canUndo: () => um.canUndo(),

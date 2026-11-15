@@ -48,6 +48,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   live.own(history.origin);
   history.onChange(() => setStepped((n) => n + 1));
   createEffect(() => history.scope(tabs.tabs().flatMap((tab) => [live.doc.getArray(rowsOf(tab.id)), live.doc.getArray(colsOf(tab.id))])));
+  // A tab deleted, by anyone, ends the history, as Excel's does: a step on it could not be undone.
+  let tabIds: Set<string> | undefined;
+  createEffect(() => { const ids = new Set(tabs.tabs().map((tab) => tab.id)); if (tabIds && [...tabIds].some((id) => !ids.has(id))) history.clear(); tabIds = ids; });
   const watchers = new Set<(pressed?: string) => void>(), moved = (pressed?: string) => watchers.forEach((listener) => listener(pressed));
   createEffect(() => props.onState?.(live.state()));
   onCleanup(() => history.destroy());
