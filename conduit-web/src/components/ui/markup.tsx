@@ -222,11 +222,9 @@ const VIEWS: ReadonlyArray<{ value: MarkupView; label: string; icon: () => JSX.E
  *  `keys`: its shortcut, as its tooltip says it. */
 /** Whether the bars are out (MarkupBar `out`): each fades itself, since a frost faded through an ancestor blurs nothing until the fade ends. */
 const Out = createContext<() => boolean>(() => false);
-/** Whether the bars stand in a row of the surface's own (MarkupBar `slot`), which is no floating thing: there they are no frost. */
-const InRow = createContext(false);
 function Bar(props: JSX.HTMLAttributes<HTMLDivElement>) {
   const out = useContext(Out);
-  return <Frost lift="raised" plain={useContext(InRow)} {...props} data-move="fade" data-out={out() ? "" : undefined} />;
+  return <Frost lift="raised" {...props} data-move="fade" data-out={out() ? "" : undefined} />;
 }
 /** The bar's own tools: one frosted bar, or (parted) a row of them, each part a bar of its own. */
 function Sets(props: { parted: boolean; children: JSX.Element }) {
@@ -377,7 +375,7 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
 
   // Over an interface the bar is in parts, as a paper's ribbon is: what is marked up, the tools, and sending. A phone's and a thread's stay one bar.
   const parted = () => !props.ribbon && !props.compact && !props.thread;
-  return <Out.Provider value={() => Boolean(props.out)}><InRow.Provider value={Boolean(props.slot)}><div ref={rails} class="ui-markup-rails" data-ribbon={props.ribbon ? "" : undefined} data-slot={props.slot ? "" : undefined} data-compact={props.compact ? "" : undefined} data-thin={props.thin === false ? undefined : ""}>
+  return <Out.Provider value={() => Boolean(props.out)}><div ref={rails} class="ui-markup-rails" data-ribbon={props.ribbon ? "" : undefined} data-slot={props.slot ? "" : undefined} data-compact={props.compact ? "" : undefined} data-thin={props.thin === false ? undefined : ""}>
   <Show when={options()}><div ref={props.compact ? undefined : held} class={props.compact ? "ui-markup-held" : "ui-markup-under"} data-over={props.ribbon ? undefined : ""}><Bar class="ui-markup-bar" role="toolbar" aria-label="Tool options">
     <Show when={props.tool === "shape" && props.onShape}>{(onShape) => <Segmented label="Shape" icons size="sm" value={props.shape ?? "arrow"} onChange={onShape()} options={SHAPES} />}</Show>
     <Show when={inks()}>{(onInk) => <>
@@ -459,5 +457,5 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     <Show when={!props.ribbon}><CloseButton size="sm" label="Close markup" onClick={props.onClose} /></Show>
     </Part>
   </Sets>
-  </div></InRow.Provider></Out.Provider>;
+  </div></Out.Provider>;
 }

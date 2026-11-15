@@ -152,4 +152,4 @@
 .ui-markup-rails[data-slot] > .ui-markup-break { display: none; }
 /* A key sequence's next key on the tool it presses (a sheet's Alt sequences), over the tool's corner as a keytip. */
 .ui-markup-bar :where(.ui-icon-button) { position: relative; }
-.ui-markup-tip { position: absolute; right: 0; bottom: 0; background: var(--foreground); color: var(--background); pointer-events: none; }
+.ui-markup-tip { position: absolute; right: 0; bottom: 0; min-width: var(--icon-sm); height: var(--icon-sm); padding: 0; font-size: var(--text-caption); pointer-events: none; }
