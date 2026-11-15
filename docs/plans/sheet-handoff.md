@@ -40,36 +40,25 @@ and key sequences are the reference unless there is a reason to differ. Storage,
 - **Workbook styles:** fills, fonts, borders, alignment, accounting layout, and row and column line styles.
 - **Settings › Artifacts.**
 
-## In flight when this was written
+## State, 2026-11-15 (late)
 
-- **Undo for hub-made changes.** A builder agent is giving the page one linear undo/redo history, with named steps in an Undo
-  dropdown, that also covers hub-made changes: fill, sort, insert/delete rows. The page's `Y.UndoManager` only tracks its own
-  transactions. The intended fix is to apply the hub's updates caused by this page's ops with a tracked origin. The owner wants
-  it very fast. Excel's linear model was chosen, not a branching tree.
-- **Text sitting high.** In the cell name field and formula bar, the text sits about 1.6 px above centre in Windows Chrome:
-  Paper Mono at 11.7 px, measured caps on rows 16–24 against a box centre of 21.6. Headless Linux draws it centred. The probable
-  cause is Paper Mono's vertical metrics. Options:
-  - `ascent-override`/`descent-override` on its `@font-face`, but that applies app-wide;
-  - `text-box: trim-both cap alphabetic`, which works on the formula text but not inside an `<input>`.
+Reviews are in `review-sheet-undo.md`, `review-sheet-merges-rules.md` and `review-sheet-xlsx-styles.md`. Fixed since then, each in its own
+commit (`611ec8dfa`..`2e8bfc8b9`):
+- merges draw (Glide copies a spanned cell as `{...cell, span}`: the merged cell's fields must be its own); a tall merge redraws every row;
+  Enter/Tab leave a merge from its far edge; deleting a merge's edge row or column shrinks it; Merge empties cells as they are when it runs;
+- imported merges are cut at the tab's edge; imported rules are stored by ids (`rulesIds`), so they move with rows and columns; `stopIfTrue`
+  round-trips as `stop`;
+- xlsx import grows a tab only through styled cells, rows and columns touching its values, as far as the limits allow; LibreOffice's
+  whole-row runs become row styles; hand-set row heights are kept; lost line styles are reported; export joins alike columns;
+- Undo waits for every tagged update a hub op sent (the hub's reply counts them as `tagged`); deleting a tab clears the history;
+- the fill handle steps a typed `2026-01-30` by days.
 
-Builders running when this was written each keep an uncommitted resume note beside this file:
-- `handoff-sheet-undo.md`: the undo history;
-- `handoff-sheet-rules.md`: conditional formatting;
-- `handoff-sheet-merges.md`: merged cells;
-- `handoff-sheet-series.md`: the fill handle's series.
+Still open from the reviews: undoing a structure change leaves other people's later formulas pointing at shifted cells
+(`sheet-engine.js:128-136`); nothing guards a merge's hidden cells (paste, fill, sort); arrows at a frozen merge's edge; prefix sums for tall
+merges; the low xlsx ones (row/column crossings outside the grid, `<c r=` attribute order).
 
-State at the pause, 2026-11-15: everything is committed in `993391e5d`. It typechecks, it runs on :4310, and the headless
-smoke test passes.
-
-- **Undo:** works in the browser. Ctrl+D followed by Ctrl+Z and Ctrl+Y on probe-sheet checked out. Its code review is still owed.
-- **Merges, rules and series:** part-built, with what is left in each note.
-  - The rules are imported and exported, but the page doesn't draw them yet.
-  - Series has its module, but it is not wired to the fill handle.
-
-Continue each with a fresh builder from its note. That beats resuming the old threads, which are large.
-
-To continue one, start a fresh builder from its note and the working tree, not the old thread. Delete each note once its work is
-committed.
+A builder is drawing conditional-format rules (`handoff-sheet-rules.md`). Notes from xlsx are waiting on the owner: sheet comments are markup
+items sent to a listener, so 16 imported notes would hand 16 items to agents.
 
 ## Open, in rough order
 
@@ -103,7 +92,7 @@ committed.
 - **Restarts are refused at a budget.** `bash scripts/start-conduit.sh restart` will not start the server when the initial JS
   bundle is over 437,000 B gzip. Sheet-only icons go in `components/ui/sheet-icons.tsx`, which loads lazily, never in the library's
   `icons.tsx`.
-- **The source ceiling.** It is `sourceLines` in `conduit-web/scripts/check-conventions.mjs`, now 131,500. It may be raised for
+- **The source ceiling.** It is `sourceLines` in `conduit-web/scripts/check-conventions.mjs`, now 132,400. It may be raised for
   planned feature work.
 - **Testing.** Headless Chromium via `conduit-web/scripts/probes/lib.mjs` `open()`, on the owner's test sheet "probe-sheet"
   (`/?panes=artifact%3A802d93d7cfbe2968`):
