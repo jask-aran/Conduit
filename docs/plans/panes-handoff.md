@@ -25,11 +25,18 @@ For the next agent. The model is DESIGN.md "Places and panes", "Focus and openin
   sheet, 1x and 6x CPU); not yet seen on the phone.
 - `9698a03ea`: overlay scrollbars show for any fine pointer (`any-pointer: fine`), for a mouse in Samsung DeX.
 
+## Checking in Chrome :9222
+
+A new tab there is served the previous client by the service worker (`sw.js`) after a restart; set CDP
+`Network.setBypassServiceWorker` (or reload twice) before judging a fix. Opening timed 2026-11-15 on :4310: sheet
+539 ms, paper 576 ms from a project page.
+
 ## Open items
 
-1. A builder (worktree `agent-aa412443dc8f83e96`) is checking docking/undocking, closing pane A, Ctrl from a document
-   pane, document headers, `page:jbot` as a tab, the paper/thread switch, then removing old-model leftovers in
-   main.tsx. Cherry-pick its commits; expect a small conflict near `gate` (the `leaves(pane)` line above).
+1. Landed (`8c7df5786`→`96…`, `e0fd7908a`): docking shows the docked pane at once, docking over a held pane gates
+   unsaved edits, Ctrl from a document pane joins the nearest session pane (store `openRules`), focus kept on the
+   paper/thread switch, old-model leftovers removed. Unfixed: a thread's header names its place "Chats" in pane B but
+   the project in pane A. Not run: Ctrl-opening jbot, jbot in a side pane.
 2. Tabs: closing the active tab should go to the tab used last (needs a per-pane use order in the store), and the
    "every tab has a draft" notice is gone; bring it back.
 3. A pure test for the store's verbs, paid for by removing more test lines than it adds (`budgets.json`).
