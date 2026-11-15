@@ -10,7 +10,7 @@ import { ASK_KEY, type SheetAnchor, type SheetBox, type SheetGrid, type SheetGri
 import { createLiveSheet } from "./live";
 import { readLook } from "./theme";
 import { createFormulaEditor, FormulaField, FormulaHelp } from "./formula-editor";
-import { createSequenceKeys, SequenceHint, SizePrompt, type SizeQuestion } from "./sequences";
+import { createSequenceKeys, SequenceHint, SHEET_SEQUENCES, SizePrompt, type SizeQuestion } from "./sequences";
 import { createSheetSizes, dragRowEdges } from "./sizes";
 
 // Cells written into the text a comment quotes, and how much of each: enough to read.
@@ -211,6 +211,13 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const rows = () => menu().rows, cols = () => menu().cols;
   const count = (from: number, to: number) => to - from + 1;
   return <section ref={root} class="ui-spreadsheet" aria-label={props.name} data-margin={props.marginEmpty ? "none" : "beside"}
+  // The menu's own doings, over what it was opened on: a sequence's (sizes), and the cells' cut, copy, paste and clearing.
+  const picked = (): SheetRange | null => { const r = rows(), c = cols(); return r && c ? { top: r.top, bottom: r.bottom, left: c.left, right: c.right } : null; };
+  const sized = (keys: string, selection: SheetRange) => SHEET_SEQUENCES.find((sequence) => sequence.keys === keys)?.run({ selection: () => selection, sizes, look: () => readLook(root!), ask: setQuestion });
+  const within = (range: SheetRange) => Array.from({ length: range.bottom - range.top + 1 }, (_, r) => Array.from({ length: range.right - range.left + 1 }, (_, c) => ({ row: range.top + r, col: range.left + c })));
+  const copy = (range: SheetRange) => navigator.clipboard.writeText(within(range).map((row) => row.map(({ row: r, col }) => String(model()?.value(r, col) ?? "")).join("\t")).join("\n")).catch((error: Error) => props.host.failed(error.message));
+  const clear = (range: SheetRange) => write(within(range).flat().map((cell) => ({ ...cell, input: "" })));
+  const paste = (range: SheetRange) => void navigator.clipboard.readText().then((text) => write(text.replace(/\r?\n$/, "").split(/\r?\n/).flatMap((line, r) => line.split("\t").map((input, c) => ({ row: range.top + r, col: range.left + c, input })))), (error: Error) => props.host.failed(error.message));
     onKeyDown={(event) => {
       if (!(event.ctrlKey || event.metaKey) || !island()?.contains(event.target as Node)) return;
       if (tabs.key(event)) return;
@@ -238,15 +245,26 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
           <ContextMenuContent>
             <Show when={rows()}>{(range) => <MenuSection>
               <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-rows", range().top, count(range().top, range().bottom))}>Insert {count(range().top, range().bottom) > 1 ? `${count(range().top, range().bottom)} rows` : "row"} above</MenuRow>
+            <Show when={picked()}>{(range) => <MenuSection>
+              <MenuRow icon={<Icons.Cut />} keys={["Ctrl", "X"]} onSelect={() => void copy(range()).then(() => clear(range()))}>Cut</MenuRow>
+              <MenuRow icon={<Icons.Copy />} keys={["Ctrl", "C"]} onSelect={() => void copy(range())}>Copy</MenuRow>
+              <MenuRow icon={<Icons.Paste />} keys={["Ctrl", "V"]} onSelect={() => paste(range())}>Paste</MenuRow>
+              <MenuRow icon={<Icons.Delete />} keys={["Delete"]} onSelect={() => clear(range())}>Clear contents</MenuRow>
+              <Show when={props.onAsk}><MenuRow icon={<Icons.Chat />} onSelect={() => { grid()?.select(range(), false); props.onAsk?.(); }}>Comment</MenuRow></Show>
+            </MenuSection>}</Show>
               <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-rows", range().bottom + 1, count(range().top, range().bottom))}>Insert {count(range().top, range().bottom) > 1 ? `${count(range().top, range().bottom)} rows` : "row"} below</MenuRow>
               <MenuRow destructive icon={<Icons.Delete />} onSelect={() => structure("delete-rows", range().top, count(range().top, range().bottom))}>Delete {count(range().top, range().bottom) > 1 ? `rows ${range().top + 1}–${range().bottom + 1}` : `row ${range().top + 1}`}</MenuRow>
             </MenuSection>}</Show>
             <Show when={cols()}>{(range) => <MenuSection>
+              <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "H"]} onSelect={() => sized("HOH", range())}>Row height…</MenuRow>
+              <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "A"]} onSelect={() => sized("HOA", range())}>Fit row height</MenuRow>
               <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-cols", range().left, count(range().left, range().right))}>Insert {count(range().left, range().right) > 1 ? `${count(range().left, range().right)} columns` : "column"} left</MenuRow>
               <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-cols", range().right + 1, count(range().left, range().right))}>Insert {count(range().left, range().right) > 1 ? `${count(range().left, range().right)} columns` : "column"} right</MenuRow>
               <MenuRow destructive icon={<Icons.Delete />} onSelect={() => structure("delete-cols", range().left, count(range().left, range().right))}>Delete {count(range().left, range().right) > 1 ? "columns" : "column"} {rangeA1({ ...range(), top: 0, bottom: 0 }).replace(/1/g, "")}</MenuRow>
             </MenuSection>}</Show>
           </ContextMenuContent>
+              <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "W"]} onSelect={() => sized("HOW", range())}>Column width…</MenuRow>
+              <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "I"]} onSelect={() => sized("HOI", range())}>Fit column width</MenuRow>
         </ContextMenu>
         <div class="ui-spreadsheet-editor" data-open={editor.editing() ? "" : undefined} style={cellBox()}><FormulaField editor={editor} place="cell" label="Cell" class="ui-formula-text" /></div>
         <FormulaHelp editor={editor} frame={() => body} />

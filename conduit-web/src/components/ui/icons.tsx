@@ -31,6 +31,8 @@ import {
   Columns2Icon,
   CopyIcon,
   ClipboardPasteIcon,
+  MoveHorizontalIcon,
+  ScissorsIcon,
   CpuIcon,
   DeleteIcon,
   DownloadIcon,
@@ -156,6 +158,8 @@ export const Code = CodeXmlIcon;
 export const Compact = ShrinkIcon;
 export const Copy = CopyIcon;
 export const Paste = ClipboardPasteIcon;
+export const Cut = ScissorsIcon;
+export const Resize = MoveHorizontalIcon;
 export const LocalModel = CpuIcon;
 export const Dashboard = LayoutDashboardIcon;
 export const Delete = Trash2Icon;

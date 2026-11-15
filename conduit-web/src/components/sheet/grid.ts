@@ -99,7 +99,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     editOnType: false, cellActivationBehavior: "double-click",
     onVisibleRegionChanged: (region) => { view = region; events.moved(); },
     // Its own Ctrl+Space and Shift+Space take only the current cell's column or row; the sheet's take the whole selection's (`whole`).
-    rowMarkers: "number", smoothScrollX: true, smoothScrollY: true, width: "100%", height: "100%", fillHandle: true, getCellsForSelection: true, keybindings: { search: false, selectColumn: false, selectRow: false },
+    rowMarkers: "clickable-number", smoothScrollX: true, smoothScrollY: true, width: "100%", height: "100%", fillHandle: true, getCellsForSelection: true, keybindings: { search: false, selectColumn: false, selectRow: false },
     // The grid's own description of every cell for a screen reader is rebuilt on each move and scroll. Drawn off screen and copied whole, an
     // arrow-key move that scrolls costs a third less and a wheel step half (measured: p95 8.6 to 5.7 ms, 6.4 to 2.5 ms).
     experimental: { disableAccessibilityTree: true, renderStrategy: "double-buffer" },
