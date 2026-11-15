@@ -4152,6 +4152,8 @@ function App() {
   const dockPane = async (pane: PaneKey) => {
     const id = idOf(pane);
     if (!canDock(pane) || !id) return void toast.info("Pane A docks only while another pane can take its place.");
+    const held = dockedSlot();
+    if (held !== null && !(await gate(held, null))) return;
     // Pane A docking: the pane beside it becomes pane A, and the docked pane takes that pane's slot, file tabs and all.
     if (pane === "main") swapTabs("main", rowSlots()[0]!);
     movingDocuments = true;
