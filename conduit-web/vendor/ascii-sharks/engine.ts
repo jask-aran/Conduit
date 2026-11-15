@@ -68,6 +68,8 @@ export class OceanEngine {
     this.renderer.resize(rect.width, rect.height, dpr);
     this.world.resize(rect.width, rect.height, this.renderer.cellWidth, this.renderer.cellHeight);
     if (this.reducedMotion.matches) this.drawStill();
+    // Conduit: resizing cleared the canvas; drawn now rather than at the next step, so a copy never takes it blank.
+    else { this.renderer.render(this.world, 0); this.frames++; }
   }
 
   private schedule() {
