@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { writePrivateJson } from "../private-file.js";
 import { composeDraft, prefill } from "./compose.js";
-import { canonicalFilter, filterGuide, parseFilter } from "./filter.js";
+import { canonicalFilter, filterGuide, parseFilterForSaving } from "./filter.js";
 import { attachmentOf, parseMail, readBody } from "./parse.js";
 import { openMailStore } from "./store.js";
 
@@ -32,7 +32,7 @@ const newId = () => crypto.randomBytes(4).toString("hex");
 /** A filter as stored, written in full; a refusal that says where it stopped reading for one that does not read. */
 const filterOf = (value) => {
   if (typeof value !== "string" || value.length > 2000) throw badRequest("A filter is text, 2000 characters at most.");
-  const { node, error } = parseFilter(value);
+  const { node, error } = parseFilterForSaving(value);
   if (error) throw Object.assign(badRequest(error.message), { at: error.at });
   return canonicalFilter(node);
 };
@@ -463,7 +463,7 @@ export async function createMail({ dataRoot, changed }) {
     async filter(id, filter) {
       entryOf(id);
       if (typeof filter !== "string") throw badRequest("A filter is text.");
-      const { node, error } = parseFilter(filter);
+      const { node, error } = parseFilterForSaving(filter);
       if (error) return { ok: false, error };
       let threads = 0, before = null;
       const sample = [];

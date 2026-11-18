@@ -1,4 +1,4 @@
-import type { MailAccount, MailBody, MailChange, MailDraft, MailDraftInput, MailLabel, MailMessage, MailParty, MailRule, MailSortCategory, MailSync, MailThread } from "@/mail/mail";
+import type { MailAccount, MailBody, MailChange, MailDraft, MailDraftInput, MailLabel, MailMessage, MailFilterCheck, MailLabelRule, MailParty, MailSenderRoute, MailSorting, MailSplit, MailSync, MailThread } from "@/mail/mail";
 import { api } from "../api/client";
 import { httpUrl } from "../api/transport.js";
 import { authorizedFetch } from "../api/native-auth-client.ts";
@@ -19,9 +19,15 @@ export const mailApi = {
   updateAccount: (account: string, input: { name?: string; sync?: Partial<MailSync> }) =>
     api<{ account: MailAccount }>(`/v0/mail/accounts/${id(account)}`, { ...json("PATCH", input), timeout: false }).then((answer) => answer.account),
   resync: (account: string) => api<{ account: MailAccount }>(`/v0/mail/accounts/${id(account)}/resync`, { method: "POST", body: "{}", timeout: false }).then((answer) => answer.account),
-  rules: (account: string) => api<{ rules: MailRule[]; categories: MailSortCategory[] }>(`/v0/mail/accounts/${id(account)}/rules`),
-  putRule: (account: string, rule: Partial<MailRule> & Pick<MailRule, "name" | "when" | "then"> | Pick<MailRule, "id" | "on">) => api<{ rule: MailRule }>(`/v0/mail/accounts/${id(account)}/rules`, json("POST", rule)).then((answer) => answer.rule),
-  removeRule: (account: string, rule: string) => api<{ ok: true }>(`/v0/mail/accounts/${id(account)}/rules/${id(rule)}`, { method: "DELETE" }),
+  sorting: (account: string) => api<MailSorting>(`/v0/mail/accounts/${id(account)}/sorting`),
+  putSplit: (account: string, split: Partial<MailSplit> & Pick<MailSplit, "name" | "filter">) => api<{ split: MailSplit }>(`/v0/mail/accounts/${id(account)}/splits`, json("POST", split)).then((answer) => answer.split),
+  removeSplit: (account: string, split: string) => api<{ ok: true }>(`/v0/mail/accounts/${id(account)}/splits/${id(split)}`, { method: "DELETE" }),
+  orderSplits: (account: string, ids: string[]) => api<{ splits: MailSplit[] }>(`/v0/mail/accounts/${id(account)}/splits/order`, json("POST", { ids })).then((answer) => answer.splits),
+  putLabelRule: (account: string, rule: Partial<MailLabelRule> & Pick<MailLabelRule, "name" | "filter" | "labels">) => api<{ rule: MailLabelRule }>(`/v0/mail/accounts/${id(account)}/label-rules`, json("POST", rule)).then((answer) => answer.rule),
+  removeLabelRule: (account: string, rule: string) => api<{ ok: true }>(`/v0/mail/accounts/${id(account)}/label-rules/${id(rule)}`, { method: "DELETE" }),
+  routeSender: (account: string, address: string, split: string | null) => api<{ senders: MailSenderRoute[] }>(`/v0/mail/accounts/${id(account)}/senders`, json("POST", { address, split })).then((answer) => answer.senders),
+  checkFilter: (account: string, filter: string) => api<MailFilterCheck>(`/v0/mail/accounts/${id(account)}/filter`, json("POST", { filter })),
+  move: (threads: string[], split: string | null) => api<{ threads: MailThread[] }>("/v0/mail/move", json("POST", { threads, split })).then((answer) => answer.threads),
   labels: (account: string) => api<{ labels: MailLabel[] }>(`/v0/mail/accounts/${id(account)}/labels`).then((answer) => answer.labels),
   threads: (input: { account: string; label: string; before?: string | null; limit?: number }) =>
     api<{ threads: MailThread[]; next: string | null }>(`/v0/mail/threads?${q({ ...input, limit: input.limit ?? THREAD_PAGE })}`),
