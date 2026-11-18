@@ -141,6 +141,7 @@ export function openMailStore({ dir }) {
     }
     return known;
   };
+  const isOwn = (account, row) => json(row.sender).address.toLowerCase() === sorting.get(account)?.own;
   function sortThread(account, row) {
     const state = sorting.get(account);
     if (!state || row.draft) return null;
@@ -172,9 +173,9 @@ export function openMailStore({ dir }) {
     // One the person does not keep as a tab shows in the first, as it does at the source.
     const tab = (category) => `category-${tabsOf.get(account)?.includes(category) === false ? CATEGORIES[0] : category}`;
     if (labels.includes("inbox")) for (const row of all) if (row.category && !labels.includes(tab(row.category))) labels.push(tab(row.category));
-    // Sorted by its newest message: an inbox thread is in one category, and one the person wrote last may be waiting wherever it is.
-    const sorted = sortThread(account, newest);
-    if (sorted && (labels.includes("inbox") || sorted === "waiting")) labels.push(`sort-${sorted}`);
+    // Sorted by its newest message that is not the person's own: an inbox thread is in one category.
+    const sorted = labels.includes("inbox") ? sortThread(account, shown.findLast((row) => !isOwn(account, row)) ?? newest) : null;
+    if (sorted) labels.push(`sort-${sorted}`);
     const parties = new Map();
     for (const row of shown) {
       const party = json(row.sender);
@@ -359,7 +360,7 @@ export function openMailStore({ dir }) {
     },
     /** Sorts again a page of the threads sorting covers (the inbox's and those already sorted), after `after`; returns the last thread it did, null at the end. */
     resort(account, after, limit) {
-      const threads = q(`SELECT DISTINCT thread FROM thread_labels WHERE account = ? AND (label = 'inbox' OR label = 'sent' OR label LIKE 'sort-%') AND thread > ? ORDER BY thread LIMIT ?`).all(account, after, limit).map((row) => row.thread);
+      const threads = q(`SELECT DISTINCT thread FROM thread_labels WHERE account = ? AND (label = 'inbox' OR label LIKE 'sort-%') AND thread > ? ORDER BY thread LIMIT ?`).all(account, after, limit).map((row) => row.thread);
       if (threads.length) tx(() => rollupAll(account, threads));
       return threads.at(-1) ?? null;
     },
@@ -440,7 +441,7 @@ export function openMailStore({ dir }) {
       const order = (label) => label.role ? ROLES.indexOf(label.role) + (label.at ?? CATEGORIES.indexOf(label.id.slice("category-".length))) / 100 : ROLES.length;
       // A category is a label the hub makes: Conduit's own, and any a rule names.
       const named = new Map(SORTS.map((one) => [one.id, one.name]));
-      for (const rule of this.rules(account)) if (!named.has(categoryId(rule.then?.category ?? "other"))) named.set(categoryId(rule.then.category), rule.then.category);
+      for (const rule of this.rules(account)) if (!named.has(categoryId(rule.then?.category ?? SORTS[0].id))) named.set(categoryId(rule.then.category), rule.then.category);
       const sorts = sorting.has(account) ? [...named].map(([id, name], at) => ({ id: `sort-${id}`, name, role: "sort", at })) : [];
       return [...q("SELECT id, name, role FROM labels WHERE account = ?").all(account), ...sorts]
         .filter((row) => row.role !== "category" || tabsOf.get(account)?.includes(row.id.slice("category-".length)) !== false)

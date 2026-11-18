@@ -64,6 +64,9 @@ Executor is too slow and too narrow for a client: a client needs a synced local 
   and rules, a table the person can read and edit, that turn facts and judgments into a category and its handling. The
   model never decides the category. A judgment between 0.3 and 0.7 is unsure: the message stays in the main list.
   - Message sender, subject and text may be sent to TypeSafe for every message. Cost is looked at once it runs.
+  - Start minimal (2026-11-18): Conduit's own categories are Primary, Promotions and Updates, given by rules that
+    take the source's sorting as it is. A category is added only when the person asks for it or makes a rule that
+    names one; proposals come as a short list to accept, never as built-in defaults.
   - Conduit's categories replace Gmail's tabs in the pane once they are right. The provider's own category stays
     available as a view and is an input to the rules (Gmail is trusted on marketing).
   - Nothing is filed automatically until the person has watched the categories for a week; then only Noise and Money.

@@ -122,7 +122,7 @@ export async function createMail({ dataRoot, changed }) {
     return entry;
   }
   // Threads are sorted as they change; all of them again, a page at a time, when Conduit's rules or facts change (SORT_READ) or a rule is written (`again`).
-  const SORT_READ = 1;
+  const SORT_READ = 2;
   async function resort(entry, again = false) {
     const id = entry.account.id;
     let at = again ? { read: 0, after: "" } : store.cursor(id, "sort") ?? { read: 0, after: "" };

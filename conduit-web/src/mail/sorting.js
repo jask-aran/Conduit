@@ -87,9 +87,8 @@ export async function judge(message, facts, { key, fetch: ask = fetch, tries = 4
   }
 }
 
-/** The categories every account has, in the order a list offers them; a rule may name one of its own (`then.name`). */
-export const CATEGORIES = [["reply", "Reply"], ["todo", "To do"], ["waiting", "Waiting"], ["alerts", "Alerts"], ["money", "Money"], ["logistics", "Trips & deliveries"], ["reading", "Reading"], ["noise", "Noise"], ["other", "Other"]]
-  .map(([id, name]) => ({ id, name }));
+/** The categories every account has, in the order a list offers them: the three most people already sort by. A rule may name one of its own (`then.category`). */
+export const CATEGORIES = [["primary", "Primary"], ["promotions", "Promotions"], ["updates", "Updates"]].map(([id, name]) => ({ id, name }));
 export const categoryId = (name) => CATEGORIES.find((one) => one.id === name || one.name.toLowerCase() === String(name).toLowerCase())?.id
   ?? String(name).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "");
 
@@ -101,19 +100,14 @@ export const categoryId = (name) => CATEGORIES.find((one) => one.id === name || 
  *   { field: "from" | "to" | "subject" | "text", has: "words" }    the words are in it, whatever their case; `from`/`to` take an address or "@domain"
  *   { ask: question id, atLeast?: 0.7 } Jev's chance for one of QUESTIONS; not given, the condition does not hold
  */
-const person = { all: [{ fact: "person" }, { any: [{ fact: "known" }, { fact: "source", is: "primary" }, { fact: "source", is: null }] }] };
-const sold = { fact: "source", is: "promotions" };
-/** What every account starts with, tried after the person's and agents' own; each can be turned off (`on: false` saved under its id). */
+/**
+ * What every account starts with, tried after the person's and agents' own; each can be turned off (`on: false` saved
+ * under its id). They take the source's sorting as it is: what it calls promotions, and its updates and forums; all else
+ * is primary. The other facts are there for rules the person or an agent adds.
+ */
 export const BUILT_IN = [
-  { id: "waiting", name: "I wrote last", when: { all: [{ fact: "mine" }, { fact: "last" }, { fact: "age", under: 14 }] }, then: { category: "waiting" } },
-  { id: "own", name: "My own messages", when: { fact: "mine" }, then: { category: "other" } },
-  { id: "alerts", name: "Security alerts", when: { all: [{ fact: "security" }, { not: person }, { not: sold }] }, then: { category: "alerts" } },
-  { id: "reply", name: "A person is waiting for an answer", when: { all: [person, { fact: "last" }, { any: [{ fact: "asks" }, { fact: "known" }] }] }, then: { category: "reply" } },
-  { id: "todo", name: "Something to do", when: { all: [{ fact: "action" }, { not: sold }] }, then: { category: "todo" } },
-  { id: "money", name: "Receipts and invoices", when: { all: [{ fact: "receipt" }, { not: sold }] }, then: { category: "money" } },
-  { id: "logistics", name: "Deliveries, bookings and appointments", when: { all: [{ fact: "logistics" }, { not: sold }] }, then: { category: "logistics" } },
-  { id: "noise", name: "What the source calls promotions", when: sold, then: { category: "noise" } },
-  { id: "reading", name: "Mailings to read", when: { all: [{ fact: "bulk" }, { not: person }] }, then: { category: "reading" } },
+  { id: "promotions", name: "What the source calls promotions", when: { fact: "source", is: "promotions" }, then: { category: "promotions" } },
+  { id: "updates", name: "What the source calls updates or forums", when: { any: [{ fact: "source", is: "updates" }, { fact: "source", is: "forums" }] }, then: { category: "updates" } },
 ].map((rule) => ({ ...rule, by: "conduit", on: true }));
 
 const FIELDS = { from: (message) => `${message.from.name} <${message.from.address}>`, to: (message) => [...message.to, ...message.cc].map((party) => party.address).join(" "), subject: (message) => message.subject, text: (message) => message.text };
@@ -138,8 +132,8 @@ export function holds(when, message, facts, answers = {}) {
   if ("ask" in when) return answers[when.ask] >= (when.atLeast ?? YES);
   return false;
 }
-/** The category the first rule that holds gives, and that rule's id; "other" where none does. */
+/** The category the first rule that holds gives, and that rule's id; the first category where none does. */
 export function sortOf(rules, message, facts, answers = {}) {
   const rule = rules.find((one) => one.on !== false && holds(one.when, message, facts, answers));
-  return { category: rule ? categoryId(rule.then.category) : "other", rule: rule?.id ?? null };
+  return { category: rule ? categoryId(rule.then.category) : CATEGORIES[0].id, rule: rule?.id ?? null };
 }
