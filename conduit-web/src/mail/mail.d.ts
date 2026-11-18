@@ -27,6 +27,8 @@ export interface MailSync {
   since: MailReach;
   /** Messages newer than this are kept whole and open at once. An older one (inside `since`) still has its text read in for search, a day.s share at a time, and is fetched again when it is opened. Shortening it fetches no more: text already held stays. Never further back than `since`. Default 90. */
   bodies: MailReach;
+  /** The inbox categories kept as tabs beside the first (of "promotions", "social", "updates", "forums"); mail of one not kept shows in the first, as it does at the source. A source cannot be asked which the person keeps there, so they say. */
+  tabs: string[];
 }
 /** What the hub holds of an account, counted when asked. */
 export interface MailHeld {

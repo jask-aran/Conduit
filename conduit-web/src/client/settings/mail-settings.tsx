@@ -1,6 +1,6 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import type { MailAccount, MailReach, MailSync } from "@/mail/mail";
-import { Button, Input, Segmented } from "@/components/ui/controls";
+import { Button, Input, Segmented, Switch } from "@/components/ui/controls";
 import { SettingLine, SettingStep } from "@/components/ui/overlay";
 import { Group } from "@/components/ui/group";
 import { Note } from "@/components/ui/state";
@@ -9,6 +9,7 @@ import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { sizeLabel } from "../chat/attachments";
 import { failure, mailApi } from "../mail/mail-api";
 
+const TABS = [{ value: "promotions", label: "Promotions" }, { value: "social", label: "Social" }, { value: "updates", label: "Updates" }, { value: "forums", label: "Forums" }];
 const SINCE = [{ value: "365", label: "1 year" }, { value: "1095", label: "3 years" }, { value: "1825", label: "5 years" }, { value: "all", label: "All" }];
 const BODIES = [{ value: "30", label: "1 month" }, { value: "90", label: "3 months" }, { value: "365", label: "1 year" }, { value: "all", label: "All" }];
 const reachOf = (value: string): MailReach => value === "all" ? "all" : Number(value);
@@ -95,6 +96,10 @@ export function MailSettings() {
           options={BODIES.map((option) => ({ ...option, disabled: further(reachOf(option.value), account.sync.since) }))}
           onChange={(value) => void update(account, { bodies: reachOf(value) })} />
       </SettingLine>
+      <For each={TABS}>{(tab) => <SettingLine label={`${tab.label} tab`} title={`Off, ${tab.label.toLowerCase()} mail shows in Primary, as in Gmail with that tab off`}>
+        <Switch label={`${tab.label} tab`} checked={account.sync.tabs.includes(tab.value)} disabled={busy() === account.id}
+          onChange={(on) => void update(account, { tabs: on ? [...account.sync.tabs, tab.value] : account.sync.tabs.filter((one) => one !== tab.value) })} />
+      </SettingLine>}</For>
     </Group>}</For>
     <Group title="Add a Gmail account">
       <Note>Gmail signs Conduit in with an app password: 16 letters Google makes for one app, in place of your own password.</Note>

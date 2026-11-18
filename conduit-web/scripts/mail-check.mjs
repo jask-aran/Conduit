@@ -215,7 +215,7 @@ try {
     assert.equal((await call(`/accounts/${account}`, { method: "PATCH", body: bad })).status, 400, JSON.stringify(bad));
   }
   assert.equal((await call("/accounts/nope", { method: "PATCH", body: { sync: { paused: true } } })).status, 404);
-  assert.deepEqual((await call(`/accounts/${account}`, { method: "PATCH", body: { name: "Me" } })).body.account.sync, { paused: false, since: 1095, bodies: 90 });
+  assert.deepEqual((await call(`/accounts/${account}`, { method: "PATCH", body: { name: "Me" } })).body.account.sync, { paused: false, since: 1095, bodies: 90, tabs: ["promotions", "social", "updates"] });
   server.close();
   step("routes answer, with 404, 400 and a source's refusal as { error, message }; a PATCH with a reach that is not days or \"all\" is 400");
 
@@ -228,7 +228,7 @@ try {
   const older = one("SELECT count(*) AS n FROM messages WHERE account = ? AND date < ?", account, cut90);
   assert.ok(older > 20, "the fixture has mail older than 90 days");
   const shrunk = await mail.updateAccount(account, { sync: { since: 90, bodies: "all" } });
-  assert.deepEqual(shrunk.sync, { paused: false, since: 90, bodies: 90 }, "text is kept no further back than mail");
+  assert.deepEqual(shrunk.sync, { paused: false, since: 90, bodies: 90, tabs: ["promotions", "social", "updates"] }, "text is kept no further back than mail");
   assert.deepEqual([shrunk.held.messages, shrunk.held.bodies], [full.messages, full.bodies], "a shorter reach drops nothing held");
   assert.ok(mail.message(oldMessage.id)?.held);
   step(`keep mail from 90 days: the ${older} older messages and their text stay; text reaches no further than mail`);
@@ -284,7 +284,7 @@ try {
   const second_ = await createMail({ dataRoot: oldRoot, changed: () => {} });
   try {
     const [loaded] = second_.accounts();
-    assert.deepEqual(loaded.sync, { paused: false, since: 1095, bodies: 90 });
+    assert.deepEqual(loaded.sync, { paused: false, since: 1095, bodies: 90, tabs: ["promotions", "social", "updates"] });
     await waitFor("the backfill", () => second_.accounts()[0].status.state === "idle");
     assert.ok(second_.message("old1.ancient"), "what was held from before the reach stays");
   } finally {

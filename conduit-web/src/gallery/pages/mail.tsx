@@ -59,7 +59,7 @@ function seed(scenario: Scenario) {
   accounts = scenario === "none" ? [] : [{ id: "a1", kind: "fixture", address: me.address, name: me.name,
     status: scenario === "error" ? { state: "error", error: "The source refused the sign-in: make a new app password in Settings › Mail." }
       : { state: "syncing", backfill: { done: 4210, total: 18532 }, at: new Date().toISOString() },
-    sync: { paused: false, since: 1095, bodies: 90 },
+    sync: { paused: false, since: 1095, bodies: 90, tabs: ["promotions", "updates"] },
     held: { messages: 12_430, threads: 7_918, bodies: 3_210, bytes: 432_013_312, oldest: ago(24 * 620), total: 31_225 } }];
   held = SEEDS.map((one, index) => {
     const id = `t${index + 1}`;

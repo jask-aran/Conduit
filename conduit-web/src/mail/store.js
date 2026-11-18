@@ -62,6 +62,7 @@ const snippetOf = (text) => {
   const plain = unpadded(splitQuoted(text).own);
   return plain.length > SNIPPET ? `${plain.slice(0, SNIPPET - 1)}…` : plain;
 };
+const sameList = (a, b) => a.length === b.length && a.every((item) => b.includes(item));
 const partyText = (parties) => parties.map((party) => `${party.name} ${party.address}`).join(" ");
 const chunks = (list) => Array.from({ length: Math.ceil(list.length / CHUNK) }, (_, index) => list.slice(index * CHUNK, (index + 1) * CHUNK));
 const marks = (list) => list.map(() => "?").join(",");
@@ -123,6 +124,8 @@ export function openMailStore({ dir }) {
     };
   };
 
+  // The categories each account keeps as tabs (MailSync's `tabs`, the first always among them); none said, all are.
+  const tabsOf = new Map();
   // A message the hub has a draft for (same Message-ID) is the source's copy of it: the draft stands in its place.
   const HIDDEN = "(message_id <> '' AND message_id IN (SELECT message_id FROM drafts WHERE drafts.account = messages.account))";
   function rollup(account, thread) {
@@ -138,7 +141,9 @@ export function openMailStore({ dir }) {
     const newest = shown[shown.length - 1];
     const labels = [...new Set(all.flatMap((row) => json(row.labels)))];
     // A category sorts the inbox: a thread is in one only while it is in the inbox.
-    if (labels.includes("inbox")) for (const row of all) if (row.category && !labels.includes(`category-${row.category}`)) labels.push(`category-${row.category}`);
+    // One the person does not keep as a tab shows in the first, as it does at the source.
+    const tab = (category) => `category-${tabsOf.get(account)?.includes(category) === false ? CATEGORIES[0] : category}`;
+    if (labels.includes("inbox")) for (const row of all) if (row.category && !labels.includes(tab(row.category))) labels.push(tab(row.category));
     const parties = new Map();
     for (const row of shown) {
       const party = json(row.sender);
@@ -295,6 +300,18 @@ export function openMailStore({ dir }) {
       }
     },
 
+    /** The categories an account keeps as tabs; a change sorts its inbox threads again and returns them. */
+    setTabs(account, tabs) {
+      const now = [CATEGORIES[0], ...tabs];
+      tabsOf.set(account, now);
+      const kept = this.cursor(account, "tabs");
+      if (kept ? sameList(kept, now) : now.length === CATEGORIES.length) return { threads: [] };
+      return tx(() => {
+        this.setCursor(account, "tabs", now);
+        return rollupAll(account, q("SELECT thread FROM thread_labels WHERE account = ? AND label = 'inbox'").all(account).map((row) => row.thread));
+      });
+    },
+
     /** These messages (by `seq`) are in this category at the source; returns the threads it changed. */
     setCategory(account, category, seqs) {
       return tx(() => {
@@ -358,6 +375,7 @@ export function openMailStore({ dir }) {
       const counts = new Map(q("SELECT label, count(*) AS n, sum(unread > 0) AS unread FROM thread_labels WHERE account = ? GROUP BY label").all(account).map((row) => [row.label, row]));
       const order = (label) => label.role ? ROLES.indexOf(label.role) + CATEGORIES.indexOf(label.id.slice("category-".length)) / 10 : ROLES.length;
       return q("SELECT id, name, role FROM labels WHERE account = ?").all(account)
+        .filter((row) => row.role !== "category" || tabsOf.get(account)?.includes(row.id.slice("category-".length)) !== false)
         .map((row) => ({ id: row.id, name: row.name, role: row.role || null, unread: counts.get(row.id)?.unread || 0, threads: counts.get(row.id)?.n || 0 }))
         .sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name));
     },

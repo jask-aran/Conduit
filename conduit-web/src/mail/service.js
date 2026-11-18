@@ -14,7 +14,9 @@ const LIMIT_MAX = 100;
 // A page of 500 takes about 150 ms to drop on a 31k-message copy; 100 keeps each well inside what a request waits.
 const PAGE = 100;
 const HELD_MS = 2_000;
-const SYNC = { paused: false, since: 1095, bodies: 90 };
+const SYNC = { paused: false, since: 1095, bodies: 90, tabs: ["promotions", "social", "updates"] };
+const TABS = ["promotions", "social", "updates", "forums"];
+const isTabs = (value) => Array.isArray(value) && value.every((tab) => TABS.includes(tab));
 
 const notFound = (what) => Object.assign(new Error(`No such ${what}.`), { status: 404, code: "not_found" });
 const refused = (message) => Object.assign(new Error(message), { reason: "refused" });
@@ -33,6 +35,7 @@ const syncOf = (saved = {}) => clampBodies({
   paused: typeof saved.paused === "boolean" ? saved.paused : SYNC.paused,
   since: isReach(saved.since) ? saved.since : SYNC.since,
   bodies: isReach(saved.bodies) ? saved.bodies : SYNC.bodies,
+  tabs: isTabs(saved.tabs) ? TABS.filter((tab) => saved.tabs.includes(tab)) : SYNC.tabs,
 });
 const parties = (list) => (Array.isArray(list) ? list : []).filter((party) => typeof party?.address === "string" && party.address.trim())
   .map((party) => ({ name: typeof party.name === "string" ? party.name : "", address: party.address.trim() }));
@@ -111,6 +114,7 @@ export async function createMail({ dataRoot, changed }) {
       account: { ...record, status: { state: "error", error: error.message } }, secret, adapter: null, closed: false, held: null,
     }));
     live.set(record.id, entry);
+    store.setTabs(record.id, syncOf(entry.account.sync).tabs);
     entry.adapter?.start();
     void retext(entry).catch((error) => console.warn("[mail] re-reading held text failed:", error.message));
     return entry;
@@ -285,15 +289,18 @@ export async function createMail({ dataRoot, changed }) {
       if (entry.closed) throw refused("This account is being read in again; change it once that has started.");
       const { name, sync: asked } = input && typeof input === "object" ? input : {};
       if ((name !== undefined && typeof name !== "string") || (asked !== undefined && (!asked || typeof asked !== "object"))
-        || !flag(asked?.paused) || ![asked?.since, asked?.bodies].every((reach) => reach === undefined || isReach(reach))) {
+        || !flag(asked?.paused) || ![asked?.since, asked?.bodies].every((reach) => reach === undefined || isReach(reach))
+        || !(asked?.tabs === undefined || isTabs(asked.tabs))) {
         throw badRequest("A reach is a whole number of days above 0 or \"all\", and paused is true or false.");
       }
-      const sync = clampBodies({ ...entry.account.sync, ...Object.fromEntries(Object.entries(asked ?? {}).filter(([key, value]) => key in SYNC && value !== undefined)) });
+      const sync = syncOf({ ...entry.account.sync, ...Object.fromEntries(Object.entries(asked ?? {}).filter(([key, value]) => key in SYNC && value !== undefined)) });
       entry.account = { ...entry.account, ...(name === undefined ? {} : { name: name.trim() || entry.account.address }), sync };
       // A shorter reach only stops reading further back: what is already held stays.
       await persist();
       entry.adapter?.configure?.();
       entry.held = null;
+      const sorted = store.setTabs(id, sync.tabs);
+      if (sorted.threads.length) notify(id, { threads: [], all: true }, true);
       notify(id, { accounts: true }, true);
       return publicAccount(entry);
     },
