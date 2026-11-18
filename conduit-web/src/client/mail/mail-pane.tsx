@@ -53,7 +53,11 @@ export default function MailPane(props: {
   // An inbox sorted so opens on its first until the person chooses.
   const [sorter, setSorter] = createSignal<"split" | "category">((() => { try { return localStorage.getItem(SORTER) === "category" ? "category" : "split"; } catch { return "split"; } })());
   const sortBy = (now: "split" | "category") => { setSorter(now); try { localStorage.setItem(SORTER, now); } catch { /* this session only */ } setLabel(labels().find((one) => one.role === now && one.threads)?.id ?? "inbox"); };
-  const categories = createMemo(() => labels().filter((one) => one.role === sorter() && (one.threads || one.id === label())));
+  // Splits are tried in order and the last holds what none took, which is the mail to see first: it is the first tab.
+  const categories = createMemo(() => {
+    const all = labels().filter((one) => one.role === sorter()), rest = sorter() === "split" ? all.at(-1) : undefined;
+    return [...(rest ? [rest] : []), ...all.filter((one) => one !== rest)].filter((one) => one.threads || one.id === label());
+  });
   const inInbox = () => label() === "inbox" || /^(category|split)-/.test(label());
   // A view kept from the other sorting, or one the account no longer has, opens as this one's first.
   createEffect(() => { if (labels().length && /^(category|split|sort)-/.test(label()) && !labels().some((one) => one.id === label() && one.role === sorter())) setLabel(categories()[0]?.id ?? "inbox"); });
