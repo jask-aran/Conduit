@@ -52,11 +52,32 @@ Executor is too slow and too narrow for a client: a client needs a synced local 
 - **Sending.** You send freely from the client. jbot sends when you asked it to in that conversation. An email jbot
   decides to send on its own waits for your approval (`agent/approval-policy.js`).
 
+- **Sync choices** are per account in Settings › Mail: mail from the last 3 years is held unless said, the text of all of
+  it is indexed for word search, raw files only for the "Keep text of" range (90 days). Nothing held is dropped except
+  by "Read in again".
+- **Gmail's inbox categories** are tabs over the list. IMAP cannot say which tabs the person keeps, so the account says
+  (`MailSync.tabs`); mail of a tab not kept shows in Primary.
+- **jbot's `mail` tool is off** (`CONDUIT_AGENT_MAIL=1` turns it on) while the pane is worked on; the Executor mailbox
+  path stays.
+- **Sorting is Conduit's own** (decided 2026-11-18), in three layers: facts the hub reads from a message in code;
+  judgments Jev (TypeSafe) gives about it, each one small question, stored beside the message with the model version;
+  and rules, a table the person can read and edit, that turn facts and judgments into a category and its handling. The
+  model never decides the category. A judgment between 0.3 and 0.7 is unsure: the message stays in the main list.
+  - Message sender, subject and text may be sent to TypeSafe for every message. Cost is looked at once it runs.
+  - Conduit's categories replace Gmail's tabs in the pane once they are right. The provider's own category stays
+    available as a view and is an input to the rules (Gmail is trusted on marketing).
+  - Nothing is filed automatically until the person has watched the categories for a week; then only Noise and Money.
+  - Each category is mirrored to a Gmail label, so the phone's Gmail app shows the sorting.
+  - Jev sorts, jbot acts: jbot works a category on request or on a schedule, under the sending rule.
+
 ## Phases
 
 1. **Phase 1**: the mail primitive, the Gmail adapter with sync and store, the client pane (read, threads, search,
    triage: archive, mark read, label, star; compose, reply, forward, drafts), and jbot's mail tool.
-2. **Phase 2**: jbot's mailbox as a second account in the client (the jbot chat keeps its mail rooms over the same
+2. **Sorting**, in this order: facts and judgment columns with Jev run over the last 90 days; focus modes and
+   categories in the pane, read-only; rules, corrections ("always for this sender") and their Settings editor; snooze,
+   waiting-on and the keyboard set; jbot handling per category.
+3. **jbot's mailbox** (was phase 2): jbot's mailbox as a second account in the client (the jbot chat keeps its mail rooms over the same
    messages), and retiring the Executor Gmail routine (`mail-task.js`, `mailbox.js`, the `email` routine kind) once
    jbot reads from the store.
 
