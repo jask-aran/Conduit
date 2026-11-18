@@ -357,10 +357,12 @@ and installing prove none of those.
 
 The SM-S936B runs `com.jaskaran.conduit.dev`, paired for wireless ADB through
 the **Windows** `adb.exe` (Linux ADB pairing fails with `protocol fault`).
-WSL's adb uses that server via `ADB_SERVER_SOCKET`; Android CLI does not see
-the phone through it, and the working server is worth more than Android CLI,
-so don't replace it. Keep addresses, ports and identifiers out of this
-document.
+WSL's adb (the same version) is a client of that server: mirrored networking
+shares localhost, so both list the same devices. Restart, pair and connect with
+`adb.exe`; `adb start-server` from WSL starts a second server that cannot see
+USB. Android CLI does not see the phone through it, and the working server is
+worth more than Android CLI, so don't replace it. Keep addresses, ports and
+identifiers out of this document.
 
 - Check `adb devices -l` first and select the phone with `-s` (it can appear
   under two aliases).
@@ -382,7 +384,7 @@ it looks.
 
 ```bash
 /usr/bin/sg kvm -c "$ANDROID_HOME/emulator/emulator -avd conduit-kbd36 \
-  -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot"
+  -no-window -no-audio -no-boot-anim -gpu guest -no-snapshot"   # swiftshader_indirect segfaults
 adb forward tcp:9333 localabstract:webview_devtools_remote_$(adb shell pidof com.jaskaran.conduit.dev)
 adb reverse tcp:4310 tcp:4310   # then "Use the server on this computer" and the password
 ```
