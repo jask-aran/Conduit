@@ -86,6 +86,10 @@ add({ key: "cumulus", from: someone("Weather Desk"), subject: "Cumulus report", 
 add({ key: "wombatt-literal", from: someone("Zoo Keeper"), subject: "Note", body: "The sign says wombatt, spelt wrong." });
 add({ key: "wombat-1", from: someone("Wombat Supplies"), subject: "Burrow kit dispatched", body: "Thanks." });
 add({ key: "wombat-2", from: someone("Wombat Supplies"), subject: "Spring catalogue", body: "Thanks." });
+add({ key: "zep-decoy", from: someone("Science Club"), subject: "Zep met Joseph at physics with a hyrax" });
+add({ key: "common-subject-old", from: someone("Old Friend"), subject: `About ${VOCAB[0]} again`, body: "Hello.", date: NOW - 900 * DAY });
+add({ key: "common-office-30", from: OFFICE, subject: "Store news", body: `We stock ${VOCAB[0]} now.`, date: NOW - 30 * DAY });
+add({ key: "common-office-900", from: OFFICE, subject: "Store news", body: `We stock ${VOCAB[0]} now.`, date: NOW - 900 * DAY });
 add({ key: "elsewhere-office", account: "a2", from: OFFICE, subject: "Officeworks for another account", body: "No." });
 db.exec("COMMIT");
 const filled = performance.now() - started;
@@ -157,7 +161,7 @@ group("operators with words", () => {
 
 group("operators alone", () => {
   // Newest first, and only from the newest 2000 messages (about 3 months here): the 400-day-old invoice is past the walk.
-  assert.deepEqual(threads("from:officeworks"), ["office-order", "office-invoice-new"]);
+  assert.deepEqual(threads("from:officeworks"), ["office-order", "office-invoice-new", "common-office-30"]);
   assert.deepEqual(threads("from:officeworks newer_than:10d"), ["office-order"]);
   const either = threads("from:wombat OR from:quokka", 2);
   assert.ok(either.length === 2 && either.every((t) => ["wombat-1", "wombat-2", "quokka-sender"].includes(t)), either.join());
@@ -184,6 +188,19 @@ group("typos through the trigram table, under exact hits", () => {
   assert.ok(found.slice(1).every((hit) => hit.fuzzy && hit.score < found[0].score), JSON.stringify(found));
   assert.deepEqual(found.slice(1).map((hit) => hit.thread).sort(), ["wombat-1", "wombat-2"]);
   assert.deepEqual(threads("zq"), [], "a word under 3 characters is never fuzzed");
+  const zephyr = find("zephyx");
+  assert.ok(zephyr.some((hit) => hit.thread === "zephyr-recent" && hit.fuzzy), JSON.stringify(zephyr));
+  assert.ok(!zephyr.some((hit) => hit.thread === "zep-decoy"), "trigrams scattered over other words do not add up");
+});
+
+group("a word in thousands of messages", () => {
+  const common = VOCAB[0];
+  const n = db.prepare("SELECT count(*) AS n FROM search WHERE search MATCH ?").get(`"${common}"*`).n;
+  assert.ok(n > 2000, `${common} is in ${n} messages`);
+  assert.ok(threads(common).includes("common-subject-old"), "an old subject match is in the strong pool");
+  // With an operator, only the newest 2000 matches are tried: the 900-day-old one is past them (the word is typed, so a prefix).
+  assert.deepEqual(threads(`from:officeworks ${common}`), ["common-office-30"]);
+  return `${n} match ${common}*`;
 });
 
 group("a deleted message never surfaces; a reused rowid is indexed again", () => {
@@ -208,6 +225,7 @@ group("hostile input never throws", () => {
     "x".repeat(10_000), "officeworks ".repeat(2000), "(".repeat(5000), "NOT ".repeat(2500) + "a", "\"a ".repeat(3000), "a OR ".repeat(2000) + "b",
     Array.from({ length: 3000 }, (_, i) => `w${i}`).join(" ")];
   for (const text of cases) assert.ok(Array.isArray(find(text)), text.slice(0, 40));
+  for (const text of ["offi*", "invoice (", "tax:invoice", '"tax invoice"', "invoice)", "(invoice"]) assert.ok(exactOf(text).includes("office-invoice-new"), text);
   assert.ok(db.prepare("SELECT count(*) AS n FROM messages").get().n > 25_000);
 });
 
@@ -221,7 +239,7 @@ group("timings at 25,000 messages", () => {
   };
   const common = VOCAB[0];
   const lines = ["offi", "officeworks ord", common, `${common.slice(0, 2)}`, `${pick(VOCAB)} ${pick(VOCAB)}`, "invoice from:officeworks newer_than:3m",
-    "oficeworks", "ofice works", `${common}x`, "from:officeworks", "is:unread newer_than:30d"].map(time);
+    "oficeworks", "ofice works", `${common}x`, "exampel", "sampel", "from:officeworks", "is:unread newer_than:30d"].map(time);
   return `median/worst of 30\n    ${lines.join("\n    ")}`;
 });
 

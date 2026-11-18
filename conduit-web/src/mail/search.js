@@ -7,7 +7,7 @@ import { matches, parseFilter } from "./filter.js";
  */
 const MAX_TEXT = 1000, MAX_WORDS = 16, MAX_TRIGRAMS = 12;
 const POOL = 200, POOL_FILTERED = 2000;
-const SHORTLIST = 10, HANDFUL = 5, FUZZY_POOL = 200, FUZZY_MIN = 0.5;
+const SHORTLIST = 10, HANDFUL = 5, FUZZY_POOL = 200, FUZZY_MIN = 0.5, FUZZY_MAX = 10, COMMON_GRAM = 2000;
 // The newest messages an operators-only search reads: enough for months of a busy inbox, with `describe` on each.
 const WALK = 2000;
 // bm25 column weights in `search` (subject, sender, recipients, body); recipients are 0 because `matches` never reads them.
@@ -81,7 +81,7 @@ export function openMailSearch({ db, describe }) {
     for (const row of candidates) {
       if (out.length >= want) break;
       if (taken.has(row.thread)) continue;
-      const full = row.key ? row : q("SELECT rowid, * FROM messages WHERE rowid = ?").get(row.rowid);
+      const full = row.recipients ? row : q("SELECT rowid, * FROM messages WHERE rowid = ?").get(row.rowid);
       const read = describe(full);
       if (rest && !matches(rest, read.message, read.facts, {}, now)) continue;
       taken.add(row.thread);
@@ -109,30 +109,51 @@ export function openMailSearch({ db, describe }) {
     const best = Math.max(...rows.map((row) => -row.bm), 1e-9);
     for (const row of rows) {
       row.rel = -row.bm / best;
-      row.stage = REL * row.rel + RECENT * fresh(row.date, now);
+      row.stage = rankOf({ rel: row.rel, date: row.date, now, known: false });
     }
     rows.sort((a, b) => b.stage - a.stage || b.date - a.date);
     return accept(rows, rest, want, now, false);
   }
 
   // A typo'd word is looked up by its trigrams (any may hit; every word must hit one), and kept when at least FUZZY_MIN of
-  // them are in the message's squashed sender or subject: one wrong, missing or extra letter costs a word at most three.
+  // them are in the message's squashed sender or subject in their places: the word's i-th trigram found at p says the
+  // word starts at p - i, and only trigrams agreeing on a start within one letter count, so trigrams scattered over other
+  // words never add up. One wrong, missing or extra letter costs a word at most three trigrams and shifts the rest by one.
   // A phrase (a value with a space, which only quotes give) is never fuzzed: it must be in them whole.
+  const inPlace = (grams, live) => {
+    const starts = grams.map(({ g, at }) => {
+      const found = [];
+      for (let p = live.indexOf(g); p >= 0; p = live.indexOf(g, p + 1)) found.push(p - at);
+      return found;
+    });
+    let best = 0;
+    for (const s of starts.flat()) best = Math.max(best, starts.filter((list) => list.some((t) => Math.abs(t - s) <= 1)).length);
+    return best / grams.length;
+  };
   function fuzzy(account, words, rest, want, now, taken) {
     const terms = words.map(squash).filter(Boolean), whole = new Set(words.filter((w) => /\s/.test(w)).map(squash));
     const long = terms.filter((t) => t.length >= 3 && !whole.has(t));
     if (!long.length) return [];
     const gramsOf = (t) => {
-      const all = [...new Set(Array.from({ length: t.length - 2 }, (_, i) => t.slice(i, i + 3)))];
+      const all = Array.from({ length: t.length - 2 }, (_, at) => ({ g: t.slice(at, at + 3), at })).filter(({ g }, i, list) => list.findIndex((x) => x.g === g) === i);
       return all.length <= MAX_TRIGRAMS ? all : Array.from({ length: MAX_TRIGRAMS }, (_, i) => all[Math.floor(i * all.length / MAX_TRIGRAMS)]);
     };
-    const match = long.map((t) => `(${gramsOf(t).map(quoteFts).join(" OR ")})`).join(" AND ");
+    // A trigram in most senders and subjects (com, the domain everyone shares) finds nothing and costs a bm25 for every row,
+    // so the lookup leaves those out and keeps a word's rarest; they still count when a candidate is scored.
+    const docs = (g) => q("SELECT doc FROM search_fuzzy_terms WHERE term = ?").get(g)?.doc ?? 0;
+    const lookup = (t) => {
+      const grams = gramsOf(t).map(({ g }) => ({ g, n: docs(g) })).sort((a, b) => a.n - b.n);
+      return grams.filter((x, i) => i === 0 || x.n <= COMMON_GRAM).map((x) => quoteFts(x.g));
+    };
     let rows;
     try {
-      // Joined back on rowid and key so a row whose message is gone, or whose rowid was reused, never surfaces.
-      rows = q(`SELECT m.rowid AS rowid, m.*, bm25(search_fuzzy) AS bm FROM search_fuzzy f
-        JOIN messages m ON m.rowid = f.rowid AND m.account = f.account AND m.key = f.key
-        WHERE search_fuzzy MATCH ? AND f.account = ? ORDER BY bm LIMIT ?`).all(match, account, FUZZY_POOL);
+      const match = long.map((t) => `(${lookup(t).join(" OR ")})`).join(" AND ");
+      // Ranked on the trigram table alone (CROSS JOIN keeps the planner from scanning messages instead), then joined back
+      // on rowid and key so a row whose message is gone, or whose rowid was reused, never surfaces; scored on the
+      // message's own sender and subject, never the indexed copy.
+      rows = q(`SELECT m.rowid AS rowid, m.key, m.thread, m.date, m.sender, m.subject FROM
+        (SELECT rowid, key, bm25(search_fuzzy) AS bm FROM search_fuzzy WHERE search_fuzzy MATCH ? AND account = ? ORDER BY bm LIMIT ?) f
+        CROSS JOIN messages m ON m.rowid = f.rowid AND m.account = ? AND m.key = f.key ORDER BY f.bm`).all(match, account, FUZZY_POOL, account);
     } catch { return []; }
     const kept = [];
     for (const row of rows) {
@@ -142,14 +163,14 @@ export function openMailSearch({ db, describe }) {
       const ok = terms.every((t) => {
         if (live.includes(t)) return sum += 1;
         if (t.length < 3 || whole.has(t)) return false;
-        const grams = gramsOf(t), share = grams.filter((g) => live.includes(g)).length / grams.length;
+        const share = inPlace(gramsOf(t), live);
         sum += share;
         return share >= FUZZY_MIN;
       });
       if (ok) kept.push(Object.assign(row, { rel: sum / terms.length }));
     }
     kept.sort((a, b) => b.rel - a.rel || b.date - a.date);
-    return accept(kept, rest, want, now, true, taken);
+    return accept(kept, rest, Math.min(want, FUZZY_MAX), now, true, taken);
   }
 
   function walk(account, rest, want, now) {
@@ -166,10 +187,11 @@ export function openMailSearch({ db, describe }) {
   }
 
   return {
-    /** Creates the trigram table this module owns, if it is missing. */
+    /** Creates the tables this module owns, if they are missing: the trigram table and its vocabulary. */
     ensure() {
       db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS search_fuzzy USING fts5 (sender, subject, account UNINDEXED, key UNINDEXED,
-        tokenize = "trigram remove_diacritics 1")`);
+        tokenize = "trigram remove_diacritics 1");
+        CREATE VIRTUAL TABLE IF NOT EXISTS search_fuzzy_terms USING fts5vocab (search_fuzzy, row);`);
     },
 
     /** Indexes up to `limit` messages the trigram table lacks, oldest rowid first; returns how many it wrote, 0 when level. */
