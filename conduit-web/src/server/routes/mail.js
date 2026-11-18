@@ -26,6 +26,10 @@ export function registerMailRoutes(app, { mail }) {
 
   app.post("/v0/mail/accounts/:account/resync", async (request, response) => response.json({ account: await mail.resync(request.params.account) }));
 
+  app.get("/v0/mail/accounts/:account/rules", (request, response) => response.json(mail.rules(request.params.account)));
+  app.post("/v0/mail/accounts/:account/rules", (request, response) => response.json({ rule: mail.putRule(request.params.account, request.body || {}) }));
+  app.delete("/v0/mail/accounts/:account/rules/:rule", (request, response) => { mail.removeRule(request.params.account, request.params.rule); response.json({ ok: true }); });
+
   app.get("/v0/mail/accounts/:account/labels", (request, response) => response.json({ labels: mail.labels(request.params.account) }));
 
   app.get("/v0/mail/threads", (request, response) => {

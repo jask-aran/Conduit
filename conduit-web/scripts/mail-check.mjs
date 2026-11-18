@@ -63,7 +63,9 @@ const checkRollups = (account) => {
     assert.deepEqual(thread, listed);
     assert.equal(thread.count, messages.length);
     assert.equal(thread.unread, messages.filter((message) => message.unread).length);
-    assert.deepEqual(new Set(thread.labels), new Set(messages.flatMap((message) => message.labels)));
+    // A thread's labels are its messages' and the one category the rules sort it into.
+    assert.deepEqual(new Set(thread.labels.filter((label) => !label.startsWith("sort-"))), new Set(messages.flatMap((message) => message.labels)));
+    assert.ok(thread.labels.filter((label) => label.startsWith("sort-")).length <= 1, "a thread is sorted into one category at most");
     const senders = messages.map((message) => message.from).filter((party, index, all) => all.findIndex((other) => other.address.toLowerCase() === party.address.toLowerCase()) === index);
     assert.deepEqual(thread.from, senders);
     assert.equal(thread.date, messages[messages.length - 1].date);

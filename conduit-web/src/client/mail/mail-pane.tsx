@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, Show, type JSX } from "solid-js";
-import type { MailAccount, MailDraft, MailLabel, MailThread } from "@/mail/mail";
+import type { MailAccount, MailDraft, MailLabel, MailParty, MailThread } from "@/mail/mail";
 import { Button, DashDay, Empty, HeaderButton, Icons, LeadInput, Loading, MailRow, ReaderSplit, ReadingScroll, ReadingTitle, Segmented, SelectTrigger, SheetFill, Spinner, StatusDot, ToolBar } from "@/components/ui";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
@@ -12,6 +12,8 @@ import { labelRows, mailDay, mailTime, MailThreadView, threadVerbs } from "./mai
 const LABEL_ICON: Record<string, () => JSX.Element> = {
   inbox: () => <Icons.Inbox />, starred: () => <Icons.Star />, sent: () => <Icons.Send />, drafts: () => <Icons.Edit />, all: () => <Icons.Mail />, important: () => <Icons.Notification />,
 };
+const SORTER = "conduit:mail-sorter";
+const FOCUS = ["sort-reply", "sort-todo", "sort-waiting", "sort-alerts"];
 const who = (thread: MailThread, own: string) => {
   const names = [...new Set(thread.from.map((party) => party.address === own ? "me" : (party.name || party.address).split(" ")[0]!))];
   return thread.from.length === 1 ? thread.from[0]!.name || thread.from[0]!.address : names.join(", ");
@@ -48,8 +50,13 @@ export default function MailPane(props: {
   const keptView = (id?: string) => { try { return id ? localStorage.getItem(viewKey(id)) : null; } catch { return null; } };
   createEffect(on(() => account()?.id, (id) => { const kept = keptView(id); if (kept) setLabel(kept); }));
   // The source's own sorting of the inbox (Gmail's tabs): those with mail in them. An inbox sorted so opens on its first until the person chooses.
-  const categories = createMemo(() => labels().filter((one) => one.role === "category" && (one.threads || one.id === label())));
-  const inInbox = () => label() === "inbox" || label().startsWith("category-");
+  // The inbox is sorted one of two ways, as chosen on this device: by Conduit's rules, or as the source sorts it.
+  const [sorter, setSorter] = createSignal<"sort" | "category">((() => { try { return localStorage.getItem(SORTER) === "sort" ? "sort" : "category"; } catch { return "category"; } })());
+  const sortBy = (now: "sort" | "category") => { setSorter(now); try { localStorage.setItem(SORTER, now); } catch { /* this session only */ } setLabel(labels().find((one) => one.role === now && one.threads)?.id ?? "inbox"); };
+  const categories = createMemo(() => labels().filter((one) => one.role === sorter() && (one.threads || one.id === label())));
+  const inInbox = () => label() === "inbox" || /^(category|sort)-/.test(label());
+  // A view kept from the other sorting opens as this one's first.
+  createEffect(() => { const other = sorter() === "sort" ? "category-" : "sort-"; if (label().startsWith(other) && labels().length) setLabel(categories()[0]?.id ?? "inbox"); });
   createEffect(() => { const first = categories()[0]; if (first && label() === "inbox" && !keptView(account()?.id)) setLabel(first.id); });
   createEffect(() => { if (inInbox()) inboxView = label(); });
   createEffect(on(label, (now) => { const id = account()?.id; try { if (id) localStorage.setItem(viewKey(id), now); } catch { /* this session only */ } }, { defer: true }));
@@ -92,19 +99,27 @@ export default function MailPane(props: {
 
   const labelName = () => labels().find((one) => one.id === label())?.name ?? "Inbox";
   // The chooser names the place; the inbox's categories are the tabs under it.
-  const placeName = () => inInbox() ? "Inbox" : labelName();
-  const tabs = () => <Show when={inInbox() && categories().length}><ToolBar>
+  // Conduit's categories are too many for tabs: those that wait on the person are the tabs, and every one is in the chooser.
+  const tabbed = () => sorter() === "sort" ? categories().filter((one) => FOCUS.includes(one.id)) : categories();
+  const placeName = () => inInbox() && (label() === "inbox" || tabbed().some((one) => one.id === label())) ? "Inbox" : labelName();
+  const tabs = () => <Show when={inInbox() && tabbed().length && placeName() === "Inbox"}><ToolBar>
     <Segmented label="Inbox category" size="sm" arrows value={label()} onChange={setLabel}
-      options={[...categories().map((one) => ({ value: one.id, label: one.name, count: one.unread || undefined })), { value: "inbox", label: "All" }]} />
+      options={[...tabbed().map((one) => ({ value: one.id, label: one.name, count: one.unread || undefined })), { value: "inbox", label: "All" }]} />
   </ToolBar></Show>;
   const chooser = () => <DropdownMenu modal={false} placement="bottom-start">
     <MenuControl as={SelectTrigger} bare value={placeName()} aria-label="Label" />
     <MenuContent width="sm" height="xl">
       <Show when={(accounts.latest?.length ?? 0) > 1}><MenuSection title="Accounts"><For each={accounts.latest}>{(one) =>
         <MenuRow checked={one.id === account()?.id} detail={one.name || undefined} onSelect={() => props.onAccount(one.id)}>{one.address}</MenuRow>}</For></MenuSection></Show>
-      <MenuSection><For each={labels().filter((one) => (one.role && one.role !== "category") || one.id === "all")}>{(one) => <MenuRow icon={LABEL_ICON[one.role ?? one.id]?.() ?? <Icons.Label />}
-        checked={one.id === "inbox" ? inInbox() : one.id === label()} meta={one.unread ? String(one.unread) : undefined}
+      <MenuSection><For each={labels().filter((one) => (one.role && one.role !== "category" && one.role !== "sort") || one.id === "all")}>{(one) => <MenuRow icon={LABEL_ICON[one.role ?? one.id]?.() ?? <Icons.Label />}
+        checked={one.id === "inbox" ? placeName() === "Inbox" : one.id === label()} meta={one.unread ? String(one.unread) : undefined}
         onSelect={() => setLabel(one.id === "inbox" ? keptInbox() : one.id)}>{one.name}</MenuRow>}</For></MenuSection>
+      <Show when={sorter() === "sort" && categories().length}><MenuSection title="Categories"><For each={categories()}>{(one) =>
+        <MenuRow icon={<Icons.Label />} checked={one.id === label()} meta={one.unread ? String(one.unread) : undefined} onSelect={() => setLabel(one.id)}>{one.name}</MenuRow>}</For></MenuSection></Show>
+      <Show when={labels().some((one) => one.role === "sort") && labels().some((one) => one.role === "category")}><MenuSection title="Inbox sorted by">
+        <MenuRow checked={sorter() === "sort"} onSelect={() => sortBy("sort")}>Conduit's rules</MenuRow>
+        <MenuRow checked={sorter() === "category"} onSelect={() => sortBy("category")}>Gmail's tabs</MenuRow>
+      </MenuSection></Show>
       <Show when={labels().some((one) => !one.role && one.id !== "all")}><MenuSection title="Labels"><For each={labels().filter((one) => !one.role && one.id !== "all")}>{(one) =>
         <MenuRow icon={<Icons.Label />} checked={one.id === label()} meta={one.unread ? String(one.unread) : undefined} onSelect={() => setLabel(one.id)}>{one.name}</MenuRow>}</For></MenuSection></Show>
     </MenuContent>
@@ -123,6 +138,16 @@ export default function MailPane(props: {
     all[Math.min(to, all.length - 1)]?.focus();
   };
   const nearEnd = (element: HTMLElement) => { if (element.scrollTop + 2 * element.clientHeight >= element.scrollHeight) void list.more().catch((reason) => toast.error(failure(reason))); };
+  // The last of a thread's writers who is not the person: whose mail a rule made from its row is about.
+  const sender = (thread: MailThread) => thread.from.findLast((party) => party.address.toLowerCase() !== own().toLowerCase());
+  const alwaysSort = async (from: MailParty, to: MailLabel) => {
+    const id = account()?.id;
+    if (!id) return;
+    try {
+      const rule = await mailApi.putRule(id, { name: `${from.name || from.address} is ${to.name}`, when: { field: "from", has: from.address }, then: { category: to.id.slice("sort-".length) } });
+      toast.success(`Mail from ${from.address} now sorts as ${to.name}`, { action: { label: "Undo", onClick: () => void mailApi.removeRule(id, rule.id).catch((reason) => toast.error(failure(reason))) } });
+    } catch (reason) { toast.error(failure(reason)); }
+  };
   const row = (thread: MailThread) => <ContextMenu>
     <ContextMenuTrigger as={MailRow} data-thread={thread.id} tabIndex={(cursor() ?? list.threads()[0]?.id) === thread.id ? 0 : -1}
       current={open() === thread.id} from={who(thread, own())} count={thread.count} subject={thread.subject || "(no subject)"} snippet={thread.snippet}
@@ -132,6 +157,8 @@ export default function MailPane(props: {
       <MenuSection><MenuRow icon={<Icons.Preview />} onSelect={() => openThread(thread.id)}>Open</MenuRow>
         <For each={threadVerbs(thread, list)}>{(verb) => <MenuRow icon={verb.icon()} disabled={verb.disabled} onSelect={verb.run}>{verb.label}</MenuRow>}</For></MenuSection>
       <Show when={labels().some((one) => !one.role && one.id !== "all")}><MenuSection title="Labels">{labelRows(thread, labels(), list)}</MenuSection></Show>
+      <Show when={sender(thread)}>{(from) => <MenuSection title={`Always sort ${from().address} as`}><For each={labels().filter((one) => one.role === "sort" && one.id !== "sort-waiting")}>{(one) =>
+        <MenuRow checked={thread.labels.includes(one.id)} onSelect={() => void alwaysSort(from(), one)}>{one.name}</MenuRow>}</For></MenuSection>}</Show>
     </ContextMenuContent>
   </ContextMenu>;
 

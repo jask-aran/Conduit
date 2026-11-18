@@ -45,7 +45,21 @@ export interface MailHeld {
 export interface MailAccount { id: string; kind: MailAccountKind; address: string; name: string; status: MailStatus; sync: MailSync; held: MailHeld }
 
 /** What a label is for, where every source has one; a label the person made has none. "category": the source's own sorting of the inbox (id `category-<name>`), which only the source sets. */
-export type MailLabelRole = "inbox" | "sent" | "drafts" | "starred" | "important" | "category";
+/** "category": the source's own sorting of the inbox. "sort": a category Conduit's rules give (id `sort-<category>`). */
+export type MailLabelRole = "inbox" | "sent" | "drafts" | "starred" | "important" | "category" | "sort";
+
+/** What a rule asks of a message (sorting.js says what each means and lists the facts and questions). */
+export type MailCondition = { all: MailCondition[] } | { any: MailCondition[] } | { not: MailCondition }
+  | { fact: string; is?: string | boolean | null; under?: number } | { field: "from" | "to" | "subject" | "text"; has: string } | { ask: string; atLeast?: number };
+/**
+ * A sorting rule: rules are tried in order (the person's and agents' own, newest first, then Conduit's) and the first
+ * whose condition holds of a thread's newest message gives its category. `then.category` is one of Conduit's ids or a
+ * name of the writer's own, which makes that category. A Conduit rule can only be turned on or off.
+ * GET /v0/mail/accounts/:account/rules → { rules, categories }; POST …/rules (a rule; with a kept id it replaces) → { rule };
+ * DELETE …/rules/:rule. Writing one sorts the account's mail again.
+ */
+export interface MailRule { id: string; name: string; when: MailCondition; then: { category: string }; by: "conduit" | "person" | "agent"; on: boolean }
+export interface MailSortCategory { id: string; name: string; threads: number }
 /** `id` is the role for a label with one ("inbox"), else an id of the hub's; `name` is what the person reads. */
 export interface MailLabel { id: string; name: string; role: MailLabelRole | null; /** Threads with something unread, and all its threads. */ unread: number; threads: number }
 

@@ -115,10 +115,30 @@ export async function createMail({ dataRoot, changed }) {
     }));
     live.set(record.id, entry);
     store.setTabs(record.id, syncOf(entry.account.sync).tabs);
+    store.setSorting(record.id, record.address.toLowerCase());
+    void resort(entry).catch((error) => console.warn("[mail] sorting failed:", error.message));
     entry.adapter?.start();
     void retext(entry).catch((error) => console.warn("[mail] re-reading held text failed:", error.message));
     return entry;
   }
+  // Threads are sorted as they change; all of them again, a page at a time, when Conduit's rules or facts change (SORT_READ) or a rule is written (`again`).
+  const SORT_READ = 1;
+  async function resort(entry, again = false) {
+    const id = entry.account.id;
+    let at = again ? { read: 0, after: "" } : store.cursor(id, "sort") ?? { read: 0, after: "" };
+    if (at.read >= SORT_READ) return;
+    const mine = entry.sorting = {};
+    for (;;) {
+      if (entry.closed || entry.sorting !== mine) return;
+      const last = store.resort(id, at.after, PAGE);
+      at = last === null ? { read: SORT_READ, after: "" } : { read: 0, after: last };
+      store.setCursor(id, "sort", at);
+      if (last === null) return notify(id, { threads: [], all: true }, true);
+      await tick();
+    }
+  }
+  const sortAgain = (entry) => void resort(entry, true).catch((error) => console.warn("[mail] sorting failed:", error.message));
+
   // What a message's search text and snippet are read from changed (TEXT_READ): held ones are read again once, a page at a time.
   const TEXT_READ = 2;
   async function retext(entry) {
@@ -303,6 +323,22 @@ export async function createMail({ dataRoot, changed }) {
       if (sorted.threads.length) notify(id, { threads: [], all: true }, true);
       notify(id, { accounts: true }, true);
       return publicAccount(entry);
+    },
+
+    /** An account's sorting rules in the order tried, and the categories they give. */
+    rules(id) {
+      entryOf(id);
+      return { rules: store.rules(id), categories: store.labels(id).filter((label) => label.role === "sort").map((label) => ({ id: label.id.slice("sort-".length), name: label.name, threads: label.threads })) };
+    },
+    /** Keeps a rule (a new one is tried first) and sorts the account's mail again. */
+    putRule(id, rule) {
+      const kept = store.putRule(id, rule);
+      sortAgain(entryOf(id));
+      return kept;
+    },
+    removeRule(id, rule) {
+      if (!store.removeRule(entryOf(id).account.id, rule)) throw notFound("rule");
+      sortAgain(entryOf(id));
     },
 
     async resync(id) {

@@ -1,4 +1,4 @@
-import type { MailAccount, MailBody, MailChange, MailDraft, MailDraftInput, MailLabel, MailMessage, MailParty, MailSync, MailThread } from "@/mail/mail";
+import type { MailAccount, MailBody, MailChange, MailDraft, MailDraftInput, MailLabel, MailMessage, MailParty, MailRule, MailSortCategory, MailSync, MailThread } from "@/mail/mail";
 import { api } from "../api/client";
 import { httpUrl } from "../api/transport.js";
 import { authorizedFetch } from "../api/native-auth-client.ts";
@@ -19,6 +19,9 @@ export const mailApi = {
   updateAccount: (account: string, input: { name?: string; sync?: Partial<MailSync> }) =>
     api<{ account: MailAccount }>(`/v0/mail/accounts/${id(account)}`, { ...json("PATCH", input), timeout: false }).then((answer) => answer.account),
   resync: (account: string) => api<{ account: MailAccount }>(`/v0/mail/accounts/${id(account)}/resync`, { method: "POST", body: "{}", timeout: false }).then((answer) => answer.account),
+  rules: (account: string) => api<{ rules: MailRule[]; categories: MailSortCategory[] }>(`/v0/mail/accounts/${id(account)}/rules`),
+  putRule: (account: string, rule: Partial<MailRule> & Pick<MailRule, "name" | "when" | "then"> | Pick<MailRule, "id" | "on">) => api<{ rule: MailRule }>(`/v0/mail/accounts/${id(account)}/rules`, json("POST", rule)).then((answer) => answer.rule),
+  removeRule: (account: string, rule: string) => api<{ ok: true }>(`/v0/mail/accounts/${id(account)}/rules/${id(rule)}`, { method: "DELETE" }),
   labels: (account: string) => api<{ labels: MailLabel[] }>(`/v0/mail/accounts/${id(account)}/labels`).then((answer) => answer.labels),
   threads: (input: { account: string; label: string; before?: string | null; limit?: number }) =>
     api<{ threads: MailThread[]; next: string | null }>(`/v0/mail/threads?${q({ ...input, limit: input.limit ?? THREAD_PAGE })}`),

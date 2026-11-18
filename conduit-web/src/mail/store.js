@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { splitQuoted } from "../email-quote.js";
+import { BUILT_IN, CATEGORIES as SORTS, categoryId, conditionFault, factsOf, sortOf } from "./sorting.js";
 
 /*
  * The hub's copy of mail (mail.d.ts MailStore). Each thread's roll-up is rewritten whenever one of its messages or
@@ -11,7 +12,7 @@ import { splitQuoted } from "../email-quote.js";
 const SNIPPET = 200;
 const TEXT_MAX = 100_000;
 const CHUNK = 500;
-const ROLES = ["inbox", "category", "starred", "important", "sent", "drafts"];
+const ROLES = ["inbox", "category", "sort", "starred", "important", "sent", "drafts"];
 // A source's own sorting of the inbox (Gmail's tabs), in the order it shows them; a label's id is `category-<name>`.
 const CATEGORIES = ["primary", "promotions", "social", "updates", "forums"];
 
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS thread_labels (
   PRIMARY KEY (account, label, thread));
 CREATE INDEX IF NOT EXISTS thread_labels_date ON thread_labels (account, label, date, thread);
 CREATE TABLE IF NOT EXISTS labels (account TEXT NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL, role TEXT, PRIMARY KEY (account, id));
+CREATE TABLE IF NOT EXISTS rules (account TEXT NOT NULL, id TEXT NOT NULL, position INTEGER NOT NULL, value TEXT NOT NULL, PRIMARY KEY (account, id));
 CREATE TABLE IF NOT EXISTS cursors (account TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (account, name));
 CREATE TABLE IF NOT EXISTS drafts (id TEXT PRIMARY KEY, account TEXT NOT NULL, thread TEXT, message_id TEXT NOT NULL, value TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS drafts_account ON drafts (account, message_id);
@@ -124,12 +126,38 @@ export function openMailStore({ dir }) {
     };
   };
 
+  // What sorting needs of each account (setSorting): its address, its rules in the order tried, and who the person has written to.
+  const sorting = new Map();
+  const rulesOf = (account) => {
+    const saved = q("SELECT value FROM rules WHERE account = ? ORDER BY position, id").all(account).map((row) => json(row.value));
+    const off = new Set(saved.filter((rule) => rule.by === "conduit" && rule.on === false).map((rule) => rule.id));
+    return [...saved.filter((rule) => rule.by !== "conduit"), ...BUILT_IN.map((rule) => off.has(rule.id) ? { ...rule, on: false } : rule)];
+  };
+  const writtenTo = (account, own) => {
+    const known = new Set();
+    for (const row of q("SELECT recipients FROM messages WHERE account = ? AND draft = 0 AND lower(json_extract(sender, '$.address')) = ?").iterate(account, own)) {
+      const all = json(row.recipients);
+      for (const party of [...all.to, ...all.cc, ...all.bcc]) known.add(party.address.toLowerCase());
+    }
+    return known;
+  };
+  function sortThread(account, row) {
+    const state = sorting.get(account);
+    if (!state || row.draft) return null;
+    state.known ??= writtenTo(account, state.own);
+    const recipients = json(row.recipients), from = json(row.sender);
+    if (from.address.toLowerCase() === state.own) for (const party of [...recipients.to, ...recipients.cc, ...recipients.bcc]) state.known.add(party.address.toLowerCase());
+    const message = { from, to: recipients.to, cc: recipients.cc, subject: row.subject, date: row.date, labels: json(row.labels), category: row.category, attachments: Boolean(row.attachments),
+      text: q("SELECT body FROM search WHERE rowid = ?").get(row.rid)?.body || row.snippet };
+    return sortOf(state.rules, message, factsOf(message, { own: state.own, wroteTo: (address) => state.known.has(address) })).category;
+  }
+
   // The categories each account keeps as tabs (MailSync's `tabs`, the first always among them); none said, all are.
   const tabsOf = new Map();
   // A message the hub has a draft for (same Message-ID) is the source's copy of it: the draft stands in its place.
   const HIDDEN = "(message_id <> '' AND message_id IN (SELECT message_id FROM drafts WHERE drafts.account = messages.account))";
   function rollup(account, thread) {
-    const all = q(`SELECT *, ${HIDDEN} AS hidden FROM messages WHERE account = ? AND thread = ? ORDER BY date, key`).all(account, thread);
+    const all = q(`SELECT rowid AS rid, *, ${HIDDEN} AS hidden FROM messages WHERE account = ? AND thread = ? ORDER BY date, key`).all(account, thread);
     const hubDrafts = q("SELECT count(*) AS n FROM drafts WHERE account = ? AND thread = ?").get(account, hubId(account, thread)).n;
     q("DELETE FROM thread_labels WHERE account = ? AND thread = ?").run(account, thread);
     if (!all.length) {
@@ -144,6 +172,9 @@ export function openMailStore({ dir }) {
     // One the person does not keep as a tab shows in the first, as it does at the source.
     const tab = (category) => `category-${tabsOf.get(account)?.includes(category) === false ? CATEGORIES[0] : category}`;
     if (labels.includes("inbox")) for (const row of all) if (row.category && !labels.includes(tab(row.category))) labels.push(tab(row.category));
+    // Sorted by its newest message: an inbox thread is in one category, and one the person wrote last may be waiting wherever it is.
+    const sorted = sortThread(account, newest);
+    if (sorted && (labels.includes("inbox") || sorted === "waiting")) labels.push(`sort-${sorted}`);
     const parties = new Map();
     for (const row of shown) {
       const party = json(row.sender);
@@ -300,6 +331,39 @@ export function openMailStore({ dir }) {
       }
     },
 
+    /** Sorting starts for an account (its address in lower case); its threads are sorted as they are next rolled up, and `resort` does the rest. */
+    setSorting(account, own) { sorting.set(account, { own, rules: rulesOf(account), known: null }); },
+    /** An account's rules in the order tried: the person's and agents' own, then Conduit's (each `on` or not). */
+    rules: (account) => sorting.get(account)?.rules ?? rulesOf(account),
+    /** Keeps a rule (replacing the one of its id; a Conduit rule keeps only whether it is on) and returns it; throws a refusal for one that cannot be kept. */
+    putRule(account, rule) {
+      const built = BUILT_IN.find((one) => one.id === rule?.id);
+      const kept = built ? { id: built.id, by: "conduit", on: rule.on !== false } : (() => {
+        const fault = !rule || typeof rule !== "object" ? "A rule is an object." : typeof rule.name !== "string" || !rule.name.trim() || rule.name.length > 120 ? "A rule has a name of 120 characters at most."
+          : typeof rule.then?.category !== "string" || !categoryId(rule.then.category) || rule.then.category.length > 40 ? "A rule gives a category: one of Conduit's ids or a name of your own, 40 characters at most."
+          : conditionFault(rule.when);
+        if (fault) throw Object.assign(new Error(fault), { status: 400, code: "bad_request" });
+        return { id: typeof rule.id === "string" && /^[a-z0-9-]{1,40}$/.test(rule.id) ? rule.id : crypto.randomBytes(4).toString("hex"), name: rule.name.trim(), when: rule.when,
+          then: { category: rule.then.category.trim() }, by: rule.by === "agent" ? "agent" : "person", on: rule.on !== false };
+      })();
+      // A new rule goes first: the latest word wins.
+      const position = q("SELECT position FROM rules WHERE account = ? AND id = ?").get(account, kept.id)?.position ?? (q("SELECT min(position) AS at FROM rules WHERE account = ?").get(account).at ?? 0) - 1;
+      q("INSERT OR REPLACE INTO rules (account, id, position, value) VALUES (?, ?, ?, ?)").run(account, kept.id, position, JSON.stringify(kept));
+      if (sorting.has(account)) sorting.get(account).rules = rulesOf(account);
+      return this.rules(account).find((one) => one.id === kept.id);
+    },
+    removeRule(account, id) {
+      const gone = q("DELETE FROM rules WHERE account = ? AND id = ?").run(account, id).changes > 0;
+      if (sorting.has(account)) sorting.get(account).rules = rulesOf(account);
+      return gone;
+    },
+    /** Sorts again a page of the threads sorting covers (the inbox's and those already sorted), after `after`; returns the last thread it did, null at the end. */
+    resort(account, after, limit) {
+      const threads = q(`SELECT DISTINCT thread FROM thread_labels WHERE account = ? AND (label = 'inbox' OR label = 'sent' OR label LIKE 'sort-%') AND thread > ? ORDER BY thread LIMIT ?`).all(account, after, limit).map((row) => row.thread);
+      if (threads.length) tx(() => rollupAll(account, threads));
+      return threads.at(-1) ?? null;
+    },
+
     /** The categories an account keeps as tabs; a change sorts its inbox threads again and returns them. */
     setTabs(account, tabs) {
       const now = [CATEGORIES[0], ...tabs];
@@ -373,11 +437,15 @@ export function openMailStore({ dir }) {
 
     labels(account) {
       const counts = new Map(q("SELECT label, count(*) AS n, sum(unread > 0) AS unread FROM thread_labels WHERE account = ? GROUP BY label").all(account).map((row) => [row.label, row]));
-      const order = (label) => label.role ? ROLES.indexOf(label.role) + CATEGORIES.indexOf(label.id.slice("category-".length)) / 10 : ROLES.length;
-      return q("SELECT id, name, role FROM labels WHERE account = ?").all(account)
+      const order = (label) => label.role ? ROLES.indexOf(label.role) + (label.at ?? CATEGORIES.indexOf(label.id.slice("category-".length))) / 100 : ROLES.length;
+      // A category is a label the hub makes: Conduit's own, and any a rule names.
+      const named = new Map(SORTS.map((one) => [one.id, one.name]));
+      for (const rule of this.rules(account)) if (!named.has(categoryId(rule.then?.category ?? "other"))) named.set(categoryId(rule.then.category), rule.then.category);
+      const sorts = sorting.has(account) ? [...named].map(([id, name], at) => ({ id: `sort-${id}`, name, role: "sort", at })) : [];
+      return [...q("SELECT id, name, role FROM labels WHERE account = ?").all(account), ...sorts]
         .filter((row) => row.role !== "category" || tabsOf.get(account)?.includes(row.id.slice("category-".length)) !== false)
-        .map((row) => ({ id: row.id, name: row.name, role: row.role || null, unread: counts.get(row.id)?.unread || 0, threads: counts.get(row.id)?.n || 0 }))
-        .sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name));
+        .sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name))
+        .map((row) => ({ id: row.id, name: row.name, role: row.role || null, unread: counts.get(row.id)?.unread || 0, threads: counts.get(row.id)?.n || 0 }));
     },
 
     threads({ account, label = "inbox", unread = false, before = null, limit = 50 }) {
@@ -494,8 +562,9 @@ export function openMailStore({ dir }) {
     dropAccount(account) {
       tx(() => {
         q("DELETE FROM search WHERE rowid IN (SELECT rowid FROM messages WHERE account = ?)").run(account);
-        for (const table of ["messages", "threads", "thread_labels", "labels", "cursors", "drafts"]) q(`DELETE FROM ${table} WHERE account = ?`).run(account);
+        for (const table of ["messages", "threads", "thread_labels", "labels", "cursors", "drafts", "rules"]) q(`DELETE FROM ${table} WHERE account = ?`).run(account);
       });
+      sorting.delete(account);
       fs.rmSync(rawDir(account), { recursive: true, force: true });
     },
   };
