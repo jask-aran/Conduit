@@ -55,8 +55,11 @@ const splitId = (id) => {
   return at > 0 ? { account: id.slice(0, at), key: id.slice(at + 1) } : null;
 };
 const iso = (ms) => new Date(ms).toISOString();
+// The invisible characters a sender pads its preview line with (and a joiner that joins no picture), which a list would show as a gap.
+const PADDING = /[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180e\u200b\u200c\u200e\u200f\u2007\u202a-\u202e\u2060-\u2064\u206a-\u206f\u3164\ufeff\uffa0]|\u200d(?!\p{Extended_Pictographic})/gu;
+const unpadded = (text) => text.replace(PADDING, "").replace(/\s+/g, " ").trim();
 const snippetOf = (text) => {
-  const plain = splitQuoted(text).own.replace(/\s+/g, " ").trim();
+  const plain = unpadded(splitQuoted(text).own);
   return plain.length > SNIPPET ? `${plain.slice(0, SNIPPET - 1)}…` : plain;
 };
 const partyText = (parties) => parties.map((party) => `${party.name} ${party.address}`).join(" ");
@@ -106,7 +109,7 @@ export function openMailStore({ dir }) {
 
   const toThread = (row) => ({
     id: hubId(row.account, row.thread), account: row.account, subject: row.subject, from: json(row.parties),
-    date: iso(row.date), snippet: row.snippet, count: row.count, unread: row.unread, labels: json(row.labels),
+    date: iso(row.date), snippet: unpadded(row.snippet), count: row.count, unread: row.unread, labels: json(row.labels),
     starred: Boolean(row.starred), attachments: Boolean(row.attachments), draft: Boolean(row.draft),
   });
   const toMessage = (row) => {
@@ -114,7 +117,7 @@ export function openMailStore({ dir }) {
     return {
       id: hubId(row.account, row.key), thread: hubId(row.account, row.thread), account: row.account,
       from: json(row.sender), to: recipients.to, cc: recipients.cc, bcc: recipients.bcc,
-      subject: row.subject, date: iso(row.date), snippet: row.snippet,
+      subject: row.subject, date: iso(row.date), snippet: unpadded(row.snippet),
       unread: Boolean(row.unread), starred: json(row.labels).includes("starred"), draft: Boolean(row.draft), labels: json(row.labels),
       attachments: Boolean(row.attachments), held: Boolean(row.held),
     };
@@ -352,10 +355,10 @@ export function openMailStore({ dir }) {
     },
 
     labels(account) {
-      const unread = new Map(q("SELECT label, count(*) AS n FROM thread_labels WHERE account = ? AND unread > 0 GROUP BY label").all(account).map((row) => [row.label, row.n]));
+      const counts = new Map(q("SELECT label, count(*) AS n, sum(unread > 0) AS unread FROM thread_labels WHERE account = ? GROUP BY label").all(account).map((row) => [row.label, row]));
       const order = (label) => label.role ? ROLES.indexOf(label.role) + CATEGORIES.indexOf(label.id.slice("category-".length)) / 10 : ROLES.length;
       return q("SELECT id, name, role FROM labels WHERE account = ?").all(account)
-        .map((row) => ({ id: row.id, name: row.name, role: row.role || null, unread: unread.get(row.id) || 0 }))
+        .map((row) => ({ id: row.id, name: row.name, role: row.role || null, unread: counts.get(row.id)?.unread || 0, threads: counts.get(row.id)?.n || 0 }))
         .sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name));
     },
 

@@ -14,10 +14,10 @@ const DAY_MS = 86_400_000;
 const DAY = new Intl.DateTimeFormat([], { weekday: "short" });
 const DATE = new Intl.DateTimeFormat([], { day: "numeric", month: "short" });
 const startOf = (at: number) => new Date(at).setHours(0, 0, 0, 0);
-/** Today's clock time, then the weekday within the week, then the date. */
-export const mailTime = (iso: string, now = Date.now()) => {
+/** Today's clock time, then the weekday within the week, then the date. `under`: said under its day's heading (a list), where yesterday's is its clock time too. */
+export const mailTime = (iso: string, under = false, now = Date.now()) => {
   const days = Math.round((startOf(now) - startOf(Date.parse(iso))) / DAY_MS);
-  return days <= 0 ? clockTime(iso) ?? "" : days === 1 ? "Yesterday" : days < 7 ? DAY.format(new Date(iso)) : DATE.format(new Date(iso));
+  return days <= 0 || (under && days === 1) ? clockTime(iso) ?? "" : days === 1 ? `Yesterday ${clockTime(iso) ?? ""}`.trim() : days < 7 ? DAY.format(new Date(iso)) : DATE.format(new Date(iso));
 };
 export const mailDay = (iso: string, now = Date.now()) => {
   const days = Math.round((startOf(now) - startOf(Date.parse(iso))) / DAY_MS);
@@ -107,8 +107,10 @@ export function MailThreadView(props: { id: string; own: string; labels: MailLab
     catch (reason) { toast.error(failure(reason)); }
   };
 
-  const bar = (end?: JSX.Element) => <ToolBar end={end}>
+  // The thread's verbs stand at the bar's start, beside the list they act on, not across the pane from it.
+  const bar = (verbs?: JSX.Element) => <ToolBar>
     <Show when={props.back}>{(back) => <HeaderButton label="Back" icon={<Icons.Back />} onClick={back()} />}</Show>
+    {verbs}
   </ToolBar>;
   const verbs = (current: MailThread) => <>
     <For each={threadVerbs(current, props.list, ours).slice(0, 3)}>{(verb) => <IconButton label={verb.label} disabled={verb.disabled} onClick={verb.run}>{verb.icon()}</IconButton>}</For>

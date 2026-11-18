@@ -45,7 +45,7 @@ export interface MailAccount { id: string; kind: MailAccountKind; address: strin
 /** What a label is for, where every source has one; a label the person made has none. "category": the source's own sorting of the inbox (id `category-<name>`), which only the source sets. */
 export type MailLabelRole = "inbox" | "sent" | "drafts" | "starred" | "important" | "category";
 /** `id` is the role for a label with one ("inbox"), else an id of the hub's; `name` is what the person reads. */
-export interface MailLabel { id: string; name: string; role: MailLabelRole | null; unread: number }
+export interface MailLabel { id: string; name: string; role: MailLabelRole | null; /** Threads with something unread, and all its threads. */ unread: number; threads: number }
 
 export interface MailParty { name: string; address: string }
 

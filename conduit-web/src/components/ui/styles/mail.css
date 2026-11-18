@@ -7,8 +7,9 @@
 .ui-mail-meta > svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-mail-meta > svg[data-starred] { fill: currentColor; }
 
+/* The list is at its minimum where the frame only just holds both, and takes a share of a wider one up to a measure, so a row says more of its subject. */
 .ui-reader-split { --split-list: var(--measure-lg); --split-reader: var(--measure-xl); position: relative; display: grid; min-width: 0; min-height: 0; flex: 1;
-  grid-template-columns: var(--split-list) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  grid-template-columns: clamp(var(--split-list), 32%, var(--measure-2xl)) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 .ui-reader-split-need { position: absolute; width: calc(var(--split-list) + var(--split-reader)); height: 0; visibility: hidden; pointer-events: none; }
 .ui-reader-split > section { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
 .ui-reader-split-list { border-right: var(--hairline) solid var(--border); }

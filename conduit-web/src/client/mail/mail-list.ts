@@ -17,7 +17,9 @@ const holds = (label: string, thread: MailThread) => label === "all" || thread.l
 /** What a change makes of a thread, as the hub will: null when it goes (trashed). */
 function predict(thread: MailThread, change: MailChange): MailThread | null {
   if (change.trash) return null;
-  const labels = [...new Set([...thread.labels.filter((label) => !change.remove?.includes(label)), ...(change.add ?? [])])];
+  // A category sorts the inbox, so a thread taken out of the inbox leaves its category too.
+  const out = (label: string) => change.remove?.includes(label) || (change.remove?.includes("inbox") && label.startsWith("category-"));
+  const labels = [...new Set([...thread.labels.filter((label) => !out(label)), ...(change.add ?? [])])];
   const unread = change.unread === undefined ? thread.unread : change.unread ? Math.max(thread.unread, 1) : 0;
   return { ...thread, labels, unread, starred: labels.includes("starred") };
 }

@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, Show, type JSX } from "solid-js";
 import type { MailAccount, MailDraft, MailLabel, MailThread } from "@/mail/mail";
-import { Button, DashDay, Empty, HeaderButton, Icons, LeadInput, Loading, MailRow, ReaderSplit, ReadingScroll, ReadingTitle, SelectTrigger, SheetFill, Spinner, StatusDot, ToolBar } from "@/components/ui";
+import { Button, DashDay, Empty, HeaderButton, Icons, LeadInput, Loading, MailRow, ReaderSplit, ReadingScroll, ReadingTitle, Segmented, SelectTrigger, SheetFill, Spinner, StatusDot, ToolBar } from "@/components/ui";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
 import { createArtWindow } from "@/components/ui/chat-art";
@@ -40,9 +40,18 @@ export default function MailPane(props: {
   // Read as .latest: a refetch must not suspend the pane.
   const labels = () => labelsRead.latest ?? [];
   const [label, setLabel] = createSignal("inbox");
+  // The inbox view last shown, which choosing Inbox goes back to.
+  let inboxView = "";
+  const keptInbox = () => inboxView || categories()[0]?.id || "inbox";
   // The view last chosen for an account is where its mail opens next, on this device.
   const viewKey = (id: string) => `conduit:mail-view:${id}`;
-  createEffect(on(() => account()?.id, (id) => { try { const kept = id && localStorage.getItem(viewKey(id)); if (kept) setLabel(kept); } catch { /* opens on the inbox */ } }));
+  const keptView = (id?: string) => { try { return id ? localStorage.getItem(viewKey(id)) : null; } catch { return null; } };
+  createEffect(on(() => account()?.id, (id) => { const kept = keptView(id); if (kept) setLabel(kept); }));
+  // The source's own sorting of the inbox (Gmail's tabs): those with mail in them. An inbox sorted so opens on its first until the person chooses.
+  const categories = createMemo(() => labels().filter((one) => one.role === "category" && (one.threads || one.id === label())));
+  const inInbox = () => label() === "inbox" || label().startsWith("category-");
+  createEffect(() => { const first = categories()[0]; if (first && label() === "inbox" && !keptView(account()?.id)) setLabel(first.id); });
+  createEffect(() => { if (inInbox()) inboxView = label(); });
   createEffect(on(label, (now) => { const id = account()?.id; try { if (id) localStorage.setItem(viewKey(id), now); } catch { /* this session only */ } }, { defer: true }));
   const list = createMailList(() => account()?.id ?? null, label);
   createEffect(on([() => account()?.id, label], ([id]) => { if (id) void list.load().then(() => setTrouble(""), (reason) => setTrouble(failure(reason))); }));
@@ -82,13 +91,20 @@ export default function MailPane(props: {
   </>;
 
   const labelName = () => labels().find((one) => one.id === label())?.name ?? "Inbox";
+  // The chooser names the place; the inbox's categories are the tabs under it.
+  const placeName = () => inInbox() ? "Inbox" : labelName();
+  const tabs = () => <Show when={inInbox() && categories().length}><ToolBar>
+    <Segmented label="Inbox category" size="sm" arrows value={label()} onChange={setLabel}
+      options={[...categories().map((one) => ({ value: one.id, label: one.name, count: one.unread || undefined })), { value: "inbox", label: "All" }]} />
+  </ToolBar></Show>;
   const chooser = () => <DropdownMenu modal={false} placement="bottom-start">
-    <MenuControl as={SelectTrigger} bare value={labelName()} aria-label="Label" />
+    <MenuControl as={SelectTrigger} bare value={placeName()} aria-label="Label" />
     <MenuContent width="sm" height="xl">
       <Show when={(accounts.latest?.length ?? 0) > 1}><MenuSection title="Accounts"><For each={accounts.latest}>{(one) =>
         <MenuRow checked={one.id === account()?.id} detail={one.name || undefined} onSelect={() => props.onAccount(one.id)}>{one.address}</MenuRow>}</For></MenuSection></Show>
-      <MenuSection><For each={labels().filter((one) => one.role || one.id === "all")}>{(one) => <MenuRow icon={LABEL_ICON[one.role ?? one.id]?.() ?? <Icons.Label />}
-        checked={one.id === label()} meta={one.unread ? String(one.unread) : undefined} onSelect={() => setLabel(one.id)}>{one.name}</MenuRow>}</For></MenuSection>
+      <MenuSection><For each={labels().filter((one) => (one.role && one.role !== "category") || one.id === "all")}>{(one) => <MenuRow icon={LABEL_ICON[one.role ?? one.id]?.() ?? <Icons.Label />}
+        checked={one.id === "inbox" ? inInbox() : one.id === label()} meta={one.unread ? String(one.unread) : undefined}
+        onSelect={() => setLabel(one.id === "inbox" ? keptInbox() : one.id)}>{one.name}</MenuRow>}</For></MenuSection>
       <Show when={labels().some((one) => !one.role && one.id !== "all")}><MenuSection title="Labels"><For each={labels().filter((one) => !one.role && one.id !== "all")}>{(one) =>
         <MenuRow icon={<Icons.Label />} checked={one.id === label()} meta={one.unread ? String(one.unread) : undefined} onSelect={() => setLabel(one.id)}>{one.name}</MenuRow>}</For></MenuSection></Show>
     </MenuContent>
@@ -110,7 +126,7 @@ export default function MailPane(props: {
   const row = (thread: MailThread) => <ContextMenu>
     <ContextMenuTrigger as={MailRow} data-thread={thread.id} tabIndex={(cursor() ?? list.threads()[0]?.id) === thread.id ? 0 : -1}
       current={open() === thread.id} from={who(thread, own())} count={thread.count} subject={thread.subject || "(no subject)"} snippet={thread.snippet}
-      time={mailTime(thread.date)} dateTime={thread.date} unread={thread.unread > 0} starred={thread.starred} attachments={thread.attachments} draft={thread.draft}
+      time={mailTime(thread.date, true)} dateTime={thread.date} unread={thread.unread > 0} starred={thread.starred} attachments={thread.attachments} draft={thread.draft}
       onFocus={() => setCursor(thread.id)} onClick={() => openThread(thread.id)} />
     <ContextMenuContent width="sm">
       <MenuSection><MenuRow icon={<Icons.Preview />} onSelect={() => openThread(thread.id)}>Open</MenuRow>
@@ -131,6 +147,7 @@ export default function MailPane(props: {
           if (event.key === "Escape" && list.query()) { event.preventDefault(); event.stopPropagation(); void list.search(""); }
         }} />
     </ToolBar>
+    {tabs()}
     <ReadingScroll ref={(element) => { rows = element; }} onScroll={(event) => nearEnd(event.currentTarget)} onKeyDown={walk} aria-label={labelName()}>
       <Show when={list.threads().length} fallback={<Empty>{list.query() ? "Nothing found" : `Nothing in ${labelName()}`}</Empty>}>
         <div><For each={list.threads()}>{(thread, index) => <><Show when={dayOver(index())}>{(day) => <DashDay>{day()}</DashDay>}</Show>{row(thread)}</>}</For></div>

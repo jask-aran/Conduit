@@ -49,9 +49,9 @@ let drafts: MailDraft[] = [];
 let accounts: MailAccount[] = [];
 let mode: Scenario = "syncing";
 const LABELS: MailLabel[] = [
-  { id: "inbox", name: "Inbox", role: "inbox", unread: 0 }, { id: "starred", name: "Starred", role: "starred", unread: 0 }, { id: "sent", name: "Sent", role: "sent", unread: 0 },
-  { id: "drafts", name: "Drafts", role: "drafts", unread: 0 }, { id: "all", name: "All mail", role: null, unread: 0 },
-  { id: "l1", name: "Japan trip", role: null, unread: 0 }, { id: "l2", name: "House", role: null, unread: 0 }, { id: "l3", name: "Receipts", role: null, unread: 0 }, { id: "l4", name: "Conduit", role: null, unread: 0 },
+  { id: "inbox", name: "Inbox", role: "inbox", unread: 0, threads: 40 }, { id: "starred", name: "Starred", role: "starred", unread: 0, threads: 40 }, { id: "sent", name: "Sent", role: "sent", unread: 0, threads: 40 },
+  { id: "drafts", name: "Drafts", role: "drafts", unread: 0, threads: 40 }, { id: "all", name: "All mail", role: null, unread: 0, threads: 40 },
+  { id: "l1", name: "Japan trip", role: null, unread: 0, threads: 40 }, { id: "l2", name: "House", role: null, unread: 0, threads: 40 }, { id: "l3", name: "Receipts", role: null, unread: 0, threads: 40 }, { id: "l4", name: "Conduit", role: null, unread: 0, threads: 40 },
 ];
 
 function seed(scenario: Scenario) {
