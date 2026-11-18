@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createResource, createSignal, For, on, onCleanup, Show, type JSX } from "solid-js";
-import type { MailAccount, MailDraft, MailLabel, MailParty, MailThread } from "@/mail/mail";
+import type { MailAccount, MailDraft, MailLabel, MailSorting, MailThread } from "@/mail/mail";
 import { Button, DashDay, Empty, HeaderButton, Icons, LeadInput, Loading, MailRow, ReaderSplit, ReadingScroll, ReadingTitle, Segmented, SelectTrigger, SheetFill, Spinner, StatusDot, ToolBar } from "@/components/ui";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
@@ -7,7 +7,7 @@ import { createArtWindow } from "@/components/ui/chat-art";
 import { failure, mailApi } from "./mail-api";
 import { DraftComposer } from "./mail-compose";
 import { createMailList } from "./mail-list";
-import { labelRows, mailDay, mailTime, MailThreadView, threadVerbs } from "./mail-thread";
+import { labelNames, labelRows, mailDay, mailTime, MailThreadView, moveSections, sender, threadVerbs, type MailMoves } from "./mail-thread";
 
 const LABEL_ICON: Record<string, () => JSX.Element> = {
   inbox: () => <Icons.Inbox />, starred: () => <Icons.Star />, sent: () => <Icons.Send />, drafts: () => <Icons.Edit />, all: () => <Icons.Mail />, important: () => <Icons.Notification />,
@@ -49,18 +49,21 @@ export default function MailPane(props: {
   const viewKey = (id: string) => `conduit:mail-view:${id}`;
   const keptView = (id?: string) => { try { return id ? localStorage.getItem(viewKey(id)) : null; } catch { return null; } };
   createEffect(on(() => account()?.id, (id) => { const kept = keptView(id); if (kept) setLabel(kept); }));
-  // The source's own sorting of the inbox (Gmail's tabs): those with mail in them. An inbox sorted so opens on its first until the person chooses.
-  // The inbox is sorted one of two ways, as chosen on this device: by Conduit's rules, or as the source sorts it.
-  const [sorter, setSorter] = createSignal<"sort" | "category">((() => { try { return localStorage.getItem(SORTER) === "category" ? "category" : "sort"; } catch { return "sort"; } })());
-  const sortBy = (now: "sort" | "category") => { setSorter(now); try { localStorage.setItem(SORTER, now); } catch { /* this session only */ } setLabel(labels().find((one) => one.role === now && one.threads)?.id ?? "inbox"); };
+  // The inbox's tabs, as chosen on this device: the account's splits, or the source's own sorting (Gmail's tabs); those with mail in them.
+  // An inbox sorted so opens on its first until the person chooses.
+  const [sorter, setSorter] = createSignal<"split" | "category">((() => { try { return localStorage.getItem(SORTER) === "category" ? "category" : "split"; } catch { return "split"; } })());
+  const sortBy = (now: "split" | "category") => { setSorter(now); try { localStorage.setItem(SORTER, now); } catch { /* this session only */ } setLabel(labels().find((one) => one.role === now && one.threads)?.id ?? "inbox"); };
   const categories = createMemo(() => labels().filter((one) => one.role === sorter() && (one.threads || one.id === label())));
-  const inInbox = () => label() === "inbox" || /^(category|sort)-/.test(label());
-  // A view kept from the other sorting opens as this one's first.
-  createEffect(() => { const other = sorter() === "sort" ? "category-" : "sort-"; if (label().startsWith(other) && labels().length) setLabel(categories()[0]?.id ?? "inbox"); });
+  const inInbox = () => label() === "inbox" || /^(category|split)-/.test(label());
+  // A view kept from the other sorting, or one the account no longer has, opens as this one's first.
+  createEffect(() => { if (labels().length && /^(category|split|sort)-/.test(label()) && !labels().some((one) => one.id === label() && one.role === sorter())) setLabel(categories()[0]?.id ?? "inbox"); });
   createEffect(() => { const first = categories()[0]; if (first && label() === "inbox" && !keptView(account()?.id)) setLabel(first.id); });
   createEffect(() => { if (inInbox()) inboxView = label(); });
   createEffect(on(label, (now) => { const id = account()?.id; try { if (id) localStorage.setItem(viewKey(id), now); } catch { /* this session only */ } }, { defer: true }));
   const list = createMailList(() => account()?.id ?? null, label);
+  // The account's splits as the hub keeps them (which take, where senders are routed), read again when the labels list other splits.
+  const splitKey = () => { const id = account()?.id; return id && labels().length ? `${id}|${labels().filter((one) => one.role === "split").map((one) => one.id).join()}` : undefined; };
+  const [sorting, { mutate: setSorting, refetch: rereadSorting }] = createResource(splitKey, () => mailApi.sorting(account()!.id).catch(() => undefined));
   createEffect(on([() => account()?.id, label], ([id]) => { if (id) void list.load().then(() => setTrouble(""), (reason) => setTrouble(failure(reason))); }));
 
   const [open, setOpen] = createSignal<string | null>(null);
@@ -74,6 +77,7 @@ export default function MailPane(props: {
     if (detail?.accounts) void rereadAccounts();
     if (!detail || detail.account !== account()?.id) return;
     void rereadLabels();
+    if (!detail.threads) void rereadSorting();
     void list.heard(detail.threads).catch(() => {});
   };
   window.addEventListener("conduit:mail-changed", heard);
@@ -111,13 +115,13 @@ export default function MailPane(props: {
     <MenuContent width="sm" height="xl">
       <Show when={(accounts.latest?.length ?? 0) > 1}><MenuSection title="Accounts"><For each={accounts.latest}>{(one) =>
         <MenuRow checked={one.id === account()?.id} detail={one.name || undefined} onSelect={() => props.onAccount(one.id)}>{one.address}</MenuRow>}</For></MenuSection></Show>
-      <MenuSection><For each={labels().filter((one) => (one.role && one.role !== "category" && one.role !== "sort") || one.id === "all")}>{(one) => <MenuRow icon={LABEL_ICON[one.role ?? one.id]?.() ?? <Icons.Label />}
+      <MenuSection><For each={labels().filter((one) => (one.role && one.role !== "category" && one.role !== "split") || one.id === "all")}>{(one) => <MenuRow icon={LABEL_ICON[one.role ?? one.id]?.() ?? <Icons.Label />}
         checked={one.id === "inbox" ? placeName() === "Inbox" : one.id === label()} meta={one.unread ? String(one.unread) : undefined}
         onSelect={() => setLabel(one.id === "inbox" ? keptInbox() : one.id)}>{one.name}</MenuRow>}</For></MenuSection>
-      <Show when={sorter() === "sort" && categories().length > TABS_MOST}><MenuSection title="Categories"><For each={categories()}>{(one) =>
+      <Show when={categories().length > TABS_MOST}><MenuSection title={sorter() === "split" ? "Splits" : "Categories"}><For each={categories().slice(TABS_MOST)}>{(one) =>
         <MenuRow icon={<Icons.Label />} checked={one.id === label()} meta={one.unread ? String(one.unread) : undefined} onSelect={() => setLabel(one.id)}>{one.name}</MenuRow>}</For></MenuSection></Show>
-      <Show when={labels().some((one) => one.role === "sort") && labels().some((one) => one.role === "category")}><MenuSection title="Inbox sorted by">
-        <MenuRow checked={sorter() === "sort"} onSelect={() => sortBy("sort")}>Conduit's rules</MenuRow>
+      <Show when={labels().some((one) => one.role === "split") && labels().some((one) => one.role === "category")}><MenuSection title="Inbox sorted by">
+        <MenuRow checked={sorter() === "split"} onSelect={() => sortBy("split")}>Splits</MenuRow>
         <MenuRow checked={sorter() === "category"} onSelect={() => sortBy("category")}>Gmail's tabs</MenuRow>
       </MenuSection></Show>
       <Show when={labels().some((one) => !one.role && one.id !== "all")}><MenuSection title="Labels"><For each={labels().filter((one) => !one.role && one.id !== "all")}>{(one) =>
@@ -138,27 +142,43 @@ export default function MailPane(props: {
     all[Math.min(to, all.length - 1)]?.focus();
   };
   const nearEnd = (element: HTMLElement) => { if (element.scrollTop + 2 * element.clientHeight >= element.scrollHeight) void list.more().catch((reason) => toast.error(failure(reason))); };
-  // The last of a thread's writers who is not the person: whose mail a rule made from its row is about.
-  const sender = (thread: MailThread) => thread.from.findLast((party) => party.address.toLowerCase() !== own().toLowerCase());
-  const alwaysSort = async (from: MailParty, to: MailLabel) => {
-    const id = account()?.id;
-    if (!id) return;
-    try {
-      const rule = await mailApi.putRule(id, { name: `${from.name || from.address} is ${to.name}`, when: { field: "from", has: from.address }, then: { category: to.id.slice("sort-".length) } });
-      toast.success(`Mail from ${from.address} now sorts as ${to.name}`, { action: { label: "Undo", onClick: () => void mailApi.removeRule(id, rule.id).catch((reason) => toast.error(failure(reason))) } });
-    } catch (reason) { toast.error(failure(reason)); }
+  // Where a thread can be moved: the splits that take, drawn at once in the list; each says what it did, with Undo.
+  const taking = () => (sorting.latest?.splits ?? []).filter((one) => one.takes);
+  const takingLabels = () => taking().map((one) => `split-${one.id}`);
+  const route = (address: string) => sorting.latest?.senders.find((one) => one.address.toLowerCase() === address.toLowerCase())?.split;
+  const routed = (senders: MailSorting["senders"]) => { const now = sorting.latest; if (now) setSorting({ ...now, senders }); };
+  const undo = (run: () => Promise<unknown>) => ({ action: { label: "Undo", onClick: () => void run().catch((reason) => toast.error(failure(reason))) } });
+  const moves: MailMoves = {
+    splits: taking,
+    route,
+    move: (thread, split, onThreads) => {
+      if (thread.labels.includes(`split-${split.id}`)) return;
+      const was = taking().find((one) => thread.labels.includes(`split-${one.id}`));
+      void list.move([thread], split.id, takingLabels(), (ids) => mailApi.move(ids, split.id), onThreads).then((done) => done && toast.success(`Moved to ${split.name}`, undo(async () => {
+        // Back where it was: unpinned, unless that leaves it elsewhere (it had been moved there by hand).
+        const [now] = await mailApi.move([thread.id], null);
+        if (was && now && !now.labels.includes(`split-${was.id}`)) await mailApi.move([thread.id], was.id);
+      })));
+    },
+    always: (thread, from, split, onThreads) => {
+      const id = account()?.id, before = route(from.address) ?? null;
+      if (!id || before === split.id) return;
+      // Every shown thread from this sender goes; the hub then tells which did.
+      const theirs = list.threads().filter((one) => one.id === thread.id || sender(one, own())?.address.toLowerCase() === from.address.toLowerCase());
+      void list.move(theirs, split.id, takingLabels(), () => mailApi.routeSender(id, from.address, split.id).then(routed), onThreads).then((done) => done && toast.success(`Mail from ${from.address} now goes to ${split.name}`,
+        undo(() => mailApi.routeSender(id, from.address, before).then(routed))));
+    },
   };
   const row = (thread: MailThread) => <ContextMenu>
     <ContextMenuTrigger as={MailRow} data-thread={thread.id} tabIndex={(cursor() ?? list.threads()[0]?.id) === thread.id ? 0 : -1}
       current={open() === thread.id} from={who(thread, own())} count={thread.count} subject={thread.subject || "(no subject)"} snippet={thread.snippet}
-      time={mailTime(thread.date, true)} dateTime={thread.date} unread={thread.unread > 0} starred={thread.starred} attachments={thread.attachments} draft={thread.draft}
+      time={mailTime(thread.date, true)} dateTime={thread.date} unread={thread.unread > 0} starred={thread.starred} attachments={thread.attachments} draft={thread.draft} labels={labelNames(thread, labels())}
       onFocus={() => setCursor(thread.id)} onClick={() => openThread(thread.id)} />
     <ContextMenuContent width="sm">
       <MenuSection><MenuRow icon={<Icons.Preview />} onSelect={() => openThread(thread.id)}>Open</MenuRow>
         <For each={threadVerbs(thread, list)}>{(verb) => <MenuRow icon={verb.icon()} disabled={verb.disabled} onSelect={verb.run}>{verb.label}</MenuRow>}</For></MenuSection>
       <Show when={labels().some((one) => !one.role && one.id !== "all")}><MenuSection title="Labels">{labelRows(thread, labels(), list)}</MenuSection></Show>
-      <Show when={sender(thread)}>{(from) => <MenuSection title={`Always sort ${from().address} as`}><For each={labels().filter((one) => one.role === "sort")}>{(one) =>
-        <MenuRow checked={thread.labels.includes(one.id)} onSelect={() => void alwaysSort(from(), one)}>{one.name}</MenuRow>}</For></MenuSection>}</Show>
+      <Show when={taking().length}>{moveSections(thread, moves, own())}</Show>
     </ContextMenuContent>
   </ContextMenu>;
 
@@ -186,7 +206,7 @@ export default function MailPane(props: {
 
   const back = () => folded() ? backToList : undefined;
   const readerColumn = () => <Show when={writing()} fallback={<Show when={open()} keyed fallback={<Empty>No thread open</Empty>}>{(id) =>
-    <MailThreadView id={id} own={own()} labels={labels()} list={list} back={back()} onGone={backToList} />}</Show>}>{(draft) => <>
+    <MailThreadView id={id} own={own()} labels={labels()} list={list} moves={moves} back={back()} onGone={backToList} />}</Show>}>{(draft) => <>
     <ToolBar><Show when={folded()}><HeaderButton label="Back" icon={<Icons.Back />} onClick={backToList} /></Show></ToolBar>
     <ReadingScroll><ReadingTitle>New message</ReadingTitle><DraftComposer draft={draft()} subject autofocus onDone={backToList} /></ReadingScroll>
   </>}</Show>;

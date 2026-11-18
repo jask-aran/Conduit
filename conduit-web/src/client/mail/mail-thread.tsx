@@ -1,6 +1,6 @@
 import { createSignal, For, onCleanup, Show, Suspense, type JSX } from "solid-js";
-import type { MailBody, MailDraft, MailLabel, MailMessage, MailParty, MailThread } from "@/mail/mail";
-import { Answer, Button, EmailItem, Empty, HeaderButton, IconButton, Icons, Loading, ReadingScroll, ReadingTitle, Row, Spinner, ToolBar, clockTime } from "@/components/ui";
+import type { MailBody, MailDraft, MailLabel, MailMessage, MailParty, MailSplit, MailThread } from "@/mail/mail";
+import { Answer, Button, EmailItem, Empty, HeaderButton, IconButton, Icons, Loading, MailLabels, ReadingScroll, ReadingTitle, Row, Spinner, ToolBar, clockTime } from "@/components/ui";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
 import { MailPage } from "@/components/ui/mail-page";
@@ -43,6 +43,30 @@ export const labelRows = (thread: MailThread, labels: MailLabel[], list: MailLis
   <For each={labels.filter((label) => !label.role && label.id !== "all")}>{(label) => <MenuRow closeOnSelect={false} checked={thread.labels.includes(label.id)}
     onSelect={() => void list.triage([thread], thread.labels.includes(label.id) ? { remove: [label.id] } : { add: [label.id] }, onThreads)}>{label.name}</MenuRow>}</For>;
 
+/** The names of a thread's own labels (those the person or a rule put on it). */
+export const labelNames = (thread: MailThread, labels: MailLabel[]) =>
+  labels.filter((label) => !label.role && label.id !== "all" && thread.labels.includes(label.id)).map((label) => label.name);
+
+/** The last of a thread's writers who is not the person: whose mail "Always move" is about. */
+export const sender = (thread: MailThread, own: string) => thread.from.findLast((party) => party.address.toLowerCase() !== own.toLowerCase());
+
+/** Moving threads between the account's splits, as the pane does it (drawn at once, said in a toast with Undo). */
+export interface MailMoves {
+  /** The splits a thread can sit in (those that take), in order. */
+  splits(): MailSplit[];
+  /** The split an address's mail is routed to. */
+  route(address: string): string | undefined;
+  move(thread: MailThread, split: MailSplit, onThreads?: (threads: MailThread[]) => void): void;
+  always(thread: MailThread, from: MailParty, split: MailSplit, onThreads?: (threads: MailThread[]) => void): void;
+}
+/** "Move to" this thread, and "Always move" its sender, each split once; the current one is marked. One list for the row's menu and the thread's bar. */
+export const moveSections = (thread: MailThread, moves: MailMoves, own: string, onThreads?: (threads: MailThread[]) => void) => <>
+  <MenuSection title="Move to"><For each={moves.splits()}>{(split) =>
+    <MenuRow checked={thread.labels.includes(`split-${split.id}`)} onSelect={() => moves.move(thread, split, onThreads)}>{split.name}</MenuRow>}</For></MenuSection>
+  <Show when={sender(thread, own)}>{(from) => <MenuSection title={`Always move ${from().address} to`}><For each={moves.splits()}>{(split) =>
+    <MenuRow checked={moves.route(from().address) === split.id} onSelect={() => moves.always(thread, from(), split, onThreads)}>{split.name}</MenuRow>}</For></MenuSection>}</Show>
+</>;
+
 // A message is shown with its pictures, as other mail readers show it; a sender learns from them that it was opened, so they can be turned off on this device.
 const IMAGES = "conduit:mail-images";
 const [images, setImages] = createSignal((() => { try { return localStorage.getItem(IMAGES) !== "0"; } catch { return true; } })());
@@ -52,7 +76,7 @@ const keepImages = (on: boolean) => { setImages(on); try { localStorage.setItem(
  * An open thread: its subject, earlier messages folded to a line, the newest and any unread open, each with its verbs; the
  * drafts written in it at its foot. It says it is opening until the thread and its open bodies are in.
  */
-export function MailThreadView(props: { id: string; own: string; labels: MailLabel[]; list: MailList; back?: () => void; onGone: () => void }) {
+export function MailThreadView(props: { id: string; own: string; labels: MailLabel[]; list: MailList; moves: MailMoves; back?: () => void; onGone: () => void }) {
   const [thread, setThread] = createSignal<MailThread>();
   const [messages, setMessages] = createSignal<MailMessage[]>([]);
   const [drafts, setDrafts] = createSignal<MailDraft[]>([]);
@@ -114,6 +138,10 @@ export function MailThreadView(props: { id: string; own: string; labels: MailLab
   </ToolBar>;
   const verbs = (current: MailThread) => <>
     <For each={threadVerbs(current, props.list, ours).slice(0, 3)}>{(verb) => <IconButton label={verb.label} disabled={verb.disabled} onClick={verb.run}>{verb.icon()}</IconButton>}</For>
+    <Show when={props.moves.splits().length}><DropdownMenu modal={false} placement="bottom-end">
+      <MenuControl as={IconButton} label="Move to"><Icons.MoveToFolder /></MenuControl>
+      <MenuContent width="sm">{moveSections(current, props.moves, props.own, ours)}</MenuContent>
+    </DropdownMenu></Show>
     <DropdownMenu modal={false} placement="bottom-end">
       <MenuControl as={IconButton} label="Labels"><Icons.Label /></MenuControl>
       <MenuContent width="sm"><MenuSection title="Labels" note={props.labels.some((label) => !label.role && label.id !== "all") ? undefined : "No labels of your own"}>
@@ -154,7 +182,7 @@ export function MailThreadView(props: { id: string; own: string; labels: MailLab
     <>
       {bar(verbs(current()))}
       <ReadingScroll>
-        <ReadingTitle>{current().subject || "(no subject)"}</ReadingTitle>
+        <ReadingTitle>{current().subject || "(no subject)"}<MailLabels names={labelNames(current(), props.labels)} /></ReadingTitle>
         <div><For each={messages()}>{message}</For></div>
         <For each={drafts()}>{(draft) => <DraftComposer draft={draft} autofocus subject={Boolean(draft.forward)}
           onDone={() => setDrafts(drafts().filter((one) => one.id !== draft.id))} />}</For>

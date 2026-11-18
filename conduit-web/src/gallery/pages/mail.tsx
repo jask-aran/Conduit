@@ -1,10 +1,11 @@
 import { createSignal, For, lazy, onMount, Show, Suspense } from "solid-js";
-import { Answer, Button, ComposerField, ComposerLine, DashDay, DesktopComposer, DraftState, EmailItem, Icons, IconButton, MailRow, PaneHeader, ReaderSplit, ReadingScroll, ReadingTitle,
+import { Answer, Button, ComposerField, ComposerLine, DashDay, DesktopComposer, DraftState, EmailItem, Icons, IconButton, MailLabels, MailRow, PaneHeader, ReaderSplit, ReadingScroll, ReadingTitle,
   Row, Segmented, TextArea, ToolBar, Toolbar } from "@/components/ui";
 import { PaneTab, PaneTabRow, PaneTabs, TabPlace } from "@/components/ui/pane";
 import { Actions } from "@/components/ui/actions";
 import { attachRowMenus } from "@/components/ui/menus";
-import type { MailAccount, MailBody, MailChange, MailDraft, MailLabel, MailMessage, MailParty, MailSync, MailThread } from "@/mail/mail";
+import { NotificationToaster } from "@/components/ui/notifications";
+import type { MailAccount, MailBody, MailChange, MailDraft, MailLabel, MailMessage, MailParty, MailSenderRoute, MailSplit, MailSync, MailThread } from "@/mail/mail";
 import { row, type Page } from "../model";
 
 const MailPane = lazy(() => import("../../client/mail/mail-pane"));
@@ -43,16 +44,39 @@ const TOPICS = ["Book club: December pick", "Water bill share", "Your hold is re
   "Your order has shipped", "A note on your wishlist", "Weekly digest", "Receipt for your purchase", "Garden fence", "Quarterly plan"];
 for (let index = 0; index < 60; index++) SEEDS.push({ subject: TOPICS[index % TOPICS.length]!, hours: 170 + index * 30, from: [[priya, tom, lena, maya][index % 4]!], text: [`Older mail, number ${index + 1}, so the list has pages to read in.`] });
 
-type Held = { thread: MailThread; messages: MailMessage[]; bodies: Record<string, MailBody> };
+type Held = { thread: MailThread; messages: MailMessage[]; bodies: Record<string, MailBody>; category: string };
 let held: Held[] = [];
 let drafts: MailDraft[] = [];
 let accounts: MailAccount[] = [];
 let mode: Scenario = "syncing";
-const LABELS: MailLabel[] = [
-  { id: "inbox", name: "Inbox", role: "inbox", unread: 0, threads: 40 }, { id: "starred", name: "Starred", role: "starred", unread: 0, threads: 40 }, { id: "sent", name: "Sent", role: "sent", unread: 0, threads: 40 },
-  { id: "drafts", name: "Drafts", role: "drafts", unread: 0, threads: 40 }, { id: "all", name: "All mail", role: null, unread: 0, threads: 40 },
-  { id: "l1", name: "Japan trip", role: null, unread: 0, threads: 40 }, { id: "l2", name: "House", role: null, unread: 0, threads: 40 }, { id: "l3", name: "Receipts", role: null, unread: 0, threads: 40 }, { id: "l4", name: "Conduit", role: null, unread: 0, threads: 40 },
+const LABELS: Omit<MailLabel, "unread" | "threads">[] = [
+  { id: "inbox", name: "Inbox", role: "inbox" }, { id: "starred", name: "Starred", role: "starred" }, { id: "sent", name: "Sent", role: "sent" }, { id: "drafts", name: "Drafts", role: "drafts" }, { id: "all", name: "All mail", role: null },
+  { id: "category-primary", name: "Primary", role: "category" }, { id: "category-promotions", name: "Promotions", role: "category" }, { id: "category-updates", name: "Updates", role: "category" },
+  { id: "l1", name: "Japan trip", role: null }, { id: "l2", name: "House", role: null }, { id: "l3", name: "Receipts", role: null }, { id: "l4", name: "Conduit", role: null },
 ];
+// The account's splits, in order: more with mail than are tabs, one view (it does not take), one empty, and the last taking what none took.
+// `passes` stands in for the hub reading `filter`.
+const PEOPLE = [maya, tom, priya].map((one) => one.address), CHORES = /order|receipt|wishlist|purchase|digest|outage|hold|welcome/i;
+const SPLITS: (Omit<MailSplit, "threads" | "unread"> & { passes: (thread: MailThread) => boolean })[] = [
+  { id: "people", name: "People", filter: "from:(maya OR tom OR priya)", takes: true, by: "person", passes: (thread) => thread.from.some((one) => PEOPLE.includes(one.address)) && !CHORES.test(thread.subject) },
+  { id: "work", name: "Work", filter: "from:(lena OR github)", takes: true, by: "agent", passes: (thread) => thread.from.some((one) => /^(lena|hello@github)/.test(one.address)) },
+  { id: "travel", name: "Travel", filter: "from:(ryokan OR harbourair)", takes: true, by: "person", passes: (thread) => thread.from.some((one) => /ryokan|harbourair/.test(one.address)) },
+  { id: "bills", name: "Bills", filter: "subject:(bill OR invoice)", takes: true, by: "conduit", passes: (thread) => /bill|invoice/i.test(thread.subject) },
+  { id: "waiting", name: "Waiting on me", filter: "is:unread from:people", takes: false, by: "person", passes: (thread) => thread.unread > 0 && thread.from.some((one) => [...PEOPLE, lena.address].includes(one.address)) },
+  { id: "shopping", name: "Shopping", filter: "subject:(order OR receipt OR wishlist)", takes: true, by: "agent", passes: (thread) => /order|receipt|wishlist|purchase/i.test(thread.subject) },
+  { id: "updates", name: "Updates", filter: "subject:(digest OR outage OR hold)", takes: true, by: "conduit", passes: (thread) => CHORES.test(thread.subject) },
+  { id: "newsletters", name: "Newsletters", filter: "subject:newsletter", takes: true, by: "person", passes: (thread) => /newsletter/i.test(thread.subject) },
+  { id: "other", name: "Other", filter: "", takes: true, by: "conduit", passes: () => true },
+];
+let pins = new Map<string, string>();
+let senders: MailSenderRoute[] = [];
+/** As the hub sorts: in the inbox, its pin, else its sender's route, else the first taking split it passes, and every view it passes. */
+function sortHeld(one: Held) {
+  const inbox = one.thread.labels.includes("inbox"), kept = one.thread.labels.filter((label) => !/^(split|category)-/.test(label));
+  const from = one.thread.from.findLast((party) => party.address !== me.address)?.address;
+  const taking = pins.get(one.thread.id) ?? senders.find((route) => route.address === from)?.split ?? SPLITS.find((split) => split.takes && split.passes(one.thread))!.id;
+  one.thread = { ...one.thread, labels: inbox ? [...kept, one.category, `split-${taking}`, ...SPLITS.filter((split) => !split.takes && split.passes(one.thread)).map((split) => `split-${split.id}`)] : kept };
+}
 
 function seed(scenario: Scenario) {
   mode = scenario;
@@ -61,6 +85,7 @@ function seed(scenario: Scenario) {
       : { state: "syncing", backfill: { done: 4210, total: 18532 }, at: new Date().toISOString() },
     sync: { paused: false, since: 1095, bodies: 90, tabs: ["promotions", "updates"] },
     held: { messages: 12_430, threads: 7_918, bodies: 3_210, bytes: 432_013_312, oldest: ago(24 * 620), total: 31_225 } }];
+  pins = new Map(); senders = [];
   held = SEEDS.map((one, index) => {
     const id = `t${index + 1}`;
     const messages = one.from.map((from, at): MailMessage => ({ id: `${id}m${at + 1}`, thread: id, account: "a1", from, to: from === me ? [one.from[0]!] : [me, ...(one.from.includes(tom) && from !== tom ? [tom] : [])],
@@ -73,8 +98,10 @@ function seed(scenario: Scenario) {
     const thread: MailThread = { id, account: "a1", subject: one.subject, from: [...new Map(one.from.map((from) => [from.address, from])).values()], date: last.date, snippet: last.snippet,
       count: messages.length, unread: messages.filter((message) => message.unread).length, labels: ["inbox", ...(one.labels ?? []), ...(one.starred ? ["starred"] : [])],
       starred: Boolean(one.starred), attachments: Boolean(one.file), draft: false };
-    return { thread, messages, bodies };
+    const category = one.from.some((from) => from.address.startsWith("hello@")) ? /GitHub|Northwind|Harbour/.test(one.from[0]!.name) ? "category-updates" : "category-promotions" : "category-primary";
+    return { thread, messages, bodies, category };
   });
+  held.forEach(sortHeld);
   drafts = [draft({ id: "d1", thread: "t1", to: [maya, tom], subject: "Re: Lease renewal for 14 Albert St", text: "Thanks Maya, that's great. I'll sign it tonight.", reply: "t1m4", state: "saved" })];
   held[0]!.thread.draft = true;
 }
@@ -82,7 +109,8 @@ function draft(input: Partial<MailDraft> & { id: string }): MailDraft {
   return { account: "a1", thread: null, to: [], cc: [], bcc: [], subject: "", text: "", reply: null, forward: null, updated: new Date().toISOString(), state: "saved", ...input };
 }
 const holds = (label: string, thread: MailThread) => label === "all" || thread.labels.includes(label) || (label === "drafts" && thread.draft);
-const labelsNow = () => LABELS.map((label) => ({ ...label, unread: held.filter((one) => holds(label.id, one.thread)).reduce((sum, one) => sum + one.thread.unread, 0) }));
+const counted = (id: string) => { const all = held.filter((one) => holds(id, one.thread)); return { threads: all.length, unread: all.filter((one) => one.thread.unread).length }; };
+const labelsNow = (): MailLabel[] => [...LABELS.slice(0, 5), ...SPLITS.map((split) => ({ id: `split-${split.id}`, name: split.name, role: "split" as const })), ...LABELS.slice(5)].map((label) => ({ ...label, ...counted(label.id) }));
 const tell = (threads?: string[]) => window.dispatchEvent(new CustomEvent("conduit:mail-changed", { detail: { type: "mail_changed", account: "a1", threads } }));
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const answer = (body: unknown, status = 200) => new Response(body === undefined ? null : JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -94,6 +122,22 @@ async function mailRoute(url: URL, init: RequestInit = {}): Promise<Response> {
   const message = (id: string) => held.flatMap((one) => one.messages).find((one) => one.id === id);
   if (path === "/accounts") return method === "POST" ? answer({ error: "refused", message: "The source refused the sign-in: check the app password." }, 400) : answer({ accounts });
   if (/^\/accounts\/[^/]+\/labels$/.test(path)) return answer({ labels: labelsNow() });
+  if (/^\/accounts\/[^/]+\/sorting$/.test(path)) return answer({ splits: SPLITS.map(({ passes: _, ...split }) => ({ ...split, ...counted(`split-${split.id}`) })), rules: [], senders, guide: "" });
+  if (/^\/accounts\/[^/]+\/senders$/.test(path)) {
+    senders = [...senders.filter((route) => route.address !== body.address), ...(body.split ? [{ address: String(body.address), split: String(body.split) }] : [])];
+    const theirs = held.filter((one) => one.thread.from.some((from) => from.address === body.address));
+    theirs.forEach(sortHeld);
+    tell(theirs.map((one) => one.thread.id));
+    return answer({ senders });
+  }
+  if (path === "/move") {
+    const ids = body.threads as string[];
+    for (const id of ids) body.split ? pins.set(id, String(body.split)) : pins.delete(id);
+    const moved = held.filter((one) => ids.includes(one.thread.id));
+    moved.forEach(sortHeld);
+    tell(ids);
+    return answer({ threads: moved.map((one) => one.thread) });
+  }
   if (/^\/accounts\/[^/]+(\/resync)?$/.test(path) && accounts[0]) {
     if (method === "DELETE") { accounts = []; return answer(undefined, 204); }
     const one = accounts[0], sync = { ...one.sync, ...(body.sync as Partial<MailSync> | undefined) };
@@ -121,6 +165,7 @@ async function mailRoute(url: URL, init: RequestInit = {}): Promise<Response> {
       const unread = change.unread === undefined ? one.thread.unread : change.unread ? 1 : 0;
       one.thread = { ...one.thread, labels, unread, starred: labels.includes("starred") };
       one.messages = one.messages.map((message, at) => ({ ...message, unread: change.unread === undefined ? message.unread : change.unread && at === one.messages.length - 1 }));
+      sortHeld(one);
     }
     tell(ids);
     return answer({ threads: held.filter((one) => ids.includes(one.thread.id)).map((one) => one.thread) });
@@ -177,12 +222,14 @@ const stubMail = () => {
 
 type Scenario = "syncing" | "error" | "none";
 seed("syncing");
-function LivePane(props: { width: string }) {
+/** `toasts`: this one shows what the pane says it did (one host for the page, so a toast is not shown twice). */
+function LivePane(props: { width: string; toasts?: boolean }) {
   const [scenario, setScenario] = createSignal<Scenario>(mode);
   const [run, setRun] = createSignal(0);
   onMount(stubMail);
   const choose = (next: Scenario) => { seed(next); setScenario(next); setRun(run() + 1); };
   return <div style={{ display: "grid", gap: "var(--space-sm)", width: props.width, "max-width": "100%" }}>
+    <Show when={props.toasts}><NotificationToaster /></Show>
     <div style={{ "justify-self": "start" }}><Segmented label="Mailbox" size="sm" value={scenario()} onChange={choose} options={[{ value: "syncing", label: "Syncing" }, { value: "error", label: "Not working" }, { value: "none", label: "No account" }]} /></div>
     <div style={{ display: "flex", height: "calc(40 * var(--u-space))", overflow: "hidden", "border-radius": "var(--radius-surface)", background: "var(--background)" }}>
       <Show when={run() + 1} keyed><Suspense><MailPane account="default" onAccount={() => {}} onSettings={() => {}}
@@ -195,10 +242,10 @@ function LivePane(props: { width: string }) {
 /* --- The pieces, each in its forms. --- */
 
 const box = (width: number) => ({ width: `min(100%, calc(${width} * var(--u-space)))` });
-const rows = () => <div style={box(30)}>
+const rows = (width = 30) => <div style={box(width)}>
   <DashDay>Today</DashDay>
-  <MailRow from="Maya, me, Tom" count={4} subject="Lease renewal for 14 Albert St" snippet="Tom's fine with the twelve months." time="09:42" unread starred attachments draft />
-  <MailRow from="Hana Sato" subject="Ryokan in Shirakawa-go" snippet="Your stay on 3–5 December is confirmed." time="08:15" unread current />
+  <MailRow from="Maya, me, Tom" count={4} subject="Lease renewal for 14 Albert St" snippet="Tom's fine with the twelve months." time="09:42" unread starred attachments draft labels={["House"]} />
+  <MailRow from="Hana Sato" subject="Ryokan in Shirakawa-go" snippet="Your stay on 3–5 December is confirmed." time="08:15" unread current labels={["Japan trip", "Receipts"]} />
   <MailRow from="Priya, me" count={2} subject="Saturday climbing?" snippet="Gym opens at 9." time="07:20" />
   <MailRow from="Northwind Energy" subject="Your November bill is ready" snippet="Amount due $142.30." time="Yesterday" attachments />
 </div>;
@@ -220,20 +267,22 @@ const WIDE = "calc(72 * var(--u-space))", NARROW = "calc(30 * var(--u-space))";
 export const mailPage: Page = {
   title: "Mail", rail: "Blocks",
   summary: "Mail in a Work pane: a label's threads (MailRow) beside the open thread (ReaderSplit) while the pane holds both, else one at a time. The thread reads in a ReadingScroll under a ReadingTitle, its messages EmailItems (earlier ones folded to a line), a reply a DesktopComposer with ComposerLines and a DraftState. The panes below run the real MailPane over a made-up mailbox.",
-  preview: rows,
+  preview: () => rows(),
   usage: `import { MailRow, ReaderSplit, ReadingScroll, ReadingTitle, EmailItem, ComposerLine, DraftState, ToolBar } from "@/components/ui";
 
 <ReaderSplit show={open() ? "reader" : "list"} onFold={setFolded}
   list={<><ToolBar>{labels}{search}</ToolBar><ReadingScroll><MailRow from subject snippet time unread starred attachments draft current /></ReadingScroll></>}
   reader={<><ToolBar end={verbs}>{back}</ToolBar><ReadingScroll><ReadingTitle>{subject}</ReadingTitle><EmailItem folded snippet onOpen /><EmailItem attachments actions>…</EmailItem></ReadingScroll></>} />`,
   examples: [
-    row("MailPane · wide", "the real pane over a made-up mailbox: open a thread, triage it (its row's menu too), write and send; the list reads in older pages as it scrolls", () => <LivePane width={WIDE} />, { surfaces: ["ground"], source: "mail/mail-pane.tsx" }),
+    row("MailPane · wide", "the real pane over a made-up mailbox: the inbox's splits as tabs (more in the label chooser, which also switches to Gmail's tabs), open a thread, triage or move it (its row's menu too), write and send; the list reads in older pages as it scrolls", () => <LivePane width={WIDE} toasts />, { surfaces: ["ground"], source: "mail/mail-pane.tsx" }),
     row("MailPane · narrow", "too narrow for both: the list, then a thread in its place with Back; Escape steps back", () => <LivePane width={NARROW} />, { surfaces: ["ground"], source: "mail/mail-pane.tsx" }),
     row("MailSettings", "Settings › Mail over the same mailbox: each account's sync (Pause, Remove), what it holds (Read in again), how far back it keeps mail and text, and the form to add one (this stub refuses every sign-in, to show the hub's sentence)", () => {
       onMount(stubMail);
       return <div style={box(40)}><Suspense><MailSettings /></Suspense></div>;
     }, { surfaces: ["frost"], source: "settings/mail-settings.tsx" }),
-    row("MailRow", "unread (the dot, lit title and subject), starred, with attachments and a draft; current; read", rows, { surfaces: ["ground"], phone: true, code: "<MailRow from count subject snippet time unread starred attachments draft current />" }),
+    row("MailRow", "unread (the dot, lit title and subject), starred, with attachments and a draft; current; read; its own labels as quiet chips before the time", () => rows(), { surfaces: ["ground"], phone: true, code: "<MailRow from count subject snippet time unread starred attachments draft current labels />" }),
+    row("MailRow · narrow", "the text gives way first, then the labels (the last first), the subject only once they are gone", () => rows(20), { surfaces: ["ground"], code: "<MailRow labels={names} />" }),
+    row("MailLabels", "a thread's own labels by its title", () => <div style={box(30)}><ReadingTitle>Ryokan in Shirakawa-go: two nights confirmed<MailLabels names={["Japan trip", "Receipts"]} /></ReadingTitle></div>, { surfaces: ["ground"], code: "<ReadingTitle>{subject}<MailLabels names /></ReadingTitle>" }),
     row("ReaderSplit · both", "the frame holds --split-list beside --split-reader: both stand", () => split(60, "reader"), { surfaces: ["ground"], code: '<ReaderSplit show list reader onFold />' }),
     row("ReaderSplit · folded", "narrower than both minimums: one at a time, the other faded out where it stands", () => split(30, "reader"), { surfaces: ["ground"], code: '<ReaderSplit show="reader" />' }),
     row("EmailItem · open", "attachments under the text, and its foot of verbs", () => <div style={box(34)}>{email({})}</div>, { surfaces: ["ground"], code: "<EmailItem from to time quoted attachments actions>…</EmailItem>" }),
@@ -245,5 +294,5 @@ export const mailPage: Page = {
       <IconButton label="Back"><Icons.Back /></IconButton></ToolBar>, { code: "<ToolBar end={verbs}>{back}</ToolBar>" }),
     row("ReadingScroll · ReadingTitle", "one column at the reading width, the pane scrolling it; the name at the title role", () => <div style={{ display: "flex", ...box(30), height: "calc(10 * var(--u-space))" }}><ReadingScroll><ReadingTitle>Ryokan in Shirakawa-go: two nights confirmed</ReadingTitle><For each={[1, 2, 3]}>{() => <p>Dinner is served at 18:30 in the hearth room.</p>}</For></ReadingScroll></div>, { surfaces: ["ground"] }),
   ],
-  api: ["MailRow", "ReaderSplit", "ReadingScroll", "ReadingTitle", "EmailItem", "ComposerLine", "DraftState", "ToolBar"],
+  api: ["MailRow", "MailLabels", "ReaderSplit", "ReadingScroll", "ReadingTitle", "EmailItem", "ComposerLine", "DraftState", "ToolBar"],
 };

@@ -14,12 +14,15 @@ export const SEARCH_REMOTE_MS = 600;
 const holds = (label: string, thread: MailThread) => label === "all" || thread.labels.includes(label)
   || (label === "starred" && thread.starred) || (label === "drafts" && thread.draft);
 
+/** A change as the list draws it: a triage, or a move (`to`, a split's label) out of every taking split (`taking`, their labels). */
+type Change = Omit<MailChange, "threads" | "messages"> & { move?: { to: string; taking: string[] } };
+
 /** What a change makes of a thread, as the hub will: null when it goes (trashed). */
-function predict(thread: MailThread, change: MailChange): MailThread | null {
+function predict(thread: MailThread, change: Change): MailThread | null {
   if (change.trash) return null;
-  // A category sorts the inbox (the source's or Conduit's), so a thread taken out of the inbox leaves it too.
-  const out = (label: string) => change.remove?.includes(label) || (change.remove?.includes("inbox") && /^(category|sort)-/.test(label));
-  const labels = [...new Set([...thread.labels.filter((label) => !out(label)), ...(change.add ?? [])])];
+  // A category or a split sorts the inbox, so a thread taken out of the inbox leaves them too; a move leaves the views it passes.
+  const out = (label: string) => change.remove?.includes(label) || (change.remove?.includes("inbox") && /^(category|split)-/.test(label)) || change.move?.taking.includes(label);
+  const labels = [...new Set([...thread.labels.filter((label) => !out(label)), ...(change.add ?? []), ...(change.move ? [change.move.to] : [])])];
   const unread = change.unread === undefined ? thread.unread : change.unread ? Math.max(thread.unread, 1) : 0;
   return { ...thread, labels, unread, starred: labels.includes("starred") };
 }
@@ -93,8 +96,8 @@ export function createMailList(account: () => string | null, label: () => string
   };
 
   const keeps = (thread: MailThread) => Boolean(query()) || holds(label(), thread);
-  /** Drawn at once; the hub's answer then stands, and a refusal puts the rows back and says why. `onThreads` hears each outcome. */
-  const triage = async (threads: MailThread[], change: Omit<MailChange, "threads" | "messages">, onThreads?: (threads: MailThread[]) => void) => {
+  /** Drawn at once as `change` makes the threads; the hub's answer (`ask`) then stands, and a refusal puts the rows back and says why. `onThreads` hears each outcome. */
+  const act = async (threads: MailThread[], change: Change, ask: (ids: string[]) => Promise<MailThread[] | void>, onThreads?: (threads: MailThread[]) => void) => {
     const before = store.threads.slice();
     const ids = threads.map((thread) => thread.id);
     const predicted = threads.map((thread) => predict(thread, change)).filter((thread): thread is MailThread => Boolean(thread));
@@ -108,14 +111,21 @@ export function createMailList(account: () => string | null, label: () => string
     };
     apply(predicted, change.trash ? ids : []);
     try {
-      const answer = await mailApi.change({ ...change, threads: ids });
-      apply(answer, ids.filter((id) => !answer.some((thread) => thread.id === id)));
+      const answer = await ask(ids);
+      if (answer) apply(answer, ids.filter((id) => !answer.some((thread) => thread.id === id)));
+      return true;
     } catch (reason) {
       show(before);
       onThreads?.(threads);
       toast.error(failure(reason));
+      return false;
     }
   };
+  const triage = (threads: MailThread[], change: Omit<MailChange, "threads" | "messages">, onThreads?: (threads: MailThread[]) => void) =>
+    act(threads, change, (ids) => mailApi.change({ ...change, threads: ids }), onThreads);
+  /** Into a split (its id, its label `split-<id>`): out of the taking splits (`taking`, their labels), drawn at once. `ask` is the hub's move, or a sender's route (whose threads are then told). */
+  const move = (threads: MailThread[], split: string, taking: string[], ask: (ids: string[]) => Promise<MailThread[] | void>, onThreads?: (threads: MailThread[]) => void) =>
+    act(threads, { move: { to: `split-${split}`, taking } }, ask, onThreads);
 
   /** The hub's word that mail changed: the shown pages are read again when a named thread is shown or could now be. */
   const heard = async (threads?: string[]) => {
@@ -127,6 +137,6 @@ export function createMailList(account: () => string | null, label: () => string
     if (head.threads.some((thread) => threads.includes(thread.id))) await reread();
   };
 
-  return { threads: () => store.threads, ready, next, paging, query, searchingRemote, load, more, search, triage, heard, holds };
+  return { threads: () => store.threads, ready, next, paging, query, searchingRemote, load, more, search, triage, move, heard, holds };
 }
 export type MailList = ReturnType<typeof createMailList>;

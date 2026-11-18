@@ -3,6 +3,19 @@
 @media (hover: hover) { .ui-row[data-mail]:hover .ui-mail-subject { color: var(--foreground); } }
 .ui-mail-draft { margin-right: var(--space-xs); }
 .ui-mail-count { margin-left: var(--space-xs); color: var(--muted-foreground); font: var(--weight-light) var(--text-caption)/var(--leading-row) var(--font-data); }
+/* The text gives way first, then the labels (the last first), and the subject only once they are gone. */
+.ui-row[data-mail] > .ui-row-context { display: flex; align-items: center; }
+.ui-row[data-mail] :is(.ui-mail-subject, .ui-mail-snippet) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-row[data-mail] .ui-mail-subject { flex: 0 1 auto; }
+.ui-row[data-mail] .ui-mail-snippet { flex: 1 1 0; margin-left: var(--space-xs); }
+.ui-row[data-mail] .ui-mail-draft { flex: none; }
+/* A label that no longer fits whole wraps out of sight, never cut: the empty first item lets even the first one wrap. */
+.ui-row[data-mail] .ui-mail-labels { min-width: 0; flex: 0 100 auto; flex-wrap: wrap; justify-content: flex-end; height: calc(var(--text-caption) * var(--leading-row)); overflow: hidden; }
+.ui-row[data-mail] .ui-mail-labels::before { height: 100%; content: ""; }
+.ui-row[data-mail] .ui-mail-label { flex: none; }
+.ui-mail-labels { display: inline-flex; margin-left: var(--space-xs); vertical-align: middle; }
+.ui-mail-label { margin-left: var(--space-2xs); overflow: hidden; border-radius: var(--radius-inset); background: var(--tint); padding: 0 var(--space-xs); color: var(--muted-foreground);
+  font: var(--weight-rest) var(--text-caption)/var(--leading-row) var(--font-sans); text-overflow: ellipsis; white-space: nowrap; }
 .ui-mail-meta { display: inline-flex; align-items: center; gap: var(--space-2xs); }
 .ui-mail-meta > svg { width: var(--icon-xs); height: var(--icon-xs); }
 .ui-mail-meta > svg[data-starred] { fill: currentColor; }

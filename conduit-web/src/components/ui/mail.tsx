@@ -1,19 +1,24 @@
-import { createSignal, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
+import { createSignal, For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js";
 import * as Icons from "./icons";
 import { Dot } from "./nav";
 import { Row, type RowProps } from "./row";
 
-/** A thread in a mail list, on one line: who wrote (and how many messages), the subject before the start of its text, then
- *  what it holds and when. Unread is the dot in its mark's place and a lit title. */
+/** A thread's own labels, by name, as quiet chips. In a row they give way (the last first) before its subject does. */
+export const MailLabels = (props: { names: string[] }) =>
+  <Show when={props.names.length}><span class="ui-mail-labels"><For each={props.names}>{(name) => <span class="ui-mail-label">{name}</span>}</For></span></Show>;
+
+/** A thread in a mail list, on one line: who wrote (and how many messages), the subject before the start of its text, its
+ *  labels, then what it holds and when. Unread is the dot in its mark's place and a lit title. */
 export function MailRow(props: Omit<RowProps, "density" | "lead" | "label" | "context" | "meta" | "children"> & {
   from: string; count?: number; subject: string; snippet: string; time: string; dateTime?: string;
-  unread?: boolean; starred?: boolean; attachments?: boolean; draft?: boolean;
+  unread?: boolean; starred?: boolean; attachments?: boolean; draft?: boolean; labels?: string[];
 }) {
-  const [local, rest] = splitProps(props, ["from", "count", "subject", "snippet", "time", "dateTime", "unread", "starred", "attachments", "draft"]);
+  const [local, rest] = splitProps(props, ["from", "count", "subject", "snippet", "time", "dateTime", "unread", "starred", "attachments", "draft", "labels"]);
   return <Row density="list" element="button" {...rest} data-mail="" data-unread={local.unread ? "" : undefined}
     lead={local.unread ? <Dot tone="unread" aria-label="Unread" /> : undefined}
     label={<>{local.from}<Show when={(local.count ?? 0) > 1}><span class="ui-mail-count">{local.count}</span></Show></>}
-    context={<><Show when={local.draft}><span class="ui-mail-draft">Draft</span></Show><span class="ui-mail-subject">{local.subject}</span> · {local.snippet}</>}
+    context={<><Show when={local.draft}><span class="ui-mail-draft">Draft</span></Show><span class="ui-mail-subject">{local.subject}</span>
+      <span class="ui-mail-snippet">· {local.snippet}</span><MailLabels names={local.labels ?? []} /></>}
     meta={<span class="ui-mail-meta"><Show when={local.attachments}><Icons.Attach aria-label="Attachments" /></Show>
       <Show when={local.starred}><Icons.Star data-starred="" aria-label="Starred" /></Show><time dateTime={local.dateTime}>{local.time}</time></span>} />;
 }
