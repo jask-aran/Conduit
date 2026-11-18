@@ -30,8 +30,8 @@ export default function MailPane(props: {
   onAccount(id: string): void;
   /** Open Settings at the mail section. */
   onSettings(): void;
-  /** The pane's header, given what mail adds to its actions (Compose, the error dot) and its modes (the inbox's splits). */
-  header(actions: JSX.Element, modes?: JSX.Element): JSX.Element;
+  /** The pane's header, given mail's own parts of it: its title (the label chooser), its modes (the inbox's splits) and its actions (search, Compose, the error dot). */
+  header(parts: { title: JSX.Element; modes: JSX.Element; actions: JSX.Element }): JSX.Element;
 }) {
   // A failure to read is said in the pane, never thrown into it.
   const [trouble, setTrouble] = createSignal("");
@@ -189,8 +189,7 @@ export default function MailPane(props: {
 
   const foot = () => list.searchingRemote() ? "Searching older mail"
     : status()?.backfill && !list.query() ? `Reading in older mail · ${status()!.backfill!.done.toLocaleString()} of ${status()!.backfill!.total.toLocaleString()}` : "";
-  const listColumn = () => <>
-    <ToolBar>{chooser()}
+  const search = () => <Show when={account()}>
       <LeadInput kind="tool" ref={(element) => { field = element; }} aria-label="Search mail" placeholder="Search mail" value={list.query()}
         onInput={(event) => void list.search(event.currentTarget.value).catch((reason) => toast.error(failure(reason)))}
         onClear={() => void list.search("")}
@@ -198,7 +197,8 @@ export default function MailPane(props: {
           if (event.key === "ArrowDown") { event.preventDefault(); (rowsShown().find((one) => one.tabIndex === 0) ?? rowsShown()[0])?.focus(); }
           if (event.key === "Escape" && list.query()) { event.preventDefault(); event.stopPropagation(); void list.search(""); }
         }} />
-    </ToolBar>
+  </Show>;
+  const listColumn = () => <>
     <ReadingScroll ref={(element) => { rows = element; }} onScroll={(event) => nearEnd(event.currentTarget)} onKeyDown={walk} aria-label={labelName()}>
       <Show when={list.threads().length} fallback={<Empty>{list.query() ? "Nothing found" : `Nothing in ${labelName()}`}</Empty>}>
         <div><For each={list.threads()}>{(thread, index) => <><Show when={dayOver(index())}>{(day) => <DashDay>{day()}</DashDay>}</Show>{row(thread)}</>}</For></div>
@@ -211,8 +211,7 @@ export default function MailPane(props: {
   const back = () => folded() ? backToList : undefined;
   const readerColumn = () => <Show when={writing()} fallback={<Show when={open()} keyed fallback={<Empty>No thread open</Empty>}>{(id) =>
     <MailThreadView id={id} own={own()} labels={labels()} list={list} moves={moves} back={back()} onGone={backToList} />}</Show>}>{(draft) => <>
-    <ToolBar><Show when={folded()}><HeaderButton label="Back" icon={<Icons.Back />} onClick={backToList} /></Show></ToolBar>
-    <ReadingScroll><ReadingTitle>New message</ReadingTitle><DraftComposer draft={draft()} subject autofocus onDone={backToList} /></ReadingScroll>
+    <ReadingScroll><ReadingTitle lead={<Show when={folded()}><HeaderButton label="Back" icon={<Icons.Back />} onClick={backToList} /></Show>}>New message</ReadingTitle><DraftComposer draft={draft()} subject autofocus onDone={backToList} /></ReadingScroll>
   </>}</Show>;
 
   // Escape steps out one level: a thread that took the pane hands it back to the list. In a field it is the field's.
@@ -224,7 +223,7 @@ export default function MailPane(props: {
   };
 
   return <SheetFill ref={createArtWindow(true)} class="pane-mail" onKeyDown={escape}>
-    {props.header(headerActions(), tabs())}
+    {props.header({ title: account() ? chooser() : <>Mail</>, modes: tabs(), actions: <>{search()}{headerActions()}</> })}
     <Show when={!accounts.loading || accounts.latest} fallback={<Loading kind="pane"><Spinner />Loading mail</Loading>}>
       <Show when={account()} fallback={trouble() ? <Empty role="alert">{trouble()}</Empty> : <Empty><div><Icons.Mail /><p>Mail is set up in Settings.</p><Button variant="ghost" outline size="sm" onClick={() => props.onSettings()}>Open Settings</Button></div></Empty>}>
         <Show when={list.ready()} fallback={<Show when={trouble()} fallback={<Loading kind="pane"><Spinner />Loading mail</Loading>}><Empty role="alert">{trouble()}</Empty></Show>}>

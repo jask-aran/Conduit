@@ -1,6 +1,6 @@
 import { createSignal, For, onCleanup, Show, Suspense, type JSX } from "solid-js";
 import type { MailBody, MailDraft, MailLabel, MailMessage, MailParty, MailSplit, MailThread } from "@/mail/mail";
-import { Answer, Button, EmailItem, Empty, HeaderButton, IconButton, Icons, Loading, MailLabels, ReadingScroll, ReadingTitle, Row, Spinner, ToolBar, clockTime } from "@/components/ui";
+import { Answer, Button, EmailItem, Empty, HeaderButton, IconButton, Icons, Loading, MailLabels, ReadingScroll, ReadingTitle, Row, Spinner, clockTime } from "@/components/ui";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
 import { MailPage } from "@/components/ui/mail-page";
@@ -131,11 +131,7 @@ export function MailThreadView(props: { id: string; own: string; labels: MailLab
     catch (reason) { toast.error(failure(reason)); }
   };
 
-  // The thread's verbs stand at the bar's start, beside the list they act on, not across the pane from it.
-  const bar = (verbs?: JSX.Element) => <ToolBar>
-    <Show when={props.back}>{(back) => <HeaderButton label="Back" icon={<Icons.Back />} onClick={back()} />}</Show>
-    {verbs}
-  </ToolBar>;
+  const back = () => <Show when={props.back}>{(back) => <HeaderButton label="Back" icon={<Icons.Back />} onClick={back()} />}</Show>;
   const verbs = (current: MailThread) => <>
     <For each={threadVerbs(current, props.list, ours).slice(0, 3)}>{(verb) => <IconButton label={verb.label} disabled={verb.disabled} onClick={verb.run}>{verb.icon()}</IconButton>}</For>
     <Show when={props.moves.splits().length}><DropdownMenu modal={false} placement="bottom-end">
@@ -178,14 +174,11 @@ export function MailThreadView(props: { id: string; own: string; labels: MailLab
     </EmailItem>;
   };
 
-  return <Show when={thread()} fallback={<>{bar()}<Show when={failed()} fallback={<Loading kind="pane"><Spinner />Opening the thread</Loading>}><Empty role="alert">{failed()}</Empty></Show></>}>{(current) =>
-    <>
-      {bar(verbs(current()))}
-      <ReadingScroll>
-        <ReadingTitle>{current().subject || "(no subject)"}<MailLabels names={labelNames(current(), props.labels)} /></ReadingTitle>
-        <div><For each={messages()}>{message}</For></div>
-        <For each={drafts()}>{(draft) => <DraftComposer draft={draft} autofocus subject={Boolean(draft.forward)}
-          onDone={() => setDrafts(drafts().filter((one) => one.id !== draft.id))} />}</For>
-      </ReadingScroll>
-    </>}</Show>;
+  return <Show when={thread()} fallback={<Show when={failed()} fallback={<Loading kind="pane"><Spinner />Opening the thread</Loading>}><Empty role="alert">{failed()}</Empty></Show>}>{(current) =>
+    <ReadingScroll>
+      <ReadingTitle lead={back()} actions={verbs(current())}>{current().subject || "(no subject)"}<MailLabels names={labelNames(current(), props.labels)} /></ReadingTitle>
+      <div><For each={messages()}>{message}</For></div>
+      <For each={drafts()}>{(draft) => <DraftComposer draft={draft} autofocus subject={Boolean(draft.forward)}
+        onDone={() => setDrafts(drafts().filter((one) => one.id !== draft.id))} />}</For>
+    </ReadingScroll>}</Show>;
 }

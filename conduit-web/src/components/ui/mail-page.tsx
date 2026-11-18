@@ -45,6 +45,6 @@ export function MailPage(props: { html: string; images?: boolean; title: string;
   onCleanup(() => watch.disconnect());
   // With pictures on, one addressed to the hub itself would be fetched with the person's session: its address is broken.
   const source = () => `<!doctype html><meta charset="utf-8"><base href="about:blank"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; form-action 'none'; img-src data:${props.images ? " https:" : ""}">`
-    + `<style>html{background:#fff;color:#1a1a1a;font:14px/1.5 system-ui,sans-serif;color-scheme:light}body{margin:0;overflow-wrap:anywhere}img{max-width:100%}${props.images ? "" : "img{display:none!important}"}</style>${props.images ? props.html.replaceAll(location.host, "hub.invalid") : props.html}`;
+    + `<style>html{background:#fff;color:#1a1a1a;font:14px/1.5 system-ui,sans-serif;color-scheme:light}body{margin:0;padding:12px 16px;overflow-wrap:anywhere}img{max-width:100%}${props.images ? "" : "img{display:none!important}"}</style>${props.images ? props.html.replaceAll(location.host, "hub.invalid") : props.html}`;
   return <iframe ref={frame} class="ui-mail-page" title={props.title} sandbox="allow-same-origin" scrolling="no" srcdoc={source()} onLoad={ready} />;
 }

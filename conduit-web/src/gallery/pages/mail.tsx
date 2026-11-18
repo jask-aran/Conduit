@@ -1,7 +1,6 @@
 import { createSignal, For, lazy, onMount, Show, Suspense } from "solid-js";
 import { Answer, Button, ComposerField, ComposerLine, DashDay, DesktopComposer, DraftState, EmailItem, Icons, IconButton, MailLabels, MailRow, PaneHeader, ReaderSplit, ReadingScroll, ReadingTitle,
   Row, Segmented, TextArea, ToolBar, Toolbar } from "@/components/ui";
-import { PaneTab, PaneTabRow, PaneTabs, TabPlace } from "@/components/ui/pane";
 import { Actions } from "@/components/ui/actions";
 import { attachRowMenus } from "@/components/ui/menus";
 import { NotificationToaster } from "@/components/ui/notifications";
@@ -233,8 +232,7 @@ function LivePane(props: { width: string; toasts?: boolean }) {
     <div style={{ "justify-self": "start" }}><Segmented label="Mailbox" size="sm" value={scenario()} onChange={choose} options={[{ value: "syncing", label: "Syncing" }, { value: "error", label: "Not working" }, { value: "none", label: "No account" }]} /></div>
     <div style={{ display: "flex", height: "calc(40 * var(--u-space))", overflow: "hidden", "border-radius": "var(--radius-surface)", background: "var(--background)" }}>
       <Show when={run() + 1} keyed><Suspense><MailPane account="default" onAccount={() => {}} onSettings={() => {}}
-        header={(actions) => <PaneHeader actions={<>{actions}<Actions kind="pane"><IconButton kind="pane" label="Close pane"><Icons.Close /></IconButton></Actions></>}>
-          <PaneTabRow><PaneTabs><TabPlace><PaneTab title="Mail" shown icon={<Icons.Mail />} onClose={() => {}} /></TabPlace></PaneTabs></PaneTabRow></PaneHeader>} /></Suspense></Show>
+        header={(parts) => <PaneHeader modes={parts.modes} actions={<>{parts.actions}<Actions kind="pane"><IconButton kind="pane" label="Close pane"><Icons.Close /></IconButton></Actions></>}>{parts.title}</PaneHeader>} /></Suspense></Show>
     </div>
   </div>;
 }

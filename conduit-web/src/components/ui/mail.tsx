@@ -52,8 +52,9 @@ export function ReadingScroll(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?
   return <div {...rest} class="ui-reading-scroll"><div class="ui-reading-column">{local.children}</div></div>;
 }
 
-/** The name of what is read, at the title role: it sits in a narrow pane as in a wide one. */
-export const ReadingTitle = (props: { children: JSX.Element }) => <h1 class="ui-reading-title">{props.children}</h1>;
+/** The name of what is read, at the title role (it sits in a narrow pane as in a wide one), with what can be done to it on its line. */
+export const ReadingTitle = (props: { children: JSX.Element; /** Before the name: the way back, where the column took the pane. */ lead?: JSX.Element; /** What can be done to it, at the line's end. */ actions?: JSX.Element }) =>
+  <header class="ui-reading-head">{props.lead}<h1 class="ui-reading-title">{props.children}</h1><Show when={props.actions}><div class="ui-reading-actions" role="toolbar">{props.actions}</div></Show></header>;
 
 const DRAFT_STATE = { saving: "Saving", saved: "Saved", sending: "Sending", failed: "Not saved" } as const;
 /** Where a draft stands, in the composer's quiet aside; a failure says why. */

@@ -36,6 +36,13 @@
 /* A message read at length: room between its head, its text and the next one, which a line in a chat does without. */
 .ui-reading-column .ui-email:not([data-folded]) { gap: var(--space-md); padding-block: var(--space-xl); }
 .ui-reading-column .ui-email-foot { padding-top: var(--space-sm); }
+.ui-reading-head { display: flex; min-width: 0; align-items: flex-start; gap: var(--space-sm); }
+.ui-reading-head > .ui-reading-title { min-width: 0; flex: 1; }
+.ui-reading-actions { display: flex; flex: none; align-items: center; gap: var(--space-2xs); }
+/* A chooser standing as a pane's title reads as the title: where you are, in the text colour. */
+.ui-header-title > .ui-input[data-bare] { color: var(--foreground); font-weight: var(--weight-strong); }
+/* A search on a pane's top edge keeps a measure of its own, beside the pane's actions. */
+.ui-pane-header .ui-lead-input:where([data-lead-input="tool"]) { flex: none; width: var(--measure-lg); }
 .ui-reading-title { margin: 0; color: var(--foreground); font: var(--weight-strong) var(--text-title)/var(--leading-tight) var(--font-sans); overflow-wrap: anywhere; }
 
 .ui-draft-state { color: var(--muted-foreground); font-size: var(--text-caption); white-space: nowrap; }
