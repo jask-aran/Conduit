@@ -45,21 +45,39 @@ export interface MailHeld {
 export interface MailAccount { id: string; kind: MailAccountKind; address: string; name: string; status: MailStatus; sync: MailSync; held: MailHeld }
 
 /** What a label is for, where every source has one; a label the person made has none. "category": the source's own sorting of the inbox (id `category-<name>`), which only the source sets. */
-/** "category": the source's own sorting of the inbox. "sort": a category Conduit's rules give (id `sort-<category>`). */
-export type MailLabelRole = "inbox" | "sent" | "drafts" | "starred" | "important" | "category" | "sort";
+/** "category": the source's own sorting of the inbox. "split": one of the account's splits (id `split-<id>`), in their order. */
+export type MailLabelRole = "inbox" | "sent" | "drafts" | "starred" | "important" | "category" | "split";
 
-/** What a rule asks of a message (sorting.js says what each means and lists the facts and questions). */
-export type MailCondition = { all: MailCondition[] } | { any: MailCondition[] } | { not: MailCondition }
-  | { fact: string; is?: string | boolean | null; under?: number } | { field: "from" | "to" | "subject" | "text"; has: string } | { ask: string; atLeast?: number };
+/** A filter in the mail filter language (src/mail/filter.js; its `filterGuide()` describes it), stored written in full. "" passes everything. */
+export type MailFilter = string;
 /**
- * A sorting rule: rules are tried in order (the person's and agents' own, newest first, then Conduit's) and the first
- * whose condition holds of a thread's newest message gives its category. `then.category` is one of Conduit's ids or a
- * name of the writer's own, which makes that category. A Conduit rule can only be turned on or off.
- * GET /v0/mail/accounts/:account/rules → { rules, categories }; POST …/rules (a rule; with a kept id it replaces) → { rule };
- * DELETE …/rules/:rule. Writing one sorts the account's mail again.
+ * A split: a saved filter shown as a tab of the inbox. Splits are in order. One that `takes` its mail is where a thread
+ * sits, the first such it passes and no other; the last split has no filter, always takes, cannot be deleted and holds
+ * what none took. One that does not take is a view: threads that pass it show there and stay where they sit.
+ * A thread's split is decided, in order, by: the person's move of that thread (a pin), its sender's route, the first
+ * taking split it passes, the last split. Decided on its newest message that is not the person's own.
+ * A thread in a split carries the label `split-<id>` (role "split"); splits are the hub's own, never written to the source.
  */
-export interface MailRule { id: string; name: string; when: MailCondition; then: { category: string }; by: "conduit" | "person" | "agent"; on: boolean }
-export interface MailSortCategory { id: string; name: string; threads: number }
+export interface MailSplit { id: string; name: string; filter: MailFilter; takes: boolean; by: "conduit" | "person" | "agent"; threads: number; unread: number }
+/** A label rule: every inbox thread that passes `filter` gets `labels` (names; one the account lacks is made). Every rule that passes applies. `mirror`: the labels are also written to the source, so its own apps show them; off, they are the hub's alone. */
+export interface MailLabelRule { id: string; name: string; filter: MailFilter; labels: string[]; mirror: boolean; by: "person" | "agent"; threads: number }
+/** All mail from an address goes to a split, whatever the filters say. */
+export interface MailSenderRoute { address: string; split: string }
+/**
+ * An account's sorting.
+ * GET    /v0/mail/accounts/:account/sorting                 → MailSorting
+ * POST   /v0/mail/accounts/:account/splits                  { id?, name, filter, takes?, by? } → { split }; a new one goes first; with a kept id it replaces. 400 { error: "bad_request", message, at? } for a filter that does not read (`at`: the character)
+ * DELETE /v0/mail/accounts/:account/splits/:split           → { ok: true }; 400 for the last split
+ * POST   /v0/mail/accounts/:account/splits/order            { ids: string[] } (every split's id; the last split stays last) → { splits }
+ * POST   /v0/mail/accounts/:account/label-rules             { id?, name, filter, labels, mirror?, by? } → { rule }
+ * DELETE /v0/mail/accounts/:account/label-rules/:rule       → { ok: true }
+ * POST   /v0/mail/accounts/:account/senders                 { address, split: string | null } → { senders } (null takes the route away)
+ * POST   /v0/mail/accounts/:account/filter                  { filter } → MailFilterCheck: reads it and tries it on the inbox, changing nothing
+ * POST   /v0/mail/move                                      { threads: string[], split: string | null } → { threads: MailThread[] }: pins these threads to a split (null unpins)
+ * Any write sorts the account's inbox again, a page at a time, and tells clients as mail changes are told.
+ */
+export interface MailSorting { splits: MailSplit[]; rules: MailLabelRule[]; senders: MailSenderRoute[]; /** The filter language, described for whoever writes one. */ guide: string }
+export interface MailFilterCheck { ok: boolean; /** The filter written in full. */ canonical?: string; error?: { message: string; at: number }; /** Inbox threads that pass, and the newest few of them. */ threads?: number; sample?: MailThread[] }
 /** `id` is the role for a label with one ("inbox"), else an id of the hub's; `name` is what the person reads. */
 export interface MailLabel { id: string; name: string; role: MailLabelRole | null; /** Threads with something unread, and all its threads. */ unread: number; threads: number }
 
@@ -226,6 +244,24 @@ export interface MailStore {
   removeDraft(id: string): void;
   /** Every row and file of an account. */
   dropAccount(account: string): void;
+
+  // Sorting (MailSorting). Splits and label rules' labels are the hub's, written on an inbox thread as it is rolled up.
+  /** Sorting starts for an account: its address in lower case, and the id its source gives a label of a name. */
+  setSorting(account: string, own: string, labelId?: (name: string) => string): void;
+  /** The categories the account keeps as tabs; a change rolls its inbox up again and returns those threads. */
+  setTabs(account: string, tabs: string[]): StoreChange;
+  /** As saved, Conduit's splits for an account that has saved none, with what each holds now. */
+  sorting(account: string): Omit<MailSorting, "guide">;
+  /** Keeps it (each part already checked) and drops pins to a split that is gone. */
+  putSorting(account: string, sorting: { splits: Omit<MailSplit, "threads" | "unread">[]; rules: Omit<MailLabelRule, "threads">[]; senders: MailSenderRoute[] }): void;
+  /** Pins threads (the source's keys) to a split, null unpins; they are rolled up at once. */
+  pin(account: string, threads: string[], split: string | null): StoreChange;
+  /** Rolls up a page of the threads sorting covers after `after`; the last done, null at the end. */
+  resort(account: string, after: string, limit: number): string | null;
+  /** Of a page of the inbox, newest first, the threads (hub ids) whose newest message not the person's own passes `node`; `next` for the page after. */
+  tryFilter(account: string, node: unknown, before: string | null, limit: number): { passed: string[]; next: string | null };
+  /** Messages (hub ids) a mirrored label rule gave a label they lack at the source, by label id; each given out once. */
+  takeMirrors(account: string): { label: string; messages: string[] }[];
 }
 
 /** A change the hub has already made to its copy, for the source: rejected, the service puts its copy back. */
@@ -272,6 +308,8 @@ export interface MailAdapter {
   configure?(): void;
   /** How many messages the source holds in all, once it has said (kept across a pause). */
   total?(): number | null;
+  /** The MailLabel id a label of this name has at the source, whether or not it exists yet (`apply` makes one it lacks). */
+  labelId?(name: string): string;
 }
 
 /**
@@ -284,6 +322,15 @@ export interface MailService {
   removeAccount(id: string): Promise<void>;
   updateAccount(id: string, input: { name?: string; sync?: Partial<MailSync> }): Promise<MailAccount>;
   resync(id: string): Promise<MailAccount>;
+  sorting(account: string): MailSorting;
+  putSplit(account: string, input: { id?: string; name: string; filter: MailFilter; takes?: boolean; by?: "person" | "agent" }): MailSplit;
+  removeSplit(account: string, split: string): void;
+  orderSplits(account: string, ids: string[]): MailSplit[];
+  putLabelRule(account: string, input: { id?: string; name: string; filter: MailFilter; labels: string[]; mirror?: boolean; by?: "person" | "agent" }): MailLabelRule;
+  removeLabelRule(account: string, rule: string): void;
+  routeSender(account: string, address: string, split: string | null): MailSenderRoute[];
+  filter(account: string, filter: MailFilter): Promise<MailFilterCheck>;
+  move(threads: string[], split: string | null): MailThread[];
   labels(account: string): MailLabel[];
   threads(query: Parameters<MailStore["threads"]>[0]): ReturnType<MailStore["threads"]>;
   thread(id: string): { thread: MailThread; messages: MailMessage[]; drafts: MailDraft[] } | null;

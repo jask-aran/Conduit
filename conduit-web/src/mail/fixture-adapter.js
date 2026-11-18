@@ -244,6 +244,7 @@ export function createFixtureAdapter(ctx) {
       else ctx.status({ state: "off" });
     },
     total: () => messages.length,
+    labelId: (name) => `l-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
     async stop() {
       running = false;
       syncing = false;

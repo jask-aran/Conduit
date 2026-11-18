@@ -1,8 +1,6 @@
 /*
- * Sorting mail. Facts: what the hub reads from a message in code (the source's own category among them). Rules: data the
- * person and agents read and write, tried in order, the first whose condition holds giving the category. A condition is
- * about facts, words in a field, or a judgment asked of a model (Jev, every question's words here); a judgment nobody has
- * given settles nothing, so a rule that needs one does not hold. The model never names a category.
+ * What sorting mail reads of a message beyond its fields: facts the hub reads in code (the source's own category among
+ * them), and the questions a model (Jev) can be asked about it. Splits and label rules are filters (filter.js) over both.
  */
 export const JEV_MODEL = "jev-latest";
 export const YES = 0.7, NO = 0.3;
@@ -85,55 +83,4 @@ export async function judge(message, facts, { key, fetch: ask = fetch, tries = 4
     if (![429, 529].includes(answer.status) || attempt === tries) throw new Error(`TypeSafe answered ${answer.status}: ${(await answer.text()).slice(0, 300)}`);
     await new Promise((resolve) => setTimeout(resolve, (Number(answer.headers.get("retry-after")) || 2 ** attempt) * 1000));
   }
-}
-
-/** The categories every account has, in the order a list offers them: the three most people already sort by. A rule may name one of its own (`then.category`). */
-export const CATEGORIES = [["primary", "Primary"], ["promotions", "Promotions"], ["updates", "Updates"]].map(([id, name]) => ({ id, name }));
-export const categoryId = (name) => CATEGORIES.find((one) => one.id === name || one.name.toLowerCase() === String(name).toLowerCase())?.id
-  ?? String(name).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "");
-
-/*
- * A condition (MailCondition in mail.d.ts):
- *   { all: [c…] } { any: [c…] } { not: c }
- *   { fact: name }                      a fact that is true        { fact: "source", is: "promotions" }   a fact's value
- *   { fact: "age", under: 14 }          a number under a bound
- *   { field: "from" | "to" | "subject" | "text", has: "words" }    the words are in it, whatever their case; `from`/`to` take an address or "@domain"
- *   { ask: question id, atLeast?: 0.7 } Jev's chance for one of QUESTIONS; not given, the condition does not hold
- */
-/**
- * What every account starts with, tried after the person's and agents' own; each can be turned off (`on: false` saved
- * under its id). They take the source's sorting as it is: what it calls promotions, and its updates and forums; all else
- * is primary. The other facts are there for rules the person or an agent adds.
- */
-export const BUILT_IN = [
-  { id: "promotions", name: "What the source calls promotions", when: { fact: "source", is: "promotions" }, then: { category: "promotions" } },
-  { id: "updates", name: "What the source calls updates or forums", when: { any: [{ fact: "source", is: "updates" }, { fact: "source", is: "forums" }] }, then: { category: "updates" } },
-].map((rule) => ({ ...rule, by: "conduit", on: true }));
-
-const FIELDS = { from: (message) => `${message.from.name} <${message.from.address}>`, to: (message) => [...message.to, ...message.cc].map((party) => party.address).join(" "), subject: (message) => message.subject, text: (message) => message.text };
-const FACTS = ["mine", "last", "direct", "listed", "known", "robot", "bulk", "person", "asks", "security", "receipt", "logistics", "action", "attachments", "important", "source", "age"];
-/** Why a condition cannot be kept, or "" for one that can. */
-export function conditionFault(when, depth = 0) {
-  if (!when || typeof when !== "object" || Array.isArray(when) || depth > 8) return "A condition is an object, nested no deeper than 8.";
-  for (const key of ["all", "any"]) if (key in when) return Array.isArray(when[key]) && when[key].length && when[key].length <= 32 ? when[key].map((one) => conditionFault(one, depth + 1)).find(Boolean) ?? "" : `"${key}" takes 1 to 32 conditions.`;
-  if ("not" in when) return conditionFault(when.not, depth + 1);
-  if ("fact" in when) return FACTS.includes(when.fact) ? "" : `No such fact: ${when.fact}. The facts are ${FACTS.join(", ")}.`;
-  if ("field" in when) return when.field in FIELDS && typeof when.has === "string" && when.has.trim() && when.has.length <= 200 ? "" : `"field" is one of ${Object.keys(FIELDS).join(", ")} with "has" words (200 characters at most).`;
-  if ("ask" in when) return when.ask in QUESTIONS ? "" : `No such question: ${when.ask}. The questions are ${Object.keys(QUESTIONS).join(", ")}.`;
-  return "A condition is one of all, any, not, fact, field or ask.";
-}
-/** Whether a condition holds of a message, its facts and the judgments given of it. */
-export function holds(when, message, facts, answers = {}) {
-  if ("all" in when) return when.all.every((one) => holds(one, message, facts, answers));
-  if ("any" in when) return when.any.some((one) => holds(one, message, facts, answers));
-  if ("not" in when) return !holds(when.not, message, facts, answers);
-  if ("fact" in when) return "under" in when ? facts[when.fact] < when.under : "is" in when ? facts[when.fact] === when.is : Boolean(facts[when.fact]);
-  if ("field" in when) return FIELDS[when.field](message).toLowerCase().includes(when.has.trim().toLowerCase());
-  if ("ask" in when) return answers[when.ask] >= (when.atLeast ?? YES);
-  return false;
-}
-/** The category the first rule that holds gives, and that rule's id; the first category where none does. */
-export function sortOf(rules, message, facts, answers = {}) {
-  const rule = rules.find((one) => one.on !== false && holds(one.when, message, facts, answers));
-  return { category: rule ? categoryId(rule.then.category) : CATEGORIES[0].id, rule: rule?.id ?? null };
 }

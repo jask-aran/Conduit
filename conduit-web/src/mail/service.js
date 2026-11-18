@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { writePrivateJson } from "../private-file.js";
 import { composeDraft, prefill } from "./compose.js";
+import { canonicalFilter, filterGuide, parseFilter } from "./filter.js";
 import { attachmentOf, parseMail, readBody } from "./parse.js";
 import { openMailStore } from "./store.js";
 
@@ -25,6 +26,16 @@ const clamp = (limit) => Math.min(Math.max(Math.trunc(Number(limit)) || 50, 1), 
 const strings = (value) => value === undefined || (Array.isArray(value) && value.every((item) => typeof item === "string"));
 const flag = (value) => value === undefined || typeof value === "boolean";
 const sameSet = (a, b) => a.length === b.length && a.every((item) => b.includes(item));
+const text = (value, most) => typeof value === "string" && value.trim() && value.length <= most;
+const ID = /^[a-z0-9-]{1,40}$/;
+const newId = () => crypto.randomBytes(4).toString("hex");
+/** A filter as stored, written in full; a refusal that says where it stopped reading for one that does not read. */
+const filterOf = (value) => {
+  if (typeof value !== "string" || value.length > 2000) throw badRequest("A filter is text, 2000 characters at most.");
+  const { node, error } = parseFilter(value);
+  if (error) throw Object.assign(badRequest(error.message), { at: error.at });
+  return canonicalFilter(node);
+};
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 const isReach = (value) => value === "all" || (Number.isInteger(value) && value > 0);
 /** Whether reach `a` goes further back than `b`. */
@@ -95,7 +106,11 @@ export async function createMail({ dataRoot, changed }) {
       account: { id: record.id, kind: record.kind, address: record.address, name: record.name },
       sync: () => entry.account.sync,
       secret, store: guarded(entry), parse: parseMail,
-      changed: (change) => entry.closed || notify(record.id, { threads: change.threads, all: Boolean(change.all) }),
+      changed: (change) => {
+        if (entry.closed) return;
+        notify(record.id, { threads: change.threads, all: Boolean(change.all) });
+        mirror(entry);
+      },
       status: (status) => {
         if (entry.closed) return;
         entry.account.status = status;
@@ -114,15 +129,20 @@ export async function createMail({ dataRoot, changed }) {
       account: { ...record, status: { state: "error", error: error.message } }, secret, adapter: null, closed: false, held: null,
     }));
     live.set(record.id, entry);
-    store.setTabs(record.id, syncOf(entry.account.sync).tabs);
-    store.setSorting(record.id, record.address.toLowerCase());
-    void resort(entry).catch((error) => console.warn("[mail] sorting failed:", error.message));
+    startSorting(entry);
     entry.adapter?.start();
     void retext(entry).catch((error) => console.warn("[mail] re-reading held text failed:", error.message));
     return entry;
   }
-  // Threads are sorted as they change; all of them again, a page at a time, when Conduit's rules or facts change (SORT_READ) or a rule is written (`again`).
-  const SORT_READ = 2;
+  function startSorting(entry, again = false) {
+    const { id, address, sync } = entry.account;
+    store.setTabs(id, syncOf(sync).tabs);
+    store.setSorting(id, address.toLowerCase(), entry.adapter?.labelId);
+    if (again) sortAgain(entry);
+    else void resort(entry).catch((error) => console.warn("[mail] sorting failed:", error.message));
+  }
+  // Threads are sorted as they change; all of them again, a page at a time, when how sorting reads changes (SORT_READ) or sorting is written (`again`).
+  const SORT_READ = 3;
   async function resort(entry, again = false) {
     const id = entry.account.id;
     let at = again ? { read: 0, after: "" } : store.cursor(id, "sort") ?? { read: 0, after: "" };
@@ -133,11 +153,43 @@ export async function createMail({ dataRoot, changed }) {
       const last = store.resort(id, at.after, PAGE);
       at = last === null ? { read: SORT_READ, after: "" } : { read: 0, after: last };
       store.setCursor(id, "sort", at);
+      mirror(entry);
       if (last === null) return notify(id, { threads: [], all: true }, true);
       await tick();
     }
   }
   const sortAgain = (entry) => void resort(entry, true).catch((error) => console.warn("[mail] sorting failed:", error.message));
+  // A mirrored label rule's labels go to the source behind the hub's copy, as triage's do; only ever added, each once a run, and not while paused.
+  let serving = false;
+  function mirror(entry) {
+    if (entry.mirroring) return void (entry.mirrorAgain = true);
+    if (!serving || entry.closed || !entry.adapter || entry.account.sync.paused) return;
+    entry.mirroring = (async () => {
+      await tick();
+      do {
+        entry.mirrorAgain = false;
+        for (const { label, messages } of store.takeMirrors(entry.account.id)) {
+          await service.change({ messages, add: [label] }).catch((error) => console.warn("[mail] a mirrored label was refused:", error.message));
+        }
+      } while (entry.mirrorAgain && !entry.closed && !entry.account.sync.paused);
+    })().catch((error) => console.warn("[mail] mirroring failed:", error.message)).finally(() => { entry.mirroring = null; });
+  }
+  /** Writes an account's sorting through `edit(saved)` and sorts its inbox again. */
+  function resorting(id, edit) {
+    const entry = entryOf(id);
+    const { splits, rules, senders } = store.sorting(id);
+    const strip = ({ threads: _, unread: __, ...one }) => one;
+    const next = { splits: splits.map(strip), rules: rules.map(strip), senders };
+    const result = edit(next);
+    store.putSorting(id, next);
+    sortAgain(entry);
+    return result;
+  }
+  const splitOf = (saved, id) => saved.splits.find((split) => split.id === id) ?? (() => { throw notFound("split"); })();
+  const takingSplit = (saved, id) => {
+    if (typeof id !== "string" || !splitOf(saved, id).takes) throw badRequest("Mail goes only to a split that takes its mail.");
+    return id;
+  };
 
   // What a message's search text and snippet are read from changed (TEXT_READ): held ones are read again once, a page at a time.
   const TEXT_READ = 2;
@@ -299,6 +351,7 @@ export async function createMail({ dataRoot, changed }) {
       });
       live.set(record.id, entry);
       await persist();
+      startSorting(entry);
       entry.adapter.start();
       notify(record.id, { accounts: true }, true);
       return publicAccount(entry);
@@ -322,23 +375,114 @@ export async function createMail({ dataRoot, changed }) {
       const sorted = store.setTabs(id, sync.tabs);
       if (sorted.threads.length) notify(id, { threads: [], all: true }, true);
       notify(id, { accounts: true }, true);
+      mirror(entry);
       return publicAccount(entry);
     },
 
-    /** An account's sorting rules in the order tried, and the categories they give. */
-    rules(id) {
+    /** An account's splits, label rules and sender routes, and the filter language described. */
+    sorting(id) {
       entryOf(id);
-      return { rules: store.rules(id), categories: store.labels(id).filter((label) => label.role === "sort").map((label) => ({ id: label.id.slice("sort-".length), name: label.name, threads: label.threads })) };
+      return { ...store.sorting(id), guide: filterGuide() };
     },
-    /** Keeps a rule (a new one is tried first) and sorts the account's mail again. */
-    putRule(id, rule) {
-      const kept = store.putRule(id, rule);
-      sortAgain(entryOf(id));
-      return kept;
+    /** Keeps a split (a new one goes first; a kept id replaces it in place) and sorts the inbox again. */
+    putSplit(id, input) {
+      const { id: asked, name, filter, takes, by } = input && typeof input === "object" ? input : {};
+      if (!text(name, 120) || !flag(takes) || (asked !== undefined && !(typeof asked === "string" && ID.test(asked)))) {
+        throw badRequest("A split has a name of 120 characters at most, a filter, and takes as true or false.");
+      }
+      const kept = resorting(id, (saved) => {
+        const at = saved.splits.findIndex((split) => split.id === asked);
+        const last = at >= 0 && at === saved.splits.length - 1;
+        const split = { id: at >= 0 ? asked : newId(), name: name.trim(), filter: filterOf(filter), takes: takes ?? true, by: by === "agent" ? "agent" : "person" };
+        if (last && (split.filter || !split.takes)) throw badRequest("The last split holds what no other takes: it has no filter and takes its mail.");
+        if (at >= 0) saved.splits[at] = split;
+        else saved.splits.unshift(split);
+        return split.id;
+      });
+      return store.sorting(id).splits.find((split) => split.id === kept);
     },
-    removeRule(id, rule) {
-      if (!store.removeRule(entryOf(id).account.id, rule)) throw notFound("rule");
-      sortAgain(entryOf(id));
+    /** Deletes a split, and the sender routes and pins to it; the last cannot be. */
+    removeSplit(id, split) {
+      resorting(id, (saved) => {
+        const at = saved.splits.indexOf(splitOf(saved, split));
+        if (at === saved.splits.length - 1) throw badRequest("The last split holds what no other takes, so it cannot be deleted.");
+        saved.splits.splice(at, 1);
+        saved.senders = saved.senders.filter((route) => route.split !== split);
+      });
+    },
+    /** Puts the splits in this order (every split's id); the last stays last. */
+    orderSplits(id, ids) {
+      resorting(id, (saved) => {
+        const last = saved.splits.at(-1);
+        if (!Array.isArray(ids) || ids.length !== saved.splits.length || !saved.splits.every((split) => ids.includes(split.id))) throw badRequest("Give every split's id once.");
+        saved.splits = [...ids.filter((one) => one !== last.id).map((one) => splitOf(saved, one)), last];
+      });
+      return store.sorting(id).splits;
+    },
+    /** Keeps a label rule (a kept id replaces it) and sorts the inbox again. */
+    putLabelRule(id, input) {
+      const { id: asked, name, filter, labels, mirror: mirrored, by } = input && typeof input === "object" ? input : {};
+      if (!text(name, 120) || !flag(mirrored) || (asked !== undefined && !(typeof asked === "string" && ID.test(asked)))
+        || !Array.isArray(labels) || !labels.length || labels.length > 20 || !labels.every((label) => text(label, 100) && !label.trim().startsWith("\\"))) {
+        throw badRequest("A label rule has a name of 120 characters at most, a filter, 1 to 20 label names, and mirror as true or false.");
+      }
+      const roles = store.labels(id).filter((label) => label.role);
+      const taken = labels.find((label) => roles.some((one) => one.name.toLowerCase() === label.trim().toLowerCase()));
+      if (taken) throw badRequest(`${taken} is not a label a rule can give.`);
+      const kept = resorting(id, (saved) => {
+        const at = saved.rules.findIndex((rule) => rule.id === asked);
+        const rule = { id: at >= 0 ? asked : newId(), name: name.trim(), filter: filterOf(filter), labels: [...new Set(labels.map((label) => label.trim()))],
+          mirror: mirrored ?? false, by: by === "agent" ? "agent" : "person" };
+        if (at >= 0) saved.rules[at] = rule;
+        else saved.rules.unshift(rule);
+        return rule.id;
+      });
+      return store.sorting(id).rules.find((rule) => rule.id === kept);
+    },
+    /** Deletes a label rule: its hub-held labels come off; what it mirrored stays at the source. */
+    removeLabelRule(id, rule) {
+      resorting(id, (saved) => {
+        if (!saved.rules.some((one) => one.id === rule)) throw notFound("label rule");
+        saved.rules = saved.rules.filter((one) => one.id !== rule);
+      });
+    },
+    /** Sends all mail from an address to a split that takes its mail, or (null) takes the route away. */
+    routeSender(id, address, split) {
+      if (!text(address, 320) || !address.includes("@") || (split !== null && typeof split !== "string")) throw badRequest("A route is an email address and a split, or null.");
+      const key = address.trim().toLowerCase();
+      return resorting(id, (saved) => {
+        saved.senders = saved.senders.filter((route) => route.address !== key);
+        if (split !== null) saved.senders.push({ address: key, split: takingSplit(saved, split) });
+        return saved.senders;
+      });
+    },
+    /** Reads a filter and tries it on the inbox, changing nothing: how many threads pass, and the newest five. */
+    async filter(id, filter) {
+      entryOf(id);
+      if (typeof filter !== "string") throw badRequest("A filter is text.");
+      const { node, error } = parseFilter(filter);
+      if (error) return { ok: false, error };
+      let threads = 0, before = null;
+      const sample = [];
+      do {
+        const page = store.tryFilter(id, node, before, PAGE);
+        threads += page.passed.length;
+        sample.push(...page.passed.slice(0, 5 - sample.length));
+        before = page.next;
+        await tick();
+      } while (before);
+      return { ok: true, canonical: canonicalFilter(node), threads, sample: store.threadsOf(sample) };
+    },
+    /** Pins threads to a split that takes its mail (null unpins) and sorts them again at once. */
+    move(threads, split) {
+      if (!strings(threads) || !threads?.length || (split !== null && typeof split !== "string")) throw badRequest("A move takes a list of thread ids and a split, or null.");
+      const keys = Map.groupBy(threads.map((thread) => store.threadsOf([thread])[0] ?? (() => { throw notFound("thread"); })()), (thread) => thread.account);
+      for (const [account, list] of keys) {
+        if (split !== null) takingSplit(store.sorting(entryOf(account).account.id), split);
+        notify(account, store.pin(account, list.map((thread) => thread.id.slice(account.length + 1)), split), true);
+        mirror(entryOf(account));
+      }
+      return store.threadsOf(threads);
     },
 
     async resync(id) {
@@ -544,12 +688,16 @@ export async function createMail({ dataRoot, changed }) {
     },
 
     async stop() {
+      serving = false;
       for (const id of timers.keys()) clearTimeout(timers.get(id));
       await Promise.all([...pushing.values()].map((run) => run.catch(() => {})));
       await Promise.all([...live.values()].map(close));
+      await Promise.all([...live.values()].map((entry) => entry.mirroring));
       for (const account of [...queued.keys()]) flush(account);
       store.close();
     },
   };
+  serving = true;
+  for (const entry of live.values()) mirror(entry);
   return service;
 }

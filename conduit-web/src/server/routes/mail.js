@@ -26,9 +26,15 @@ export function registerMailRoutes(app, { mail }) {
 
   app.post("/v0/mail/accounts/:account/resync", async (request, response) => response.json({ account: await mail.resync(request.params.account) }));
 
-  app.get("/v0/mail/accounts/:account/rules", (request, response) => response.json(mail.rules(request.params.account)));
-  app.post("/v0/mail/accounts/:account/rules", (request, response) => response.json({ rule: mail.putRule(request.params.account, request.body || {}) }));
-  app.delete("/v0/mail/accounts/:account/rules/:rule", (request, response) => { mail.removeRule(request.params.account, request.params.rule); response.json({ ok: true }); });
+  app.get("/v0/mail/accounts/:account/sorting", (request, response) => response.json(mail.sorting(request.params.account)));
+  app.post("/v0/mail/accounts/:account/splits/order", (request, response) => response.json({ splits: mail.orderSplits(request.params.account, request.body?.ids) }));
+  app.post("/v0/mail/accounts/:account/splits", (request, response) => response.json({ split: mail.putSplit(request.params.account, request.body || {}) }));
+  app.delete("/v0/mail/accounts/:account/splits/:split", (request, response) => { mail.removeSplit(request.params.account, request.params.split); response.json({ ok: true }); });
+  app.post("/v0/mail/accounts/:account/label-rules", (request, response) => response.json({ rule: mail.putLabelRule(request.params.account, request.body || {}) }));
+  app.delete("/v0/mail/accounts/:account/label-rules/:rule", (request, response) => { mail.removeLabelRule(request.params.account, request.params.rule); response.json({ ok: true }); });
+  app.post("/v0/mail/accounts/:account/senders", (request, response) => response.json({ senders: mail.routeSender(request.params.account, request.body?.address, request.body?.split ?? null) }));
+  app.post("/v0/mail/accounts/:account/filter", async (request, response) => response.json(await mail.filter(request.params.account, request.body?.filter)));
+  app.post("/v0/mail/move", (request, response) => response.json({ threads: mail.move(request.body?.threads, request.body?.split ?? null) }));
 
   app.get("/v0/mail/accounts/:account/labels", (request, response) => response.json({ labels: mail.labels(request.params.account) }));
 
@@ -76,7 +82,7 @@ export function registerMailRoutes(app, { mail }) {
   // A source's refusal (a MailError) is the person's to read; anything else goes on to the app's own handler.
   app.use("/v0/mail", (error, _request, response, next) => {
     if (error.reason in STATUS) return response.status(STATUS[error.reason]).json({ error: error.reason, message: error.message });
-    if (error.code === "not_found" || error.code === "bad_request") return response.status(error.status).json({ error: error.code, message: error.message });
+    if (error.code === "not_found" || error.code === "bad_request") return response.status(error.status).json({ error: error.code, message: error.message, ...(error.at === undefined ? {} : { at: error.at }) });
     next(error);
   });
 }

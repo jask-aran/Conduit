@@ -250,6 +250,7 @@ export function createGmailAdapter(ctx, deps = {}) {
       s.boxes = boxesOf(boxes);
       if (!s.boxes.all) throw mailError("unsupported", SAY.noAllMail);
       const own = boxes.filter((b) => b.path.toUpperCase() !== "INBOX" && !NOT_LABELS.some((f) => hasFlag(b, f)));
+      s.labels = new Set(own.map((b) => b.path));
       write(s, () => store.putLabels(account, [
         ...Object.entries(ROLE_NAMES).map(([id, name]) => ({ id, name, role: id })),
         ...Object.entries(CATEGORIES).map(([id, name]) => ({ id: `category-${id}`, name, role: "category" })),
@@ -579,6 +580,7 @@ export function createGmailAdapter(ctx, deps = {}) {
     },
 
     total: () => exists,
+    labelId,
 
     async stop() {
       if (!stopped) ctx.status({ state: "off" });
@@ -598,6 +600,11 @@ export function createGmailAdapter(ctx, deps = {}) {
       const remove = change.kind === "labels" ? gmailLabels(change.remove) : [];
       await now(async (c, s) => {
         if (change.kind === "trash" && !s.boxes.trash) throw mailError("unsupported");
+        // A label the account lacks is made first (CREATE; one that exists is left as it is): a mirrored label rule can name one.
+        for (const name of add.filter((one) => !one.startsWith("\\") && !s.labels?.has(one))) {
+          await c.mailboxCreate(name);
+          s.labels?.add(name);
+        }
         for (const page of chunks(uids, PAGE)) {
           const range = page.join(",");
           if (change.kind === "labels") {

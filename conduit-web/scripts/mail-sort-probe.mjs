@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 /**
- * Tries mail sorting (src/mail/sorting.js) on the hub's own copy, changing nothing: reads the newest inbox messages from
- * mail.db (read-only) and prints the category Conduit's rules give each; with a key it asks Jev about each first.
+ * Tries mail sorting (src/mail/sorting.js, filter.js) on the hub's own copy, changing nothing: reads the newest inbox messages
+ * from mail.db (read-only) and prints the split Conduit's own splits put each in; with a key it asks Jev about each too.
  * Sends each message's sender, subject and the start of its text to api.typesafe.ai.
  * Run from conduit-web/: TYPESAFE_API_KEY=… node --max-old-space-size=1024 scripts/mail-sort-probe.mjs [count=40] [--json out.json] [--label inbox]
- * Without a key the rules run on the facts alone, and nothing is sent.
+ * Without a key only the facts are read, and nothing is sent.
  */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { BUILT_IN, factsOf, judge, sortOf, stateOf } from "../src/mail/sorting.js";
+import { matches, parseFilter } from "../src/mail/filter.js";
+import { factsOf, judge } from "../src/mail/sorting.js";
+import { DEFAULT_SPLITS } from "../src/mail/store.js";
 
 const args = process.argv.slice(2);
 const option = (name) => { const at = args.indexOf(name); return at < 0 ? null : args.splice(at, 2)[1]; };
@@ -26,15 +28,22 @@ const rows = db.prepare(`SELECT m.rowid, m.*, s.body FROM messages m JOIN search
   WHERE m.account = ? AND m.held > 0 AND m.draft = 0 AND EXISTS (SELECT 1 FROM json_each(m.labels) WHERE value = ?) ORDER BY m.date DESC LIMIT ?`).all(account.id, label, count);
 const sent = db.prepare(`SELECT 1 FROM messages WHERE account = ? AND recipients LIKE ? AND EXISTS (SELECT 1 FROM json_each(labels) WHERE value = 'sent') LIMIT 1`);
 const wroteTo = (address) => Boolean(sent.get(account.id, `%"${address.replace(/[%_"]/g, "")}"%`));
-const messages = rows.map((row) => { const to = JSON.parse(row.recipients); return {
-  from: JSON.parse(row.sender), to: to.to, cc: to.cc, subject: row.subject, text: row.body || row.snippet, labels: JSON.parse(row.labels),
-  category: row.category, attachments: Boolean(row.attachments), date: row.date }; });
+const names = new Map(db.prepare("SELECT id, name FROM labels WHERE account = ?").all(account.id).map((row) => [row.id, row.name]));
+const messages = rows.map((row) => { const to = JSON.parse(row.recipients), labels = JSON.parse(row.labels); return {
+  from: JSON.parse(row.sender), to: to.to, cc: to.cc, subject: row.subject, text: row.body || row.snippet, labels, labelNames: labels.map((id) => names.get(id) ?? id),
+  category: row.category, attachments: Boolean(row.attachments), unread: Boolean(row.unread), starred: labels.includes("starred"), date: row.date }; });
+const splits = DEFAULT_SPLITS.map((split) => ({ ...split, node: parseFilter(split.filter).node }));
+/** The split a message's thread would sit in under Conduit's splits, and why. */
+const sortOf = (message, facts, answers) => {
+  const split = splits.find((one, at) => at < splits.length - 1 && matches(one.node, message, facts, answers)) ?? splits.at(-1);
+  return { category: split.name, rule: split.filter || "the rest" };
+};
 
-// Without a key the rules run on the facts alone.
+// Without a key the splits run on the facts alone.
 const threadOf = db.prepare("SELECT sender, date FROM messages WHERE account = ? AND thread = ? ORDER BY date DESC");
 const stateIn = (row) => ({ last: threadOf.all(account.id, row.thread)[0].date === row.date });
 if (!key) {
-  const sorted = messages.map((message, at) => { const facts = factsOf(message, { own, wroteTo, ...stateIn(rows[at]) }); const { category, rule } = sortOf(BUILT_IN, message, facts); return { category, why: rule, facts, message }; });
+  const sorted = messages.map((message, at) => { const facts = factsOf(message, { own, wroteTo, ...stateIn(rows[at]) }); const { category, rule } = sortOf(message, facts); return { category, why: rule, facts, message }; });
   const groups = Object.groupBy(sorted, (one) => one.category);
   const flags = (facts) => ["known", "robot", "bulk", "person", "asks", "security", "receipt", "logistics", "action"].filter((name) => facts[name]).join(" ");
   for (const [name, list] of Object.entries(groups)) {
@@ -51,7 +60,7 @@ await Promise.all(Array.from({ length: 4 }, async () => {
     const message = messages[at], facts = factsOf(message, { own, wroteTo });
     const judged = await judge(message, facts, { key });
     tokens += judged.tokens;
-    const { category, rule: why } = sortOf(BUILT_IN, message, facts, judged.answers);
+    const { category, rule: why } = sortOf(message, facts, judged.answers);
     results[at] = { category, why, source: facts.source, from: message.from.name || message.from.address, subject: message.subject, facts, answers: judged.answers, model: judged.model };
   }
 }));

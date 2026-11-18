@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { splitQuoted } from "../email-quote.js";
-import { BUILT_IN, CATEGORIES as SORTS, categoryId, conditionFault, factsOf, sortOf } from "./sorting.js";
+import { matches, parseFilter } from "./filter.js";
+import { factsOf } from "./sorting.js";
 
 /*
  * The hub's copy of mail (mail.d.ts MailStore). Each thread's roll-up is rewritten whenever one of its messages or
@@ -12,7 +13,7 @@ import { BUILT_IN, CATEGORIES as SORTS, categoryId, conditionFault, factsOf, sor
 const SNIPPET = 200;
 const TEXT_MAX = 100_000;
 const CHUNK = 500;
-const ROLES = ["inbox", "category", "sort", "starred", "important", "sent", "drafts"];
+const ROLES = ["inbox", "category", "split", "starred", "important", "sent", "drafts"];
 // A source's own sorting of the inbox (Gmail's tabs), in the order it shows them; a label's id is `category-<name>`.
 const CATEGORIES = ["primary", "promotions", "social", "updates", "forums"];
 
@@ -43,7 +44,8 @@ CREATE TABLE IF NOT EXISTS thread_labels (
   PRIMARY KEY (account, label, thread));
 CREATE INDEX IF NOT EXISTS thread_labels_date ON thread_labels (account, label, date, thread);
 CREATE TABLE IF NOT EXISTS labels (account TEXT NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL, role TEXT, PRIMARY KEY (account, id));
-CREATE TABLE IF NOT EXISTS rules (account TEXT NOT NULL, id TEXT NOT NULL, position INTEGER NOT NULL, value TEXT NOT NULL, PRIMARY KEY (account, id));
+CREATE TABLE IF NOT EXISTS sorting (account TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS pins (account TEXT NOT NULL, thread TEXT NOT NULL, split TEXT NOT NULL, PRIMARY KEY (account, thread));
 CREATE TABLE IF NOT EXISTS cursors (account TEXT NOT NULL, name TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (account, name));
 CREATE TABLE IF NOT EXISTS drafts (id TEXT PRIMARY KEY, account TEXT NOT NULL, thread TEXT, message_id TEXT NOT NULL, value TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS drafts_account ON drafts (account, message_id);
@@ -69,6 +71,10 @@ const partyText = (parties) => parties.map((party) => `${party.name} ${party.add
 const chunks = (list) => Array.from({ length: Math.ceil(list.length / CHUNK) }, (_, index) => list.slice(index * CHUNK, (index + 1) * CHUNK));
 const marks = (list) => list.map(() => "?").join(",");
 const DAY = 86_400_000;
+
+/** The splits of an account that has saved none: what the source calls promotions, its updates and forums, and the rest. */
+export const DEFAULT_SPLITS = [["promotions", "Promotions", "category:promotions"], ["updates", "Updates", "category:updates OR category:forums"], ["primary", "Primary", ""]]
+  .map(([id, name, filter]) => ({ id, name, filter, takes: true, by: "conduit" }));
 
 /** Where a reach (MailSync's `since` or `bodies`) starts, in ms: the UTC midnight that many days back; null for "all". */
 export const reachStart = (reach, now = Date.now()) => reach === "all" ? null : Math.floor((now - reach * DAY) / DAY) * DAY;
@@ -126,13 +132,35 @@ export function openMailStore({ dir }) {
     };
   };
 
-  // What sorting needs of each account (setSorting): its address, its rules in the order tried, and who the person has written to.
+  // What sorting needs of each account (setSorting): its address, its splits, label rules, sender routes and pins, read
+  // once, and who the person has written to. A filter that no longer reads passes nothing rather than stopping a sync.
   const sorting = new Map();
-  const rulesOf = (account) => {
-    const saved = q("SELECT value FROM rules WHERE account = ? ORDER BY position, id").all(account).map((row) => json(row.value));
-    const off = new Set(saved.filter((rule) => rule.by === "conduit" && rule.on === false).map((rule) => rule.id));
-    return [...saved.filter((rule) => rule.by !== "conduit"), ...BUILT_IN.map((rule) => off.has(rule.id) ? { ...rule, on: false } : rule)];
+  const NEVER = Symbol("never");
+  const compiled = (filter) => { const { node, error } = parseFilter(filter); return error ? NEVER : node; };
+  const savedOf = (account) => {
+    const row = q("SELECT value FROM sorting WHERE account = ?").get(account);
+    const saved = row ? json(row.value) : {};
+    return { splits: saved.splits?.length ? saved.splits : DEFAULT_SPLITS, rules: saved.rules ?? [], senders: saved.senders ?? [] };
   };
+  const label64 = (name) => Buffer.from(name).toString("base64url");
+  function load(state, account) {
+    const saved = savedOf(account);
+    state.saved = saved;
+    state.splits = saved.splits.map((split) => ({ ...split, node: compiled(split.filter) }));
+    state.rules = saved.rules.map((rule) => ({ ...rule, node: compiled(rule.filter), ids: null }));
+    state.senders = new Map(saved.senders.map((route) => [route.address, route.split]));
+    state.pins = new Map(q("SELECT thread, split FROM pins WHERE account = ?").all(account).map((row) => [row.thread, row.split]));
+    state.names = null;
+  }
+  // Label names by id, and the ids a rule's names give: the account's label of that name, else the id the source would give it.
+  function namesOf(state, account) {
+    if (state.names) return state.names;
+    const rows = q("SELECT id, name, role FROM labels WHERE account = ?").all(account);
+    state.names = new Map(rows.map((row) => [row.id, row.name]));
+    const byName = new Map(rows.filter((row) => !row.role).map((row) => [row.name.toLowerCase(), row.id]));
+    for (const rule of state.rules) rule.ids = rule.labels.map((name) => byName.get(name.toLowerCase()) ?? state.labelId?.(name) ?? `hub-${label64(name)}`);
+    return state.names;
+  }
   const writtenTo = (account, own) => {
     const known = new Set();
     for (const row of q("SELECT recipients FROM messages WHERE account = ? AND draft = 0 AND lower(json_extract(sender, '$.address')) = ?").iterate(account, own)) {
@@ -142,15 +170,38 @@ export function openMailStore({ dir }) {
     return known;
   };
   const isOwn = (account, row) => json(row.sender).address.toLowerCase() === sorting.get(account)?.own;
-  function sortThread(account, row) {
-    const state = sorting.get(account);
-    if (!state || row.draft) return null;
+  /** A message row as a filter reads it (filter.js `matches`), and its facts. */
+  function readOf(account, state, row) {
     state.known ??= writtenTo(account, state.own);
-    const recipients = json(row.recipients), from = json(row.sender);
+    const recipients = json(row.recipients), from = json(row.sender), labels = json(row.labels), names = namesOf(state, account);
     if (from.address.toLowerCase() === state.own) for (const party of [...recipients.to, ...recipients.cc, ...recipients.bcc]) state.known.add(party.address.toLowerCase());
-    const message = { from, to: recipients.to, cc: recipients.cc, subject: row.subject, date: row.date, labels: json(row.labels), category: row.category, attachments: Boolean(row.attachments),
+    const message = { from, to: recipients.to, cc: recipients.cc, subject: row.subject, date: row.date, labels, labelNames: labels.map((id) => names.get(id) ?? id),
+      category: row.category, attachments: Boolean(row.attachments), unread: Boolean(row.unread), starred: labels.includes("starred"),
       text: q("SELECT body FROM search WHERE rowid = ?").get(row.rid)?.body || row.snippet };
-    return sortOf(state.rules, message, factsOf(message, { own: state.own, wroteTo: (address) => state.known.has(address) })).category;
+    return { message, facts: factsOf(message, { own: state.own, wroteTo: (address) => state.known.has(address) }) };
+  }
+  const passes = (node, read) => node !== NEVER && matches(node, read.message, read.facts);
+  // The split labels and label rules' labels of an inbox thread, decided on `row`, its newest message not the person's own; `marks` are counted, never shown.
+  function sortThread(account, thread, row) {
+    const state = sorting.get(account);
+    if (!state) return null;
+    const read = readOf(account, state, row);
+    const takes = (id) => state.splits.some((split) => split.id === id && split.takes);
+    const last = state.splits.at(-1);
+    const home = [state.pins.get(thread), state.senders.get(read.message.from.address.toLowerCase())].find(takes)
+      ?? state.splits.find((split) => split !== last && split.takes && passes(split.node, read))?.id ?? last.id;
+    const labels = [`split-${home}`, ...state.splits.filter((split) => !split.takes && split !== last && passes(split.node, read)).map((split) => `split-${split.id}`)];
+    const marks = [];
+    for (const rule of state.rules.filter((one) => passes(one.node, read))) {
+      marks.push(`rule-${rule.id}`);
+      labels.push(...rule.ids);
+      const lacking = rule.mirror ? rule.ids.filter((id) => !read.message.labels.includes(id) && !state.tried.has(`${row.key}\0${id}`)) : [];
+      for (const id of lacking) {
+        state.tried.add(`${row.key}\0${id}`);
+        state.mirrors.set(id, [...(state.mirrors.get(id) ?? []), hubId(account, row.key)]);
+      }
+    }
+    return { labels, marks };
   }
 
   // The categories each account keeps as tabs (MailSync's `tabs`, the first always among them); none said, all are.
@@ -173,9 +224,8 @@ export function openMailStore({ dir }) {
     // One the person does not keep as a tab shows in the first, as it does at the source.
     const tab = (category) => `category-${tabsOf.get(account)?.includes(category) === false ? CATEGORIES[0] : category}`;
     if (labels.includes("inbox")) for (const row of all) if (row.category && !labels.includes(tab(row.category))) labels.push(tab(row.category));
-    // Sorted by its newest message that is not the person's own: an inbox thread is in one category.
-    const sorted = labels.includes("inbox") ? sortThread(account, shown.findLast((row) => !isOwn(account, row)) ?? newest) : null;
-    if (sorted) labels.push(`sort-${sorted}`);
+    const sorted = labels.includes("inbox") ? sortThread(account, thread, shown.findLast((row) => !isOwn(account, row)) ?? newest) : null;
+    if (sorted) for (const label of sorted.labels) if (!labels.includes(label)) labels.push(label);
     const parties = new Map();
     for (const row of shown) {
       const party = json(row.sender);
@@ -189,7 +239,7 @@ export function openMailStore({ dir }) {
       labels.includes("starred") ? 1 : 0, all.some((row) => row.attachments) ? 1 : 0,
       hubDrafts || all.some((row) => row.draft) ? 1 : 0);
     const insert = q("INSERT INTO thread_labels (account, label, thread, date, unread) VALUES (?, ?, ?, ?, ?)");
-    for (const label of labels) insert.run(account, label, thread, newest.date, unread);
+    for (const label of [...labels, ...sorted?.marks ?? []]) insert.run(account, label, thread, newest.date, unread);
   }
   const rollupAll = (account, threads) => {
     for (const thread of threads) rollup(account, thread);
@@ -332,37 +382,73 @@ export function openMailStore({ dir }) {
       }
     },
 
-    /** Sorting starts for an account (its address in lower case); its threads are sorted as they are next rolled up, and `resort` does the rest. */
-    setSorting(account, own) { sorting.set(account, { own, rules: rulesOf(account), known: null }); },
-    /** An account's rules in the order tried: the person's and agents' own, then Conduit's (each `on` or not). */
-    rules: (account) => sorting.get(account)?.rules ?? rulesOf(account),
-    /** Keeps a rule (replacing the one of its id; a Conduit rule keeps only whether it is on) and returns it; throws a refusal for one that cannot be kept. */
-    putRule(account, rule) {
-      const built = BUILT_IN.find((one) => one.id === rule?.id);
-      const kept = built ? { id: built.id, by: "conduit", on: rule.on !== false } : (() => {
-        const fault = !rule || typeof rule !== "object" ? "A rule is an object." : typeof rule.name !== "string" || !rule.name.trim() || rule.name.length > 120 ? "A rule has a name of 120 characters at most."
-          : typeof rule.then?.category !== "string" || !categoryId(rule.then.category) || rule.then.category.length > 40 ? "A rule gives a category: one of Conduit's ids or a name of your own, 40 characters at most."
-          : conditionFault(rule.when);
-        if (fault) throw Object.assign(new Error(fault), { status: 400, code: "bad_request" });
-        return { id: typeof rule.id === "string" && /^[a-z0-9-]{1,40}$/.test(rule.id) ? rule.id : crypto.randomBytes(4).toString("hex"), name: rule.name.trim(), when: rule.when,
-          then: { category: rule.then.category.trim() }, by: rule.by === "agent" ? "agent" : "person", on: rule.on !== false };
-      })();
-      // A new rule goes first: the latest word wins.
-      const position = q("SELECT position FROM rules WHERE account = ? AND id = ?").get(account, kept.id)?.position ?? (q("SELECT min(position) AS at FROM rules WHERE account = ?").get(account).at ?? 0) - 1;
-      q("INSERT OR REPLACE INTO rules (account, id, position, value) VALUES (?, ?, ?, ?)").run(account, kept.id, position, JSON.stringify(kept));
-      if (sorting.has(account)) sorting.get(account).rules = rulesOf(account);
-      return this.rules(account).find((one) => one.id === kept.id);
+    /** Sorting starts for an account: its address in lower case, and the id its source gives a label of a name. Its threads are sorted as they are next rolled up, and `resort` does the rest. */
+    setSorting(account, own, labelId) {
+      const state = { own, labelId, known: null, mirrors: new Map(), tried: new Set() };
+      load(state, account);
+      sorting.set(account, state);
     },
-    removeRule(account, id) {
-      const gone = q("DELETE FROM rules WHERE account = ? AND id = ?").run(account, id).changes > 0;
-      if (sorting.has(account)) sorting.get(account).rules = rulesOf(account);
-      return gone;
+    /** An account's splits (in order), label rules and sender routes as saved, Conduit's splits for one that has saved none, with what each holds now. */
+    sorting(account) {
+      const { splits, rules, senders } = savedOf(account);
+      const counts = new Map(q("SELECT label, count(*) AS n, sum(unread > 0) AS unread FROM thread_labels WHERE account = ? AND (label LIKE 'split-%' OR label LIKE 'rule-%') GROUP BY label").all(account).map((row) => [row.label, row]));
+      return {
+        splits: splits.map((split) => ({ ...split, threads: counts.get(`split-${split.id}`)?.n ?? 0, unread: counts.get(`split-${split.id}`)?.unread ?? 0 })),
+        rules: rules.map((rule) => ({ ...rule, threads: counts.get(`rule-${rule.id}`)?.n ?? 0 })), senders,
+      };
     },
-    /** Sorts again a page of the threads sorting covers (the inbox's and those already sorted), after `after`; returns the last thread it did, null at the end. */
+    /** Keeps an account's splits, label rules and sender routes (each already checked), and drops pins to a split that is gone; `resort` sorts by them. */
+    putSorting(account, { splits, rules, senders }) {
+      tx(() => {
+        q("INSERT OR REPLACE INTO sorting (account, value) VALUES (?, ?)").run(account, JSON.stringify({ splits, rules, senders }));
+        q(`DELETE FROM pins WHERE account = ? AND split NOT IN (${marks(splits)})`).run(account, ...splits.map((split) => split.id));
+      });
+      const state = sorting.get(account);
+      if (state) {
+        load(state, account);
+        state.tried.clear();
+      }
+    },
+    /** Pins these threads (the source's keys) to a split, or unpins them with null, and sorts them again. */
+    pin(account, threads, split) {
+      return tx(() => {
+        for (const thread of threads) {
+          if (split) q("INSERT OR REPLACE INTO pins (account, thread, split) VALUES (?, ?, ?)").run(account, thread, split);
+          else q("DELETE FROM pins WHERE account = ? AND thread = ?").run(account, thread);
+        }
+        const state = sorting.get(account);
+        if (state) state.pins = new Map(q("SELECT thread, split FROM pins WHERE account = ?").all(account).map((row) => [row.thread, row.split]));
+        return rollupAll(account, threads);
+      });
+    },
+    /** Sorts again a page of the threads sorting covers (the inbox's and those still carrying what an earlier sorting gave), after `after`; returns the last thread it did, null at the end. */
     resort(account, after, limit) {
-      const threads = q(`SELECT DISTINCT thread FROM thread_labels WHERE account = ? AND (label = 'inbox' OR label LIKE 'sort-%') AND thread > ? ORDER BY thread LIMIT ?`).all(account, after, limit).map((row) => row.thread);
+      const threads = q(`SELECT DISTINCT thread FROM thread_labels WHERE account = ? AND (label = 'inbox' OR label LIKE 'split-%' OR label LIKE 'rule-%' OR label LIKE 'sort-%') AND thread > ? ORDER BY thread LIMIT ?`).all(account, after, limit).map((row) => row.thread);
       if (threads.length) tx(() => rollupAll(account, threads));
       return threads.at(-1) ?? null;
+    },
+    /** Of a page of the inbox (newest first, after the `next` of the page before), the threads whose newest message not the person's own passes `node`. */
+    tryFilter(account, node, before, limit) {
+      const state = sorting.get(account);
+      const at = before ? String(before).indexOf(":") : -1;
+      const cursor = at > 0 ? [Number(before.slice(0, at)), before.slice(at + 1)] : null;
+      const rows = q(`SELECT thread, date FROM thread_labels WHERE account = ? AND label = 'inbox' ${cursor ? "AND (date < ? OR (date = ? AND thread < ?))" : ""}
+        ORDER BY date DESC, thread DESC LIMIT ?`).all(account, ...(cursor ? [cursor[0], cursor[0], cursor[1]] : []), limit);
+      const passed = state ? rows.filter((row) => {
+        const all = q(`SELECT rowid AS rid, * FROM messages WHERE account = ? AND thread = ? AND NOT ${HIDDEN} ORDER BY date, key`).all(account, row.thread);
+        const deciding = all.findLast((one) => !isOwn(account, one)) ?? all.at(-1);
+        return deciding && passes(node, readOf(account, state, deciding));
+      }).map((row) => hubId(account, row.thread)) : [];
+      const last = rows.at(-1);
+      return { passed, next: rows.length === limit ? `${last.date}:${last.thread}` : null };
+    },
+    /** The messages a mirrored label rule gave a label the source lacks, by label id, each given out once. */
+    takeMirrors(account) {
+      const state = sorting.get(account);
+      if (!state?.mirrors.size) return [];
+      const taken = [...state.mirrors];
+      state.mirrors.clear();
+      return taken.map(([label, messages]) => ({ label, messages }));
     },
 
     /** The categories an account keeps as tabs; a change sorts its inbox threads again and returns them. */
@@ -395,6 +481,7 @@ export function openMailStore({ dir }) {
         q("DELETE FROM labels WHERE account = ?").run(account);
         for (const label of labels) q("INSERT INTO labels (account, id, name, role) VALUES (?, ?, ?, ?)").run(account, label.id, label.name, label.role);
       });
+      if (sorting.has(account)) sorting.get(account).names = null;
     },
 
     cursor(account, name) {
@@ -439,11 +526,18 @@ export function openMailStore({ dir }) {
     labels(account) {
       const counts = new Map(q("SELECT label, count(*) AS n, sum(unread > 0) AS unread FROM thread_labels WHERE account = ? GROUP BY label").all(account).map((row) => [row.label, row]));
       const order = (label) => label.role ? ROLES.indexOf(label.role) + (label.at ?? CATEGORIES.indexOf(label.id.slice("category-".length))) / 100 : ROLES.length;
-      // A category is a label the hub makes: Conduit's own, and any a rule names.
-      const named = new Map(SORTS.map((one) => [one.id, one.name]));
-      for (const rule of this.rules(account)) if (!named.has(categoryId(rule.then?.category ?? SORTS[0].id))) named.set(categoryId(rule.then.category), rule.then.category);
-      const sorts = sorting.has(account) ? [...named].map(([id, name], at) => ({ id: `sort-${id}`, name, role: "sort", at })) : [];
-      return [...q("SELECT id, name, role FROM labels WHERE account = ?").all(account), ...sorts]
+      const listed = q("SELECT id, name, role FROM labels WHERE account = ?").all(account);
+      const state = sorting.get(account);
+      const own = [];
+      if (state) {
+        namesOf(state, account);
+        own.push(...state.saved.splits.map((split, at) => ({ id: `split-${split.id}`, name: split.name, role: "split", at })));
+        // A label only a rule gives is the hub's, listed as any label the person made.
+        for (const rule of state.rules) rule.labels.forEach((name, at) => {
+          if (![...listed, ...own].some((one) => one.id === rule.ids[at])) own.push({ id: rule.ids[at], name, role: null });
+        });
+      }
+      return [...listed, ...own]
         .filter((row) => row.role !== "category" || tabsOf.get(account)?.includes(row.id.slice("category-".length)) !== false)
         .sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name))
         .map((row) => ({ id: row.id, name: row.name, role: row.role || null, unread: counts.get(row.id)?.unread || 0, threads: counts.get(row.id)?.n || 0 }));
@@ -563,7 +657,7 @@ export function openMailStore({ dir }) {
     dropAccount(account) {
       tx(() => {
         q("DELETE FROM search WHERE rowid IN (SELECT rowid FROM messages WHERE account = ?)").run(account);
-        for (const table of ["messages", "threads", "thread_labels", "labels", "cursors", "drafts", "rules"]) q(`DELETE FROM ${table} WHERE account = ?`).run(account);
+        for (const table of ["messages", "threads", "thread_labels", "labels", "cursors", "drafts", "sorting", "pins"]) q(`DELETE FROM ${table} WHERE account = ?`).run(account);
       });
       sorting.delete(account);
       fs.rmSync(rawDir(account), { recursive: true, force: true });
