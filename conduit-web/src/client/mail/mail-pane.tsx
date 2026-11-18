@@ -30,8 +30,8 @@ export default function MailPane(props: {
   onAccount(id: string): void;
   /** Open Settings at the mail section. */
   onSettings(): void;
-  /** The pane's header, given what mail adds to its actions (Compose, the error dot). */
-  header(actions: JSX.Element): JSX.Element;
+  /** The pane's header, given what mail adds to its actions (Compose, the error dot) and its modes (the inbox's splits). */
+  header(actions: JSX.Element, modes?: JSX.Element): JSX.Element;
 }) {
   // A failure to read is said in the pane, never thrown into it.
   const [trouble, setTrouble] = createSignal("");
@@ -110,10 +110,11 @@ export default function MailPane(props: {
   // The first few categories are the tabs; an account with more of its own has the rest in the chooser.
   const tabbed = () => categories().slice(0, TABS_MOST);
   const placeName = () => inInbox() && (label() === "inbox" || tabbed().some((one) => one.id === label())) ? "Inbox" : labelName();
-  const tabs = () => <Show when={inInbox() && tabbed().length && placeName() === "Inbox"}><ToolBar>
-    <Segmented label="Inbox category" size="sm" arrows value={label()} onChange={setLabel}
+  // The inbox's splits are the pane's modes, on its top edge.
+  const tabs = () => <Show when={inInbox() && tabbed().length && placeName() === "Inbox"}>
+    <Segmented label="Inbox split" size="sm" arrows value={label()} onChange={setLabel}
       options={[...tabbed().map((one) => ({ value: one.id, label: one.name, count: one.unread || undefined })), { value: "inbox", label: "All" }]} />
-  </ToolBar></Show>;
+  </Show>;
   const chooser = () => <DropdownMenu modal={false} placement="bottom-start">
     <MenuControl as={SelectTrigger} bare value={placeName()} aria-label="Label" />
     <MenuContent width="sm" height="xl">
@@ -198,7 +199,6 @@ export default function MailPane(props: {
           if (event.key === "Escape" && list.query()) { event.preventDefault(); event.stopPropagation(); void list.search(""); }
         }} />
     </ToolBar>
-    {tabs()}
     <ReadingScroll ref={(element) => { rows = element; }} onScroll={(event) => nearEnd(event.currentTarget)} onKeyDown={walk} aria-label={labelName()}>
       <Show when={list.threads().length} fallback={<Empty>{list.query() ? "Nothing found" : `Nothing in ${labelName()}`}</Empty>}>
         <div><For each={list.threads()}>{(thread, index) => <><Show when={dayOver(index())}>{(day) => <DashDay>{day()}</DashDay>}</Show>{row(thread)}</>}</For></div>
@@ -224,7 +224,7 @@ export default function MailPane(props: {
   };
 
   return <SheetFill ref={createArtWindow(true)} class="pane-mail" onKeyDown={escape}>
-    {props.header(headerActions())}
+    {props.header(headerActions(), tabs())}
     <Show when={!accounts.loading || accounts.latest} fallback={<Loading kind="pane"><Spinner />Loading mail</Loading>}>
       <Show when={account()} fallback={trouble() ? <Empty role="alert">{trouble()}</Empty> : <Empty><div><Icons.Mail /><p>Mail is set up in Settings.</p><Button variant="ghost" outline size="sm" onClick={() => props.onSettings()}>Open Settings</Button></div></Empty>}>
         <Show when={list.ready()} fallback={<Show when={trouble()} fallback={<Loading kind="pane"><Spinner />Loading mail</Loading>}><Empty role="alert">{trouble()}</Empty></Show>}>

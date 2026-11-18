@@ -64,6 +64,19 @@ export function safeHtml(html) {
 }
 // Read as text: pictures are in Original, and a remote one would tell its sender the message was opened.
 const withoutImages = (markdown) => markdown.replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/\[\s*\]\([^)]*\)/g, "").replace(/\n{3,}/g, "\n\n").trim();
+// A picture a message carries with it (src="cid:…") is put in its place as data: the frame can load nothing from the hub, and nothing is told to anyone by showing it.
+const INLINE_MOST = 8 * 1024 * 1024;
+function inlined(html, attachments) {
+  let room = INLINE_MOST;
+  const carried = new Map(attachments.filter((part) => part.contentId && /^image\/(png|jpe?g|gif|webp|bmp)$/i.test(part.mimeType))
+    .map((part) => [part.contentId.replace(/^<|>$/g, "").toLowerCase(), part]));
+  return carried.size ? html.replace(/cid:([^"'\s)>]+)/gi, (whole, id) => {
+    const part = carried.get(decodeURIComponent(id).toLowerCase()), data = part && bytes(part);
+    if (!data || data.length > room) return whole;
+    room -= data.length;
+    return `data:${part.mimeType.toLowerCase()};base64,${data.toString("base64")}`;
+  }) : html;
+}
 /** A message as the pane reads it (MailBody without `message`), and what `holdBody` takes from the same parse. */
 export async function readBody(raw) {
   const read = await readMail(raw);
@@ -72,7 +85,7 @@ export async function readBody(raw) {
     markdown: withoutImages(read.quoted ? read.own : read.markdown),
     quoted: read.quoted ? quoted : "",
     // As sent, its own styles and layout kept: cleanEmailHtml is for reading it as Markdown, and strips both.
-    html: read.mail.html ? safeHtml(read.mail.html) : null,
+    html: read.mail.html ? safeHtml(inlined(read.mail.html, read.mail.attachments)) : null,
     attachments: read.attachments.map((item, index) => ({ index, filename: item.filename, mimeType: item.mimeType, size: item.size })),
     hold: holdable(read.mail),
   };
