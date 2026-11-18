@@ -36,7 +36,9 @@ group("parsing and precedence", () => {
   assert.equal(full("{a}"), "a");
   assert.equal(full("from:(amazon ebay)"), "from:amazon AND from:ebay");
   assert.equal(full("subject:{sale deal} x"), "(subject:sale OR subject:deal) AND x");
-  assert.equal(full("subject:weekly plan from:bob"), 'subject:"weekly plan" AND from:bob');
+  assert.equal(full("subject:weekly plan from:bob"), "subject:weekly AND plan AND from:bob");
+  assert.equal(full('subject:"weekly plan" from:bob'), 'subject:"weekly plan" AND from:bob');
+  assert.equal(full("ask:a bill to pay from:bob"), 'ask:"a bill to pay" AND from:bob');
   assert.equal(full("FROM:bob IS:UNREAD"), "from:bob AND is:unread");
   assert.equal(full('"uber eats" x'), '"uber eats" AND x');
 });
@@ -64,7 +66,7 @@ group("forgiving reads", () => {
 
 group("canonical round-trips", () => {
   for (const text of ["a b OR c", "(a OR b) (c OR d)", "((a b)) OR (c OR (d e))", "NOT (a OR b) c", "{a b} {c d}", "-{a b}",
-    'subject:"a \\"quoted\\" word" from:@amazon.com', 'text:"x:y" "and" "-x" "{}" ""', "label:Work stuff OR category:social",
+    'subject:"a \\"quoted\\" word" from:@amazon.com', 'text:"x:y" "and" "-x" "{}" ""', 'label:"Work stuff" OR category:social',
     "is:read has:attachment kind:delivery older_than:2m newer_than:1y after:2026/01/01 before:2026/12/31",
     "ask:a bill to pay -ask:spam", "from:(a OR b c)", "a OR b AND c OR d"]) {
     const { node } = parseFilter(text), written = canonicalFilter(node), again = parseFilter(written);
@@ -87,7 +89,7 @@ group("text and phrase matching", () => {
   assert.ok(pass('""'));
   assert.ok(matches(null, mail(), FACTS));
   assert.ok(pass("text:tracking") && !pass("text:shipped"));
-  assert.ok(pass("subject:order has") && !pass("subject:tracking"));
+  assert.ok(pass('subject:"order has"') && !pass("subject:tracking"));
 });
 
 group("from, to, cc", () => {
@@ -101,7 +103,7 @@ group("from, to, cc", () => {
 });
 
 group("label, category, is, has, kind", () => {
-  assert.ok(pass("label:work stuff") && pass("label:WORK-STUFF") && pass('label:"Work stuff"') && !pass("label:work"));
+  assert.ok(pass("label:work-stuff") && pass("label:WORK-STUFF") && pass('label:"Work stuff"') && !pass("label:work"));
   assert.ok(pass("category:primary") && !pass("category:promotions"));
   assert.ok(pass("category:social", mail({ category: "social" })));
   assert.ok(pass("is:unread") && !pass("is:read") && pass("is:read", mail({ unread: false })));

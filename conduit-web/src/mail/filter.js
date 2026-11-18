@@ -219,11 +219,12 @@ class Parser {
     if (!dayStart(value)) throw new FilterError(`${field}: expects a date, such as ${field}:2026/10/01`, next.pos);
     return { kind: "field", field, value: value.replace(/-/g, "/") };
   }
-  // A value runs on, word by word, until the next field, operator, -term, bracket or quoted text.
+  // A value is one word, as in Gmail's search: the word after it is a term of its own. Only ask: runs on, being always a phrase:
+  // word by word until the next field, operator, -term, bracket or quoted text.
   collectValue(field) {
     if (this.peek().kind === "quoted") return this.consume().text;
     const words = [];
-    while (this.peek().kind === "word") {
+    while (this.peek().kind === "word" && (field === "ask" || !words.length)) {
       if (words.length && (this.isFieldAt(this.idx) || this.tokens[this.idx + 1]?.kind === "colon")) break;
       if (this.isDashAt(this.idx) || this.isLooseOrAt(this.idx)) break;
       words.push(this.collectTextWord());
@@ -358,7 +359,8 @@ TERMS (* marks Conduit's own, which Gmail's search lacks)
   from:amazon          sender's name or address contains it; from:@amazon.com the domain, from:a@b.com exactly; from:me yours
   to:jo                a To or Cc recipient (name or address); to:me sent to you
   cc:jo                a Cc recipient
-  subject:weekly plan  subject contains the phrase (a value runs on; subject:(a b) is each word in the subject)
+  subject:"weekly plan" subject contains the phrase; a value is one word unless quoted, so subject:weekly plan is
+                       subject:weekly AND plan, and subject:(a b) is each word in the subject
   label:receipts       has this label, its whole name ignoring case; a hyphen stands for a space
   category:promotions  the source's tab: primary, promotions, social, updates or forums
   is:unread            unread, read, starred, important
@@ -369,7 +371,8 @@ TERMS (* marks Conduit's own, which Gmail's search lacks)
   after:2026/10/01     on or after that day (local time); before:2026/10/01 before it; 2026-10-01 also reads
   * kind:receipt       receipt, delivery, security or action (it asks for something), read from its subject and text
   * text:tracking      the message text contains the phrase
-  * ask:a bill to pay  a model judges it; passes when it is at least 70% sure, never before it has answered
+  * ask:a bill to pay  a model judges it (its words run on to the next field or operator); passes when it is at least 70%
+                       sure, never before it has answered
 
 PRECEDENCE: NOT binds tightest, then AND (or a space), then OR
   a b OR c             reads as (a AND b) OR c
@@ -394,7 +397,8 @@ GRAMMAR
   and     = unary { [ "AND" ] unary } ;            (* side by side = AND *)
   unary   = { "NOT" } [ "-" ] primary ;            (* -x: no space *)
   primary = "(" filter ")" | "{" unary { unary } "}" | quoted | field | text ;
-  field   = multi ":" ( quoted | word { word } | "(" filter ")" | "{" unary { unary } "}" ) | single ":" ( word | quoted ) ;
-  multi   = from | to | cc | subject | text | label | ask ;
+  field   = multi ":" ( quoted | word | "(" filter ")" | "{" unary { unary } "}" ) | "ask" ":" ( quoted | word { word } )
+          | single ":" ( word | quoted ) ;
+  multi   = from | to | cc | subject | text | label ;
   single  = category | is | has | kind | older_than | newer_than | after | before ;   (* any case *)
   word    = { char but space ( ) { } : " } ;      quoted = '"' { char | '\\"' | '\\\\' } '"' ;`;
