@@ -4,6 +4,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { splitQuoted } from "../email-quote.js";
 import { matches, parseFilter } from "./filter.js";
+import { openMailSearch } from "./search.js";
 import { factsOf } from "./sorting.js";
 
 /*
@@ -271,29 +272,13 @@ export function openMailStore({ dir }) {
     return new Set([own, ...copies].filter(Boolean));
   };
 
-  // What the person typed, as FTS5 and SQL: every word quoted (so nothing they type is FTS syntax) and prefix-matched.
-  function parseQuery(account, text) {
-    const words = [];
-    const filters = { unread: false, attachments: false, labels: [] };
-    const phrase = (word) => `"${word.replace(/"/g, "\"\"")}"*`;
-    for (const match of String(text || "").matchAll(/(-?)(?:(\w+):)?(?:"([^"]*)"|(\S+))/g)) {
-      const [, , field, quoted, bare] = match;
-      const known = ["is", "has", "label", "from", "to", "subject"].includes(field?.toLowerCase());
-      const term = known ? field.toLowerCase() : undefined;
-      const value = known ? (quoted ?? bare ?? "").trim() : `${field ? `${field}:` : ""}${quoted ?? bare ?? ""}`.trim();
-      if (term === "is" && value === "unread") filters.unread = true;
-      else if (term === "is" && value === "starred") filters.labels.push("starred");
-      else if (term === "has" && /^attachments?$/.test(value)) filters.attachments = true;
-      else if (term === "label") {
-        const label = q("SELECT id FROM labels WHERE account = ? AND (id = ? OR lower(name) = lower(?))").get(account, value, value);
-        filters.labels.push(label?.id ?? value);
-      } else if (/[\p{L}\p{N}]/u.test(value)) {
-        const column = { from: "sender", to: "recipients", subject: "subject" }[term];
-        words.push(column ? `${column} : ${phrase(value)}` : phrase(value));
-      }
-    }
-    return { match: words.join(" AND "), filters };
-  }
+  // Found by search.js: words through the text index, operators checked on each candidate as a split's filter is.
+  let finder;
+  const find = () => finder ??= (() => {
+    const made = openMailSearch({ db, describe: (row) => readOf(row.account, sorting.get(row.account) ?? { own: "", known: new Set() }, { ...row, rid: row.rowid }) });
+    made.ensure();
+    return made;
+  })();
 
   const store = {
     close: () => db.close(),
@@ -597,29 +582,13 @@ export function openMailStore({ dir }) {
       return [...found.values()];
     },
 
+    /** The threads a search finds, best first (search.js says how it reads the text and ranks). */
     search({ account, q: text, limit = 50 }) {
       const size = Math.min(Math.max(Number(limit) || 50, 1), CHUNK);
-      const { match, filters } = parseQuery(account, text);
-      const { unread, attachments, labels } = filters;
-      if (!match && !unread && !attachments && !labels.length) return [];
-      if (!match) {
-        // Filters alone ask about threads, which the roll-ups answer from an index, newest first, without reading messages.
-        const [first, ...more] = labels;
-        const where = [unread ? "AND th.unread > 0" : "", attachments ? "AND th.attachments = 1" : "",
-          ...more.map(() => "AND EXISTS (SELECT 1 FROM thread_labels l WHERE l.account = th.account AND l.thread = th.thread AND l.label = ?)")].join(" ");
-        const rows = first
-          ? q(`SELECT th.* FROM thread_labels t JOIN threads th USING (account, thread) WHERE t.account = ? AND t.label = ? ${where}
-               ORDER BY t.date DESC, t.thread DESC LIMIT ?`).all(account, first, ...more, size)
-          : q(`SELECT * FROM threads th WHERE account = ? ${where} ORDER BY date DESC, thread DESC LIMIT ?`).all(account, ...more, size);
-        return rows.map(toThread);
-      }
-      const where = [unread ? "AND m.unread = 1" : "", attachments ? "AND m.attachments = 1" : "",
-        ...labels.map(() => "AND EXISTS (SELECT 1 FROM json_each(m.labels) WHERE value = ?)")].join(" ");
-      // Best message per thread; rank is lower for a better match, and a newer thread wins a tie.
-      const rows = q(`SELECT m.thread, min(search.rank) AS best, max(m.date) AS date FROM search JOIN messages m ON m.rowid = search.rowid
-        WHERE search MATCH ? AND m.account = ? ${where} GROUP BY m.thread ORDER BY best, date DESC LIMIT ?`).all(match, account, ...labels, size);
-      return store.threadsOf(rows.map((row) => hubId(account, row.thread)));
+      return store.threadsOf(find().search({ account, text: String(text ?? ""), limit: size }).map((hit) => hubId(account, hit.thread)));
     },
+    /** Brings the typo index up to the newest messages, at most `limit` of them; returns how many it took (0 when level). */
+    indexSearch: (limit) => find().catchUp(limit),
 
     drafts(account, thread) {
       const rows = thread

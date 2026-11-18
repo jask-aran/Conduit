@@ -71,6 +71,16 @@ export async function createMail({ dataRoot, changed }) {
   const live = new Map();
   const persist = () => writePrivateJson(file, { accounts: [...live.values()].map(({ account: { status: _, ...account }, secret }) => ({ ...account, secret })) });
 
+  // The typo index follows what sync reads in, a page at a time with a tick between, one run at a time.
+  let indexing = false;
+  const indexSearch = async () => {
+    if (indexing) return;
+    indexing = true;
+    try { while (store.indexSearch(1000)) await tick(); }
+    catch (error) { console.warn("[mail] indexing for search failed:", error.message); }
+    finally { indexing = false; }
+  };
+
   // A backfill writes hundreds of threads a second; clients hear of them in one event per account every NOTIFY_MS.
   const queued = new Map();
   const flush = (account) => {
@@ -78,6 +88,7 @@ export async function createMail({ dataRoot, changed }) {
     if (!entry) return;
     queued.delete(account);
     clearTimeout(entry.timer);
+    void indexSearch();
     // `all`: the account's mail was read in again from nothing, so clients re-read what they show rather than some threads.
     changed({ account, ...(entry.threads.size && !entry.all ? { threads: [...entry.threads] } : {}), ...(entry.accounts ? { accounts: true } : {}) });
   };
@@ -230,6 +241,7 @@ export async function createMail({ dataRoot, changed }) {
   }
 
   for (const { secret, ...record } of saved) await open({ ...record, sync: syncOf(record.sync) }, secret);
+  void indexSearch();
 
   const entryOf = (account) => {
     const entry = live.get(account);
