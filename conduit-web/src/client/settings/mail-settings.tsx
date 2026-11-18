@@ -1,4 +1,5 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import type { MailAccount, MailReach, MailSync } from "@/mail/mail";
 import { Button, Input, Segmented, Switch } from "@/components/ui/controls";
 import { SettingLine, SettingStep } from "@/components/ui/overlay";
@@ -8,6 +9,7 @@ import { Icons } from "@/components/ui";
 import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { sizeLabel } from "../chat/attachments";
 import { failure, mailApi } from "../mail/mail-api";
+import { MailSortingSettings } from "./mail-sorting-settings";
 
 const TABS = [{ value: "promotions", label: "Promotions" }, { value: "social", label: "Social" }, { value: "updates", label: "Updates" }, { value: "forums", label: "Forums" }];
 const SINCE = [{ value: "365", label: "1 year" }, { value: "1095", label: "3 years" }, { value: "1825", label: "5 years" }, { value: "all", label: "All" }];
@@ -37,7 +39,9 @@ const heldOf = ({ held, kind }: MailAccount) => [
 
 /** Mail accounts the hub reads for you: how each stands and what it holds, how far back it reads, and a form to add one. */
 export function MailSettings() {
-  const [accounts, setAccounts] = createSignal<MailAccount[] | null>(null);
+  // Kept by id, so an account's lines (and an editor open under them) outlive each status update.
+  const [held, setHeld] = createStore<{ accounts: MailAccount[] | null }>({ accounts: null });
+  const accounts = () => held.accounts;
   const [error, setError] = createSignal("");
   const [address, setAddress] = createSignal("");
   const [secret, setSecret] = createSignal("");
@@ -45,7 +49,7 @@ export function MailSettings() {
   const [refused, setRefused] = createSignal("");
   const [busy, setBusy] = createSignal("");
   const { confirm } = createDecisionScope(() => "mail-settings");
-  const load = () => mailApi.accounts().then((found) => { setAccounts(found); setError(""); }).catch((reason) => setError(failure(reason)));
+  const load = () => mailApi.accounts().then((found) => { setHeld("accounts", reconcile(found, { key: "id" })); setError(""); }).catch((reason) => setError(failure(reason)));
   onMount(() => void load());
   // Sync and errors move on their own: the hub says when.
   const heard = (event: Event) => { if ((event as CustomEvent<{ accounts?: true }>).detail?.accounts) void load(); };
@@ -79,7 +83,7 @@ export function MailSettings() {
   const ready = () => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address().trim()) && secret().trim().length > 0;
 
   return <>
-    <For each={accounts()}>{(account) => <Group title={account.address}>
+    <For each={accounts()}>{(account) => <><Group title={account.address}>
       <SettingLine plain label="Sync" title={account.name || undefined} state={stateOf(account)}>
         <Button variant="ghost" size="sm" disabled={busy() === account.id} onClick={() => void update(account, { paused: !account.sync.paused })}>{account.sync.paused ? "Resume" : "Pause"}</Button>
         <Button variant="ghost" size="icon-sm" haptic="destructive" aria-label={`Remove ${account.address}`} title="Remove" disabled={busy() === account.id} onClick={() => void remove(account)}><Icons.Delete /></Button>
@@ -100,7 +104,8 @@ export function MailSettings() {
         <Switch label={`${tab.label} tab`} checked={account.sync.tabs.includes(tab.value)} disabled={busy() === account.id}
           onChange={(on) => void update(account, { tabs: on ? [...account.sync.tabs, tab.value] : account.sync.tabs.filter((one) => one !== tab.value) })} />
       </SettingLine>}</For>
-    </Group>}</For>
+    </Group>
+    <MailSortingSettings account={account.id} scope={(accounts()?.length ?? 0) > 1 ? account.address : undefined} /></>}</For>
     <Group title="Add a Gmail account">
       <Note>Gmail signs Conduit in with an app password: 16 letters Google makes for one app, in place of your own password.</Note>
       <SettingStep step={1} label="Turn on 2-Step Verification"><Button variant="secondary" size="sm" onClick={() => window.open("https://myaccount.google.com/signinoptions/twosv", "_blank", "noopener,noreferrer")}><Icons.ExternalLink />Open Google</Button></SettingStep>
