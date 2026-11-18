@@ -310,6 +310,8 @@ try {
   await sorted(() => mail.removeLabelRule(account, travel.id));
   assert.ok(!mail.labels(account).some((label) => label.name === "Away"), "a rule's own label goes with it");
   assert.ok(allThreads({ account, label: paidLabel.id }).length === paidThreads.length, "a mirrored label stays at the source");
+  await mail.search({ account, q: "receipt", remote: true, limit: 100 });
+  assert.ok(paidThreads.every((thread) => mail.thread(thread.id).messages.some((message) => message.labels.includes(paidLabel.id))), "read back from the source, the label is there");
   step(`label rules: Paid held by the hub on ${paidThreads.length} threads, then mirrored to their messages at the source and kept there when the rule went; trying "receipt" found ${tried.threads}`);
 
   const bad = await call(`/accounts/${account}/splits`, { method: "POST", body: { name: "Bad", filter: "from:" } });
@@ -320,6 +322,9 @@ try {
   assert.equal((await call(`/accounts/${account}/splits`, { method: "POST", body: { id: "primary", name: "Rest", filter: "receipt" } })).status, 400, "the last split has no filter");
   assert.equal((await call(`/accounts/${account}/splits/nope`, { method: "DELETE" })).status, 404);
   assert.equal((await call(`/accounts/${account}/label-rules`, { method: "POST", body: { name: "x", filter: "", labels: ["Inbox"] } })).status, 400, "a rule cannot give a role label");
+  const named = await sorted(() => mail.putLabelRule(account, { id: "named", name: "Named like a split", filter: "Booking", labels: ["Receipts"] }));
+  assert.equal(named.id, "named", "a new rule keeps the id it was given");
+  await sorted(() => mail.removeLabelRule(account, "named"));
   assert.equal((await call(`/accounts/${account}/splits/order`, { method: "POST", body: { ids: ["primary"] } })).status, 400);
   for (const split of [receipts, flights, trips]) await sorted(async () => assert.deepEqual((await call(`/accounts/${account}/splits/${split.id}`, { method: "DELETE" })).body, { ok: true }));
   const restored = snapshot();

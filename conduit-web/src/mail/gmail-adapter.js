@@ -217,7 +217,9 @@ export function createGmailAdapter(ctx, deps = {}) {
     const s = { alive: true, work: c };
     try {
       await c.connect();
-      s.boxes = boxesOf(await c.list());
+      const boxes = await c.list();
+      s.boxes = boxesOf(boxes);
+      s.labels = new Set(boxes.map((b) => b.path));
       const path = pick(s.boxes);
       if (!path) throw mailError("unsupported", s.boxes.all ? SAY.unsupported : SAY.noAllMail);
       return await inBox(c, path, () => {
@@ -600,9 +602,9 @@ export function createGmailAdapter(ctx, deps = {}) {
       const remove = change.kind === "labels" ? gmailLabels(change.remove) : [];
       await now(async (c, s) => {
         if (change.kind === "trash" && !s.boxes.trash) throw mailError("unsupported");
-        // A label the account lacks is made first (CREATE; one that exists is left as it is): a mirrored label rule can name one.
+        // A label the account lacks is made first: a mirrored label rule can name one. A CREATE refused (made at Gmail since it was listed) leaves it to the STORE.
         for (const name of add.filter((one) => !one.startsWith("\\") && !s.labels?.has(one))) {
-          await c.mailboxCreate(name);
+          await c.mailboxCreate(name).catch(() => {});
           s.labels?.add(name);
         }
         for (const page of chunks(uids, PAGE)) {

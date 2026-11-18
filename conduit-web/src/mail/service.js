@@ -145,13 +145,16 @@ export async function createMail({ dataRoot, changed }) {
   const SORT_READ = 3;
   async function resort(entry, again = false) {
     const id = entry.account.id;
-    let at = again ? { read: 0, after: "" } : store.cursor(id, "sort") ?? { read: 0, after: "" };
+    const fresh = { read: 0, toward: SORT_READ, after: "" };
+    let at = again ? fresh : store.cursor(id, "sort") ?? fresh;
     if (at.read >= SORT_READ) return;
+    // A sorting left part-way by an older reading starts again from the first thread.
+    if (at.toward !== SORT_READ) at = fresh;
     const mine = entry.sorting = {};
     for (;;) {
       if (entry.closed || entry.sorting !== mine) return;
       const last = store.resort(id, at.after, PAGE);
-      at = last === null ? { read: SORT_READ, after: "" } : { read: 0, after: last };
+      at = last === null ? { read: SORT_READ, after: "" } : { ...fresh, after: last };
       store.setCursor(id, "sort", at);
       mirror(entry);
       if (last === null) return notify(id, { threads: [], all: true }, true);
@@ -393,7 +396,7 @@ export async function createMail({ dataRoot, changed }) {
       const kept = resorting(id, (saved) => {
         const at = saved.splits.findIndex((split) => split.id === asked);
         const last = at >= 0 && at === saved.splits.length - 1;
-        const split = { id: at >= 0 ? asked : newId(), name: name.trim(), filter: filterOf(filter), takes: takes ?? true, by: by === "agent" ? "agent" : "person" };
+        const split = { id: asked ?? newId(), name: name.trim(), filter: filterOf(filter), takes: takes ?? true, by: by === "agent" ? "agent" : "person" };
         if (last && (split.filter || !split.takes)) throw badRequest("The last split holds what no other takes: it has no filter and takes its mail.");
         if (at >= 0) saved.splits[at] = split;
         else saved.splits.unshift(split);
@@ -426,12 +429,12 @@ export async function createMail({ dataRoot, changed }) {
         || !Array.isArray(labels) || !labels.length || labels.length > 20 || !labels.every((label) => text(label, 100) && !label.trim().startsWith("\\"))) {
         throw badRequest("A label rule has a name of 120 characters at most, a filter, 1 to 20 label names, and mirror as true or false.");
       }
-      const roles = store.labels(id).filter((label) => label.role);
+      const roles = store.labels(id).filter((label) => label.role && label.role !== "split");
       const taken = labels.find((label) => roles.some((one) => one.name.toLowerCase() === label.trim().toLowerCase()));
       if (taken) throw badRequest(`${taken} is not a label a rule can give.`);
       const kept = resorting(id, (saved) => {
         const at = saved.rules.findIndex((rule) => rule.id === asked);
-        const rule = { id: at >= 0 ? asked : newId(), name: name.trim(), filter: filterOf(filter), labels: [...new Set(labels.map((label) => label.trim()))],
+        const rule = { id: asked ?? newId(), name: name.trim(), filter: filterOf(filter), labels: [...new Set(labels.map((label) => label.trim()))],
           mirror: mirrored ?? false, by: by === "agent" ? "agent" : "person" };
         if (at >= 0) saved.rules[at] = rule;
         else saved.rules.unshift(rule);
