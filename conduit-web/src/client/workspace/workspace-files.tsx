@@ -895,8 +895,6 @@ export function FilesView(props: {
           <WorkspaceFileSlot
             projectId={props.projectId}
             path={c.openPaths().primary}
-            slot="primary"
-            focused={false}
             closable={Boolean(c.openPaths().primary)}
             busy={c.uploading()}
             wrap={c.wrapLines()}
