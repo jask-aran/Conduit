@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
-import { SheetEditor, type SheetFrozen, type SheetHost, type SheetMarks } from "@/components/sheet";
+import { SheetEditor, type SheetFrozen, type SheetHost, type SheetMarks, type SheetPlace } from "@/components/sheet";
+import type { SheetChartKind } from "@/sheet-charts.js";
 import { toast } from "@/components/ui/notifications";
 import { webSocketUrl } from "../api/transport.js";
 import type { ArtifactSurfaceProps } from "./artifact-kinds";
@@ -39,6 +40,16 @@ export default function SheetSurface(props: ArtifactSurfaceProps) {
   });
   // The ask key asks the one comments go to about the cells selected.
   const ask = () => { const place = marks()?.place(); if (place && !props.quiet) props.offer()?.ask(place); };
-  return <SheetEditor host={host} id={id} name={props.about().name} margin={props.margin} marginEmpty={props.marginEmpty} marks={(made) => setMarks(() => made)} onDrawn={() => setDrawn(true)} onAsk={ask}
+  // A chart is asked of the one comments go to, as a comment on its range: withdrawn, the comment is settled and a chat the hub holds at work on it stopped.
+  const chart = (place: SheetPlace, kind?: SheetChartKind) => {
+    const offer = props.offer();
+    if (!offer || props.quiet) return Promise.resolve(null);
+    const words = `Make a ${kind ? `${kind} ` : ""}chart of these cells${kind ? "" : ", of the kind that fits them"}, with the chart action of conduit_artifact.`;
+    return offer.request(place, words).then(({ key, to }) => {
+      if (!to) { toast("Saved: no session was listening"); return null; }
+      return () => void Promise.allSettled([offer.withdraw(key), api(`/v0/document/${encodeURIComponent(id)}/stop`, { method: "POST", body: JSON.stringify({ item: key.split("/")[0] }) })]);
+    }, (error: Error) => { toast.error(`The chart was not asked for: ${error.message}`); return null; });
+  };
+  return <SheetEditor host={host} id={id} name={props.about().name} margin={props.margin} marginEmpty={props.marginEmpty} marks={(made) => setMarks(() => made)} onDrawn={() => setDrawn(true)} onAsk={ask} onChart={chart}
     onState={(state) => { setAway(state === "away"); setStale(state === "stale"); }} />;
 }

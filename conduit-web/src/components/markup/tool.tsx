@@ -387,6 +387,14 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     // Asked with its words (a paper's `@`): sent as it is, with no card to finish.
     if (words) posting = posting.then(() => send(id)); else openNote(id);
   };
+  /** Asked of the one comments go to, in words of the host's, about a place with its quote, and sent at once as an item of its own (a sheet's Make chart). */
+  const request = async (place: MarkupPlace, words: string) => {
+    const text = place.text.replace(/\s+/g, " ").trim().slice(0, QUOTE_CHARS), to = agent()?.name ?? null;
+    const asked: Selection = { id: nextId++, elements: [], comment: words, on: "page", place, ...(text ? { quote: text } : {}), ...(to ? { to } : {}) };
+    const { result } = await deliver((await transport.mark(host.clientId())).id, [asked], undefined, 0, to, false);
+    void host.sent?.();
+    return { key: `${result.id}/1`, to: result.handed.to?.name ?? null };
+  };
   const add = (elements: Element[], drag?: MarkupBox) => {
     const id = nextId++;
     const held = boxOf(elements);
@@ -649,7 +657,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   onMount(() => {
     // The moment is kept in case it is wanted; the tool opens on the live page all the same.
     if (atOpen) void take(false);
-    host.asks?.({ names: () => (waiters.latest ?? []).map((waiter) => waiter.name), listeners: () => waiters.latest ?? [], comment: (place) => addQuote(place), ask: (place, to) => { const name = to ?? agent()?.name; if (name) { openNote(null); setAsking({ place, name }); } }, unsent: () => sending() ? 0 : selections.filter((selection) => !selection.sent && selection.comment.trim()).length, send: () => void send(), to: () => agent()?.name ?? null, hand: handTo });
+    host.asks?.({ names: () => (waiters.latest ?? []).map((waiter) => waiter.name), listeners: () => waiters.latest ?? [], comment: (place) => addQuote(place), ask: (place, to) => { const name = to ?? agent()?.name; if (name) { openNote(null); setAsking({ place, name }); } }, request, withdraw: (key) => { const [item, n] = key.split("/"); return transport.resolve(item!, Number(n), true).then(() => void host.sent?.()); }, unsent: () => sending() ? 0 : selections.filter((selection) => !selection.sent && selection.comment.trim()).length, send: () => void send(), to: () => agent()?.name ?? null, hand: handTo });
     onCleanup(() => host.asks?.(null));
     for (const type of POINTER_EVENTS) window.addEventListener(type, swallow, { capture: true, passive: false });
     window.addEventListener("keydown", onKeyDown, { capture: true });

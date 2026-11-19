@@ -5,7 +5,8 @@
  */
 import type { Accessor } from "solid-js";
 import { Swatch } from "@/components/ui";
-import { sheetToolIcons } from "@/components/ui/sheet-icons";
+import { sheetChartIcons, sheetToolIcons } from "@/components/ui/sheet-icons";
+import { CHART_KINDS, type SheetChartKind } from "@/sheet-charts.js";
 import { SHEET_BORDERS, SHEET_INKS, type SheetBorders, type SheetInk } from "@/sheet-styles.js";
 import { SHEET_PRESETS, type SheetFormats } from "./formats";
 import { SHEET_TOOLS, type SheetRange, type SheetTool, type SheetToolId, type SheetToolName } from "./host";
@@ -19,8 +20,8 @@ const BORDER_LABELS: Readonly<Record<SheetBorders, string>> = { all: "All border
 const ALIGNS = [["left", "Align left"], ["center", "Align centre"], ["right", "Align right"]] as const;
 const VALIGNS = [["top", "Align top"], ["middle", "Align middle"], ["bottom", "Align bottom"]] as const;
 
-/** `done`: after a tool has run (the grid takes focus back). `fit`: the rows of a range whose wrapping changed are fitted to their lines. `spread`: Fill down or Fill right (sheet.tsx). `act`: a tool's run is one step of the history, by its label. */
-export function createSheetTools(options: { tip(name: SheetToolId): string | undefined; at: Accessor<SheetRange | null>; styles: SheetStyles; formats: SheetFormats; offered?: readonly SheetToolName[]; fit(range: SheetRange): void; spread(range: SheetRange, way: "down" | "right"): void; act(label: string, run: () => void): void; done(): void }): SheetTool[] {
+/** `done`: after a tool has run (the grid takes focus back). `fit`: the rows of a range whose wrapping changed are fitted to their lines. `spread`: Fill down or Fill right (sheet.tsx). `act`: a tool's run is one step of the history, by its label. `chart`: a chart of the selection asked for (sheet.tsx), where one can be. */
+export function createSheetTools(options: { tip(name: SheetToolId): string | undefined; at: Accessor<SheetRange | null>; styles: SheetStyles; formats: SheetFormats; offered?: readonly SheetToolName[]; fit(range: SheetRange): void; spread(range: SheetRange, way: "down" | "right"): void; act(label: string, run: () => void): void; chart?(kind: SheetChartKind): void; done(): void }): SheetTool[] {
   const { at, styles, formats } = options, offered = options.offered ?? SHEET_TOOLS;
   const worn = () => { const range = at(); return range && styles.worn(range.top, range.left); };
   const tool = (name: SheetToolId, label: string, icon: SheetTool["icon"], run: (range: SheetRange) => void, rest: Partial<SheetTool> & { on?(): boolean } = {}): SheetTool => {
@@ -42,6 +43,8 @@ export function createSheetTools(options: { tip(name: SheetToolId): string | und
     format: () => SHEET_PRESETS.map((preset) => tool(`format-${preset.name.toLowerCase()}` as SheetToolId, preset.name, mark("format"), (range) => formats.set(range, preset.format),
       { menu: "Number format", on: () => { const range = at(), format = range && formats.at(range.top, range.left); return Boolean(range) && (format ?? "General") === preset.format; } })),
     decimals: () => [tool("decimals-more", "More decimals", mark("decimals-more"), (range) => formats.decimals(range, 1)), tool("decimals-fewer", "Fewer decimals", mark("decimals-fewer"), (range) => formats.decimals(range, -1))],
+    // Each kind asks the agent for a chart of the selection: nothing is drawn here until it makes one.
+    chart: () => options.chart ? CHART_KINDS.map((kind) => { const Icon = sheetChartIcons[kind]; return tool(`chart-${kind}`, `${kind[0]!.toUpperCase()}${kind.slice(1)} chart`, () => <Icon />, () => options.chart!(kind), { menu: "Chart", glyph: () => <sheetChartIcons.column /> }); }) : [],
     spread: () => (["down", "right"] as const).map((way) => tool(`spread-${way}`, `Fill ${way}`, mark(`spread-${way}`), (range) => options.spread(range, way), { menu: "Fill", glyph: mark("spread-down"), keys: ["Ctrl", way === "down" ? "D" : "R"] })),
   };
   for (const [name, label, keys] of TOGGLES) all[name] = () => [tool(name, label, mark(name), (range) => { styles.set(range, { [name]: !worn()?.[name] }); if (name === "wrap") options.fit(range); }, { menu: STYLE, glyph: mark("text-style"), keys: keys && [...keys], on: () => Boolean(worn()?.[name]) })];

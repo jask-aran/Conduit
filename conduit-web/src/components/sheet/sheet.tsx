@@ -24,6 +24,8 @@ import { createSheetTools } from "./tools";
 import { createSheetFind } from "./find";
 import { createSheetHistory } from "./history";
 import { FormatMenu } from "./format-menu";
+import { sheetChartIcons as ChartIcons } from "@/components/ui/sheet-icons";
+import type { SheetChartKind } from "@/sheet-charts.js";
 
 const SheetCharts = lazy(() => import("./charts"));
 
@@ -37,8 +39,10 @@ const between = (from: number, to: number) => Array.from({ length: to - from + 1
 type Menu = { rows?: SheetRange; cols?: SheetRange };
 
 /** A sheet: the hub's live copy drawn in the grid, a formula bar over it, the comment margin beside it. */
-/** `onAsk`: the ask key (ASK_KEY) was pressed in the grid. */
-export function SheetEditor(props: { host: SheetHost; id: string; name: string; margin?: JSX.Element; marginEmpty?: boolean; marks?(marks: SheetMarks): void; onState?(state: SheetState): void; onDrawn?(): void; onAsk?(): void }) {
+/** `onAsk`: the ask key (ASK_KEY) was pressed in the grid. `onChart`: a chart of a range asked for (of a kind, or of the one that fits it), which answers how
+ *  to withdraw it, or null where it did not go. */
+export function SheetEditor(props: { host: SheetHost; id: string; name: string; margin?: JSX.Element; marginEmpty?: boolean; marks?(marks: SheetMarks): void; onState?(state: SheetState): void; onDrawn?(): void; onAsk?(): void;
+  onChart?(place: SheetPlace, kind?: SheetChartKind): Promise<(() => void) | null> }) {
   const live = createLiveSheet(props.host, props.id), cells = live.doc.getMap<string>(CELLS), look = live.doc.getMap<number | string>(LOOK);
   const [model, setModel] = createSignal<SheetView>(), [grid, setGrid] = createSignal<SheetGrid>(), [failed, setFailed] = createSignal<string>();
   const [at, setAt] = createSignal<SheetRange | null>(null), [changed, setChanged] = createSignal(0), [address, setAddress] = createSignal<string | null>(null), [scrolled, setScrolled] = createSignal(0);
@@ -137,6 +141,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     drawn: () => props.onDrawn?.(),
     pressed: (row, col) => { const hit = anchors.find((anchor) => { const range = rangeOf(anchor); return range && row >= range.top && row <= range.bottom && col >= range.left && col <= range.right; }); if (hit) moved(hit.key); },
     key: (event, row, col) => {
+      if (event.key === "Escape" && charting()) { event.preventDefault(); charting()!.stop(); return true; }
       if (event.key === " " && event.ctrlKey !== event.shiftKey && !event.altKey && !event.metaKey) { event.preventDefault(); grid()?.whole(event.ctrlKey ? "cols" : "rows"); return true; }
       // As a spreadsheet's: Alt+= opens a SUM of the numbers just above (else just left), Ctrl+; today's date, each to be finished in the cell.
       const sum = event.altKey && !event.ctrlKey && !event.metaKey && event.key === "=", today = event.ctrlKey && !event.altKey && !event.shiftKey && event.key === ";";
@@ -286,8 +291,21 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     }
     return { text: lines.join("\n"), label: corners.range, under: corners, boxes: () => { const now = rangeOf({ under: corners }), box = now && grid()?.bounds(now); return box ? [box] : []; } };
   };
+  // A chart asked of the agent: a notice says it is being made, until a chart arrives from elsewhere or the person stops it (Esc), which withdraws it.
+  const [charting, setCharting] = createSignal<{ label: string; stop(): void } | null>(null);
+  const askChart = (kind?: SheetChartKind, range = at()) => {
+    const place = range && placeOf(range);
+    if (!place || !props.onChart) return;
+    let withdraw: (() => void) | null | undefined, stopped = false;
+    const asked = { label: kind ? `${kind[0]!.toUpperCase()}${kind.slice(1)} chart` : "Chart", stop: () => { stopped = true; if (charting() === asked) setCharting(null); withdraw?.(); grid()?.focus(); } };
+    setCharting(asked);
+    void props.onChart(place, kind).then((then) => { withdraw = then; if (!then && charting() === asked) setCharting(null); else if (stopped) then?.(); });
+  };
+  const charted = (event: { keysChanged: Set<string>; transaction: { local: boolean } }) => { if (charting() && !event.transaction.local && [...event.keysChanged].some((name) => name.startsWith("charts:"))) setCharting(null); };
+  look.observe(charted);
+  onCleanup(() => look.unobserve(charted));
   const find = createSheetFind({ model, grid, at, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols, draw: formats.draw, write: (list) => writes(list.length === 1 ? "Replace" : "Replace all")(list) });
-  const tools = createSheetTools({ tip: sequences.tip, at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(), spread: (range, way) => spread(range, way), act: history.act,
+  const tools = createSheetTools({ tip: sequences.tip, at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(), spread: (range, way) => spread(range, way), act: history.act, chart: props.onChart && ((kind) => askChart(kind)),
     fit: (range) => sizes.fitRows(Array.from({ length: range.bottom - range.top + 1 }, (_, n) => range.top + n), readLook(root!)) });
   const marks: SheetMarks = {
     subject: () => ({ ...model()?.size() }),
@@ -414,6 +432,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       </Frost>
       {/* The ribbon (Markup's bar with the sheet's tools) stands here, at the row's end, folding to the room the formula field leaves it. */}
       <div ref={setSlot} class="ui-spreadsheet-slot" />
+      <Show when={charting()}>{(asked) => <Notice kind="tool" busy live action={{ label: "Stop (Esc)", onClick: () => asked().stop() }}>{asked().label} — Making the chart…</Notice>}</Show>
       <Show when={frozenHere()}>{(cell) => <Notice kind="tool" title={cell().why ? `${cell().formula}: ${cell().why}` : cell().formula}>Frozen on import: ={cell().formula.replace(/^=/, "")}</Notice>}</Show>
     </div>
     <div ref={body} class="ui-spreadsheet-body">
@@ -431,6 +450,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
               <Show when={grid()?.held()}><MenuRow icon={<Icons.Paste />} keys={["Ctrl", "Shift", "V"]} onSelect={() => paste(range(), true)}>Paste values</MenuRow></Show>
               <MenuRow icon={<Icons.Delete />} keys={["Delete"]} onSelect={() => clear(range())}>Clear contents</MenuRow>
               <Show when={props.onAsk}><MenuRow icon={<Icons.Chat />} onSelect={() => { grid()?.select(range()); props.onAsk?.(); }}>Comment</MenuRow></Show>
+              <Show when={props.onChart && (range().bottom > range().top || range().right > range().left)}><MenuRow icon={<ChartIcons.column />} onSelect={() => askChart(undefined, range())}>Make chart</MenuRow></Show>
             </MenuSection>}</Show>
             <Show when={picked()}>{(range) => <Show when={range().bottom > range().top || range().right > range().left}><MenuSection>
               <Show when={!merges.is(range())}>

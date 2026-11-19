@@ -206,7 +206,10 @@ export interface MarkupHost {
 }
 
 /** What the open tool offers its host (MarkupHost.asks). */
-export type MarkupOffer = { names(): string[]; listeners(): MarkupListener[]; comment(about: MarkupPlace): void; ask(about: MarkupPlace, to?: string): void; unsent(): number; send(): void; to(): string | null; hand(name: string): void };
+/** `request`: words of the host's about a place, sent at once to the one comments go to, with the place's quote: the comment's key (<item>/<n>) and who it was handed to (null: no one was listening, and it waits saved).
+ *  `withdraw`: that comment settled by the person, so it is asked no longer. */
+export type MarkupOffer = { names(): string[]; listeners(): MarkupListener[]; comment(about: MarkupPlace): void; ask(about: MarkupPlace, to?: string): void; request(about: MarkupPlace, words: string): Promise<{ key: string; to: string | null }>; withdraw(key: string): Promise<void>;
+  unsent(): number; send(): void; to(): string | null; hand(name: string): void };
 
 /** The receiver's routes over the host's own request function (its origin, its credentials); a 204 resolves with nothing. */
 export function httpTransport(request: <T>(path: string, init?: { method?: string; headers?: Record<string, string>; body?: string | Blob }) => Promise<T>, base = "/v0/markup"): MarkupTransport {

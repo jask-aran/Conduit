@@ -8,7 +8,7 @@ import type { JSX } from "solid-js";
 import type { SheetSortOp, SheetTabOp } from "@/sheet-format.js";
 import type { SheetFormatOp } from "@/sheet-formats.js";
 import type { SheetBorders, SheetInk, SheetStyleOp } from "@/sheet-styles.js";
-import type { SheetChartSpec } from "@/sheet-charts.js";
+import type { SheetChartKind, SheetChartSpec } from "@/sheet-charts.js";
 
 /** Cells by position, 0-based and inclusive (sheet-format.js parseRange). */
 export type SheetRange = { top: number; left: number; bottom: number; right: number };
@@ -47,11 +47,11 @@ export type SheetFrozen = Record<string, Record<string, { formula: string; why: 
  * The edit tools a sheet offers on its ribbon, as its kind declares them (client/document/artifact-kinds.ts). Each draws as one or more tools named
  * `<tool>` (a toggle) or `<tool>-<choice>` (one of a menu): SheetToolId, the stable names a key sequence is bound to. Undo and Redo are the ribbon's own.
  */
-export type SheetToolName = "bold" | "italic" | "underline" | "strike" | "wrap" | "clear" | "color" | "fill" | "borders" | "align" | "valign" | "format" | "decimals" | "spread";
-export const SHEET_TOOLS: readonly SheetToolName[] = ["bold", "italic", "underline", "strike", "wrap", "clear", "color", "fill", "borders", "align", "valign", "format", "decimals", "spread"];
+export type SheetToolName = "bold" | "italic" | "underline" | "strike" | "wrap" | "clear" | "color" | "fill" | "borders" | "align" | "valign" | "format" | "decimals" | "spread" | "chart";
+export const SHEET_TOOLS: readonly SheetToolName[] = ["bold", "italic", "underline", "strike", "wrap", "clear", "color", "fill", "borders", "align", "valign", "format", "decimals", "spread", "chart"];
 /** `clear`: Clear formatting (styles and number formats). `spread-down` and `spread-right`: Fill down and Fill right, named apart from `fill`, the fill colour. */
 export type SheetToolId = "bold" | "italic" | "underline" | "strike" | "wrap" | "clear" | `spread-${"down" | "right"}` | `color-${SheetInk | "none"}` | `fill-${SheetInk | "none"}` | `borders-${SheetBorders}`
-  | `align-${"left" | "center" | "right"}` | `valign-${"top" | "middle" | "bottom"}` | `format-${"general" | "number" | "currency" | "percent" | "date" | "time"}` | `decimals-${"more" | "fewer"}`;
+  | `chart-${SheetChartKind}` | `align-${"left" | "center" | "right"}` | `valign-${"top" | "middle" | "bottom"}` | `format-${"general" | "number" | "currency" | "percent" | "date" | "time"}` | `decimals-${"more" | "fewer"}`;
 /** One tool as the ribbon draws it (Markup's MarkupHostTool): read where drawn, so getters follow. `menu`: the tools of one stand as one control (showing `glyph` where one says it); `compact` with `swatch`: a set of inks. */
 export type SheetTool = { name: SheetToolId; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; compact?: boolean; swatch?: string; glyph?: () => JSX.Element; tip?: string; run(): void };
 
