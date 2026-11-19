@@ -309,7 +309,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     // second press of a double click, for a fit, would miss the edge it moved.
     onColumnResizeStart: (_, __, col) => { sizing = { col, moved: false }; },
     onColumnResize: (_, width, col) => { if (sizing && col === sizing.col) sizing.moved = true; if (sizing?.moved) drive.width?.(col, width); },
-    onColumnResizeEnd: (_, width, col) => { if (sizing?.moved) events.resized(col, width); },
+    // Let go, the resize is over: Glide's own fit on a double click (to its 500 px cap, drawn but never kept) comes after, and is left out for the sheet's.
+    onColumnResizeEnd: (_, width, col) => { if (sizing?.moved) events.resized(col, width); sizing = undefined; },
     onHeaderContextMenu: (col) => { const area = picked(); events.menu({ cols: owner.current.columns.hasIndex(col) && area ? area : { top: 0, bottom: 0, left: col, right: col } }); },
     onCellContextMenu: ([col, drawn]) => {
       const row = p.map.sheet(drawn), area = picked(), inside = area && row >= area.top && row <= area.bottom && (col < 0 || (col >= area.left && col <= area.right));
