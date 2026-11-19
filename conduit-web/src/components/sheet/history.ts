@@ -2,7 +2,7 @@ import * as Y from "yjs";
 import type { SheetCellsOp } from "./host";
 
 /** One step of the page's history: the origin of every transaction it makes, here and, tagged, on the hub (live.ts), so all of it is undone as one. */
-export class SheetStep { constructor(readonly id: number, readonly label: string) {} }
+export class SheetStep { counted = false; constructor(readonly id: number, readonly label: string) {} }
 
 // Excel keeps 100 steps; the list shows the latest of them.
 const KEPT = 100, LISTED = 20, STEP = "step", LABEL = "label", WAIT_MS = 3000;
@@ -29,7 +29,7 @@ type Scoped = Y.AbstractType<any>;
 export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: SheetCellsOp) => Promise<unknown>) {
   const um = new Y.UndoManager(scope, { captureTimeout: 0, trackedOrigins: new Set<unknown>([null, SheetStep]) });
   const steps = new Map<number, SheetStep>(), listeners = new Set<() => void>(), owed: (() => void)[] = [];
-  // `made`: steps begun, and changes made outside any.
+  // `made`: steps that changed something or sent an op (each once), and changes made outside any. A step begun for a key that did nothing is not one.
   let open: SheetStep | null = null, lone: SheetStep | null = null, next = 1, made = 0, out = 0, owedFrames = 0, late: ReturnType<typeof setTimeout> | undefined;
   const settle = () => {
     clearTimeout(late);
@@ -40,7 +40,8 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
     for (const run of owed.splice(0)) run();
   };
   const changed = () => listeners.forEach((listener) => listener());
-  const begin = (label: string) => { made++; const step = new SheetStep(next++, label); steps.set(step.id, step); if (steps.size > KEPT * 2) steps.delete(steps.keys().next().value!); return step; };
+  const count = (step: SheetStep | null) => { if (step?.counted) return; if (step) step.counted = true; made++; };
+  const begin = (label: string) => { const step = new SheetStep(next++, label); steps.set(step.id, step); if (steps.size > KEPT * 2) steps.delete(steps.keys().next().value!); return step; };
   um.on("stack-item-added", ({ stackItem, origin, changedParentTypes }) => {
     const step = origin instanceof SheetStep ? origin : null, stack = um.undoStack;
     if (origin === um) stackItem.meta.set(LABEL, um.currStackItem?.meta.get(LABEL));
@@ -50,7 +51,7 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
         into.insertions = Y.mergeDeleteSets([into.insertions, stackItem.insertions]); into.deletions = Y.mergeDeleteSets([into.deletions, stackItem.deletions]);
         stack.splice(stack.lastIndexOf(stackItem), 1);
       } else {
-        if (!step) made++;
+        count(step);
         stackItem.meta.set(STEP, step?.id).set(LABEL, step?.label || described(changedParentTypes));
         if (stack.length > KEPT) stack.shift();
       }
@@ -75,6 +76,7 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
       // Ops sent together outside a step (the fill handle's, a run of shown rows each) are one step.
       const step = open ?? lone ?? (lone = begin(opLabel(op)));
       queueMicrotask(() => { lone = null; });
+      count(step);
       out++;
       let over = false;
       const done = () => { if (over) return; over = true; clearTimeout(gaveUp); out--; settle(); }, gaveUp = setTimeout(() => { owed.length = 0; done(); }, WAIT_MS * 10);
