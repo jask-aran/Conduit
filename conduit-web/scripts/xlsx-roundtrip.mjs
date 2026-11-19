@@ -109,9 +109,10 @@ try {
   $xl.Visible = $false; $xl.DisplayAlerts = $false; $xl.AutomationSecurity = 3
   # A normal load: a file Excel would offer to repair is refused here, never repaired silently.
   try { $wb = $xl.Workbooks.Open($Path, 0, $true) } catch { $out.status = 'needs repair'; throw }
-  $sheets = 0; $charts = 0; $tables = 0; $formulas = 0
-  foreach ($ws in $wb.Worksheets) { $sheets++; $charts += $ws.ChartObjects().Count; $tables += $ws.ListObjects.Count; try { $formulas += $ws.UsedRange.SpecialCells(-4123).Count } catch {} }
-  $out = @{ status = 'opens clean'; sheets = $sheets; charts = $charts; tables = $tables; formulas = $formulas }
+  $sheets = 0; $charts = 0; $tables = 0; $formulas = 0; $at = 0
+  foreach ($ws in $wb.Worksheets) { $sheets++; $charts += $ws.ChartObjects().Count; $tables += $ws.ListObjects.Count; try { $found = $ws.UsedRange.SpecialCells(-4123); $formulas += $found.Count; foreach ($cell in $found.Cells) { if ("$($cell.Formula2)" -like '*@*') { $at++ } } } catch {} }
+  # A formula Excel reads as one value where the file meant it to spill shows as =@…: counted in "at".
+  $out = @{ status = 'opens clean'; sheets = $sheets; charts = $charts; tables = $tables; formulas = $formulas; at = $at }
   $wb.Close($false)
 } catch { $out.error = $_.Exception.Message }
 finally {
@@ -126,7 +127,7 @@ const win = (file) => execFileSync("wslpath", ["-w", file], { encoding: "utf8" }
 /** What Excel makes of an export, held against what it holds: its tabs, charts, tables and formulas. */
 const excel = async (bytes) => {
   const file = path.join(excelDir, "book.xlsx"), zip = XLSX.CFB.read(bytes, { type: "buffer" }), names = zip.FullPaths, xml = (re) => zip.FileIndex.filter((_, i) => re.test(names[i])).map((one) => Buffer.from(one.content).toString("utf8"));
-  const wrote = { sheets: (xml(/xl\/workbook\.xml$/)[0].match(/<sheet\b/g) ?? []).length, charts: xml(/xl\/charts\/chart\d+\.xml$/).length, tables: xml(/xl\/tables\/table\d+\.xml$/).length, formulas: xml(/worksheets\/sheet\d+\.xml$/).join("").match(/<f\b/g)?.length ?? 0 };
+  const wrote = { sheets: (xml(/xl\/workbook\.xml$/)[0].match(/<sheet\b/g) ?? []).length, charts: xml(/xl\/charts\/chart\d+\.xml$/).length, tables: xml(/xl\/tables\/table\d+\.xml$/).length, formulas: [...xml(/worksheets\/sheet\d+\.xml$/).join("").matchAll(/<c\b([^>]*)><f\b([^>]*)/g)].reduce((n, [, cell, head]) => { const ref = /ref="([^"]+)"/.exec(head)?.[1], area = ref && !/\bcm=/.test(cell) && XLSX.utils.decode_range(ref); return n + (area ? (area.e.r - area.s.r + 1) * (area.e.c - area.s.c + 1) : 1); }, 0), at: 0 };
   await fs.writeFile(file, bytes);
   try {
     const said = JSON.parse(execFileSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", win(path.join(excelDir, "open.ps1")), "-Path", win(file)], { cwd: "/mnt/c", encoding: "utf8", timeout: 120_000 }).trim());
