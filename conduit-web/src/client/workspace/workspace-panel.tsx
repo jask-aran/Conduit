@@ -1,8 +1,6 @@
 import { Icons } from "@/components/ui";
-import { Dock, DockDocument, DockSurface, SheetFill, ToolContent, ToolKept, Loading, PaneHeader, Segmented } from "@/components/ui";
-import { createDecisionScope } from "@/components/ui/decision-dialog";
+import { Dock, DockDocument, DockSurface, ToolContent, ToolKept, Loading, PaneHeader, Segmented } from "@/components/ui";
 import { batch, createEffect, createSignal, For, on, onCleanup, onMount, Show, type Accessor, type JSX } from "solid-js";
-import { Portal } from "solid-js/web";
 import { minMainPaneWidth } from "../layout-geometry";
 import { unitPx } from "@/components/ui/layout";
 
@@ -21,14 +19,13 @@ import "./workspace.css";
 import type { DiffScope } from "./workspace-review-source";
 import { REVIEW_NAVIGATION_EVENT, type ReviewNavigationRequest } from "../chat/review-navigation";
 import { TURN_ARTIFACT_NAVIGATION_EVENT, type TurnArtifactNavigationRequest } from "../chat/turn-artifact-navigation";
-import { cachedWorkspace, cacheWorkspace, createRequestScope, reportError } from "./workspace-shared";
-import { createFiles, FileBesideView, FilesView } from "./workspace-files";
-import { createSourceControl, SourceControlModes, SourceControlView } from "./workspace-source-control";
+import { cacheWorkspace, reportError } from "./workspace-shared";
+import { createFolderViewer, FolderModes, FolderView } from "./folder-viewer";
+import { SourceControlModes } from "./workspace-source-control";
 import { ChatModes, ChatView, createChatReview } from "./workspace-chat-view";
 import { TerminalView } from "./workspace-terminal-view";
-import { createWorkspacePoll } from "./workspace-poll";
-import type { DirectoryListing, FileSlotId, PanelTab, SplitView, WorkspaceSettings } from "./workspace-types";
-import { readToolDrag, TOOL_DRAG_TYPE, WORKSPACE_TOOL_ICONS, WORKSPACE_TOOL_LABELS } from "./workspace-rail";
+import type { DirectoryListing, PanelTab, SplitView, WorkspaceSettings } from "./workspace-types";
+import { WORKSPACE_TOOL_ICONS, WORKSPACE_TOOL_LABELS } from "./workspace-rail";
 import type { FileEntry } from "./file-documents";
 
 const PANEL_TABS = ["files", "chat", "terminal", "diff", "jbot"] satisfies PanelTab[];
@@ -41,10 +38,9 @@ function panelTab(value: string): PanelTab | null {
 // In the unit: its least, its most and its first width; the gap is --space-md, the chat's margin.
 const MIN_WORKSPACE_PANE_UNITS = 18.75, MAX_WORKSPACE_PANE_UNITS = 38.75, DEFAULT_WORKSPACE_PANE_UNITS = 26.25, DOCK_GAP_UNITS = 0.5;
 
-export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; onFocusRequestComplete?: () => void; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; onTabChange?: (tab: PanelTab) => void; splitView?: Accessor<SplitView | null>; splitHost?: Accessor<HTMLElement | undefined>; onOpenBeside?: (view: SplitView) => void; onMoveToDock?: (view: SplitView) => void; onCloseSplit?: (focus?: boolean) => void; bindSplit?: (release: (toDock: boolean) => Promise<boolean>) => () => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing>; onOpenFile?: (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest; adopt?: boolean }) => void; openFiles?: Accessor<Map<string, "focused" | "shown">>; documentShown?: Accessor<boolean>; minWidth?: Accessor<number>; widthRequest?: Accessor<{ width: number; nonce: number } | null>; overlay?: Accessor<boolean>; documentHost?: (element: HTMLElement | undefined) => void;
+export default function WorkspacePanel(props: { connectivity?: () => Connectivity; projectId: Accessor<string>; projectName: Accessor<string>; sourceControlEnabled: Accessor<boolean>; workingRoot: Accessor<string>; chatId: Accessor<string>; artifactChatId?: Accessor<string | null>; commentChatId?: Accessor<string | null>; historyAvailable?: Accessor<boolean>; open: Accessor<boolean>; expanded: Accessor<boolean>; focusRequest: Accessor<number>; onFocusRequestComplete?: () => void; requestedTab?: Accessor<{ tab: PanelTab; terminalId?: string; nonce: number } | null>; onRequestOpen?: () => void; onToggleExpanded: () => void; onClose: () => void; onTabChange?: (tab: PanelTab) => void; /** The folder viewer or a terminal leaving the dock for a pane of its own. */ onMoveToRow?: (view: SplitView) => void; shortcuts: ShortcutManager; onBrowseDirectory?: (path: string) => void; onBrowseParent?: () => void; requestedFile?: Accessor<{ path: string } | null>; settingsScope?: Accessor<string>; initialDirectory?: Accessor<DirectoryListing>; onOpenFile?: (entry: FileEntry, options: { beside: boolean; edit: boolean; reveal?: ReviewNavigationRequest; adopt?: boolean }) => void; openFiles?: Accessor<Map<string, "focused" | "shown">>; documentShown?: Accessor<boolean>; minWidth?: Accessor<number>; widthRequest?: Accessor<{ width: number; nonce: number } | null>; overlay?: Accessor<boolean>; documentHost?: (element: HTMLElement | undefined) => void;
   /** Drawn by the app, which holds its session. It stays in the dock: no Maximise, no moving to a pane. */
   jbotView?: () => JSX.Element }) {
-  const { confirm: confirmDialog } = createDecisionScope(props.projectId);
   let panelRoot: HTMLElement | undefined;
   let panelMotionId = 0;
   let mobileReturnFocus: HTMLElement | null = null;
@@ -74,59 +70,27 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   const commentChatId = () => props.commentChatId?.() ?? props.artifactChatId?.() ?? null;
 
   const tabVisible = (candidate: PanelTab) => (candidate !== "diff" || props.sourceControlEnabled()) && tab() === candidate;
-  // A view is in the dock or in the main pane's split, never both.
-  const inSplit = (candidate: PanelTab) => props.splitView?.() === candidate && Boolean(props.splitHost?.()) && (candidate !== "diff" || props.sourceControlEnabled());
-  const fileBeside = () => props.splitView?.() === "file" && Boolean(props.splitHost?.());
-  const dockShows = (candidate: PanelTab) => tabVisible(candidate) && !inSplit(candidate);
-  const shown = (candidate: PanelTab) => (props.open() && dockShows(candidate)) || inSplit(candidate);
+  const shown = (candidate: PanelTab) => props.open() && tabVisible(candidate);
 
-  const requests = createRequestScope(props.projectId);
-  const sourceControl = createSourceControl({ projectId: props.projectId, enabled: props.sourceControlEnabled, chatId: () => props.artifactChatId?.() ?? null, requests, settings, settingsScope: panelScope() });
+  const viewer = createFolderViewer({ projectId: props.projectId, sourceControlEnabled: props.sourceControlEnabled, chatId: () => props.artifactChatId?.() ?? null, settings, settingsScope: panelScope(),
+    mode: () => tab() === "diff" ? "changes" : "files", setMode: (mode) => setPaneTab(mode === "changes" ? "diff" : "files"),
+    shown: () => shown("files") || shown("diff"), initialDirectory: props.initialDirectory });
+  const { files, sourceControl, requests } = viewer;
   createEffect(() => {
     if (props.sourceControlEnabled()) return;
     if (tab() === "diff") setTab("files");
   });
   const chat = createChatReview({ projectId: props.projectId, chatId: () => props.artifactChatId?.() ?? null, historyAvailable: () => Boolean(props.historyAvailable?.()),
     visible: () => shown("chat"), gitFiles: () => sourceControl.diff()?.files ?? [], settings, settingsScope: panelScope() });
-  const openFileDocument = (path: string, beside: boolean, edit: boolean, reveal?: ReviewNavigationRequest) => {
+  createEffect(on(() => [props.projectId(), shown("chat")] as const, ([, visible]) => { if (visible && chat.mode() === "history") void chat.loadHistory(); }));
+  const openFileDocument = (path: string, beside: boolean, edit: boolean, reveal?: ReviewNavigationRequest, mode?: FileEntry["mode"]) => {
     if (!props.onOpenFile) return false;
-    props.onOpenFile({ projectId: props.projectId(), path }, { beside, edit, reveal });
+    props.onOpenFile({ projectId: props.projectId(), path, ...(mode ? { mode } : {}) }, { beside, edit, reveal });
     return true;
   };
-  const files = createFiles({ projectId: props.projectId, requests, settings, settingsScope: projectScope(), openElsewhere: openFileDocument });
-  const poll = createWorkspacePoll({ projectId: props.projectId, requests, files, sourceControl, sourceControlEnabled: props.sourceControlEnabled,
-    hasInitialDirectory: Boolean(props.initialDirectory),
-    shown: () => shown("files") || fileBeside() || shown("diff") || shown("chat"),
-    filesShown: () => shown("files") || fileBeside(), diffShown: () => shown("diff") });
-  // The second slot lives only while the split holds it: anything else there
-  // lets it go, and it going (closed, removed, another chat's files) closes
-  // the split. Leaving asks first when it has an edit.
-  createEffect(() => {
-    const view = props.splitView?.();
-    const path = files.openPaths().secondary;
-    if (view !== "file" && path) files.setSlotPath("secondary", null);
-    else if (view === "file" && !path) props.onCloseSplit?.(false);
-  });
-  const releaseFileBeside = async (toDock: boolean) => {
-    const path = files.openPaths().secondary;
-    if (!path) return true;
-    if (files.slotHandles.get("secondary")?.hasUnsavedChanges() && !(await confirmDialog(toDock ? "Discard unsaved changes and move this file to the dock?" : "Discard unsaved changes and close this file?"))) return false;
-    if (files.openPaths().secondary !== path) return false;
-    if (toDock && !(await files.openInSlot("primary", path))) return false;
-    files.slotHandles.get("secondary")?.discardChanges();
-    return true;
-  };
-  const unbindSplit = props.bindSplit?.(releaseFileBeside);
-  onCleanup(() => unbindSplit?.());
-  const openFileBeside = async (path: string) => {
-    if (openFileDocument(path, true, false)) return;
-    if (!props.onOpenBeside) return files.openFile(path);
-    const previous = files.openPaths().secondary;
-    if (previous && previous !== path && !(await files.confirmDiscard(previous, "Discard unsaved changes and open another file?"))) return;
-    batch(() => {
-      props.onOpenBeside!("file");
-      files.openInSlot("secondary", path);
-    });
+  // Without room for a pane of its own (a phone, a narrow window) it opens in the viewer.
+  const openDocument = (path: string, mode?: FileEntry["mode"]) => {
+    if (!openFileDocument(path, true, false, undefined, mode)) void (mode ? viewer.review(mode, path) : files.openFile(path));
   };
 
   let panelWasOpen = false;
@@ -147,15 +111,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   };
   createEffect(() => props.onTabChange?.(tab()));
   const tabLabel = (candidate: PanelTab) => WORKSPACE_TOOL_LABELS[candidate];
-  const setPaneTab = (next: PanelTab) => {
-    const resolved = next === "diff" && !props.sourceControlEnabled() ? "files" : next;
-    if (!inSplit(resolved)) selectTab(resolved);
-  };
-  const focusSplit = () => queueMicrotask(() => {
-    const content = props.splitHost?.()?.querySelector<HTMLElement>(".ui-tool-content");
-    focusFirst(content);
-    if (!content?.contains(document.activeElement)) content?.focus({ preventScroll: true });
-  });
+  const setPaneTab = (next: PanelTab) => selectTab(next === "diff" && !props.sourceControlEnabled() ? "files" : next);
   const focusTabControl = (next: PanelTab) => {
     const control = panelRoot?.querySelectorAll<HTMLElement>('[aria-label="Workspace views"] > button')[PANEL_TABS.filter((item) => item !== "jbot").indexOf(next as never)];
     // On a desktop the rail stands in for the tabs, so focus lands in the
@@ -191,7 +147,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     });
   };
   const [jbotKept, setJbotKept] = createSignal(false);
-  createEffect(() => { if (dockShows("jbot") && props.open()) setJbotKept(true); });
+  createEffect(() => { if (tabVisible("jbot") && props.open()) setJbotKept(true); });
   const tabIcon = (candidate: PanelTab) => { const Icon = WORKSPACE_TOOL_ICONS[candidate]; return <Icon />; };
   // A phone has no rail, so its header keeps a strip of the views.
   const [viewIconsOnly, setViewIconsOnly] = createSignal(false);
@@ -221,7 +177,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     '[role="dialog"][data-state="open"]',
   );
   const selectShortcutTab = (next: PanelTab) => {
-    if (inSplit(next)) return focusSplit();
     setPaneTab(next);
     focusTabDefault(next);
   };
@@ -247,52 +202,28 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   ];
   onCleanup(() => releaseShortcutHandlers.forEach((release) => release()));
 
-  const openSourceControlReview = async (scope: DiffScope, path: string, beside = false) => {
-    if (!(await files.confirmDiscard(path, "Discard unsaved changes and review this file?"))) return;
-    sourceControl.showReview(scope);
-    if (beside && props.onOpenBeside) props.onOpenBeside("diff");
-    else {
-      if (!inSplit("diff")) props.onRequestOpen?.();
-      setPaneTab("diff");
-    }
-    await sourceControl.refreshReview(path);
-  };
-  const inspectFileDiff = (path: string, staged: boolean, beside?: boolean) => void openSourceControlReview(staged ? "staged" : "changes", path, beside);
-  const showFileDiff = (slot: FileSlotId, staged: boolean, beside?: boolean) => {
-    const path = files.openPaths()[slot];
-    if (path) { files.setFocusedSlot(slot); void openSourceControlReview(staged ? "staged" : "changes", path, beside); }
+  const openSourceControlReview = async (scope: DiffScope, path: string) => {
+    props.onRequestOpen?.();
+    await viewer.review(scope, path);
   };
   const focusedBeside = () => {
-    const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const row = focused && (panelRoot?.contains(focused) || props.splitHost?.()?.contains(focused)) ? focused : null;
-    if (row?.matches('[role="treeitem"]:not([aria-expanded])') && row.dataset.path) return { kind: "file" as const, path: row.dataset.path };
-    if (row?.matches("[data-change-path]")) return { kind: "diff" as const, path: row.dataset.changePath!, staged: row.dataset.staged === "true" };
+    const focused = document.activeElement instanceof HTMLElement && panelRoot?.contains(document.activeElement) ? document.activeElement : null;
+    if (focused?.matches('[role="treeitem"]:not([aria-expanded])') && focused.dataset.path) return { path: focused.dataset.path };
+    if (focused?.matches("[data-change-path]")) return { path: focused.dataset.changePath!, mode: focused.dataset.staged === "true" ? "staged" as const : "changes" as const };
     return null;
   };
-  // A file opens beside wherever the tree offers it (a pane of its own, or the split); a change only into the split.
-  const canOpenFocusedBeside = () => {
-    const target = focusedBeside();
-    return Boolean(target && (props.onOpenBeside || (target.kind === "file" && props.onOpenFile)));
-  };
-  const openFocusedBeside = () => {
-    const target = focusedBeside();
-    if (target?.kind === "file") openFileBeside(target.path);
-    else if (target) inspectFileDiff(target.path, target.staged, true);
-  };
+  const canOpenFocusedBeside = () => Boolean(focusedBeside());
+  const openFocusedBeside = () => { const target = focusedBeside(); if (target) openDocument(target.path, target.mode); };
   const openWorkingFile = async (path: string) => {
-    if (openFileDocument(path, false, false)) return;
-    if (!(await files.openInSlot("primary", path))) return;
-    if (inSplit("files")) return focusSplit();
     props.onRequestOpen?.();
-    if (!tabVisible("files")) setPaneTab("files");
+    await viewer.openWorking(path);
     queueMicrotask(() => focusTabDefault("files"));
   };
   const resolveReviewNavigation = (event: Event) => {
     const request = (event as CustomEvent<ReviewNavigationRequest>).detail;
     if (!request || request.chatId !== commentChatId()) return;
-    const target: PanelTab = request.scope === "file" ? "files" : request.scope === "changes" || request.scope === "staged" || request.scope === "head" ? "diff" : "chat";
     // A file's comment goes to a pane's file viewer, which needs no dock.
-    if (!inSplit(target) && !(request.scope === "file" && props.onOpenFile)) props.onRequestOpen?.();
+    if (!(request.scope === "file" && props.onOpenFile)) props.onRequestOpen?.();
     setReviewReveal(request);
     if (request.scope === "file") {
       if (openFileDocument(request.path, false, false, request)) return;
@@ -314,7 +245,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   const resolveTurnArtifactNavigation = (event: Event) => {
     const request = (event as CustomEvent<TurnArtifactNavigationRequest>).detail;
     if (!request || request.chatId !== props.artifactChatId?.()) return;
-    if (!inSplit("chat")) props.onRequestOpen?.();
+    props.onRequestOpen?.();
     setReviewReveal(null);
     chat.selectMode("changes");
     setPaneTab("chat");
@@ -395,7 +326,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   createEffect(() => {
     const open = props.open();
     if (open !== panelWasOpen) {
-      if (!open && !props.splitView?.()) requests.reset();
+      if (!open) requests.reset();
       animatePanelGeometry(open);
     }
     panelWasOpen = open;
@@ -453,7 +384,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     stopResize?.();
   });
 
-  let loadedProjectId = "";
   let geometryProjectId = "";
   createEffect(on(() => [props.chatId(), props.projectId()] as const, () => {
     const nextTab = storedTab();
@@ -475,7 +405,8 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     if (pendingWidthCommit != null) commitWidth(pendingWidthCommit);
   }));
   createEffect(on(() => props.requestedTab?.(), (next) => {
-    if (next) selectShortcutTab(next.tab);
+    // Summoning Files brings the folder viewer back in the mode it was left in.
+    if (next) selectShortcutTab(next.tab === "files" && tab() === "diff" ? "diff" : next.tab);
   }));
   createEffect(on(() => props.focusRequest(), (request, previous) => {
     if (request && request !== previous && props.open()) {
@@ -485,35 +416,6 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
       });
     }
   }));
-  createEffect(on(
-    () => [props.projectId(), tab(), props.open(), sourceControl.mode(), props.splitView?.(), props.splitHost?.()] as const,
-    ([projectId]) => {
-      if (!shown("files") && !shown("diff") && !shown("chat") && !shown("terminal")) return;
-      const projectChanged = loadedProjectId !== projectId;
-      if (projectChanged) {
-        if (loadedProjectId) requests.reset();
-        loadedProjectId = projectId;
-        const cached = cachedWorkspace(projectId);
-        batch(() => {
-          files.restoreFromCache(cached, props.initialDirectory?.());
-          sourceControl.setDiff(cached?.diff || null);
-        });
-      }
-      const filesVisible = shown("files");
-      const diffVisible = shown("diff");
-      const chatVisible = shown("chat");
-      if (filesVisible && !files.directories()[""] && !files.filesLoading()) void files.loadDirectory("", false);
-      if (diffVisible || (filesVisible && props.sourceControlEnabled())) {
-        const includePatch = sourceControl.mode() === "patch";
-        const includeHistory = sourceControl.mode() === "graph";
-        const current = sourceControl.diff();
-        const needsPatch = diffVisible && includePatch;
-        const needsHistory = diffVisible && includeHistory;
-        if (!current || (needsPatch && !current.diff) || (needsHistory && !current.commits)) void sourceControl.loadDiff(needsPatch, needsHistory, Boolean(current));
-      }
-      if (chatVisible && chat.mode() === "history") void chat.loadHistory();
-    }));
-
   createEffect(on(() => props.initialDirectory?.(), (listing) => {
     if (!listing) return;
     files.setDirectories((current) => ({ ...current, "": listing }));
@@ -521,95 +423,58 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   }));
 
   createEffect(on(() => [props.projectId(), props.requestedFile?.(), props.open()] as const, ([, file, open]) => {
-    if (file && open) files.openFile(file.path);
+    if (file && open) void viewer.openWorking(file.path);
   }));
 
-  const viewLabel = (view: SplitView) => view === "file" ? files.openPaths().secondary?.split("/").pop() || "File"
-    : view.startsWith("shell:") ? "Terminal" : tabLabel(view as PanelTab);
-  const closeSplitView = (view: SplitView) => {
-    if (view === "file") {
-      files.closeSlot("secondary");
-      if (files.openPaths().secondary) return;
-    }
-    props.onCloseSplit?.();
-  };
+  const folder = (tool: PanelTab) => tool === "files" || tool === "diff";
   // A terminal's controls are drawn into its tool header, so it is one row.
-  const [termSlots, setTermSlots] = createSignal<Partial<Record<"dock" | "split", HTMLElement>>>({});
-  const termSlot = (where: "dock" | "split") => <span ref={(element) => { element.style.display = "contents"; setTermSlots((slots) => ({ ...slots, [where]: element })); }} />;
-  const toolHeader = (tool: Accessor<SplitView>, where: "dock" | "split") => (
-    <PaneHeader kind="tool" fit frost={tool() === "jbot"} draggable={!isMobileLayout() && tool() !== "jbot"}
-      onDragStart={(event) => { event.dataTransfer?.setData(TOOL_DRAG_TYPE, JSON.stringify({ tool: tool(), from: where })); if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"; document.body.dataset.toolDrag = where; }}
-      onDragEnd={() => delete document.body.dataset.toolDrag}
-      name={!isMobileLayout() && tool() === "diff" ? "Files" : viewLabel(tool())} nameTitle={tool() === "file" ? files.openPaths().secondary ?? "" : props.workingRoot()}
-      place={where === "dock" && tool() !== "jbot" ? props.projectName() : undefined} placeTitle={props.workingRoot()}
+  const [termSlot, setTermSlot] = createSignal<HTMLElement>();
+  const toolHeader = (tool: Accessor<PanelTab>) => (
+    <PaneHeader kind="tool" fit frost={tool() === "jbot"} draggable={!isMobileLayout() && folder(tool()) && Boolean(props.onMoveToRow)} data-doc-view={folder(tool()) ? `folder:${props.projectId()}` : undefined}
+      name={!isMobileLayout() && folder(tool()) ? "Files" : tabLabel(tool())} nameTitle={props.workingRoot()}
+      place={tool() !== "jbot" ? props.projectName() : undefined} placeTitle={props.workingRoot()}
       modes={<>
-        <Show when={where === "dock" && !isMobileLayout() && (tool() === "files" || tool() === "diff")}>
-          <Segmented arrows label="Folder viewer" value={tab() === "diff" ? "diff" : "files"} onChange={changePaneTab}
-            options={[{ value: "files", label: "Files" }, { value: "diff", label: "Changes", disabled: !props.sourceControlEnabled() }]} />
-        </Show>
-        <Show when={tool() === "diff" && props.sourceControlEnabled()}><SourceControlModes control={sourceControl} /></Show>
+        <Show when={!isMobileLayout() && folder(tool())}><FolderModes viewer={viewer} sourceControlEnabled={props.sourceControlEnabled()} /></Show>
+        <Show when={isMobileLayout() && tool() === "diff" && props.sourceControlEnabled()}><SourceControlModes control={sourceControl} /></Show>
         <Show when={tool() === "chat"}><ChatModes control={chat} historyAvailable={Boolean(props.historyAvailable?.())} /></Show>
       </>}
-      views={where === "dock" ? tabStrip() : undefined}
-      actions={<><Show when={tool() === "terminal" || tool().startsWith("shell:")}>{termSlot(where)}</Show><Show when={where === "dock"} fallback={<>
-          <HeaderButton label="Move to dock" aria-label={`Move ${viewLabel(tool())} to the dock`} icon={<Icons.Workspace />} onClick={() => props.onMoveToDock?.(tool())} />
-          <HeaderButton label={`Close ${viewLabel(tool())}`} icon={<Icons.Close />} onClick={() => closeSplitView(tool())} />
-        </>}>
-          <Show when={props.onOpenBeside && tool() !== "jbot" && !(tool() === "files" && props.onOpenFile)}><HeaderButton only="desktop" label="Move to main pane" aria-label={`Move ${viewLabel(tool())} to the main pane`} icon={<Icons.Split />} onClick={() => props.onOpenBeside?.(tool())} /></Show>
-          <Show when={tool() === "terminal"}><HeaderButton label={props.expanded() ? "Restore" : "Maximise"} aria-label={props.expanded() ? "Restore workspace panel" : "Maximise workspace panel"} aria-pressed={props.expanded()} icon={<Show when={props.expanded()} fallback={<Icons.Maximize />}><Icons.Minimize /></Show>} onClick={props.onToggleExpanded} /></Show>
-          <HeaderButton label="Close workspace panel" icon={<Icons.Close />} onClick={props.onClose} />
-        </Show></>} />
+      views={tabStrip()}
+      actions={<>
+        <Show when={tool() === "terminal"}><span ref={(element) => { element.style.display = "contents"; setTermSlot(element); }} /></Show>
+        <Show when={props.onMoveToRow && folder(tool())}><HeaderButton only="desktop" label="Move to a pane" aria-label="Move Files to a pane" icon={<Icons.Split />} onClick={() => props.onMoveToRow?.(`folder:${props.projectId()}`)} /></Show>
+        <Show when={tool() === "terminal"}><HeaderButton label={props.expanded() ? "Restore" : "Maximise"} aria-label={props.expanded() ? "Restore workspace panel" : "Maximise workspace panel"} aria-pressed={props.expanded()} icon={<Show when={props.expanded()} fallback={<Icons.Maximize />}><Icons.Minimize /></Show>} onClick={props.onToggleExpanded} /></Show>
+        <HeaderButton label="Close workspace panel" icon={<Icons.Close />} onClick={props.onClose} />
+      </>} />
   );
-  const toolView = (tool: PanelTab, where: "dock" | "split") => tool === "files"
-    ? <FilesView control={files} expanded={where === "dock" && props.expanded()} projectId={props.projectId()} workingRoot={props.workingRoot()}
-      sourceControlEnabled={props.sourceControlEnabled()} gitFiles={sourceControl.diff()?.files ?? []} commentChatId={commentChatId()} reveal={reviewReveal()}
-      stale={poll.stale()} onRetryPoll={poll.retry} onSaved={() => void sourceControl.loadDiff(false, false)} onShowDiff={showFileDiff}
+  const toolView = (tool: PanelTab) => folder(tool)
+    ? <FolderView viewer={viewer} expanded={props.expanded()} projectId={props.projectId()} workingRoot={props.workingRoot()} sourceControlEnabled={props.sourceControlEnabled()}
+      commentChatId={commentChatId()} chatAvailable={Boolean(props.artifactChatId?.())} reveal={reviewReveal()} onOpenDocument={openDocument}
       onOpenAs={props.onOpenFile ? (path) => void props.onOpenFile!({ projectId: props.projectId(), path }, { beside: false, edit: false, adopt: true }) : undefined}
-      onOpenBeside={props.onOpenBeside || props.onOpenFile ? openFileBeside : undefined} onBrowseDirectory={props.onBrowseDirectory} onBrowseParent={props.onBrowseParent}
-      navigatorOnly={Boolean(props.onOpenFile)} openInPane={props.openFiles ? (path) => props.openFiles!().get(`${props.projectId()}:${path}`) : undefined} />
-    : tool === "diff" ? <SourceControlView control={sourceControl} stale={poll.stale()} onRetryPoll={poll.retry} chatAvailable={Boolean(props.artifactChatId?.())}
-      commentChatId={commentChatId()} reveal={reviewReveal()} onInspectFile={inspectFileDiff} onOpenWorkingFile={openWorkingFile} />
+      onBrowseDirectory={props.onBrowseDirectory} onBrowseParent={props.onBrowseParent} openInPane={props.openFiles ? (path) => props.openFiles!().get(`${props.projectId()}:${path}`) : undefined} />
     : tool === "jbot" ? props.jbotView?.()
     : tool === "chat" ? <ChatView control={chat} historyAvailable={Boolean(props.historyAvailable?.())} chatId={props.artifactChatId?.() ?? null}
       commentChatId={commentChatId()} reveal={reviewReveal()} onOpenWorkingFile={openWorkingFile} />
     : <TerminalView computer={props.settingsScope?.() === "computer"} projectId={props.projectId()} projectName={props.projectName()}
       workingRoot={props.workingRoot()} terminalId={props.requestedTab?.()?.terminalId} focusRequest={terminalFocusRequest()} connectivity={props.connectivity}
-      onOpenBeside={where === "dock" && props.onOpenBeside ? (id) => props.onOpenBeside!(`shell:${id}`) : undefined} controls={termSlots()[where]} />;
-  const splitView = (view: SplitView) => view === "file"
-    ? <FileBesideView control={files} projectId={props.projectId()} sourceControlEnabled={props.sourceControlEnabled()} gitFiles={sourceControl.diff()?.files ?? []}
-      commentChatId={commentChatId()} reveal={reviewReveal()} onSaved={() => void sourceControl.loadDiff(false, false)} onShowDiff={showFileDiff} />
-    : view.startsWith("shell:") ? <TerminalView computer={props.settingsScope?.() === "computer"} projectId={props.projectId()} projectName={props.projectName()}
-      workingRoot={props.workingRoot()} terminalId={view.slice("shell:".length)} focusRequest={0} connectivity={props.connectivity} controls={termSlots().split} />
-    : toolView(view as PanelTab, "split");
-  const dockDrop = {
-    onDragOver: (event: DragEvent) => { if (document.body.dataset.toolDrag === "split" && event.dataTransfer?.types.includes(TOOL_DRAG_TYPE)) event.preventDefault(); },
-    onDrop: (event: DragEvent) => { const drag = readToolDrag(event); if (drag?.from === "split") { event.preventDefault(); props.onMoveToDock?.(drag.tool); } },
-  };
+      onOpenBeside={props.onMoveToRow ? (id) => props.onMoveToRow!(`term:${id}`) : undefined} controls={termSlot()} />;
 
   return <>
     <Show when={props.open()}>
       <Backdrop layer="panel" label="Dismiss workspace panel" onDismiss={props.onClose} />
     </Show>
-    <Dock ref={panelRoot} class="workspace-panel" data-region="workspace-panel" open={props.open() || shellWidth() > 0.5} expanded={props.expanded()} overlay={Boolean(props.overlay?.())} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} {...dockDrop} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, "--dock-document-width": `${documentWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
+    <Dock ref={panelRoot} class="workspace-panel" data-region="workspace-panel" open={props.open() || shellWidth() > 0.5} expanded={props.expanded()} overlay={Boolean(props.overlay?.())} aria-label="Workspace panel" aria-hidden={!props.open()} inert={!props.open()} style={{ "--workspace-panel-width": `${width()}px`, "--workspace-shell-width": `${shellWidth()}px`, "--dock-document-width": `${documentWidth()}px`, width: `${shellWidth()}px`, "margin-right": `${shellGap()}px` }}>
     <ResizeEdge kind="pane" dock aria-label="Resize workspace panel" aria-valuemin={minWidth()} aria-valuemax={Math.floor(window.innerWidth * 0.65)} aria-valuenow={width()} startDrag={startResize} onStep={(direction) => saveWidth(width() - 16 * direction)} />
     <DockSurface documented={Boolean(props.documentShown?.())} onPointerDown={focusWorkspaceSurface}>
-    {toolHeader(tab, "dock")}
+    {toolHeader(tab)}
     <ToolContent>
-      <For each={PANEL_TABS.filter((tool) => tool !== "jbot")}>{(tool) => <Show when={dockShows(tool)}>{toolView(tool, "dock")}</Show>}</For>
+      <Show when={tabVisible("files") || tabVisible("diff")}>{toolView("files")}</Show>
+      <For each={["chat", "terminal"] as const}>{(tool) => <Show when={tabVisible(tool)}>{toolView(tool)}</Show>}</For>
       {/* jbot's stays drawn once opened, its chat where it was: put away and back costs nothing. */}
-      <Show when={jbotKept()}><ToolKept shown={dockShows("jbot")}>{toolView("jbot", "dock")}</ToolKept></Show>
+      <Show when={jbotKept()}><ToolKept shown={tabVisible("jbot")}>{toolView("jbot")}</ToolKept></Show>
     </ToolContent>
     <DockDocument ref={(element) => { props.documentHost?.(element); onCleanup(() => props.documentHost?.(undefined)); }} />
     <Show when={requests.loading()}><Loading kind="pane"><Spinner /><span>Loading workspace</span></Loading></Show>
     </DockSurface>
   </Dock>
-    <Show when={props.splitHost?.() && props.splitView?.() && !/^(chat|page|files):/.test(props.splitView()!) && props.splitView()}>{(tool) =>
-      <Portal mount={props.splitHost!()!}>
-        <SheetFill>
-          {toolHeader(tool, "split")}
-          <ToolContent>{splitView(tool())}</ToolContent>
-        </SheetFill>
-      </Portal>
-    }</Show>
   </>;
 }

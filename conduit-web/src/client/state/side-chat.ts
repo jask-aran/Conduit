@@ -55,6 +55,8 @@ export function createSideChat(options: {
   });
   return {
     ...session, selectedId, selected,
+    /** Where the chat was opened from, for a chat no project lists (a paper's thread), as pane A's route knows it. */
+    project: () => selected()?.project ?? options.projects().find((item) => item.id === projectId()),
     open: (target: ChatSummary, project: Project) => session.chat.select(target, project, { history: "none" }),
     close: () => {
       session.chat.reset();

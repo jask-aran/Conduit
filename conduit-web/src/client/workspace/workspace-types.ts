@@ -14,14 +14,14 @@ export interface DiffPayload { repository: boolean; branch?: string; upstream?: 
 export interface GitCommitDetail { hash: string; content: string; }
 /** The dock's tools; jbot's works on no project (the jbot chat with its panel). */
 export type PanelTab = "files" | "diff" | "chat" | "terminal" | "jbot";
-export type SplitView = PanelTab | "file" | "home" | `shell:${string}` | `chat:${string}` | `page:${string}` | `files:${string}` | `term:${string}` | `browser:${string}` | `mail:${string}` | `artifact:${string}`;
+/** What a pane shows; `folder:<project>` is the folder viewer on a workspace, `files:` one file. */
+export type SplitView = "home" | `chat:${string}` | `page:${string}` | `files:${string}` | `folder:${string}` | `term:${string}` | `browser:${string}` | `mail:${string}` | `artifact:${string}`;
 /** SplitView's kinds are the UI API's declared views', each way: a kind on one side only fails here. */
 type SplitViewKind = SplitView extends infer V ? V extends `${infer K}:${string}` ? K : V : never;
 type DeclaredViewKind = (typeof UI_VIEWS)[number]["kind"];
 const viewKindsAgree: [SplitViewKind] extends [DeclaredViewKind] ? [DeclaredViewKind] extends [SplitViewKind] ? true : never : never = true;
 void viewKindsAgree;
-export const isPanelTab = (value: unknown): value is PanelTab => value === "files" || value === "diff" || value === "chat" || value === "terminal" || value === "jbot";
-export const isSplitView = (value: unknown): value is SplitView => isPanelTab(value) || value === "file" || value === "home" || (typeof value === "string" && /^(shell|chat|page|files|term|browser|mail|artifact):./.test(value));
+export const isSplitView = (value: unknown): value is SplitView => value === "home" || (typeof value === "string" && /^(chat|page|files|folder|term|browser|mail|artifact):./.test(value));
 export type ChatMode = "history" | "changes";
 // `discarded`: the harness kept this step in its tree but builds every later request without it
 // (an answer it was interrupted writing).
@@ -30,8 +30,8 @@ export interface HistoryNode { entry: HistoryEntry; children: HistoryNode[]; lab
 export interface HistoryTree { mode: "linear" | "tree"; tree: HistoryNode[]; leafId: string | null; }
 export type SourceControlMode = "changes" | "review" | "graph" | "patch";
 export type GitAction = "stage" | "stage-all" | "unstage" | "unstage-all" | "commit" | "fetch" | "pull" | "push";
-export type FileSlotId = "primary" | "secondary";
-export type OpenFiles = { primary: string | null; secondary: string | null };
+export type FileSlotId = "primary";
+export type OpenFiles = { primary: string | null };
 export type UploadTarget = { kind: "directory"; path: string } | { kind: "replacement"; path: string };
 
 export interface WorkspaceSettings {

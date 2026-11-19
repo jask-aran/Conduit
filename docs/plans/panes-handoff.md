@@ -35,28 +35,31 @@ A new tab there is served the previous client by the service worker (`sw.js`) af
 
 1. Landed (`57274bdd4`, `e0fd7908a`): docking shows the docked pane at once, docking over a held pane gates
    unsaved edits, Ctrl from a document pane joins the nearest session pane (store `openRules`), focus kept on the
-   paper/thread switch, old-model leftovers removed. Unfixed: a thread's header names its place "Chats" in pane B but
-   the project in pane A. Not run: Ctrl-opening jbot, jbot in a side pane.
+   paper/thread switch, old-model leftovers removed. Not run: Ctrl-opening jbot, jbot in a side pane.
 2. Landed (`896bb060f`): closing the shown tab goes to the one shown before it (`Pane.recent`); a tab past five is
    refused with the old notice when every tab holds a draft. Not clicked through in the browser.
 3. Added `test/pane-store.test.js`: Ctrl/Alt, document uniqueness, draft retention, recent-tab close/eviction,
    dock/summon URL round-trip, undo/redo. Paid for by consolidating test-stream assertions and its reader fixture.
-4. In the current checkout: `Layout.summon` now drives desktop Files/terminal/jbot and survives reload; dismiss
-   restores the dock's held pane. The shown jbot rail button dismisses even when it has needs. Desktop Files/Changes
-   share a header; Source Control and Chat review no longer have rail buttons. Phone controls remain unchanged.
-   File documents now hold one file: plain replaces the focused pane, Alt opens beside, Ctrl opens a document pane
-   without document tabs. File-column/tab state, `main-file-tabs`, empty columns and their drag/swap paths are gone;
-   `file-tabs.ts` was replaced by the pane drop geometry in `panes/pane-drop.ts`. Old column/tab layouts are unsupported.
-   The revised panes smoke checks opening, reload, pane swap/focus, drag bands, summons, unsaved cancellation and resize.
-   Next completion criteria: plain opens inside the folder viewer, Alt opens a document pane, Files/Changes preserve
-   that viewer's state; remove the old tool splits once their callers use that document kind.
-   Verified: typecheck/conventions clean; full suite 301 passed, 0 failed, 1 existing TODO (hub identity replacement);
-   panes smoke 9/9 on Japan; headless reload/dismiss probes on Japan and a Git workspace; gallery built and opened
-   in Windows Chrome; two file documents also checked there for tabs and header overflow. Edit-from-Files and
-   unsaved replacement cancellation pass without file writes. Terminal and phone behaviour were not exercised. Restart succeeded on :4310.
-   Initial JS fell from 436,999 to 432,862 / 437,000 B gzip (4,138 B headroom), by removing old file-column/tab code.
-5. Plan steps 4-6: the dock as one slot plus summons (jbot, Files, terminal), the folder viewer (Files | Changes,
-   replacing FilesView/SourceControlView/file columns/`ftabs`), the rail foot button's two states, smoke rewritten.
+4. Summons (`Layout.summon`) drive desktop Files/terminal/jbot and survive reload; dismiss restores the dock's held
+   pane. File documents hold one file and have no tabs; `file-tabs.ts` became `panes/pane-drop.ts`.
+5. The folder viewer (`workspace/folder-viewer.tsx`): `createFolderViewer` holds a tree, its one open file and the
+   workspace's changes; `FolderView` draws both modes kept mounted (`ToolKept`), so Files ↔ Changes keeps the tree,
+   the open file and its edit; `FolderModes` is the Files | Changes switch. Two hosts: the dock (the Files summon,
+   following the focused pane's workspace, its mode the dock's `files`/`diff` tab so the phone strip still picks it)
+   and a row pane, view `folder:<project>` (`FolderPane`, lazy, keeping its workspace; mode not kept over reload).
+   In the tree plain opens in the viewer; Alt, Ctrl and Open beside open a `files:` document pane (Alt on a change
+   opens it `@changes`/`@staged`). The dock's header "Move to a pane" and dragging that header (`data-doc-view`)
+   take the viewer to the row and dismiss the summon; the rail's Files drags as `tool:files`. Agents' `files` and
+   `terminal` views become `folder:<focused workspace>` and a `term:` in the bridge. Tool splits are gone (`file`,
+   `shell:`, panel tabs as pane views, `splitHost`, `bindSplit`, `FileBesideView`, `TOOL_DRAG_TYPE`, Files'
+   navigator-only mode, the second file slot). Pane B's thread header names its project (`side.project()`), as pane A.
+   `FilesView` and `SourceControlView` remain only as the two modes' bodies. A narrow viewer (the dock) shows its tree
+   while no file is open and folds it after a plain open, as Files did on the phone: a feel question for the owner.
+   Not run in a browser: all of item 5. Unproven: the dock's viewer holding an unsaved edit while focus moves to a
+   pane of another workspace (the project change restores that workspace's open file; the edit is likely lost
+   without asking). `smoke:panes` scenarios that start with a plain tree click expecting `.chat-main .ui-file-viewer`
+   now fail by design (plain replaces, Alt two documents, swap/focus, unsaved cancel); step 6 rewrites them.
+   Left of plan step 4: see `panes-and-dock.md`.
 6. DeX (user's Samsung S936B, wireless adb, `ANDROID_SERIAL=192.168.20.244:37125`):
    - On-screen keyboard with a physical keyboard is Samsung's setting `show_ime_with_hard_keyboard=1`, not the app.
    - Dragging handles "isn't good" in DeX: cause unmeasured (DeX wasn't attached). Suspect: tab/header/sidebar drags

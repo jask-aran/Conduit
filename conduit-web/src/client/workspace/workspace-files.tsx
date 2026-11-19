@@ -52,8 +52,6 @@ function storedPaths(scopeId: string, name: string) {
 /** It outlives the view, so a hidden Files view keeps its drafts, and the change poll can refresh what is open. */
 export function createFiles(options: {
   projectId: Accessor<string>; requests: RequestScope; settings: WorkspaceSettings; settingsScope: string;
-  /** Answers false where there is no pane for it (a phone, a desktop too narrow), and the slot opens it. */
-  openElsewhere?: (path: string, beside: boolean, edit: boolean) => boolean;
 }) {
   const { confirm: confirmDialog, prompt: promptDialog } = createDecisionScope(options.projectId);
   const { requests, settings } = options;
@@ -67,9 +65,8 @@ export function createFiles(options: {
   const [filesWide, setFilesWide] = createSignal(false);
   const [uploading, setUploading] = createSignal(false);
   const [uploadTarget, setUploadTarget] = createSignal<UploadTarget>({ kind: "directory", path: "" });
-  const storedOpenFiles = (): OpenFiles => ({ primary: readSetting(settings.fileScope(), "file"), secondary: readSetting(settings.fileScope(), "file-secondary") });
+  const storedOpenFiles = (): OpenFiles => ({ primary: readSetting(settings.fileScope(), "file") });
   const [openPaths, setOpenPaths] = createSignal<OpenFiles>(storedOpenFiles());
-  const [focusedSlot, setFocusedSlot] = createSignal<FileSlotId>("primary");
   const slotHandles = new Map<FileSlotId, FileSlotHandle>();
   const [wrapLines, setWrapLines] = createSignal(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "wrap-lines") === "true");
   const [treeWidth, setTreeWidth] = createSignal(Math.max(unitPx(MIN_TREE_UNITS), Math.min(unitPx(MAX_TREE_UNITS), Number(settings.geometry("tree-width")) || unitPx(DEFAULT_TREE_UNITS))));
@@ -128,27 +125,20 @@ export function createFiles(options: {
     setExpanded(next);
     cacheWorkspace(options.projectId(), { expanded: next });
   };
-  const isFileOpen = (path: string) => openPaths().primary === path || openPaths().secondary === path;
-  const slotForPath = (path: string): FileSlotId | null =>
-    openPaths().primary === path ? "primary" : openPaths().secondary === path ? "secondary" : null;
+  const isFileOpen = (path: string) => openPaths().primary === path;
+  const slotForPath = (path: string): FileSlotId | null => isFileOpen(path) ? "primary" : null;
   const setSlotPath = (slot: FileSlotId, path: string | null) => {
     setOpenPaths((current) => ({ ...current, [slot]: path }));
-    writeSetting(settings.fileScope(), slot === "primary" ? "file" : "file-secondary", path);
+    writeSetting(settings.fileScope(), "file", path);
   };
-  // Only the slot being retargeted can lose a draft, so editing on one side is
-  // never discarded by opening a file on the other.
   const openInSlot = async (slot: FileSlotId, path: string) => {
     const handle = slotHandles.get(slot);
-    if (openPaths()[slot] === path) {
-      setFocusedSlot(slot);
-      return true;
-    }
+    if (openPaths()[slot] === path) return true;
     if (handle?.hasUnsavedChanges()) {
       if (!(await confirmDialog("Discard unsaved changes and open another file?", { destructive: true, confirmLabel: "Discard", valid: () => slotHandles.get(slot) === handle }))) return false;
       handle.discardChanges();
     }
     setSlotPath(slot, path);
-    setFocusedSlot(slot);
     return true;
   };
   const toggleTreeCollapsed = () => {
@@ -163,16 +153,13 @@ export function createFiles(options: {
   let pendingEdit: string | null = null;
   const openPath = async (path: string, edit: boolean) => {
     pendingEdit = edit ? path : null;
-    if (options.openElsewhere?.(path, false, false)) return;
     if ((await openInSlot("primary", path))) setNavigatorOpen(false);
   };
   const openFile = (path: string) => openPath(path, false);
   const editFile = async (path: string) => {
-    if (options.openElsewhere?.(path, false, true)) return;
     const slot = slotForPath(path);
     if (slot) {
       pendingEdit = null;
-      setFocusedSlot(slot);
       slotHandles.get(slot)?.edit();
       return;
     }
@@ -184,17 +171,13 @@ export function createFiles(options: {
       slotHandles.get(slot)?.edit();
     }
   };
-  // The slots sit in different panes, so closing one leaves the other where it is.
   const closeSlot = async (slot: FileSlotId) => {
     const handle = slotHandles.get(slot);
     if (handle?.hasUnsavedChanges() && !(await confirmDialog("Discard unsaved changes and close this file?", { destructive: true, confirmLabel: "Discard", valid: () => slotHandles.get(slot) === handle }))) return;
     setSlotPath(slot, null);
-    setFocusedSlot("primary");
   };
   const dropOpenPath = (path: string) => {
-    if (openPaths().secondary === path) setSlotPath("secondary", null);
     if (openPaths().primary === path) setSlotPath("primary", null);
-    setFocusedSlot("primary");
   };
   const pathIsWithin = (candidate: string | null, parent: string) =>
     Boolean(candidate && (candidate === parent || candidate.startsWith(`${parent}/`)));
@@ -212,7 +195,6 @@ export function createFiles(options: {
   const remapOpenPaths = (source: string, destination: string) => {
     const current = openPaths();
     setSlotPath("primary", remapWorkspacePath(current.primary, source, destination));
-    setSlotPath("secondary", remapWorkspacePath(current.secondary, source, destination));
     const nextKept = new Set([...keptVisible()].map((path) => remapWorkspacePath(path, source, destination) || path));
     setKeptVisible(nextKept);
     writeSetting(options.projectId(), "kept-visible", JSON.stringify([...nextKept]));
@@ -391,7 +373,6 @@ export function createFiles(options: {
     setUploading(true);
     try {
       await api<void>(`/v0/projects/${encodeURIComponent(options.projectId())}/directory?path=${encodeURIComponent(path)}`, { method: "DELETE" });
-      if (pathIsWithin(openPaths().secondary, path)) setSlotPath("secondary", null);
       if (pathIsWithin(openPaths().primary, path)) dropOpenPath(openPaths().primary!);
       await resetFileTree();
       toast.success(`Deleted ${path}`);
@@ -531,14 +512,13 @@ export function createFiles(options: {
     uploading,
     uploadTarget,
     openPaths,
-    focusedSlot,
-    setFocusedSlot,
     slotHandles,
     wrapLines,
     treeWidth,
     setTreeWidth,
     treeCollapsed,
-    navigatorOpen,
+    /** A viewer with no file open shows its tree: there is nothing to fold it away for. */
+    navigatorOpen: () => navigatorOpen() || !openPaths().primary,
     filesLoading,
     loadDirectory,
     toggleDirectory,
@@ -601,7 +581,6 @@ export function createFiles(options: {
     restoreOpenFiles: () => {
       setKeptVisible(storedPaths(options.projectId(), "kept-visible"));
       setOpenPaths(storedOpenFiles());
-      setFocusedSlot("primary");
     },
     restoreFromCache: (cached: WorkspaceCacheEntry | null, initialDirectory?: DirectoryListing) => {
       batch(() => {
@@ -640,13 +619,15 @@ export function FilesView(props: {
   onRetryPoll: () => void;
   onSaved: () => void;
   onShowDiff: (slot: FileSlotId, staged: boolean, beside?: boolean) => void;
+  /** Opens a file as a document pane of its own (Alt, Ctrl, Open beside). */
   onOpenBeside?: (path: string) => void;
   /** Opens a file as the artifact kind it may be when asked (artifact-kinds `opens`). */
   onOpenAs?: (path: string) => void;
   onBrowseDirectory?: (path: string) => void;
   onBrowseParent?: () => void;
-  navigatorOnly?: boolean;
   openInPane?: (path: string) => "focused" | "shown" | undefined;
+  /** The open file's slot, for a host that asks about unsaved edits before it lets the viewer go. */
+  onHandle?: (handle: FileSlotHandle | undefined) => void;
 }) {
   const c = props.control;
   let filesResizeObserver: ResizeObserver | undefined;
@@ -777,7 +758,7 @@ export function FilesView(props: {
             }}
             onKeyDown={onTreeKeyDown}
             onDblClick={() => { if (entry.type === "directory") props.onBrowseDirectory?.(entry.path); }}
-            onClick={(event) => entry.type === "directory" ? void c.toggleDirectory(entry.path) : entry.type === "file" ? (event.altKey && props.onOpenBeside ? props.onOpenBeside(entry.path) : c.openFile(entry.path)) : undefined}
+            onClick={(event) => entry.type === "directory" ? void c.toggleDirectory(entry.path) : entry.type === "file" ? ((event.altKey || event.ctrlKey || event.metaKey) && props.onOpenBeside ? props.onOpenBeside(entry.path) : c.openFile(entry.path)) : undefined}
           />
           <ContextMenuContent>
             <MenuSection>
@@ -847,15 +828,15 @@ export function FilesView(props: {
           filesResizeObserver.observe(element);
           c.elements.host = element;
         }}
-        wide={props.navigatorOnly ? "navigator" : c.filesWide()}
-        data-doc-project={props.navigatorOnly ? props.projectId : undefined}
+        wide={c.filesWide()}
+        data-doc-project={props.projectId}
         treeCollapsed={c.treeCollapsed()}
         navigatorOpen={c.navigatorOpen()}
         treeWidth={c.treeWidth()}
       >
         <FilesTree>
           <ToolBar>
-            <Show when={!props.navigatorOnly}><IconButton label="Hide file navigator" onClick={c.hideFileNavigator}><Icons.CollapseFiles /></IconButton></Show>
+            <IconButton label="Hide file navigator" onClick={c.hideFileNavigator}><Icons.CollapseFiles /></IconButton>
             <LeadInput kind="tool"
                 ref={(element) => { c.elements.filter = element; }}
                 aria-label="Filter loaded files"
@@ -899,7 +880,7 @@ export function FilesView(props: {
             <input ref={(element) => { c.elements.upload = element; }} hidden type="file" multiple={c.uploadTarget().kind === "directory"} onChange={(event) => void c.uploadFiles(event.currentTarget.files)} />
           </ToolBar>
         </FilesTree>
-        <Show when={!props.navigatorOnly && (c.filesWide() ? c.treeCollapsed() : !c.navigatorOpen())}>
+        <Show when={c.filesWide() ? c.treeCollapsed() : !c.navigatorOpen()}>
           <ToolBar vertical data-tree-rail="">
             <IconButton label="Show file navigator" onClick={c.showFileNavigator}><Icons.ExpandFiles /></IconButton>
             <div role="toolbar" aria-label="File tree actions">
@@ -907,11 +888,11 @@ export function FilesView(props: {
             </div>
           </ToolBar>
         </Show>
-        <Show when={!props.navigatorOnly && c.filesWide()}>
+        <Show when={c.filesWide()}>
           <ResizeEdge kind="split" aria-label="Resize file tree" aria-valuemin={unitPx(MIN_TREE_UNITS)} aria-valuemax={unitPx(MAX_TREE_UNITS)} aria-valuenow={c.treeWidth()}
             startDrag={startTreeResize} onStep={(direction) => c.saveTreeWidth(c.treeWidth() + 8 * direction)} />
         </Show>
-          <Show when={!props.navigatorOnly}><WorkspaceFileSlot
+          <WorkspaceFileSlot
             projectId={props.projectId}
             path={c.openPaths().primary}
             slot="primary"
@@ -922,7 +903,6 @@ export function FilesView(props: {
             onToggleWrap={c.toggleWrapLines}
             annotationChatId={props.commentChatId}
             reveal={props.reveal}
-            onFocus={() => c.setFocusedSlot("primary")}
             onClose={() => c.closeSlot("primary")}
             onError={reportError}
             onRemoved={(path, announce) => { c.dropOpenPath(path); if (announce) toast.info(`${path} was removed`); }}
@@ -932,48 +912,8 @@ export function FilesView(props: {
             gitFile={gitFile(c.openPaths().primary)}
             onShowDiff={(staged, beside) => props.onShowDiff("primary", staged, beside)}
             onSaved={() => { if (props.sourceControlEnabled) props.onSaved(); }}
-            ref={(handle) => c.slotHandles.set("primary", handle)}
-            onDispose={() => c.slotHandles.delete("primary")}
-          /></Show>
+            ref={(handle) => { c.slotHandles.set("primary", handle); props.onHandle?.(handle); }}
+            onDispose={() => { c.slotHandles.delete("primary"); props.onHandle?.(undefined); }}
+          />
       </FilesPane>;
-}
-
-export function FileBesideView(props: {
-  control: Files;
-  projectId: string;
-  sourceControlEnabled: boolean;
-  gitFiles: GitChangedFile[];
-  commentChatId: string | null;
-  reveal: ReviewNavigationRequest | null;
-  onSaved: () => void;
-  onShowDiff: (slot: FileSlotId, staged: boolean, beside?: boolean) => void;
-}) {
-  const c = props.control;
-  const gitFile = () => props.sourceControlEnabled ? props.gitFiles.find((file) => file.path === c.openPaths().secondary) : undefined;
-  return <FilesPane>
-    <WorkspaceFileSlot
-      projectId={props.projectId}
-      path={c.openPaths().secondary}
-      slot="secondary"
-      focused={false}
-      closable={false}
-      busy={c.uploading()}
-      wrap={c.wrapLines()}
-      onToggleWrap={c.toggleWrapLines}
-      annotationChatId={props.commentChatId}
-      reveal={props.reveal}
-      onFocus={() => c.setFocusedSlot("secondary")}
-      onClose={() => c.closeSlot("secondary")}
-      onError={reportError}
-      onRemoved={(path, announce) => { c.dropOpenPath(path); if (announce) toast.info(`${path} was removed`); }}
-      onReplace={(path) => c.chooseUpload({ kind: "replacement", path })}
-      onDelete={(path) => void c.deleteFile(path)}
-      onLoaded={(file) => c.noteSlotLoaded("secondary", file)}
-      gitFile={gitFile()}
-      onShowDiff={(staged, beside) => props.onShowDiff("secondary", staged, beside)}
-      onSaved={() => { if (props.sourceControlEnabled) props.onSaved(); }}
-      ref={(handle) => c.slotHandles.set("secondary", handle)}
-      onDispose={() => c.slotHandles.delete("secondary")}
-    />
-  </FilesPane>;
 }

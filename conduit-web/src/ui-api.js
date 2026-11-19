@@ -27,14 +27,11 @@ export const UI_VIEWS = /** @type {const} */ ([
   { kind: "browser", view: "browser:<device>", agent: true, says: "a device's browser, by its view from screens: for the person to see and use; your browser tools work the hub's" },
   { kind: "mail", view: "mail:<account>", agent: true, says: "the person's mail in a pane, for them to read and write in (mail:default is their first account; an account's id comes from the mail tool); you read and write mail with the mail tool" },
   { kind: "artifact", view: "artifact:<id>", agent: true, says: "an artifact by its id: a paper the person and agents write together, or a site an agent builds as one HTML file" },
-  { kind: "terminal", view: "terminal", agent: true, says: "" },
-  { kind: "files", view: "files", agent: true, says: "" },
+  { kind: "term", view: "terminal", agent: true, says: "" },
+  { kind: "folder", view: "files", agent: true, says: "" },
+  { kind: "folder", view: "folder:<project>", agent: false, says: "" },
   { kind: "files", view: "files:<path>", agent: false, says: "" },
-  { kind: "file", view: "file", agent: false, says: "" },
-  { kind: "diff", view: "diff", agent: false, says: "" },
-  { kind: "jbot", view: "jbot", agent: false, says: "" },
   { kind: "home", view: "home", agent: false, says: "" },
-  { kind: "shell", view: "shell:<id>", agent: false, says: "" },
   { kind: "term", view: "term:<id>", agent: false, says: "" },
 ]);
 
