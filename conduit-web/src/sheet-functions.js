@@ -64,6 +64,34 @@ class SpreadsheetDates extends Dates {
 SpreadsheetDates.implementedFunctions = { TEXT: { method: "text", parameters: [{ argumentType: SCALAR }, { argumentType: STRING }] }, DATEDIF: Dates.implementedFunctions.DATEDIF };
 HyperFormula.registerFunctionPlugin(SpreadsheetDates, { enGB: { TEXT: "TEXT", DATEDIF: "DATEDIF" }, enUS: { TEXT: "TEXT", DATEDIF: "DATEDIF" } });
 
+// The engine's FILTER takes only a row or a column and conditions after it; a spreadsheet's keeps a table's rows (or columns) where `include` holds,
+// and a value past it is what to give where none does (`FILTER(A2:D9, B2:B9>15, "none")`). Further conditions the engine's way still count.
+const Arrays = HyperFormula.getFunctionPlugin("FILTER");
+class SpreadsheetFilter extends Arrays {
+  filter(ast, state) {
+    return this.runFunction(ast.args, state, this.metadata("FILTER"), (values, ...rest) => {
+      const conditions = rest.filter((one) => one instanceof SimpleRangeValue), empty = rest.find((one) => !(one instanceof SimpleRangeValue));
+      const tall = conditions.every((one) => one.width() === 1 && one.height() === values.height()), wide = !tall && conditions.every((one) => one.height() === 1 && one.width() === values.width());
+      if (!tall && !wide) return new CellError(ErrorType.VALUE, "The condition is not as tall or as wide as the range.");
+      const count = tall ? values.height() : values.width(), keep = [];
+      for (let at = 0; at < count; at++) {
+        let held = true;
+        for (const one of conditions) {
+          const cell = tall ? one.data[at][0] : one.data[0][at];
+          if (cell instanceof CellError) return cell;
+          held &&= cell === true || (number(cell) ?? 0) !== 0;
+        }
+        keep.push(held);
+      }
+      const kept = tall ? values.data.filter((_, at) => keep[at]) : values.data.map((row) => row.filter((_, at) => keep[at]));
+      if (kept.length && kept[0].length) return SimpleRangeValue.onlyValues(kept);
+      return empty === undefined ? new CellError(ErrorType.NA, "Nothing matches the condition.") : empty instanceof CellError ? empty : SimpleRangeValue.onlyValues([[plain(empty) ?? 0]]);
+    });
+  }
+}
+SpreadsheetFilter.implementedFunctions = { FILTER: { ...Arrays.implementedFunctions.FILTER, parameters: [{ argumentType: RANGE }, { argumentType: RANGE }, { argumentType: ANY, optionalArg: true }] } };
+HyperFormula.registerFunctionPlugin(SpreadsheetFilter, { enGB: { FILTER: "FILTER" }, enUS: { FILTER: "FILTER" } });
+
 /*
  * What the engine lacks and @formulajs/formulajs has, under the name a spreadsheet gives it. A range reaches it as rows of plain values and a date as its
  * serial number. One that answers with several values (TREND, LINEST, TAKE) gives its first here: a result spilt over cells is not built.

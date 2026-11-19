@@ -99,7 +99,7 @@ export const FUNCTION_HELP: Readonly<Record<string, FunctionHelp>> = {
   TRANSPOSE: help("range", "A range with its rows and columns swapped."),
   UNIQUE: help("range, [by_column], [exactly_once]", "A range's rows without repeats, spilt below."),
   SORT: help("range, [sort_index], [sort_order], [by_column]", "A range sorted, spilt below."),
-  FILTER: help("range, condition1, [condition2, …]", "The rows of a range where every condition holds, spilt below."),
+  FILTER: help("range, include, [if_empty]", "The rows (or columns) of a range where a condition holds, spilt below."),
   SEQUENCE: help("rows, [columns], [start], [step]", "Numbers in order, spilt over rows and columns."),
   OFFSET: help("reference, rows, columns, [height], [width]", "A range a number of rows and columns from another."),
   INDIRECT: help("reference_text", "The range a text names."),
