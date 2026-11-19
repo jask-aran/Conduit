@@ -8,7 +8,7 @@ import "@glideapps/glide-data-grid/dist/index.css";
 import { createElement, useEffect, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
-import { colName, fromCsv, guess, toCsv, type SheetView, COL_LIMIT } from "@/sheet-format.js";
+import { colName, fromCsv, guess, runsOf, toCsv, type SheetView, COL_LIMIT } from "@/sheet-format.js";
 import { shiftRefs } from "@/sheet-rules.js";
 import { createCellLook } from "./cell-draw";
 import { seriesFill } from "./series";
@@ -239,15 +239,20 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     onFillPattern: ({ patternSource, fillDestination, preventDefault }) => {
       preventDefault();
       const source = range(patternSource), into = range(fillDestination), rows = Array.from({ length: patternSource.height }, (_, y) => p.map.sheet(source.top + y));
-      const direction = into.bottom > source.bottom ? "down" : into.top < source.top ? "up" : into.right > source.right ? "right" : "left", across = direction === "right" || direction === "left";
-      const added = across ? into.right - into.left - source.right + source.left : into.bottom - into.top - source.bottom + source.top;
-      if (!added) return;
-      const cells = rows.map((row) => Array.from({ length: patternSource.width }, (_, x) => ({ input: model.input(row, source.left + x), value: model.value(row, source.left + x), dated: options.columns.dated(row, source.left + x) })));
-      const values = seriesFill(cells, direction, added, counting), from = { top: rows[0]!, bottom: rows.at(-1)!, left: source.left, right: source.right };
+      const direction = into.bottom > source.bottom ? "down" : into.top < source.top ? "up" : into.right > source.right ? "right" : "left";
       const top = direction === "down" ? source.bottom + 1 : direction === "up" ? into.top : source.top, bottom = direction === "up" ? source.top - 1 : direction === "down" ? into.bottom : source.bottom;
-      const left = direction === "right" ? source.right + 1 : into.left, right = direction === "left" ? source.left - 1 : into.right;
-      // Into the rows shown: each run of them between hidden rows is filled on its own.
-      for (let start = top, drawn = top; drawn <= bottom; drawn++) if (drawn === bottom || p.map.sheet(drawn + 1) !== p.map.sheet(drawn) + 1) { events.fill({ top: p.map.sheet(start), bottom: p.map.sheet(drawn), left, right }, values.slice(start - top, drawn - top + 1), from); start = drawn + 1; }
+      // The columns shown, of the source and of what is filled; the series runs on over them as if the hidden ones were not there.
+      const sourceCols = colsFrom(source.left, Infinity, source.right), cols = colsFrom(direction === "right" ? source.right + 1 : into.left, Infinity, direction === "left" ? source.left - 1 : into.right);
+      const added = direction === "right" || direction === "left" ? cols.length : bottom - top + 1;
+      if (added <= 0 || !sourceCols.length) return;
+      const cells = rows.map((row) => sourceCols.map((col) => ({ input: model.input(row, col), value: model.value(row, col), dated: options.columns.dated(row, col) })));
+      const values = seriesFill(cells, direction, added, counting), from = { top: rows[0]!, bottom: rows.at(-1)!, left: source.left, right: source.right };
+      // Into the rows and columns shown: each run of them between hidden ones is filled on its own.
+      for (let start = top, drawn = top; drawn <= bottom; drawn++) if (drawn === bottom || p.map.sheet(drawn + 1) !== p.map.sheet(drawn) + 1) {
+        let at = 0;
+        for (const run of runsOf(cols)) { events.fill({ top: p.map.sheet(start), bottom: p.map.sheet(drawn), left: run[0]!, right: run.at(-1)! }, values.slice(start - top, drawn - top + 1).map((line) => line.slice(at, at + run.length)), from); at += run.length; }
+        start = drawn + 1;
+      }
     },
     getRowThemeOverride: (drawn) => lineCut(p, drawn) ? NO_LINE : undefined,
     onColumnResize: (_, width, col) => drive.width?.(col, width),

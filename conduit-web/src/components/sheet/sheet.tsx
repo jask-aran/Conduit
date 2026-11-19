@@ -5,7 +5,8 @@ import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { createSheetMerges, type SheetMergeKind } from "./merges";
 import { Input } from "@/components/ui/controls";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
-import { CELLS, COLS, COL_LIMIT, LOOK, ROWS, a1, colIndex, colName, colsOf, key, parseRange, rangeA1, rowsOf, type SheetView } from "@/sheet-format.js";
+import { CELLS, COLS, COL_LIMIT, LOOK, ROWS, a1, colIndex, colName, colsOf, key, parseRange, rangeA1, rowsOf, runsOf, type SheetView } from "@/sheet-format.js";
+import { shiftRefs } from "@/sheet-rules.js";
 import { SheetFoot } from "./foot";
 import { createSheetTabs } from "./tabs";
 import { ASK_KEY, type SheetAnchor, type SheetBox, type SheetGrid, type SheetGridEvents, type SheetHost, type SheetMarks, type SheetPlace, type SheetRange, type SheetState } from "./host";
@@ -13,7 +14,6 @@ import { createLiveSheet } from "./live";
 import { readLook } from "./theme";
 import { createArtWindow } from "@/components/ui/chat-art";
 import { createFormulaEditor, FormulaField, FormulaHelp } from "./formula-editor";
-import { tokenize } from "./formula";
 import { createSequenceKeys, SequenceHint, SHEET_SEQUENCES, SizePrompt, type SheetSequence, type SizeQuestion } from "./sequences";
 import { createSheetSizes, dragRowEdges } from "./sizes";
 import { createSheetFilter, FilterMenu } from "./filter";
@@ -27,15 +27,9 @@ import { FormatMenu } from "./format-menu";
 
 // Cells written into the text a comment quotes, and how much of each: enough to read.
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
-// A formula moved down `by` rows, as the hub's fill moves one: each reference's rows not held by `$`.
 // The grid keeps a spreadsheet's chords the application binds elsewhere: Ctrl+- deletes rows, Ctrl+Shift+1..5 are number formats.
 const OWN_KEYS = ["primary+Minus", ...[1, 2, 3, 4, 5].map((n) => `primary+shift+Digit${n}`)].join(" ");
-const lowered = (input: string, by: number) => tokenize(input).map((token) => { const text = input.slice(token.from, token.to); if (token.kind !== "ref") return text;
-  // Only the address moves: a tab's name (Sheet2!, 'Q1 2024'!) keeps its digits.
-  const at = text.lastIndexOf("!") + 1;
-  return text.slice(0, at) + text.slice(at).replace(/(\$?)(\d+)/g, (all, held: string, row: string) => held ? all : String(Number(row) + by)); }).join("");
 const between = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, n) => from + n);
-const runsOf = (rows: readonly number[]) => rows.reduce<number[][]>((out, row) => { const last = out.at(-1); if (last && last.at(-1) === row - 1) last.push(row); else out.push([row]); return out; }, []);
 type Menu = { rows?: SheetRange; cols?: SheetRange };
 
 /** A sheet: the hub's live copy drawn in the grid, a formula bar over it, the comment margin beside it. */
@@ -333,26 +327,24 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const paste = (range: SheetRange, values = false) => void navigator.clipboard.readText().then((text) => grid()?.paste({ row: range.top, col: range.left }, text, values), (error: Error) => props.host.failed(error.message));
   // Each run of shown rows on its own, the last first, so the runs above keep their places.
   const deleteRows = (range: SheetRange) => history.act(`Delete ${range.bottom > range.top ? "rows" : "row"}`, () => { const rows = shownRows(range); for (let end = rows.length - 1; end >= 0;) { let start = end; while (start > 0 && rows[start - 1] === rows[start]! - 1) start--; structure("delete-rows", rows[start]!, end - start + 1); end = start - 1; } });
-  // Fill down and Fill right: the selection's first shown row (or its first column) into the rest of it, from the shown row above (or the column left) where it is
-  // one deep, as a spreadsheet's; the hub moves the formulas. Each run of shown rows is a fill of its own, its formulas first moved to where the run starts.
+  // Fill down and Fill right: the selection's first shown row (or column) into the rest of it, from the shown row above (or column left) where it is
+  // one deep, as a spreadsheet's; the hub moves the formulas. Each run of shown rows and columns is a fill of its own, its formulas first moved to where
+  // the run starts.
   const spread = (picked: SheetRange, way: "down" | "right") => history.act(`Fill ${way}`, () => {
     const sheet = model();
     if (!sheet) return;
     // Whole columns or rows reach the grid's spare room past the data; filling it would grow the tab on every press.
-    const size = sheet.size(), range = { ...picked, bottom: Math.min(picked.bottom, Math.max(picked.top, size.rows - 1)), right: Math.min(picked.right, Math.max(picked.left, size.cols - 1)) }, shown = shownRows(range);
-    if (!shown.length) return;
-    if (way === "right") {
-      const left = range.left === range.right ? range.left - 1 : range.left;
-      if (left >= 0) for (const run of runsOf(shown)) hub({ op: "fill", range: rangeA1({ top: run[0]!, bottom: run.at(-1)!, left, right: range.right }), values: run.map((row) => [sheet.input(row, left)]) });
-      return;
-    }
-    const hidden = sizes.hidden();
-    let source = range.top === range.bottom ? range.top - 1 : shown[0]!;
+    const size = sheet.size(), range = { ...picked, bottom: Math.min(picked.bottom, Math.max(picked.top, size.rows - 1)), right: Math.min(picked.right, Math.max(picked.left, size.cols - 1)) };
+    const rows = shownRows(range), cols = shownCols(range), down = way === "down", hidden = down ? sizes.hidden() : sizes.hiddenCols();
+    if (!rows.length || !cols.length) return;
+    let source = down ? (range.top === range.bottom ? range.top - 1 : rows[0]!) : range.left === range.right ? range.left - 1 : cols[0]!;
     while (source >= 0 && hidden.has(source)) source--;
     if (source < 0) return;
-    const cols = Array.from({ length: range.right - range.left + 1 }, (_, c) => range.left + c);
-    for (const run of runsOf([...new Set([source, ...shown])])) if (run.length > 1 || run[0] !== source)
-      hub({ op: "fill", range: rangeA1({ top: run[0]!, bottom: run.at(-1)!, left: range.left, right: range.right }), values: [cols.map((col) => lowered(sheet.input(source, col), run[0]! - source))] });
+    for (const run of runsOf([...new Set([source, ...(down ? rows : cols)])])) if (run.length > 1 || run[0] !== source) for (const side of runsOf(down ? cols : rows)) {
+      const by = run[0]! - source, [lines, across] = down ? [run, side] : [side, run];
+      hub({ op: "fill", range: rangeA1({ top: lines[0]!, bottom: lines.at(-1)!, left: across[0]!, right: across.at(-1)! }),
+        values: down ? [side.map((col) => shiftRefs(sheet.input(source, col), by, 0))] : side.map((row) => [shiftRefs(sheet.input(row, source), 0, by)]) });
+    }
   });
   const hiddenIn = (range: SheetRange) => shownRows(range).length < range.bottom - range.top + 1;
   // A column's menu unhides the hidden columns it spans, or those just beside it, as column A hidden can be spanned by none.

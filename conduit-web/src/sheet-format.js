@@ -33,6 +33,8 @@ export const parseRef = (text) => {
   const said = String(text ?? "").trim(), hit = /^(?:'((?:[^']|'')+)'|([^'!:]+))!(.*)$/.exec(said);
   return hit ? { tab: hit[1] !== undefined ? hit[1].replace(/''/g, "'") : hit[2].trim(), range: hit[3].trim() } : { tab: null, range: said };
 };
+/** Ascending numbers cut into runs of consecutive ones. */
+export const runsOf = (list) => list.reduce((out, n) => { const last = out.at(-1); if (last && last.at(-1) === n - 1) last.push(n); else out.push([n]); return out; }, []);
 export const key = (row, col) => `${row}:${col}`;
 export const colName = (col) => { let name = ""; for (let n = col + 1; n > 0; n = Math.floor((n - 1) / 26)) name = String.fromCharCode(65 + ((n - 1) % 26)) + name; return name; };
 export const a1 = (row, col) => `${colName(col)}${row + 1}`;
