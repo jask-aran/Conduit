@@ -29,6 +29,8 @@ import { FormatMenu } from "./format-menu";
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
 // The grid keeps a spreadsheet's chords the application binds elsewhere: Ctrl+- deletes rows, Ctrl+0 hides columns, Ctrl+Shift+1..5 are number formats.
 const OWN_KEYS = ["primary+Minus", "primary+Digit0", ...[0, 1, 2, 3, 4, 5].map((n) => `primary+shift+Digit${n}`)].join(" ");
+// A formula moved as a fill moves it; text stays as typed.
+const shifted = (input: string, rows: number, cols: number) => input.startsWith("=") ? shiftRefs(input, rows, cols) : input;
 const between = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, n) => from + n);
 type Menu = { rows?: SheetRange; cols?: SheetRange };
 
@@ -343,7 +345,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     for (const run of runsOf([...new Set([source, ...(down ? rows : cols)])])) if (run.length > 1 || run[0] !== source) for (const side of runsOf(down ? cols : rows)) {
       const by = run[0]! - source, [lines, across] = down ? [run, side] : [side, run];
       hub({ op: "fill", range: rangeA1({ top: lines[0]!, bottom: lines.at(-1)!, left: across[0]!, right: across.at(-1)! }),
-        values: down ? [side.map((col) => shiftRefs(sheet.input(source, col), by, 0))] : side.map((row) => [shiftRefs(sheet.input(row, source), 0, by)]) });
+        values: down ? [side.map((col) => shifted(sheet.input(source, col), by, 0))] : side.map((row) => [shifted(sheet.input(row, source), 0, by)]) });
     }
   });
   const hiddenIn = (range: SheetRange) => shownRows(range).length < range.bottom - range.top + 1;
