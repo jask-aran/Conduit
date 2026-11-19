@@ -200,11 +200,12 @@ patch code as prior art rather than depending on it.
 
 ## Decisions for the owner
 
-1. **Own format or A2UI's.** Conduit-shaped (smaller, typed with Effect, no spec to follow) or A2UI v1.0 exactly
-   (interoperable, larger, written by others).
-2. **How a press reaches the agent.** The tool call waits for it (every harness, one answer), or it becomes a new user
+Decided 2026-11-19: the format is A2UI v1.0 exactly (option B), not a Conduit-shaped one. The recommendation above
+(option E) is superseded on format; the spike below sends A2UI messages. Still open:
+
+1. **How a press reaches the agent.** The tool call waits for it (every harness, one answer), or it becomes a new user
    turn (widgets that last), or both.
-3. **Artifact or widget first,** and whether Conduit's own runtime gets the tool in every chat.
+2. **Artifact or widget first,** and whether Conduit's own runtime gets the tool in every chat.
 
 ## First spike
 
