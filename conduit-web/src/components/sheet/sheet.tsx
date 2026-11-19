@@ -83,6 +83,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const editor = createFormulaEditor({
     grid, input: (row, col) => model()?.input(row, col) ?? "", functions: tabs.functions, merged: (row, col) => merges.at(row, col),
     write: (row, col, input) => writes("")([{ row, col, input }]),
+    // As a spreadsheet's Ctrl+Enter: each shown cell selected takes it, a formula moved from the cell typed in to its own.
+    fill: (from, input) => { const area = at(); if (!area || (area.top === area.bottom && area.left === area.right)) return false; writes("Fill selection")(within(inTab(area)).flat().map(({ row, col }) => ({ row, col, input: shifted(input, row - from.row, col - from.col) }))); return true; },
     selected: () => { changed(); const area = at(); return area && { row: area.top, col: area.left }; }, error: (row, col) => model()?.error(row, col) ?? null,
   });
   // A cell its import froze keeps the file's formula under `excel:<rowId>:<colId>` (server/sheet-xlsx.js), so the mark follows it as rows, columns
@@ -553,6 +555,14 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       // A style's chord is its tool's step: Ctrl+B is Bold.
       const tool = tools.find((one) => one.keys?.length === 2 && one.keys[1]!.toLowerCase() === event.key.toLowerCase())?.label ?? "";
       if (find.keys(event) || tabs.key(event) || history.act(tool, () => formats.key(event, at()) || styles.key(event, at())) || filters.key(event)) return;
+      // Ctrl+A selects the block of data round the active cell, and pressed again (or where there is none) the whole tab, as a spreadsheet's.
+      if (!event.shiftKey && !event.altKey && event.code === "KeyA") {
+        event.preventDefault();
+        const area = at(), size = model()?.size(), around = area && filters.around(area.top, area.left), same = (one: SheetRange, two: SheetRange) => one.top === two.top && one.left === two.left && one.bottom === two.bottom && one.right === two.right;
+        if (!area || !size) return;
+        const lone = around && (around.bottom > around.top || around.right > around.left || model()?.input(around.top, around.left));
+        return grid()?.select(lone && !same(around, area) ? around : { top: 0, left: 0, bottom: Math.max(0, size.rows - 1), right: Math.max(0, size.cols - 1) });
+      }
       // Ctrl+\ clears the selection's formatting.
       if (!event.shiftKey && !event.altKey && event.code === "Backslash") { event.preventDefault(); return tools.find((one) => one.name === "clear")?.run(); }
       // Ctrl+D and Ctrl+R are the grid's only while it has the keyboard: elsewhere the browser keeps them.

@@ -390,7 +390,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     editOnType: false, cellActivationBehavior: "double-click",
     onVisibleRegionChanged: (region) => { p.view = region; events.moved(); },
     // Its own Ctrl+Space and Shift+Space take only the current cell's column or row; the sheet's take the whole selection's (`whole`).
-    rowMarkers: "clickable-number", smoothScrollX: true, smoothScrollY: true, width: "100%", height: "100%", fillHandle: true, getCellsForSelection: true, keybindings: { search: false, selectColumn: false, selectRow: false, clear: false },
+    rowMarkers: "clickable-number", smoothScrollX: true, smoothScrollY: true, width: "100%", height: "100%", fillHandle: true, getCellsForSelection: true, keybindings: { search: false, selectColumn: false, selectRow: false, clear: false, selectAll: false },
     // The grid's own description of every cell for a screen reader is rebuilt on each move and scroll. Drawn off screen and copied whole, an
     // arrow-key move that scrolls costs a third less and a wheel step half (measured: p95 8.6 to 5.7 ms, 6.4 to 2.5 ms).
     experimental: { disableAccessibilityTree: true, renderStrategy: "double-buffer" },
@@ -537,13 +537,22 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   };
   let stop = () => {};
   // Dragged along the column letters or down the row numbers, the columns or rows between are picked.
-  const sweep = (event: PointerEvent) => {
+  const sweep = (event: PointerEvent, capture = false) => {
     const p = partAt(event.clientY), letters = frozenRows ? head : body, frame0 = (p.host ?? element).getBoundingClientRect(), lettersTop = (letters.host ?? element).getBoundingClientRect().top;
     const numbers = box(p, -1, p.view.y), top = p === letters ? frame0.top + look.header : frame0.top, left = numbers ? numbers.x + numbers.width : frame0.left;
     const across = p === letters && event.clientY >= lettersTop && event.clientY < lettersTop + look.header, down = !across && Boolean(numbers) && event.clientX < left;
     const at = (place: number) => across ? colAt(p, place) : rowAt(p, place), [lo, hi] = across ? [left, frame0.right] : [top, frame0.bottom], from = at(across ? event.clientX : event.clientY);
     // A press on an edge sizes (the grid's own columns, sizes.ts's rows); Shift and Ctrl add to the selection, as the grid does.
     const cell = across ? box(p, from, p.view.y) : undefined, onEdge = cell ? cell.x + cell.width - event.clientX <= COL_EDGE || (from > 0 && event.clientX - cell.x <= COL_EDGE) : rowEdge(p, event.clientX, event.clientY);
+    // Shift from a cell, as a spreadsheet's: whole columns (or rows) from the active cell's to the one pressed. From lines picked, the grid's own extends them.
+    const was = owner.current.current?.cell;
+    if (capture) {
+      if (event.cancelBubble || event.button !== 0 || !event.shiftKey || event.ctrlKey || event.metaKey || !(across || down) || from < 0 || onEdge || !was || owner.current.columns.length || owner.current.rows.length || !(across || p === owner)) return;
+      event.preventDefault(); event.stopPropagation();
+      const lines = CompactSelection.fromSingleSelection([Math.min(from, was[across ? 0 : 1]), Math.max(from, was[across ? 0 : 1]) + 1]);
+      choose(p, { columns: across ? lines : CompactSelection.empty(), rows: across ? CompactSelection.empty() : lines, current: undefined }); events.selected(picked());
+      return;
+    }
     if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || !(across || down) || from < 0 || onEdge) return;
     // Each frame, not each move: held past an edge, the grid scrolls a line at a time under a still pointer and the pick runs on with it.
     // The body scrolls (the head never does up or down); a drag down the head's numbers stays in the head.
@@ -562,7 +571,10 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     stop(); stop = up;
     addEventListener("pointermove", move); addEventListener("pointerup", up); addEventListener("pointercancel", up); frame = requestAnimationFrame(pick);
   };
-  element.addEventListener("pointerdown", sweep);
+  // A Shift press extending from a cell is taken in capture, so it is the sheet's alone, not the grid's, which would start a pick of its own (a press
+  // the formula editor took first has stopped).
+  const extend = (event: PointerEvent) => sweep(event, true);
+  element.addEventListener("pointerdown", sweep); element.addEventListener("pointerdown", extend, true);
   // A double click on a column letter's edge, or a row number's, fits that column or row to what it shows.
   const autofit = (event: MouseEvent) => {
     const p = partAt(event.clientY), letters = frozenRows ? head : body, top = (letters.host ?? element).getBoundingClientRect().top;
@@ -721,7 +733,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     theme: (next) => { look = next; drive.look?.(look); },
     scroll: (to) => { if (to) { const drawn = clip(body, { top: to.row, bottom: to.row, left: to.col, right: to.col }); body.editor?.scrollTo(to.col, drawn?.top ?? 0, "both", 0, 0, { hAlign: "start", vAlign: "start" }); } return { row: body.map.sheet(body.view.y), col: body.view.x }; },
     focus: () => owner.editor?.focus(),
-    destroy: () => { stop(); element.removeEventListener("pointerdown", sweep); element.removeEventListener("dblclick", autofit); removeEventListener("pointerup", ctrl, true); removeEventListener("copy", clipped, true); removeEventListener("cut", clipped, true); removeEventListener("paste", pasted, true); root.unmount(); },
+    destroy: () => { stop(); element.removeEventListener("pointerdown", sweep); element.removeEventListener("pointerdown", extend, true); element.removeEventListener("dblclick", autofit); removeEventListener("pointerup", ctrl, true); removeEventListener("copy", clipped, true); removeEventListener("cut", clipped, true); removeEventListener("paste", pasted, true); root.unmount(); },
   };
   return api;
 }
