@@ -21,7 +21,16 @@ const colour = (word) => SHEET_INKS.includes(word) || HEX.test(word);
 const WORDS = { h: ["left", "center", "right"], v: ["top", "middle", "bottom"], bw: ["medium", "thick"] };
 const VALID = { ...Object.fromEntries(Object.entries(WORDS).map(([code, words]) => [code, (word) => words.includes(word)])), c: colour, f: colour, bc: (word) => HEX.test(word), z: (word) => /^\d{1,3}(\.\d)?$/.test(word) && Number(word) >= 1 && Number(word) <= 409 };
 const INK = `${SHEET_INKS.join(", ")} or #rrggbb`, SAID = { c: INK, f: INK, bc: "#rrggbb", z: "a size in points, 1 to 409" };
-const ORDER = [...Object.values(FLAGS), ...Object.values(VALUES), ...Object.values(EDGES)];
+// What a workbook brings that the page does not draw yet, kept so an export writes it back (xlsx-styles.js), and not in an agent's style: a font's
+// face (`n`, spaces as `_`), double underline, shrink to fit, an edge's line (`bs`: Excel's style name, lower case, over `bw`), a diagonal, a fill's
+// pattern and its second colour, indent, rotation in degrees (255 stacked), and Excel's other horizontal alignments (`hx`, over `h`).
+const KEPT_FLAGS = ["u2", "k"];
+const LINES = ["hair", "dotted", "dashed", "dashdot", "dashdotdot", "double", "mediumdashed", "mediumdashdot", "mediumdashdotdot", "slantdashdot"];
+const PATTERNS = ["darkgray", "mediumgray", "lightgray", "gray125", "gray0625", "darkhorizontal", "darkvertical", "darkdown", "darkup", "darkgrid", "darktrellis", "lighthorizontal", "lightvertical", "lightdown", "lightup", "lightgrid", "lighttrellis"];
+const KEPT = { n: (word) => /^[^\s=]{1,64}$/.test(word), bs: (word) => LINES.includes(word), bd: (word) => ["up", "down", "both"].includes(word), fp: (word) => PATTERNS.includes(word), fb: (word) => HEX.test(word),
+  in: (word) => /^\d{1,3}$/.test(word) && Number(word) >= 1 && Number(word) <= 250, r: (word) => /^\d{1,3}$/.test(word) && (Number(word) <= 180 || word === "255"), hx: (word) => ["centercontinuous", "fill", "justify", "distributed"].includes(word) };
+Object.assign(VALID, KEPT);
+const ORDER = [...Object.values(FLAGS), ...KEPT_FLAGS, ...Object.values(VALUES), ...Object.keys(KEPT), ...Object.values(EDGES)];
 const valued = (code) => Object.hasOwn(VALID, code);
 const fault = (message) => Object.assign(new Error(message), { status: 400 });
 
@@ -29,7 +38,7 @@ const fault = (message) => Object.assign(new Error(message), { status: 400 });
 export function decodeStyle(text) {
   const out = {};
   for (const token of String(text ?? "").split(" ")) {
-    const off = token.startsWith("-"), [code, said] = (off ? token.slice(1) : token).split("="), word = said?.toLowerCase();
+    const off = token.startsWith("-"), [code, said] = (off ? token.slice(1) : token).split("="), word = code === "n" ? said : said?.toLowerCase();
     if (!ORDER.includes(code)) continue;
     if (off) out[code] = valued(code) ? null : false;
     else if (!valued(code)) out[code] = true;

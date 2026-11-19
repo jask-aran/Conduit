@@ -129,7 +129,7 @@ def g_borders(wb):
         s = Side(style=style, color="FF0000" if i % 2 else "000000"); ws.cell(i * 2, 2, i).border = Border(left=s, right=s, top=s, bottom=s)
     ws["D2"] = "diag"; ws["D2"].border = Border(bottom=Side(style="thin"), diagonal=Side(style="thin"), diagonalUp=True)
 def r_borders(wb, raw):
-    side = lambda s: f"{s.style}/{rgb(s.color)}" if s and s.style else ""
+    side = lambda s: f"{s.style}/{rgb(s.color).replace('000000', '')}" if s and s.style else ""  # black is Excel's automatic edge colour
     return {c.coordinate: [side(c.border.left), side(c.border.right), side(c.border.top), side(c.border.bottom), side(c.border.diagonal)] for row in wb.active.iter_rows() for c in row if c.value}
 feature("borders")((g_borders, r_borders))
 

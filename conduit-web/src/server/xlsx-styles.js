@@ -40,7 +40,7 @@ const colourOf = (tag, theme) => {
   return hex && /^[0-9a-f]{6}$/.test(hex) ? `#${tinted(hex, Number(attr(tag, "tint") ?? 0))}` : undefined;
 };
 const HEAVY = { thick: 2, double: 2, slantDashDot: 1 };
-const SIDES = [["left", "bl"], ["right", "br"], ["top", "bt"], ["bottom", "bb"]];
+const SIDES = [["left", "bl"], ["right", "br"], ["top", "bt"], ["bottom", "bb"]], STROKES = ["thin", "medium", "thick"];
 
 // The ribbon's inks as a workbook writes them, as text and as a fill (Excel's Bad, Neutral, Good and a light accent); read back as the inks.
 const INKS = { red: ["c00000", "ffc7ce"], amber: ["9c5700", "ffeb9c"], green: ["006100", "c6efce"], blue: ["0070c0", "ddebf7"] };
@@ -55,9 +55,17 @@ export function readStyles(stylesXml, themeXml) {
     for (const [name, code] of [["b", "b"], ["i", "i"], ["u", "u"], ["strike", "s"]]) if (on(font, name)) out[code] = true;
     if (ink && ink !== baseInk && ink !== "#000000") out.c = inkOf(ink, 0);
     if (size && size !== baseSize) out.z = String(Math.round((size * 11) / baseSize * 10) / 10);
+    const face = attr(first(font, "name"), "val"), baseFace = attr(first(base, "name"), "val");
+    if (face && face !== baseFace && /^[^_=]{1,64}$/.test(face)) out.n = face.replace(/ /g, "_");
+    if (/^double/.test(attr(first(font, "u"), "val") ?? "")) out.u2 = true;
     return out;
   });
-  const fillOf = all(within(stylesXml, "fills"), "fill").map((fill) => { const pattern = first(fill, "patternFill"), ink = /patternType="(?!none)/.test(pattern ?? "") ? colourOf(first(pattern, "fgColor"), theme) : undefined; return ink ? { f: inkOf(ink, 1) } : {}; });
+  const fillOf = all(within(stylesXml, "fills"), "fill").map((fill) => {
+    const pattern = first(fill, "patternFill"), kind = (attr(pattern, "patternType") ?? "none").toLowerCase(), ink = kind !== "none" ? colourOf(first(pattern, "fgColor"), theme) : undefined;
+    if (!ink) return {};
+    const under = kind === "solid" ? undefined : colourOf(first(pattern, "bgColor"), theme);
+    return { f: kind === "solid" ? inkOf(ink, 1) : ink, ...(kind === "solid" ? {} : { fp: kind }), ...(under ? { fb: under } : {}) };
+  });
   const borderOf = all(within(stylesXml, "borders"), "border").map((border) => {
     const out = {};
     let weight = 0, ink;
@@ -66,8 +74,11 @@ export function readStyles(stylesXml, themeXml) {
       if (!kind || kind === "none") continue;
       out[code] = true;
       weight = Math.max(weight, HEAVY[kind] ?? (kind.startsWith("medium") ? 1 : 0));
+      if (!STROKES.includes(kind)) out.bs ??= kind.toLowerCase();
       ink ??= colourOf(first(tag, "color"), theme);
     }
+    const diagonal = attr(first(border, "diagonal"), "style"), up = ["1", "true"].includes(attr(border, "diagonalUp")), down = ["1", "true"].includes(attr(border, "diagonalDown"));
+    if (diagonal && diagonal !== "none" && (up || down)) { out.bd = up && down ? "both" : up ? "up" : "down"; ink ??= colourOf(first(first(border, "diagonal"), "color"), theme); }
     if (weight) out.bw = weight === 2 ? "thick" : "medium";
     if (ink && ink !== "#000000") out.bc = ink;
     return out;
@@ -79,6 +90,10 @@ export function readStyles(stylesXml, themeXml) {
     if (across === "left" || across === "right" || across === "center" || across === "centerContinuous") attrs.h = across === "centerContinuous" ? "center" : across;
     if (down === "top") attrs.v = "top";
     if (attr(align, "wrapText") === "1" || attr(align, "wrapText") === "true") attrs.w = true;
+    if (["centerContinuous", "fill", "justify", "distributed"].includes(across)) attrs.hx = across.toLowerCase();
+    if (Number(attr(align, "indent")) > 0) attrs.in = String(Number(attr(align, "indent")));
+    if (Number(attr(align, "textRotation")) > 0) attrs.r = String(Number(attr(align, "textRotation")));
+    if (["1", "true"].includes(attr(align, "shrinkToFit"))) attrs.k = true;
     return encodeStyle(attrs);
   });
 }
@@ -151,6 +166,8 @@ export { ownOver } from "../sheet-styles.js";
 /** A colour as Excel writes it (RRGGBB): an ink as its font (or `fill`) colour, a #rrggbb as itself. */
 export const rgbOf = (colour, fill) => (colour.startsWith("#") ? colour.slice(1) : INKS[colour]?.[fill ? 1 : 0] ?? "000000").toUpperCase();
 const STROKE = { 1: "thin", medium: "medium", thick: "thick" };
+// The lower-case words the look keeps (sheet-styles.js) in Excel's own case.
+const EXCEL_WORD = Object.fromEntries(["hair", "dotted", "dashed", "dashDot", "dashDotDot", "double", "mediumDashed", "mediumDashDot", "mediumDashDotDot", "slantDashDot", "darkGray", "mediumGray", "lightGray", "gray125", "gray0625", "darkHorizontal", "darkVertical", "darkDown", "darkUp", "darkGrid", "darkTrellis", "lightHorizontal", "lightVertical", "lightDown", "lightUp", "lightGrid", "lightTrellis", "centerContinuous", "fill", "justify", "distributed"].map((word) => [word.toLowerCase(), word]));
 const FACE = '<name val="Calibri"/><family val="2"/><scheme val="minor"/>';
 
 /**
@@ -168,11 +185,14 @@ export function writeStyles(styles, sheets) {
     const name = `${format}|${packed}`;
     if (xfOf.has(name)) return xfOf.get(name);
     const a = decodeStyle(packed), flag = (code, tag) => (a[code] ? `<${tag}/>` : "");
-    const font = idOf("font", `<font>${flag("b", "b")}${flag("i", "i")}${flag("u", "u")}${flag("s", "strike")}<sz val="${a.z ?? 11}"/>${a.c ? `<color rgb="FF${rgbOf(a.c)}"/>` : '<color theme="1"/>'}${FACE}</font>`);
-    const fill = a.f ? idOf("fill", `<fill><patternFill patternType="solid"><fgColor rgb="FF${rgbOf(a.f, true)}"/><bgColor indexed="64"/></patternFill></fill>`) : 0;
-    const side = (name, code) => (a[code] ? `<${name} style="${STROKE[a.bw ?? 1]}">${a.bc ? `<color rgb="FF${rgbOf(a.bc)}"/>` : '<color indexed="64"/>'}</${name}>` : `<${name}/>`);
-    const border = idOf("border", `<border>${side("left", "bl")}${side("right", "br")}${side("top", "bt")}${side("bottom", "bb")}<diagonal/></border>`);
-    const align = [a.h && `horizontal="${a.h}"`, a.v && `vertical="${a.v === "middle" ? "center" : a.v}"`, a.w && 'wrapText="1"'].filter(Boolean).join(" ");
+    const font = idOf("font", `<font>${flag("b", "b")}${flag("i", "i")}${a.u2 ? '<u val="double"/>' : flag("u", "u")}${flag("s", "strike")}<sz val="${a.z ?? 11}"/>${a.c ? `<color rgb="FF${rgbOf(a.c)}"/>` : '<color theme="1"/>'}${a.n ? `<name val="${escaped(a.n.replace(/_/g, " "))}"/>` : FACE}</font>`);
+    const fill = a.f ? idOf("fill", `<fill><patternFill patternType="${a.fp ? EXCEL_WORD[a.fp] : "solid"}"><fgColor rgb="FF${rgbOf(a.f, !a.fp)}"/>${a.fb ? `<bgColor rgb="FF${rgbOf(a.fb)}"/>` : '<bgColor indexed="64"/>'}</patternFill></fill>`) : 0;
+    const line = a.bs ? EXCEL_WORD[a.bs] : STROKE[a.bw ?? 1], ink = a.bc ? `<color rgb="FF${rgbOf(a.bc)}"/>` : '<color indexed="64"/>';
+    const side = (name, code) => (a[code] ? `<${name} style="${line}">${ink}</${name}>` : `<${name}/>`);
+    const diagonal = a.bd ? `<diagonal style="${line}">${ink}</diagonal>` : "<diagonal/>", slant = a.bd ? `${a.bd !== "down" ? ' diagonalUp="1"' : ""}${a.bd !== "up" ? ' diagonalDown="1"' : ""}` : "";
+    const border = idOf("border", `<border${slant}>${side("left", "bl")}${side("right", "br")}${side("top", "bt")}${side("bottom", "bb")}${diagonal}</border>`);
+    const across = a.hx ? EXCEL_WORD[a.hx] : a.h;
+    const align = [across && `horizontal="${across}"`, a.v && `vertical="${a.v === "middle" ? "center" : a.v}"`, a.r && `textRotation="${a.r}"`, a.w && 'wrapText="1"', a.in && `indent="${a.in}"`, a.k && 'shrinkToFit="1"'].filter(Boolean).join(" ");
     const id = idOf("xf", `<xf numFmtId="${format}" fontId="${font}" fillId="${fill}" borderId="${border}" xfId="0"${format ? ' applyNumberFormat="1"' : ""}${font ? ' applyFont="1"' : ""}${fill ? ' applyFill="1"' : ""}${border ? ' applyBorder="1"' : ""}${align ? ` applyAlignment="1"><alignment ${align}/></xf>` : "/>"}`);
     xfOf.set(name, id);
     return id;
