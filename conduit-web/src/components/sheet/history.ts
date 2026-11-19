@@ -14,7 +14,7 @@ const described = (changed: Map<unknown, readonly unknown[]>) => {
 };
 const opLabel = (op: SheetCellsOp) => {
   const many = "count" in op && (op.count ?? 1) > 1 ? `${op.count} ` : "", [verb, what] = op.op.split("-");
-  return op.op === "sort" ? `Sort ${op.descending ? "Z–A" : "A–Z"}` : what ? `${verb === "insert" ? "Insert" : "Delete"} ${many}${what === "rows" ? "row" : "column"}${many ? "s" : ""}` : op.op === "fill" ? "Fill" : "Typing";
+  return op.op === "sort" ? `Sort ${op.descending ? "Z–A" : "A–Z"}` : what ? `${verb === "insert" ? "Insert" : verb === "move" ? "Move" : "Delete"} ${many}${what === "rows" ? "row" : "column"}${many ? "s" : ""}` : op.op === "fill" ? "Fill" : "Typing";
 };
 
 /**
