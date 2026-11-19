@@ -100,9 +100,14 @@ export function sheetStyles(sheetXml, size, shows) {
     // At most as many as a tab keeps cell styles: a file setting every row's height keeps its first.
     if ((["1", "true"].includes(attr(tag, "customHeight")) ? height && height !== usual : height > 1.25 * usual) && heights.size < HEIGHTS) heights.set(r, height);
   }
-  const shown = [];
-  for (const found of sheetXml.matchAll(cols.size || rows.size ? /<c r="([A-Z]+)(\d+)"([^>]*?)\/?>/g : /<c r="([A-Z]+)(\d+)"([^>]*?\ss="[1-9]\d*"[^>]*?)\/?>/g)) {
-    const r = Number(found[2]) - 1, c = colIndex(found[1]), s = Number(attr(found[3], "s") ?? 0);
+  // A cell's `r` may stand after its other attributes, or be left out for the one after the cell before it (and a row's, for the row after).
+  const shown = [], lines = cols.size || rows.size;
+  let r = -1, c = -1;
+  for (const found of within(sheetXml, "sheetData").matchAll(/<(row|c)\b([^>]*?)\/?>/g)) {
+    if (found[1] === "row") { const at = /\sr="(\d+)"/.exec(found[2]); r = at ? Number(at[1]) - 1 : r + 1; c = -1; continue; }
+    const place = /\sr="([A-Z]+)(\d+)"/.exec(found[2]), s = Number(/\ss="(\d+)"/.exec(found[2])?.[1] ?? 0);
+    if (place) { r = Number(place[2]) - 1; c = colIndex(place[1]); } else c += 1;
+    if (!s && !lines) continue;
     if (shows[s]) shown.push([r, c, s]);
     else if (r < size.rows && c < size.cols) cells.push([r, c, s]);
   }
@@ -126,9 +131,13 @@ export function sheetStyles(sheetXml, size, shows) {
   for (const tag of sheetXml.match(/<col\b[^>]*>/g) ?? []) if (Number(attr(tag, "max")) >= 1024) for (let c = Number(attr(tag, "min")) - 1; c < 16384; c++) wide.add(c);
   const seenCells = cells.filter(([, , s]) => shows[s]).sort((x, y) => x[0] - y[0] || x[1] - y[1]);
   reach.rows = size.rows; reach.cols = size.cols;
+  // Each cell is looked at once: by row until its row is reached, then, if its column is not yet, waiting under its column.
+  const reached = (r, c) => { reach.rows = Math.max(reach.rows, r + 1); reach.cols = Math.max(reach.cols, c + 1); }, waiting = [];
+  let next = 0, scanned = reach.cols;
   for (let was = -1; was !== reach.rows * 16384 + reach.cols;) {
     was = reach.rows * 16384 + reach.cols;
-    for (const [r, c] of seenCells) if (r <= reach.rows && c <= reach.cols) { reach.rows = Math.max(reach.rows, r + 1); reach.cols = Math.max(reach.cols, c + 1); }
+    for (; next < seenCells.length && seenCells[next][0] <= reach.rows; next++) { const [r, c] = seenCells[next]; if (c <= reach.cols) reached(r, c); else (waiting[c] ??= []).push(r); }
+    while (scanned < reach.cols) { scanned++; for (const r of waiting[scanned] ?? []) reached(r, scanned); }
     while (shows[rows.get(reach.rows)]) reach.rows++;
     while (!wide.has(reach.cols) && shows[cols.get(reach.cols)]) reach.cols++;
   }

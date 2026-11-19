@@ -1,9 +1,10 @@
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 import { HyperFormula } from "hyperformula";
 import * as XLSX from "xlsx";
-import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colIndex, colName, tabName, toCsv, valueText } from "../sheet-format.js";
+import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colIndex, colName, parseA1, tabName, toCsv, valueText } from "../sheet-format.js";
 import { CONFIG } from "../sheet-engine.js";
 import { NAMES } from "../sheet-functions.js";
+import { shiftRefs } from "../sheet-rules.js";
 import { decodeStyle, encodeStyle } from "../sheet-styles.js";
 import { ownOver, readDxfs, readStyles, seen, sheetRules, sheetStyles, withDxfs, withRules, writeRules, writeStyles } from "./xlsx-styles.js";
 
@@ -22,6 +23,8 @@ const PX_PER_CHAR = 7, STYLES_PER_TAB = 20_000;
 const VOLATILE = /\b(?:TODAY|NOW|RAND|RANDBETWEEN|RANDARRAY)\s*\(/i, FORMATS_PER_TAB = 2000, PASSES = 4;
 const ERROR_TEXT = { 0: "#NULL!", 7: "#DIV/0!", 15: "#VALUE!", 23: "#REF!", 29: "#NAME?", 36: "#NUM!", 42: "#N/A", 43: "#GETTING_DATA" };
 const fault = (message) => Object.assign(new Error(message), { status: 422 });
+// SheetJS's dense rows are holey arrays as long as their last cell: walking the holes of rows whose formatting runs far out costs more than all the rest.
+const cellsOf = (data, each) => { for (let r = 0; r < data.length; r++) { const row = data[r]; if (row) for (const c of Object.keys(row)) if (row[c]) each(row[c], r, Number(c)); } };
 const isError = (value) => value !== null && typeof value === "object";
 // SheetJS reads and writes no frozen panes or styles: they are read from, and written into, the workbook's own XML parts.
 const unescaped = (text) => text.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
@@ -86,9 +89,10 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     while (names.has(name.toLowerCase())) name = `${tabName(called).slice(0, 27)} ${n++}`;
     names.add(name.toLowerCase());
     let rows = 0, cols = 0;
-    data.forEach((row, r) => row?.forEach((cell, c) => { if (cell && (cell.f || (cell.t !== "z" && cell.v !== "" && cell.v !== undefined))) { rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1); } }));
+    let notes = 0;
+    cellsOf(data, (cell, r, c) => { if (cell.f || (cell.t !== "z" && cell.v !== "" && cell.v !== undefined)) { rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1); } if (cell.c?.length) notes++; });
     read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, rows: Math.max(1, rows), cols: Math.max(1, cols) });
-    drop("notes", data.reduce((sum, row) => sum + (row?.filter((cell) => cell?.c?.length).length ?? 0), 0));
+    drop("notes", notes);
   });
   if (!read.length) throw fault(wanted ? `None of those tabs is in the workbook: its tabs are ${book.SheetNames.join(", ")}` : "That workbook has no tabs with cells");
   const sizes = () => read.map((tab) => `${tab.name} ${tab.rows}x${tab.cols}`).join(", ");
@@ -117,14 +121,14 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   const formulas = [], spilt = [];
   for (const tab of read) {
     tab.typed = Array.from({ length: tab.rows }, () => new Array(tab.cols).fill(null));
-    tab.data.forEach((row, r) => row?.forEach((cell, c) => {
-      if (!cell || r >= tab.rows || c >= tab.cols) return;
+    cellsOf(tab.data, (cell, r, c) => {
+      if (r >= tab.rows || c >= tab.cols) return;
       // A formula over several cells is not computed: the engine fails to load some of them ("Edge does not exist"), so each of its cells holds its kept value.
       if (cell.f && cell.F?.includes(":")) { spilt.push({ tab, r, c, formula: translated(cell.f) }); tab.typed[r][c] = cell.t === "n" ? cell.v : cell.t === "z" ? null : kept(cell) || null; }
       else if (cell.f) { formulas.push({ tab, r, c, cell, formula: translated(cell.f) }); tab.typed[r][c] = translated(cell.f); }
       else if (cell.t === "n") tab.typed[r][c] = cell.v;
       else if (cell.t !== "z" && kept(cell) !== "") tab.typed[r][c] = cell.t === "s" || cell.t === "str" ? String(cell.v) : kept(cell);
-    }));
+    });
   }
   let engine;
   try { engine = HyperFormula.buildFromSheets(Object.fromEntries(read.map((tab) => [tab.name, tab.typed])), CONFIG, NAMES); }
@@ -133,20 +137,20 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     for (const tab of read) tab.id = engine.getSheetId(tab.name);
     // Text this engine would read as something else (a number, TRUE, a formula) is typed with the mark that keeps it text.
     const marked = [];
-    for (const tab of read) tab.data.forEach((row, r) => row?.forEach((cell, c) => {
-      if (!cell || cell.f || (cell.t !== "s" && cell.t !== "str") || r >= tab.rows || c >= tab.cols || cell.v === "" || tab.typed[r][c] === null) return;
+    for (const tab of read) cellsOf(tab.data, (cell, r, c) => {
+      if (cell.f || (cell.t !== "s" && cell.t !== "str") || r >= tab.rows || c >= tab.cols || cell.v === "" || tab.typed[r][c] === null) return;
       if (engine.getCellValue({ sheet: tab.id, row: r, col: c }) !== cell.v || String(cell.v).startsWith("'")) marked.push([tab, r, c, `'${cell.v}`]);
-    }));
+    });
     if (marked.length) engine.batch(() => { for (const [tab, r, c, text] of marked) { tab.typed[r][c] = text; engine.setCellContents({ sheet: tab.id, row: r, col: c }, text); } });
 
     // Compared in passes: a formula that reads a wrong one is wrong too, so only the first wrong ones in each chain are frozen, then the rest are computed again.
     const report = { computed: { same: 0, frozen: 0, noCache: 0, volatile: 0 }, frozen: {}, reasons: {} };
     const at = (one) => ({ sheet: one.tab.id, row: one.r, col: one.c }), id = (address) => `${address.sheet}:${address.row}:${address.col}`;
+    // Through the ranges that read them too (SUM(C1:C9)), each a dependant of its own.
     const downstream = (from) => {
       const seen = new Set(), queue = from.map(at);
       while (queue.length) for (const next of engine.getCellDependents(queue.pop())) {
-        if (next.start) continue;
-        const key = id(next);
+        const key = next.start ? `${id(next.start)}-${id(next.end)}` : id(next);
         if (!seen.has(key)) { seen.add(key); queue.push(next); }
       }
       return seen;
@@ -159,7 +163,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     const freeze = (wrong, gave = wrong.map((one) => engine.getCellValue(at(one)))) => engine.batch(() => {
       for (const [index, one] of wrong.entries()) {
         const value = gave[index], text = kept(one.cell);
-        const why = isError(value) ? (value.value === "#NAME?" ? "a function or name this sheet does not have" : `it gives ${value.value} here`) : `it gives ${valueText(value) || "nothing"} here, ${text || "nothing"} in the file`;
+        const why = isError(value) ? (value.value === "#NAME?" ? "a function or name this sheet does not have" : value.value === "#ERROR!" ? "a formula this sheet cannot read" : `it gives ${value.value} here`) : `it gives ${valueText(value) || "nothing"} here, ${text || "nothing"} in the file`;
         (report.frozen[one.tab.name] ??= {})[a1(one.r, one.c)] = { formula: one.formula, why, kept: one.cell.t === "s" || one.cell.t === "str" ? `'${one.cell.v}` : text };
         const reason = !why.startsWith("it gives") ? why : isError(value) ? `gives ${value.value}` : "a different value";
         report.reasons[reason] = (report.reasons[reason] ?? 0) + 1;
@@ -187,7 +191,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       (tab.sheet["!cols"] ?? []).forEach((col, c) => { if (c >= tab.cols) return; if (col?.width || col?.wpx) look[`width:${colName(c)}`] = Math.round(col.width ? col.width * PX_PER_CHAR : col.wpx); if (col?.hidden) look[`hidden:${colName(c)}`] = 1; });
       (tab.sheet["!rows"] ?? []).forEach((row, r) => { if (r < tab.rows && row?.hidden) look[`hidden:${r + 1}`] = 1; });
       // A number format is kept for a column where most of its numbers share it, and for the cells that differ, up to a count.
-      tab.data.forEach((row, r) => row?.forEach((cell, c) => { if (cell?.t === "n" && r < tab.rows && c < tab.cols) (formats.get(c) ?? formats.set(c, new Map()).get(c)).set(r, typeof cell.z === "string" ? cell.z : "General"); }));
+      cellsOf(tab.data, (cell, r, c) => { if (cell.t === "n" && r < tab.rows && c < tab.cols) (formats.get(c) ?? formats.set(c, new Map()).get(c)).set(r, typeof cell.z === "string" ? cell.z : "General"); });
       let single = 0;
       for (const [c, column] of formats) {
         const counts = new Map();
@@ -214,6 +218,8 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       drop("merged ranges past the tab's last value", (tab.sheet["!merges"]?.length ?? 0) - merges.length);
       if (merges.length) look.merges = merges.map((range) => XLSX.utils.encode_range(range));
       if (tab.rules.length) look.rules = tab.rules;
+      // A frozen formula goes with its cell (`excel:<rowId>:<colId>` once in the doc), written for the cell it was in (`anchor`), as a rule's are.
+      for (const [at, one] of Object.entries(report.frozen[tab.name] ?? {})) if (!one.why.startsWith("a formula over")) look[`excel:${at}`] = { formula: one.formula, value: one.kept, anchor: at };
       if (tab.pane?.rows) look.freezeRows = tab.pane.rows;
       if (tab.pane?.cols) look.freezeCols = tab.pane.cols;
       return { name: tab.name, hidden: tab.hidden, csv: toCsv(csv), inputs, look, rows: tab.rows, cols: tab.cols, formulas: Object.keys(inputs).length };
@@ -236,24 +242,30 @@ export function importSummary(report) {
 const PREFIXED = new Set("STDEV.S STDEV.P VAR.S VAR.P COVARIANCE.S COVARIANCE.P FLOOR.MATH CEILING.MATH CEILING.PRECISE FLOOR.PRECISE ISO.CEILING IFS SWITCH MAXIFS MINIFS CONCAT TEXTJOIN XLOOKUP XMATCH IFNA XOR RANK.EQ RANK.AVG PERCENTILE.INC PERCENTILE.EXC PERCENTRANK.INC PERCENTRANK.EXC QUARTILE.INC QUARTILE.EXC MODE.SNGL MODE.MULT NORM.DIST NORM.INV NORM.S.DIST NORM.S.INV T.DIST T.DIST.2T T.DIST.RT T.INV T.INV.2T T.TEST CHISQ.DIST CHISQ.DIST.RT CHISQ.INV CHISQ.INV.RT CHISQ.TEST F.DIST F.DIST.RT F.INV F.INV.RT F.TEST Z.TEST BINOM.DIST BINOM.DIST.RANGE BINOM.INV NEGBINOM.DIST POISSON.DIST EXPON.DIST GAMMA.DIST GAMMA.INV BETA.DIST BETA.INV WEIBULL.DIST LOGNORM.DIST LOGNORM.INV HYPGEOM.DIST CONFIDENCE.NORM CONFIDENCE.T NETWORKDAYS.INTL WORKDAY.INTL DAYS ISOWEEKNUM NUMBERVALUE FORECAST.LINEAR UNICHAR UNICODE BITAND BITOR BITXOR BITLSHIFT BITRSHIFT SHEET SHEETS FORMULATEXT ISFORMULA PERMUTATIONA GAMMA GAUSS PHI SEC CSC COT SECH CSCH COTH ACOT ACOTH ARABIC BASE DECIMAL COMBINA MUNIT SKEW.P AGGREGATE ERF.PRECISE ERFC.PRECISE GAMMALN.PRECISE UNIQUE SEQUENCE RANDARRAY SORTBY TAKE DROP CHOOSECOLS CHOOSEROWS EXPAND".split(" "));
 const SCOPED = new Set(["FILTER", "SORT"]);
 const stored = (formula) => formula.slice(1).split(/("(?:[^"]|"")*")/).map((part, nth) => nth % 2 ? part : part.replace(/([A-Za-z][A-Za-z0-9.]*)\(/g, (all, name) => PREFIXED.has(name.toUpperCase()) ? `_xlfn.${all}` : SCOPED.has(name.toUpperCase()) ? `_xlfn._xlws.${all}` : all)).join("");
+// A reference to a tab the workbook no longer has is #REF!, as a spreadsheet makes it when the tab is deleted: a file naming a missing tab is one to repair.
+const TAB_REF = /(?<![#\p{L}\p{N}_.'])('(?:[^']|'')+'|[\p{L}_][\p{L}\p{N}_.]*)!(?:\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?|\$?[A-Z]{1,3}:\$?[A-Z]{1,3}|\$?\d+:\$?\d+)/gu;
+// A frozen formula reading a table or another workbook (`[`) is written as its value: the export has neither part.
+const outside = (formula) => formula.replace(/"(?:[^"]|"")*"/g, "");
+const orphaned = (formula, known) => formula.split(/("(?:[^"]|"")*")/).map((part, nth) => nth % 2 ? part : part.replace(TAB_REF, (all, tab) => known.has((tab.startsWith("'") ? tab.slice(1, -1).replace(/''/g, "'") : tab).toLowerCase()) ? all : "#REF!")).join("");
 const ERROR_CODE = Object.fromEntries(Object.entries(ERROR_TEXT).map(([code, text]) => [text, Number(code)]));
 /**
  * A workbook written as an .xlsx: each formula with the value it computes here, number formats, column widths, row heights, hidden rows and columns, frozen panes and hidden tabs. A cell an import
- * froze gets its formula back where it still holds what the import left in it. Styles are written into the parts SheetJS wrote (xlsx-styles.js).
+ * froze (`excel:` in its look) gets its formula back while it holds what the import left in it, moved as a fill moves it from its `anchor` (where a
+ * sort took it; a row or column change rewrites the formula itself, sheets.js). Styles are written into the parts SheetJS wrote (xlsx-styles.js).
  * @param {{ name: string, hidden: boolean, typed: string[][], values: unknown[][], look: Record<string, unknown> }[]} tabs  `values`: what each cell computes
- * @param {ImportReport | null} [imported]
  * @returns {Buffer}
  */
-export function exportXlsx(tabs, imported) {
-  const book = XLSX.utils.book_new();
+export function exportXlsx(tabs) {
+  const book = XLSX.utils.book_new(), known = new Set(tabs.map((tab) => tab.name.toLowerCase()));
   for (const tab of tabs) {
-    const frozen = imported?.frozen?.[tab.name] ?? {}, sheet = {}, cols = Math.max(1, ...tab.typed.map((row) => row.length));
+    const sheet = {}, cols = Math.max(1, ...tab.typed.map((row) => row.length));
     tab.typed.forEach((row, r) => row.forEach((typed, c) => {
       if (!typed) return;
-      const at = a1(r, c), was = frozen[at], formula = typed.startsWith("=") ? typed : was?.kept === typed && !was.why.startsWith("a formula over") ? was.formula : null, value = tab.values[r]?.[c];
+      const at = a1(r, c), held = tab.look[`excel:${at}`], from = parseA1(String(held?.anchor ?? "")), value = tab.values[r]?.[c];
+      const formula = typed.startsWith("=") ? typed : from && held.value === typed && typeof held.formula === "string" && !outside(held.formula).includes("[") ? shiftRefs(held.formula, r - from.row, c - from.col) : null;
       const cell = isError(value) ? { t: "e", v: ERROR_CODE[value.value] ?? 15, w: value.value } : typeof value === "number" ? { t: "n", v: value } : typeof value === "boolean" ? { t: "b", v: value } : { t: "s", v: String(value ?? "") };
       if (cell.t === "s" && cell.v === "" && !formula) return;
-      if (formula) cell.f = stored(formula);
+      if (formula) cell.f = stored(orphaned(formula, known));
       const format = tab.look[`fmt:${at}`] ?? tab.look[`fmt:${colName(c)}`];
       if (cell.t === "n" && typeof format === "string" && format !== "General") cell.z = format;
       sheet[at] = cell;
@@ -274,7 +286,7 @@ export function exportXlsx(tabs, imported) {
   book.Workbook = { Sheets: tabs.map((tab) => ({ Hidden: tab.hidden ? 1 : 0 })) };
   const written = XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true }), count = (value) => typeof value === "number" && value > 0 ? value : 0;
   const panes = tabs.map((tab) => [count(tab.look.freezeRows), count(tab.look.freezeCols)]), styled = tabs.some((tab) => Object.keys(tab.look).some((name) => name.startsWith("style:")));
-  const ruled = tabs.some((tab) => Array.isArray(tab.look.rules) && tab.look.rules.length), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(`=${formula}`)) : null;
+  const ruled = tabs.some((tab) => Array.isArray(tab.look.rules) && tab.look.rules.length), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(orphaned(`=${formula}`, known))) : null;
   if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols)) return written;
   let restyled = null;
   return editParts(written, (path, xml, all) => {

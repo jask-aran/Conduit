@@ -5,7 +5,7 @@ import { CALL_LIMIT, CELLS, COLS, COL_LIMIT, LOOK, MAIN, ROWS, SHEET_FORMAT, SHE
 import { CONFIG, createWorkbookModel } from "../sheet-engine.js";
 import { listFormats, writeFormat } from "../sheet-formats.js";
 import { listStyles, writeStyle } from "../sheet-styles.js";
-import { readRules, rulesA1, rulesIds } from "../sheet-rules.js";
+import { readRules, rulesA1, rulesIds, shiftRefs } from "../sheet-rules.js";
 import { writePrivateFile } from "../private-file.js";
 
 /*
@@ -187,6 +187,36 @@ export function sheetKind(hub) {
       if (JSON.stringify(next) !== JSON.stringify(rules)) out.push([`rules:${sheet.id}`, next.length ? JSON.stringify(next) : null]);
     }
     return () => { for (const [name, value] of out) if (value === null) room.look.delete(name); else room.look.set(name, value); };
+  };
+  /**
+   * The formulas an import froze (`excel:<rowId>:<colId>`, sheet-xlsx.js) that are on the tab or name it, rewritten by a change to the tab as the
+   * engine rewrites a formula, in an engine of its own: OFFSET goes in under a name the engine does not know, so it parses. One that still does not
+   * parse loses its formula, so an export writes its value alone. `op`: a row or column op, or `rename` (to `at`).
+   * Applied after the change, as `keepCorners`'s.
+   */
+  const keepFrozen = (room, sheet, op, at, count) => {
+    const named = sheet.engine.getSheetName(sheet.sheet).toLowerCase(), held = [], { engine, here } = scratch(room, sheet), isRows = op.endsWith("rows"), removing = op.startsWith("delete");
+    try {
+      for (const [name, value] of room.look.entries()) {
+        const [what, row, col] = name.split(":"), tab = what === "excel" && typeof value?.formula === "string" ? room.book.tabOfRow(row) : undefined, on = tab && room.book.tab(tab);
+        if (!on || on.indexOfCol(col) < 0 || (on.id !== sheet.id && !value.formula.toLowerCase().includes(named))) continue;
+        // Written for its `anchor`, where a sort may have left it: as it reads where it is now.
+        const place = { sheet: engine.getSheetId(on.engine.getSheetName(on.sheet)), row: on.indexOfRow(row), col: on.indexOfCol(col) }, from = parseA1(String(value.anchor ?? "")) ?? place;
+        engine.setCellContents(place, shiftRefs(value.formula, place.row - from.row, place.col - from.col).replace(/\bOFFSET\(/gi, "MOVEDREF("));
+        const unread = engine.getCellValue(place)?.message?.startsWith("Parsing");
+        held.push({ name, value, row, col, on, place: unread ? null : place });
+      }
+      if (!held.length) return () => {};
+      // A name the tab cannot take is the tab op's to refuse.
+      if (op === "rename") { try { engine.renameSheet(here, at); } catch { return () => {}; } }
+      else (isRows ? removing ? engine.removeRows : engine.addRows : removing ? engine.removeColumns : engine.addColumns).call(engine, here, [at, count]);
+      const moved = (n) => removing ? (n >= at + count ? n - count : n >= at ? -1 : n) : n >= at ? n + count : n;
+      const after = held.map(({ place, ...one }) => {
+        const to = place && (place.sheet !== here || op === "rename" ? place : isRows ? { ...place, row: moved(place.row) } : { ...place, col: moved(place.col) });
+        return { ...one, formula: to && to.row >= 0 && to.col >= 0 ? engine.getCellFormula(to)?.replace(/\bMOVEDREF\(/g, "OFFSET(") : undefined };
+      });
+      return () => { for (const { name, value, row, col, on, formula } of after) if (!formula || on.indexOfRow(row) < 0 || on.indexOfCol(col) < 0) room.look.delete(name); else room.look.set(name, { ...value, formula, anchor: a1(on.indexOfRow(row), on.indexOfCol(col)) }); };
+    } finally { engine.destroy(); }
   };
   const text = (value) => value === null || value === undefined ? "" : typeof value === "string" ? value : typeof value === "number" || typeof value === "boolean" ? String(value).toUpperCase() : (() => { throw fault(400, "A cell's value is text: what is typed in it (a number, TRUE or FALSE, or a formula starting with =)"); })();
   const index = (value, most, what) => {
@@ -435,7 +465,9 @@ export function sheetKind(hub) {
               if (!room.doc.getMap(TAB).has(`name:${MAIN}`)) hub.as(room, name, (sign) => room.book.tabOp("rename", { tab: MAIN, name: first }, sign));
             }
           }
-          const done = hub.as(room, name, (sign) => room.book.tabOp(TAB_OPS[op], tabArgs, sign));
+          const changed = op === "rename-tab" && typeof called === "string" ? room.book.find(tabArgs.tab) : null;
+          const frozen = changed ? keepFrozen(room, room.book.tab(changed), TAB_OPS[op], called?.trim()) : () => {};
+          const done = hub.as(room, name, (sign) => room.book.tabOp(TAB_OPS[op], tabArgs, () => { frozen(); sign(); }));
           return { tab: done.tab, tabs: tabsWithSize(room) };
         }
         if (op === "set" || op === "fill") {
@@ -493,8 +525,8 @@ export function sheetKind(hub) {
         if (removing && at + count > size) throw fault(400, `There are ${size - at} ${what}s from ${at}: count is at most that`);
         if (removing && count >= size) throw fault(400, `A tab keeps at least one ${what}`);
         if (!removing) sized(room, sheet, isRows ? rows + count : rows, isRows ? cols : cols + count);
-        const corners = removing ? keepCorners(room, sheet, isRows, at, count) : () => {};
-        return { ...hub.as(room, name, (sign) => sheet.structure(op, at, count, () => { corners(); sign(); })), ...(many(room) ? { tab: sheet.name } : {}) };
+        const corners = removing ? keepCorners(room, sheet, isRows, at, count) : () => {}, frozen = keepFrozen(room, sheet, op, at, count);
+        return { ...hub.as(room, name, (sign) => sheet.structure(op, at, count, () => { corners(); frozen(); sign(); })), ...(many(room) ? { tab: sheet.name } : {}) };
       },
     },
   };
