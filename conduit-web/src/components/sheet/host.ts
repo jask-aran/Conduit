@@ -33,6 +33,8 @@ export type SheetCellsOp = { client?: number; step?: number } & (
   | { op: "set"; at: string; value: string; tab?: string }
   | { op: "fill"; range: string; values?: string[][]; value?: string; from?: string; tab?: string }
   | { op: "insert-rows" | "insert-cols" | "delete-rows" | "delete-cols"; at: number; count?: number; tab?: string }
+  /** `count` whole rows or columns from `at` moved to start at `to`, the tab's formulas reading them following them. */
+  | { op: "move-rows" | "move-cols"; at: number; count?: number; to: number; tab?: string }
   | SheetFormatOp
   | SheetStyleOp
   | SheetSortOp

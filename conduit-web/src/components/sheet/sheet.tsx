@@ -1,11 +1,12 @@
 import { createEffect, createMemo, createResource, createSignal, on, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { Empty, Frost, Icons, Notice } from "@/components/ui";
-import { sheetMergeIcons as MergeIcons, sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
+import { sheetLineIcons as LineIcons, sheetMergeIcons as MergeIcons, sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
+import { SheetMenu, type SheetMenuEntry } from "./cell-menu";
 import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { createSheetMerges, type SheetMergeKind } from "./merges";
 import { Input } from "@/components/ui/controls";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
-import { CELLS, COLS, LOOK, ROWS, a1, colIndex, colName, colsOf, key, parseRange, rangeA1, rowsOf, runsOf, type SheetView } from "@/sheet-format.js";
+import { CELLS, COLS, LOOK, ROWS, a1, colIndex, colName, colsOf, key, parseRange, rangeA1, rowsOf, runsOf, valueText, type SheetView } from "@/sheet-format.js";
 import { shiftRefs } from "@/sheet-rules.js";
 import { SheetFoot } from "./foot";
 import { createSheetTabs } from "./tabs";
@@ -35,8 +36,8 @@ const between = (from: number, to: number) => Array.from({ length: to - from + 1
 type Menu = { rows?: SheetRange; cols?: SheetRange };
 
 /** A sheet: the hub's live copy drawn in the grid, a formula bar over it, the comment margin beside it. */
-/** `onAsk`: the ask key (ASK_KEY) was pressed in the grid. */
-export function SheetEditor(props: { host: SheetHost; id: string; name: string; margin?: JSX.Element; marginEmpty?: boolean; marks?(marks: SheetMarks): void; onState?(state: SheetState): void; onDrawn?(): void; onAsk?(): void }) {
+/** `onComment`: a comment on the selection, as the quote tool starts one (the comment key, ASK_KEY, or the cell menu); `onAsk`: the agent asked about it. */
+export function SheetEditor(props: { host: SheetHost; id: string; name: string; margin?: JSX.Element; marginEmpty?: boolean; marks?(marks: SheetMarks): void; onState?(state: SheetState): void; onDrawn?(): void; onAsk?(): void; onComment?(): void }) {
   const live = createLiveSheet(props.host, props.id), cells = live.doc.getMap<string>(CELLS), look = live.doc.getMap<number | string>(LOOK);
   const [model, setModel] = createSignal<SheetView>(), [grid, setGrid] = createSignal<SheetGrid>(), [failed, setFailed] = createSignal<string>();
   const [at, setAt] = createSignal<SheetRange | null>(null), [changed, setChanged] = createSignal(0), [address, setAddress] = createSignal<string | null>(null), [scrolled, setScrolled] = createSignal(0);
@@ -44,7 +45,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const formats = createSheetFormats(look, model, props.host.failed), styles = createSheetStyles(look, model, props.host.failed);
   // The grid's element is a signal: the menu trigger that makes it may make it again, and the grid then mounts in the one that stands.
   const [island, setIsland] = createSignal<HTMLDivElement>(), [slot, setSlot] = createSignal<HTMLDivElement>();
-  let root: HTMLElement | undefined, anchors: SheetAnchor[] = [];
+  let root: HTMLElement | undefined, anchors: SheetAnchor[] = [], picking: string | undefined;
   const tabs = createSheetTabs({ doc: live.doc, host: props.host, id: props.id, name: props.name, grid, at });
   // Every tab's rows and columns are in it, so a row put in or taken out is undone with the formulas the hub moved for it.
   const history = createSheetHistory(live.doc, [cells, look, live.doc.getArray(ROWS), live.doc.getArray(COLS)], (op) => tabs.cells(op)), [stepped, setStepped] = createSignal(0);
@@ -307,6 +308,10 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     anchors: (list) => {
       anchors = list;
       tabs.follow(list);
+      // A comment picked in the margin selects its cells.
+      const open = list.find((anchor) => anchor.current && !anchor.resolved), range = open && open.key !== picking ? rangeOf(open) : null;
+      picking = open?.key;
+      if (range) grid()?.select(range);
       grid()?.highlight(list.filter((anchor) => !anchor.resolved).flatMap((anchor) => { const range = rangeOf(anchor); return range ? [{ range, current: anchor.current }] : []; }));
     },
     where: (name) => { const anchor = anchors.find((one) => one.key === name), range = anchor && rangeOf(anchor); return range ? grid()?.bounds(range) ?? null : null; },
@@ -369,6 +374,109 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     opening = () => { grid()?.select(cell); grid()?.focus(); requestAnimationFrame(() => { const box = grid()?.bounds(cell); if (box) { filters.reapply(); setFiltering({ col, box }); } }); };
   };
   createEffect(() => { if (!filters.filter()) setFiltering(null); });
+  /** The type the range's columns share (undefined: plain), null where they differ. */
+  const typeOf = (range: SheetRange) => { const types = new Set(between(range.left, range.right).map((col) => look.get(`type:${model()?.colAt(col)}`))); return types.size === 1 ? [...types][0] : null; };
+  const setType = (range: SheetRange, type: string | null) => history.act("Cell type", () => { for (const col of between(range.left, range.right)) { const id = model()?.colAt(col); if (id) { if (type) look.set(`type:${id}`, type); else look.delete(`type:${id}`); } } });
+  // The cell menu, as a spreadsheet's: what it does is said of the rows or columns it was opened on, counted ("Insert 5 rows above").
+  const menuGroups = (): (SheetMenuEntry[] | false)[] => {
+    const r = rows(), c = cols(), size = model()?.size();
+    if (!size || (!r && !c)) return [];
+    const kind = r && c ? "cells" : r ? "rows" : "cols", lastRow = Math.max(0, size.rows - 1), lastCol = Math.max(0, size.cols - 1);
+    const range = kind === "cells" ? picked()! : kind === "rows" ? { top: r!.top, bottom: Math.min(r!.bottom, lastRow), left: 0, right: lastCol } : { top: 0, bottom: lastRow, left: c!.left, right: Math.min(c!.right, lastCol) };
+    const nRows = count(range.top, range.bottom), nCols = count(range.left, range.right), many = (n: number, one: string, more: string) => n > 1 ? `${n} ${more}` : one;
+    const rowsSaid = many(nRows, "row", "rows"), colsSaid = many(nCols, "column", "columns"), byCol = kind === "cols" ? range.left : at()?.left ?? range.left, whole = kind !== "cells";
+    const moveBy = (isRows: boolean, by: -1 | 1) => history.act(`Move ${isRows ? rowsSaid : colsSaid}`, () => {
+      const from = isRows ? range.top : range.left;
+      hub({ op: isRows ? "move-rows" : "move-cols", at: from, count: isRows ? nRows : nCols, to: from + by });
+      grid()?.select(isRows ? { ...range, top: range.top + by, bottom: range.bottom + by } : { ...range, left: range.left + by, right: range.right + by });
+      grid()?.whole(isRows ? "rows" : "cols");
+    });
+    const clearFormats = () => { styles.clear(range); formats.set(range, "General"); };
+    // A sheet's sort: every row under the frozen ones, by one column, the frozen header naming it.
+    const frozen = sizes.freeze().rows, header = frozen ? valueText(model()?.value(frozen - 1, byCol) ?? null) : "", named = header ? `“${header}”` : `column ${colName(byCol)}`;
+    const sortSheet = (descending: boolean) => history.act(`Sort sheet ${descending ? "Z–A" : "A–Z"}`, () => { if (frozen < lastRow) hub({ op: "sort", range: rangeA1({ top: frozen, bottom: lastRow, left: 0, right: lastCol }), column: colName(byCol), descending }); });
+    const hideRows = () => history.act("Hide rows", () => sizes.setHidden(between(range.top, range.bottom), true));
+    return [
+      [
+        ...props.onAsk ? [{ label: "Ask the agent", icon: <Icons.Agent />, run: () => { grid()?.select(range); props.onAsk?.(); } }] : [],
+        ...props.onComment ? [{ label: "Comment", icon: <Icons.Chat />, keys: ["Ctrl", "Alt", "M"], run: () => { grid()?.select(range); props.onComment?.(); } }] : [],
+      ],
+      [
+        { label: "Cut", icon: <Icons.Cut />, keys: ["Ctrl", "X"], run: () => void copy(range, true).then(() => clear(range, "Cut")) },
+        { label: "Copy", icon: <Icons.Copy />, keys: ["Ctrl", "C"], run: () => void copy(range) },
+        { label: "Paste", icon: <Icons.Paste />, keys: ["Ctrl", "V"], run: () => paste(range) },
+        ...grid()?.held() ? [{ label: "Paste values only", icon: <Icons.Paste />, keys: ["Ctrl", "Shift", "V"], run: () => paste(range, true) }] : [],
+      ],
+      [
+        ...kind !== "cols" ? [{ label: range.bottom ? `Freeze rows 1 to ${range.bottom + 1}` : "Freeze row 1", icon: <Icons.Pin />, run: () => history.act("Freeze panes", () => sizes.setFreeze(range.bottom + 1, sizes.freeze().cols)) }] : [],
+        ...kind !== "rows" ? [{ label: range.right ? `Freeze columns A to ${colName(range.right)}` : "Freeze column A", icon: <Icons.Pin />, run: () => history.act("Freeze panes", () => sizes.setFreeze(sizes.freeze().rows, range.right + 1)) }] : [],
+        ...sizes.freeze().rows || sizes.freeze().cols ? [{ label: "Unfreeze", icon: <Icons.PinOff />, keys: ["Alt", "W", "F", "F"], run: () => history.act("Freeze panes", () => sizes.setFreeze(0, 0)) }] : [],
+      ],
+      [
+        ...kind !== "cols" ? [
+          { label: `Insert ${rowsSaid} above`, icon: <Icons.Add />, keys: whole ? ["Ctrl", "Shift", "="] : undefined, run: () => structure("insert-rows", range.top, nRows) },
+          ...kind === "rows" ? [{ label: `Insert ${rowsSaid} below`, icon: <Icons.Add />, run: () => structure("insert-rows", range.bottom + 1, nRows) }] : [],
+        ] : [],
+        // Make chart goes here, under the inserts.
+        ...kind !== "rows" ? [
+          { label: `Insert ${colsSaid} left`, icon: <Icons.Add />, keys: whole ? ["Ctrl", "Shift", "="] : undefined, run: () => structure("insert-cols", range.left, nCols) },
+          ...kind === "cols" ? [{ label: `Insert ${colsSaid} right`, icon: <Icons.Add />, run: () => structure("insert-cols", range.right + 1, nCols) }] : [],
+        ] : [],
+      ],
+      kind === "rows" && [
+        { label: `Move ${rowsSaid} up`, icon: <LineIcons.up />, disabled: range.top === 0, run: () => moveBy(true, -1) },
+        { label: `Move ${rowsSaid} down`, icon: <LineIcons.down />, disabled: range.bottom >= lastRow, run: () => moveBy(true, 1) },
+      ],
+      kind === "cols" && [
+        { label: `Move ${colsSaid} left`, icon: <LineIcons.left />, disabled: range.left === 0, run: () => moveBy(false, -1) },
+        { label: `Move ${colsSaid} right`, icon: <LineIcons.right />, disabled: range.right >= lastCol, run: () => moveBy(false, 1) },
+      ],
+      [
+        { label: "Clear", icon: <Icons.Erase />, sub: [
+          { label: "Clear contents", keys: ["Delete"], run: () => clear(range) },
+          { label: "Clear formatting", keys: ["Alt", "H", "E", "F"], run: () => history.act("Clear formatting", clearFormats) },
+          { label: "Clear all", run: () => history.act("Clear all", () => { clear(range); clearFormats(); }) },
+        ] },
+        ...kind !== "cols" ? [{ label: `Delete ${rowsSaid}`, icon: <Icons.Delete />, destructive: true, keys: whole ? ["Ctrl", "-"] : undefined, run: () => deleteRows(range) }] : [],
+        ...kind !== "rows" ? [{ label: `Delete ${colsSaid}`, icon: <Icons.Delete />, destructive: true, keys: whole ? ["Ctrl", "-"] : undefined, run: () => structure("delete-cols", range.left, nCols) }] : [],
+        ...kind === "rows" ? [
+          { label: `Hide ${rowsSaid}`, icon: <Icons.Hide />, run: hideRows },
+          ...hiddenIn(range) ? [{ label: "Unhide rows", icon: <Icons.Preview />, run: () => { const lines = between(range.top, range.bottom); history.act("Unhide rows", () => { sizes.setHidden(lines, false); filters.show(lines); }); } }] : [],
+        ] : [],
+        ...kind === "cols" ? [
+          { label: `Hide ${colsSaid}`, icon: <Icons.Hide />, keys: ["Ctrl", "0"], run: () => history.act("Hide columns", () => sizes.setHiddenCols(between(range.left, range.right), true)) },
+          ...hiddenColsBy(range).length ? [{ label: "Unhide columns", icon: <Icons.Preview />, keys: ["Ctrl", "Shift", "0"], run: () => history.act("Unhide columns", () => sizes.setHiddenCols(hiddenColsBy(range), false)) }] : [],
+        ] : [],
+      ],
+      kind === "rows" && [
+        { label: `Resize ${rowsSaid}…`, icon: <Icons.Resize />, keys: ["Alt", "H", "O", "H"], run: () => sized("HOH", range) },
+        { label: "Fit row height", icon: <Icons.Resize />, keys: ["Alt", "H", "O", "A"], run: () => history.act("Row height", () => sized("HOA", range)) },
+      ],
+      kind === "cols" && [
+        { label: `Resize ${colsSaid}…`, icon: <Icons.Resize />, keys: ["Alt", "H", "O", "W"], run: () => sized("HOW", range) },
+        { label: "Fit column width", icon: <Icons.Resize />, keys: ["Alt", "H", "O", "I"], run: () => history.act("Column width", () => sized("HOI", range)) },
+        { label: "Default width…", icon: <Icons.Resize />, keys: ["Alt", "H", "O", "D"], run: () => sized("HOD", range) },
+      ],
+      [
+        { label: "Sort range", icon: <SortIcons.ascending />, sub: [
+          { label: `A to Z by column ${colName(byCol)}`, icon: <SortIcons.ascending />, keys: ["Alt", "H", "S", "S"], run: () => filters.keys.sort(false, byCol) },
+          { label: `Z to A by column ${colName(byCol)}`, icon: <SortIcons.descending />, keys: ["Alt", "H", "S", "O"], run: () => filters.keys.sort(true, byCol) },
+        ] },
+        { label: "Sort sheet", icon: <SortIcons.ascending />, sub: [
+          { label: `A to Z by ${named}`, icon: <SortIcons.ascending />, run: () => sortSheet(false) },
+          { label: `Z to A by ${named}`, icon: <SortIcons.descending />, run: () => sortSheet(true) },
+        ] },
+        { label: filters.filter() ? "Remove filter" : "Create a filter", icon: <SortIcons.filter />, keys: ["Ctrl", "Shift", "L"], run: filters.keys.filter },
+        ...filteredBy(byCol) ? [{ label: "Filter column…", icon: <SortIcons.filter />, run: () => openFilter(filteredBy(byCol)!, byCol) }] : [],
+        { label: inTable() ? "Remove table" : "Format as table", icon: <SortIcons.table />, keys: ["Alt", "H", "T"], run: filters.keys.table },
+      ],
+      // A column's cells are plain or checkboxes (TRUE and FALSE), its type in the look (`type:<colId>`): the whole column's, so only its menu sets it.
+      kind === "cols" && [{ label: "Cell type", icon: <LineIcons.type />, meta: typeOf(range) === "boolean" ? "Checkbox" : typeOf(range) === null ? undefined : "Plain", sub: [
+        { label: "Plain", run: () => setType(range, null) },
+        { label: "Checkbox", icon: <LineIcons.checkbox />, run: () => setType(range, "boolean") },
+      ] }],
+    ];
+  };
   createEffect(on(tabs.shown, () => setFiltering(null), { defer: true }));
   return <section ref={(element) => { root = element; art(element); }} class="ui-spreadsheet" aria-label={props.name} data-margin={props.marginEmpty ? "none" : "beside"}
     onKeyDown={(event) => {
@@ -396,7 +504,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       }
       // Ctrl+Shift+V pastes what the cells copied here showed, not their formulas; held back, it is not the browser's paste as plain text.
       if (event.shiftKey && !event.altKey && event.code === "KeyV") { event.preventDefault(); const area = at(); if (area) paste(area, true); return; }
-      if (event.altKey && event.code === ASK_KEY) { event.preventDefault(); return props.onAsk?.(); }
+      if (event.altKey && event.code === ASK_KEY) { event.preventDefault(); return props.onComment?.(); }
       // The grid has no history of its own: what this page did is undone here, never what others did.
       const redo = event.key === "y" || (event.key === "z" && event.shiftKey);
       if (event.key !== "z" && !redo) return;
@@ -419,54 +527,21 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         <ContextMenu placement="bottom-start">
           <ContextMenuTrigger as="div" ref={setIsland} class="ui-spreadsheet-grid" data-own-keys={OWN_KEYS} />
           <ContextMenuContent onCloseAutoFocus={(event) => { const open = opening; opening = undefined; if (open) { event.preventDefault(); open(); } }}>
-            <Show when={picked()}>{(range) => <MenuSection>
-              <MenuRow icon={<Icons.Cut />} keys={["Ctrl", "X"]} onSelect={() => void copy(range(), true).then(() => clear(range(), "Cut"))}>Cut</MenuRow>
-              <MenuRow icon={<Icons.Copy />} keys={["Ctrl", "C"]} onSelect={() => void copy(range())}>Copy</MenuRow>
-              <MenuRow icon={<Icons.Paste />} keys={["Ctrl", "V"]} onSelect={() => paste(range())}>Paste</MenuRow>
-              <Show when={grid()?.held()}><MenuRow icon={<Icons.Paste />} keys={["Ctrl", "Shift", "V"]} onSelect={() => paste(range(), true)}>Paste values</MenuRow></Show>
-              <MenuRow icon={<Icons.Delete />} keys={["Delete"]} onSelect={() => clear(range())}>Clear contents</MenuRow>
-              <Show when={props.onAsk}><MenuRow icon={<Icons.Chat />} onSelect={() => { grid()?.select(range()); props.onAsk?.(); }}>Comment</MenuRow></Show>
-            </MenuSection>}</Show>
-            <Show when={picked()}>{(range) => <Show when={range().bottom > range().top || range().right > range().left}><MenuSection>
-              <Show when={!merges.is(range())}>
-                <MenuRow icon={<MergeIcons.merge />} keys={["Alt", "H", "M", "C"]} onSelect={() => merge("center", range())}>Merge &amp; Center</MenuRow>
-                <Show when={range().right > range().left && range().bottom > range().top}><MenuRow icon={<MergeIcons.merge />} keys={["Alt", "H", "M", "A"]} onSelect={() => merge("across", range())}>Merge across</MenuRow></Show>
-                <MenuRow icon={<MergeIcons.merge />} keys={["Alt", "H", "M", "M"]} onSelect={() => merge("cells", range())}>Merge cells</MenuRow>
-              </Show>
-              <Show when={merges.list().some((one) => one.top <= range().bottom && one.bottom >= range().top && one.left <= range().right && one.right >= range().left)}>
-                <MenuRow icon={<MergeIcons.unmerge />} keys={["Alt", "H", "M", "U"]} onSelect={() => merge(null, range())}>Unmerge cells</MenuRow>
-              </Show>
-            </MenuSection></Show>}</Show>
-            <Show when={rows()}>{(range) => <MenuSection>
-              <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-rows", range().top, count(range().top, range().bottom))}>Insert {count(range().top, range().bottom) > 1 ? `${count(range().top, range().bottom)} rows` : "row"} above</MenuRow>
-              <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-rows", range().bottom + 1, count(range().top, range().bottom))}>Insert {count(range().top, range().bottom) > 1 ? `${count(range().top, range().bottom)} rows` : "row"} below</MenuRow>
-              <MenuRow icon={<Icons.Hide />} onSelect={() => sizes.setHidden(Array.from({ length: count(range().top, range().bottom) }, (_, r) => range().top + r), true)}>Hide {count(range().top, range().bottom) > 1 ? `rows ${range().top + 1}–${range().bottom + 1}` : `row ${range().top + 1}`}</MenuRow>
-              <MenuRow icon={<Icons.Pin />} onSelect={() => sizes.setFreeze(range().bottom + 1, sizes.freeze().cols)}>Freeze {range().bottom ? `rows 1–${range().bottom + 1}` : "row 1"}</MenuRow>
-              <Show when={sizes.freeze().rows}><MenuRow icon={<Icons.PinOff />} onSelect={() => sizes.setFreeze(0, sizes.freeze().cols)}>Unfreeze rows</MenuRow></Show>
-              <Show when={hiddenIn(range())}><MenuRow icon={<Icons.Preview />} onSelect={() => { const rows = Array.from({ length: count(range().top, range().bottom) }, (_, r) => range().top + r); history.act("Unhide rows", () => { sizes.setHidden(rows, false); filters.show(rows); }); }}>Unhide rows</MenuRow></Show>
-              <MenuRow destructive icon={<Icons.Delete />} onSelect={() => deleteRows(range())}>Delete {count(range().top, range().bottom) > 1 ? `rows ${range().top + 1}–${range().bottom + 1}` : `row ${range().top + 1}`}</MenuRow>
-              <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "H"]} onSelect={() => sized("HOH", range())}>Row height…</MenuRow>
-              <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "A"]} onSelect={() => sized("HOA", range())}>Fit row height</MenuRow>
-            </MenuSection>}</Show>
-            <Show when={cols()}>{(range) => <MenuSection>
-              <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-cols", range().left, count(range().left, range().right))}>Insert {count(range().left, range().right) > 1 ? `${count(range().left, range().right)} columns` : "column"} left</MenuRow>
-              <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-cols", range().right + 1, count(range().left, range().right))}>Insert {count(range().left, range().right) > 1 ? `${count(range().left, range().right)} columns` : "column"} right</MenuRow>
-              <MenuRow icon={<Icons.Hide />} onSelect={() => history.act("Hide columns", () => sizes.setHiddenCols(between(range().left, range().right), true))}>Hide {range().right > range().left ? `columns ${colName(range().left)}–${colName(range().right)}` : `column ${colName(range().left)}`}</MenuRow>
-              <Show when={hiddenColsBy(range()).length}><MenuRow icon={<Icons.Preview />} onSelect={() => history.act("Unhide columns", () => sizes.setHiddenCols(hiddenColsBy(range()), false))}>Unhide columns</MenuRow></Show>
-              <MenuRow destructive icon={<Icons.Delete />} onSelect={() => structure("delete-cols", range().left, count(range().left, range().right))}>Delete {count(range().left, range().right) > 1 ? "columns" : "column"} {rangeA1({ ...range(), top: 0, bottom: 0 }).replace(/1/g, "")}</MenuRow>
-              <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "W"]} onSelect={() => sized("HOW", range())}>Column width…</MenuRow>
-              <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "I"]} onSelect={() => sized("HOI", range())}>Fit column width</MenuRow>
-              <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "D"]} onSelect={() => sized("HOD", range())}>Default width…</MenuRow>
-              <MenuRow icon={<Icons.Pin />} onSelect={() => sizes.setFreeze(sizes.freeze().rows, range().right + 1)}>Freeze {range().right ? `columns A–${colName(range().right)}` : "column A"}</MenuRow>
-              <Show when={sizes.freeze().cols}><MenuRow icon={<Icons.PinOff />} onSelect={() => sizes.setFreeze(sizes.freeze().rows, 0)}>Unfreeze columns</MenuRow></Show>
-              <MenuRow icon={<SortIcons.ascending />} keys={["Alt", "H", "S", "S"]} onSelect={() => filters.keys.sort(false, range().left)}>Sort A–Z</MenuRow>
-              <MenuRow icon={<SortIcons.descending />} keys={["Alt", "H", "S", "O"]} onSelect={() => filters.keys.sort(true, range().left)}>Sort Z–A</MenuRow>
-              <MenuRow icon={<SortIcons.filter />} keys={["Ctrl", "Shift", "L"]} onSelect={filters.keys.filter}>{filters.filter() ? "Remove filter" : "Filter"}</MenuRow>
-              <Show when={filteredBy(range().left)}>{(over) => <MenuRow icon={<SortIcons.filter />} onSelect={() => openFilter(over(), range().left)}>Filter column…</MenuRow>}</Show>
-              <MenuRow icon={<SortIcons.table />} keys={["Alt", "H", "T"]} onSelect={filters.keys.table}>{inTable() ? "Remove table" : "Format as table"}</MenuRow>
-            </MenuSection>}</Show>
-            <Show when={formatted()}>{(range) => <FormatMenu formats={formats} range={range()} />}</Show>
-            <Show when={props.host.openSettings}>{(open) => <MenuSection><MenuRow icon={<Icons.Settings />} onSelect={() => open()()}>View settings…</MenuRow></MenuSection>}</Show>
+            <SheetMenu groups={menuGroups()} after={<>
+              <Show when={picked()}>{(range) => <Show when={range().bottom > range().top || range().right > range().left}><MenuSection>
+                <Show when={!merges.is(range())}>
+                  <MenuRow icon={<MergeIcons.merge />} keys={["Alt", "H", "M", "C"]} onSelect={() => merge("center", range())}>Merge &amp; Center</MenuRow>
+                  <Show when={range().right > range().left && range().bottom > range().top}><MenuRow icon={<MergeIcons.merge />} keys={["Alt", "H", "M", "A"]} onSelect={() => merge("across", range())}>Merge across</MenuRow></Show>
+                  <MenuRow icon={<MergeIcons.merge />} keys={["Alt", "H", "M", "M"]} onSelect={() => merge("cells", range())}>Merge cells</MenuRow>
+                </Show>
+                <Show when={merges.list().some((one) => one.top <= range().bottom && one.bottom >= range().top && one.left <= range().right && one.right >= range().left)}>
+                  <MenuRow icon={<MergeIcons.unmerge />} keys={["Alt", "H", "M", "U"]} onSelect={() => merge(null, range())}>Unmerge cells</MenuRow>
+                </Show>
+              </MenuSection></Show>}</Show>
+              {/* The formatting submenus (Formatting, Conditional formatting) stand here, with Number format. */}
+              <Show when={formatted()}>{(range) => <FormatMenu formats={formats} range={range()} />}</Show>
+              <Show when={props.host.openSettings}>{(open) => <MenuSection><MenuRow icon={<Icons.Settings />} onSelect={() => open()()}>View settings…</MenuRow></MenuSection>}</Show>
+            </>} />
           </ContextMenuContent>
         </ContextMenu>
         <div class="ui-spreadsheet-editor" data-open={editor.editing() ? "" : undefined} style={{ ...cellBox(), "--sheet-zoom": zoom() }}><FormulaField editor={editor} place="cell" label="Cell" class="ui-formula-text" /></div>
