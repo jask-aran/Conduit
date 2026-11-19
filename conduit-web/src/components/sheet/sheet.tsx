@@ -376,7 +376,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       // Ctrl+0 hides the selection's columns and Ctrl+Shift+0 shows those hidden in it, as a spreadsheet's (by code: shifted, the key is ")").
       if (!event.altKey && event.code === "Digit0") {
         event.preventDefault();
-        const area = at(), hide = !event.shiftKey, cols = area ? between(area.left, area.right).filter((col) => hide || sizes.hiddenCols().has(col)) : [];
+        const area = at(), hide = !event.shiftKey, hidden = sizes.hiddenCols(), cols = area ? between(area.left, area.right).filter((col) => hide || hidden.has(col)) : [];
         if (cols.length) history.act(hide ? "Hide columns" : "Unhide columns", () => sizes.setHiddenCols(cols, hide));
         return;
       }
