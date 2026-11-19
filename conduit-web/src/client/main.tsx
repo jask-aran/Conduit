@@ -2984,7 +2984,7 @@ function App() {
       header={<PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title={viewName(`browser:${id}`)} /></PaneHeader>} />
   </SheetFill>;
   const renderMailDocument = (pane: PaneKey, account: string) => <MailPane account={account} onAccount={(id) => void setPaneView(pane, `mail:${id}`)} onSettings={() => openSettings("mail")}
-    header={(actions) => <PaneHeader actions={<>{actions}{paneTabActions(pane)}</>}><HeaderCrumb title="Mail" /></PaneHeader>} />;
+    header={(parts) => <PaneHeader modes={parts.modes} actions={<>{parts.actions}{paneTabActions(pane)}</>}>{parts.title}</PaneHeader>} />;
   const renderTerminalDocument = (pane: PaneKey, shell: string) => {
     const [record, setRecord] = createSignal<{ projectId: string; cwd?: string | null; title?: string | null } | null | undefined>(undefined);
     void api<PtysPayload>("/v0/ptys")
