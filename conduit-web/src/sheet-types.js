@@ -25,7 +25,7 @@ export function optionsOf(validation) {
   const listed = validation?.type === "list" && /^"(.*)"$/s.exec(String(validation.formula1 ?? "").trim());
   if (!listed) return null;
   const inks = validation.inks && typeof validation.inks === "object" ? validation.inks : {};
-  return listed[1].replace(/""/g, '"').split(",").flatMap((value) => value ? [SHEET_INKS.includes(inks[value]) ? { value, ink: inks[value] } : { value }] : []);
+  return listed[1].replace(/""/g, '"').split(",").flatMap((typed) => { const value = typed.trim(); return value ? [SHEET_INKS.includes(inks[value]) ? { value, ink: inks[value] } : { value }] : []; });
 }
 
 /** Options as kept: each a value of its own, once (no commas, which Excel's list parts by), with an ink of the sheet's or none. */
@@ -38,9 +38,11 @@ export const cleanOptions = (options) => {
     return [SHEET_INKS.includes(one?.ink) ? { value, ink: one.ink } : { value }];
   });
 };
-/** A list validation's own fields for `options`, as Excel writes a dropdown. */
+/** A list validation's own fields for `options`, as Excel writes a dropdown: as many as its 255 characters of list hold. */
 export const listFields = (options) => {
-  const clean = cleanOptions(options), inks = Object.fromEntries(clean.flatMap((one) => one.ink ? [[one.value, one.ink]] : []));
+  const clean = cleanOptions(options);
+  while (clean.length > 1 && clean.map((one) => one.value.replace(/"/g, '""')).join(",").length > 255) clean.pop();
+  const inks = Object.fromEntries(clean.flatMap((one) => one.ink ? [[one.value, one.ink]] : []));
   return { type: "list", allowBlank: "1", showErrorMessage: "1", formula1: `"${clean.map((one) => one.value.replace(/"/g, '""')).join(",")}"`, ...(Object.keys(inks).length ? { inks } : {}) };
 };
 
@@ -65,7 +67,9 @@ export function editValidations(look, tab, edit) {
  */
 export function writeType(look, sheet, area, type, columns, options) {
   const at = span(sheet, area), cols = [];
-  editValidations(look, sheet.id, (list) => [...list.map((one) => ({ ...one, range: areasOf(one).flatMap((part) => cut(part, at)).map(rangeA1).join(" ") })),
+  // A validation the area does not meet, and any part of one this cannot read, is left as it is.
+  const recut = (one) => { const parts = String(one.range ?? "").split(/\s+/).filter(Boolean), next = parts.flatMap((part) => { const area = parseRange(part.replace(/\$/g, "")); return area ? cut(area, at).map((piece) => piece === area ? part : rangeA1(piece)) : [part]; }); return next.join(" ") === parts.join(" ") ? one : { ...one, range: next.join(" ") }; };
+  editValidations(look, sheet.id, (list) => [...list.map(recut),
     ...type === "list" ? [{ range: rangeA1(at), ...listFields(options) }] : []]);
   const kept = type === "list" ? null : type;
   for (let c = at.left; c <= at.right; c++) cols.push(sheet.colAt(c));

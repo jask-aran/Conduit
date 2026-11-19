@@ -91,9 +91,11 @@ export function createCellLook(look: SheetLook) {
   };
   const spill = (args: Parameters<DrawCellCallback>[0], { text, offset, font: own, ink }: SheetSpill) => {
     const { ctx, rect, theme: drawn } = args, padX = drawn.cellHorizontalPadding, font = `${own ?? drawn.baseFontStyle} ${drawn.fontFamily}`, was = [ctx.font, ctx.fillStyle] as const;
-    if (measureTextCached(text, ctx, font).width + padX <= offset) return;
+    // Measured in its own font: the cache's font is only its key.
+    ctx.font = font;
+    if (measureTextCached(text, ctx, font).width + padX <= offset) { ctx.font = was[0]; return; }
     ctx.save(); ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.width, rect.height); ctx.clip();
-    ctx.font = font; ctx.fillStyle = ink ?? drawn.textDark;
+    ctx.fillStyle = ink ?? drawn.textDark;
     ctx.fillText(text, rect.x - offset + padX + 0.5, rect.y + rect.height / 2 + getMiddleCenterBias(ctx, font));
     ctx.restore();
     [ctx.font, ctx.fillStyle] = was;

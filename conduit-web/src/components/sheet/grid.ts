@@ -244,7 +244,14 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   };
   const write = (list: { row: number; col: number; input: string }[], label?: string) => { if (list.length) events.write(list, label); };
   // Each drawn row's filled columns, found once a change (`update`), so an empty cell finds the text running into it from its left in a few reads.
-  let filledRows = new Map<number, number[]>();
+  let filledRows = new Map<number, number[]>(), measure: CanvasRenderingContext2D | null = null;
+  /** How far from a dropdown cell's left its pill reaches (cell-draw.ts), where a click opens its options too. */
+  const pillReach = (value: unknown) => {
+    const text = value === null || value === undefined ? "" : String(value);
+    if (!text || !(measure ??= document.createElement("canvas").getContext("2d"))) return 0;
+    measure.font = `${look.grid.baseFontStyle} ${look.grid.fontFamily}`;
+    return measure.measureText(text).width + 2.5 * Number(look.grid.cellHorizontalPadding);
+  };
   const filledLeft = (row: number, col: number) => {
     let list = filledRows.get(row);
     if (!list) { list = []; for (let at = 0, cols = model.size().cols; at < cols; at++) if (model.input(row, at) !== "") list.push(at); filledRows.set(row, list); }
@@ -319,7 +326,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       if (link) return void events.follow?.(link);
       const cell = options.columns.mark(at, col) && event.localEventX >= event.bounds.width - Number(look.grid.headerIconSize) - 2 * Number(look.grid.cellHorizontalPadding) ? box(p, col, row) : undefined;
       if (cell) events.filter?.(at, col, { left: cell.x, top: cell.y, width: cell.width, height: cell.height });
-      else if (options.columns.type(at, col)?.startsWith("list:") && event.localEventX >= event.bounds.width - Number(look.grid.headerIconSize) - 2 * Number(look.grid.cellHorizontalPadding)) { const one = box(p, col, row); if (one) events.dropdown?.(at, col, { left: one.x, top: one.y, width: one.width, height: one.height }); }
+      else if (options.columns.type(at, col)?.startsWith("list:") && (event.localEventX >= event.bounds.width - Number(look.grid.headerIconSize) - 2 * Number(look.grid.cellHorizontalPadding) || event.localEventX <= pillReach(value))) { const one = box(p, col, row); if (one) events.dropdown?.(at, col, { left: one.x, top: one.y, width: one.width, height: one.height }); }
       events.pressed(at, col);
     },
     onCellActivated: ([col, drawn]) => { const row = p.map.sheet(drawn), home = mergeAt(row, col); events.activated(home?.top ?? row, home?.left ?? col); },
@@ -475,6 +482,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         if (typeof value !== "string" || !value || style?.wrap || style?.clip || (style?.align && style.align !== "left")) return undefined;
         let offset = 0;
         for (let at = from; at < col; at++) offset += columns[at]?.width ?? theme.width;
+        // No letter is wider than twice the text's size: text that cannot reach this cell makes nothing.
+        if (value.length * 2 * parseFloat(String(theme.grid.editorFontSize)) * (style?.size ? style.size / 11 : 1) < offset) return undefined;
         const drawn = options.columns.draw(row, from, value), text = (drawn?.text ?? value).split("\n", 1)[0]!, worn = themed(style);
         return { text, offset, font: worn?.baseFontStyle, ink: worn?.textDark };
       };
@@ -688,7 +697,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       if (merges.length) { const seen = new Set<SheetRange>(); changed = changed.flatMap((cell) => { const one = mergeAt(cell.row, cell.col); if (!one || one.bottom === one.top) return [cell]; if (seen.has(one)) return []; seen.add(one); return Array.from({ length: one.bottom - one.top + 1 }, (_, n) => ({ row: one.top + n, col: one.left })); }); }
       for (const p of parts) {
         // A cell drawn again redraws the row on to its right in view too: its text may run on over the empty cells there (`spillInto`).
-        const { view } = p, near = changed.flatMap(({ row: at, col }) => { const drawn = partOf(at) === p ? clip(p, { top: at, bottom: at, left: col, right: col }) : null; return drawn && drawn.top >= view.y && drawn.top < view.y + view.height + 1 && col < view.x + view.width + 1 ? Array.from({ length: view.x + view.width + 1 - Math.max(col, view.x) }, (_, n) => ({ cell: [Math.max(col, view.x) + n, drawn.top] as Item })) : []; });
+        const { view } = p, from = new Map<number, number>();
+        for (const { row: at, col } of changed) { const drawn = partOf(at) === p ? clip(p, { top: at, bottom: at, left: col, right: col }) : null; if (drawn && drawn.top >= view.y && drawn.top < view.y + view.height + 1 && col < view.x + view.width + 1) from.set(drawn.top, Math.min(from.get(drawn.top) ?? col, Math.max(col, view.x))); }
+        const near = [...from].flatMap(([drawn, left]) => Array.from({ length: view.x + view.width + 1 - left }, (_, n) => ({ cell: [left + n, drawn] as Item })));
         if (near.length) p.editor?.updateCells(near);
       }
     },

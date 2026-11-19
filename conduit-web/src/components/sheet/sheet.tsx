@@ -194,7 +194,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     dropdown: (row, col, box) => setListing({ row, col, box }),
     // A place in the workbook (`#Tab!A1`) is gone to; anything else opens beside.
     follow: (address) => {
-      if (!address.startsWith("#")) return void window.open(address, "_blank", "noopener,noreferrer");
+      // Only web and mail addresses leave the page: a workbook's links are anyone's.
+      if (!address.startsWith("#")) return void (/^(https?|mailto):/i.test(address) && window.open(address, "_blank", "noopener,noreferrer"));
       const range = parseRange(tabs.reveal(address.slice(1)).replace(/\$/g, ""));
       if (range) { grid()?.select(range); requestAnimationFrame(() => grid()?.focus()); }
     },

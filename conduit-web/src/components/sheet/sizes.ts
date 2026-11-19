@@ -109,7 +109,7 @@ export function createSheetSizes(look: Y.Map<number | string>, model: () => Shee
           for (let col = 0; col < cols; col++) { const text = valueText(sheet.value(row, col)); if (text) most = Math.max(most, lines ? lines(row, col, text, sheetLook) : text.split("\n").length); }
           const id = sheet.rowAt(row), height = most > 1 ? Math.max(sheetLook.row, Math.ceil(most * line + padding)) : null;
           if (id && look.get(`height:${id}`) !== (height ?? undefined)) set("height", [id], height);
-          if (id && height) look.set(`fitted:${id}`, 1); else if (id) look.delete(`fitted:${id}`);
+          if (id && height && !look.has(`fitted:${id}`)) look.set(`fitted:${id}`, 1); else if (id && !height && look.has(`fitted:${id}`)) look.delete(`fitted:${id}`);
         }
       });
     },

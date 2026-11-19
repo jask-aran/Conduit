@@ -183,3 +183,14 @@ Then the ribbon, charts and ask box, walked in headless Chrome on :4310 (2026-11
   - read the formula bar through `.ui-spreadsheet-formula` as well as its input.
 - **Verifying exports.** Check exported xlsx with openpyxl: `/home/jask/jaskNEM/.venv/bin/python -I`.
 - **The owner's workbook** is private. Read it locally only, and never copy it into the repo.
+
+## Cell types, overflow, refit and links (branch `sheet-cells`, 2026-11-20; typechecked, not seen in a browser)
+
+- Look keys: `type:<colId>` or `type:<rowId>:<colId>` (`boolean`, `date`, `plain` under a typed column); a dropdown is a list entry of the tab's
+  `validations:<tabId>` (the xlsx import's shape, A1 ranges) plus our own `inks: { value: ink }`; `link:<rowId>:<colId>` (the import's hyperlinks);
+  `fitted:<rowId>` marks a height a fit set; style flag `x` is Clip. `src/sheet-types.js` writes types for the page and the hub's `type` op.
+- Dropdowns are A1 ranges, so they do not follow rows put in, taken out, moved or sorted; checkboxes and dates do (ids).
+- Date cells keep ISO text (as Ctrl+; writes) and draw it through their date format; formulas see text.
+- Overflow: an empty cell draws the share of text running into it (`spillInto`, grid.ts) from a per-row list of filled columns made once a change;
+  a changed cell redraws its row to the right in view. Gridlines still cross overflowing text.
+- Refit runs in `sheet.onChange` for wrapped cells, as a transaction of origin `refit`, outside the history.
