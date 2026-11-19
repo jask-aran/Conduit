@@ -205,14 +205,16 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   }
 
   // What is typed in each cell, and where the formulas are. 
-  const formulas = [], spilt = [];
+  const formulas = [];
   for (const tab of read) {
     tab.typed = Array.from({ length: tab.rows }, () => new Array(tab.cols).fill(null));
     cellsOf(tab.data, (cell, r, c) => {
       if (r >= tab.rows || c >= tab.cols) return;
-      // A formula over several cells is not computed: the engine fails to load some of them ("Edge does not exist"), so each of its cells holds its kept value.
-      if (cell.f && cell.F?.includes(":")) { spilt.push({ tab, r, c, formula: translated(cell.f) }); tab.typed[r][c] = cell.t === "n" ? cell.v : cell.t === "z" ? null : kept(cell) || null; }
-      else if (cell.f) { formulas.push({ tab, r, c, cell, formula: translated(cell.f) }); tab.typed[r][c] = translated(cell.f); }
+      // An array formula (a dynamic one that spills, or one entered with Ctrl+Shift+Enter) is typed on its first cell alone, and spills over the rest as
+      // the engine computes it; its range and kind are kept (`array:<cell>`) so an export writes it as the file had it.
+      if (cell.F && !cell.f) return;
+      if (cell.f && cell.F) (tab.arrays ??= {})[a1(r, c)] = { range: cell.F, ...(cell.D ? { dynamic: true } : {}) };
+      if (cell.f) { formulas.push({ tab, r, c, cell, formula: translated(cell.f) }); tab.typed[r][c] = translated(cell.f); }
       else if (cell.t === "n") tab.typed[r][c] = cell.v;
       else if (cell.t !== "z" && kept(cell) !== "") tab.typed[r][c] = cell.t === "s" || cell.t === "str" ? String(cell.v) : kept(cell);
     });
@@ -245,8 +247,6 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     };
     const moving = downstream(formulas.filter((one) => VOLATILE.test(one.formula)));
     for (const one of formulas) if (VOLATILE.test(one.formula)) moving.add(id(at(one)));
-    for (const one of spilt) { (report.frozen[one.tab.name] ??= {})[a1(one.r, one.c)] = { formula: one.formula, why: "a formula over several cells", kept: String(one.tab.typed[one.r][one.c] ?? "") }; report.reasons["a formula over several cells"] = (report.reasons["a formula over several cells"] ?? 0) + 1; }
-    report.computed.frozen += spilt.length;
     let open = formulas.filter((one) => !moving.has(id(at(one))));
     const freeze = (wrong, gave = wrong.map((one) => engine.getCellValue(at(one)))) => engine.batch(() => {
       for (const [index, one] of wrong.entries()) {
@@ -316,6 +316,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       if (tab.filter) look.filter = tab.filter;
       // A frozen formula goes with its cell (`excel:<rowId>:<colId>` once in the doc), written for the cell it was in (`anchor`), as a rule's are.
       for (const [at, one] of Object.entries(report.frozen[tab.name] ?? {})) if (!one.why.startsWith("a formula over")) look[`excel:${at}`] = { formula: one.formula, value: one.kept, anchor: at };
+      for (const [at, array] of Object.entries(tab.arrays ?? {})) look[`array:${at}`] = array;
       if (tab === read[0] && definedNames.length) look.names = definedNames;
       if (tab.pane?.rows) look.freezeRows = tab.pane.rows;
       if (tab.pane?.cols) look.freezeCols = tab.pane.cols;
@@ -358,13 +359,22 @@ export function exportXlsx(tabs) {
   const tableNames = new Set();
   for (const tab of tabs) {
     const sheet = {}, cols = Math.max(1, ...tab.typed.map((row) => row.length));
+    // A formula that spills is an array formula over the cells it spills into (Excel's dynamic array, `D`), or over the range it was entered on with
+    // Ctrl+Shift+Enter (`array:` in the look, not dynamic); the cells it spills into hold their values.
+    const spill = (r, c) => { let rows = 1, cols = 1; const free = (y, x) => !tab.typed[y]?.[x] && tab.values[y]?.[x] !== null && tab.values[y]?.[x] !== undefined; while (free(r + rows, c)) rows++; while (free(r, c + cols)) cols++; return { rows, cols }; };
     tab.typed.forEach((row, r) => row.forEach((typed, c) => {
-      if (!typed) return;
+      if (!typed) { const value = tab.values[r]?.[c]; if (value !== null && value !== undefined) sheet[a1(r, c)] = isError(value) ? { t: "e", v: ERROR_CODE[value.value] ?? 15, w: value.value } : typeof value === "number" ? { t: "n", v: value } : typeof value === "boolean" ? { t: "b", v: value } : { t: "s", v: String(value) }; return; }
       const at = a1(r, c), held = tab.look[`excel:${at}`], from = parseA1(String(held?.anchor ?? "")), value = tab.values[r]?.[c];
       const formula = typed.startsWith("=") ? typed : from && held.value === typed && typeof held.formula === "string" && !outside(held.formula).includes("[") ? shiftRefs(held.formula, r - from.row, c - from.col) : null;
       const cell = isError(value) ? { t: "e", v: ERROR_CODE[value.value] ?? 15, w: value.value } : typeof value === "number" ? { t: "n", v: value } : typeof value === "boolean" ? { t: "b", v: value } : { t: "s", v: String(value ?? "") };
       if (cell.t === "s" && cell.v === "" && !formula) return;
       if (formula) cell.f = stored(orphaned(formula, known));
+      const array = tab.look[`array:${at}`], entered = parseRange(String(array?.range ?? "")), size = formula && typed.startsWith("=") ? spill(r, c) : null;
+      if (size && (entered || size.rows > 1 || size.cols > 1)) {
+        const [rows, cols] = entered && !array.dynamic ? [entered.bottom - entered.top + 1, entered.right - entered.left + 1] : [size.rows, size.cols];
+        cell.F = rows > 1 || cols > 1 ? `${at}:${a1(r + rows - 1, c + cols - 1)}` : at;
+        if (!entered || array.dynamic) cell.D = true;
+      }
       const format = tab.look[`fmt:${at}`] ?? tab.look[`fmt:${colName(c)}`];
       if (cell.t === "n" && typeof format === "string" && format !== "General") cell.z = format;
       const link = tab.look[`link:${at}`];

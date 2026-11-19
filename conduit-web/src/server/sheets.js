@@ -586,7 +586,7 @@ export function sheetKind(hub) {
       async read(room, as, range, tab) {
         if (as === "tabs") return { tabs: tabsWithSize(room) };
         // For an export: every tab, what is typed in it, what that computes, and its look by letter and address.
-        if (as === "book") return { tabs: room.book.tabs().map((tab) => { const sheet = room.book.tab(tab.id), typed = sheet.inputs(); return { name: tab.name, hidden: tab.hidden, typed, values: typed.map((row, r) => row.map((input, col) => input ? sheet.engine.getCellValue({ sheet: sheet.sheet, row: r, col }) : null)), look: lookOf(room, sheet) }; }) };
+        if (as === "book") return { tabs: room.book.tabs().map((tab) => { const sheet = room.book.tab(tab.id), typed = sheet.inputs(); return { name: tab.name, hidden: tab.hidden, typed, values: typed.map((row, r) => row.map((input, col) => sheet.engine.getCellValue({ sheet: sheet.sheet, row: r, col }))), look: lookOf(room, sheet) }; }) };
         const ref = parseRef(range ?? ""), sheet = pick(room, tab, ref.tab ?? undefined), { rows, cols } = sheet.size(), whole = { top: 0, left: 0, bottom: rows - 1, right: cols - 1 };
         const asked = ref.range === "" ? whole : parseRange(ref.range);
         if (!asked) throw fault(400, `range is an A1 range such as B2:C5 (or Data!B2:C5), not ${range}`);
