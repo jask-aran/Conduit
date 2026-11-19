@@ -96,6 +96,14 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
       else if (step.delete) remove(at, step.delete);
     }
   };
+  // An undo of a move puts the ids back where they were even where another's move has taken them on since, so a line would stand twice: the hub keeps
+  // the later one, which the engine holds (an index keeps an id's last place), and takes out the one the undo put back.
+  const unrepeat = () => doc.transact(() => {
+    for (const t of tabs.values()) for (const [line, ids] of [[t.rows, t.rowIds], [t.cols, t.colIds]]) {
+      const twice = ids.flatMap((id, at) => ids.indexOf(id) === at && ids.lastIndexOf(id) > at ? [at] : []);
+      for (const at of twice.reverse()) line.delete(at, 1);
+    }
+  });
   const relaid = (delta, index) => Boolean(index) && delta.some((step) => step.insert?.some((id) => index.has(id)));
   const emit = (change) => { for (const listener of listeners) listener(change); };
   const onCells = (event) => { const keys = note().keys; for (const cell of event.keysChanged) keys.add(cell); };
@@ -123,7 +131,7 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
     if (transaction.origin === self) { retype(written); written = null; }
     // A structure change rewrites many formulas, which the engine rewrites too: that is no reason to build it again. But ids put back where they were
     // taken out (a move, or its undo) are lines whose cells kept their keys, which the engine only knows from the doc.
-    else if ((!structure && now.keys.size > REBUILD_AT) || [...now.rows].some(([id, delta]) => relaid(delta, tabs.get(id)?.rowIndex)) || [...now.cols].some(([id, delta]) => relaid(delta, tabs.get(id)?.colIndex))) rebuild();
+    else if ((!structure && now.keys.size > REBUILD_AT) || [...now.rows].some(([id, delta]) => relaid(delta, tabs.get(id)?.rowIndex)) || [...now.cols].some(([id, delta]) => relaid(delta, tabs.get(id)?.colIndex))) { rebuild(); if (owner) queueMicrotask(unrepeat); }
     else {
       // Suspended rather than batched: a batch keeps what it changed for an undo, many times slower for many cells.
       engine.suspendEvaluation();
