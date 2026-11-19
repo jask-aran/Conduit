@@ -2556,7 +2556,7 @@ function App() {
     if (isMobileLayout() || !(event instanceof MouseEvent || event instanceof KeyboardEvent)) return {};
     return event.altKey ? { beside: true } : event.ctrlKey || event.metaKey ? { tab: true } : {};
   };
-  const openRules: Layouts.Rules = { held: (view) => view.startsWith("chat:") && Boolean(drafts.draftFor(view.slice("chat:".length))) };
+  const openRules: Layouts.Rules = { held: (view) => view.startsWith("chat:") && Boolean(drafts.draftFor(view.slice("chat:".length))), fits: (row) => isMobileLayout() || viewsFit(row.slice(1)) };
   /** Opening, from anywhere: plain replaces what the focused pane shows (its tabs with it, offering Undo), `tab` adds a
    *  chat or terminal as a tab of the nearest session pane, `beside` opens a pane beside and leaves the keyboard. A
    *  view open already is gone to. `inPaneA` draws pane A's route when the caller has more than its view to go on. */

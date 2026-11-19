@@ -56,8 +56,9 @@ export function findView(layout: Layout, view: View) {
   return null;
 }
 
-/** What a caller knows that views alone do not: `held` tabs (a draft) are never dropped. */
-export type Rules = { held?: (view: View) => boolean };
+/** What a caller knows that views alone do not: `held` tabs (a draft) are never dropped; whether the row `fits` these
+ *  views at their minimums. */
+export type Rules = { held?: (view: View) => boolean; fits?: (row: View[]) => boolean };
 
 /** The session pane a Ctrl-opened tab joins: the focused one, else the one used last, else the nearest in the row (a
  *  restored layout has used only the focused pane). */
@@ -90,11 +91,10 @@ export function open(layout: Layout, view: View, verb: Verb = {}, rules: Rules =
     const after = layout.row.indexOf(layout.focus);
     // A tab with no session pane to join is a session pane of its own, given the keyboard as a joined tab would be.
     const placing = (next: Layout) => verb.beside ? next : focusing(next, pane.id);
-    if (layout.row.length < ROW_MAX) {
-      const row = [...layout.row];
-      row.splice(after < 0 ? row.length : after + 1, 0, pane.id);
-      return placing({ ...withPane(layout, pane), row });
-    }
+    const row = [...layout.row];
+    row.splice(after < 0 ? row.length : after + 1, 0, pane.id);
+    // A row too narrow for another pane is full too, but a lone pane has no neighbour to give up.
+    if (layout.row.length < ROW_MAX && (!verb.beside || layout.row.length < 2 || (rules.fits?.(row.map((id) => id === pane.id ? view : shownView(layout.panes[id]!))) ?? true))) return placing({ ...withPane(layout, pane), row });
     // A full row: beside means the neighbour, replaced.
     const neighbour = layout.row[after + 1] ?? layout.row[after - 1] ?? layout.row[0]!;
     return placing({ ...withPane(dropPane(layout, neighbour), pane), row: layout.row.map((id) => id === neighbour ? pane.id : id) });
