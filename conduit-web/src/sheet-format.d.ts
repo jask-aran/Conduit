@@ -43,8 +43,10 @@ export function tabRef(name: string): string;
 export function tabNameFault(name: unknown): string | null;
 /** Any text made a name a tab can have. */
 export function tabName(name: unknown): string;
-export function toCsv(rows: string[][], eol?: string): string;
-export function fromCsv(text: string): string[][];
+/** What a typed cell shows until the engine says (null for a formula): a number, a percentage, TRUE/FALSE, or text (a leading `'` dropped). */
+export function guess(input: string): number | boolean | string | null;
+export function toCsv(rows: string[][], eol?: string, sep?: string): string;
+export function fromCsv(text: string, sep?: string): string[][];
 /** A computed value as the file writes it: TRUE/FALSE, an error's code, "" for empty. */
 export function valueText(value: unknown): string;
 /** `cells`: the cells whose values changed, or null when everything may have (the engine was built again, or the hub's own structure change). */

@@ -127,7 +127,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const drawnLook = () => readLook(root!, props.host.display?.());
   const events: SheetGridEvents = {
     selected: setAt,
-    write: writes(""),
+    write: (list, label) => writes(label ?? "")(list),
     fill: (range, values, from) => hub({ op: "fill", range: rangeA1(range), values, ...(from ? { from: rangeA1(from) } : {}) }),
     resized: (col, width) => history.act("Column width", () => sizes.setWidths(span("cols", col), width / zoom())),
     menu: setMenu,
@@ -325,12 +325,10 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const sized = (keys: string, selection: SheetRange) => SHEET_SEQUENCES.find((sequence): sequence is Extract<SheetSequence, { run: unknown }> => sequence.keys === keys && "run" in sequence)?.run({ selection: () => selection, sizes, look: () => readLook(root!), ask: setQuestion, filters: filters.keys, merge, rules: () => setRuling(at()) });
   // What a range's cuts, clears, pastes and deletes reach: its rows shown, never one hidden, which is out of sight.
   const shownRows = (range: SheetRange) => { const hidden = sizes.hidden(); return Array.from({ length: range.bottom - range.top + 1 }, (_, r) => range.top + r).filter((row) => !hidden.has(row)); };
-  const shownFrom = (top: number, count: number) => { const hidden = sizes.hidden(), out: number[] = []; for (let row = top; out.length < count; row++) if (!hidden.has(row)) out.push(row); return out; };
   const within = (range: SheetRange) => shownRows(range).map((row) => Array.from({ length: range.right - range.left + 1 }, (_, c) => ({ row, col: range.left + c })));
-  const copy = (range: SheetRange) => navigator.clipboard.writeText(within(range).map((row) => row.map(({ row: r, col }) => String(model()?.value(r, col) ?? "")).join("\t")).join("\n")).catch((error: Error) => props.host.failed(error.message));
+  const copy = (range: SheetRange, cut = false) => navigator.clipboard.writeText(grid()?.copy(range, cut) ?? "").catch((error: Error) => props.host.failed(error.message));
   const clear = (range: SheetRange, label = "Clear contents") => writes(label)(within(range).flat().map((cell) => ({ ...cell, input: "" })));
-  const paste = (range: SheetRange) => void navigator.clipboard.readText().then((text) => { const split = text.replace(/\r?\n$/, "").split(/\r?\n/).map((line) => line.split("\t")), lines = grid()?.moved(split, range.top, range.left) ?? split, rows = shownFrom(range.top, lines.length);
-    writes("Paste")(lines.flatMap((line, r) => line.map((input, c) => ({ row: rows[r]!, col: range.left + c, input })))); }, (error: Error) => props.host.failed(error.message));
+  const paste = (range: SheetRange, values = false) => void navigator.clipboard.readText().then((text) => grid()?.paste({ row: range.top, col: range.left }, text, values), (error: Error) => props.host.failed(error.message));
   // Each run of shown rows on its own, the last first, so the runs above keep their places.
   const deleteRows = (range: SheetRange) => history.act(`Delete ${range.bottom > range.top ? "rows" : "row"}`, () => { const rows = shownRows(range); for (let end = rows.length - 1; end >= 0;) { let start = end; while (start > 0 && rows[start - 1] === rows[start]! - 1) start--; structure("delete-rows", rows[start]!, end - start + 1); end = start - 1; } });
   // Fill down and Fill right: the selection's first shown row (or its first column) into the rest of it, from the shown row above (or the column left) where it is
@@ -391,6 +389,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         if (lines === "rows") return void (adding ? structure("insert-rows", area.top, count(area.top, area.bottom)) : deleteRows(area));
         return void structure(adding ? "insert-cols" : "delete-cols", area.left, count(area.left, area.right));
       }
+      // Ctrl+Shift+V pastes what the cells copied here showed, not their formulas; held back, it is not the browser's paste as plain text.
+      if (event.shiftKey && !event.altKey && event.code === "KeyV") { event.preventDefault(); const area = at(); if (area) paste(area, true); return; }
       if (event.altKey && event.code === ASK_KEY) { event.preventDefault(); return props.onAsk?.(); }
       // The grid has no history of its own: what this page did is undone here, never what others did.
       const redo = event.key === "y" || (event.key === "z" && event.shiftKey);
@@ -415,10 +415,10 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
           <ContextMenuTrigger as="div" ref={setIsland} class="ui-spreadsheet-grid" data-own-keys={OWN_KEYS} />
           <ContextMenuContent onCloseAutoFocus={(event) => { const open = opening; opening = undefined; if (open) { event.preventDefault(); open(); } }}>
             <Show when={picked()}>{(range) => <MenuSection>
-              <MenuRow icon={<Icons.Cut />} keys={["Ctrl", "X"]} onSelect={() => void copy(range()).then(() => clear(range(), "Cut"))}>Cut</MenuRow>
+              <MenuRow icon={<Icons.Cut />} keys={["Ctrl", "X"]} onSelect={() => void copy(range(), true).then(() => clear(range(), "Cut"))}>Cut</MenuRow>
               <MenuRow icon={<Icons.Copy />} keys={["Ctrl", "C"]} onSelect={() => void copy(range())}>Copy</MenuRow>
               <MenuRow icon={<Icons.Paste />} keys={["Ctrl", "V"]} onSelect={() => paste(range())}>Paste</MenuRow>
-              <Show when={grid()?.copiedValues()}>{(values) => <MenuRow icon={<Icons.Paste />} keys={["Ctrl", "Shift", "V"]} onSelect={() => { const rows = shownFrom(range().top, values().length); writes("Paste values")(values().flatMap((line, r) => line.map((input, c) => ({ row: rows[r]!, col: range().left + c, input })))); }}>Paste values</MenuRow>}</Show>
+              <Show when={grid()?.held()}><MenuRow icon={<Icons.Paste />} keys={["Ctrl", "Shift", "V"]} onSelect={() => paste(range(), true)}>Paste values</MenuRow></Show>
               <MenuRow icon={<Icons.Delete />} keys={["Delete"]} onSelect={() => clear(range())}>Clear contents</MenuRow>
               <Show when={props.onAsk}><MenuRow icon={<Icons.Chat />} onSelect={() => { grid()?.select(range()); props.onAsk?.(); }}>Comment</MenuRow></Show>
             </MenuSection>}</Show>

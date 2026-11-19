@@ -129,10 +129,13 @@ export interface SheetGrid {
   whole(kind: "cols" | "rows"): void;
   /** Whether whole columns or whole rows are picked; null for a block of cells. */
   lines(): "cols" | "rows" | null;
-  /** Text pasted at a cell: what was copied from this grid has its formulas' relative references moved there. */
-  moved(values: readonly (readonly string[])[], top: number, left: number): string[][];
-  /** The values of what was last copied from this grid (its rows shown), for Paste values; null when nothing was. */
-  copiedValues(): string[][] | null;
+  /** A range's cells shown, as the clipboard's text (tab-separated, quoted as a spreadsheet's), held as copied from this grid unless cut. */
+  copy(range: SheetRange, cut: boolean): string;
+  /** The clipboard's text pasted at a cell, into the rows and columns shown from it: copied from this grid, its formulas' relative references move with
+   * it, or (`values`) what its cells showed is pasted. */
+  paste(at: { row: number; col: number }, text: string, values?: boolean): void;
+  /** Whether something copied from this grid is held, for Paste values. */
+  held(): boolean;
   /** The row whose lower edge, beside its number, is under a point of the viewport (and the top of that row), as a drag to size it starts. */
   rowEdge(x: number, y: number): { row: number; top: number } | null;
   /** A row drawn at a height while it is dragged, before the look holds it. */
@@ -152,7 +155,7 @@ export interface SheetGrid {
 export type SheetGridEvents = {
   selected(range: SheetRange | null): void;
   /** What was typed into a cell, or pasted, as inputs by position; the editor writes them. */
-  write(cells: readonly { row: number; col: number; input: string }[]): void;
+  write(cells: readonly { row: number; col: number; input: string }[], label?: string): void;
   /** A paste or a fill dragged past the sheet's edge, or a fill whose formulas move: the hub's fill. `from`: the fill handle's source, whose formulas the hub moves into `values`. */
   fill(range: SheetRange, values: string[][], from?: SheetRange): void;
   resized(col: number, width: number): void;
