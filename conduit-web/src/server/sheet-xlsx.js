@@ -242,6 +242,9 @@ export function importSummary(report) {
 const PREFIXED = new Set("STDEV.S STDEV.P VAR.S VAR.P COVARIANCE.S COVARIANCE.P FLOOR.MATH CEILING.MATH CEILING.PRECISE FLOOR.PRECISE ISO.CEILING IFS SWITCH MAXIFS MINIFS CONCAT TEXTJOIN XLOOKUP XMATCH IFNA XOR RANK.EQ RANK.AVG PERCENTILE.INC PERCENTILE.EXC PERCENTRANK.INC PERCENTRANK.EXC QUARTILE.INC QUARTILE.EXC MODE.SNGL MODE.MULT NORM.DIST NORM.INV NORM.S.DIST NORM.S.INV T.DIST T.DIST.2T T.DIST.RT T.INV T.INV.2T T.TEST CHISQ.DIST CHISQ.DIST.RT CHISQ.INV CHISQ.INV.RT CHISQ.TEST F.DIST F.DIST.RT F.INV F.INV.RT F.TEST Z.TEST BINOM.DIST BINOM.DIST.RANGE BINOM.INV NEGBINOM.DIST POISSON.DIST EXPON.DIST GAMMA.DIST GAMMA.INV BETA.DIST BETA.INV WEIBULL.DIST LOGNORM.DIST LOGNORM.INV HYPGEOM.DIST CONFIDENCE.NORM CONFIDENCE.T NETWORKDAYS.INTL WORKDAY.INTL DAYS ISOWEEKNUM NUMBERVALUE FORECAST.LINEAR UNICHAR UNICODE BITAND BITOR BITXOR BITLSHIFT BITRSHIFT SHEET SHEETS FORMULATEXT ISFORMULA PERMUTATIONA GAMMA GAUSS PHI SEC CSC COT SECH CSCH COTH ACOT ACOTH ARABIC BASE DECIMAL COMBINA MUNIT SKEW.P AGGREGATE ERF.PRECISE ERFC.PRECISE GAMMALN.PRECISE UNIQUE SEQUENCE RANDARRAY SORTBY TAKE DROP CHOOSECOLS CHOOSEROWS EXPAND".split(" "));
 const SCOPED = new Set(["FILTER", "SORT"]);
 const stored = (formula) => formula.slice(1).split(/("(?:[^"]|"")*")/).map((part, nth) => nth % 2 ? part : part.replace(/([A-Za-z][A-Za-z0-9.]*)\(/g, (all, name) => PREFIXED.has(name.toUpperCase()) ? `_xlfn.${all}` : SCOPED.has(name.toUpperCase()) ? `_xlfn._xlws.${all}` : all)).join("");
+// A reference to a tab the workbook no longer has is #REF!, as a spreadsheet makes it when the tab is deleted: a file naming a missing tab is one to repair.
+const TAB_REF = /(?<![#\p{L}\p{N}_.'])('(?:[^']|'')+'|[\p{L}_][\p{L}\p{N}_.]*)!(?:\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?|\$?[A-Z]{1,3}:\$?[A-Z]{1,3}|\$?\d+:\$?\d+)/gu;
+const orphaned = (formula, known) => formula.split(/("(?:[^"]|"")*")/).map((part, nth) => nth % 2 ? part : part.replace(TAB_REF, (all, tab) => known.has((tab.startsWith("'") ? tab.slice(1, -1).replace(/''/g, "'") : tab).toLowerCase()) ? all : "#REF!")).join("");
 const ERROR_CODE = Object.fromEntries(Object.entries(ERROR_TEXT).map(([code, text]) => [text, Number(code)]));
 /**
  * A workbook written as an .xlsx: each formula with the value it computes here, number formats, column widths, row heights, hidden rows and columns, frozen panes and hidden tabs. A cell an import
@@ -251,7 +254,7 @@ const ERROR_CODE = Object.fromEntries(Object.entries(ERROR_TEXT).map(([code, tex
  * @returns {Buffer}
  */
 export function exportXlsx(tabs) {
-  const book = XLSX.utils.book_new();
+  const book = XLSX.utils.book_new(), known = new Set(tabs.map((tab) => tab.name.toLowerCase()));
   for (const tab of tabs) {
     const sheet = {}, cols = Math.max(1, ...tab.typed.map((row) => row.length));
     tab.typed.forEach((row, r) => row.forEach((typed, c) => {
@@ -260,7 +263,7 @@ export function exportXlsx(tabs) {
       const formula = typed.startsWith("=") ? typed : from && held.value === typed && typeof held.formula === "string" ? shiftRefs(held.formula, r - from.row, c - from.col) : null;
       const cell = isError(value) ? { t: "e", v: ERROR_CODE[value.value] ?? 15, w: value.value } : typeof value === "number" ? { t: "n", v: value } : typeof value === "boolean" ? { t: "b", v: value } : { t: "s", v: String(value ?? "") };
       if (cell.t === "s" && cell.v === "" && !formula) return;
-      if (formula) cell.f = stored(formula);
+      if (formula) cell.f = stored(orphaned(formula, known));
       const format = tab.look[`fmt:${at}`] ?? tab.look[`fmt:${colName(c)}`];
       if (cell.t === "n" && typeof format === "string" && format !== "General") cell.z = format;
       sheet[at] = cell;
