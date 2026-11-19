@@ -53,6 +53,8 @@ A new tab there is served the previous client by the service worker (`sw.js`) af
    `terminal` views become `folder:<focused workspace>` and a `term:` in the bridge. Tool splits are gone (`file`,
    `shell:`, panel tabs as pane views, `splitHost`, `bindSplit`, `FileBesideView`, `TOOL_DRAG_TYPE`, Files'
    navigator-only mode, the second file slot). Pane B's thread header names its project (`side.project()`), as pane A.
+   `FilesView` and `SourceControlView` remain only as the two modes' bodies. A narrow viewer (the dock) shows its tree
+   while no file is open and folds it after a plain open, as Files did on the phone: a feel question for the owner.
    Not run in a browser: all of item 5. Unproven: the dock's viewer holding an unsaved edit while focus moves to a
    pane of another workspace (the project change restores that workspace's open file; the edit is likely lost
    without asking). `smoke:panes` scenarios that start with a plain tree click expecting `.chat-main .ui-file-viewer`

@@ -517,7 +517,8 @@ export function createFiles(options: {
     treeWidth,
     setTreeWidth,
     treeCollapsed,
-    navigatorOpen,
+    /** A viewer with no file open shows its tree: there is nothing to fold it away for. */
+    navigatorOpen: () => navigatorOpen() || !openPaths().primary,
     filesLoading,
     loadDirectory,
     toggleDirectory,

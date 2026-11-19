@@ -113,6 +113,7 @@ export default function FolderPane(props: {
   const read = (name: string) => readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, name);
   const viewer = createFolderViewer({ projectId: () => props.projectId, sourceControlEnabled: () => props.sourceControlEnabled, chatId: () => props.commentChatId,
     settings: { panel: read, geometry: read, fileScope: () => `folder:${props.projectId}` }, settingsScope: WORKSPACE_PANEL_GLOBAL_SCOPE, mode, setMode, shown: () => true });
+  batch(() => { viewer.files.restoreOpenFiles(); viewer.files.restoreGeometry(); });
   const open = (path: string, mode?: FileEntry["mode"], adopt?: boolean) => props.onOpenFile({ projectId: props.projectId, path, ...(mode ? { mode } : {}) }, { adopt });
   return <SheetFill>
     <PaneHeader kind="tool" fit name="Files" nameTitle={props.workingRoot} place={props.projectName} placeTitle={props.workingRoot}
