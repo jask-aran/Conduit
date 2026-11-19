@@ -3035,6 +3035,7 @@ function App() {
     // A file document taking the pane is drawn before this viewer goes: its going clears only its own handle.
     let mine: FileSlotHandle | undefined;
     return <FolderPane projectId={id} projectName={project().name} workingRoot={project().workingRoot} sourceControlEnabled={project().repository} commentChatId={focusedChat().loadedId()} actions={paneTabActions(pane)}
+      shown={() => pane === "main" || shownSlots().includes(pane) || (panelOpen() && dockSlot() === pane)}
       onOpenFile={(entry, options) => void openFileDocument(entry, { ...options, beside: true, tab: Boolean(verbNow().tab), edit: false })} openFiles={openFileKeys}
       onHandle={(handle) => { const list = handlesOf(pane); if (handle) list[0] = mine = handle; else if (list[0] === mine) list[0] = undefined; }} />;
   }}</Show>;
