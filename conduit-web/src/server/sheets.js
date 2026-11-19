@@ -5,7 +5,7 @@ import { CALL_LIMIT, CELLS, COLS, COL_LIMIT, LOOK, MAIN, ROWS, SHEET_FORMAT, SHE
 import { CONFIG, createWorkbookModel } from "../sheet-engine.js";
 import { listFormats, writeFormat } from "../sheet-formats.js";
 import { listStyles, writeStyle } from "../sheet-styles.js";
-import { readRules, rulesA1, rulesIds } from "../sheet-rules.js";
+import { readRules, rulesA1, rulesIds, shiftRefs } from "../sheet-rules.js";
 import { writePrivateFile } from "../private-file.js";
 
 /*
@@ -191,7 +191,7 @@ export function sheetKind(hub) {
   /**
    * The formulas an import froze (`excel:<rowId>:<colId>`, sheet-xlsx.js) that are on the tab or name it, rewritten by a change to the tab as the
    * engine rewrites a formula, in an engine of its own: OFFSET goes in under a name the engine does not know, so it parses. One that still does not
-   * parse, or names a tab deleted, loses its formula, so an export writes its value alone. `op`: a row or column op, `rename` or `delete`.
+   * parse loses its formula, so an export writes its value alone. `op`: a row or column op, or `rename` (to `at`).
    * Applied after the change, as `keepCorners`'s.
    */
   const keepFrozen = (room, sheet, op, at, count) => {
@@ -199,20 +199,21 @@ export function sheetKind(hub) {
     try {
       for (const [name, value] of room.look.entries()) {
         const [what, row, col] = name.split(":"), tab = what === "excel" && typeof value?.formula === "string" ? room.book.tabOfRow(row) : undefined, on = tab && room.book.tab(tab);
-        if (!on || on.indexOfCol(col) < 0 || (on.id === sheet.id ? op === "delete" : !value.formula.toLowerCase().includes(named))) continue;
-        const place = { sheet: engine.getSheetId(on.engine.getSheetName(on.sheet)), row: on.indexOfRow(row), col: on.indexOfCol(col) };
-        engine.setCellContents(place, value.formula.replace(/\bOFFSET\(/gi, "MOVEDREF("));
+        if (!on || on.indexOfCol(col) < 0 || (on.id !== sheet.id && !value.formula.toLowerCase().includes(named))) continue;
+        // Written for its `anchor`, where a sort may have left it: as it reads where it is now.
+        const place = { sheet: engine.getSheetId(on.engine.getSheetName(on.sheet)), row: on.indexOfRow(row), col: on.indexOfCol(col) }, from = parseA1(String(value.anchor ?? "")) ?? place;
+        engine.setCellContents(place, shiftRefs(value.formula, place.row - from.row, place.col - from.col).replace(/\bOFFSET\(/gi, "MOVEDREF("));
         const unread = engine.getCellValue(place)?.message?.startsWith("Parsing");
         held.push({ name, value, row, col, on, place: unread ? null : place });
       }
       if (!held.length) return () => {};
       // A name the tab cannot take is the tab op's to refuse.
-      if (op === "rename") { try { engine.renameSheet(here, at); } catch { return () => {}; } } else if (op === "delete") engine.removeSheet(here);
+      if (op === "rename") { try { engine.renameSheet(here, at); } catch { return () => {}; } }
       else (isRows ? removing ? engine.removeRows : engine.addRows : removing ? engine.removeColumns : engine.addColumns).call(engine, here, [at, count]);
       const moved = (n) => removing ? (n >= at + count ? n - count : n >= at ? -1 : n) : n >= at ? n + count : n;
       const after = held.map(({ place, ...one }) => {
         const to = place && (place.sheet !== here || op === "rename" ? place : isRows ? { ...place, row: moved(place.row) } : { ...place, col: moved(place.col) });
-        return { ...one, formula: op !== "delete" && to && to.row >= 0 && to.col >= 0 ? engine.getCellFormula(to)?.replace(/\bMOVEDREF\(/g, "OFFSET(") : undefined };
+        return { ...one, formula: to && to.row >= 0 && to.col >= 0 ? engine.getCellFormula(to)?.replace(/\bMOVEDREF\(/g, "OFFSET(") : undefined };
       });
       return () => { for (const { name, value, row, col, on, formula } of after) if (!formula || on.indexOfRow(row) < 0 || on.indexOfCol(col) < 0) room.look.delete(name); else room.look.set(name, { ...value, formula, anchor: a1(on.indexOfRow(row), on.indexOfCol(col)) }); };
     } finally { engine.destroy(); }
@@ -464,7 +465,7 @@ export function sheetKind(hub) {
               if (!room.doc.getMap(TAB).has(`name:${MAIN}`)) hub.as(room, name, (sign) => room.book.tabOp("rename", { tab: MAIN, name: first }, sign));
             }
           }
-          const changed = (op === "rename-tab" && typeof called === "string") || op === "delete-tab" ? room.book.find(tabArgs.tab) : null;
+          const changed = op === "rename-tab" && typeof called === "string" ? room.book.find(tabArgs.tab) : null;
           const frozen = changed ? keepFrozen(room, room.book.tab(changed), TAB_OPS[op], called?.trim()) : () => {};
           const done = hub.as(room, name, (sign) => room.book.tabOp(TAB_OPS[op], tabArgs, () => { frozen(); sign(); }));
           return { tab: done.tab, tabs: tabsWithSize(room) };

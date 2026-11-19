@@ -244,6 +244,8 @@ const SCOPED = new Set(["FILTER", "SORT"]);
 const stored = (formula) => formula.slice(1).split(/("(?:[^"]|"")*")/).map((part, nth) => nth % 2 ? part : part.replace(/([A-Za-z][A-Za-z0-9.]*)\(/g, (all, name) => PREFIXED.has(name.toUpperCase()) ? `_xlfn.${all}` : SCOPED.has(name.toUpperCase()) ? `_xlfn._xlws.${all}` : all)).join("");
 // A reference to a tab the workbook no longer has is #REF!, as a spreadsheet makes it when the tab is deleted: a file naming a missing tab is one to repair.
 const TAB_REF = /(?<![#\p{L}\p{N}_.'])('(?:[^']|'')+'|[\p{L}_][\p{L}\p{N}_.]*)!(?:\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?|\$?[A-Z]{1,3}:\$?[A-Z]{1,3}|\$?\d+:\$?\d+)/gu;
+// A frozen formula reading a table or another workbook (`[`) is written as its value: the export has neither part.
+const outside = (formula) => formula.replace(/"(?:[^"]|"")*"/g, "");
 const orphaned = (formula, known) => formula.split(/("(?:[^"]|"")*")/).map((part, nth) => nth % 2 ? part : part.replace(TAB_REF, (all, tab) => known.has((tab.startsWith("'") ? tab.slice(1, -1).replace(/''/g, "'") : tab).toLowerCase()) ? all : "#REF!")).join("");
 const ERROR_CODE = Object.fromEntries(Object.entries(ERROR_TEXT).map(([code, text]) => [text, Number(code)]));
 /**
@@ -260,7 +262,7 @@ export function exportXlsx(tabs) {
     tab.typed.forEach((row, r) => row.forEach((typed, c) => {
       if (!typed) return;
       const at = a1(r, c), held = tab.look[`excel:${at}`], from = parseA1(String(held?.anchor ?? "")), value = tab.values[r]?.[c];
-      const formula = typed.startsWith("=") ? typed : from && held.value === typed && typeof held.formula === "string" ? shiftRefs(held.formula, r - from.row, c - from.col) : null;
+      const formula = typed.startsWith("=") ? typed : from && held.value === typed && typeof held.formula === "string" && !outside(held.formula).includes("[") ? shiftRefs(held.formula, r - from.row, c - from.col) : null;
       const cell = isError(value) ? { t: "e", v: ERROR_CODE[value.value] ?? 15, w: value.value } : typeof value === "number" ? { t: "n", v: value } : typeof value === "boolean" ? { t: "b", v: value } : { t: "s", v: String(value ?? "") };
       if (cell.t === "s" && cell.v === "" && !formula) return;
       if (formula) cell.f = stored(orphaned(formula, known));
@@ -284,7 +286,7 @@ export function exportXlsx(tabs) {
   book.Workbook = { Sheets: tabs.map((tab) => ({ Hidden: tab.hidden ? 1 : 0 })) };
   const written = XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true }), count = (value) => typeof value === "number" && value > 0 ? value : 0;
   const panes = tabs.map((tab) => [count(tab.look.freezeRows), count(tab.look.freezeCols)]), styled = tabs.some((tab) => Object.keys(tab.look).some((name) => name.startsWith("style:")));
-  const ruled = tabs.some((tab) => Array.isArray(tab.look.rules) && tab.look.rules.length), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(`=${formula}`)) : null;
+  const ruled = tabs.some((tab) => Array.isArray(tab.look.rules) && tab.look.rules.length), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(orphaned(`=${formula}`, known))) : null;
   if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols)) return written;
   let restyled = null;
   return editParts(written, (path, xml, all) => {
