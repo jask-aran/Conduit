@@ -19,13 +19,12 @@ inferred from view changes (`reconcileTabs`, `keepNext`) with no stored active t
 
 ## Steps
 
-Steps 1-3 (store, main.tsx on it, verbs and undo) landed; follow-ups are in `panes-handoff.md`.
+Follow-ups of the steps already landed are in `panes-handoff.md`.
 
-4. **The dock as one slot plus summons**: remove docked slots (`dockedSlots`, `dockSlot`, `dock=`, `docked-1..3`,
-   rail docked buttons), tool splits (`file`, `shell:`, tool in pane A, `splitHost`, `bindSplit`), the dock's tab strip
-   and Chat tool; summons for jbot, Files, terminal; overflow becomes the row's "more panes" control.
-5. **Folder viewer**: one document kind, tree plus file, Files | Changes modes; replaces FilesView, SourceControlView
-   and FileBesideView. File document columns and tabs (`ftabs`, `file-tabs.ts`) have been removed; documents stand alone.
+4. **The rest of the dock**: overflow becomes the row's "more panes" control (today `foldedSlots` fold into the
+   dock, listed as the rail's docked buttons, `props.docked`); the dock's Chat tool goes once its review navigations
+   (`REVIEW_NAVIGATION_EVENT` for a session or turn, `TURN_ARTIFACT_NAVIGATION_EVENT`) have another home. The phone
+   keeps its tab strip this pass.
 6. **Rail foot**: the beside/over button shows both states; `smoke:panes` rewritten to the new rules.
 
 Checks per step: typecheck, `npm run smoke:panes` (rewritten in step 6; until then expect its tab and column

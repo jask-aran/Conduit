@@ -164,7 +164,7 @@ export default function WorkspaceFileSlot(props: {
   onToggleWrap: () => void;
   annotationChatId?: string | null;
   reveal?: ReviewNavigationRequest | null;
-  onFocus: () => void;
+  onFocus?: () => void;
   onClose: () => void;
   onError: (message: string) => void;
   // announce: the file vanished while it was on screen, which is worth saying.

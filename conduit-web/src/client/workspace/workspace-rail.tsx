@@ -3,20 +3,10 @@ import { For, Show, type JSX } from "solid-js";
 import { Columns3Icon, CommandIcon, LayoutTemplateIcon } from "lucide-solid";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
 import { LayoutGlyph, RailRule, ToolRail } from "@/components/ui/pane";
-import { isSplitView, type PanelTab, type SplitView } from "./workspace-types";
+import type { PanelTab } from "./workspace-types";
 
 export const WORKSPACE_TOOL_LABELS: Record<PanelTab, string> = { files: "Files", diff: "Source Control", chat: "Chat review", terminal: "Terminal", jbot: "jbot" };
 export const WORKSPACE_TOOL_ICONS = { files: Icons.Folder, diff: Icons.GitCompareArrows, chat: Icons.Chat, terminal: Icons.Terminal, jbot: Icons.Agent } satisfies Record<PanelTab, unknown>;
-
-export const TOOL_DRAG_TYPE = "application/x-conduit-tool";
-export function readToolDrag(event: DragEvent): { tool: SplitView; from: "dock" | "split" } | null {
-  try {
-    const value = JSON.parse(event.dataTransfer?.getData(TOOL_DRAG_TYPE) || "null");
-    return value && isSplitView(value.tool) && (value.from === "dock" || value.from === "split") ? value : null;
-  } catch {
-    return null;
-  }
-}
 
 export const PANE_LAYOUTS: Record<number, number[][]> = {
   2: [[1, 1], [1, 2], [2, 1], [1, 3], [3, 1]],
@@ -33,9 +23,7 @@ export function WorkspaceRail(props: {
   onOpenMail: () => void;
   windowControls?: JSX.Element;
   current: PanelTab | null;
-  inSplit: PanelTab | null;
   onChoose: (tool: PanelTab) => void;
-  onDock: (view: SplitView) => void;
   panes: number;
   onLayout: (weights: number[]) => void;
   docked: { slot: number; view: string; name: string }[];
@@ -65,15 +53,12 @@ export function WorkspaceRail(props: {
       </DropdownMenu>
     </>}</Show>
   </>;
-  return <ToolRail aria-label="Workspace tools" data-region="workspace-rail" foot={PANE_LAYOUTS[props.panes] || props.tools ? foot() : undefined}
-    onDragOver={(event) => { if (document.body.dataset.toolDrag === "split" && event.dataTransfer?.types.includes(TOOL_DRAG_TYPE)) event.preventDefault(); }}
-    onDrop={(event) => { const drag = readToolDrag(event); if (drag?.from === "split") { event.preventDefault(); props.onDock(drag.tool); } }}>
+  return <ToolRail aria-label="Workspace tools" data-region="workspace-rail" foot={PANE_LAYOUTS[props.panes] || props.tools ? foot() : undefined}>
     <Show when={props.windowControls}>{props.windowControls}<RailRule /></Show>
     <Show when={props.tools}><For each={RAIL_TOOLS}>{(tool) => {
       const Icon = WORKSPACE_TOOL_ICONS[tool];
-      return <IconButton kind="rail" tabIndex={-1} data-tool={tool} draggable={true} data-doc-view={tool === "terminal" ? "tool:terminal" : tool}
+      return <IconButton kind="rail" tabIndex={-1} data-tool={tool} draggable={true} data-doc-view={`tool:${tool}`}
         aria-label={WORKSPACE_TOOL_LABELS[tool]} title={WORKSPACE_TOOL_LABELS[tool]} current={props.current === tool || (tool === "files" && props.current === "diff")}
-        data-open={props.inSplit === tool ? "" : undefined}
         onClick={() => props.onChoose(tool)}><Icon /></IconButton>;
     }}</For></Show>
     <Show when={props.jbot}>{(jbot) => <IconButton kind="rail" tabIndex={-1} data-doc-view="page:jbot" aria-label={jbot().needs ? `${jbot().name}, ${jbot().needs} waiting on you` : jbot().name} title={jbot().name}

@@ -8,7 +8,7 @@ export function FileView(props: JSX.HTMLAttributes<HTMLElement> & { ref?: (eleme
   const [local, rest] = splitProps(props, ["focused"]);
   return <section {...rest} class="ui-file" data-focused={local.focused ? "" : undefined} />;
 }
-export function FilesPane(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void; wide?: boolean | "navigator"; treeCollapsed?: boolean; navigatorOpen?: boolean; treeWidth?: number }) {
+export function FilesPane(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void; wide?: boolean; treeCollapsed?: boolean; navigatorOpen?: boolean; treeWidth?: number }) {
   const [local, rest] = splitProps(props, ["wide", "treeCollapsed", "navigatorOpen", "treeWidth"]);
   return <div {...rest} class="ui-files" data-wide={local.wide === undefined ? undefined : String(local.wide)} data-tree-collapsed={local.treeCollapsed ? "" : undefined}
     data-navigator-open={local.navigatorOpen ? "" : undefined} style={local.treeWidth === undefined ? undefined : { "--files-tree-width": `${local.treeWidth}px` }} />;
