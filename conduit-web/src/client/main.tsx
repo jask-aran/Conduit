@@ -3055,11 +3055,16 @@ function App() {
     });
     const view = existing ?? formatFileView([entry]);
     await openView(view, { beside: options.beside, tab: options.tab });
-    if (options.edit && existing) {
-      const found = Layouts.findView(layout(), view);
-      const pane = found ? keyOf(found.id) : null;
-      if (pane !== null && handlesOf(pane)[0]?.edit()) pendingFileEdit = null;
+    if (!existing) return;
+    const found = Layouts.findView(layout(), view);
+    const pane = found ? keyOf(found.id) : null;
+    if (pane === null) return;
+    // Open already in another mode (the file, or its changes): it turns to the one asked for.
+    if (parseFileView(existing)![0]!.mode !== entry.mode) {
+      if (handlesOf(pane)[0]?.hasUnsavedChanges() && !(await confirmDialog("Discard unsaved changes and review this file?", { destructive: true, confirmLabel: "Discard", valid: () => viewOf(pane) === existing }))) return;
+      await setFileMode(pane, 0, entry.mode);
     }
+    if (options.edit && handlesOf(pane)[0]?.edit()) pendingFileEdit = null;
   };
   const noteFileLoaded = (pane: PaneKey, index: number, file: FileSummary | null) => {
     const entry = parseFileView(viewOf(pane))?.[index];
