@@ -49,16 +49,19 @@ export function createSheetTools(options: { tip(name: SheetToolId): string | und
       pick: (picked: string) => { const range = at(); if (range) options.act(label, () => styles.set(range, { [name]: picked.toLowerCase() }), `${label} ${range.top}:${range.left}:${range.bottom}:${range.right}`); } });
     return [...named, any];
   };
+  // Rows are fitted with the styles' index, which a style reaches only as its transaction ends: the fit is a second transaction of the same step.
+  let fits = 0;
+  const fitted = (label: string, range: SheetRange, restyle: () => void) => { const join = `fit ${++fits}`; options.act(label, restyle, join); options.act(label, () => options.fit(range), join); };
   const all: Record<SheetToolName, () => SheetTool[]> = {
     bold: () => [], italic: () => [], underline: () => [], strike: () => [],
     // The painter takes the selection's look as it is pressed, and lays it on the next cells chosen (styles.ts createSheetBrush).
     paint: () => options.brush ? [tool("paint", "Format painter", mark("paint"), () => options.brush!.toggle(), { own: true, on: () => options.brush!.held() })] : [],
-    clear: () => [tool("clear", "Clear formatting", mark("clear"), (range) => { styles.clear(range); formats.set(range, "General"); options.fit(range); }, { keys: ["Ctrl", "\\"] })],
+    clear: () => [tool("clear", "Clear formatting", mark("clear"), (range) => fitted("Clear formatting", range, () => { styles.clear(range); formats.set(range, "General"); }), { keys: ["Ctrl", "\\"], own: true })],
     wrap: () => [
       // Overflow runs text on over the empty cells to its right; Clip cuts it at the cell's edge; Wrap breaks it into lines.
-      tool("overflow", "Overflow", mark("overflow"), (range) => { styles.set(range, { wrap: false, clip: false }); options.fit(range); }, { menu: "Wrapping", on: () => !worn()?.wrap && !worn()?.clip }),
-      tool("clip", "Clip", mark("clip"), (range) => { styles.set(range, { wrap: false, clip: true }); options.fit(range); }, { menu: "Wrapping", on: () => Boolean(worn()?.clip) && !worn()?.wrap }),
-      tool("wrap", "Wrap", mark("wrap"), (range) => { styles.set(range, { wrap: !worn()?.wrap, clip: false }); options.fit(range); }, { menu: "Wrapping", on: () => Boolean(worn()?.wrap) }),
+      tool("overflow", "Overflow", mark("overflow"), (range) => fitted("Overflow", range, () => styles.set(range, { wrap: false, clip: false })), { own: true, menu: "Wrapping", on: () => !worn()?.wrap && !worn()?.clip }),
+      tool("clip", "Clip", mark("clip"), (range) => fitted("Clip", range, () => styles.set(range, { wrap: false, clip: true })), { own: true, menu: "Wrapping", on: () => Boolean(worn()?.clip) && !worn()?.wrap }),
+      tool("wrap", "Wrap", mark("wrap"), (range) => { const wrap = !worn()?.wrap; fitted("Wrap", range, () => styles.set(range, { wrap, clip: false })); }, { own: true, menu: "Wrapping", on: () => Boolean(worn()?.wrap) }),
     ],
     color: () => inks("color", "Text colour", "Default text", "text"),
     fill: () => inks("fill", "Fill colour", "No fill", "fill"),
