@@ -109,7 +109,7 @@ import { isShortcutRegion, type ShortcutBinding } from "./shortcuts/shortcut-typ
 import { normalizeStoredBinding } from "./shortcuts/shortcut-normalize";
 import { acknowledgeRegion } from "./shortcuts/region-cue";
 import { globalShortcuts } from "./shortcuts/global-shortcuts";
-import { fileEntryKey, formatFileView, parseFileView, sameFileEntry, type FileEntry } from "./workspace/file-documents";
+import { carryDraft, fileEntryKey, formatFileView, parseFileView, sameFileEntry, type FileEntry } from "./workspace/file-documents";
 import { dropWash, dropZoneAt } from "./panes/pane-drop";
 import type { ReviewNavigationRequest } from "./chat/review-navigation";
 import type { FileSlotHandle, FileSummary } from "./workspace/workspace-file-slot";
@@ -2637,7 +2637,16 @@ function App() {
     if (before.summon && panes.target(-1) !== last) panes.amend(before);
   };
   /** The dock's folder viewer or terminal taken to a pane of its own: the summon goes, the pane keeps the workspace. */
-  const moveToRow = (view: SplitView) => fromSummon(() => openBeside(view));
+  const moveToRow = (view: SplitView) => fromSummon(() => withDockFile(view, () => openBeside(view)));
+  /** The dock's folder viewer made a pane takes its open file and unsaved edit; an open folder pane is gone to instead. */
+  const withDockFile = async (view: string, open: () => Promise<unknown>) => {
+    const handle = dockFile(), path = handle?.path(), projectId = view === "tool:files" ? dockProject()?.id : view.startsWith("folder:") ? view.slice("folder:".length) : null;
+    if (!handle || !path || !projectId || Layouts.findView(layout(), `folder:${projectId}`)) return void await open();
+    writeSetting(`folder:${projectId}`, "file", path);
+    const draft = handle.draft(), drop = draft === null ? null : carryDraft({ projectId, path }, draft);
+    await open();
+    if (!Layouts.findView(layout(), `folder:${projectId}`)) drop?.(); else if (drop) handle.discardChanges();
+  };
   const closeSlot = async (slot: number | null, focus = true) => {
     if (slot === null) return;
     const previous = slotView(slot);
@@ -2840,7 +2849,9 @@ function App() {
     const placed = { ...target, zone: target.zone };
     if (fromPane !== null) return void await movePaneDocument(fromPane, placed);
     if (group) return void await moveTabGroup(group, placed, view as SplitView);
-    return /^(folder:|tool:files$)/.test(view) && layout().summon === "files" ? fromSummon(() => dropDocument(placed, view)) : dropDocument(placed, view);
+    if (!/^(folder:|tool:files$)/.test(view)) return dropDocument(placed, view);
+    const drop = () => withDockFile(view!, () => dropDocument(placed, view!));
+    return layout().summon === "files" ? fromSummon(drop) : drop();
   };
   const dropDocument = async (target: { pane: PaneKey; zone: "left" | "middle" | "right" }, view: string) => {
     if (view === "tool:terminal") { const id = await pickShell(); if (!id) return; view = `term:${id}`; }
@@ -3014,9 +3025,14 @@ function App() {
     requestAnimationFrame(land);
   }
   const folderProject = (id: string) => { const found = catalogue.projects().find((item) => item.id === id); const computer = computerLocation(); return found ? { ...found, repository: found.kind === "workspace" } : computer?.project.id === id ? { ...computer.project, repository: computer.repository } : null; };
-  const renderFolderViewer = (pane: PaneKey, id: string) => <Show when={folderProject(id)} fallback={<SheetFill><PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title="Files" /></PaneHeader><Empty>This workspace is not open here.</Empty></SheetFill>}>{(project) =>
-    <FolderPane projectId={id} projectName={project().name} workingRoot={project().workingRoot} sourceControlEnabled={project().repository} commentChatId={focusedChat().loadedId()} actions={paneTabActions(pane)}
-      onOpenFile={(entry, options) => void openFileDocument(entry, { ...options, beside: true, tab: Boolean(verbNow().tab), edit: false })} openFiles={openFileKeys} onHandle={(handle) => { handlesOf(pane)[0] = handle; }} />}</Show>;
+  const renderFolderViewer = (pane: PaneKey, id: string) => <Show when={folderProject(id)} fallback={<SheetFill><PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title="Files" /></PaneHeader><Empty>This workspace is not open here.</Empty></SheetFill>}>{(project) => {
+    // A file document taking the pane is drawn before this viewer goes: its going clears only its own handle.
+    let mine: FileSlotHandle | undefined;
+    return <FolderPane projectId={id} projectName={project().name} workingRoot={project().workingRoot} sourceControlEnabled={project().repository} commentChatId={focusedChat().loadedId()} actions={paneTabActions(pane)}
+      shown={() => pane === "main" || shownSlots().includes(pane) || (panelOpen() && dockSlot() === pane)}
+      onOpenFile={(entry, options) => void openFileDocument(entry, { ...options, beside: true, tab: Boolean(verbNow().tab), edit: false })} openFiles={openFileKeys}
+      onHandle={(handle) => { const list = handlesOf(pane); if (handle) list[0] = mine = handle; else if (list[0] === mine) list[0] = undefined; }} />;
+  }}</Show>;
   const [fileReveal, setFileReveal] = createSignal<{ entry: FileEntry; request: ReviewNavigationRequest } | null>(null);
   const openFileDocument = async (entry: FileEntry, options: { beside?: boolean; tab?: boolean; edit: boolean; reveal?: ReviewNavigationRequest; /** Open it as the artifact kind it may be when asked (artifact-kinds `opens`). */ adopt?: boolean }) => {
     // A paper or a site is an artifact: its file opens as the artifact, never in the file viewer.
@@ -3034,11 +3050,16 @@ function App() {
     });
     const view = existing ?? formatFileView([entry]);
     await openView(view, { beside: options.beside, tab: options.tab });
-    if (options.edit && existing) {
-      const found = Layouts.findView(layout(), view);
-      const pane = found ? keyOf(found.id) : null;
-      if (pane !== null && handlesOf(pane)[0]?.edit()) pendingFileEdit = null;
+    if (!existing) return;
+    const found = Layouts.findView(layout(), view);
+    const pane = found ? keyOf(found.id) : null;
+    if (pane === null) return;
+    // Open already in another mode (the file, or its changes): it turns to the one asked for.
+    if (parseFileView(existing)![0]!.mode !== entry.mode) {
+      if (handlesOf(pane)[0]?.hasUnsavedChanges() && !(await confirmDialog("Discard unsaved changes and review this file?", { destructive: true, confirmLabel: "Discard", valid: () => viewOf(pane) === existing }))) return;
+      await setFileMode(pane, 0, entry.mode);
     }
+    if (options.edit && handlesOf(pane)[0]?.edit()) pendingFileEdit = null;
   };
   const noteFileLoaded = (pane: PaneKey, index: number, file: FileSummary | null) => {
     const entry = parseFileView(viewOf(pane))?.[index];
@@ -3260,8 +3281,13 @@ function App() {
   const [heldPlace, setHeldPlace] = createSignal<PlaceSelection | "route">("route");
   createEffect(() => { const place = placeOf(keyboardPane()); if (place) setHeldPlace(() => place); });
   const dockSelection = (): PlaceSelection | null => { const place = heldPlace(); return place === "route" ? null : place; };
-  const dockProject = () => dockSelection()?.project ?? dockHome();
-  const dockScope = () => dockSelection() ? `project:${dockSelection()!.project.id}` : workspacePanelScope();
+  // The dock follows the focused pane's workspace, but keeps one whose file has an unsaved edit until it is saved or discarded.
+  const [dockFile, setDockFile] = createSignal<FileSlotHandle>();
+  const dockPlace = createMemo<{ project: ReturnType<typeof dockHome>; scope: string | null }, { project: ReturnType<typeof dockHome>; scope: string | null } | undefined>((last) => last && dockFile()?.hasUnsavedChanges() ? last
+    : { project: dockSelection()?.project ?? dockHome(), scope: dockSelection() ? `project:${dockSelection()!.project.id}` : workspacePanelScope() },
+  undefined, { equals: (a, b) => a?.project === b?.project && a?.scope === b?.scope });
+  const dockProject = () => dockPlace().project;
+  const dockScope = () => dockPlace().scope;
   let swappingPanes = false;
   function paneAView(): SplitView { return paneAShown(); }
   /** What pane A draws itself rather than through the route. */
@@ -5343,8 +5369,8 @@ function App() {
     {/* Docked panes stay mounted, so each keeps its state and tabs; the dock shows one. */}
     <Show when={dockDocHost()} keyed>{(host) =>
       <For each={dockContents()}>{(slot) => <Portal mount={host}>{renderSlot(slot, () => 0, true)}</Portal>}</For>}</Show>
-    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel jbotView={() => renderJbot("tool")} connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onMoveToRow={isMobileLayout() ? undefined : moveToRow} onOpenFile={canOpenFilePanes() ? (entry, options) => void openFileDocument(entry, { ...options, tab: Boolean(verbNow().tab) }) : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={() => void dismissSummon()} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
-    <Show when={["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && Boolean(dockHome()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onMoveToRow={isMobileLayout() ? undefined : moveToRow} onOpenFile={canOpenFilePanes() ? (entry, options) => void openFileDocument(entry, { ...options, tab: Boolean(verbNow().tab) }) : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={() => void dismissSummon()} shortcuts={shortcutManager}
+    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel jbotView={() => renderJbot("tool")} connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onMoveToRow={isMobileLayout() ? undefined : moveToRow} onFileHandle={(handle) => setDockFile(() => handle)} onOpenFile={canOpenFilePanes() ? (entry, options) => void openFileDocument(entry, { ...options, tab: Boolean(verbNow().tab) }) : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={() => void dismissSummon()} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
+    <Show when={["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && Boolean(dockHome()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onMoveToRow={isMobileLayout() ? undefined : moveToRow} onFileHandle={(handle) => setDockFile(() => handle)} onOpenFile={canOpenFilePanes() ? (entry, options) => void openFileDocument(entry, { ...options, tab: Boolean(verbNow().tab) }) : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={() => void dismissSummon()} shortcuts={shortcutManager}
       jbotView={() => renderJbot("tool")}
  /></Show>
     </AppShell>

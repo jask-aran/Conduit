@@ -156,7 +156,7 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
     keep: (key) => settle(key, true),
     revert: (key) => void margin?.revert?.run(key).catch(failed("Not taken back")),
     retry: (key) => { const words = commentOf(key)?.comment; if (words && margin?.revert) void margin.revert.run(key).then(() => transport.say(split(key)[0], split(key)[1], words)).then(took, failed("Not asked again")); },
-    stop: (key) => void margin?.stop?.(key).catch(failed("Not stopped")),
+    stop: (key) => void host.stop?.(key).catch(failed("Not stopped")),
   };
   const resolveDone = async () => {
     const done = keys().filter((key) => commentOf(key)?.resolved && !putAway(key));
@@ -223,7 +223,7 @@ export function MarkupMargin(props: { host: MarkupHost; sent?: unknown; control?
   return <MarkupMarginNotes ref={(element) => { column = element; }} beside={beside()}>
     <For each={keys()}>{(key) => <MarkupNote ref={(element) => { field = element; }} key={key} open={openKey() === key} tag="" name="" quote={commentOf(key)?.quote} words={commentOf(key)?.comment} said={saidOf(key)} by={itemOf(key)?.by ?? undefined} state={stateOf(key)} unread={unread(key)}
       placeholder="Write back" resolved={putAway(key)} value={openKey() === key ? reply() : ""} onOpen={() => open(key)} onInput={setReply} onSay={answer} onResolve={(resolved) => settle(key, resolved)}
-      onStop={margin?.stop && stateOf(key).busy ? () => acts.stop(key) : undefined} onRevert={margin?.revert?.can(key) ? () => acts.revert(key) : undefined} onRetry={margin?.revert?.can(key) && commentOf(key)?.comment ? () => acts.retry(key) : undefined}
+      onStop={host.stop && stateOf(key).busy ? () => acts.stop(key) : undefined} onRevert={margin?.revert?.can(key) ? () => acts.revert(key) : undefined} onRetry={margin?.revert?.can(key) && commentOf(key)?.comment ? () => acts.retry(key) : undefined}
       count={tucked() ? placed(key).length : undefined} stacked={stacked(key)} cycle={cycle(key)} />}</For>
     <For each={[...many().keys()]}>{(by) => <MarkupNote key={BY + by} open={false} tag="" name={`${many().get(by) ?? 0} from ${who(by)}`} value="" onOpen={() => {}} onInput={() => {}} all
       onAccept={() => margin?.suggestions?.acceptAll?.(by)} onReject={() => margin?.suggestions?.rejectAll?.(by)} />}</For>

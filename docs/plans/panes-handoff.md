@@ -55,10 +55,12 @@ A new tab there is served the previous client by the service worker (`sw.js`) af
    navigator-only mode, the second file slot). Pane B's thread header names its project (`side.project()`), as pane A.
    `FilesView` and `SourceControlView` remain only as the two modes' bodies. A narrow viewer (the dock) shows its tree
    while no file is open and folds it after a plain open, as Files did on the phone, leaving the keyboard on the
-   page body: a feel question for the owner. Walked headless 2026-11-20 (`smoke:panes` covers it). Open, for the
-   owner: the dock viewer's unsaved edit is dropped without asking when focus moves to a pane of another workspace;
-   "Move to a pane" does not carry the dock's open file or its edit (the edit stays in the closed dock), against
-   DESIGN's "keeping its document and state"; Alt in a pane's folder viewer leaves the keyboard on the page body,
+   page body: a feel question for the owner. Walked headless 2026-11-20 (`smoke:panes` covers it). An unsaved edit
+   is never dropped unasked: the dock viewer stays drawn under other tools and summons; while its file has an edit
+   the dock keeps that workspace (`dockPlace` in main.tsx) instead of following focus, since a click giving focus is
+   no change to ask about; "Move to a pane" and dragging the header carry the open file (its `folder:` scope's
+   `file`) and the edit (`carryDraft`, taken by the pane's file slot), unless a folder pane for that workspace is
+   open already. Not walked in a browser yet. Open: Alt in a pane's folder viewer leaves the keyboard on the page body,
    not where it was (cause unmeasured); Files → Changes → Files with an edit is unwalked (Japan has no Changes).
    Left of plan step 4: see `panes-and-dock.md`.
 6. DeX (user's Samsung S936B, wireless adb, `ANDROID_SERIAL=192.168.20.244:37125`):

@@ -107,12 +107,14 @@ export function FolderView(props: {
 /** The folder viewer as a pane of its own: it keeps its workspace, and its open file is remembered per workspace. */
 export default function FolderPane(props: {
   projectId: string; projectName: string; workingRoot: string; sourceControlEnabled: boolean; commentChatId: string | null; actions: JSX.Element;
+  /** In sight: a pane folded or docked out of sight neither loads nor polls. */
+  shown: Accessor<boolean>;
   onOpenFile: (entry: FileEntry, options: { adopt?: boolean }) => void; openFiles: Accessor<Map<string, "focused" | "shown">>; onHandle: (handle: FileSlotHandle | undefined) => void;
 }) {
   const [mode, setMode] = createSignal<FolderMode>("files");
   const read = (name: string) => readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, name);
   const viewer = createFolderViewer({ projectId: () => props.projectId, sourceControlEnabled: () => props.sourceControlEnabled, chatId: () => props.commentChatId,
-    settings: { panel: read, geometry: read, fileScope: () => `folder:${props.projectId}` }, settingsScope: WORKSPACE_PANEL_GLOBAL_SCOPE, mode, setMode, shown: () => true });
+    settings: { panel: read, geometry: read, fileScope: () => `folder:${props.projectId}` }, settingsScope: WORKSPACE_PANEL_GLOBAL_SCOPE, mode, setMode, shown: props.shown });
   batch(() => { viewer.files.restoreOpenFiles(); viewer.files.restoreGeometry(); });
   const open = (path: string, mode?: FileEntry["mode"], adopt?: boolean) => props.onOpenFile({ projectId: props.projectId, path, ...(mode ? { mode } : {}) }, { adopt });
   return <SheetFill>
