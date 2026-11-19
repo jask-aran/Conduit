@@ -296,10 +296,48 @@ part of a big workbook.
 - frozen cells' original formulas;
 - number formats, widths (`wpx`), merges, names, hidden tabs and the tab order.
 
-An export with merges, conditional formats, hidden rows and columns, frozen panes, styles and frozen formulas reopens in
-openpyxl, and its parts pass the checks Excel is strict about: element order in `<worksheet>` and `styleSheet`, every
-`count`, `cols` ranges in order and apart, style and dxf ids in range, and no formula naming a missing tab (measured on a
-generated workbook). Whether Excel opens it without a repair prompt, and recalculates on open, is **not verified**.
+**Verification: the round-trip scorecard** (`conduit-web/scripts/xlsx-roundtrip.mjs`, **measured**). It takes 30 workbooks, one per
+feature, written by openpyxl with the cached values Excel keeps put back in by hand. It imports each one and exports it through the hub's
+document service in a temporary data root, then reads both files back with openpyxl. Each export is also held to what Excel is strict about:
+every part has a content type, every relationship target exists, `r:id`s resolve, children of `<worksheet>`, `<workbook>`, `<styleSheet>`
+and `<chartSpace>` are in schema order, every `count` matches, and style and dxf ids are in range. Any fault fails the run.
+
+The features script is kept outside the repo (the script's usage says what it must answer). LibreOffice is not installed here. Whether
+Excel opens an export without a repair prompt is **not verified**. openpyxl cannot write threaded comments or dynamic-array metadata
+(`cm=`), so those are not tested: the spilling formulas are legacy array formulas with their cached cells.
+
+| Feature | Baseline (main, 2026-11-20) | Import report then |
+| --- | --- | --- |
+| values | kept | - |
+| formulas | kept | 1 frozen |
+| array (CSE) | changed: 0/1 kept; Sheet!C1: ["=SUM(A1:A5*B1:B5)","550","C1"] -> ["=SUM(A1:A5*B1:B5)","550",""] | - |
+| spilling formulas | changed: 15/18 kept; Sheet!C1: ["=_xlfn.UNIQUE(A1:A5)","3","C1:C4"] -> null | 3 frozen |
+| functions the engine lacks | changed: 1/3 kept; Sheet!B1: ["=_xlfn.LAMBDA(x,x*2)(A1)","20",""] -> ["=LAMBDA(x,x*2)(A1)","20",""] | 2 frozen |
+| defined names | changed: 2/4 kept; name Rate: "Sheet!$A$2" -> null | left out 2 defined names; 2 frozen |
+| number formats | kept | - |
+| fonts | changed: 6/8 kept; A7: [false,false,"",false,"",11,"Courier New"] -> [false,false,"",false,"",11,"Calibri"] | - |
+| fills | changed: 3/4 kept; A4: ["darkGray","FF0000"] -> ["solid","FF0000"] | - |
+| borders | changed: 2/7 kept; D2: ["","","","thin/","thin/"] -> ["","","","thin/",""] | - |
+| alignment, wrap, indent, rotation | changed: 4/9 kept; A5: ["left","",false,2,0,false] -> ["left","",false,0,0,false] | - |
+| widths, heights, hidden, frozen | changed: 6/8 kept; height 2: 40 -> 39.75 | - |
+| merges | dropped: 0/2 kept; B1:D1: true -> null | left out 1 merged ranges past the tab's last value |
+| conditional: cell value | kept | - |
+| conditional: colour scale | dropped: 0/2 kept; A1:A10 0: ["colorScale","",[],"","",false,"",false,false] -> null | left out 1 conditional formats (colorScale) |
+| conditional: data bar | dropped: 0/2 kept; A1:A10 0: ["dataBar","",[],"","",false,"",false,false] -> null | left out 1 conditional formats (dataBar) |
+| conditional: icon set | dropped: 0/2 kept; A1:A10 0: ["iconSet","",[],"","",false,"",false,false] -> null | left out 1 conditional formats (iconSet) |
+| conditional: formula | kept | - |
+| conditional: top 10 | dropped: 0/1 kept; A1:A10 0: ["top10","",[],"FFC7CE","",true,3,false,false] -> null | left out 1 conditional formats (top10) |
+| conditional: number format | changed: 0/1 kept; A1:A10 0: ["cellIs","greaterThan",["50"],"","0.0\" big\"",false,"",false,false] -> ["cellIs","greaterThan",["50"],"","",false,"",… | left out 1 conditional formats (number format of a rule) |
+| data validations | dropped: 0/5 kept; B1:B10: ["list","","\"Yes,No,Maybe\"","",true,""] -> null | left out 5 validation rules |
+| hyperlinks | changed: 1/4 kept; A1: ["https://example.com/page",""] -> null | - |
+| notes | dropped: 0/2 kept; A1: "Check this number" -> null | left out 2 notes |
+| tables | dropped: 0/1 kept; table Sales: ["A1:C4","TableStyleMedium9"] -> null | - |
+| autofilter | changed: 0/1 kept; autofilter: "A1:B6" -> "" | - |
+| charts | dropped: 0/3 kept; chart 1: ["bar","col",["Sheet!$A$2:$A$7","Sheet!$B$2:$B$7","Sheet!$C$2:$C$7","Sheet!B1","Sheet!C1"]] -> null | - |
+| images | dropped: 0/1 kept; media 0: true -> null | - |
+| tabs: names, colours, hidden | changed: 4/6 kept; tab 1: ["O'Brien & Co","visible","FF0000"] -> ["O'Brien & Co","visible",""] | - |
+| print settings | changed: 0/7 kept; orientation: "landscape" -> null | - |
+| protection | changed: 0/2 kept; workbook structure: true -> false | - |
 
 ## Still to build
 
