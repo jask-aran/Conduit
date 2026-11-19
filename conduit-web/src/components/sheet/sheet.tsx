@@ -575,7 +575,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         {/* Before the grid, so Tab reaches a chart before the grid keeps it. */}
         <Show when={model()}>{(sheet) => <SheetCharts look={look} model={sheet()} grid={grid} scrolled={scrolled} zoom={zoom} hidden={sizes.hidden} hiddenCols={sizes.hiddenCols} act={history.act} undo={() => history.undo()} redo={() => history.redo()}
           text={(row, col) => { const value = sheet().value(row, col); return value === null ? "" : typeof value === "number" ? formats.draw(row, col, value)?.text ?? String(value) : String(value); }} />}</Show>
-        <ContextMenu placement="bottom-start">
+        {/* Escape in a submenu shuts the whole menu without its close focus: the keyboard fell to the page. */}
+        <ContextMenu placement="bottom-start" onOpenChange={(open) => { if (!open) requestAnimationFrame(() => { if (!document.activeElement || document.activeElement === document.body) grid()?.focus(); }); }}>
           <ContextMenuTrigger as="div" ref={setIsland} class="ui-spreadsheet-grid" data-own-keys={OWN_KEYS} />
           {/* Shut, the menu gives the keyboard back to the grid (Kobalte's would go to the page), unless what it ran (a prompt, a comment) took it to type in. */}
           <ContextMenuContent onOpenAutoFocus={focusSearch} onCloseAutoFocus={(event) => {
