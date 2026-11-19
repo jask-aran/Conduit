@@ -38,6 +38,8 @@ export type SheetCellsOp = { client?: number; step?: number } & (
   | { op: "move-rows" | "move-cols"; at: number; count?: number; to: number; tab?: string }
   /** A block's cells deleted with those below (`up`) or right (`left`) moving in, or room made by moving them down or right, formulas following. */
   | { op: "shift-cells"; range: string; way: "up" | "left" | "down" | "right"; tab?: string }
+  /** The range's rows (under its header) repeating one above them taken out, those below moving up; answered `{ removed, left }`. */
+  | { op: "dedupe"; range: string; header?: boolean; tab?: string }
   | SheetFormatOp
   | SheetStyleOp
   | SheetSortOp
@@ -140,7 +142,8 @@ export interface SheetGrid {
   copy(range: SheetRange, cut: boolean): string;
   /** The clipboard's text pasted at a cell, into the rows and columns shown from it: copied from this grid, its formulas' relative references move with
    * it, or (`values`) what its cells showed is pasted. */
-  paste(at: { row: number; col: number }, text: string, values?: boolean): void;
+  /** `transposed`: its rows laid down as columns (Paste transposed). */
+  paste(at: { row: number; col: number }, text: string, values?: boolean, transposed?: boolean): void;
   /** Whether something copied from this grid is held, for Paste values. */
   held(): boolean;
   /** The rows and columns shown that what is held was copied from, for Paste formatting. */

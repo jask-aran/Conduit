@@ -470,6 +470,26 @@ export function sheetKind(hub) {
     }));
     refilter(room, sheet, by);
   };
+  /**
+   * The rows of a range (under its header) that say again, case aside, what a row above them says in its columns, taken out: the range's cells below
+   * move up into their place, each with its look, as the rows a sort moves (`reorder`), and its last rows are emptied.
+   */
+  const dedupe = (room, sheet, area, header, by) => {
+    const top = area.top + (header ? 1 : 0), seen = new Set(), kept = [], gone = [];
+    for (let r = top; r <= area.bottom; r += 1) {
+      const said = Array.from({ length: area.right - area.left + 1 }, (_, c) => valueText(sheet.value(r, area.left + c)).toLowerCase()).join("\u0000");
+      if (seen.has(said)) gone.push(r); else { seen.add(said); kept.push(r); }
+    }
+    if (gone.length) hub.as(room, by, (sign) => room.doc.transact(() => {
+      reorder(room, sheet, top, [...kept, ...gone], area.left, area.right);
+      const tail = new Set(gone.map((_, n) => sheet.rowAt(top + kept.length + n))), cols = new Set(Array.from({ length: area.right - area.left + 1 }, (_, c) => sheet.colAt(area.left + c)));
+      for (const row of tail) for (const col of cols) room.cells.delete(key(row, col));
+      for (const name of [...room.look.keys()]) { const [, row, col, more] = name.split(":"); if (more === undefined && tail.has(row) && cols.has(col)) room.look.delete(name); }
+      sign();
+    }));
+    refilter(room, sheet, by);
+    return { removed: gone.length, left: kept.length };
+  };
   const tabsWithSize = (room) => room.book.tabs().map((tab) => ({ ...tab, ...room.book.tab(tab.id).size() }));
   const TAB_OPS = { "add-tab": "add", "rename-tab": "rename", "delete-tab": "delete", "move-tab": "move", "hide-tab": "hide" };
 
@@ -668,7 +688,15 @@ export function sheetKind(hub) {
           shiftCells(room, sheet, { ...area, bottom: Math.min(area.bottom, rows - 1), right: Math.min(area.right, cols - 1) }, way, name);
           return { cells: [label(room, sheet, area)], ...sheet.size(), ...(many(room) ? { tab: sheet.name } : {}) };
         }
-        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, sort, chart, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, shift-cells, add-tab, rename-tab, delete-tab, move-tab or hide-tab");
+        if (op === "dedupe") {
+          const ref = parseRef(range ?? at), sheet = pick(room, tab, ref.tab ?? undefined), area = parseRange(ref.range), { rows, cols } = sheet.size();
+          if (!area) throw fault(400, `range is an A1 range such as A1:D20 (or Data!A1:D20), not ${range ?? at}`);
+          if (area.top >= rows || area.left >= cols) throw fault(400, `${rangeA1(area)} is past the tab's edge: it is ${rows} rows x ${cols} columns`);
+          const across = mergeAreas(room, sheet).find((one) => one.bottom >= area.top && one.top <= area.bottom && one.right >= area.left && one.left <= area.right);
+          if (across) throw fault(400, `${rangeA1(across)} is merged: unmerge it to remove duplicates from ${rangeA1(area)}`);
+          return { ...dedupe(room, sheet, { ...area, bottom: Math.min(area.bottom, rows - 1), right: Math.min(area.right, cols - 1) }, header === true, name), ...(many(room) ? { tab: sheet.name } : {}) };
+        }
+        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, sort, chart, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, shift-cells, dedupe, add-tab, rename-tab, delete-tab, move-tab or hide-tab");
         const sheet = pick(room, tab), { rows, cols } = sheet.size(), isRows = op.endsWith("rows"), size = isRows ? rows : cols, what = isRows ? "row" : "column", removing = op.startsWith("delete");
         if (!Number.isInteger(count) || count < 1 || count > CALL_LIMIT) throw fault(400, "count is how many, 1 or more");
         index(at, removing ? size - 1 : size, `${what} to ${removing ? "delete" : "insert before"} (${size} ${what}s now)`);

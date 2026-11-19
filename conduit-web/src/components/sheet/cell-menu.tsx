@@ -1,7 +1,10 @@
 import { createSignal, For, Show, type JSX } from "solid-js";
-import { Item, SearchSection, Section } from "@/components/ui";
+import { Actions, Item, SearchSection, Section } from "@/components/ui";
+import { CardForm } from "@/components/ui/card";
+import { Button, Field, Input, Switch } from "@/components/ui/controls";
+import { Dialog } from "@/components/ui/dialog";
 import { PHONE_LAYOUT_QUERY } from "@/components/ui/layout";
-import { MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, Popover, PopoverContent } from "@/components/ui/menus";
+import { MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, Popover, PopoverContent, Select } from "@/components/ui/menus";
 import type { SheetBox } from "./host";
 
 /** One row of the cell menu: a doing, or (`sub`) a submenu of them. */
@@ -72,4 +75,29 @@ export function ShiftPrompt(props: { asked: { verb: "delete" | "insert"; box: Sh
       </div>
     </PopoverContent>
   </Popover>;
+}
+
+/** Remove duplicates asked about its range: whether its first row is a header, which stays. */
+export function DedupePrompt(props: { asked: { range: string; header: boolean } | null; onRemove(header: boolean): void; onClose(): void }) {
+  const [header, setHeader] = createSignal(false);
+  return <Dialog open={props.asked !== null} title="Remove duplicates" description={props.asked ? `Rows of ${props.asked.range} that repeat one above them` : undefined} onOpenChange={(open) => { if (!open) props.onClose(); }}>
+    <Show when={props.asked}>{(asked) => { setHeader(asked().header); return <CardForm onSubmit={(event) => { event.preventDefault(); props.onRemove(header()); props.onClose(); }}>
+      <Switch label="Has a header row" checked={header()} onChange={setHeader} />
+      <Actions><Button type="button" variant="ghost" outline onClick={() => props.onClose()}>Cancel</Button><Button type="submit">Remove</Button></Actions>
+    </CardForm>; }}</Show>
+  </Dialog>;
+}
+
+const SEPARATORS = [{ value: ",", label: "Comma" }, { value: ";", label: "Semicolon" }, { value: "\t", label: "Tab" }, { value: " ", label: "Space" }, { value: "", label: "Other" }];
+/** Split text to columns asked for its separator: one of the usual, or one typed. */
+export function SplitPrompt(props: { open: boolean; onSplit(separator: string): void; onClose(): void }) {
+  const [chosen, setChosen] = createSignal(","), [typed, setTyped] = createSignal("");
+  const separator = () => chosen() || typed();
+  return <Dialog open={props.open} title="Split text to columns" onOpenChange={(open) => { if (!open) props.onClose(); }}>
+    <CardForm onSubmit={(event) => { event.preventDefault(); if (separator()) props.onSplit(separator()); props.onClose(); }}>
+      <Field label="Separator" plain><Select aria-label="Separator" value={chosen()} onChange={(event) => setChosen(event.currentTarget.value)}><For each={SEPARATORS}>{(one) => <option value={one.value}>{one.label}</option>}</For></Select></Field>
+      <Show when={!chosen()}><Input aria-label="Separator" value={typed()} onInput={(event) => setTyped(event.currentTarget.value)} ref={(field) => queueMicrotask(() => field.focus())} /></Show>
+      <Actions><Button type="button" variant="ghost" outline onClick={() => props.onClose()}>Cancel</Button><Button type="submit" disabled={!separator()}>Split</Button></Actions>
+    </CardForm>
+  </Dialog>;
 }

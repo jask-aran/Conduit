@@ -599,13 +599,15 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   };
   const clear = (area: SheetRange, label?: string) => { const { rows, cols } = cellsIn(area); write(rows.flatMap((row) => cols.flatMap((col) => model.input(row, col) ? [{ row, col, input: "" }] : [])), label); };
   /** Lines pasted at a cell, into the rows and columns shown from it: a hidden one keeps what it holds. Past the sheet's edge, the hub's fill makes room. */
-  const paste = (at: { row: number; col: number }, given: readonly (readonly string[])[], values = false) => {
+  const paste = (at: { row: number; col: number }, given: readonly (readonly string[])[], values = false, transposed = false) => {
     // Copied here, the copy's own lines are pasted, at its own size.
-    const from = copied && flat(given) === copied.text ? copied : null, lines = from ? (values ? from.values : from.typed) : given.at(-1)?.length === 0 ? given.slice(0, -1) : given;
+    const from = copied && flat(given) === copied.text ? copied : null, straight = from ? (values ? from.values : from.typed) : given.at(-1)?.length === 0 ? given.slice(0, -1) : given;
+    // Transposed, each cell lands at its column's row and its row's column; a formula moves by its own cell's move.
+    const lines = transposed ? Array.from({ length: Math.max(0, ...straight.map((line) => line.length)) }, (_, x) => straight.map((line) => line[x] ?? "")) : straight;
     const rows = rowsFrom(at.row, lines.length), cols = colsFrom(at.col, Math.max(0, ...lines.map((line) => line.length)));
     if (!rows.length || !cols.length) return;
-    const typed = lines.map((line, y) => line.map((input, x) => from && !values && input.startsWith("=") ? shiftRefs(input, rows[y]! - from.rows[y]!, cols[x]! - from.cols[x]!) : input));
-    const bottom = rows.at(-1)!, right = cols.at(-1)!, held = model.size(), label = values ? "Paste values" : "Paste";
+    const typed = lines.map((line, y) => line.map((input, x) => from && !values && input.startsWith("=") ? shiftRefs(input, rows[y]! - from.rows[transposed ? x : y]!, cols[x]! - from.cols[transposed ? y : x]!) : input));
+    const bottom = rows.at(-1)!, right = cols.at(-1)!, held = model.size(), label = transposed ? "Paste transposed" : values ? "Paste values" : "Paste";
     if (bottom < held.rows && right < held.cols) return write(typed.flatMap((line, y) => line.map((input, x) => ({ row: rows[y]!, col: cols[x]!, input }))), label);
     const block = Array.from({ length: bottom - at.row + 1 }, (_, r) => Array.from({ length: right - at.col + 1 }, (_, c) => model.input(at.row + r, at.col + c)));
     typed.forEach((line, y) => line.forEach((input, x) => { block[rows[y]! - at.row]![cols[x]! - at.col] = input; }));
@@ -703,7 +705,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       return col < 0 || row < 0 ? null : { row: p.map.sheet(row), col };
     },
     copy: take,
-    paste: (at, text, values) => paste(at, fromCsv(text, "\t"), values),
+    paste: (at, text, values, transposed) => paste(at, fromCsv(text, "\t"), values, transposed),
     held: () => copied !== null,
     source: () => copied && { rows: copied.rows, cols: copied.cols },
     whole: (kind) => {

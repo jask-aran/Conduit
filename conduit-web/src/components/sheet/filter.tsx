@@ -158,6 +158,10 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
   };
   return {
     keys, values, kept,
+    /** What a sort or filter would act on now (the selection, or the block round a lone cell), and whether its first row is a header. */
+    region: target,
+    /** The block of filled cells joined to a cell. */
+    around: (row: number, col: number) => { const sheet = model(); return sheet ? block(sheet, row, col) : null; },
     filter: () => { changed(); return read("filter"); },
     table: () => { changed(); return read("table"); },
     /** Sorts the filter's rows under its header by a column. */
