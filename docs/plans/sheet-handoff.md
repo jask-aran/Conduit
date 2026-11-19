@@ -91,6 +91,18 @@ in a pane no longer closes it (the filter's values could not be picked).
 Notes from xlsx are waiting on the owner: sheet comments are markup items sent to a listener, so 16 imported notes would hand 16 items to
 agents.
 
+Then the cell menu round (checked in headless Chrome on :4310 before the fixes; the fixes themselves unseen there). What a later builder must know:
+- The menu is `cell-menu.tsx` `SheetMenu`: groups of entries built in `sheet.tsx` `menuGroups`, each label counted from the range it was opened on
+  (plain cell, block, whole rows by their numbers, whole columns by their letters). The search filters those entries and their submenus' rows;
+  the `after` sections (merges, Formatting, Conditional formatting, Number format, View settings) show only while nothing is typed.
+- Moves (`move-rows`, `move-cols`) move the lines' ids in the Y.Array (`sheet-engine.js` `structure`), so whatever is held by ids goes with them:
+  cells, styles, sizes, hidden, a column's type, comments, `excel:` entries (their formulas rewritten by `keepFrozen`). Filters, tables and
+  conditional formats keep their places (`keepPlaces`), as their two corners would come apart. A page or the hub seeing ids put back where others
+  were taken out (a move, or its undo) builds its engine again from the doc (`flush`). A comment over several cells whose corner moves alone stretches.
+- Sort sheet keeps row 1 when rows are frozen or row 1 is text alone over a column of numbers or dates.
+- Ctrl+Alt+M asks the one comments go to (the paper's comment key does the same); Comment has no chord. Comment and Ask the agent exist while
+  Markup's tool is mounted, which is whenever the pane is not `quiet`; Ask needs a listener too.
+
 ## Open, in rough order
 
 1. **Notes and comments from xlsx:** 16 in the budget workbook, counted but not imported. They would become comments.
@@ -103,6 +115,12 @@ agents.
    - Paste values of text from outside keeps `=1+1` a live formula; whether it should land as text is the owner's call.
    - "View settings…" in the context menu breaks DESIGN's rule that menu rows don't open settings. The owner hasn't decided.
    - Ctrl+- on a block of cells does nothing; Excel asks whether to shift cells up or left, or delete whole rows or columns.
+   - The cell menu's search field breaks DESIGN's "a popover rather than a menu when rows hold inputs"; the library's `SearchList` holds no submenus,
+     keys or groups. The owner asked for the field.
+   - FILTER reserves the whole source range's size to spill into (HyperFormula sizes an array before computing it), so its "if empty" value shows
+     #SPILL! where cells under it are filled.
+   - Shift+click on a row number or column letter does not extend whole-row or whole-column picks; sweeping along them does.
+   - Undoing an insert or delete of rows can leave other formulas re-cased (`=sum(a1)` back as `=SUM(A1)`).
 3. **Left by the reviews:**
    - xlsx export: where a styled row past the tab's cells crosses a styled column, only the row's style is written (`xlsx-styles.js`).
    - xlsx: a rule's number format or border (its dxf) is counted as dropped, not kept.
