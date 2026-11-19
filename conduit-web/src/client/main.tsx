@@ -2647,11 +2647,16 @@ function App() {
     if (focus && pane !== undefined) focusAnyPane(pane);
     return pane;
   };
-  /** The dock's folder viewer or terminal taken to a pane of its own: the summon goes, the pane keeps the workspace. */
-  const moveToRow = async (view: SplitView) => {
-    if (layout().summon) dismissSummon();
-    await openBeside(view);
+  /** What a summon shows, opened as a pane: the summon goes once it has, so undoing the open brings the summon back. */
+  const fromSummon = async (open: () => Promise<unknown>) => {
+    const summoned = Boolean(layout().summon);
+    // The dock's room is the row's while it opens, as when the summon went first.
+    if (summoned && dockedSlot() === null) setPanelOpenForChat(false);
+    await open();
+    if (summoned && layout().summon) dismissSummon();
   };
+  /** The dock's folder viewer or terminal taken to a pane of its own: the summon goes, the pane keeps the workspace. */
+  const moveToRow = (view: SplitView) => fromSummon(() => openBeside(view));
   const closeSlot = async (slot: number | null, focus = true) => {
     if (slot === null) return;
     const previous = slotView(slot);
@@ -2854,12 +2859,11 @@ function App() {
     const placed = { ...target, zone: target.zone };
     if (fromPane !== null) return void await movePaneDocument(fromPane, placed);
     if (group) return void await moveTabGroup(group, placed, view as SplitView);
-    return dropDocument(placed, view);
+    return /^(folder:|tool:files$)/.test(view) && layout().summon === "files" ? fromSummon(() => dropDocument(placed, view)) : dropDocument(placed, view);
   };
   const dropDocument = async (target: { pane: PaneKey; zone: "left" | "middle" | "right" }, view: string) => {
     if (view === "tool:terminal") { const id = await pickShell(); if (!id) return; view = `term:${id}`; }
     if (view === "tool:files") { const project = dockProject(); if (!project) return; view = `folder:${project.id}`; }
-    if (view.startsWith("folder:") && layout().summon === "files") dismissSummon();
     const next = view as SplitView;
     const docked = dockedSlot();
     if (docked !== null && slotView(docked) === next) {
