@@ -32,8 +32,8 @@ const SheetCharts = lazy(() => import("./charts"));
 
 // Cells written into the text a comment quotes, and how much of each: enough to read.
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
-// The grid keeps a spreadsheet's chords the application binds elsewhere: Ctrl+- deletes rows, Ctrl+0 hides columns, Ctrl+Shift+1..5 are number formats.
-const OWN_KEYS = ["primary+Minus", "primary+Digit0", ...[0, 1, 2, 3, 4, 5, 6].map((n) => `primary+shift+Digit${n}`), "primary+Backslash", "alt+primary+KeyV"].join(" ");
+// The grid keeps a spreadsheet's chords the application binds elsewhere: Ctrl+B is Bold (the sidebar elsewhere), Ctrl+- deletes rows, Ctrl+0 hides columns, Ctrl+Shift+1..5 are number formats.
+const OWN_KEYS = ["primary+KeyB", "primary+Minus", "primary+Digit0", ...[0, 1, 2, 3, 4, 5, 6].map((n) => `primary+shift+Digit${n}`), "primary+Backslash", "alt+primary+KeyV"].join(" ");
 // A formula moved as a fill moves it; text stays as typed.
 const shifted = (input: string, rows: number, cols: number) => input.startsWith("=") ? shiftRefs(input, rows, cols) : input;
 const between = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, n) => from + n);
