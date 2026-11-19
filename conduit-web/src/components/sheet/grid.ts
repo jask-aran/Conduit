@@ -93,7 +93,8 @@ function createRowMap() {
 type RowMap = ReturnType<typeof createRowMap>;
 /** One of the grid's two views: the head (the column letters and the rows frozen above the rest, there only while some are) and the body. */
 type Part = { editor: DataEditorRef | null; view: Rectangle; map: RowMap; current: GridSelection; host?: HTMLDivElement; select?(selection: GridSelection): void };
-type Mark = { color: string; range: SheetRange; style: "solid-outline" | "no-outline" | "dashed" | "solid" };
+// Coloured from the look as drawn, so a new theme recolours it.
+type Mark = { color(look: SheetLook): string; range: SheetRange; style: "solid-outline" | "no-outline" | "dashed" | "solid" };
 
 /** Mounts the grid in `element` and gives the editor its controls; the grid's whole state is here, kept as React's. */
 export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid {
@@ -113,9 +114,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   // Set as the component mounts: the editor drives the island through these.
   const drive: { width?(col: number, width: number): void; height?(row: number, height: number): void; marks?(): void; look?(look: SheetLook): void; structure?(): void; owner?(part: Part): void } = {};
   let look = options.look, comments: Mark[] = [], references: Mark[] = [], owner = body;
-  // Find's matches (find.tsx) in amber's wash, as a highlighter marks them; coloured as drawn, so they follow the theme.
+  // Find's matches (find.tsx) in amber's wash, as a highlighter marks them.
   let found: readonly { range: SheetRange; current: boolean }[] = [];
-  const findMarks = (): Mark[] => found.map((one) => ({ color: look.palette.amber.fill, range: one.range, style: one.current ? "solid-outline" : "no-outline" }));
+  const findMarks = (): Mark[] => found.map((one) => ({ color: (now) => now.palette.amber.fill, range: one.range, style: one.current ? "solid-outline" : "no-outline" }));
 
   // The grid runs on past what the sheet holds, as a spreadsheet's does: a cell written out there makes the sheet reach it (the hub's `set`).
   // The rows frozen are the head's; the body hides them, as it does the rows hidden.
@@ -169,7 +170,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     return [...band(0, row, col, 1), ...band(col + 1, row, size.cols - col - 1, 1), ...band(col, 0, 1, row), ...band(col, row + 1, 1, rows - row - 1)];
   };
   const marksOf = (p: Part): Highlight[] | undefined => {
-    const list = [...focusOf(p), ...[...references, ...findMarks(), ...comments].flatMap((one) => { const drawn = clip(p, one.range); return drawn ? [{ color: one.color, range: rect({ ...drawn, right: Math.min(drawn.right, size.cols - 1) }), style: one.style }] : []; })];
+    const list = [...focusOf(p), ...[...references, ...findMarks(), ...comments].flatMap((one) => { const drawn = clip(p, one.range); return drawn ? [{ color: one.color(look), range: rect({ ...drawn, right: Math.min(drawn.right, size.cols - 1) }), style: one.style }] : []; })];
     return list.length ? list : undefined;
   };
   /**
@@ -434,9 +435,10 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     rowHeights.set(head, rowHeight.head).set(body, rowHeight.body);
     // The columns frozen stand at the left as the rest scroll; never all of those in view, or nothing could scroll.
     const freezeColumns = useMemo(() => { frozenCols = Math.min(options.columns.freeze().cols, cols - 1); return frozenCols; }, [shape, cols]);
-    // The focus cell follows the active cell; while it is off the key stays the same, so a move draws no marks again.
+    // The focus cell follows the active cell; while it is off the key stays the same, so a move draws no marks again. A new theme draws every
+    // mark again in its colours.
     const focused = theme.focus && owner.current.current ? `${owner === head ? "head" : "body"}:${owner.current.current.cell.join()}` : "";
-    const marks = useMemo(() => ({ head: marksOf(head), body: marksOf(body) }), [marked, shape, focused, theme.focus]);
+    const marks = useMemo(() => ({ head: marksOf(head), body: marksOf(body) }), [marked, shape, focused, theme]);
     // A whole column's letter, picked, is washed as its cells are; the grid would fill it in the accent its fill handle and ring keep.
     // A line at a letter's side says the columns beside it are hidden, as one under a row number does.
     const drawHeader: DataEditorProps["drawHeader"] = (args, draw) => {
@@ -603,9 +605,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       else for (const p of parts) choose(p, NO_SELECTION);
       events.selected(to);
     },
-    highlight: (list) => { comments = list.map((one) => ({ color: one.current ? look.markCurrent : look.mark, range: one.range, style: one.current ? "solid-outline" : "no-outline" })); drive.marks?.(); },
+    highlight: (list) => { comments = list.map((one) => ({ color: (now) => one.current ? now.markCurrent : now.mark, range: one.range, style: one.current ? "solid-outline" : "no-outline" })); drive.marks?.(); },
     // A whole column or row runs to the grid's end.
-    references: (list: readonly SheetReference[]) => { references = list.map((one) => ({ color: look.inks[one.ink] ?? look.mark, range: one.range, style: one.pointing ? "dashed" : "solid" })); drive.marks?.(); },
+    references: (list: readonly SheetReference[]) => { references = list.map((one) => ({ color: (now) => now.inks[one.ink] ?? now.mark, range: one.range, style: one.pointing ? "dashed" : "solid" })); drive.marks?.(); },
     found: (list) => { found = list; drive.marks?.(); },
     // The region's edge cells may be cut off: those are scrolled to, the rest left where they are.
     show: (at, col) => {
