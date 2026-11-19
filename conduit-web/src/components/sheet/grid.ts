@@ -312,6 +312,13 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         api.select({ top: bottom, bottom, left: right, right });
         return;
       }
+      // Home goes to the row's first column shown, Ctrl+Home to the part's first cell shown: the grid's own would land on a hidden column A.
+      if (event.key === "Home" && !event.shiftKey && !event.altKey && hiddenCols.has(0)) {
+        event.cancel();
+        const row = p.map.sheet(event.ctrlKey || event.metaKey ? 0 : cell[1]), col = shownAt(0);
+        api.select({ top: row, bottom: row, left: col, right: col });
+        return;
+      }
       // An arrow from a merge steps past its edge, from its top-left.
       const home = step && !(event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) ? mergeAt(p.map.sheet(cell[1]), cell[0]) : undefined, inPart = home && clip(p, home);
       if (step && inPart) {
