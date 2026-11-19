@@ -2,7 +2,7 @@ import path from "node:path";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 import { HyperFormula } from "hyperformula";
 import * as XLSX from "xlsx";
-import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colIndex, colName, parseA1, tabName, toCsv, valueText } from "../sheet-format.js";
+import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colIndex, colName, parseA1, parseRange, tabName, toCsv, valueText } from "../sheet-format.js";
 import { CONFIG } from "../sheet-engine.js";
 import { NAMES } from "../sheet-functions.js";
 import { shiftRefs } from "../sheet-rules.js";
@@ -113,11 +113,10 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     let rows = 0, cols = 0;
     let notes = 0;
     cellsOf(data, (cell, r, c) => { if (cell.f || (cell.t !== "z" && cell.v !== "" && cell.v !== undefined)) { rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1); } if (cell.c?.length) notes++; });
-    // Its charts, each standing on a cell the tab is taken out to.
-    const charts = readCharts(xmlOf[called] ?? "", called, text, linked, drop);
-    for (const chart of charts) { const at = parseA1(chart.at); rows = Math.max(rows, at.row + 1); cols = Math.max(cols, at.col + 1); }
-    // A merge holding a value (a title over empty columns) takes the tab out to its far corner.
-    for (const { s, e } of sheet["!merges"] ?? []) if (s.r < rows && s.c < cols && data[s.r]?.[s.c]?.v !== undefined) { rows = Math.max(rows, e.r + 1); cols = Math.max(cols, e.c + 1); }
+    // Its charts, each standing on a cell the tab is taken out to, and a merge holding a value (a title over empty columns) to its far corner, while the tab fits a sheet.
+    const grow = (r, c) => { const taller = Math.max(rows, r + 1), wider = Math.max(cols, c + 1); if (wider <= COL_LIMIT && taller * wider <= SHEET_LIMIT) { rows = taller; cols = wider; return true; } return false; };
+    const charts = readCharts(xmlOf[called] ?? "", called, text, linked, drop).filter((chart) => { const at = parseA1(chart.at), area = parseRange(chart.range); return grow(at.row, at.col) && grow(area.bottom, area.right) || (drop("charts past the sheet's limits"), false); });
+    for (const { s, e } of sheet["!merges"] ?? []) if (s.r < rows && s.c < cols && data[s.r]?.[s.c]?.v !== undefined) grow(e.r, e.c);
     read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, charts, rows: Math.max(1, rows), cols: Math.max(1, cols) });
     drop("notes", notes);
   });
@@ -302,6 +301,7 @@ const ERROR_CODE = Object.fromEntries(Object.entries(ERROR_TEXT).map(([code, tex
 export function exportXlsx(tabs) {
   const book = XLSX.utils.book_new(), known = new Set(tabs.map((tab) => tab.name.toLowerCase()));
   let tables = 0;
+  const tableNames = new Set();
   for (const tab of tabs) {
     const sheet = {}, cols = Math.max(1, ...tab.typed.map((row) => row.length));
     tab.typed.forEach((row, r) => row.forEach((typed, c) => {
@@ -325,8 +325,9 @@ export function exportXlsx(tabs) {
     const filteredOut = new Set(tab.look.filter?.hide ?? []);
     sheet["!rows"] = tab.typed.map((_, r) => { const height = tab.look[`height:${r + 1}`]; return { ...(typeof height === "number" ? { hpt: height * PT_PER_PX } : {}), ...(tab.look[`hidden:${r + 1}`] || filteredOut.has(r + 1) ? { hidden: true } : {}) }; });
     // A table is its own part (xlsx-parts.js); one Excel would repair is written as its filter alone.
-    tab.tablePart = tab.look.table ? tablePart(tab.look.table, tab.values, ++tables) : null;
-    const filtered = tab.look.filter?.range ?? (tab.tablePart ? undefined : tab.look.table?.range);
+    // The table's part holds its own filter: a sheet's filter over it is one Excel repairs.
+    tab.tablePart = tab.look.table ? tablePart(tab.look.table, tab.values, ++tables, tableNames) : null;
+    const filtered = tab.tablePart ? undefined : tab.look.filter?.range ?? tab.look.table?.range;
     if (typeof filtered === "string") sheet["!autofilter"] = { ref: filtered };
     if (Array.isArray(tab.look.merges)) sheet["!merges"] = tab.look.merges.map((range) => XLSX.utils.decode_range(String(range)));
     XLSX.utils.book_append_sheet(book, sheet, tab.name);

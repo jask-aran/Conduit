@@ -1,6 +1,6 @@
 import path from "node:path";
 import * as XLSX from "xlsx";
-import { a1, colIndex, parseRange, rangeA1, tabRef } from "../sheet-format.js";
+import { a1, colIndex, parseRange, rangeA1, rowId, tabRef } from "../sheet-format.js";
 import { CHART_KINDS, chartSize } from "../sheet-charts.js";
 
 /*
@@ -14,12 +14,14 @@ const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships
 const EMU_PER_PX = 9525;
 
 /** A tab's table as its own part, its columns named by its header row's text; none where a header is empty or repeated, as Excel would repair it. */
-export function tablePart(table, values, id) {
+export function tablePart(table, values, id, taken) {
   const area = parseRange(String(table?.range ?? ""));
   if (!area || area.bottom <= area.top) return null;
-  const names = Array.from({ length: area.right - area.left + 1 }, (_, c) => { const value = values[area.top]?.[area.left + c]; return value === null || value === undefined || typeof value === "object" ? "" : String(value); });
+  const names = Array.from({ length: area.right - area.left + 1 }, (_, c) => { const value = values[area.top]?.[area.left + c]; return typeof value === "string" || Number.isInteger(value) ? String(value) : ""; });
   if (names.some((name) => !name) || new Set(names.map((name) => name.toLowerCase())).size < names.length) return null;
-  const called = /^[A-Za-z_\\][\w.]*$/.test(String(table.name ?? "")) && !/^[A-Z]{1,3}\d+$/i.test(table.name) ? table.name : `Table${id}`, ref = rangeA1(area);
+  // A table's name is the workbook's: one another tab's table has, or one Excel would not take, is numbered instead.
+  const said = String(table.name ?? ""), called = /^[A-Za-z_\\][\w.]*$/.test(said) && !/^[A-Z]{1,3}\d+$/i.test(said) && !taken.has(said.toLowerCase()) ? said : `Table${id}`, ref = rangeA1(area);
+  taken.add(called.toLowerCase());
   return { name: `xl/tables/table${id}.xml`, type: `${TYPE}spreadsheetml.table+xml`, rel: `${REL}/table`, element: "tableParts", block: (rid) => `<tableParts count="1"><tablePart r:id="${rid}"/></tableParts>`,
     xml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="${id}" name="${escaped(called)}" displayName="${escaped(called)}" ref="${ref}"><autoFilter ref="${ref}"/><tableColumns count="${names.length}">${names.map((name, n) => `<tableColumn id="${n + 1}" name="${escaped(name)}"/>`).join("")}</tableColumns><tableStyleInfo name="${escaped(table.style ?? "TableStyleMedium2")}" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/></table>` };
 }
@@ -104,7 +106,12 @@ export function readCharts(sheetName, tabName, text, linked, drop) {
       const ext = /<(?:xdr:)?ext\b[^>]*cx="(\d+)"[^>]*cy="(\d+)"/.exec(anchor), to = [at("to", "col"), at("to", "row")];
       const title = [...(/<(?:\w+:)?title>[\s\S]*?<\/(?:\w+:)?title>/.exec(chart)?.[0] ?? "").matchAll(/<(?:\w+:)?t>([^<]*)<\/(?:\w+:)?t>/g)].map(([, t]) => unescaped(t)).join("");
       const size = ext ? { width: Number(ext[1]) / EMU_PER_PX, height: Number(ext[2]) / EMU_PER_PX } : { width: (to[0] - at("from", "col")) * 64, height: (to[1] - at("from", "row")) * 20 };
-      found.push({ id: `x${found.length + 1}`, kind: KIND_OF[plot](chart), range: rangeA1(span), labels: values[0] && values[0].left === values[0].right && values[0].top !== values[0].bottom ? "col" : "row", ...(title ? { title } : {}), at: a1(at("from", "row"), at("from", "col")), ...chartSize(size) });
+      const one = { id: rowId(), kind: KIND_OF[plot](chart), range: rangeA1(span), labels: values[0] && values[0].left === values[0].right && values[0].top !== values[0].bottom ? "col" : "row", ...(title ? { title } : {}), at: a1(at("from", "row"), at("from", "col")), ...chartSize(size) };
+      // A chart the sheet draws otherwise (series left out of the block, stacked, two plots in one) is kept as the sheet would draw its block, and said so.
+      const refsOf = (xml) => [...new Set([...xml.matchAll(/<(?:\w+:)?f>([^<]*)<\/(?:\w+:)?f>/g)].map(([, f]) => unescaped(f).replace(/[$']/g, "")))].sort().join(" ");
+      const plots = Object.keys(KIND_OF).filter((name) => new RegExp(`<(?:\\w+:)?${name}>`).test(chart)).length;
+      if (refsOf(chart) !== refsOf(chartXml(one, tabName)) || plots > 1 || /<(?:\w+:)?grouping val="(?:stacked|percentStacked)"/.test(chart)) drop("charts drawn from the block of cells their series read, not as the file drew them");
+      found.push(one);
     }
   }
   return found;
