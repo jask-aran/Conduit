@@ -17,7 +17,7 @@ import type { SheetCellStyle } from "./styles";
 import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange, SheetReference } from "./host";
 
 /** What the grid reads of the sheet besides its cells: each column's width and type, the rows whose height is not the default (`look`), a value as its cell's number format draws it (formats.ts), a cell's style (styles.ts), and whether an import froze it. */
-export type SheetColumns = { width(col: number): number | undefined; type(col: number): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; dated(row: number, col: number): boolean; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean; freeze(): { rows: number; cols: number }; hidden(): ReadonlySet<number>;
+export type SheetColumns = { width(col: number): number | undefined; type(col: number): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; dated(row: number, col: number): boolean; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean; freeze(): { rows: number; cols: number }; hidden(): ReadonlySet<number>; hiddenCols(): ReadonlySet<number>;
   /** A filter's mark on a header cell (0 none, 1 a filter, 2 one keeping only some values) and a table's banded rows (filter.tsx). */
   mark(row: number, col: number): number; banded(row: number, col: number): boolean;
   /** The tab's merged ranges (merges.ts). */
@@ -120,6 +120,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   // The grid runs on past what the sheet holds, as a spreadsheet's does: a cell written out there makes the sheet reach it (the hub's `set`).
   // The rows frozen are the head's; the body hides them, as it does the rows hidden.
   let frozenRows = 0, frozenCols = 0;
+  // A hidden column keeps its place and is drawn 0 wide, so the grid's columns stay the sheet's; the keys step over it (`nextShown`).
+  let hiddenCols: ReadonlySet<number> = new Set();
   // Each row's merges, by the sheet's rows, made again with the rest of the shape.
   let merges: readonly SheetRange[] = [], mergesOf = new Map<number, SheetRange[]>();
   const mergeAt = (row: number, col: number) => { const list = mergesOf.get(row); if (list) for (const one of list) if (col >= one.left && col <= one.right) return one; return undefined; };
@@ -142,12 +144,16 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     merges = options.columns.merges(); mergesOf = new Map();
     for (const one of merges) for (let row = one.top; row <= one.bottom; row++) (mergesOf.get(row) ?? mergesOf.set(row, []).get(row)!).push(one);
     const held = model.size(), hidden = options.columns.hidden();
+    hiddenCols = options.columns.hiddenCols();
     frozenRows = Math.min(options.columns.freeze().rows, held.rows);
     head.map.set(hidden, frozenRows);
     body.map.set(frozenRows ? new Set([...hidden, ...Array.from({ length: frozenRows }, (_, row) => row)]) : hidden, held.rows);
     return { rows: Math.max(held.rows - body.map.hiddenCount() + ROOM.rows, ROOM.least.rows), head: frozenRows - head.map.hiddenCount(), cols: Math.min(COL_LIMIT, Math.max(held.cols + ROOM.cols, ROOM.least.cols)) };
   };
   let size = reach();
+  /** The next column shown from `col` that way; `col` itself where none past it is. */
+  const nextShown = (col: number, dir: number) => { for (let at = col + dir; at >= 0 && at < size.cols; at += dir) if (!hiddenCols.has(at)) return at; return col; };
+  const shownAt = (col: number) => !hiddenCols.has(col) ? col : nextShown(col, 1) !== col ? nextShown(col, 1) : nextShown(col, -1);
   const partOf = (row: number) => row < frozenRows ? head : body;
   /** The part of a range of the sheet's rows a part holds, as it draws them; null where it holds none of it. */
   const clip = (p: Part, area: SheetRange) => {
@@ -198,7 +204,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     const was = p.current.current?.cell ?? owner.current.current?.cell, cols = edges(next.columns), rows = edges(next.rows), { view } = p;
     if (cols) { const col = was && was[0] >= cols[0] && was[0] <= cols[1] ? was[0] : cols[0]; return { ...next, current: one(col, p === owner && was ? was[1] : p === head ? 0 : view.y) }; }
     const [top, bottom] = rows!, row = was && p === owner && was[1] >= top && was[1] <= bottom ? was[1] : top;
-    return { ...next, current: one(was ? was[0] : frozenCols ? 0 : view.x, row) };
+    return { ...next, current: one(was ? was[0] : shownAt(frozenCols ? 0 : view.x), row) };
   };
   // Moved into the other part, it is drawn at once: a part focused before its selection is drawn selects its first cell.
   const choose = (p: Part, given: GridSelection) => {
@@ -275,23 +281,24 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       // An arrow from whole columns or rows goes on from their active cell, to one cell.
       const step = ({ ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] } as Record<string, [number, number]>)[event.key];
       if (step && !(event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) && (p.current.columns.length || p.current.rows.length)) {
-        const col = Math.min(Math.max(cell[0] + step[0], 0), size.cols - 1), drawn = cell[1] + step[1];
+        const col = step[0] ? nextShown(cell[0], step[0]) : cell[0], drawn = cell[1] + step[1];
         if (drawn >= 0 && drawn < (p === head ? size.head : size.rows)) { event.cancel(); const row = p.map.sheet(drawn); api.select({ top: row, bottom: row, left: col, right: col }); return; }
       }
       // Ctrl and an arrow go as a spreadsheet's: from a value along a run of values to its last, else on to the next value, else to the edge; Shift
-      // moves the selection's far edge so, the active cell kept. Within the part, past its hidden rows.
+      // moves the selection's far edge so, the active cell kept. Within the part, past its hidden rows; across, over hidden columns as if not there.
       if (step && (event.ctrlKey || event.metaKey) && !event.altKey) {
         event.cancel();
         const range = p.current.current?.range, filled = (col: number, drawn: number) => model.input(p.map.sheet(drawn), col) !== "";
-        const vertical = step[1] !== 0, dir = vertical ? step[1] : step[0], end = vertical ? (p === head ? size.head : size.rows) : size.cols;
+        const vertical = step[1] !== 0, dir = vertical ? step[1] : step[0];
         const far = !event.shiftKey || !range ? cell : [range.x === cell[0] ? range.x + range.width - 1 : range.x, range.y === cell[1] ? range.y + range.height - 1 : range.y] as const;
-        const at = (n: number) => vertical ? filled(far[0], n) : filled(n, far[1]);
-        let n = vertical ? far[1] : far[0];
+        const line = vertical || !hiddenCols.size ? null : Array.from({ length: size.cols }, (_, col) => col).filter((col) => !hiddenCols.has(col)), of = (n: number) => line ? line[n]! : n;
+        const end = vertical ? (p === head ? size.head : size.rows) : line ? line.length : size.cols, at = (n: number) => vertical ? filled(far[0], n) : filled(of(n), far[1]);
+        let n = vertical ? far[1] : line ? Math.max(0, line.findIndex((col) => col >= far[0])) : far[0];
         if (n + dir >= 0 && n + dir < end) {
           if (at(n) && at(n + dir)) while (n + dir >= 0 && n + dir < end && at(n + dir)) n += dir;
           else { n += dir; while (!at(n) && n + dir >= 0 && n + dir < end) n += dir; }
         }
-        const to: [number, number] = vertical ? [far[0], n] : [n, far[1]];
+        const to: [number, number] = vertical ? [far[0], n] : [of(n), far[1]];
         if (!event.shiftKey) { const row = p.map.sheet(to[1]); api.select({ top: row, bottom: row, left: to[0], right: to[0] }); return; }
         const drawn = { x: Math.min(cell[0], to[0]), y: Math.min(cell[1], to[1]), width: Math.abs(cell[0] - to[0]) + 1, height: Math.abs(cell[1] - to[1]) + 1 };
         choose(p, { columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: { cell: [cell[0], cell[1]], range: drawn, rangeStack: [] } });
@@ -310,8 +317,19 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       // An arrow from a merge steps past its edge, from its top-left.
       const home = step && !(event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) ? mergeAt(p.map.sheet(cell[1]), cell[0]) : undefined, inPart = home && clip(p, home);
       if (step && inPart) {
-        const col = step[0] < 0 ? inPart.left - 1 : step[0] > 0 ? inPart.right + 1 : inPart.left, drawn = step[1] < 0 ? inPart.top - 1 : step[1] > 0 ? inPart.bottom + 1 : inPart.top;
+        const col = step[0] < 0 ? nextShown(inPart.left, -1) : step[0] > 0 ? nextShown(inPart.right, 1) : inPart.left, drawn = step[1] < 0 ? inPart.top - 1 : step[1] > 0 ? inPart.bottom + 1 : inPart.top;
         if (col >= 0 && col < size.cols && drawn >= 0 && drawn < (p === head ? size.head : size.rows)) { event.cancel(); const row = p.map.sheet(drawn); api.select({ top: row, bottom: row, left: col, right: col }); return; }
+      }
+      // An arrow, Tab or Shift and an arrow onto a hidden column goes on past it, to the next column shown.
+      const across = !hiddenCols.size || event.ctrlKey || event.metaKey || event.altKey ? 0 : event.key === "Tab" ? (event.shiftKey ? -1 : 1) : step && !step[1] ? step[0] : 0;
+      const held = p.current.current?.range, extend = event.shiftKey && event.key !== "Tab" ? held : undefined, from = extend ? (extend.x === cell[0] ? extend.x + extend.width - 1 : extend.x) : cell[0];
+      if (across && hiddenCols.has(from + across)) {
+        event.cancel(); event.preventDefault();
+        const to = nextShown(from, across), row = p.map.sheet(cell[1]);
+        if (!extend) return void api.select({ top: row, bottom: row, left: to, right: to });
+        choose(p, { columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: { cell: [cell[0], cell[1]], range: { ...extend, x: Math.min(cell[0], to), width: Math.abs(cell[0] - to) + 1 }, rangeStack: [] } });
+        asked = null; events.selected(picked()); api.show(row, to);
+        return;
       }
       // Escape brings a selection of more than one cell back to its active cell; one cell, it is left to the pane.
       const area = picked();
@@ -361,7 +379,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       requestAnimationFrame(() => events.drawn());
     }, []);
     const { rows, cols } = size, frozen = frozenRows > 0;
-    const columns = useMemo(() => Array.from({ length: cols }, (_, col) => ({ id: model.colAt(col) ?? String(col), title: colName(col), width: widths[col] ?? options.columns.width(col) ?? theme.width })), [shape, cols, widths, theme]);
+    // A hidden column's edge dragged (the grid gives a press just right of it to it) draws it open as it goes, and the width shows it again (sizes.ts).
+    const columns = useMemo(() => Array.from({ length: cols }, (_, col) => ({ id: model.colAt(col) ?? String(col), title: colName(col), width: widths[col] ?? (hiddenCols.has(col) ? 0 : options.columns.width(col) ?? theme.width) })), [shape, cols, widths, theme]);
     const types = useMemo(() => Array.from({ length: cols }, (_, col) => options.columns.type(col)), [shape, cols]);
     const cellLook = useMemo(() => createCellLook(theme), [theme]);
     const contentOf = (p: Part) => {
@@ -414,7 +433,16 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     const focused = theme.focus && owner.current.current ? `${owner === head ? "head" : "body"}:${owner.current.current.cell.join()}` : "";
     const marks = useMemo(() => ({ head: marksOf(head), body: marksOf(body) }), [marked, shape, focused, theme.focus]);
     // A whole column's letter, picked, is washed as its cells are; the grid would fill it in the accent its fill handle and ring keep.
-    const drawHeader: DataEditorProps["drawHeader"] = (args, draw) => { if (args.isSelected) { const { ctx, rect: box } = args, inset = args.columnIndex ? 1 : 0; for (const fill of [theme.grid.bgHeader, theme.picked]) { ctx.fillStyle = String(fill); ctx.fillRect(box.x + inset, box.y, box.width - inset, box.height); } } draw(); };
+    // A line at a letter's side says the columns beside it are hidden, as one under a row number does.
+    const drawHeader: DataEditorProps["drawHeader"] = (args, draw) => {
+      const { ctx, rect: box, columnIndex: col } = args;
+      if (args.isSelected) { const inset = col ? 1 : 0; for (const fill of [theme.grid.bgHeader, theme.picked]) { ctx.fillStyle = String(fill); ctx.fillRect(box.x + inset, box.y, box.width - inset, box.height); } }
+      draw();
+      if (!hiddenCols.size) return;
+      ctx.fillStyle = args.theme.textMedium;
+      if (hiddenCols.has(col + 1)) ctx.fillRect(box.x + box.width - HIDDEN_LINE, box.y, HIDDEN_LINE, box.height);
+      if (hiddenCols.has(col - 1)) ctx.fillRect(box.x, box.y, HIDDEN_LINE, box.height);
+    };
     // A filter's mark at its header cell's right: a caret, under a bar (a funnel) where the column keeps only some values.
     const drawCell = useMemo<NonNullable<DataEditorProps["drawCell"]>>(() => (args, content) => {
       const { block, line } = args.cell as { block?: [number, number]; line?: boolean };
@@ -535,8 +563,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     // The grid scrolls a selection given it into view itself, as it draws it: a scroll of ours as well would be counted twice.
     select: (given) => {
       // A single cell in a hidden row is the first shown row's after it, as a move down onto it lands there.
+      // In a hidden column, it is the next column shown's.
       const lone = given && given.top === given.bottom && given.left === given.right ? partOf(given.top) : null, shownRow = lone && lone.map.hidden(given!.top) ? lone.map.sheet(lone.map.drawn(given!.top)) : null;
-      const shownTo = given && shownRow !== null ? { ...given, top: shownRow, bottom: shownRow } : given, to = shownTo && grown(shownTo);
+      const col = lone ? shownAt(given!.left) : null, shownTo = given && lone ? { top: shownRow ?? given.top, bottom: shownRow ?? given.top, left: col!, right: col! } : given, to = shownTo && grown(shownTo);
       // Held at once, not at React's next render: `whole` and the grid's own focus read it straight after. A range across the frozen rows' edge
       // is drawn in both parts, the cursor in the part of its first row.
       const into = to ? partOf(to.top) : body;

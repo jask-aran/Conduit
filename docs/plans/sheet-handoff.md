@@ -69,8 +69,9 @@ Ctrl+Shift+_ takes borders off.
 
 Then Paste values in the cell menu, and row 1's top border drawn just inside the header's line.
 
-Still open: hidden columns (rows hide, columns can't; an import counts them dropped) need the grid's columns mapped as its rows are
-(`createRowMap`), a bigger change; arrows at a frozen merge's edge; prefix sums for tall
+Then hidden columns (`handoff-sheet-hidden-cols.md`): drawn 0 wide, not mapped as rows are.
+
+Still open: arrows at a frozen merge's edge; prefix sums for tall
 merges; the low xlsx ones (row/column crossings outside the grid, `<c r=` attribute order); Notes from xlsx are waiting on the owner: sheet comments are markup items sent to a listener, so 16 imported notes would hand
 16 items to agents. Phone width is still unchecked (the headless probe opened with the sidebar drawer over the pane).
 

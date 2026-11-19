@@ -67,7 +67,7 @@ const same = (value, cell) => {
  */
 export function importXlsx(bytes, { tabs: only } = {}) {
   let book;
-  // sheetStubs: without it a formula whose kept value is empty is left out. cellStyles: column widths and hidden rows come only with it. xlfn: the prefixes stay, so `translated` is the one place they go.
+  // sheetStubs: without it a formula whose kept value is empty is left out. cellStyles: column widths and hidden rows and columns come only with it. xlfn: the prefixes stay, so `translated` is the one place they go.
   try { book = XLSX.read(bytes, { type: "array", dense: true, cellFormula: true, cellNF: true, cellText: false, cellHTML: false, cellStyles: true, sheetStubs: true, xlfn: true, bookFiles: true }); }
   catch (error) { throw fault(`That file could not be read as an .xlsx: ${error?.message ?? error}`); }
   const wanted = only?.length ? new Set(only.map((name) => name.toLowerCase())) : null, meta = book.Workbook?.Sheets ?? [];
@@ -88,7 +88,6 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     let rows = 0, cols = 0;
     data.forEach((row, r) => row?.forEach((cell, c) => { if (cell && (cell.f || (cell.t !== "z" && cell.v !== "" && cell.v !== undefined))) { rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1); } }));
     read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, rows: Math.max(1, rows), cols: Math.max(1, cols) });
-    drop("hidden columns", sheet["!cols"]?.filter((col) => col?.hidden).length ?? 0);
     drop("notes", data.reduce((sum, row) => sum + (row?.filter((cell) => cell?.c?.length).length ?? 0), 0));
   });
   if (!read.length) throw fault(wanted ? `None of those tabs is in the workbook: its tabs are ${book.SheetNames.join(", ")}` : "That workbook has no tabs with cells");
@@ -185,7 +184,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
         if (typeof typed === "string" && typed.startsWith("=")) { inputs[a1(r, c)] = typed; return valueText(values[r]?.[c]); }
         return typed === null ? "" : String(typed);
       }));
-      (tab.sheet["!cols"] ?? []).forEach((col, c) => { if (c < tab.cols && (col?.width || col?.wpx)) look[`width:${colName(c)}`] = Math.round(col.width ? col.width * PX_PER_CHAR : col.wpx); });
+      (tab.sheet["!cols"] ?? []).forEach((col, c) => { if (c >= tab.cols) return; if (col?.width || col?.wpx) look[`width:${colName(c)}`] = Math.round(col.width ? col.width * PX_PER_CHAR : col.wpx); if (col?.hidden) look[`hidden:${colName(c)}`] = 1; });
       (tab.sheet["!rows"] ?? []).forEach((row, r) => { if (r < tab.rows && row?.hidden) look[`hidden:${r + 1}`] = 1; });
       // A number format is kept for a column where most of its numbers share it, and for the cells that differ, up to a count.
       tab.data.forEach((row, r) => row?.forEach((cell, c) => { if (cell?.t === "n" && r < tab.rows && c < tab.cols) (formats.get(c) ?? formats.set(c, new Map()).get(c)).set(r, typeof cell.z === "string" ? cell.z : "General"); }));
@@ -239,7 +238,7 @@ const SCOPED = new Set(["FILTER", "SORT"]);
 const stored = (formula) => formula.slice(1).split(/("(?:[^"]|"")*")/).map((part, nth) => nth % 2 ? part : part.replace(/([A-Za-z][A-Za-z0-9.]*)\(/g, (all, name) => PREFIXED.has(name.toUpperCase()) ? `_xlfn.${all}` : SCOPED.has(name.toUpperCase()) ? `_xlfn._xlws.${all}` : all)).join("");
 const ERROR_CODE = Object.fromEntries(Object.entries(ERROR_TEXT).map(([code, text]) => [text, Number(code)]));
 /**
- * A workbook written as an .xlsx: each formula with the value it computes here, number formats, column widths, row heights, hidden rows, frozen panes and hidden tabs. A cell an import
+ * A workbook written as an .xlsx: each formula with the value it computes here, number formats, column widths, row heights, hidden rows and columns, frozen panes and hidden tabs. A cell an import
  * froze gets its formula back where it still holds what the import left in it. Styles are written into the parts SheetJS wrote (xlsx-styles.js).
  * @param {{ name: string, hidden: boolean, typed: string[][], values: unknown[][], look: Record<string, unknown> }[]} tabs  `values`: what each cell computes
  * @param {ImportReport | null} [imported]
@@ -261,7 +260,7 @@ export function exportXlsx(tabs, imported) {
     }));
     sheet["!ref"] = `A1:${a1(Math.max(0, tab.typed.length - 1), cols - 1)}`;
     // A column without its own width takes the tab's default (`width` alone), where it has one.
-    sheet["!cols"] = Array.from({ length: cols }, (_, c) => { const width = tab.look[`width:${colName(c)}`] ?? tab.look.width; return typeof width === "number" ? { width: width / PX_PER_CHAR } : {}; });
+    sheet["!cols"] = Array.from({ length: cols }, (_, c) => { const width = tab.look[`width:${colName(c)}`] ?? tab.look.width; return { ...(typeof width === "number" ? { width: width / PX_PER_CHAR } : {}), ...(tab.look[`hidden:${colName(c)}`] ? { hidden: true } : {}) }; });
     // Each row's height where it has its own, in points (SheetJS writes pixels as points), and the rows hidden.
     // The rows hidden, and those the filter hid when last applied.
     const filteredOut = new Set(tab.look.filter?.hide ?? []);
