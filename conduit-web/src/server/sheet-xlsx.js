@@ -50,6 +50,23 @@ const editParts = (bytes, edit) => {
   }
   return changed ? XLSX.CFB.write(zip, { fileType: "zip", type: "buffer", compression: true }) : bytes;
 };
+const escaped = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const WORKSHEET = "sheetPr dimension sheetViews sheetFormatPr cols sheetData sheetCalcPr sheetProtection protectedRanges scenarios autoFilter sortState dataConsolidate customSheetViews mergeCells phoneticPr conditionalFormatting dataValidations hyperlinks printOptions pageMargins pageSetup headerFooter rowBreaks colBreaks customProperties cellWatches ignoredErrors smartTags drawing legacyDrawing legacyDrawingHF drawingHF picture oleObjects controls webPublishItems tableParts extLst".split(" ");
+/** A sheet part with `block` put where the schema has `element`: before the first element that comes after it there. */
+const placed = (xml, element, block) => {
+  const later = WORKSHEET.slice(WORKSHEET.indexOf(element) + 1).join("|");
+  return xml.replace(new RegExp(`<(?:${later})\\b|</worksheet>`), (at) => `${block}${at}`);
+};
+// A data validation's attributes as the schema has them, and each one's formulas: what is kept of one (`validations` in a tab's look) and written back.
+const VALIDATION = ["type", "errorStyle", "imeMode", "operator", "allowBlank", "showDropDown", "showInputMessage", "showErrorMessage", "errorTitle", "error", "promptTitle", "prompt"];
+const validationsOf = (xml) => [...xml.matchAll(/<dataValidation\b([^>]*?)(?:\/>|>([\s\S]*?)<\/dataValidation>)/g)].map(([, head, body = ""]) => {
+  const formula = (n) => { const found = new RegExp(`<formula${n}>([\\s\\S]*?)</formula${n}>`).exec(body); return found ? { [`formula${n}`]: unescaped(found[1]) } : {}; };
+  return { range: attr(head, "sqref") ?? "", ...Object.fromEntries(VALIDATION.flatMap((name) => attr(head, name) === undefined ? [] : [[name, attr(head, name)]])), ...formula(1), ...formula(2) };
+}).filter((one) => one.range);
+const validationsXml = (list) => {
+  const kept = (Array.isArray(list) ? list : []).filter((one) => typeof one?.range === "string" && /^(\$?[A-Z]{1,3}\$?\d+(:\$?[A-Z]{1,3}\$?\d+)?\s*)+$/.test(one.range));
+  return kept.length ? `<dataValidations count="${kept.length}">${kept.map((one) => `<dataValidation${VALIDATION.filter((name) => one[name] !== undefined).map((name) => ` ${name}="${escaped(one[name])}"`).join("")} sqref="${escaped(one.range)}">${["formula1", "formula2"].filter((name) => one[name] !== undefined).map((name) => `<${name}>${escaped(one[name])}</${name}>`).join("")}</dataValidation>`).join("")}</dataValidations>` : "";
+};
 const sheetOf = (path) => { const n = /^xl\/worksheets\/sheet(\d+)\.xml$/.exec(path)?.[1]; return n ? Number(n) - 1 : -1; };
 /** A formula as this engine reads it: the prefixes a newer function is stored under are taken off. */
 const translated = (formula) => `=${formula.replace(/_xlfn\.|_xlws\.|_xlpm\./g, "")}`;
@@ -116,7 +133,8 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     const ruled = sheetRules(xml, dxfs);
     tab.rules = ruled.rules;
     for (const [type, count] of Object.entries(ruled.unread)) drop(`conditional formats (${type})`, count);
-    drop("validation rules", xml.match(/<dataValidation\b/g)?.length ?? 0);
+    tab.validations = validationsOf(xml);
+    drop("validation rules (in Excel 2010's form, naming another tab)", xml.match(/<x14:dataValidation\b/g)?.length ?? 0);
   }
 
   // What is typed in each cell, and where the formulas are. 
@@ -222,6 +240,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       drop("merged ranges past the tab's last value", (tab.sheet["!merges"]?.length ?? 0) - merges.length);
       if (merges.length) look.merges = merges.map((range) => XLSX.utils.encode_range(range));
       if (tab.rules.length) look.rules = tab.rules;
+      if (tab.validations.length) look.validations = tab.validations;
       // A frozen formula goes with its cell (`excel:<rowId>:<colId>` once in the doc), written for the cell it was in (`anchor`), as a rule's are.
       for (const [at, one] of Object.entries(report.frozen[tab.name] ?? {})) if (!one.why.startsWith("a formula over")) look[`excel:${at}`] = { formula: one.formula, value: one.kept, anchor: at };
       if (tab.pane?.rows) look.freezeRows = tab.pane.rows;
@@ -293,7 +312,8 @@ export function exportXlsx(tabs) {
   const written = XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true }), count = (value) => typeof value === "number" && value > 0 ? value : 0;
   const panes = tabs.map((tab) => [count(tab.look.freezeRows), count(tab.look.freezeCols)]), styled = tabs.some((tab) => Object.keys(tab.look).some((name) => name.startsWith("style:")));
   const ruled = tabs.some((tab) => Array.isArray(tab.look.rules) && tab.look.rules.length), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(orphaned(`=${formula}`, known))) : null;
-  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols)) return written;
+  const validations = tabs.map((tab) => validationsXml(tab.look.validations));
+  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean)) return written;
   let restyled = null;
   return editParts(written, (path, xml, all) => {
     if (styled && !restyled) {
@@ -302,7 +322,8 @@ export function exportXlsx(tabs) {
     }
     if (path === "xl/styles.xml") return rules ? withDxfs(restyled?.styles ?? xml, rules.dxfs) : restyled?.styles ?? xml;
     const n = sheetOf(path), [rows, cols] = panes[n] ?? [0, 0], sheet = withRules(n >= 0 && restyled ? restyled.sheets[n] : xml, rules?.sheets[n]);
-    return rows || cols ? sheet.replace(/<sheetView workbookViewId="0"\/>/, paneXml(rows, cols)) : sheet;
+    const valid = n >= 0 && validations[n] ? placed(sheet, "dataValidations", validations[n]) : sheet;
+    return rows || cols ? valid.replace(/<sheetView workbookViewId="0"\/>/, paneXml(rows, cols)) : valid;
   });
 }
 /** The style each cell of a tab wears, packed (empty for none), from its look by letter, row number and address: its own over its row's over its column's; and each line's own. */
