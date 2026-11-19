@@ -2,10 +2,11 @@ import { Type } from "@earendil-works/pi-ai";
 import { defineTool } from "@earendil-works/pi-durable";
 import { colIndex } from "../sheet-format.js";
 import { SHEET_BORDERS, SHEET_INKS as INKS } from "../sheet-styles.js";
+import { CHART_KINDS } from "../sheet-charts.js";
 import { callingChat } from "./conduit-mcp.js";
 
 const text = (words, isError = false) => ({ output: [{ type: "text", text: words }], ...(isError ? { isError: true } : {}) });
-const ACTIONS = ["answer", "list", "new", "show", "lead", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve", "cells", "fill", "format", "style", "rows", "cols", "tabs", "import", "export"];
+const ACTIONS = ["answer", "list", "new", "show", "lead", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve", "cells", "fill", "format", "style", "chart", "rows", "cols", "tabs", "import", "export"];
 const TAB_OPS = { add: "add-tab", rename: "rename-tab", delete: "delete-tab", move: "move-tab", hide: "hide-tab", show: "hide-tab" };
 
 /** Artifacts for an agent (papers, Markdown files, sheets and sites): the hub's document service (server/documents.js) as one tool, with the verbs `conduit-markup` has. */
@@ -39,7 +40,9 @@ export function PaperTool(runtime) {
       + "tabs lists them with their sizes; tabs with op add (name, at: its place, 1 first; last unsaid), rename (tab, name: the new one; formulas naming it are rewritten), delete (tab; formulas naming it then show #REF!), move (tab, at), hide or show (tab) changes them. "
       + "format (range: A1 such as B2:C5, or whole columns such as B:D; format: an Excel number format such as $#,##0.00, 0.0%, d/m/yyyy or General) lists the range's number formats, setting format first when given; cells and its computed read stay raw values. "
       + "style (range: A1, whole columns B:D or whole rows 3:5; style: any of bold, italic, underline, strike, wrap (true or false), color and fill (red, amber, green, blue, or null), align (left, center, right), valign (top, middle, bottom), borders ({ top, right, bottom, left }: a cell's own edges); "
-      + "borders: all, outer, top, bottom, left, right or none over the range) lists the range's styles, setting what is given first; a field left out stays as it is, false or null sets the default.",
+      + "borders: all, outer, top, bottom, left, right or none over the range) lists the range's styles, setting what is given first; a field left out stays as it is, false or null sets the default. "
+      + "chart (chart: { kind: bar (horizontal bars), column, line, area, pie or scatter; range: the cells it draws from, A1 such as A1:C13 (Data!A1:C13 for a tab); labels: col when the range's first column holds the labels and each other column is a series (its first row naming them), row the other way; title; at: the cell its top-left corner stands on; width, height: pixels at 100% }) "
+      + "makes a chart on the range's tab, drawn from its cells as they change; with chart.id it changes that chart (what is left out stays), with chart.id and delete: true takes it off; with no chart it lists the tab's charts and their ids. The person moves and sizes charts themselves.",
     parameters: Type.Object({
       action: Type.Union(ACTIONS.map((value) => Type.Literal(value))),
       paper: Type.Optional(Type.String({ description: "A paper's id." })),
@@ -82,6 +85,11 @@ export function PaperTool(runtime) {
         borders: Type.Optional(Type.Object({ top: Type.Optional(Type.Boolean()), right: Type.Optional(Type.Boolean()), bottom: Type.Optional(Type.Boolean()), left: Type.Optional(Type.Boolean()) })),
       }, { description: "style: what to set on the range." })),
       borders: Type.Optional(Type.Union(SHEET_BORDERS.map((value) => Type.Literal(value)), { description: "style: a border choice over the range." })),
+      chart: Type.Optional(Type.Object({
+        id: Type.Optional(Type.String({ description: "The chart to change or delete, from chart's list." })), delete: Type.Optional(Type.Boolean()),
+        kind: Type.Optional(Type.Union(CHART_KINDS.map((value) => Type.Literal(value)))), range: Type.Optional(Type.String()), labels: Type.Optional(Type.Union([Type.Literal("col"), Type.Literal("row")])),
+        title: Type.Optional(Type.Union([Type.String(), Type.Null()])), at: Type.Optional(Type.String()), width: Type.Optional(Type.Integer()), height: Type.Optional(Type.Integer()),
+      }, { description: "chart: what to make or change." })),
     }),
     replay: "unsafe",
     execute: async (args, api = {}, context) => {
@@ -132,6 +140,10 @@ export function PaperTool(runtime) {
         if (args.action === "style") {
           const done = await documents.cells(paper, { op: "style", tab: args.tab, range: args.range ?? args.at, style: args.style, borders: args.borders, by, for: args.for }), listed = Object.entries(done.styles);
           return text(`${args.style || args.borders ? `Styled ${done.cells[0]}. ` : ""}${listed.length ? `Styles in ${done.cells[0]} (a column's by its letter, a row's by its number, a cell's own by its address; a cell wears its own, else its row's, else its column's):\n${listed.map(([at, style]) => `${at}  ${JSON.stringify(style)}`).join("\n")}` : `${done.cells[0]} has no styles.`}`);
+        }
+        if (args.action === "chart") {
+          const done = await documents.cells(paper, { op: "chart", tab: args.tab, chart: args.chart, by, for: args.for });
+          return text(`${done.chart ? `${args.chart?.id ? "Changed" : "Made"} the chart ${done.chart}. ` : args.chart?.delete ? `Deleted the chart ${args.chart.id}. ` : ""}${done.charts.length ? `Charts on the ${done.tab ? `tab ${done.tab}` : "sheet"}:\n${done.charts.map((one) => `${one.id}  ${one.kind} of ${one.range} (labels in its first ${one.labels === "col" ? "column" : "row"}) at ${one.at}, ${one.width}x${one.height}${one.title ? `, "${one.title}"` : ""}`).join("\n")}` : `The ${done.tab ? `tab ${done.tab}` : "sheet"} has no charts.`}`);
         }
         if (args.action === "fill" || (args.action === "set" && args.at !== undefined)) {
           const done = await documents.cells(paper, { op: args.action, tab: args.tab, at: args.at, range: args.range, values: args.values, value: args.value ?? args.text, by, for: args.for });

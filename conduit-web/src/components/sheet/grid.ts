@@ -677,6 +677,14 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       }
       return out;
     },
+    // Unclipped, for what stands over the grid at a cell (a chart): Glide gives any cell's box, in view or not.
+    origin: (row, col) => { const p = partOf(row), drawn = clip(p, { top: row, bottom: row, left: col, right: col }), cell = drawn && box(p, col, drawn.top); return cell ? { left: cell.x, top: cell.y, width: cell.width, height: cell.height } : null; },
+    area: () => {
+      const frame = (head.host && frozenRows ? head.host : body.host)?.getBoundingClientRect(), bottom = body.host?.getBoundingClientRect().bottom, numbers = box(body, -1, body.view.y);
+      if (!frame || bottom === undefined || !numbers) return null;
+      const left = numbers.x + numbers.width, top = frame.top + look.header;
+      return { left, top, width: frame.right - left, height: bottom - top };
+    },
     cellAt: (x, y) => {
       const p = partAt(y), col = colAt(p, x), row = rowAt(p, y);
       return col < 0 || row < 0 ? null : { row: p.map.sheet(row), col };

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, createSignal, on, onCleanup, Show, untrack, type JSX } from "solid-js";
+import { createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { Empty, Frost, Icons, Notice } from "@/components/ui";
 import { sheetLineIcons as LineIcons, sheetMergeIcons as MergeIcons, sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
 import { focusSearch, SheetMenu, type SheetMenuEntry } from "./cell-menu";
@@ -25,6 +25,10 @@ import { createSheetTools } from "./tools";
 import { createSheetFind } from "./find";
 import { createSheetHistory } from "./history";
 import { FormatMenu, FormatPrompt, FormattingMenu } from "./format-menu";
+import { sheetChartIcons as ChartIcons } from "@/components/ui/sheet-icons";
+import type { SheetChartKind } from "@/sheet-charts.js";
+
+const SheetCharts = lazy(() => import("./charts"));
 
 // Cells written into the text a comment quotes, and how much of each: enough to read.
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
@@ -36,8 +40,10 @@ const between = (from: number, to: number) => Array.from({ length: to - from + 1
 type Menu = { rows?: SheetRange; cols?: SheetRange };
 
 /** A sheet: the hub's live copy drawn in the grid, a formula bar over it, the comment margin beside it. */
-/** `onComment`: a comment on the selection, as the quote tool starts one (the cell menu); `onAsk`: the one comments go to asked about it (the cell menu, or ASK_KEY as on a paper). */
-export function SheetEditor(props: { host: SheetHost; id: string; name: string; margin?: JSX.Element; marginEmpty?: boolean; marks?(marks: SheetMarks): void; onState?(state: SheetState): void; onDrawn?(): void; onAsk?(): void; onComment?(): void }) {
+/** `onChart`: a chart of a range asked for (of a kind, or of the one that fits it), which answers how to withdraw it, or null where it did not go.
+ *  `onComment`: a comment on the selection, as the quote tool starts one (the cell menu); `onAsk`: the one comments go to asked about it (the cell menu, or ASK_KEY as on a paper). */
+export function SheetEditor(props: { host: SheetHost; id: string; name: string; margin?: JSX.Element; marginEmpty?: boolean; marks?(marks: SheetMarks): void; onState?(state: SheetState): void; onDrawn?(): void; onAsk?(): void; onComment?(): void;
+  onChart?(place: SheetPlace, kind?: SheetChartKind): Promise<(() => void) | null> }) {
   const live = createLiveSheet(props.host, props.id), cells = live.doc.getMap<string>(CELLS), look = live.doc.getMap<number | string>(LOOK);
   const [model, setModel] = createSignal<SheetView>(), [grid, setGrid] = createSignal<SheetGrid>(), [failed, setFailed] = createSignal<string>();
   const [at, setAt] = createSignal<SheetRange | null>(null), [changed, setChanged] = createSignal(0), [address, setAddress] = createSignal<string | null>(null), [scrolled, setScrolled] = createSignal(0);
@@ -137,6 +143,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     drawn: () => props.onDrawn?.(),
     pressed: (row, col) => { const hit = anchors.find((anchor) => { const range = rangeOf(anchor); return range && row >= range.top && row <= range.bottom && col >= range.left && col <= range.right; }); if (hit) moved(hit.key); },
     key: (event, row, col) => {
+      if (event.key === "Escape" && charting()) { event.preventDefault(); charting()!.stop(); return true; }
       if (event.key === " " && event.ctrlKey !== event.shiftKey && !event.altKey && !event.metaKey) { event.preventDefault(); grid()?.whole(event.ctrlKey ? "cols" : "rows"); return true; }
       // As a spreadsheet's: Alt+= opens a SUM of the numbers just above (else just left), Ctrl+; today's date, each to be finished in the cell.
       const sum = event.altKey && !event.ctrlKey && !event.metaKey && event.key === "=", today = event.ctrlKey && !event.altKey && !event.shiftKey && event.key === ";";
@@ -292,9 +299,22 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     const text = lines.join("\n");
     return { text: text.trim() ? text : corners.range, label: corners.range, under: corners, boxes: () => { const now = rangeOf({ under: corners }), box = now && grid()?.bounds(now); return box ? [box] : []; } };
   };
+  // A chart asked of the agent: a notice says it is being made, until a chart arrives from elsewhere or the person stops it (Esc), which withdraws it.
+  const [charting, setCharting] = createSignal<{ label: string; stop(): void } | null>(null);
+  const askChart = (kind?: SheetChartKind, range = at()) => {
+    const place = range && placeOf(range);
+    if (!place || !props.onChart) return;
+    let withdraw: (() => void) | null | undefined, stopped = false;
+    const asked = { label: kind ? `${kind[0]!.toUpperCase()}${kind.slice(1)} chart` : "Chart", stop: () => { stopped = true; if (charting() === asked) setCharting(null); withdraw?.(); grid()?.focus(); } };
+    setCharting(asked);
+    void props.onChart(place, kind).then((then) => { withdraw = then; if (!then && charting() === asked) setCharting(null); else if (stopped) then?.(); });
+  };
+  const charted = (event: { keysChanged: Set<string>; transaction: { local: boolean } }) => { if (charting() && !event.transaction.local && [...event.keysChanged].some((name) => name.startsWith("charts:"))) setCharting(null); };
+  look.observe(charted);
+  onCleanup(() => look.unobserve(charted));
   const find = createSheetFind({ model, grid, at, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols, draw: formats.draw, write: (list) => writes(list.length === 1 ? "Replace" : "Replace all")(list) });
   const brush = createSheetBrush({ look, model, formats, at, act: history.act, failed: props.host.failed });
-  const tools = createSheetTools({ tip: sequences.tip, at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(), spread: (range, way) => spread(range, way), merge: (kind) => merge(kind), brush, act: history.act,
+  const tools = createSheetTools({ tip: sequences.tip, at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(), spread: (range, way) => spread(range, way), merge: (kind) => merge(kind), brush, act: history.act, chart: props.onChart && ((kind) => askChart(kind)),
     fit: (range) => sizes.fitRows(Array.from({ length: range.bottom - range.top + 1 }, (_, n) => range.top + n), readLook(root!)) });
   const marks: SheetMarks = {
     subject: () => ({ ...model()?.size() }),
@@ -432,7 +452,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
           { label: `Insert ${rowsSaid} above`, icon: <Icons.Add />, keys: whole ? ["Ctrl", "Shift", "="] : undefined, run: () => structure("insert-rows", range.top, nRows) },
           { label: `Insert ${rowsSaid} below`, icon: <Icons.Add />, run: () => structure("insert-rows", range.bottom + 1, nRows) },
         ] : [],
-        // Make chart goes here, under the inserts.
+        ...props.onChart && (nRows > 1 || nCols > 1) ? [{ label: "Make chart", icon: <ChartIcons.column />, run: () => askChart(undefined, range) }] : [],
         ...kind !== "rows" ? [
           { label: `Insert ${colsSaid} left`, icon: <Icons.Add />, keys: whole ? ["Ctrl", "Shift", "="] : undefined, run: () => structure("insert-cols", range.left, nCols) },
           { label: `Insert ${colsSaid} right`, icon: <Icons.Add />, run: () => structure("insert-cols", range.right + 1, nCols) },
@@ -537,10 +557,14 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       </Frost>
       {/* The ribbon (Markup's bar with the sheet's tools) stands here, at the row's end, folding to the room the formula field leaves it. */}
       <div ref={setSlot} class="ui-spreadsheet-slot" />
+      <Show when={charting()}>{(asked) => <Notice kind="tool" busy live action={{ label: "Stop (Esc)", onClick: () => asked().stop() }}>{asked().label} — Making the chart…</Notice>}</Show>
       <Show when={frozenHere()}>{(cell) => <Notice kind="tool" title={cell().why ? `${cell().formula}: ${cell().why}` : cell().formula}>Frozen on import: ={cell().formula.replace(/^=/, "")}</Notice>}</Show>
     </div>
     <div ref={body} class="ui-spreadsheet-body">
       <Show when={!failed()} fallback={<Empty role="alert">The sheet could not be drawn: {failed()}</Empty>}>
+        {/* Before the grid, so Tab reaches a chart before the grid keeps it. */}
+        <Show when={model()}>{(sheet) => <SheetCharts look={look} model={sheet()} grid={grid} scrolled={scrolled} zoom={zoom} hidden={sizes.hidden} hiddenCols={sizes.hiddenCols} act={history.act} undo={() => history.undo()} redo={() => history.redo()}
+          text={(row, col) => { const value = sheet().value(row, col); return value === null ? "" : typeof value === "number" ? formats.draw(row, col, value)?.text ?? String(value) : String(value); }} />}</Show>
         <ContextMenu placement="bottom-start">
           <ContextMenuTrigger as="div" ref={setIsland} class="ui-spreadsheet-grid" data-own-keys={OWN_KEYS} />
           {/* Shut, the menu gives the keyboard back to the grid (Kobalte's would go to the page), unless what it ran (a prompt, a comment) took it to type in. */}

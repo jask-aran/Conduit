@@ -8,6 +8,7 @@ import type { JSX } from "solid-js";
 import type { SheetSortOp, SheetTabOp } from "@/sheet-format.js";
 import type { SheetFormatOp } from "@/sheet-formats.js";
 import type { SheetBorders, SheetInk, SheetStyleOp } from "@/sheet-styles.js";
+import type { SheetChartKind, SheetChartSpec } from "@/sheet-charts.js";
 
 /** Cells by position, 0-based and inclusive (sheet-format.js parseRange). */
 export type SheetRange = { top: number; left: number; bottom: number; right: number };
@@ -38,6 +39,7 @@ export type SheetCellsOp = { client?: number; step?: number } & (
   | SheetFormatOp
   | SheetStyleOp
   | SheetSortOp
+  | { op: "chart"; chart?: SheetChartSpec & { id?: string; delete?: boolean }; tab?: string }
   | SheetTabOp);
 
 /** A cell an import could not compute, as GET /v0/document/:id?as=import reports it (server/sheet-xlsx.js): the file's formula, why, and the value it holds instead. By tab name, then A1. */
@@ -47,11 +49,11 @@ export type SheetFrozen = Record<string, Record<string, { formula: string; why: 
  * The edit tools a sheet offers on its ribbon, as its kind declares them (client/document/artifact-kinds.ts). Each draws as one or more tools named
  * `<tool>` (a toggle) or `<tool>-<choice>` (one of a menu): SheetToolId, the stable names a key sequence is bound to. Undo and Redo are the ribbon's own.
  */
-export type SheetToolName = "bold" | "italic" | "underline" | "strike" | "wrap" | "clear" | "color" | "fill" | "borders" | "merge" | "align" | "valign" | "format" | "decimals" | "spread" | "paint";
+export type SheetToolName = "bold" | "italic" | "underline" | "strike" | "wrap" | "clear" | "color" | "fill" | "borders" | "merge" | "chart" | "align" | "valign" | "format" | "decimals" | "spread" | "paint";
 /** In the ribbon's order, left to right. */
-export const SHEET_TOOLS: readonly SheetToolName[] = ["bold", "italic", "underline", "strike", "align", "color", "fill", "borders", "merge", "format", "valign", "wrap", "decimals", "spread", "paint", "clear"];
+export const SHEET_TOOLS: readonly SheetToolName[] = ["bold", "italic", "underline", "strike", "align", "color", "fill", "borders", "merge", "chart", "format", "valign", "wrap", "decimals", "spread", "paint", "clear"];
 /** `clear`: Clear formatting (styles and number formats). `spread-down` and `spread-right`: Fill down and Fill right, named apart from `fill`, the fill colour. */
-export type SheetToolId = "bold" | "italic" | "underline" | "strike" | "wrap" | "clip" | "clear" | "paint" | `spread-${"down" | "right"}` | `color-${SheetInk | "none" | "any"}` | `fill-${SheetInk | "none" | "any"}` | `borders-${SheetBorders}` | `merge-${"center" | "across" | "cells" | "none"}`
+export type SheetToolId = "bold" | "italic" | "underline" | "strike" | "wrap" | "clip" | "clear" | "paint" | `spread-${"down" | "right"}` | `color-${SheetInk | "none" | "any"}` | `fill-${SheetInk | "none" | "any"}` | `borders-${SheetBorders}` | `merge-${"center" | "across" | "cells" | "none"}` | `chart-${SheetChartKind}`
   | `align-${"left" | "center" | "right"}` | `valign-${"top" | "middle" | "bottom"}` | `format-${"general" | "number" | "currency" | "accounting" | "percent" | "scientific" | "date" | "long-date" | "time" | "custom"}` | `decimals-${"more" | "fewer"}`;
 /** One tool as the ribbon draws it (Markup's MarkupHostTool): read where drawn, so getters follow. `menu`: the tools of one stand as one control (showing `glyph` where one says it); `compact` with `swatch`: a set of inks. */
 export type SheetTool = { name: SheetToolId; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; compact?: boolean; swatch?: string; glyph?: () => JSX.Element; tip?: string; pick?(hex: string): void; run(): void };
@@ -147,6 +149,9 @@ export interface SheetGrid {
   height(row: number, height: number): void;
   /** A range's box on screen, clipped to the grid's; null when none of it is in view. */
   bounds(range: SheetRange): SheetBox | null;
+  /** A cell's box on screen, in view or not (null in a hidden row); `area`: where the cells are drawn, under the letters and beside the row numbers. */
+  origin(row: number, col: number): SheetBox | null;
+  area(): SheetBox | null;
   /** The cell under a point of the viewport. */
   cellAt(x: number, y: number): { row: number; col: number } | null;
   theme(look: SheetLook): void;

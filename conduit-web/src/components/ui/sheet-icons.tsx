@@ -1,3 +1,4 @@
+import { ChartAreaIcon, ChartBarIcon, ChartColumnIcon, ChartLineIcon, ChartPieIcon, ChartScatterIcon } from "lucide-solid";
 import { ArrowRightToLineIcon, PaintbrushIcon, ArrowDownAZIcon, ArrowDownZAIcon, FunnelIcon, Table2Icon, TableCellsMergeIcon, TableCellsSplitIcon,ArrowDownFromLineIcon, ArrowDownToLineIcon, ArrowRightFromLineIcon, ArrowUpToLineIcon, BaselineIcon, BoldIcon, DecimalsArrowLeftIcon, DecimalsArrowRightIcon, FoldVerticalIcon, Grid2x2Icon, HashIcon, ItalicIcon, PaintBucketIcon, RemoveFormattingIcon, StrikethroughIcon, TextAlignCenterIcon, TextAlignEndIcon, TextAlignStartIcon, TypeIcon, UnderlineIcon, WrapTextIcon } from "lucide-solid";
 import { ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, ChevronDownCircleIcon, ListIcon, SquareCheckIcon } from "lucide-solid";
 
@@ -10,6 +11,8 @@ export const sheetToolIcons = {
 
 /** The sheet's sort, filter and table rows (context menu, filter popover). */
 export const sheetSortIcons = { ascending: ArrowDownAZIcon, descending: ArrowDownZAIcon, filter: FunnelIcon, table: Table2Icon };
+/** The sheet's chart kinds (the ribbon's Chart menu, the context menu's Make chart). */
+export const sheetChartIcons = { bar: ChartBarIcon, column: ChartColumnIcon, line: ChartLineIcon, area: ChartAreaIcon, pie: ChartPieIcon, scatter: ChartScatterIcon };
 /** The sheet's merge rows (context menu). */
 export const sheetMergeIcons = { merge: TableCellsMergeIcon, unmerge: TableCellsSplitIcon };
 /** The cell menu's moves of rows and columns, and its cell types (components/sheet/sheet.tsx). */

@@ -6,6 +6,7 @@ import { CONFIG, createWorkbookModel } from "../sheet-engine.js";
 import { listFormats, writeFormat } from "../sheet-formats.js";
 import { listStyles, writeStyle } from "../sheet-styles.js";
 import { readRules, rulesA1, rulesIds, shiftRefs } from "../sheet-rules.js";
+import { CHART_LIMIT, chartFrom, chartIds, chartsA1, keptCharts, readCharts } from "../sheet-charts.js";
 import { writePrivateFile } from "../private-file.js";
 
 /*
@@ -208,6 +209,8 @@ export function sheetKind(hub) {
       const next = rules.map((rule) => ({ ...rule, ranges: rule.ranges.flatMap(([from, to]) => { const one = moved({ from, to }); return one ? [[one.from, one.to]] : []; }) })).filter((rule) => rule.ranges.length);
       if (JSON.stringify(next) !== JSON.stringify(rules)) out.push([`rules:${sheet.id}`, next.length ? JSON.stringify(next) : null]);
     }
+    const charts = keptCharts(sheet, room.look.get(`charts:${sheet.id}`), isRows, at, count);
+    if (charts !== undefined) out.push([`charts:${sheet.id}`, charts]);
     return () => { for (const [name, value] of out) if (value === null) room.look.delete(name); else room.look.set(name, value); };
   };
   /**
@@ -275,6 +278,7 @@ export function sheetKind(hub) {
       const [what, ...ids] = name.split(":");
       if (ids.length === 1 && ids[0] === sheet.id && what === "merges") { const said = mergesA1(sheet, value); if (said.length) out.merges = said; }
       else if (ids.length === 1 && ids[0] === sheet.id && what === "rules") { const said = rulesA1(sheet, value); if (said.length) out.rules = said; else if (Array.isArray(value)) out.rules = value; }
+      else if (ids.length === 1 && ids[0] === sheet.id && what === "charts") { const said = chartsA1(sheet, value); if (said.length) out.charts = said; }
       else if (ids.length === 1 && ids[0] === sheet.id && RANGED.includes(what)) { const said = rangedA1(sheet, value); if (said) out[what] = said; }
       else if (ids.length === 1 && ids[0] === sheet.id) out[what] = value;
       else if (ids.length === 1 && sheet.indexOfRow(ids[0]) >= 0) out[`${what}:${sheet.indexOfRow(ids[0]) + 1}`] = value;
@@ -297,6 +301,7 @@ export function sheetKind(hub) {
         if (ids.length) room.look.set(`merges:${tab}`, JSON.stringify(ids));
       }
       else if (at === undefined && what === "rules") { const ids = rulesIds(sheet, value); if (ids) room.look.set(`rules:${tab}`, ids); }
+      else if (at === undefined && what === "charts") { const ids = chartIds(sheet, value); if (ids) room.look.set(`charts:${tab}`, ids); }
       else if (at === undefined && RANGED.includes(what)) { const ids = rangedIds(sheet, value); if (ids) room.look.set(`${what}:${tab}`, ids); }
       else if (at === undefined) room.look.set(`${what}:${tab}`, value);
       else if (row >= 0 && row < rows) room.look.set(`${what}:${sheet.rowAt(row)}`, value);
@@ -436,7 +441,7 @@ export function sheetKind(hub) {
         isFolder(room) ? `It is the workbook folder ${room.entry.path} in its project's folder, a sheet with tabs (${listed(room)}), one CSV file each: change it through the cells actions, not by writing the files (the hub holds its live copy and its formulas; the files hold what they compute).`
           : `It is the CSV file ${room.entry.path} in its project's folder, a sheet: change it through the cells actions, not by writing the file (the hub holds its live copy and its formulas; the file holds what they compute).`,
         "A comment's `under.cells` names the two corners of the range it is on by row and column ids; its hand-off says that range by A1 address as it is now (with its tab where the sheet has several).",
-        `If you have the tool \`conduit_artifact\`, its actions cells, set, fill, format, style, rows, cols and tabs read and change the sheet (with \`for\`: the comment's <item>/<n>; \`tab\` or an address such as Data!B4 names a tab; format and style list or set a range's number formats and its bold, colours, fill, borders and alignment, which cells leaves out), and answer replies and resolves; the CLI's \`document cells|set|fill|format|style|rows|cols|tabs\` do the same.`,
+        `If you have the tool \`conduit_artifact\`, its actions cells, set, fill, format, style, chart, rows, cols and tabs read and change the sheet (with \`for\`: the comment's <item>/<n>; \`tab\` or an address such as Data!B4 names a tab; format and style list or set a range's number formats and its bold, colours, fill, borders and alignment, which cells leaves out; chart lists, makes, changes or deletes a tab's charts, drawn from a range's cells), and answer replies and resolves; the CLI's \`document cells|set|fill|format|style|chart|rows|cols|tabs\` do the same.`,
       ],
     },
     cells: {
@@ -469,7 +474,7 @@ export function sheetKind(hub) {
         return `${head}${part}\n${toCsv(clip(typed, area))}`;
       },
       /** One change of cells, of rows and columns, or of tabs (contract: POST /v0/document/:id/cells). `for` is checked, and nothing is kept of it yet. */
-      async edit(room, { op, tab, at, range, from, values, value, format, style, borders, column, header, descending, count = 1, to, name: called, hidden, by, for: about } = {}) {
+      async edit(room, { op, tab, at, range, from, values, value, format, style, borders, column, header, descending, count = 1, to, name: called, hidden, chart, by, for: about } = {}) {
         const name = typeof by === "string" && by ? by.slice(0, 80) : "agent";
         if (about !== undefined) {
           if (!/^[\w-]+\/\d+$/.test(String(about))) throw fault(400, `for is the comment answered, as <item>/<n>, not ${about}`);
@@ -542,6 +547,30 @@ export function sheetKind(hub) {
           refilter(room, sheet, name);
           return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}) };
         }
+        // A tab's charts (sheet-charts.js): `chart` makes one, changes one (its `id`, the rest as it was where left out) or takes it off (`delete`); the
+        // tab's charts by A1 are the answer, so with no chart they are listed. A chart named by id is found on whichever tab holds it.
+        if (op === "chart") {
+          const spec = chart ?? {};
+          if (typeof spec !== "object" || Array.isArray(spec)) throw fault(400, "chart is { kind, range, title, labels, at, width, height }, with id to change one or delete: true to take it off");
+          const ref = parseRef(String(spec.range ?? "")), holding = spec.id !== undefined && (tab === undefined || tab === "") && !ref.tab ? room.book.tabs().find((one) => readCharts(room.look.get(`charts:${one.id}`)).some((made) => made.id === String(spec.id))) : undefined;
+          const sheet = holding ? room.book.tab(holding.id) : pick(room, tab, ref.tab ?? undefined), held = `charts:${sheet.id}`, all = readCharts(room.look.get(held));
+          const was = spec.id === undefined ? undefined : all.find((one) => one.id === String(spec.id));
+          if (spec.id !== undefined && !was) throw fault(400, `No chart ${spec.id}${many(room) ? ` on ${sheet.name}` : ""}: ${all.length ? `its charts are ${all.map((one) => one.id).join(", ")}` : "it has none"}`);
+          const { id: _, delete: drop, ...asked } = spec, change = Object.keys(asked).length > 0;
+          if (drop === true && !was) throw fault(400, "delete takes the id of the chart to take off");
+          if (!was && change && all.length >= CHART_LIMIT) throw fault(400, `A tab holds at most ${CHART_LIMIT} charts: change one (its id) or delete one`);
+          let made;
+          if (drop !== true && change) {
+            // A chart stands on a cell the tab has: the tab grows to hold where it is asked to stand, unsaid two columns right of its range, once the rest is checked.
+            const given = { ...asked, ...(spec.range === undefined ? {} : { range: ref.range }) }, area = parseRange(ref.range), spot = spec.at !== undefined ? parseA1(String(spec.at)) : !was && area ? { row: area.top, col: area.right + 2 } : null;
+            const check = (one, id) => { try { return chartFrom(sheet, one, was, id); } catch (error) { throw fault(400, error.message); } };
+            if (spot) { check({ ...given, at: "A1" }, ""); grow(room, sheet, { bottom: spot.row, right: spot.col }, name); }
+            made = check(spot ? { ...given, at: a1(spot.row, spot.col) } : given, rowId());
+          }
+          const next = drop === true ? all.filter((one) => one !== was) : made ? (was ? all.map((one) => one === was ? made : one) : [...all, made]) : all;
+          if (next !== all) hub.as(room, name, (sign) => room.doc.transact(() => { if (next.length) room.look.set(held, JSON.stringify(next)); else room.look.delete(held); sign(); }));
+          return { charts: chartsA1(sheet, room.look.get(held)), ...(made ? { chart: made.id } : {}), ...(many(room) ? { tab: sheet.name } : {}) };
+        }
         // Whole rows or columns moved to start at `to`, their ids with them, so all held by ids (cells, their look, comments) goes with them and each
         // formula reading them, on any tab, follows them.
         if (op === "move-rows" || op === "move-cols") {
@@ -556,7 +585,7 @@ export function sheetKind(hub) {
           refilter(room, sheet, name);
           return { ...sheet.size(), ...(many(room) ? { tab: sheet.name } : {}) };
         }
-        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, sort, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, add-tab, rename-tab, delete-tab, move-tab or hide-tab");
+        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, sort, chart, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, add-tab, rename-tab, delete-tab, move-tab or hide-tab");
         const sheet = pick(room, tab), { rows, cols } = sheet.size(), isRows = op.endsWith("rows"), size = isRows ? rows : cols, what = isRows ? "row" : "column", removing = op.startsWith("delete");
         if (!Number.isInteger(count) || count < 1 || count > CALL_LIMIT) throw fault(400, "count is how many, 1 or more");
         index(at, removing ? size - 1 : size, `${what} to ${removing ? "delete" : "insert before"} (${size} ${what}s now)`);
