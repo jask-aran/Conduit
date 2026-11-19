@@ -134,6 +134,8 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     tab.rules = ruled.rules;
     for (const [type, count] of Object.entries(ruled.unread)) drop(`conditional formats (${type})`, count);
     tab.validations = validationsOf(xml);
+    const color = /<tabColor\b[^>]*>/.exec(xml)?.[0];
+    if (color && /^[0-9A-F]{8}$/i.test(attr(color, "rgb") ?? "")) tab.color = `#${attr(color, "rgb").slice(2).toUpperCase()}`; else drop("tab colours from the theme", color ? 1 : 0);
     drop("validation rules (in Excel 2010's form, naming another tab)", xml.match(/<x14:dataValidation\b/g)?.length ?? 0);
   }
 
@@ -241,6 +243,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       if (merges.length) look.merges = merges.map((range) => XLSX.utils.encode_range(range));
       if (tab.rules.length) look.rules = tab.rules;
       if (tab.validations.length) look.validations = tab.validations;
+      if (tab.color) look.tabColor = tab.color;
       // A frozen formula goes with its cell (`excel:<rowId>:<colId>` once in the doc), written for the cell it was in (`anchor`), as a rule's are.
       for (const [at, one] of Object.entries(report.frozen[tab.name] ?? {})) if (!one.why.startsWith("a formula over")) look[`excel:${at}`] = { formula: one.formula, value: one.kept, anchor: at };
       if (tab.pane?.rows) look.freezeRows = tab.pane.rows;
@@ -313,7 +316,8 @@ export function exportXlsx(tabs) {
   const panes = tabs.map((tab) => [count(tab.look.freezeRows), count(tab.look.freezeCols)]), styled = tabs.some((tab) => Object.keys(tab.look).some((name) => name.startsWith("style:")));
   const ruled = tabs.some((tab) => Array.isArray(tab.look.rules) && tab.look.rules.length), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(orphaned(`=${formula}`, known))) : null;
   const validations = tabs.map((tab) => validationsXml(tab.look.validations));
-  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean)) return written;
+  const colors = tabs.map((tab) => /^#[0-9A-F]{6}$/i.test(String(tab.look.tabColor ?? "")) ? `<tabColor rgb="FF${tab.look.tabColor.slice(1).toUpperCase()}"/>` : "");
+  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean) && !colors.some(Boolean)) return written;
   let restyled = null;
   return editParts(written, (path, xml, all) => {
     if (styled && !restyled) {
@@ -322,7 +326,8 @@ export function exportXlsx(tabs) {
     }
     if (path === "xl/styles.xml") return rules ? withDxfs(restyled?.styles ?? xml, rules.dxfs) : restyled?.styles ?? xml;
     const n = sheetOf(path), [rows, cols] = panes[n] ?? [0, 0], sheet = withRules(n >= 0 && restyled ? restyled.sheets[n] : xml, rules?.sheets[n]);
-    const valid = n >= 0 && validations[n] ? placed(sheet, "dataValidations", validations[n]) : sheet;
+    const valid = [[validations[n], (xml) => placed(xml, "dataValidations", validations[n])], [colors[n], (xml) => /<sheetPr\b/.test(xml) ? xml.replace(/<sheetPr\b([^>]*?)(\/?)>/, (_, head, closed) => `<sheetPr${head}>${colors[n]}${closed ? "</sheetPr>" : ""}`) : placed(xml, "sheetPr", `<sheetPr>${colors[n]}</sheetPr>`)]]
+      .reduce((xml, [has, put]) => n >= 0 && has ? put(xml) : xml, sheet);
     return rows || cols ? valid.replace(/<sheetView workbookViewId="0"\/>/, paneXml(rows, cols)) : valid;
   });
 }
