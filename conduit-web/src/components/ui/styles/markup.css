@@ -123,7 +123,7 @@
 .ui-markup-caption { padding-inline: var(--space-xs); white-space: nowrap; }
 /* The edit set is the paper's own tools, usable at rest: full strength, washed while on, dimmed only when not to be done. */
 .ui-markup-bar[data-set="edit"] .ui-icon-button:not(:disabled) { color: var(--foreground); }
-.ui-markup-room { flex: none; height: calc(var(--control-sm) + 4 * var(--space-xs)); }
+.ui-markup-room { flex: none; min-height: calc(var(--control-sm) + 4 * var(--space-xs)); }
 .ui-markup-rails[data-compact] { right: calc(var(--markup-frame-right, 0px) + var(--space-2xs)); left: calc(var(--markup-frame-left, 0px) + var(--space-2xs)); }
 .ui-markup-rails[data-compact] > .ui-markup-bar { gap: 0; }
 /* Its controls keep their width; only the status gives way. */
@@ -153,3 +153,7 @@
 /* A key sequence's next key on the tool it presses (a sheet's Alt sequences), over the tool's corner as a keytip. */
 .ui-markup-bar :where(button) { position: relative; }
 .ui-markup-tip { position: absolute; right: 0; bottom: 0; min-width: var(--icon-sm); height: var(--icon-sm); padding: 0; font-size: var(--text-caption); pointer-events: none; }
+/* The ribbon drawn in its room at the head of the pane: in the pane's flow and tab order, between its header and its text; where it folds no narrower and still
+   wraps (a phone), the room is as tall as its rows, so no row stands over the text. What a tool draws with still stands under it, over the text. */
+.ui-markup-room .ui-markup-rails[data-ribbon] { position: relative; inset: auto; z-index: 2; padding: var(--space-xs) var(--space-lg); pointer-events: auto; font-family: var(--font-sans); stroke-width: var(--stroke); }
+.ui-markup-room .ui-markup-rails[data-ribbon][data-compact] { padding-inline: var(--space-2xs); }

@@ -24,7 +24,8 @@ const margin = () => <MarkupMarginNotes beside={false}>
   {thread({ name: "“Osaka”", words: "Add the hotel to the table.", state: { label: "Working on it", busy: true } })}
 </MarkupMarginNotes>;
 
-const find = () => <DocumentFind query="three" count="2 of 2" onQuery={noop} onNext={noop} onPrevious={noop} onEscape={noop} onClose={noop} />;
+const find = (replace?: boolean) => <DocumentFind query="three" count="2 of 2" onQuery={noop} onNext={noop} onPrevious={noop} onEscape={noop} onClose={noop} onReplacing={noop}
+  replace={replace ? { value: "four", onValue: noop, onReplace: noop, onReplaceAll: noop } : undefined} />;
 const TABLE = `<p>Where we stay.</p><div class="tableWrapper"><table><tr><th>City</th><th>Nights</th></tr><tr><td>Osaka</td><td>4</td></tr><tr><td>Kyoto</td><td>3</td></tr></table></div>`;
 /** The edges are placed from the table as drawn, as the editor places them. */
 const table = () => {
@@ -86,6 +87,7 @@ export const documentPage: Page = {
     row("marks in the text", "comment: a run of text a comment is about, with data-current while its card is open; commented: a whole block, the same; changed: a block an agent changed that is not yet accepted; removed: the line where a block was deleted. Drawn by the editor (documentDrawClass): mention, an @name that shows what it asked when pressed; match and currentMatch, what find found", () => sheet(undefined, MARKS), { code: "documentMarkClass · documentDrawClass", surfaces: ["ground"] }),
     row("its width", "How wide the text runs: narrow, its reading measure (unsaid); wide; full, all its column has", () => sheet(undefined, TEXT, undefined, { width: "wide" }), { code: '<DocumentSheet width="wide">', surfaces: ["ground"] }),
     row("finding in it", "Mod-F with the text focused: the bar at the sheet's top right, how many it found and which is current, each match drawn and the current one apart", () => sheet(undefined, MARKS, undefined, { find: find() }), { code: "<DocumentSheet find={<DocumentFind query count>}>", surfaces: ["ground"] }),
+    row("replacing in it", "Mod-H, or the bar's Replace: the replace row under find's, Enter or Replace for the current match, Replace all for every one", () => sheet(undefined, MARKS, undefined, { find: find(true) }), { code: "<DocumentFind replace={{ value, onReplace, onReplaceAll }}>", surfaces: ["ground"] }),
     row("a table's edges", "While the caret is in a table: its tools on its top edge, in the room kept over it; + on its bottom edge adds a row, on its right a column", table, { code: "<DocumentTableEdges box tools onAddRow onAddColumn>", surfaces: ["ground"] }),
     row("an empty document", "Its one paragraph says what it is for (documentHintClass, its words in data-hint); in the app, while the editor has focus, the caret's empty paragraph says it too and every other empty block what it is", () => sheet(undefined, `<p class="${documentHintClass}" data-hint="Write, / for blocks, @ to ask an agent" data-empty></p>`), { code: "documentHintClass", surfaces: ["ground"] }),
     row("its head", "Over the text: the document's name as its title (DocumentTitle, a field where it can be renamed, else plain text), then its properties, a name and a value written in place (DocumentProperty, DocumentField)", () => sheet(undefined, TEXT, undefined, { head: head() }), { code: "<DocumentHead add><DocumentTitle editable /><DocumentProperty name>…", surfaces: ["ground"] }),

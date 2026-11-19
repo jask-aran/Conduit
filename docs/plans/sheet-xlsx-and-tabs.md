@@ -296,10 +296,47 @@ part of a big workbook.
 - frozen cells' original formulas;
 - number formats, widths (`wpx`), merges, names, hidden tabs and the tab order.
 
-An export with merges, conditional formats, hidden rows and columns, frozen panes, styles and frozen formulas reopens in
-openpyxl, and its parts pass the checks Excel is strict about: element order in `<worksheet>` and `styleSheet`, every
-`count`, `cols` ranges in order and apart, style and dxf ids in range, and no formula naming a missing tab (measured on a
-generated workbook). Whether Excel opens it without a repair prompt, and recalculates on open, is **not verified**.
+**Verification: the round-trip scorecard** (`conduit-web/scripts/xlsx-roundtrip.mjs`, **measured**). It takes 30 workbooks, one per
+feature, written by openpyxl with the cached values Excel keeps put back in by hand. It imports each one and exports it through the hub's
+document service in a temporary data root, then reads both files back with openpyxl. Each export is also held to what Excel is strict about:
+every part has a content type, every relationship target exists, `r:id`s resolve, children of `<worksheet>`, `<workbook>`, `<styleSheet>`
+and `<chartSpace>` are in schema order, every `count` matches, and style and dxf ids are in range. Any fault fails the run.
+
+The features script is kept outside the repo (the script's usage says what it must answer). LibreOffice is not installed here. Whether
+Excel opens an export without a repair prompt is **not verified**. openpyxl cannot write threaded comments or dynamic-array metadata
+(`cm=`), so those are not tested: the spilling formulas are legacy array formulas with their cached cells.
+
+| Feature | Before (main, 2026-11-20) | After (branch `sheet-excel`) | Import report after |
+| --- | --- | --- | --- |
+| values (numbers, text, booleans, dates, times, errors, 5,000-character text, leading zeros, text like numbers) | kept | kept | - |
+| formulas (relative, absolute, another tab, whole column, XLOOKUP, TEXT) | kept | kept | 1 frozen (`TEXT` gives another value here) |
+| array formula (CSE) | changed: its value is kept, written as a plain formula | same | - |
+| spilling formulas (UNIQUE, SEQUENCE, SORT) | changed: the values are kept, the formulas are lost | same | 3 frozen |
+| functions the engine lacks (LAMBDA, CELL, GETPIVOTDATA) | changed: values kept, `_xlfn.` taken off LAMBDA | same | 2 frozen |
+| defined names | changed: names lost, formulas using them frozen | same | names reported left out |
+| number formats (20 built-in and custom) | kept | kept | - |
+| fonts | changed: font name lost | same | not reported |
+| fills | changed: pattern fills become solid | same | not reported |
+| borders | changed: dashed, dotted and double become thin, diagonals lost | same | not reported |
+| alignment, wrap, indent, rotation | changed: indent, rotation and shrink lost | same | not reported |
+| widths, heights, hidden rows and columns, frozen panes | changed: row heights off by up to 0.25 pt | same | - |
+| merges | **dropped** where the merge ran past the last value | kept | - |
+| conditional: cell value, formula | kept | kept | - |
+| conditional: colour scale, data bar, icon set, top 10 | dropped | dropped | reported |
+| conditional: a rule's number format | changed: number format lost | same | reported |
+| data validations (list, whole number, date, custom) | **dropped** | kept | - |
+| hyperlinks (web, mail, a place in the workbook) | **dropped** | kept | - |
+| notes | dropped | dropped (waits on the owner) | reported |
+| tables | **dropped**, not reported | kept | - |
+| autofilter | **dropped**, not reported | kept | - |
+| charts (bar, line, pie) | **dropped**, not reported | kept | - |
+| images | dropped, not reported | dropped | reported |
+| tabs: odd names, colours, a hidden tab | changed: colours lost | kept | - |
+| print settings | dropped, not reported | same | not reported |
+| workbook and sheet protection | dropped, not reported | same | not reported |
+
+From 5 kept, 15 changed and 10 dropped of 30 workbooks to 12 kept, 12 changed and 6 dropped, counted as the script counts.
+Every export passed the strictness checks both times.
 
 ## Still to build
 

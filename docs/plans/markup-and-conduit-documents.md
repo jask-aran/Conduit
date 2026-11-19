@@ -78,12 +78,9 @@ and site really right to start with". No new kind of artifact is next. Built tha
 Asked for and not built: a **suggesting mode** beside editing, where what the person types is a suggestion (a comment)
 and not an edit. Not designed yet.
 
-Known and left: a pane narrower than the ribbon wraps it over the text; the block handle is mouse only and is clipped
-in a narrow pane; Yjs has no move, so a block moved while someone else types in it may lose those keystrokes (read
-from the code, not seen); the "+" leaves a typed "/" if its menu is dismissed; "Add a property" shows on hover or
-focus, against DESIGN.md's "nothing hides behind hover"; Alt+Shift+Arrow is the editor's own key, not a command in
-the registry; `markup-document.mjs`'s "in order" check fails on a paper that holds a table (the table's block is
-wrapped, so the probe does not see its id).
+Known and left: a pane narrower than the ribbon wraps it over the text; the block handle's grip is not drawn where the
+pane leaves it no room (Ctrl+/ still opens its menu); Yjs has no move, so a block moved while someone else types in it
+may lose those keystrokes (read from the code, not seen).
 
 ### Step (b) as built
 
@@ -513,8 +510,8 @@ document stays possible: a comment may be a mark, not only words.
 ## Not settled
 
 - How the editor feels: the block tools in the rail, Markdown typing rules, the margin. The user has not yet said.
-  Not built: other people's carets, a placeholder, the library's own checkbox in a checklist, table controls, and
-  keeping what is typed while the hub is away if the page is closed before it answers.
+  Not built: other people's carets, the library's own checkbox in a checklist, a table's header row turned off (a
+  Markdown table always has one), and keeping what is typed while the hub is away if the page is closed before it answers.
 - The margin's rules, to be judged by use: a comment the person has resolved leaves the margin once every comment of
   its item is resolved (so Reopen is only reachable until then); a drawing made on a document is not kept on the page
   once sent, only the blocks under it; a phone has the cards under the text, not beside a block; while annotating, the

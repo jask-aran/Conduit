@@ -7,6 +7,7 @@ import { DocumentDropLine, DocumentHandle, documentBlockIcons, documentToneIcons
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/ui/menus";
 import { addUnder, blockAt, blockById, blockRange, blockStarts, caretBlockAt, caretInto, deleteBlock, duplicateBlock, moveBlock, shiftBlock } from "./blocks";
 import { DOCUMENT_TURNABLE, type DocumentBlockKind } from "./host";
+import { alignColumn, columnAlign, inHeaderRow, TABLE_ALIGNS, TABLE_INSERTS } from "./toolbar";
 
 /** `is`: the node a block of this kind is, and its attrs (a heading's level); a paragraph is Text. */
 type Tool = { name: DocumentBlockKind; label: string; icon: () => JSX.Element; is?: [string, Record<string, unknown>?]; run(): void };
@@ -120,6 +121,9 @@ export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: r
   const kind = createMemo(() => { const at = from(), made = editor(); if (at === null || !made) return null; track(made, "doc"); const node = made.state.doc.nodeAt(at);
     return node && (tools.find(({ is }) => is && node.type.name === is[0] && Object.entries(is[1] ?? {}).every(([key, value]) => node.attrs[key] === value))?.name ?? (node.type.name === "paragraph" ? "text" : null)); });
   const add = act((on, at) => options.onAdded(addUnder(on, at)));
+  // A table's rows and columns are put in beside the caret's cell, so they are offered while the caret is in the table the menu is about.
+  const inTable = () => { const at = from(), node = at === null ? null : editor()?.state.doc.nodeAt(at); return node?.type.name === "table" && caret() === node.attrs.id; };
+  const table = (run: (chain: ReturnType<Editor["chain"]>) => ReturnType<Editor["chain"]>) => () => { const made = editor(); if (made) run(made.chain().focus()).run(); };
 
   const view = <>
     <DocumentHandle ref={(element) => { handle = element; }} top={place()?.top} inside={place()?.inside}>
@@ -137,6 +141,13 @@ export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: r
               <MenuSubTrigger icon={<documentBlockIcons.text />}>Turn into</MenuSubTrigger>
               <MenuSubContent width="sm"><For each={tools.filter((tool) => (DOCUMENT_TURNABLE as readonly string[]).includes(tool.name))}>{(tool) => <MenuRow icon={tool.icon()} checked={kind() === tool.name} onSelect={turn(tool)}>{tool.label}</MenuRow>}</For></MenuSubContent>
             </MenuSub>
+            <Show when={inTable()}><MenuSub>
+              <MenuSubTrigger icon={<documentBlockIcons.table />}>Table</MenuSubTrigger>
+              <MenuSubContent width="sm">
+                <MenuSection><For each={TABLE_INSERTS}>{([icon, label, command]) => { const Icon = documentToolIcons[icon], view = editor()?.view; return <MenuRow icon={<Icon />} disabled={command === "addRowBefore" && Boolean(view && inHeaderRow(view))} onSelect={table((chain) => chain[command]())}>{label}</MenuRow>; }}</For></MenuSection>
+                <MenuSection title="Align column"><For each={TABLE_ALIGNS}>{([icon, label, align]) => { const Icon = documentToolIcons[icon], view = editor()?.view; return <MenuRow icon={<Icon />} checked={Boolean(view && columnAlign(view) === align)} onSelect={() => { const now = editor()?.view; if (now) alignColumn(now, columnAlign(now) === align ? null : align); }}>{label}</MenuRow>; }}</For></MenuSection>
+              </MenuSubContent>
+            </MenuSub></Show>
             <Show when={tone()}>{(now) => <MenuSub>
               <MenuSubTrigger icon={<documentBlockIcons.callout />}>Tone</MenuSubTrigger>
               <MenuSubContent width="sm"><For each={tones}>{([name, label]) => { const Icon = documentToneIcons[name]; return <MenuRow icon={<Icon />} checked={now() === name} onSelect={act((on, at) => on.dispatch(on.state.tr.setNodeAttribute(at, "tone", name)))}>{label}</MenuRow>; }}</For></MenuSubContent>

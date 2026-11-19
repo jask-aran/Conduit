@@ -286,9 +286,12 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     createEffect(() => tell(selections.flatMap((selection) => selection.place && !selection.sent ? [{ key: `${UNSENT}${selection.id}`, quote: selection.quote, under: selection.place.under, current: openId() === selection.id, resolved: false }] : [])));
     onCleanup(() => tell([]));
   }
-  // A bar in the surface's own row stands under the layer: while the layer has the pointer, the bar and what stands under it are cut out of the layer, so they are pressed as themselves.
-  if (can.bar === "slot") createEffect(() => {
-    const slot = host.slot?.(), over = layer;
+  // Where the bar is drawn in the surface's own flow, in its tab order: a slot of the surface's row, or the ribbon's room at the head of the pane (MarkupRibbonRoom, the frame
+  // the host gives), as tall as the ribbon's rows. With neither, it stands over the page in the layer.
+  const home = () => { if (can.bar === "slot") return host.slot?.(); const framed = can.bar === "ribbon" ? host.frame?.() : null; return framed?.classList.contains("ui-markup-room") ? framed : null; };
+  // A bar in the surface's own flow stands under the layer: while the layer has the pointer, the bar and what stands under it are cut out of the layer, so they are pressed as themselves.
+  if (can.bar !== "foot") createEffect(() => {
+    const slot = home(), over = layer;
     if (!slot || !over || !select()) return;
     const cut = () => { over.style.clipPath = `path(evenodd, "M0 0H${innerWidth}V${innerHeight}H0Z${[...slot.querySelectorAll(".ui-markup-rails, .ui-markup-under, .ui-markup-held")].map((part) => { const box = part.getBoundingClientRect(); return `M${box.left} ${box.top}H${box.right}V${box.bottom}H${box.left}Z`; }).join("")}")`; };
     const sized = new ResizeObserver(cut), parts = new MutationObserver(cut);
@@ -735,7 +738,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
         if (ids.length !== Object.keys(now).length || ids.some((id) => now[+id]?.left !== next[+id]!.left || now[+id]?.top !== next[+id]!.top || now[+id]?.width !== next[+id]!.width)) setStandingAt(next);
       }
       // The ask box stands by the tools, as wide as they are: under a ribbon, over a foot bar; kept inside the window.
-      const box = (asking() || working()) && layer?.querySelector<HTMLElement>(".ui-markup-ask"), rails = box && (can.bar === "slot" ? host.slot?.() : layer)?.querySelector(".ui-markup-rails");
+      const box = (asking() || working()) && layer?.querySelector<HTMLElement>(".ui-markup-ask"), rails = box && (home() ?? layer)?.querySelector(".ui-markup-rails");
       const sets = rails ? [...rails.querySelectorAll(":scope > [data-set], :scope > .ui-markup-sets > .ui-markup-bar")].map((set) => set.getBoundingClientRect()) : [];
       if (box && rails && sets.length) {
         const tools = around(sets.map((set) => ({ left: set.left, top: set.top, width: set.width, height: set.height }))), gap = parseFloat(getComputedStyle(rails).rowGap) || 0, width = Math.max(tools.width, box.offsetWidth);
@@ -978,7 +981,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
               value={reply()} onOpen={() => startReply(n())} onInput={setReply} resolved={resolvedOf(n())} onSay={() => void answer()} onResolve={(resolved) => settle(n(), resolved)} />}</Show>
           </Show>}</For></MarkupNotes>
         </Show>
-        <Show when={can.bar === "slot"} fallback={bar()}><Show when={!props.hidden && host.slot?.()} keyed>{(slot) => <Portal mount={slot} ref={(element: HTMLDivElement) => { element.style.display = "contents"; }}>{bar()}</Portal>}</Show></Show>
+        <Show when={can.bar === "slot" || home()} fallback={bar()}><Show when={!props.hidden && home()} keyed>{(slot) => <Portal mount={slot} ref={(element: HTMLDivElement) => { element.style.display = "contents"; element.toggleAttribute("data-frost-grounded", Boolean(can.grounded)); }}>{bar()}</Portal>}</Show></Show>
       </Show>
     </MarkupLayer>
   </Portal>;
