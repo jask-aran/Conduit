@@ -152,7 +152,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const drawnLook = () => readLook(root!, props.host.display?.());
   const events: SheetGridEvents = {
     selected: setAt,
-    write: (list, label) => writes(label ?? "")(list),
+    write: (list, label) => writes(label ?? "")(list.map((cell) => ({ ...cell, input: types.typed(cell.row, cell.col, cell.input) }))),
     fill: (range, values, from) => hub({ op: "fill", range: rangeA1(range), values, ...(from ? { from: rangeA1(from) } : {}) }),
     resized: (col, width) => history.act("Column width", () => sizes.setWidths(span("cols", col), width / zoom())),
     autofit: (kind, line) => history.act(kind === "cols" ? "Fit column width" : "Fit row height", () => kind === "cols" ? sizes.fitColumns(span("cols", line), readLook(root!)) : sizes.fitRows(span("rows", line), readLook(root!))),
@@ -461,7 +461,14 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   createEffect(() => { if (!filters.filter()) setFiltering(null); });
   const TYPE_NAMES: Record<SheetTypeKind, string> = { boolean: "Checkbox", date: "Date", list: "Dropdown" };
   // A date cell draws its ISO text through a date format: one that has none takes the sheet's Date.
-  const setType = (range: SheetRange, kind: SheetTypeKind | null) => history.act("Cell type", () => { types.set(range, kind); if (kind === "date" && !formats.dated(range.top, range.left)) formats.set(range, "d/m/yyyy"); });
+  // A date cell is a serial number in a date format: one with none takes the sheet's Date, and the dates its cells hold as text are read into serials.
+  const setType = (range: SheetRange, kind: SheetTypeKind | null) => history.act("Cell type", () => {
+    types.set(range, kind);
+    if (kind !== "date") return;
+    if (!formats.dated(range.top, range.left)) formats.set(range, "d/m/yyyy");
+    const sheet = model();
+    if (sheet) write(within(inTab(range)).flat().flatMap((cell) => { const input = sheet.input(cell.row, cell.col), typed = types.typed(cell.row, cell.col, input); return typed !== input ? [{ ...cell, input: typed }] : []; }));
+  });
   /** The options editor on a range: its one dropdown's, else a new one's, started from the values its cells hold. */
   const editList = (range: SheetRange) => {
     const sheet = model(), type = types.uniform(range) === "list" ? types.at(range.top, range.left) : undefined;

@@ -13,7 +13,6 @@ import { shiftRefs } from "@/sheet-rules.js";
 import { createCellLook } from "./cell-draw";
 import { seriesFill, sourceLine } from "./series";
 import type { SheetDrawn } from "./formats";
-import { serialOf } from "./types";
 import type { SheetPill, SheetSpill } from "./cell-draw";
 import type { SheetCellStyle } from "./styles";
 import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange, SheetReference } from "./host";
@@ -502,11 +501,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         if (input === "" && !value) return style || mark || striped ? withMark(new TextCell(row, col, "", "", undefined, striped ? washed(themed(style)) : themed(style), style), mark) : EMPTY;
         // An error is shown by its code, as the engine names it; only a value that could be one is asked whether it is.
         const fault = typeof value === "string" && value.startsWith("#") && model.error(row, col) !== null;
-        // A date cell's ISO text is drawn through its date format.
-        const serial = type === "date" && typeof value === "string" && options.columns.dated(row, col) ? serialOf(value) : null;
-        const drawn = fault || value === null || typeof value === "boolean" ? null : options.columns.draw(row, col, serial ?? value);
+        const drawn = fault || value === null || typeof value === "boolean" ? null : options.columns.draw(row, col, value);
         const worn = themed(style, fault ? theme.error : drawn?.hue && hues[drawn.hue]);
-        const made = withMark(new TextCell(row, col, input, drawn ? drawn.text : shown(value), style?.align ?? (typeof value === "number" || type === "number" || serial !== null ? "right" : undefined), striped ? washed(worn) : worn, style,
+        const made = withMark(new TextCell(row, col, input, drawn ? drawn.text : shown(value), style?.align ?? (typeof value === "number" || type === "number" ? "right" : undefined), striped ? washed(worn) : worn, style,
           input !== null && !input.startsWith("=") && options.columns.frozen(row, col) || undefined), mark);
         if (typeof value === "string" && !fault) made.link = options.columns.link(row, col, value);
         return made;

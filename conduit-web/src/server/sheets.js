@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { HyperFormula } from "hyperformula";
+import { isDateFormat } from "numfmt";
 import { CALL_LIMIT, CELLS, COLS, COL_LIMIT, LOOK, MAIN, ROWS, SHEET_FORMAT, SHEET_LIMIT, TAB, TABS, WORKBOOK_LIMIT, a1, colId, filterHides, rangedArea, colIndex, colName, colsOf, fromCsv, key, parseA1, parseRange, parseRef, rangeA1, rowId, rowsOf, tabName, tabNameFault, tabRef, toCsv, valueText } from "../sheet-format.js";
 import { CONFIG, createWorkbookModel } from "../sheet-engine.js";
 import { listFormats, writeFormat } from "../sheet-formats.js";
@@ -8,7 +9,7 @@ import { listStyles, writeStyle } from "../sheet-styles.js";
 import { readRules, rulesA1, rulesIds, shiftRefs } from "../sheet-rules.js";
 import { CHART_LIMIT, chartFrom, chartIds, chartsA1, keptCharts, readCharts } from "../sheet-charts.js";
 import { writePrivateFile } from "../private-file.js";
-import { cleanOptions, restoreValidations, validationsA1, VALID, writeType } from "../sheet-types.js";
+import { cleanOptions, readDate, restoreValidations, validationsA1, VALID, writeType } from "../sheet-types.js";
 
 /*
  * The sheet artifact kind on the hub (sheet-format.js): a .csv that holds the values, the formulas beside it in sheet.json, and the live copy in
@@ -673,6 +674,12 @@ export function sheetKind(hub) {
           if (cellType === "dropdown" && !cleanOptions(options).length) throw fault(400, "options is a dropdown's values, as [\"Done\", { \"value\": \"Late\", \"ink\": \"red\" }] (inks: red, amber, green, blue)");
           hub.as(room, name, (sign) => room.doc.transact(() => {
             try { writeType(room.look, sheet, area, kinds[cellType], Boolean(columns), options); } catch (error) { throw fault(400, error.message); }
+            // A date is a serial number in a date format: dates the cells hold as text are read into serials, and one without a date format takes d/m/yyyy.
+            if (cellType === "date") {
+              const format = room.look.get(`fmt:${key(sheet.rowAt(area.top), sheet.colAt(area.left))}`) ?? room.look.get(`fmt:${sheet.colAt(area.left)}`);
+              if (typeof format !== "string" || !isDateFormat(format)) writeFormat(room.look, sheet, area, "d/m/yyyy", Boolean(columns));
+              for (let r = area.top; r <= Math.min(area.bottom, rows - 1); r++) for (let c = area.left; c <= Math.min(area.right, cols - 1); c++) { const at = key(sheet.rowAt(r), sheet.colAt(c)), input = room.cells.get(at), day = input && !input.startsWith("=") ? readDate(input) : null; if (day !== null) room.cells.set(at, String(day)); }
+            }
             sign();
           }));
           return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}) };

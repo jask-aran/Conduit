@@ -13,6 +13,23 @@ export const TYPE_CELL_LIMIT = 10_000;
 export const PLAIN = "plain";
 export const VALID = "valid:";
 
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+// The engine's serials (sheet-engine.js CONFIG: Excel's, 1900 a leap year): days from 30 December 1899, for dates from March 1900.
+const serial = (y, m, d) => { const day = new Date(Date.UTC(y, m - 1, d)); return day.getUTCMonth() === m - 1 && day.getUTCDate() === d && y >= 1900 ? day.getTime() / 864e5 + 25569 : null; };
+
+/** A date as typed (2026-03-15, 15/3/2026, 15/3/26, 15 Mar 2026, Mar 15 2026) as its serial number, as a spreadsheet keeps a date; null for anything else. Day before month, as the sheet's Date format. */
+export function readDate(text) {
+  const typed = text.trim().toLowerCase();
+  let hit = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(typed);
+  if (hit) return serial(+hit[1], +hit[2], +hit[3]);
+  if ((hit = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/.exec(typed))) return serial(hit[3].length === 2 ? 2000 + +hit[3] : +hit[3], +hit[2], +hit[1]);
+  const month = (word) => MONTHS.indexOf(word.slice(0, 3)) + 1;
+  if ((hit = /^(\d{1,2}) ([a-z]+),? (\d{4})$/.exec(typed)) && month(hit[2])) return serial(+hit[3], month(hit[2]), +hit[1]);
+  if ((hit = /^([a-z]+) (\d{1,2}),? (\d{4})$/.exec(typed)) && month(hit[1])) return serial(+hit[3], month(hit[1]), +hit[2]);
+  return null;
+}
+
+
 const span = (sheet, area) => { const { rows, cols } = sheet.size(); return { ...area, bottom: Math.min(area.bottom, rows - 1), right: Math.min(area.right, cols - 1) }; };
 
 /** A tab's validations' attributes by id. */

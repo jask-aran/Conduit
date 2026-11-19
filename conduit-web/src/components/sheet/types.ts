@@ -5,27 +5,10 @@
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 import type * as Y from "yjs";
 import { key, parseRange, type SheetView } from "@/sheet-format.js";
-import { listFields, optionsOf, PLAIN, readValidations, setValidation, VALID, writeType, type SheetOption, type SheetValidation } from "@/sheet-types.js";
+import { listFields, optionsOf, PLAIN, readDate, readValidations, setValidation, VALID, writeType, type SheetOption, type SheetValidation } from "@/sheet-types.js";
 import type { SheetRange } from "./host";
 
 export type SheetTypeKind = "boolean" | "date" | "list";
-const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-const iso = (y: number, m: number, d: number) => { const day = new Date(Date.UTC(y, m - 1, d)); return day.getUTCMonth() === m - 1 && day.getUTCDate() === d ? day.toISOString().slice(0, 10) : null; };
-
-/** A date as typed (2026-03-15, 15/3/2026, 15/3/26, 15 Mar 2026, Mar 15 2026) as the ISO text Ctrl+; writes; null for anything else. Day before month, as the sheet's Date format. */
-export function readDate(text: string): string | null {
-  const typed = text.trim().toLowerCase();
-  let hit = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(typed);
-  if (hit) return iso(+hit[1]!, +hit[2]!, +hit[3]!);
-  if ((hit = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/.exec(typed))) return iso(hit[3]!.length === 2 ? 2000 + +hit[3]! : +hit[3]!, +hit[2]!, +hit[1]!);
-  const month = (word: string) => MONTHS.indexOf(word.slice(0, 3)) + 1;
-  if ((hit = /^(\d{1,2}) ([a-z]+),? (\d{4})$/.exec(typed)) && month(hit[2]!)) return iso(+hit[3]!, month(hit[2]!), +hit[1]!);
-  if ((hit = /^([a-z]+) (\d{1,2}),? (\d{4})$/.exec(typed)) && month(hit[1]!)) return iso(+hit[3]!, month(hit[1]!), +hit[2]!);
-  return null;
-}
-/** ISO text as the serial number a date format draws. */
-export const serialOf = (text: string) => /^\d{4}-\d{2}-\d{2}$/.test(text) ? Date.parse(`${text}T00:00:00Z`) / 864e5 + 25569 : null;
-
 export interface SheetTypes {
   /** A drawn cell's type (`boolean`, `date`, `list:<n>` for the tab's nth validation, or an import's `number`); undefined for plain. Not tracked. */
   at(row: number, col: number): string | undefined;
@@ -39,7 +22,7 @@ export interface SheetTypes {
   set(range: SheetRange, kind: SheetTypeKind | null, options?: readonly SheetOption[]): void;
   /** A dropdown's options changed, every cell of it following. */
   setOptions(type: string, options: readonly SheetOption[]): void;
-  /** What is written into a cell as typed: a date cell's typed date as ISO text. */
+  /** What is written into a cell as typed: a date cell's typed date as its serial number. */
   typed(row: number, col: number, input: string): string;
   /** Where a cell's link goes: its own (`link:<rowId>:<colId>`, as an xlsx import keeps a hyperlink; `#Tab!A1` a place in the workbook), else its text where that is a web or mail address. Not tracked. */
   link(row: number, col: number, text: string): string | undefined;
@@ -117,6 +100,6 @@ export function createSheetTypes(look: Y.Map<number | string>, model: Accessor<S
       return own ?? (text.includes("@") || text.includes(":") || text.startsWith("www.") ? addressOf(text) : undefined);
     },
     setLink: (row, col, address) => { const sheet = model(), rowId = sheet?.rowAt(row), colId = sheet?.colAt(col); if (rowId && colId) { if (address) look.set(`link:${key(rowId, colId)}`, address); else look.delete(`link:${key(rowId, colId)}`); } },
-    typed: (row, col, input) => at(row, col) === "date" && input && !input.startsWith("=") ? readDate(input) ?? input : input,
+    typed: (row, col, input) => at(row, col) === "date" && input && !input.startsWith("=") ? String(readDate(input) ?? input) : input,
   };
 }

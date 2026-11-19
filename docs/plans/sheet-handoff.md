@@ -203,6 +203,8 @@ Then the ribbon, charts and ask box, walked in headless Chrome on :4310 (2026-11
   (the import's hyperlinks); `fitted:<rowId>` marks a height a fit set; style flag `x` is Clip. `src/sheet-types.js` writes types for the page and the
   hub's `type` op. Held per cell, a validation follows inserts, deletes, moves, sorts and shifts as styles do; `lookOf`/`restoreLook` give sheet.json and
   xlsx the import's A1 shape (`validations: [{ range, ... }]`, `validationsA1`/`restoreValidations`). `inks` survive sheet.json but not an xlsx file.
+- A date cell holds a serial number in a date format (Excel's, the engine's CONFIG unchanged): `readDate` (sheet-types.js) reads typed, pasted
+  and already-held text dates into serials; the hub's `set` into a date cell does not.
 - Overflow: an empty cell draws the share of text running into it (`spillInto`, grid.ts) from a per-row list of filled columns made once a change;
   a changed cell redraws its row to the right in view. Gridlines still cross overflowing text.
 - Refit runs in `sheet.onChange` for wrapped cells, as a transaction of origin `refit`, outside the history.
