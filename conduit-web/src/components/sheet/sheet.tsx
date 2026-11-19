@@ -5,7 +5,7 @@ import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { createSheetMerges, type SheetMergeKind } from "./merges";
 import { Input } from "@/components/ui/controls";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
-import { CELLS, COLS, COL_LIMIT, LOOK, ROWS, a1, colIndex, colName, colsOf, key, parseRange, rangeA1, rowsOf, runsOf, type SheetView } from "@/sheet-format.js";
+import { CELLS, COLS, LOOK, ROWS, a1, colIndex, colName, colsOf, key, parseRange, rangeA1, rowsOf, runsOf, type SheetView } from "@/sheet-format.js";
 import { shiftRefs } from "@/sheet-rules.js";
 import { SheetFoot } from "./foot";
 import { createSheetTabs } from "./tabs";
@@ -76,16 +76,19 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     write: (row, col, input) => writes("")([{ row, col, input }]),
     selected: () => { changed(); const area = at(); return area && { row: area.top, col: area.left }; }, error: (row, col) => model()?.error(row, col) ?? null,
   });
-  // The cells its import froze, by tab name then position (a row's index times COL_LIMIT, plus its column's): marked while they hold what the import left.
+  // A cell its import froze keeps the file's formula under `excel:<rowId>:<colId>` (server/sheet-xlsx.js), so the mark follows it as rows, columns
+  // and tabs change; it is marked while it holds what the import left. Why it froze is the import report's, found by its formula.
   const [report] = createResource(() => props.host.frozen?.() ?? null);
-  const frozen = createMemo(() => {
-    const name = tabs.tabs().find((tab) => tab.id === tabs.shown())?.name, listed = name ? report()?.[name] : undefined, out = new Map<number, { formula: string; why: string }>();
-    for (const [address, cell] of Object.entries(listed ?? {})) { const range = parseRange(address); if (range) out.set(range.top * COL_LIMIT + range.left, cell); }
-    return out;
-  });
-  const frozenAt = (row: number, col: number) => frozen().size ? frozen().get(row * COL_LIMIT + col) : undefined;
-  const frozenHere = () => { changed(); const area = at(), cell = area && frozenAt(area.top, area.left); return cell && !model()?.input(area!.top, area!.left).startsWith("=") ? cell : undefined; };
-  createEffect(() => { if (frozen().size) grid()?.update(null); });
+  const whyOf = createMemo(() => new Map(Object.values(report() ?? {}).flatMap((tab) => Object.values(tab).map((cell) => [cell.formula, cell.why] as const))));
+  let anyFrozen = [...look.keys()].some((name) => name.startsWith("excel:"));
+  const countFrozen = (event: { keysChanged: Set<string> }) => { if ([...event.keysChanged].some((name) => name.startsWith("excel:"))) anyFrozen = [...look.keys()].some((name) => name.startsWith("excel:")); };
+  look.observe(countFrozen);
+  onCleanup(() => look.unobserve(countFrozen));
+  const frozenAt = (row: number, col: number) => {
+    const sheet = anyFrozen ? model() : undefined, held = sheet && look.get(`excel:${sheet.rowAt(row)}:${sheet.colAt(col)}`) as unknown as { formula?: string; value?: unknown } | undefined;
+    return held?.formula && sheet!.input(row, col) === String(held.value ?? "") ? { formula: held.formula, why: whyOf().get(held.formula) } : undefined;
+  };
+  const frozenHere = () => { changed(); const area = at(); return area ? frozenAt(area.top, area.left) : undefined; };
   const filters = createSheetFilter(look, model, at, hub, (row, col) => Boolean(styles.at(row, col)?.bold)), [filtering, setFiltering] = createSignal<{ col: number; box: SheetBox } | null>(null);
   const sizes = createSheetSizes(look, model, styles.lines, filters.hidden), [question, setQuestion] = createSignal<SizeQuestion | null>(null);
   const merges = createSheetMerges(look, model), rules = createSheetRules(look, model), [ruling, setRuling] = createSignal<SheetRange | null>(null), decisions = createDecisionScope(() => props.id);
@@ -409,7 +412,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       </Frost>
       {/* The ribbon (Markup's bar with the sheet's tools) stands here, at the row's end, folding to the room the formula field leaves it. */}
       <div ref={setSlot} class="ui-spreadsheet-slot" />
-      <Show when={frozenHere()}>{(cell) => <Notice kind="tool" title={`${cell().formula}: ${cell().why}`}>Frozen on import: ={cell().formula.replace(/^=/, "")}</Notice>}</Show>
+      <Show when={frozenHere()}>{(cell) => <Notice kind="tool" title={cell().why ? `${cell().formula}: ${cell().why}` : cell().formula}>Frozen on import: ={cell().formula.replace(/^=/, "")}</Notice>}</Show>
     </div>
     <div ref={body} class="ui-spreadsheet-body">
       <Show when={!failed()} fallback={<Empty role="alert">The sheet could not be drawn: {failed()}</Empty>}>
