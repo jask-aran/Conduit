@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { HyperFormula } from "hyperformula";
+import { isDateFormat } from "numfmt";
 import { CALL_LIMIT, CELLS, COLS, COL_LIMIT, LOOK, MAIN, ROWS, SHEET_FORMAT, SHEET_LIMIT, TAB, TABS, WORKBOOK_LIMIT, a1, colId, filterHides, rangedArea, colIndex, colName, colsOf, fromCsv, key, parseA1, parseRange, parseRef, rangeA1, rowId, rowsOf, tabName, tabNameFault, tabRef, toCsv, valueText } from "../sheet-format.js";
 import { CONFIG, createWorkbookModel } from "../sheet-engine.js";
 import { listFormats, writeFormat } from "../sheet-formats.js";
@@ -8,6 +9,7 @@ import { listStyles, writeStyle } from "../sheet-styles.js";
 import { readRules, rulesA1, rulesIds, shiftRefs } from "../sheet-rules.js";
 import { CHART_LIMIT, chartFrom, chartIds, chartsA1, keptCharts, readCharts } from "../sheet-charts.js";
 import { writePrivateFile } from "../private-file.js";
+import { cleanOptions, readDate, restoreValidations, validationsA1, VALID, writeType } from "../sheet-types.js";
 
 /*
  * The sheet artifact kind on the hub (sheet-format.js): a .csv that holds the values, the formulas beside it in sheet.json, and the live copy in
@@ -284,6 +286,8 @@ export function sheetKind(hub) {
     const out = {};
     for (const [name, value] of room.look.entries()) {
       const [what, ...ids] = name.split(":");
+      // Validations are written by A1 below, from the cells that hold them.
+      if (what === "validations" || (what === "type" && String(value).startsWith(VALID))) continue;
       if (ids.length === 1 && ids[0] === sheet.id && what === "merges") { const said = mergesA1(sheet, value); if (said.length) out.merges = said; }
       else if (ids.length === 1 && ids[0] === sheet.id && what === "rules") { const said = rulesA1(sheet, value); if (said.length) out.rules = said; else if (Array.isArray(value)) out.rules = value; }
       else if (ids.length === 1 && ids[0] === sheet.id && what === "charts") { const said = chartsA1(sheet, value); if (said.length) out.charts = said; }
@@ -293,6 +297,8 @@ export function sheetKind(hub) {
       else if (ids.length === 1 && sheet.indexOfCol(ids[0]) >= 0) out[`${what}:${colName(sheet.indexOfCol(ids[0]))}`] = value;
       else if (ids.length === 2 && sheet.indexOfRow(ids[0]) >= 0 && sheet.indexOfCol(ids[1]) >= 0) out[`${what}:${a1(sheet.indexOfRow(ids[0]), sheet.indexOfCol(ids[1]))}`] = value;
     }
+    const validations = validationsA1(room.look, sheet);
+    if (validations.length) out.validations = validations;
     return out;
   };
   const restoreLook = (room, sheet, tab, kept) => {
@@ -308,6 +314,7 @@ export function sheetKind(hub) {
         }) : [];
         if (ids.length) room.look.set(`merges:${tab}`, JSON.stringify(ids));
       }
+      else if (at === undefined && what === "validations") restoreValidations(room.look, sheet, value);
       else if (at === undefined && what === "rules") { const ids = rulesIds(sheet, value); if (ids) room.look.set(`rules:${tab}`, ids); }
       else if (at === undefined && what === "charts") { const ids = chartIds(sheet, value); if (ids) room.look.set(`charts:${tab}`, ids); }
       else if (at === undefined && RANGED.includes(what)) { const ids = rangedIds(sheet, value); if (ids) room.look.set(`${what}:${tab}`, ids); }
@@ -600,7 +607,7 @@ export function sheetKind(hub) {
         return `${head}${part}\n${toCsv(clip(typed, area))}`;
       },
       /** One change of cells, of rows and columns, or of tabs (contract: POST /v0/document/:id/cells). `for` is checked, and nothing is kept of it yet. */
-      async edit(room, { op, tab, at, range, from, values, value, format, style, borders, column, header, descending, count = 1, to, name: called, hidden, chart, way, by, for: about } = {}) {
+      async edit(room, { op, tab, at, range, from, values, value, format, style, borders, column, header, descending, count = 1, to, name: called, hidden, chart, way, by, for: about, type: cellType, options } = {}) {
         const name = typeof by === "string" && by ? by.slice(0, 80) : "agent";
         if (about !== undefined) {
           if (!/^[\w-]+\/\d+$/.test(String(about))) throw fault(400, `for is the comment answered, as <item>/<n>, not ${about}`);
@@ -655,6 +662,27 @@ export function sheetKind(hub) {
             sign();
           }));
           return { cells: [label(room, sheet, area)], ...(op === "format" ? { formats: listFormats(room.look, sheet, area) } : { styles: listStyles(room.look, sheet, area) }), ...(many(room) ? { tab: sheet.name } : {}) };
+        }
+        // A range's cell type (sheet-types.js): a checkbox, a date, a dropdown of `options` (a list validation) or plain; whole columns (B:D) take theirs.
+        if (op === "type") {
+          const ref = parseRef(range ?? at), sheet = pick(room, tab, ref.tab ?? undefined), { rows, cols } = sheet.size(), columns = /^\$?([A-Za-z]{1,3}):\$?([A-Za-z]{1,3})$/.exec(ref.range);
+          const area = columns ? { top: 0, bottom: rows - 1, left: Math.min(colIndex(columns[1]), colIndex(columns[2])), right: Math.max(colIndex(columns[1]), colIndex(columns[2])) } : parseRange(ref.range);
+          if (!area) throw fault(400, `range is an A1 range such as B2:C5, or whole columns such as B:D (Data!B:D for a tab), not ${range ?? at}`);
+          if (area.top >= rows || area.left >= cols) throw fault(400, `${rangeA1(area)} is past the tab's edge: it is ${rows} rows x ${cols} columns`);
+          const kinds = { checkbox: "boolean", date: "date", dropdown: "list", plain: null };
+          if (!Object.hasOwn(kinds, cellType)) throw fault(400, "type is checkbox, date, dropdown or plain");
+          if (cellType === "dropdown" && !cleanOptions(options).length) throw fault(400, "options is a dropdown's values, as [\"Done\", { \"value\": \"Late\", \"ink\": \"red\" }] (inks: red, amber, green, blue)");
+          hub.as(room, name, (sign) => room.doc.transact(() => {
+            try { writeType(room.look, sheet, area, kinds[cellType], Boolean(columns), options); } catch (error) { throw fault(400, error.message); }
+            // A date is a serial number in a date format: dates the cells hold as text are read into serials, and one without a date format takes d/m/yyyy.
+            if (cellType === "date") {
+              const format = room.look.get(`fmt:${key(sheet.rowAt(area.top), sheet.colAt(area.left))}`) ?? room.look.get(`fmt:${sheet.colAt(area.left)}`);
+              if (typeof format !== "string" || !isDateFormat(format)) writeFormat(room.look, sheet, area, "d/m/yyyy", Boolean(columns));
+              for (let r = area.top; r <= Math.min(area.bottom, rows - 1); r++) for (let c = area.left; c <= Math.min(area.right, cols - 1); c++) { const at = key(sheet.rowAt(r), sheet.colAt(c)), input = room.cells.get(at), day = input && !input.startsWith("=") ? readDate(input) : null; if (day !== null) room.cells.set(at, String(day)); }
+            }
+            sign();
+          }));
+          return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}) };
         }
         if (op === "sort") {
           const ref = parseRef(range ?? at), sheet = pick(room, tab, ref.tab ?? undefined), area = parseRange(ref.range), { rows, cols } = sheet.size();
@@ -724,7 +752,7 @@ export function sheetKind(hub) {
           if (across) throw fault(400, `${rangeA1(across)} is merged: unmerge it to remove duplicates from ${rangeA1(area)}`);
           return { ...dedupe(room, sheet, { ...area, bottom: Math.min(area.bottom, rows - 1), right: Math.min(area.right, cols - 1) }, header === true, name), ...(many(room) ? { tab: sheet.name } : {}) };
         }
-        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, sort, chart, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, shift-cells, dedupe, add-tab, duplicate-tab, rename-tab, delete-tab, move-tab or hide-tab");
+        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, type, sort, chart, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, shift-cells, dedupe, add-tab, duplicate-tab, rename-tab, delete-tab, move-tab or hide-tab");
         const sheet = pick(room, tab), { rows, cols } = sheet.size(), isRows = op.endsWith("rows"), size = isRows ? rows : cols, what = isRows ? "row" : "column", removing = op.startsWith("delete");
         if (!Number.isInteger(count) || count < 1 || count > CALL_LIMIT) throw fault(400, "count is how many, 1 or more");
         index(at, removing ? size - 1 : size, `${what} to ${removing ? "delete" : "insert before"} (${size} ${what}s now)`);

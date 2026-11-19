@@ -70,11 +70,22 @@ export default function MailPane(props: {
   const [sorting, { mutate: setSorting, refetch: rereadSorting }] = createResource(splitKey, () => mailApi.sorting(account()!.id).catch(() => undefined));
   createEffect(on([() => account()?.id, label], ([id]) => { if (id) void list.load().then(() => setTrouble(""), (reason) => setTrouble(failure(reason))); }));
 
+  const art = createArtWindow(true);
   const [open, setOpen] = createSignal<string | null>(null);
   const [writing, setWriting] = createSignal<MailDraft | null>(null);
   const [folded, setFolded] = createSignal(false);
   const [cursor, setCursor] = createSignal<string | null>(null);
-  let rows: HTMLDivElement | undefined, field: HTMLInputElement | undefined;
+  let rows: HTMLDivElement | undefined, field: HTMLInputElement | undefined, listField: HTMLInputElement | undefined;
+  // What the pane's header folded for room (PaneHeader's "headerfold"): the search goes to the top of the list, the
+  // inbox's splits into the label chooser.
+  const [headerFolded, setHeaderFolded] = createSignal<string[]>([]);
+  const searchFolded = () => headerFolded().includes("0"), splitsFolded = () => headerFolded().includes("1");
+  const watchHeader = (pane: HTMLElement) => queueMicrotask(() => {
+    const header = pane.querySelector(":scope > .ui-pane-header");
+    const note = (event: Event) => setHeaderFolded((event as CustomEvent<string[]>).detail);
+    header?.addEventListener("headerfold", note);
+    onCleanup(() => header?.removeEventListener("headerfold", note));
+  });
 
   const heard = (event: Event) => {
     const detail = (event as CustomEvent<{ account: string; threads?: string[]; accounts?: true }>).detail;
@@ -109,10 +120,12 @@ export default function MailPane(props: {
   // The chooser names the place; the inbox's categories are the tabs under it.
   // The first few categories are the tabs; an account with more of its own has the rest in the chooser.
   const tabbed = () => categories().slice(0, TABS_MOST);
-  const placeName = () => inInbox() && (label() === "inbox" || tabbed().some((one) => one.id === label())) ? "Inbox" : labelName();
-  // The inbox's splits are the pane's modes, on its top edge.
-  const tabs = () => <Show when={inInbox() && tabbed().length && placeName() === "Inbox"}>
-    <Segmented label="Inbox split" size="sm" arrows value={label()} onChange={setLabel}
+  const inSplits = () => inInbox() && (label() === "inbox" || tabbed().some((one) => one.id === label()));
+  const placeName = () => inSplits() ? "Inbox" : labelName();
+  const chosen = () => categories().slice(splitsFolded() ? 0 : TABS_MOST);
+  // The inbox's splits are the pane's modes, on its top edge; folded, they stay laid out there so the header knows when they fit again.
+  const tabs = () => <Show when={inSplits() && tabbed().length}>
+    <Segmented label="Inbox split" size="sm" arrows fold={1} value={label()} onChange={setLabel}
       options={[...tabbed().map((one) => ({ value: one.id, label: one.name, count: one.unread || undefined })), { value: "inbox", label: "All" }]} />
   </Show>;
   const chooser = () => <DropdownMenu modal={false} placement="bottom-start">
@@ -123,7 +136,7 @@ export default function MailPane(props: {
       <MenuSection><For each={labels().filter((one) => (one.role && one.role !== "category" && one.role !== "split") || one.id === "all")}>{(one) => <MenuRow icon={LABEL_ICON[one.role ?? one.id]?.() ?? <Icons.Label />}
         checked={one.id === "inbox" ? placeName() === "Inbox" : one.id === label()} meta={one.unread ? String(one.unread) : undefined}
         onSelect={() => setLabel(one.id === "inbox" ? keptInbox() : one.id)}>{one.name}</MenuRow>}</For></MenuSection>
-      <Show when={categories().length > TABS_MOST}><MenuSection title={sorter() === "split" ? "Splits" : "Categories"}><For each={categories().slice(TABS_MOST)}>{(one) =>
+      <Show when={chosen().length}><MenuSection title={sorter() === "split" ? "Splits" : "Categories"}><For each={chosen()}>{(one) =>
         <MenuRow icon={<Icons.Label />} checked={one.id === label()} meta={one.unread ? String(one.unread) : undefined} onSelect={() => setLabel(one.id)}>{one.name}</MenuRow>}</For></MenuSection></Show>
       <Show when={labels().some((one) => one.role === "split") && labels().some((one) => one.role === "category")}><MenuSection title="Inbox sorted by">
         <MenuRow checked={sorter() === "split"} onSelect={() => sortBy("split")}>Splits</MenuRow>
@@ -143,7 +156,7 @@ export default function MailPane(props: {
     const to = event.key === "ArrowDown" ? at + 1 : event.key === "ArrowUp" ? at - 1 : event.key === "Home" ? 0 : event.key === "End" ? all.length - 1 : null;
     if (to === null || at < 0) return;
     event.preventDefault();
-    if (to < 0) return field?.focus();
+    if (to < 0) return (searchFolded() ? listField : field)?.focus();
     all[Math.min(to, all.length - 1)]?.focus();
   };
   const nearEnd = (element: HTMLElement) => { if (element.scrollTop + 2 * element.clientHeight >= element.scrollHeight) void list.more().catch((reason) => toast.error(failure(reason))); };
@@ -189,8 +202,8 @@ export default function MailPane(props: {
 
   const foot = () => list.searchingRemote() ? "Searching older mail"
     : status()?.backfill && !list.query() ? `Reading in older mail · ${status()!.backfill!.done.toLocaleString()} of ${status()!.backfill!.total.toLocaleString()}` : "";
-  const search = () => <Show when={account()}>
-      <LeadInput kind="tool" ref={(element) => { field = element; }} aria-label="Search mail" placeholder="Search mail" value={list.query()}
+  const search = (inList = false) => <Show when={account()}>
+      <LeadInput kind="tool" fold={inList ? undefined : 0} ref={(element) => { if (inList) listField = element; else field = element; }} aria-label="Search mail" placeholder="Search mail" value={list.query()}
         onInput={(event) => void list.search(event.currentTarget.value).catch((reason) => toast.error(failure(reason)))}
         onClear={() => void list.search("")}
         onKeyDown={(event) => {
@@ -199,6 +212,7 @@ export default function MailPane(props: {
         }} />
   </Show>;
   const listColumn = () => <>
+    <Show when={searchFolded()}><ToolBar>{search(true)}</ToolBar></Show>
     <ReadingScroll ref={(element) => { rows = element; }} onScroll={(event) => nearEnd(event.currentTarget)} onKeyDown={walk} aria-label={labelName()}>
       <Show when={list.threads().length} fallback={<Empty>{list.query() ? "Nothing found" : `Nothing in ${labelName()}`}</Empty>}>
         <div><For each={list.threads()}>{(thread, index) => <><Show when={dayOver(index())}>{(day) => <DashDay>{day()}</DashDay>}</Show>{row(thread)}</>}</For></div>
@@ -222,7 +236,7 @@ export default function MailPane(props: {
     backToList();
   };
 
-  return <SheetFill ref={createArtWindow(true)} class="pane-mail" onKeyDown={escape}>
+  return <SheetFill ref={(element) => { art(element); watchHeader(element); }} class="pane-mail" onKeyDown={escape}>
     {props.header({ title: account() ? chooser() : <>Mail</>, modes: tabs(), actions: <>{search()}{headerActions()}</> })}
     <Show when={!accounts.loading || accounts.latest} fallback={<Loading kind="pane"><Spinner />Loading mail</Loading>}>
       <Show when={account()} fallback={trouble() ? <Empty role="alert">{trouble()}</Empty> : <Empty><div><Icons.Mail /><p>Mail is set up in Settings.</p><Button variant="ghost" outline size="sm" onClick={() => props.onSettings()}>Open Settings</Button></div></Empty>}>

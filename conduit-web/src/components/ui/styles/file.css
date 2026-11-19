@@ -42,8 +42,9 @@
 .ui-status-bar { display: flex; min-height: var(--control); flex: none; align-items: center; gap: var(--space-2xs); overflow: hidden; border-top: var(--hairline) solid var(--border); background: color-mix(in oklch, var(--background), black 3%); padding: var(--space-xs) var(--space-sm); color: var(--muted-foreground); font-size: var(--text-caption); }
 .ui-status-group { display: flex; min-width: 0; height: var(--control-xs); flex: none; align-items: center; gap: var(--space-2xs); overflow-x: auto; scrollbar-width: none; }
 .ui-status-group::-webkit-scrollbar { display: none; }
-.ui-status-group[data-details] { flex: 1; justify-content: flex-end; }
-.ui-status-text { flex: none; padding-inline: var(--space-sm); white-space: nowrap; }
+.ui-status-group[data-details] { flex: 1; justify-content: safe flex-end; }
+/* What is known of the file gives way at its end, so it never runs off the bar's left edge. */
+.ui-status-text { min-width: 0; flex: 0 1 auto; overflow: hidden; padding-inline: var(--space-sm); text-overflow: ellipsis; white-space: nowrap; }
 .ui-status-bar .ui-icon-button:where([data-icon-button="file"]) { padding-inline: var(--space-sm); }
 .ui-status-picker { display: flex; --status-picker-max: calc(7.5 * var(--u-space)); max-width: var(--status-picker-max); height: var(--control-xs); flex: none; align-items: center; gap: var(--space-xs); border: 0; border-radius: var(--radius-control); background: transparent; padding-inline: var(--space-sm); color: var(--muted-foreground); font: inherit; white-space: nowrap; }
 .ui-status-picker > svg { width: var(--icon-xs); height: var(--icon-xs); flex: none; }

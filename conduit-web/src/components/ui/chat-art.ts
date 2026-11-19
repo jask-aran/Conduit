@@ -38,15 +38,17 @@ export const [chatArt, setChatArt] = createRoot(() => {
 });
 
 /** For a view's root element: the pane the view stands in is a window onto the art while the view is mounted;
-    `dim` for a view that covers its pane, which shows the picture faintly through itself. */
-export function createArtWindow(dim = false) {
+    `dim` for a view that covers its pane, which shows the picture faintly through itself; `"shade"` for a view whose
+    muted text stands on the picture, which is shaded under it. */
+export function createArtWindow(dim: boolean | "shade" = false) {
   let inside: Element | undefined;
   onMount(() => {
     // A dimmed view is screened over the picture, which only reaches as far as the nearest layer that isolates it.
-    const pane = inside?.closest<HTMLElement>(dim ? ".ui-sheet-fill, .ui-sheet, .ui-dock-surface" : ".ui-sheet, .ui-dock-surface");
+    const pane = inside?.closest<HTMLElement>(dim === true ? ".ui-sheet-fill, .ui-sheet, .ui-dock-surface" : ".ui-sheet, .ui-dock-surface");
     if (!pane) return;
     panes.set(pane, (panes.get(pane) ?? 0) + 1);
-    pane.toggleAttribute("data-art-dim", dim);
+    pane.toggleAttribute("data-art-dim", dim === true);
+    pane.toggleAttribute("data-art-shade", dim === "shade");
     if (chatArt()) sync();
     // Counted: a pane's next view mounts before the one it replaces is cleaned up.
     onCleanup(() => { const left = panes.get(pane)! - 1; if (left) panes.set(pane, left); else { panes.delete(pane); sync(); } });

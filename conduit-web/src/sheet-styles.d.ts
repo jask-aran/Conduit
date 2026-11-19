@@ -17,7 +17,7 @@ export const SHEET_BORDERS: readonly SheetBorders[];
  * `borders` its own edges, drawn in `borderColor` (else the grid's) at `borderWeight` (else thin); `size` its text's in points (else the sheet's).
  */
 export type SheetStyle = {
-  bold?: boolean; italic?: boolean; underline?: boolean; strike?: boolean; wrap?: boolean;
+  bold?: boolean; italic?: boolean; underline?: boolean; strike?: boolean; wrap?: boolean; clip?: boolean;
   color?: SheetInk | SheetHex | null; fill?: SheetInk | SheetHex | null; borderColor?: SheetHex | null; borderWeight?: "medium" | "thick" | null; size?: number | null; align?: "left" | "center" | "right" | null; valign?: "top" | "middle" | "bottom" | null;
   borders?: { top?: boolean; right?: boolean; bottom?: boolean; left?: boolean };
 };
@@ -26,7 +26,7 @@ export type SheetStyle = {
  * (`h=center`, `c=#0070c0`, `bw=medium`, `z=9`), `bt br bb bl` edges, `-` before one for its default set on purpose: "b c=red f=amber h=center bt bb", "-b".
  * As attributes: each code to true or false (a flag or an edge), or a word or null (a value).
  */
-export type StyleAttrs = Partial<Record<"b" | "i" | "u" | "s" | "w" | "bt" | "br" | "bb" | "bl", boolean> & Record<"c" | "f" | "h" | "v" | "bc" | "bw" | "z", string | null>>;
+export type StyleAttrs = Partial<Record<"b" | "i" | "u" | "s" | "w" | "x" | "bt" | "br" | "bb" | "bl", boolean> & Record<"c" | "f" | "h" | "v" | "bc" | "bw" | "z", string | null>>;
 export function decodeStyle(text: unknown): StyleAttrs;
 export function encodeStyle(attrs: StyleAttrs): string;
 /** A fault is an Error with status 400. */

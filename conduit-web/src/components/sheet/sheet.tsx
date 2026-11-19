@@ -28,6 +28,10 @@ import { createSheetFind } from "./find";
 import { createSheetHistory } from "./history";
 import { FormatMenu, FormatPrompt, FormattingMenu } from "./format-menu";
 import { sheetChartIcons as ChartIcons } from "@/components/ui/sheet-icons";
+import { createSheetTypes, type SheetTypeKind } from "./types";
+import { DropdownList, DropdownPrompt, type DropdownOption } from "./dropdown";
+import { LinkPrompt } from "./link";
+import type { SheetPill } from "./cell-draw";
 import type { SheetChartKind } from "@/sheet-charts.js";
 
 const SheetCharts = lazy(() => import("./charts"));
@@ -35,9 +39,10 @@ const SheetCharts = lazy(() => import("./charts"));
 // Cells written into the text a comment quotes, and how much of each: enough to read.
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
 // The grid keeps a spreadsheet's chords the application binds elsewhere: Ctrl+B is Bold (the sidebar elsewhere), Ctrl+- deletes rows, Ctrl+0 hides columns, Ctrl+Shift+1..5 are number formats.
-const OWN_KEYS = ["primary+KeyB", "primary+Minus", "primary+Digit0", ...[0, 1, 2, 3, 4, 5, 6].map((n) => `primary+shift+Digit${n}`), "primary+Backslash", "alt+primary+KeyV"].join(" ");
+const OWN_KEYS = ["primary+KeyB", "primary+Minus", "primary+Digit0", ...[0, 1, 2, 3, 4, 5, 6].map((n) => `primary+shift+Digit${n}`), "primary+Backslash", "alt+primary+KeyV", "primary+KeyK"].join(" ");
 // A formula moved as a fill moves it; text stays as typed.
 const shifted = (input: string, rows: number, cols: number) => input.startsWith("=") ? shiftRefs(input, rows, cols) : input;
+const REFIT = "refit";
 const between = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, n) => from + n);
 type Menu = { rows?: SheetRange; cols?: SheetRange };
 
@@ -50,7 +55,16 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const [model, setModel] = createSignal<SheetView>(), [grid, setGrid] = createSignal<SheetGrid>(), [failed, setFailed] = createSignal<string>();
   const [at, setAt] = createSignal<SheetRange | null>(null), [changed, setChanged] = createSignal(0), [address, setAddress] = createSignal<string | null>(null), [scrolled, setScrolled] = createSignal(0);
   const [menu, setMenu] = createSignal<Menu>({});
-  const formats = createSheetFormats(look, model, props.host.failed), styles = createSheetStyles(look, model, props.host.failed);
+  const formats = createSheetFormats(look, model, props.host.failed), styles = createSheetStyles(look, model, props.host.failed), types = createSheetTypes(look, model, props.host.failed);
+  // A dropdown's list open on its cell, and the options being edited for a range (`type`: the list's, else a new one).
+  const [listing, setListing] = createSignal<{ row: number; col: number; box: SheetBox } | null>(null), [editingList, setEditingList] = createSignal<{ range: SheetRange; type?: string; options: readonly DropdownOption[] } | null>(null);
+  const [linking, setLinking] = createSignal<{ row: number; col: number; box: SheetBox; text: string; address: string; own: boolean } | null>(null);
+  const pills = new Map<string, SheetPill>();
+  const pillOf = (_row: number, _col: number, type: string | undefined, shown: string): SheetPill | undefined => {
+    if (!type?.startsWith("list:")) return undefined;
+    const options = types.options(type), option = shown ? options?.find((one) => one.value === shown) : undefined, known = !shown || !options || Boolean(option), name = `${option?.ink}|${known}`;
+    return pills.get(name) ?? pills.set(name, { ink: option?.ink, known }).get(name)!;
+  };
   // The grid's element is a signal: the menu trigger that makes it may make it again, and the grid then mounts in the one that stands.
   const [island, setIsland] = createSignal<HTMLDivElement>(), [slot, setSlot] = createSignal<HTMLDivElement>();
   let root: HTMLElement | undefined, anchors: SheetAnchor[] = [], picking: string | undefined;
@@ -82,7 +96,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const writes = (label: string) => (list: readonly { row: number; col: number; input: string }[]) => history.act(label || labelOf(list), () => write(list));
   const editor = createFormulaEditor({
     grid, input: (row, col) => model()?.input(row, col) ?? "", functions: tabs.functions, merged: (row, col) => merges.at(row, col),
-    write: (row, col, input) => writes("")([{ row, col, input }]),
+    write: (row, col, input) => writes("")([{ row, col, input: types.typed(row, col, input) }]),
     // As a spreadsheet's Ctrl+Enter: each shown cell selected takes it, a formula moved from the cell typed in to its own.
     fill: (from, input) => { const area = at(); if (!area || (area.top === area.bottom && area.left === area.right)) return false; writes("Fill selection")(within(inTab(area)).flat().map(({ row, col }) => ({ row, col, input: shifted(input, row - from.row, col - from.col) }))); return true; },
     selected: () => { changed(); const area = at(); return area && { row: area.top, col: area.left }; }, error: (row, col) => model()?.error(row, col) ?? null,
@@ -138,7 +152,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const drawnLook = () => readLook(root!, props.host.display?.());
   const events: SheetGridEvents = {
     selected: setAt,
-    write: (list, label) => writes(label ?? "")(list),
+    write: (list, label) => writes(label ?? "")(list.map((cell) => ({ ...cell, input: types.typed(cell.row, cell.col, cell.input) }))),
     fill: (range, values, from) => hub({ op: "fill", range: rangeA1(range), values, ...(from ? { from: rangeA1(from) } : {}) }),
     resized: (col, width) => history.act("Column width", () => sizes.setWidths(span("cols", col), width / zoom())),
     autofit: (kind, line) => history.act(kind === "cols" ? "Fit column width" : "Fit row height", () => kind === "cols" ? sizes.fitColumns(span("cols", line), readLook(root!)) : sizes.fitRows(span("rows", line), readLook(root!))),
@@ -148,6 +162,11 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     pressed: (row, col) => { const hit = anchors.find((anchor) => { const range = rangeOf(anchor); return range && row >= range.top && row <= range.bottom && col >= range.left && col <= range.right; }); if (hit) moved(hit.key); },
     key: (event, row, col) => {
       if (event.key === " " && event.ctrlKey !== event.shiftKey && !event.altKey && !event.metaKey) { event.preventDefault(); grid()?.whole(event.ctrlKey ? "cols" : "rows"); return true; }
+      const plain = !event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey, type = types.at(row, col);
+      // Space ticks (or clears) every checkbox of the selection as the active one goes, as one step.
+      if (plain && event.key === " " && type === "boolean") { event.preventDefault(); toggle(row, col); return true; }
+      // Enter and Alt+Down open a dropdown's options.
+      if (type?.startsWith("list:") && ((plain && event.key === "Enter") || (event.altKey && !event.ctrlKey && event.key === "ArrowDown"))) { event.preventDefault(); openList(row, col); return true; }
       // As a spreadsheet's: Alt+= opens a SUM of the numbers just above (else just left), Ctrl+; today's date, each to be finished in the cell.
       const sum = event.altKey && !event.ctrlKey && !event.metaKey && event.key === "=", today = event.ctrlKey && !event.altKey && !event.shiftKey && event.key === ";";
       if (sum || today) {
@@ -175,7 +194,16 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       editor.begin({ row, col }, "enter", "cell");
       return true;
     },
-    activated: (row, col) => editor.begin({ row, col }, "edit", "cell"),
+    activated: (row, col) => types.at(row, col)?.startsWith("list:") ? openList(row, col) : editor.begin({ row, col }, "edit", "cell"),
+    dropdown: (row, col, box) => setListing({ row, col, box }),
+    // A place in the workbook (`#Tab!A1`) is gone to; anything else opens beside.
+    follow: (address) => {
+      // Only web and mail addresses leave the page: a workbook's links are anyone's.
+      if (!address.startsWith("#")) return void (/^(https?|mailto):/i.test(address) && window.open(address, "_blank", "noopener,noreferrer"));
+      const range = parseRange(tabs.reveal(address.slice(1)).replace(/\$/g, ""));
+      if (range) { grid()?.select(range); requestAnimationFrame(() => grid()?.focus()); }
+    },
+    hovered: (address) => { const into = island(); if (into && into.title !== (address ?? "")) into.title = address ?? ""; },
     filter: (_, col, box) => { filters.reapply(); setFiltering({ col, box }); },
   };
 
@@ -195,12 +223,15 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       made = mountGrid(into, { model: sheet, events, look: untrack(drawnLook), columns: {
         width: (col) => { const width = sizes.width(col); return width === undefined ? undefined : Math.round(width * zoom()); }, freeze: sizes.freeze, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols,
         heights: () => { const by = zoom(), kept = sizes.heights(); return by === 1 ? kept : new Map([...kept].map(([row, height]) => [row, Math.round(height * by)])); },
-        type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; }, draw: formats.draw, dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded, merges: merges.list,
+        type: types.at, pill: pillOf, link: types.link, draw: formats.draw, dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded, merges: merges.list,
       } });
       setGrid(made);
     }, (error: Error) => { setFailed(error.message); props.onDrawn?.(); });
     const off = sheet.onChange((change) => {
       const cells = change.structure ? null : change.cells;
+      // A wrapped cell's row fits its text again, whoever changed it, unless a person set its height; not a step of the history.
+      const wrapped = cells && [...new Set(cells.flatMap(({ row, col }) => styles.at(row, col)?.wrap ? [row] : []))];
+      if (wrapped?.length && root) live.doc.transact(() => sizes.refit(wrapped, readLook(root!)), REFIT);
       rules.changed();
       made?.update(rules.wide() ? null : cells);
       // The formula bar reads the selected cell again only when it may have changed.
@@ -428,9 +459,36 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     opening = () => { grid()?.select(cell); grid()?.focus(); requestAnimationFrame(() => { const box = grid()?.bounds(cell); if (box) { filters.reapply(); setFiltering({ col, box }); } }); };
   };
   createEffect(() => { if (!filters.filter()) setFiltering(null); });
-  /** The type the range's columns share (undefined: plain), null where they differ. */
-  const typeOf = (range: SheetRange) => { const types = new Set(between(range.left, range.right).map((col) => look.get(`type:${model()?.colAt(col)}`))); return types.size === 1 ? [...types][0] : null; };
-  const setType = (range: SheetRange, type: string | null) => history.act("Cell type", () => { for (const col of between(range.left, range.right)) { const id = model()?.colAt(col); if (id) { if (type) look.set(`type:${id}`, type); else look.delete(`type:${id}`); } } });
+  const TYPE_NAMES: Record<SheetTypeKind, string> = { boolean: "Checkbox", date: "Date", list: "Dropdown" };
+  // A date cell draws its ISO text through a date format: one that has none takes the sheet's Date.
+  // A date cell is a serial number in a date format: one with none takes the sheet's Date, and the dates its cells hold as text are read into serials.
+  const setType = (range: SheetRange, kind: SheetTypeKind | null) => history.act("Cell type", () => {
+    types.set(range, kind);
+    if (kind !== "date") return;
+    if (!formats.dated(range.top, range.left)) formats.set(range, "d/m/yyyy");
+    const sheet = model();
+    if (sheet) write(within(inTab(range)).flat().flatMap((cell) => { const input = sheet.input(cell.row, cell.col), typed = types.typed(cell.row, cell.col, input); return typed !== input ? [{ ...cell, input: typed }] : []; }));
+  });
+  /** The options editor on a range: its one dropdown's, else a new one's, started from the values its cells hold. */
+  const editList = (range: SheetRange) => {
+    const sheet = model(), type = types.uniform(range) === "list" ? types.at(range.top, range.left) : undefined;
+    const options = type && types.options(type);
+    if (type && options) return setEditingList({ range, type, options: options.map((one) => ({ ...one, was: one.value })) });
+    const seen = new Set<string>();
+    if (sheet) for (const row of shownRows(inTab(range)).slice(0, 1000)) for (const col of shownCols(inTab(range))) { const text = valueText(sheet.value(row, col)); if (text) seen.add(text); }
+    setEditingList({ range, options: [...seen].slice(0, 50).map((value) => ({ value })) });
+  };
+  const openLink = (row: number, col: number) => {
+    const box = grid()?.bounds({ top: row, bottom: row, left: col, right: col }), text = valueText(model()?.value(row, col) ?? null);
+    if (box) setLinking({ row, col, box, text, address: types.link(row, col, text) ?? "", own: Boolean(types.link(row, col, "")) });
+  };
+  const openList = (row: number, col: number) => { const box = grid()?.bounds({ top: row, bottom: row, left: col, right: col }); if (box) setListing({ row, col, box }); };
+  const toggle = (row: number, col: number) => {
+    const sheet = model(), area = at();
+    if (!sheet || !area) return;
+    const to = sheet.value(row, col) === true ? "FALSE" : "TRUE";
+    writes("Toggle checkboxes")(within(inTab(area)).flat().filter((cell) => types.at(cell.row, cell.col) === "boolean").map((cell) => ({ ...cell, input: to })));
+  };
   // The cell menu, as a spreadsheet's: what it does is said of the rows or columns it was opened on, counted ("Insert 5 rows above").
   const menuGroups = (): (SheetMenuEntry[] | false)[] => {
     const r = rows(), c = cols(), size = model()?.size();
@@ -541,10 +599,12 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
           { label: "Split text to columns…", icon: <DataIcons.split />, disabled: nCols > 1, run: () => { opening = () => setSplitting(range); } },
         ] },
       ],
-      // A column's cells are plain or checkboxes (TRUE and FALSE), its type in the look (`type:<colId>`): the whole column's, so only its menu sets it.
-      kind === "cols" && [{ label: "Cell type", icon: <LineIcons.type />, meta: typeOf(range) === "boolean" ? "Checkbox" : typeOf(range) === null ? undefined : "Plain", sub: [
+      // Plain, checkboxes (TRUE and FALSE), dates or a dropdown's options (sheet-types.js): whole columns take a column's type, other ranges each cell its own.
+      [{ label: "Cell type", icon: <LineIcons.type />, meta: ((kind) => kind === null ? undefined : kind ? TYPE_NAMES[kind] : "Plain")(types.uniform(range)), sub: [
         { label: "Plain", run: () => setType(range, null) },
         { label: "Checkbox", icon: <LineIcons.checkbox />, run: () => setType(range, "boolean") },
+        { label: "Date", icon: <LineIcons.date />, run: () => setType(range, "date") },
+        { label: "Dropdown…", icon: <LineIcons.dropdown />, run: () => editList(range) },
       ] }],
     ];
   };
@@ -555,6 +615,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       // A style's chord is its tool's step: Ctrl+B is Bold.
       const tool = tools.find((one) => one.keys?.length === 2 && one.keys[1]!.toLowerCase() === event.key.toLowerCase())?.label ?? "";
       if (find.keys(event) || tabs.key(event) || history.act(tool, () => formats.key(event, at()) || styles.key(event, at())) || filters.key(event)) return;
+      // Ctrl+K edits the active cell's link.
+      if (!event.shiftKey && !event.altKey && event.code === "KeyK") { event.preventDefault(); const area = at(); if (area) openLink(area.top, area.left); return; }
       // Ctrl+A selects the block of data round the active cell, and pressed again (or where there is none) the whole tab, as a spreadsheet's.
       if (!event.shiftKey && !event.altKey && event.code === "KeyA") {
         event.preventDefault();
@@ -647,6 +709,20 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         <SizePrompt question={question()} onClose={() => { setQuestion(null); grid()?.focus(); }} />
         <RulePrompt area={ruling()} rules={rules} act={(label, run) => history.act(label, run)} onClose={() => { setRuling(null); grid()?.focus(); }} />
         <FilterMenu filter={filters} at={filtering()} frame={() => body} onClose={() => { setFiltering(null); grid()?.focus(); }} />
+        <DropdownList at={listing()?.box ?? null} frame={() => body} options={(() => { const now = listing(); changed(); const type = now && types.at(now.row, now.col); return (type && types.options(type)) || []; })()}
+          value={(() => { const now = listing(); return now ? valueText(model()?.value(now.row, now.col) ?? null) : ""; })()} onClose={() => { setListing(null); grid()?.focus(); }}
+          onPick={(value) => { const now = listing(); setListing(null); if (now) writes(`Pick in ${a1(now.row, now.col)}`)([{ row: now.row, col: now.col, input: value }]); grid()?.focus(); }}
+          onEdit={() => { const now = listing(); setListing(null); if (now) editList({ top: now.row, bottom: now.row, left: now.col, right: now.col }); }} />
+        <LinkPrompt at={linking()} frame={() => body} onClose={() => { setLinking(null); grid()?.focus(); }}
+          onSave={(text, address) => { const now = linking(); setLinking(null); if (now) history.act(address ? "Link" : "Remove link", () => { if (text !== now.text) write([{ row: now.row, col: now.col, input: text }]); types.setLink(now.row, now.col, address || null); }); grid()?.focus(); }} />
+        <DropdownPrompt given={editingList()?.options ?? null} onClose={() => { setEditingList(null); grid()?.focus(); }}
+          onSave={(options) => { const now = editingList(); setEditingList(null); if (now) history.act("Dropdown", () => {
+            if (!now.type) return types.set(now.range, "list", options);
+            // A renamed option renames the cells that hold it.
+            const renamed = new Map(options.flatMap((one) => one.was && one.was !== one.value ? [[one.was, one.value] as const] : [])), sheet = model(), cells = types.cells(now.type);
+            types.setOptions(now.type, options);
+            if (renamed.size && sheet) write(cells.flatMap((cell) => { const to = renamed.get(valueText(sheet.value(cell.row, cell.col))); return to ? [{ ...cell, input: to }] : []; }));
+          }); grid()?.focus(); }} />
         <DedupePrompt asked={deduping() && { range: rangeA1(deduping()!.range), header: deduping()!.header }} onRemove={(header) => { const asked = untrack(deduping); if (asked) dedupe(asked.range, header); }} onClose={() => { setDeduping(null); grid()?.focus(); }} />
         <SplitPrompt open={splitting() !== null} onSplit={(separator) => { const range = untrack(splitting); if (range) void split(range, separator); }} onClose={() => { setSplitting(null); grid()?.focus(); }} />
         <ShiftPrompt asked={shifting()} frame={() => body} onClose={() => { setShifting(null); grid()?.focus(); }} onChoose={(way) => { const asked = untrack(shifting); if (asked) shift(asked.verb, asked.range, way); }} />

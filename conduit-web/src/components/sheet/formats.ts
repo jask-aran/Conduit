@@ -148,7 +148,10 @@ export function createSheetFormats(look: Y.Map<number | string>, model: Accessor
       const sheet = model(), pattern = at(range.top, range.left);
       if (!sheet) return;
       if (pattern) { const next = stepDecimals(pattern, by); if (next !== pattern) set(range, next); return; }
-      const value = sheet.value(range.top, range.left), places = typeof value === "number" ? (String(Number(value.toPrecision(12))).split(".")[1]?.length ?? 0) + by : Math.max(0, by);
+      // From the range's first number (a General cell of text has no places of its own), as Excel steps from the numbers it shows.
+      let value = sheet.value(range.top, range.left);
+      for (let row = range.top, { rows, cols } = sheet.size(); typeof value !== "number" && row <= Math.min(range.bottom, rows - 1, range.top + 999); row++) for (let col = range.left; typeof value !== "number" && col <= Math.min(range.right, cols - 1); col++) value = sheet.value(row, col);
+      const places = typeof value === "number" ? (String(Number(value.toPrecision(12))).split(".")[1]?.length ?? 0) + by : Math.max(0, by);
       set(range, places > 0 ? `0.${"0".repeat(places)}` : "0");
     },
     key: (event, range) => {

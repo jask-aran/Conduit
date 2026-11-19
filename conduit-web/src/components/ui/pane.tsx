@@ -174,7 +174,7 @@ export const LayoutGlyph = (props: { weights: number[] }) =>
   <span class="ui-layout-glyph" aria-hidden="true"><For each={props.weights}>{(weight) => <i style={{ flex: `${weight} 1 0` }} />}</For></span>;
 
 export const PaneHome = (props: { label: string; children: JSX.Element }) =>
-  <section ref={createArtWindow()} class="ui-pane-home" aria-label={props.label}><div class="ui-pane-home-column">{props.children}</div></section>;
+  <section ref={createArtWindow("shade")} class="ui-pane-home" aria-label={props.label}><div class="ui-pane-home-column">{props.children}</div></section>;
 /** `end`: controls held at the bar's far end, after what it says or holds. */
 export function ToolBar(props: JSX.HTMLAttributes<HTMLDivElement> & { ref?: (element: HTMLDivElement) => void; edge?: "top" | "bottom"; vertical?: boolean; end?: JSX.Element }) {
   const [local, rest] = splitProps(props, ["edge", "vertical", "end", "children"]);

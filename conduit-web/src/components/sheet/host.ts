@@ -9,6 +9,7 @@ import type { SheetSortOp, SheetTabOp } from "@/sheet-format.js";
 import type { SheetFormatOp } from "@/sheet-formats.js";
 import type { SheetBorders, SheetInk, SheetStyleOp } from "@/sheet-styles.js";
 import type { SheetChartKind, SheetChartSpec } from "@/sheet-charts.js";
+import type { SheetTypeOp } from "@/sheet-types.js";
 
 /** Cells by position, 0-based and inclusive (sheet-format.js parseRange). */
 export type SheetRange = { top: number; left: number; bottom: number; right: number };
@@ -42,6 +43,7 @@ export type SheetCellsOp = { client?: number; step?: number } & (
   | { op: "dedupe"; range: string; header?: boolean; tab?: string }
   | SheetFormatOp
   | SheetStyleOp
+  | SheetTypeOp
   | SheetSortOp
   | { op: "chart"; chart?: SheetChartSpec & { id?: string; delete?: boolean }; tab?: string }
   | SheetTabOp);
@@ -57,7 +59,7 @@ export type SheetToolName = "bold" | "italic" | "underline" | "strike" | "wrap" 
 /** In the ribbon's order, left to right. */
 export const SHEET_TOOLS: readonly SheetToolName[] = ["bold", "italic", "underline", "strike", "align", "color", "fill", "borders", "merge", "chart", "format", "valign", "wrap", "decimals", "spread", "paint", "clear"];
 /** `clear`: Clear formatting (styles and number formats). `spread-down` and `spread-right`: Fill down and Fill right, named apart from `fill`, the fill colour. */
-export type SheetToolId = "bold" | "italic" | "underline" | "strike" | "wrap" | "clip" | "clear" | "paint" | `spread-${"down" | "right"}` | `color-${SheetInk | "none" | "any"}` | `fill-${SheetInk | "none" | "any"}` | `borders-${SheetBorders}` | `merge-${"center" | "across" | "cells" | "none"}` | `chart-${SheetChartKind}`
+export type SheetToolId = "bold" | "italic" | "underline" | "strike" | "wrap" | "clip" | "overflow" | "clear" | "paint" | `spread-${"down" | "right"}` | `color-${SheetInk | "none" | "any"}` | `fill-${SheetInk | "none" | "any"}` | `borders-${SheetBorders}` | `merge-${"center" | "across" | "cells" | "none"}` | `chart-${SheetChartKind}`
   | `align-${"left" | "center" | "right"}` | `valign-${"top" | "middle" | "bottom"}` | `format-${"general" | "number" | "currency" | "accounting" | "percent" | "scientific" | "date" | "long-date" | "time" | "custom"}` | `decimals-${"more" | "fewer"}`;
 /** One tool as the ribbon draws it (Markup's MarkupHostTool): read where drawn, so getters follow. `menu`: the tools of one stand as one control (showing `glyph` where one says it); `compact` with `swatch`: a set of inks. */
 export type SheetTool = { name: SheetToolId; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; compact?: boolean; swatch?: string; glyph?: () => JSX.Element; tip?: string; pick?(hex: string): void; run(): void };
@@ -187,6 +189,11 @@ export type SheetGridEvents = {
   autofit?(kind: "cols" | "rows", line: number): void;
   /** A filter's mark pressed on its header cell (SheetColumns `mark`), with the cell's box. */
   filter?(row: number, col: number, box: SheetBox): void;
+  /** A dropdown cell's arrow pressed, with the cell's box. */
+  dropdown?(row: number, col: number, box: SheetBox): void;
+  /** A link Ctrl+clicked, to go to; and the link under the pointer as it moves (undefined: none). */
+  follow?(address: string): void;
+  hovered?(address: string | undefined): void;
   /** Its first frame with the sheet's cells is painted. */
   drawn(): void;
 };

@@ -66,10 +66,10 @@
 
 /* The wash's corner is the track's less the inset, so the space round the wash is even; segments sit a gap apart, so
    a pointed-at wash never touches the thumb's. */
-.ui-seg { --seg-pad: calc(2 * var(--hairline)); --seg-gap: var(--seg-pad); --seg-inner: calc(var(--radius-control) - var(--hairline) - var(--seg-pad)); --seg-cell: calc((100% - 2 * var(--seg-pad) - (var(--segments) - 1) * var(--seg-gap)) / var(--segments)); position: relative; display: inline-grid; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); gap: var(--seg-gap); background: transparent; padding: var(--seg-pad); }
+.ui-seg { --seg-pad: calc(2 * var(--hairline)); --seg-gap: var(--seg-pad); --seg-inner: calc(var(--radius-control) - var(--hairline) - var(--seg-pad)); position: relative; display: inline-grid; grid-template-columns: repeat(var(--segments), auto); gap: var(--seg-gap); background: transparent; padding: var(--seg-pad); }
 /* The thumb slides by left, not transform: a layer of its own would put the labels on others, where Windows drops
    ClearType, so they dim while it moves. */
-.ui-seg-thumb { position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: calc(var(--seg-pad) + (var(--seg-cell) + var(--seg-gap)) * var(--segment)); width: var(--seg-cell); border-radius: var(--seg-inner); background: var(--tint); transition: left var(--duration-gentle) var(--ease-arrive); }
+.ui-seg-thumb { position: absolute; top: var(--seg-pad); bottom: var(--seg-pad); left: var(--thumb-at); width: var(--thumb-width); border-radius: var(--seg-inner); background: var(--tint); transition: left var(--duration-gentle) var(--ease-arrive), width var(--duration-gentle) var(--ease-arrive); }
 .ui-seg button { position: relative; display: inline-flex; min-width: 0; min-height: calc(var(--control-xs) - 2 * var(--seg-pad)); align-items: center; justify-content: center; gap: var(--space-xs); border: 0; border-radius: var(--seg-inner); background: transparent; padding: 0 var(--space-md); color: var(--muted-foreground); font-size: var(--text-row); font-weight: var(--weight-lift); cursor: pointer; }
 .ui-seg button:is(:focus-visible, [data-held], [aria-checked="true"]) { color: var(--foreground); }
 @media (hover: hover) { .ui-seg button:is(:hover, :focus-visible, [data-held], [aria-checked="true"]) { color: var(--foreground); } }
@@ -83,12 +83,12 @@
 @media (hover: hover) { [data-surface="frame"] :is(.ui-pill > button, .ui-seg button:is([aria-checked="true"], :hover, :focus-visible, [data-held])) { color: var(--foreground); } }
 [data-surface="frame"] .ui-seg .ui-seg-thumb { background: var(--border); }
 @media (prefers-reduced-motion: reduce) { .ui-seg-thumb { transition: none; } }
-.ui-seg[aria-disabled] { opacity: var(--opacity-disabled); pointer-events: none; }
+.ui-seg[aria-disabled], .ui-seg button:disabled { opacity: var(--opacity-disabled); pointer-events: none; }
 .ui-seg button[aria-checked="true"]:is(:focus-visible, [data-held]) { background: var(--tint); }
 @media (hover: hover) { .ui-seg button[aria-checked="true"]:is(:hover, :focus-visible, [data-held]) { background: var(--tint); } }
 .ui-seg button:not([aria-checked="true"]):is(:focus-visible, [data-held]) { background: var(--tint); }
 @media (hover: hover) { .ui-seg button:not([aria-checked="true"]):is(:hover, :focus-visible, [data-held]) { background: var(--tint); } }
-.ui-seg[data-size="sm"] button { min-height: calc(var(--control-xs) - 2 * var(--seg-pad)); padding: var(--space-2xs) var(--space-sm); font-size: var(--text-caption); }
+.ui-seg[data-size="sm"] button { padding-inline: var(--space-sm); font-size: var(--text-caption); }
 
 .ui-slider { display: grid; gap: var(--space-sm); padding: var(--space-sm) var(--space-md) var(--space-md); }
 .ui-slider[data-disabled] { opacity: var(--opacity-disabled); }

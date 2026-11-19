@@ -2556,7 +2556,7 @@ function App() {
     if (isMobileLayout() || !(event instanceof MouseEvent || event instanceof KeyboardEvent)) return {};
     return event.altKey ? { beside: true } : event.ctrlKey || event.metaKey ? { tab: true } : {};
   };
-  const openRules: Layouts.Rules = { held: (view) => view.startsWith("chat:") && Boolean(drafts.draftFor(view.slice("chat:".length))) };
+  const openRules: Layouts.Rules = { held: (view) => view.startsWith("chat:") && Boolean(drafts.draftFor(view.slice("chat:".length))), fits: (row) => isMobileLayout() || viewsFit(row.slice(1)) };
   /** Opening, from anywhere: plain replaces what the focused pane shows (its tabs with it, offering Undo), `tab` adds a
    *  chat or terminal as a tab of the nearest session pane, `beside` opens a pane beside and leaves the keyboard. A
    *  view open already is gone to. `inPaneA` draws pane A's route when the caller has more than its view to go on. */
@@ -2922,15 +2922,15 @@ function App() {
   const [termTitles, setTermTitles] = createSignal<Record<string, string>>({});
   /** Terminal views whose shell is live, for their tab's dot. */
   const [termLive, setTermLive] = createSignal<Record<string, boolean>>({});
-  const [artifactNames, setArtifactNames] = createSignal<Record<string, { name: string; label: string }>>({});
-  const nameArtifact = (view: string, name: string, label: string) => setArtifactNames((current) => current[view]?.name === name && current[view]?.label === label ? current : { ...current, [view]: { name, label } });
+  const [artifactNames, setArtifactNames] = createSignal<Record<string, { name: string; label: string; project: string }>>({});
+  const nameArtifact = (view: string, { name, project }: { name: string; project: string }, label: string) => setArtifactNames((current) => current[view]?.name === name && current[view]?.label === label && current[view]?.project === project ? current : { ...current, [view]: { name, label, project } });
   // A tab is named before its pane is first shown: the hub is asked, once, and again for every tab drawn when an artifact changes, as one not shown may be the one renamed.
   const namedArtifacts = new Set<string>(), [artifactsChanged, setArtifactsChanged] = createSignal(undefined, { equals: false });
   const askArtifactName = (view: string) => {
     artifactsChanged();
     if (namedArtifacts.has(view)) return;
     namedArtifacts.add(view);
-    void import("./document/artifacts").then(({ artifactAbout, artifactLabel }) => artifactAbout(view.slice("artifact:".length)).then((found) => nameArtifact(view, found.name, artifactLabel(found.kind)))).catch(() => {});
+    void import("./document/artifacts").then(({ artifactAbout, artifactLabel }) => artifactAbout(view.slice("artifact:".length)).then((found) => nameArtifact(view, found, artifactLabel(found.kind)))).catch(() => {});
   };
   const renameArtifacts = () => { namedArtifacts.clear(); setArtifactsChanged(); };
   window.addEventListener("conduit:artifacts-changed", renameArtifacts);
@@ -2964,7 +2964,7 @@ function App() {
     <PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title="New artifact" /></PaneHeader>
     <ArtifactCreator project={id.slice("new:".length) || undefined} projects={catalogue.projects().filter((item) => item.id === id.slice("new:".length) || homeProjects().includes(item))}
       onBack={() => void setPaneView(pane, "home")} onMade={(made) => void setPaneView(pane, `artifact:${made.id}`).then(() => focusAnyPane(pane))} />
-  </SheetFill> : <ArtifactPane id={id} pending={arriving()[pane] === id} said={said()[pane] === id} moving={paneMotion()?.slot === pane} onDrawn={() => drawnArtifacts.add(`${pane}:${id}`)} onThread={(links) => void pressThread(id, links)} shortcuts={shortcutManager} onAbout={(found, label) => nameArtifact(`artifact:${id}`, found.name, label)}
+  </SheetFill> : <ArtifactPane id={id} pending={arriving()[pane] === id} said={said()[pane] === id} moving={paneMotion()?.slot === pane} onDrawn={() => drawnArtifacts.add(`${pane}:${id}`)} onThread={(links) => void pressThread(id, links)} shortcuts={shortcutManager} onAbout={(found, label) => nameArtifact(`artifact:${id}`, found, label)}
     chats={(project) => (catalogue.projects().find((item) => item.id === project)?.sessions ?? []).map((chat) => ({ id: chat.id, title: chat.title || "Untitled chat" }))}
     thread={isMobileLayout() ? undefined : (chat) => ({ shown: Boolean(shownChat(chat)), cue: <RuntimeIndicator process={((process) => visibleRuntimeActivity(process) === "idle" ? null : process)(runtime.getProcess(chat ?? ""))} fallback={<Icons.Message />} /> })}
     header={(extra, links) => <PaneHeader modes={paperModes(id, "paper", links)} actions={<>{extra}{paneTabActions(pane)}</>}><HeaderCrumb title={viewName(`artifact:${id}`)} /></PaneHeader>} />);
@@ -5180,7 +5180,7 @@ function App() {
         <Show when={workspaceIdentityProject()}>{(project) => <WorkspaceAppearanceEditor compact value={project().workspaceAppearance} saving={workspaceIdentitySaving()} onSave={(appearance) => void saveWorkspaceIdentity(appearance)} />}</Show>
     </Dialog>
     <Show when={routeKind() !== "terminal"}>
-    <Sidebar onPreviewChat={previewChat} onPreviewJbot={previewJbot} onPreviewRelease={releasePreview} projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} placeOf={(id: string) => chatPlaces().get(id)} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} focusedView={viewOf(keyboardPane())} onOpenArtifact={(artifact, beside) => openArtifact(artifact.id, beside ? { beside } : verbNow())} onNewPane={isMobileLayout() ? undefined : openEmptyPane} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneADocument()} agent={routeKind() === "jbot" && !paneADocument()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneADocument()} routeCovered={paneADocument() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
+    <Sidebar onPreviewChat={previewChat} onPreviewJbot={previewJbot} onPreviewRelease={releasePreview} projects={sidebarFilled() ? catalogue.projects() : []} catalogueLoaded={sidebarFilled() && catalogue.loaded()} projectId={catalogue.projectId()} selectedId={catalogue.selectedId()} focusedId={keyboardSlot() !== null ? slotChatId(keyboardSlot()!) : null} openIds={openChatIds()} placeOf={(id: string) => chatPlaces().get(id)} onOpenChatBeside={isMobileLayout() ? undefined : openChatBeside} focusedView={viewOf(keyboardPane())} focusedProject={artifactNames()[viewOf(keyboardPane()) ?? ""]?.project} onOpenArtifact={(artifact, beside) => openArtifact(artifact.id, beside ? { beside } : verbNow())} onNewPane={isMobileLayout() ? undefined : openEmptyPane} navigatingId={chat.navigatingId()} dashboard={routeKind() === "dashboard" && !paneADocument()} agent={routeKind() === "jbot" && !paneADocument()} project={routeKind() === "project"} computer={routeKind() === "computer" && !paneADocument()} routeCovered={paneADocument() !== null} terminal={false} runtime={runtime} chatLimit={sidebarChatLimit()}
       connectivity={runtime.connectivity()} workspaceSuggestions={workspaceSuggestions()} workspacePolicy={workspacePolicy()} command={sidebarCommand()}
       sidebarPins={sidebarPins()} onTogglePin={toggleSidebarPin}
       serverInTitleBar={Boolean(desktopShell) && desktopTitleBar() === "conduit" && titleBarShows("server")}

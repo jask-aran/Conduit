@@ -13,7 +13,7 @@ export const SHEET_BORDERS = ["all", "outer", "inner", "top", "bottom", "left", 
 // Each attribute's code in the packed string, in the order it is written; a flag stands alone (`b`), a value after `=` (`c=red`), and `-` before
 // either is its default set on purpose, over what would be worn from beneath (`-b`: not bold in a bold column). A colour is an ink or, as a workbook
 // brings it, `#rrggbb`: data, drawn as it is (components/sheet/shade.ts fits it to the theme); `bc` and `bw` are the colour and weight of every edge drawn.
-const FLAGS = { bold: "b", italic: "i", underline: "u", strike: "s", wrap: "w" };
+const FLAGS = { bold: "b", italic: "i", underline: "u", strike: "s", wrap: "w", clip: "x" };
 const EDGES = { top: "bt", right: "br", bottom: "bb", left: "bl" };
 const VALUES = { color: "c", fill: "f", align: "h", valign: "v", borderColor: "bc", borderWeight: "bw", size: "z" };
 const HEX = /^#[0-9a-f]{6}$/;
@@ -59,7 +59,7 @@ export function styleAttrs(style) {
     else if (field === "borders") {
       if (!value || typeof value !== "object") throw fault("borders is { top, right, bottom, left }, each true or false");
       for (const [edge, on] of Object.entries(value)) { if (!Object.hasOwn(EDGES, edge) || typeof on !== "boolean") throw fault("borders is { top, right, bottom, left }, each true or false"); out[EDGES[edge]] = on; }
-    } else throw fault(`A style has bold, italic, underline, strike, wrap, color, fill, align, valign, borderColor, borderWeight, size and borders, not ${field}`);
+    } else throw fault(`A style has bold, italic, underline, strike, wrap, clip, color, fill, align, valign, borderColor, borderWeight, size and borders, not ${field}`);
   }
   return out;
 }

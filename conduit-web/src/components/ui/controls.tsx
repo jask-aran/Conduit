@@ -2,7 +2,7 @@ import { HarnessMark } from "./marks";
 import { Frost } from "./frost";
 import { CloseButton, IconButton } from "./actions";
 import * as Icons from "./icons";
-import { createEffect, createSignal, createUniqueId, For, Show, splitProps, untrack, type JSX } from "solid-js";
+import { createEffect, createSignal, createUniqueId, For, onCleanup, Show, splitProps, untrack, type JSX } from "solid-js";
 
 import { feel, type Haptic, type HapticProp } from "./haptics";
 import { cn } from "@/lib/utils";
@@ -55,14 +55,14 @@ export function Input(props: JSX.InputHTMLAttributes<HTMLInputElement>) {
 
 export type LeadInputKind = "tool" | "web" | "browser";
 
-export function LeadInput(props: JSX.InputHTMLAttributes<HTMLInputElement> & { kind?: LeadInputKind; lead?: JSX.Element; ref?: (element: HTMLInputElement) => void; onClear?: () => void }) {
-  const [local, rest] = splitProps(props, ["kind", "lead", "onClear"]);
+export function LeadInput(props: JSX.InputHTMLAttributes<HTMLInputElement> & { kind?: LeadInputKind; lead?: JSX.Element; ref?: (element: HTMLInputElement) => void; onClear?: () => void; fold?: number }) {
+  const [local, rest] = splitProps(props, ["kind", "lead", "onClear", "fold"]);
   const kind = () => local.kind ?? "tool";
   const field = () => kind() === "web"
     ? <input type="text" spellcheck={false} autocomplete="off" {...rest} />
     : kind() === "browser" ? <Input type="search" {...rest} /> : <input type="search" {...rest} />;
   const clear = (event: MouseEvent) => { event.preventDefault(); local.onClear?.(); (event.currentTarget as HTMLElement).closest(".ui-lead-input")?.querySelector("input")?.focus(); };
-  return <label class="ui-lead-input" data-lead-input={kind()} data-clearable={local.onClear ? "" : undefined}>{local.lead ?? <Icons.Search />}{field()}
+  return <label class="ui-lead-input" data-lead-input={kind()} data-fold={local.fold} data-clearable={local.onClear ? "" : undefined}>{local.lead ?? <Icons.Search />}{field()}
     <Show when={local.onClear && String(rest.value ?? "")}><IconButton kind="file" class="ui-lead-input-clear" label="Clear" onMouseDown={(event) => event.preventDefault()} onClick={clear}><Icons.Close /></IconButton></Show></label>;
 }
 
@@ -73,8 +73,23 @@ export function SelectTrigger(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonEle
   </button>;
 }
 
-export function Segmented<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element; count?: number; title?: string; disabled?: boolean }>; onChange: (value: T) => void; size?: "sm"; pill?: boolean; icons?: boolean; arrows?: boolean; disabled?: boolean; tabIndex?: number; id?: string; haptic?: HapticProp }) {
+export function Segmented<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element; count?: number; title?: string; disabled?: boolean }>; onChange: (value: T) => void; size?: "sm"; pill?: boolean; icons?: boolean; arrows?: boolean; disabled?: boolean; tabIndex?: number; id?: string; haptic?: HapticProp; fold?: number }) {
   const index = () => Math.max(0, props.options.findIndex((option) => option.value === props.value));
+  // Each segment is as wide as its words, so the thumb is put under the chosen one by measure, before it is painted:
+  // it slides only when the choice changes, and snaps when the segments resize or first show.
+  let group: HTMLElement | undefined;
+  const sizes = new ResizeObserver(() => place(true));
+  onCleanup(() => sizes.disconnect());
+  const place = (snap = false) => {
+    const on = group?.querySelector<HTMLElement>(':scope > [aria-checked="true"]'), thumb = group?.firstElementChild as HTMLElement | null;
+    for (const part of group?.querySelectorAll(":scope > button") ?? []) sizes.observe(part);
+    if (!group || !thumb || !on?.offsetWidth) return;
+    if (snap) thumb.style.transition = "none";
+    group.style.setProperty("--thumb-at", `${on.offsetLeft}px`);
+    group.style.setProperty("--thumb-width", `${on.offsetWidth}px`);
+    if (snap) { void thumb.offsetLeft; thumb.style.transition = ""; }
+  };
+  createEffect(() => { index(); place(); });
   const move = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
     const step = ["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : ["ArrowLeft", "ArrowUp"].includes(event.key) ? -1 : 0;
     if (!props.arrows || !step || props.disabled) return;
@@ -83,7 +98,7 @@ export function Segmented<T extends string>(props: { label: string; value: T; op
     const group = event.currentTarget;
     queueMicrotask(() => group.querySelector<HTMLElement>('[aria-checked="true"]')?.focus());
   };
-  return <Frost plain={!props.pill} id={props.id} role="radiogroup" aria-label={props.label} aria-disabled={props.disabled || undefined} class="ui-seg" data-pill={props.pill ? "" : undefined} data-icons={props.icons || props.pill ? "" : undefined} data-size={props.size}
+  return <Frost ref={(element: HTMLElement) => { group = element; }} plain={!props.pill} id={props.id} data-fold={props.fold} role="radiogroup" aria-label={props.label} aria-disabled={props.disabled || undefined} class="ui-seg" data-pill={props.pill ? "" : undefined} data-icons={props.icons || props.pill ? "" : undefined} data-size={props.size}
     style={{ "--segments": props.options.length, "--segment": index() }} onKeyDown={move}>
     <span class="ui-seg-thumb" aria-hidden="true" />
     <For each={props.options}>{(option) => <button type="button" role="radio" aria-checked={option.value === props.value} tabIndex={props.tabIndex ?? (props.arrows && option.value !== props.value ? -1 : undefined)} disabled={props.disabled || option.disabled} aria-label={props.icons || props.pill ? option.label : undefined} title={option.title ?? (props.icons || props.pill ? option.label : undefined)}

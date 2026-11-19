@@ -91,7 +91,7 @@
 @media (--conduit-phone-layout) {
   .ui-pane-header:where([data-header="tool"]) > [data-only="phone"] { display: flex; }
   .ui-pane-header:where([data-header="tool"]) { height: auto; flex-wrap: wrap; }
-  .ui-pane-header:where([data-header="tool"]) > .ui-seg { order: 1; flex-basis: 100%; margin-bottom: var(--space-xs); }
+  .ui-pane-header:where([data-header="tool"]) > .ui-seg { order: 1; flex-basis: 100%; grid-template-columns: repeat(var(--segments), minmax(0, 1fr)); margin-bottom: var(--space-xs); }
   .ui-pane-header:where([data-header="tool"]) [data-only="desktop"] { display: none; }
 }
 

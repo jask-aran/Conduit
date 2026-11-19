@@ -116,7 +116,7 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; pendi
     const row = (entry: MarkupMarginEntry) => <MenuRow icon={entry.unread ? <Dot tone="unread" aria-label="Unread" /> : undefined} detail={entry.by ?? undefined} meta={MARKUP_STATES[entry.state]} onSelect={() => margin.go(entry.key)}>{entry.about || "Comment"}</MenuRow>;
     // Always there, with how many are open: at rest the header says what waits on the person.
     return <Show when={margin}><DropdownMenu modal={false} placement="bottom-end">
-      <MenuControl as={Button} variant="ghost" size="sm" aria-label="Comments" title={margin.open() ? `${margin.open()} open` : entries().length ? `${entries().length} to review` : "No comments"}><Icons.Chat />{margin.open() || null}</MenuControl>
+      <MenuControl as={Button} variant="ghost" size={margin.open() ? "sm" : "icon-sm"} aria-label="Comments" title={margin.open() ? `${margin.open()} open` : entries().length ? `${entries().length} to review` : "No comments"}><Icons.Chat />{margin.open() || null}</MenuControl>
       <MenuContent width="md" height="lg">
         <MenuSection title="Show">
           <MenuRow closeOnSelect={false} checked={needsMe()} meta={String(waiting().length)} onSelect={() => setNeedsMe(true)}>Needs me</MenuRow>

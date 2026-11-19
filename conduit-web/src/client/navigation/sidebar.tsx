@@ -120,6 +120,8 @@ export function Sidebar(props: {
   onOpenChatBeside?: (chat: ChatSummary, project: Project) => void;
   /** What the focused pane shows, for an artifact row's current mark. */
   focusedView?: string | null;
+  /** The project holding the artifact the focused pane shows, which reads as holding where you are. */
+  focusedProject?: string;
   onOpenArtifact: (artifact: Pick<Artifact, "id">, beside?: boolean) => Promise<void>;
   onNewPane?: () => void;
   navigatingId?: string | null;
@@ -690,8 +692,8 @@ export function Sidebar(props: {
   // reader is on.
   const shownId = () => props.routeCovered ? null : props.selectedId;
   const onProjectPage = (project: Project) => !props.routeCovered && props.projectId === project.id && (props.project || props.selectedId == null);
-  const holdsCurrentChat = (project: Project) => shownId() != null && project.sessions.some((chat) => chat.id === shownId());
-  const railProjectIsActive = (project: Project) => !props.routeCovered && (project.id === props.projectId || project.sessions.some((chat) => chat.id === props.selectedId));
+  const holdsCurrent = (project: Project) => props.focusedProject === project.id || (shownId() != null && project.sessions.some((chat) => chat.id === shownId()));
+  const railProjectIsActive = (project: Project) => props.focusedProject === project.id || (!props.routeCovered && (project.id === props.projectId || project.sessions.some((chat) => chat.id === props.selectedId)));
   const railProjectIsLive = (project: Project) => project.sessions.some((chat) => Boolean(processFor(chat)));
   const RailAction = (railProps: { label: string; onClick: () => void; current?: boolean; live?: boolean; children: JSX.Element }) =>
     <IconButton kind="rail" aria-label={railProps.label} title={railProps.label} current={railProps.current} live={railProps.live} onClick={railProps.onClick}>{railProps.children}</IconButton>;
@@ -975,7 +977,7 @@ export function Sidebar(props: {
     // Its artifacts are asked of the hub once the project is first open, not for every folded project at start.
     const opened = createMemo((was: boolean) => was || open(), false);
     return <NavFolder open={open()} row={<ContextMenu placement={menuPlacement()} onOpenChange={guardOpen(guard)}>
-        <ContextMenuTrigger as={NavFolderRow} open={open()} current={onProjectPage(blockProps.project)} within={holdsCurrentChat(blockProps.project)}
+        <ContextMenuTrigger as={NavFolderRow} open={open()} current={onProjectPage(blockProps.project)} within={holdsCurrent(blockProps.project)}
           icon={<Show when={isWorkspace()} fallback={<Icons.Folder />}><WorkspaceGlyph appearance={blockProps.project.workspaceAppearance} /></Show>}
           mark={<ProjectActivityIndicator sessions={blockProps.project.sessions} />}
           meta={cloning() ? "Cloning…" : undefined}
@@ -1026,7 +1028,7 @@ export function Sidebar(props: {
       : item.type === "project" ? (workspace() ? <WorkspaceGlyph appearance={item.project.workspaceAppearance} /> : <Icons.Folder />)
         : <Icons.Terminal />;
     return <ContextMenu placement={menuPlacement()}>
-      <ContextMenuTrigger density="nav" element="button" as={Row} lead={icon()} current={current()} within={item.type === "project" && holdsCurrentChat(item.project)} onClick={open}>{label()}</ContextMenuTrigger>
+      <ContextMenuTrigger density="nav" element="button" as={Row} lead={icon()} current={current()} within={item.type === "project" && holdsCurrent(item.project)} onClick={open}>{label()}</ContextMenuTrigger>
       <ContextMenuContent>
         <MenuSection>
           <Show when={workspace()}>

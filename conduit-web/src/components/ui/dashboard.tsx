@@ -26,7 +26,7 @@ export function Dashboard(props: {
   aside?: JSX.Element;
   dock?: JSX.Element;
 }) {
-  const art = createArtWindow();
+  const art = createArtWindow("shade");
   return <section ref={(element) => { art(element); props.ref?.(element); }} class="ui-dash" data-compact={props.compact ? "" : undefined} data-one-column={props.oneColumn ? "" : undefined} data-stacked={props.stacked ? "" : undefined} data-headless={props.head || props.actions ? undefined : ""} data-room={props.room ? "" : undefined} data-page={props.page} aria-label={props.label}>
     <div class="ui-dash-body">
       <Show when={props.head || props.actions}><header class="ui-dash-head">{props.head}{props.actions}</header></Show>
