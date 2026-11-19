@@ -645,7 +645,12 @@ export function sheetKind(hub) {
           const under = op === "set" && text(value) !== "" && hiddenUnder(mergeAreas(room, sheet), area.top, area.left);
           if (under) throw fault(400, `${a1(area.top, area.left)} is inside the merged ${rangeA1(under)}: its value is ${a1(under.top, under.left)}'s`);
           grow(room, sheet, area, name);
-          writeCells(room, sheet, filled(room, sheet, grid, area, source), name, true);
+          // A date written into a date cell is its serial number, as the page writes one typed (types.ts `typed`).
+          const dated = filled(room, sheet, grid, area, source).map(([r, c, input]) => {
+            const type = room.look.get(`type:${key(sheet.rowAt(r), sheet.colAt(c))}`) ?? room.look.get(`type:${sheet.colAt(c)}`), day = type === "date" && input && !input.startsWith("=") ? readDate(input) : null;
+            return day === null ? [r, c, input] : [r, c, String(day)];
+          });
+          writeCells(room, sheet, dated, name, true);
           return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}), ...sheet.size() };
         }
         // A range's number formats (sheet-formats.js) or styles (sheet-styles.js), set first when given; whole columns (B:D), or for styles rows (3:5), set theirs.
