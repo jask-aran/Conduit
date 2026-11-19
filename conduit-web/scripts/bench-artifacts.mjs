@@ -2,7 +2,7 @@
 /**
  * How fast the sheet and the paper open and answer, and what appears or moves after their pane first paints, in headless Chrome.
  *
- *   node scripts/bench-artifacts.mjs <sheet|paper|both> [--runs 5] [--cpu 1,4] [--art] [--save <path without extension>]
+ *   node scripts/bench-artifacts.mjs <sheet|paper|both> [--runs 5] [--cpu 1,4] [--art] [--css <file>] [--save <path without extension>]
  *
  * Run from conduit-web/ against CONDUIT_ORIGIN (http://127.0.0.1:4310). The sheet is the owner's "probe-sheet": it types into Z1 and
  * clears it, and checks columns Z on are as found. The paper is a scratch one, "bench scratch" in the Test project, made with 300 blocks
@@ -16,7 +16,7 @@
  * - long tasks: main-thread tasks over 6.94 ms during the load (to usable + 3 s) and each interaction, with what ran in the longest.
  * The background is off (`conduit:chat-art` none), as headless draws WebGL on the CPU; --art keeps this device's default.
  * Medians over runs. Waits for a load average under 2 (up to 2 minutes) before each run and prints it beside the numbers.
- * --save writes <path>.md (the table) and <path>.json (every run, every pop-in, every long task).
+ * --css injects a stylesheet at the end of the page's head, to measure a CSS change before it is built. --save writes <path>.md (the table) and <path>.json (every run, every pop-in, every long task).
  */
 import fs from "node:fs/promises"; import os from "node:os"; import path from "node:path"; import zlib from "node:zlib";
 import { execFileSync } from "node:child_process";
@@ -28,7 +28,7 @@ if (!["sheet", "paper", "both"].includes(which)) {
   process.exit(1);
 }
 const RUNS = Number(arg("--runs", 5)), RATES = arg("--cpu", "1,4").split(",").map(Number), SAVE = arg("--save"), BUDGET = 6.94, SETTLE = 3000;
-const SHEET = "802d93d7cfbe2968", CATEGORIES = ["devtools.timeline", "toplevel", "loading", "blink.user_timing"];
+const CSS_FIX = arg("--css") && await fs.readFile(arg("--css"), "utf8"), SHEET = "802d93d7cfbe2968", CATEGORIES = ["devtools.timeline", "toplevel", "loading", "blink.user_timing"];
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 const median = (list) => { const sorted = list.filter((n) => Number.isFinite(n)).sort((a, b) => a - b); return sorted.length ? sorted[Math.floor((sorted.length - 1) / 2)] : NaN; };
 const calm = async () => { for (let n = 0; n < 24 && os.loadavg()[0] > 2; n += 1) await sleep(5000); return os.loadavg()[0]; };
@@ -144,9 +144,9 @@ async function load(page, cdp, address, kind) {
   return {
     first: Math.round(at.first), usable: Math.round(at.usable), pop: pop.length, elsewhere: all.length - pop.length, lastPop: pop.length ? Math.round(Math.max(...pop.map((one) => one.t)) - at.first) : 0,
     shiftScore: +late.reduce((sum, shift) => sum + shift.score, 0).toFixed(4), allShiftScore: +shifts.reduce((sum, shift) => sum + shift.score, 0).toFixed(4),
-    long: tasks.length, longest: Math.max(0, ...tasks.map((task) => task.ms)), tasks, pops: all.map((one) => ({ ...one, t: Math.round(one.t - at.first) })), chunks: chunks.sort((a, b) => a.start - b.start),
+    long: tasks.length, longest: Math.max(0, ...tasks.map((task) => task.ms)), tasks, pops: pop.map((one) => ({ ...one, t: Math.round(one.t - at.first) })), chunks: chunks.sort((a, b) => a.start - b.start),
     api: [...requests.values()].filter((one) => one.url.includes("/v0/")).map((one) => `${since(one.start)}–${one.end ? since(one.end) : "?"} ${one.url.replace(origin, "").slice(0, 80)}`),
-    dialogs: await page.locator("[role=dialog]").evaluateAll((all) => all.map((one) => one.querySelector("[id$=-title]")?.textContent ?? "untitled")),
+    dialogs: await page.locator("[role=dialog]").evaluateAll((all) => all.filter((one) => one.dataset.closed === undefined).map((one) => one.querySelector("[id$=-title]")?.textContent ?? "untitled")),
   };
 }
 
@@ -169,7 +169,7 @@ const SHEET_ACTS = {
     const grid = await box(page, ".ui-spreadsheet-rows");
     await page.mouse.move(grid.x + grid.width / 2, grid.y + grid.height / 2);
     for (let n = 0; n < 50; n += 1) { await page.mouse.wheel(n < 30 ? 0 : 100, n < 30 ? 100 : 0); await page.waitForTimeout(16); }
-    return page.evaluate(() => { const at = [...document.querySelectorAll(".ui-spreadsheet-rows *")].find((one) => one.scrollTop || one.scrollLeft); return at ? `${at.scrollLeft}x${at.scrollTop}` : "not scrolled"; });
+    return page.evaluate(() => { const at = [...document.querySelectorAll(".ui-spreadsheet-grid, .ui-spreadsheet-grid *")].find((one) => one.scrollTop || one.scrollLeft); return at ? `${at.scrollLeft}x${at.scrollTop}` : "not scrolled"; });
   },
   "arrows across 50 cells": async (page) => { await address(page, "A3"); for (let n = 0; n < 50; n += 1) await page.keyboard.press(n < 25 ? "ArrowRight" : "ArrowDown"); return page.locator("input.ui-spreadsheet-address").inputValue(); },
   "type 20 characters, commit": async (page) => { await address(page, "Z1"); await page.keyboard.type("bench typing twenty!"); await page.keyboard.press("Enter"); await page.waitForTimeout(300); return (await api("GET", `/v0/document/${SHEET}?as=cells&range=Z1`)).cells?.[0]?.input; },
@@ -180,8 +180,8 @@ const SHEET_ACTS = {
     const grid = await box(page, ".ui-spreadsheet-rows"), field = page.locator("input.ui-spreadsheet-address");
     await page.mouse.move(grid.x + 80, grid.y + 45); await page.mouse.down();
     for (let n = 1; n <= 20; n += 1) await page.mouse.move(grid.x + 80 + (grid.width - 100) * n / 20, grid.y + 45 + (grid.height - 60) * n / 20);
-    // Held past the corner, the grid scrolls itself to the tab's last cell.
-    for (let n = 0; n < 150 && cells(await field.inputValue()) < 1000; n += 1) { await page.mouse.move(grid.x + grid.width + 5 + (n % 2), grid.y + grid.height + 5); await page.waitForTimeout(16); }
+    // Held past the corner for a second, the grid scrolls itself on: over a thousand cells, the same drag every run.
+    for (let n = 0; n < 60; n += 1) { await page.mouse.move(grid.x + grid.width + 5 + (n % 2), grid.y + grid.height + 5); await page.waitForTimeout(16); }
     await page.mouse.up();
     const picked = await field.inputValue();
     return `${picked} (${cells(picked)})`;
@@ -258,6 +258,7 @@ try {
       const context = await browser.newContext({ storageState: state, viewport: { width: 1600, height: 1000 } });
       if (!process.argv.includes("--art")) await context.addInitScript(() => localStorage.setItem("conduit:chat-art", JSON.stringify({ art: "none" })));
       await context.addInitScript(watch, kind);
+      if (CSS_FIX) await context.addInitScript((css) => document.addEventListener("DOMContentLoaded", () => document.head.append(Object.assign(document.createElement("style"), { textContent: css }))), CSS_FIX);
       const page = await context.newPage(), cdp = await context.newCDPSession(page);
       await cdp.send("Network.enable"); await cdp.send("Emulation.setCPUThrottlingRate", { rate });
       const cold = await load(page, cdp, target, kind), warm = await load(page, cdp, target, kind);
@@ -276,7 +277,7 @@ try {
 
 const ended = await release();
 const lines = [`# Sheet and paper benchmark, ${started.toISOString().slice(0, 16)}Z`, "",
-  `Headless Chrome ${version} at 1600x1000, DPR 1, against ${origin} (${built}${ended === built ? "" : `, then ${ended}: the server changed during the run`}); medians of ${RUNS} runs. Headless numbers, not the owner's Windows Chrome${process.argv.includes("--art") ? "" : "; the background off"}. Pop-ins count what is visible in the artifact's pane.`, ""];
+  `Headless Chrome ${version} at 1600x1000, DPR 1, against ${origin} (${built}${ended === built ? "" : `, then ${ended}: the server changed during the run`}); medians of ${RUNS} runs. Headless numbers, not the owner's Windows Chrome${process.argv.includes("--art") ? "" : "; the background off"}${CSS_FIX ? `; with ${arg("--css")} injected` : ""}. Pop-ins count what is visible in the artifact's pane.`, ""];
 for (const [name, runs] of Object.entries(results)) {
   if (!runs.length) continue;
   const m = (pick) => median(runs.map(pick));
@@ -286,8 +287,8 @@ for (const [name, runs] of Object.entries(results)) {
   for (const act of Object.keys(runs[0].acts)) lines.push(`| ${act} | ${m((run) => run.acts[act].long)} | ${m((run) => run.acts[act].longest)} | ${m((run) => run.acts[act].over)} | ${[...new Set(runs.map((run) => String(run.acts[act].check)))].join(", ")} |`);
   const last = runs.at(-1);
   for (const how of ["cold", "warm"]) {
-    const inside = last[how].pops.filter((one) => one.pane && one.seen);
-    lines.push("", `Visible pop-in in the pane, ${how}, last run (ms after first paint; the rest of the app's are in the JSON):`, "", ...inside.slice(0, 60).map((one) => `- ${one.t} ${one.what} ${one.el}${one.px ? ` (${one.px})` : ""}`));
+    const inside = last[how].pops;
+    lines.push("", `Visible pop-in in the pane, ${how}, last run (ms after first paint):`, "", ...inside.slice(0, 60).map((one) => `- ${one.t} ${one.what} ${one.el}${one.px ? ` (${one.px})` : ""}`));
     if (inside.length > 60) lines.push(`- … ${inside.length - 60} more`);
   }
   lines.push("", "Chunks, cold, last run (ms from navigation, gzip bytes):", "", ...last.cold.chunks.map((one) => `- ${one.start}–${one.end} ${one.file} ${one.gz}`));
