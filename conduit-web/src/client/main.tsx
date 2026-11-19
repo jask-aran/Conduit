@@ -3031,9 +3031,13 @@ function App() {
     requestAnimationFrame(land);
   }
   const folderProject = (id: string) => { const found = catalogue.projects().find((item) => item.id === id); const computer = computerLocation(); return found ? { ...found, repository: found.kind === "workspace" } : computer?.project.id === id ? { ...computer.project, repository: computer.repository } : null; };
-  const renderFolderViewer = (pane: PaneKey, id: string) => <Show when={folderProject(id)} fallback={<SheetFill><PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title="Files" /></PaneHeader><Empty>This workspace is not open here.</Empty></SheetFill>}>{(project) =>
-    <FolderPane projectId={id} projectName={project().name} workingRoot={project().workingRoot} sourceControlEnabled={project().repository} commentChatId={focusedChat().loadedId()} actions={paneTabActions(pane)}
-      onOpenFile={(entry, options) => void openFileDocument(entry, { ...options, beside: true, tab: Boolean(verbNow().tab), edit: false })} openFiles={openFileKeys} onHandle={(handle) => { handlesOf(pane)[0] = handle; }} />}</Show>;
+  const renderFolderViewer = (pane: PaneKey, id: string) => <Show when={folderProject(id)} fallback={<SheetFill><PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title="Files" /></PaneHeader><Empty>This workspace is not open here.</Empty></SheetFill>}>{(project) => {
+    // A file document taking the pane is drawn before this viewer goes: its going clears only its own handle.
+    let mine: FileSlotHandle | undefined;
+    return <FolderPane projectId={id} projectName={project().name} workingRoot={project().workingRoot} sourceControlEnabled={project().repository} commentChatId={focusedChat().loadedId()} actions={paneTabActions(pane)}
+      onOpenFile={(entry, options) => void openFileDocument(entry, { ...options, beside: true, tab: Boolean(verbNow().tab), edit: false })} openFiles={openFileKeys}
+      onHandle={(handle) => { const list = handlesOf(pane); if (handle) list[0] = mine = handle; else if (list[0] === mine) list[0] = undefined; }} />;
+  }}</Show>;
   const [fileReveal, setFileReveal] = createSignal<{ entry: FileEntry; request: ReviewNavigationRequest } | null>(null);
   const openFileDocument = async (entry: FileEntry, options: { beside?: boolean; tab?: boolean; edit: boolean; reveal?: ReviewNavigationRequest; /** Open it as the artifact kind it may be when asked (artifact-kinds `opens`). */ adopt?: boolean }) => {
     // A paper or a site is an artifact: its file opens as the artifact, never in the file viewer.
