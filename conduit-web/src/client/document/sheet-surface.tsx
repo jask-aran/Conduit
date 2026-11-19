@@ -22,7 +22,7 @@ export default function SheetSurface(props: ArtifactSurfaceProps) {
     markup: {
       client: () => ({ kind: "sheet" }),
       subject: () => ({ sheet: props.about().name, file: props.about().path, ...marks()?.subject(),
-        change: "This is a sheet: a CSV file of values, with its formulas kept beside it. A comment is about the cells under `range` (A1). Read it, and change cells or insert and delete rows and columns, with the conduit_artifact tool (`cells`, `set`, `fill`, `rows`, `cols`)." }),
+        change: "This is a sheet: a CSV file of values, with its formulas kept beside it. A comment is about the cells under `range` (A1). Read it, and change cells or insert and delete rows and columns, with the conduit_artifact tool (`cells`, `set`, `fill`, `rows`, `cols`), and make or change a chart of them with its `chart`." }),
       under: (box) => marks()?.under(box) ?? null,
       margin: {
         anchors: (list) => marks()?.anchors(list), place: (key) => marks()?.where(key) ?? null, watch: (listener) => marks()?.watch(listener) ?? (() => {}),

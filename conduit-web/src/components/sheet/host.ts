@@ -8,6 +8,7 @@ import type { JSX } from "solid-js";
 import type { SheetSortOp, SheetTabOp } from "@/sheet-format.js";
 import type { SheetFormatOp } from "@/sheet-formats.js";
 import type { SheetBorders, SheetInk, SheetStyleOp } from "@/sheet-styles.js";
+import type { SheetChartSpec } from "@/sheet-charts.js";
 
 /** Cells by position, 0-based and inclusive (sheet-format.js parseRange). */
 export type SheetRange = { top: number; left: number; bottom: number; right: number };
@@ -36,6 +37,7 @@ export type SheetCellsOp = { client?: number; step?: number } & (
   | SheetFormatOp
   | SheetStyleOp
   | SheetSortOp
+  | { op: "chart"; chart?: SheetChartSpec & { id?: string; delete?: boolean }; tab?: string }
   | SheetTabOp);
 
 /** A cell an import could not compute, as GET /v0/document/:id?as=import reports it (server/sheet-xlsx.js): the file's formula, why, and the value it holds instead. By tab name, then A1. */
