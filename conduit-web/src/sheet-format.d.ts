@@ -63,7 +63,9 @@ export type SheetTabOp =
   | { op: "rename-tab"; tab: string; name: string }
   | { op: "delete-tab"; tab: string }
   | { op: "move-tab"; tab: string; at: number }
-  | { op: "hide-tab"; tab: string; hidden: boolean };
+  | { op: "hide-tab"; tab: string; hidden: boolean }
+  /** A copy of the tab, its cells, formulas and look, next after it, named as Excel names one ("Data (2)"). */
+  | { op: "duplicate-tab"; tab: string };
 /**
  * POST /v0/document/:id/cells: the rows of `range` (below its first, with `header`) sorted by `column` (its letter), blanks last, as a spreadsheet
  * sorts: only the range's cells move, each with its own look (style, number format), a formula moved as a fill moves it. Rows, their heights and

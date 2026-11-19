@@ -1,9 +1,12 @@
 import { createEffect, createSignal, For, mergeProps, onCleanup, Show, type JSX } from "solid-js";
-import { DashPath, IconButton, Icons, Input, Notice, PaneTab, PaneTabs, ToolBar } from "@/components/ui";
+import { DashPath, Dot, IconButton, Icons, Input, Notice, PaneTab, PaneTabs, ToolBar } from "@/components/ui";
+import { sheetDataIcons as DataIcons } from "@/components/ui/sheet-icons";
+import { SHEET_INKS } from "@/sheet-styles.js";
+import { SHEET_INK_TOKENS } from "./theme";
 import { duration } from "@/components/ui/motion";
 import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { createFolds } from "@/components/ui/fit";
-import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection } from "@/components/ui/menus";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger, DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/ui/menus";
 import { toast } from "@/components/ui/notifications";
 import { tabNameFault, type Tab } from "@/sheet-format.js";
 import { createFigures, type SheetFigures } from "./stats";
@@ -21,8 +24,13 @@ const FIGURES: { name: string; of(figures: SheetFigures): number | null }[] = [
 
 /** The sheet's foot: its tabs, to show, add, rename, move, hide and delete, and the figures of the cells selected. */
 /** `format`: how the selection's figures but its count are drawn, where it has one number format throughout (formats.ts). */
-/** `filtered`: the rows under the filter's header and how many it shows, while it narrows them. */
-export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: () => ((value: number) => string) | null; filtered?: () => { shown: number; total: number } | null }) {
+// A tab dragged along the strip, as a spreadsheet's: its id, under a type of its own so nothing else dropped there moves a tab.
+const DRAGGED = "application/x-conduit-sheet-tab";
+const inkOf = (color: string) => (SHEET_INKS as readonly string[]).includes(color) ? `var(${SHEET_INK_TOKENS[color as keyof typeof SHEET_INK_TOKENS]})` : color;
+const INK_NAMES: Record<string, string> = { red: "Red", amber: "Amber", green: "Green", blue: "Blue" };
+
+/** `filtered`: the rows under the filter's header and how many it shows, while it narrows them. `act`: a change made as one named step (history.ts). */
+export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: () => ((value: number) => string) | null; filtered?: () => { shown: number; total: number } | null; act(label: string, run: () => void): void }) {
   const tabs = props.tabs, decide = createDecisionScope(() => props.id);
   const [renaming, setRenaming] = createSignal<string>(), [draft, setDraft] = createSignal("");
   const figures = createFigures(tabs.model, tabs.selection);
@@ -58,6 +66,13 @@ export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: () => (
   };
   const copy = (name: string, value: number) => void navigator.clipboard.writeText(String(Number(value.toPrecision(15)))).then(() => toast(`${name} copied`), () => tabs.failed("The figure could not be copied"));
   const alone = (tab: Tab) => !tab.hidden && visible().length < 2;
+  const color = (tab: Tab, ink: string | null) => props.act("Tab colour", () => tabs.setColor(tab.id, ink));
+  const drop = (event: DragEvent, onto: Tab) => {
+    const id = event.dataTransfer?.getData(DRAGGED);
+    if (!id || id === onto.id) return;
+    event.preventDefault();
+    void tabs.op({ op: "move-tab", tab: id, at: tabs.tabs().findIndex((one) => one.id === onto.id) });
+  };
 
   const one = (tab: Tab) => {
     const at = () => visible().findIndex((one) => one.id === tab.id);
@@ -66,13 +81,29 @@ export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: () => (
     return <Show when={renaming() === tab.id} fallback={
       <ContextMenu placement="bottom-start" onOpenChange={(open) => { held = open; }}>
         <ContextMenuTrigger as={(attrs: Omit<JSX.HTMLAttributes<HTMLSpanElement>, "draggable">) => <PaneTab id={tab.id} lit={tabs.shown() === tab.id} title={tab.name}
-          onOpen={() => { if (!held) { tabs.show(tab.id); tabs.focus(); } }} drag={mergeProps(attrs, { onDblClick: () => rename(tab) })} />} />
+          icon={tabs.color(tab.id) ? <Dot style={{ color: inkOf(tabs.color(tab.id)!) }} /> : undefined}
+          onOpen={() => { if (!held) { tabs.show(tab.id); tabs.focus(); } }} drag={mergeProps(attrs, {
+            onDblClick: () => rename(tab), draggable: true,
+            onDragStart: (event: DragEvent) => { event.dataTransfer?.setData(DRAGGED, tab.id); if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"; },
+            onDragOver: (event: DragEvent) => { if (event.dataTransfer?.types.includes(DRAGGED)) event.preventDefault(); },
+            onDrop: (event: DragEvent) => drop(event, tab),
+          })} />} />
         <ContextMenuContent>
           <MenuSection>
             <MenuRow icon={<Icons.Edit />} onSelect={() => rename(tab)}>Rename</MenuRow>
+            <MenuRow icon={<DataIcons.duplicate />} onSelect={() => void tabs.op({ op: "duplicate-tab", tab: tab.id })}>Duplicate</MenuRow>
+            <MenuSub><MenuSubTrigger icon={<DataIcons.color />}>Tab colour</MenuSubTrigger><MenuSubContent><MenuSection>
+              <For each={SHEET_INKS}>{(ink) => <MenuRow icon={<Dot style={{ color: inkOf(ink) }} />} checked={tabs.color(tab.id) === ink} onSelect={() => color(tab, ink)}>{INK_NAMES[ink]}</MenuRow>}</For>
+              <MenuRow checked={!tabs.color(tab.id)} onSelect={() => color(tab, null)}>No colour</MenuRow>
+            </MenuSection></MenuSubContent></MenuSub>
             <MenuRow icon={<Icons.ChevronLeft />} disabled={at() < 1} onSelect={() => move(tab, -1)}>Move left</MenuRow>
             <MenuRow icon={<Icons.ChevronRight />} disabled={at() >= visible().length - 1} onSelect={() => move(tab, 1)}>Move right</MenuRow>
             <MenuRow icon={<Icons.Hide />} disabled={alone(tab)} onSelect={() => void tabs.op({ op: "hide-tab", tab: tab.id, hidden: true })}>Hide</MenuRow>
+            <Show when={hidden().length}>
+              <MenuSub><MenuSubTrigger icon={<Icons.Preview />}>Unhide</MenuSubTrigger><MenuSubContent><MenuSection>
+                <For each={hidden()}>{(one) => <MenuRow onSelect={() => void tabs.op({ op: "hide-tab", tab: one.id, hidden: false })}>{one.name}</MenuRow>}</For>
+              </MenuSection></MenuSubContent></MenuSub>
+            </Show>
             <MenuRow destructive icon={<Icons.Delete />} disabled={alone(tab) || tabs.tabs().length < 2} onSelect={() => void remove(tab)}>Delete</MenuRow>
           </MenuSection>
         </ContextMenuContent>

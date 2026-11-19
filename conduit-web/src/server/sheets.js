@@ -490,6 +490,29 @@ export function sheetKind(hub) {
     refilter(room, sheet, by);
     return { removed: gone.length, left: kept.length };
   };
+  /** A .csv becomes a workbook folder before its second tab is written, so a failed move leaves it as it was; its tab is named then, as is its file. */
+  const intoFolder = async (room, by) => {
+    if (isFolder(room)) return;
+    const first = room.doc.getMap(TAB).get(`name:${MAIN}`) ?? tabName(room.entry.name);
+    await hub.folder(room, tabFile(first));
+    if (!room.doc.getMap(TAB).has(`name:${MAIN}`)) hub.as(room, by, (sign) => room.book.tabOp("rename", { tab: MAIN, name: first }, sign));
+  };
+  /** A copy of a tab next after it, named as Excel names one (`Data (2)`): its cells as typed (a formula reading its own tab reads the copy), and its look. */
+  const duplicateTab = async (room, source, by) => {
+    const base = source.name.replace(/ \(\d+\)$/, "").slice(0, 25), { rows, cols } = source.size();
+    let n = 2, called = `${base} (${n})`;
+    while (room.book.find(called)) called = `${base} (${++n})`;
+    sized(room, null, rows, cols);
+    await intoFolder(room, by);
+    const at = room.book.tabs().findIndex((one) => one.id === source.id) + 1, kept = lookOf(room, source), typed = source.inputs();
+    const done = hub.as(room, by, (sign) => room.book.tabOp("add", { name: called, at, rows, cols }, sign)), copy = room.book.tab(done.tab);
+    hub.as(room, by, (sign) => room.doc.transact(() => {
+      typed.forEach((line, r) => line.forEach((input, c) => { if (input) room.cells.set(key(copy.rowAt(r), copy.colAt(c)), input); }));
+      restoreLook(room, copy, done.tab, kept);
+      sign();
+    }));
+    return { tab: done.tab, tabs: tabsWithSize(room) };
+  };
   const tabsWithSize = (room) => room.book.tabs().map((tab) => ({ ...tab, ...room.book.tab(tab.id).size() }));
   const TAB_OPS = { "add-tab": "add", "rename-tab": "rename", "delete-tab": "delete", "move-tab": "move", "hide-tab": "hide" };
 
@@ -575,6 +598,7 @@ export function sheetKind(hub) {
           if (!/^[\w-]+\/\d+$/.test(String(about))) throw fault(400, `for is the comment answered, as <item>/<n>, not ${about}`);
           await room.markup.thread(String(about).split("/")[0]);
         }
+        if (op === "duplicate-tab") return duplicateTab(room, pick(room, tab), name);
         if (Object.hasOwn(TAB_OPS, op)) {
           const tabArgs = { tab: tab === undefined ? undefined : String(tab), name: called, at, hidden: hidden !== false };
           if (op === "add-tab") {
@@ -583,11 +607,7 @@ export function sheetKind(hub) {
             sized(room, null, START.rows, START.cols);
             // A .csv becomes a workbook folder before its second tab is written, so a failed move leaves it as it was. Its tab is named then (its file's
             // name, unless it was given one), as is the file it becomes.
-            if (!isFolder(room)) {
-              const first = room.doc.getMap(TAB).get(`name:${MAIN}`) ?? tabName(room.entry.name);
-              await hub.folder(room, tabFile(first));
-              if (!room.doc.getMap(TAB).has(`name:${MAIN}`)) hub.as(room, name, (sign) => room.book.tabOp("rename", { tab: MAIN, name: first }, sign));
-            }
+            await intoFolder(room, name);
           }
           const changed = op === "rename-tab" && typeof called === "string" ? room.book.find(tabArgs.tab) : null;
           const frozen = changed ? keepFrozen(room, room.book.tab(changed), TAB_OPS[op], called?.trim()) : () => {};
@@ -696,7 +716,7 @@ export function sheetKind(hub) {
           if (across) throw fault(400, `${rangeA1(across)} is merged: unmerge it to remove duplicates from ${rangeA1(area)}`);
           return { ...dedupe(room, sheet, { ...area, bottom: Math.min(area.bottom, rows - 1), right: Math.min(area.right, cols - 1) }, header === true, name), ...(many(room) ? { tab: sheet.name } : {}) };
         }
-        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, sort, chart, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, shift-cells, dedupe, add-tab, rename-tab, delete-tab, move-tab or hide-tab");
+        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, sort, chart, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, shift-cells, dedupe, add-tab, duplicate-tab, rename-tab, delete-tab, move-tab or hide-tab");
         const sheet = pick(room, tab), { rows, cols } = sheet.size(), isRows = op.endsWith("rows"), size = isRows ? rows : cols, what = isRows ? "row" : "column", removing = op.startsWith("delete");
         if (!Number.isInteger(count) || count < 1 || count > CALL_LIMIT) throw fault(400, "count is how many, 1 or more");
         index(at, removing ? size - 1 : size, `${what} to ${removing ? "delete" : "insert before"} (${size} ${what}s now)`);

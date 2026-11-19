@@ -645,6 +645,6 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       </Show>
       <Show when={props.margin}><aside class="ui-spreadsheet-margin" aria-label="Comments">{props.margin}</aside></Show>
     </div>
-    <SheetFoot tabs={tabs} id={props.id} format={() => formats.figure(at())} filtered={filters.counted} />
+    <SheetFoot tabs={tabs} id={props.id} format={() => formats.figure(at())} filtered={filters.counted} act={history.act} />
   </section>;
 }
