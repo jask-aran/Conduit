@@ -77,7 +77,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     selected: () => { changed(); const area = at(); return area && { row: area.top, col: area.left }; }, error: (row, col) => model()?.error(row, col) ?? null,
   });
   // A cell its import froze keeps the file's formula under `excel:<rowId>:<colId>` (server/sheet-xlsx.js), so the mark follows it as rows, columns
-  // and tabs change; it is marked while it holds what the import left. Why it froze is the import report's, found by its formula.
+  // and tabs change; it is marked while it holds what the import left, as an export writes the formula back. Why it froze is the import report's, found by its formula.
   const [report] = createResource(() => props.host.frozen?.() ?? null);
   const whyOf = createMemo(() => new Map(Object.values(report() ?? {}).flatMap((tab) => Object.values(tab).map((cell) => [cell.formula, cell.why] as const))));
   let anyFrozen = [...look.keys()].some((name) => name.startsWith("excel:"));
@@ -86,7 +86,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   onCleanup(() => look.unobserve(countFrozen));
   const frozenAt = (row: number, col: number) => {
     const sheet = anyFrozen ? model() : undefined, held = sheet && look.get(`excel:${sheet.rowAt(row)}:${sheet.colAt(col)}`) as unknown as { formula?: string; value?: unknown } | undefined;
-    return held?.formula && sheet!.input(row, col) === String(held.value ?? "") ? { formula: held.formula, why: whyOf().get(held.formula) } : undefined;
+    return held?.formula && held.value === sheet!.input(row, col) ? { formula: held.formula, why: whyOf().get(held.formula) } : undefined;
   };
   const frozenHere = () => { changed(); const area = at(); return area ? frozenAt(area.top, area.left) : undefined; };
   const filters = createSheetFilter(look, model, at, hub, (row, col) => Boolean(styles.at(row, col)?.bold)), [filtering, setFiltering] = createSignal<{ col: number; box: SheetBox } | null>(null);
