@@ -7,6 +7,11 @@ export const sameFileEntry = (a: FileEntry, b: FileEntry) => a.projectId === b.p
 export const EMPTY_FILE_VIEW: SplitView = "files:~";
 export const fileEntryKey = (entry: FileEntry) => `${entry.projectId}:${entry.path}`;
 
+/** Unsaved text going with a file to another viewer, taken by the first file slot that loads it; carrying returns its undo. */
+const carried = new Map<string, string>();
+export const carryDraft = (entry: FileEntry, text: string) => { carried.set(fileEntryKey(entry), text); return () => carried.delete(fileEntryKey(entry)); };
+export const takeDraft = (entry: FileEntry) => { const text = carried.get(fileEntryKey(entry)); carried.delete(fileEntryKey(entry)); return text; };
+
 export const formatFileView = (entries: FileEntry[]): SplitView => entries.length === 0 ? EMPTY_FILE_VIEW :
   `files:${entries.map((entry) => `${encodeURIComponent(entry.projectId)}:${encodeURIComponent(entry.path)}${entry.mode ? `@${entry.mode}` : ""}`).join("|")}`;
 
@@ -25,5 +30,6 @@ export function parseFileView(view: string | null | undefined): FileEntry[] | nu
       return null;
     }
   }
-  return entries.length === 1 && entries.every((entry) => entry.path) ? entries : null;
+  // A view of two sides, from a layout stored before a file document held one file, shows its first.
+  return entries[0]?.path ? entries.slice(0, 1) : null;
 }

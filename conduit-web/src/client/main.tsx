@@ -72,6 +72,7 @@ import { landTranscriptCursor } from "./chat/transcript-cursor";
 import { isChatContentActivity } from "./chat/transcript-source";
 import { ARTIFACT_COMMANDS, COMMAND_IDS, commandRegistry, FEEDBACK_CONTEXTS, getCommandDefinition, LEADER_STROKE, type ArtifactCommand } from "./commands/command-registry";
 import { focusedArtifact } from "./document/focused-artifact";
+import type { PaperConnections } from "./document/connections";
 import { CommandMenu } from "./navigation/command-menu";
 import { LeaderPalette } from "./navigation/leader-palette";
 import { KeyboardTour, keyboardTourActive, startKeyboardTour, watchForTourOffer } from "./tour/keyboard-tour";
@@ -108,7 +109,7 @@ import { isShortcutRegion, type ShortcutBinding } from "./shortcuts/shortcut-typ
 import { normalizeStoredBinding } from "./shortcuts/shortcut-normalize";
 import { acknowledgeRegion } from "./shortcuts/region-cue";
 import { globalShortcuts } from "./shortcuts/global-shortcuts";
-import { fileEntryKey, formatFileView, parseFileView, sameFileEntry, type FileEntry } from "./workspace/file-documents";
+import { carryDraft, fileEntryKey, formatFileView, parseFileView, sameFileEntry, type FileEntry } from "./workspace/file-documents";
 import { dropWash, dropZoneAt } from "./panes/pane-drop";
 import type { ReviewNavigationRequest } from "./chat/review-navigation";
 import type { FileSlotHandle, FileSummary } from "./workspace/workspace-file-slot";
@@ -652,33 +653,13 @@ function App() {
   applyStreamFade();
   watchStrayFrost();
   installFocusShown();
-  // A paper and its mated thread are one tab, showing either: the thread is a chat no list holds, found from its paper.
-  // Which chats are mated threads is kept, so a reload on one opens its paper.
-  const [matedThreads, setMatedThreads] = createSignal<Record<string, string>>((() => { try { return JSON.parse(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "mated") || "{}") as Record<string, string>; } catch { return {}; } })());
-  const matedPaper = (view: string | null | undefined) => view?.startsWith("chat:") ? matedThreads()[view.slice("chat:".length)] : undefined;
-  const paperOf = <View extends string | null>(view: View) => { const paper = matedPaper(view); return paper ? `artifact:${paper}` as const : view; };
   const launchUrl = new URL(location.href);
   const atStart = launchUrl.pathname === "/" && !launchUrl.search;
   const SLOT_IDS = [0, 1, 2, 3, 4];
-  /** A layout read from an address or storage, its views as the panes hold them: a mated thread as its paper. */
-  const readLayout = (params: URLSearchParams) => {
-    const found = Layouts.decode(params, isSplitView);
-    if (!found) return null;
-    for (const pane of Object.values(found.panes)) pane.views = pane.views.map(paperOf).filter((view, index, all) => all.indexOf(view) === index);
-    return found;
-  };
+  const readLayout = (params: URLSearchParams) => Layouts.decode(params, isSplitView);
   // Pane A draws the route, so the first layout's pane A is what the address names until the route settles.
-  const panes = Layouts.createPaneStore((() => {
-    const seed = readLayout(launchUrl.searchParams) ?? (atStart ? readLayout(new URLSearchParams(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-layout") || "")) : null)
-      ?? Layouts.layoutOf(pathChatId() ? `chat:${pathChatId()}` : "page:dashboard");
-    // The address of a thread opens its paper in pane A; the other panes, the dock and the tabs it names are kept.
-    const paper = matedPaper(`chat:${pathChatId()}`);
-    if (!paper) return seed;
-    const url = new URL(location.href);
-    url.pathname = "/";
-    history.replaceState({}, "", url);
-    return Layouts.show(seed, seed.row[0]!, `artifact:${paper}`);
-  })());
+  const panes = Layouts.createPaneStore(readLayout(launchUrl.searchParams) ?? (atStart ? readLayout(new URLSearchParams(readSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "main-layout") || "")) : null)
+    ?? Layouts.layoutOf(pathChatId() ? `chat:${pathChatId()}` : "page:dashboard"));
   const layout = panes.layout;
   const paneAShown = createMemo(() => Layouts.shownView(layout().panes[layout().row[0]!]!));
   // Pane A is the row's first pane, drawn by the route; every other placed pane keeps a numbered slot (its `SideChat`)
@@ -695,7 +676,6 @@ function App() {
   const idOf = (pane: PaneKey) => pane === "main" ? layout().row[0]! : [...slotIds()].find(([, slot]) => slot === pane)?.[0] ?? null;
   const paneData = (pane: PaneKey) => { const id = idOf(pane); return id ? layout().panes[id] ?? null : null; };
   const sameList = <T,>(a: T[], b: T[]) => a.length === b.length && a.every((item, index) => item === b[index]);
-  const slotOrder = createMemo(() => { const { row, dock } = layout(); return [...row.slice(1), ...(dock ? [dock] : [])].map((id) => slotIds().get(id)!).filter((slot) => slot !== undefined); }, [], { equals: sameList });
   const rowSlots = createMemo(() => layout().row.slice(1).map((id) => slotIds().get(id)).filter((slot) => slot !== undefined), [], { equals: sameList });
   /** The dock's one pane; `dockSlot` is what the dock shows, which may instead be a row pane folded there for room. */
   const dockedSlot = createMemo(() => { const dock = layout().dock; return dock ? slotIds().get(dock) ?? null : null; });
@@ -1682,6 +1662,8 @@ function App() {
   // Subagents' transcripts: chats the lists do not show, kept here so a pane holding one finds it as it finds a listed
   // chat.
   const [hiddenChats, setHiddenChats] = createSignal<ReadonlyMap<string, { chat: ChatSummary; project: Project }>>(new Map());
+  /** The artifact a chat view is the mated thread of: a chat no list holds, so known once it is loaded. */
+  const matedPaper = (view: string | null | undefined) => view?.startsWith("chat:") ? hiddenChats().get(view.slice("chat:".length))?.chat.backend?.mated : undefined;
   // `environment` is set with the rest, never "" first: the view would read as the hub's for a moment, and following
   // it would open that.
   const openComputer = async (historyMode: "push" | "none" = "push", environment = "") => {
@@ -2574,7 +2556,7 @@ function App() {
     if (isMobileLayout() || !(event instanceof MouseEvent || event instanceof KeyboardEvent)) return {};
     return event.altKey ? { beside: true } : event.ctrlKey || event.metaKey ? { tab: true } : {};
   };
-  const openRules: Layouts.Rules = { held: (view) => view.startsWith("chat:") && Boolean(drafts.draftFor(view.slice("chat:".length))), document: (view) => Boolean(matedPaper(view)) };
+  const openRules: Layouts.Rules = { held: (view) => view.startsWith("chat:") && Boolean(drafts.draftFor(view.slice("chat:".length))) };
   /** Opening, from anywhere: plain replaces what the focused pane shows (its tabs with it, offering Undo), `tab` adds a
    *  chat or terminal as a tab of the nearest session pane, `beside` opens a pane beside and leaves the keyboard. A
    *  view open already is gone to. `inPaneA` draws pane A's route when the caller has more than its view to go on. */
@@ -2655,7 +2637,16 @@ function App() {
     if (before.summon && panes.target(-1) !== last) panes.amend(before);
   };
   /** The dock's folder viewer or terminal taken to a pane of its own: the summon goes, the pane keeps the workspace. */
-  const moveToRow = (view: SplitView) => fromSummon(() => openBeside(view));
+  const moveToRow = (view: SplitView) => fromSummon(() => withDockFile(view, () => openBeside(view)));
+  /** The dock's folder viewer made a pane takes its open file and unsaved edit; an open folder pane is gone to instead. */
+  const withDockFile = async (view: string, open: () => Promise<unknown>) => {
+    const handle = dockFile(), path = handle?.path(), projectId = view === "tool:files" ? dockProject()?.id : view.startsWith("folder:") ? view.slice("folder:".length) : null;
+    if (!handle || !path || !projectId || Layouts.findView(layout(), `folder:${projectId}`)) return void await open();
+    writeSetting(`folder:${projectId}`, "file", path);
+    const draft = handle.draft(), drop = draft === null ? null : carryDraft({ projectId, path }, draft);
+    await open();
+    if (!Layouts.findView(layout(), `folder:${projectId}`)) drop?.(); else if (drop) handle.discardChanges();
+  };
   const closeSlot = async (slot: number | null, focus = true) => {
     if (slot === null) return;
     const previous = slotView(slot);
@@ -2858,7 +2849,9 @@ function App() {
     const placed = { ...target, zone: target.zone };
     if (fromPane !== null) return void await movePaneDocument(fromPane, placed);
     if (group) return void await moveTabGroup(group, placed, view as SplitView);
-    return /^(folder:|tool:files$)/.test(view) && layout().summon === "files" ? fromSummon(() => dropDocument(placed, view)) : dropDocument(placed, view);
+    if (!/^(folder:|tool:files$)/.test(view)) return dropDocument(placed, view);
+    const drop = () => withDockFile(view!, () => dropDocument(placed, view!));
+    return layout().summon === "files" ? fromSummon(drop) : drop();
   };
   const dropDocument = async (target: { pane: PaneKey; zone: "left" | "middle" | "right" }, view: string) => {
     if (view === "tool:terminal") { const id = await pickShell(); if (!id) return; view = `term:${id}`; }
@@ -2942,27 +2935,27 @@ function App() {
   const renameArtifacts = () => { namedArtifacts.clear(); setArtifactsChanged(); };
   window.addEventListener("conduit:artifacts-changed", renameArtifacts);
   onCleanup(() => window.removeEventListener("conduit:artifacts-changed", renameArtifacts));
-  /** The paper's pane turns to its mated thread, which the hub makes if there is none: the same tab, as a chat. A chat the paper leads to instead opens beside it as itself, keeping its place in the sidebar. */
-  const showThread = async (pane: PaneKey, paper: string) => {
+  /** The pane showing a chat, as the shown view of its pane. */
+  const shownChat = (chat: string | null) => paneOrder().find((pane) => chat && viewOf(pane) === `chat:${chat}`);
+  /** The artifact's thread (the chat its comments go to, if that is a connected chat), opened beside it, gone to if
+   *  open elsewhere, or closed if it shows beside it; the hub makes the mated thread if there is none. On a phone it
+   *  replaces the artifact. */
+  const pressThread = async (paper: string, links: Pick<PaperConnections, "thread" | "lead">) => {
+    const shown = shownChat(links.lead ?? links.thread);
+    if (shown) {
+      const { row, focus } = layout(), at = row.indexOf(idOf(shown) ?? ""), from = row.indexOf(focus);
+      return void (at >= 0 && from >= 0 && Math.abs(at - from) === 1 ? closeTab(shown, paneData(shown)!.active) : openView(viewOf(shown)!, {}));
+    }
     try {
-      const { lead } = await api<{ lead: string | null }>(`/v0/document/${encodeURIComponent(paper)}/connections`);
-      if (lead) {
-        const listed = catalogue.projects().flatMap((project) => project.sessions.map((chat) => ({ chat, project }))).find((one) => one.chat.id === lead) ?? await agentChat(lead);
-        return void await openChatBeside(listed.chat, listed.project);
-      }
-      const { chat } = await api<{ chat: ChatSummary }>(`/v0/document/${encodeURIComponent(paper)}/thread`, { method: "POST" });
-      setMatedThreads((current) => { const next = { ...current, [chat.id]: paper }; writeSetting(WORKSPACE_PANEL_GLOBAL_SCOPE, "mated", JSON.stringify(next)); return next; });
-      await agentChat(chat.id);
-      const thread: SplitView = `chat:${chat.id}`;
-      if (!(await setPaneView(pane, thread))) return;
-      focusAnyPane(pane);
-      if (pane !== "main") void keepKeyboard(pane, thread);
+      const id = links.lead ?? (await api<{ chat: ChatSummary }>(`/v0/document/${encodeURIComponent(paper)}/thread`, { method: "POST" })).chat.id;
+      const found = catalogue.projects().flatMap((project) => project.sessions.map((chat) => ({ chat, project }))).find((one) => one.chat.id === id) ?? await agentChat(id);
+      await openChatBeside(found.chat, found.project);
     } catch (error) { showError(error); }
   };
-  const paperModes = (pane: PaneKey, paper: string, shown: "paper" | "thread") => <Segmented label="View" size="sm" value={shown} options={[{ value: "paper", label: (askArtifactName(`artifact:${paper}`), artifactNames()[`artifact:${paper}`]?.label) ?? "Artifact" }, { value: "thread", label: "Thread" }]}
-    onChange={(next) => { if (next !== shown) void (next === "thread" ? showThread(pane, paper) : setPaneView(pane, `artifact:${paper}`)); }} />;
-  /** The switch on a chat's header, where the chat is a paper's mated thread. */
-  const threadModes = (pane: PaneKey) => { const paper = matedPaper(viewOf(pane)); return paper ? paperModes(pane, paper, "thread") : undefined; };
+  /** A phone's switch between an artifact and its thread, which have no room side by side. */
+  const paperModes = (paper: string, shown: "paper" | "thread", links?: () => PaperConnections) => <Show when={isMobileLayout()}><Segmented label="View" size="sm" value={shown} options={[{ value: "paper", label: (askArtifactName(`artifact:${paper}`), artifactNames()[`artifact:${paper}`]?.label) ?? "Artifact" }, { value: "thread", label: "Thread" }]}
+    onChange={(next) => { if (next !== shown) void (next === "thread" ? pressThread(paper, links?.() ?? { thread: null, lead: null }) : openArtifact(paper)); }} /></Show>;
+  const threadModes = (pane: PaneKey) => { const paper = matedPaper(viewOf(pane)); return paper ? paperModes(paper, "thread") : undefined; };
   const openArtifactFromEvent = (event: Event) => { const { id, beside } = (event as CustomEvent<{ id: string; beside?: boolean }>).detail; void openArtifact(id, beside ? { beside } : {}); };
   window.addEventListener("conduit:open-artifact", openArtifactFromEvent);
   onCleanup(() => window.removeEventListener("conduit:open-artifact", openArtifactFromEvent));
@@ -2971,9 +2964,10 @@ function App() {
     <PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title="New artifact" /></PaneHeader>
     <ArtifactCreator project={id.slice("new:".length) || undefined} projects={catalogue.projects().filter((item) => item.id === id.slice("new:".length) || homeProjects().includes(item))}
       onBack={() => void setPaneView(pane, "home")} onMade={(made) => void setPaneView(pane, `artifact:${made.id}`).then(() => focusAnyPane(pane))} />
-  </SheetFill> : <ArtifactPane id={id} pending={arriving()[pane] === id} said={said()[pane] === id} moving={paneMotion()?.slot === pane} onDrawn={() => drawnArtifacts.add(`${pane}:${id}`)} onThread={() => void showThread(pane, id)} shortcuts={shortcutManager} onAbout={(found, label) => nameArtifact(`artifact:${id}`, found.name, label)}
+  </SheetFill> : <ArtifactPane id={id} pending={arriving()[pane] === id} said={said()[pane] === id} moving={paneMotion()?.slot === pane} onDrawn={() => drawnArtifacts.add(`${pane}:${id}`)} onThread={(links) => void pressThread(id, links)} shortcuts={shortcutManager} onAbout={(found, label) => nameArtifact(`artifact:${id}`, found.name, label)}
     chats={(project) => (catalogue.projects().find((item) => item.id === project)?.sessions ?? []).map((chat) => ({ id: chat.id, title: chat.title || "Untitled chat" }))}
-    header={(extra) => <PaneHeader modes={paperModes(pane, id, "paper")} actions={<>{extra}{paneTabActions(pane)}</>}><HeaderCrumb title={viewName(`artifact:${id}`)} /></PaneHeader>} />);
+    thread={isMobileLayout() ? undefined : (chat) => ({ shown: Boolean(shownChat(chat)), cue: <RuntimeIndicator process={((process) => visibleRuntimeActivity(process) === "idle" ? null : process)(runtime.getProcess(chat ?? ""))} fallback={<Icons.Message />} /> })}
+    header={(extra, links) => <PaneHeader modes={paperModes(id, "paper", links)} actions={<>{extra}{paneTabActions(pane)}</>}><HeaderCrumb title={viewName(`artifact:${id}`)} /></PaneHeader>} />);
   const renderBrowserDocument = (pane: PaneKey, id: string) => <SheetFill class="pane-browser">
     <BrowserPane id={id} onTitle={(title) => setBrowserTitles((current) => ({ ...current, [`browser:${id}`]: title }))}
       header={<PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title={viewName(`browser:${id}`)} /></PaneHeader>} />
@@ -3031,9 +3025,14 @@ function App() {
     requestAnimationFrame(land);
   }
   const folderProject = (id: string) => { const found = catalogue.projects().find((item) => item.id === id); const computer = computerLocation(); return found ? { ...found, repository: found.kind === "workspace" } : computer?.project.id === id ? { ...computer.project, repository: computer.repository } : null; };
-  const renderFolderViewer = (pane: PaneKey, id: string) => <Show when={folderProject(id)} fallback={<SheetFill><PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title="Files" /></PaneHeader><Empty>This workspace is not open here.</Empty></SheetFill>}>{(project) =>
-    <FolderPane projectId={id} projectName={project().name} workingRoot={project().workingRoot} sourceControlEnabled={project().repository} commentChatId={focusedChat().loadedId()} actions={paneTabActions(pane)}
-      onOpenFile={(entry, options) => void openFileDocument(entry, { ...options, beside: true, tab: Boolean(verbNow().tab), edit: false })} openFiles={openFileKeys} onHandle={(handle) => { handlesOf(pane)[0] = handle; }} />}</Show>;
+  const renderFolderViewer = (pane: PaneKey, id: string) => <Show when={folderProject(id)} fallback={<SheetFill><PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title="Files" /></PaneHeader><Empty>This workspace is not open here.</Empty></SheetFill>}>{(project) => {
+    // A file document taking the pane is drawn before this viewer goes: its going clears only its own handle.
+    let mine: FileSlotHandle | undefined;
+    return <FolderPane projectId={id} projectName={project().name} workingRoot={project().workingRoot} sourceControlEnabled={project().repository} commentChatId={focusedChat().loadedId()} actions={paneTabActions(pane)}
+      shown={() => pane === "main" || shownSlots().includes(pane) || (panelOpen() && dockSlot() === pane)}
+      onOpenFile={(entry, options) => void openFileDocument(entry, { ...options, beside: true, tab: Boolean(verbNow().tab), edit: false })} openFiles={openFileKeys}
+      onHandle={(handle) => { const list = handlesOf(pane); if (handle) list[0] = mine = handle; else if (list[0] === mine) list[0] = undefined; }} />;
+  }}</Show>;
   const [fileReveal, setFileReveal] = createSignal<{ entry: FileEntry; request: ReviewNavigationRequest } | null>(null);
   const openFileDocument = async (entry: FileEntry, options: { beside?: boolean; tab?: boolean; edit: boolean; reveal?: ReviewNavigationRequest; /** Open it as the artifact kind it may be when asked (artifact-kinds `opens`). */ adopt?: boolean }) => {
     // A paper or a site is an artifact: its file opens as the artifact, never in the file viewer.
@@ -3051,11 +3050,16 @@ function App() {
     });
     const view = existing ?? formatFileView([entry]);
     await openView(view, { beside: options.beside, tab: options.tab });
-    if (options.edit && existing) {
-      const found = Layouts.findView(layout(), view);
-      const pane = found ? keyOf(found.id) : null;
-      if (pane !== null && handlesOf(pane)[0]?.edit()) pendingFileEdit = null;
+    if (!existing) return;
+    const found = Layouts.findView(layout(), view);
+    const pane = found ? keyOf(found.id) : null;
+    if (pane === null) return;
+    // Open already in another mode (the file, or its changes): it turns to the one asked for.
+    if (parseFileView(existing)![0]!.mode !== entry.mode) {
+      if (handlesOf(pane)[0]?.hasUnsavedChanges() && !(await confirmDialog("Discard unsaved changes and review this file?", { destructive: true, confirmLabel: "Discard", valid: () => viewOf(pane) === existing }))) return;
+      await setFileMode(pane, 0, entry.mode);
     }
+    if (options.edit && handlesOf(pane)[0]?.edit()) pendingFileEdit = null;
   };
   const noteFileLoaded = (pane: PaneKey, index: number, file: FileSummary | null) => {
     const entry = parseFileView(viewOf(pane))?.[index];
@@ -3160,12 +3164,7 @@ function App() {
   const openProjectHere = (project: Project, verb: Layouts.Verb = {}) => openView(`page:project:${project.id}`, verb, () => openProject(project));
   const openDashboardHere = (verb: Layouts.Verb = {}) => openView("page:dashboard", verb, () => openDashboard());
   const openComputerHere = (verb: Layouts.Verb = {}) => openView("page:computer", verb, () => openComputer());
-  const openArtifact = async (id: string, verb: Layouts.Verb = {}) => {
-    const view = `artifact:${id}` as const;
-    const threaded = (["main", ...slotOrder()] as PaneKey[]).find((pane) => matedPaper(viewOf(pane)) === id);
-    if (threaded !== undefined) { await setPaneView(threaded, view); return focusAnyPane(threaded); }
-    await openView(view, verb);
-  };
+  const openArtifact = (id: string, verb: Layouts.Verb = {}) => openView(`artifact:${id}`, verb);
   const openHarnessHere = (id: string, verb: Layouts.Verb = {}) => openView(`page:harness:${encodeURIComponent(id)}`, verb, () => openComputerHarness(id));
   const openAgentHere = (verb: Layouts.Verb = {}) => openView("page:agent", verb, () => openAgent());
   const openJbotHere = (verb: Layouts.Verb = {}) => openView("page:jbot", verb, () => openJbot());
@@ -3202,10 +3201,12 @@ function App() {
       const found = projects.flatMap((project) => project.sessions.map((item) => ({ chat: item, project }))).find((item) => item.chat.id === id) || hidden.get(id);
       if (!found) {
         // setProjects marks the catalogue loaded before publishing its list.
-        // Recheck after both writes, and never close a pane that moved on.
+        // Recheck after both writes, and never close a pane that moved on. A chat no list holds (a mated thread, a
+        // subagent) is asked of the hub first.
         queueMicrotask(async () => {
           if (slotChatId(slot) !== id || !catalogue.loaded() || hiddenChats().has(id)
             || catalogue.projects().some((project) => project.sessions.some((item) => item.id === id))) return;
+          if (await agentChat(id).then(() => true, () => false)) return;
           const at = Layouts.findView(layout(), `chat:${id}`);
           if (at) panes.replace((current) => Layouts.closeTab(current, at.id, at.index));
         });
@@ -3280,8 +3281,13 @@ function App() {
   const [heldPlace, setHeldPlace] = createSignal<PlaceSelection | "route">("route");
   createEffect(() => { const place = placeOf(keyboardPane()); if (place) setHeldPlace(() => place); });
   const dockSelection = (): PlaceSelection | null => { const place = heldPlace(); return place === "route" ? null : place; };
-  const dockProject = () => dockSelection()?.project ?? dockHome();
-  const dockScope = () => dockSelection() ? `project:${dockSelection()!.project.id}` : workspacePanelScope();
+  // The dock follows the focused pane's workspace, but keeps one whose file has an unsaved edit until it is saved or discarded.
+  const [dockFile, setDockFile] = createSignal<FileSlotHandle>();
+  const dockPlace = createMemo<{ project: ReturnType<typeof dockHome>; scope: string | null }, { project: ReturnType<typeof dockHome>; scope: string | null } | undefined>((last) => last && dockFile()?.hasUnsavedChanges() ? last
+    : { project: dockSelection()?.project ?? dockHome(), scope: dockSelection() ? `project:${dockSelection()!.project.id}` : workspacePanelScope() },
+  undefined, { equals: (a, b) => a?.project === b?.project && a?.scope === b?.scope });
+  const dockProject = () => dockPlace().project;
+  const dockScope = () => dockPlace().scope;
   let swappingPanes = false;
   function paneAView(): SplitView { return paneAShown(); }
   /** What pane A draws itself rather than through the route. */
@@ -3322,12 +3328,12 @@ function App() {
       return project ? (await openProject(project)) : undefined;
     }
     const id = view.slice("chat:".length);
-    const hidden = hiddenChats().get(id);
-    if (hidden) return await openChat(hidden.chat, hidden.project);
     for (const project of catalogue.projects()) {
       const found = project.sessions.find((item) => item.id === id);
       if (found) return await openChat(found, project);
     }
+    const hidden = await agentChat(id).catch(() => null);
+    if (hidden) return await openChat(hidden.chat, hidden.project);
   };
   const swapPartner = (pane: PaneKey): PaneKey | null => {
     const shown = shownSlots();
@@ -3455,7 +3461,6 @@ function App() {
   const foldedSlots = () => !dockAvailable() || isMobileLayout() ? [] : rowSlots().filter((slot) => slotView(slot) && !shownSlots().includes(slot));
   const viewName = (view: SplitView | null): string => {
     if (!view) return "";
-    if (matedPaper(view)) return viewName(paperOf(view));
     if (view.startsWith("chat:")) {
       const id = view.slice("chat:".length);
       const found = catalogue.projects().flatMap((project) => project.sessions).find((item) => item.id === id) || hiddenChats().get(id)?.chat;
@@ -3479,13 +3484,15 @@ function App() {
     if (view.startsWith("folder:")) return `Files · ${folderProject(view.slice("folder:".length))?.name ?? "Workspace"}`;
     return "Pane";
   };
-  /** A session pane's tabs are its views; a document pane (a paper's thread among them) has none. */
-  const tabsOf = (pane: PaneKey) => { const data = paneData(pane); return data && data.views.every((view) => Layouts.sessionView(view) && !matedPaper(view)) ? data.views : null; };
+  /** A session pane's tabs are its views; a document pane has none. */
+  const tabsOf = (pane: PaneKey) => { const data = paneData(pane); return data && Layouts.kindOf(data) === "session" ? data.views : null; };
   const chatOfTab = (view: SplitView) => view.startsWith("chat:") ? view.slice("chat:".length) : null;
   const tabPlace = (view: SplitView) => {
     if (view.startsWith("page:project:")) return view.slice("page:project:".length);
     const id = chatOfTab(view);
     if (!id) return `doc:${view.split(":")[0]}`;
+    const paper = matedPaper(view);
+    if (paper) return `artifact:${paper}`;
     return hiddenChats().get(id)?.chat.status === "subagent" ? `sub:${hiddenChats().get(id)!.chat.backend?.parentChatId ?? ""}`
       : catalogue.projects().find((item) => item.sessions.some((chat) => chat.id === id))?.id ?? "chats";
   };
@@ -3525,6 +3532,7 @@ function App() {
     keys: () => string[] | null;
     place: (key: string) => string;
     placeLabel: (key: string) => string;
+    onPlace: (key: string) => void;
     title: (key: string) => string;
     icon: (key: string) => JSX.Element;
     lit: () => string | null;
@@ -3553,7 +3561,7 @@ function App() {
         const current = () => run.keys.includes(options.lit() ?? "");
         const label = () => options.placeLabel(run.keys[0]!);
         const recent = () => options.used().find((key) => run.keys.includes(key)) ?? run.keys[0]!;
-        return <TabPlace current={current()} label={label()} onLabel={() => { if (!current()) options.select(recent()); }}
+        return <TabPlace current={current()} label={label()} onLabel={() => current() ? options.onPlace(recent()) : options.select(recent())}
           labelProps={{ draggable: "true", "data-doc-view": options.dragView(recent()), ...options.groupDrag(run.keys) } as JSX.ButtonHTMLAttributes<HTMLButtonElement>}>
           <For each={run.keys}>{(key) => {
             const lit = () => options.lit() === key;
@@ -3587,8 +3595,10 @@ function App() {
     const row = createTabStrip({
       keys: () => { const list = tabsOf(pane); return list && !isMobileLayout() ? list : null; },
       place: (view) => tabPlace(view as SplitView),
-      placeLabel: (view) => { const place = tabPlace(view as SplitView); return place === "doc:term" ? "Terminal" : place.startsWith("doc:") ? "Conduit" : place.startsWith("sub:") ? subagentParent(chatOfTab(view as SplitView)).title : placeLabelOf(place); },
-      title: (view) => viewName(view as SplitView),
+      placeLabel: (view) => { const place = tabPlace(view as SplitView); return place === "doc:term" ? "Terminal" : place.startsWith("doc:") ? "Conduit" : place.startsWith("sub:") ? subagentParent(chatOfTab(view as SplitView)).title : place.startsWith("artifact:") ? viewName(place as SplitView) : placeLabelOf(place); },
+      // A mated thread's place is its artifact, which its label opens beside.
+      onPlace: (view) => { const paper = matedPaper(view); if (paper) void openArtifact(paper, { beside: true }); },
+      title: (view) => matedPaper(view) ? "Thread" : viewName(view as SplitView),
       icon: (view) => hiddenChats().get(chatOfTab(view as SplitView) ?? "")?.chat.status === "subagent" ? <Icons.Agent /> : undefined,
       lit: () => { const data = paneData(pane); return data ? Layouts.shownView(data) : null; },
       used: () => { const data = paneData(pane); return data ? [Layouts.shownView(data), ...data.views] : []; },
@@ -5359,8 +5369,8 @@ function App() {
     {/* Docked panes stay mounted, so each keeps its state and tabs; the dock shows one. */}
     <Show when={dockDocHost()} keyed>{(host) =>
       <For each={dockContents()}>{(slot) => <Portal mount={host}>{renderSlot(slot, () => 0, true)}</Portal>}</For>}</Show>
-    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel jbotView={() => renderJbot("tool")} connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onMoveToRow={isMobileLayout() ? undefined : moveToRow} onOpenFile={canOpenFilePanes() ? (entry, options) => void openFileDocument(entry, { ...options, tab: Boolean(verbNow().tab) }) : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={() => void dismissSummon()} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
-    <Show when={["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && Boolean(dockHome()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onMoveToRow={isMobileLayout() ? undefined : moveToRow} onOpenFile={canOpenFilePanes() ? (entry, options) => void openFileDocument(entry, { ...options, tab: Boolean(verbNow().tab) }) : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={() => void dismissSummon()} shortcuts={shortcutManager}
+    <Show when={routeKind() === "computer" && computerLocation()}><WorkspacePanel jbotView={() => renderJbot("tool")} connectivity={runtime.connectivity} projectId={() => computerLocation()!.project.id} projectName={() => computerLocation()!.project.name} sourceControlEnabled={() => computerLocation()!.repository} workingRoot={() => computerLocation()!.project.workingRoot} chatId={() => "computer"} settingsScope={() => "computer"} initialDirectory={() => computerLocation()!.listing} requestedFile={computerFile} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onMoveToRow={isMobileLayout() ? undefined : moveToRow} onFileHandle={(handle) => setDockFile(() => handle)} onOpenFile={canOpenFilePanes() ? (entry, options) => void openFileDocument(entry, { ...options, tab: Boolean(verbNow().tab) }) : undefined} openFiles={openFileKeys} onToggleExpanded={toggleWorkspaceExpanded} onClose={() => void dismissSummon()} shortcuts={shortcutManager} onBrowseDirectory={(path) => void browseComputer(`${computerLocation()!.project.workingRoot}/${path}`)} onBrowseParent={() => void browseComputer(computerLocation()!.parent)} /></Show>
+    <Show when={["chat", "project", "dashboard", "agent", "jbot"].includes(routeKind()) && Boolean(dockHome()) && Boolean(workspacePanelScope())}><WorkspacePanel connectivity={runtime.connectivity} projectId={() => dockProject()!.id} projectName={() => dockProject()!.name} sourceControlEnabled={() => dockProject()!.kind === "workspace"} workingRoot={() => dockProject()!.workingRoot} chatId={() => dockScope()!} artifactChatId={() => sideFocused() ? focusedChat().loadedId() : routeKind() === "chat" ? chat.loadedId() : null} commentChatId={() => focusedChat().loadedId()} historyAvailable={() => sideFocused() ? focusedSession().history() !== "none" : routeKind() !== "chat" || chatHistory() !== "none"} open={panelOpen} expanded={workspaceExpanded} focusRequest={workspaceFocusRequest} onFocusRequestComplete={acknowledgeWorkspaceFocus} requestedTab={workspaceViewRequest} onTabChange={setDockTool} documentShown={() => dockSlot() !== null} widthRequest={dockWidthRequest} documentHost={(element) => setDockDocHost((current) => element ?? (current?.isConnected ? current : undefined))} minWidth={dockMinWidth} overlay={dockOverlay} onMoveToRow={isMobileLayout() ? undefined : moveToRow} onFileHandle={(handle) => setDockFile(() => handle)} onOpenFile={canOpenFilePanes() ? (entry, options) => void openFileDocument(entry, { ...options, tab: Boolean(verbNow().tab) }) : undefined} openFiles={openFileKeys} onRequestOpen={() => setPanelOpenForChat(true)} onToggleExpanded={toggleWorkspaceExpanded} onClose={() => void dismissSummon()} shortcuts={shortcutManager}
       jbotView={() => renderJbot("tool")}
  /></Show>
     </AppShell>

@@ -37,7 +37,7 @@ try {
     top: (() => { try { top.location.href = "about:blank"; return "navigated"; } catch { return "refused"; } })(),
     origin: self.origin,
   }), origin)), "| what it asked the hub carried no sign-in:", sent.length === 2 && (await Promise.all(sent.map((request) => request.allHeaders()))).every((headers) => !headers.cookie && !headers.authorization), "| the person's own page still answers:", (await api("/v0/projects")).status === 200 && page.url().includes(made));
-  console.log("the switch says Site | Thread, and the row has no Markdown to export:", (await page.locator('.pane-artifact [aria-label="View"]').textContent()).replace(/\s+/g, " ").trim(), "|", await (async () => { await row.click({ button: "right" }); const items = await page.getByRole("menuitem").allTextContents(); await page.keyboard.press("Escape"); return items.join(); })());
+  console.log("the header has the thread button, and the row has no Markdown to export:", await page.locator('.pane-artifact [aria-label*="thread"]').count() === 1, "|", await (async () => { await row.click({ button: "right" }); const items = await page.getByRole("menuitem").allTextContents(); await page.keyboard.press("Escape"); return items.join(); })());
   // A new version of the file: the same frame, where it was scrolled.
   await page.evaluate(() => { document.querySelector(".pane-artifact iframe").dataset.probe = "kept"; });
   const tall = html.replace("</body>", `<section id="plans"><h2>Plans</h2><p class="lede">Three of them.</p></section><div style="height:3000px"></div></body>`);

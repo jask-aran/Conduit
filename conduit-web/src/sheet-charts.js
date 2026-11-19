@@ -101,10 +101,12 @@ export const keptCharts = (view, text, isRows, at, count) => {
  * and how it is shown. Lines in `hidden` are left out, as a spreadsheet's chart leaves out hidden rows. With labels in the first column, the first
  * row names the series where it holds no number; a range one column wide is one series, numbered. A scatter's labels are its x values.
  */
-export const chartData = (area, labels, read, hidden = { rows: new Set(), cols: new Set() }) => {
-  const rows = [], cols = [];
-  for (let row = area.top; row <= area.bottom; row++) if (!hidden.rows.has(row)) rows.push(row);
-  for (let col = area.left; col <= area.right; col++) if (!hidden.cols.has(col)) cols.push(col);
+export const chartData = (area, labels, read, hidden = { rows: new Set(), cols: new Set() }, most = Infinity) => {
+  // Along the labels, one line in `every` is read where the range holds more than `most`: past the chart's pixels more draw nothing, and a whole column
+  // read cell by cell would take frames.
+  const along = labels === "col" ? area.bottom - area.top + 1 : area.right - area.left + 1, every = Math.max(1, Math.ceil(along / most));
+  const shown = (from, to, skip, step) => { const out = []; for (let at = from; at <= to; at += step) { while (at <= to && skip.has(at)) at++; if (at <= to) out.push(at); } return out; };
+  const rows = shown(area.top, area.bottom, hidden.rows, labels === "col" ? every : 1), cols = shown(area.left, area.right, hidden.cols, labels === "col" ? 1 : every);
   // Read as labels down the first column, the other way turned round.
   const lines = labels === "col" ? rows : cols, fields = labels === "col" ? cols : rows, cell = (line, field) => labels === "col" ? read(line, field) : read(field, line);
   const number = (one) => typeof one.value === "number" && Number.isFinite(one.value) ? one.value : null;
@@ -112,6 +114,7 @@ export const chartData = (area, labels, read, hidden = { rows: new Set(), cols: 
   const head = lines.length > 1 && series.every((field) => number(cell(lines[0], field)) === null) && series.some((field) => cell(lines[0], field).text !== "");
   const body = head ? lines.slice(1) : lines;
   return {
+    every,
     labels: body.map((line, n) => named ? cell(line, fields[0]).text : String(n + 1)),
     x: body.map((line) => named ? number(cell(line, fields[0])) : null),
     series: series.map((field, n) => ({ name: head ? cell(lines[0], field).text : `Series ${n + 1}`, values: body.map((line) => number(cell(line, field))) })),

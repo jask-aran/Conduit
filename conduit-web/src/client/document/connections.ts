@@ -52,5 +52,5 @@ function written(text: string): MarkupHandoff[] {
       said: field.said === "reply" || field.said === "reopened" ? field.said : undefined, quote: quote === undefined ? undefined : unescaped(quote), words: words === undefined ? undefined : unescaped(words) };
   });
 }
-/** Opens the artifact a hand-off is about, at its place (main.tsx's `conduit:open-artifact`; focused-artifact.ts keeps the place for the surface). */
-export const showHandoff = (handoff: MarkupHandoff) => window.dispatchEvent(new CustomEvent("conduit:open-artifact", { detail: { id: handoff.artifact, place: { block: handoff.block, cells: handoff.cells } satisfies ArtifactPlace } }));
+/** Opens the artifact a hand-off is about beside the chat, at its place (main.tsx's `conduit:open-artifact`; focused-artifact.ts keeps the place for the surface). */
+export const showHandoff = (handoff: MarkupHandoff) => window.dispatchEvent(new CustomEvent("conduit:open-artifact", { detail: { id: handoff.artifact, beside: true, place: { block: handoff.block, cells: handoff.cells } satisfies ArtifactPlace } }));

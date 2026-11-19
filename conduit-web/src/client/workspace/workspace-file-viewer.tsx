@@ -131,8 +131,6 @@ export default function FileViewer(props: {
         <WorkspaceFileSlot
           projectId={entry().projectId}
           path={entry().path}
-          slot={index === 0 ? "primary" : "secondary"}
-          focused={false}
           closable={props.closable}
           busy={false}
           wrap={props.wrap(index)}
@@ -152,7 +150,7 @@ export default function FileViewer(props: {
           onDispose={() => { handles[index] = undefined; props.ref(index, undefined); }}
         />
       }>{(mode) =>
-        <ChangesEntry entry={entry()} closable={props.closable} mode={mode()} status={statuses()[entryKey(entry())]} focused={false} end={props.paneActions?.()}
+        <ChangesEntry entry={entry()} closable={props.closable} mode={mode()} status={statuses()[entryKey(entry())]} end={props.paneActions?.()}
           onFocus={() => props.onFocusEntry(index)} onClose={() => props.onCloseEntry(index)} onSetMode={(next) => props.onSetMode(index, next)}
           ref={(handle) => { handles[index] = handle; props.ref(index, handle); }} />
       }</Show>
@@ -165,7 +163,6 @@ function ChangesEntry(props: {
   closable: boolean;
   mode: "changes" | "staged";
   status?: GitChangedFile;
-  focused: boolean;
   onFocus: () => void;
   onClose: () => void;
   onSetMode: (mode: FileEntry["mode"]) => void;
@@ -175,14 +172,14 @@ function ChangesEntry(props: {
   const [comparison, { refetch }] = createResource(() => [props.entry.projectId, props.entry.path, props.mode] as const, ([projectId, path, scope]) =>
     api<ComparisonPayload | null>(`/v0/projects/${encodeURIComponent(projectId)}/diff?compare=1&scope=${scope}&path=${encodeURIComponent(path)}`)
       .catch((cause: unknown): ComparisonPayload => ({ path, oldPath: path, scope, kind: "unavailable", message: (cause as { message?: string })?.message || "These changes could not be loaded." })));
-  props.ref({ path: () => props.entry.path, hasUnsavedChanges: () => false, reload: async () => { await refetch(); }, edit: () => { props.onSetMode(undefined); return false; }, save: async () => {}, discardChanges: () => {} });
+  props.ref({ path: () => props.entry.path, hasUnsavedChanges: () => false, draft: () => null, reload: async () => { await refetch(); }, edit: () => { props.onSetMode(undefined); return false; }, save: async () => {}, discardChanges: () => {} });
   const other = () => props.mode === "changes" ? (hasStaged(props.status) ? "staged" as const : null) : (hasUnstaged(props.status) ? "changes" as const : null);
   const actions = <>
     <IconButton kind="file" type="button" aria-label="Show the file" title="Show the file" onClick={() => props.onSetMode(undefined)}><Icons.FileText /></IconButton>
     <Show when={other()}>{(next) => <IconButton kind="file" type="button" aria-label={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} title={next() === "staged" ? "Review staged changes" : "Review unstaged changes"} onClick={() => props.onSetMode(next())}>{next() === "staged" ? <Icons.GitCompareArrows /> : <Icons.FileDiff />}</IconButton>}</Show>
     <Show when={props.closable}><IconButton kind="file" type="button" close aria-label="Close file" title="Close file" onClick={() => props.onClose()}><Icons.Close /></IconButton></Show>
   </>;
-  return <FileChanges tabIndex={-1} focused={props.focused} aria-label={`${props.entry.path} ${props.mode === "staged" ? "staged changes" : "changes"}`} onFocusIn={() => props.onFocus()} onPointerDown={() => props.onFocus()}>
+  return <FileChanges tabIndex={-1} aria-label={`${props.entry.path} ${props.mode === "staged" ? "staged changes" : "changes"}`} onFocusIn={() => props.onFocus()} onPointerDown={() => props.onFocus()}>
     <Suspense>
       <Show when={comparison()} fallback={<Empty>{comparison.loading ? "Loading changes…" : "No changes to show."}</Empty>}>{(payload) =>
         <WorkspaceComparison comparison={payload()} sourceKey={`${props.entry.projectId}:${props.entry.path}:${props.mode}`} viewState={{ layout: "unified", wrap: false, top: 0, left: 0, position: 0 }}

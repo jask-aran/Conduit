@@ -108,7 +108,7 @@ export default function WorkspaceEditor(props: {
   const [canRedo, setCanRedo] = createSignal(false);
   const [annotation, setAnnotation] = createSignal<AnnotationSelection | null>(null);
   const [editorReady, setEditorReady] = createSignal(false);
-  let view: EditorView | undefined;
+  let view: EditorView | undefined, pendingDraft: string | undefined;
   const editableCompartment = new Compartment();
   const wrappingCompartment = new Compartment();
   const languageCompartment = new Compartment();
@@ -300,6 +300,7 @@ export default function WorkspaceEditor(props: {
       reportDirty(false);
     },
     openDocument,
+    setDraft(value) { if (view) view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } }); else pendingDraft = value; },
   };
   props.ref?.(editorHandle);
 
@@ -354,6 +355,7 @@ export default function WorkspaceEditor(props: {
         state: createDocumentState(activePath, props.value, indentation()),
       });
       setEditorReady(true);
+      if (pendingDraft !== undefined) editorHandle.setDraft(pendingDraft);
       updatePosition(view.state);
       view.contentDOM.setAttribute("aria-label", `${editable() ? "Edit" : "Preview"} ${activePath}`);
       if (editable()) view.focus();
@@ -435,6 +437,8 @@ export interface WorkspaceEditorHandle {
   acknowledgeSaved: (value: string) => void;
   replaceDocument: (value: string) => void;
   openDocument: (path: string, value: string, projectId: string) => void;
+  /** Puts unsaved text over the open document, as if typed: Save writes it, Discard goes back. */
+  setDraft: (value: string) => void;
 }
 
 interface CachedDocument {

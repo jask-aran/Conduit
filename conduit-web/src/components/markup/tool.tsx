@@ -4,7 +4,7 @@ import { Portal } from "solid-js/web";
 import { drawingBox, MarkupAsk, MarkupBar, MarkupDrawing, MarkupLayer, MarkupMark, MarkupNote, MarkupNotes, MarkupText, markupInkColour, MARKUP_INKS, MARKUP_TEXT, type MarkupBox, type MarkupDrawingKind, type MarkupInk, type MarkupPoint, type MarkupShape, type MarkupToolKind, type MarkupWeight } from "@/components/ui/markup";
 import { captureHeld, captureScreen, cropAreas, previewOf, type Capture } from "./capture";
 import { MARKUP_CAPABILITIES, type MarkupAt, type MarkupHost, type MarkupListener, type MarkupPlace, type MarkupSent, type MarkupThread } from "./host";
-import { marginColumn, unsentAnchors, UNSENT } from "./margin";
+import { marginColumn, unsentAnchors, MARKUP_STATES, UNSENT } from "./margin";
 import { createPieces } from "./pieces";
 import { textAt } from "./text";
 
@@ -19,9 +19,8 @@ type Drawing = { kind: MarkupDrawingKind | "text"; points: MarkupPoint[]; ink: M
  * `place`: the place it is about, as its surface says it (MarkupPlace), which it follows; `quote`, what that said when chosen, where a comment quotes it.
  * `elements` is then the piece it is in, where it is the page's own text.
  * `preview`: the picture a note shows of it. `sent`: its number in a live item it has gone to; it is then a thread, not to be changed.
- * `to`: the listener the surface asked it of (a paper's `@`).
  */
-type Selection = { id: number; elements: Element[]; comment: string; on: View; reach?: MarkupBox; drawings?: Drawing[]; from?: { left: number; top: number }; place?: MarkupPlace; quote?: string; general?: true; whole?: true; preview?: string; sent?: number; to?: string };
+type Selection = { id: number; elements: Element[]; comment: string; on: View; reach?: MarkupBox; drawings?: Drawing[]; from?: { left: number; top: number }; place?: MarkupPlace; quote?: string; general?: true; whole?: true; preview?: string; sent?: number };
 const GENERAL = "General note";
 const WHOLE = "Screenshot";
 type Tool = MarkupToolKind;
@@ -112,8 +111,10 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   /** The tool's layer draws a place; else the surface does, told it as an anchor. */
   const drawsPlaces = can.marks === "layer";
   const placeAt = (from: MarkupAt, to: MarkupAt | null) => host.placeAt ? host.placeAt(from, to) : layer ? textAt(layer, from, to) : null;
-  /** The ask field, at a place, asking someone by name to do something there. */
-  const [asking, setAsking] = createSignal<{ place: MarkupPlace; name: string } | null>(null), [askAt, setAskAt] = createSignal<JSX.CSSProperties | null>(null);
+  /** The ask box, by the tools, asking someone by name for a change to a place (null: the whole of what is marked up); `back`, where the keyboard was. Its words are kept until they are sent.
+   *  `working`: the last request still unanswered, which the box's place says until it is. */
+  const [asking, setAsking] = createSignal<{ place: MarkupPlace | null; name: string; back: Element | null } | null>(null), [askAt, setAskAt] = createSignal<JSX.CSSProperties | null>(null);
+  const [draft, setDraft] = createSignal(""), [working, setWorking] = createSignal<{ item: string; label: string } | null>(null);
   // An ink as the page resolves it, for a note's picture.
   const colours = new Map<MarkupInk, string>();
   const colourOf = (name: MarkupInk) => {
@@ -161,7 +162,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   const nextAgent = () => { const all = waiters.latest ?? []; handTo(all[(all.findIndex((waiter) => waiter.name === agent()?.name) + 1) % all.length]?.name ?? null); };
   /** Who a comment is for, whatever the bar hands to: a listener its words name with `@` (the longest that matches), else the one it was asked of. */
   const addressOf = (selection: Selection) => (waiters.latest ?? []).map((waiter) => waiter.name).sort((a, b) => b.length - a.length)
-    .find((name) => new RegExp(`(?<!\\w)@${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\w)`, "i").test(selection.comment)) ?? selection.to ?? null;
+    .find((name) => new RegExp(`(?<!\\w)@${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?!\\w)`, "i").test(selection.comment)) ?? null;
   const forWhom = (selection: Selection) => { const to = addressOf(selection); return to ? { label: `For ${to}` } : undefined; };
   const [sending, setSending] = createSignal(false);
   const [capturing, setCapturing] = createSignal(false);
@@ -378,23 +379,41 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     if (done && !done.sent && !done.whole && done.comment.trim()) posting = posting.then(() => send(done.id));
   };
   /** A place is a comment about it; the page's own text, about the piece it is in. */
-  const addQuote = (place: MarkupPlace, to?: string, words?: string) => {
+  const addQuote = (place: MarkupPlace) => {
     const text = place.text.replace(/\s+/g, " ").trim().slice(0, QUOTE_CHARS), holder = place.element;
-    // Asked of someone where there is no text yet (a paper's `@` on an empty line), it is a comment about that place.
-    if (!text && !to) return;
+    if (!text) return;
     const id = nextId++;
-    keep(); setSelections(selections.length, { id, elements: holder ? placed([(text && pieceRoot(holder)) || holder]) : [], comment: words ?? "", on: "page", place, ...(text && !words ? { quote: text } : {}), ...(to ? { to } : {}) });
-    // Asked with its words (a paper's `@`): sent as it is, with no card to finish.
-    if (words) posting = posting.then(() => send(id)); else openNote(id);
+    keep(); setSelections(selections.length, { id, elements: holder ? placed([pieceRoot(holder) || holder]) : [], comment: "", on: "page", place, quote: text });
+    openNote(id);
   };
-  /** Asked of the one comments go to, in words of the host's, about a place with its quote, and sent at once as an item of its own (a sheet's Make chart). */
-  const request = async (place: MarkupPlace, words: string) => {
-    const text = place.text.replace(/\s+/g, " ").trim().slice(0, QUOTE_CHARS), to = agent()?.name ?? null;
-    const asked: Selection = { id: nextId++, elements: [], comment: words, on: "page", place, ...(text ? { quote: text } : {}), ...(to ? { to } : {}) };
+  /** Asked of `to` (unsaid: the one comments go to) about a place with its quote, or the whole of what is marked up as a general note, and sent at once as an item of its own: the ask box's, a sheet's Make chart.
+   *  Until it is answered the box's place says so (`doing`), with Stop. */
+  const request = async (place: MarkupPlace | null, words: string, as: { to?: string; doing?: string } = {}) => {
+    const text = place?.text.replace(/\s+/g, " ").trim().slice(0, QUOTE_CHARS), to = as.to ?? agent()?.name ?? null;
+    const asked: Selection = { id: nextId++, elements: [], comment: words, on: "page", ...(place ? { place, ...(text ? { quote: text } : {}) } : { general: true as const }) };
     const { result } = await deliver((await transport.mark(host.clientId())).id, [asked], undefined, 0, to, false);
     void host.sent?.();
-    return { key: `${result.id}/1`, to: result.handed.to?.name ?? null };
+    const handed = result.handed.to?.name ?? null;
+    if (handed) setWorking({ item: result.id, label: as.doing ?? MARKUP_STATES.working }); else host.notify("sent", "Saved: no session was listening");
+    return { key: `${result.id}/1`, to: handed };
   };
+  /** The request out settled by the person, so it is asked no longer, and whoever is at work on it stopped. */
+  const stopWork = () => { const out = working(); if (!out) return; setWorking(null); void Promise.allSettled([transport.resolve(out.item, 1, true), host.stop?.(`${out.item}/1`)]).then(() => void host.sent?.()); };
+  // Followed until it is answered, as its margin card is: settled, its item handled, the last word on it the agent's, or the agent at work on it no longer.
+  createEffect(() => {
+    const out = working();
+    if (!out) return;
+    let began = false;
+    const following = setInterval(() => void transport.thread(out.item).then((thread) => {
+      const comment = thread.comments[0], ended = began && !comment?.working;
+      began ||= Boolean(comment?.working);
+      if (working() === out && (ended || thread.state === "handled" || comment?.resolved || thread.messages.filter((message) => message.n === 1 || message.n === null).at(-1)?.from === "agent")) setWorking(null);
+    }, () => {}), WAITING_EVERY_MS);
+    onCleanup(() => clearInterval(following));
+  });
+  /** The ask box opened by the tools, about `place` as it is now (it is read before the box takes the keyboard). */
+  const openAsk = (place: MarkupPlace | null, to?: string) => { const name = to ?? agent()?.name; if (!name) return host.notify("failed", "No agent is listening"); look("use"); setAsking({ place, name, back: document.activeElement }); };
+  const shutAsk = (refocus?: boolean) => { const back = asking()?.back; setAsking(null); if (!refocus) return; if (back instanceof HTMLElement && back.isConnected) back.focus({ preventScroll: true }); else host.margin?.focus?.(); };
   const add = (elements: Element[], drag?: MarkupBox) => {
     const id = nextId++;
     const held = boxOf(elements);
@@ -653,24 +672,32 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     else if (event.key === "Enter") { handled(); choose(event.shiftKey); }
   };
 
+  // Heard after the surface, and only in its pane: Escape stops the request out where nothing nearer took it, and the ask key opens the box where the surface has no ask of its own (a site).
+  const later = (event: KeyboardEvent) => {
+    const framed = host.frame?.(), pane = framed?.classList.contains("ui-markup-room") ? framed.parentElement : framed, target = event.target as Node;
+    if (event.defaultPrevented || props.hidden || asking() || document.querySelector(`${MENUS}, [role='dialog']`) || !(layer?.contains(target) || pane?.contains(target))) return;
+    if (event.key === "Escape" && working()) { event.preventDefault(); stopWork(); }
+    else if ((event.ctrlKey || event.metaKey) && event.altKey && event.code === "KeyM" && can.bar !== "foot" && can.listeners) { event.preventDefault(); openAsk(host.place?.() ?? null); }
+  };
   const POINTER_EVENTS = ["pointermove", "pointerdown", "pointerup", "pointercancel", "mousedown", "mouseup", "click", "dblclick", "contextmenu", "wheel", "touchstart", "touchmove", "touchend", "touchcancel"] as const;
   onMount(() => {
     // The moment is kept in case it is wanted; the tool opens on the live page all the same.
     if (atOpen) void take(false);
-    host.asks?.({ names: () => (waiters.latest ?? []).map((waiter) => waiter.name), listeners: () => waiters.latest ?? [], comment: (place) => addQuote(place), ask: (place, to) => { const name = to ?? agent()?.name; if (name) { openNote(null); setAsking({ place, name }); } }, request, withdraw: (key) => { const [item, n] = key.split("/"); return transport.resolve(item!, Number(n), true).then(() => void host.sent?.()); }, unsent: () => sending() ? 0 : selections.filter((selection) => !selection.sent && selection.comment.trim()).length, send: () => void send(), to: () => agent()?.name ?? null, hand: handTo });
+    host.asks?.({ names: () => (waiters.latest ?? []).map((waiter) => waiter.name), listeners: () => waiters.latest ?? [], comment: (place) => addQuote(place), ask: openAsk, request, unsent: () => sending() ? 0 : selections.filter((selection) => !selection.sent && selection.comment.trim()).length, send: () => void send(), to: () => agent()?.name ?? null, hand: handTo });
     onCleanup(() => host.asks?.(null));
     for (const type of POINTER_EVENTS) window.addEventListener(type, swallow, { capture: true, passive: false });
     window.addEventListener("keydown", onKeyDown, { capture: true });
+    window.addEventListener("keydown", later);
     window.addEventListener("beforeinput", typed, { capture: true });
     for (const type of ["focusin", "focusout"] as const) window.addEventListener(type, quietFocus, { capture: true });
     // With nothing marked and no stack of notes, a frame after the first reads and places nothing: the tool stands open through all the typing in a paper.
     let rested = false, stacks: HTMLCollectionOf<Element> | undefined;
     let handle = requestAnimationFrame(function tick() {
-      const none = !selections.length && !quoting() && !asking() && !((stacks ??= layer?.getElementsByClassName("ui-markup-notes"))?.length);
+      const none = !selections.length && !quoting() && !asking() && !working() && !((stacks ??= layer?.getElementsByClassName("ui-markup-notes"))?.length);
       if (none && rested) { handle = requestAnimationFrame(tick); return; }
       rested = none;
       // Only marks read the frame: with none drawn, nothing is told a frame passed.
-      if (selections.length || quoting()) setFrame((value) => value + 1);
+      if (selections.length || quoting() || asking()?.place) setFrame((value) => value + 1);
       // What the app redrew is found again where it was.
       for (const selection of selections) selection.elements.forEach((element, at) => {
         if (element.isConnected) return;
@@ -707,11 +734,12 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
         const now = standsAt(), ids = Object.keys(next);
         if (ids.length !== Object.keys(now).length || ids.some((id) => now[+id]?.left !== next[+id]!.left || now[+id]?.top !== next[+id]!.top || now[+id]?.width !== next[+id]!.width)) setStandingAt(next);
       }
-      // The ask field stands in the place's line where it says nothing (an empty line), else under it; as wide as the surface's column, where it has one.
-      const asked = asking();
-      if (asked) {
-        const boxes = boxesOf(asked.place), at = boxes.length ? around(boxes) : null, column = host.margin?.column?.();
-        const next = at && { left: `${Math.round(column?.left ?? at.left)}px`, top: `${Math.round(asked.place.text.trim() ? at.top + at.height : at.top)}px`, width: column ? `${Math.round(column.width)}px` : `${Math.round(at.width)}px` };
+      // The ask box stands by the tools, as wide as they are: under a ribbon, over a foot bar; kept inside the window.
+      const box = (asking() || working()) && layer?.querySelector<HTMLElement>(".ui-markup-ask"), rails = box && (can.bar === "slot" ? host.slot?.() : layer)?.querySelector(".ui-markup-rails");
+      const sets = rails ? [...rails.querySelectorAll(":scope > [data-set], :scope > .ui-markup-sets > .ui-markup-bar")].map((set) => set.getBoundingClientRect()) : [];
+      if (box && rails && sets.length) {
+        const tools = around(sets.map((set) => ({ left: set.left, top: set.top, width: set.width, height: set.height }))), gap = parseFloat(getComputedStyle(rails).rowGap) || 0, width = Math.max(tools.width, box.offsetWidth);
+        const next = { left: `${Math.round(Math.max(gap, Math.min(tools.left, innerWidth - width - gap)))}px`, width: `${Math.round(tools.width)}px`, ...(can.bar === "foot" ? { bottom: `${Math.round(innerHeight - tools.top + gap)}px` } : { top: `${Math.round(tools.top + tools.height + gap)}px` }) };
         if (JSON.stringify(next) !== JSON.stringify(askAt())) setAskAt(next);
       }
       // The note being written sits beside what it is about: to its right, else its left, else under or over it.
@@ -754,6 +782,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   onCleanup(() => {
     for (const type of POINTER_EVENTS) window.removeEventListener(type, swallow, { capture: true });
     window.removeEventListener("keydown", onKeyDown, { capture: true });
+    window.removeEventListener("keydown", later);
     window.removeEventListener("beforeinput", typed, { capture: true });
     const column = marginColumn(host);
     if (column) { column.waiting.clear(); column.lay(); }
@@ -882,7 +911,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   const sourceLine = (selection: Selection) => selection.whole ? "The whole page, as it was when this was taken." : selection.general ? "About nothing on the page in particular." : selection.quote ? `“${selection.quote}”` : selection.elements.length === 1 ? sourceOf(selection.elements[0]!) : undefined;
 
   // The bar: over the page in the layer, or in the slot the surface gives in a row of its own.
-  const bar = () => <MarkupBar out={props.moving} thin={can.thin} ribbon={can.bar !== "foot"} slot={can.bar === "slot" ? host.slot?.() ?? undefined : undefined} own={host.tools?.()} onOwn={() => setMarkedLast(false)} onAsk={host.place && offered("quote") ? () => { const place = host.place!(); if (place) addQuote(place); } : undefined} view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onNote={() => { if (props.mode === "use") look("page"); note(); }}
+  const bar = () => <MarkupBar out={props.moving} thin={can.thin} ribbon={can.bar !== "foot"} slot={can.bar === "slot" ? host.slot?.() ?? undefined : undefined} own={host.tools?.()} onOwn={() => setMarkedLast(false)} onAsk={can.bar !== "foot" && can.listeners ? () => openAsk(host.place?.() ?? null) : undefined} view={props.mode === "use" ? "use" : view()} screenshots={screenshots} onView={look} tools={can.tools} tool={pointerTool()} onNote={() => { if (props.mode === "use") look("page"); note(); }}
     // The quote tool taken up while a place is chosen comments on it.
     onTool={(tool) => { const took = props.mode === "use" || pointerTool() !== tool; if (props.mode === "use") look("page"); setCursor(null); setStroke(null); setQuoting(null); setPointerTool(tool); const place = took && tool === "quote" ? host.place?.() : null; if (place) addQuote(place); }}
     status={status()} compact={touchOnly} onRetake={() => { openNote(null); void take(true); }} ink={ink()} onInk={can.inks ? setInk : undefined} weight={weight()} onWeight={can.inks ? setWeight : undefined} size={textSize()} onSize={can.inks ? setTextSize : undefined} shape={shape()} onShape={setShape} onUndo={(reviewing() && undoable()) || surface?.canUndo() ? undoAny : undefined} onRedo={(reviewing() && redoable()) || surface?.canRedo() ? redoAny : undefined}
@@ -896,8 +925,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
     <MarkupLayer ref={(element) => { layer = element; }} grounded={can.grounded} select={select()} text={pointerTool() === "quote" && showing() === "page"} frozen={showing() === "screenshot" ? picture()?.url : undefined} hidden={taking() || props.hidden}>
       <For each={selections}>{(selection) => <Show when={floats(selection) && selection.on === showing()}>
         <Show when={selection.drawings} fallback={<Show when={selection.place} fallback={<MarkupMark kind="chosen" box={box(selection.elements)} tag={tagOf(selection)} current={openId() === selection.id} onOpen={() => openCard(selection)} />}>{(place) => <Show when={drawsPlaces}>
-          <Show when={selection.quote} fallback={<MarkupMark kind="asked" box={extent(selection)} current={openId() === selection.id} onOpen={() => openCard(selection)} />}>
-            <Index each={linesNow(place())}>{(line, at) => <MarkupMark kind={selection.to ? "asked" : "quote"} box={line()} tag={at || selection.to ? undefined : tagOf(selection)} current={openId() === selection.id} onOpen={at ? undefined : () => openCard(selection)} />}</Index></Show></Show>}</Show>}>{(drawings) => <>
+          <Index each={linesNow(place())}>{(line, at) => <MarkupMark kind="quote" box={line()} tag={at ? undefined : tagOf(selection)} current={openId() === selection.id} onOpen={at ? undefined : () => openCard(selection)} />}</Index></Show>}</Show>}>{(drawings) => <>
           <For each={drawings()}>{(drawing, at) => drawing.kind === "text"
             ? <MarkupText ref={(element) => { textField = element; }} at={drawing.points[0]!} ink={drawing.ink} size={drawing.font} shift={shiftOf(selection)} value={drawing.text ?? ""} editable={openId() === selection.id}
                 onInput={(value, element) => setSelections((candidate) => candidate.id === selection.id, "drawings", at(), produce((draft) => { draft.text = value; draft.size = { width: element.offsetWidth, height: element.offsetHeight }; }))} onDone={() => textDone(selection.id, at())} />
@@ -909,8 +937,11 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
       <Show when={select() && cursor()} keyed>{(element) => <Show when={!sameBox(box([element]), open() && floats(open()) ? box(open()!.elements) : null)}><MarkupMark kind="cursor" box={box([element])} name={nameOf([element])} /></Show>}</Show>
       <Show when={stroke()}>{(drawn) => <MarkupDrawing kind={drawn().kind} points={drawn().points} ink={ink()} weight={weight()} current />}</Show>
       <Show when={drawsPlaces && quoting()}>{(place) => <Index each={(frame(), boxesOf(place()))}>{(line) => <MarkupMark kind="quote" box={line()} />}</Index>}</Show>
-      <Show when={asking()}>{(asked) => <MarkupAsk name={asked().name} names={(waiters.latest ?? []).map((waiter) => waiter.name)} at={askAt() ?? { opacity: 0 }} onName={(name) => setAsking({ ...asked(), name })}
-        onSend={(words) => { const { place, name } = asked(); setAsking(null); addQuote(place, name, words); host.margin?.focus?.(); }} onClose={() => { setAsking(null); host.margin?.focus?.(); }} />}</Show>
+      {/* While the box is open, what it asks about is marked as asked of someone. */}
+      <Show when={drawsPlaces && asking()?.place}>{(place) => <Index each={linesNow(place())}>{(line) => <MarkupMark kind="asked" box={line()} />}</Index>}</Show>
+      <Show when={!props.hidden && (asking() || working())}><MarkupAsk name={asking()?.name ?? ""} names={(waiters.latest ?? []).map((waiter) => waiter.name)} at={askAt() ?? { opacity: 0 }} onName={(name) => setAsking({ ...asking()!, name })}
+        value={draft()} onInput={setDraft} onThread={host.thread} working={asking() || !working() ? undefined : { label: working()!.label, onStop: stopWork }}
+        onSend={(words) => { const { place, name } = asking()!; shutAsk(true); setDraft(""); void request(place, words, { to: name }).catch((error: Error) => { setDraft(words); host.notify("failed", `Not asked: ${error.message}`); }); }} onClose={shutAsk} /></Show>
       <Show when={marquee()}>{(drag) => <>
         <MarkupMark kind="marquee" box={drag()} />
         <Show when={aimed().length > 1}><For each={aimed()}>{(element) => <MarkupMark kind="member" box={box([element])} />}</For></Show>
@@ -931,11 +962,11 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
       </>}</Show>
       <Show when={!capturing() && !alone() && !listing()}>
         <Show when={floats(open()) && open()} keyed>{(selection) =>
-          <MarkupNote ref={(element) => { noteField = element; }} float={noteAt() ? { left: `${noteAt()!.left}px`, top: `${noteAt()!.top}px` } : { opacity: 0 }} open tag={headOf(selection) && !selection.to ? tagOf(selection) : ""} name={selection.to ? `Ask ${selection.to}` : headOf(selection) ? titleOf(selection) : ""} quote={selection.quote} source={selection.to ? undefined : sourceLine(selection)} state={selection.to ? undefined : forWhom(selection)} placeholder={selection.to ? "What should it do?" : undefined}
+          <MarkupNote ref={(element) => { noteField = element; }} float={noteAt() ? { left: `${noteAt()!.left}px`, top: `${noteAt()!.top}px` } : { opacity: 0 }} open tag={headOf(selection) ? tagOf(selection) : ""} name={headOf(selection) ? titleOf(selection) : ""} quote={selection.quote} source={sourceLine(selection)} state={forWhom(selection)}
             value={selection.comment} onOpen={() => {}} onInput={write(selection)} onDone={() => openNote(null)} onRemove={() => remove(selection.id)} sendNow={offersLive ? live() : undefined} onSendNow={agent() ? (on) => { keepLive(on); noteField?.focus({ preventScroll: true }); } : undefined} />}
         </Show>
         <For each={selections}>{(selection) => <Show when={stands(selection)}>
-          <MarkupNote key={`${UNSENT}${selection.id}`} float={standsAt()[selection.id] ? { left: `${standsAt()[selection.id]!.left}px`, top: `${standsAt()[selection.id]!.top}px`, width: standsAt()[selection.id]!.width === undefined ? undefined : `${standsAt()[selection.id]!.width}px` } : { opacity: 0 }} open={false} tag={headOf(selection) && !selection.to ? tagOf(selection) : ""} name={selection.to ? `Ask ${selection.to}` : headOf(selection) ? titleOf(selection) : ""} quote={selection.quote} source={sourceLine(selection)}
+          <MarkupNote key={`${UNSENT}${selection.id}`} float={standsAt()[selection.id] ? { left: `${standsAt()[selection.id]!.left}px`, top: `${standsAt()[selection.id]!.top}px`, width: standsAt()[selection.id]!.width === undefined ? undefined : `${standsAt()[selection.id]!.width}px` } : { opacity: 0 }} open={false} tag={headOf(selection) ? tagOf(selection) : ""} name={headOf(selection) ? titleOf(selection) : ""} quote={selection.quote} source={sourceLine(selection)}
             value={selection.comment} onOpen={() => openNote(selection.id)} onInput={write(selection)} onRemove={() => remove(selection.id)} state={forWhom(selection) ?? { label: "Not sent" }} />
         </Show>}</For>
         <Show when={selections.some((selection) => !stands(selection) && (!floats(selection) || selection.id !== openId()))}>
