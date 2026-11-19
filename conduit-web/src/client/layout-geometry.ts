@@ -10,9 +10,10 @@ export const MIN_MAIN_PANE_UNITS = 33;
 export const MIN_SPLIT_PANE_UNITS = 18.75;
 
 /** An artifact's text at its narrowest measure (the paper body's basis, --measure-xl), the sheet's own padding round it
- *  (--space-4xl each side) and its column's gutters (--space-lg each side); the folded ribbon and the header's tab,
- *  Paper | Thread and buttons fit within it. */
-export const MIN_ARTIFACT_PANE_UNITS = 30 + 2 * 2 + 2 * 0.75;
+ *  (--space-4xl each side) and its column's gutters at their least (--space-xs each side, as snug); the folded ribbon
+ *  (its three sets on one row with the row's padding) and the header's tab and buttons fit within it, so an artifact and
+ *  a chat stand side by side at 1440 wide with the sidebar open. */
+export const MIN_ARTIFACT_PANE_UNITS = 30 + 2 * 2 + 2 * 0.25;
 
 export const minMainPaneWidth = () => unitPx(MIN_MAIN_PANE_UNITS);
 export const minArtifactPaneWidth = () => unitPx(MIN_ARTIFACT_PANE_UNITS);

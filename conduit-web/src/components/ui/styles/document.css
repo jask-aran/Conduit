@@ -10,7 +10,10 @@
 .ui-document > .ui-find-bar { flex-wrap: wrap; }
 .ui-document-replace { display: flex; flex-basis: 100%; align-items: center; gap: var(--space-2xs); order: 1; }
 .ui-document-replace > .ui-lead-input { flex: 1; min-width: var(--control-lg); }
-.ui-document-column { min-height: 0; flex: 1; overflow-y: auto; padding: var(--space-2xl) var(--space-lg) 0; }
+/* Its side gutters give way, down to snug's, before the sheet narrows past its measure, so an artifact pane's least width (layout-geometry.ts) keeps only snug's;
+   narrower still (a phone) the text gives way and they come back. --spare: the room each side beyond the sheet at its measure, negative once there is none. */
+.ui-document-column { --spare: calc((100% - var(--measure-xl)) / 2 - var(--space-4xl)); min-height: 0; flex: 1; overflow-y: auto;
+  padding: var(--space-2xl) max(clamp(var(--space-xs), var(--spare), var(--space-lg)), min(var(--space-lg), -1 * var(--spare))) 0; }
 /* The text, and the margin beside it. The margin wraps under the text at the width where the two no longer fit side by side, which is the text's own measure and the margin's. */
 .ui-document-page { display: flex; min-height: 100%; flex-wrap: wrap; justify-content: center; gap: var(--space-2xl); }
 /* The text gives up width before the margin goes under it: it wraps only where the text at its narrowest measure and the margin no longer fit side by side. */
