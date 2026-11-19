@@ -7,6 +7,8 @@
 /* A grid covers its pane and its canvas cannot be seen through, so its dark ground is screened over the picture,
    which is dimmed a long way for it. */
 [data-art-dim] > .ui-chat-art { opacity: 0.35; }
+/* A dashboard's or a pane home's muted text stands on the picture itself: it is shaded towards the pane's ground, live, under every part. */
+[data-art-shade] > .ui-chat-art { opacity: var(--opacity-rest); }
 .dark [data-art-window][data-art-dim] .ui-spreadsheet-grid { mix-blend-mode: screen; }
 /* What stood on the pane's ground stands on the picture. Every header in a window is the same: no ground, and what
    scrolls beneath it blurs away towards the top. The blur is the header's own, never a mask on what scrolls: a mask
