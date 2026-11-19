@@ -72,6 +72,7 @@ function strict(bytes) {
   for (const [part, xml] of Object.entries(parts)) {
     const root = /<(?:\w+:)?(worksheet|workbook|styleSheet|chartSpace)\b/.exec(xml)?.[1];
     if (!root || !part.endsWith(".xml")) continue;
+    if (!new RegExp(`^\\s*(<\\?xml[^>]*\\?>\\s*)?<(?:\\w+:)?${root}\\b`).test(xml)) fault(part, `something before <${root}>`);
     const order = ORDER[root].split(" "), seen = children(xml, root);
     let last = -1;
     for (const name of seen) { const at = order.indexOf(name); if (at < 0) fault(part, `<${name}> is not a child of <${root}>`); else if (at < last) fault(part, `<${name}> after <${order[last]}>`); else last = at; }
