@@ -108,7 +108,7 @@ wrapped, so the probe does not see its id).
 - **The thread beside** (`client/main.tsx`): a chat
   is known as a mated thread by `backend.mated` on its summary in `hiddenChats` (`matedPaper`). The artifact
   header's thread button (`ArtifactPane`'s `thread`, pressed through `pressThread`) opens the thread (or the chat
-  the comments lead to) beside, goes to it when it is a tab not shown, and closes it when it shows; it is lit while
+  the comments lead to) beside, goes to it when it is open elsewhere, and closes it when it is the next pane; it is lit while
   it shows and wears `RuntimeIndicator`'s running cue. The thread's tab is grouped under its artifact, and that
   label opens the artifact beside. A thread's address opens the thread alone. On a phone `paperModes`, the
   `Segmented` Artifact | Thread, switches the one pane between them.

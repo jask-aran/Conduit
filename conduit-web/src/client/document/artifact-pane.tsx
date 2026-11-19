@@ -84,7 +84,7 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; pendi
   holdArtifact(() => frame, () => {
     const kind = found()?.kind, margin = comments();
     if (!kind) return null;
-    return { id: props.id, kind, offers: { thread: () => props.onThread?.(connectedTo(props.id)), ...surface()?.offers?.(), ...(margin && !props.quiet ? { nextComment: margin.next, previousComment: margin.previous } : {}) } };
+    return { id: props.id, kind, offers: { thread: props.onThread && (() => props.onThread!(connectedTo(props.id))), ...surface()?.offers?.(), ...(margin && !props.quiet ? { nextComment: margin.next, previousComment: margin.previous } : {}) } };
   });
   // Drawn once its surface is and, for a kind with a margin, the margin has answered: the text, the header's count and the marks come in one frame.
   const [drawn, setDrawn] = createSignal(false);

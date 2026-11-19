@@ -9,19 +9,19 @@ const wait = (ms) => new Promise((done) => setTimeout(done, ms)), paper = "/v0/d
 const { page, close } = await open({ width: 1600, height: 950 });
 const errors = []; page.on("pageerror", (error) => errors.push(String(error)));
 const api = (url, method = "GET", body) => page.evaluate(async ([url, method, body]) => { const answer = await fetch(url, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined }); return answer.json().catch(() => null); }, [url, method, body]);
-const view = () => page.evaluate(() => ({ lit: document.querySelector('.pane-artifact [aria-pressed][aria-label*="thread"]')?.getAttribute("aria-pressed"), panes: document.querySelectorAll(".pane-artifact, .chat-main textarea").length, tabs: [...document.querySelectorAll("[role=tab]")].map((tab) => tab.textContent.trim()).join() }));
+const view = () => page.evaluate(() => ({ lit: document.querySelector('.pane-artifact [aria-pressed][aria-label*="thread"]')?.getAttribute("aria-pressed"), thread: document.querySelectorAll(".main-split textarea").length, tabs: [...document.querySelectorAll("[role=tab]")].map((tab) => tab.textContent.trim()).join() }));
 const turn = () => page.locator('.pane-artifact [aria-label*="thread"]').click();
 let chat, item; const extra = [];
 try {
   await page.goto(`${origin}/?a=artifact:test`);
   await page.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 }); await wait(1200);
   const before = await view();
-  await turn(); await page.waitForSelector(".chat-main textarea", { timeout: 15000 }); await wait(1500);
+  await turn(); await page.waitForSelector(".main-split textarea", { timeout: 15000 }); await wait(1500);
   const thread = await view(), links = await api(`${paper}/connections`), listed = (await api("/v0/projects")).projects.flatMap((project) => project.sessions.map((one) => one.id));
-  console.log("the button opens the paper's chat beside it, lit:", before.lit === "false" && thread.lit === "true" && thread.panes === 2 && thread.tabs.includes("Thread"), JSON.stringify([before, thread]));
+  console.log("the button opens the paper's chat beside it, lit:", before.lit === "false" && thread.lit === "true" && thread.thread === 1 && thread.tabs.includes("Thread"), JSON.stringify([before, thread]));
   console.log("the mated thread is a chat of the paper's, in no project's list:", Boolean(links.thread) && page.url().includes(links.thread) && !listed.includes(links.thread));
   await turn(); await wait(1500);
-  console.log("pressed again, it closes the thread:", (await view()).lit === "false" && (await view()).panes === 1);
+  console.log("pressed again, it closes the thread:", (await view()).lit === "false" && (await view()).thread === 0);
   // A chat connected to the paper is handed what is sent to it.
   chat = (await api("/v0/chats", "POST", { projectId: "test", profileId: "test-stream" })).id;
   const name = `chat ${chat.slice(0, 8)}`;
