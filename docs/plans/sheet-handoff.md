@@ -128,23 +128,19 @@ Then the ribbon, charts and ask box, walked in headless Chrome on :4310 (2026-11
    - Find doesn't search again when a column is hidden or shown while it is open.
    - Paste values of text from outside keeps `=1+1` a live formula; whether it should land as text is the owner's call.
    - "View settings…" in the context menu breaks DESIGN's rule that menu rows don't open settings. The owner hasn't decided.
-   - Ctrl+- on a block of cells does nothing; Excel asks whether to shift cells up or left, or delete whole rows or columns.
    - The cell menu's search field breaks DESIGN's "a popover rather than a menu when rows hold inputs"; the library's `SearchList` holds no submenus,
      keys or groups. The owner asked for the field.
    - FILTER reserves the whole source range's size to spill into (HyperFormula sizes an array before computing it), so its "if empty" value shows
      #SPILL! where cells under it are filled.
-   - Shift+click on a row number or column letter extends a row or column pick, but from a cell it starts a new pick (Excel extends from the active cell).
-   - A wrapped cell's row is fitted when Wrap is set, not when text is typed into it: nothing refits after a write. Excel refits only rows whose height
-     was not set by hand, which the look does not tell apart (`height:` is written by a fit and by a drag alike).
    - More decimals on a General cell of text gives `0.0` to the range, not the number cells' own decimals plus one.
    - Ctrl+Z does nothing while a ribbon button has the focus (after Escape from one of its menus): the undo keys are the grid's alone.
-   - Undoing an insert or delete of rows can leave other formulas re-cased (`=sum(a1)` back as `=SUM(A1)`).
 3. **Left by the reviews:**
    - xlsx export: where a styled row past the tab's cells crosses a styled column, only the row's style is written (`xlsx-styles.js`).
    - xlsx: a rule's number format or border (its dxf) is counted as dropped, not kept.
    - Merge with an empty top-left blanks the only value; Excel may keep the first value in reading order (not checked).
    - "Undo N steps" can undo more than N: Yjs skips steps others have since overwritten, and the list still names them.
-   - Opening a filter can make a "Filter" step: `reapply()` writes the look as a tracked change when others' edits moved what it hides.
+   - Opening a filter can make a "Filter" step: `reapply()` writes the look as a tracked change when others' edits moved what it hides (a plain open
+     made none in the walk of `sheet-check-3`).
    - Frozen formulas (`excel:` in the look): Undo putting back the entries the hub rewrote is unproven; row and column changes outside
      `cells.edit` (growing at the edge, `retake`, the page's Undo) don't rewrite them; `documents.js` still passes the import report to
      `exportXlsx`, which ignores it.
@@ -158,8 +154,8 @@ Then the ribbon, charts and ask box, walked in headless Chrome on :4310 (2026-11
    - Windows performance traces;
    - Ctrl+Shift+0 on Windows, which may take it to switch the input language.
 5. **Charts, waiting on the owner:** a selected chart's edge brightens (close to DESIGN's no-outline rule); the series inks were not run through a
-   palette check; charts draw over frozen rows; a moved chart snaps to the cell under its corner. A bar chart's last value label can be clipped at the
-   right edge. The ask box under the tools at 1,100 px is as wide as the folded ribbon, wraps its text and covers the margin's top card.
+   palette check; charts draw over frozen rows; a moved chart snaps to the cell under its corner. The ask box under the tools at 1,100 px is as wide as the
+   folded ribbon, wraps its text and covers the margin's top card.
 
 ## How the work has gone well
 
@@ -204,7 +200,34 @@ Then the ribbon, charts and ask box, walked in headless Chrome on :4310 (2026-11
   hub's `type` op. Held per cell, a validation follows inserts, deletes, moves, sorts and shifts as styles do; `lookOf`/`restoreLook` give sheet.json and
   xlsx the import's A1 shape (`validations: [{ range, ... }]`, `validationsA1`/`restoreValidations`). `inks` survive sheet.json but not an xlsx file.
 - A date cell holds a serial number in a date format (Excel's, the engine's CONFIG unchanged): `readDate` (sheet-types.js) reads typed, pasted
-  and already-held text dates into serials; the hub's `set` into a date cell does not.
+  and already-held text dates into serials, and so do the hub's `set` and `fill` (`sheet-check-3`).
 - Overflow: an empty cell draws the share of text running into it (`spillInto`, grid.ts) from a per-row list of filled columns made once a change;
   a changed cell redraws its row to the right in view. Gridlines still cross overflowing text.
 - Refit runs in `sheet.onChange` for wrapped cells, as a transaction of origin `refit`, outside the history.
+
+## Walked in headless Chrome on :4310 (branch `sheet-check-3`, 2026-11-20)
+
+Cell types, overflow and refit, links, the filter, shifting cells, the Data tools, tabs, selection keys and the earlier fixes were walked on a scratch
+tab of probe-sheet. Each fix on the branch was seen working by patching the served bundle in the probe, except the hub's (date `set`, formula casing).
+What a later builder must know:
+- Solid compiles `a && b` in a prop to `false`, not `null`: a prompt opened by `props.x !== null` opened at load and could not be shut. Pass `x ? … : null`.
+- Cell types: a dropdown opens on its pill, its arrow, Enter, Alt+Down or a double click; a click on the cell's empty middle only selects. A checkbox
+  toggles on a plain click (Glide's own), so the grid stops Glide's toggle for Shift and Ctrl clicks. A date cell holds a serial and shows and edits
+  it as d/m/yyyy (`types.shown`, the inverse of `types.typed`).
+- Styles reach the styles' index only as their transaction ends: anything measuring with the new style (a row fit) is a second transaction of the
+  same step (`tools.tsx` `fitted`).
+- Shifting: HyperFormula's `moveCells` moves only references wholly inside the block, which is why a partly covered range stays; and its
+  `getCellFormula` spells every formula its own way, so compare its reading before and after, never with the typed text.
+- Filter: opening one makes no step. Select all found keeps the found values alone (Excel's Select All Search Results).
+- Glide fits a column on a double click of its edge by itself (to its 500 px cap, drawn only): the grid drops that after a resize ends.
+- The page's book tells `tabs` when its listed tabs change; a hide or rename reaches `meta` before the transaction is read, so it compares with
+  the list it told last (`toldTabs`).
+
+Open after the walk:
+- A row put in inside a dropdown's range has no dropdown (Excel's takes the row above's validation).
+- A formula on a date (`=E2+30`) shows a serial: Excel gives it the date format.
+- Delete cells… and Insert cells… start on Shift cells left / right; Excel starts on up / down for a block wider than tall.
+- The dropdown options dialog draws each row's colour picker above its Up and Delete buttons; the link popover's labels sit close to its frame.
+- At a 1,600 px window the ribbon folds into "Format" once the undo group gains its chevron.
+- Ctrl+Z does nothing after the Undo several list is shut (focus stays on its button), as in item 2's ribbon note.
+
