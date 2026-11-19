@@ -46,8 +46,8 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
   const nameOf = (id) => meta.get(`name:${id}`) ?? (id === MAIN ? called ?? FIRST : id);
   const engineName = (id) => meta.get(`name:${id}`) ?? (id === MAIN ? FIRST : id);
   const blank = (n) => new Array(n).fill("");
-  const reindexRows = (t) => { for (const id of t.rowIds) rowTab.delete(id); t.rowIds = t.rows.toArray(); t.rowIndex = new Map(t.rowIds.map((id, at) => [id, at])); for (const id of t.rowIds) rowTab.set(id, t); };
-  const reindexCols = (t) => { for (const id of t.colIds) colTab.delete(id); t.colIds = t.cols.toArray(); t.colIndex = new Map(t.colIds.map((id, at) => [id, at])); for (const id of t.colIds) colTab.set(id, t); };
+  const reindexRows = (t, keep) => { for (const id of t.rowIds) rowTab.delete(id); t.rowIds = t.rows.toArray(); t.rowIndex = new Map([...t.rowIds.map((id, at) => [id, at]), ...(keep ?? [])]); for (const id of t.rowIds) rowTab.set(id, t); };
+  const reindexCols = (t, keep) => { for (const id of t.colIds) colTab.delete(id); t.colIds = t.cols.toArray(); t.colIndex = new Map([...t.colIds.map((id, at) => [id, at]), ...(keep ?? [])]); for (const id of t.colIds) colTab.set(id, t); };
   /** A cell by its key: its tab and its place in the engine, or null for one not placed (a row or column gone, or of another tab). */
   const placeOf = (cell) => {
     const cut = cell.indexOf(":"), t = rowTab.get(cell.slice(0, cut)), col = t?.colIndex.get(cell.slice(cut + 1));
@@ -96,15 +96,43 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
       else if (step.delete) remove(at, step.delete);
     }
   };
-  // An undo of a move puts the ids back where they were even where another's move has taken them on since, so a line would stand twice: the hub keeps
-  // the later one, which the engine holds (an index keeps an id's last place), and takes out the one the undo put back.
-  const unrepeat = () => doc.transact(() => {
-    for (const t of tabs.values()) for (const [line, ids] of [[t.rows, t.rowIds], [t.cols, t.colIds]]) {
-      const twice = ids.flatMap((id, at) => ids.indexOf(id) === at && ids.lastIndexOf(id) > at ? [at] : []);
-      for (const at of twice.reverse()) line.delete(at, 1);
+  const resize = (t, isRows, at, n, removing) => { (isRows ? removing ? engine.removeRows : engine.addRows : removing ? engine.removeColumns : engine.addColumns).call(engine, t.sheet, [at, n]); (isRows ? moveRows : moveCols)(t, at, n, removing); };
+  // A delta putting back ids the line still has (a move, its undo or redo) as the engine's moves, so cells and the formulas reading them go with their ids
+  // (undefined: inserts and deletes alone, `along`). An undo of a move after another's move of the line stands it where the later move put it; the
+  // undo's place holds an empty line until the hub takes it out (`unrepeat`). The answer: where each id standing twice is kept (reindexRows's `keep`; unsaid, its last place).
+  const relay = (t, isRows, delta) => {
+    const before = isRows ? t.rowIds : t.colIds, index = isRows ? t.rowIndex : t.colIndex, after = (isRows ? t.rows : t.cols).toArray();
+    if (before.length === index.size && new Set(after).size === after.length && !delta.some((step) => step.insert?.some((id) => index.has(id)))) return undefined;
+    // Where the delta keeps each line that holds its id's cells (a delta leaves out the lines kept at its end).
+    const stays = new Map(), stay = (n) => { for (; n > 0 && from < before.length; n--, from++, to++) if (index.get(before[from]) === from) stays.set(before[from], to); };
+    let from = 0, to = 0;
+    for (const step of delta) { if (step.retain) stay(step.retain); else if (step.insert) to += step.insert.length; else if (step.delete) from += step.delete; }
+    stay(Infinity);
+    const keep = new Map(), seen = new Set();
+    for (const id of after) if (seen.has(id)) keep.set(id, after[stays.get(id)] === id ? stays.get(id) : after.indexOf(id)); else seen.add(id);
+    const want = after.map((id, at) => (keep.get(id) ?? at) === at ? id : null), wantAt = new Map(want.map((id, at) => [id, at])), current = before.slice();
+    const holds = (at) => index.get(current[at]) === at && wantAt.has(current[at]);
+    // `n` lines from `at` to stand from `into`.
+    const shift = (at, n, into) => { const move = (list) => list.splice(into, 0, ...list.splice(at, n)); (isRows ? engine.moveRows : engine.moveColumns).call(engine, t.sheet, at, n, into < at ? into : into + n); if (isRows) move(t.typed); else t.typed.forEach(move); move(current); };
+    // Out first what has gone and the lines that held no cells, then each line brought to its place, a run of them at once.
+    for (let at = current.length - 1, n; at >= 0; at -= n) { for (n = 0; at - n >= 0 && !holds(at - n); n++); if (n) { resize(t, isRows, at - n + 1, n, true); current.splice(at - n + 1, n); } else n = 1; }
+    const held = new Set(current);
+    for (let at = 0, n = 1; at < want.length; at += n, n = 1) {
+      const id = want[at];
+      if (id !== null && current[at] === id) continue;
+      if (!held.has(id)) { while (at + n < want.length && !held.has(want[at + n])) n++; resize(t, isRows, at, n, false); current.splice(at, 0, ...new Array(n).fill(null)); continue; }
+      // The shorter of the run that belongs here, brought up, and the run standing here, sent down to its place past the first (each step brings it nearer).
+      const was = current.indexOf(id, at), goes = wantAt.get(current[at]) ?? -1; let m = 1;
+      while (was + n < current.length && want[at + n] !== null && current[was + n] === want[at + n]) n++;
+      while (goes >= 0 && current[at + m] !== null && current[at + m] !== undefined && current[at + m] === want[goes + m]) m++;
+      if (m < n && goes > was - m && goes + m <= current.length) { shift(at, m, goes); n = 0; } else shift(was, n, at);
     }
+    return keep;
+  };
+  // The places `relay` left empty for an id standing twice, taken out by the hub so the doc says each line once.
+  const unrepeat = () => doc.transact(() => {
+    for (const t of tabs.values()) for (const [line, ids, index] of [[t.rows, t.rowIds, t.rowIndex], [t.cols, t.colIds, t.colIndex]]) for (let at = ids.length - 1; at >= 0; at--) if (index.get(ids[at]) !== at) line.delete(at, 1);
   });
-  const relaid = (delta, index) => Boolean(index) && delta.some((step) => step.insert?.some((id) => index.has(id)));
   const emit = (change) => { for (const listener of listeners) listener(change); };
   const onCells = (event) => { const keys = note().keys; for (const cell of event.keysChanged) keys.add(cell); };
   const onTabs = () => { note().tabs = true; };
@@ -120,7 +148,7 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
       ids = next;
     }
     const moved = [...new Set([...now.rows.keys(), ...now.cols.keys()])].filter((id) => tabs.has(id)), structure = moved.length > 0;
-    let changed = null;
+    let changed = null, relaid = false, twice = false, failed = false;
     const kept = [];
     const retype = (done) => {
       const places = [];
@@ -129,33 +157,37 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
     };
     // The hub's own structure change was made in the engine and in `typed` first: only what `write` changed is left.
     if (transaction.origin === self) { retype(written); written = null; }
-    // A structure change rewrites many formulas, which the engine rewrites too: that is no reason to build it again. But ids put back where they were
-    // taken out (a move, or its undo) are lines whose cells kept their keys, which the engine only knows from the doc.
-    else if ((!structure && now.keys.size > REBUILD_AT) || [...now.rows].some(([id, delta]) => relaid(delta, tabs.get(id)?.rowIndex)) || [...now.cols].some(([id, delta]) => relaid(delta, tabs.get(id)?.colIndex))) { rebuild(); if (owner) queueMicrotask(unrepeat); }
+    // A structure change rewrites many formulas, which the engine rewrites too: that is no reason to build it again.
+    else if (!structure && now.keys.size > REBUILD_AT) rebuild();
     else {
       // Suspended rather than batched: a batch keeps what it changed for an undo, many times slower for many cells.
       engine.suspendEvaluation();
       try {
-        for (const [id, delta] of now.rows) { const t = tabs.get(id); if (t) along(delta, (at, n) => { engine.addRows(t.sheet, [at, n]); moveRows(t, at, n, false); }, (at, n) => { engine.removeRows(t.sheet, [at, n]); moveRows(t, at, n, true); }); }
-        for (const [id, delta] of now.cols) { const t = tabs.get(id); if (t) along(delta, (at, n) => { engine.addColumns(t.sheet, [at, n]); moveCols(t, at, n, false); }, (at, n) => { engine.removeColumns(t.sheet, [at, n]); moveCols(t, at, n, true); }); }
-        for (const id of now.rows.keys()) if (tabs.has(id)) reindexRows(tabs.get(id));
-        for (const id of now.cols.keys()) if (tabs.has(id)) reindexCols(tabs.get(id));
+        const keeps = new Map();
+        for (const [isRows, changes] of [[true, now.rows], [false, now.cols]]) for (const [id, delta] of changes) { const t = tabs.get(id), keep = t && relay(t, isRows, delta); if (keep) { relaid = true; keeps.set(`${isRows}:${id}`, keep); } else if (t) along(delta, (at, n) => resize(t, isRows, at, n, false), (at, n) => resize(t, isRows, at, n, true)); }
+        for (const id of now.rows.keys()) if (tabs.has(id)) reindexRows(tabs.get(id), keeps.get(`true:${id}`));
+        for (const id of now.cols.keys()) if (tabs.has(id)) reindexCols(tabs.get(id), keeps.get(`false:${id}`));
+        twice = [...keeps.values()].some((keep) => keep.size > 0);
         // After a structure change every formula is as the doc says: one the engine already rewrote in the same way is left as it is, and one typed
         // here while the hub made the change, which the engine rewrote but the hub never saw, goes back to what the doc holds. Any tab's formula
         // may refer to the moved cells.
         for (const [place, input] of retype()) if (!(structure && input?.startsWith("="))) engine.setCellContents(place, input);
         // But a formula this change did not write itself (one typed since the rows an undo takes back were made) keeps the engine's rewrite, as the
-        // hub's own change would have made it; the hub (`owner`) writes those so every copy follows.
+        // hub's own change would have made it; the hub (`owner`) writes those so every copy follows. Lines moved back (`relay`) move no formula's
+        // cells: each reads what it read, which the engine's rewrite says, whatever text an undo put back.
         if (structure) eachFormula((t, row, col, input) => {
           const place = { sheet: t.sheet, row, col }, rewritten = engine.getCellFormula(place);
           if (rewritten === input) return;
           const cell = key(t.rowIds[row], t.colIds[col]);
-          if (owner && rewritten && !now.keys.has(cell)) { t.typed[row][col] = rewritten; kept.push([cell, input, rewritten]); } else engine.setCellContents(place, input);
+          if (owner && rewritten && (relaid || !now.keys.has(cell))) { t.typed[row][col] = rewritten; kept.push([cell, input, rewritten]); } else engine.setCellContents(place, input);
         });
-      } finally { changed = engine.resumeEvaluation().flatMap((change) => change.address && bySheet.has(change.address.sheet) ? [{ tab: bySheet.get(change.address.sheet).id, row: change.address.row, col: change.address.col }] : []); }
+      } catch { failed = true; } finally { changed = engine.resumeEvaluation().flatMap((change) => change.address && bySheet.has(change.address.sheet) ? [{ tab: bySheet.get(change.address.sheet).id, row: change.address.row, col: change.address.col }] : []); }
     }
+    // A move the engine refused (one cutting through a spilt array) is built again from the doc.
+    if (failed) { rebuild(); changed = null; kept.length = 0; twice = [...tabs.values()].some((t) => t.rowIds.length !== t.rowIndex.size || t.colIds.length !== t.colIndex.size); }
     emit({ tabs: now.tabs, structure: moved, cells: changed });
-    if (kept.length) queueMicrotask(() => doc.transact(() => { written = new Set(); for (const [cell, was, after] of kept) if (cells.get(cell) === was) { cells.set(cell, after); written.add(cell); } }, self));
+    // The rewrites first, written for the places before the empty lines are taken out, which then rewrites them again.
+    if (kept.length || (owner && twice)) queueMicrotask(() => { if (kept.length) doc.transact(() => { written = new Set(); for (const [cell, was, after] of kept) if (cells.get(cell) === was) { cells.set(cell, after); written.add(cell); } }, self); if (owner && twice) unrepeat(); });
   };
   order.observe(onTabs); meta.observe(onTabs); cells.observe(onCells);
   doc.on("afterTransaction", flush);
