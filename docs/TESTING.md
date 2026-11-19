@@ -127,13 +127,16 @@ invariant it broke (DESIGN.md Motion).
 
 ## Panes smoke
 
-`npm run smoke:panes [-- --project <name>]` drives the panes and file viewer
-in headless Chromium and prints `ok`/`FAIL`/`skip` per scenario, exiting 1 on any
-failure. It is read-only, each scenario in a fresh context so the saved layout
-starts empty; it picks the first project with six visible top-level files
-(Files hides dotfiles), and a
+`npm run smoke:panes [-- --project <name>]` drives the panes, the dock and the
+folder viewer in headless Chromium and prints `ok`/`FAIL`/`skip` per scenario
+(with `note:` lines for what it reports without judging), exiting 1 on any
+failure. Its edits go only into `panes-smoke-scratch.txt`, which it creates in the
+project, never saves and removes at the end; it signs its session out. Each
+scenario runs in a fresh context so the saved layout starts empty; it picks the
+first project with six visible top-level files (Files hides dotfiles), and a
 project whose page lists files also covers the project page. Playwright comes
-from `conduit-web` or is installed once into `.smoke-tools/`. Run it from the
+from `conduit-web` or is installed once into `.smoke-tools/`; with no Playwright
+Chromium cached it runs the installed Chrome headless. Run it from the
 checkout the server serves, with its `CONDUIT_DATA_ROOT` (the session goes into
 that auth store), after
 any change to panes, tabs, drag, header folding or the dock -- performance
