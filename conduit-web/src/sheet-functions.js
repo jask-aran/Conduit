@@ -1,11 +1,12 @@
 import * as formulajs from "@formulajs/formulajs";
+import { format as formatted } from "numfmt";
 import { CellError, EmptyValue, ErrorType, FunctionArgumentType, FunctionPlugin, HyperFormula, SimpleRangeValue } from "hyperformula";
 
 /*
  * Functions a spreadsheet's workbooks use that the engine lacks, registered for every engine once this module is loaded (sheet-format.js imports it,
  * so the hub and the page compute the same values).
  */
-const { NUMBER, RANGE, NOERROR, ANY } = FunctionArgumentType;
+const { NUMBER, RANGE, NOERROR, ANY, SCALAR, STRING } = FunctionArgumentType;
 const number = (value) => typeof value === "number" ? value : typeof value?.val === "number" ? value.val : undefined;
 const RANKED = { parameters: [{ argumentType: NUMBER }, { argumentType: RANGE }, { argumentType: NUMBER, defaultValue: 0 }] };
 const Sum = (sum, count) => ({ sum, count });
@@ -44,6 +45,25 @@ SpreadsheetGaps.implementedFunctions = {
 const names = Object.fromEntries(Object.keys(SpreadsheetGaps.implementedFunctions).map((name) => [name, name]));
 HyperFormula.registerFunctionPlugin(SpreadsheetGaps, { enGB: names, enUS: names });
 
+// The engine's own TEXT knows a few codes (`#,##0.00` gave "1235,##0.00", `0%` "0%"): a format is read as the cells draw theirs, and DATEDIF takes its unit in any case.
+const Dates = HyperFormula.getFunctionPlugin("DATEDIF");
+class SpreadsheetDates extends Dates {
+  text(ast, state) {
+    return this.runFunction(ast.args, state, this.metadata("TEXT"), (value, pattern) => {
+      if (value instanceof CellError) return value;
+      const given = plain(value) ?? 0, number = typeof given === "string" && given.trim() && Number.isFinite(Number(given)) ? Number(given) : given;
+      try { return formatted(pattern, typeof number === "boolean" ? String(number).toUpperCase() : number); } catch { return new CellError(ErrorType.VALUE); }
+    });
+  }
+  datedif(ast, state) {
+    const run = this.runFunction;
+    this.runFunction = (args, at, metadata, compute) => run.call(this, args, at, metadata, (start, end, unit) => compute(start, end, unit.toUpperCase()));
+    try { return super.datedif(ast, state); } finally { delete this.runFunction; }
+  }
+}
+SpreadsheetDates.implementedFunctions = { TEXT: { method: "text", parameters: [{ argumentType: SCALAR }, { argumentType: STRING }] }, DATEDIF: Dates.implementedFunctions.DATEDIF };
+HyperFormula.registerFunctionPlugin(SpreadsheetDates, { enGB: { TEXT: "TEXT", DATEDIF: "DATEDIF" }, enUS: { TEXT: "TEXT", DATEDIF: "DATEDIF" } });
+
 /*
  * What the engine lacks and @formulajs/formulajs has, under the name a spreadsheet gives it. A range reaches it as rows of plain values and a date as its
  * serial number. One that answers with several values (TREND, LINEST, TAKE) gives its first here: a result spilt over cells is not built.
@@ -52,11 +72,30 @@ const BORROWED = {
   ACCRINT: "ACCRINT", AGGREGATE: "AGGREGATE", "BINOM.DIST.RANGE": "BINOM.DIST.RANGE", CHOOSECOLS: "CHOOSECOLS", CHOOSEROWS: "CHOOSEROWS", CONCAT: "CONCAT",
   CONVERT: "CONVERT", COUPDAYS: "COUPDAYS", DISC: "DISC", DOLLAR: "DOLLAR", DROP: "DROP", "ERROR.TYPE": "ERROR.TYPE", EXPAND: "EXPAND", FIXED: "FIXED",
   FORECAST: "FORECAST", "FORECAST.LINEAR": "FORECAST", FREQUENCY: "FREQUENCY", GESTEP: "GESTEP", GROWTH: "GROWTH", INTERCEPT: "INTERCEPT", KURT: "KURT",
-  LINEST: "LINEST", LOGEST: "LOGEST", LOOKUP: "LOOKUP", "MODE.MULT": "MODE.MULT", "MODE.SNGL": "MODE.SNGL", MUNIT: "MUNIT",
+  LINEST: "LINEST", LOGEST: "LOGEST", LOOKUP: "LOOKUP", MODE: "MODE.SNGL", "MODE.MULT": "MODE.MULT", "MODE.SNGL": "MODE.SNGL", MUNIT: "MUNIT",
   "NETWORKDAYS.INTL": "NETWORKDAYSINTL", NUMBERVALUE: "NUMBERVALUE", "PERCENTILE.EXC": "PERCENTILE.EXC", "PERCENTILE.INC": "PERCENTILE.INC",
   PERCENTRANK: "PERCENTRANK.INC", "PERCENTRANK.EXC": "PERCENTRANK.EXC", "PERCENTRANK.INC": "PERCENTRANK.INC", PERMUT: "PERMUT", PERMUTATIONA: "PERMUTATIONA",
   PRICEDISC: "PRICEDISC", PROB: "PROB", "QUARTILE.EXC": "QUARTILE.EXC", "QUARTILE.INC": "QUARTILE.INC", TAKE: "TAKE", TREND: "TREND", TRIMMEAN: "TRIMMEAN",
-  TYPE: "TYPE", "WORKDAY.INTL": "WORKDAYINTL",
+  TYPE: "TYPE", "WORKDAY.INTL": "WORKDAYINTL", TEXTAFTER: "TEXTAFTER", TEXTBEFORE: "TEXTBEFORE", XMATCH: "XMATCH",
+};
+// Errors in a range are passed over by these, not given back.
+const PAST_ERRORS = new Set(["LOOKUP", "XMATCH"]);
+const folded = (value) => typeof value === "string" ? value.toLowerCase() : value;
+/** A spreadsheet's wildcards (`*`, `?`, `~` before either for itself) as a whole-text, any-case pattern. */
+const wildcard = (text) => new RegExp(`^${text.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/~?[*?]/g, (part) => part.length > 1 ? `\\${part[1]}` : part === "*" ? ".*" : ".")}$`, "is");
+/** The text before (or after) the nth delimiter, counted from the end where n is negative; `end` counts the text's end (or start) as one. */
+const around = (after) => (text, delimiters, n, mode, end, missing) => {
+  text = String(text ?? ""); n ??= 1;
+  const cut = [delimiters].flat(2).map((one) => String(one ?? "")), empty = cut.includes(""), fold = (one) => mode ? one.toLowerCase() : one, hay = fold(text);
+  if (!n || Math.abs(n) > text.length + 1) return new Error("#VALUE!");
+  const hits = empty ? [[n > 0 ? 0 : text.length, 0]] : [];
+  for (let at = 0; !empty && at < hay.length;) {
+    const found = cut.filter((one) => hay.startsWith(fold(one), at)).sort((a, b) => b.length - a.length)[0];
+    if (found === undefined) at++; else { hits.push([at, found.length]); at += found.length; }
+  }
+  if (end && !empty) n > 0 ? hits.push([text.length, 0]) : hits.unshift([0, 0]);
+  const hit = n > 0 ? hits[n - 1] : hits[hits.length + n];
+  return !hit ? missing ?? new Error("#N/A") : after ? text.slice(hit[0] + hit[1]) : text.slice(0, hit[0]);
 };
 const same = (a, b) => typeof a === typeof b && (typeof a === "string" ? a.toLowerCase() <= b.toLowerCase() : a <= b);
 /** Ours where the borrowed one is wrong: it fails on a blank in the range and on a decimal comma. */
@@ -69,6 +108,23 @@ const OURS = {
     from.forEach((value, at) => { if (value !== null && !(value instanceof CellError) && same(value, needle)) found = at; });
     return found < 0 ? new Error("#N/A") : to[found] ?? 0;
   },
+  // A position (from 1) in a row or column: exact (0), else the next smaller (-1) or larger (1), or by wildcards (2); from the end where `search` is negative.
+  XMATCH: (needle, within, mode, search) => {
+    within = Array.isArray(within) ? within : [[within]];
+    if (within.length > 1 && within[0].length > 1) return new Error("#VALUE!");
+    const line = within.length === 1 ? within[0] : within.map((row) => row[0]), key = folded(needle), wild = mode === 2 && typeof needle === "string" ? wildcard(needle) : null;
+    let best = -1;
+    for (let step = 0; step < line.length; step++) {
+      const at = search < 0 ? line.length - 1 - step : step, value = line[at];
+      if (typeof value !== typeof needle) continue;
+      if (wild ? wild.test(value) : folded(value) === key) return at + 1;
+      if (mode === 1 && folded(value) > key && (best < 0 || folded(value) < folded(line[best]))) best = at;
+      if (mode === -1 && folded(value) < key && (best < 0 || folded(value) > folded(line[best]))) best = at;
+    }
+    return best < 0 ? new Error("#N/A") : best + 1;
+  },
+  TEXTAFTER: around(true),
+  TEXTBEFORE: around(false),
   NUMBERVALUE: (text, decimal = ".", group = ",") => {
     const [, digits, percents] = /^(.*?)(%*)$/.exec(String(text ?? "").replace(/\s/g, "").split(group[0]).join("").replace(decimal[0], "."));
     return digits === "" ? 0 : Number.isNaN(Number(digits)) ? new Error("#VALUE!") : Number(digits) / 100 ** percents.length;
@@ -101,7 +157,7 @@ for (const [name, path] of Object.entries(BORROWED)) {
         if (!(arg instanceof SimpleRangeValue)) { given.push(plain(arg)); continue; }
         const rows = arg.data.map((row) => row.map(plain));
         const broken = rows.flat().find((cell) => cell instanceof CellError);
-        if (broken && name !== "LOOKUP") return broken;
+        if (broken && !PAST_ERRORS.has(name)) return broken;
         given.push(rows);
       }
       try { return answer(borrowed(...given)); } catch { return new CellError(ErrorType.VALUE); }
