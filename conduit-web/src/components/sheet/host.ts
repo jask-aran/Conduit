@@ -36,6 +36,8 @@ export type SheetCellsOp = { client?: number; step?: number } & (
   | { op: "insert-rows" | "insert-cols" | "delete-rows" | "delete-cols"; at: number; count?: number; tab?: string }
   /** `count` whole rows or columns from `at` moved to start at `to`, the tab's formulas reading them following them. */
   | { op: "move-rows" | "move-cols"; at: number; count?: number; to: number; tab?: string }
+  /** A block's cells deleted with those below (`up`) or right (`left`) moving in, or room made by moving them down or right, formulas following. */
+  | { op: "shift-cells"; range: string; way: "up" | "left" | "down" | "right"; tab?: string }
   | SheetFormatOp
   | SheetStyleOp
   | SheetSortOp

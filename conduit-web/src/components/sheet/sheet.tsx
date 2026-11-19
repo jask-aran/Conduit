@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { Empty, Frost, Icons, Notice } from "@/components/ui";
 import { sheetLineIcons as LineIcons, sheetMergeIcons as MergeIcons, sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
-import { focusSearch, SheetMenu, type SheetMenuEntry } from "./cell-menu";
+import { focusSearch, SheetMenu, ShiftPrompt, type SheetMenuEntry, type SheetShiftWay } from "./cell-menu";
 import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { createSheetMerges, type SheetMergeKind } from "./merges";
 import { Input } from "@/components/ui/controls";
@@ -270,6 +270,15 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     requestAnimationFrame(() => grid()?.focus());
   };
   const structure = (op: "insert-rows" | "insert-cols" | "delete-rows" | "delete-cols", at: number, count = 1) => hub({ op, at, count });
+  // Ctrl+- and Ctrl+Shift+= on a block of cells ask, as a spreadsheet's do, which way what is round it goes; whole rows or columns picked are not asked.
+  const [shifting, setShifting] = createSignal<{ verb: "delete" | "insert"; range: SheetRange; box: SheetBox } | null>(null);
+  const askShift = (verb: "delete" | "insert", range: SheetRange) => { const box = grid()?.bounds(range); if (box) setShifting({ verb, range, box }); };
+  const shift = (verb: "delete" | "insert", range: SheetRange, way: SheetShiftWay) => {
+    const rows = range.bottom - range.top + 1, cols = range.right - range.left + 1;
+    if (way === "rows") return verb === "delete" ? deleteRows(range) : structure("insert-rows", range.top, rows);
+    if (way === "cols") return structure(verb === "delete" ? "delete-cols" : "insert-cols", range.left, cols);
+    history.act(verb === "delete" ? "Delete cells" : "Insert cells", () => hub({ op: "shift-cells", range: rangeA1(inTab(range)), way }));
+  };
 
   const rangeOf = (anchor: Pick<SheetAnchor, "under">): SheetRange | null => {
     const sheet = model(), corners = String(anchor.under?.cells ?? "").split(" ").map((one) => one.split(":"));
@@ -462,6 +471,10 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         ] },
         ...kind !== "cols" ? [{ label: `Delete ${rowsSaid}`, icon: <Icons.Delete />, destructive: true, keys: whole ? ["Ctrl", "-"] : undefined, run: () => deleteRows(range) }] : [],
         ...kind !== "rows" ? [{ label: `Delete ${colsSaid}`, icon: <Icons.Delete />, destructive: true, keys: whole ? ["Ctrl", "-"] : undefined, run: () => structure("delete-cols", range.left, nCols) }] : [],
+        ...!whole ? [
+          { label: "Delete cells…", icon: <Icons.Delete />, destructive: true, keys: ["Ctrl", "-"], run: () => { opening = () => askShift("delete", range); } },
+          { label: "Insert cells…", icon: <Icons.Add />, keys: ["Ctrl", "Shift", "="], run: () => { opening = () => askShift("insert", range); } },
+        ] : [],
         ...kind !== "cols" ? [
           { label: `Hide ${rowsSaid}`, icon: <Icons.Hide />, run: hideRows },
           ...hiddenIn(range) ? [{ label: "Unhide rows", icon: <Icons.Preview />, run: () => { const lines = between(range.top, range.bottom); history.act("Unhide rows", () => { sizes.setHidden(lines, false); filters.show(lines); }); } }] : [],
@@ -524,7 +537,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (!event.altKey && (event.key === "-" || (event.shiftKey && (event.key === "+" || event.code === "Equal")))) {
         event.preventDefault();
         const area = at(), lines = grid()?.lines(), adding = event.key !== "-";
-        if (!area || !lines) return;
+        if (!area) return;
+        if (!lines) return askShift(adding ? "insert" : "delete", area);
         if (lines === "rows") return void (adding ? structure("insert-rows", area.top, count(area.top, area.bottom)) : deleteRows(area));
         return void structure(adding ? "insert-cols" : "delete-cols", area.left, count(area.left, area.right));
       }
@@ -591,6 +605,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         <SizePrompt question={question()} onClose={() => { setQuestion(null); grid()?.focus(); }} />
         <RulePrompt area={ruling()} rules={rules} act={(label, run) => history.act(label, run)} onClose={() => { setRuling(null); grid()?.focus(); }} />
         <FilterMenu filter={filters} at={filtering()} frame={() => body} onClose={() => { setFiltering(null); grid()?.focus(); }} />
+        <ShiftPrompt asked={shifting()} frame={() => body} onClose={() => { setShifting(null); grid()?.focus(); }} onChoose={(way) => { const asked = untrack(shifting); if (asked) shift(asked.verb, asked.range, way); }} />
         <find.view beside={Boolean(props.margin) && !props.marginEmpty} />
         <Show when={!model()}><Empty role="status" class="ui-spreadsheet-waiting">Opening the sheet…</Empty></Show>
       </Show>

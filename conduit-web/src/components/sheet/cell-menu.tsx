@@ -1,7 +1,8 @@
 import { createSignal, For, Show, type JSX } from "solid-js";
-import { SearchSection } from "@/components/ui";
+import { Item, SearchSection, Section } from "@/components/ui";
 import { PHONE_LAYOUT_QUERY } from "@/components/ui/layout";
-import { MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/ui/menus";
+import { MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, Popover, PopoverContent } from "@/components/ui/menus";
+import type { SheetBox } from "./host";
 
 /** One row of the cell menu: a doing, or (`sub`) a submenu of them. */
 export type SheetMenuEntry = { label: string; icon?: JSX.Element; keys?: string[]; meta?: string; destructive?: boolean; disabled?: boolean; run?(): void; sub?: SheetMenuEntry[] };
@@ -40,4 +41,35 @@ export function SheetMenu(props: { groups: (SheetMenuEntry[] | false | null | un
       : row(entry)}</For></MenuSection>}</For>
     <Show when={!query().trim()}>{props.after}</Show>
   </>;
+}
+
+/** What deleting or inserting a block of cells does to what is round it, as a spreadsheet asks: the cells shift, or whole rows or columns go or come. */
+export type SheetShiftWay = "up" | "left" | "down" | "right" | "rows" | "cols";
+const SHIFTS: Record<"delete" | "insert", { way: SheetShiftWay; label: string; key: string }[]> = {
+  delete: [{ way: "left", label: "Shift cells left", key: "L" }, { way: "up", label: "Shift cells up", key: "U" }, { way: "rows", label: "Entire row", key: "R" }, { way: "cols", label: "Entire column", key: "C" }],
+  insert: [{ way: "right", label: "Shift cells right", key: "I" }, { way: "down", label: "Shift cells down", key: "D" }, { way: "rows", label: "Entire row", key: "R" }, { way: "cols", label: "Entire column", key: "C" }],
+};
+
+/** Asked at the block: the arrows and Enter, or a row's letter, choose; Escape leaves it as it was. */
+export function ShiftPrompt(props: { asked: { verb: "delete" | "insert"; box: SheetBox } | null; frame: () => HTMLElement | undefined; onChoose(way: SheetShiftWay): void; onClose(): void }) {
+  const [active, setActive] = createSignal(0), list = () => SHIFTS[props.asked?.verb ?? "delete"];
+  const choose = (way: SheetShiftWay) => { props.onChoose(way); props.onClose(); };
+  const keys = (event: KeyboardEvent) => {
+    const by = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0, letter = list().find((one) => one.key === event.key.toUpperCase());
+    if (by) setActive((at) => Math.min(list().length - 1, Math.max(0, at + by)));
+    else if (event.key === "Enter") choose(list()[active()]!.way);
+    else if (letter && !event.ctrlKey && !event.metaKey && !event.altKey) choose(letter.way);
+    else return;
+    event.preventDefault();
+  };
+  return <Popover open={props.asked !== null} onOpenChange={(open) => { if (!open) props.onClose(); }} anchorRef={props.frame} placement="bottom-start"
+    anchorRect={() => { const box = props.asked?.box; return box && new DOMRect(box.left, box.top, box.width, box.height); }}>
+    <PopoverContent aria-label={props.asked?.verb === "insert" ? "Insert cells" : "Delete cells"} width="sm" onOpenAutoFocus={(event) => { event.preventDefault(); setActive(0); }}>
+      <div tabIndex={-1} onKeyDown={keys} ref={(element) => queueMicrotask(() => element.focus())}>
+        <Section title={props.asked?.verb === "insert" ? "Insert" : "Delete"}>
+          <For each={list()}>{(one, at) => <Item keys={[one.key]} active={active() === at()} onCursor={() => setActive(at())} onClick={() => choose(one.way)}>{one.label}</Item>}</For>
+        </Section>
+      </div>
+    </PopoverContent>
+  </Popover>;
 }
