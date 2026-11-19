@@ -141,15 +141,10 @@ tab ops rewrite these formulas as the engine rewrites any (OFFSET goes into a sc
 know, so it parses); a sort moves them as a fill does, from `anchor`. Dependent cells, through ranges too, compute from
 the kept value (measured on a generated workbook; W8 not run).
 
-**Whole-workbook result (measured, `scripts/pipeline.cjs`).** The pipeline reads with SheetJS, builds one engine with the
-fixes above (except freezing), compares each formula with Excel's cached value, exports, and reopens with openpyxl:
-
-RESULTS_TABLE
-
 **What round-trips and what cannot.** Exact (measured on the exported files): values, formula text (`_xlfn.` restored),
-tab names and order, number formats, merges and defined names. Column widths need writing as `wpx`: the prototype lost
-them. Lost on export unless a later step adds them: fonts, fills and borders, conditional formats, validation, charts,
-images, pivots (their cells survive as values), notes, hyperlinks, row heights, frozen panes and print settings. Shared
+tab names and order, number formats, merges and defined names. Written by our own parts beside SheetJS's: fonts, fills,
+borders and alignment, cell-value and formula conditional formats, row heights, hidden rows and columns, and frozen panes.
+Lost: validation, charts, images, pivots (their cells survive as values), notes, hyperlinks and print settings. Shared
 formulas are written out per cell, so the file grows, but Excel reads them the same.
 
 ## Library choice
@@ -301,35 +296,15 @@ part of a big workbook.
 - frozen cells' original formulas;
 - number formats, widths (`wpx`), merges, names, hidden tabs and the tab order.
 
-Whether Excel opens such a file without a repair prompt, and whether it recalculates on open, is **not verified**
-(Excel was not driven here).
+An export with merges, conditional formats, hidden rows and columns, frozen panes, styles and frozen formulas reopens in
+openpyxl, and its parts pass the checks Excel is strict about: element order in `<worksheet>` and `styleSheet`, every
+`count`, `cols` ranges in order and apart, style and dxf ids in range, and no formula naming a missing tab (measured on a
+generated workbook). Whether Excel opens it without a repair prompt, and recalculates on open, is **not verified**.
 
-## Build order
+## Still to build
 
-Each step is one builder's task, and the steps run in order.
-
-1. **Excel parity in the engine.** `src/sheet-format.js` (`CONFIG`) and a new `src/sheet-functions.js` (the RANK,
-   RANK.EQ and AVERAGEIFS plugin, and the TRUE/FALSE names). Also measure the cost of `useArrayArithmetic` on W2 and W4.
-   Check: `npm run typecheck`, and a scratch script running the gap cases above.
-2. **Workbook model.** `src/sheet-format.js` and `.d.ts`: tabs, `createWorkbookModel`, the worker messages, format 2.
-   Check: a scratch script with two docs, a cross-tab formula, a rename, rows inserted in the other tab, and the hub
-   model and page model agreeing.
-3. **Hub tab verbs and addresses.** `src/server/sheets.js` and `documents.js`: tab ops, `Tab!A1`, `sheet.json` format 2,
-   `where` and `context`. Check: `curl` on `/v0/document/:id/cells` with a minted cookie.
-4. **Folder layout.** `src/server/documents.js` (`kindOf`, `localDisk`, `deviceDisk`, `walk`, becoming a folder, tab files
-   edited outside). Check: `curl`, a listing of the project folder, then `restart`.
-5. **Number formats in the grid.** `src/components/sheet/grid.ts` with `numfmt`, and `fmt:` keys. Check: `npm run
-   gallery` and a screenshot of currency, date and % columns.
-6. **Tab strip and Markup's tab.** `src/components/sheet/sheet.tsx`, built from existing v2 pieces. Check: gallery, phone
-   and desktop widths.
-7. **Agent surfaces.** `src/server/paper-tool.js` and `scripts/conduit-markup.mjs`. Check: CLI calls against the local
-   hub.
-8. **Import.** A new `src/server/sheet-xlsx.js` and its worker, the route, the verbs and `import.json`. Check: import the
-   9 workbooks on a worktree preview server (:4320) and compare with the counts here.
-9. **Export.** Same file, plus the route and verbs. Check: reopen every export with openpyxl in the scratch venv; then
-   the owner opens two in Excel.
-10. **Later:** frozen panes, fills and bold (a reader for `styles.xml`), an OFFSET plugin, and Excel notes as Markup
-    comments.
+Steps 1 to 9 of the first build order have landed. Left: an OFFSET plugin, and Excel notes as Markup comments (waiting on
+the owner: 16 notes would hand 16 items to agents).
 
 ## Open decisions for the owner
 
