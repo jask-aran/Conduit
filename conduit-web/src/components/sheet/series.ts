@@ -100,3 +100,6 @@ export function seriesFill(source: readonly (readonly SeriesCell[])[], direction
   const cols = source[0]!.map((_, c) => order(continueLine(source.map((row) => row[c]!), count, back, counting)));
   return Array.from({ length: count }, (_, r) => cols.map((col) => col[r]!));
 }
+
+/** Which of a source's `k` lines the `i`th of `n` lines filled (in sheet order) repeats, as `seriesFill` carries a formula on; `back`: filled up or left. */
+export const sourceLine = (k: number, n: number, i: number, back: boolean) => back ? k - 1 - ((n - 1 - i) % k) : i % k;

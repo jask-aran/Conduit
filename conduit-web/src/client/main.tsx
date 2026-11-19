@@ -2024,7 +2024,7 @@ function App() {
     const target = event.target instanceof Element ? event.target : null;
     // A press in a menu or popover belongs to it, and Solid carries portal
     // events up to where the portal was declared, so skip those as well.
-    if (target?.closest(".ui-composer-slot,.ui-phone-composer,[role='menu'],button,a,input,textarea,select,[contenteditable='true'],[role='button'],[role='link'],[role='option'],[data-slot='menu-content'],[data-slot='menu-sub-content'],[data-slot='context-menu-content'],[data-slot='context-menu-sub-content'],[data-slot='popover-content']")) return;
+    if (target?.closest(".ui-composer-slot,.ui-phone-composer,[role='menu'],button,a,input,textarea,select,[contenteditable='true'],[role='button'],[role='link'],[role='option'],[data-slot='ui-menu-content'],[data-slot='ui-menu-sub-content'],[data-slot='ui-context-menu-content'],[data-slot='ui-context-menu-sub-content'],[data-slot='ui-popover-content']")) return;
     if (!(event.currentTarget instanceof HTMLElement)) return;
     event.currentTarget.focus({ preventScroll: true });
   };
