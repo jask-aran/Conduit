@@ -2110,7 +2110,8 @@ function App() {
     const pane = document.querySelector<HTMLElement>(".chat-main");
     const active = document.activeElement;
     if (attempt > 0 && active !== from && active !== document.body) return;
-    if (hasComposer()) return focusComposer();
+    // Its own composer only: another pane's, ready first, would take the keyboard (and the dock) away from pane A.
+    if (pane?.querySelector("textarea[data-composer-input]:not([disabled])")) return focusComposer();
     if (active !== pane) pane?.focus({ preventScroll: true });
     if (document.querySelector("textarea[data-composer-input]") && attempt < 20) enterRetry = setTimeout(() => enterMainPane(attempt + 1, pane, intent), ENTER_RETRY_MS);
   };
