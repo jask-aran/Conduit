@@ -39,6 +39,7 @@ const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
 const OWN_KEYS = ["primary+KeyB", "primary+Minus", "primary+Digit0", ...[0, 1, 2, 3, 4, 5, 6].map((n) => `primary+shift+Digit${n}`), "primary+Backslash", "alt+primary+KeyV"].join(" ");
 // A formula moved as a fill moves it; text stays as typed.
 const shifted = (input: string, rows: number, cols: number) => input.startsWith("=") ? shiftRefs(input, rows, cols) : input;
+const REFIT = "refit";
 const between = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, n) => from + n);
 type Menu = { rows?: SheetRange; cols?: SheetRange };
 
@@ -214,6 +215,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     }, (error: Error) => { setFailed(error.message); props.onDrawn?.(); });
     const off = sheet.onChange((change) => {
       const cells = change.structure ? null : change.cells;
+      // A wrapped cell's row fits its text again, whoever changed it, unless a person set its height; not a step of the history.
+      const wrapped = cells && [...new Set(cells.flatMap(({ row, col }) => styles.at(row, col)?.wrap ? [row] : []))];
+      if (wrapped?.length && root) live.doc.transact(() => sizes.refit(wrapped, readLook(root!)), REFIT);
       rules.changed();
       made?.update(rules.wide() ? null : cells);
       // The formula bar reads the selected cell again only when it may have changed.
