@@ -265,12 +265,14 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       if (added <= 0 || !sourceCols.length) return;
       const cells = rows.map((row) => sourceCols.map((col) => ({ input: model.input(row, col), value: model.value(row, col), dated: options.columns.dated(row, col) })));
       const vertical = direction === "up" || direction === "down", back = direction === "up" || direction === "left", filled = Array.from({ length: bottom - top + 1 }, (_, n) => p.map.sheet(top + n));
-      const src = vertical ? rows : sourceCols, dst = vertical ? filled : cols, lines = [...src, ...dst].sort((a, b) => a - b);
+      const src = vertical ? rows : sourceCols, dst = vertical ? filled : cols, first = vertical ? rows[0]! : source.left, span = vertical ? rows.at(-1)! - first + 1 : source.right - first + 1;
       let values = seriesFill(cells, direction, added, counting), from: SheetRange | undefined = { top: rows[0]!, bottom: rows.at(-1)!, left: source.left, right: source.right };
-      // The hub moves a formula from the source cell at its place in the whole source, hidden lines and all; where a hidden line is in or beside the
-      // source, each formula is moved here instead, from the source line its series repeats (another tab's references then stay as they are).
-      if (lines.some((line, n) => n && line !== lines[n - 1]! + 1)) {
-        const moved = (input: string, i: number) => { if (!input.startsWith("=")) return input; const by = dst[i]! - src[sourceLine(src.length, dst.length, i, back)]!; return shiftRefs(input, vertical ? by : 0, vertical ? 0 : by); };
+      // The hub moves each formula from the source line at its place in the whole of `from`, hidden lines and all. Where that is not the line the
+      // page's series repeats (a hidden line in or beside a source of more than one), each formula is moved here instead (another tab's
+      // references then stay as they are).
+      const repeats = (i: number) => src[sourceLine(src.length, dst.length, i, back)]!;
+      if (dst.some((line, i) => first + (((line - first) % span) + span) % span !== repeats(i))) {
+        const moved = (input: string, i: number) => { if (!input.startsWith("=")) return input; const by = dst[i]! - repeats(i); return shiftRefs(input, vertical ? by : 0, vertical ? 0 : by); };
         values = values.map((line, r) => line.map((input, c) => moved(input, vertical ? r : c)));
         from = undefined;
       }
