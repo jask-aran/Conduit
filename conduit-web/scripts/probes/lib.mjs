@@ -50,7 +50,7 @@ export async function launchHeadless(chromium) {
       const executablePath = path.join(cache, build, build.startsWith("chromium_headless_shell") ? "chrome-headless-shell-linux64/chrome-headless-shell" : "chrome-linux64/chrome");
       if (await fs.stat(executablePath).catch(() => null)) return chromium.launch({ executablePath });
     }
-    throw error;
+    return chromium.launch({ channel: "chrome" }).catch(() => { throw error; });
   }
 }
 
