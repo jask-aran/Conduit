@@ -25,5 +25,6 @@ export function parseFileView(view: string | null | undefined): FileEntry[] | nu
       return null;
     }
   }
-  return entries.length === 1 && entries.every((entry) => entry.path) ? entries : null;
+  // A view of two sides, from a layout stored before a file document held one file, shows its first.
+  return entries[0]?.path ? entries.slice(0, 1) : null;
 }
