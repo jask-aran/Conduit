@@ -40,9 +40,22 @@ const refused = (message) => Object.assign(new Error(message), { status: 400 });
  * The whole workbook in one engine, a sheet of it per tab (so `Data!A1` and `'My Data'!A1` compute), and a SheetModel for each tab (`tab`).
  * `name`: what a tab never named (the one tab of a format-1 doc) is called, its file's name on the hub.
  */
+/**
+ * A workbook's defined names (an imported .xlsx's, `names:<tabId>` in the look: `{ name, ref, tab? }`, `tab` the one a name is local to) as the engine's
+ * named expressions, so the formulas reading them compute; Excel's own (`_xlnm.Print_Area`…) and any the engine cannot take are left to the file.
+ */
+export const defineNames = (engine, list) => {
+  for (const one of list) {
+    const scope = one.tab === undefined ? undefined : engine.getSheetId(String(one.tab)), expression = `=${one.ref}`;
+    if (typeof one.name === "string" && !one.name.startsWith("_xlnm.") && (one.tab === undefined || scope !== undefined) && engine.isItPossibleToAddNamedExpression(one.name, expression, scope)) engine.addNamedExpression(one.name, expression, scope);
+  }
+};
+const listOf = (value) => { try { const list = typeof value === "string" ? JSON.parse(value) : value; return Array.isArray(list) ? list.filter((one) => one && typeof one.ref === "string") : []; } catch { return []; } };
+
 export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
   const order = doc.getArray(TABS), meta = doc.getMap(TAB), cells = doc.getMap(CELLS), look = doc.getMap(LOOK), self = {}, listeners = new Set();
   let engine, ids = [], tabs = new Map(), bySheet = new Map(), rowTab = new Map(), colTab = new Map(), named = new Map(), names = "", watched = [], pending = null, written = null;
+  const defined = () => listed(order).flatMap((id) => listOf(look.get(`names:${id}`)));
   const nameOf = (id) => meta.get(`name:${id}`) ?? (id === MAIN ? called ?? FIRST : id);
   const engineName = (id) => meta.get(`name:${id}`) ?? (id === MAIN ? FIRST : id);
   const blank = (n) => new Array(n).fill("");
@@ -68,7 +81,7 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
     // Two names the same but for case (only a doc written outside the hub has them) would stop the engine: the second is told apart.
     const taken = new Set();
     for (const id of ids) { let one = engineName(id); if (taken.has(one.toLowerCase())) one = `${one}~${id}`; taken.add(one.toLowerCase()); named.set(id, one); }
-    names = ids.map(engineName).join("\n");
+    names = [...ids.map(engineName), JSON.stringify(defined())].join("\n");
     tabs = new Map(ids.map((id) => [id, { id, rows: doc.getArray(rowsOf(id)), cols: doc.getArray(colsOf(id)), rowIds: [], colIds: [], rowIndex: new Map(), colIndex: new Map(), typed: [], sheet: -1 }]));
     const grids = {};
     for (const t of tabs.values()) {
@@ -79,6 +92,7 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
     for (const [cell, input] of cells) { const place = placeOf(cell); if (place) { place.t.typed[place.at.row][place.at.col] = input ?? ""; grids[named.get(place.t.id)][place.at.row][place.at.col] = raw(input); } }
     engine?.destroy();
     engine = HyperFormula.buildFromSheets(grids, CONFIG, NAMES);
+    defineNames(engine, defined());
     bySheet = new Map();
     for (const t of tabs.values()) { t.sheet = engine.getSheetId(named.get(t.id)); bySheet.set(t.sheet, t); }
     watched = [...tabs.values()].flatMap((t) => {
@@ -144,7 +158,7 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
     if (now.tabs) {
       const next = listed(order);
       // A tab added, deleted or renamed builds the engine again from the doc, which then says every name and every formula: tabs change seldom.
-      if (next.length !== ids.length || next.some((id) => !tabs.has(id)) || next.map(engineName).join("\n") !== names) { written = null; rebuild(); return emit({ tabs: true, structure: [...ids], cells: null }); }
+      if (next.length !== ids.length || next.some((id) => !tabs.has(id)) || [...next.map(engineName), JSON.stringify(defined())].join("\n") !== names) { written = null; rebuild(); return emit({ tabs: true, structure: [...ids], cells: null }); }
       ids = next;
     }
     const moved = [...new Set([...now.rows.keys(), ...now.cols.keys()])].filter((id) => tabs.has(id)), structure = moved.length > 0;
@@ -189,7 +203,8 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
     // The rewrites first, written for the places before the empty lines are taken out, which then rewrites them again.
     if (kept.length || (owner && twice)) queueMicrotask(() => { if (kept.length) doc.transact(() => { written = new Set(); for (const [cell, was, after] of kept) if (cells.get(cell) === was) { cells.set(cell, after); written.add(cell); } }, self); if (owner && twice) unrepeat(); });
   };
-  order.observe(onTabs); meta.observe(onTabs); cells.observe(onCells);
+  const onLook = (event) => { for (const name of event.keysChanged) if (name.startsWith("names:")) return onTabs(); };
+  order.observe(onTabs); meta.observe(onTabs); cells.observe(onCells); look.observe(onLook);
   doc.on("afterTransaction", flush);
   rebuild();
   /** An id no row, column or tab has. */
@@ -321,7 +336,7 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
     cellCount: () => [...tabs.values()].reduce((sum, t) => sum + t.rowIds.length * t.colIds.length, 0),
     onChange: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
     structure, tabOp,
-    destroy() { for (const off of watched) off(); order.unobserve(onTabs); meta.unobserve(onTabs); cells.unobserve(onCells); doc.off("afterTransaction", flush); listeners.clear(); engine.destroy(); },
+    destroy() { for (const off of watched) off(); order.unobserve(onTabs); meta.unobserve(onTabs); cells.unobserve(onCells); look.unobserve(onLook); doc.off("afterTransaction", flush); listeners.clear(); engine.destroy(); },
   };
   return book;
 }

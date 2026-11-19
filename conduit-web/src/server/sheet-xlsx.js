@@ -3,7 +3,7 @@ import { Worker, isMainThread, parentPort, workerData } from "node:worker_thread
 import { HyperFormula } from "hyperformula";
 import * as XLSX from "xlsx";
 import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colIndex, colName, parseA1, parseRange, tabName, toCsv, valueText } from "../sheet-format.js";
-import { CONFIG } from "../sheet-engine.js";
+import { CONFIG, defineNames } from "../sheet-engine.js";
 import { NAMES } from "../sheet-functions.js";
 import { shiftRefs } from "../sheet-rules.js";
 import { decodeStyle, encodeStyle, SHEET_INKS } from "../sheet-styles.js";
@@ -173,7 +173,9 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   if (large) throw fault(`The tab ${large.name} is too large for a sheet (${large.rows} rows x ${large.cols} columns; at most ${SHEET_LIMIT} cells a tab). Import some of its tabs (tabs): ${sizes()}`);
   const total = read.reduce((sum, tab) => sum + tab.rows * tab.cols, 0);
   if (total > WORKBOOK_LIMIT) throw fault(`That workbook is too large for a sheet (${total} cells over its tabs; at most ${WORKBOOK_LIMIT}). Import some of its tabs (tabs): ${sizes()}`);
-  drop("defined names", (book.Workbook?.Names ?? []).filter((name) => !name.Name.startsWith("_xlnm.")).length);
+  // The workbook's defined names, each local one by its tab's name here; kept on the first tab's look (`names`) and computed (sheet-engine.js `defineNames`).
+  const tabNamed = new Map(read.map((tab) => [tab.called, tab.name]));
+  const definedNames = (book.Workbook?.Names ?? []).flatMap((one) => typeof one.Name === "string" && typeof one.Ref === "string" ? [{ name: one.Name, ref: one.Ref, ...(one.Sheet !== undefined && tabNamed.has(book.SheetNames[one.Sheet]) ? { tab: tabNamed.get(book.SheetNames[one.Sheet]) } : {}) }] : []);
   // Read once the workbook fits: a tab grows to take in the empty cells a fill or an edge shows on, while it still fits.
   const shows = formatsOf.map(seen);
   let room = WORKBOOK_LIMIT - total;
@@ -219,6 +221,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   try { engine = HyperFormula.buildFromSheets(Object.fromEntries(read.map((tab) => [tab.name, tab.typed])), CONFIG, NAMES); }
   catch (error) { throw fault(`That workbook's formulas could not be loaded: ${error?.message ?? error}`); }
   try {
+    defineNames(engine, definedNames);
     for (const tab of read) tab.id = engine.getSheetId(tab.name);
     // Text this engine would read as something else (a number, TRUE, a formula) is typed with the mark that keeps it text.
     const marked = [];
@@ -313,6 +316,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       if (tab.filter) look.filter = tab.filter;
       // A frozen formula goes with its cell (`excel:<rowId>:<colId>` once in the doc), written for the cell it was in (`anchor`), as a rule's are.
       for (const [at, one] of Object.entries(report.frozen[tab.name] ?? {})) if (!one.why.startsWith("a formula over")) look[`excel:${at}`] = { formula: one.formula, value: one.kept, anchor: at };
+      if (tab === read[0] && definedNames.length) look.names = definedNames;
       if (tab.pane?.rows) look.freezeRows = tab.pane.rows;
       if (tab.pane?.cols) look.freezeCols = tab.pane.cols;
       return { name: tab.name, hidden: tab.hidden, csv: toCsv(csv), inputs, look, rows: tab.rows, cols: tab.cols, formulas: Object.keys(inputs).length };
@@ -382,7 +386,9 @@ export function exportXlsx(tabs) {
     if (Array.isArray(tab.look.merges)) sheet["!merges"] = tab.look.merges.map((range) => XLSX.utils.decode_range(String(range)));
     XLSX.utils.book_append_sheet(book, sheet, tab.name);
   }
-  book.Workbook = { Sheets: tabs.map((tab) => ({ Hidden: tab.hidden ? 1 : 0 })) };
+  const at = new Map(tabs.map((tab, n) => [tab.name.toLowerCase(), n]));
+  const names = tabs.flatMap((tab) => Array.isArray(tab.look.names) ? tab.look.names : []).filter((one) => typeof one?.name === "string" && typeof one.ref === "string" && (one.tab === undefined || at.has(String(one.tab).toLowerCase())));
+  book.Workbook = { Sheets: tabs.map((tab) => ({ Hidden: tab.hidden ? 1 : 0 })), ...(names.length ? { Names: names.map((one) => ({ Name: one.name, Ref: one.ref, ...(one.tab === undefined ? {} : { Sheet: at.get(String(one.tab).toLowerCase()) }) })) } : {}) };
   const written = XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true }), count = (value) => typeof value === "number" && value > 0 ? value : 0;
   const panes = tabs.map((tab) => [count(tab.look.freezeRows), count(tab.look.freezeCols)]), styled = tabs.some((tab) => Object.keys(tab.look).some((name) => name.startsWith("style:")));
   const ruled = tabs.some((tab) => ["rules", "rulesKept"].some((name) => Array.isArray(tab.look[name]) && tab.look[name].length)), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(orphaned(`=${formula}`, known)), tabs.map((tab) => tab.look.rulesKept)) : null;
