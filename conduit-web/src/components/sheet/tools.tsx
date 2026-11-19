@@ -30,8 +30,10 @@ export function createSheetTools(options: { tip(name: SheetToolId): string | und
   // `own`: the run names its own step (a merge, which may ask first). `hue`: the swatch it shows now.
   const tool = (name: SheetToolId, label: string, icon: SheetTool["icon"], run: (range: SheetRange) => void, rest: Partial<SheetTool> & { on?(): boolean; own?: boolean; hue?(): string | undefined } = {}): SheetTool => {
     const { on, own, hue, ...more } = rest;
-    return { name, label, icon, ...more, get tip() { return options.tip(name); }, get active() { return on?.() ?? false; }, get pressed() { return on && !more.menu ? on() : undefined; }, get disabled() { return !at(); },
-      ...(hue ? { get swatch() { return hue(); } } : {}), run: () => { const range = at(); if (range) { if (own) run(range); else options.act(label, () => run(range)); } options.done(); } };
+    const made: SheetTool = { name, label, icon, ...more, get tip() { return options.tip(name); }, get active() { return on?.() ?? false; }, get pressed() { return on && !more.menu ? on() : undefined; }, get disabled() { return !at(); },
+      run: () => { const range = at(); if (range) { if (own) run(range); else options.act(label, () => run(range)); } options.done(); } };
+    // A getter of its own: spread into the tool, it would be read once.
+    return hue ? Object.defineProperty(made, "swatch", { get: hue, enumerable: true }) : made;
   };
   const mark = (name: keyof typeof sheetToolIcons) => { const Icon = sheetToolIcons[name]; return () => <Icon />; };
   const inks = (name: "color" | "fill", menu: string, none: string, noun: string) => {
