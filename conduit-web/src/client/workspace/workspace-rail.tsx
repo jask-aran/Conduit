@@ -36,7 +36,7 @@ export function WorkspaceRail(props: {
 }) {
   const foot = () => <>
     <Show when={props.tools}><IconButton kind="rail" tabIndex={-1} aria-pressed={props.dockOverlay} data-open={props.dockOverlay ? "" : undefined}
-      aria-label={props.dockOverlay ? "Dock beside the panes" : "Dock over the panes"} title={props.dockOverlay ? "Dock: over the panes" : "Dock: beside the panes"} onClick={() => props.onToggleDockOverlay()}><Icons.Workspace /></IconButton></Show>
+      aria-label={props.dockOverlay ? "Dock beside the panes" : "Dock over the panes"} title={props.dockOverlay ? "Dock: over the panes" : "Dock: beside the panes"} onClick={() => props.onToggleDockOverlay()}><Show when={props.dockOverlay} fallback={<Icons.Workspace />}><Icons.DockOver /></Show></IconButton></Show>
     <Show when={PANE_LAYOUTS[props.panes]}>{(layouts) => <>
       <IconButton kind="rail" tabIndex={-1} aria-label="Equalise panes" title="Equalise panes" onClick={() => props.onLayout(layouts()[0]!)}><Columns3Icon /></IconButton>
       <DropdownMenu modal={false} placement="left-end">

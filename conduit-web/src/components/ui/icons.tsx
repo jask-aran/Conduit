@@ -76,6 +76,7 @@ import {
   PanelLeftCloseIcon,
   PanelLeftIcon,
   PanelLeftOpenIcon,
+  PanelRightDashedIcon,
   PanelRightIcon,
   PaperclipIcon,
   PencilIcon,
@@ -239,6 +240,8 @@ export const Redo = Redo2Icon;
 export const Upload = UploadIcon;
 export const Warning = TriangleAlertIcon;
 export const Workspace = PanelRightIcon;
+/** The dock laid over the panes, where `Workspace` is the dock beside them. */
+export const DockOver = PanelRightDashedIcon;
 export const WrapText = WrapTextIcon;
 export const Narration = ListCollapseIcon;
 export const Tool = WrenchIcon;
