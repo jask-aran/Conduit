@@ -9,6 +9,7 @@ import type { SheetSortOp, SheetTabOp } from "@/sheet-format.js";
 import type { SheetFormatOp } from "@/sheet-formats.js";
 import type { SheetBorders, SheetInk, SheetStyleOp } from "@/sheet-styles.js";
 import type { SheetChartKind, SheetChartSpec } from "@/sheet-charts.js";
+import type { SheetTypeOp } from "@/sheet-types.js";
 
 /** Cells by position, 0-based and inclusive (sheet-format.js parseRange). */
 export type SheetRange = { top: number; left: number; bottom: number; right: number };
@@ -38,6 +39,7 @@ export type SheetCellsOp = { client?: number; step?: number } & (
   | { op: "move-rows" | "move-cols"; at: number; count?: number; to: number; tab?: string }
   | SheetFormatOp
   | SheetStyleOp
+  | SheetTypeOp
   | SheetSortOp
   | { op: "chart"; chart?: SheetChartSpec & { id?: string; delete?: boolean }; tab?: string }
   | SheetTabOp);
@@ -182,6 +184,8 @@ export type SheetGridEvents = {
   autofit?(kind: "cols" | "rows", line: number): void;
   /** A filter's mark pressed on its header cell (SheetColumns `mark`), with the cell's box. */
   filter?(row: number, col: number, box: SheetBox): void;
+  /** A dropdown cell's arrow pressed, with the cell's box. */
+  dropdown?(row: number, col: number, box: SheetBox): void;
   /** Its first frame with the sheet's cells is painted. */
   drawn(): void;
 };

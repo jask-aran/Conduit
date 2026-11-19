@@ -13,11 +13,15 @@ import { shiftRefs } from "@/sheet-rules.js";
 import { createCellLook } from "./cell-draw";
 import { seriesFill, sourceLine } from "./series";
 import type { SheetDrawn } from "./formats";
+import { serialOf } from "./types";
+import type { SheetPill } from "./cell-draw";
 import type { SheetCellStyle } from "./styles";
 import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange, SheetReference } from "./host";
 
 /** What the grid reads of the sheet besides its cells: each column's width and type, the rows whose height is not the default (`look`), a value as its cell's number format draws it (formats.ts), a cell's style (styles.ts), and whether an import froze it. */
-export type SheetColumns = { width(col: number): number | undefined; type(col: number): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; dated(row: number, col: number): boolean; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean; freeze(): { rows: number; cols: number }; hidden(): ReadonlySet<number>; hiddenCols(): ReadonlySet<number>;
+export type SheetColumns = { width(col: number): number | undefined; type(row: number, col: number): string | undefined;
+  /** A dropdown cell's pill for the value it shows (cell-draw.ts); undefined where the cell is no dropdown. */
+  pill(row: number, col: number, type: string | undefined, shown: string): SheetPill | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; dated(row: number, col: number): boolean; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean; freeze(): { rows: number; cols: number }; hidden(): ReadonlySet<number>; hiddenCols(): ReadonlySet<number>;
   /** A filter's mark on a header cell (0 none, 1 a filter, 2 one keeping only some values) and a table's banded rows (filter.tsx). */
   mark(row: number, col: number): number; banded(row: number, col: number): boolean;
   /** The tab's merged ranges (merges.ts). */
@@ -102,7 +106,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   let counting = false;
   /** What a cell shows; what was typed into it is read only when the grid asks (editing, copying), since drawing never does. */
   class TextCell {
-    readonly kind = GridCellKind.Text; readonly allowOverlay = false; mark = 0;
+    readonly kind = GridCellKind.Text; readonly allowOverlay = false; mark = 0; pill?: SheetPill;
     constructor(private row: number, private col: number, private typed: string | null, readonly displayData: string, readonly contentAlign?: "left" | "center" | "right", readonly themeOverride?: Partial<Theme>, readonly worn?: SheetCellStyle, readonly frozen?: boolean) {}
     get data() { return this.typed ??= model.input(this.row, this.col); }
     get copyData() { return this.data; }
@@ -302,6 +306,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       p.editor?.focus();
       const at = p.map.sheet(row), cell = options.columns.mark(at, col) && event.localEventX >= event.bounds.width - Number(look.grid.headerIconSize) - 2 * Number(look.grid.cellHorizontalPadding) ? box(p, col, row) : undefined;
       if (cell) events.filter?.(at, col, { left: cell.x, top: cell.y, width: cell.width, height: cell.height });
+      else if (options.columns.type(at, col)?.startsWith("list:") && event.localEventX >= event.bounds.width - Number(look.grid.headerIconSize) - 2 * Number(look.grid.cellHorizontalPadding)) { const one = box(p, col, row); if (one) events.dropdown?.(at, col, { left: one.x, top: one.y, width: one.width, height: one.height }); }
       events.pressed(at, col);
     },
     onCellActivated: ([col, drawn]) => { const row = p.map.sheet(drawn), home = mergeAt(row, col); events.activated(home?.top ?? row, home?.left ?? col); },
@@ -425,7 +430,6 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     const { rows, cols } = size, frozen = frozenRows > 0;
     // A hidden column's edge dragged (the grid gives a press just right of it to it) draws it open as it goes, and the width shows it again (sizes.ts).
     const columns = useMemo(() => Array.from({ length: cols }, (_, col) => ({ id: model.colAt(col) ?? String(col), title: colName(col), width: widths[col] ?? (hiddenCols.has(col) ? 0 : options.columns.width(col) ?? theme.width) })), [shape, cols, widths, theme]);
-    const types = useMemo(() => Array.from({ length: cols }, (_, col) => options.columns.type(col)), [shape, cols]);
     const cellLook = useMemo(() => createCellLook(theme), [theme]);
     const contentOf = (p: Part) => {
       const hues = { destructive: theme.error, live: theme.live, warn: theme.warn }, { theme: themed } = cellLook;
@@ -449,24 +453,29 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         } as GridCell;
       };
       const own = (row: number, col: number): GridCell => {
-        const value = model.value(row, col), type = types[col], mark = options.columns.mark(row, col), striped = options.columns.banded(row, col);
+        const value = model.value(row, col), type = options.columns.type(row, col), mark = options.columns.mark(row, col), striped = options.columns.banded(row, col);
         // A filter's header cell in a column of checkboxes is drawn as text, so its mark shows.
         if (type === "boolean" && !mark) return { kind: GridCellKind.Boolean, data: value === true, allowOverlay: false, copyData: model.input(row, col) };
         // An empty value is an empty cell but for a formula that gives nothing.
         const input = value === null || typeof value === "string" ? model.input(row, col) : null;
         const style = options.columns.style(row, col);
         // An empty cell is drawn for its fill and edges alone; one an array formula spills text into is not empty.
+        // A dropdown draws its arrow, empty or not.
+        const pill = type?.startsWith("list:") ? options.columns.pill(row, col, type, value === null ? "" : String(value)) : undefined;
+        if (pill) { const cell = withMark(new TextCell(row, col, input, String(value ?? ""), undefined, striped ? washed(themed(style)) : themed(style), style), mark); cell.pill = pill; return cell; }
         if (input === "" && !value) return style || mark || striped ? withMark(new TextCell(row, col, "", "", undefined, striped ? washed(themed(style)) : themed(style), style), mark) : EMPTY;
         // An error is shown by its code, as the engine names it; only a value that could be one is asked whether it is.
         const fault = typeof value === "string" && value.startsWith("#") && model.error(row, col) !== null;
-        const drawn = fault || value === null || typeof value === "boolean" ? null : options.columns.draw(row, col, value);
+        // A date cell's ISO text is drawn through its date format.
+        const serial = type === "date" && typeof value === "string" && options.columns.dated(row, col) ? serialOf(value) : null;
+        const drawn = fault || value === null || typeof value === "boolean" ? null : options.columns.draw(row, col, serial ?? value);
         const worn = themed(style, fault ? theme.error : drawn?.hue && hues[drawn.hue]);
-        return withMark(new TextCell(row, col, input, drawn ? drawn.text : shown(value), style?.align ?? (typeof value === "number" || type === "number" ? "right" : undefined), striped ? washed(worn) : worn, style,
+        return withMark(new TextCell(row, col, input, drawn ? drawn.text : shown(value), style?.align ?? (typeof value === "number" || type === "number" || serial !== null ? "right" : undefined), striped ? washed(worn) : worn, style,
           input !== null && !input.startsWith("=") && options.columns.frozen(row, col) || undefined), mark);
       };
       return ([col, at]: Item): GridCell => merges.length ? merged(at, col, p.map.sheet(at)) : own(p.map.sheet(at), col);
     };
-    const content = useMemo(() => ({ head: contentOf(head), body: contentOf(body) }), [types, theme, cellLook]);
+    const content = useMemo(() => ({ head: contentOf(head), body: contentOf(body) }), [shape, theme, cellLook]);
     // One number while every row is the default height: the grid then sums no heights to scroll. Heights set while a row's edge is dragged are by the sheet's row.
     const heightOf = (p: Part) => { const kept = options.columns.heights(); return kept.size || Object.keys(heights).length ? (drawn: number) => { const row = p.map.sheet(drawn); return heights[row] ?? kept.get(row) ?? theme.row; } : theme.row; };
     const rowHeight = useMemo(() => ({ head: heightOf(head), body: heightOf(body) }), [shape, heights, theme]);

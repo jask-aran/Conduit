@@ -8,6 +8,7 @@ import { listStyles, writeStyle } from "../sheet-styles.js";
 import { readRules, rulesA1, rulesIds, shiftRefs } from "../sheet-rules.js";
 import { CHART_LIMIT, chartFrom, chartIds, chartsA1, keptCharts, readCharts } from "../sheet-charts.js";
 import { writePrivateFile } from "../private-file.js";
+import { cleanOptions, writeType } from "../sheet-types.js";
 
 /*
  * The sheet artifact kind on the hub (sheet-format.js): a .csv that holds the values, the formulas beside it in sheet.json, and the live copy in
@@ -480,7 +481,7 @@ export function sheetKind(hub) {
         return `${head}${part}\n${toCsv(clip(typed, area))}`;
       },
       /** One change of cells, of rows and columns, or of tabs (contract: POST /v0/document/:id/cells). `for` is checked, and nothing is kept of it yet. */
-      async edit(room, { op, tab, at, range, from, values, value, format, style, borders, column, header, descending, count = 1, to, name: called, hidden, chart, by, for: about } = {}) {
+      async edit(room, { op, tab, at, range, from, values, value, format, style, borders, column, header, descending, count = 1, to, name: called, hidden, chart, by, for: about, type: cellType, options } = {}) {
         const name = typeof by === "string" && by ? by.slice(0, 80) : "agent";
         if (about !== undefined) {
           if (!/^[\w-]+\/\d+$/.test(String(about))) throw fault(400, `for is the comment answered, as <item>/<n>, not ${about}`);
@@ -539,6 +540,21 @@ export function sheetKind(hub) {
           }));
           return { cells: [label(room, sheet, area)], ...(op === "format" ? { formats: listFormats(room.look, sheet, area) } : { styles: listStyles(room.look, sheet, area) }), ...(many(room) ? { tab: sheet.name } : {}) };
         }
+        // A range's cell type (sheet-types.js): a checkbox, a date, a dropdown of `options` (a list validation) or plain; whole columns (B:D) take theirs.
+        if (op === "type") {
+          const ref = parseRef(range ?? at), sheet = pick(room, tab, ref.tab ?? undefined), { rows, cols } = sheet.size(), columns = /^\$?([A-Za-z]{1,3}):\$?([A-Za-z]{1,3})$/.exec(ref.range);
+          const area = columns ? { top: 0, bottom: rows - 1, left: Math.min(colIndex(columns[1]), colIndex(columns[2])), right: Math.max(colIndex(columns[1]), colIndex(columns[2])) } : parseRange(ref.range);
+          if (!area) throw fault(400, `range is an A1 range such as B2:C5, or whole columns such as B:D (Data!B:D for a tab), not ${range ?? at}`);
+          if (area.top >= rows || area.left >= cols) throw fault(400, `${rangeA1(area)} is past the tab's edge: it is ${rows} rows x ${cols} columns`);
+          const kinds = { checkbox: "boolean", date: "date", dropdown: "list", plain: null };
+          if (!Object.hasOwn(kinds, cellType)) throw fault(400, "type is checkbox, date, dropdown or plain");
+          if (cellType === "dropdown" && !cleanOptions(options).length) throw fault(400, "options is a dropdown's values, as [\"Done\", { \"value\": \"Late\", \"ink\": \"red\" }] (inks: red, amber, green, blue)");
+          hub.as(room, name, (sign) => room.doc.transact(() => {
+            try { writeType(room.look, sheet, area, kinds[cellType], Boolean(columns), options); } catch (error) { throw fault(400, error.message); }
+            sign();
+          }));
+          return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}) };
+        }
         if (op === "sort") {
           const ref = parseRef(range ?? at), sheet = pick(room, tab, ref.tab ?? undefined), area = parseRange(ref.range), { rows, cols } = sheet.size();
           if (!area) throw fault(400, `range is an A1 range such as A1:D20 (or Data!A1:D20), not ${range ?? at}`);
@@ -591,7 +607,7 @@ export function sheetKind(hub) {
           refilter(room, sheet, name);
           return { ...sheet.size(), ...(many(room) ? { tab: sheet.name } : {}) };
         }
-        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, sort, chart, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, add-tab, rename-tab, delete-tab, move-tab or hide-tab");
+        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, type, sort, chart, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, add-tab, rename-tab, delete-tab, move-tab or hide-tab");
         const sheet = pick(room, tab), { rows, cols } = sheet.size(), isRows = op.endsWith("rows"), size = isRows ? rows : cols, what = isRows ? "row" : "column", removing = op.startsWith("delete");
         if (!Number.isInteger(count) || count < 1 || count > CALL_LIMIT) throw fault(400, "count is how many, 1 or more");
         index(at, removing ? size - 1 : size, `${what} to ${removing ? "delete" : "insert before"} (${size} ${what}s now)`);

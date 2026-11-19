@@ -6,6 +6,7 @@
  */
 import { getMiddleCenterBias, measureTextCached, type DrawCellCallback, type Theme } from "@glideapps/glide-data-grid";
 import { SHEET_FILL } from "./formats";
+import type { SheetInk } from "@/sheet-styles.js";
 import type { SheetLook } from "./host";
 import { shade } from "./shade";
 import { PLAIN, textSize, type SheetCellStyle } from "./styles";
@@ -13,7 +14,9 @@ import { wrapLines } from "./wrap";
 
 /** What the grid's own cells carry for this (grid.ts TextCell). */
 /** `block`: a row of a merge over several rows, drawn here against the merge's box (grid.ts). */
-export type StyledCell = { worn?: SheetCellStyle; frozen?: boolean; displayData?: string; contentAlign?: "left" | "right" | "center"; block?: unknown };
+export type StyledCell = { worn?: SheetCellStyle; frozen?: boolean; displayData?: string; contentAlign?: "left" | "right" | "center"; block?: unknown; pill?: SheetPill };
+/** A dropdown cell's value as a pill in its option's ink (none: a plain wash); `known` false marks a value not among the options. One object for each, made once (sheet.tsx). */
+export type SheetPill = { ink?: SheetInk; known: boolean };
 // The grid's own measure of a line's height in a font: the box of these letters.
 const EM = "ABCi09jgqpy";
 
@@ -62,9 +65,30 @@ export function createCellLook(look: SheetLook) {
     ctx.textAlign = "start";
     if (clip) ctx.restore();
   };
+  // The value in a rounded wash of its ink, and the arrow that opens the options at the cell's right end; a value not among them in plain text, marked.
+  const pill = (args: Parameters<DrawCellCallback>[0], cell: StyledCell, { ink, known }: SheetPill) => {
+    const { ctx, rect, theme: drawn } = args, padX = drawn.cellHorizontalPadding, font = `${drawn.baseFontStyle} ${drawn.fontFamily}`, shown = cell.displayData ?? "";
+    const box = measureTextCached(EM, ctx, font), em = box.actualBoundingBoxAscent + box.actualBoundingBoxDescent, middle = rect.y + rect.height / 2, arrow = Number(look.grid.headerIconSize) / 2;
+    const room = rect.width - 3 * padX - arrow, ink0 = ctx.fillStyle;
+    ctx.save(); ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.width, rect.height); ctx.clip();
+    if (shown && known) {
+      const tall = Math.min(rect.height - 2, em + 2 * drawn.cellVerticalPadding), wide = Math.min(room, measureTextCached(shown, ctx, font).width + padX);
+      ctx.fillStyle = ink ? look.palette[ink].fill : look.mark;
+      ctx.beginPath(); ctx.roundRect(rect.x + padX / 2, middle - tall / 2, wide + padX, tall, tall / 2); ctx.fill();
+    }
+    ctx.fillStyle = ink0;
+    if (shown) { ctx.save(); ctx.beginPath(); ctx.rect(rect.x, rect.y, padX + room, rect.height); ctx.clip(); ctx.fillText(shown, rect.x + padX + 0.5, middle + getMiddleCenterBias(ctx, font)); ctx.restore(); }
+    const x = rect.x + rect.width - padX - arrow, y = middle - arrow / 4;
+    ctx.fillStyle = String(look.grid.textMedium);
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + arrow, y); ctx.lineTo(x + arrow / 2, y + arrow / 2); ctx.closePath(); ctx.fill();
+    if (shown && !known) { ctx.fillStyle = look.error; ctx.beginPath(); ctx.moveTo(rect.x + 1, rect.y + 1); ctx.lineTo(rect.x + 1 + look.corner, rect.y + 1); ctx.lineTo(rect.x + 1, rect.y + 1 + look.corner); ctx.closePath(); ctx.fill(); }
+    ctx.restore();
+    ctx.fillStyle = ink0;
+  };
   const draw: DrawCellCallback = (args, content) => {
     const cell = args.cell as StyledCell, style = cell.worn, shown = cell.displayData;
-    if (shown && (style?.custom || cell.block || shown.includes(SHEET_FILL))) text(args, style ?? PLAIN, cell); else content();
+    if (cell.pill) pill(args, cell, cell.pill);
+    else if (shown && (style?.custom || cell.block || shown.includes(SHEET_FILL))) text(args, style ?? PLAIN, cell); else content();
     if (!style?.edges && !cell.frozen) return;
     // The grid keeps note of the ink it set for a column's text, so it is put back.
     const { ctx, rect: { x, y, width, height } } = args, was = ctx.fillStyle;
