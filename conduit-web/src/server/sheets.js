@@ -226,11 +226,11 @@ export function sheetKind(hub) {
    * Applied after the change, as `keepCorners`'s.
    */
   const keepFrozen = (room, sheet, op, at, count, into = at) => {
-    const named = sheet.engine.getSheetName(sheet.sheet).toLowerCase(), held = [], { engine, here } = scratch(room, sheet), isRows = op.endsWith("rows"), removing = op.startsWith("delete"), moving = op.startsWith("move");
+    const named = sheet.engine.getSheetName(sheet.sheet).toLowerCase(), quoted = named.replace(/'/g, "''"), held = [], { engine, here } = scratch(room, sheet), isRows = op.endsWith("rows"), removing = op.startsWith("delete"), moving = op.startsWith("move");
     try {
       for (const [name, value] of room.look.entries()) {
         const [what, row, col] = name.split(":"), tab = what === "excel" && typeof value?.formula === "string" ? room.book.tabOfRow(row) : undefined, on = tab && room.book.tab(tab);
-        if (!on || on.indexOfCol(col) < 0 || (on.id !== sheet.id && !value.formula.toLowerCase().includes(named))) continue;
+        if (!on || on.indexOfCol(col) < 0 || (on.id !== sheet.id && ![named, quoted].some((name) => value.formula.toLowerCase().includes(name)))) continue;
         // Written for its `anchor`, where a sort may have left it: as it reads where it is now.
         const place = { sheet: engine.getSheetId(on.engine.getSheetName(on.sheet)), row: on.indexOfRow(row), col: on.indexOfCol(col) }, from = parseA1(String(value.anchor ?? "")) ?? place;
         engine.setCellContents(place, shiftRefs(value.formula, place.row - from.row, place.col - from.col).replace(/\bOFFSET\(/gi, "MOVEDREF("));
