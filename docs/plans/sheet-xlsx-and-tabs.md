@@ -135,9 +135,11 @@ ExcelGaps.implementedFunctions = { RANK: { method: "rank", parameters: [NUMBER, 
 It belongs in a module that `sheet-format.js` imports, so the hub and the page compute the same values.
 
 **Freezing.** When a formula cannot be parsed or names a function we do not have, import stores Excel's cached value as
-the cell's input. It also keeps `{ formula, value }` under `excel:<rowId>:<colId>` in `look`. Export writes the original
-formula back only while the cell still holds that value, so a later edit simply wins. Dependent cells then compute from
-the right number: freezing W8's 55 OFFSET roots would let the other 304 cells compute (guess, not run).
+the cell's input. It also keeps `{ formula, value, anchor }` under `excel:<rowId>:<colId>` in `look`. Export writes the
+original formula back only while the cell still holds that value, so a later edit simply wins. The hub's row, column and
+tab ops rewrite these formulas as the engine rewrites any (OFFSET goes into a scratch engine under a name it does not
+know, so it parses); a sort moves them as a fill does, from `anchor`. Dependent cells, through ranges too, compute from
+the kept value (measured on a generated workbook; W8 not run).
 
 **Whole-workbook result (measured, `scripts/pipeline.cjs`).** The pipeline reads with SheetJS, builds one engine with the
 fixes above (except freezing), compares each formula with Excel's cached value, exports, and reopens with openpyxl:

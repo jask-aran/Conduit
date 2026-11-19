@@ -1,9 +1,10 @@
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 import { HyperFormula } from "hyperformula";
 import * as XLSX from "xlsx";
-import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colIndex, colName, tabName, toCsv, valueText } from "../sheet-format.js";
+import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colIndex, colName, parseA1, tabName, toCsv, valueText } from "../sheet-format.js";
 import { CONFIG } from "../sheet-engine.js";
 import { NAMES } from "../sheet-functions.js";
+import { shiftRefs } from "../sheet-rules.js";
 import { decodeStyle, encodeStyle } from "../sheet-styles.js";
 import { ownOver, readDxfs, readStyles, seen, sheetRules, sheetStyles, withDxfs, withRules, writeRules, writeStyles } from "./xlsx-styles.js";
 
@@ -142,11 +143,11 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     // Compared in passes: a formula that reads a wrong one is wrong too, so only the first wrong ones in each chain are frozen, then the rest are computed again.
     const report = { computed: { same: 0, frozen: 0, noCache: 0, volatile: 0 }, frozen: {}, reasons: {} };
     const at = (one) => ({ sheet: one.tab.id, row: one.r, col: one.c }), id = (address) => `${address.sheet}:${address.row}:${address.col}`;
+    // Through the ranges that read them too (SUM(C1:C9)), each a dependant of its own.
     const downstream = (from) => {
       const seen = new Set(), queue = from.map(at);
       while (queue.length) for (const next of engine.getCellDependents(queue.pop())) {
-        if (next.start) continue;
-        const key = id(next);
+        const key = next.start ? `${id(next.start)}-${id(next.end)}` : id(next);
         if (!seen.has(key)) { seen.add(key); queue.push(next); }
       }
       return seen;
@@ -159,7 +160,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     const freeze = (wrong, gave = wrong.map((one) => engine.getCellValue(at(one)))) => engine.batch(() => {
       for (const [index, one] of wrong.entries()) {
         const value = gave[index], text = kept(one.cell);
-        const why = isError(value) ? (value.value === "#NAME?" ? "a function or name this sheet does not have" : `it gives ${value.value} here`) : `it gives ${valueText(value) || "nothing"} here, ${text || "nothing"} in the file`;
+        const why = isError(value) ? (value.value === "#NAME?" ? "a function or name this sheet does not have" : value.value === "#ERROR!" ? "a formula this sheet cannot read" : `it gives ${value.value} here`) : `it gives ${valueText(value) || "nothing"} here, ${text || "nothing"} in the file`;
         (report.frozen[one.tab.name] ??= {})[a1(one.r, one.c)] = { formula: one.formula, why, kept: one.cell.t === "s" || one.cell.t === "str" ? `'${one.cell.v}` : text };
         const reason = !why.startsWith("it gives") ? why : isError(value) ? `gives ${value.value}` : "a different value";
         report.reasons[reason] = (report.reasons[reason] ?? 0) + 1;
@@ -214,6 +215,8 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       drop("merged ranges past the tab's last value", (tab.sheet["!merges"]?.length ?? 0) - merges.length);
       if (merges.length) look.merges = merges.map((range) => XLSX.utils.encode_range(range));
       if (tab.rules.length) look.rules = tab.rules;
+      // A frozen formula goes with its cell (`excel:<rowId>:<colId>` once in the doc), written for the cell it was in (`anchor`), as a rule's are.
+      for (const [at, one] of Object.entries(report.frozen[tab.name] ?? {})) if (!one.why.startsWith("a formula over")) look[`excel:${at}`] = { formula: one.formula, value: one.kept, anchor: at };
       if (tab.pane?.rows) look.freezeRows = tab.pane.rows;
       if (tab.pane?.cols) look.freezeCols = tab.pane.cols;
       return { name: tab.name, hidden: tab.hidden, csv: toCsv(csv), inputs, look, rows: tab.rows, cols: tab.cols, formulas: Object.keys(inputs).length };
@@ -239,18 +242,19 @@ const stored = (formula) => formula.slice(1).split(/("(?:[^"]|"")*")/).map((part
 const ERROR_CODE = Object.fromEntries(Object.entries(ERROR_TEXT).map(([code, text]) => [text, Number(code)]));
 /**
  * A workbook written as an .xlsx: each formula with the value it computes here, number formats, column widths, row heights, hidden rows and columns, frozen panes and hidden tabs. A cell an import
- * froze gets its formula back where it still holds what the import left in it. Styles are written into the parts SheetJS wrote (xlsx-styles.js).
+ * froze (`excel:` in its look) gets its formula back while it holds what the import left in it, moved as a fill moves it from its `anchor` (where a
+ * sort took it; a row or column change rewrites the formula itself, sheets.js). Styles are written into the parts SheetJS wrote (xlsx-styles.js).
  * @param {{ name: string, hidden: boolean, typed: string[][], values: unknown[][], look: Record<string, unknown> }[]} tabs  `values`: what each cell computes
- * @param {ImportReport | null} [imported]
  * @returns {Buffer}
  */
-export function exportXlsx(tabs, imported) {
+export function exportXlsx(tabs) {
   const book = XLSX.utils.book_new();
   for (const tab of tabs) {
-    const frozen = imported?.frozen?.[tab.name] ?? {}, sheet = {}, cols = Math.max(1, ...tab.typed.map((row) => row.length));
+    const sheet = {}, cols = Math.max(1, ...tab.typed.map((row) => row.length));
     tab.typed.forEach((row, r) => row.forEach((typed, c) => {
       if (!typed) return;
-      const at = a1(r, c), was = frozen[at], formula = typed.startsWith("=") ? typed : was?.kept === typed && !was.why.startsWith("a formula over") ? was.formula : null, value = tab.values[r]?.[c];
+      const at = a1(r, c), held = tab.look[`excel:${at}`], from = parseA1(String(held?.anchor ?? "")), value = tab.values[r]?.[c];
+      const formula = typed.startsWith("=") ? typed : from && held.value === typed && typeof held.formula === "string" ? shiftRefs(held.formula, r - from.row, c - from.col) : null;
       const cell = isError(value) ? { t: "e", v: ERROR_CODE[value.value] ?? 15, w: value.value } : typeof value === "number" ? { t: "n", v: value } : typeof value === "boolean" ? { t: "b", v: value } : { t: "s", v: String(value ?? "") };
       if (cell.t === "s" && cell.v === "" && !formula) return;
       if (formula) cell.f = stored(formula);
