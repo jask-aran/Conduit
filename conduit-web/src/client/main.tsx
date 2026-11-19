@@ -776,7 +776,9 @@ function App() {
     const fallback = setTimeout(arrive, ARRIVAL_FALLBACK_MS);
     // A long transcript renders in passes, and shown mid-way its bubbles move under the fade: the reveal waits for
     // every pane's chat and then for the layout to hold still.
-    const panesLoaded = () => shownSlots().every((slot) => { const id = slotChatId(slot); return !id || paneSlot(slot).session.chat.loadedId() === id; });
+    // An artifact's pane is loaded once it is drawn (artifact-pane's onDrawn), so the first open never shows one opening.
+    const panesLoaded = () => shownSlots().every((slot) => { const id = slotChatId(slot); return !id || paneSlot(slot).session.chat.loadedId() === id; })
+      && (drawnCount(), (["main", ...shownSlots()] as PaneKey[]).every((pane) => artifactsIn(pane).every((id) => id === "new" || id.startsWith("new:") || drawnArtifacts.has(`${pane}:${id}`))));
     const waitForStill = () => new Promise<void>((resolve) => {
       let last = "";
       let still = 0;
@@ -2511,7 +2513,7 @@ function App() {
   const SAY_MS = 400, ARRIVE_MS = 1500;
   const [arriving, setArriving] = createSignal<Partial<Record<PaneKey, string>>>({});
   const [said, setSaid] = createSignal<Partial<Record<PaneKey, string>>>({});
-  const drawnArtifacts = new Set<string>();
+  const drawnArtifacts = new Set<string>(), [drawnCount, setDrawnCount] = createSignal(0);
   const arrives = (pane: PaneKey, previous: SplitView | null, next: SplitView | null) => Boolean(previous && previous !== next && next?.startsWith("artifact:") && !/^artifact:new\b/.test(next) && paneElement(pane));
   const leaves = (pane: PaneKey) => setArriving(({ [pane]: _, ...rest }) => rest);
   /** Asked to show `view`, a pane drops what was arriving in it unless that is `view`: the last asked for is the one shown. */
@@ -2969,7 +2971,7 @@ function App() {
     <PaneHeader actions={paneTabActions(pane)}><HeaderCrumb title="New artifact" /></PaneHeader>
     <ArtifactCreator project={id.slice("new:".length) || undefined} projects={catalogue.projects().filter((item) => item.id === id.slice("new:".length) || homeProjects().includes(item))}
       onBack={() => void setPaneView(pane, "home")} onMade={(made) => void setPaneView(pane, `artifact:${made.id}`).then(() => focusAnyPane(pane))} />
-  </SheetFill> : <ArtifactPane id={id} pending={arriving()[pane] === id} said={said()[pane] === id} moving={paneMotion()?.slot === pane} onDrawn={() => drawnArtifacts.add(`${pane}:${id}`)} onThread={(links) => void pressThread(id, links)} shortcuts={shortcutManager} onAbout={(found, label) => nameArtifact(`artifact:${id}`, found, label)}
+  </SheetFill> : <ArtifactPane id={id} pending={arriving()[pane] === id} said={said()[pane] === id} moving={paneMotion()?.slot === pane} onDrawn={() => { drawnArtifacts.add(`${pane}:${id}`); setDrawnCount((n) => n + 1); }} onThread={(links) => void pressThread(id, links)} shortcuts={shortcutManager} onAbout={(found, label) => nameArtifact(`artifact:${id}`, found, label)}
     chats={(project) => (catalogue.projects().find((item) => item.id === project)?.sessions ?? []).map((chat) => ({ id: chat.id, title: chat.title || "Untitled chat" }))}
     thread={isMobileLayout() ? undefined : (chat) => ({ shown: inSight(shownChat(chat)), cue: <RuntimeIndicator process={((process) => visibleRuntimeActivity(process) === "idle" ? null : process)(runtime.getProcess(chat ?? ""))} fallback={<Icons.Message />} /> })}
     header={(extra, links) => <PaneHeader modes={paperModes(id, "paper", links)} actions={<>{extra}{paneTabActions(pane)}</>}><HeaderCrumb title={viewName(`artifact:${id}`)} /></PaneHeader>} />);
