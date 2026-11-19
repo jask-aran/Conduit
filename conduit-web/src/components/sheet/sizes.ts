@@ -42,8 +42,11 @@ export interface SheetSizes {
   setHiddenCols(cols: readonly number[], hidden: boolean): void;
 }
 
-/** `lines`: how many lines a cell's text takes where its style wraps it (styles.ts); unsaid, its own line breaks. `filtered`: the rows a filter hides besides (filter.tsx). */
-export function createSheetSizes(look: Y.Map<number | string>, model: () => SheetView | undefined, lines?: (row: number, col: number, text: string, look: SheetLook) => number, filtered?: () => ReadonlySet<number>): SheetSizes {
+/**
+ * `lines`: how many lines a cell's text takes where its style wraps it (styles.ts); unsaid, its own line breaks. `filtered`: the rows a filter hides
+ * besides (filter.tsx). `measure`: how wide a cell's text is drawn, in its format and font (0 for none); unsaid, its value in the grid's font.
+ */
+export function createSheetSizes(look: Y.Map<number | string>, model: () => SheetView | undefined, lines?: (row: number, col: number, text: string, look: SheetLook) => number, filtered?: () => ReadonlySet<number>, sheetMeasure?: (row: number, col: number, look: SheetLook) => number): SheetSizes {
   const keyOf = (what: "width" | "height", id: string): SizeKey => `${what}:${id}`;
   const sized = (what: "width" | "height", id: string | undefined) => { const size = id && look.get(keyOf(what, id)); return typeof size === "number" ? size : undefined; };
   const set = (what: "width" | "height", ids: (string | undefined)[], size: number | null) => look.doc!.transact(() => {
@@ -87,7 +90,7 @@ export function createSheetSizes(look: Y.Map<number | string>, model: () => Shee
       look.doc!.transact(() => {
         for (const col of cols) {
           let widest = 0;
-          for (let row = 0; row < rows; row++) { const shown = valueText(sheet.value(row, col)); if (shown) widest = Math.max(widest, measure!.measureText(shown).width); }
+          for (let row = 0; row < rows; row++) { if (sheetMeasure) { widest = Math.max(widest, sheetMeasure(row, col, sheetLook)); continue; } const shown = valueText(sheet.value(row, col)); if (shown) widest = Math.max(widest, measure!.measureText(shown).width); }
           set("width", [sheet.colAt(col)], widest ? Math.ceil(widest + padding) : null);
         }
       });

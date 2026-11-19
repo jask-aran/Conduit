@@ -6,7 +6,7 @@ import { createSignal, onCleanup, type Accessor } from "solid-js";
 import type * as Y from "yjs";
 import { key, valueText, type SheetView } from "@/sheet-format.js";
 import { decodeStyle, paintStyle, writeStyle, type SheetBorders, type SheetHex, type SheetInk, type SheetStyle, type StyleAttrs } from "@/sheet-styles.js";
-import type { SheetFormats } from "./formats";
+import { unfilled, type SheetFormats } from "./formats";
 import type { SheetLook, SheetRange } from "./host";
 import { widthOf } from "./sizes";
 import { wrapLines } from "./wrap";
@@ -37,6 +37,8 @@ export interface SheetStyles {
   key(event: KeyboardEvent, range: SheetRange | null): boolean;
   /** How many lines a cell's text takes: wrapped to its column's width where it wraps (sizes.ts fits a row by it). */
   lines(row: number, col: number, text: string, look: SheetLook): number;
+  /** How wide a cell's text is drawn in its font: its widest line, or the width it wraps to. */
+  width(row: number, col: number, text: string, look: SheetLook): number;
   /** The rows of the range a wrapped cell would need more than one line in. */
   taller(range: SheetRange, look: SheetLook): number[];
 }
@@ -89,13 +91,16 @@ export function createSheetStyles(look: Y.Map<number | string>, model: Accessor<
     try { look.doc!.transact(() => writeStyle(look, sheet, range, change, whole)); } catch (error) { failed((error as Error).message); }
   };
   let measure: CanvasRenderingContext2D | null = null;
+  const fontOf = (style: SheetCellStyle | undefined, sheetLook: SheetLook) => {
+    const [weight, size] = String(sheetLook.grid.baseFontStyle).split(" ") as [string, string];
+    return `${style?.italic ? "italic " : ""}${style?.bold ? sheetLook.strong : weight} ${textSize(size, style?.size)} ${sheetLook.grid.fontFamily}`;
+  };
   const count = (row: number, col: number, text: string, sheetLook: SheetLook) => {
     const style = at(row, col);
     if (!style?.wrap) return text.split("\n").length;
     measure ??= document.createElement("canvas").getContext("2d");
     if (!measure) return 1;
-    const width = widthOf(look, model(), col), [weight, size] = String(sheetLook.grid.baseFontStyle).split(" ") as [string, string];
-    const font = `${style.italic ? "italic " : ""}${style.bold ? sheetLook.strong : weight} ${textSize(size, style.size)} ${sheetLook.grid.fontFamily}`;
+    const width = widthOf(look, model(), col), font = fontOf(style, sheetLook);
     measure.font = font;
     return wrapLines(measure, text, font, (width ?? sheetLook.width) - 2 * Number(sheetLook.grid.cellHorizontalPadding)).length;
   };
@@ -115,6 +120,14 @@ export function createSheetStyles(look: Y.Map<number | string>, model: Accessor<
       return true;
     },
     lines: count,
+    width: (row, col, text, sheetLook) => {
+      measure ??= document.createElement("canvas").getContext("2d");
+      if (!measure || !text) return 0;
+      const style = at(row, col);
+      if (style?.wrap) return (widthOf(look, model(), col) ?? sheetLook.width) - 2 * Number(sheetLook.grid.cellHorizontalPadding);
+      measure.font = fontOf(style, sheetLook);
+      return Math.max(...text.split("\n").map((line) => measure!.measureText(line).width));
+    },
     taller: (range, sheetLook) => {
       const sheet = model(), out: number[] = [];
       if (!sheet) return out;
@@ -159,3 +172,11 @@ export function createSheetBrush(options: { look: Y.Map<number | string>; model:
   };
 }
 export type SheetBrush = ReturnType<typeof createSheetBrush>;
+
+/** How wide a cell's value is drawn: in its number format (an accounting fill's gap left out) and its font, for fitting a column (sizes.ts). */
+export const measureShown = (styles: SheetStyles, formats: SheetFormats, model: Accessor<SheetView | undefined>) => (row: number, col: number, sheetLook: SheetLook) => {
+  const value = model()?.value(row, col);
+  if (value === null || value === undefined || value === "") return 0;
+  const drawn = typeof value === "boolean" ? null : formats.draw(row, col, value);
+  return styles.width(row, col, drawn ? unfilled(drawn.text) : valueText(value), sheetLook);
+};

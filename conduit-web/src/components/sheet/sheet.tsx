@@ -18,7 +18,7 @@ import { createSequenceKeys, SequenceHint, SHEET_SEQUENCES, SizePrompt, type She
 import { createSheetSizes, dragRowEdges } from "./sizes";
 import { createSheetFilter, FilterMenu } from "./filter";
 import { createSheetFormats } from "./formats";
-import { createSheetBrush, createSheetStyles } from "./styles";
+import { createSheetBrush, createSheetStyles, measureShown } from "./styles";
 import { createSheetRules, RulePrompt } from "./rules";
 import { createSheetTools } from "./tools";
 import { createSheetFind } from "./find";
@@ -90,7 +90,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   };
   const frozenHere = () => { changed(); const area = at(); return area ? frozenAt(area.top, area.left) : undefined; };
   const filters = createSheetFilter(look, model, at, hub, (row, col) => Boolean(styles.at(row, col)?.bold)), [filtering, setFiltering] = createSignal<{ col: number; box: SheetBox } | null>(null);
-  const sizes = createSheetSizes(look, model, styles.lines, filters.hidden), [question, setQuestion] = createSignal<SizeQuestion | null>(null);
+  const sizes = createSheetSizes(look, model, styles.lines, filters.hidden, measureShown(styles, formats, model)), [question, setQuestion] = createSignal<SizeQuestion | null>(null);
   const merges = createSheetMerges(look, model), rules = createSheetRules(look, model), [ruling, setRuling] = createSignal<SheetRange | null>(null), decisions = createDecisionScope(() => props.id);
   // As a spreadsheet's: Merge & Center on a merge unmerges it, and a merge emptying cells that hold values asks first.
   const merge = (kind: SheetMergeKind | null, asked = at()) => {
@@ -130,6 +130,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     write: (list, label) => writes(label ?? "")(list),
     fill: (range, values, from) => hub({ op: "fill", range: rangeA1(range), values, ...(from ? { from: rangeA1(from) } : {}) }),
     resized: (col, width) => history.act("Column width", () => sizes.setWidths(span("cols", col), width / zoom())),
+    autofit: (kind, line) => history.act(kind === "cols" ? "Fit column width" : "Fit row height", () => kind === "cols" ? sizes.fitColumns(span("cols", line), readLook(root!)) : sizes.fitRows(span("rows", line), readLook(root!))),
     menu: setMenu,
     moved: () => { setScrolled((n) => n + 1); moved(); },
     drawn: () => props.onDrawn?.(),

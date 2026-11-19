@@ -171,6 +171,8 @@ export type SheetGridEvents = {
   key(event: SheetKey, row: number, col: number): boolean;
   /** A cell double-clicked: it is opened to edit. */
   activated(row: number, col: number): void;
+  /** A column letter's edge or a row number's double-clicked: that column or row is fitted to what it shows. */
+  autofit?(kind: "cols" | "rows", line: number): void;
   /** A filter's mark pressed on its header cell (SheetColumns `mark`), with the cell's box. */
   filter?(row: number, col: number, box: SheetBox): void;
   /** Its first frame with the sheet's cells is painted. */
