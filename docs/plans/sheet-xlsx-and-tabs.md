@@ -306,38 +306,37 @@ The features script is kept outside the repo (the script's usage says what it mu
 Excel opens an export without a repair prompt is **not verified**. openpyxl cannot write threaded comments or dynamic-array metadata
 (`cm=`), so those are not tested: the spilling formulas are legacy array formulas with their cached cells.
 
-| Feature | Baseline (main, 2026-11-20) | Import report then |
-| --- | --- | --- |
-| values | kept | - |
-| formulas | kept | 1 frozen |
-| array (CSE) | changed: 0/1 kept; Sheet!C1: ["=SUM(A1:A5*B1:B5)","550","C1"] -> ["=SUM(A1:A5*B1:B5)","550",""] | - |
-| spilling formulas | changed: 15/18 kept; Sheet!C1: ["=_xlfn.UNIQUE(A1:A5)","3","C1:C4"] -> null | 3 frozen |
-| functions the engine lacks | changed: 1/3 kept; Sheet!B1: ["=_xlfn.LAMBDA(x,x*2)(A1)","20",""] -> ["=LAMBDA(x,x*2)(A1)","20",""] | 2 frozen |
-| defined names | changed: 2/4 kept; name Rate: "Sheet!$A$2" -> null | left out 2 defined names; 2 frozen |
-| number formats | kept | - |
-| fonts | changed: 6/8 kept; A7: [false,false,"",false,"",11,"Courier New"] -> [false,false,"",false,"",11,"Calibri"] | - |
-| fills | changed: 3/4 kept; A4: ["darkGray","FF0000"] -> ["solid","FF0000"] | - |
-| borders | changed: 2/7 kept; D2: ["","","","thin/","thin/"] -> ["","","","thin/",""] | - |
-| alignment, wrap, indent, rotation | changed: 4/9 kept; A5: ["left","",false,2,0,false] -> ["left","",false,0,0,false] | - |
-| widths, heights, hidden, frozen | changed: 6/8 kept; height 2: 40 -> 39.75 | - |
-| merges | dropped: 0/2 kept; B1:D1: true -> null | left out 1 merged ranges past the tab's last value |
-| conditional: cell value | kept | - |
-| conditional: colour scale | dropped: 0/2 kept; A1:A10 0: ["colorScale","",[],"","",false,"",false,false] -> null | left out 1 conditional formats (colorScale) |
-| conditional: data bar | dropped: 0/2 kept; A1:A10 0: ["dataBar","",[],"","",false,"",false,false] -> null | left out 1 conditional formats (dataBar) |
-| conditional: icon set | dropped: 0/2 kept; A1:A10 0: ["iconSet","",[],"","",false,"",false,false] -> null | left out 1 conditional formats (iconSet) |
-| conditional: formula | kept | - |
-| conditional: top 10 | dropped: 0/1 kept; A1:A10 0: ["top10","",[],"FFC7CE","",true,3,false,false] -> null | left out 1 conditional formats (top10) |
-| conditional: number format | changed: 0/1 kept; A1:A10 0: ["cellIs","greaterThan",["50"],"","0.0\" big\"",false,"",false,false] -> ["cellIs","greaterThan",["50"],"","",false,"",… | left out 1 conditional formats (number format of a rule) |
-| data validations | dropped: 0/5 kept; B1:B10: ["list","","\"Yes,No,Maybe\"","",true,""] -> null | left out 5 validation rules |
-| hyperlinks | changed: 1/4 kept; A1: ["https://example.com/page",""] -> null | - |
-| notes | dropped: 0/2 kept; A1: "Check this number" -> null | left out 2 notes |
-| tables | dropped: 0/1 kept; table Sales: ["A1:C4","TableStyleMedium9"] -> null | - |
-| autofilter | changed: 0/1 kept; autofilter: "A1:B6" -> "" | - |
-| charts | dropped: 0/3 kept; chart 1: ["bar","col",["Sheet!$A$2:$A$7","Sheet!$B$2:$B$7","Sheet!$C$2:$C$7","Sheet!B1","Sheet!C1"]] -> null | - |
-| images | dropped: 0/1 kept; media 0: true -> null | - |
-| tabs: names, colours, hidden | changed: 4/6 kept; tab 1: ["O'Brien & Co","visible","FF0000"] -> ["O'Brien & Co","visible",""] | - |
-| print settings | changed: 0/7 kept; orientation: "landscape" -> null | - |
-| protection | changed: 0/2 kept; workbook structure: true -> false | - |
+| Feature | Before (main, 2026-11-20) | After (branch `sheet-excel`) | Import report after |
+| --- | --- | --- | --- |
+| values (numbers, text, booleans, dates, times, errors, 5,000-character text, leading zeros, text like numbers) | kept | kept | - |
+| formulas (relative, absolute, another tab, whole column, XLOOKUP, TEXT) | kept | kept | 1 frozen (`TEXT` gives another value here) |
+| array formula (CSE) | changed: its value is kept, written as a plain formula | same | - |
+| spilling formulas (UNIQUE, SEQUENCE, SORT) | changed: the values are kept, the formulas are lost | same | 3 frozen |
+| functions the engine lacks (LAMBDA, CELL, GETPIVOTDATA) | changed: values kept, `_xlfn.` taken off LAMBDA | same | 2 frozen |
+| defined names | changed: names lost, formulas using them frozen | same | names reported left out |
+| number formats (20 built-in and custom) | kept | kept | - |
+| fonts | changed: font name lost | same | not reported |
+| fills | changed: pattern fills become solid | same | not reported |
+| borders | changed: dashed, dotted and double become thin, diagonals lost | same | not reported |
+| alignment, wrap, indent, rotation | changed: indent, rotation and shrink lost | same | not reported |
+| widths, heights, hidden rows and columns, frozen panes | changed: row heights off by up to 0.25 pt | same | - |
+| merges | **dropped** where the merge ran past the last value | kept | - |
+| conditional: cell value, formula | kept | kept | - |
+| conditional: colour scale, data bar, icon set, top 10 | dropped | dropped | reported |
+| conditional: a rule's number format | changed: number format lost | same | reported |
+| data validations (list, whole number, date, custom) | **dropped** | kept | - |
+| hyperlinks (web, mail, a place in the workbook) | **dropped** | kept | - |
+| notes | dropped | dropped (waits on the owner) | reported |
+| tables | **dropped**, not reported | kept | - |
+| autofilter | **dropped**, not reported | kept | - |
+| charts (bar, line, pie) | **dropped**, not reported | kept | - |
+| images | dropped, not reported | dropped | reported |
+| tabs: odd names, colours, a hidden tab | changed: colours lost | kept | - |
+| print settings | dropped, not reported | same | not reported |
+| workbook and sheet protection | dropped, not reported | same | not reported |
+
+From 5 kept, 15 changed and 10 dropped of 30 workbooks to 12 kept, 12 changed and 6 dropped, counted as the script counts.
+Every export passed the strictness checks both times.
 
 ## Still to build
 
