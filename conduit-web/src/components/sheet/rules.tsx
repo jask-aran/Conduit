@@ -88,7 +88,7 @@ export function createSheetRules(look: Y.Map<number | string>, model: Accessor<S
     list: () => { version(); const sheet = model(); return sheet ? own().map((rule) => ({ rule, ranges: ruleAreas(sheet, rule).map(rangeA1).join(" ") })) : []; },
     remove(at: number) { const id = model()?.id, list = own(); if (!id || !list[at]) return; list.splice(at, 1); if (list.length) look.set(`rules:${id}`, JSON.stringify(list)); else look.delete(`rules:${id}`); setVersion((n) => n + 1); },
     /** The rule at `at` said again (its ranges kept), or moved one place up, over the one before it. */
-    change(at: number, rule: Omit<SheetRule, "ranges" | "anchor">) { const id = model()?.id, list = own(), was = list[at]; if (!id || !was) return; list[at] = { ...rule, ranges: was.ranges, anchor: was.anchor }; look.set(`rules:${id}`, JSON.stringify(list)); setVersion((n) => n + 1); },
+    change(at: number, rule: Omit<SheetRule, "ranges" | "anchor">) { const id = model()?.id, list = own(), was = list[at]; if (!id || !was) return; list[at] = { ...rule, ...(was.stop ? { stop: true } : {}), ranges: was.ranges, anchor: was.anchor }; look.set(`rules:${id}`, JSON.stringify(list)); setVersion((n) => n + 1); },
     raise(at: number) { const id = model()?.id, list = own(); if (!id || at < 1 || !list[at]) return; [list[at - 1], list[at]] = [list[at]!, list[at - 1]!]; look.set(`rules:${id}`, JSON.stringify(list)); setVersion((n) => n + 1); },
     /** A rule on `area` (clipped to the tab) put first, as a spreadsheet puts a new one. */
     add(area: Range, rule: Omit<SheetRule, "ranges" | "anchor">) {
@@ -128,7 +128,7 @@ export function RulePrompt(props: { area: Range | null; rules: SheetRules; act(l
   const add = (event: SubmitEvent) => {
     event.preventDefault();
     const area = props.area, at = editing();
-    if (area && readable()) props.act("Conditional formatting", () => at === null ? props.rules.add(area, rule()) : props.rules.change(at, rule()));
+    if (area && readable()) props.act(at === null ? "Conditional formatting" : "Edit rule", () => at === null ? props.rules.add(area, rule()) : props.rules.change(at, rule()));
     setEditing(null); props.onClose();
   };
   return <Dialog open={props.area !== null} title={editing() === null ? "New formatting rule" : "Edit formatting rule"} description={props.area ? `Cells ${a1(props.area.top, props.area.left)}${props.area.bottom > props.area.top || props.area.right > props.area.left ? `:${a1(props.area.bottom, props.area.right)}` : ""}` : undefined} onOpenChange={(open) => { if (!open) { setEditing(null); props.onClose(); } }}>
@@ -145,13 +145,13 @@ export function RulePrompt(props: { area: Range | null; rules: SheetRules; act(l
           <For each={props.rules.list()}>{(one, at) => <Row label={said(one.rule)} meta={one.ranges} selected={editing() === at()}
             end={<>
               <Button type="button" variant="ghost" onClick={() => pick(at(), one.rule)}>Edit</Button>
-              <Show when={at() > 0}><Button type="button" variant="ghost" onClick={() => { props.act("Rule order", () => props.rules.raise(at())); if (editing() !== null) setEditing(null); }}>Up</Button></Show>
+              <Show when={at() > 0}><Button type="button" variant="ghost" onClick={() => { props.act("Rule order", () => props.rules.raise(at())); setEditing(null); }}>Up</Button></Show>
               <Button type="button" variant="ghost" onClick={() => { props.act("Delete rule", () => props.rules.remove(at())); setEditing(null); }}>Delete</Button>
             </>} />}</For>
         </Field>
       </Show>
       <Actions>
-        <Show when={props.area && props.rules.count()}><Button type="button" variant="ghost" outline onClick={() => { props.act("Clear rules", () => props.rules.clear()); props.onClose(); }}>Clear sheet's rules</Button></Show>
+        <Show when={props.area && props.rules.count()}><Button type="button" variant="ghost" outline onClick={() => { props.act("Clear rules", () => props.rules.clear()); setEditing(null); props.onClose(); }}>Clear sheet's rules</Button></Show>
         <Button type="button" variant="ghost" outline onClick={() => { setEditing(null); props.onClose(); }}>Cancel</Button><Button type="submit" disabled={!readable()}>{editing() === null ? "Add" : "Save"}</Button>
       </Actions>
     </CardForm>

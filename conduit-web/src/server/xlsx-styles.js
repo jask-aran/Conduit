@@ -34,7 +34,7 @@ const tinted = (hex, tint) => {
 };
 /** A `<color>`, `<fgColor>`… as `#rrggbb`, or undefined for the default (auto, the system's, or none). */
 const colourOf = (tag, theme) => {
-  if (!tag || attr(tag, "auto") === "1") return undefined;
+  if (!tag || ["1", "true"].includes(attr(tag, "auto"))) return undefined;
   const rgb = attr(tag, "rgb"), index = attr(tag, "theme"), legacy = attr(tag, "indexed");
   const hex = rgb ? rgb.slice(-6).toLowerCase() : index !== undefined ? theme[Number(index)] : legacy !== undefined ? INDEXED[Number(legacy)] : undefined;
   return hex && /^[0-9a-f]{6}$/.test(hex) ? `#${tinted(hex, Number(attr(tag, "tint") ?? 0))}` : undefined;
@@ -96,7 +96,7 @@ export function sheetStyles(sheetXml, size, shows) {
   const usual = Number(attr(/<sheetFormatPr\b[^>]*>/.exec(sheetXml)?.[0], "defaultRowHeight")) || 15;
   for (const tag of sheetXml.match(/<row\b[^>]*>/g) ?? []) {
     const r = Number(attr(tag, "r")) - 1, height = Number(attr(tag, "ht"));
-    if (attr(tag, "customFormat") === "1" && attr(tag, "s")) rows.set(r, Number(attr(tag, "s")));
+    if (["1", "true"].includes(attr(tag, "customFormat")) && attr(tag, "s")) rows.set(r, Number(attr(tag, "s")));
     // At most as many as a tab keeps cell styles: a file setting every row's height keeps its first.
     if ((["1", "true"].includes(attr(tag, "customHeight")) ? height && height !== usual : height > 1.25 * usual) && heights.size < HEIGHTS) heights.set(r, height);
   }

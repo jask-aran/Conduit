@@ -177,7 +177,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     void import("./grid").then(({ mountGrid }) => {
       if (over) return;
       made = mountGrid(into, { model: sheet, events, look: untrack(drawnLook), columns: {
-        width: (col) => { const width = sizes.width(col); return width === undefined ? undefined : Math.round(width * zoom()); }, freeze: sizes.freeze, hidden: sizes.hidden,
+        width: (col) => { const width = sizes.width(col); return width === undefined ? undefined : Math.round(width * zoom()); }, freeze: sizes.freeze, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols,
         heights: () => { const by = zoom(), kept = sizes.heights(); return by === 1 ? kept : new Map([...kept].map(([row, height]) => [row, Math.round(height * by)])); },
         type: (col) => { const type = look.get(`type:${sheet.colAt(col)}`); return typeof type === "string" ? type : undefined; }, draw: formats.draw, dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded, merges: merges.list,
       } });
@@ -355,6 +355,11 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       hub({ op: "fill", range: rangeA1({ top: run[0]!, bottom: run.at(-1)!, left: range.left, right: range.right }), values: [cols.map((col) => lowered(sheet.input(source, col), run[0]! - source))] });
   });
   const hiddenIn = (range: SheetRange) => shownRows(range).length < range.bottom - range.top + 1;
+  // A column's menu unhides the hidden columns it spans, or those just beside it, as column A hidden can be spanned by none.
+  const between = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, n) => from + n);
+  const hiddenColsBy = (range: SheetRange) => { const hidden = sizes.hiddenCols(), out = between(range.left, range.right).filter((col) => hidden.has(col));
+    for (const dir of [-1, 1]) for (let col = (dir < 0 ? range.left : range.right) + dir; hidden.has(col); col += dir) out.push(col);
+    return out; };
   // A header's menu is its whole columns, a row number's its whole rows (formats.ts clips both to the tab).
   const formatted = () => { const { rows, cols } = menu(), most = Number.MAX_SAFE_INTEGER; return rows || cols ? { top: rows?.top ?? 0, bottom: rows?.bottom ?? most, left: cols?.left ?? 0, right: cols?.right ?? most } : null; };
   const count = (from: number, to: number) => to - from + 1;
@@ -441,6 +446,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
             <Show when={cols()}>{(range) => <MenuSection>
               <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-cols", range().left, count(range().left, range().right))}>Insert {count(range().left, range().right) > 1 ? `${count(range().left, range().right)} columns` : "column"} left</MenuRow>
               <MenuRow icon={<Icons.Add />} onSelect={() => structure("insert-cols", range().right + 1, count(range().left, range().right))}>Insert {count(range().left, range().right) > 1 ? `${count(range().left, range().right)} columns` : "column"} right</MenuRow>
+              <MenuRow icon={<Icons.Hide />} onSelect={() => history.act("Hide columns", () => sizes.setHiddenCols(between(range().left, range().right), true))}>Hide {range().right > range().left ? `columns ${colName(range().left)}–${colName(range().right)}` : `column ${colName(range().left)}`}</MenuRow>
+              <Show when={hiddenColsBy(range()).length}><MenuRow icon={<Icons.Preview />} onSelect={() => history.act("Unhide columns", () => sizes.setHiddenCols(hiddenColsBy(range()), false))}>Unhide columns</MenuRow></Show>
               <MenuRow destructive icon={<Icons.Delete />} onSelect={() => structure("delete-cols", range().left, count(range().left, range().right))}>Delete {count(range().left, range().right) > 1 ? "columns" : "column"} {rangeA1({ ...range(), top: 0, bottom: 0 }).replace(/1/g, "")}</MenuRow>
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "W"]} onSelect={() => sized("HOW", range())}>Column width…</MenuRow>
               <MenuRow icon={<Icons.Resize />} keys={["Alt", "H", "O", "I"]} onSelect={() => sized("HOI", range())}>Fit column width</MenuRow>

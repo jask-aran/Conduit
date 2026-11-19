@@ -129,7 +129,7 @@ export function compileRule(rule) {
 export const shiftRefs = (formula, rows, cols) => !rows && !cols ? formula : String(formula).split(/("(?:[^"]|"")*"|'(?:[^']|'')*')/).map((part, nth) => nth % 2 ? part
   : part.replace(/(?<![\w.$])(\$?)([A-Za-z]{1,3})(\$?)(\d+)(?![\w(.!])/g, (all, colHeld, letters, rowHeld, digits) => {
     const col = colHeld ? colIndex(letters) : colIndex(letters) + cols, row = rowHeld ? Number(digits) - 1 : Number(digits) - 1 + rows;
-    return row < 0 || col < 0 ? "#REF!" : `${colHeld}${a1(0, col).replace(/\d+$/, "")}${rowHeld}${row + 1}`;
+    return row < 0 || col < 0 || row >= 1048576 || col >= 16384 ? "#REF!" : `${colHeld}${a1(0, col).replace(/\d+$/, "")}${rowHeld}${row + 1}`;
   })).join("");
 
 /** The rules a look's text holds, those that are whole. */

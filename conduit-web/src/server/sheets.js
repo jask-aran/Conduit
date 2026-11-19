@@ -451,7 +451,7 @@ export function sheetKind(hub) {
           if (count > CALL_LIMIT) throw fault(400, `That is ${count} cells; one call writes at most ${CALL_LIMIT}: split it`);
           const source = op === "fill" && from !== undefined ? parseRange(from) : undefined;
           if (source === null) throw fault(400, `from is the fill's source on its tab, an A1 range such as B2:C3, not ${from}`);
-          const under = op === "set" && hiddenUnder(mergeAreas(room, sheet), area.top, area.left);
+          const under = op === "set" && text(value) !== "" && hiddenUnder(mergeAreas(room, sheet), area.top, area.left);
           if (under) throw fault(400, `${a1(area.top, area.left)} is inside the merged ${rangeA1(under)}: its value is ${a1(under.top, under.left)}'s`);
           grow(room, sheet, area, name);
           writeCells(room, sheet, filled(room, sheet, grid, area, source), name, true);

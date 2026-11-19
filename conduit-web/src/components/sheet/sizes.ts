@@ -37,6 +37,9 @@ export interface SheetSizes {
   /** The rows hidden (`hidden:<rowId>`) and those a filter hides, by position. */
   hidden(): ReadonlySet<number>;
   setHidden(rows: readonly number[], hidden: boolean): void;
+  /** The columns hidden (`hidden:<colId>`, apart from rows' as ids never repeat), by position. */
+  hiddenCols(): ReadonlySet<number>;
+  setHiddenCols(cols: readonly number[], hidden: boolean): void;
 }
 
 /** `lines`: how many lines a cell's text takes where its style wraps it (styles.ts); unsaid, its own line breaks. `filtered`: the rows a filter hides besides (filter.tsx). */
@@ -46,6 +49,7 @@ export function createSheetSizes(look: Y.Map<number | string>, model: () => Shee
   const set = (what: "width" | "height", ids: (string | undefined)[], size: number | null) => look.doc!.transact(() => {
     for (const id of ids) if (id) { if (size === null) look.delete(keyOf(what, id)); else look.set(keyOf(what, id), Math.max(LEAST, Math.round(size))); }
   });
+  const hide = (ids: (string | undefined)[], hidden: boolean) => look.doc!.transact(() => { for (const id of ids) if (id) { if (hidden) look.set(`hidden:${id}`, 1); else look.delete(`hidden:${id}`); } });
   let measure: CanvasRenderingContext2D | null = null;
   return {
     width: (col) => widthOf(look, model(), col),
@@ -64,8 +68,15 @@ export function createSheetSizes(look: Y.Map<number | string>, model: () => Shee
       if (sheet) for (const name of look.keys()) if (name.startsWith("hidden:")) { const row = sheet.indexOfRow(name.slice(7)); if (row >= 0) out.add(row); }
       return out;
     },
-    setHidden: (rows, hidden) => look.doc!.transact(() => { for (const id of rows.map((row) => model()?.rowAt(row))) if (id) { if (hidden) look.set(`hidden:${id}`, 1); else look.delete(`hidden:${id}`); } }),
-    setWidths: (cols, width) => set("width", cols.map((col) => model()?.colAt(col)), width),
+    setHidden: (rows, hidden) => hide(rows.map((row) => model()?.rowAt(row)), hidden),
+    hiddenCols: () => {
+      const sheet = model(), out = new Set<number>();
+      if (sheet) for (const name of look.keys()) if (name.startsWith("hidden:")) { const col = sheet.indexOfCol(name.slice(7)); if (col >= 0) out.add(col); }
+      return out;
+    },
+    setHiddenCols: (cols, hidden) => hide(cols.map((col) => model()?.colAt(col)), hidden),
+    // A width given a hidden column shows it again, as a spreadsheet's: its edge dragged open, or a width typed over it.
+    setWidths: (cols, width) => look.doc!.transact(() => { const ids = cols.map((col) => model()?.colAt(col)); set("width", ids, width); hide(ids, false); }),
     setHeights: (rows, height) => set("height", rows.map((row) => model()?.rowAt(row)), height),
     fitColumns: (cols, sheetLook) => {
       const sheet = model();
