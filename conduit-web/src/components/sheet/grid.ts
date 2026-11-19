@@ -130,6 +130,16 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   const lineCut = (p: Part, drawn: number) => { if (!mergesOf.size || drawn < 1) return false; const above = p.map.sheet(drawn - 1), list = mergesOf.get(p.map.sheet(drawn)); return Boolean(list?.some((one) => one.top <= above)); };
   // Each part's row heights as last drawn, which a merge's rows measure it by.
   const rowHeights = new Map<Part, number | ((drawn: number) => number)>();
+  // The pixels above each drawn row, summed once for each set of heights as far as a merge has asked: a tall merge's rows each measure from its top.
+  const sums = new Map<Part, { by: number | ((drawn: number) => number); above: number[] }>();
+  const above = (p: Part, drawn: number) => {
+    const by = rowHeights.get(p) ?? look.row;
+    if (typeof by === "number") return drawn * by;
+    let held = sums.get(p);
+    if (held?.by !== by) sums.set(p, held = { by, above: [0] });
+    for (const list = held.above; list.length <= drawn;) list.push(list.at(-1)! + by(list.length - 1));
+    return held.above[drawn]!;
+  };
   /** A range grown to take in every merge it reaches. */
   const grown = (area: SheetRange) => {
     let out = area;
@@ -411,7 +421,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       const merged = (at: number, col: number, row: number): GridCell => {
         const one = mergeAt(row, col), cut = lineCut(p, at);
         if (!one) return cut ? Object.create(own(row, col), { line: { value: true } }) : own(row, col);
-        const drawn = clip(p, one)!, height = rowHeights.get(p) ?? theme.row, sum = (from: number, to: number) => { let out = 0; for (let n = from; n < to; n++) out += typeof height === "number" ? height : height(n); return out; };
+        const drawn = clip(p, one)!, sum = (from: number, to: number) => above(p, to) - above(p, from);
         // Own fields only: with row numbers shown the grid copies a spanned cell as `{ ...cell, span }`, which keeps no prototype's.
         const base = own(one.top, one.left) as GridCell & { data?: unknown; copyData?: string }, first = row === one.top && col === one.left;
         return {
