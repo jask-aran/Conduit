@@ -343,7 +343,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   props.marks?.({
     subject: () => ({ kind: "document", name: props.name, document: props.id }),
     under: (box) => {
-      const over = [...(column()?.querySelectorAll<HTMLElement>(".ProseMirror > [data-id]") ?? [])].filter((block) => { const at = block.getBoundingClientRect(); return at.bottom > box.top && at.top < box.top + box.height; });
+      const over = [...(column()?.querySelectorAll<HTMLElement>(".ProseMirror > [data-id], .ProseMirror > .tableWrapper > [data-id]") ?? [])].filter((block) => { const at = block.getBoundingClientRect(); return at.bottom > box.top && at.top < box.top + box.height; });
       return over.length ? { blocks: over.map((block) => block.dataset.id).join(" "), text: over.map((block) => block.textContent ?? "").join("\n") } : null;
     },
     anchors: (list) => { told.anchors = list; redraw(); },
