@@ -382,12 +382,12 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (find.keys(event) || tabs.key(event) || history.act(tool, () => formats.key(event, at()) || styles.key(event, at())) || filters.key(event)) return;
       // Ctrl+D and Ctrl+R are the grid's only while it has the keyboard: elsewhere the browser keeps them.
       if (!event.shiftKey && !event.altKey && (event.code === "KeyD" || event.code === "KeyR")) { event.preventDefault(); const area = at(); if (area) spread(area, event.code === "KeyD" ? "down" : "right"); return; }
-      // Ctrl+Shift+= and Ctrl+- insert and delete whole rows or columns picked, as a spreadsheet's (a block of cells is left alone).
+      // Ctrl+Shift+= and Ctrl+- insert and delete whole rows or columns picked, as a spreadsheet's. A block of cells is left alone (Excel asks which
+      // way to shift it), and the key held back from the browser's zoom.
       if (!event.altKey && (event.key === "-" || (event.shiftKey && (event.key === "+" || event.code === "Equal")))) {
-        const area = at(), size = model()?.size(), adding = event.key !== "-";
-        const lines = area && size ? (area.left === 0 && area.right >= size.cols - 1 ? "rows" : area.top === 0 && area.bottom >= size.rows - 1 ? "cols" : null) : null;
-        if (!area || !lines) return;
         event.preventDefault();
+        const area = at(), lines = grid()?.lines(), adding = event.key !== "-";
+        if (!area || !lines) return;
         if (lines === "rows") return void (adding ? structure("insert-rows", area.top, count(area.top, area.bottom)) : deleteRows(area));
         return void structure(adding ? "insert-cols" : "delete-cols", area.left, count(area.left, area.right));
       }

@@ -127,6 +127,8 @@ export interface SheetGrid {
   show(row: number, col: number): void;
   /** Selects the whole columns, or rows, the selection covers. */
   whole(kind: "cols" | "rows"): void;
+  /** Whether whole columns or whole rows are picked; null for a block of cells. */
+  lines(): "cols" | "rows" | null;
   /** Text pasted at a cell: what was copied from this grid has its formulas' relative references moved there. */
   moved(values: readonly (readonly string[])[], top: number, left: number): string[][];
   /** The values of what was last copied from this grid (its rows shown), for Paste values; null when nothing was. */

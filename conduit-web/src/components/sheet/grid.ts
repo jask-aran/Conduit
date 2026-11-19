@@ -611,6 +611,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       else spread({ ...area, left: 0, right: size.cols - 1 }, partOf(area.top), (_, drawn) => ({ columns: CompactSelection.empty(), rows: CompactSelection.fromSingleSelection([drawn.top, drawn.bottom + 1]) }));
       events.selected(picked());
     },
+    lines: () => owner.current.columns.length ? "cols" : owner.current.rows.length ? "rows" : null,
     rowEdge: (x, y) => { const p = partAt(y), edge = rowEdge(p, x, y); return edge && { ...edge, row: p.map.sheet(edge.row) }; },
     height: (row, height) => drive.height?.(row, height),
     theme: (next) => { look = next; drive.look?.(look); },
