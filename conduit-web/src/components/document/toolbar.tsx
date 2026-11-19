@@ -58,18 +58,21 @@ const ribbonChord = (keys: string) => keys.split("-").map((key) => key === "Mod"
 // A press on a tool keeps the editor's focus, and with it the selection the tool acts on.
 const keep = (event: MouseEvent) => event.preventDefault();
 
-/** The lines from `from` to `to` as they stand, each line's whole height and not only its letters', so what floats over them clears the line. */
-const linesOf = (view: EditorView, from: number, to: number) => {
-  const box = posToDOMRect(view, from, to), glyph = view.coordsAtPos(from), at = view.domAtPos(from).node;
-  const block = (at.nodeType === Node.ELEMENT_NODE ? at : at.parentElement) as HTMLElement | null, line = block ? parseFloat(getComputedStyle(block).lineHeight) : NaN;
+/**
+ * The selection's first line (`last`: its last) as it stands, its whole height and not only its letters', across the selection's width: what floats
+ * over the selection stands off the line it is placed by, never over the rest of what is selected.
+ */
+const lineOf = (view: EditorView, from: number, to: number, last = false) => {
+  const box = posToDOMRect(view, from, to), pos = last ? to : from, glyph = view.coordsAtPos(pos, last ? -1 : 1), at = view.domAtPos(pos).node;
+  const block = (at.nodeType === Node.ELEMENT_NODE ? at : at.parentElement) as HTMLElement | null, line = block && block !== view.dom ? parseFloat(getComputedStyle(block).lineHeight) : NaN;
   const lead = Number.isFinite(line) ? Math.max(0, (line - (glyph.bottom - glyph.top)) / 2) : 0;
-  return new DOMRect(box.left, box.top - lead, box.width, box.height + 2 * lead);
+  return new DOMRect(box.left, glyph.top - lead, box.width, glyph.bottom - glyph.top + 2 * lead);
 };
 
 /**
  * What can be done to the text selected, over it while the editor has focus: the marks (pressed where the selection wears them; a text colour and a
  * highlight each picked from a row of the inks and Any colour in place of the buttons), a link (its address asked for in place), a comment (`onComment`); and with
- * the caret in a link, its address, Open, Edit and Remove. `chord` writes a chord in the editor's notation (`Mod-b`) as the app writes keys. It stands clear above the lines it is about, or under them where `bounds` (the view the
+ * the caret in a link, its address, Open, Edit and Remove. `chord` writes a chord in the editor's notation (`Mod-b`) as the app writes keys. It stands a gap above the first line it is about, or under the last where `bounds` (the view the
  * text scrolls in) has no room above. Escape or a press away shuts it until the selection changes.
  */
 export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bounds: Accessor<HTMLElement | undefined>; /** Counted up by Mod-K: the link's field opens. */ asked?: Accessor<number>; /** The marks offered (every one, unsaid). */ marks?: readonly string[]; onComment?: (about: Range) => void; chord?: (keys: string) => string }) {
@@ -88,14 +91,14 @@ export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bo
     const { from, to } = text ? selection : { from: selection.from, to: selection.from };
     track(made, "selection");
     return { text, focused: made.isFocused, key: `${from} ${to}`, link, marks: Object.fromEntries([...MARKS, ...INKED].map(([name]) => [name, isOn(made, name)])) as Record<string, boolean>,
-      inks: { color: markAttrs(made, "color").ink, highlight: markAttrs(made, "highlight").ink } as Record<InkedMark, PaperInk | `#${string}` | undefined>, lines: () => linesOf(made.view, from, to) };
+      inks: { color: markAttrs(made, "color").ink, highlight: markAttrs(made, "highlight").ink } as Record<InkedMark, PaperInk | `#${string}` | undefined>, lines: (last?: boolean) => lineOf(made.view, from, to, last) };
   }, undefined, { equals: sameJson });
-  // Placed again only when what it is over changes.
-  const lines = createMemo(on(() => state()?.key, () => state()?.lines));
   const placement = createMemo(on(() => state()?.key, () => {
     const now = state()?.lines(), top = props.bounds()?.getBoundingClientRect().top;
     return now && top !== undefined && now.y - top < (tools?.offsetHeight ?? 0) * 1.5 ? "bottom-start" as const : "top-start" as const;
   }));
+  // Placed again only when what it is over changes: above the first line, or under the last.
+  const lines = createMemo(on([() => state()?.key, placement], () => { const now = state(), under = placement() === "bottom-start"; return now && (() => now.lines(under)); }));
   createEffect(on(() => state()?.key, () => { setLinking(false); setInking(undefined); setPicking(false); setShut(undefined); }, { defer: true }));
   createEffect(on(() => props.asked?.(), () => { setInking(undefined); setShut(undefined); setLinking(true); }, { defer: true }));
   const open = () => { const now = state(); return Boolean(now && (now.focused || linking() || inking()) && shut() !== now.key); };
