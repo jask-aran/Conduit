@@ -242,7 +242,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     onGridSelectionChange: (next) => {
       // A merge across the frozen rows' edge, moved onto, is selected whole, in both parts.
       const cell = next.current && !next.columns.length && !next.rows.length ? next.current.cell : undefined, home = cell && frozenRows ? mergeAt(p.map.sheet(cell[1]), cell[0]) : undefined;
-      if (home && home.top < frozenRows && home.bottom >= frozenRows && next.current!.range.width * next.current!.range.height === 1) { api.select(home); if (owner !== p) owner.editor?.focus(); return; }
+      const one = next.current?.range;
+      // One row of it, as the grid widens a cell to its span before it says so.
+      if (home && one && home.top < frozenRows && home.bottom >= frozenRows && one.height === 1 && one.x >= home.left && one.x + one.width - 1 <= home.right) { api.select(home); if (owner !== p) owner.editor?.focus(); return; }
       choose(p, fit(p, next)); events.selected(picked());
     },
     onCellsEdited: (cells) => {
