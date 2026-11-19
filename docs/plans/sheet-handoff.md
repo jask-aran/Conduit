@@ -69,31 +69,42 @@ Ctrl+Shift+_ takes borders off.
 
 Then Paste values in the cell menu, and row 1's top border drawn just inside the header's line.
 
-Then hidden columns (`handoff-sheet-hidden-cols.md`): drawn 0 wide, not mapped as rows are.
+Then hidden columns. What a later builder must know:
+- Glide 6 has none. Rows are mapped (`createRowMap`); a hidden column keeps its index and is drawn 0 wide (a numeric `width` skips
+  `minColumnWidth`, lines skip `width === 0`, cells clip to their rect), so the grid's columns stay the sheet's.
+- The look key is `hidden:<colId>`, as rows' `hidden:<rowId>` (ids never repeat across rows, columns and tabs); xlsx sees `hidden:C`.
+- Keys step over it through `nextShown`/`shownAt` (grid.ts); copy, paste, clear, fill and Find skip it (`colsFrom`, `shownCols`).
+- Glide gives a press just right of a hidden column's line to its resize: dragging there opens it, and `setWidths` deletes `hidden:`.
+- The row Hide isn't wrapped in `history.act`, so its step is named by `LOOKS.hidden` ("Hide rows"): name any column hide explicitly.
+- SheetJS writes `hidden="true"`, not `"1"`, and reads both.
 
 Then the keys and paste review, all fixed: Ctrl+- acts only on whole rows or columns the grid picked; the grid writes its own clipboard text
 (quoted TSV, hidden rows and columns left out) and every paste moves each formula by its own cell's offset; Paste values reads the clipboard
 and keeps text as text; a queued Undo is dropped when a step is made first; `shiftRefs` moves `A:A` and `1:1`. Hidden columns are now
 skipped by copy, cut, clear, paste, fill and Find, Home steps past column A, and Ctrl+0 / Ctrl+Shift+0 hide and show columns.
 
-Still open: arrows at a frozen merge's edge; prefix sums for tall merges; Notes from xlsx are waiting on the owner: sheet comments are
-markup items sent to a listener, so 16 imported notes would hand 16 items to agents. Phone width is still unchecked (the headless probe
-opened with the sidebar drawer over the pane).
+Then the grid round (checked in headless Chromium on :4310 first): arrows leave a merge at or across the frozen rows' edge; tall merges
+sum their rows' heights once; a fill-handle drag over hidden lines moves its formulas on the page (`sourceLine` in series.ts; another
+tab's references don't move there); marks recolour on a new theme; the in-cell editor writes at the cell's size; a press on a popover's row
+in a pane no longer closes it (the filter's values could not be picked).
+
+Notes from xlsx are waiting on the owner: sheet comments are markup items sent to a listener, so 16 imported notes would hand 16 items to
+agents.
 
 ## Open, in rough order
 
 1. **Notes and comments from xlsx:** 16 in the budget workbook, counted but not imported. They would become comments.
 2. **Small gaps:**
    - Ctrl+T is taken by Chrome; Alt H T works.
-   - The in-cell editor doesn't zoom.
-   - The find and focus-cell washes don't recolour on a theme change until the next move.
-   - The new Ctrl keys are not commands in the registry; nor are Ctrl+B, I or U.
+   - The sheet's Ctrl keys (and Ctrl+B, I, U) are not commands in the registry. They would be palette-only `ARTIFACT_COMMANDS` with no
+     binding (the grid keeps the chords; Ctrl+B, Ctrl+0 and Ctrl+- are application chords), but the registry is in the initial bundle,
+     which has no room to spare: the owner's call.
+   - Find doesn't search again when a column is hidden or shown while it is open.
+   - Paste values of text from outside keeps `=1+1` a live formula; whether it should land as text is the owner's call.
    - "View settings…" in the context menu breaks DESIGN's rule that menu rows don't open settings. The owner hasn't decided.
    - Ctrl+- on a block of cells does nothing; Excel asks whether to shift cells up or left, or delete whole rows or columns.
 3. **Left by the reviews:**
    - Merge with an empty top-left blanks the only value; Excel may keep the first value in reading order (not checked).
-   - The fill handle from a source of several rows or columns with hidden ones in or past it: the hub's fill takes each formula by its place
-     in the whole source, so it can differ from the page's series (not checked).
    - "Undo N steps" can undo more than N: Yjs skips steps others have since overwritten, and the list still names them.
    - Opening a filter can make a "Filter" step: `reapply()` writes the look as a tracked change when others' edits moved what it hides.
    - Frozen formulas (`excel:` in the look): Undo putting back the entries the hub rewrote is unproven; row and column changes outside
@@ -101,10 +112,13 @@ opened with the sidebar drawer over the pane).
      `exportXlsx`, which ignores it.
    - A column's `date` type can't be read from text without `dateFormats`, which was decided against: that item waits on the owner.
 4. **Not yet checked:**
-   - phone width;
+   - phone width, by touch: at 390 px nothing overflows, a tap selects, a double tap edits and a long press opens the cell menu, but
+     headless touch scrolling moves nothing anywhere (not the grid, not a menu), so swiping the grid is unproven;
    - Excel opening an exported file without offering a repair;
-   - lag in sideways scroll between frozen rows and the body;
-   - Windows performance traces.
+   - lag in sideways scroll between frozen rows and the body: headless, the two parts' `scrollLeft` matched on all 68 frames of a 1,440 px
+     wheel; what each canvas paints per frame needs a Windows trace;
+   - Windows performance traces;
+   - Ctrl+Shift+0 on Windows, which may take it to switch the input language.
 5. **Charts:** parked by the owner.
 
 ## How the work has gone well
@@ -120,7 +134,9 @@ opened with the sidebar drawer over the pane).
 - **The source ceiling.** It is `sourceLines` in `conduit-web/scripts/check-conventions.mjs`, now 134,400. It may be raised for
   planned feature work.
 - **Testing.** Headless Chromium via `conduit-web/scripts/probes/lib.mjs` `open()`, on the owner's test sheet "probe-sheet"
-  (`/?panes=artifact%3A802d93d7cfbe2968`):
+  (`/?panes=artifact%3A802d93d7cfbe2968`). No Playwright Chromium is cached here, so `open()` installs Playwright into `.smoke-tools`
+  and fails after minting a session: launch `/opt/google/chrome/chrome` headless instead and sign the session out. Read cells with
+  `GET /v0/document/<id>?as=cells`; a cell's box on screen is the in-cell editor's after F2.
   - use scratch columns Z and beyond, and clear them after;
   - a sort test once reordered the sheet's real rows, back when sort moved whole rows;
   - never drive or reload the owner's own Chrome tabs on :9222;
