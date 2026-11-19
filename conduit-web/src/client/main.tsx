@@ -2028,11 +2028,10 @@ function App() {
     }
     if (handled) event.preventDefault();
   };
+  // The keyboard pane's composer, else one in no pane (a summon's): never another pane's, which would take the keyboard from it.
   const focusComposer = () => {
-    const composer = "textarea[data-composer-input]:not([disabled])";
-    ((keyboardSlot() !== null ? document.querySelector<HTMLTextAreaElement>(`${paneSelector(keyboardSlot()!)} ${composer}`) : null)
-      ?? document.querySelector<HTMLTextAreaElement>(`.chat-main ${composer}`)
-      ?? document.querySelector<HTMLTextAreaElement>(composer))?.focus({ preventScroll: true });
+    const composers = [...document.querySelectorAll<HTMLTextAreaElement>("textarea[data-composer-input]:not([disabled])")], pane = keyboardSlot() ?? "main";
+    (composers.find((composer) => paneOf(composer) === pane) ?? composers.find((composer) => paneOf(composer) === null))?.focus({ preventScroll: true });
   };
   const focusChatPane = () => {
     const target = document.querySelector<HTMLElement>(".chat-main");
@@ -2129,7 +2128,7 @@ function App() {
     if (isMobileLayout()) return;
     const active = document.activeElement;
     if (active && active !== document.body && !active.matches(".chat-main")) return;
-    enterMainPane();
+    focusAnyPane(keyboardPane());
   };
   createEffect(on([routeKind, () => catalogue.selectedId()], () => requestAnimationFrame(() => {
     settleFocus();
@@ -3101,10 +3100,17 @@ function App() {
     return catalogue.projects().find((item) => item.id === page.slice("project:".length)) || null;
   };
   const lastPaneFocus = new Map<PaneKey, HTMLElement>();
+  // On load the keyboard is the pane that had it (the address's focus), else pane A: until the person first presses or
+  // types, a pane that takes focus itself as it becomes ready is given none, and focus goes back.
+  let personActed = false;
+  const acted = () => { personActed = true; };
+  window.addEventListener("pointerdown", acted, { capture: true, once: true });
+  window.addEventListener("keydown", acted, { capture: true, once: true });
   const noteKeyboardSide = (event: FocusEvent) => {
     const target = event.target instanceof HTMLElement ? event.target : null;
     const pane = paneOf(target);
     if (pane === null || !target) return;
+    if (!personActed && pane !== keyboardPane()) return void focusAnyPane(keyboardPane());
     setKeyboardPane(pane);
     lastPaneFocus.set(pane, target);
   };
