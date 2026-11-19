@@ -61,8 +61,8 @@ Then keys, as Excel's: Ctrl+arrow to the data's edge (Shift selects), Ctrl+End t
 Ctrl+Shift+= / Ctrl+- insert and delete whole rows or columns; the grid keeps Ctrl+- and Ctrl+Shift+1..5 from the application's chords
 (`data-own-keys`). Copy and paste in the grid move a formula's relative references (`shiftRefs`; a cut keeps them; another tab's
 references don't move yet), and Ctrl+Shift+V pastes values. Merges: nothing writes into their hidden cells (a hub `set` there is refused),
-and the merge question holds its corners by ids. `review-sheet-fixes.md` is done but for #6 (quadratic import growth), #7 (Undo gives up on
-an op after 9 s) and #9 (deleting a merge's top row leaves it empty, as Excel's does).
+and the merge question holds its corners by ids. `review-sheet-fixes.md` is done but for #7 (Undo gives up on
+an op after 30 s) and #9 (deleting a merge's top row leaves it empty, as Excel's does).
 
 Later: the context menu's Paste moves references too (checked in the browser); rules can be edited and moved up; Ctrl+Shift+& outlines,
 Ctrl+Shift+_ takes borders off.
@@ -91,14 +91,15 @@ opened with the sidebar drawer over the pane).
    - "View settings…" in the context menu breaks DESIGN's rule that menu rows don't open settings. The owner hasn't decided.
    - Ctrl+- on a block of cells does nothing; Excel asks whether to shift cells up or left, or delete whole rows or columns.
 3. **Left by the reviews:**
-   - xlsx export: where a styled row past the tab's cells crosses a styled column, only the row's style is written (`xlsx-styles.js`).
-   - xlsx: a `<c>` without `r`, or with `r` after another attribute, is not seen on import, and its `s` is not rewritten on export.
-   - xlsx: a rule's number format or border (its dxf) is counted as dropped, not kept.
    - Merge with an empty top-left blanks the only value; Excel may keep the first value in reading order (not checked).
    - The fill handle from a source of several rows or columns with hidden ones in or past it: the hub's fill takes each formula by its place
      in the whole source, so it can differ from the page's series (not checked).
    - "Undo N steps" can undo more than N: Yjs skips steps others have since overwritten, and the list still names them.
    - Opening a filter can make a "Filter" step: `reapply()` writes the look as a tracked change when others' edits moved what it hides.
+   - Frozen formulas (`excel:` in the look): Undo putting back the entries the hub rewrote is unproven; row and column changes outside
+     `cells.edit` (growing at the edge, `retake`, the page's Undo) don't rewrite them; `documents.js` still passes the import report to
+     `exportXlsx`, which ignores it.
+   - A column's `date` type can't be read from text without `dateFormats`, which was decided against: that item waits on the owner.
 4. **Not yet checked:**
    - phone width;
    - Excel opening an exported file without offering a repair;
