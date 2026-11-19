@@ -144,7 +144,7 @@ export function sheetKind(hub) {
     } finally { engine.destroy(); }
   };
   /**
-   * Before rows or columns move: each filter's, table's and conditional format's corners stay where they are, on the cells moved into them, as
+   * Before rows or columns move: each filter's, table's, conditional format's and chart's corners stay where they are, on the cells moved into them, as
    * they would come apart if they went with their lines (keepCorners is the delete's).
    */
   const keepPlaces = (room, sheet) => {
@@ -162,6 +162,12 @@ export function sheetKind(hub) {
     if (rules.length) {
       const held = rules.map((rule) => ({ rule, ranges: rule.ranges.map(([from, to]) => [stay(from), stay(to)]) }));
       after.push(() => { const next = JSON.stringify(held.map(({ rule, ranges }) => ({ ...rule, ranges: ranges.map(([from, to]) => [from(), to()]) }))); if (next !== JSON.stringify(rules)) room.look.set(`rules:${sheet.id}`, next); });
+    }
+    // A chart too, its range and the cell it stands on: it draws the same cells' places and stands where it stood.
+    const charts = readCharts(room.look.get(`charts:${sheet.id}`));
+    if (charts.length) {
+      const held = charts.map((chart) => ({ chart, from: stay(chart.from), to: stay(chart.to), at: stay(chart.at) }));
+      after.push(() => { const next = JSON.stringify(held.map(({ chart, from, to, at }) => ({ ...chart, from: from(), to: to(), at: at() }))); if (next !== JSON.stringify(charts)) room.look.set(`charts:${sheet.id}`, next); });
     }
     return () => { for (const one of after) one(); };
   };
