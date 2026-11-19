@@ -8,7 +8,7 @@ import { a1, colName, key } from "./sheet-format.js";
 export const STYLE_CELL_LIMIT = 10_000;
 /** The inks, named as a paper's are (document-format.js PAPER_INKS), so each theme draws its own. */
 export const SHEET_INKS = ["red", "amber", "green", "blue"];
-export const SHEET_BORDERS = ["all", "outer", "top", "bottom", "left", "right", "none"];
+export const SHEET_BORDERS = ["all", "outer", "inner", "top", "bottom", "left", "right", "none"];
 
 // Each attribute's code in the packed string, in the order it is written; a flag stands alone (`b`), a value after `=` (`c=red`), and `-` before
 // either is its default set on purpose, over what would be worn from beneath (`-b`: not bold in a bold column). A colour is an ink or, as a workbook
@@ -67,6 +67,8 @@ export function styleOf(attrs) {
 const edgesOf = (kind, top, bottom, left, right) => {
   if (kind === "all" || kind === "none") return { bt: kind === "all", br: kind === "all", bb: kind === "all", bl: kind === "all" };
   const out = {};
+  // Inside borders: every edge two cells of the range share, as each cell's own.
+  if (kind === "inner") { if (!top) out.bt = true; if (!bottom) out.bb = true; if (!left) out.bl = true; if (!right) out.br = true; return out; }
   if (top && (kind === "outer" || kind === "top")) out.bt = true;
   if (bottom && (kind === "outer" || kind === "bottom")) out.bb = true;
   if (left && (kind === "outer" || kind === "left")) out.bl = true;

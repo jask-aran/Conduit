@@ -317,9 +317,10 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     <MenuControl as={IconButton} label={glyph() ? menu : `${menu}: ${now().label}`} onFocus={() => { if (keyedMenu !== menu || keyed() === menu) return; const back = returnTo; keyedMenu = returnTo = null; back?.focus({ preventScroll: true }); }}>{(glyph() ?? now().icon)()}{tip(shared(menu))}</MenuControl>
     <MenuContent width="sm" keep={() => keyedMenu === menu} onOpenAutoFocus={(event) => { if (keyedMenu === menu) event.preventDefault(); }} onCloseAutoFocus={(event) => { if (keyedMenu === menu) event.preventDefault(); }}><MenuSection title={menu}><For each={of(menu)}>{(tool) => choice(tool)}</For></MenuSection></MenuContent>
   </DropdownMenu>; };
+  // In the host's order: a menu stands where its first tool does.
+  const placed = () => (props.own ?? []).filter((tool) => !tool.mode).flatMap((tool, n, list): (MarkupOwnTool | string)[] => !tool.menu || !menus().includes(tool.menu) ? [tool] : list.findIndex((one) => one.menu === tool.menu) === n ? [tool.menu] : []);
   const owned = () => <>
-    <For each={menus()}>{kinds}</For>
-    <For each={toggles()}>{(tool) => <IconButton label={named(tool.label, tool.keys)} aria-pressed={Boolean(pressed(tool))} disabled={tool.disabled} onMouseDown={(event) => event.preventDefault()} onClick={() => press(tool)}>{tool.icon()}{tip(tool.tip)}</IconButton>}</For>
+    <For each={placed()}>{(one) => typeof one === "string" ? kinds(one) : <IconButton label={named(one.label, one.keys)} aria-pressed={Boolean(pressed(one))} disabled={one.disabled} onMouseDown={(event) => event.preventDefault()} onClick={() => press(one)}>{one.icon()}{tip(one.tip)}</IconButton>}</For>
     <Show when={props.onAsk && !props.ribbon}><Button variant="ghost" size="sm" onClick={props.onAsk}><Icons.Agent />Ask the agent</Button></Show>
   </>;
   const format = () => <DropdownMenu modal={false} placement="bottom-start">

@@ -9,7 +9,7 @@ export type SheetInk = "red" | "amber" | "green" | "blue";
 export type SheetHex = `#${string}`;
 export const SHEET_INKS: readonly SheetInk[];
 /** A border choice for a range: every edge of every cell, the range's outline, one side of it, or none. */
-export type SheetBorders = "all" | "outer" | "top" | "bottom" | "left" | "right" | "none";
+export type SheetBorders = "all" | "outer" | "inner" | "top" | "bottom" | "left" | "right" | "none";
 export const SHEET_BORDERS: readonly SheetBorders[];
 /**
  * A cell's style as an agent says and reads it. A field left out is left as it is (read: worn from the row or column, else the default); false or null
