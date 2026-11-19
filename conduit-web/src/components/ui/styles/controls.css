@@ -83,12 +83,12 @@
 @media (hover: hover) { [data-surface="frame"] :is(.ui-pill > button, .ui-seg button:is([aria-checked="true"], :hover, :focus-visible, [data-held])) { color: var(--foreground); } }
 [data-surface="frame"] .ui-seg .ui-seg-thumb { background: var(--border); }
 @media (prefers-reduced-motion: reduce) { .ui-seg-thumb { transition: none; } }
-.ui-seg[aria-disabled] { opacity: var(--opacity-disabled); pointer-events: none; }
+.ui-seg[aria-disabled], .ui-seg button:disabled { opacity: var(--opacity-disabled); pointer-events: none; }
 .ui-seg button[aria-checked="true"]:is(:focus-visible, [data-held]) { background: var(--tint); }
 @media (hover: hover) { .ui-seg button[aria-checked="true"]:is(:hover, :focus-visible, [data-held]) { background: var(--tint); } }
 .ui-seg button:not([aria-checked="true"]):is(:focus-visible, [data-held]) { background: var(--tint); }
 @media (hover: hover) { .ui-seg button:not([aria-checked="true"]):is(:hover, :focus-visible, [data-held]) { background: var(--tint); } }
-.ui-seg[data-size="sm"] button { min-height: calc(var(--control-xs) - 2 * var(--seg-pad)); padding: var(--space-2xs) var(--space-sm); font-size: var(--text-caption); }
+.ui-seg[data-size="sm"] button { padding-inline: var(--space-sm); font-size: var(--text-caption); }
 
 .ui-slider { display: grid; gap: var(--space-sm); padding: var(--space-sm) var(--space-md) var(--space-md); }
 .ui-slider[data-disabled] { opacity: var(--opacity-disabled); }
