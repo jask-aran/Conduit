@@ -13,11 +13,11 @@ const attr = (tag, name) => { const found = new RegExp(`\\s${name}="([^"]*)"`).e
 const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships", TYPE = "application/vnd.openxmlformats-officedocument.";
 const EMU_PER_PX = 9525;
 
-/** A tab's table as its own part, its columns named by its header row's text; none where a header is empty or repeated, as Excel would repair it. */
+/** A tab's table as its own part, its columns named by its header row's text; none where a header is empty, repeated or not text (a year as a number), as Excel would repair it. */
 export function tablePart(table, values, id, taken) {
   const area = parseRange(String(table?.range ?? ""));
   if (!area || area.bottom <= area.top) return null;
-  const names = Array.from({ length: area.right - area.left + 1 }, (_, c) => { const value = values[area.top]?.[area.left + c]; return typeof value === "string" || Number.isInteger(value) ? String(value) : ""; });
+  const names = Array.from({ length: area.right - area.left + 1 }, (_, c) => { const value = values[area.top]?.[area.left + c]; return typeof value === "string" ? value : ""; });
   if (names.some((name) => !name) || new Set(names.map((name) => name.toLowerCase())).size < names.length) return null;
   // A table's name is the workbook's: one another tab's table has, or one Excel would not take, is numbered instead.
   const said = String(table.name ?? ""), called = /^[A-Za-z_\\][\w.]*$/.test(said) && !/^[A-Z]{1,3}\d+$/i.test(said) && !taken.has(said.toLowerCase()) ? said : `Table${id}`, ref = rangeA1(area);
