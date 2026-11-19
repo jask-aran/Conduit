@@ -16,18 +16,9 @@ import * as XLSX from "xlsx";
 
 const [python, features, outArg, only] = process.argv.slice(2);
 if (!python || !features) {
-  console.log("usage: node scripts/xlsx-roundtrip.mjs <python with openpyxl> <features.py> [out dir] [feature filter]");
+  console.log("usage: node scripts/xlsx-roundtrip.mjs <python with openpyxl> <features.py> [out dir] [feature filter]\n       node scripts/xlsx-roundtrip.mjs --check <file.xlsx>   (only what Excel is strict about)");
   process.exit(2);
 }
-const { createDocuments } = await import("../src/server/documents.js");
-const out = path.resolve(outArg ?? await fs.mkdtemp(path.join(os.tmpdir(), "xlsx-roundtrip-")));
-const dataRoot = await fs.mkdtemp(path.join(os.tmpdir(), "xlsx-roundtrip-data-")), work = path.join(dataRoot, "project");
-await fs.mkdir(path.join(out, "in"), { recursive: true }); await fs.mkdir(path.join(out, "out"), { recursive: true }); await fs.mkdir(work, { recursive: true });
-const py = (...args) => execFileSync(python, ["-I", features, ...args], { encoding: "utf8", maxBuffer: 64 << 20 });
-const named = JSON.parse(py("gen", path.join(out, "in")));
-const project = { id: "roundtrip", name: "roundtrip", workingRoot: work };
-const documents = createDocuments({ dataRoot, projects: { get: async (id) => id === project.id ? project : null, list: async () => [project] } });
-
 // ---- What Excel is strict about, part by part ----
 const NS = { rel: "http://schemas.openxmlformats.org/package/2006/relationships" };
 // CT_Worksheet and CT_Workbook's sequences (ECMA-376 Part 1, sml.xsd), and the stylesheet's.
@@ -58,6 +49,7 @@ function strict(bytes) {
   for (const part of Object.keys(parts)) {
     if (part === "[Content_Types].xml" || part.endsWith("/")) continue;
     if (!overrides[part] && !defaults.has(part.split(".").pop().toLowerCase())) fault(part, "no content type");
+    if (!overrides[part] && Object.keys(CONTENT).some((kind) => new RegExp(`/${kind}\\d*\\.xml$`).test(part))) fault(part, "no content type of its own");
     if (part.endsWith(".xml") && !/^\s*(<\?xml[^>]*\?>\s*)?</.test(parts[part])) fault(part, "not XML");
   }
   for (const [part, type] of Object.entries(overrides)) {
@@ -105,7 +97,22 @@ function strict(bytes) {
   return faults;
 }
 
+if (python === "--check") {
+  const faults = strict(await fs.readFile(features));
+  console.log(faults.join("\n") || "no faults");
+  process.exit(faults.length ? 1 : 0);
+}
+
 // ---- The round trip ----
+const { createDocuments } = await import("../src/server/documents.js");
+const out = path.resolve(outArg ?? await fs.mkdtemp(path.join(os.tmpdir(), "xlsx-roundtrip-")));
+const dataRoot = await fs.mkdtemp(path.join(os.tmpdir(), "xlsx-roundtrip-data-")), work = path.join(dataRoot, "project");
+await fs.mkdir(path.join(out, "in"), { recursive: true }); await fs.mkdir(path.join(out, "out"), { recursive: true }); await fs.mkdir(work, { recursive: true });
+const py = (...args) => execFileSync(python, ["-I", features, ...args], { encoding: "utf8", maxBuffer: 64 << 20 });
+const named = JSON.parse(py("gen", path.join(out, "in")));
+const project = { id: "roundtrip", name: "roundtrip", workingRoot: work };
+const documents = createDocuments({ dataRoot, projects: { get: async (id) => id === project.id ? project : null, list: async () => [project] } });
+
 const facts = (file, feature) => { try { return JSON.parse(py("read", file, feature)); } catch (error) { return { "(unreadable)": String(error.stderr ?? error).split("\n").filter(Boolean).at(-1) }; } };
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const soffice = ["soffice", "libreoffice"].find((tool) => { try { execFileSync("which", [tool], { stdio: "ignore" }); return true; } catch { return false; } });
