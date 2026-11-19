@@ -567,7 +567,6 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       </Frost>
       {/* The ribbon (Markup's bar with the sheet's tools) stands here, at the row's end, folding to the room the formula field leaves it. */}
       <div ref={setSlot} class="ui-spreadsheet-slot" />
-      <Show when={charting()}>{(asked) => <Notice kind="tool" busy live action={{ label: "Stop (Esc)", onClick: () => asked().stop() }}>{asked().label} — Making the chart…</Notice>}</Show>
       <Show when={frozenHere()}>{(cell) => <Notice kind="tool" title={cell().why ? `${cell().formula}: ${cell().why}` : cell().formula}>Frozen on import: ={cell().formula.replace(/^=/, "")}</Notice>}</Show>
     </div>
     <div ref={body} class="ui-spreadsheet-body">

@@ -58,7 +58,7 @@ and site really right to start with". No new kind of artifact is next. Built tha
   offered on the new tab screen as "New artifact" and opened by every other way to make one.
 - Markup's bar is a **ribbon** on an artifact (the capability `bar: "ribbon"`; `"foot"` is the interface's): at the head
   of the pane, always there, no close. On a paper it holds the paper's tools first (block kinds as one menu, the text
-  marks, "Ask the agent"), then Markup's. What is sent from a ribbon is always handed to a thread: the choice to hand
+  marks), then Markup's. What is sent from a ribbon is always handed to a thread: the choice to hand
   to no one is the foot bar's alone, since an artifact always has its thread. A probe that sends a comment from a
   paper therefore makes the hub say no one listens (`markup-document.mjs` does), or it starts a real model.
 - The paper's editor: a slash menu of block kinds; tools over selected text (marks, link, comment) and over a table
@@ -72,8 +72,7 @@ and site really right to start with". No new kind of artifact is next. Built tha
   a site has none) and **Markup's set**. What each kind offers of either is one typed table,
   `client/document/artifact-capabilities.ts` (`ARTIFACT_CAPABILITIES`); the editor's side of it is `DocumentHost.tools`
   (`DocumentToolName`). The ribbon has no "Use the app" (the app is in use while no Markup tool is held; a held tool
-  pressed again is let go) and no "Ask the agent" (`@`, the tools over a selection and a block's menu start that
-  comment). On a paper a comment written and not yet sent stands in the margin beside its text, never in the corner
+  pressed again is let go). It ends with Ask the agent, which opens the ask box (`MarkupAsk`) under the tools. On a paper a comment written and not yet sent stands in the margin beside its text, never in the corner
   stack; a site's stay in the corner, as the interface's do.
 
 Asked for and not built: a **suggesting mode** beside editing, where what the person types is a suggestion (a comment)
@@ -194,8 +193,8 @@ file and the rest below; the user has judged none of it yet.
   way leaves the stack and is found under "Sent before"; it is not the thread the corner follows.
 - **`@` typed in a paper** (`components/document/editor.tsx`): the plugin `mentioning` starts a mention only on this
   person's typing at a word's start, in a block that holds other text; a `Popover` at the `@` lists the listeners,
-  filtered as they type (Up, Down, Enter or Tab, Escape). Picking one deletes the typed `@…` and opens the comment
-  "Ask the agent" opens, for that listener: the tool hands the paper `MarkupHost.asks` (who listens, and `ask`), so
+  filtered as they type (Up, Down, Enter or Tab, Escape). Picking one deletes the typed `@…` and opens the ask box
+  for that listener: the tool hands the paper `MarkupHost.asks` (who listens, and `ask`), so
   `@` offers nothing while Markup is closed. The menu is drawn beside `DocumentSheet`, never in it: the sheet's
   column is the editor's to fill, and a child of it that comes and goes clears the paper's text.
 

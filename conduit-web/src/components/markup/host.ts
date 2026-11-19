@@ -136,8 +136,6 @@ export interface MarkupMarginHost {
   watch(listener: (pressed?: string) => void): () => void;
   /** Where the surface keeps what an agent changed to answer a comment: whether there is such a change (read where it is drawn, so it follows), and taking it back. */
   revert?: { can(key: string): boolean; run(key: string): Promise<unknown> };
-  /** Stops whoever is at work on a comment (its chat's turn), where the surface can. */
-  stop?(key: string): Promise<unknown>;
   /** Who is at work on a comment now and what they are doing (thinking, reading, writing), read where drawn so it follows; undefined while no one is. */
   working?(key: string): { by: string; state: string } | undefined;
   /** Changes an agent has proposed to the surface and not made, each a card of its own in the margin, in the order of their places: `list` read where drawn,
@@ -194,7 +192,7 @@ export interface MarkupHost {
   /** The element the bar is drawn in, where its capabilities say `slot`: the end of a row of the surface's own, whose other items give it room first. Read where drawn. */
   slot?(): HTMLElement | null | undefined;
   /** Given, as the tool opens (null as it closes), who is listening, and the tool's ways to start on a place: for a surface that asks itself (a paper's `@`, a key).
-   *  `comment`: a comment on it, written in its note. `ask`: the ask field at it, asking `to` (unsaid: the one comments go to) to do something there, sent as it is written.
+   *  `comment`: a comment on it, written in its note. `ask`: the ask box, asking `to` (unsaid: the one comments go to) to do something there, sent as it is written.
    *  `unsent` and `send`: the comments written and not yet sent, for a host that shows Send with its own list of them. `to` and `hand`: which listener
    *  they go to, for a host that says who listens itself. */
   asks?(offer: MarkupOffer | null): void;
@@ -202,13 +200,17 @@ export interface MarkupHost {
   lead?(name: string | null): Promise<unknown>;
   /** Told when comments have gone, where something other than the tool shows them. */
   sent?(): void;
+  /** Stops whoever is at work on a comment (its chat's turn), where the host can. */
+  stop?(key: string): Promise<unknown>;
+  /** Opens the thread comments go to (an artifact's mated thread, or its lead). */
+  thread?(): void;
   notify(outcome: "sent" | "failed", message: string): void;
 }
 
 /** What the open tool offers its host (MarkupHost.asks). */
-/** `request`: words of the host's about a place, sent at once to the one comments go to, with the place's quote: the comment's key (<item>/<n>) and who it was handed to (null: no one was listening, and it waits saved).
- *  `withdraw`: that comment settled by the person, so it is asked no longer. */
-export type MarkupOffer = { names(): string[]; listeners(): MarkupListener[]; comment(about: MarkupPlace): void; ask(about: MarkupPlace, to?: string): void; request(about: MarkupPlace, words: string): Promise<{ key: string; to: string | null }>; withdraw(key: string): Promise<void>;
+/** `request`: words about a place (null: the whole of what is marked up), sent at once to `to` (unsaid: the one comments go to), with the place's quote: the comment's key (<item>/<n>) and who it was handed to
+ *  (null: no one was listening, and it waits saved). Until it is answered the ask box says so (`doing`, unsaid "Working on it"), with Stop (Esc), which settles it and stops whoever is at work on it. */
+export type MarkupOffer = { names(): string[]; listeners(): MarkupListener[]; comment(about: MarkupPlace): void; ask(about: MarkupPlace | null, to?: string): void; request(about: MarkupPlace | null, words: string, as?: { to?: string; doing?: string }): Promise<{ key: string; to: string | null }>;
   unsent(): number; send(): void; to(): string | null; hand(name: string): void };
 
 /** The receiver's routes over the host's own request function (its origin, its credentials); a 204 resolves with nothing. */
