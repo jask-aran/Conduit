@@ -5,7 +5,8 @@ import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { createSheetMerges, type SheetMergeKind } from "./merges";
 import { Input } from "@/components/ui/controls";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
-import { CELLS, COLS, COL_LIMIT, LOOK, ROWS, a1, colIndex, colName, colsOf, key, parseRange, rangeA1, rowsOf, type SheetView } from "@/sheet-format.js";
+import { CELLS, COLS, COL_LIMIT, LOOK, ROWS, a1, colIndex, colName, colsOf, key, parseRange, rangeA1, rowsOf, runsOf, type SheetView } from "@/sheet-format.js";
+import { shiftRefs } from "@/sheet-rules.js";
 import { SheetFoot } from "./foot";
 import { createSheetTabs } from "./tabs";
 import { ASK_KEY, type SheetAnchor, type SheetBox, type SheetGrid, type SheetGridEvents, type SheetHost, type SheetMarks, type SheetPlace, type SheetRange, type SheetState } from "./host";
@@ -13,7 +14,6 @@ import { createLiveSheet } from "./live";
 import { readLook } from "./theme";
 import { createArtWindow } from "@/components/ui/chat-art";
 import { createFormulaEditor, FormulaField, FormulaHelp } from "./formula-editor";
-import { tokenize } from "./formula";
 import { createSequenceKeys, SequenceHint, SHEET_SEQUENCES, SizePrompt, type SheetSequence, type SizeQuestion } from "./sequences";
 import { createSheetSizes, dragRowEdges } from "./sizes";
 import { createSheetFilter, FilterMenu } from "./filter";
@@ -27,14 +27,11 @@ import { FormatMenu } from "./format-menu";
 
 // Cells written into the text a comment quotes, and how much of each: enough to read.
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
-// A formula moved down `by` rows, as the hub's fill moves one: each reference's rows not held by `$`.
-// The grid keeps a spreadsheet's chords the application binds elsewhere: Ctrl+- deletes rows, Ctrl+Shift+1..5 are number formats.
-const OWN_KEYS = ["primary+Minus", ...[1, 2, 3, 4, 5].map((n) => `primary+shift+Digit${n}`)].join(" ");
-const lowered = (input: string, by: number) => tokenize(input).map((token) => { const text = input.slice(token.from, token.to); if (token.kind !== "ref") return text;
-  // Only the address moves: a tab's name (Sheet2!, 'Q1 2024'!) keeps its digits.
-  const at = text.lastIndexOf("!") + 1;
-  return text.slice(0, at) + text.slice(at).replace(/(\$?)(\d+)/g, (all, held: string, row: string) => held ? all : String(Number(row) + by)); }).join("");
-const runsOf = (rows: readonly number[]) => rows.reduce<number[][]>((out, row) => { const last = out.at(-1); if (last && last.at(-1) === row - 1) last.push(row); else out.push([row]); return out; }, []);
+// The grid keeps a spreadsheet's chords the application binds elsewhere: Ctrl+- deletes rows, Ctrl+0 hides columns, Ctrl+Shift+1..5 are number formats.
+const OWN_KEYS = ["primary+Minus", "primary+Digit0", ...[0, 1, 2, 3, 4, 5].map((n) => `primary+shift+Digit${n}`)].join(" ");
+// A formula moved as a fill moves it; text stays as typed.
+const shifted = (input: string, rows: number, cols: number) => input.startsWith("=") ? shiftRefs(input, rows, cols) : input;
+const between = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, n) => from + n);
 type Menu = { rows?: SheetRange; cols?: SheetRange };
 
 /** A sheet: the hub's live copy drawn in the grid, a formula bar over it, the comment margin beside it. */
@@ -127,7 +124,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const drawnLook = () => readLook(root!, props.host.display?.());
   const events: SheetGridEvents = {
     selected: setAt,
-    write: writes(""),
+    write: (list, label) => writes(label ?? "")(list),
     fill: (range, values, from) => hub({ op: "fill", range: rangeA1(range), values, ...(from ? { from: rangeA1(from) } : {}) }),
     resized: (col, width) => history.act("Column width", () => sizes.setWidths(span("cols", col), width / zoom())),
     menu: setMenu,
@@ -284,7 +281,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     }
     return { text: lines.join("\n"), label: corners.range, under: corners, boxes: () => { const now = rangeOf({ under: corners }), box = now && grid()?.bounds(now); return box ? [box] : []; } };
   };
-  const find = createSheetFind({ model, grid, at, hidden: sizes.hidden, draw: formats.draw, write: (list) => writes(list.length === 1 ? "Replace" : "Replace all")(list) });
+  const find = createSheetFind({ model, grid, at, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols, draw: formats.draw, write: (list) => writes(list.length === 1 ? "Replace" : "Replace all")(list) });
   const tools = createSheetTools({ tip: sequences.tip, at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(), spread: (range, way) => spread(range, way), act: history.act,
     fit: (range) => sizes.fitRows(Array.from({ length: range.bottom - range.top + 1 }, (_, n) => range.top + n), readLook(root!)) });
   const marks: SheetMarks = {
@@ -323,40 +320,36 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   // The menu's own doings, over what it was opened on: a sequence's (sizes), and the cells' cut, copy, paste and clearing.
   const picked = (): SheetRange | null => { const r = rows(), c = cols(); return r && c ? { top: r.top, bottom: r.bottom, left: c.left, right: c.right } : null; };
   const sized = (keys: string, selection: SheetRange) => SHEET_SEQUENCES.find((sequence): sequence is Extract<SheetSequence, { run: unknown }> => sequence.keys === keys && "run" in sequence)?.run({ selection: () => selection, sizes, look: () => readLook(root!), ask: setQuestion, filters: filters.keys, merge, rules: () => setRuling(at()) });
-  // What a range's cuts, clears, pastes and deletes reach: its rows shown, never one hidden, which is out of sight.
+  // What a range's cuts, clears, pastes and deletes reach: its rows and columns shown, never one hidden, which is out of sight.
   const shownRows = (range: SheetRange) => { const hidden = sizes.hidden(); return Array.from({ length: range.bottom - range.top + 1 }, (_, r) => range.top + r).filter((row) => !hidden.has(row)); };
-  const shownFrom = (top: number, count: number) => { const hidden = sizes.hidden(), out: number[] = []; for (let row = top; out.length < count; row++) if (!hidden.has(row)) out.push(row); return out; };
-  const within = (range: SheetRange) => shownRows(range).map((row) => Array.from({ length: range.right - range.left + 1 }, (_, c) => ({ row, col: range.left + c })));
-  const copy = (range: SheetRange) => navigator.clipboard.writeText(within(range).map((row) => row.map(({ row: r, col }) => String(model()?.value(r, col) ?? "")).join("\t")).join("\n")).catch((error: Error) => props.host.failed(error.message));
+  const shownCols = (range: SheetRange) => { const hidden = sizes.hiddenCols(); return between(range.left, range.right).filter((col) => !hidden.has(col)); };
+  const within = (range: SheetRange) => shownRows(range).map((row) => shownCols(range).map((col) => ({ row, col })));
+  const copy = (range: SheetRange, cut = false) => navigator.clipboard.writeText(grid()?.copy(range, cut) ?? "").catch((error: Error) => props.host.failed(error.message));
   const clear = (range: SheetRange, label = "Clear contents") => writes(label)(within(range).flat().map((cell) => ({ ...cell, input: "" })));
-  const paste = (range: SheetRange) => void navigator.clipboard.readText().then((text) => { const split = text.replace(/\r?\n$/, "").split(/\r?\n/).map((line) => line.split("\t")), lines = grid()?.moved(split, range.top, range.left) ?? split, rows = shownFrom(range.top, lines.length);
-    writes("Paste")(lines.flatMap((line, r) => line.map((input, c) => ({ row: rows[r]!, col: range.left + c, input })))); }, (error: Error) => props.host.failed(error.message));
+  const paste = (range: SheetRange, values = false) => void navigator.clipboard.readText().then((text) => grid()?.paste({ row: range.top, col: range.left }, text, values), (error: Error) => props.host.failed(error.message));
   // Each run of shown rows on its own, the last first, so the runs above keep their places.
   const deleteRows = (range: SheetRange) => history.act(`Delete ${range.bottom > range.top ? "rows" : "row"}`, () => { const rows = shownRows(range); for (let end = rows.length - 1; end >= 0;) { let start = end; while (start > 0 && rows[start - 1] === rows[start]! - 1) start--; structure("delete-rows", rows[start]!, end - start + 1); end = start - 1; } });
-  // Fill down and Fill right: the selection's first shown row (or its first column) into the rest of it, from the shown row above (or the column left) where it is
-  // one deep, as a spreadsheet's; the hub moves the formulas. Each run of shown rows is a fill of its own, its formulas first moved to where the run starts.
+  // Fill down and Fill right: the selection's first shown row (or column) into the rest of it, from the shown row above (or column left) where it is
+  // one deep, as a spreadsheet's; the hub moves the formulas. Each run of shown rows and columns is a fill of its own, its formulas first moved to where
+  // the run starts.
   const spread = (picked: SheetRange, way: "down" | "right") => history.act(`Fill ${way}`, () => {
     const sheet = model();
     if (!sheet) return;
     // Whole columns or rows reach the grid's spare room past the data; filling it would grow the tab on every press.
-    const size = sheet.size(), range = { ...picked, bottom: Math.min(picked.bottom, Math.max(picked.top, size.rows - 1)), right: Math.min(picked.right, Math.max(picked.left, size.cols - 1)) }, shown = shownRows(range);
-    if (!shown.length) return;
-    if (way === "right") {
-      const left = range.left === range.right ? range.left - 1 : range.left;
-      if (left >= 0) for (const run of runsOf(shown)) hub({ op: "fill", range: rangeA1({ top: run[0]!, bottom: run.at(-1)!, left, right: range.right }), values: run.map((row) => [sheet.input(row, left)]) });
-      return;
-    }
-    const hidden = sizes.hidden();
-    let source = range.top === range.bottom ? range.top - 1 : shown[0]!;
+    const size = sheet.size(), range = { ...picked, bottom: Math.min(picked.bottom, Math.max(picked.top, size.rows - 1)), right: Math.min(picked.right, Math.max(picked.left, size.cols - 1)) };
+    const rows = shownRows(range), cols = shownCols(range), down = way === "down", hidden = down ? sizes.hidden() : sizes.hiddenCols();
+    if (!rows.length || !cols.length) return;
+    let source = down ? (range.top === range.bottom ? range.top - 1 : rows[0]!) : range.left === range.right ? range.left - 1 : cols[0]!;
     while (source >= 0 && hidden.has(source)) source--;
     if (source < 0) return;
-    const cols = Array.from({ length: range.right - range.left + 1 }, (_, c) => range.left + c);
-    for (const run of runsOf([...new Set([source, ...shown])])) if (run.length > 1 || run[0] !== source)
-      hub({ op: "fill", range: rangeA1({ top: run[0]!, bottom: run.at(-1)!, left: range.left, right: range.right }), values: [cols.map((col) => lowered(sheet.input(source, col), run[0]! - source))] });
+    for (const run of runsOf([...new Set([source, ...(down ? rows : cols)])])) if (run.length > 1 || run[0] !== source) for (const side of runsOf(down ? cols : rows)) {
+      const by = run[0]! - source, [lines, across] = down ? [run, side] : [side, run];
+      hub({ op: "fill", range: rangeA1({ top: lines[0]!, bottom: lines.at(-1)!, left: across[0]!, right: across.at(-1)! }),
+        values: down ? [side.map((col) => shifted(sheet.input(source, col), by, 0))] : side.map((row) => [shifted(sheet.input(row, source), 0, by)]) });
+    }
   });
   const hiddenIn = (range: SheetRange) => shownRows(range).length < range.bottom - range.top + 1;
   // A column's menu unhides the hidden columns it spans, or those just beside it, as column A hidden can be spanned by none.
-  const between = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, n) => from + n);
   const hiddenColsBy = (range: SheetRange) => { const hidden = sizes.hiddenCols(), out = between(range.left, range.right).filter((col) => hidden.has(col));
     for (const dir of [-1, 1]) for (let col = (dir < 0 ? range.left : range.right) + dir; hidden.has(col); col += dir) out.push(col);
     return out; };
@@ -382,15 +375,24 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (find.keys(event) || tabs.key(event) || history.act(tool, () => formats.key(event, at()) || styles.key(event, at())) || filters.key(event)) return;
       // Ctrl+D and Ctrl+R are the grid's only while it has the keyboard: elsewhere the browser keeps them.
       if (!event.shiftKey && !event.altKey && (event.code === "KeyD" || event.code === "KeyR")) { event.preventDefault(); const area = at(); if (area) spread(area, event.code === "KeyD" ? "down" : "right"); return; }
-      // Ctrl+Shift+= and Ctrl+- insert and delete whole rows or columns picked, as a spreadsheet's (a block of cells is left alone).
-      if (!event.altKey && (event.key === "-" || (event.shiftKey && (event.key === "+" || event.code === "Equal")))) {
-        const area = at(), size = model()?.size(), adding = event.key !== "-";
-        const lines = area && size ? (area.left === 0 && area.right >= size.cols - 1 ? "rows" : area.top === 0 && area.bottom >= size.rows - 1 ? "cols" : null) : null;
-        if (!area || !lines) return;
+      // Ctrl+0 hides the selection's columns and Ctrl+Shift+0 shows those hidden in it, as a spreadsheet's (by code: shifted, the key is ")").
+      if (!event.altKey && event.code === "Digit0") {
         event.preventDefault();
+        const area = at(), hide = !event.shiftKey, hidden = sizes.hiddenCols(), cols = area ? between(area.left, area.right).filter((col) => hide || hidden.has(col)) : [];
+        if (cols.length) history.act(hide ? "Hide columns" : "Unhide columns", () => sizes.setHiddenCols(cols, hide));
+        return;
+      }
+      // Ctrl+Shift+= and Ctrl+- insert and delete whole rows or columns picked, as a spreadsheet's. A block of cells is left alone (Excel asks which
+      // way to shift it), and the key held back from the browser's zoom.
+      if (!event.altKey && (event.key === "-" || (event.shiftKey && (event.key === "+" || event.code === "Equal")))) {
+        event.preventDefault();
+        const area = at(), lines = grid()?.lines(), adding = event.key !== "-";
+        if (!area || !lines) return;
         if (lines === "rows") return void (adding ? structure("insert-rows", area.top, count(area.top, area.bottom)) : deleteRows(area));
         return void structure(adding ? "insert-cols" : "delete-cols", area.left, count(area.left, area.right));
       }
+      // Ctrl+Shift+V pastes what the cells copied here showed, not their formulas; held back, it is not the browser's paste as plain text.
+      if (event.shiftKey && !event.altKey && event.code === "KeyV") { event.preventDefault(); const area = at(); if (area) paste(area, true); return; }
       if (event.altKey && event.code === ASK_KEY) { event.preventDefault(); return props.onAsk?.(); }
       // The grid has no history of its own: what this page did is undone here, never what others did.
       const redo = event.key === "y" || (event.key === "z" && event.shiftKey);
@@ -415,10 +417,10 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
           <ContextMenuTrigger as="div" ref={setIsland} class="ui-spreadsheet-grid" data-own-keys={OWN_KEYS} />
           <ContextMenuContent onCloseAutoFocus={(event) => { const open = opening; opening = undefined; if (open) { event.preventDefault(); open(); } }}>
             <Show when={picked()}>{(range) => <MenuSection>
-              <MenuRow icon={<Icons.Cut />} keys={["Ctrl", "X"]} onSelect={() => void copy(range()).then(() => clear(range(), "Cut"))}>Cut</MenuRow>
+              <MenuRow icon={<Icons.Cut />} keys={["Ctrl", "X"]} onSelect={() => void copy(range(), true).then(() => clear(range(), "Cut"))}>Cut</MenuRow>
               <MenuRow icon={<Icons.Copy />} keys={["Ctrl", "C"]} onSelect={() => void copy(range())}>Copy</MenuRow>
               <MenuRow icon={<Icons.Paste />} keys={["Ctrl", "V"]} onSelect={() => paste(range())}>Paste</MenuRow>
-              <Show when={grid()?.copiedValues()}>{(values) => <MenuRow icon={<Icons.Paste />} keys={["Ctrl", "Shift", "V"]} onSelect={() => { const rows = shownFrom(range().top, values().length); writes("Paste values")(values().flatMap((line, r) => line.map((input, c) => ({ row: rows[r]!, col: range().left + c, input })))); }}>Paste values</MenuRow>}</Show>
+              <Show when={grid()?.held()}><MenuRow icon={<Icons.Paste />} keys={["Ctrl", "Shift", "V"]} onSelect={() => paste(range(), true)}>Paste values</MenuRow></Show>
               <MenuRow icon={<Icons.Delete />} keys={["Delete"]} onSelect={() => clear(range())}>Clear contents</MenuRow>
               <Show when={props.onAsk}><MenuRow icon={<Icons.Chat />} onSelect={() => { grid()?.select(range()); props.onAsk?.(); }}>Comment</MenuRow></Show>
             </MenuSection>}</Show>

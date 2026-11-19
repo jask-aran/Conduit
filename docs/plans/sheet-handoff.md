@@ -42,8 +42,8 @@ and key sequences are the reference unless there is a reason to differ. Storage,
 
 ## State, 2026-11-15 (late)
 
-Reviews are in `review-sheet-undo.md`, `review-sheet-merges-rules.md` and `review-sheet-xlsx-styles.md`. Fixed since then, each in its own
-commit (`611ec8dfa`..`2e8bfc8b9`):
+Three reviews (undo, merges and rules, xlsx styles) were fixed, each finding in its own commit (`611ec8dfa`..`2e8bfc8b9`); what they left
+open is in the list below:
 - merges draw (Glide copies a spanned cell as `{...cell, span}`: the merged cell's fields must be its own); a tall merge redraws every row;
   Enter/Tab leave a merge from its far edge; deleting a merge's edge row or column shrinks it; Merge empties cells as they are when it runs;
 - imported merges are cut at the tab's edge; imported rules are stored by ids (`rulesIds`), so they move with rows and columns; `stopIfTrue`
@@ -71,31 +71,40 @@ Then Paste values in the cell menu, and row 1's top border drawn just inside the
 
 Then hidden columns (`handoff-sheet-hidden-cols.md`): drawn 0 wide, not mapped as rows are.
 
-Still open: arrows at a frozen merge's edge; prefix sums for tall
-merges; the low xlsx ones (row/column crossings outside the grid, `<c r=` attribute order); Notes from xlsx are waiting on the owner: sheet comments are markup items sent to a listener, so 16 imported notes would hand
-16 items to agents. Phone width is still unchecked (the headless probe opened with the sidebar drawer over the pane).
+Then the keys and paste review, all fixed: Ctrl+- acts only on whole rows or columns the grid picked; the grid writes its own clipboard text
+(quoted TSV, hidden rows and columns left out) and every paste moves each formula by its own cell's offset; Paste values reads the clipboard
+and keeps text as text; a queued Undo is dropped when a step is made first; `shiftRefs` moves `A:A` and `1:1`. Hidden columns are now
+skipped by copy, cut, clear, paste, fill and Find, Home steps past column A, and Ctrl+0 / Ctrl+Shift+0 hide and show columns.
+
+Still open: arrows at a frozen merge's edge; prefix sums for tall merges; Notes from xlsx are waiting on the owner: sheet comments are
+markup items sent to a listener, so 16 imported notes would hand 16 items to agents. Phone width is still unchecked (the headless probe
+opened with the sidebar drawer over the pane).
 
 ## Open, in rough order
 
-1. **Undo** (above). After it, every new hub op must land on that history as one named step.
-2. **Merged cells:** the budget workbook has D26:O26 and A63:O64. Needs grid drawing and selection, import and export.
-3. **Conditional formatting:** the budget's red negatives come from it, as `<0` rules. Read, draw and export the simple
-   cell-value rules first.
-4. **Notes and comments from xlsx:** 16 in the budget workbook, counted but not imported. They would become comments.
-5. **Smarter fill handle:** series such as 1, 2, 3, dates and month names.
-6. **Small gaps:**
+1. **Notes and comments from xlsx:** 16 in the budget workbook, counted but not imported. They would become comments.
+2. **Small gaps:**
    - Ctrl+T is taken by Chrome; Alt H T works.
-   - Fill down below hidden rows can garble a tab name that looks like a cell (`'Q1 2024'!A1`): `lowered` in `sheet.tsx`.
    - The in-cell editor doesn't zoom.
    - The find and focus-cell washes don't recolour on a theme change until the next move.
    - The new Ctrl keys are not commands in the registry; nor are Ctrl+B, I or U.
    - "View settings…" in the context menu breaks DESIGN's rule that menu rows don't open settings. The owner hasn't decided.
-7. **Not yet checked:**
+   - Ctrl+- on a block of cells does nothing; Excel asks whether to shift cells up or left, or delete whole rows or columns.
+3. **Left by the reviews:**
+   - xlsx export: where a styled row past the tab's cells crosses a styled column, only the row's style is written (`xlsx-styles.js`).
+   - xlsx: a `<c>` without `r`, or with `r` after another attribute, is not seen on import, and its `s` is not rewritten on export.
+   - xlsx: a rule's number format or border (its dxf) is counted as dropped, not kept.
+   - Merge with an empty top-left blanks the only value; Excel may keep the first value in reading order (not checked).
+   - The fill handle from a source of several rows or columns with hidden ones in or past it: the hub's fill takes each formula by its place
+     in the whole source, so it can differ from the page's series (not checked).
+   - "Undo N steps" can undo more than N: Yjs skips steps others have since overwritten, and the list still names them.
+   - Opening a filter can make a "Filter" step: `reapply()` writes the look as a tracked change when others' edits moved what it hides.
+4. **Not yet checked:**
    - phone width;
    - Excel opening an exported file without offering a repair;
    - lag in sideways scroll between frozen rows and the body;
    - Windows performance traces.
-8. **Charts:** parked by the owner.
+5. **Charts:** parked by the owner.
 
 ## How the work has gone well
 
@@ -107,7 +116,7 @@ merges; the low xlsx ones (row/column crossings outside the grid, `<c r=` attrib
 - **Restarts are refused at a budget.** `bash scripts/start-conduit.sh restart` will not start the server when the initial JS
   bundle is over 437,000 B gzip. Sheet-only icons go in `components/ui/sheet-icons.tsx`, which loads lazily, never in the library's
   `icons.tsx`.
-- **The source ceiling.** It is `sourceLines` in `conduit-web/scripts/check-conventions.mjs`, now 132,700. It may be raised for
+- **The source ceiling.** It is `sourceLines` in `conduit-web/scripts/check-conventions.mjs`, now 134,400. It may be raised for
   planned feature work.
 - **Testing.** Headless Chromium via `conduit-web/scripts/probes/lib.mjs` `open()`, on the owner's test sheet "probe-sheet"
   (`/?panes=artifact%3A802d93d7cfbe2968`):

@@ -33,6 +33,8 @@ export const parseRef = (text) => {
   const said = String(text ?? "").trim(), hit = /^(?:'((?:[^']|'')+)'|([^'!:]+))!(.*)$/.exec(said);
   return hit ? { tab: hit[1] !== undefined ? hit[1].replace(/''/g, "'") : hit[2].trim(), range: hit[3].trim() } : { tab: null, range: said };
 };
+/** Ascending numbers cut into runs of consecutive ones. */
+export const runsOf = (list) => list.reduce((out, n) => { const last = out.at(-1); if (last && last.at(-1) === n - 1) last.push(n); else out.push([n]); return out; }, []);
 export const key = (row, col) => `${row}:${col}`;
 export const colName = (col) => { let name = ""; for (let n = col + 1; n > 0; n = Math.floor((n - 1) / 26)) name = String.fromCharCode(65 + ((n - 1) % 26)) + name; return name; };
 export const a1 = (row, col) => `${colName(col)}${row + 1}`;
@@ -45,12 +47,11 @@ export const parseRange = (text) => {
 };
 export const rangeA1 = ({ top, left, bottom, right }) => top === bottom && left === right ? a1(top, left) : `${a1(top, left)}:${a1(bottom, right)}`;
 
-const QUOTED = /[",\r\n]/, DELIMITER = /[,\r\n]/g;
-/** RFC 4180: a field is quoted when it holds a comma, a quote or a line break; each row ends with `eol`. */
-export const toCsv = (rows, eol = "\n") => rows.map((row) => row.map((field) => QUOTED.test(field) ? `"${field.replace(/"/g, '""')}"` : field).join(",")).join(eol) + (rows.length ? eol : "");
+/** RFC 4180: a field is quoted when it holds the separator (`sep`: a comma, or a tab as a clipboard's cells are), a quote or a line break; each row ends with `eol`. */
+export const toCsv = (rows, eol = "\n", sep = ",") => { const quoted = new RegExp(`["${sep}\r\n]`); return rows.map((row) => row.map((field) => quoted.test(field) ? `"${field.replace(/"/g, '""')}"` : field).join(sep)).join(eol) + (rows.length ? eol : ""); };
 /** Rows as written (they need not be the same length); a line break inside quotes is kept as it is, a BOM is dropped, and the last line break ends the last row. */
-export function fromCsv(text) {
-  const rows = [], n = text.length, end = (at) => { DELIMITER.lastIndex = at; return DELIMITER.exec(text)?.index ?? n; };
+export function fromCsv(text, sep = ",") {
+  const rows = [], n = text.length, delimiter = new RegExp(`[${sep}\r\n]`, "g"), end = (at) => { delimiter.lastIndex = at; return delimiter.exec(text)?.index ?? n; };
   let at = text.charCodeAt(0) === 0xfeff ? 1 : 0, row = [];
   while (at < n) {
     let field = "";
@@ -66,7 +67,7 @@ export function fromCsv(text) {
     const stop = end(at);
     row.push(field + text.slice(at, stop));
     at = stop;
-    if (text[at] === ",") { at += 1; if (at >= n) { row.push(""); rows.push(row); } continue; }
+    if (text[at] === sep) { at += 1; if (at >= n) { row.push(""); rows.push(row); } continue; }
     rows.push(row); row = [];
     if (text[at] === "\r") at += 1;
     if (text[at] === "\n") at += 1;
@@ -98,7 +99,7 @@ export const sent = (value) => isError(value) ? [value.value, value.message || v
 
 const NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i;
 /** What a typed cell shows until the engine says: a number, a percentage or TRUE/FALSE as the engine reads them, text as typed; a formula waits. */
-const guess = (input) => {
+export const guess = (input) => {
   if (input.charCodeAt(0) === 61) return null;
   const text = input.trim(), percent = text.endsWith("%") && NUMBER.test(text.slice(0, -1));
   return NUMBER.test(text) ? Number(text) : percent ? Number(text.slice(0, -1)) / 100 : /^(?:true|false)$/i.test(text) ? text.toLowerCase() === "true" : input.charCodeAt(0) === 39 ? input.slice(1) : input;

@@ -2,7 +2,7 @@ import * as Y from "yjs";
 import type { SheetCellsOp } from "./host";
 
 /** One step of the page's history: the origin of every transaction it makes, here and, tagged, on the hub (live.ts), so all of it is undone as one. */
-export class SheetStep { constructor(readonly id: number, readonly label: string) {} }
+export class SheetStep { counted = false; constructor(readonly id: number, readonly label: string) {} }
 
 // Excel keeps 100 steps; the list shows the latest of them.
 const KEPT = 100, LISTED = 20, STEP = "step", LABEL = "label", WAIT_MS = 3000;
@@ -21,14 +21,16 @@ const opLabel = (op: SheetCellsOp) => {
  * The page's one history, as a spreadsheet's: every change made here, the hub's for it included, is a step; another person's or agent's never is.
  * `act` runs a change as one named step (its writes one transaction); `hub` sends an op whose updates come back tagged with the step (inside an `act`,
  * its step). Undo and redo are each one local transaction. While an op is out, or the tagged updates its reply counts (`tagged`) have not all come, Undo
- * waits, so it never undoes the step before it; an op the hub never answers is given up on after a while.
+ * waits, so it never undoes the step before it; a step made meanwhile drops it, as it was pressed for an older one. An op the hub never answers is
+ * given up on after a while, and the Undo waiting on it with it.
  */
 // Any Yjs type, whatever its events.
 type Scoped = Y.AbstractType<any>;
 export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: SheetCellsOp) => Promise<unknown>) {
   const um = new Y.UndoManager(scope, { captureTimeout: 0, trackedOrigins: new Set<unknown>([null, SheetStep]) });
   const steps = new Map<number, SheetStep>(), listeners = new Set<() => void>(), owed: (() => void)[] = [];
-  let open: SheetStep | null = null, lone: SheetStep | null = null, next = 1, out = 0, owedFrames = 0, late: ReturnType<typeof setTimeout> | undefined;
+  // `made`: steps that changed something or sent an op (each once), and changes made outside any. A step begun for a key that did nothing is not one.
+  let open: SheetStep | null = null, lone: SheetStep | null = null, next = 1, made = 0, out = 0, owedFrames = 0, late: ReturnType<typeof setTimeout> | undefined;
   const settle = () => {
     clearTimeout(late);
     if (out) return;
@@ -38,6 +40,7 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
     for (const run of owed.splice(0)) run();
   };
   const changed = () => listeners.forEach((listener) => listener());
+  const count = (step: SheetStep | null) => { if (step?.counted) return; if (step) step.counted = true; made++; };
   const begin = (label: string) => { const step = new SheetStep(next++, label); steps.set(step.id, step); if (steps.size > KEPT * 2) steps.delete(steps.keys().next().value!); return step; };
   um.on("stack-item-added", ({ stackItem, origin, changedParentTypes }) => {
     const step = origin instanceof SheetStep ? origin : null, stack = um.undoStack;
@@ -48,6 +51,7 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
         into.insertions = Y.mergeDeleteSets([into.insertions, stackItem.insertions]); into.deletions = Y.mergeDeleteSets([into.deletions, stackItem.deletions]);
         stack.splice(stack.lastIndexOf(stackItem), 1);
       } else {
+        count(step);
         stackItem.meta.set(STEP, step?.id).set(LABEL, step?.label || described(changedParentTypes));
         if (stack.length > KEPT) stack.shift();
       }
@@ -55,7 +59,7 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
     changed();
   });
   const walk = (back: boolean, count = 1) => {
-    if (out || owedFrames > 0) { owed.push(() => walk(back, count)); return true; }
+    if (out || owedFrames > 0) { const at = made; owed.push(() => { if (made === at) walk(back, count); }); return true; }
     let done = false;
     for (let n = 0; n < count; n++) done = (back ? um.undo() : um.redo()) !== null || done;
     changed();
@@ -72,9 +76,10 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
       // Ops sent together outside a step (the fill handle's, a run of shown rows each) are one step.
       const step = open ?? lone ?? (lone = begin(opLabel(op)));
       queueMicrotask(() => { lone = null; });
+      count(step);
       out++;
       let over = false;
-      const done = () => { if (over) return; over = true; clearTimeout(gaveUp); out--; settle(); }, gaveUp = setTimeout(done, WAIT_MS * 10);
+      const done = () => { if (over) return; over = true; clearTimeout(gaveUp); out--; settle(); }, gaveUp = setTimeout(() => { owed.length = 0; done(); }, WAIT_MS * 10);
       return send({ ...op, step: step.id, client: doc.clientID }).then((said) => {
         const tagged = (said as { tagged?: unknown } | null)?.tagged;
         if (typeof tagged === "number") owedFrames += tagged;

@@ -17,11 +17,11 @@ const primary = (event: KeyboardEvent) => (event.ctrlKey || event.metaKey) && !e
 /**
  * Find and replace over the shown tab's cells: by what a cell shows (its value as its number format draws it) or by what was typed in it (a formula's
  * text). Matches are found row by row as a spreadsheet's are, from the selected cell on. A match in a hidden row is found but not selected, as the grid
- * cannot show it. Replacing always edits what was typed, and a formula's text only while looking in formulas; hidden rows are left, as the sheet's
- * other bulk writes leave them.
+ * cannot show it; one in a hidden column is not found. Replacing always edits what was typed, and a formula's text only while looking in formulas;
+ * hidden rows are left, as the sheet's other bulk writes leave them.
  */
 export function createSheetFind(options: {
-  model: Accessor<SheetView | undefined>; grid: Accessor<SheetGrid | undefined>; at: Accessor<SheetRange | null>; hidden(): ReadonlySet<number>;
+  model: Accessor<SheetView | undefined>; grid: Accessor<SheetGrid | undefined>; at: Accessor<SheetRange | null>; hidden(): ReadonlySet<number>; hiddenCols(): ReadonlySet<number>;
   draw(row: number, col: number, value: number | string): SheetDrawn | null; write(list: { row: number; col: number; input: string }[]): void;
 }) {
   const [open, setOpen] = createSignal(false), [replacing, setReplacing] = createSignal(false);
@@ -51,9 +51,9 @@ export function createSheetFind(options: {
     version();
     const sheet = options.model(), wanted = fold(query());
     if (!open() || !sheet || !wanted) return [];
-    const formulas = lookIn() === "formulas", exact = whole(), out: Cell[] = [];
+    const formulas = lookIn() === "formulas", exact = whole(), out: Cell[] = [], hiddenCols = options.hiddenCols();
     sheet.inputs().forEach((line, row) => line.forEach((input, col) => {
-      if (!input) return;
+      if (!input || hiddenCols.has(col)) return;
       const text = fold(formulas ? input : shown(sheet, row, col));
       if (exact ? text === wanted : text.includes(wanted)) out.push({ row, col });
     }));

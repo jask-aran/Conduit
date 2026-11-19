@@ -1,4 +1,4 @@
-import { a1, colIndex, key, parseA1, parseRange, rangeA1, rangedArea } from "./sheet-format.js";
+import { a1, colIndex, colName, key, parseA1, parseRange, rangeA1, rangedArea } from "./sheet-format.js";
 
 /*
  * Conditional formatting (sheet-rules.d.ts): a tab's rules in its look (`rules:<tabId>`), each a cell-value comparison or a formula, as a spreadsheet's.
@@ -125,11 +125,16 @@ export function compileRule(rule) {
 }
 
 /** A formula's relative references moved by `rows` and `cols`, outside its strings: as a fill moves them. */
-// A string ("…") and a quoted tab's name ('Q1 2024') are left as they are; a reference after a tab's name (Data!B2) moves as any.
+// A string ("…") and a quoted tab's name ('Q1 2024') are left as they are; a reference after a tab's name (Data!B2) moves as any. A cell, a range
+// of cells, whole columns (A:C) or whole rows (1:3); a range with either end moved off the sheet is #REF! whole, as a spreadsheet's.
+const REF = /(?<![\w.$])(?:(\$?[A-Za-z]{1,3}\$?\d+)(?::(\$?[A-Za-z]{1,3}\$?\d+))?|(\$?[A-Za-z]{1,3}):(\$?[A-Za-z]{1,3})|(\$?\d+):(\$?\d+))(?![\w(.!])/g;
+const movedCol = (text, by) => { const held = text.startsWith("$"), col = colIndex(text.replace("$", "")) + (held ? 0 : by); return col < 0 || col >= 16384 ? null : `${held ? "$" : ""}${colName(col)}`; };
+const movedRow = (text, by) => { const held = text.startsWith("$"), row = Number(text.replace("$", "")) + (held ? 0 : by); return row < 1 || row > 1048576 ? null : `${held ? "$" : ""}${row}`; };
+const movedCell = (text, rows, cols) => { const [, col, row] = /^(\$?[A-Za-z]+)(\$?\d+)$/.exec(text), c = movedCol(col, cols), r = movedRow(row, rows); return c && r && c + r; };
 export const shiftRefs = (formula, rows, cols) => !rows && !cols ? formula : String(formula).split(/("(?:[^"]|"")*"|'(?:[^']|'')*')/).map((part, nth) => nth % 2 ? part
-  : part.replace(/(?<![\w.$])(\$?)([A-Za-z]{1,3})(\$?)(\d+)(?![\w(.!])/g, (all, colHeld, letters, rowHeld, digits) => {
-    const col = colHeld ? colIndex(letters) : colIndex(letters) + cols, row = rowHeld ? Number(digits) - 1 : Number(digits) - 1 + rows;
-    return row < 0 || col < 0 || row >= 1048576 || col >= 16384 ? "#REF!" : `${colHeld}${a1(0, col).replace(/\d+$/, "")}${rowHeld}${row + 1}`;
+  : part.replace(REF, (all, from, to, colFrom, colTo, rowFrom, rowTo) => {
+    const ends = from ? [movedCell(from, rows, cols), to && movedCell(to, rows, cols)] : colFrom ? [movedCol(colFrom, cols), movedCol(colTo, cols)] : [movedRow(rowFrom, rows), movedRow(rowTo, rows)];
+    return ends.some((end) => end === null) ? "#REF!" : ends.filter(Boolean).join(":");
   })).join("");
 
 /** The rules a look's text holds, those that are whole. */
