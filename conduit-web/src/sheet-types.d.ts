@@ -6,6 +6,7 @@ import type { SheetInk } from "./sheet-styles.js";
 export const TYPE_CELL_LIMIT: number;
 /** A typed date (2026-03-15, 15/3/2026, 15 Mar 2026…) as the engine's serial number; null for anything else. */
 export function readDate(text: string): number | null;
+export function dateText(serial: number): string;
 /** A cell's own type where its column has one and it is plain. */
 export const PLAIN: "plain";
 /** One of a dropdown's options: its value and, drawn as its pill's colour, an ink. */
