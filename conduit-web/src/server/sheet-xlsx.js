@@ -57,14 +57,21 @@ const WORKSHEET = "sheetPr dimension sheetViews sheetFormatPr cols sheetData she
 /** A sheet part with `block` put where the schema has `element`: before the first element that comes after it there. */
 const placed = (xml, element, block) => {
   const later = WORKSHEET.slice(WORKSHEET.indexOf(element) + 1).join("|");
-  return xml.replace(new RegExp(`<(?:${later})\\b|</worksheet>`), (at) => `${block}${at}`);
+  return xml.replace(new RegExp(`${later ? `<(?:${later})\\b|` : ""}</worksheet>`), (at) => `${block}${at}`);
 };
 // A data validation's attributes as the schema has them, and each one's formulas: what is kept of one (`validations` in a tab's look) and written back.
 const VALIDATION = ["type", "errorStyle", "imeMode", "operator", "allowBlank", "showDropDown", "showInputMessage", "showErrorMessage", "errorTitle", "error", "promptTitle", "prompt"];
 const validationsOf = (xml) => [...xml.matchAll(/<dataValidation\b([^>]*?)(?:\/>|>([\s\S]*?)<\/dataValidation>)/g)].map(([, head, body = ""]) => {
   const formula = (n) => { const found = new RegExp(`<formula${n}>([\\s\\S]*?)</formula${n}>`).exec(body); return found ? { [`formula${n}`]: unescaped(found[1]) } : {}; };
   return { range: attr(head, "sqref") ?? "", ...Object.fromEntries(VALIDATION.flatMap((name) => attr(head, name) === undefined ? [] : [[name, attr(head, name)]])), ...formula(1), ...formula(2) };
-}).filter((one) => one.range);
+}).filter((one) => one.range).map((one, _, __, inks = inksOf(xml)) => inks[one.range] ? { ...one, inks: inks[one.range] } : one);
+// A dropdown's option inks (sheet-types.js), which Excel has no place for: in an extension of the sheet's own, which Excel keeps through its own save.
+const INKS_URI = "{6C5E2A4B-0D1C-4C2B-9C2E-3F8A1D0C0A11}";
+const inksOf = (xml) => Object.fromEntries([...(new RegExp(`<ext\\b[^>]*uri="${INKS_URI.replace(/[{}]/g, "\\$&")}"[\\s\\S]*?</ext>`).exec(xml)?.[0] ?? "").matchAll(/<(?:\w+:)?inks sqref="([^"]*)">([^<]*)</g)].flatMap(([, range, json]) => { try { return [[unescaped(range), JSON.parse(unescaped(json))]]; } catch { return []; } }));
+const inksXml = (list) => {
+  const held = (Array.isArray(list) ? list : []).filter((one) => typeof one?.range === "string" && one.inks && typeof one.inks === "object" && Object.keys(one.inks).length);
+  return held.length ? `<ext uri="${INKS_URI}" xmlns:cd="https://conduit.invalid/sheet">${held.map((one) => `<cd:inks sqref="${escaped(one.range)}">${escaped(JSON.stringify(one.inks))}</cd:inks>`).join("")}</ext>` : "";
+};
 const validationsXml = (list) => {
   const kept = (Array.isArray(list) ? list : []).filter((one) => typeof one?.range === "string" && /^(\$?[A-Z]{1,3}\$?\d+(:\$?[A-Z]{1,3}\$?\d+)?\s*)+$/.test(one.range));
   return kept.length ? `<dataValidations count="${kept.length}">${kept.map((one) => `<dataValidation${VALIDATION.filter((name) => one[name] !== undefined).map((name) => ` ${name}="${escaped(one[name])}"`).join("")} sqref="${escaped(one.range)}">${["formula1", "formula2"].filter((name) => one[name] !== undefined).map((name) => `<${name}>${escaped(one[name])}</${name}>`).join("")}</dataValidation>`).join("")}</dataValidations>` : "";
@@ -379,13 +386,13 @@ export function exportXlsx(tabs) {
   const written = XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true }), count = (value) => typeof value === "number" && value > 0 ? value : 0;
   const panes = tabs.map((tab) => [count(tab.look.freezeRows), count(tab.look.freezeCols)]), styled = tabs.some((tab) => Object.keys(tab.look).some((name) => name.startsWith("style:")));
   const ruled = tabs.some((tab) => ["rules", "rulesKept"].some((name) => Array.isArray(tab.look[name]) && tab.look[name].length)), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(orphaned(`=${formula}`, known)), tabs.map((tab) => tab.look.rulesKept)) : null;
-  const validations = tabs.map((tab) => validationsXml(tab.look.validations));
+  const validations = tabs.map((tab) => validationsXml(tab.look.validations)), inked = tabs.map((tab) => inksXml(tab.look.validations));
   // A tab's colour (`tabColor`): #RRGGBB as imported, or an ink the page set, written as its hex.
   const conditions = tabs.map((tab) => tab.tablePart ? "" : filterColumns(tab.look.filter));
   const colors = tabs.map((tab) => { const color = String(tab.look.tabColor ?? ""); return /^#[0-9A-F]{6}$/i.test(color) || SHEET_INKS.includes(color) ? `<tabColor rgb="FF${rgbOf(color)}"/>` : ""; });
   let drawings = 0, charts = 1;
   const parts = tabs.map((tab) => { const drawing = Array.isArray(tab.look.charts) ? drawingPart(tab.look.charts, tab.name, drawings + 1, charts) : null; if (drawing) { drawings += 1; charts += drawing.count; } return [tab.tablePart, drawing].filter(Boolean); });
-  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean) && !colors.some(Boolean) && !conditions.some(Boolean)) return withParts(written, parts, placed);
+  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean) && !inked.some(Boolean) && !colors.some(Boolean) && !conditions.some(Boolean)) return withParts(written, parts, placed);
   let restyled = null;
   return withParts(editParts(written, (path, xml, all) => {
     if (styled && !restyled) {
@@ -395,7 +402,7 @@ export function exportXlsx(tabs) {
     if (path === "xl/styles.xml") return rules ? withDxfs(restyled?.styles ?? xml, rules.dxfs) : restyled?.styles ?? xml;
     const n = sheetOf(path), [rows, cols] = panes[n] ?? [0, 0], sheet = withRules(n >= 0 && restyled ? restyled.sheets[n] : xml, rules?.sheets[n]);
     const valid = [[validations[n], (xml) => placed(xml, "dataValidations", validations[n])], [colors[n], (xml) => /<sheetPr\b/.test(xml) ? xml.replace(/<sheetPr\b([^>]*?)(\/?)>/, (_, head, closed) => `<sheetPr${head}>${colors[n]}${closed ? "</sheetPr>" : ""}`) : placed(xml, "sheetPr", `<sheetPr>${colors[n]}</sheetPr>`)]]
-      .concat([[conditions[n], (xml) => xml.replace(/<autoFilter ref="([^"]*)"\/>/, (_, ref) => `<autoFilter ref="${ref}">${conditions[n]}</autoFilter>`)]])
+      .concat([[inked[n], (xml) => /<extLst>/.test(xml) ? xml.replace("</extLst>", `${inked[n]}</extLst>`) : placed(xml, "extLst", `<extLst>${inked[n]}</extLst>`)], [conditions[n], (xml) => xml.replace(/<autoFilter ref="([^"]*)"\/>/, (_, ref) => `<autoFilter ref="${ref}">${conditions[n]}</autoFilter>`)]])
       .reduce((xml, [has, put]) => n >= 0 && has ? put(xml) : xml, sheet);
     return rows || cols ? valid.replace(/<sheetView workbookViewId="0"\/>/, paneXml(rows, cols)) : valid;
   }), parts, placed);
