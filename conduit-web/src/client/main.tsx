@@ -2935,16 +2935,18 @@ function App() {
   const renameArtifacts = () => { namedArtifacts.clear(); setArtifactsChanged(); };
   window.addEventListener("conduit:artifacts-changed", renameArtifacts);
   onCleanup(() => window.removeEventListener("conduit:artifacts-changed", renameArtifacts));
-  /** The pane showing a chat, as the shown view of its pane. */
+  /** The pane holding a chat as its shown view, and whether it is in sight: a pane folded into the rail is not, unless the dock shows it. */
   const shownChat = (chat: string | null) => paneOrder().find((pane) => chat && viewOf(pane) === `chat:${chat}`);
+  const inSight = (pane: PaneKey | undefined) => pane !== undefined && (!inDock(pane) || (panelOpen() && dockSlot() === pane));
   /** The artifact's thread (the chat its comments go to, if that is a connected chat), opened beside it, gone to if
-   *  open elsewhere, or closed if it shows beside it; the hub makes the mated thread if there is none. On a phone it
+   *  open elsewhere, shown in the dock if folded into the rail, or closed if it shows beside it; the hub makes the mated thread if there is none. On a phone it
    *  replaces the artifact. */
   const pressThread = async (paper: string, links: Pick<PaperConnections, "thread" | "lead">) => {
     const shown = shownChat(links.lead ?? links.thread);
-    if (shown) {
+    if (shown !== undefined && !inSight(shown)) return showDocked(shown as number);
+    if (shown !== undefined) {
       const { row, focus } = layout(), at = row.indexOf(idOf(shown) ?? ""), from = row.indexOf(focus);
-      return void (at >= 0 && from >= 0 && Math.abs(at - from) === 1 ? closeTab(shown, paneData(shown)!.active) : openView(viewOf(shown)!, {}));
+      return void (at >= 0 && from >= 0 && Math.abs(at - from) === 1 ? (paneData(shown)!.views.length < 2 ? closePane(shown) : closeTab(shown, paneData(shown)!.active)) : openView(viewOf(shown)!, {}));
     }
     try {
       const id = links.lead ?? (await api<{ chat: ChatSummary }>(`/v0/document/${encodeURIComponent(paper)}/thread`, { method: "POST" })).chat.id;
@@ -2966,7 +2968,7 @@ function App() {
       onBack={() => void setPaneView(pane, "home")} onMade={(made) => void setPaneView(pane, `artifact:${made.id}`).then(() => focusAnyPane(pane))} />
   </SheetFill> : <ArtifactPane id={id} pending={arriving()[pane] === id} said={said()[pane] === id} moving={paneMotion()?.slot === pane} onDrawn={() => drawnArtifacts.add(`${pane}:${id}`)} onThread={(links) => void pressThread(id, links)} shortcuts={shortcutManager} onAbout={(found, label) => nameArtifact(`artifact:${id}`, found, label)}
     chats={(project) => (catalogue.projects().find((item) => item.id === project)?.sessions ?? []).map((chat) => ({ id: chat.id, title: chat.title || "Untitled chat" }))}
-    thread={isMobileLayout() ? undefined : (chat) => ({ shown: Boolean(shownChat(chat)), cue: <RuntimeIndicator process={((process) => visibleRuntimeActivity(process) === "idle" ? null : process)(runtime.getProcess(chat ?? ""))} fallback={<Icons.Message />} /> })}
+    thread={isMobileLayout() ? undefined : (chat) => ({ shown: inSight(shownChat(chat)), cue: <RuntimeIndicator process={((process) => visibleRuntimeActivity(process) === "idle" ? null : process)(runtime.getProcess(chat ?? ""))} fallback={<Icons.Message />} /> })}
     header={(extra, links) => <PaneHeader modes={paperModes(id, "paper", links)} actions={<>{extra}{paneTabActions(pane)}</>}><HeaderCrumb title={viewName(`artifact:${id}`)} /></PaneHeader>} />);
   const renderBrowserDocument = (pane: PaneKey, id: string) => <SheetFill class="pane-browser">
     <BrowserPane id={id} onTitle={(title) => setBrowserTitles((current) => ({ ...current, [`browser:${id}`]: title }))}
