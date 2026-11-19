@@ -11,7 +11,7 @@ import { createRoot } from "react-dom/client";
 import { colName, fromCsv, guess, runsOf, toCsv, type SheetView, COL_LIMIT } from "@/sheet-format.js";
 import { shiftRefs } from "@/sheet-rules.js";
 import { createCellLook } from "./cell-draw";
-import { seriesFill } from "./series";
+import { seriesFill, sourceLine } from "./series";
 import type { SheetDrawn } from "./formats";
 import type { SheetCellStyle } from "./styles";
 import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange, SheetReference } from "./host";
@@ -262,7 +262,16 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       const added = direction === "right" || direction === "left" ? cols.length : bottom - top + 1;
       if (added <= 0 || !sourceCols.length) return;
       const cells = rows.map((row) => sourceCols.map((col) => ({ input: model.input(row, col), value: model.value(row, col), dated: options.columns.dated(row, col) })));
-      const values = seriesFill(cells, direction, added, counting), from = { top: rows[0]!, bottom: rows.at(-1)!, left: source.left, right: source.right };
+      const vertical = direction === "up" || direction === "down", back = direction === "up" || direction === "left", filled = Array.from({ length: bottom - top + 1 }, (_, n) => p.map.sheet(top + n));
+      const src = vertical ? rows : sourceCols, dst = vertical ? filled : cols, lines = [...src, ...dst].sort((a, b) => a - b);
+      let values = seriesFill(cells, direction, added, counting), from: SheetRange | undefined = { top: rows[0]!, bottom: rows.at(-1)!, left: source.left, right: source.right };
+      // The hub moves a formula from the source cell at its place in the whole source, hidden lines and all; where a hidden line is in or beside the
+      // source, each formula is moved here instead, from the source line its series repeats (another tab's references then stay as they are).
+      if (lines.some((line, n) => n && line !== lines[n - 1]! + 1)) {
+        const moved = (input: string, i: number) => { if (!input.startsWith("=")) return input; const by = dst[i]! - src[sourceLine(src.length, dst.length, i, back)]!; return shiftRefs(input, vertical ? by : 0, vertical ? 0 : by); };
+        values = values.map((line, r) => line.map((input, c) => moved(input, vertical ? r : c)));
+        from = undefined;
+      }
       // Into the rows and columns shown: each run of them between hidden ones is filled on its own.
       for (let start = top, drawn = top; drawn <= bottom; drawn++) if (drawn === bottom || p.map.sheet(drawn + 1) !== p.map.sheet(drawn) + 1) {
         let at = 0;
