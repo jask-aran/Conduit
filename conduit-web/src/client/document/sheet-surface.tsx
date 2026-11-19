@@ -42,7 +42,6 @@ export default function SheetSurface(props: ArtifactSurfaceProps) {
   const chart = (place: SheetPlace, kind?: SheetChartKind) => {
     const words = `Make a ${kind ? `${kind} ` : ""}chart of these cells${kind ? "" : ", of the kind that fits them"}, with the chart action of conduit_artifact.`;
     void offered()?.request(place, words, { doing: `Making the ${kind ? `${kind} ` : ""}chart…` }).catch((error: Error) => toast.error(`The chart was not asked for: ${error.message}`));
-    return Promise.resolve(null);
   };
   // Comment starts a comment on the cells selected, as the quote tool does; Ask the agent (and the ask key, as a paper's) asks the one comments go to about them. Both need Markup open.
   const about = (then: (place: NonNullable<ReturnType<SheetMarks["place"]>>) => void) => () => { const place = marks()?.place(); if (place && !props.quiet) then(place); };
