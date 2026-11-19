@@ -148,6 +148,9 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
   };
   const [jbotKept, setJbotKept] = createSignal(false);
   createEffect(() => { if (tabVisible("jbot") && props.open()) setJbotKept(true); });
+  // The folder viewer stays drawn once shown, so a summon or another tool over it keeps its open file's edit.
+  const [folderKept, setFolderKept] = createSignal(false);
+  createEffect(() => { if (tabVisible("files") || tabVisible("diff")) setFolderKept(true); });
   const tabIcon = (candidate: PanelTab) => { const Icon = WORKSPACE_TOOL_ICONS[candidate]; return <Icon />; };
   // A phone has no rail, so its header keeps a strip of the views.
   const [viewIconsOnly, setViewIconsOnly] = createSignal(false);
@@ -467,7 +470,7 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     <DockSurface documented={Boolean(props.documentShown?.())} onPointerDown={focusWorkspaceSurface}>
     {toolHeader(tab)}
     <ToolContent>
-      <Show when={tabVisible("files") || tabVisible("diff")}>{toolView("files")}</Show>
+      <Show when={folderKept()}><ToolKept shown={tabVisible("files") || tabVisible("diff")}>{toolView("files")}</ToolKept></Show>
       <For each={["chat", "terminal"] as const}>{(tool) => <Show when={tabVisible(tool)}>{toolView(tool)}</Show>}</For>
       {/* jbot's stays drawn once opened, its chat where it was: put away and back costs nothing. */}
       <Show when={jbotKept()}><ToolKept shown={tabVisible("jbot")}>{toolView("jbot")}</ToolKept></Show>
