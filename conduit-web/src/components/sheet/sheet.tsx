@@ -470,8 +470,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         ...filteredBy(byCol) ? [{ label: "Filter column…", icon: <SortIcons.filter />, run: () => openFilter(filteredBy(byCol)!, byCol) }] : [],
         { label: inTable() ? "Remove table" : "Format as table", icon: <SortIcons.table />, keys: ["Alt", "H", "T"], run: filters.keys.table },
       ],
-      // A column's cells are plain or checkboxes (TRUE and FALSE), its type in the look (`type:<colId>`).
-      kind !== "rows" && [{ label: "Cell type", icon: <LineIcons.type />, meta: typeOf(range) === "boolean" ? "Checkbox" : typeOf(range) === null ? undefined : "Plain", sub: [
+      // A column's cells are plain or checkboxes (TRUE and FALSE), its type in the look (`type:<colId>`): the whole column's, so only its menu sets it.
+      kind === "cols" && [{ label: "Cell type", icon: <LineIcons.type />, meta: typeOf(range) === "boolean" ? "Checkbox" : typeOf(range) === null ? undefined : "Plain", sub: [
         { label: "Plain", run: () => setType(range, null) },
         { label: "Checkbox", icon: <LineIcons.checkbox />, run: () => setType(range, "boolean") },
       ] }],
