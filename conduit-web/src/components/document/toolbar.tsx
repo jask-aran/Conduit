@@ -93,13 +93,15 @@ export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bo
     return { text, focused: made.isFocused, key: `${from} ${to}`, link, marks: Object.fromEntries([...MARKS, ...INKED].map(([name]) => [name, isOn(made, name)])) as Record<string, boolean>,
       inks: { color: markAttrs(made, "color").ink, highlight: markAttrs(made, "highlight").ink } as Record<InkedMark, PaperInk | `#${string}` | undefined>, lines: (last?: boolean) => lineOf(made.view, from, to, last) };
   }, undefined, { equals: sameJson });
-  const placement = createMemo(on(() => state()?.key, () => {
+  // What it stands over, as its own memo: the state is new whenever the editor's focus changes (the link field taking it), which is no new place.
+  const key = createMemo(() => state()?.key);
+  const placement = createMemo(on(key, () => {
     const now = state()?.lines(), top = props.bounds()?.getBoundingClientRect().top;
     return now && top !== undefined && now.y - top < (tools?.offsetHeight ?? 0) * 1.5 ? "bottom-start" as const : "top-start" as const;
   }));
   // Placed again only when what it is over changes: above the first line, or under the last.
-  const lines = createMemo(on([() => state()?.key, placement], () => { const now = state(), under = placement() === "bottom-start"; return now ? () => now.lines(under) : undefined; }));
-  createEffect(on(() => state()?.key, () => { setLinking(false); setInking(undefined); setPicking(false); setShut(undefined); }, { defer: true }));
+  const lines = createMemo(on([key, placement], () => { const now = state(), under = placement() === "bottom-start"; return now ? () => now.lines(under) : undefined; }));
+  createEffect(on(key, () => { setLinking(false); setInking(undefined); setPicking(false); setShut(undefined); }, { defer: true }));
   createEffect(on(() => props.asked?.(), () => { setInking(undefined); setShut(undefined); setLinking(true); }, { defer: true }));
   const open = () => { const now = state(); return Boolean(now && (now.focused || linking() || inking()) && shut() !== now.key); };
   const chain = () => props.editor()!.chain().focus();
