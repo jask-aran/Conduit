@@ -723,7 +723,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
             types.setOptions(now.type, options);
             if (renamed.size && sheet) write(cells.flatMap((cell) => { const to = renamed.get(valueText(sheet.value(cell.row, cell.col))); return to ? [{ ...cell, input: to }] : []; }));
           }); grid()?.focus(); }} />
-        <DedupePrompt asked={deduping() && { range: rangeA1(deduping()!.range), header: deduping()!.header }} onRemove={(header) => { const asked = untrack(deduping); if (asked) dedupe(asked.range, header); }} onClose={() => { setDeduping(null); grid()?.focus(); }} />
+        <DedupePrompt asked={deduping() ? { range: rangeA1(deduping()!.range), header: deduping()!.header } : null} onRemove={(header) => { const asked = untrack(deduping); if (asked) dedupe(asked.range, header); }} onClose={() => { setDeduping(null); grid()?.focus(); }} />
         <SplitPrompt open={splitting() !== null} onSplit={(separator) => { const range = untrack(splitting); if (range) void split(range, separator); }} onClose={() => { setSplitting(null); grid()?.focus(); }} />
         <ShiftPrompt asked={shifting()} frame={() => body} onClose={() => { setShifting(null); grid()?.focus(); }} onChoose={(way) => { const asked = untrack(shifting); if (asked) shift(asked.verb, asked.range, way); }} />
         <find.view beside={Boolean(props.margin) && !props.marginEmpty} />
