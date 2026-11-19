@@ -50,7 +50,11 @@ export function DropdownPrompt(props: { given: readonly DropdownOption[] | null;
           <Button type="button" variant="ghost" onClick={() => setOptions((all) => all.filter((_, n) => n !== at))}>Delete</Button>
         </>} />}</Index>
       <Actions>
-        <Button type="button" variant="ghost" outline onClick={() => setOptions((all) => [...all, { value: "" }])}>Add option</Button>
+        <Button type="button" variant="ghost" outline onClick={(event) => {
+          setOptions((all) => [...all, { value: "" }]);
+          // `autofocus` acts only as the dialog opens: the added row's field is focused by hand, to be typed into.
+          const form = event.currentTarget.form; queueMicrotask(() => [...form?.querySelectorAll<HTMLInputElement>("input[aria-label^='Option']") ?? []].at(-1)?.focus());
+        }}>Add option</Button>
         <Button type="button" variant="ghost" outline onClick={() => props.onClose()}>Cancel</Button><Button type="submit">Save</Button>
       </Actions>
     </CardForm>

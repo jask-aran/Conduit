@@ -29,6 +29,8 @@ export function readDate(text) {
   return null;
 }
 
+/** A serial number as the Date format draws it (d/m/yyyy), as a date cell is edited; readDate reads it back. */
+export const dateText = (serial) => { const day = new Date((Math.floor(serial) - 25569) * 864e5); return `${day.getUTCDate()}/${day.getUTCMonth() + 1}/${day.getUTCFullYear()}`; };
 
 const span = (sheet, area) => { const { rows, cols } = sheet.size(); return { ...area, bottom: Math.min(area.bottom, rows - 1), right: Math.min(area.right, cols - 1) }; };
 

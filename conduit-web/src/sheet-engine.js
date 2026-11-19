@@ -191,7 +191,8 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
         // cells: each reads what it read, which the engine's rewrite says, whatever text an undo put back.
         if (structure) eachFormula((t, row, col, input) => {
           const place = { sheet: t.sheet, row, col }, rewritten = engine.getCellFormula(place);
-          if (rewritten === input) return;
+          // The engine writes `=sum(a1)` as `=SUM(A1)`: a formula differing only so was not moved, and stays as typed.
+          if (rewritten === input || rewritten?.toUpperCase() === input.toUpperCase()) return;
           const cell = key(t.rowIds[row], t.colIds[col]);
           if (owner && rewritten && (relaid || !now.keys.has(cell))) { t.typed[row][col] = rewritten; kept.push([cell, input, rewritten]); } else engine.setCellContents(place, input);
         });

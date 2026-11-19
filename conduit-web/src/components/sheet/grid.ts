@@ -309,7 +309,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     // second press of a double click, for a fit, would miss the edge it moved.
     onColumnResizeStart: (_, __, col) => { sizing = { col, moved: false }; },
     onColumnResize: (_, width, col) => { if (sizing && col === sizing.col) sizing.moved = true; if (sizing?.moved) drive.width?.(col, width); },
-    onColumnResizeEnd: (_, width, col) => { if (sizing?.moved) events.resized(col, width); },
+    // Let go, the resize is over: Glide's own fit on a double click (to its 500 px cap, drawn but never kept) comes after, and is left out for the sheet's.
+    onColumnResizeEnd: (_, width, col) => { if (sizing?.moved) events.resized(col, width); sizing = undefined; },
     onHeaderContextMenu: (col) => { const area = picked(); events.menu({ cols: owner.current.columns.hasIndex(col) && area ? area : { top: 0, bottom: 0, left: col, right: col } }); },
     onCellContextMenu: ([col, drawn]) => {
       const row = p.map.sheet(drawn), area = picked(), inside = area && row >= area.top && row <= area.bottom && (col < 0 || (col >= area.left && col <= area.right));
@@ -326,6 +327,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       const cell = options.columns.mark(at, col) && event.localEventX >= event.bounds.width - Number(look.grid.headerIconSize) - 2 * Number(look.grid.cellHorizontalPadding) ? box(p, col, row) : undefined;
       if (cell) events.filter?.(at, col, { left: cell.x, top: cell.y, width: cell.width, height: cell.height });
       else if (!event.shiftKey && !event.ctrlKey && !event.metaKey && options.columns.type(at, col)?.startsWith("list:") && (event.localEventX >= event.bounds.width - Number(look.grid.headerIconSize) - 2 * Number(look.grid.cellHorizontalPadding) || event.localEventX <= pillReach(value))) { const one = box(p, col, row); if (one) events.dropdown?.(at, col, { left: one.x, top: one.y, width: one.width, height: one.height }); }
+      // Shift or Ctrl and a click on a checkbox selects, as on a dropdown: Glide's own toggle is kept from it.
+      if ((event.shiftKey || event.ctrlKey || event.metaKey) && options.columns.type(at, col) === "boolean") event.preventDefault();
       events.pressed(at, col);
     },
     onCellActivated: ([col, drawn]) => { const row = p.map.sheet(drawn), home = mergeAt(row, col); events.activated(home?.top ?? row, home?.left ?? col); },

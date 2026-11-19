@@ -143,7 +143,7 @@ export function createSheetView(doc, port, { name: called } = {}) {
   const order = doc.getArray(TABS), meta = doc.getMap(TAB), cells = doc.getMap(CELLS), views = new Set(), listeners = new Set();
   // `stale`: each cell typed since the worker last answered, with the number of the update that typed it; `next`: a whole set of values arriving in parts.
   const stale = new Map();
-  let ids = [], tabs = new Map(), rowTab = new Map(), watched = new Map(), values = new Map(), next = null, names = [], posted = 0, taken = 0, built = false, isReady;
+  let toldTabs = "", ids = [], tabs = new Map(), rowTab = new Map(), watched = new Map(), values = new Map(), next = null, names = [], posted = 0, taken = 0, built = false, isReady;
   const nameOf = (id) => meta.get(`name:${id}`) ?? (id === MAIN ? called ?? FIRST : id);
   const list = () => ids.map((id) => ({ id, name: nameOf(id), hidden: meta.get(`hidden:${id}`) === true }));
   const index = (id) => {
@@ -168,7 +168,8 @@ export function createSheetView(doc, port, { name: called } = {}) {
     let whole = false;
     const moved = new Set();
     for (const type of transaction.changed.keys()) if (watched.has(type)) { const id = watched.get(type); if (id === null) whole = true; else moved.add(id); }
-    if (whole) { const was = JSON.stringify(list()); reindex(); emit({ structure: true, cells: null }); if (JSON.stringify(list()) !== was) tell({ tabs: true }); }
+    // The tabs as last told: a name or a hidden flag is already the new one in `meta` as this runs, so the list before the change can't be read here.
+    if (whole) { reindex(); emit({ structure: true, cells: null }); const now = JSON.stringify(list()); if (now !== toldTabs) { toldTabs = now; tell({ tabs: true }); } }
     else if (moved.size) { for (const id of moved) index(id); emit({ structure: true, cells: null }, moved); }
     const typed = transaction.changed.get(cells);
     if (!typed) return;
@@ -190,7 +191,7 @@ export function createSheetView(doc, port, { name: called } = {}) {
     tell({ computing: true });
   };
   const ready = new Promise((done) => { isReady = done; });
-  reindex();
+  reindex(); toldTabs = JSON.stringify(list());
   doc.on("afterTransaction", after); doc.on("update", onUpdate);
   port.addEventListener("message", onMessage); port.start?.();
   const whole = Y.encodeStateAsUpdate(doc);
