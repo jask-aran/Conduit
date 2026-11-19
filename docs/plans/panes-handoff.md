@@ -7,7 +7,7 @@ For the next agent. The model is DESIGN.md "Places and panes", "Focus and openin
 
 - Builders may work in worktrees; the parent cherry-picks their commits onto `main` in /home/jask/Conduit, runs
   `bash scripts/start-conduit.sh restart` (check exit code; output ending at "Web tools:" means it failed and the
-  old build still runs), then `cd conduit-web && npm run smoke:panes -- --project Japan` (13 scenarios: 11 pass and 2 skip; the skips say why).
+  old build still runs), then `cd conduit-web && npm run smoke:panes -- --project Japan` (13 scenarios; after branch `panes-smoke` is merged, 11 pass and 2 skip is expected, not yet run).
 - Briefs small: one landable chunk, well under ~30 minutes; parallel builders only on disjoint files. Everything
   in `src/client/main.tsx` is one file, so pane chunks go one after another.
 - Commit only own files (`git commit -- <paths>`); other sessions commit sheet work on main at the same time. No push.
@@ -58,7 +58,8 @@ A new tab there is served the previous client by the service worker (`sw.js`) af
    page body: a feel question for the owner. Walked headless 2026-11-20 (`smoke:panes` covers it). Open, for the
    owner: the dock viewer's unsaved edit is dropped without asking when focus moves to a pane of another workspace;
    "Move to a pane" does not carry the dock's open file or its edit (the edit stays in the closed dock), against
-   DESIGN's "keeping its document and state"; Files → Changes → Files with an edit is unwalked (Japan has no Changes).
+   DESIGN's "keeping its document and state"; Alt in a pane's folder viewer leaves the keyboard on the page body,
+   not where it was (cause unmeasured); Files → Changes → Files with an edit is unwalked (Japan has no Changes).
    Left of plan step 4: see `panes-and-dock.md`.
 6. DeX (user's Samsung S936B, wireless adb, `ANDROID_SERIAL=192.168.20.244:37125`):
    - On-screen keyboard with a physical keyboard is Samsung's setting `show_ime_with_hard_keyboard=1`, not the app.
