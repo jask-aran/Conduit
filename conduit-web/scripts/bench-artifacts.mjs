@@ -160,9 +160,8 @@ async function act(page, run) {
 
 const box = (page, selector) => page.locator(selector).first().boundingBox();
 const address = async (page, at) => { const field = page.locator("input.ui-spreadsheet-address"); await field.click(); await field.fill(at); await page.keyboard.press("Enter"); await page.waitForTimeout(150); };
-const column = (letters) => [...letters].reduce((sum, letter) => sum * 26 + letter.charCodeAt(0) - 64, 0);
 /** How many cells an address names; whole columns (A:AC) span the tab's 35 rows. */
-const cells = (picked) => { const [, a, r1, b, r2] = picked.match(/^([A-Z]+)(\d*):([A-Z]+)(\d*)$/) ?? []; return a ? (column(b) - column(a) + 1) * (r1 ? r2 - r1 + 1 : 35) : 1; };
+const column = (letters) => [...letters].reduce((sum, letter) => sum * 26 + letter.charCodeAt(0) - 64, 0), cells = (picked) => { const [, a, r1, b, r2] = picked.match(/^([A-Z]+)(\d*):([A-Z]+)(\d*)$/) ?? []; return a ? (column(b) - column(a) + 1) * (r1 ? r2 - r1 + 1 : 35) : 1; };
 const closeMenus = async (page) => { await page.keyboard.press("Escape"); await page.waitForTimeout(200); };
 const SHEET_ACTS = {
   "wheel 3,000 down, 2,000 across": async (page) => {
@@ -174,7 +173,7 @@ const SHEET_ACTS = {
   "arrows across 50 cells": async (page) => { await address(page, "A3"); for (let n = 0; n < 50; n += 1) await page.keyboard.press(n < 25 ? "ArrowRight" : "ArrowDown"); return page.locator("input.ui-spreadsheet-address").inputValue(); },
   "type 20 characters, commit": async (page) => { await address(page, "Z1"); await page.keyboard.type("bench typing twenty!"); await page.keyboard.press("Enter"); await page.waitForTimeout(300); return (await api("GET", `/v0/document/${SHEET}?as=cells&range=Z1`)).cells?.[0]?.input; },
   "open the cell menu": async (page) => { const grid = await box(page, ".ui-spreadsheet-rows"); await page.mouse.click(grid.x + 200, grid.y + 120, { button: "right" }); return page.locator("[role=menu]").first().waitFor({ timeout: 5000 }).then(() => true, () => false); },
-  "open a ribbon dropdown": async (page) => { await page.locator(".ui-spreadsheet-slot button[aria-haspopup]:not([disabled])").first().click(); return page.locator("[role=menu], [role=listbox], [role=dialog]").first().waitFor({ timeout: 5000 }).then(() => true, () => false); },
+  "open a ribbon dropdown": async (page) => { await page.locator(".ui-spreadsheet-slot button[aria-haspopup]:not([disabled])").first().click(); return page.locator("[role=menu], [role=listbox], [role=dialog]:not([data-closed])").first().waitFor({ timeout: 5000 }).then(() => true, () => false); },
   "select 1,000 cells by drag": async (page) => {
     await address(page, "A1");
     const grid = await box(page, ".ui-spreadsheet-rows"), field = page.locator("input.ui-spreadsheet-address");
@@ -223,6 +222,9 @@ const paperText = () => Array.from({ length: 60 }, (_, n) => [
   n === 30 ? `| name | qty | price | note |\n| --- | --- | --- | --- |\n${Array.from({ length: 20 }, (_, row) => `| item ${row} | ${row} | ${row * 1.5} | row ${row} |`).join("\n")}` : `A third paragraph ${n}, to bring the blocks to three hundred.`,
 ].join("\n\n")).join("\n\n");
 
+// The JSON keeps every run's numbers; what each element and task was, only for the last run of each (the table's lists).
+const bare = ({ pops, api, tasks, chunks, ...numbers }) => numbers;
+const slim = (all) => Object.fromEntries(Object.entries(all).map(([name, runs]) => [name, runs.map((run, n) => n === runs.length - 1 ? run : { ...run, cold: bare(run.cold), warm: bare(run.warm), acts: Object.fromEntries(Object.entries(run.acts).map(([act, { tasks, ...numbers }]) => [act, numbers])) })]));
 const results = {}, started = new Date(), release = async () => (await fetch(`${origin}/healthz`).then((answer) => answer.json(), () => ({}))).release;
 const built = await release(), size = async () => (await api("GET", `/v0/document/${SHEET}?as=cells&range=Z1:AC35`)).tabs.find((tab) => tab.id === "main");
 let paper, sheetSize, done = false;
@@ -270,7 +272,7 @@ try {
       runs.push({ loadAverage: +loadAverage.toFixed(1), release: await release(), cold, warm, acts });
       console.error(`${kind} ${rate}x run ${run + 1}: cold usable ${cold.usable} ms, warm ${warm.usable} ms, load ${loadAverage.toFixed(1)}`);
       await context.close();
-      if (SAVE) await fs.writeFile(`${SAVE}.json`, JSON.stringify(results, null, 1));
+      if (SAVE) await fs.writeFile(`${SAVE}.json`, JSON.stringify(slim(results)));
     }
   }
 } finally { await cleanup(); }
