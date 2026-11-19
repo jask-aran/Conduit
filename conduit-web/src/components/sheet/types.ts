@@ -5,7 +5,7 @@
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 import type * as Y from "yjs";
 import { key, parseRange, type SheetView } from "@/sheet-format.js";
-import { listFields, optionsOf, PLAIN, readDate, readValidations, setValidation, VALID, writeType, type SheetOption, type SheetValidation } from "@/sheet-types.js";
+import { dateText, listFields, optionsOf, PLAIN, readDate, readValidations, setValidation, VALID, writeType, type SheetOption, type SheetValidation } from "@/sheet-types.js";
 import type { SheetRange } from "./host";
 
 export type SheetTypeKind = "boolean" | "date" | "list";
@@ -24,6 +24,8 @@ export interface SheetTypes {
   setOptions(type: string, options: readonly SheetOption[]): void;
   /** What is written into a cell as typed: a date cell's typed date as its serial number. */
   typed(row: number, col: number, input: string): string;
+  /** What a cell's input is shown and edited as: a date cell's serial number as its date. */
+  shown(row: number, col: number, input: string): string;
   /** Where a cell's link goes: its own (`link:<rowId>:<colId>`, as an xlsx import keeps a hyperlink; `#Tab!A1` a place in the workbook), else its text where that is a web or mail address. Not tracked. */
   link(row: number, col: number, text: string): string | undefined;
   /** A cell's own link set (null takes it off). */
@@ -100,6 +102,7 @@ export function createSheetTypes(look: Y.Map<number | string>, model: Accessor<S
       return own ?? (text.includes("@") || text.includes(":") || text.startsWith("www.") ? addressOf(text) : undefined);
     },
     setLink: (row, col, address) => { const sheet = model(), rowId = sheet?.rowAt(row), colId = sheet?.colAt(col); if (rowId && colId) { if (address) look.set(`link:${key(rowId, colId)}`, address); else look.delete(`link:${key(rowId, colId)}`); } },
+    shown: (row, col, input) => at(row, col) === "date" && /^\d+(\.\d+)?$/.test(input) && +input >= 61 ? dateText(+input) : input,
     typed: (row, col, input) => at(row, col) === "date" && input && !input.startsWith("=") ? String(readDate(input) ?? input) : input,
   };
 }

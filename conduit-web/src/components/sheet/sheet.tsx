@@ -95,7 +95,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const labelOf = (list: readonly { row: number; col: number; input: string }[]) => list.every(({ input }) => !input) ? "Clear contents" : list.length === 1 ? `Typing in ${a1(list[0]!.row, list[0]!.col)}` : "Paste";
   const writes = (label: string) => (list: readonly { row: number; col: number; input: string }[]) => history.act(label || labelOf(list), () => write(list));
   const editor = createFormulaEditor({
-    grid, input: (row, col) => model()?.input(row, col) ?? "", functions: tabs.functions, merged: (row, col) => merges.at(row, col),
+    grid, input: (row, col) => types.shown(row, col, model()?.input(row, col) ?? ""), functions: tabs.functions, merged: (row, col) => merges.at(row, col),
     write: (row, col, input) => writes("")([{ row, col, input: types.typed(row, col, input) }]),
     // As a spreadsheet's Ctrl+Enter: each shown cell selected takes it, a formula moved from the cell typed in to its own.
     fill: (from, input) => { const area = at(); if (!area || (area.top === area.bottom && area.left === area.right)) return false; writes("Fill selection")(within(inTab(area)).flat().map(({ row, col }) => ({ row, col, input: shifted(input, row - from.row, col - from.col) }))); return true; },
@@ -253,7 +253,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   // Drawn at another zoom, what stands where has moved.
   createEffect(on(() => props.host.display?.(), () => { const made = untrack(grid); if (made && root) { made.theme(drawnLook()); moved(); } }, { defer: true }));
 
-  const input = () => { changed(); const area = at(), sheet = model(); return area && sheet ? sheet.input(area.top, area.left) : ""; };
+  const input = () => { changed(); const area = at(), sheet = model(); return area && sheet ? types.shown(area.top, area.left, sheet.input(area.top, area.left)) : ""; };
   // The references of the formula being edited, outlined on the grid in their inks.
   createEffect(() => grid()?.references(editor.references()));
   // The cell editor stands over its cell, and may grow over the neighbours to its right as far as the grid's edge.
