@@ -13,6 +13,9 @@ const esc = (text: string) => text.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const fit = (text: string, room: number, font: number) => { const most = Math.max(1, Math.floor(room / (font * CHAR))); return text.length <= most ? text : `${text.slice(0, Math.max(1, most - 1))}…`; };
 const wide = (text: string, font: number) => text.length * font * CHAR;
 const r = (n: number) => Math.round(n * 10) / 10;
+// Looped, not spread: a long list spread into Math.min overflows the stack.
+const least = (list: readonly number[]) => { let out = Infinity; for (const n of list) if (n < out) out = n; return out; };
+const most = (list: readonly number[]) => { let out = -Infinity; for (const n of list) if (n > out) out = n; return out; };
 /** A number as an axis says it: 1.2k, 3M. */
 const figure = (n: number) => {
   const size = Math.abs(n);
@@ -35,6 +38,8 @@ export function drawChart(kind: SheetChartKind, data: SheetChartData, size: { wi
   const { width, height } = size, pad = font, parts: string[] = [];
   let top = pad;
   if (title) { parts.push(text(width / 2, top + font, fit(title, width - 2 * pad, font * 1.2), font * 1.2, `text-anchor="middle" font-weight="600" style="fill:${TEXT}"`)); top += font * 2; }
+  // Read in part (chartData's `every`), it says so, as a long range draws one line in so many.
+  if (data.every > 1) { parts.push(text(width - pad, top + font * 0.85, `1 in ${data.every} drawn`, font * 0.9, `text-anchor="end" style="fill:${MUTED}"`)); top += font * 1.5; }
   const pie = kind === "pie";
   // A pie is its first series in the cells' order, its largest slices kept and the rest one more as Other; every other kind is up to as many series
   // as there are inks.
@@ -79,10 +84,10 @@ export function drawChart(kind: SheetChartKind, data: SheetChartData, size: { wi
   }
   const across = kind === "bar", scatter = kind === "scatter", count = data.labels.length;
   const xs = scatter ? data.x.map((x, n) => x ?? n + 1) : [];
-  const values = ticks(Math.min(...numbers), Math.max(...numbers), kind === "bar" || kind === "column" || kind === "area"), low = values[0]!, high = values.at(-1)!;
+  const values = ticks(least(numbers), most(numbers), kind === "bar" || kind === "column" || kind === "area"), low = values[0]!, high = values.at(-1)!;
   const valueWords = values.map(figure), labelFont = font;
   // The plot's box: the value axis's figures at the left (a bar chart's labels there instead), a line of labels under it.
-  const leftWords = across ? data.labels : valueWords, leftRoom = Math.min(width * 0.3, Math.max(...leftWords.map((one) => wide(one, labelFont)))) + font * 0.5;
+  const leftWords = across ? data.labels : valueWords, leftRoom = Math.min(width * 0.3, most(leftWords.map((one) => wide(one, labelFont)))) + font * 0.5;
   const plot = { left: pad + leftRoom, right: width - pad, top: top + font * 0.5, bottom: bottom - font * 1.4 };
   if (plot.right - plot.left < font * 2 || plot.bottom - plot.top < font * 2) return svg(width, height, parts);
   const scale = (value: number, lo: number, hi: number, from: number, to: number) => from + ((value - lo) / (hi - lo)) * (to - from);
@@ -94,14 +99,14 @@ export function drawChart(kind: SheetChartKind, data: SheetChartData, size: { wi
     parts.push(across ? text(at, plot.bottom + font * 1.2, valueWords[n]!, labelFont, `text-anchor="middle" style="fill:${MUTED}"`) : text(plot.left - font * 0.5, at + font * 0.35, valueWords[n]!, labelFont, `text-anchor="end" style="fill:${MUTED}"`));
   });
   // Along the other axis: the labels in bands (a scatter: its x values on a scale of their own).
-  const xTicks = scatter ? ticks(Math.min(...xs), Math.max(...xs), false) : [];
+  const xTicks = scatter ? ticks(least(xs), most(xs), false) : [];
   const along = (n: number) => scatter ? scale(xs[n]!, xTicks[0]!, xTicks.at(-1)!, plot.left, plot.right) : across ? plot.top + (n + 0.5) * ((plot.bottom - plot.top) / count) : plot.left + (n + 0.5) * ((plot.right - plot.left) / count);
   const band = (across ? plot.bottom - plot.top : plot.right - plot.left) / Math.max(1, count);
   if (scatter) xTicks.forEach((x) => parts.push(text(scale(x, xTicks[0]!, xTicks.at(-1)!, plot.left, plot.right), plot.bottom + font * 1.2, figure(x), labelFont, `text-anchor="middle" style="fill:${MUTED}"`)));
   else if (across) data.labels.forEach((label, n) => { if (band >= font * 1.1 || n % Math.ceil((font * 1.1) / band) === 0) parts.push(text(plot.left - font * 0.5, along(n) + font * 0.35, fit(label, leftRoom - font * 0.5, labelFont), labelFont, `text-anchor="end" style="fill:${MUTED}"`)); });
   else {
     // Every kth label, so none runs into the next.
-    const widest = Math.max(...data.labels.map((one) => wide(one, labelFont))) + font, every = Math.max(1, Math.ceil(Math.min(widest, font * 8) / band));
+    const widest = most(data.labels.map((one) => wide(one, labelFont))) + font, every = Math.max(1, Math.ceil(Math.min(widest, font * 8) / band));
     data.labels.forEach((label, n) => { if (n % every === 0) parts.push(text(along(n), plot.bottom + font * 1.2, fit(label, band * every - font * 0.5, labelFont), labelFont, `text-anchor="middle" style="fill:${MUTED}"`)); });
   }
   const say = (n: number, one: { name: string }, value: number) => tip(`${data.labels[n]}${series.length > 1 ? ` · ${one.name}` : ""}: ${value}`);
