@@ -8,7 +8,7 @@ import { a1, colName, key } from "./sheet-format.js";
 export const STYLE_CELL_LIMIT = 10_000;
 /** The inks, named as a paper's are (document-format.js PAPER_INKS), so each theme draws its own. */
 export const SHEET_INKS = ["red", "amber", "green", "blue"];
-export const SHEET_BORDERS = ["all", "outer", "top", "bottom", "left", "right", "none"];
+export const SHEET_BORDERS = ["all", "outer", "inner", "top", "bottom", "left", "right", "none"];
 
 // Each attribute's code in the packed string, in the order it is written; a flag stands alone (`b`), a value after `=` (`c=red`), and `-` before
 // either is its default set on purpose, over what would be worn from beneath (`-b`: not bold in a bold column). A colour is an ink or, as a workbook
@@ -67,6 +67,8 @@ export function styleOf(attrs) {
 const edgesOf = (kind, top, bottom, left, right) => {
   if (kind === "all" || kind === "none") return { bt: kind === "all", br: kind === "all", bb: kind === "all", bl: kind === "all" };
   const out = {};
+  // Inside borders: every edge two cells of the range share, as each cell's own.
+  if (kind === "inner") { if (!top) out.bt = true; if (!bottom) out.bb = true; if (!left) out.bl = true; if (!right) out.br = true; return out; }
   if (top && (kind === "outer" || kind === "top")) out.bt = true;
   if (bottom && (kind === "outer" || kind === "bottom")) out.bb = true;
   if (left && (kind === "outer" || kind === "left")) out.bl = true;
@@ -122,8 +124,36 @@ export function writeStyle(look, sheet, area, { style, borders } = {}, whole = n
   }
   // What is not the same along a line (a range's outer edges at its ends) is its end cells' own.
   for (const end of new Set(byCols ? [at.top, at.bottom] : [at.left, at.right])) for (let n = from; n <= to; n++) {
-    const r = byCols ? end : n, c = byCols ? n : end, rest = without(patchAt(r, c), byCols ? patchAt(-1, c) : patchAt(r, -1));
+    const r = byCols ? end : n, c = byCols ? n : end, line = byCols ? patchAt(-1, c) : patchAt(r, -1), rest = without(patchAt(r, c), line);
+    // Inside borders along whole lines stop at the range's ends: the end cells say their outer edge off.
+    if (borders === "inner") for (const code of byCols ? [r === at.top && "bt", r === at.bottom && "bb"] : [c === at.left && "bl", c === at.right && "br"]) if (code && line[code]) rest[code] = false;
     if (Object.keys(rest).length) setCell(r, c, rest);
+  }
+}
+
+/** What a cell's own style must say over what it would wear from beneath: what differs, and the defaults of what beneath sets. */
+export const ownOver = (under, own) => {
+  const out = {};
+  for (const code of new Set([...Object.keys(under), ...Object.keys(own)])) if (own[code] !== under[code]) out[code] = own[code] ?? (typeof under[code] === "boolean" ? false : null);
+  return out;
+};
+
+/**
+ * What the cells of `from` (rows and columns by position) wear laid on `to`, in the caller's transaction, tiled as a paste is: over a range a whole
+ * number of copies of `from`, else from `to`'s first cell at `from`'s size; each cell of it is given its own style, what makes it wear its source's.
+ * `each` is told each source and target cell (formats.ts copies number formats by it). Cells past the tab's are left.
+ */
+export function paintStyle(look, sheet, from, to, each) {
+  const { rows, cols } = sheet.size(), tall = from.rows.length, wide = from.cols.length;
+  const height = (to.bottom - to.top + 1) % tall === 0 ? to.bottom - to.top + 1 : tall, width = (to.right - to.left + 1) % wide === 0 ? to.right - to.left + 1 : wide;
+  const count = Math.min(height, rows - to.top) * Math.min(width, cols - to.left);
+  if (count > STYLE_CELL_LIMIT) throw fault(`That is ${count} cells; at most ${STYLE_CELL_LIMIT} take a style of their own at once`);
+  const lines = (r, c) => ({ ...read(look, `style:${sheet.colAt(c)}`), ...read(look, `style:${sheet.rowAt(r)}`) });
+  const worn = from.rows.map((r) => from.cols.map((c) => ({ ...lines(r, c), ...read(look, `style:${key(sheet.rowAt(r), sheet.colAt(c))}`) })));
+  for (let y = 0; y < height && to.top + y < rows; y++) for (let x = 0; x < width && to.left + x < cols; x++) {
+    const r = to.top + y, c = to.left + x;
+    put(look, `style:${key(sheet.rowAt(r), sheet.colAt(c))}`, ownOver(lines(r, c), worn[y % tall][x % wide]));
+    each?.(from.rows[y % tall], from.cols[x % wide], r, c);
   }
 }
 

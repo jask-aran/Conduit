@@ -559,6 +559,19 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     addEventListener("pointermove", move); addEventListener("pointerup", up); addEventListener("pointercancel", up); frame = requestAnimationFrame(pick);
   };
   element.addEventListener("pointerdown", sweep);
+  // A double click on a column letter's edge, or a row number's, fits that column or row to what it shows.
+  const autofit = (event: MouseEvent) => {
+    const p = partAt(event.clientY), letters = frozenRows ? head : body, top = (letters.host ?? element).getBoundingClientRect().top;
+    if (p === letters && event.clientY >= top && event.clientY < top + look.header) {
+      const from = colAt(p, event.clientX), cell = from >= 0 ? box(p, from, p.view.y) : undefined;
+      const col = !cell ? -1 : cell.x + cell.width - event.clientX <= COL_EDGE ? from : from > 0 && event.clientX - cell.x <= COL_EDGE ? from - 1 : -1;
+      if (col >= 0) events.autofit?.("cols", col);
+      return;
+    }
+    const edge = rowEdge(p, event.clientX, event.clientY);
+    if (edge) events.autofit?.("rows", p.map.sheet(edge.row));
+  };
+  element.addEventListener("dblclick", autofit);
   // Ctrl as the fill handle is let go (the grid fills on the mouseup after it) counts a lone number up, or copies a series.
   const ctrl = (event: PointerEvent) => { counting = event.ctrlKey; };
   addEventListener("pointerup", ctrl, true);
@@ -679,6 +692,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     copy: take,
     paste: (at, text, values) => paste(at, fromCsv(text, "\t"), values),
     held: () => copied !== null,
+    source: () => copied && { rows: copied.rows, cols: copied.cols },
     whole: (kind) => {
       const area = picked();
       if (!area) return;
@@ -692,7 +706,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     theme: (next) => { look = next; drive.look?.(look); },
     scroll: (to) => { if (to) { const drawn = clip(body, { top: to.row, bottom: to.row, left: to.col, right: to.col }); body.editor?.scrollTo(to.col, drawn?.top ?? 0, "both", 0, 0, { hAlign: "start", vAlign: "start" }); } return { row: body.map.sheet(body.view.y), col: body.view.x }; },
     focus: () => owner.editor?.focus(),
-    destroy: () => { stop(); element.removeEventListener("pointerdown", sweep); removeEventListener("pointerup", ctrl, true); removeEventListener("copy", clipped, true); removeEventListener("cut", clipped, true); root.unmount(); },
+    destroy: () => { stop(); element.removeEventListener("pointerdown", sweep); element.removeEventListener("dblclick", autofit); removeEventListener("pointerup", ctrl, true); removeEventListener("copy", clipped, true); removeEventListener("cut", clipped, true); root.unmount(); },
   };
   return api;
 }

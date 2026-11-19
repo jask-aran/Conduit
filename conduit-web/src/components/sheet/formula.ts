@@ -16,6 +16,9 @@ export const INKS = ["--syntax-title", "--syntax-variable", "--syntax-string", "
 const CELL = /\$?([A-Za-z]{1,3})\$?(\d{1,7})/y, PARTIAL = /\$?[A-Za-z]{0,3}\$?/y, WORD = /[A-Za-z_][\w.]*/y, NUMBER = /\d*\.?\d+(?:[eE][+-]?\d+)?/y;
 const COLS = /\$?([A-Za-z]{1,3}):\$?([A-Za-z]{1,3})(?![\w.(])/y, ROWS = /\$?(\d{1,7}):\$?(\d{1,7})(?![\w.(])/y;
 const OPERATORS = "+-*/^&=<>%:";
+// Another tab's reference (`Data!A1`, `'Q1 2025'!B:B`) is one token with no cells: its outline would fall on this tab's.
+const TAB = /(?:'(?:[^']|'')*'|[\p{L}_][\p{L}\p{N}_.]*)!/uy, TAB_SPAN = /\$?[A-Za-z]{1,3}\$?\d{1,7}(?::\$?[A-Za-z]{1,3}\$?\d{1,7})?|\$?[A-Za-z]{1,3}:\$?[A-Za-z]{1,3}|\$?\d{1,7}:\$?\d{1,7}/y;
+const tabCut = (reference: string) => reference.lastIndexOf("!") + 1;
 const sticky = (pattern: RegExp, text: string, at: number) => { pattern.lastIndex = at; return pattern.exec(text); };
 const letters = (name: string) => { let col = 0; for (const letter of name.toUpperCase()) col = col * 26 + letter.charCodeAt(0) - 64; return col - 1; };
 const span = (a: number, b: number) => [Math.min(a, b), Math.max(a, b)] as const;
@@ -29,7 +32,8 @@ export function tokenize(text: string): FormulaToken[] {
   if (!isFormula(text)) return [{ kind: "other", from: 0, to: text.length }];
   const tokens: FormulaToken[] = [{ kind: "operator", from: 0, to: 1 }], push = (kind: FormulaTokenKind, from: number, to: number, ref?: SheetRange) => tokens.push(ref ? { kind, from, to, ref, key: text.slice(from, to).replace(/\$/g, "").replace(/:$/, "").toUpperCase() } : { kind, from, to });
   for (let at = 1; at < text.length;) {
-    const char = text[at]!;
+    const char = text[at]!, tab = char === "'" || /[\p{L}_]/u.test(char) ? sticky(TAB, text, at) : null, other = tab && sticky(TAB_SPAN, text, at + tab[0].length);
+    if (other && ends(text, at + tab![0].length + other[0].length)) { const end = at + tab![0].length + other[0].length; push("ref", at, end); at = end; continue; }
     if (char === '"') {
       let end = at + 1;
       for (; end < text.length; end++) if (text[end] === '"') { if (text[end + 1] === '"') end++; else { end++; break; } }
@@ -104,7 +108,9 @@ export function contextAt(text: string, tokens: readonly FormulaToken[], caret: 
 // A1 → $A$1 → A$1 → $A1 → A1, every corner alike; a whole column or row has one mark to turn.
 const ANCHORS = [[false, false], [true, true], [false, true], [true, false]] as const;
 /** The reference's `$` anchoring turned one step on, as F4 does. */
-export function cycleAnchors(reference: string) {
+export function cycleAnchors(reference: string): string {
+  const cut = tabCut(reference);
+  if (cut) return reference.slice(0, cut) + cycleAnchors(reference.slice(cut));
   const parts = reference.split(":").map((part) => /^(\$?)([A-Za-z]*)(\$?)(\d*)$/.exec(part));
   if (!parts.every(Boolean)) return reference;
   const [, first, col, second, row] = parts[0]!;
@@ -119,7 +125,8 @@ export function finish(text: string) {
   let out = "", depth = 0;
   for (const token of tokenize(text)) {
     const part = text.slice(token.from, token.to);
-    out += token.kind === "call" || token.kind === "ref" || (token.kind === "name" && /^(true|false)$/i.test(part)) ? part.toUpperCase() : part;
+    const cut = token.kind === "ref" ? tabCut(part) : 0;
+    out += token.kind === "call" || token.kind === "ref" || (token.kind === "name" && /^(true|false)$/i.test(part)) ? part.slice(0, cut) + part.slice(cut).toUpperCase() : part;
     if (token.kind === "open") depth++; else if (token.kind === "close") depth = Math.max(0, depth - 1);
   }
   return (out.trim() + ")".repeat(depth)).trim();

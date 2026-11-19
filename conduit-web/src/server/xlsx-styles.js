@@ -146,12 +146,7 @@ export function sheetStyles(sheetXml, size, shows) {
 /** Whether a packed style can be seen on an empty cell. */
 export const seen = (packed) => /(^| )(f=|b[trbl](?= |$))/.test(packed);
 
-/** What a cell's own style must say over what it would wear from beneath: what differs, and the defaults of what beneath sets. */
-export const ownOver = (under, own) => {
-  const out = {};
-  for (const code of new Set([...Object.keys(under), ...Object.keys(own)])) if (own[code] !== under[code]) out[code] = own[code] ?? (typeof under[code] === "boolean" ? false : null);
-  return out;
-};
+export { ownOver } from "../sheet-styles.js";
 
 const rgbOf = (colour, fill) => (colour.startsWith("#") ? colour.slice(1) : INKS[colour]?.[fill ? 1 : 0] ?? "000000").toUpperCase();
 const STROKE = { 1: "thin", medium: "medium", thick: "thick" };
@@ -190,13 +185,16 @@ export function writeStyles(styles, sheets) {
     }
     const rowOf = (r) => rows.get(r) ?? rows.set(r, { open: `<row r="${r + 1}"`, cells: new Map() }).get(r);
     for (const [r, packed] of across) rowOf(r).open += ` s="${xfFor(0, packed)}" customFormat="1"`;
-    for (let r = 0; r < size.rows; r++) for (let c = 0; c < size.cols; c++) {
+    const place = (r, c) => {
       // What an empty cell shows without one: its row's style, else its column's.
       const packed = styleAt(r, c), cell = rows.get(r)?.cells.get(c);
-      if (!cell && packed === (across.get(r) ?? cols.get(c) ?? "")) continue;
+      if (!cell && packed === (across.get(r) ?? cols.get(c) ?? "")) return;
       const open = cell && /^<c\b[^>]*?(?=\/?>)/.exec(cell)[0], s = xfFor(open ? formats[Number(attr(open, "s") ?? 0)] ?? 0 : 0, packed), worn = s ? ` s="${s}"` : "";
       rowOf(r).cells.set(c, open ? `${open.replace(/\s+s="\d+"/, "")}${worn}${cell.slice(open.length)}` : `<c r="${colName(c)}${r + 1}"${worn}/>`);
-    }
+    };
+    for (let r = 0; r < size.rows; r++) for (let c = 0; c < size.cols; c++) place(r, c);
+    // Past the tab's values, where a styled row crosses a styled column: a workbook shows the row's style alone there, the sheet both.
+    for (const r of across.keys()) for (const c of cols.keys()) if (r >= size.rows || c >= size.cols) place(r, c);
     // SheetJS's <col>s with each column's style, neighbours alike as one range.
     const kept = new Map();
     for (const tag of xml.match(/<col\b[^>]*>/g) ?? []) for (let c = Number(attr(tag, "min")) - 1; c < Number(attr(tag, "max")); c++) kept.set(c, tag.replace(/<col|\s(min|max|style)="[^"]*"|\/?>/g, ""));
@@ -218,11 +216,14 @@ export function writeStyles(styles, sheets) {
 
 const CELL_IS = { lessThan: "<", greaterThan: ">", lessThanOrEqual: "<=", greaterThanOrEqual: ">=", equal: "=", notEqual: "<>", between: "between", notBetween: "notBetween" };
 const OPERATOR = Object.fromEntries(Object.entries(CELL_IS).map(([word, op]) => [op, word]));
+// A text rule's kind in a file, its operator there, and the formula a workbook keeps beside it (`{t}` the text, `{c}` the range's first cell).
+const TEXT_RULES = { contains: ["containsText", "containsText", "NOT(ISERROR(SEARCH({t},{c})))"], notContains: ["notContainsText", "notContains", "ISERROR(SEARCH({t},{c}))"], begins: ["beginsWith", "beginsWith", "LEFT({c},LEN({t}))={t}"], ends: ["endsWith", "endsWith", "RIGHT({c},LEN({t}))={t}"] };
+const TEXT_KINDS = Object.fromEntries(Object.entries(TEXT_RULES).map(([op, [type]]) => [type, op]));
 const escaped = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 // What follows conditional formats in a sheet's part, in the schema's order: they go before the first of these there is.
 const AFTER_RULES = /<(?:dataValidations|hyperlinks|printOptions|pageMargins|pageSetup|headerFooter|rowBreaks|colBreaks|customProperties|cellWatches|ignoredErrors|smartTags|drawing|legacyDrawing|legacyDrawingHF|picture|oleObjects|controls|webPublishItems|tableParts|extLst)\b|<\/worksheet>/;
 
-/** Each conditional format's style of a workbook's `styles.xml` (`dxfs`) as a packed style: text colour, fill, bold, italic, underline, a line through. */
+/** Each conditional format's style of a workbook's `styles.xml` (`dxfs`) as a packed style: text colour, fill, bold, italic, underline, a line through, edges. */
 export function readDxfs(stylesXml, themeXml) {
   const theme = themeColours(themeXml ?? "");
   return all(within(stylesXml, "dxfs"), "dxf").map((dxf) => {
@@ -231,8 +232,11 @@ export function readDxfs(stylesXml, themeXml) {
     const ink = colourOf(first(font, "color"), theme), fill = pattern && attr(pattern, "patternType") !== "none" ? colourOf(first(pattern, "bgColor"), theme) ?? colourOf(first(pattern, "fgColor"), theme) : undefined;
     if (ink) out.c = inkOf(ink, 0);
     if (fill) out.f = inkOf(fill, 1);
-    // A sheet's style has no number format or edge of a rule's own: a rule setting them loses them, and is counted as losing them.
-    return Object.assign(new String(encodeStyle(out)), { lossy: /<numFmt\b|<(left|right|top|bottom)\b[^>]*\bstyle=/.test(dxf) });
+    // Its edges, drawn at the sheet's one weight.
+    for (const [side, code] of SIDES) { const tag = first(within(dxf, "border"), side), kind = attr(tag, "style"); if (kind && kind !== "none") { out[code] = true; out.bc ??= colourOf(first(tag, "color"), theme); } }
+    if (out.bc === undefined || out.bc === "#000000") delete out.bc;
+    // A sheet's style has no number format of a rule's own: a rule setting one loses it, and is counted as losing it.
+    return Object.assign(new String(encodeStyle(out)), { lossy: /<numFmt\b/.test(dxf) });
   });
 }
 /**
@@ -245,9 +249,10 @@ export function sheetRules(sheetXml, dxfs) {
     const ranges = attr(block, "sqref") ?? "";
     for (const rule of all(block, "cfRule")) {
       const type = attr(rule, "type"), formulas = all(rule, "formula").map((tag) => unescaped(within(tag, "formula")).replace(/_xlfn\.|_xlws\./g, "")), style = dxfs[Number(attr(rule, "dxfId"))];
-      const op = CELL_IS[attr(rule, "operator") ?? ""];
+      const op = CELL_IS[attr(rule, "operator") ?? ""], text = attr(rule, "text");
+      if (TEXT_KINDS[type] && style !== undefined && text !== undefined) { found.push({ priority: Number(attr(rule, "priority")) || Infinity, rule: { ranges, kind: "text", op: TEXT_KINDS[type], a: text, style: String(style), ...(["1", "true"].includes(attr(rule, "stopIfTrue")) ? { stop: true } : {}) } }); continue; }
       if (style === undefined || !formulas.length || (type === "cellIs" ? !op || (op.endsWith("etween") && formulas.length < 2) : type !== "expression")) { unread[type] = (unread[type] ?? 0) + 1; continue; }
-      if (style.lossy) unread["number format or border of a rule"] = (unread["number format or border of a rule"] ?? 0) + 1;
+      if (style.lossy) unread["number format of a rule"] = (unread["number format of a rule"] ?? 0) + 1;
       // Excel stops at a rule that holds and says so, the rules below it unread for that cell.
       const said = { style: String(style), ...(["1", "true"].includes(attr(rule, "stopIfTrue")) ? { stop: true } : {}) };
       found.push({ priority: Number(attr(rule, "priority")) || Infinity, rule: type === "cellIs" ? { ranges, kind: "value", op, a: formulas[0], ...(op.endsWith("etween") ? { b: formulas[1] } : {}), ...said } : { ranges, kind: "formula", a: formulas[0], ...said } });
@@ -263,12 +268,18 @@ export function writeRules(tabsRules, formula) {
     const a = decodeStyle(packed), flag = (code, tag) => (a[code] ? `<${tag}/>` : "");
     const font = `${flag("b", "b")}${flag("i", "i")}${flag("u", "u")}${flag("s", "strike")}${a.c ? `<color rgb="FF${rgbOf(a.c)}"/>` : ""}`;
     // A conditional format's solid fill is its background colour, as Excel writes it.
-    dxfs.push(`<dxf>${font ? `<font>${font}</font>` : ""}${a.f ? `<fill><patternFill patternType="solid"><bgColor rgb="FF${rgbOf(a.f, true)}"/></patternFill></fill>` : ""}</dxf>`);
+    const edges = SIDES.some(([, code]) => a[code]) ? `<border>${SIDES.map(([side, code]) => a[code] ? `<${side} style="thin">${a.bc ? `<color rgb="FF${rgbOf(a.bc)}"/>` : '<color indexed="64"/>'}</${side}>` : "").join("")}</border>` : "";
+    dxfs.push(`<dxf>${font ? `<font>${font}</font>` : ""}${a.f ? `<fill><patternFill patternType="solid"><bgColor rgb="FF${rgbOf(a.f, true)}"/></patternFill></fill>` : ""}${edges}</dxf>`);
     ids.set(packed, dxfs.length - 1);
     return dxfs.length - 1;
   };
   let priority = 0;
   const sheets = tabsRules.map((rules) => (Array.isArray(rules) ? rules : []).map((rule) => {
+    const stop = rule.stop ? ' stopIfTrue="1"' : "";
+    if (rule.kind === "text") {
+      const [type, operator, kept] = TEXT_RULES[rule.op] ?? TEXT_RULES.contains, quoted = `"${String(rule.a).replace(/"/g, '""')}"`, corner = String(rule.ranges).split(/[\s:]/)[0].replace(/\$/g, "");
+      return `<conditionalFormatting sqref="${escaped(rule.ranges)}"><cfRule type="${type}" dxfId="${dxfOf(rule.style ?? "")}" priority="${++priority}"${stop} operator="${operator}" text="${escaped(String(rule.a))}"><formula>${escaped(kept.replaceAll("{t}", quoted).replaceAll("{c}", corner))}</formula></cfRule></conditionalFormatting>`;
+    }
     const formulas = [rule.a, ...(rule.kind === "value" && rule.op?.endsWith("etween") ? [rule.b ?? ""] : [])].map((text) => `<formula>${escaped(formula(text))}</formula>`).join("");
     const kind = rule.kind === "formula" ? 'type="expression"' : `type="cellIs" operator="${OPERATOR[rule.op]}"`;
     return `<conditionalFormatting sqref="${escaped(rule.ranges)}"><cfRule ${kind} dxfId="${dxfOf(rule.style ?? "")}" priority="${++priority}"${rule.stop ? ' stopIfTrue="1"' : ""}>${formulas}</cfRule></conditionalFormatting>`;

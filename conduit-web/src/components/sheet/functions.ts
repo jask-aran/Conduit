@@ -31,6 +31,7 @@ export const FUNCTION_HELP: Readonly<Record<string, FunctionHelp>> = {
   XLOOKUP: help("search_key, lookup_range, result_range, [if_not_found], [match_mode], [search_mode]", "Finds a key in one range and gives what stands beside it in another."),
   INDEX: help("range, row, [column]", "The cell at a row and column of a range."),
   MATCH: help("search_key, range, [match_type]", "Where a key stands in a range."),
+  XMATCH: help("search_key, range, [match_mode], [search_mode]", "Where a key stands in a row or column: exactly, the next smaller or larger, or by wildcards."),
   CHOOSE: help("index, value1, [value2, …]", "The value at an index."),
   SUMIF: help("range, criterion, [sum_range]", "Adds the cells that meet a criterion."),
   SUMIFS: help("sum_range, criteria_range1, criterion1, [criteria_range2, criterion2, …]", "Adds the cells that meet every criterion."),
@@ -59,6 +60,9 @@ export const FUNCTION_HELP: Readonly<Record<string, FunctionHelp>> = {
   RANDBETWEEN: help("low, high", "A random whole number between two."),
   CONCATENATE: help("text1, [text2, …]", "Joins text."),
   TEXTJOIN: help("delimiter, ignore_empty, text1, [text2, …]", "Joins text with a delimiter between."),
+  CONCAT: help("text1, [text2, …]", "Joins text and ranges of text."),
+  TEXTBEFORE: help("text, delimiter, [instance], [match_mode], [match_end], [if_not_found]", "The text before a delimiter."),
+  TEXTAFTER: help("text, delimiter, [instance], [match_mode], [match_end], [if_not_found]", "The text after a delimiter."),
   LEFT: help("text, [count]", "The first characters of text."),
   RIGHT: help("text, [count]", "The last characters of text."),
   MID: help("text, start, count", "Characters from the middle of text."),
@@ -70,7 +74,7 @@ export const FUNCTION_HELP: Readonly<Record<string, FunctionHelp>> = {
   SUBSTITUTE: help("text, search_for, replace_with, [occurrence]", "Replaces text inside text."),
   FIND: help("search_for, text, [start]", "Where text first appears, matching case."),
   SEARCH: help("search_for, text, [start]", "Where text first appears, ignoring case."),
-  TEXT: help("number, format", "A number written in a format."),
+  TEXT: help("value, format", "A number or date written in a format, such as \"#,##0.00\" or \"d mmm yyyy\"."),
   VALUE: help("text", "Text read as a number."),
   ISBLANK: help("value", "TRUE where the value is empty."),
   ISNUMBER: help("value", "TRUE where the value is a number."),
@@ -85,12 +89,18 @@ export const FUNCTION_HELP: Readonly<Record<string, FunctionHelp>> = {
   EDATE: help("start_date, months", "The date some months before or after."),
   EOMONTH: help("start_date, months", "The last day of the month some months on."),
   NETWORKDAYS: help("start_date, end_date, [holidays]", "Working days between two dates."),
+  DATEDIF: help("start_date, end_date, unit", "Whole years (\"Y\"), months (\"M\") or days (\"D\") between two dates."),
   RANK: help("value, range, [ascending]", "A value's rank in a range."),
   LARGE: help("range, n", "The nth largest value."),
   SMALL: help("range, n", "The nth smallest value."),
+  MODE: help("number1, [number2, …]", "The value that comes most often."),
   STDEV: help("value1, [value2, …]", "The standard deviation of a sample."),
   VAR: help("value1, [value2, …]", "The variance of a sample."),
   TRANSPOSE: help("range", "A range with its rows and columns swapped."),
+  UNIQUE: help("range, [by_column], [exactly_once]", "A range's rows without repeats, spilt below."),
+  SORT: help("range, [sort_index], [sort_order], [by_column]", "A range sorted, spilt below."),
+  FILTER: help("range, include, [if_empty]", "The rows (or columns) of a range where a condition holds, spilt below."),
+  SEQUENCE: help("rows, [columns], [start], [step]", "Numbers in order, spilt over rows and columns."),
   OFFSET: help("reference, rows, columns, [height], [width]", "A range a number of rows and columns from another."),
   INDIRECT: help("reference_text", "The range a text names."),
   ROW: help("[reference]", "A cell's row number."),
@@ -113,7 +123,7 @@ const RANK = new Map([...POPULAR, ...Object.keys(FUNCTION_HELP)].filter((name, a
 export const WRONG_NAMES: Readonly<Record<string, string>> = {
   AVG: "AVERAGE", MEAN: "AVERAGE", STDDEV: "STDEV", CONCAT: "CONCATENATE", LENGTH: "LEN", STRLEN: "LEN", SUBSTR: "MID", SUBSTRING: "MID", CEIL: "CEILING", POW: "POWER",
   IFNULL: "IFERROR", NVL: "IFERROR", LCASE: "LOWER", UCASE: "UPPER", INSTR: "FIND", ISEMPTY: "ISBLANK", TRUNCATE: "TRUNC", DISTINCT: "UNIQUE", COUNTDISTINCT: "COUNTUNIQUE",
-  TOTAL: "SUM", RANK: "RANK.EQ", MODE: "MODE.SNGL", REPLACEALL: "SUBSTITUTE", DATEADD: "EDATE",
+  TOTAL: "SUM", RANK: "RANK.EQ", REPLACEALL: "SUBSTITUTE", DATEADD: "EDATE",
 };
 const wrongFor = (typed: string, names: ReadonlySet<string>) => Object.entries(WRONG_NAMES).filter(([wrong, real]) => wrong.startsWith(typed) && names.has(real) && !names.has(wrong));
 
@@ -148,3 +158,26 @@ export function nearestFunctions(name: string, names: readonly string[], known: 
 
 /** The argument a position in a call stands for: past the last, the last again where it repeats. */
 export const argumentAt = (help: FunctionHelp, at: number) => at < help.args.length ? at : help.args.at(-1)?.includes("…") ? help.args.length - 1 : -1;
+
+// The engine's words for an error, where they are its own (or it gave none, only the code), as a person can act on them.
+const REASONS: Readonly<Record<string, string>> = {
+  "#DIV/0!": "It divides by zero, or by an empty cell.",
+  "#CYCLE!": "Circular reference: the formula reads its own cell, directly or through other cells.",
+  "#N/A": "A value it looks for is not there.",
+  "#VALUE!": "A value is of the wrong type here.",
+  "#REF!": "It reads a cell that is not there.",
+  "#NUM!": "A number is out of range here.",
+  "#NAME?": "It names a function or name this sheet does not have.",
+  "#SPILL!": "Its result spills over cells that are not empty: clear them to show it.",
+  "#ERROR!": "The formula cannot be read: check its brackets, commas and quotes.",
+  "Value cannot be coerced to number.": "It reads text where a number is needed.",
+  "NaN or infinite value encountered.": "The result is not a number, such as the square root of a negative one.",
+  "Cell range not allowed.": "It is given a range where one value is needed.",
+  "No space for array result.": "Its result spills over cells that are not empty: clear them to show it.",
+  "Sheet does not exist.": "It reads a tab this sheet does not have.",
+  "Value not found.": "The value it looks for is not in the range.",
+  "Wrong number of arguments.": "The function is given too many or too few arguments.",
+  "Address is not correct.": "It reads a cell that is not there.",
+};
+/** Why a cell shows an error, from the engine's message (or, where it gave none, the error's code). */
+export const errorReason = (message: string) => REASONS[message] ?? (message.startsWith("Parsing error.") ? REASONS["#ERROR!"]! : message.replace(/^Named expression (.+) not recognized\.$/, "$1 is not a name this sheet has."));

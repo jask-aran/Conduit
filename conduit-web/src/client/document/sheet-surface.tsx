@@ -38,8 +38,6 @@ export default function SheetSurface(props: ArtifactSurfaceProps) {
     away, stale, drawn,
     reveal: () => { const show = marks()?.reveal; return show && ((place) => { if (place.cells) show(place.cells); }); },
   });
-  // The ask key asks the one comments go to about the cells selected.
-  const ask = () => { const place = marks()?.place(); if (place && !props.quiet) props.offer()?.ask(place); };
   // A chart is asked of the one comments go to, as a comment on its range: withdrawn, the comment is settled and a chat the hub holds at work on it stopped.
   const chart = (place: SheetPlace, kind?: SheetChartKind) => {
     const offer = props.offer();
@@ -50,6 +48,10 @@ export default function SheetSurface(props: ArtifactSurfaceProps) {
       return () => void Promise.allSettled([offer.withdraw(key), api(`/v0/document/${encodeURIComponent(id)}/stop`, { method: "POST", body: JSON.stringify({ item: key.split("/")[0] }) })]);
     }, (error: Error) => { toast.error(`The chart was not asked for: ${error.message}`); return null; });
   };
-  return <SheetEditor host={host} id={id} name={props.about().name} margin={props.margin} marginEmpty={props.marginEmpty} marks={(made) => setMarks(() => made)} onDrawn={() => setDrawn(true)} onAsk={ask} onChart={chart}
+  // The comment key starts a comment on the cells selected, as the quote tool does; Ask the agent asks the one comments go to about them. Both need Markup open.
+  const about = (then: (place: NonNullable<ReturnType<SheetMarks["place"]>>) => void) => () => { const place = marks()?.place(); if (place && !props.quiet) then(place); };
+  const offered = () => props.quiet ? null : props.offer();
+  return <SheetEditor host={host} id={id} name={props.about().name} margin={props.margin} marginEmpty={props.marginEmpty} marks={(made) => setMarks(() => made)} onDrawn={() => setDrawn(true)}
+    onAsk={offered()?.to() ? about((place) => offered()?.ask(place)) : undefined} onComment={offered() ? about((place) => offered()?.comment(place)) : undefined} onChart={chart}
     onState={(state) => { setAway(state === "away"); setStale(state === "stale"); }} />;
 }
