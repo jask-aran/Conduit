@@ -26,7 +26,7 @@ import { createSheetFind } from "./find";
 import { createSheetHistory } from "./history";
 import { FormatMenu, FormatPrompt, FormattingMenu } from "./format-menu";
 import { sheetChartIcons as ChartIcons } from "@/components/ui/sheet-icons";
-import type { SheetChartKind } from "@/sheet-charts.js";
+import { readCharts, type SheetChartKind } from "@/sheet-charts.js";
 
 const SheetCharts = lazy(() => import("./charts"));
 
@@ -300,16 +300,25 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     return { text: text.trim() ? text : corners.range, label: corners.range, under: corners, boxes: () => { const now = rangeOf({ under: corners }), box = now && grid()?.bounds(now); return box ? [box] : []; } };
   };
   // A chart asked of the agent: a notice says it is being made, until a chart arrives from elsewhere or the person stops it (Esc), which withdraws it.
-  const [charting, setCharting] = createSignal<{ label: string; stop(): void } | null>(null);
+  const [charting, setCharting] = createSignal<{ label: string; stop(): void; under: SheetPlace["under"]; had: Set<string> } | null>(null);
+  const chartIds = () => new Set([...look.keys()].filter((name) => name.startsWith("charts:")).flatMap((name) => readCharts(look.get(name)).map((one) => one.id)));
   const askChart = (kind?: SheetChartKind, range = at()) => {
     const place = range && placeOf(range);
     if (!place || !props.onChart) return;
     let withdraw: (() => void) | null | undefined, stopped = false;
-    const asked = { label: kind ? `${kind[0]!.toUpperCase()}${kind.slice(1)} chart` : "Chart", stop: () => { stopped = true; if (charting() === asked) setCharting(null); withdraw?.(); grid()?.focus(); } };
+    const asked = { label: kind ? `${kind[0]!.toUpperCase()}${kind.slice(1)} chart` : "Chart", under: place.under, had: chartIds(), stop: () => { stopped = true; if (charting() === asked) setCharting(null); withdraw?.(); grid()?.focus(); } };
     setCharting(asked);
     void props.onChart(place, kind).then((then) => { withdraw = then; if (!then && charting() === asked) setCharting(null); else if (stopped) then?.(); });
   };
-  const charted = (event: { keysChanged: Set<string>; transaction: { local: boolean } }) => { if (charting() && !event.transaction.local && [...event.keysChanged].some((name) => name.startsWith("charts:"))) setCharting(null); };
+  // Only a chart that was not there when asked, over cells of the asked range: another person moving a chart is not the answer.
+  const charted = (event: { keysChanged: Set<string>; transaction: { local: boolean } }) => {
+    const asked = charting(), area = asked && rangeOf(asked);
+    if (!asked || !area || event.transaction.local) return;
+    for (const name of event.keysChanged) if (name.startsWith("charts:")) for (const one of readCharts(look.get(name))) {
+      const range = !asked.had.has(one.id) && rangeOf({ under: { cells: `${one.from} ${one.to}` } });
+      if (range && range.top <= area.bottom && range.bottom >= area.top && range.left <= area.right && range.right >= area.left) return setCharting(null);
+    }
+  };
   look.observe(charted);
   onCleanup(() => look.unobserve(charted));
   const find = createSheetFind({ model, grid, at, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols, draw: formats.draw, write: (list) => writes(list.length === 1 ? "Replace" : "Replace all")(list) });
