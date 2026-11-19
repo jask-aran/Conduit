@@ -326,6 +326,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       const cell = options.columns.mark(at, col) && event.localEventX >= event.bounds.width - Number(look.grid.headerIconSize) - 2 * Number(look.grid.cellHorizontalPadding) ? box(p, col, row) : undefined;
       if (cell) events.filter?.(at, col, { left: cell.x, top: cell.y, width: cell.width, height: cell.height });
       else if (!event.shiftKey && !event.ctrlKey && !event.metaKey && options.columns.type(at, col)?.startsWith("list:") && (event.localEventX >= event.bounds.width - Number(look.grid.headerIconSize) - 2 * Number(look.grid.cellHorizontalPadding) || event.localEventX <= pillReach(value))) { const one = box(p, col, row); if (one) events.dropdown?.(at, col, { left: one.x, top: one.y, width: one.width, height: one.height }); }
+      // Shift or Ctrl and a click on a checkbox selects, as on a dropdown: Glide's own toggle is kept from it.
+      if ((event.shiftKey || event.ctrlKey || event.metaKey) && options.columns.type(at, col) === "boolean") event.preventDefault();
       events.pressed(at, col);
     },
     onCellActivated: ([col, drawn]) => { const row = p.map.sheet(drawn), home = mergeAt(row, col); events.activated(home?.top ?? row, home?.left ?? col); },
