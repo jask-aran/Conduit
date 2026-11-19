@@ -121,7 +121,7 @@ export default function MailPane(props: {
   // The first few categories are the tabs; an account with more of its own has the rest in the chooser.
   const tabbed = () => categories().slice(0, TABS_MOST);
   const inSplits = () => inInbox() && (label() === "inbox" || tabbed().some((one) => one.id === label()));
-  const placeName = () => inSplits() && !splitsFolded() ? "Inbox" : labelName();
+  const placeName = () => inSplits() ? "Inbox" : labelName();
   const chosen = () => categories().slice(splitsFolded() ? 0 : TABS_MOST);
   // The inbox's splits are the pane's modes, on its top edge; folded, they stay laid out there so the header knows when they fit again.
   const tabs = () => <Show when={inSplits() && tabbed().length}>
