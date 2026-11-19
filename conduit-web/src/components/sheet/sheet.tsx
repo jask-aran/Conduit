@@ -374,6 +374,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     opening = () => { grid()?.select(cell); grid()?.focus(); requestAnimationFrame(() => { const box = grid()?.bounds(cell); if (box) { filters.reapply(); setFiltering({ col, box }); } }); };
   };
   createEffect(() => { if (!filters.filter()) setFiltering(null); });
+  /** The type the range's columns share (undefined: plain), null where they differ. */
+  const typeOf = (range: SheetRange) => { const types = new Set(between(range.left, range.right).map((col) => look.get(`type:${model()?.colAt(col)}`))); return types.size === 1 ? [...types][0] : null; };
+  const setType = (range: SheetRange, type: string | null) => history.act("Cell type", () => { for (const col of between(range.left, range.right)) { const id = model()?.colAt(col); if (id) { if (type) look.set(`type:${id}`, type); else look.delete(`type:${id}`); } } });
   // The cell menu, as a spreadsheet's: what it does is said of the rows or columns it was opened on, counted ("Insert 5 rows above").
   const menuGroups = (): (SheetMenuEntry[] | false)[] => {
     const r = rows(), c = cols(), size = model()?.size();
@@ -467,6 +470,11 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         ...filteredBy(byCol) ? [{ label: "Filter column…", icon: <SortIcons.filter />, run: () => openFilter(filteredBy(byCol)!, byCol) }] : [],
         { label: inTable() ? "Remove table" : "Format as table", icon: <SortIcons.table />, keys: ["Alt", "H", "T"], run: filters.keys.table },
       ],
+      // A column's cells are plain or checkboxes (TRUE and FALSE), its type in the look (`type:<colId>`).
+      kind !== "rows" && [{ label: "Cell type", icon: <LineIcons.type />, meta: typeOf(range) === "boolean" ? "Checkbox" : typeOf(range) === null ? undefined : "Plain", sub: [
+        { label: "Plain", run: () => setType(range, null) },
+        { label: "Checkbox", icon: <LineIcons.checkbox />, run: () => setType(range, "boolean") },
+      ] }],
     ];
   };
   createEffect(on(tabs.shown, () => setFiltering(null), { defer: true }));
