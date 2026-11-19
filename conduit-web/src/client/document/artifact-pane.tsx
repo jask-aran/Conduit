@@ -104,7 +104,8 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; pendi
   createEffect(() => { const place = placeWanted(props.id), reveal = surface()?.reveal?.(); if (!place || !reveal) return; const due = requestAnimationFrame(() => { reveal(place); placeShown(); }); onCleanup(() => cancelAnimationFrame(due)); });
   const shared = { names, transport: httpTransport(api, `/v0/document/${encodeURIComponent(props.id)}/markup`), clientId: () => client, capturePage, frame: () => room ?? frame,
     notify: (outcome, message) => outcome === "sent" ? toast.success(message) : toast.error(message),
-    asks: (offered) => setOffer(() => offered), sent: () => setSent((count) => count + 1), lead: (name) => setLead(props.id, name) } satisfies Partial<MarkupHost>;
+    asks: (offered) => setOffer(() => offered), sent: () => setSent((count) => count + 1), lead: (name) => setLead(props.id, name), thread: () => props.onThread?.(),
+    stop: (key) => api(`/v0/document/${encodeURIComponent(props.id)}/stop`, { method: "POST", body: JSON.stringify({ item: key.split("/")[0] }) }) } satisfies Partial<MarkupHost>;
   // Every card of the margin, in the order of their places: those waiting on the person (answered, resolved by the agent) or all, then the suggestions.
   const [needsMe, setNeedsMe] = createSignal(true);
   const commentList = (margin: MarkupMarginControl) => {

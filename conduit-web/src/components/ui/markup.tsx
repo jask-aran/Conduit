@@ -1,6 +1,6 @@
 import { createContext, untrack, createEffect, createMemo, createSignal, createUniqueId, For, onCleanup, onMount, Show, useContext, type JSX } from "solid-js";
 // Through the barrel, so the tool's chunk takes these from the app's own and the build splits nothing new out of it.
-import { Button, Card, ColourPicker, CardPreview, CloseButton, Count, Dot, Frost, IconButton, Icons, Item, Keycap, Section, Segmented, Spinner, Stepper, Swatch, Switch, TextArea } from "./index";
+import { Button, Card, ColourPicker, CardPreview, CloseButton, Count, Dot, Frost, IconButton, Icons, Item, Keycap, Notice, Section, Segmented, Spinner, Stepper, Swatch, Switch, TextArea } from "./index";
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection, Popover, PopoverContent } from "./menus";
 import { clockTime } from "./time";
 import "./styles/markup.css";
@@ -153,15 +153,19 @@ const ASKED = "conduit.document.asked";
 type Asked = { words: string; uses: number };
 const askedBefore = (): Asked[] => { try { const kept: unknown = JSON.parse(localStorage.getItem(ASKED) ?? "[]"); return Array.isArray(kept) ? kept.filter((one): one is Asked => typeof one?.words === "string" && typeof one.uses === "number") : []; } catch { return []; } };
 const keepAsked = (words: string) => { const was = askedBefore(), had = was.find((one) => one.words === words); try { localStorage.setItem(ASKED, JSON.stringify([{ words, uses: (had?.uses ?? 0) + 1 }, ...was.filter((one) => one !== had)].slice(0, 20))); } catch { /* not kept */ } };
-/** Asking someone to do something at a place (a paper's line, a range of cells), as a line standing there: who is asked, what of them, and Send. `at`: where it stands
- *  (left, top and width in the viewport). Enter sends, Shift Enter is a new line; ArrowUp in an empty field recalls what was asked before; `@` first offers the others
- *  of `names`, picked told to `onName`. Escape, or focus leaving it, puts it away (`onClose`). */
-export function MarkupAsk(props: { name: string; names?: readonly string[]; onName?: (name: string) => void; at: JSX.CSSProperties; onSend: (words: string) => void; onClose: () => void }) {
-  const [words, setWords] = createSignal(""), [active, setActive] = createSignal(0), [shut, setShut] = createSignal<string>();
+/** The ask box: asking the one comments go to for a change to what is selected, in a line standing by the tools (`at`: where, in the viewport), its words the caller's
+ *  (`value`, kept while it is put away). Enter sends, Shift Enter is a new line; ArrowUp in an empty field recalls what was asked before; `@` first offers the others
+ *  of `names`, picked told to `onName`, and with several listening who is asked heads it. Escape (`back`: the keyboard is to go back where it was), or focus leaving it, puts it away (`onClose`).
+ *  `working`: what was asked is being done, said in its place (`label`), with Stop; `onThread` opens the thread it went to. */
+export function MarkupAsk(props: { name: string; names?: readonly string[]; onName?: (name: string) => void; at: JSX.CSSProperties; value: string; onInput: (words: string) => void; onSend: (words: string) => void; onClose: (back?: boolean) => void;
+  onThread?: () => void; working?: { label: string; onStop: () => void } }) {
+  const words = () => props.value, setWords = (said: string) => props.onInput(said);
+  const [active, setActive] = createSignal(0), [shut, setShut] = createSignal<string>();
   const before = askedBefore(), used = before.filter((one) => one.uses > 1).sort((a, b) => b.uses - a.uses).slice(0, 3);
   let field: HTMLTextAreaElement | undefined, root: HTMLDivElement | undefined, recalled = -1;
   const put = (said: string) => { setWords(said); queueMicrotask(() => field?.setSelectionRange(said.length, said.length)); };
   const send = () => { const said = words().trim(); if (!said) return; keepAsked(said); props.onSend(said); };
+  const several = () => (props.names?.length ?? 0) > 1;
   const others = createMemo(() => { const typed = /^@(\S*)$/.exec(words())?.[1]?.toLowerCase(); return typed === undefined || shut() === words() ? [] : (props.names ?? []).filter((name) => name !== props.name && name.toLowerCase().includes(typed)); });
   createEffect(() => { others(); setActive(0); });
   const rename = (name: string) => { props.onName?.(name); put(""); };
@@ -171,7 +175,7 @@ export function MarkupAsk(props: { name: string; names?: readonly string[]; onNa
     if (menu.length && (up || event.key === "ArrowDown")) { event.preventDefault(); setActive((at) => Math.min(menu.length - 1, Math.max(0, at + (up ? -1 : 1)))); }
     else if (menu.length && (event.key === "Enter" || event.key === "Tab") && !event.isComposing) { event.preventDefault(); rename(menu[active()]!); }
     else if (menu.length && event.key === "Escape") { event.preventDefault(); setShut(words()); }
-    else if (event.key === "Escape") { event.preventDefault(); props.onClose(); }
+    else if (event.key === "Escape") { event.preventDefault(); props.onClose(true); }
     else if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); send(); }
     // As a shell recalls: from empty, or from an ask recalled and left as it was, ArrowUp goes one older and ArrowDown one newer.
     else if ((up || event.key === "ArrowDown") && (!words() || words() === before[recalled]?.words)) {
@@ -180,17 +184,21 @@ export function MarkupAsk(props: { name: string; names?: readonly string[]; onNa
       event.preventDefault(); recalled = next; put(before[next]?.words ?? "");
     }
   };
-  return <div ref={root} class="ui-markup-ask" style={props.at} onFocusOut={(event) => { if (event.currentTarget.isConnected && !event.currentTarget.contains(event.relatedTarget as Node | null)) props.onClose(); }}>
-    <div class="ui-markup-ask-field">
-      {/* Who is asked; pressed, it offers the others as typing @ does. */}
-      <Button variant="secondary" size="sm" aria-label={`Asking ${props.name}`} title={(props.names?.length ?? 0) > 1 ? "Ask someone else (@)" : undefined} disabled={(props.names?.length ?? 0) < 2} onMouseDown={keep} onClick={() => put("@")}>@{props.name}<Show when={(props.names?.length ?? 0) > 1}><Icons.ChevronDown /></Show></Button>
-      <TextArea ref={(element) => { field = element; queueMicrotask(() => element.focus({ preventScroll: true })); }} aria-label={`Ask ${props.name}`} placeholder="Ask about this…" value={words()} onInput={(event) => setWords(event.currentTarget.value)} onKeyDown={keys} />
-      <Show when={words().trim()} fallback={<Keycap>↵</Keycap>}><IconButton label="Send (Enter)" onMouseDown={keep} onClick={send}><Icons.Send /></IconButton></Show>
-    </div>
-    <Show when={!words() && before.length}><div class="ui-markup-ask-asked" role="group" aria-label="Asked before">
-      <For each={used}>{(one) => <Button variant="ghost" outline size="sm" title={one.words} onMouseDown={keep} onClick={() => put(one.words)}><span class="ui-truncate">{one.words}</span></Button>}</For>
-      <span>↑ earlier asks</span>
-    </div></Show>
+  const thread = () => <Show when={props.onThread}><IconButton label="Open the thread" onMouseDown={keep} onClick={() => props.onThread?.()}><Icons.Chat /></IconButton></Show>;
+  return <div ref={root} class="ui-markup-ask" style={props.at} onFocusOut={(event) => { if (!props.working && event.currentTarget.isConnected && !event.currentTarget.contains(event.relatedTarget as Node | null)) props.onClose(); }}>
+    <Show when={props.working} fallback={<>
+      <div class="ui-markup-ask-field">
+        {/* Who is asked, where it is a choice; pressed, it offers the others as typing @ does. */}
+        <Show when={several()}><Button variant="secondary" size="sm" aria-label={`Asking ${props.name}`} title="Ask someone else (@)" onMouseDown={keep} onClick={() => put("@")}>@{props.name}<Icons.ChevronDown /></Button></Show>
+        <TextArea ref={(element) => { field = element; queueMicrotask(() => element.focus({ preventScroll: true })); }} aria-label={`Ask ${props.name}`} placeholder="Describe a change" value={words()} onInput={(event) => setWords(event.currentTarget.value)} onKeyDown={keys} />
+        {thread()}<IconButton label="Send (Enter)" disabled={!words().trim()} onMouseDown={keep} onClick={send}><Icons.Send /></IconButton>
+      </div>
+      <Show when={!words() && used.length}><div class="ui-markup-ask-asked" role="group" aria-label="Asked before">
+        <For each={used}>{(one) => <Button variant="ghost" outline size="sm" title={one.words} onMouseDown={keep} onClick={() => put(one.words)}><span class="ui-truncate">{one.words}</span></Button>}</For>
+      </div></Show>
+    </>}>{(working) => <div class="ui-markup-ask-field">
+      <Notice kind="tool" busy live action={{ label: "Stop (Esc)", onClick: () => working().onStop() }}>{working().label}</Notice>{thread()}
+    </div>}</Show>
     <Popover open={others().length > 0} onOpenChange={(open) => { if (!open) setShut(words()); }} anchorRef={() => root} placement="bottom-start">
       <PopoverContent aria-label="Ask someone else" width="sm" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}>
         <Section role="listbox"><For each={others()}>{(name, at) => <Item role="option" aria-selected={active() === at()} active={active() === at()} onCursor={() => setActive(at())} onMouseDown={keep} onClick={() => rename(name)}>{name}</Item>}</For></Section>
@@ -250,9 +258,9 @@ const FOLDS = 3;
  *  `outstanding`: how many comments Send would deliver; `standing`: where the item they have gone to stands, once some have.
  *  `ribbon`: it stands at the head of the frame and is always there: the host's tools (its edit set) are a bar of their own beside Markup's, each captioned, whatever the mode (one pressed while annotating goes back to using the app), what a tool draws with stands under it, and it has no close.
  *  The two stay on one line: where the frame is narrower than they need (measured), the captions go, then the edit set folds into one Format menu, then Markup's tools into one Annotate menu; the agent and Send stay.
- *  Neither form has a "Use the app": the app is in use while no tool is held, a tool pressed is held, and pressed again is let go (on the foot, a view pressed again too). The ribbon has no "Ask the agent" either: on a paper `@`, the tools over a selection and a block's menu each start that comment.
+ *  Neither form has a "Use the app": the app is in use while no tool is held, a tool pressed is held, and pressed again is let go (on the foot, a view pressed again too).
  *  On the ribbon what is sent is always handed on, so who it goes to is said and not a choice to turn off; Undo and Redo work while the app is in use (the tool decides whose history they step).
- *  `own`: the host's own tools (a document's block kinds), `onOwn` told as one is pressed, and `onAsk` a comment about where the surface's selection or caret is: a rail above the bar while the app is in use.
+ *  `own`: the host's own tools (a document's block kinds), `onOwn` told as one is pressed: a rail above the bar while the app is in use. `onAsk`: the ribbon ends with it, opening the ask box (MarkupAsk).
  *  `out`: what it stands over is moving, so the bars fade out until it stops. */
 export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnTool[]; onOwn?: () => void; onAsk?: () => void; ribbon?: boolean; screenshots?: boolean; onView: (view: MarkupView) => void; tools?: readonly (MarkupToolKind | "note")[]; tool: MarkupToolKind; onTool: (tool: MarkupToolKind) => void; onNote: () => void; outstanding?: number; standing?: string; thin?: boolean; thread?: boolean; onBack?: () => void; replies?: number; sent?: number; onReplies?: () => void; ink?: MarkupInk; onInk?: (ink: MarkupInk) => void; weight?: MarkupWeight; onWeight?: (weight: MarkupWeight) => void; size?: number; onSize?: (size: number) => void; shape?: MarkupShape; onShape?: (shape: MarkupShape) => void; onUndo?: () => void; onRedo?: () => void; undoSteps?: readonly string[]; redoSteps?: readonly string[]; onSteps?: (back: boolean, count: number) => void; status?: string; compact?: boolean; hand?: boolean; onHand?: (on: boolean) => void; agent?: string; heard?: boolean; onNextAgent?: () => void; onRetake?: () => void;
   canSend: boolean; sending?: boolean; onSend: () => void; onClose: () => void; out?: boolean; slot?: HTMLElement }) {
@@ -321,7 +329,6 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   const placed = () => (props.own ?? []).filter((tool) => !tool.mode).flatMap((tool, n, list): (MarkupOwnTool | string)[] => !tool.menu || !menus().includes(tool.menu) ? [tool] : list.findIndex((one) => one.menu === tool.menu) === n ? [tool.menu] : []);
   const owned = () => <>
     <For each={placed()}>{(one) => typeof one === "string" ? kinds(one) : <IconButton label={named(one.label, one.keys)} aria-pressed={Boolean(pressed(one))} disabled={one.disabled} onMouseDown={(event) => event.preventDefault()} onClick={() => press(one)}>{one.icon()}{tip(one.tip)}</IconButton>}</For>
-    <Show when={props.onAsk && !props.ribbon}><Button variant="ghost" size="sm" onClick={props.onAsk}><Icons.Agent />Ask the agent</Button></Show>
   </>;
   const format = () => <DropdownMenu modal={false} placement="bottom-start">
     <MenuControl as={Button} variant="ghost" size="sm" aria-label="Format" title="Format">Format<Icons.ChevronDown /></MenuControl>
@@ -422,9 +429,10 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
   <Show when={props.ribbon && !props.thread}><Bar class="ui-markup-bar" data-set="mode" role="toolbar" aria-label="Mode">
     <Show when={modes().length}><Segmented label="Mode" icons size="sm" value={(modes().find((tool) => tool.active) ?? modes()[0]!).name} onChange={(name) => press(modes().find((tool) => tool.name === name)!)} options={modes().map((tool) => ({ value: tool.name, label: tool.label, icon: tool.icon() }))} /></Show>
     <span class="ui-markup-with">{undo()}{redo()}</span>
+    <Show when={props.onAsk}><IconButton label="Ask the agent (Ctrl Alt M)" onMouseDown={keep} onClick={() => props.onAsk?.()}><Icons.Agent /></IconButton></Show>
   </Bar></Show>
   {/* Only while the app is in use, as the options are only while annotating: the two never stand together. */}
-  <Show when={(props.ribbon || using()) && !props.thread && (props.own?.length || (props.onAsk && !props.ribbon))}><Bar class="ui-markup-bar" data-set="edit" role="toolbar" aria-label="Document tools">
+  <Show when={(props.ribbon || using()) && !props.thread && props.own?.length}><Bar class="ui-markup-bar" data-set="edit" role="toolbar" aria-label="Document tools">
     {caption("Edit")}<Show when={fold() < 2} fallback={format()}>{owned()}</Show>
   </Bar></Show>
   <Show when={props.ribbon}><span class="ui-markup-break" /></Show>
