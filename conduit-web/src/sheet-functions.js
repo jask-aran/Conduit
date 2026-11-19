@@ -58,7 +58,7 @@ class SpreadsheetDates extends Dates {
   datedif(ast, state) {
     const run = this.runFunction;
     this.runFunction = (args, at, metadata, compute) => run.call(this, args, at, metadata, (start, end, unit) => compute(start, end, unit.toUpperCase()));
-    try { return super.datedif(ast, state); } finally { delete this.runFunction; }
+    try { return super.datedif(ast, state); } finally { this.runFunction = run; }
   }
 }
 SpreadsheetDates.implementedFunctions = { TEXT: { method: "text", parameters: [{ argumentType: SCALAR }, { argumentType: STRING }] }, DATEDIF: Dates.implementedFunctions.DATEDIF };
