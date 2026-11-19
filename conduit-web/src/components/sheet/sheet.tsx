@@ -36,7 +36,7 @@ const between = (from: number, to: number) => Array.from({ length: to - from + 1
 type Menu = { rows?: SheetRange; cols?: SheetRange };
 
 /** A sheet: the hub's live copy drawn in the grid, a formula bar over it, the comment margin beside it. */
-/** `onComment`: a comment on the selection, as the quote tool starts one (the comment key, ASK_KEY, or the cell menu); `onAsk`: the agent asked about it. */
+/** `onComment`: a comment on the selection, as the quote tool starts one (the cell menu); `onAsk`: the one comments go to asked about it (the cell menu, or ASK_KEY as on a paper). */
 export function SheetEditor(props: { host: SheetHost; id: string; name: string; margin?: JSX.Element; marginEmpty?: boolean; marks?(marks: SheetMarks): void; onState?(state: SheetState): void; onDrawn?(): void; onAsk?(): void; onComment?(): void }) {
   const live = createLiveSheet(props.host, props.id), cells = live.doc.getMap<string>(CELLS), look = live.doc.getMap<number | string>(LOOK);
   const [model, setModel] = createSignal<SheetView>(), [grid, setGrid] = createSignal<SheetGrid>(), [failed, setFailed] = createSignal<string>();
@@ -155,6 +155,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       }
       // Ctrl+Alt+V lays what was copied here on the selection's cells as their formatting alone.
       if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "v") { event.preventDefault(); const from = grid()?.source(), area = at(); if (from && area) brush.lay(from, area); return true; }
+      // The ask key (ASK_KEY) is the sheet's, not a letter typed.
+      if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "m") return false;
       // AltGr is Ctrl and Alt together: what it types is typed.
       if ((event.ctrlKey || event.metaKey) && !(event.ctrlKey && event.altKey)) return false;
       if (event.key === "Enter" || event.key === "F2") { event.preventDefault(); editor.begin({ row, col }, "edit", "cell"); return true; }
@@ -286,7 +288,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       for (let col = range.left; col <= range.right && count < QUOTED_CELLS; col++, count++) { const value = sheet.value(row, col); cells.push((value === null ? "" : String(value)).slice(0, QUOTED_CHARS)); }
       lines.push(cells.join("\t"));
     }
-    return { text: lines.join("\n"), label: corners.range, under: corners, boxes: () => { const now = rangeOf({ under: corners }), box = now && grid()?.bounds(now); return box ? [box] : []; } };
+    // Empty cells are quoted by their address: Markup starts no comment on a place without text.
+    const text = lines.join("\n");
+    return { text: text.trim() ? text : corners.range, label: corners.range, under: corners, boxes: () => { const now = rangeOf({ under: corners }), box = now && grid()?.bounds(now); return box ? [box] : []; } };
   };
   const find = createSheetFind({ model, grid, at, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols, draw: formats.draw, write: (list) => writes(list.length === 1 ? "Replace" : "Replace all")(list) });
   const brush = createSheetBrush({ look, model, formats, at, act: history.act, failed: props.host.failed });
@@ -402,8 +406,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     const hideRows = () => history.act("Hide rows", () => sizes.setHidden(between(range.top, range.bottom), true));
     return [
       [
-        ...props.onAsk ? [{ label: "Ask the agent", icon: <Icons.Agent />, run: () => { grid()?.select(range); props.onAsk?.(); } }] : [],
-        ...props.onComment ? [{ label: "Comment", icon: <Icons.Chat />, keys: ["Ctrl", "Alt", "M"], run: () => { grid()?.select(range); props.onComment?.(); } }] : [],
+        ...props.onAsk ? [{ label: "Ask the agent", icon: <Icons.Agent />, keys: ["Ctrl", "Alt", "M"], run: () => { grid()?.select(range); props.onAsk?.(); } }] : [],
+        ...props.onComment ? [{ label: "Comment", icon: <Icons.Chat />, run: () => { grid()?.select(range); props.onComment?.(); } }] : [],
       ],
       [
         { label: "Cut", icon: <Icons.Cut />, keys: ["Ctrl", "X"], run: () => void copy(range, true).then(() => clear(range, "Cut")) },
@@ -510,7 +514,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       }
       // Ctrl+Shift+V pastes what the cells copied here showed, not their formulas; held back, it is not the browser's paste as plain text.
       if (event.shiftKey && !event.altKey && event.code === "KeyV") { event.preventDefault(); const area = at(); if (area) paste(area, true); return; }
-      if (event.altKey && event.code === ASK_KEY) { event.preventDefault(); return props.onComment?.(); }
+      if (event.altKey && event.code === ASK_KEY) { event.preventDefault(); return props.onAsk?.(); }
       // The grid has no history of its own: what this page did is undone here, never what others did.
       const redo = event.key === "y" || (event.key === "z" && event.shiftKey);
       if (event.key !== "z" && !redo) return;

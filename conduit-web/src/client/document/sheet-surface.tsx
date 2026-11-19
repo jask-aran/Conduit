@@ -37,7 +37,7 @@ export default function SheetSurface(props: ArtifactSurfaceProps) {
     away, stale, drawn,
     reveal: () => { const show = marks()?.reveal; return show && ((place) => { if (place.cells) show(place.cells); }); },
   });
-  // The comment key starts a comment on the cells selected, as the quote tool does; Ask the agent asks the one comments go to about them. Both need Markup open.
+  // Comment starts a comment on the cells selected, as the quote tool does; Ask the agent (and the ask key, as a paper's) asks the one comments go to about them. Both need Markup open.
   const about = (then: (place: NonNullable<ReturnType<SheetMarks["place"]>>) => void) => () => { const place = marks()?.place(); if (place && !props.quiet) then(place); };
   const offered = () => props.quiet ? null : props.offer();
   return <SheetEditor host={host} id={id} name={props.about().name} margin={props.margin} marginEmpty={props.marginEmpty} marks={(made) => setMarks(() => made)} onDrawn={() => setDrawn(true)}
