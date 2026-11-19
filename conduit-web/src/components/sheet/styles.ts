@@ -15,8 +15,8 @@ import { wrapLines } from "./wrap";
  * What a cell is drawn with, its column's, row's and own style together. `color`, `fill` and `edgeColor`: an ink or a workbook's `#rrggbb`. `edges`: top 1,
  * right 2, bottom 4, left 8, `edgeWeight` px wide. `size`: points. `custom`: the grid draws its text itself (cell-draw.ts).
  */
-export type SheetCellStyle = { bold: boolean; italic: boolean; underline: boolean; strike: boolean; wrap: boolean; color?: SheetInk | SheetHex; fill?: SheetInk | SheetHex; align?: "left" | "center" | "right"; valign: "top" | "middle" | "bottom"; edges: number; edgeColor?: SheetHex; edgeWeight: number; size?: number; custom: boolean };
-export const PLAIN: SheetCellStyle = { bold: false, italic: false, underline: false, strike: false, wrap: false, valign: "middle", edges: 0, edgeWeight: 1, custom: false };
+export type SheetCellStyle = { bold: boolean; italic: boolean; underline: boolean; strike: boolean; wrap: boolean; clip: boolean; color?: SheetInk | SheetHex; fill?: SheetInk | SheetHex; align?: "left" | "center" | "right"; valign: "top" | "middle" | "bottom"; edges: number; edgeColor?: SheetHex; edgeWeight: number; size?: number; custom: boolean };
+export const PLAIN: SheetCellStyle = { bold: false, italic: false, underline: false, strike: false, wrap: false, clip: false, valign: "middle", edges: 0, edgeWeight: 1, custom: false };
 const WEIGHTS: Readonly<Record<string, number>> = { medium: 2, thick: 3 };
 /** The grid's text size (`13px`) for a cell of `points`: the sheet's text is the 11 points a workbook's is by default. */
 export const textSize = (base: string, points?: number) => points ? `${Math.round(parseFloat(base) * points / 11 * 10) / 10}px` : base;
@@ -61,11 +61,11 @@ export function createSheetStyles(look: Y.Map<number | string>, model: Accessor<
 
   const make = (attrs: StyleAttrs): SheetCellStyle | null => {
     const on = (code: keyof StyleAttrs) => attrs[code] === true, edges = (on("bt") ? 1 : 0) | (on("br") ? 2 : 0) | (on("bb") ? 4 : 0) | (on("bl") ? 8 : 0);
-    const style: SheetCellStyle = { bold: on("b"), italic: on("i"), underline: on("u"), strike: on("s"), wrap: on("w"), color: (attrs.c ?? undefined) as SheetCellStyle["color"], fill: (attrs.f ?? undefined) as SheetCellStyle["fill"],
+    const style: SheetCellStyle = { bold: on("b"), italic: on("i"), underline: on("u"), strike: on("s"), wrap: on("w"), clip: on("x"), color: (attrs.c ?? undefined) as SheetCellStyle["color"], fill: (attrs.f ?? undefined) as SheetCellStyle["fill"],
       align: (attrs.h ?? undefined) as SheetCellStyle["align"], valign: (attrs.v ?? "middle") as SheetCellStyle["valign"], edges, edgeColor: (attrs.bc ?? undefined) as SheetHex | undefined, edgeWeight: WEIGHTS[attrs.bw ?? ""] ?? 1,
       size: attrs.z ? Number(attrs.z) : undefined, custom: false };
     style.custom = style.wrap || style.underline || style.strike || style.valign !== "middle";
-    return style.custom || style.bold || style.italic || style.color || style.fill || style.align || style.size || edges ? style : null;
+    return style.custom || style.clip || style.bold || style.italic || style.color || style.fill || style.align || style.size || edges ? style : null;
   };
   // Each mix made once, by the three styles' own objects, so a frame's draws make nothing new (formats.ts says why).
   const mix = (col: StyleAttrs, row: StyleAttrs, own: StyleAttrs) => {

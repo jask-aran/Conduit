@@ -1,6 +1,7 @@
 /*
  * A tab's row heights and column widths, as its look holds them (`height:<rowId>`, `width:<colId>`, so a size follows its row or column when others
- * are put in), and what sets them: a row's edge dragged beside its number, a key sequence, fitting to what the cells show.
+ * are put in), and what sets them: a row's edge dragged beside its number, a key sequence, fitting to what the cells show. A height a fit set is marked
+ * `fitted:<rowId>`, so a row fits itself again as its wrapped text changes; one set by hand, or of unknown origin, stays as it is.
  */
 import type * as Y from "yjs";
 import { valueText, type SheetView, type SizeKey } from "@/sheet-format.js";
@@ -31,6 +32,8 @@ export interface SheetSizes {
   fitColumns(cols: readonly number[], look: SheetLook): void;
   /** Each row as tall as its tallest value's lines; one line is the default height. */
   fitRows(rows: readonly number[], look: SheetLook): void;
+  /** The rows of these whose height no person set fitted again. */
+  refit(rows: readonly number[], look: SheetLook): void;
   /** How many rows and columns stand still at the top and left as the rest scrolls (`freezeRows:<tabId>`, `freezeCols:<tabId>`). */
   freeze(): { rows: number; cols: number };
   setFreeze(rows: number, cols: number): void;
@@ -80,7 +83,7 @@ export function createSheetSizes(look: Y.Map<number | string>, model: () => Shee
     setHiddenCols: (cols, hidden) => hide(cols.map((col) => model()?.colAt(col)), hidden),
     // A width given a hidden column shows it again, as a spreadsheet's: its edge dragged open, or a width typed over it.
     setWidths: (cols, width) => look.doc!.transact(() => { const ids = cols.map((col) => model()?.colAt(col)); set("width", ids, width); hide(ids, false); }),
-    setHeights: (rows, height) => set("height", rows.map((row) => model()?.rowAt(row)), height),
+    setHeights: (rows, height) => look.doc!.transact(() => { const ids = rows.map((row) => model()?.rowAt(row)); set("height", ids, height); for (const id of ids) if (id) look.delete(`fitted:${id}`); }),
     fitColumns: (cols, sheetLook) => {
       const sheet = model();
       measure ??= document.createElement("canvas").getContext("2d");
@@ -95,6 +98,7 @@ export function createSheetSizes(look: Y.Map<number | string>, model: () => Shee
         }
       });
     },
+    refit(rows, sheetLook) { const sheet = model(); this.fitRows(rows.filter((row) => { const id = sheet?.rowAt(row); return id && (!look.has(`height:${id}`) || look.has(`fitted:${id}`)); }), sheetLook); },
     fitRows: (rows, sheetLook) => {
       const sheet = model();
       if (!sheet) return;
@@ -103,7 +107,9 @@ export function createSheetSizes(look: Y.Map<number | string>, model: () => Shee
         for (const row of rows) {
           let most = 1;
           for (let col = 0; col < cols; col++) { const text = valueText(sheet.value(row, col)); if (text) most = Math.max(most, lines ? lines(row, col, text, sheetLook) : text.split("\n").length); }
-          set("height", [sheet.rowAt(row)], most > 1 ? Math.max(sheetLook.row, Math.ceil(most * line + padding)) : null);
+          const id = sheet.rowAt(row), height = most > 1 ? Math.max(sheetLook.row, Math.ceil(most * line + padding)) : null;
+          if (id && look.get(`height:${id}`) !== (height ?? undefined)) set("height", [id], height);
+          if (id && height && !look.has(`fitted:${id}`)) look.set(`fitted:${id}`, 1); else if (id && !height && look.has(`fitted:${id}`)) look.delete(`fitted:${id}`);
         }
       });
     },

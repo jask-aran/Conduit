@@ -55,8 +55,10 @@ export function createSheetTools(options: { tip(name: SheetToolId): string | und
     paint: () => options.brush ? [tool("paint", "Format painter", mark("paint"), () => options.brush!.toggle(), { own: true, on: () => options.brush!.held() })] : [],
     clear: () => [tool("clear", "Clear formatting", mark("clear"), (range) => { styles.clear(range); formats.set(range, "General"); options.fit(range); }, { keys: ["Ctrl", "\\"] })],
     wrap: () => [
-      tool("clip", "Clip", mark("clip"), (range) => { styles.set(range, { wrap: false }); options.fit(range); }, { menu: "Wrapping", on: () => !worn()?.wrap }),
-      tool("wrap", "Wrap", mark("wrap"), (range) => { styles.set(range, { wrap: !worn()?.wrap }); options.fit(range); }, { menu: "Wrapping", on: () => Boolean(worn()?.wrap) }),
+      // Overflow runs text on over the empty cells to its right; Clip cuts it at the cell's edge; Wrap breaks it into lines.
+      tool("overflow", "Overflow", mark("overflow"), (range) => { styles.set(range, { wrap: false, clip: false }); options.fit(range); }, { menu: "Wrapping", on: () => !worn()?.wrap && !worn()?.clip }),
+      tool("clip", "Clip", mark("clip"), (range) => { styles.set(range, { wrap: false, clip: true }); options.fit(range); }, { menu: "Wrapping", on: () => Boolean(worn()?.clip) && !worn()?.wrap }),
+      tool("wrap", "Wrap", mark("wrap"), (range) => { styles.set(range, { wrap: !worn()?.wrap, clip: false }); options.fit(range); }, { menu: "Wrapping", on: () => Boolean(worn()?.wrap) }),
     ],
     color: () => inks("color", "Text colour", "Default text", "text"),
     fill: () => inks("fill", "Fill colour", "No fill", "fill"),
