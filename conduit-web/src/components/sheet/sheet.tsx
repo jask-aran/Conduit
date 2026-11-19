@@ -36,8 +36,8 @@ const between = (from: number, to: number) => Array.from({ length: to - from + 1
 type Menu = { rows?: SheetRange; cols?: SheetRange };
 
 /** A sheet: the hub's live copy drawn in the grid, a formula bar over it, the comment margin beside it. */
-/** `onAsk`: the ask key (ASK_KEY) was pressed in the grid. */
-export function SheetEditor(props: { host: SheetHost; id: string; name: string; margin?: JSX.Element; marginEmpty?: boolean; marks?(marks: SheetMarks): void; onState?(state: SheetState): void; onDrawn?(): void; onAsk?(): void }) {
+/** `onComment`: a comment on the selection, as the quote tool starts one (the comment key, ASK_KEY, or the cell menu); `onAsk`: the agent asked about it. */
+export function SheetEditor(props: { host: SheetHost; id: string; name: string; margin?: JSX.Element; marginEmpty?: boolean; marks?(marks: SheetMarks): void; onState?(state: SheetState): void; onDrawn?(): void; onAsk?(): void; onComment?(): void }) {
   const live = createLiveSheet(props.host, props.id), cells = live.doc.getMap<string>(CELLS), look = live.doc.getMap<number | string>(LOOK);
   const [model, setModel] = createSignal<SheetView>(), [grid, setGrid] = createSignal<SheetGrid>(), [failed, setFailed] = createSignal<string>();
   const [at, setAt] = createSignal<SheetRange | null>(null), [changed, setChanged] = createSignal(0), [address, setAddress] = createSignal<string | null>(null), [scrolled, setScrolled] = createSignal(0);
@@ -45,7 +45,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const formats = createSheetFormats(look, model, props.host.failed), styles = createSheetStyles(look, model, props.host.failed);
   // The grid's element is a signal: the menu trigger that makes it may make it again, and the grid then mounts in the one that stands.
   const [island, setIsland] = createSignal<HTMLDivElement>(), [slot, setSlot] = createSignal<HTMLDivElement>();
-  let root: HTMLElement | undefined, anchors: SheetAnchor[] = [];
+  let root: HTMLElement | undefined, anchors: SheetAnchor[] = [], picking: string | undefined;
   const tabs = createSheetTabs({ doc: live.doc, host: props.host, id: props.id, name: props.name, grid, at });
   // Every tab's rows and columns are in it, so a row put in or taken out is undone with the formulas the hub moved for it.
   const history = createSheetHistory(live.doc, [cells, look, live.doc.getArray(ROWS), live.doc.getArray(COLS)], (op) => tabs.cells(op)), [stepped, setStepped] = createSignal(0);
@@ -308,6 +308,10 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     anchors: (list) => {
       anchors = list;
       tabs.follow(list);
+      // A comment picked in the margin selects its cells.
+      const open = list.find((anchor) => anchor.current && !anchor.resolved), range = open && open.key !== picking ? rangeOf(open) : null;
+      picking = open?.key;
+      if (range) grid()?.select(range);
       grid()?.highlight(list.filter((anchor) => !anchor.resolved).flatMap((anchor) => { const range = rangeOf(anchor); return range ? [{ range, current: anchor.current }] : []; }));
     },
     where: (name) => { const anchor = anchors.find((one) => one.key === name), range = anchor && rangeOf(anchor); return range ? grid()?.bounds(range) ?? null : null; },
@@ -390,7 +394,10 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     const sortSheet = (descending: boolean) => history.act(`Sort sheet ${descending ? "Z–A" : "A–Z"}`, () => { if (frozen < lastRow) hub({ op: "sort", range: rangeA1({ top: frozen, bottom: lastRow, left: 0, right: lastCol }), column: colName(byCol), descending }); });
     const hideRows = () => history.act("Hide rows", () => sizes.setHidden(between(range.top, range.bottom), true));
     return [
-      Boolean(props.onAsk) && [{ label: "Comment", icon: <Icons.Chat />, run: () => { grid()?.select(range); props.onAsk?.(); } }],
+      [
+        ...props.onAsk ? [{ label: "Ask the agent", icon: <Icons.Agent />, run: () => { grid()?.select(range); props.onAsk?.(); } }] : [],
+        ...props.onComment ? [{ label: "Comment", icon: <Icons.Chat />, keys: ["Ctrl", "Alt", "M"], run: () => { grid()?.select(range); props.onComment?.(); } }] : [],
+      ],
       [
         { label: "Cut", icon: <Icons.Cut />, keys: ["Ctrl", "X"], run: () => void copy(range, true).then(() => clear(range, "Cut")) },
         { label: "Copy", icon: <Icons.Copy />, keys: ["Ctrl", "C"], run: () => void copy(range) },
@@ -407,6 +414,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
           { label: `Insert ${rowsSaid} above`, icon: <Icons.Add />, keys: whole ? ["Ctrl", "Shift", "="] : undefined, run: () => structure("insert-rows", range.top, nRows) },
           ...kind === "rows" ? [{ label: `Insert ${rowsSaid} below`, icon: <Icons.Add />, run: () => structure("insert-rows", range.bottom + 1, nRows) }] : [],
         ] : [],
+        // Make chart goes here, under the inserts.
         ...kind !== "rows" ? [
           { label: `Insert ${colsSaid} left`, icon: <Icons.Add />, keys: whole ? ["Ctrl", "Shift", "="] : undefined, run: () => structure("insert-cols", range.left, nCols) },
           ...kind === "cols" ? [{ label: `Insert ${colsSaid} right`, icon: <Icons.Add />, run: () => structure("insert-cols", range.right + 1, nCols) }] : [],
@@ -488,7 +496,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       }
       // Ctrl+Shift+V pastes what the cells copied here showed, not their formulas; held back, it is not the browser's paste as plain text.
       if (event.shiftKey && !event.altKey && event.code === "KeyV") { event.preventDefault(); const area = at(); if (area) paste(area, true); return; }
-      if (event.altKey && event.code === ASK_KEY) { event.preventDefault(); return props.onAsk?.(); }
+      if (event.altKey && event.code === ASK_KEY) { event.preventDefault(); return props.onComment?.(); }
       // The grid has no history of its own: what this page did is undone here, never what others did.
       const redo = event.key === "y" || (event.key === "z" && event.shiftKey);
       if (event.key !== "z" && !redo) return;
