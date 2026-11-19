@@ -14,7 +14,7 @@ import { wrapLines } from "./wrap";
 
 /** What the grid's own cells carry for this (grid.ts TextCell). */
 /** `block`: a row of a merge over several rows, drawn here against the merge's box (grid.ts). */
-export type StyledCell = { worn?: SheetCellStyle; frozen?: boolean; displayData?: string; contentAlign?: "left" | "right" | "center"; block?: unknown; pill?: SheetPill; spill?: SheetSpill };
+export type StyledCell = { worn?: SheetCellStyle; frozen?: boolean; displayData?: string; contentAlign?: "left" | "right" | "center"; block?: unknown; pill?: SheetPill; spill?: SheetSpill; link?: string };
 /** Text running on into an empty cell from a filled one `offset` pixels to its left, in that cell's font and ink (none: the grid's). */
 export type SheetSpill = { text: string; offset: number; font?: string; ink?: string };
 /** A dropdown cell's value as a pill in its option's ink (none: a plain wash); `known` false marks a value not among the options. One object for each, made once (sheet.tsx). */
@@ -58,9 +58,11 @@ export function createCellLook(look: SheetLook) {
         const x = at(align);
         ctx.textAlign = align;
         ctx.fillText(piece, x, middle + bias);
-        if (!style.underline && !style.strike) continue;
+        if (!style.underline && !style.strike && !cell.link) continue;
         const width = measureTextCached(piece, ctx, font).width, from = align === "right" ? x - width : align === "center" ? x - width / 2 : x;
         if (style.underline) ctx.fillRect(from, Math.round(middle + em / 2), width, 1);
+        // A link is the text colour with a muted underline.
+        else if (cell.link) { const ink = ctx.fillStyle; ctx.fillStyle = String(look.grid.textMedium); ctx.fillRect(from, Math.round(middle + em / 2), width, 1); ctx.fillStyle = ink; }
         if (style.strike) ctx.fillRect(from, Math.round(middle), width, 1);
       }
     });
@@ -99,7 +101,7 @@ export function createCellLook(look: SheetLook) {
   const draw: DrawCellCallback = (args, content) => {
     const cell = args.cell as StyledCell, style = cell.worn, shown = cell.displayData;
     if (cell.pill) pill(args, cell, cell.pill);
-    else if (shown && (style?.custom || cell.block || shown.includes(SHEET_FILL))) text(args, style ?? PLAIN, cell); else content();
+    else if (shown && (style?.custom || cell.block || cell.link || shown.includes(SHEET_FILL))) text(args, style ?? PLAIN, cell); else content();
     if (cell.spill) spill(args, cell.spill);
     if (!style?.edges && !cell.frozen) return;
     // The grid keeps note of the ink it set for a column's text, so it is put back.

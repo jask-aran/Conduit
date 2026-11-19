@@ -41,11 +41,19 @@ export interface SheetTypes {
   setOptions(type: string, options: readonly SheetOption[]): void;
   /** What is written into a cell as typed: a date cell's typed date as ISO text. */
   typed(row: number, col: number, input: string): string;
+  /** Where a cell's link goes: its own (`link:<rowId>:<colId>`, as an xlsx import keeps a hyperlink; `#Tab!A1` a place in the workbook), else its text where that is a web or mail address. Not tracked. */
+  link(row: number, col: number, text: string): string | undefined;
+  /** A cell's own link set (null takes it off). */
+  setLink(row: number, col: number, address: string | null): void;
 }
+
+const WEB = /^(https?:\/\/|www\.)[^\s]+$/i, MAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** A cell's text as the address it links to, where it is one. */
+export const addressOf = (text: string) => WEB.test(text) ? (/^www\./i.test(text) ? `https://${text}` : text) : MAIL.test(text) ? `mailto:${text}` : undefined;
 
 type Dropdown = { areas: SheetRange[]; options: SheetOption[] | null; source: SheetRange | null };
 export function createSheetTypes(look: Y.Map<number | string>, model: Accessor<SheetView | undefined>, failed: (message: string) => void): SheetTypes {
-  const columns = new Map<string, string>(), cells = new Map<string, string>(), lists = new Map<string, (Dropdown | null)[]>(), [changed, setChanged] = createSignal(0);
+  const columns = new Map<string, string>(), cells = new Map<string, string>(), links = new Map<string, string>(), lists = new Map<string, (Dropdown | null)[]>(), [changed, setChanged] = createSignal(0);
   const kept = look as unknown as Y.Map<unknown>;
   const index = (name: string) => {
     if (name.startsWith("validations:")) {
@@ -57,6 +65,7 @@ export function createSheetTypes(look: Y.Map<number | string>, model: Accessor<S
       }));
       return true;
     }
+    if (name.startsWith("link:")) { const value = look.get(name); if (typeof value === "string" && value) links.set(name.slice(5), value); else links.delete(name.slice(5)); return false; }
     if (!name.startsWith("type:")) return false;
     const at = name.slice(5), value = look.get(name), to = at.includes(":") ? cells : columns;
     if (typeof value === "string") to.set(at, value); else to.delete(at);
@@ -97,6 +106,11 @@ export function createSheetTypes(look: Y.Map<number | string>, model: Accessor<S
     },
     set: (range, kind, options) => { const sheet = model(), tab = sheet?.id; if (sheet && tab) act(() => writeType(kept, sheet as SheetView & { id: string }, range, kind, range.top === 0 && range.bottom >= sheet.size().rows - 1, options)); },
     setOptions: (type, options) => { const tab = model()?.id, n = Number(type.slice(5)); if (tab) act(() => editValidations(kept, tab, (all) => all.map(({ inks: _, ...one }, at) => at === n ? { ...one, ...listFields(options) } : { ...one, ...(_ ? { inks: _ } : {}) }))); },
+    link: (row, col, text) => {
+      const sheet = links.size ? model() : undefined, own = sheet && links.get(key(sheet.rowAt(row) ?? "", sheet.colAt(col) ?? ""));
+      return own ?? (text.includes("@") || text.includes(":") || text.startsWith("www.") ? addressOf(text) : undefined);
+    },
+    setLink: (row, col, address) => { const sheet = model(), rowId = sheet?.rowAt(row), colId = sheet?.colAt(col); if (rowId && colId) { if (address) look.set(`link:${key(rowId, colId)}`, address); else look.delete(`link:${key(rowId, colId)}`); } },
     typed: (row, col, input) => at(row, col) === "date" && input && !input.startsWith("=") ? readDate(input) ?? input : input,
   };
 }

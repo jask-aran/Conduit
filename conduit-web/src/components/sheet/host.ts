@@ -186,6 +186,9 @@ export type SheetGridEvents = {
   filter?(row: number, col: number, box: SheetBox): void;
   /** A dropdown cell's arrow pressed, with the cell's box. */
   dropdown?(row: number, col: number, box: SheetBox): void;
+  /** A link Ctrl+clicked, to go to; and the link under the pointer as it moves (undefined: none). */
+  follow?(address: string): void;
+  hovered?(address: string | undefined): void;
   /** Its first frame with the sheet's cells is painted. */
   drawn(): void;
 };

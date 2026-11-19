@@ -28,6 +28,7 @@ import { FormatMenu, FormatPrompt, FormattingMenu } from "./format-menu";
 import { sheetChartIcons as ChartIcons } from "@/components/ui/sheet-icons";
 import { createSheetTypes, type SheetTypeKind } from "./types";
 import { DropdownList, DropdownPrompt, type DropdownOption } from "./dropdown";
+import { LinkPrompt } from "./link";
 import type { SheetPill } from "./cell-draw";
 import type { SheetChartKind } from "@/sheet-charts.js";
 
@@ -36,7 +37,7 @@ const SheetCharts = lazy(() => import("./charts"));
 // Cells written into the text a comment quotes, and how much of each: enough to read.
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
 // The grid keeps a spreadsheet's chords the application binds elsewhere: Ctrl+B is Bold (the sidebar elsewhere), Ctrl+- deletes rows, Ctrl+0 hides columns, Ctrl+Shift+1..5 are number formats.
-const OWN_KEYS = ["primary+KeyB", "primary+Minus", "primary+Digit0", ...[0, 1, 2, 3, 4, 5, 6].map((n) => `primary+shift+Digit${n}`), "primary+Backslash", "alt+primary+KeyV"].join(" ");
+const OWN_KEYS = ["primary+KeyB", "primary+Minus", "primary+Digit0", ...[0, 1, 2, 3, 4, 5, 6].map((n) => `primary+shift+Digit${n}`), "primary+Backslash", "alt+primary+KeyV", "primary+KeyK"].join(" ");
 // A formula moved as a fill moves it; text stays as typed.
 const shifted = (input: string, rows: number, cols: number) => input.startsWith("=") ? shiftRefs(input, rows, cols) : input;
 const REFIT = "refit";
@@ -55,6 +56,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const formats = createSheetFormats(look, model, props.host.failed), styles = createSheetStyles(look, model, props.host.failed), types = createSheetTypes(look, model, props.host.failed);
   // A dropdown's list open on its cell, and the options being edited for a range (`type`: the list's, else a new one).
   const [listing, setListing] = createSignal<{ row: number; col: number; box: SheetBox } | null>(null), [editingList, setEditingList] = createSignal<{ range: SheetRange; type?: string; options: readonly DropdownOption[] } | null>(null);
+  const [linking, setLinking] = createSignal<{ row: number; col: number; box: SheetBox; text: string; address: string; own: boolean } | null>(null);
   const pills = new Map<string, SheetPill>();
   const pillOf = (_row: number, _col: number, type: string | undefined, shown: string): SheetPill | undefined => {
     if (!type?.startsWith("list:")) return undefined;
@@ -190,6 +192,13 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     },
     activated: (row, col) => types.at(row, col)?.startsWith("list:") ? openList(row, col) : editor.begin({ row, col }, "edit", "cell"),
     dropdown: (row, col, box) => setListing({ row, col, box }),
+    // A place in the workbook (`#Tab!A1`) is gone to; anything else opens beside.
+    follow: (address) => {
+      if (!address.startsWith("#")) return void window.open(address, "_blank", "noopener,noreferrer");
+      const range = parseRange(tabs.reveal(address.slice(1)).replace(/\$/g, ""));
+      if (range) { grid()?.select(range); requestAnimationFrame(() => grid()?.focus()); }
+    },
+    hovered: (address) => { const into = island(); if (into && into.title !== (address ?? "")) into.title = address ?? ""; },
     filter: (_, col, box) => { filters.reapply(); setFiltering({ col, box }); },
   };
 
@@ -209,7 +218,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       made = mountGrid(into, { model: sheet, events, look: untrack(drawnLook), columns: {
         width: (col) => { const width = sizes.width(col); return width === undefined ? undefined : Math.round(width * zoom()); }, freeze: sizes.freeze, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols,
         heights: () => { const by = zoom(), kept = sizes.heights(); return by === 1 ? kept : new Map([...kept].map(([row, height]) => [row, Math.round(height * by)])); },
-        type: types.at, pill: pillOf, draw: formats.draw, dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded, merges: merges.list,
+        type: types.at, pill: pillOf, link: types.link, draw: formats.draw, dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded, merges: merges.list,
       } });
       setGrid(made);
     }, (error: Error) => { setFailed(error.message); props.onDrawn?.(); });
@@ -424,6 +433,10 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     if (sheet) for (const row of shownRows(inTab(range)).slice(0, 1000)) for (const col of shownCols(inTab(range))) { const text = valueText(sheet.value(row, col)); if (text) seen.add(text); }
     setEditingList({ range, options: [...seen].slice(0, 50).map((value) => ({ value })) });
   };
+  const openLink = (row: number, col: number) => {
+    const box = grid()?.bounds({ top: row, bottom: row, left: col, right: col }), text = valueText(model()?.value(row, col) ?? null);
+    if (box) setLinking({ row, col, box, text, address: types.link(row, col, text) ?? "", own: Boolean(types.link(row, col, "")) });
+  };
   const openList = (row: number, col: number) => { const box = grid()?.bounds({ top: row, bottom: row, left: col, right: col }); if (box) setListing({ row, col, box }); };
   const toggle = (row: number, col: number) => {
     const sheet = model(), area = at();
@@ -546,6 +559,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       // A style's chord is its tool's step: Ctrl+B is Bold.
       const tool = tools.find((one) => one.keys?.length === 2 && one.keys[1]!.toLowerCase() === event.key.toLowerCase())?.label ?? "";
       if (find.keys(event) || tabs.key(event) || history.act(tool, () => formats.key(event, at()) || styles.key(event, at())) || filters.key(event)) return;
+      // Ctrl+K edits the active cell's link.
+      if (!event.shiftKey && !event.altKey && event.code === "KeyK") { event.preventDefault(); const area = at(); if (area) openLink(area.top, area.left); return; }
       // Ctrl+\ clears the selection's formatting.
       if (!event.shiftKey && !event.altKey && event.code === "Backslash") { event.preventDefault(); return tools.find((one) => one.name === "clear")?.run(); }
       // Ctrl+D and Ctrl+R are the grid's only while it has the keyboard: elsewhere the browser keeps them.
@@ -633,6 +648,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
           value={(() => { const now = listing(); return now ? valueText(model()?.value(now.row, now.col) ?? null) : ""; })()} onClose={() => { setListing(null); grid()?.focus(); }}
           onPick={(value) => { const now = listing(); setListing(null); if (now) writes(`Pick in ${a1(now.row, now.col)}`)([{ row: now.row, col: now.col, input: value }]); grid()?.focus(); }}
           onEdit={() => { const now = listing(); setListing(null); if (now) editList({ top: now.row, bottom: now.row, left: now.col, right: now.col }); }} />
+        <LinkPrompt at={linking()} frame={() => body} onClose={() => { setLinking(null); grid()?.focus(); }}
+          onSave={(text, address) => { const now = linking(); setLinking(null); if (now) history.act(address ? "Link" : "Remove link", () => { if (text !== now.text) write([{ row: now.row, col: now.col, input: text }]); types.setLink(now.row, now.col, address || null); }); grid()?.focus(); }} />
         <DropdownPrompt given={editingList()?.options ?? null} onClose={() => { setEditingList(null); grid()?.focus(); }}
           onSave={(options) => { const now = editingList(); setEditingList(null); if (now) history.act("Dropdown", () => {
             if (!now.type) return types.set(now.range, "list", options);

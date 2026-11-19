@@ -21,7 +21,9 @@ import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange, Sheet
 /** What the grid reads of the sheet besides its cells: each column's width and type, the rows whose height is not the default (`look`), a value as its cell's number format draws it (formats.ts), a cell's style (styles.ts), and whether an import froze it. */
 export type SheetColumns = { width(col: number): number | undefined; type(row: number, col: number): string | undefined;
   /** A dropdown cell's pill for the value it shows (cell-draw.ts); undefined where the cell is no dropdown. */
-  pill(row: number, col: number, type: string | undefined, shown: string): SheetPill | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; dated(row: number, col: number): boolean; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean; freeze(): { rows: number; cols: number }; hidden(): ReadonlySet<number>; hiddenCols(): ReadonlySet<number>;
+  pill(row: number, col: number, type: string | undefined, shown: string): SheetPill | undefined;
+  /** Where a cell's link goes (types.ts); undefined where it is none. */
+  link(row: number, col: number, text: string): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; dated(row: number, col: number): boolean; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean; freeze(): { rows: number; cols: number }; hidden(): ReadonlySet<number>; hiddenCols(): ReadonlySet<number>;
   /** A filter's mark on a header cell (0 none, 1 a filter, 2 one keeping only some values) and a table's banded rows (filter.tsx). */
   mark(row: number, col: number): number; banded(row: number, col: number): boolean;
   /** The tab's merged ranges (merges.ts). */
@@ -106,7 +108,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   let counting = false;
   /** What a cell shows; what was typed into it is read only when the grid asks (editing, copying), since drawing never does. */
   class TextCell {
-    readonly kind = GridCellKind.Text; readonly allowOverlay = false; mark = 0; pill?: SheetPill; spill?: SheetSpill;
+    readonly kind = GridCellKind.Text; readonly allowOverlay = false; mark = 0; pill?: SheetPill; spill?: SheetSpill; link?: string;
     constructor(private row: number, private col: number, private typed: string | null, readonly displayData: string, readonly contentAlign?: "left" | "center" | "right", readonly themeOverride?: Partial<Theme>, readonly worn?: SheetCellStyle, readonly frozen?: boolean) {}
     get data() { return this.typed ??= model.input(this.row, this.col); }
     get copyData() { return this.data; }
@@ -312,7 +314,10 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     // A press on a filter's mark, in its header cell's right end, opens the filter.
     onCellClicked: ([col, row], event) => {
       p.editor?.focus();
-      const at = p.map.sheet(row), cell = options.columns.mark(at, col) && event.localEventX >= event.bounds.width - Number(look.grid.headerIconSize) - 2 * Number(look.grid.cellHorizontalPadding) ? box(p, col, row) : undefined;
+      const at = p.map.sheet(row), value = model.value(at, col), link = (event.ctrlKey || event.metaKey) && typeof value === "string" ? options.columns.link(at, col, value) : undefined;
+      // Ctrl and a click follows a cell's link.
+      if (link) return void events.follow?.(link);
+      const cell = options.columns.mark(at, col) && event.localEventX >= event.bounds.width - Number(look.grid.headerIconSize) - 2 * Number(look.grid.cellHorizontalPadding) ? box(p, col, row) : undefined;
       if (cell) events.filter?.(at, col, { left: cell.x, top: cell.y, width: cell.width, height: cell.height });
       else if (options.columns.type(at, col)?.startsWith("list:") && event.localEventX >= event.bounds.width - Number(look.grid.headerIconSize) - 2 * Number(look.grid.cellHorizontalPadding)) { const one = box(p, col, row); if (one) events.dropdown?.(at, col, { left: one.x, top: one.y, width: one.width, height: one.height }); }
       events.pressed(at, col);
@@ -402,6 +407,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     },
     editOnType: false, cellActivationBehavior: "double-click",
     onVisibleRegionChanged: (region) => { p.view = region; events.moved(); },
+    onItemHovered: (args) => { const at = args.kind === "cell" ? p.map.sheet(args.location[1]) : -1, value = at >= 0 ? model.value(at, args.location[0]) : null; events.hovered?.(typeof value === "string" ? options.columns.link(at, args.location[0], value) : undefined); },
     // Its own Ctrl+Space and Shift+Space take only the current cell's column or row; the sheet's take the whole selection's (`whole`).
     rowMarkers: "clickable-number", smoothScrollX: true, smoothScrollY: true, width: "100%", height: "100%", fillHandle: true, getCellsForSelection: true, keybindings: { search: false, selectColumn: false, selectRow: false, clear: false },
     // The grid's own description of every cell for a screen reader is rebuilt on each move and scroll. Drawn off screen and copied whole, an
@@ -491,8 +497,10 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         const serial = type === "date" && typeof value === "string" && options.columns.dated(row, col) ? serialOf(value) : null;
         const drawn = fault || value === null || typeof value === "boolean" ? null : options.columns.draw(row, col, serial ?? value);
         const worn = themed(style, fault ? theme.error : drawn?.hue && hues[drawn.hue]);
-        return withMark(new TextCell(row, col, input, drawn ? drawn.text : shown(value), style?.align ?? (typeof value === "number" || type === "number" || serial !== null ? "right" : undefined), striped ? washed(worn) : worn, style,
+        const made = withMark(new TextCell(row, col, input, drawn ? drawn.text : shown(value), style?.align ?? (typeof value === "number" || type === "number" || serial !== null ? "right" : undefined), striped ? washed(worn) : worn, style,
           input !== null && !input.startsWith("=") && options.columns.frozen(row, col) || undefined), mark);
+        if (typeof value === "string" && !fault) made.link = options.columns.link(row, col, value);
+        return made;
       };
       return ([col, at]: Item): GridCell => merges.length ? merged(at, col, p.map.sheet(at)) : own(p.map.sheet(at), col);
     };
