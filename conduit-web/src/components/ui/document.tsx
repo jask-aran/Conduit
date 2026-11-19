@@ -1,8 +1,8 @@
-import { BaselineIcon, BetweenHorizontalEndIcon, BetweenVerticalEndIcon, BoldIcon, CalendarIcon, ChevronRightIcon, CodeIcon, ExternalLinkIcon, Grid2x2XIcon, GripVerticalIcon, Heading1Icon, Heading2Icon, Heading3Icon, HighlighterIcon, ImageIcon, ImageOffIcon, InfoIcon, ItalicIcon, LinkIcon, ListChecksIcon, ListCollapseIcon, ListIcon, ListOrderedIcon,
-  MessageSquarePlusIcon, MinusIcon, PencilIcon, FileDiffIcon, PilcrowIcon, StrikethroughIcon, TableColumnsSplitIcon, TableIcon, TableRowsSplitIcon, TextQuoteIcon, TriangleAlertIcon, UnlinkIcon } from "lucide-solid";
+import { AlignCenterIcon, AlignLeftIcon, AlignRightIcon, BaselineIcon, BetweenHorizontalEndIcon, BetweenHorizontalStartIcon, BetweenVerticalEndIcon, BetweenVerticalStartIcon, BoldIcon, CalendarIcon, ChevronRightIcon, CodeIcon, ExternalLinkIcon, Grid2x2XIcon, GripVerticalIcon, Heading1Icon, Heading2Icon, Heading3Icon, HighlighterIcon, ImageIcon, ImageOffIcon, InfoIcon, ItalicIcon, LinkIcon, ListChecksIcon, ListCollapseIcon, ListIcon, ListOrderedIcon,
+  MessageSquarePlusIcon, MinusIcon, PencilIcon, FileDiffIcon, PilcrowIcon, ReplaceAllIcon, ReplaceIcon, StrikethroughIcon, TableColumnsSplitIcon, TableIcon, TableRowsSplitIcon, TextQuoteIcon, TriangleAlertIcon, UnlinkIcon } from "lucide-solid";
 import { createEffect, createSignal, onCleanup, Show, splitProps, type JSX } from "solid-js";
 // Through the barrel, as markup.tsx does, so the editor's chunk takes the header from the app's own.
-import { Button, FindBar, Frost, IconButton, Icons, PaneHeader, Spinner } from "./index";
+import { Button, FindBar, Frost, IconButton, Icons, LeadInput, PaneHeader, Spinner } from "./index";
 import { createArtWindow } from "./chat-art";
 import "./styles/document.css";
 
@@ -64,7 +64,8 @@ export const documentToneIcons = { note: InfoIcon, warning: TriangleAlertIcon };
 
 /** What can be done to the text selected (its marks, a link, a comment) and to the table the caret is in. */
 export const documentToolIcons = { bold: BoldIcon, italic: ItalicIcon, strike: StrikethroughIcon, code: CodeIcon, color: BaselineIcon, highlight: HighlighterIcon, link: LinkIcon, unlink: UnlinkIcon, open: ExternalLinkIcon, edit: PencilIcon, comment: MessageSquarePlusIcon,
-  grip: GripVerticalIcon, "row-below": BetweenHorizontalEndIcon, "column-right": BetweenVerticalEndIcon, "delete-row": TableRowsSplitIcon, "delete-column": TableColumnsSplitIcon, "delete-table": Grid2x2XIcon };
+  grip: GripVerticalIcon, "row-above": BetweenHorizontalStartIcon, "row-below": BetweenHorizontalEndIcon, "column-left": BetweenVerticalStartIcon, "column-right": BetweenVerticalEndIcon,
+  "align-left": AlignLeftIcon, "align-center": AlignCenterIcon, "align-right": AlignRightIcon, "delete-row": TableRowsSplitIcon, "delete-column": TableColumnsSplitIcon, "delete-table": Grid2x2XIcon };
 
 /** How the reader writes (DocumentWriting): Editing, final; Suggesting, each change standing until it is accepted. */
 export const documentWritingIcons = { editing: PencilIcon, suggesting: FileDiffIcon };
@@ -178,7 +179,21 @@ export const DocumentTableEdges = (props: { box?: { top: number; left: number; w
 
 
 /** Find in a document's text, at the sheet's top right: the field, how many it found and which is current ("3 of 12"), previous, next, close. */
-export const DocumentFind = (props: Omit<Parameters<typeof FindBar>[0], "label" | "plain" | "children">) => <FindBar label="Find" {...props} />;
+/** Find in the text. `onReplacing`: a toggle for the replace row, which shows while `replace` is given: Enter or Replace puts its text in place of
+ *  the current match and goes on to the next; Replace all, every match. */
+export const DocumentFind = (props: Omit<Parameters<typeof FindBar>[0], "label" | "plain" | "children"> & { onReplacing?: () => void;
+  replace?: { value: string; onValue: (value: string) => void; onReplace: () => void; onReplaceAll: () => void; inputRef?: (element: HTMLInputElement) => void } }) => {
+  const [own, bar] = splitProps(props, ["onReplacing", "replace"]), keep = (event: MouseEvent) => event.preventDefault();
+  return <FindBar label="Find" {...bar}>
+    <Show when={own.onReplacing}>{(toggle) => <IconButton kind="tool" label="Replace (Ctrl+H)" aria-pressed={Boolean(own.replace)} onMouseDown={keep} onClick={() => toggle()()}><ReplaceIcon /></IconButton>}</Show>
+    <Show when={own.replace}>{(replace) => <div class="ui-document-replace">
+      <LeadInput kind="tool" lead={<ReplaceIcon />} ref={replace().inputRef} aria-label="Replace with" placeholder="Replace with" value={replace().value} onInput={(event) => replace().onValue(event.currentTarget.value)} onClear={() => replace().onValue("")}
+        onKeyDown={(event) => { if (event.isComposing) return; if (event.key === "Enter") { event.preventDefault(); replace().onReplace(); } else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); bar.onEscape(); } }} />
+      <IconButton kind="tool" label="Replace (Enter)" disabled={!bar.query} onMouseDown={keep} onClick={() => replace().onReplace()}><ReplaceIcon /></IconButton>
+      <IconButton kind="tool" label="Replace all" disabled={!bar.query} onMouseDown={keep} onClick={() => replace().onReplaceAll()}><ReplaceAllIcon /></IconButton>
+    </div>}</Show>
+  </FindBar>;
+};
 
 /** What the editor's own blocks wear in its text: a callout's box (its tone in `data-tone`), a toggle (`data-open` while unfolded) and the room its blocks fold in. */
 export const documentBlockClass = { callout: "ui-document-callout", toggle: "ui-document-toggle", toggleBody: "ui-document-toggle-body" };

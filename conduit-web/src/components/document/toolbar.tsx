@@ -29,26 +29,53 @@ export const inkSwatch = (ink?: PaperInk) => ink ? <Swatch colour={MARKUP_INKS[i
 /** The ink put on the text selected, or the mark taken off it (none). */
 export const putInk = (chain: ChainedCommands, mark: InkedMark, ink?: PaperInk | `#${string}`) => (ink ? chain.setMark(mark, { ink }) : chain.unsetMark(mark)).run();
 const TABLE = [["delete-row", "Delete the row", "deleteRow"], ["delete-column", "Delete the column", "deleteColumn"], ["delete-table", "Delete the table", "deleteTable"]] as const;
+/** What the caret's cell offers in the block menu: rows and columns put in beside it, and its column's alignment, which Markdown keeps for a whole column. */
+export const TABLE_INSERTS = [["row-above", "Insert row above", "addRowBefore"], ["row-below", "Insert row below", "addRowAfter"], ["column-left", "Insert column left", "addColumnBefore"], ["column-right", "Insert column right", "addColumnAfter"]] as const;
+export const TABLE_ALIGNS = [["align-left", "Left", "left"], ["align-center", "Centre", "center"], ["align-right", "Right", "right"]] as const;
+/** The caret's column in its table: where the table starts, its map and the column's index; null outside a table. */
+const caretColumn = (view: EditorView) => {
+  const { $from } = view.state.selection;
+  let cell = $from.depth;
+  while (cell > 0 && !/cell/.test($from.node(cell).type.spec.tableRole ?? "")) cell--;
+  if (cell < 3) return null;
+  const table = $from.node(cell - 2), start = $from.start(cell - 2), map = TableMap.get(table);
+  return { start, map, column: map.colCount($from.before(cell) - start), row: $from.index(cell - 2) };
+};
+/** The caret is in its table's first row, its header in Markdown: a row put above it would push the header down. */
+export const inHeaderRow = (view: EditorView) => caretColumn(view)?.row === 0;
+/** The caret column's alignment as its cells wear it, the first cell's. */
+export const columnAlign = (view: EditorView) => { const at = caretColumn(view); return at ? view.state.doc.nodeAt(at.start + at.map.map[at.column]!)?.attrs.align as string | null : null; };
+/** Every cell of the caret's column aligned (`align`: left, center, right, or null for none), in one change. */
+export const alignColumn = (view: EditorView, align: string | null) => {
+  const at = caretColumn(view);
+  if (!at) return;
+  const tr = view.state.tr;
+  for (const pos of new Set(Array.from({ length: at.map.height }, (_, row) => at.start + at.map.map[row * at.map.width + at.column]!))) tr.setNodeAttribute(pos, "align", align);
+  view.dispatch(tr);
+};
 // The app's own writing of a chord is passed in (`chord`); without it, the ribbon's.
 const ribbonChord = (keys: string) => keys.split("-").map((key) => key === "Mod" ? "Ctrl" : key.length === 1 ? key.toUpperCase() : key).join(" ");
 // A press on a tool keeps the editor's focus, and with it the selection the tool acts on.
 const keep = (event: MouseEvent) => event.preventDefault();
 
-/** The lines from `from` to `to` as they stand, each line's whole height and not only its letters', so what floats over them clears the line. */
-const linesOf = (view: EditorView, from: number, to: number) => {
-  const box = posToDOMRect(view, from, to), glyph = view.coordsAtPos(from), at = view.domAtPos(from).node;
-  const block = (at.nodeType === Node.ELEMENT_NODE ? at : at.parentElement) as HTMLElement | null, line = block ? parseFloat(getComputedStyle(block).lineHeight) : NaN;
+/**
+ * The selection's first line (`last`: its last) as it stands, its whole height and not only its letters', across the selection's width: what floats
+ * over the selection stands off the line it is placed by, never over the rest of what is selected.
+ */
+const lineOf = (view: EditorView, from: number, to: number, last = false) => {
+  const box = posToDOMRect(view, from, to), pos = last ? to : from, glyph = view.coordsAtPos(pos, last ? -1 : 1), at = view.domAtPos(pos).node;
+  const block = (at.nodeType === Node.ELEMENT_NODE ? at : at.parentElement) as HTMLElement | null, line = block && block !== view.dom ? parseFloat(getComputedStyle(block).lineHeight) : NaN;
   const lead = Number.isFinite(line) ? Math.max(0, (line - (glyph.bottom - glyph.top)) / 2) : 0;
-  return new DOMRect(box.left, box.top - lead, box.width, box.height + 2 * lead);
+  return new DOMRect(box.left, glyph.top - lead, box.width, glyph.bottom - glyph.top + 2 * lead);
 };
 
 /**
  * What can be done to the text selected, over it while the editor has focus: the marks (pressed where the selection wears them; a text colour and a
  * highlight each picked from a row of the inks and Any colour in place of the buttons), a link (its address asked for in place), a comment (`onComment`); and with
- * the caret in a link, its address, Open, Edit and Remove. `chord` writes a chord in the editor's notation (`Mod-b`) as the app writes keys. It stands clear above the lines it is about, or under them where `bounds` (the view the
+ * the caret in a link, its address, Open, Edit and Remove. `chord` writes a chord in the editor's notation (`Mod-b`) as the app writes keys. It stands a gap above the first line it is about, or under the last where `bounds` (the view the
  * text scrolls in) has no room above. Escape or a press away shuts it until the selection changes.
  */
-export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bounds: Accessor<HTMLElement | undefined>; /** The marks offered (every one, unsaid). */ marks?: readonly string[]; onComment?: (about: Range) => void; chord?: (keys: string) => string }) {
+export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bounds: Accessor<HTMLElement | undefined>; /** Counted up by Mod-K: the link's field opens. */ asked?: Accessor<number>; /** The marks offered (every one, unsaid). */ marks?: readonly string[]; onComment?: (about: Range) => void; chord?: (keys: string) => string }) {
   const [linking, setLinking] = createSignal(false), [inking, setInking] = createSignal<typeof INKED[number]>(), [shut, setShut] = createSignal<string>();
   // Any colour's picker, open under the strip; the last colour chosen for each mark is kept to come back to. It puts its colour without taking the
   // editor's focus, so its hex can be typed.
@@ -64,15 +91,16 @@ export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bo
     const { from, to } = text ? selection : { from: selection.from, to: selection.from };
     track(made, "selection");
     return { text, focused: made.isFocused, key: `${from} ${to}`, link, marks: Object.fromEntries([...MARKS, ...INKED].map(([name]) => [name, isOn(made, name)])) as Record<string, boolean>,
-      inks: { color: markAttrs(made, "color").ink, highlight: markAttrs(made, "highlight").ink } as Record<InkedMark, PaperInk | `#${string}` | undefined>, lines: () => linesOf(made.view, from, to) };
+      inks: { color: markAttrs(made, "color").ink, highlight: markAttrs(made, "highlight").ink } as Record<InkedMark, PaperInk | `#${string}` | undefined>, lines: (last?: boolean) => lineOf(made.view, from, to, last) };
   }, undefined, { equals: sameJson });
-  // Placed again only when what it is over changes.
-  const lines = createMemo(on(() => state()?.key, () => state()?.lines));
   const placement = createMemo(on(() => state()?.key, () => {
     const now = state()?.lines(), top = props.bounds()?.getBoundingClientRect().top;
     return now && top !== undefined && now.y - top < (tools?.offsetHeight ?? 0) * 1.5 ? "bottom-start" as const : "top-start" as const;
   }));
+  // Placed again only when what it is over changes: above the first line, or under the last.
+  const lines = createMemo(on([() => state()?.key, placement], () => { const now = state(), under = placement() === "bottom-start"; return now ? () => now.lines(under) : undefined; }));
   createEffect(on(() => state()?.key, () => { setLinking(false); setInking(undefined); setPicking(false); setShut(undefined); }, { defer: true }));
+  createEffect(on(() => props.asked?.(), () => { setInking(undefined); setShut(undefined); setLinking(true); }, { defer: true }));
   const open = () => { const now = state(); return Boolean(now && (now.focused || linking() || inking()) && shut() !== now.key); };
   const chain = () => props.editor()!.chain().focus();
   const link = (href: string) => { const made = chain().extendMarkRange("link"); (href.trim() ? made.setLink({ href: href.trim() }) : made.unsetLink()).run(); setLinking(false); };
