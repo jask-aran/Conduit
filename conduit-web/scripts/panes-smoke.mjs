@@ -129,8 +129,8 @@ try {
   await scenario("file drag edges open panes and the middle replaces", async (page, check) => {
     await open(page);
     const target = page.locator(".chat-main");
-    const left = await dragProbe(page, dockRow(page, 1), target, 0.1);
-    const box = await target.boundingBox(); // once the dock has eased open
+    await until(page, () => { const main = document.querySelector(".chat-main"), same = main.offsetWidth === main.smokeWidth; main.smokeWidth = main.offsetWidth; return same; }); // the dock has eased open
+    const left = await dragProbe(page, dockRow(page, 1), target, 0.1), box = await target.boundingBox();
     check("left third opens a pane", left.pill === "Open in a new pane on the left" && left.wash && Math.abs(left.wash.width - box.width / 3) <= 2, JSON.stringify(left));
     const right = await dragProbe(page, dockRow(page, 1), target, 0.9);
     check("right third opens a pane", right.pill === "Open in a new pane on the right", JSON.stringify(right));
