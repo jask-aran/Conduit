@@ -1,5 +1,5 @@
-// A paper's mated thread and its connections: the pane's Paper | Thread switch turns the same tab to the paper's own chat (made by the hub, in no list of
-// chats) and back; a chat connected to the paper is a listener by name, a comment sent to it is taken in its name and written into the chat, which starts
+// A paper's mated thread and its connections: the header's thread button opens the paper's own chat (made by the hub, in no list of
+// chats) in a pane beside, and closes it; a chat connected to the paper is a listener by name, a comment sent to it is taken in its name and written into the chat, which starts
 // its agent; the chat shows the connection as a rider, which opens the paper beside it and disconnects it.
 // The chat's harness answers through the tool conduit_artifact (Conduit's MCP endpoint).
 // Makes a chat on the scripted test-stream profile (no model is called) and deletes it; the comment it sends it resolves as the person.
@@ -9,19 +9,19 @@ const wait = (ms) => new Promise((done) => setTimeout(done, ms)), paper = "/v0/d
 const { page, close } = await open({ width: 1600, height: 950 });
 const errors = []; page.on("pageerror", (error) => errors.push(String(error)));
 const api = (url, method = "GET", body) => page.evaluate(async ([url, method, body]) => { const answer = await fetch(url, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined }); return answer.json().catch(() => null); }, [url, method, body]);
-const view = () => page.evaluate(() => ({ shown: document.querySelector('[aria-label="View"] [aria-checked="true"], [aria-label="View"] [aria-pressed="true"], [aria-label="View"] [data-current]')?.textContent.trim(), tabs: [...document.querySelectorAll("main [role=tab]")].map((tab) => tab.textContent.trim()).join() }));
-const turn = (to) => page.locator('[aria-label="View"]').getByText(to).click();
+const view = () => page.evaluate(() => ({ lit: document.querySelector('.pane-artifact [aria-pressed][aria-label*="thread"]')?.getAttribute("aria-pressed"), thread: document.querySelectorAll(".main-split textarea").length, tabs: [...document.querySelectorAll("[role=tab]")].map((tab) => tab.textContent.trim()).join() }));
+const turn = () => page.locator('.pane-artifact [aria-label*="thread"]').click();
 let chat, item; const extra = [];
 try {
   await page.goto(`${origin}/?a=artifact:test`);
   await page.waitForSelector(".ui-document-text [data-id]", { timeout: 20000 }); await wait(1200);
   const before = await view();
-  await turn("Thread"); await page.waitForSelector(".chat-main textarea", { timeout: 15000 }); await wait(1500);
+  await turn(); await page.waitForSelector(".main-split textarea", { timeout: 15000 }); await wait(1500);
   const thread = await view(), links = await api(`${paper}/connections`), listed = (await api("/v0/projects")).projects.flatMap((project) => project.sessions.map((one) => one.id));
-  console.log("Thread turns the same tab to the paper's chat:", before.shown === "Paper" && thread.shown === "Thread" && before.tabs === thread.tabs && thread.tabs.endsWith("Test document"), JSON.stringify([before, thread]));
-  console.log("the mated thread is a chat of the paper's, in no project's list:", Boolean(links.thread) && page.url().endsWith(links.thread) && !listed.includes(links.thread));
-  await turn("Paper"); await page.waitForSelector(".pane-artifact .ui-document-text [data-id]", { timeout: 15000 });
-  console.log("Paper turns it back:", (await view()).shown === "Paper" && (await view()).tabs === before.tabs);
+  console.log("the button opens the paper's chat beside it, lit:", before.lit === "false" && thread.lit === "true" && thread.thread === 1 && thread.tabs.includes("Thread"), JSON.stringify([before, thread]));
+  console.log("the mated thread is a chat of the paper's, in no project's list:", Boolean(links.thread) && page.url().includes(links.thread) && !listed.includes(links.thread));
+  await turn(); await wait(1500);
+  console.log("pressed again, it closes the thread:", (await view()).lit === "false" && (await view()).thread === 0);
   // A chat connected to the paper is handed what is sent to it.
   chat = (await api("/v0/chats", "POST", { projectId: "test", profileId: "test-stream" })).id;
   const name = `chat ${chat.slice(0, 8)}`;

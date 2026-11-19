@@ -5,7 +5,7 @@
  * Each of those is one step of the sheet's history.
  */
 import type * as Y from "yjs";
-import { createEffect, createMemo, createSignal, Index, onCleanup, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, Index, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { CHART_LEAST, CHART_MOST, chartData, chartPlace, chartSize, readCharts, type SheetChart } from "@/sheet-charts.js";
 import { rangeA1, type SheetView } from "@/sheet-format.js";
 import { drawChart } from "./chart-draw";
@@ -16,16 +16,22 @@ const STEP = 24;
 // How far (px) a press moves before it is a drag.
 const SLOP = 3;
 const clamp = (n: number, least: number, most: number) => Math.min(most, Math.max(least, Math.round(n)));
+// The most lines along a chart's labels it reads and draws (chartData's `every`): a whole column of 100,000 rows is worked out in under 1 ms.
+const POINTS = 200;
+// The look keys that change what a chart draws besides its own: hidden rows and columns, a filter's or table's, number formats.
+const DRAWN = /^(hidden|filter|table|fmt):/;
 
 export default function SheetCharts(props: { look: Y.Map<number | string>; model: SheetView; grid: () => SheetGrid | undefined; scrolled: () => number; zoom: () => number;
   hidden: () => ReadonlySet<number>; hiddenCols: () => ReadonlySet<number>; text(row: number, col: number): string; act(label: string, run: () => void): void; undo(): void; redo(): void }) {
   const sheet = props.model;
   const [tick, setTick] = createSignal(0), [selected, setSelected] = createSignal<string | null>(null);
   const bump = () => setTick((n) => n + 1);
-  // Any look may change what a chart draws (hidden rows, a filter, a number format), not only its own.
-  props.look.observe(bump);
-  const off = sheet.onChange(bump);
-  onCleanup(() => { props.look.unobserve(bump); off(); });
+  // The cells changed last (null: any may have), which a chart is drawn again for only where they meet its range.
+  const [edited, setEdited] = createSignal<readonly { row: number; col: number }[] | null>(null, { equals: false });
+  const looked = (event: { keysChanged: Set<string> }) => { if ([...event.keysChanged].some((name) => DRAWN.test(name))) setEdited(null); bump(); };
+  props.look.observe(looked);
+  const off = sheet.onChange((change) => { setEdited(change.cells); bump(); });
+  onCleanup(() => { props.look.unobserve(looked); off(); });
   const name = () => `charts:${sheet.id}`;
   const list = createMemo(() => { tick(); return sheet.id ? readCharts(props.look.get(name())) : []; });
   // The caption's size, which the drawing is laid out from.
@@ -51,12 +57,15 @@ export default function SheetCharts(props: { look: Y.Map<number | string>; model
   return <div ref={setLayer} class="ui-sheet-charts" style={spot()}>
     <Index each={list()}>{(chart) => {
       const place = createMemo(() => { tick(); return chartPlace(sheet, chart()); });
-      // Drawn again when its cells, its look or the hidden lines change, never as the grid scrolls.
+      // Drawn again when its cells, its look or the hidden lines change, never as the grid scrolls nor for cells outside it.
+      const due = createMemo((n: number) => { const cells = edited(), at = untrack(place)?.area; return !cells || !at || cells.some(({ row, col }) => row >= at.top && row <= at.bottom && col >= at.left && col <= at.right) ? n + 1 : n; }, 0);
+      const drawn = createMemo(() => { const at = place(); return at ? `${due()} ${rangeA1(at.area)} ${JSON.stringify(chart())}` : ""; });
       const art = createMemo(() => {
-        const at = place();
+        const at = drawn() && untrack(place);
         if (!at) return "";
-        const data = chartData(at.area, chart().labels, (row, col) => ({ value: sheet.value(row, col), text: props.text(row, col) }), { rows: props.hidden(), cols: props.hiddenCols() });
-        return drawChart(chart().kind, data, chartSize(chart()), chart().title, font());
+        const data = chartData(at.area, untrack(chart).labels, (row, col) => ({ value: sheet.value(row, col), text: props.text(row, col) }), { rows: props.hidden(), cols: props.hiddenCols() }, POINTS);
+        const caption = font();
+        return untrack(() => drawChart(chart().kind, data, chartSize(chart()), chart().title, caption));
       });
       const [drag, setDrag] = createSignal<{ x: number; y: number; width: number; height: number } | null>(null);
       const box = createMemo(() => {
@@ -91,7 +100,7 @@ export default function SheetCharts(props: { look: Y.Map<number | string>; model
       };
       const key = (event: KeyboardEvent) => {
         const at = place(), mod = event.ctrlKey || event.metaKey;
-        if (mod && !event.altKey && (event.key === "z" || event.key === "y")) { event.preventDefault(); event.stopPropagation(); return event.key === "y" || event.shiftKey ? props.redo() : props.undo(); }
+        if (mod && !event.altKey && (event.code === "KeyZ" || event.code === "KeyY")) { event.preventDefault(); event.stopPropagation(); return event.code === "KeyY" || event.shiftKey ? props.redo() : props.undo(); }
         if (event.key === "Delete" || event.key === "Backspace") { event.preventDefault(); save("Delete chart", chart().id, null); return props.grid()?.focus(); }
         if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setSelected(null); return props.grid()?.focus(); }
         if (event.key === "Tab") {

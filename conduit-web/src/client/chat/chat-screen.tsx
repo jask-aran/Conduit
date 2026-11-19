@@ -46,7 +46,7 @@ export function ChatHeader(props: {
   tabActions?: JSX.Element;
   tabs?: JSX.Element;
   pill?: JSX.Element;
-  /** What the pane shows of one thing in turn (a paper and its thread), as the switch between them. */
+  /** On a phone, the switch between an artifact and its thread, shown in turn. */
   modes?: JSX.Element;
 }) {
   const placeKind = () => props.project && isWorkspace(props.project) ? "workspace" : "project";

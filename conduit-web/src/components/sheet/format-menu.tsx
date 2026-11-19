@@ -52,8 +52,8 @@ export function FormatPrompt(props: { formats: SheetFormats; act(label: string, 
 
 /**
  * The cell menu's Formatting: the ribbon's look tools (tools.tsx) as rows, those of one ribbon menu under one submenu, each showing what the selection
- * wears. A row first selects `range`, what the menu was opened on (`select`: the grid's), so it formats that. Merging, filling, the painter and charts (Make chart) have
- * rows or places of their own; a colour picked by hand stays on the ribbon, which has room for its picker.
+ * wears. A row first selects `range`, what the menu was opened on (`select`: the grid's), so it formats that. Merging, filling and the painter have
+ * rows or places of their own, as Make chart has; a colour picked by hand stays on the ribbon, which has room for its picker.
  */
 export function FormattingMenu(props: { tools: readonly SheetTool[]; range: SheetRange; select(range: SheetRange): void }) {
   const shown = () => props.tools.filter((tool) => !tool.pick && !/^(paint|spread-|merge-|chart-)/.test(tool.name));

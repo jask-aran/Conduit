@@ -12,7 +12,7 @@ import { PANEL_GEOMETRY_MOTION_EVENT, type PanelGeometryMotionDetail } from "../
 import { ARTIFACT_KINDS, type ArtifactSurface, type ArtifactSurfaceProps, type MarkupOffer } from "./artifact-kinds";
 import { artifactAbout, artifactKnown, artifactLabel, type Artifact } from "./artifacts";
 import { holdArtifact, placeShown, placeWanted } from "./focused-artifact";
-import { connect, connectedTo, disconnect, setLead } from "./connections";
+import { connect, connectedTo, disconnect, setLead, type PaperConnections } from "./connections";
 
 const LISTENER_KINDS: Record<MarkupListener["kind"], string> = { thread: "This artifact's thread", agent: "Your agent", chat: "Connected chat", session: "Terminal session" };
 /** Asked again, for half a minute, while the hub does not answer or is starting (no status, or 5xx): what it refuses (404) is said at once. */
@@ -33,12 +33,13 @@ const listenerLabel = (listener: MarkupListener) => listener.kind === "thread" ?
  * An artifact in a pane (the view `artifact:<id>`): its kind's surface (ARTIFACT_KINDS), with Markup's bar over the
  * pane, wired as /document wires the test document. `quiet`: the app's own interface feedback is open, and there is
  * one bar. `header` is the pane's, given what the artifact adds to its actions: why what is shown may not be the
- * file, "Mark up" while its bar is closed, and "Connect a chat" over `chats`, the project's. `pending`: it is made
+ * file, "Mark up" while its bar is closed, and "Connect a chat" over `chats`, the project's; and its connections, for its
+ * thread. `thread`: the button for its thread (where comments go), lit while `chat` shows in a pane, with its cue. `pending`: it is made
  * unseen behind what the pane shows, and `onDrawn` says when it can take its place; `said`: it is slow, and its header
  * stands over the pane's saying it is opening. Markup stands over the page, not in the pane, so it is hidden while the
  * artifact is unseen, and its bar leaves while the pane moves: easing open or shut (`moving`), or any other motion.
  */
-export default function ArtifactPane(props: { id: string; quiet?: boolean; pending?: boolean; said?: boolean; moving?: boolean; onDrawn?: () => void; chats?: (project: string) => { id: string; title: string }[]; onAbout?: (about: Artifact, label: string) => void; onThread?: () => void; shortcuts?: ArtifactSurfaceProps["shortcuts"]; header: (actions: JSX.Element) => JSX.Element }) {
+export default function ArtifactPane(props: { id: string; quiet?: boolean; pending?: boolean; said?: boolean; moving?: boolean; onDrawn?: () => void; chats?: (project: string) => { id: string; title: string }[]; onAbout?: (about: Artifact, label: string) => void; onThread?: (links: PaperConnections) => void; thread?: (chat: string | null) => { shown: boolean; cue: JSX.Element }; shortcuts?: ArtifactSurfaceProps["shortcuts"]; header: (actions: JSX.Element, links: () => PaperConnections) => JSX.Element }) {
   // The kind's surface is fetched before the artifact is said to be found, so "Opening the …" stands until it can be drawn.
   const [about, { refetch }] = createResource(() => props.id, (id) => patiently(() => artifactAbout(id)).then((found) => { last = found; props.onAbout?.(found, artifactLabel(found.kind)); return ARTIFACT_KINDS[found.kind].Surface.preload().then(() => found); }));
   // Renamed, it takes its new name; deleted, it says so, where its surface would only wait for the hub; and the hub says when its trouble starts and ends.
@@ -83,7 +84,7 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; pendi
   holdArtifact(() => frame, () => {
     const kind = found()?.kind, margin = comments();
     if (!kind) return null;
-    return { id: props.id, kind, offers: { thread: props.onThread, ...surface()?.offers?.(), ...(margin && !props.quiet ? { nextComment: margin.next, previousComment: margin.previous } : {}) } };
+    return { id: props.id, kind, offers: { thread: props.onThread && (() => props.onThread!(connectedTo(props.id))), ...surface()?.offers?.(), ...(margin && !props.quiet ? { nextComment: margin.next, previousComment: margin.previous } : {}) } };
   });
   // Drawn once its surface is and, for a kind with a margin, the margin has answered: the text, the header's count and the marks come in one frame.
   const [drawn, setDrawn] = createSignal(false);
@@ -132,9 +133,10 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; pendi
   const found = () => about.error ? undefined : about.latest;
   // `last`: deleted, it is in no list, and its pane still says what it was.
   const noun = () => { const kind = (found() ?? artifactKnown(props.id) ?? last)?.kind; return kind ? artifactLabel(kind).toLowerCase() : "artifact"; };
+  const links = () => connectedTo(props.id);
   // Its own mated thread is the artifact's already, never connected to it.
-  const chats = () => (props.chats?.(found()?.project ?? "") ?? []).filter((chat) => chat.id !== connectedTo(props.id).thread);
-  const linked = (chat: string) => connectedTo(props.id).connections.some((connection) => connection.chat === chat);
+  const chats = () => (props.chats?.(found()?.project ?? "") ?? []).filter((chat) => chat.id !== links().thread);
+  const linked = (chat: string) => links().connections.some((connection) => connection.chat === chat);
   // Who listens to this artifact now (its own thread, and any chat connected or session waiting), told by the open tool.
   const listening = () => offer()?.listeners() ?? [];
   // The lead, or one chosen and not yet set on the hub.
@@ -163,7 +165,8 @@ export default function ArtifactPane(props: { id: string; quiet?: boolean; pendi
   return <SheetFill ref={(element) => { frame = element; }} class="pane-artifact" data-pending={props.pending ? "" : undefined} data-said={props.said ? "" : undefined} data-opening={opening() ? "" : undefined}>
     {props.header(<><Show when={offer()?.unsent()}>{(unsent) => <Button variant="primary" outline size="sm" data-markup-own="" title="Send (Ctrl Enter)" onClick={() => offer()?.send()}>{unsent() > 1 ? `Send ${unsent()}` : "Send"}</Button>}</Show><Show when={found()?.trouble}>{(why) => <StatusDot label={why()} title={why()} tone="warn" />}</Show><Show when={surface()?.stale?.()}><HeaderButton label={`Reload: this page is older than the ${noun()}`} icon={<Icons.Refresh />} onClick={() => location.reload()} /></Show><Show when={props.said || opening()}><StatusDot label={`Opening the ${noun()}`} title={`Opening the ${noun()}`} spinning /></Show><Show when={surface()?.away?.()}><StatusDot label="Reconnecting to the hub" title="Reconnecting to the hub" tone="warn" spinning /></Show><Show when={!props.quiet && comments()}>{(margin) => commentList(margin())}</Show>
       {surface()?.header?.()}
-      <Show when={found()}>{connecting}</Show></>)}
+      <Show when={found()}>{connecting}<Show when={props.thread?.(links().lead ?? links().thread)}>{(at) =>
+        <HeaderButton label={at().shown ? "Close the thread" : "Open the thread beside"} aria-pressed={at().shown} icon={at().cue} onClick={() => props.onThread?.(links())} />}</Show></Show></>, links)}
     {/* Room for a ribbon over the pane; a kind whose bar stands in a slot of its own row takes none. */}
     <Show when={!props.quiet && found() && ARTIFACT_KINDS[found()!.kind].markup.bar === "ribbon"}><MarkupRibbonRoom ref={(element) => { room = element; }} /></Show>
     <Show when={!about.error} fallback={<Empty role="alert">This {noun()} could not be opened: {String((about.error as Error)?.message || "the hub did not say why").replace(/\.$/, "")}.</Empty>}>
