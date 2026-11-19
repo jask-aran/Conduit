@@ -29,9 +29,8 @@ if (!["sheet", "paper", "both"].includes(which)) {
 }
 const RUNS = Number(arg("--runs", 5)), RATES = arg("--cpu", "1,4").split(",").map(Number), SAVE = arg("--save"), BUDGET = 6.94, SETTLE = 3000;
 const CSS_FIX = arg("--css") && await fs.readFile(arg("--css"), "utf8"), SHEET = "802d93d7cfbe2968", CATEGORIES = ["devtools.timeline", "toplevel", "loading", "blink.user_timing"];
-const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 const median = (list) => { const sorted = list.filter((n) => Number.isFinite(n)).sort((a, b) => a - b); return sorted.length ? sorted[Math.floor((sorted.length - 1) / 2)] : NaN; };
-const calm = async () => { for (let n = 0; n < 24 && os.loadavg()[0] > 2; n += 1) await sleep(5000); return os.loadavg()[0]; };
+const calm = async () => { for (let n = 0; n < 24 && os.loadavg()[0] > 2; n += 1) await new Promise((done) => setTimeout(done, 5000)); return os.loadavg()[0]; };
 
 const scratch = await fs.mkdtemp(path.join(os.tmpdir(), "bench-artifacts-")), state = path.join(scratch, "state.json");
 execFileSync("node", ["scripts/conduit-auth.mjs", "mint-session", "--user-agent", "probe", "--format", "playwright", "--origin", origin, "--output", state], { cwd: root });
@@ -69,7 +68,8 @@ function watch(kind) {
     for (const child of element.children) observe(child, after);
   };
   const added = new MutationObserver((records) => { for (const record of records) for (const node of record.addedNodes) observe(node, true); });
-  const after = (event) => bench.at.first && event.target instanceof Element && log(event.type === "transitionrun" ? `transition ${event.propertyName}` : `animation ${event.animationName}`, event.target);
+  // The reveal itself (every region's one fade as the launch screen goes) is not a pop-in.
+  const after = (event) => bench.at.first && event.target instanceof Element && !(document.documentElement.dataset.arrival === "arriving" && /^ui-(arrive|leave)$/.test(event.animationName)) && log(event.type === "transitionrun" ? `transition ${event.propertyName}` : `animation ${event.animationName}`, event.target);
   addEventListener("transitionrun", after, true); addEventListener("animationstart", after, true);
   new PerformanceObserver((list) => {
     for (const entry of list.getEntries()) if (bench.at.first && entry.startTime >= bench.at.first && !entry.hadRecentInput) {
@@ -136,8 +136,7 @@ async function load(page, cdp, address, kind) {
   const bench = await page.evaluate(() => window.__bench), { at } = bench;
   const { tasks, shifts, zero } = readTrace(trace.toString(), 0, (at.usable ?? 60000) + SETTLE);
   const traceZero = zero - bench.markAt * 1000, since = (seconds) => Math.round(seconds * 1000 - traceZero / 1000);
-  // The reveal itself (every region's one fade as the launch screen goes) is not a pop-in; what is in the pane is told apart from the rest of the app.
-  const all = bench.pop.filter((one) => one.t > at.first + 1 && !(one.t < at.first + 50 && /^animation ui-(arrive|leave)$/.test(one.what))), pop = all.filter((one) => one.pane && one.seen);
+  const all = bench.pop.filter((one) => one.t > at.first + 1), pop = all.filter((one) => one.pane && one.seen);
   const chunks = [];
   for (const one of requests.values()) if (["Script", "Stylesheet", "Font"].includes(one.type) && !one.parser && one.url.startsWith(origin)) chunks.push({ file: one.url.replace(origin, ""), start: since(one.start), end: one.end && since(one.end), gz: await sized(one.url) });
   const late = shifts.filter((shift) => shift.t > at.first);
