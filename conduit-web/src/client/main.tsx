@@ -2647,13 +2647,12 @@ function App() {
     if (focus && pane !== undefined) focusAnyPane(pane);
     return pane;
   };
-  /** What a summon shows, opened as a pane: the summon goes once it has, so undoing the open brings the summon back. */
+  /** What a summon shows, opened as a pane: the summon goes first, and undoing the open brings it back. */
   const fromSummon = async (open: () => Promise<unknown>) => {
-    const summoned = Boolean(layout().summon);
-    // The dock's room is the row's while it opens, as when the summon went first.
-    if (summoned && dockedSlot() === null) setPanelOpenForChat(false);
+    const before = layout(), last = panes.target(-1);
+    if (before.summon) dismissSummon();
     await open();
-    if (summoned && layout().summon) dismissSummon();
+    if (before.summon && panes.target(-1) !== last) panes.amend(before);
   };
   /** The dock's folder viewer or terminal taken to a pane of its own: the summon goes, the pane keeps the workspace. */
   const moveToRow = (view: SplitView) => fromSummon(() => openBeside(view));
