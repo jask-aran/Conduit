@@ -155,6 +155,8 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     const grow = (r, c) => { const taller = Math.max(rows, r + 1), wider = Math.max(cols, c + 1); if (wider <= COL_LIMIT && taller * wider <= most) { rows = taller; cols = wider; return true; } return false; };
     const charts = readCharts(xmlOf[called] ?? "", called, text, linked, drop).filter((chart) => { const at = parseA1(chart.at), area = parseRange(chart.range); return grow(at.row, at.col) && grow(area.bottom, area.right) || (drop("charts past the sheet's limits"), false); });
     for (const { s, e } of sheet["!merges"] ?? []) if (s.r < rows && s.c < cols && data[s.r]?.[s.c]?.v !== undefined) grow(e.r, e.c);
+    // A validation's cells (the tab holds it on its cells, sheet-types.js): its columns, and its rows as far as the same room lets (a whole column stops at the values).
+    for (const one of validationsOf(text(xmlOf[called] ?? ""))) for (const part of one.range.split(/\s+/)) { const area = parseRange(part.replace(/\$/g, "")); if (area && !grow(area.bottom, area.right)) grow(Math.min(area.bottom, rows - 1), area.right); }
     read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, charts, rows: Math.max(1, rows), cols: Math.max(1, cols) });
     drop("notes", notes);
   });
