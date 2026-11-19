@@ -618,6 +618,15 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     if (event.type === "cut") clear(area, "Cut");
   };
   addEventListener("copy", clipped, true); addEventListener("cut", clipped, true);
+  // Plain text is read here: the grid's own reading cuts it by characters and indexes it by UTF-16 units, so an emoji shifts every cell after it.
+  // Its reading stays for HTML (a spreadsheet's copy). Added before the grid's own window listener, so stopping it here keeps that one out.
+  const pasted = (event: ClipboardEvent) => {
+    const data = event.clipboardData, area = picked();
+    if (!data || data.types.includes("text/html") || !area || !parts.some((p) => p.host?.contains(document.activeElement))) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    paste({ row: area.top, col: area.left }, fromCsv(data.getData("text/plain"), "\t"));
+  };
+  addEventListener("paste", pasted, true);
   const api: SheetGrid = {
     update: (changed) => {
       if (!changed) {
@@ -706,7 +715,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     theme: (next) => { look = next; drive.look?.(look); },
     scroll: (to) => { if (to) { const drawn = clip(body, { top: to.row, bottom: to.row, left: to.col, right: to.col }); body.editor?.scrollTo(to.col, drawn?.top ?? 0, "both", 0, 0, { hAlign: "start", vAlign: "start" }); } return { row: body.map.sheet(body.view.y), col: body.view.x }; },
     focus: () => owner.editor?.focus(),
-    destroy: () => { stop(); element.removeEventListener("pointerdown", sweep); element.removeEventListener("dblclick", autofit); removeEventListener("pointerup", ctrl, true); removeEventListener("copy", clipped, true); removeEventListener("cut", clipped, true); root.unmount(); },
+    destroy: () => { stop(); element.removeEventListener("pointerdown", sweep); element.removeEventListener("dblclick", autofit); removeEventListener("pointerup", ctrl, true); removeEventListener("copy", clipped, true); removeEventListener("cut", clipped, true); removeEventListener("paste", pasted, true); root.unmount(); },
   };
   return api;
 }
