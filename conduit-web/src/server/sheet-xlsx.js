@@ -7,6 +7,7 @@ import { CONFIG } from "../sheet-engine.js";
 import { NAMES } from "../sheet-functions.js";
 import { shiftRefs } from "../sheet-rules.js";
 import { decodeStyle, encodeStyle } from "../sheet-styles.js";
+import { drawingPart, readCharts, tablePart, withParts } from "./xlsx-parts.js";
 import { ownOver, readDxfs, readStyles, seen, sheetRules, sheetStyles, withDxfs, withRules, writeRules, writeStyles } from "./xlsx-styles.js";
 
 /*
@@ -112,9 +113,12 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     let rows = 0, cols = 0;
     let notes = 0;
     cellsOf(data, (cell, r, c) => { if (cell.f || (cell.t !== "z" && cell.v !== "" && cell.v !== undefined)) { rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1); } if (cell.c?.length) notes++; });
+    // Its charts, each standing on a cell the tab is taken out to.
+    const charts = readCharts(xmlOf[called] ?? "", called, text, linked, drop);
+    for (const chart of charts) { const at = parseA1(chart.at); rows = Math.max(rows, at.row + 1); cols = Math.max(cols, at.col + 1); }
     // A merge holding a value (a title over empty columns) takes the tab out to its far corner.
     for (const { s, e } of sheet["!merges"] ?? []) if (s.r < rows && s.c < cols && data[s.r]?.[s.c]?.v !== undefined) { rows = Math.max(rows, e.r + 1); cols = Math.max(cols, e.c + 1); }
-    read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, rows: Math.max(1, rows), cols: Math.max(1, cols) });
+    read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, charts, rows: Math.max(1, rows), cols: Math.max(1, cols) });
     drop("notes", notes);
   });
   if (!read.length) throw fault(wanted ? `None of those tabs is in the workbook: its tabs are ${book.SheetNames.join(", ")}` : "That workbook has no tabs with cells");
@@ -255,6 +259,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       if (tab.rules.length) look.rules = tab.rules;
       if (tab.validations.length) look.validations = tab.validations;
       if (tab.color) look.tabColor = tab.color;
+      if (tab.charts.length) look.charts = tab.charts;
       if (tab.table) look.table = tab.table;
       if (tab.filter) look.filter = tab.filter;
       // A frozen formula goes with its cell (`excel:<rowId>:<colId>` once in the doc), written for the cell it was in (`anchor`), as a rule's are.
@@ -274,7 +279,7 @@ export function importSummary(report) {
     `Tabs: ${report.tabs.map((tab) => `${tab.name} (${tab.rows}x${tab.cols}, ${tab.formulas} formulas)`).join(", ")}.${report.skipped.length ? ` Not imported: ${report.skipped.join(", ")}.` : ""}`,
     total ? `Of ${total} formulas, ${same + noCache + volatile} compute here as they did${volatile ? ` (${volatile} depend on the date or a random number and were not compared)` : ""}${frozen ? `; ${frozen} do not and hold the value the file kept, as plain values: ${Object.entries(report.reasons).map(([why, count]) => `${count} ${why}`).join(", ")}` : ""}.` : "It has no formulas.",
     ...(listed.length ? [`Frozen: ${listed.slice(0, 20).join("; ")}${listed.length > 20 ? `; and ${listed.length - 20} more (GET /v0/document/<id>?as=import lists all)` : ""}.`] : []),
-    ...(Object.keys(report.dropped).length ? [`Left out: ${Object.entries(report.dropped).map(([what, count]) => `${count} ${what}`).join(", ")}; also any charts, images and pivot tables, which are not read.`] : ["Charts, images and pivot tables are not read."]),
+    ...(Object.keys(report.dropped).length ? [`Left out: ${Object.entries(report.dropped).map(([what, count]) => `${count} ${what}`).join(", ")}; also any pivot tables, which are not read.`] : ["Pivot tables are not read."]),
   ].join("\n");
 }
 // Functions an .xlsx stores under a prefix: without it a spreadsheet shows #NAME? until the cell is entered again.
@@ -296,6 +301,7 @@ const ERROR_CODE = Object.fromEntries(Object.entries(ERROR_TEXT).map(([code, tex
  */
 export function exportXlsx(tabs) {
   const book = XLSX.utils.book_new(), known = new Set(tabs.map((tab) => tab.name.toLowerCase()));
+  let tables = 0;
   for (const tab of tabs) {
     const sheet = {}, cols = Math.max(1, ...tab.typed.map((row) => row.length));
     tab.typed.forEach((row, r) => row.forEach((typed, c) => {
@@ -318,8 +324,9 @@ export function exportXlsx(tabs) {
     // The rows hidden, and those the filter hid when last applied.
     const filteredOut = new Set(tab.look.filter?.hide ?? []);
     sheet["!rows"] = tab.typed.map((_, r) => { const height = tab.look[`height:${r + 1}`]; return { ...(typeof height === "number" ? { hpt: height * PT_PER_PX } : {}), ...(tab.look[`hidden:${r + 1}`] || filteredOut.has(r + 1) ? { hidden: true } : {}) }; });
-    // A table is written as its filter alone: SheetJS writes no tables.
-    const filtered = tab.look.filter?.range ?? tab.look.table?.range;
+    // A table is its own part (xlsx-parts.js); one Excel would repair is written as its filter alone.
+    tab.tablePart = tab.look.table ? tablePart(tab.look.table, tab.values, ++tables) : null;
+    const filtered = tab.look.filter?.range ?? (tab.tablePart ? undefined : tab.look.table?.range);
     if (typeof filtered === "string") sheet["!autofilter"] = { ref: filtered };
     if (Array.isArray(tab.look.merges)) sheet["!merges"] = tab.look.merges.map((range) => XLSX.utils.decode_range(String(range)));
     XLSX.utils.book_append_sheet(book, sheet, tab.name);
@@ -330,9 +337,11 @@ export function exportXlsx(tabs) {
   const ruled = tabs.some((tab) => Array.isArray(tab.look.rules) && tab.look.rules.length), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(orphaned(`=${formula}`, known))) : null;
   const validations = tabs.map((tab) => validationsXml(tab.look.validations));
   const colors = tabs.map((tab) => /^#[0-9A-F]{6}$/i.test(String(tab.look.tabColor ?? "")) ? `<tabColor rgb="FF${tab.look.tabColor.slice(1).toUpperCase()}"/>` : "");
-  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean) && !colors.some(Boolean)) return written;
+  let drawings = 0, charts = 1;
+  const parts = tabs.map((tab) => { const drawing = Array.isArray(tab.look.charts) ? drawingPart(tab.look.charts, tab.name, drawings + 1, charts) : null; if (drawing) { drawings += 1; charts += drawing.count; } return [tab.tablePart, drawing].filter(Boolean); });
+  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean) && !colors.some(Boolean)) return withParts(written, parts, placed);
   let restyled = null;
-  return editParts(written, (path, xml, all) => {
+  return withParts(editParts(written, (path, xml, all) => {
     if (styled && !restyled) {
       const sheets = tabs.map((tab, n) => ({ xml: all[`xl/worksheets/sheet${n + 1}.xml`] ?? "", ...styleOf(tab.look), size: { rows: tab.typed.length, cols: Math.max(1, ...tab.typed.map((row) => row.length)) } }));
       restyled = writeStyles(all["xl/styles.xml"] ?? "", sheets);
@@ -342,7 +351,7 @@ export function exportXlsx(tabs) {
     const valid = [[validations[n], (xml) => placed(xml, "dataValidations", validations[n])], [colors[n], (xml) => /<sheetPr\b/.test(xml) ? xml.replace(/<sheetPr\b([^>]*?)(\/?)>/, (_, head, closed) => `<sheetPr${head}>${colors[n]}${closed ? "</sheetPr>" : ""}`) : placed(xml, "sheetPr", `<sheetPr>${colors[n]}</sheetPr>`)]]
       .reduce((xml, [has, put]) => n >= 0 && has ? put(xml) : xml, sheet);
     return rows || cols ? valid.replace(/<sheetView workbookViewId="0"\/>/, paneXml(rows, cols)) : valid;
-  });
+  }), parts, placed);
 }
 /** The style each cell of a tab wears, packed (empty for none), from its look by letter, row number and address: its own over its row's over its column's; and each line's own. */
 const styleOf = (look) => {
