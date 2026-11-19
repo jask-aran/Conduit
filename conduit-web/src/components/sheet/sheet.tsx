@@ -20,11 +20,11 @@ import { createSheetSizes, dragRowEdges } from "./sizes";
 import { createSheetFilter, FilterMenu } from "./filter";
 import { createSheetFormats } from "./formats";
 import { createSheetBrush, createSheetStyles, measureShown } from "./styles";
-import { createSheetRules, RulePrompt } from "./rules";
+import { createSheetRules, RulePrompt, RulesMenu } from "./rules";
 import { createSheetTools } from "./tools";
 import { createSheetFind } from "./find";
 import { createSheetHistory } from "./history";
-import { FormatMenu, FormatPrompt } from "./format-menu";
+import { FormatMenu, FormatPrompt, FormattingMenu } from "./format-menu";
 
 // Cells written into the text a comment quotes, and how much of each: enough to read.
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
@@ -372,6 +372,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   // A header's menu is its whole columns, a row number's its whole rows (formats.ts clips both to the tab).
   const formatted = () => { const { rows, cols } = menu(), most = Number.MAX_SAFE_INTEGER; return rows || cols ? { top: rows?.top ?? 0, bottom: rows?.bottom ?? most, left: cols?.left ?? 0, right: cols?.right ?? most } : null; };
   const count = (from: number, to: number) => to - from + 1;
+  const inTab = (area: SheetRange) => { const size = model()?.size(); return size ? { ...area, bottom: Math.min(area.bottom, size.rows - 1), right: Math.min(area.right, size.cols - 1) } : area; };
   const filteredBy = (col: number) => { const on = filters.filter(); return on && col >= on.range.left && col <= on.range.right ? on.range : null; };
   const inTable = () => { const on = filters.table(), area = at(); return Boolean(on && area && area.top >= on.range.top && area.top <= on.range.bottom && area.left >= on.range.left && area.left <= on.range.right); };
   // Opened once the menu has shut and given focus back (its onCloseAutoFocus), which would shut a popover opened sooner. The filter's header cell is
@@ -419,6 +420,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         { label: "Copy", icon: <Icons.Copy />, keys: ["Ctrl", "C"], run: () => void copy(range) },
         { label: "Paste", icon: <Icons.Paste />, keys: ["Ctrl", "V"], run: () => paste(range) },
         ...grid()?.held() ? [{ label: "Paste values only", icon: <Icons.Paste />, keys: ["Ctrl", "Shift", "V"], run: () => paste(range, true) }] : [],
+        ...grid()?.source() ? [{ label: "Paste formatting only", icon: <Icons.Paste />, keys: ["Ctrl", "Alt", "V"], run: () => { const from = grid()?.source(); if (from) brush.lay(from, range); } }] : [],
       ],
       [
         ...kind !== "cols" ? [{ label: range.bottom ? `Freeze rows 1 to ${range.bottom + 1}` : "Freeze row 1", icon: <Icons.Pin />, run: () => history.act("Freeze panes", () => sizes.setFreeze(range.bottom + 1, sizes.freeze().cols)) }] : [],
@@ -558,8 +560,12 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
                   <MenuRow icon={<MergeIcons.unmerge />} keys={["Alt", "H", "M", "U"]} onSelect={() => merge(null, range())}>Unmerge cells</MenuRow>
                 </Show>
               </MenuSection></Show>}</Show>
-              {/* The formatting submenus (Formatting, Conditional formatting) stand here, with Number format. */}
-              <Show when={formatted()}>{(range) => <FormatMenu formats={formats} range={range()} />}</Show>
+              {/* Each selects what the menu was opened on (within the tab) before it acts, as the ribbon's tools act on the selection. */}
+              <Show when={formatted()}>{(range) => <>
+                <FormattingMenu tools={tools} range={range()} select={(area) => grid()?.select(inTab(area))} />
+                <RulesMenu rules={rules} open={() => { grid()?.select(inTab(range())); setRuling(inTab(range())); }} />
+                <FormatMenu formats={formats} range={range()} />
+              </>}</Show>
               <Show when={props.host.openSettings}>{(open) => <MenuSection><MenuRow icon={<Icons.Settings />} onSelect={() => open()()}>View settings…</MenuRow></MenuSection>}</Show>
             </>} />
           </ContextMenuContent>
