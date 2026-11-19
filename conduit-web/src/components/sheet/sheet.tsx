@@ -400,8 +400,13 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       grid()?.whole(isRows ? "rows" : "cols");
     });
     const clearFormats = () => { styles.clear(range); formats.set(range, "General"); };
-    // A sheet's sort: every row under the frozen ones, by one column, the frozen header naming it.
-    const frozen = sizes.freeze().rows, header = frozen ? valueText(model()?.value(frozen - 1, byCol) ?? null) : "", named = header ? `“${header}”` : `column ${colName(byCol)}`;
+    // A sheet's sort: every row under its header, by one column, the header naming it. The header is the frozen rows, else a first row of text alone
+    // with a column of numbers (or dates) under one of its words, as a spreadsheet guesses one; else there is none and every row sorts.
+    const valueAt = (row: number, col: number) => model()?.value(row, col) ?? null, filled = (value: unknown) => value !== null && value !== "";
+    const under = (col: number) => { for (let row = 1; row <= lastRow; row++) { const value = valueAt(row, col); if (filled(value)) return value; } return null; };
+    const tops = between(0, lastCol).filter((col) => filled(valueAt(0, col))), worded = tops.length > 0 && tops.every((col) => typeof valueAt(0, col) === "string");
+    const frozen = sizes.freeze().rows || (worded && tops.some((col) => typeof under(col) === "number") ? 1 : 0);
+    const header = frozen ? valueText(valueAt(frozen - 1, byCol)) : "", named = header ? `“${header}”` : `column ${colName(byCol)}`;
     const sortSheet = (descending: boolean) => history.act(`Sort sheet ${descending ? "Z–A" : "A–Z"}`, () => { if (frozen < lastRow) hub({ op: "sort", range: rangeA1({ top: frozen, bottom: lastRow, left: 0, right: lastCol }), column: colName(byCol), descending }); });
     const hideRows = () => history.act("Hide rows", () => sizes.setHidden(between(range.top, range.bottom), true));
     return [
