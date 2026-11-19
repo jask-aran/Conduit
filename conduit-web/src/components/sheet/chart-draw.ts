@@ -88,7 +88,8 @@ export function drawChart(kind: SheetChartKind, data: SheetChartData, size: { wi
   const valueWords = values.map(figure), labelFont = font;
   // The plot's box: the value axis's figures at the left (a bar chart's labels there instead), a line of labels under it.
   const leftWords = across ? data.labels : valueWords, leftRoom = Math.min(width * 0.3, most(leftWords.map((one) => wide(one, labelFont)))) + font * 0.5;
-  const plot = { left: pad + leftRoom, right: width - pad, top: top + font * 0.5, bottom: bottom - font * 1.4 };
+  // A bar chart's last figure is centred on the plot's right edge: half of it is kept room for, so it isn't cut at the chart's.
+  const plot = { left: pad + leftRoom, right: width - pad - (across ? wide(valueWords.at(-1) ?? "", labelFont) / 2 : 0), top: top + font * 0.5, bottom: bottom - font * 1.4 };
   if (plot.right - plot.left < font * 2 || plot.bottom - plot.top < font * 2) return svg(width, height, parts);
   const scale = (value: number, lo: number, hi: number, from: number, to: number) => from + ((value - lo) / (hi - lo)) * (to - from);
   const valueAt = (value: number) => across ? scale(value, low, high, plot.left, plot.right) : scale(value, low, high, plot.bottom, plot.top);
