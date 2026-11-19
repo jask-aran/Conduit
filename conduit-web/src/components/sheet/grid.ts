@@ -238,6 +238,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   };
   const write = (list: { row: number; col: number; input: string }[], label?: string) => { if (list.length) events.write(list, label); };
   // Made once a part: a new function or object for the grid on each render has it work everything out again, the cost of each arrow-key move.
+  let sizing: { col: number; moved: boolean } | undefined;
   const handlersOf = (p: Part): Partial<DataEditorProps> => ({
     onGridSelectionChange: (next) => {
       // A merge across the frozen rows' edge, moved onto, is selected whole, in both parts.
@@ -284,8 +285,11 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       }
     },
     getRowThemeOverride: (drawn) => lineCut(p, drawn) ? NO_LINE : undefined,
-    onColumnResize: (_, width, col) => drive.width?.(col, width),
-    onColumnResizeEnd: (_, width, col) => events.resized(col, width),
+    // A press on a letter's edge let go unmoved sizes nothing: the grid would give its least width (as it does every other selected column), and the
+    // second press of a double click, for a fit, would miss the edge it moved.
+    onColumnResizeStart: (_, __, col) => { sizing = { col, moved: false }; },
+    onColumnResize: (_, width, col) => { if (sizing && col === sizing.col) sizing.moved = true; if (sizing?.moved) drive.width?.(col, width); },
+    onColumnResizeEnd: (_, width, col) => { if (sizing?.moved) events.resized(col, width); },
     onHeaderContextMenu: (col) => { const area = picked(); events.menu({ cols: owner.current.columns.hasIndex(col) && area ? area : { top: 0, bottom: 0, left: col, right: col } }); },
     onCellContextMenu: ([col, drawn]) => {
       const row = p.map.sheet(drawn), area = picked(), inside = area && row >= area.top && row <= area.bottom && (col < 0 || (col >= area.left && col <= area.right));
