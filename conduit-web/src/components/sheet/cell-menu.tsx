@@ -19,10 +19,13 @@ const keys = (event: KeyboardEvent) => {
   if (event.key === "Enter") first.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
 };
 
-/** The menu's own focus on opening goes to its search field, so typing searches; on a phone it stays, so a long press does not raise the keyboard. */
+/**
+ * The menu's own focus on opening goes to its search field, so typing searches; on a phone it stays, so a long press does not raise the keyboard.
+ * After a task, as the menu's list focuses itself in one (Kobalte's deferred autofocus) queued before this.
+ */
 export const focusSearch = (event: Event) => {
   const field = (event.currentTarget as HTMLElement | null)?.querySelector<HTMLInputElement>("input.ui-search");
-  if (field && !matchMedia(PHONE_LAYOUT_QUERY).matches) { event.preventDefault(); field.focus(); }
+  if (field && !matchMedia(PHONE_LAYOUT_QUERY).matches) { event.preventDefault(); setTimeout(() => field.focus()); }
 };
 
 /** The cell menu's groups under a field that keeps the rows (or submenus holding them) whose names hold what is typed. `after`: sections shown while nothing is. */

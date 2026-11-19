@@ -543,11 +543,11 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       <Show when={!failed()} fallback={<Empty role="alert">The sheet could not be drawn: {failed()}</Empty>}>
         <ContextMenu placement="bottom-start">
           <ContextMenuTrigger as="div" ref={setIsland} class="ui-spreadsheet-grid" data-own-keys={OWN_KEYS} />
-          {/* Shut, the menu gives the keyboard back to the grid, unless what it ran (a prompt, a comment) took it meanwhile. */}
+          {/* Shut, the menu gives the keyboard back to the grid (Kobalte's would go to the page), unless what it ran (a prompt, a comment) took it to type in. */}
           <ContextMenuContent onOpenAutoFocus={focusSearch} onCloseAutoFocus={(event) => {
-            const open = opening, was = document.activeElement;
+            const open = opening;
             opening = undefined; event.preventDefault();
-            if (open) open(); else requestAnimationFrame(() => { if (document.activeElement === was || document.activeElement === document.body) grid()?.focus(); });
+            if (open) open(); else requestAnimationFrame(() => { const now = document.activeElement; if (!now?.matches("input, textarea, [contenteditable], [role=dialog] *, [role=alertdialog] *")) grid()?.focus(); });
           }}>
             <SheetMenu groups={menuGroups()} after={<>
               <Show when={picked()}>{(range) => <Show when={range().bottom > range().top || range().right > range().left}><MenuSection>
