@@ -305,40 +305,43 @@ and `<chartSpace>` are in schema order, every `count` matches, and style and dxf
 The features script is `scripts/xlsx-roundtrip-features.py` (`XLSX_PYTHON` names a python with openpyxl). LibreOffice is not installed here. openpyxl cannot write threaded comments or dynamic-array metadata
 (`cm=`), so those are not tested: the spilling formulas are legacy array formulas with their cached cells.
 
-| Feature | Before (main, 2026-11-20) | After round 1 | After round 2 |
-| --- | --- | --- | --- |
-| values (numbers, text, booleans, dates, times, errors, 5,000-character text, leading zeros, text like numbers) | kept | kept | kept |
-| formulas (relative, absolute, another tab, whole column, XLOOKUP, TEXT) | kept | kept | kept (1 frozen: `TEXT` gives another value here) |
-| array formula (CSE) | changed: value kept, written as a plain formula | same | same |
-| spilling formulas (UNIQUE, SEQUENCE, SORT) | changed: values kept, formulas lost | same | same |
-| functions the engine lacks (LAMBDA, CELL, GETPIVOTDATA) | changed: values kept, `_xlfn.` taken off LAMBDA | same | same |
-| defined names | changed: names lost, formulas using them frozen | same | same |
-| number formats (20 built-in and custom) | kept | kept | kept |
-| fonts (face, size, double underline) | changed: face lost | same | kept, face not shown |
-| fills (solid, pattern) | changed: patterns become solid | same | kept, pattern not shown |
-| borders (dashed, dotted, double, diagonal) | changed: drawn thin, diagonals lost | same | kept, line styles and diagonals not shown |
-| alignment, wrap, indent, rotation, shrink | changed: indent, rotation, shrink lost | same | kept, indent, rotation and shrink not shown |
-| widths, heights, hidden rows and columns, frozen panes | changed: heights off by up to 0.25 pt | same | same |
-| merges | **dropped** past the last value | kept | kept |
-| conditional: cell value, formula | kept | kept | kept |
-| conditional: colour scale, data bar, icon set, top 10 | dropped (reported) | same | kept, not shown |
-| conditional: a rule's number format | changed: lost (reported) | same | kept, not shown |
-| data validations (list, whole number, date, custom) | **dropped** | kept | kept |
-| hyperlinks (web, mail, a place in the workbook) | **dropped** | kept | kept |
-| notes | dropped (reported) | same | same (waits on the owner) |
-| tables | **dropped**, not reported | kept | kept |
-| autofilter | **dropped**, not reported | kept | kept |
-| filter conditions (values, custom, dates, blanks) | not in the scorecard | not in the scorecard | kept |
-| charts (bar, line, pie) | **dropped**, not reported | kept | kept |
-| images | dropped, not reported | dropped (reported) | same |
-| tabs: odd names, colours, a hidden tab | changed: colours lost | kept | kept |
-| print settings | dropped, not reported | same | same |
-| workbook and sheet protection | dropped, not reported | same | same |
+| Feature | Before (main, 2026-11-20) | After round 1 | After round 2 | After round 3 |
+| --- | --- | --- | --- | --- |
+| values (numbers, text, booleans, dates, times, errors, 5,000-character text, leading zeros, text like numbers) | kept | kept | kept | same |
+| formulas (relative, absolute, another tab, whole column, XLOOKUP, TEXT) | kept | kept | kept (1 frozen: `TEXT` gives another value here) | same |
+| array formula (CSE) | changed: value kept, written as a plain formula | same | same | kept, live |
+| spilling formulas (UNIQUE, SEQUENCE, SORT) | changed: values kept, formulas lost | same | same | kept, live; exported as Excel's dynamic arrays |
+| functions the engine lacks (LAMBDA, CELL, GETPIVOTDATA) | changed: values kept, `_xlfn.` taken off LAMBDA | same | same | same; Excel reads 2 of them with an implicit @ (LAMBDA loses `_xlfn.`/`_xlpm.`) |
+| defined names | changed: names lost, formulas using them frozen | same | same | kept, computed |
+| number formats (20 built-in and custom) | kept | kept | kept | same |
+| fonts (face, size, double underline) | changed: face lost | same | kept, face not shown | same |
+| fills (solid, pattern) | changed: patterns become solid | same | kept, pattern not shown | same |
+| borders (dashed, dotted, double, diagonal) | changed: drawn thin, diagonals lost | same | kept, line styles and diagonals not shown | same |
+| alignment, wrap, indent, rotation, shrink | changed: indent, rotation, shrink lost | same | kept, indent, rotation and shrink not shown | same |
+| widths, heights, hidden rows and columns, frozen panes | changed: heights off by up to 0.25 pt | same | same | same |
+| merges | **dropped** past the last value | kept | kept | same |
+| conditional: cell value, formula | kept | kept | kept | same |
+| conditional: colour scale, data bar, icon set, top 10 | dropped (reported) | same | kept, not shown | same |
+| conditional: a rule's number format | changed: lost (reported) | same | kept, not shown | same |
+| data validations (list, whole number, date, custom) | **dropped** | kept | kept | kept (and a dropdown's option inks, in a sheet extension) |
+| hyperlinks (web, mail, a place in the workbook) | **dropped** | kept | kept | same |
+| notes | dropped (reported) | same | same (waits on the owner) | same |
+| tables | **dropped**, not reported | kept | kept | same |
+| autofilter | **dropped**, not reported | kept | kept | same |
+| filter conditions (values, custom, dates, blanks) | not in the scorecard | not in the scorecard | kept | same |
+| charts (bar, line, pie) | **dropped**, not reported | kept | kept | same |
+| images | dropped, not reported | dropped (reported) | same | same |
+| tabs: odd names, colours, a hidden tab | changed: colours lost | kept | kept | same |
+| print settings | dropped, not reported | same | same | changed: print area and titles kept (as names), page setup lost |
+| workbook and sheet protection | dropped, not reported | same | same | same |
 
-The counts went from 5 kept, 15 changed and 10 dropped of 30 workbooks, to 12, 12 and 6 after round 1, to 22, 7 and 2 of 31 after round 2.
+The counts went from 5 kept, 15 changed and 10 dropped of 30 workbooks, to 12, 12 and 6 after round 1, to 22, 7 and 2 of 31 after round 2, and to 25, 4 and 2 after round 3. Merging main before round 3 dropped data validations
+(its cell types clipped them to the tab's values); that was fixed first.
 "Not shown" means the look holds it and an export writes it back, but the page does not draw it.
 
-**In real Excel** (`--excel`, **measured**): every export opens clean after round 2. That covers all 31 scorecard workbooks and hand-built
+**In real Excel** (`--excel`, **measured**): every export opens clean after rounds 2 and 3. A dynamic-array export opens spilling with no implicit
+`@`; a dropdown's inks extension survives Excel's own edit and save. Rule ranges kept unread (`rulesKept`) are A1 at tab level, so they do not follow
+inserted rows. That covers all 31 scorecard workbooks and hand-built
 looks: six chart kinds, labels by row, a tab name that needs quotes, two tables with one name, and a table with filter conditions. Excel
 also reads the same number of tabs, charts, tables and formulas as were written.
 
