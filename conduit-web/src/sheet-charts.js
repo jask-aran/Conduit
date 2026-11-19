@@ -1,4 +1,4 @@
-import { a1, key, parseA1, parseRange, rangeA1, rangedArea } from "./sheet-format.js";
+import { a1, key, parseA1, parseRange, rangeA1 } from "./sheet-format.js";
 
 /*
  * A tab's charts (sheet-charts.d.ts), as its look holds them (`charts:<tabId>`, a JSON list): each its kind, its source range by its corners' ids (so it
@@ -17,9 +17,14 @@ const corner = (view, text) => { const cut = String(text ?? "").indexOf(":"); re
 const fits = (one) => one && typeof one.id === "string" && CHART_KINDS.includes(one.kind) && typeof one.from === "string" && typeof one.to === "string" && typeof one.at === "string";
 
 export const readCharts = (text) => { try { const list = JSON.parse(String(text)); return Array.isArray(list) ? list.filter(fits) : []; } catch { return []; } };
+// A chart's range by its corners, which a move of rows or columns (by ids) can carry past each other: the box they span, as a spreadsheet's keeps.
+const spanned = (view, chart) => {
+  const from = corner(view, chart.from), to = corner(view, chart.to);
+  return from && to && Math.min(from.row, from.col, to.row, to.col) >= 0 ? { top: Math.min(from.row, to.row), left: Math.min(from.col, to.col), bottom: Math.max(from.row, to.row), right: Math.max(from.col, to.col) } : null;
+};
 /** Where a chart is now: its source range and the cell it stands on; null where either is gone. */
 export const chartPlace = (view, chart) => {
-  const area = rangedArea(view, chart), at = corner(view, chart.at);
+  const area = spanned(view, chart), at = corner(view, chart.at);
   return area && at && at.row >= 0 && at.col >= 0 ? { area, at } : null;
 };
 /** A tab's charts by A1 (sheet.json, and an agent's read), those whose cells are gone left out. */
@@ -84,14 +89,15 @@ export const keptCharts = (view, text, isRows, at, count) => {
   const lineOf = (cell) => { const [row, col] = cell.split(":"); return isRows ? view.indexOfRow(row) : view.indexOfCol(col); };
   const moved = (cell, n) => { const [row, col] = cell.split(":"); return isRows ? key(id(n), col) : key(row, id(n)); };
   const next = list.flatMap((chart) => {
-    const area = rangedArea(view, chart);
+    const area = spanned(view, chart);
     if (!area) return [chart];
     let [lo, hi] = isRows ? [area.top, area.bottom] : [area.left, area.right];
     while (lo <= hi && gone(lo)) lo++;
     while (hi >= lo && gone(hi)) hi--;
     if (lo > hi) return [];
     const stand = lineOf(chart.at), kept = stand < 0 || !gone(stand) ? chart.at : at > 0 ? moved(chart.at, at - 1) : at + count < size ? moved(chart.at, at + count) : chart.at;
-    return [{ ...chart, from: moved(chart.from, lo), to: moved(chart.to, hi), at: kept }];
+    const from = key(view.rowAt(area.top), view.colAt(area.left)), to = key(view.rowAt(area.bottom), view.colAt(area.right));
+    return [{ ...chart, from: moved(from, lo), to: moved(to, hi), at: kept }];
   });
   return JSON.stringify(next) === JSON.stringify(list) ? undefined : next.length ? JSON.stringify(next) : null;
 };
