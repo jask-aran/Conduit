@@ -126,9 +126,13 @@ export function sheetStyles(sheetXml, size, shows) {
   for (const tag of sheetXml.match(/<col\b[^>]*>/g) ?? []) if (Number(attr(tag, "max")) >= 1024) for (let c = Number(attr(tag, "min")) - 1; c < 16384; c++) wide.add(c);
   const seenCells = cells.filter(([, , s]) => shows[s]).sort((x, y) => x[0] - y[0] || x[1] - y[1]);
   reach.rows = size.rows; reach.cols = size.cols;
+  // Each cell is looked at once: by row until its row is reached, then, if its column is not yet, waiting under its column.
+  const reached = (r, c) => { reach.rows = Math.max(reach.rows, r + 1); reach.cols = Math.max(reach.cols, c + 1); }, waiting = [];
+  let next = 0, scanned = reach.cols;
   for (let was = -1; was !== reach.rows * 16384 + reach.cols;) {
     was = reach.rows * 16384 + reach.cols;
-    for (const [r, c] of seenCells) if (r <= reach.rows && c <= reach.cols) { reach.rows = Math.max(reach.rows, r + 1); reach.cols = Math.max(reach.cols, c + 1); }
+    for (; next < seenCells.length && seenCells[next][0] <= reach.rows; next++) { const [r, c] = seenCells[next]; if (c <= reach.cols) reached(r, c); else (waiting[c] ??= []).push(r); }
+    while (scanned < reach.cols) { scanned++; for (const r of waiting[scanned] ?? []) reached(r, scanned); }
     while (shows[rows.get(reach.rows)]) reach.rows++;
     while (!wide.has(reach.cols) && shows[cols.get(reach.cols)]) reach.cols++;
   }

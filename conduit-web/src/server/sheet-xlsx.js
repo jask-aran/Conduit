@@ -23,6 +23,8 @@ const PX_PER_CHAR = 7, STYLES_PER_TAB = 20_000;
 const VOLATILE = /\b(?:TODAY|NOW|RAND|RANDBETWEEN|RANDARRAY)\s*\(/i, FORMATS_PER_TAB = 2000, PASSES = 4;
 const ERROR_TEXT = { 0: "#NULL!", 7: "#DIV/0!", 15: "#VALUE!", 23: "#REF!", 29: "#NAME?", 36: "#NUM!", 42: "#N/A", 43: "#GETTING_DATA" };
 const fault = (message) => Object.assign(new Error(message), { status: 422 });
+// SheetJS's dense rows are holey arrays as long as their last cell: walking the holes of rows whose formatting runs far out costs more than all the rest.
+const cellsOf = (data, each) => { for (let r = 0; r < data.length; r++) { const row = data[r]; if (row) for (const c of Object.keys(row)) if (row[c]) each(row[c], r, Number(c)); } };
 const isError = (value) => value !== null && typeof value === "object";
 // SheetJS reads and writes no frozen panes or styles: they are read from, and written into, the workbook's own XML parts.
 const unescaped = (text) => text.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
@@ -87,9 +89,10 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     while (names.has(name.toLowerCase())) name = `${tabName(called).slice(0, 27)} ${n++}`;
     names.add(name.toLowerCase());
     let rows = 0, cols = 0;
-    data.forEach((row, r) => row?.forEach((cell, c) => { if (cell && (cell.f || (cell.t !== "z" && cell.v !== "" && cell.v !== undefined))) { rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1); } }));
+    let notes = 0;
+    cellsOf(data, (cell, r, c) => { if (cell.f || (cell.t !== "z" && cell.v !== "" && cell.v !== undefined)) { rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1); } if (cell.c?.length) notes++; });
     read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, rows: Math.max(1, rows), cols: Math.max(1, cols) });
-    drop("notes", data.reduce((sum, row) => sum + (row?.filter((cell) => cell?.c?.length).length ?? 0), 0));
+    drop("notes", notes);
   });
   if (!read.length) throw fault(wanted ? `None of those tabs is in the workbook: its tabs are ${book.SheetNames.join(", ")}` : "That workbook has no tabs with cells");
   const sizes = () => read.map((tab) => `${tab.name} ${tab.rows}x${tab.cols}`).join(", ");
@@ -118,14 +121,14 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   const formulas = [], spilt = [];
   for (const tab of read) {
     tab.typed = Array.from({ length: tab.rows }, () => new Array(tab.cols).fill(null));
-    tab.data.forEach((row, r) => row?.forEach((cell, c) => {
-      if (!cell || r >= tab.rows || c >= tab.cols) return;
+    cellsOf(tab.data, (cell, r, c) => {
+      if (r >= tab.rows || c >= tab.cols) return;
       // A formula over several cells is not computed: the engine fails to load some of them ("Edge does not exist"), so each of its cells holds its kept value.
       if (cell.f && cell.F?.includes(":")) { spilt.push({ tab, r, c, formula: translated(cell.f) }); tab.typed[r][c] = cell.t === "n" ? cell.v : cell.t === "z" ? null : kept(cell) || null; }
       else if (cell.f) { formulas.push({ tab, r, c, cell, formula: translated(cell.f) }); tab.typed[r][c] = translated(cell.f); }
       else if (cell.t === "n") tab.typed[r][c] = cell.v;
       else if (cell.t !== "z" && kept(cell) !== "") tab.typed[r][c] = cell.t === "s" || cell.t === "str" ? String(cell.v) : kept(cell);
-    }));
+    });
   }
   let engine;
   try { engine = HyperFormula.buildFromSheets(Object.fromEntries(read.map((tab) => [tab.name, tab.typed])), CONFIG, NAMES); }
@@ -134,10 +137,10 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     for (const tab of read) tab.id = engine.getSheetId(tab.name);
     // Text this engine would read as something else (a number, TRUE, a formula) is typed with the mark that keeps it text.
     const marked = [];
-    for (const tab of read) tab.data.forEach((row, r) => row?.forEach((cell, c) => {
-      if (!cell || cell.f || (cell.t !== "s" && cell.t !== "str") || r >= tab.rows || c >= tab.cols || cell.v === "" || tab.typed[r][c] === null) return;
+    for (const tab of read) cellsOf(tab.data, (cell, r, c) => {
+      if (cell.f || (cell.t !== "s" && cell.t !== "str") || r >= tab.rows || c >= tab.cols || cell.v === "" || tab.typed[r][c] === null) return;
       if (engine.getCellValue({ sheet: tab.id, row: r, col: c }) !== cell.v || String(cell.v).startsWith("'")) marked.push([tab, r, c, `'${cell.v}`]);
-    }));
+    });
     if (marked.length) engine.batch(() => { for (const [tab, r, c, text] of marked) { tab.typed[r][c] = text; engine.setCellContents({ sheet: tab.id, row: r, col: c }, text); } });
 
     // Compared in passes: a formula that reads a wrong one is wrong too, so only the first wrong ones in each chain are frozen, then the rest are computed again.
@@ -188,7 +191,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       (tab.sheet["!cols"] ?? []).forEach((col, c) => { if (c >= tab.cols) return; if (col?.width || col?.wpx) look[`width:${colName(c)}`] = Math.round(col.width ? col.width * PX_PER_CHAR : col.wpx); if (col?.hidden) look[`hidden:${colName(c)}`] = 1; });
       (tab.sheet["!rows"] ?? []).forEach((row, r) => { if (r < tab.rows && row?.hidden) look[`hidden:${r + 1}`] = 1; });
       // A number format is kept for a column where most of its numbers share it, and for the cells that differ, up to a count.
-      tab.data.forEach((row, r) => row?.forEach((cell, c) => { if (cell?.t === "n" && r < tab.rows && c < tab.cols) (formats.get(c) ?? formats.set(c, new Map()).get(c)).set(r, typeof cell.z === "string" ? cell.z : "General"); }));
+      cellsOf(tab.data, (cell, r, c) => { if (cell.t === "n" && r < tab.rows && c < tab.cols) (formats.get(c) ?? formats.set(c, new Map()).get(c)).set(r, typeof cell.z === "string" ? cell.z : "General"); });
       let single = 0;
       for (const [c, column] of formats) {
         const counts = new Map();
