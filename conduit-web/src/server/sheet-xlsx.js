@@ -113,8 +113,10 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     let rows = 0, cols = 0;
     let notes = 0;
     cellsOf(data, (cell, r, c) => { if (cell.f || (cell.t !== "z" && cell.v !== "" && cell.v !== undefined)) { rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1); } if (cell.c?.length) notes++; });
-    // Its charts, each standing on a cell the tab is taken out to, and a merge holding a value (a title over empty columns) to its far corner, while the tab fits a sheet.
-    const grow = (r, c) => { const taller = Math.max(rows, r + 1), wider = Math.max(cols, c + 1); if (wider <= COL_LIMIT && taller * wider <= SHEET_LIMIT) { rows = taller; cols = wider; return true; } return false; };
+    // Its charts, each standing on a cell the tab is taken out to, and a merge holding a value (a title over empty columns) to its far corner, by no
+    // more empty cells than a tab keeps styles for (a title merged across the whole row is cut at the tab's edge, as before).
+    const most = Math.min(SHEET_LIMIT, Math.max(1, rows) * Math.max(1, cols) + STYLES_PER_TAB);
+    const grow = (r, c) => { const taller = Math.max(rows, r + 1), wider = Math.max(cols, c + 1); if (wider <= COL_LIMIT && taller * wider <= most) { rows = taller; cols = wider; return true; } return false; };
     const charts = readCharts(xmlOf[called] ?? "", called, text, linked, drop).filter((chart) => { const at = parseA1(chart.at), area = parseRange(chart.range); return grow(at.row, at.col) && grow(area.bottom, area.right) || (drop("charts past the sheet's limits"), false); });
     for (const { s, e } of sheet["!merges"] ?? []) if (s.r < rows && s.c < cols && data[s.r]?.[s.c]?.v !== undefined) grow(e.r, e.c);
     read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, charts, rows: Math.max(1, rows), cols: Math.max(1, cols) });
