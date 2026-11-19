@@ -5,7 +5,8 @@
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 import type * as Y from "yjs";
 import { key, valueText, type SheetView } from "@/sheet-format.js";
-import { decodeStyle, writeStyle, type SheetBorders, type SheetHex, type SheetInk, type SheetStyle, type StyleAttrs } from "@/sheet-styles.js";
+import { decodeStyle, paintStyle, writeStyle, type SheetBorders, type SheetHex, type SheetInk, type SheetStyle, type StyleAttrs } from "@/sheet-styles.js";
+import { unfilled, type SheetFormats } from "./formats";
 import type { SheetLook, SheetRange } from "./host";
 import { widthOf } from "./sizes";
 import { wrapLines } from "./wrap";
@@ -36,6 +37,8 @@ export interface SheetStyles {
   key(event: KeyboardEvent, range: SheetRange | null): boolean;
   /** How many lines a cell's text takes: wrapped to its column's width where it wraps (sizes.ts fits a row by it). */
   lines(row: number, col: number, text: string, look: SheetLook): number;
+  /** How wide a cell's text is drawn in its font: its widest line, or the width it wraps to. */
+  width(row: number, col: number, text: string, look: SheetLook): number;
   /** The rows of the range a wrapped cell would need more than one line in. */
   taller(range: SheetRange, look: SheetLook): number[];
 }
@@ -88,13 +91,16 @@ export function createSheetStyles(look: Y.Map<number | string>, model: Accessor<
     try { look.doc!.transact(() => writeStyle(look, sheet, range, change, whole)); } catch (error) { failed((error as Error).message); }
   };
   let measure: CanvasRenderingContext2D | null = null;
+  const fontOf = (style: SheetCellStyle | undefined, sheetLook: SheetLook) => {
+    const [weight, size] = String(sheetLook.grid.baseFontStyle).split(" ") as [string, string];
+    return `${style?.italic ? "italic " : ""}${style?.bold ? sheetLook.strong : weight} ${textSize(size, style?.size)} ${sheetLook.grid.fontFamily}`;
+  };
   const count = (row: number, col: number, text: string, sheetLook: SheetLook) => {
     const style = at(row, col);
     if (!style?.wrap) return text.split("\n").length;
     measure ??= document.createElement("canvas").getContext("2d");
     if (!measure) return 1;
-    const width = widthOf(look, model(), col), [weight, size] = String(sheetLook.grid.baseFontStyle).split(" ") as [string, string];
-    const font = `${style.italic ? "italic " : ""}${style.bold ? sheetLook.strong : weight} ${textSize(size, style.size)} ${sheetLook.grid.fontFamily}`;
+    const width = widthOf(look, model(), col), font = fontOf(style, sheetLook);
     measure.font = font;
     return wrapLines(measure, text, font, (width ?? sheetLook.width) - 2 * Number(sheetLook.grid.cellHorizontalPadding)).length;
   };
@@ -114,6 +120,14 @@ export function createSheetStyles(look: Y.Map<number | string>, model: Accessor<
       return true;
     },
     lines: count,
+    width: (row, col, text, sheetLook) => {
+      measure ??= document.createElement("canvas").getContext("2d");
+      if (!measure || !text) return 0;
+      const style = at(row, col);
+      if (style?.wrap) return (widthOf(look, model(), col) ?? sheetLook.width) - 2 * Number(sheetLook.grid.cellHorizontalPadding);
+      measure.font = fontOf(style, sheetLook);
+      return Math.max(...text.split("\n").map((line) => measure!.measureText(line).width));
+    },
     taller: (range, sheetLook) => {
       const sheet = model(), out: number[] = [];
       if (!sheet) return out;
@@ -125,3 +139,44 @@ export function createSheetStyles(look: Y.Map<number | string>, model: Accessor<
     },
   };
 }
+
+/** Cells by the rows and columns shown, as a copy holds them. */
+type SheetCells = { rows: readonly number[]; cols: readonly number[] };
+/**
+ * A cell's look laid on others: their styles and number formats, as Paste formatting lays what was copied and the format painter what was selected
+ * when it was pressed, on the next cells chosen. Each lay is one named step (`act`).
+ */
+export function createSheetBrush(options: { look: Y.Map<number | string>; model: Accessor<SheetView | undefined>; formats: SheetFormats; at: Accessor<SheetRange | null>; act(label: string, run: () => void): void; failed(message: string): void }) {
+  const [held, hold] = createSignal<SheetCells | null>(null);
+  const lay = (label: string, from: SheetCells, to: SheetRange) => options.act(label, () => {
+    const sheet = options.model();
+    if (!sheet || !from.rows.length || !from.cols.length) return;
+    const formats: [number, number, string | undefined][] = [];
+    try { paintStyle(options.look, sheet, from, to, (fromRow, fromCol, row, col) => formats.push([row, col, options.formats.at(fromRow, fromCol)])); } catch (error) { return options.failed((error as Error).message); }
+    for (const [row, col, format] of formats) options.formats.set({ top: row, bottom: row, left: col, right: col }, format ?? "General");
+  });
+  const cellsOf = (range: SheetRange): SheetCells => { const size = options.model()?.size(), span = (from: number, to: number) => Array.from({ length: Math.max(0, to - from + 1) }, (_, n) => from + n);
+    return { rows: span(range.top, Math.min(range.bottom, (size?.rows ?? 1) - 1)), cols: span(range.left, Math.min(range.right, (size?.cols ?? 1) - 1)) }; };
+  return {
+    /** Whether the painter holds a look, waiting for the cells it goes on. */
+    held: () => held() !== null,
+    /** The painter pressed: it takes the selection's look, or (holding one) puts it down. */
+    toggle: () => { const range = options.at(); hold(held() || !range ? null : cellsOf(range)); },
+    lay: (from: SheetCells, to: SheetRange) => lay("Paste formatting", from, to),
+    /** On the grid's element: a pointer let go there ends a choice of cells, which takes the painter's look. */
+    attach: (into: HTMLElement) => {
+      const up = () => { const from = held(); if (from) requestAnimationFrame(() => { const to = options.at(); hold(null); if (to) lay("Format painter", from, to); }); };
+      into.addEventListener("pointerup", up);
+      return () => into.removeEventListener("pointerup", up);
+    },
+  };
+}
+export type SheetBrush = ReturnType<typeof createSheetBrush>;
+
+/** How wide a cell's value is drawn: in its number format (an accounting fill's gap left out) and its font, for fitting a column (sizes.ts). */
+export const measureShown = (styles: SheetStyles, formats: SheetFormats, model: Accessor<SheetView | undefined>) => (row: number, col: number, sheetLook: SheetLook) => {
+  const value = model()?.value(row, col);
+  if (value === null || value === undefined || value === "") return 0;
+  const drawn = typeof value === "boolean" ? null : formats.draw(row, col, value);
+  return styles.width(row, col, drawn ? unfilled(drawn.text) : valueText(value), sheetLook);
+};

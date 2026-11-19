@@ -19,17 +19,17 @@ import { createSequenceKeys, SequenceHint, SHEET_SEQUENCES, SizePrompt, type She
 import { createSheetSizes, dragRowEdges } from "./sizes";
 import { createSheetFilter, FilterMenu } from "./filter";
 import { createSheetFormats } from "./formats";
-import { createSheetStyles } from "./styles";
+import { createSheetBrush, createSheetStyles, measureShown } from "./styles";
 import { createSheetRules, RulePrompt } from "./rules";
 import { createSheetTools } from "./tools";
 import { createSheetFind } from "./find";
 import { createSheetHistory } from "./history";
-import { FormatMenu } from "./format-menu";
+import { FormatMenu, FormatPrompt } from "./format-menu";
 
 // Cells written into the text a comment quotes, and how much of each: enough to read.
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
 // The grid keeps a spreadsheet's chords the application binds elsewhere: Ctrl+- deletes rows, Ctrl+0 hides columns, Ctrl+Shift+1..5 are number formats.
-const OWN_KEYS = ["primary+Minus", "primary+Digit0", ...[0, 1, 2, 3, 4, 5].map((n) => `primary+shift+Digit${n}`)].join(" ");
+const OWN_KEYS = ["primary+Minus", "primary+Digit0", ...[0, 1, 2, 3, 4, 5, 6].map((n) => `primary+shift+Digit${n}`), "primary+Backslash", "alt+primary+KeyV"].join(" ");
 // A formula moved as a fill moves it; text stays as typed.
 const shifted = (input: string, rows: number, cols: number) => input.startsWith("=") ? shiftRefs(input, rows, cols) : input;
 const between = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, n) => from + n);
@@ -91,7 +91,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   };
   const frozenHere = () => { changed(); const area = at(); return area ? frozenAt(area.top, area.left) : undefined; };
   const filters = createSheetFilter(look, model, at, hub, (row, col) => Boolean(styles.at(row, col)?.bold)), [filtering, setFiltering] = createSignal<{ col: number; box: SheetBox } | null>(null);
-  const sizes = createSheetSizes(look, model, styles.lines, filters.hidden), [question, setQuestion] = createSignal<SizeQuestion | null>(null);
+  const sizes = createSheetSizes(look, model, styles.lines, filters.hidden, measureShown(styles, formats, model)), [question, setQuestion] = createSignal<SizeQuestion | null>(null);
   const merges = createSheetMerges(look, model), rules = createSheetRules(look, model), [ruling, setRuling] = createSignal<SheetRange | null>(null), decisions = createDecisionScope(() => props.id);
   // As a spreadsheet's: Merge & Center on a merge unmerges it, and a merge emptying cells that hold values asks first.
   const merge = (kind: SheetMergeKind | null, asked = at()) => {
@@ -131,6 +131,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     write: (list, label) => writes(label ?? "")(list),
     fill: (range, values, from) => hub({ op: "fill", range: rangeA1(range), values, ...(from ? { from: rangeA1(from) } : {}) }),
     resized: (col, width) => history.act("Column width", () => sizes.setWidths(span("cols", col), width / zoom())),
+    autofit: (kind, line) => history.act(kind === "cols" ? "Fit column width" : "Fit row height", () => kind === "cols" ? sizes.fitColumns(span("cols", line), readLook(root!)) : sizes.fitRows(span("rows", line), readLook(root!))),
     menu: setMenu,
     moved: () => { setScrolled((n) => n + 1); moved(); },
     drawn: () => props.onDrawn?.(),
@@ -152,6 +153,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         editor.begin({ row, col }, "enter", "cell"); editor.typed(text, text.endsWith("()") ? text.length - 1 : text.length);
         return true;
       }
+      // Ctrl+Alt+V lays what was copied here on the selection's cells as their formatting alone.
+      if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "v") { event.preventDefault(); const from = grid()?.source(), area = at(); if (from && area) brush.lay(from, area); return true; }
       // AltGr is Ctrl and Alt together: what it types is typed.
       if ((event.ctrlKey || event.metaKey) && !(event.ctrlKey && event.altKey)) return false;
       if (event.key === "Enter" || event.key === "F2") { event.preventDefault(); editor.begin({ row, col }, "edit", "cell"); return true; }
@@ -215,8 +218,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   createEffect(() => {
     const into = island();
     if (!into) return;
-    const offKeys = sequences.attach(into), offEdges = dragRowEdges(into, grid, (row, height) => history.act("Row height", () => sizes.setHeights(span("rows", row), height / zoom())));
-    onCleanup(() => { offKeys(); offEdges(); });
+    const offKeys = sequences.attach(into), offBrush = brush.attach(into), offEdges = dragRowEdges(into, grid, (row, height) => history.act("Row height", () => sizes.setHeights(span("rows", row), height / zoom())));
+    onCleanup(() => { offKeys(); offBrush(); offEdges(); });
   });
   const cellBox = createMemo<JSX.CSSProperties>((was) => {
     scrolled();
@@ -286,7 +289,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     return { text: lines.join("\n"), label: corners.range, under: corners, boxes: () => { const now = rangeOf({ under: corners }), box = now && grid()?.bounds(now); return box ? [box] : []; } };
   };
   const find = createSheetFind({ model, grid, at, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols, draw: formats.draw, write: (list) => writes(list.length === 1 ? "Replace" : "Replace all")(list) });
-  const tools = createSheetTools({ tip: sequences.tip, at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(), spread: (range, way) => spread(range, way), act: history.act,
+  const brush = createSheetBrush({ look, model, formats, at, act: history.act, failed: props.host.failed });
+  const tools = createSheetTools({ tip: sequences.tip, at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(), spread: (range, way) => spread(range, way), merge: (kind) => merge(kind), brush, act: history.act,
     fit: (range) => sizes.fitRows(Array.from({ length: range.bottom - range.top + 1 }, (_, n) => range.top + n), readLook(root!)) });
   const marks: SheetMarks = {
     subject: () => ({ ...model()?.size() }),
@@ -484,6 +488,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       // A style's chord is its tool's step: Ctrl+B is Bold.
       const tool = tools.find((one) => one.keys?.length === 2 && one.keys[1]!.toLowerCase() === event.key.toLowerCase())?.label ?? "";
       if (find.keys(event) || tabs.key(event) || history.act(tool, () => formats.key(event, at()) || styles.key(event, at())) || filters.key(event)) return;
+      // Ctrl+\ clears the selection's formatting.
+      if (!event.shiftKey && !event.altKey && event.code === "Backslash") { event.preventDefault(); return tools.find((one) => one.name === "clear")?.run(); }
       // Ctrl+D and Ctrl+R are the grid's only while it has the keyboard: elsewhere the browser keeps them.
       if (!event.shiftKey && !event.altKey && (event.code === "KeyD" || event.code === "KeyR")) { event.preventDefault(); const area = at(); if (area) spread(area, event.code === "KeyD" ? "down" : "right"); return; }
       // Ctrl+0 hides the selection's columns and Ctrl+Shift+0 shows those hidden in it, as a spreadsheet's (by code: shifted, the key is ")").
@@ -547,6 +553,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         <div class="ui-spreadsheet-editor" data-open={editor.editing() ? "" : undefined} style={{ ...cellBox(), "--sheet-zoom": zoom() }}><FormulaField editor={editor} place="cell" label="Cell" class="ui-formula-text" /></div>
         <FormulaHelp editor={editor} frame={() => body} />
         <SequenceHint typed={sequences.typed} next={sequences.next} anchor={slot} />
+        <FormatPrompt formats={formats} act={history.act} onClose={() => grid()?.focus()} />
         <SizePrompt question={question()} onClose={() => { setQuestion(null); grid()?.focus(); }} />
         <RulePrompt area={ruling()} rules={rules} act={(label, run) => history.act(label, run)} onClose={() => { setRuling(null); grid()?.focus(); }} />
         <FilterMenu filter={filters} at={filtering()} frame={() => body} onClose={() => { setFiltering(null); grid()?.focus(); }} />

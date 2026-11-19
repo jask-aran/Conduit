@@ -17,16 +17,19 @@ export const SHEET_FILL = "\u0001";
 export const unfilled = (text: string) => text.includes(SHEET_FILL) ? text.replace(/\u0001[^]/g, "").trim() : text;
 /** A value as its format draws it. */
 export type SheetDrawn = { text: string; hue?: SheetHue };
-/** A format the person picks by name (`code`: the key under Ctrl+Shift, as Excel has it). */
-export type SheetPreset = { name: string; format: string; code: string; sample: string };
+/** A format the person picks by name (`id`: its tool's, sheet tools' `format-<id>`; `code`: the key under Ctrl+Shift, where it has one). */
+export type SheetPreset = { id: string; name: string; format: string; code?: string; sample: string };
 
 export const SHEET_PRESETS: readonly SheetPreset[] = [
-  { name: "General", format: "General", code: "Backquote", sample: "1234.5" },
-  { name: "Number", format: "#,##0.00", code: "Digit1", sample: "1,234.50" },
-  { name: "Currency", format: "$#,##0.00", code: "Digit4", sample: "$1,234.50" },
-  { name: "Percent", format: "0%", code: "Digit5", sample: "12%" },
-  { name: "Date", format: "d/m/yyyy", code: "Digit3", sample: "15/3/2023" },
-  { name: "Time", format: "h:mm AM/PM", code: "Digit2", sample: "6:00 PM" },
+  { id: "general", name: "General", format: "General", code: "Backquote", sample: "1234.5" },
+  { id: "number", name: "Number", format: "#,##0.00", code: "Digit1", sample: "1,234.50" },
+  { id: "currency", name: "Currency", format: "$#,##0.00", code: "Digit4", sample: "$1,234.50" },
+  { id: "accounting", name: "Accounting", format: '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)', sample: "$ 1,234.50" },
+  { id: "percent", name: "Percent", format: "0%", code: "Digit5", sample: "12%" },
+  { id: "scientific", name: "Scientific", format: "0.00E+00", code: "Digit6", sample: "1.23E+03" },
+  { id: "date", name: "Date", format: "d/m/yyyy", code: "Digit3", sample: "15/3/2023" },
+  { id: "long-date", name: "Long date", format: "d mmmm yyyy", sample: "15 March 2023" },
+  { id: "time", name: "Time", format: "h:mm AM/PM", code: "Digit2", sample: "6:00 PM" },
 ];
 const HUES: Readonly<Record<string, SheetHue>> = { red: "destructive", green: "live", yellow: "warn" };
 // What a format holds that is not a placeholder: quoted text, an escaped character, [colour] or [condition], and _x or *x spacing.
@@ -80,17 +83,20 @@ export interface SheetFormats {
   set(range: SheetRange, format: string): void;
   /** One more decimal place, or one fewer, from the first cell's format, for the whole range. */
   decimals(range: SheetRange, by: 1 | -1): void;
-  /** Ctrl+Shift with 1 to 5 or `: a preset for the range. True when taken. */
+  /** Ctrl+Shift with 1 to 6 or `: a preset for the range. True when taken. */
   key(event: KeyboardEvent, range: SheetRange | null): boolean;
   /** How the range's figures (its sum, average…) are drawn: in its one format, or null where it has none or several. */
   figure(range: SheetRange | null): ((value: number) => string) | null;
   /** Whether a cell's format draws a date: the fill handle steps its number by days, months or years. */
   dated(row: number, col: number): boolean;
+  /** The range a format of the person's own is being asked for (format-menu.tsx FormatPrompt), and `ask` to ask (null: done). */
+  asking: Accessor<SheetRange | null>;
+  ask(range: SheetRange | null): void;
 }
 
 export function createSheetFormats(look: Y.Map<number | string>, model: Accessor<SheetView | undefined>, failed: (message: string) => void): SheetFormats {
   // By column id, and by "<rowId>:<colId>"; "" is General set on a cell under a column that has a format.
-  const columns = new Map<string, string>(), cells = new Map<string, string>(), [changed, setChanged] = createSignal(0);
+  const columns = new Map<string, string>(), cells = new Map<string, string>(), [changed, setChanged] = createSignal(0), [asking, ask] = createSignal<SheetRange | null>(null);
   const index = (name: string) => {
     if (!name.startsWith("fmt:")) return false;
     const at = name.slice(4), value = look.get(name), to = at.includes(":") ? cells : columns;
@@ -113,7 +119,7 @@ export function createSheetFormats(look: Y.Map<number | string>, model: Accessor
     try { look.doc!.transact(() => writeFormat(look, sheet, range, format, range.top === 0 && range.bottom >= sheet.size().rows - 1)); } catch (error) { failed((error as Error).message); }
   };
   return {
-    at,
+    at, asking, ask,
     dated: (row, col) => { const pattern = at(row, col); return Boolean(pattern && isDateFormat(pattern)); },
     draw: (row, col, value) => {
       const pattern = at(row, col), made = pattern ? compile(pattern) : null;

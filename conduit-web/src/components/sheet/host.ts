@@ -47,13 +47,14 @@ export type SheetFrozen = Record<string, Record<string, { formula: string; why: 
  * The edit tools a sheet offers on its ribbon, as its kind declares them (client/document/artifact-kinds.ts). Each draws as one or more tools named
  * `<tool>` (a toggle) or `<tool>-<choice>` (one of a menu): SheetToolId, the stable names a key sequence is bound to. Undo and Redo are the ribbon's own.
  */
-export type SheetToolName = "bold" | "italic" | "underline" | "strike" | "wrap" | "clear" | "color" | "fill" | "borders" | "align" | "valign" | "format" | "decimals" | "spread";
-export const SHEET_TOOLS: readonly SheetToolName[] = ["bold", "italic", "underline", "strike", "wrap", "clear", "color", "fill", "borders", "align", "valign", "format", "decimals", "spread"];
+export type SheetToolName = "bold" | "italic" | "underline" | "strike" | "wrap" | "clear" | "color" | "fill" | "borders" | "merge" | "align" | "valign" | "format" | "decimals" | "spread" | "paint";
+/** In the ribbon's order, left to right. */
+export const SHEET_TOOLS: readonly SheetToolName[] = ["bold", "italic", "underline", "strike", "align", "color", "fill", "borders", "merge", "format", "valign", "wrap", "decimals", "spread", "paint", "clear"];
 /** `clear`: Clear formatting (styles and number formats). `spread-down` and `spread-right`: Fill down and Fill right, named apart from `fill`, the fill colour. */
-export type SheetToolId = "bold" | "italic" | "underline" | "strike" | "wrap" | "clear" | `spread-${"down" | "right"}` | `color-${SheetInk | "none"}` | `fill-${SheetInk | "none"}` | `borders-${SheetBorders}`
-  | `align-${"left" | "center" | "right"}` | `valign-${"top" | "middle" | "bottom"}` | `format-${"general" | "number" | "currency" | "percent" | "date" | "time"}` | `decimals-${"more" | "fewer"}`;
+export type SheetToolId = "bold" | "italic" | "underline" | "strike" | "wrap" | "clip" | "clear" | "paint" | `spread-${"down" | "right"}` | `color-${SheetInk | "none" | "any"}` | `fill-${SheetInk | "none" | "any"}` | `borders-${SheetBorders}` | `merge-${"center" | "across" | "cells" | "none"}`
+  | `align-${"left" | "center" | "right"}` | `valign-${"top" | "middle" | "bottom"}` | `format-${"general" | "number" | "currency" | "accounting" | "percent" | "scientific" | "date" | "long-date" | "time" | "custom"}` | `decimals-${"more" | "fewer"}`;
 /** One tool as the ribbon draws it (Markup's MarkupHostTool): read where drawn, so getters follow. `menu`: the tools of one stand as one control (showing `glyph` where one says it); `compact` with `swatch`: a set of inks. */
-export type SheetTool = { name: SheetToolId; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; compact?: boolean; swatch?: string; glyph?: () => JSX.Element; tip?: string; run(): void };
+export type SheetTool = { name: SheetToolId; label: string; icon: () => JSX.Element; active?: boolean; pressed?: boolean; disabled?: boolean; keys?: string[]; menu?: string; compact?: boolean; swatch?: string; glyph?: () => JSX.Element; tip?: string; pick?(hex: string): void; run(): void };
 
 export interface SheetHost {
   /** The hub's live socket for the sheet, opened with the app's own sign-in. */
@@ -138,6 +139,8 @@ export interface SheetGrid {
   paste(at: { row: number; col: number }, text: string, values?: boolean): void;
   /** Whether something copied from this grid is held, for Paste values. */
   held(): boolean;
+  /** The rows and columns shown that what is held was copied from, for Paste formatting. */
+  source(): { rows: readonly number[]; cols: readonly number[] } | null;
   /** The row whose lower edge, beside its number, is under a point of the viewport (and the top of that row), as a drag to size it starts. */
   rowEdge(x: number, y: number): { row: number; top: number } | null;
   /** A row drawn at a height while it is dragged, before the look holds it. */
@@ -170,6 +173,8 @@ export type SheetGridEvents = {
   key(event: SheetKey, row: number, col: number): boolean;
   /** A cell double-clicked: it is opened to edit. */
   activated(row: number, col: number): void;
+  /** A column letter's edge or a row number's double-clicked: that column or row is fitted to what it shows. */
+  autofit?(kind: "cols" | "rows", line: number): void;
   /** A filter's mark pressed on its header cell (SheetColumns `mark`), with the cell's box. */
   filter?(row: number, col: number, box: SheetBox): void;
   /** Its first frame with the sheet's cells is painted. */

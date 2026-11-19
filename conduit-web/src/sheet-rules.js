@@ -6,6 +6,8 @@ import { a1, colIndex, colName, key, parseA1, parseRange, rangeA1, rangedArea } 
  * must be answered at once. Shared by the page, which draws them (components/sheet/rules.tsx), the hub (sheets.js) and the xlsx parts.
  */
 export const RULE_OPS = [">", "<", ">=", "<=", "=", "<>", "between", "notBetween"];
+/** A text rule's tests of a cell's text against `a`, its text as written (case aside, as a spreadsheet's). */
+export const TEXT_OPS = { contains: (text, said) => text.includes(said), notContains: (text, said) => !text.includes(said), begins: (text, said) => text.startsWith(said), ends: (text, said) => text.endsWith(said) };
 export const RULE_LIMIT = 200;
 const COMPARE = { ">": (n) => n > 0, "<": (n) => n < 0, ">=": (n) => n >= 0, "<=": (n) => n <= 0, "=": (n) => n === 0, "<>": (n) => n !== 0 };
 const TOKEN = /\s*(?:("(?:[^"]|"")*")|(\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?)(?![\w(.!])|(\d*\.?\d+(?:[eE][+-]?\d+)?)|(TRUE|FALSE)(?![\w(.])|([A-Za-z_][\w.]*)\s*\(|(<=|>=|<>|[-+*/^&=<>(),%]))/iy;
@@ -113,6 +115,10 @@ export function compileFormula(source, anchor) {
 
 /** A rule as one test of a cell, reading values with `get` (which throws for an error): its value, or its formula, against the rule. Null where a formula of it cannot be read here. */
 export function compileRule(rule) {
+  if (rule.kind === "text") {
+    const test = TEXT_OPS[rule.op], said = String(rule.a ?? "").toLowerCase();
+    return test ? Object.assign((row, col, get) => { try { return test(text(get(row, col)).toLowerCase(), said); } catch { return false; } }, { reads: false }) : null;
+  }
   const anchor = rule.anchor ?? "A1", a = compileFormula(rule.a, anchor), two = rule.op === "between" || rule.op === "notBetween", b = two ? compileFormula(rule.b, anchor) : null;
   if (!a || (rule.kind !== "formula" && (!RULE_OPS.includes(rule.op) || (two && !b)))) return null;
   const test = rule.kind === "formula" ? (row, col, get) => truth(a(row, col, get)) : (row, col, get) => {
@@ -141,7 +147,7 @@ export const shiftRefs = (formula, rows, cols) => !rows && !cols ? formula : Str
 export function readRules(text) {
   try {
     const list = JSON.parse(String(text));
-    return Array.isArray(list) ? list.filter((rule) => rule && Array.isArray(rule.ranges) && typeof rule.a === "string" && (rule.kind === "formula" || RULE_OPS.includes(rule.op))) : [];
+    return Array.isArray(list) ? list.filter((rule) => rule && Array.isArray(rule.ranges) && typeof rule.a === "string" && (rule.kind === "formula" || (rule.kind === "text" ? Object.hasOwn(TEXT_OPS, rule.op) : RULE_OPS.includes(rule.op)))) : [];
   } catch { return []; }
 }
 /** A rule's ranges where they are now (a range whose corner has gone is left out). */
@@ -154,7 +160,7 @@ export function rulesA1(view, text) {
   return readRules(text).flatMap((rule) => {
     const areas = ruleAreas(view, rule);
     if (!areas.length) return [];
-    const at = topLeft(areas), from = parseA1(rule.anchor) ?? at, move = (formula) => formula === undefined ? undefined : shiftRefs(formula, at.row - from.row, at.col - from.col);
+    const at = topLeft(areas), from = parseA1(rule.anchor) ?? at, move = (formula) => formula === undefined || rule.kind === "text" ? formula : shiftRefs(formula, at.row - from.row, at.col - from.col);
     return [{ ...said(rule), ranges: areas.map(rangeA1).join(" "), a: move(rule.a), b: move(rule.b) }];
   }).map((rule) => JSON.parse(JSON.stringify(rule)));
 }

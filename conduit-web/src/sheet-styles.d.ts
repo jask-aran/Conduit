@@ -9,7 +9,7 @@ export type SheetInk = "red" | "amber" | "green" | "blue";
 export type SheetHex = `#${string}`;
 export const SHEET_INKS: readonly SheetInk[];
 /** A border choice for a range: every edge of every cell, the range's outline, one side of it, or none. */
-export type SheetBorders = "all" | "outer" | "top" | "bottom" | "left" | "right" | "none";
+export type SheetBorders = "all" | "outer" | "inner" | "top" | "bottom" | "left" | "right" | "none";
 export const SHEET_BORDERS: readonly SheetBorders[];
 /**
  * A cell's style as an agent says and reads it. A field left out is left as it is (read: worn from the row or column, else the default); false or null
@@ -46,3 +46,5 @@ export function listStyles(look: Y.Map<number | string>, sheet: FormatSheet, are
  */
 export type SheetStyleOp = { op: "style"; range: string; style?: SheetStyle; borders?: SheetBorders; tab?: string };
 export type SheetStylesResult = { cells: string[]; styles: Record<string, SheetStyle>; tab?: string };
+/** The cells of `from` (rows and columns by position) laid on `to` as a paste tiles them, each target cell given its own style; `each` told each source and target cell. */
+export function paintStyle(look: Y.Map<number | string>, sheet: FormatSheet, from: { rows: readonly number[]; cols: readonly number[] }, to: Range, each?: (fromRow: number, fromCol: number, row: number, col: number) => void): void;
