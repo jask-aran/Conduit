@@ -438,7 +438,7 @@ export function sheetKind(hub) {
     const formulas = [];
     for (const tab of room.book.tabs()) {
       const one = room.book.tab(tab.id), id = engine.getSheetId(one.engine.getSheetName(one.sheet));
-      one.inputs().forEach((line, r) => line.forEach((input, c) => { if (input.startsWith("=")) { engine.setCellContents({ sheet: id, row: r, col: c }, input); formulas.push({ one, id, r, c, input }); } }));
+      one.inputs().forEach((line, r) => line.forEach((input, c) => { if (input.startsWith("=")) { engine.setCellContents({ sheet: id, row: r, col: c }, input); formulas.push({ one, id, r, c, input, read: engine.getCellFormula({ sheet: id, row: r, col: c }) }); } }));
     }
     const out = [];
     try {
@@ -458,10 +458,12 @@ export function sheetKind(hub) {
         const next = old.startsWith("=") ? String(engine.getCellFormula({ sheet: here, ...at }) ?? old) : old;
         if (next !== (now[at.row]?.[at.col] ?? "")) out.push([sheet, at.row, at.col, next]);
       }
-      for (const { one, id, r, c, input } of formulas) {
+      // Compared with the engine's own reading before the shift, not with the text typed: the engine writes `=sum(a1)` as `=SUM(A1)`, and a formula
+      // the shift did not move is left as it was typed.
+      for (const { one, id, r, c, read } of formulas) {
         if (one.id === sheet.id && zone.has(`${r}:${c}`)) continue;
         const next = engine.getCellFormula({ sheet: id, row: r, col: c });
-        if (next && next !== input) out.push([one, r, c, next]);
+        if (next && next !== read) out.push([one, r, c, next]);
       }
     } finally { engine.destroy(); }
     // Each cell's look (`<what>:<rowId>:<colId>`: a style, a number format, a frozen formula) moves with it.
