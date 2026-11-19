@@ -17,6 +17,8 @@ export type PaperKeyRow = { does: string; keys: string[]; typed?: string; space?
 export const PAPER_MARK_KEYS: Record<Exclude<DocumentMarkKind, "color" | "highlight">, string> = { bold: "Mod-b", italic: "Mod-i", strike: "Mod-Shift-s", code: "Mod-e" };
 /** Links the text selected, or changes the link the caret is in (editor.tsx). */
 export const PAPER_LINK_KEY = "Mod-k";
+/** Find with the replace row (find.tsx). */
+export const PAPER_REPLACE_KEY = "Mod-h";
 /** Asks the one comments go to about the text selected, or the caret's block (editor.tsx). */
 export const PAPER_COMMENT_KEY = "Mod-Alt-m";
 // Read here, not from the app's shortcut environment: the editor is lifted whole into other projects.
@@ -71,6 +73,7 @@ export const PAPER_KEYS: Record<PaperKeyGroup, readonly PaperKey[]> = {
   ],
   Paper: [
     { command: "find", keys: ["Mod-f"] },
+    { does: "Find and replace", keys: [PAPER_REPLACE_KEY] },
   ],
 };
 

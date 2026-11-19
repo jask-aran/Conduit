@@ -390,7 +390,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   props.controls?.({
     openBlockMenu: handle.openMenu,
     moveBlock: (by) => { const view = editor()?.view, at = view ? caretBlockAt(view) : null; return at !== null && shiftBlock(view!, at, by); },
-    outline, current, reveal, find: find.show,
+    outline, current, reveal, find: () => find.show(),
   });
   return <>
   <DocumentSheet ref={setColumn} scroller={setScroller} width={props.width} find={find.view()} name={props.name} state={copy.state() === "away" ? "Reconnecting" : copy.state() === "stale" ? "Reload: this page is older than the paper" : undefined}
