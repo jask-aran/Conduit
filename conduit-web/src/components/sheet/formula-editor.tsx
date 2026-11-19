@@ -9,7 +9,7 @@ import { Item, Match, Section } from "@/components/ui";
 import { Popover, PopoverContent } from "@/components/ui/menus";
 import { a1, rangeA1 } from "@/sheet-format.js";
 import { contextAt, cycleAnchors, finish, INKS, inksOf, isFormula, tokenize, unknownCalls, type FormulaContext, type FormulaToken } from "./formula";
-import { argumentAt, FUNCTION_HELP, functionOffers, nearestFunctions, type FunctionOffer } from "./functions";
+import { argumentAt, errorReason, FUNCTION_HELP, functionOffers, nearestFunctions, type FunctionOffer } from "./functions";
 import type { SheetGrid, SheetReference } from "./host";
 
 type Cell = { row: number; col: number };
@@ -108,7 +108,7 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
     const cell = editing() ? null : host.selected(), message = cell && host.error(cell.row, cell.col);
     if (!cell || message === null || message === undefined) return null;
     const input = host.input(cell.row, cell.col), unknown = unknownCalls(input, tokenize(input), known())[0];
-    if (!unknown) return { text: message, near: [] };
+    if (!unknown) return { text: errorReason(message), near: [] };
     const name = input.slice(unknown.from, unknown.to).toUpperCase();
     return { text: `${name} is not a function`, near: nearestFunctions(name, names(), known(), 3) };
   });

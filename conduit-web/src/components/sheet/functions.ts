@@ -158,3 +158,26 @@ export function nearestFunctions(name: string, names: readonly string[], known: 
 
 /** The argument a position in a call stands for: past the last, the last again where it repeats. */
 export const argumentAt = (help: FunctionHelp, at: number) => at < help.args.length ? at : help.args.at(-1)?.includes("…") ? help.args.length - 1 : -1;
+
+// The engine's words for an error, where they are its own (or it gave none, only the code), as a person can act on them.
+const REASONS: Readonly<Record<string, string>> = {
+  "#DIV/0!": "It divides by zero, or by an empty cell.",
+  "#CYCLE!": "Circular reference: the formula reads its own cell, directly or through other cells.",
+  "#N/A": "A value it looks for is not there.",
+  "#VALUE!": "A value is of the wrong type here.",
+  "#REF!": "It reads a cell that is not there.",
+  "#NUM!": "A number is out of range here.",
+  "#NAME?": "It names a function or name this sheet does not have.",
+  "#SPILL!": "Its result spills over cells that are not empty: clear them to show it.",
+  "#ERROR!": "The formula cannot be read: check its brackets, commas and quotes.",
+  "Value cannot be coerced to number.": "It reads text where a number is needed.",
+  "NaN or infinite value encountered.": "The result is not a number, such as the square root of a negative one.",
+  "Cell range not allowed.": "It is given a range where one value is needed.",
+  "No space for array result.": "Its result spills over cells that are not empty: clear them to show it.",
+  "Sheet does not exist.": "It reads a tab this sheet does not have.",
+  "Value not found.": "The value it looks for is not in the range.",
+  "Wrong number of arguments.": "The function is given too many or too few arguments.",
+  "Address is not correct.": "It reads a cell that is not there.",
+};
+/** Why a cell shows an error, from the engine's message (or, where it gave none, the error's code). */
+export const errorReason = (message: string) => REASONS[message] ?? (message.startsWith("Parsing error.") ? REASONS["#ERROR!"]! : message.replace(/^Named expression (.+) not recognized\.$/, "$1 is not a name this sheet has."));
