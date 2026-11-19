@@ -399,12 +399,15 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   };
   /** The request out settled by the person, so it is asked no longer, and whoever is at work on it stopped. */
   const stopWork = () => { const out = working(); if (!out) return; setWorking(null); void Promise.allSettled([transport.resolve(out.item, 1, true), host.stop?.(`${out.item}/1`)]).then(() => void host.sent?.()); };
-  // Followed until it is answered: settled, its item handled, or the last word on it the agent's.
+  // Followed until it is answered, as its margin card is: settled, its item handled, the last word on it the agent's, or the agent at work on it no longer.
   createEffect(() => {
     const out = working();
     if (!out) return;
+    let began = false;
     const following = setInterval(() => void transport.thread(out.item).then((thread) => {
-      if (working() === out && (thread.state === "handled" || thread.comments[0]?.resolved || thread.messages.filter((message) => message.n === 1).at(-1)?.from === "agent")) setWorking(null);
+      const comment = thread.comments[0], ended = began && !comment?.working;
+      began ||= Boolean(comment?.working);
+      if (working() === out && (ended || thread.state === "handled" || comment?.resolved || thread.messages.filter((message) => message.n === 1 || message.n === null).at(-1)?.from === "agent")) setWorking(null);
     }, () => {}), WAITING_EVERY_MS);
     onCleanup(() => clearInterval(following));
   });
@@ -672,8 +675,8 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
   // Heard after the surface, and only in its pane: Escape stops the request out where nothing nearer took it, and the ask key opens the box where the surface has no ask of its own (a site).
   const later = (event: KeyboardEvent) => {
     const framed = host.frame?.(), pane = framed?.classList.contains("ui-markup-room") ? framed.parentElement : framed, target = event.target as Node;
-    if (event.defaultPrevented || props.hidden || document.querySelector(`${MENUS}, [role='dialog']`) || !(layer?.contains(target) || pane?.contains(target))) return;
-    if (event.key === "Escape" && working() && !asking()) { event.preventDefault(); stopWork(); }
+    if (event.defaultPrevented || props.hidden || asking() || document.querySelector(`${MENUS}, [role='dialog']`) || !(layer?.contains(target) || pane?.contains(target))) return;
+    if (event.key === "Escape" && working()) { event.preventDefault(); stopWork(); }
     else if ((event.ctrlKey || event.metaKey) && event.altKey && event.code === "KeyM" && can.bar !== "foot" && can.listeners) { event.preventDefault(); openAsk(host.place?.() ?? null); }
   };
   const POINTER_EVENTS = ["pointermove", "pointerdown", "pointerup", "pointercancel", "mousedown", "mouseup", "click", "dblclick", "contextmenu", "wheel", "touchstart", "touchmove", "touchend", "touchcancel"] as const;
@@ -694,7 +697,7 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
       if (none && rested) { handle = requestAnimationFrame(tick); return; }
       rested = none;
       // Only marks read the frame: with none drawn, nothing is told a frame passed.
-      if (selections.length || quoting()) setFrame((value) => value + 1);
+      if (selections.length || quoting() || asking()?.place) setFrame((value) => value + 1);
       // What the app redrew is found again where it was.
       for (const selection of selections) selection.elements.forEach((element, at) => {
         if (element.isConnected) return;

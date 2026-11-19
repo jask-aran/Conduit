@@ -166,7 +166,7 @@ export function MarkupAsk(props: { name: string; names?: readonly string[]; onNa
   const put = (said: string) => { setWords(said); queueMicrotask(() => field?.setSelectionRange(said.length, said.length)); };
   const send = () => { const said = words().trim(); if (!said) return; keepAsked(said); props.onSend(said); };
   const several = () => (props.names?.length ?? 0) > 1;
-  const others = createMemo(() => { const typed = /^@(\S*)$/.exec(words())?.[1]?.toLowerCase(); return typed === undefined || shut() === words() ? [] : (props.names ?? []).filter((name) => name !== props.name && name.toLowerCase().includes(typed)); });
+  const others = createMemo(() => { const typed = /^@(\S*)$/.exec(words())?.[1]?.toLowerCase(); return typed === undefined || shut() === words() || props.working ? [] : (props.names ?? []).filter((name) => name !== props.name && name.toLowerCase().includes(typed)); });
   createEffect(() => { others(); setActive(0); });
   const rename = (name: string) => { props.onName?.(name); put(""); };
   const keep = (event: MouseEvent) => event.preventDefault();
