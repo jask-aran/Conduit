@@ -144,7 +144,7 @@ export function sheetKind(hub) {
     } finally { engine.destroy(); }
   };
   /**
-   * Before rows or columns move: each filter's, table's and conditional format's corners stay where they are, on the cells moved into them, as
+   * Before rows or columns move: each filter's, table's, conditional format's and chart's corners stay where they are, on the cells moved into them, as
    * they would come apart if they went with their lines (keepCorners is the delete's).
    */
   const keepPlaces = (room, sheet) => {
@@ -162,6 +162,12 @@ export function sheetKind(hub) {
     if (rules.length) {
       const held = rules.map((rule) => ({ rule, ranges: rule.ranges.map(([from, to]) => [stay(from), stay(to)]) }));
       after.push(() => { const next = JSON.stringify(held.map(({ rule, ranges }) => ({ ...rule, ranges: ranges.map(([from, to]) => [from(), to()]) }))); if (next !== JSON.stringify(rules)) room.look.set(`rules:${sheet.id}`, next); });
+    }
+    // A chart too, its range and the cell it stands on: it draws the same cells' places and stands where it stood.
+    const charts = readCharts(room.look.get(`charts:${sheet.id}`));
+    if (charts.length) {
+      const held = charts.map((chart) => ({ chart, from: stay(chart.from), to: stay(chart.to), at: stay(chart.at) }));
+      after.push(() => { const next = JSON.stringify(held.map(({ chart, from, to, at }) => ({ ...chart, from: from(), to: to(), at: at() }))); if (next !== JSON.stringify(charts)) room.look.set(`charts:${sheet.id}`, next); });
     }
     return () => { for (const one of after) one(); };
   };
@@ -220,11 +226,11 @@ export function sheetKind(hub) {
    * Applied after the change, as `keepCorners`'s.
    */
   const keepFrozen = (room, sheet, op, at, count, into = at) => {
-    const named = sheet.engine.getSheetName(sheet.sheet).toLowerCase(), held = [], { engine, here } = scratch(room, sheet), isRows = op.endsWith("rows"), removing = op.startsWith("delete"), moving = op.startsWith("move");
+    const named = sheet.engine.getSheetName(sheet.sheet).toLowerCase(), quoted = named.replace(/'/g, "''"), held = [], { engine, here } = scratch(room, sheet), isRows = op.endsWith("rows"), removing = op.startsWith("delete"), moving = op.startsWith("move");
     try {
       for (const [name, value] of room.look.entries()) {
         const [what, row, col] = name.split(":"), tab = what === "excel" && typeof value?.formula === "string" ? room.book.tabOfRow(row) : undefined, on = tab && room.book.tab(tab);
-        if (!on || on.indexOfCol(col) < 0 || (on.id !== sheet.id && !value.formula.toLowerCase().includes(named))) continue;
+        if (!on || on.indexOfCol(col) < 0 || (on.id !== sheet.id && ![named, quoted].some((name) => value.formula.toLowerCase().includes(name)))) continue;
         // Written for its `anchor`, where a sort may have left it: as it reads where it is now.
         const place = { sheet: engine.getSheetId(on.engine.getSheetName(on.sheet)), row: on.indexOfRow(row), col: on.indexOfCol(col) }, from = parseA1(String(value.anchor ?? "")) ?? place;
         engine.setCellContents(place, shiftRefs(value.formula, place.row - from.row, place.col - from.col).replace(/\bOFFSET\(/gi, "MOVEDREF("));
