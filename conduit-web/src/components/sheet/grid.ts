@@ -529,28 +529,29 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   // What was last copied from this grid, as typed, and the sheet's rows and columns it came from (those shown): pasted as it is, each relative
   // reference moves by how far its cell lands from where it was, as a spreadsheet's do. A cut moves cells, whose references stay. `values`: what
   // the cells showed, each as it is typed back (text that would be read as a number or a formula kept text), for Paste values.
-  let copied: { rows: number[]; cols: number[]; text: string; values: string[][] } | null = null;
+  let copied: { rows: number[]; cols: number[]; typed: string[][]; text: string; values: string[][] } | null = null;
   /** The rows (or columns) shown from one on: `count` of them, or those up to `last`. */
   const rowsFrom = (row: number, count: number, last = Infinity) => { const hidden = options.columns.hidden(), out: number[] = []; for (; out.length < count && row <= last; row++) if (!hidden.has(row)) out.push(row); return out; };
   const colsFrom = (col: number, count: number, last = Infinity) => { const out: number[] = []; for (; out.length < count && col <= last && col < COL_LIMIT; col++) if (!hiddenCols.has(col)) out.push(col); return out; };
   /** A range's cells shown, cut to what the sheet holds (whole columns run on into the grid's spare room). */
   const cellsIn = (area: SheetRange) => { const held = model.size(); return { rows: rowsFrom(area.top, Infinity, Math.min(area.bottom, held.rows - 1)), cols: colsFrom(area.left, Infinity, Math.min(area.right, held.cols - 1)) }; };
-  // A last empty line is how text copied elsewhere often ends; never one a copy here makes.
-  const flat = (lines: readonly (readonly string[])[]) => lines.map((line) => line.join("\t")).join("\n").replace(/\n+$/, "");
+  // Compared without the empty cells at its end: the grid's own paste drops the last line's, and text copied elsewhere often ends in an empty line.
+  const flat = (lines: readonly (readonly string[])[]) => lines.map((line) => line.join("\t")).join("\n").replace(/[\t\n]+$/, "");
   const typedBack = (value: string | number | boolean | null) => value === null ? "" : typeof value === "boolean" ? (value ? "TRUE" : "FALSE") : typeof value === "number" || (guess(value) === value && !/^\s*[-+]?\$/.test(value)) ? String(value) : `'${value}`;
   /** A range taken to the clipboard, as tab-separated text quoted as a spreadsheet's is; held as copied, or (cut) nothing is. */
   const take = (area: SheetRange, cut: boolean) => {
     const { rows, cols } = cellsIn(area), typed = rows.map((row) => cols.map((col) => model.input(row, col)));
-    copied = cut ? null : { rows, cols, text: flat(typed), values: rows.map((row) => cols.map((col) => typedBack(model.value(row, col)))) };
+    copied = cut ? null : { rows, cols, typed, text: flat(typed), values: rows.map((row) => cols.map((col) => typedBack(model.value(row, col)))) };
     return toCsv(typed, "\n", "\t").slice(0, -1);
   };
   const clear = (area: SheetRange, label?: string) => { const { rows, cols } = cellsIn(area); write(rows.flatMap((row) => cols.flatMap((col) => model.input(row, col) ? [{ row, col, input: "" }] : [])), label); };
   /** Lines pasted at a cell, into the rows and columns shown from it: a hidden one keeps what it holds. Past the sheet's edge, the hub's fill makes room. */
   const paste = (at: { row: number; col: number }, given: readonly (readonly string[])[], values = false) => {
-    const lines = given.at(-1)?.length === 0 ? given.slice(0, -1) : given, from = copied && flat(lines) === copied.text ? copied : null;
+    // Copied here, the copy's own lines are pasted, at its own size.
+    const from = copied && flat(given) === copied.text ? copied : null, lines = from ? (values ? from.values : from.typed) : given.at(-1)?.length === 0 ? given.slice(0, -1) : given;
     const rows = rowsFrom(at.row, lines.length), cols = colsFrom(at.col, Math.max(0, ...lines.map((line) => line.length)));
     if (!rows.length || !cols.length) return;
-    const typed = lines.map((line, y) => line.map((input, x) => from && values ? from.values[y]![x]! : from && input.startsWith("=") ? shiftRefs(input, rows[y]! - from.rows[y]!, cols[x]! - from.cols[x]!) : input));
+    const typed = lines.map((line, y) => line.map((input, x) => from && !values && input.startsWith("=") ? shiftRefs(input, rows[y]! - from.rows[y]!, cols[x]! - from.cols[x]!) : input));
     const bottom = rows.at(-1)!, right = cols.at(-1)!, held = model.size(), label = values ? "Paste values" : "Paste";
     if (bottom < held.rows && right < held.cols) return write(typed.flatMap((line, y) => line.map((input, x) => ({ row: rows[y]!, col: cols[x]!, input }))), label);
     const block = Array.from({ length: bottom - at.row + 1 }, (_, r) => Array.from({ length: right - at.col + 1 }, (_, c) => model.input(at.row + r, at.col + c)));
