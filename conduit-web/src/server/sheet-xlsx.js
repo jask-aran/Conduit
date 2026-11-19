@@ -1,3 +1,4 @@
+import path from "node:path";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 import { HyperFormula } from "hyperformula";
 import * as XLSX from "xlsx";
@@ -98,6 +99,9 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   const targets = Object.fromEntries((text("xl/_rels/workbook.xml.rels").match(/<Relationship\b[^>]*>/g) ?? []).map((tag) => [attr(tag, "Id"), attr(tag, "Target") ?? ""]));
   const stylesXml = text("xl/styles.xml"), themeXml = text(Object.values(targets).find((target) => /theme\d*\.xml$/.test(target))?.replace(/^\/?(xl\/)?/, "xl/") ?? "");
   const formatsOf = readStyles(stylesXml, themeXml), dxfs = readDxfs(stylesXml, themeXml);
+  // The parts a part links to by a relationship of this type (`table`, `drawing`, `chart`…), by their paths in the zip.
+  const linked = (from, type) => (text(from.replace(/([^/]+)$/, "_rels/$1.rels")).match(/<Relationship\b[^>]*>/g) ?? []).filter((tag) => (attr(tag, "Type") ?? "").endsWith(`/${type}`))
+    .map((tag) => { const target = attr(tag, "Target") ?? ""; return target.startsWith("/") ? target.slice(1) : path.posix.normalize(path.posix.join(path.posix.dirname(from), target)); });
   const xmlOf = Object.fromEntries((text("xl/workbook.xml").match(/<sheet\b[^>]*>/g) ?? []).map((tag) => { const target = targets[attr(tag, "r:id")] ?? ""; return [attr(tag, "name"), target.startsWith("/") ? target.slice(1) : `xl/${target}`]; }));
   book.SheetNames.forEach((called, index) => {
     const sheet = book.Sheets[called], data = sheet?.["!data"];
@@ -134,6 +138,13 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     tab.rules = ruled.rules;
     for (const [type, count] of Object.entries(ruled.unread)) drop(`conditional formats (${type})`, count);
     tab.validations = validationsOf(xml);
+    // A tab's first table, or else its filter, by its range (a table's name and style kept); the criteria a filter was last applied with are not read, the rows it hid are.
+    const [table, ...tables] = linked(xmlOf[tab.called] ?? "", "table").map(text).filter((part) => attr(/<table\b[^>]*>/.exec(part)?.[0] ?? "", "ref"));
+    if (table) { const head = /<table\b[^>]*>/.exec(table)[0], style = attr(/<tableStyleInfo\b[^>]*>/.exec(table)?.[0] ?? "", "name"); tab.table = { range: attr(head, "ref"), name: attr(head, "displayName") ?? attr(head, "name"), ...(style ? { style } : {}) }; }
+    drop("tables after a tab's first", tables.length);
+    const filter = /<autoFilter\b[^>]*>/.exec(xml)?.[0];
+    if (filter && attr(filter, "ref") && !table) tab.filter = { range: attr(filter, "ref") };
+    drop("filter criteria", (xml.match(/<filterColumn\b/g) ?? []).length);
     const color = /<tabColor\b[^>]*>/.exec(xml)?.[0];
     if (color && /^[0-9A-F]{8}$/i.test(attr(color, "rgb") ?? "")) tab.color = `#${attr(color, "rgb").slice(2).toUpperCase()}`; else drop("tab colours from the theme", color ? 1 : 0);
     drop("validation rules (in Excel 2010's form, naming another tab)", xml.match(/<x14:dataValidation\b/g)?.length ?? 0);
@@ -244,6 +255,8 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       if (tab.rules.length) look.rules = tab.rules;
       if (tab.validations.length) look.validations = tab.validations;
       if (tab.color) look.tabColor = tab.color;
+      if (tab.table) look.table = tab.table;
+      if (tab.filter) look.filter = tab.filter;
       // A frozen formula goes with its cell (`excel:<rowId>:<colId>` once in the doc), written for the cell it was in (`anchor`), as a rule's are.
       for (const [at, one] of Object.entries(report.frozen[tab.name] ?? {})) if (!one.why.startsWith("a formula over")) look[`excel:${at}`] = { formula: one.formula, value: one.kept, anchor: at };
       if (tab.pane?.rows) look.freezeRows = tab.pane.rows;
