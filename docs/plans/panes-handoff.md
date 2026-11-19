@@ -7,7 +7,7 @@ For the next agent. The model is DESIGN.md "Places and panes", "Focus and openin
 
 - Builders may work in worktrees; the parent cherry-picks their commits onto `main` in /home/jask/Conduit, runs
   `bash scripts/start-conduit.sh restart` (check exit code; output ending at "Web tools:" means it failed and the
-  old build still runs), then `cd conduit-web && npm run smoke:panes -- --project Japan` (8/8 expected).
+  old build still runs), then `cd conduit-web && npm run smoke:panes -- --project Japan` (9/9 expected).
 - Briefs small: one landable chunk, well under ~30 minutes; parallel builders only on disjoint files. Everything
   in `src/client/main.tsx` is one file, so pane chunks go one after another.
 - Commit only own files (`git commit -- <paths>`); other sessions commit sheet work on main at the same time. No push.
@@ -39,10 +39,25 @@ A new tab there is served the previous client by the service worker (`sw.js`) af
    the project in pane A. Not run: Ctrl-opening jbot, jbot in a side pane.
 2. Landed (`896bb060f`): closing the shown tab goes to the one shown before it (`Pane.recent`); a tab past five is
    refused with the old notice when every tab holds a draft. Not clicked through in the browser.
-3. A pure test for the store's verbs, paid for by removing more test lines than it adds (`budgets.json`).
-4. Plan steps 4-6: the dock as one slot plus summons (jbot, Files, terminal), the folder viewer (Files | Changes,
+3. Added `test/pane-store.test.js`: Ctrl/Alt, document uniqueness, draft retention, recent-tab close/eviction,
+   dock/summon URL round-trip, undo/redo. Paid for by consolidating test-stream assertions and its reader fixture.
+4. In the current checkout: `Layout.summon` now drives desktop Files/terminal/jbot and survives reload; dismiss
+   restores the dock's held pane. The shown jbot rail button dismisses even when it has needs. Desktop Files/Changes
+   share a header; Source Control and Chat review no longer have rail buttons. Phone controls remain unchanged.
+   File documents now hold one file: plain replaces the focused pane, Alt opens beside, Ctrl opens a document pane
+   without document tabs. File-column/tab state, `main-file-tabs`, empty columns and their drag/swap paths are gone;
+   `file-tabs.ts` was replaced by the pane drop geometry in `panes/pane-drop.ts`. Old column/tab layouts are unsupported.
+   The revised panes smoke checks opening, reload, pane swap/focus, drag bands, summons, unsaved cancellation and resize.
+   Next completion criteria: plain opens inside the folder viewer, Alt opens a document pane, Files/Changes preserve
+   that viewer's state; remove the old tool splits once their callers use that document kind.
+   Verified: typecheck/conventions clean; full suite 301 passed, 0 failed, 1 existing TODO (hub identity replacement);
+   panes smoke 9/9 on Japan; headless reload/dismiss probes on Japan and a Git workspace; gallery built and opened
+   in Windows Chrome; two file documents also checked there for tabs and header overflow. Edit-from-Files and
+   unsaved replacement cancellation pass without file writes. Terminal and phone behaviour were not exercised. Restart succeeded on :4310.
+   Initial JS fell from 436,999 to 432,862 / 437,000 B gzip (4,138 B headroom), by removing old file-column/tab code.
+5. Plan steps 4-6: the dock as one slot plus summons (jbot, Files, terminal), the folder viewer (Files | Changes,
    replacing FilesView/SourceControlView/file columns/`ftabs`), the rail foot button's two states, smoke rewritten.
-5. DeX (user's Samsung S936B, wireless adb, `ANDROID_SERIAL=192.168.20.244:37125`):
+6. DeX (user's Samsung S936B, wireless adb, `ANDROID_SERIAL=192.168.20.244:37125`):
    - On-screen keyboard with a physical keyboard is Samsung's setting `show_ime_with_hard_keyboard=1`, not the app.
    - Dragging handles "isn't good" in DeX: cause unmeasured (DeX wasn't attached). Suspect: tab/header/sidebar drags
      use HTML5 drag and drop (`onDocDragStart` in main.tsx sets only `application/x-conduit-doc`), which Android
@@ -50,5 +65,5 @@ A new tab there is served the previous client by the service worker (`sw.js`) af
      (`adb shell cat /proc/net/unix | grep devtools`, `adb forward`) `matchMedia('(pointer: coarse)')`,
      `(any-pointer: fine)`, a mouse pointerdown's `pointerType`, `innerWidth`, and whether `dragstart` fires.
      Read only; don't tap or type on the phone.
-6. A probe session minted by a builder, `/N0JcoUs` (label `artifact-open-probe`), is still signed in; the auth hook
+7. A probe session minted by a builder, `/N0JcoUs` (label `artifact-open-probe`), is still signed in; the auth hook
    blocked the agent from revoking it, so it is the user's call.

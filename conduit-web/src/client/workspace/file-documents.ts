@@ -25,5 +25,5 @@ export function parseFileView(view: string | null | undefined): FileEntry[] | nu
       return null;
     }
   }
-  return entries.length && entries.length <= 2 && entries.every((entry) => entry.path) ? entries : null;
+  return entries.length === 1 && entries.every((entry) => entry.path) ? entries : null;
 }

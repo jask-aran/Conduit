@@ -1,6 +1,6 @@
 import { FileTypeIcon } from "@/components/ui/file-marks";
 import { Icons } from "@/components/ui";
-import { FileView, FileName, FileGit, FileDirty, FileSuffix, FileMore, StatusBar, StatusText } from "@/components/ui/file";
+import { FileView, FileName, FileGit, FileDirty, FileMore, StatusBar, StatusText } from "@/components/ui/file";
 import { FileImage, FileMedia, FileCard, FileBody } from "@/components/ui/viewer";
 import { Notice } from "@/components/ui/state";
 import { Spinner, Empty, Actions, IconButton, PaneHeader } from "@/components/ui";
@@ -115,7 +115,7 @@ export interface FileSlotHandle {
   path: () => string | null;
   hasUnsavedChanges: () => boolean;
   reload: () => Promise<void>;
-  edit: () => void;
+  edit: () => boolean;
   save: () => Promise<void>;
   discardChanges: () => void;
 }
@@ -159,10 +159,7 @@ export default function WorkspaceFileSlot(props: {
   closable: boolean;
   busy: boolean;
   wrap: boolean;
-  headerSuffix?: JSX.Element;
-  headerTabs?: JSX.Element;
   headerEnd?: JSX.Element;
-  headerMenuItems?: (folded: (action: string) => boolean) => JSX.Element;
   empty?: string;
   onToggleWrap: () => void;
   annotationChatId?: string | null;
@@ -456,7 +453,12 @@ export default function WorkspaceFileSlot(props: {
     path: () => props.path,
     hasUnsavedChanges,
     reload: async () => { if (!hasUnsavedChanges()) await load(true); },
-    edit: () => { if (preview() && !preview()!.readOnly && !preview()!.truncated) setEditing(true); },
+    edit: () => {
+      const file = preview();
+      if (!file || file.path !== props.path || documentProjectId() !== props.projectId || file.readOnly || file.truncated) return false;
+      setEditing(true);
+      return true;
+    },
     save,
     discardChanges: () => {
       const file = preview();
@@ -504,7 +506,6 @@ export default function WorkspaceFileSlot(props: {
       <Show when={hasChanges() && isFolded("4")}><MenuRow onSelect={() => props.onShowDiff?.(false)} icon={<Icons.FileDiff />}>Review unstaged changes</MenuRow></Show>
       <Show when={hasStaged() && isFolded("3")}><MenuRow onSelect={() => props.onShowDiff?.(true)} icon={<Icons.GitCompareArrows />}>Review staged changes</MenuRow></Show>
       <Show when={text && isFolded("2")}><MenuRow onSelect={() => pressHidden("Find or replace", moreAnchor)} icon={<Icons.Search />}>Find or replace</MenuRow></Show>
-      {props.headerMenuItems?.(isFolded)}
       <Show when={isFolded("0")}><MenuRow onSelect={() => void download()} icon={<Icons.Download />}>Download</MenuRow></Show>
       <Show when={text}><MenuRow onSelect={() => props.onToggleWrap()} icon={<Icons.WrapText />}>{props.wrap ? "Stop wrapping lines" : "Wrap lines"}</MenuRow></Show>
       <Show when={text}><MenuRow onSelect={() => copy(currentText())} icon={<Icons.Copy />}>Copy contents</MenuRow></Show>
@@ -515,16 +516,15 @@ export default function WorkspaceFileSlot(props: {
     <FileGit status={file().status === "??" ? "U" : file().status.trim()} />
   }</Show>;
   const textHeader = () => <>
-    <Show when={props.headerTabs} fallback={<FileName path={props.path ?? ""} icon={<FileTypeIcon name={props.path ?? ""} />} />}>{props.headerTabs}</Show>
+    <FileName path={props.path ?? ""} icon={<FileTypeIcon name={props.path ?? ""} />} />
     {gitControls()}
-    <Show when={!props.headerTabs}><FileDirty dirty={hasUnsavedChanges()} /></Show>
+    <FileDirty dirty={hasUnsavedChanges()} />
     <Show when={hasUnsavedChanges()}>
       <IconButton kind="file" wide type="button" aria-label="Save file" title="Save file (Ctrl+S)" disabled={saveState() !== "idle"} onClick={() => void save()}><Show when={saving()} fallback={<SaveIcon />}><Spinner /></Show>Save</IconButton>
     </Show>
     {fileActions()}
-    <FileSuffix>{props.headerSuffix}</FileSuffix>
     {moreMenu(true)}
-    <Show when={props.closable && !props.headerTabs}><IconButton kind="file" type="button" close aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><Icons.Close /></IconButton></Show>
+    <Show when={props.closable}><IconButton kind="file" type="button" close aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><Icons.Close /></IconButton></Show>
     {props.headerEnd}
   </>;
   const previewStatus = (file: FileMetadata & { kind: FileKind; mime: string }) => <StatusBar commands={
@@ -552,13 +552,11 @@ export default function WorkspaceFileSlot(props: {
     >
       <Show when={asset()}>{(file) => <>
         <PaneHeader kind="file">
-          <Show when={props.headerTabs} fallback={<FileName path={file().path} icon={<FileTypeIcon name={file().path} />} />}>{props.headerTabs}</Show>
+          <FileName path={file().path} icon={<FileTypeIcon name={file().path} />} />
           {gitControls()}
           <IconButton kind="file" type="button" data-fold="0" ref={watchFolds} aria-label="Download file" title="Download file" onClick={() => void download()}><Icons.Download /></IconButton>
           <IconButton kind="file" type="button" inMenu aria-label="Copy file path" title="Copy file path" onClick={() => copy(file().path)}><Icons.Copy /></IconButton>
-          {props.headerSuffix}
-          <Show when={props.headerTabs}>{moreMenu(false)}</Show>
-          <Show when={props.closable && !props.headerTabs}>
+          <Show when={props.closable}>
             <IconButton kind="file" type="button" close aria-label={closeLabel} title={closeLabel} onClick={props.onClose}><Icons.Close /></IconButton>
           </Show>
           {props.headerEnd}

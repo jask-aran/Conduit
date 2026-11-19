@@ -35,7 +35,7 @@ export interface ComparisonViewState {
   position: number;
 }
 
-export default function WorkspaceComparison(props: { comparison: ComparisonPayload; sourceKey: string; viewState: ComparisonViewState; headerAction?: JSX.Element; headerTabs?: JSX.Element; headerEnd?: JSX.Element; comparisonSource?: JSX.Element; commentHighlights?: readonly CommentHighlight[]; reveal?: ReviewNavigationRequest | null; onViewStateChange?: (state: ComparisonViewState) => void; onAnnotate?: (selection: AnnotationSelection, note: string) => boolean }) {
+export default function WorkspaceComparison(props: { comparison: ComparisonPayload; sourceKey: string; viewState: ComparisonViewState; headerAction?: JSX.Element; headerEnd?: JSX.Element; comparisonSource?: JSX.Element; commentHighlights?: readonly CommentHighlight[]; reveal?: ReviewNavigationRequest | null; onViewStateChange?: (state: ComparisonViewState) => void; onAnnotate?: (selection: AnnotationSelection, note: string) => boolean }) {
   let host!: HTMLDivElement;
   let activeView: EditorView | undefined;
   let captureReview = () => ({ ...props.viewState });
@@ -290,7 +290,7 @@ export default function WorkspaceComparison(props: { comparison: ComparisonPaylo
 
   return <Comparison>
     <PaneHeader kind="file">
-      <Show when={props.headerTabs} fallback={<FileName path={props.comparison.path} icon={<FileTypeIcon name={props.comparison.path} />} />}>{props.headerTabs}</Show>
+      <FileName path={props.comparison.path} icon={<FileTypeIcon name={props.comparison.path} />} />
       {props.headerAction}
       <Show when={props.comparison.kind === "text"}>
         <Actions kind="tools">

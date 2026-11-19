@@ -24,8 +24,8 @@ Steps 1-3 (store, main.tsx on it, verbs and undo) landed; follow-ups are in `pan
 4. **The dock as one slot plus summons**: remove docked slots (`dockedSlots`, `dockSlot`, `dock=`, `docked-1..3`,
    rail docked buttons), tool splits (`file`, `shell:`, tool in pane A, `splitHost`, `bindSplit`), the dock's tab strip
    and Chat tool; summons for jbot, Files, terminal; overflow becomes the row's "more panes" control.
-5. **Folder viewer**: one document kind, tree plus file, Files | Changes modes; replaces FilesView, SourceControlView,
-   FileBesideView, file columns and file tabs (`ftabs`, `file-tabs.ts`).
+5. **Folder viewer**: one document kind, tree plus file, Files | Changes modes; replaces FilesView, SourceControlView
+   and FileBesideView. File document columns and tabs (`ftabs`, `file-tabs.ts`) have been removed; documents stand alone.
 6. **Rail foot**: the beside/over button shows both states; `smoke:panes` rewritten to the new rules.
 
 Checks per step: typecheck, `npm run smoke:panes` (rewritten in step 6; until then expect its tab and column

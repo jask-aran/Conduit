@@ -22,7 +22,7 @@ export const PANE_LAYOUTS: Record<number, number[][]> = {
   2: [[1, 1], [1, 2], [2, 1], [1, 3], [3, 1]],
   3: [[1, 1, 1], [2, 1, 1], [1, 2, 1], [1, 1, 2]],
 };
-const RAIL_TOOLS = ["files", "diff", "chat", "terminal"] satisfies PanelTab[];
+const RAIL_TOOLS = ["files", "terminal"] satisfies PanelTab[];
 
 /** Not a region of its own: its icons are reached from the dock, so it stays out of the tab order as the header's icons do. */
 export function WorkspaceRail(props: {
@@ -34,7 +34,6 @@ export function WorkspaceRail(props: {
   windowControls?: JSX.Element;
   current: PanelTab | null;
   inSplit: PanelTab | null;
-  sourceControlEnabled: boolean;
   onChoose: (tool: PanelTab) => void;
   onDock: (view: SplitView) => void;
   panes: number;
@@ -72,10 +71,8 @@ export function WorkspaceRail(props: {
     <Show when={props.windowControls}>{props.windowControls}<RailRule /></Show>
     <Show when={props.tools}><For each={RAIL_TOOLS}>{(tool) => {
       const Icon = WORKSPACE_TOOL_ICONS[tool];
-      const disabled = () => tool === "diff" && !props.sourceControlEnabled;
-      const label = () => disabled() ? "Source Control is available only for Git workspaces" : WORKSPACE_TOOL_LABELS[tool];
-      return <IconButton kind="rail" tabIndex={-1} data-tool={tool} draggable={!disabled()} data-doc-view={tool === "terminal" ? "tool:terminal" : tool} disabled={disabled()}
-        aria-label={WORKSPACE_TOOL_LABELS[tool]} title={label()} current={props.current === tool}
+      return <IconButton kind="rail" tabIndex={-1} data-tool={tool} draggable={true} data-doc-view={tool === "terminal" ? "tool:terminal" : tool}
+        aria-label={WORKSPACE_TOOL_LABELS[tool]} title={WORKSPACE_TOOL_LABELS[tool]} current={props.current === tool || (tool === "files" && props.current === "diff")}
         data-open={props.inSplit === tool ? "" : undefined}
         onClick={() => props.onChoose(tool)}><Icon /></IconButton>;
     }}</For></Show>

@@ -24,7 +24,7 @@ export const TAB_CAP = 5;
 export const sessionView = (view: View) => view === "home" || view === "page:jbot" || view === "page:dashboard" || view.startsWith("page:project:") || view.startsWith("chat:") || view.startsWith("term:");
 export const kindOf = (pane: Pane): PaneKind => pane.views.every(sessionView) ? "session" : "document";
 export const shownView = (pane: Pane) => pane.views[pane.active] ?? pane.views[0]!;
-const showing = (pane: Pane, index: number): Pane => ({ ...pane, active: index, recent: [pane.views[index]!, ...(pane.recent ?? [shownView(pane)]).filter((view) => view !== pane.views[index])] });
+const showing = (pane: Pane, index: number): Pane => ({ ...pane, active: index, recent: [pane.views[index]!, ...(pane.recent ?? [shownView(pane)]).filter((view) => view !== pane.views[index] && pane.views.includes(view))] });
 
 let made = 0;
 const newId = () => `p${Date.now().toString(36)}${(made++).toString(36)}`;
@@ -68,12 +68,13 @@ function sessionPaneFor(layout: Layout, session: (view: View) => boolean) {
   return [...layout.used, ...near].find((id) => layout.panes[id]!.views.every(session));
 }
 
-/** Adds a tab, dropping the first past the cap that is neither shown nor `held` (a tab with a draft). */
+/** Adds a tab, dropping the least recently shown one that has no draft. */
 function withTab(pane: Pane, view: View, held: (view: View) => boolean = () => false): Pane {
   let views = [...pane.views, view];
   if (views.length > TAB_CAP) {
-    const drop = views.findIndex((other, index) => index !== pane.active && index !== views.length - 1 && !held(other));
-    if (drop >= 0) views = views.filter((_, index) => index !== drop);
+    const recent = pane.recent ?? [];
+    const drop = [...pane.views.filter((other) => !recent.includes(other)), ...[...recent].reverse()].find((other) => pane.views.includes(other) && other !== shownView(pane) && !held(other));
+    if (drop) views = views.filter((other) => other !== drop);
   }
   return showing({ ...pane, views }, views.length - 1);
 }
@@ -110,9 +111,9 @@ export function show(layout: Layout, id: string, view: View): Layout {
   const pane = layout.panes[id];
   if (!pane) return layout;
   const index = pane.views.indexOf(view);
-  if (index >= 0) return index === pane.active ? layout : withPane(layout, { ...pane, active: index });
+  if (index >= 0) return index === pane.active ? layout : withPane(layout, showing(pane, index));
   if (!sessionView(view) || kindOf(pane) !== "session") return withPane(layout, paneOf([view], 0, id));
-  return withPane(layout, { ...pane, views: pane.views.map((other, at) => at === pane.active ? view : other) });
+  return withPane(layout, showing({ ...pane, views: pane.views.map((other, at) => at === pane.active ? view : other) }, pane.active));
 }
 
 /** A new pane in the row at `at`, as a drop on a pane's edge makes it; nothing when the row is full. */

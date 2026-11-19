@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Browser smoke test for panes, file viewer tabs, drag targets and focus, against the running local server.
+ * Browser smoke test for panes, single-file documents, drag targets and focus, against the running local server.
  * Run from conduit-web/: npm run smoke:panes [-- --project <name>] [--headed]
  */
 import fs from "node:fs/promises";
@@ -86,7 +86,7 @@ async function scenario(name, run) {
   try {
     skipped = await run(page, check) ?? null;
   } catch (error) {
-    failures.push(`threw: ${error.message.split("\n")[0]}`);
+    failures.push(`threw: ${error.message}`);
   }
   for (const error of errors) failures.push(`page error: ${error}`);
   results.push({ name, failures, skipped });
@@ -104,10 +104,8 @@ const open = async (page) => {
   await navFiles(page).nth(5).waitFor();
 };
 const navFiles = (page) => page.locator('.workspace-panel [role="treeitem"][data-path]:not([aria-expanded])');
-const twoColumns = (page) => until(page, () => { const columns = [...document.querySelectorAll(".ui-file-viewer > .ui-file")]; return columns.length === 2 && columns.every((column) => column.querySelector(".ui-tab")); });
 const until = async (page, fn, arg, timeout = 4000) => page.waitForFunction(fn, arg, { timeout, polling: 50 }).then(() => true, () => false);
-const columns = (page) => page.evaluate(() => [...document.querySelectorAll(".ui-file-viewer > .ui-file")].map((column) =>
-  column.classList.contains("ui-file-empty-side") ? "EMPTY" : [...column.querySelectorAll(".ui-tab")].map((tab) => tab.textContent.trim() + (tab.hasAttribute("data-lit") ? "*" : "")).join("|")));
+const paneViews = (page) => page.evaluate(() => new URL(location.href).searchParams.get("panes")?.split(";") ?? []);
 const focusIn = (page) => page.evaluate(() => {
   const active = document.activeElement;
   const column = active?.closest(".ui-file-viewer > .ui-file");
@@ -130,149 +128,117 @@ const dragProbe = (page, source, target, fx, fy = 0.5) => source.elementHandle()
   }, [handle, box.x + box.width * fx, box.y + box.height * fy]);
 });
 
-await scenario("opening a file gives its viewer the keyboard and marks it in Files", async (page, check) => {
+await scenario("plain replaces the focused pane with one file and no tabs", async (page, check) => {
   await open(page);
   const name = await fileName(page, 0);
   await navFiles(page).nth(0).click();
-  check("viewer opened", await until(page, () => document.querySelector("[data-pane-slot] .ui-file-viewer")), `${name} -> ${decodeURIComponent(page.url().replace(origin, ""))}`);
-  // A cold first load fetches the viewer's chunks: allow it the 6s focus waits.
-  check("focus in the viewer", await until(page, () => document.activeElement?.closest(".ui-file-viewer .cm-content") || document.activeElement?.closest(".ui-file-viewer"), undefined, 8000), await focusIn(page));
-  check("file bold as focused", await until(page, (path) => document.querySelector(`[data-path="${CSS.escape(path)}"][data-open-file="focused"]`), name));
-  // Searched for, not fixed: a fixed point lands on a row when the layout moves.
-  const blank = await page.evaluate(() => {
-    const main = document.querySelector(".chat-main").getBoundingClientRect();
-    for (let y = main.top + 80; y < main.bottom; y += 16) for (let x = main.left + 40; x < main.right; x += 40) {
-      const hit = document.elementFromPoint(x, y);
-      if (hit && main && hit.closest(".chat-main") && !hit.closest("button, a, input, textarea, [role=button], [role=option], .ui-file-viewer")) return { x, y };
-    }
-    return { x: main.left + 300, y: main.top + 400 };
-  });
-  await page.mouse.click(blank.x, blank.y);
-  check("file still bold once focus leaves", await until(page, (path) => document.querySelector(`[data-path="${CSS.escape(path)}"][data-open-file="shown"]`), name));
-});
-
-await scenario("click replaces, Ctrl keeps as a tab, Alt opens a column; tabs survive a reload", async (page, check) => {
-  await open(page);
-  const names = await Promise.all([0, 1, 2, 3, 4].map((index) => fileName(page, index)));
-  await navFiles(page).nth(0).click();
-  await until(page, () => document.querySelector(".ui-file-viewer"));
+  check("viewer in pane A", await until(page, () => document.querySelector(".chat-main .ui-file-viewer")));
+  check("viewer has the keyboard", await until(page, () => document.activeElement?.closest(".chat-main .ui-file-viewer"), undefined, 8000), await focusIn(page));
+  check("one document without tabs", await page.locator(".ui-file-viewer > .ui-file").count() === 1 && await page.locator(".ui-file-viewer .ui-tab").count() === 0);
+  check("file marked focused", await until(page, (path) => document.querySelector(`[data-path="${CSS.escape(path)}"][data-open-file="focused"]`), name));
   await navFiles(page).nth(1).click();
-  check("click replaced", await until(page, (n) => document.querySelectorAll("[data-file-side] .ui-tab").length === 1 && document.querySelector("[data-file-side] .ui-tab")?.textContent.includes(n), names[1]), JSON.stringify(await columns(page)));
-  await navFiles(page).nth(2).click({ modifiers: ["Control"] });
-  await navFiles(page).nth(3).click({ modifiers: ["Control"] });
-  check("Ctrl added at the end", await until(page, () => document.querySelectorAll("[data-file-side] .ui-tab").length === 3));
-  const one = await columns(page);
-  check("tab order", one[0]?.split("|").map((tab) => tab.replace("*", "")).join() === names.slice(1, 4).map((n) => n.split("/").pop()).join(), JSON.stringify(one));
-  check("newest active", one[0]?.split("|")[2]?.endsWith("*"), JSON.stringify(one));
-  await navFiles(page).nth(4).click({ modifiers: ["Alt"] });
-  check("Alt opened a second column", await twoColumns(page), JSON.stringify(await columns(page)));
-  check("ftabs in the URL", new URL(page.url()).searchParams.getAll("ftabs").length === 1, page.url());
-  const bare = async () => JSON.stringify((await columns(page)).map((column) => column.replaceAll("*", "")));
-  const before = await bare();
-  await page.reload();
-  check("tabs survive a reload", await until(page, (want) => JSON.stringify([...document.querySelectorAll(".ui-file-viewer > .ui-file")].map((column) => [...column.querySelectorAll(".ui-tab")].map((tab) => tab.textContent.trim()).join("|"))) === want, before, 8000), `${before} vs ${await bare()}`);
+  check("plain replaced the file", await until(page, () => document.querySelectorAll(".ui-file-viewer > .ui-file").length === 1 && document.querySelectorAll("[data-pane-slot]").length === 0));
+  check("no file-tab address state", new URL(page.url()).searchParams.getAll("ftabs").length === 0);
 });
 
-await scenario("swap trades columns; a column's last tab dragged away leaves it empty", async (page, check) => {
+await scenario("Alt opens another document pane and both survive reload", async (page, check) => {
   await open(page);
   await navFiles(page).nth(0).click();
-  await until(page, () => document.querySelector(".ui-file-viewer"));
+  await until(page, () => document.querySelector(".chat-main .ui-file-viewer"));
+  const before = new URL(page.url()).searchParams.get("focus");
   await navFiles(page).nth(1).click({ modifiers: ["Alt"] });
-  await twoColumns(page);
-  const [a, b] = await columns(page);
-  await page.locator(".ui-file-swap").click();
-  check("swapped", await until(page, (want) => [...document.querySelectorAll(".ui-file-viewer > .ui-file")].map((column) => column.querySelector(".ui-tab")?.textContent.trim()).join() === want, [b, a].map((tab) => tab.replace("*", "")).join()), JSON.stringify(await columns(page)));
-  const viewer = page.locator(".ui-file-viewer > .ui-file");
-  const left = await viewer.nth(0).boundingBox();
-  await viewer.nth(1).locator(".ui-tab").first().dragTo(viewer.nth(0), { targetPosition: { x: left.width * 0.6, y: 300 } });
-  check("right column left empty", await until(page, () => document.querySelector(".ui-file-empty-side")), JSON.stringify(await columns(page)));
-  const after = await columns(page);
-  check("left column took the tab", after[0]?.split("|").length === 2, JSON.stringify(after));
-  check("still one file viewer pane", await page.locator("[data-pane-slot]").count() === 1);
+  check("two document panes", await until(page, () => document.querySelectorAll(".ui-file-viewer").length === 2));
+  check("Alt kept the keyboard pane", new URL(page.url()).searchParams.get("focus") === before);
+  check("no file columns or tabs", await page.locator(".ui-file-viewer[data-split], .ui-file-viewer .ui-tab").count() === 0);
+  const views = await paneViews(page);
+  await page.reload();
+  check("documents survive reload", await until(page, () => document.querySelectorAll(".ui-file-viewer").length === 2));
+  check("same views", JSON.stringify(await paneViews(page)) === JSON.stringify(views));
 });
 
-await scenario("drag pills and washes name every target", async (page, check) => {
+await scenario("Ctrl opens a file document without adding document tabs", async (page, check) => {
+  await open(page);
+  await navFiles(page).nth(0).click({ modifiers: ["Control"] });
+  check("file in a pane beside the session", await until(page, () => document.querySelector("[data-pane-slot] .ui-file-viewer")));
+  check("document has no tabs", await page.locator(".ui-file-viewer .ui-tab").count() === 0);
+  const before = (await paneViews(page)).length;
+  await navFiles(page).nth(0).click({ modifiers: ["Alt"] });
+  check("opening an existing document goes to it", (await paneViews(page)).length === before);
+});
+
+await scenario("file drag edges open panes and the middle replaces", async (page, check) => {
   await open(page);
   await navFiles(page).nth(0).click();
-  await until(page, () => document.querySelector("[data-pane-slot] .ui-file-viewer"));
-  const viewer = page.locator("[data-pane-slot]").first();
+  await until(page, () => document.querySelector(".chat-main .ui-file-viewer"));
+  const viewer = page.locator(".chat-main");
   const box = await viewer.boundingBox();
   const source = navFiles(page).nth(1);
-  const edge = await dragProbe(page, source, viewer, 0.1);
-  check("viewer's left fifth opens a pane", edge.pill === "Open in a new pane on the left", JSON.stringify(edge));
-  check("wash is the fifth", edge.wash && Math.abs(edge.wash.width - box.width / 5) <= 2 && Math.abs(edge.wash.left - box.x) <= 2, JSON.stringify(edge.wash));
+  const left = await dragProbe(page, source, viewer, 0.1);
+  check("left third opens a pane", left.pill === "Open in a new pane on the left" && left.wash && Math.abs(left.wash.width - box.width / 3) <= 2, JSON.stringify(left));
   const right = await dragProbe(page, source, viewer, 0.9);
-  check("viewer's right fifth opens a pane", right.pill === "Open in a new pane on the right", JSON.stringify(right));
-  const beside = await dragProbe(page, source, viewer, 0.7);
-  check("a lone column's right half opens a column", beside.pill === "Open in a new column", JSON.stringify(beside));
-  const tab = await dragProbe(page, source, viewer, 0.3);
-  check("a column's left half adds a tab", tab.pill === "Add as a tab here", JSON.stringify(tab));
-  const main = page.locator(".chat-main").first();
-  const replace = await dragProbe(page, source, main, 0.5);
-  check("another pane's middle replaces it", replace.pill?.startsWith("Open here in place of"), JSON.stringify(replace));
-  const third = await dragProbe(page, source, main, 0.1);
-  const mainBox = await main.boundingBox();
-  check("another pane's thirds open a pane", third.pill === "Open in a new pane on the left" && third.wash && Math.abs(third.wash.width - mainBox.width / 3) <= 2, JSON.stringify(third));
+  check("right third opens a pane", right.pill === "Open in a new pane on the right", JSON.stringify(right));
+  const middle = await dragProbe(page, source, viewer, 0.5);
+  check("middle replaces the document", middle.pill?.startsWith("Open here in place of"), JSON.stringify(middle));
 });
 
-await scenario("split opens an empty column; narrowing folds actions in order into the ⋯", async (page, check) => {
+await scenario("file panes swap and keyboard focus cycles between them", async (page, check) => {
   await open(page);
   await navFiles(page).nth(0).click();
-  await until(page, () => document.querySelector(".ui-file-viewer"));
-  await page.locator('.ui-file-viewer [aria-label="Open this file again beside"]').click();
-  check("empty column", await until(page, () => document.querySelector(".ui-file-empty-side")));
-  await navFiles(page).nth(1).click();
-  check("a file fills it", await until(page, () => !document.querySelector(".ui-file-empty-side") && document.querySelectorAll(".ui-file-viewer > .ui-file").length === 2), JSON.stringify(await columns(page)));
-  const shares = () => page.evaluate(() => [...document.querySelectorAll(".ui-file-viewer > .ui-file")].map((column) => Math.round(column.getBoundingClientRect().width)));
-  const before = await shares();
-  const divider = page.locator('.ui-resize-edge[data-edge="sides"]');
-  for (let step = 0; step < 5; step++) {
-    const box = await divider.boundingBox();
-    await page.mouse.move(box.x + box.width / 2, box.y + 200);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2 - 80, box.y + 200, { steps: 4 });
-    await page.mouse.up();
-  }
-  const after = await shares();
-  check("divider resizes the columns", after[0] < before[0] - 100, `${before} -> ${after}`);
-  await page.waitForTimeout(300);
-  const folded = await page.evaluate(() => document.querySelector(".ui-file-viewer > .ui-file .ui-pane-header[data-header=file]")?.dataset.foldedActions ?? "");
-  const order = folded.split(",").filter(Boolean).map(Number);
-  check("some actions folded", order.length > 0, folded);
-  check("folded lowest priority first", order.every((value, index) => index === 0 || value > order[index - 1]) && order[0] === 0, folded);
-  check("no header overflows", await page.evaluate(() => [...document.querySelectorAll(".ui-file-viewer .ui-pane-header[data-header=file]")].every((header) => header.scrollWidth <= header.clientWidth + 1)));
-  await page.locator(".ui-file-viewer .ui-icon-button[data-icon-button=file][data-more]").first().click();
-  const items = await page.evaluate(() => [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent.trim()));
-  for (const want of ["Wrap lines", "Copy contents", "Copy path"]) check(`⋯ lists ${want}`, items.some((item) => item.startsWith(want)), items.join(" | "));
-  check("⋯ lists the folded download", !order.includes(0) || items.some((item) => /download/i.test(item)), items.join(" | "));
-  await page.keyboard.press("Escape");
-});
-
-await scenario("focus: Alt+] steps tabs across columns; Ctrl+Shift+2 steps panes; closing returns it", async (page, check) => {
-  await open(page);
-  await navFiles(page).nth(0).click();
-  await until(page, () => document.querySelector(".ui-file-viewer"));
+  await until(page, () => document.querySelector(".chat-main .ui-file-viewer"));
   await navFiles(page).nth(1).click({ modifiers: ["Alt"] });
-  await twoColumns(page);
-  await page.locator(".ui-file-viewer > .ui-file").nth(0).click({ position: { x: 200, y: 300 } });
-  check("click takes column 0", await until(page, () => document.activeElement?.closest(".ui-file-viewer > .ui-file:first-of-type") || document.activeElement?.closest(".ui-file-viewer") && [...document.querySelectorAll(".ui-file-viewer > .ui-file")][0].contains(document.activeElement)), await focusIn(page));
-  const steps = [];
-  for (let step = 0; step < 3; step++) { await page.keyboard.press("Alt+BracketRight"); await page.waitForTimeout(250); steps.push(await focusIn(page)); }
-  check("Alt+] steps the tabs of both columns", steps.join() === "viewer:1,viewer:0,viewer:1", steps.join());
+  await until(page, () => document.querySelectorAll(".ui-file-viewer").length === 2);
+  const before = await paneViews(page);
+  await page.locator('[data-pane-slot] [aria-label="Swap with the pane beside"]').click();
+  check("documents swapped", await until(page, (views) => new URL(location.href).searchParams.get("panes") === views, [...before].reverse().join(";")));
+  check("swap finished", await until(page, () => document.querySelectorAll(".chat-main .file-viewer-surface").length === 1));
+  await page.locator(".chat-main .file-viewer-surface").click({ position: { x: 200, y: 300 } });
   await page.keyboard.press("Control+Shift+Digit2");
-  check("Ctrl+Shift+2 leaves the viewer for pane A", await until(page, () => !document.activeElement?.closest("[data-pane-slot]")), await focusIn(page));
+  check("next pane takes focus", await until(page, () => document.activeElement?.closest("[data-pane-slot] .ui-file-viewer")), await focusIn(page));
   await page.keyboard.press("Control+Shift+Digit2");
-  check("Ctrl+Shift+2 comes back to the viewer", await until(page, () => document.activeElement?.closest(".ui-file-viewer")), await focusIn(page));
-  const place = () => page.evaluate(() => document.querySelector('[data-region="workspace-panel"] .ui-pane-header[data-header=tool]')?.textContent?.trim().slice(0, 60));
-  const viewerPlace = await place();
-  await page.locator("[data-pane-slot] [aria-label='Close this pane']").first().click();
-  check("closing returns focus to pane A", await until(page, () => !document.querySelector("[data-pane-slot] .ui-file-viewer") && !document.activeElement?.closest(".workspace-panel")), await focusIn(page));
-  check("the dock names pane A's place", (await place()) === viewerPlace, `${viewerPlace} vs ${await place()}`);
+  check("next pane returns to A", await until(page, () => document.activeElement?.closest(".chat-main .ui-file-viewer")), await focusIn(page));
+});
+
+await scenario("summons survive reload and dismiss back to the held dock pane", async (page, check) => {
+  const params = new URLSearchParams({ panes: `page:project:${project.id};page:dashboard`, dock: "1" });
+  await page.goto(`${origin}/project/${project.id}?${params}`);
+  const held = page.locator("[data-pane-slot].main-split");
+  await held.waitFor({ state: "visible" });
+  const files = page.locator('[data-region="workspace-rail"] [data-tool="files"]');
+  await files.click();
+  check("summon hides held pane", await until(page, () => document.querySelector("[data-pane-slot]")?.getAttribute("data-docked") === "hidden"));
+  await page.reload();
+  await page.getByRole("radiogroup", { name: "Folder viewer", exact: true }).waitFor();
+  await files.click();
+  check("dismiss restores held pane", await until(page, () => document.querySelector("[data-pane-slot]")?.getAttribute("data-docked") === ""));
+});
+
+await scenario("replacing an edited file can be cancelled without saving it", async (page, check) => {
+  await open(page);
+  const textFiles = page.locator('.workspace-panel [role="treeitem"][data-path$=".txt"]:not([aria-expanded])');
+  if (await textFiles.count() < 2) return "needs two .txt files for the unsaved-edit check";
+  let writes = 0;
+  page.on("request", (request) => { if (/\/file\?/.test(request.url()) && ["PUT", "POST", "PATCH", "DELETE"].includes(request.method())) writes++; });
+  await textFiles.nth(0).click();
+  await page.locator(".chat-main .cm-content").waitFor();
+  await textFiles.nth(1).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  const editor = page.locator('.chat-main .cm-content[contenteditable="true"]');
+  await editor.press("End");
+  await editor.pressSequentially(" pane-unsaved-probe");
+  await page.getByRole("button", { name: "Save file", exact: true }).waitFor();
+  const before = await paneViews(page);
+  await textFiles.nth(0).click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.waitFor();
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  check("same document after cancel", JSON.stringify(await paneViews(page)) === JSON.stringify(before));
+  check("edits retained", (await editor.textContent()).includes("pane-unsaved-probe"));
+  check("no file written", writes === 0);
 });
 
 await scenario("dragging the dock's edge and a pane's edge resizes them in place", async (page, check) => {
   await open(page);
-  await navFiles(page).nth(0).click();
+  await navFiles(page).nth(0).click({ modifiers: ["Alt"] });
   await until(page, () => document.querySelector("[data-pane-slot] .ui-file-viewer"));
   const geometry = () => page.evaluate(() => { const box = (selector) => { const r = document.querySelector(selector)?.getBoundingClientRect(); return r ? { left: Math.round(r.left), right: Math.round(r.right) } : null; }; return { dock: box(".workspace-panel"), main: box(".chat-main"), slot: box("[data-pane-slot]") }; });
   const dragBy = async (selector, dx) => {
@@ -305,8 +271,8 @@ await scenario("a project page's files open as the navigator's", async (page, ch
   if (!await rows.count()) return `${project.name}'s page lists no files; try --project <name>`;
   const name = await rows.first().getAttribute("title");
   await rows.first().click();
-  check("opened in a viewer with the keyboard", await until(page, () => document.activeElement?.closest("[data-pane-slot] .ui-file-viewer")), await focusIn(page));
-  check("its tab", (await columns(page))[0]?.includes(name), JSON.stringify(await columns(page)));
+  check("opened in pane A with the keyboard", await until(page, () => document.activeElement?.closest(".chat-main .ui-file-viewer")), await focusIn(page));
+  check("its file", (await paneViews(page)).some((view) => decodeURIComponent(view).includes(name)));
 });
 
 await browser.close();

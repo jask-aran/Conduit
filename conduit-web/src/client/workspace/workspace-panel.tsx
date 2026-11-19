@@ -540,9 +540,13 @@ export default function WorkspacePanel(props: { connectivity?: () => Connectivit
     <PaneHeader kind="tool" fit frost={tool() === "jbot"} draggable={!isMobileLayout() && tool() !== "jbot"}
       onDragStart={(event) => { event.dataTransfer?.setData(TOOL_DRAG_TYPE, JSON.stringify({ tool: tool(), from: where })); if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"; document.body.dataset.toolDrag = where; }}
       onDragEnd={() => delete document.body.dataset.toolDrag}
-      name={viewLabel(tool())} nameTitle={tool() === "file" ? files.openPaths().secondary ?? "" : props.workingRoot()}
+      name={!isMobileLayout() && tool() === "diff" ? "Files" : viewLabel(tool())} nameTitle={tool() === "file" ? files.openPaths().secondary ?? "" : props.workingRoot()}
       place={where === "dock" && tool() !== "jbot" ? props.projectName() : undefined} placeTitle={props.workingRoot()}
       modes={<>
+        <Show when={where === "dock" && !isMobileLayout() && (tool() === "files" || tool() === "diff")}>
+          <Segmented arrows label="Folder viewer" value={tab() === "diff" ? "diff" : "files"} onChange={changePaneTab}
+            options={[{ value: "files", label: "Files" }, { value: "diff", label: "Changes", disabled: !props.sourceControlEnabled() }]} />
+        </Show>
         <Show when={tool() === "diff" && props.sourceControlEnabled()}><SourceControlModes control={sourceControl} /></Show>
         <Show when={tool() === "chat"}><ChatModes control={chat} historyAvailable={Boolean(props.historyAvailable?.())} /></Show>
       </>}
