@@ -594,6 +594,7 @@ function App() {
     for (const project of projects) {
       scopes.add(project.id);
       scopes.add(`project:${project.id}`);
+      scopes.add(`folder:${project.id}`);
       for (const chat of project.sessions) scopes.add(chat.id);
     }
     return scopes;
