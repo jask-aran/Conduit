@@ -124,7 +124,9 @@ export function writeStyle(look, sheet, area, { style, borders } = {}, whole = n
   }
   // What is not the same along a line (a range's outer edges at its ends) is its end cells' own.
   for (const end of new Set(byCols ? [at.top, at.bottom] : [at.left, at.right])) for (let n = from; n <= to; n++) {
-    const r = byCols ? end : n, c = byCols ? n : end, rest = without(patchAt(r, c), byCols ? patchAt(-1, c) : patchAt(r, -1));
+    const r = byCols ? end : n, c = byCols ? n : end, line = byCols ? patchAt(-1, c) : patchAt(r, -1), rest = without(patchAt(r, c), line);
+    // Inside borders along whole lines stop at the range's ends: the end cells say their outer edge off.
+    if (borders === "inner") for (const code of byCols ? [r === at.top && "bt", r === at.bottom && "bb"] : [c === at.left && "bl", c === at.right && "br"]) if (code && line[code]) rest[code] = false;
     if (Object.keys(rest).length) setCell(r, c, rest);
   }
 }
