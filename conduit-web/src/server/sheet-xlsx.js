@@ -6,9 +6,9 @@ import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colIndex, colName, parseA1,
 import { CONFIG } from "../sheet-engine.js";
 import { NAMES } from "../sheet-functions.js";
 import { shiftRefs } from "../sheet-rules.js";
-import { decodeStyle, encodeStyle } from "../sheet-styles.js";
+import { decodeStyle, encodeStyle, SHEET_INKS } from "../sheet-styles.js";
 import { drawingPart, readCharts, tablePart, withParts } from "./xlsx-parts.js";
-import { ownOver, readDxfs, readStyles, seen, sheetRules, sheetStyles, withDxfs, withRules, writeRules, writeStyles } from "./xlsx-styles.js";
+import { ownOver, readDxfs, readStyles, rgbOf, seen, sheetRules, sheetStyles, withDxfs, withRules, writeRules, writeStyles } from "./xlsx-styles.js";
 
 /*
  * An .xlsx read as a workbook's files (docs/plans/sheet-xlsx-and-tabs.md): each tab's CSV of values, its formulas by address and its look, as
@@ -339,7 +339,8 @@ export function exportXlsx(tabs) {
   const panes = tabs.map((tab) => [count(tab.look.freezeRows), count(tab.look.freezeCols)]), styled = tabs.some((tab) => Object.keys(tab.look).some((name) => name.startsWith("style:")));
   const ruled = tabs.some((tab) => Array.isArray(tab.look.rules) && tab.look.rules.length), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(orphaned(`=${formula}`, known))) : null;
   const validations = tabs.map((tab) => validationsXml(tab.look.validations));
-  const colors = tabs.map((tab) => /^#[0-9A-F]{6}$/i.test(String(tab.look.tabColor ?? "")) ? `<tabColor rgb="FF${tab.look.tabColor.slice(1).toUpperCase()}"/>` : "");
+  // A tab's colour (`tabColor`): #RRGGBB as imported, or an ink the page set, written as its hex.
+  const colors = tabs.map((tab) => { const color = String(tab.look.tabColor ?? ""); return /^#[0-9A-F]{6}$/i.test(color) || SHEET_INKS.includes(color) ? `<tabColor rgb="FF${rgbOf(color)}"/>` : ""; });
   let drawings = 0, charts = 1;
   const parts = tabs.map((tab) => { const drawing = Array.isArray(tab.look.charts) ? drawingPart(tab.look.charts, tab.name, drawings + 1, charts) : null; if (drawing) { drawings += 1; charts += drawing.count; } return [tab.tablePart, drawing].filter(Boolean); });
   if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean) && !colors.some(Boolean)) return withParts(written, parts, placed);

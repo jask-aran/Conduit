@@ -1,12 +1,14 @@
 import { createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { Empty, Frost, Icons, Notice } from "@/components/ui";
 import { sheetLineIcons as LineIcons, sheetMergeIcons as MergeIcons, sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
-import { focusSearch, SheetMenu, type SheetMenuEntry } from "./cell-menu";
+import { DedupePrompt, focusSearch, SheetMenu, ShiftPrompt, SplitPrompt, type SheetMenuEntry, type SheetShiftWay } from "./cell-menu";
+import { sheetDataIcons as DataIcons } from "@/components/ui/sheet-icons";
+import { toast } from "@/components/ui/notifications";
 import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { createSheetMerges, type SheetMergeKind } from "./merges";
 import { Input } from "@/components/ui/controls";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
-import { CELLS, COLS, LOOK, ROWS, a1, colIndex, colName, colsOf, key, parseRange, rangeA1, rowsOf, runsOf, valueText, type SheetView } from "@/sheet-format.js";
+import { CELLS, COLS, LOOK, ROWS, a1, colIndex, colName, colsOf, fromCsv, key, parseRange, rangeA1, rowsOf, runsOf, valueText, type SheetView } from "@/sheet-format.js";
 import { shiftRefs } from "@/sheet-rules.js";
 import { SheetFoot } from "./foot";
 import { createSheetTabs } from "./tabs";
@@ -81,6 +83,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const editor = createFormulaEditor({
     grid, input: (row, col) => model()?.input(row, col) ?? "", functions: tabs.functions, merged: (row, col) => merges.at(row, col),
     write: (row, col, input) => writes("")([{ row, col, input }]),
+    // As a spreadsheet's Ctrl+Enter: each shown cell selected takes it, a formula moved from the cell typed in to its own.
+    fill: (from, input) => { const area = at(); if (!area || (area.top === area.bottom && area.left === area.right)) return false; writes("Fill selection")(within(inTab(area)).flat().map(({ row, col }) => ({ row, col, input: shifted(input, row - from.row, col - from.col) }))); return true; },
     selected: () => { changed(); const area = at(); return area && { row: area.top, col: area.left }; }, error: (row, col) => model()?.error(row, col) ?? null,
   });
   // A cell its import froze keeps the file's formula under `excel:<rowId>:<colId>` (server/sheet-xlsx.js), so the mark follows it as rows, columns
@@ -270,6 +274,15 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     requestAnimationFrame(() => grid()?.focus());
   };
   const structure = (op: "insert-rows" | "insert-cols" | "delete-rows" | "delete-cols", at: number, count = 1) => hub({ op, at, count });
+  // Ctrl+- and Ctrl+Shift+= on a block of cells ask, as a spreadsheet's do, which way what is round it goes; whole rows or columns picked are not asked.
+  const [shifting, setShifting] = createSignal<{ verb: "delete" | "insert"; range: SheetRange; box: SheetBox } | null>(null);
+  const askShift = (verb: "delete" | "insert", range: SheetRange) => { const box = grid()?.bounds(range); if (box) setShifting({ verb, range, box }); };
+  const shift = (verb: "delete" | "insert", range: SheetRange, way: SheetShiftWay) => {
+    const rows = range.bottom - range.top + 1, cols = range.right - range.left + 1;
+    if (way === "rows") return verb === "delete" ? deleteRows(range) : structure("insert-rows", range.top, rows);
+    if (way === "cols") return structure(verb === "delete" ? "delete-cols" : "insert-cols", range.left, cols);
+    history.act(verb === "delete" ? "Delete cells" : "Insert cells", () => hub({ op: "shift-cells", range: rangeA1(inTab(range)), way }));
+  };
 
   const rangeOf = (anchor: Pick<SheetAnchor, "under">): SheetRange | null => {
     const sheet = model(), corners = String(anchor.under?.cells ?? "").split(" ").map((one) => one.split(":"));
@@ -300,7 +313,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   };
   // A chart asked of the agent, as a request on the range: Markup's ask box says it is being made, and stops it.
   const askChart = (kind?: SheetChartKind, range = at()) => { const place = range && placeOf(range); if (place) props.onChart?.(place, kind); };
-  const find = createSheetFind({ model, grid, at, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols, draw: formats.draw, write: (list) => writes(list.length === 1 ? "Replace" : "Replace all")(list) });
+  const find = createSheetFind({ model, grid, at, look, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols, draw: formats.draw, write: (list) => writes(list.length === 1 ? "Replace" : "Replace all")(list) });
   const brush = createSheetBrush({ look, model, formats, at, act: history.act, failed: props.host.failed });
   const tools = createSheetTools({ tip: sequences.tip, at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(), spread: (range, way) => spread(range, way), merge: (kind) => merge(kind), brush, act: history.act, chart: props.onChart && ((kind) => askChart(kind)),
     fit: (range) => sizes.fitRows(Array.from({ length: range.bottom - range.top + 1 }, (_, n) => range.top + n), readLook(root!)) });
@@ -350,7 +363,31 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const within = (range: SheetRange) => shownRows(range).map((row) => shownCols(range).map((col) => ({ row, col })));
   const copy = (range: SheetRange, cut = false) => navigator.clipboard.writeText(grid()?.copy(range, cut) ?? "").catch((error: Error) => props.host.failed(error.message));
   const clear = (range: SheetRange, label = "Clear contents") => writes(label)(within(range).flat().map((cell) => ({ ...cell, input: "" })));
-  const paste = (range: SheetRange, values = false) => void navigator.clipboard.readText().then((text) => grid()?.paste({ row: range.top, col: range.left }, text, values), (error: Error) => props.host.failed(error.message));
+  const paste = (range: SheetRange, values = false, transposed = false) => void navigator.clipboard.readText().then((text) => grid()?.paste({ row: range.top, col: range.left }, text, values, transposed), (error: Error) => props.host.failed(error.message));
+  // The cell menu's Data rows: Remove duplicates (the hub's, as it moves cells as a sort does), Trim whitespace and Split text to columns.
+  const [deduping, setDeduping] = createSignal<{ range: SheetRange; header: boolean } | null>(null), [splitting, setSplitting] = createSignal<SheetRange | null>(null);
+  const dedupe = (range: SheetRange, header: boolean) => history.act("Remove duplicates", () => void history.hub({ op: "dedupe", range: rangeA1(range), header }).then((said) => {
+    const { removed = 0, left = 0 } = (said ?? {}) as { removed?: number; left?: number };
+    toast(removed ? `Removed ${removed} duplicate ${removed === 1 ? "row" : "rows"}, ${left} left` : "No duplicate rows");
+  }, (error: Error) => props.host.failed(error.message)));
+  const trim = (range: SheetRange) => {
+    const list = within(inTab(range)).flat().flatMap(({ row, col }) => { const input = model()?.input(row, col) ?? "", next = input.startsWith("=") ? input : input.trim().replace(/ {2,}/g, " "); return next === input ? [] : [{ row, col, input: next }]; });
+    if (list.length) writes("Trim whitespace")(list);
+    toast(list.length ? `Trimmed ${list.length} ${list.length === 1 ? "cell" : "cells"}` : "Nothing to trim");
+  };
+  // A column's text cut at a separator into the cells right of it; filled cells there are written over only once asked.
+  const split = async (range: SheetRange, separator: string) => {
+    const sheet = model();
+    if (!sheet) return;
+    const col = range.left, list = shownRows(inTab(range)).flatMap((row) => {
+      const input = sheet.input(row, col), parts = !input || input.startsWith("=") ? [] : separator.length === 1 ? fromCsv(input, separator).flat() : input.split(separator);
+      return parts.length > 1 ? parts.map((text, n) => ({ row, col: col + n, input: text })) : [];
+    });
+    if (!list.length) return void toast("Nothing to split");
+    if (list.some((one) => one.col > col && sheet.input(one.row, one.col) !== "") && !await decisions.confirm("Replace what is in the cells to the right?", { confirmLabel: "Replace" })) return grid()?.focus();
+    writes("Split text to columns")(list);
+    grid()?.focus();
+  };
   // Each run of shown rows on its own, the last first, so the runs above keep their places.
   const deleteRows = (range: SheetRange) => history.act(`Delete ${range.bottom > range.top ? "rows" : "row"}`, () => { const rows = shownRows(range); for (let end = rows.length - 1; end >= 0;) { let start = end; while (start > 0 && rows[start - 1] === rows[start]! - 1) start--; structure("delete-rows", rows[start]!, end - start + 1); end = start - 1; } });
   // Fill down and Fill right: the selection's first shown row (or column) into the rest of it, from the shown row above (or column left) where it is
@@ -428,6 +465,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         { label: "Copy", icon: <Icons.Copy />, keys: ["Ctrl", "C"], run: () => void copy(range) },
         { label: "Paste", icon: <Icons.Paste />, keys: ["Ctrl", "V"], run: () => paste(range) },
         ...grid()?.held() ? [{ label: "Paste values only", icon: <Icons.Paste />, keys: ["Ctrl", "Shift", "V"], run: () => paste(range, true) }] : [],
+        { label: "Paste transposed", icon: <DataIcons.transpose />, run: () => paste(range, false, true) },
         ...grid()?.source() ? [{ label: "Paste formatting only", icon: <Icons.Paste />, keys: ["Ctrl", "Alt", "V"], run: () => { const from = grid()?.source(); if (from) brush.lay(from, range); } }] : [],
       ],
       [
@@ -462,6 +500,10 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         ] },
         ...kind !== "cols" ? [{ label: `Delete ${rowsSaid}`, icon: <Icons.Delete />, destructive: true, keys: whole ? ["Ctrl", "-"] : undefined, run: () => deleteRows(range) }] : [],
         ...kind !== "rows" ? [{ label: `Delete ${colsSaid}`, icon: <Icons.Delete />, destructive: true, keys: whole ? ["Ctrl", "-"] : undefined, run: () => structure("delete-cols", range.left, nCols) }] : [],
+        ...!whole ? [
+          { label: "Delete cells…", icon: <Icons.Delete />, destructive: true, keys: ["Ctrl", "-"], run: () => { opening = () => askShift("delete", range); } },
+          { label: "Insert cells…", icon: <Icons.Add />, keys: ["Ctrl", "Shift", "="], run: () => { opening = () => askShift("insert", range); } },
+        ] : [],
         ...kind !== "cols" ? [
           { label: `Hide ${rowsSaid}`, icon: <Icons.Hide />, run: hideRows },
           ...hiddenIn(range) ? [{ label: "Unhide rows", icon: <Icons.Preview />, run: () => { const lines = between(range.top, range.bottom); history.act("Unhide rows", () => { sizes.setHidden(lines, false); filters.show(lines); }); } }] : [],
@@ -491,7 +533,13 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         ] },
         { label: filters.filter() ? "Remove filter" : "Create a filter", icon: <SortIcons.filter />, keys: ["Ctrl", "Shift", "L"], run: filters.keys.filter },
         ...filteredBy(byCol) ? [{ label: "Filter column…", icon: <SortIcons.filter />, run: () => openFilter(filteredBy(byCol)!, byCol) }] : [],
+        ...filters.narrows(byCol) ? [{ label: `Clear filter from column ${colName(byCol)}`, icon: <Icons.Erase />, run: () => filters.keep(byCol, null) }] : [],
         { label: inTable() ? "Remove table" : "Format as table", icon: <SortIcons.table />, keys: ["Alt", "H", "T"], run: filters.keys.table },
+        { label: "Data", icon: <DataIcons.data />, sub: [
+          { label: "Remove duplicates…", icon: <DataIcons.dedupe />, run: () => { const on = nRows === 1 && nCols === 1 ? filters.region() : { range: inTab(range), header: false }; if (on) opening = () => setDeduping(on); } },
+          { label: "Trim whitespace", icon: <DataIcons.trim />, run: () => trim(range) },
+          { label: "Split text to columns…", icon: <DataIcons.split />, disabled: nCols > 1, run: () => { opening = () => setSplitting(range); } },
+        ] },
       ],
       // A column's cells are plain or checkboxes (TRUE and FALSE), its type in the look (`type:<colId>`): the whole column's, so only its menu sets it.
       kind === "cols" && [{ label: "Cell type", icon: <LineIcons.type />, meta: typeOf(range) === "boolean" ? "Checkbox" : typeOf(range) === null ? undefined : "Plain", sub: [
@@ -507,6 +555,14 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       // A style's chord is its tool's step: Ctrl+B is Bold.
       const tool = tools.find((one) => one.keys?.length === 2 && one.keys[1]!.toLowerCase() === event.key.toLowerCase())?.label ?? "";
       if (find.keys(event) || tabs.key(event) || history.act(tool, () => formats.key(event, at()) || styles.key(event, at())) || filters.key(event)) return;
+      // Ctrl+A selects the block of data round the active cell, and pressed again (or where there is none) the whole tab, as a spreadsheet's.
+      if (!event.shiftKey && !event.altKey && event.code === "KeyA") {
+        event.preventDefault();
+        const area = at(), size = model()?.size(), around = area && filters.around(area.top, area.left), same = (one: SheetRange, two: SheetRange) => one.top === two.top && one.left === two.left && one.bottom === two.bottom && one.right === two.right;
+        if (!area || !size) return;
+        const lone = around && (around.bottom > around.top || around.right > around.left || model()?.input(around.top, around.left));
+        return grid()?.select(lone && !same(around, area) ? around : { top: 0, left: 0, bottom: Math.max(0, size.rows - 1), right: Math.max(0, size.cols - 1) });
+      }
       // Ctrl+\ clears the selection's formatting.
       if (!event.shiftKey && !event.altKey && event.code === "Backslash") { event.preventDefault(); return tools.find((one) => one.name === "clear")?.run(); }
       // Ctrl+D and Ctrl+R are the grid's only while it has the keyboard: elsewhere the browser keeps them.
@@ -523,7 +579,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (!event.altKey && (event.key === "-" || (event.shiftKey && (event.key === "+" || event.code === "Equal")))) {
         event.preventDefault();
         const area = at(), lines = grid()?.lines(), adding = event.key !== "-";
-        if (!area || !lines) return;
+        if (!area) return;
+        if (!lines) return askShift(adding ? "insert" : "delete", area);
         if (lines === "rows") return void (adding ? structure("insert-rows", area.top, count(area.top, area.bottom)) : deleteRows(area));
         return void structure(adding ? "insert-cols" : "delete-cols", area.left, count(area.left, area.right));
       }
@@ -590,11 +647,14 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         <SizePrompt question={question()} onClose={() => { setQuestion(null); grid()?.focus(); }} />
         <RulePrompt area={ruling()} rules={rules} act={(label, run) => history.act(label, run)} onClose={() => { setRuling(null); grid()?.focus(); }} />
         <FilterMenu filter={filters} at={filtering()} frame={() => body} onClose={() => { setFiltering(null); grid()?.focus(); }} />
+        <DedupePrompt asked={deduping() && { range: rangeA1(deduping()!.range), header: deduping()!.header }} onRemove={(header) => { const asked = untrack(deduping); if (asked) dedupe(asked.range, header); }} onClose={() => { setDeduping(null); grid()?.focus(); }} />
+        <SplitPrompt open={splitting() !== null} onSplit={(separator) => { const range = untrack(splitting); if (range) void split(range, separator); }} onClose={() => { setSplitting(null); grid()?.focus(); }} />
+        <ShiftPrompt asked={shifting()} frame={() => body} onClose={() => { setShifting(null); grid()?.focus(); }} onChoose={(way) => { const asked = untrack(shifting); if (asked) shift(asked.verb, asked.range, way); }} />
         <find.view beside={Boolean(props.margin) && !props.marginEmpty} />
         <Show when={!model()}><Empty role="status" class="ui-spreadsheet-waiting">Opening the sheet…</Empty></Show>
       </Show>
       <Show when={props.margin}><aside class="ui-spreadsheet-margin" aria-label="Comments">{props.margin}</aside></Show>
     </div>
-    <SheetFoot tabs={tabs} id={props.id} format={() => formats.figure(at())} />
+    <SheetFoot tabs={tabs} id={props.id} format={() => formats.figure(at())} filtered={filters.counted} act={history.act} />
   </section>;
 }
