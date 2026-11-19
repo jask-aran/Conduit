@@ -2620,10 +2620,20 @@ function App() {
     window.removeEventListener("keydown", note, true);
     if (!moved && shownSlots().includes(slot) && !paneElement(slot)?.contains(document.activeElement)) focusPane(slot);
   };
-  /** Pane undo and redo step whole layouts, through the same gates as any change. */
+  /** Pane undo and redo step whole layouts; an unsaved edit a step would close is asked about first, as any change's. */
   const stepPanes = async (step: -1 | 1) => {
+    const target = panes.target(step);
+    if (!target) return;
+    const nextView = (pane: PaneKey) => {
+      const id = pane === "main" ? target.row[0] : idOf(pane);
+      return id && (target.row.includes(id) || target.dock === id) ? Layouts.shownView(target.panes[id]!) : null;
+    };
+    const dirty = [...fileHandles.keys()].filter((pane) => leavesUnsaved(viewOf(pane), nextView(pane), pane));
+    if (dirty.length) {
+      if (!(await confirmDialog("Discard unsaved changes and close this file?", { destructive: true, confirmLabel: "Discard", valid: () => panes.target(step) === target }))) return;
+      dirty.forEach((pane) => handlesOf(pane).forEach((handle) => { if (handle?.hasUnsavedChanges()) handle.discardChanges(); }));
+    }
     const before = paneAView();
-    if (step < 0 ? !panes.canUndo() : !panes.canRedo()) return;
     if (step < 0) panes.undo(); else panes.redo();
     await followPaneA(before);
     focusAnyPane(keyboardPane());
