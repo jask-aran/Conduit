@@ -3,6 +3,7 @@ import { Actions, Item, SearchSection, Section } from "@/components/ui";
 import { CardForm } from "@/components/ui/card";
 import { Button, Field, Input, Switch } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
+import { Row } from "@/components/ui/row";
 import { PHONE_LAYOUT_QUERY } from "@/components/ui/layout";
 import { MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, Popover, PopoverContent, Select } from "@/components/ui/menus";
 import type { SheetBox } from "./host";
@@ -82,7 +83,7 @@ export function DedupePrompt(props: { asked: { range: string; header: boolean } 
   const [header, setHeader] = createSignal(false);
   return <Dialog open={props.asked !== null} title="Remove duplicates" description={props.asked ? `Rows of ${props.asked.range} that repeat one above them` : undefined} onOpenChange={(open) => { if (!open) props.onClose(); }}>
     <Show when={props.asked}>{(asked) => { setHeader(asked().header); return <CardForm onSubmit={(event) => { event.preventDefault(); props.onRemove(header()); props.onClose(); }}>
-      <Switch label="Has a header row" checked={header()} onChange={setHeader} />
+      <Row density="line" element="label" label="Has a header row" end={<Switch label="Has a header row" checked={header()} onChange={setHeader} />} />
       <Actions><Button type="button" variant="ghost" outline onClick={() => props.onClose()}>Cancel</Button><Button type="submit">Remove</Button></Actions>
     </CardForm>; }}</Show>
   </Dialog>;
