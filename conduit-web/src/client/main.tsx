@@ -2945,8 +2945,11 @@ function App() {
     const shown = shownChat(links.lead ?? links.thread);
     if (shown !== undefined && !inSight(shown)) return showDocked(shown as number);
     if (shown !== undefined) {
-      const { row, focus } = layout(), at = row.indexOf(idOf(shown) ?? ""), from = row.indexOf(focus);
-      return void (at >= 0 && from >= 0 && Math.abs(at - from) === 1 ? (paneData(shown)!.views.length < 2 ? closePane(shown) : closeTab(shown, paneData(shown)!.active)) : openView(viewOf(shown)!, {}));
+      // Beside means beside the artifact's own pane, wherever the keyboard is; closed from there, the keyboard stays put.
+      const own = paneOrder().find((pane) => viewOf(pane) === `artifact:${paper}`), { row } = layout();
+      const at = row.indexOf(idOf(shown) ?? ""), from = row.indexOf(own === undefined ? layout().focus : idOf(own) ?? "");
+      if (at < 0 || from < 0 || Math.abs(at - from) !== 1) return void openView(viewOf(shown)!, {});
+      return void (paneData(shown)!.views.length > 1 ? closeTab(shown, paneData(shown)!.active) : shown === "main" ? closePane("main") : closeSlot(shown, false));
     }
     try {
       const id = links.lead ?? (await api<{ chat: ChatSummary }>(`/v0/document/${encodeURIComponent(paper)}/thread`, { method: "POST" })).chat.id;
