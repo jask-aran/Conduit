@@ -129,6 +129,32 @@ export function writeStyle(look, sheet, area, { style, borders } = {}, whole = n
   }
 }
 
+/** What a cell's own style must say over what it would wear from beneath: what differs, and the defaults of what beneath sets. */
+export const ownOver = (under, own) => {
+  const out = {};
+  for (const code of new Set([...Object.keys(under), ...Object.keys(own)])) if (own[code] !== under[code]) out[code] = own[code] ?? (typeof under[code] === "boolean" ? false : null);
+  return out;
+};
+
+/**
+ * What the cells of `from` (rows and columns by position) wear laid on `to`, in the caller's transaction, tiled as a paste is: over a range a whole
+ * number of copies of `from`, else from `to`'s first cell at `from`'s size; each cell of it is given its own style, what makes it wear its source's.
+ * `each` is told each source and target cell (formats.ts copies number formats by it). Cells past the tab's are left.
+ */
+export function paintStyle(look, sheet, from, to, each) {
+  const { rows, cols } = sheet.size(), tall = from.rows.length, wide = from.cols.length;
+  const height = (to.bottom - to.top + 1) % tall === 0 ? to.bottom - to.top + 1 : tall, width = (to.right - to.left + 1) % wide === 0 ? to.right - to.left + 1 : wide;
+  const count = Math.min(height, rows - to.top) * Math.min(width, cols - to.left);
+  if (count > STYLE_CELL_LIMIT) throw fault(`That is ${count} cells; at most ${STYLE_CELL_LIMIT} take a style of their own at once`);
+  const lines = (r, c) => ({ ...read(look, `style:${sheet.colAt(c)}`), ...read(look, `style:${sheet.rowAt(r)}`) });
+  const worn = from.rows.map((r) => from.cols.map((c) => ({ ...lines(r, c), ...read(look, `style:${key(sheet.rowAt(r), sheet.colAt(c))}`) })));
+  for (let y = 0; y < height && to.top + y < rows; y++) for (let x = 0; x < width && to.left + x < cols; x++) {
+    const r = to.top + y, c = to.left + x;
+    put(look, `style:${key(sheet.rowAt(r), sheet.colAt(c))}`, ownOver(lines(r, c), worn[y % tall][x % wide]));
+    each?.(from.rows[y % tall], from.cols[x % wide], r, c);
+  }
+}
+
 /** The styles set within `area`, as sheet.json names them: a column's by its letter (`B`), a row's by its number (`5`), a cell's own by its address (`C4`). */
 export function listStyles(look, sheet, area) {
   const at = span(sheet, area), out = {}, own = [];

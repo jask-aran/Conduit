@@ -146,12 +146,7 @@ export function sheetStyles(sheetXml, size, shows) {
 /** Whether a packed style can be seen on an empty cell. */
 export const seen = (packed) => /(^| )(f=|b[trbl](?= |$))/.test(packed);
 
-/** What a cell's own style must say over what it would wear from beneath: what differs, and the defaults of what beneath sets. */
-export const ownOver = (under, own) => {
-  const out = {};
-  for (const code of new Set([...Object.keys(under), ...Object.keys(own)])) if (own[code] !== under[code]) out[code] = own[code] ?? (typeof under[code] === "boolean" ? false : null);
-  return out;
-};
+export { ownOver } from "../sheet-styles.js";
 
 const rgbOf = (colour, fill) => (colour.startsWith("#") ? colour.slice(1) : INKS[colour]?.[fill ? 1 : 0] ?? "000000").toUpperCase();
 const STROKE = { 1: "thin", medium: "medium", thick: "thick" };

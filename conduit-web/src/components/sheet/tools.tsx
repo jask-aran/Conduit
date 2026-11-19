@@ -10,7 +10,7 @@ import { SHEET_BORDERS, SHEET_INKS, type SheetBorders, type SheetInk } from "@/s
 import { SHEET_PRESETS, type SheetFormats } from "./formats";
 import { SHEET_TOOLS, type SheetRange, type SheetTool, type SheetToolId, type SheetToolName } from "./host";
 import type { SheetMergeKind } from "./merges";
-import type { SheetStyles } from "./styles";
+import type { SheetBrush, SheetStyles } from "./styles";
 import { SHEET_INK_TOKENS } from "./theme";
 
 const TOGGLES = [["bold", "Bold", ["Ctrl", "B"], undefined], ["italic", "Italic", ["Ctrl", "I"], undefined], ["underline", "Underline", ["Ctrl", "U"], "Underline"], ["strike", "Strikethrough", ["Ctrl", "5"], "Underline"]] as const;
@@ -24,7 +24,7 @@ const MERGES = [["center", "Merge & Center"], ["across", "Merge across"], ["cell
  * `done`: after a tool has run (the grid takes focus back). `fit`: the rows of a range whose wrapping changed are fitted to their lines. `spread`: Fill down
  * or Fill right (sheet.tsx). `merge`: Merge, or unmerge (null), the selection, as its own named step. `act`: a tool's run is one step of the history, by its label.
  */
-export function createSheetTools(options: { tip(name: SheetToolId): string | undefined; at: Accessor<SheetRange | null>; styles: SheetStyles; formats: SheetFormats; offered?: readonly SheetToolName[]; fit(range: SheetRange): void; spread(range: SheetRange, way: "down" | "right"): void; merge?(kind: SheetMergeKind | null): void; act(label: string, run: () => void): void; done(): void }): SheetTool[] {
+export function createSheetTools(options: { tip(name: SheetToolId): string | undefined; at: Accessor<SheetRange | null>; styles: SheetStyles; formats: SheetFormats; offered?: readonly SheetToolName[]; fit(range: SheetRange): void; spread(range: SheetRange, way: "down" | "right"): void; merge?(kind: SheetMergeKind | null): void; brush?: SheetBrush; act(label: string, run: () => void): void; done(): void }): SheetTool[] {
   const { at, styles, formats } = options, offered = options.offered ?? SHEET_TOOLS;
   const worn = () => { const range = at(); return range && styles.worn(range.top, range.left); };
   // `own`: the run names its own step (a merge, which may ask first). `hue`: the swatch it shows now.
@@ -47,6 +47,8 @@ export function createSheetTools(options: { tip(name: SheetToolId): string | und
   };
   const all: Record<SheetToolName, () => SheetTool[]> = {
     bold: () => [], italic: () => [], underline: () => [], strike: () => [],
+    // The painter takes the selection's look as it is pressed, and lays it on the next cells chosen (styles.ts createSheetBrush).
+    paint: () => options.brush ? [tool("paint", "Format painter", mark("paint"), () => options.brush!.toggle(), { own: true, on: () => options.brush!.held() })] : [],
     clear: () => [tool("clear", "Clear formatting", mark("clear"), (range) => { styles.clear(range); formats.set(range, "General"); options.fit(range); }, { keys: ["Ctrl", "\\"] })],
     wrap: () => [
       tool("clip", "Clip", mark("clip"), (range) => { styles.set(range, { wrap: false }); options.fit(range); }, { menu: "Wrapping", on: () => !worn()?.wrap }),

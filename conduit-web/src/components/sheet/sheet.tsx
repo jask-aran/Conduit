@@ -18,7 +18,7 @@ import { createSequenceKeys, SequenceHint, SHEET_SEQUENCES, SizePrompt, type She
 import { createSheetSizes, dragRowEdges } from "./sizes";
 import { createSheetFilter, FilterMenu } from "./filter";
 import { createSheetFormats } from "./formats";
-import { createSheetStyles } from "./styles";
+import { createSheetBrush, createSheetStyles } from "./styles";
 import { createSheetRules, RulePrompt } from "./rules";
 import { createSheetTools } from "./tools";
 import { createSheetFind } from "./find";
@@ -151,6 +151,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         editor.begin({ row, col }, "enter", "cell"); editor.typed(text, text.endsWith("()") ? text.length - 1 : text.length);
         return true;
       }
+      // Ctrl+Alt+V lays what was copied here on the selection's cells as their formatting alone.
+      if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "v") { event.preventDefault(); const from = grid()?.source(), area = at(); if (from && area) brush.lay(from, area); return true; }
       // AltGr is Ctrl and Alt together: what it types is typed.
       if ((event.ctrlKey || event.metaKey) && !(event.ctrlKey && event.altKey)) return false;
       if (event.key === "Enter" || event.key === "F2") { event.preventDefault(); editor.begin({ row, col }, "edit", "cell"); return true; }
@@ -214,8 +216,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   createEffect(() => {
     const into = island();
     if (!into) return;
-    const offKeys = sequences.attach(into), offEdges = dragRowEdges(into, grid, (row, height) => history.act("Row height", () => sizes.setHeights(span("rows", row), height / zoom())));
-    onCleanup(() => { offKeys(); offEdges(); });
+    const offKeys = sequences.attach(into), offBrush = brush.attach(into), offEdges = dragRowEdges(into, grid, (row, height) => history.act("Row height", () => sizes.setHeights(span("rows", row), height / zoom())));
+    onCleanup(() => { offKeys(); offBrush(); offEdges(); });
   });
   const cellBox = createMemo<JSX.CSSProperties>((was) => {
     scrolled();
@@ -285,7 +287,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     return { text: lines.join("\n"), label: corners.range, under: corners, boxes: () => { const now = rangeOf({ under: corners }), box = now && grid()?.bounds(now); return box ? [box] : []; } };
   };
   const find = createSheetFind({ model, grid, at, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols, draw: formats.draw, write: (list) => writes(list.length === 1 ? "Replace" : "Replace all")(list) });
-  const tools = createSheetTools({ tip: sequences.tip, at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(), spread: (range, way) => spread(range, way), merge: (kind) => merge(kind), act: history.act,
+  const brush = createSheetBrush({ look, model, formats, at, act: history.act, failed: props.host.failed });
+  const tools = createSheetTools({ tip: sequences.tip, at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(), spread: (range, way) => spread(range, way), merge: (kind) => merge(kind), brush, act: history.act,
     fit: (range) => sizes.fitRows(Array.from({ length: range.bottom - range.top + 1 }, (_, n) => range.top + n), readLook(root!)) });
   const marks: SheetMarks = {
     subject: () => ({ ...model()?.size() }),

@@ -671,6 +671,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     copy: take,
     paste: (at, text, values) => paste(at, fromCsv(text, "\t"), values),
     held: () => copied !== null,
+    source: () => copied && { rows: copied.rows, cols: copied.cols },
     whole: (kind) => {
       const area = picked();
       if (!area) return;

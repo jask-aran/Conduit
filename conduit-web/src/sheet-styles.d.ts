@@ -46,3 +46,5 @@ export function listStyles(look: Y.Map<number | string>, sheet: FormatSheet, are
  */
 export type SheetStyleOp = { op: "style"; range: string; style?: SheetStyle; borders?: SheetBorders; tab?: string };
 export type SheetStylesResult = { cells: string[]; styles: Record<string, SheetStyle>; tab?: string };
+/** The cells of `from` (rows and columns by position) laid on `to` as a paste tiles them, each target cell given its own style; `each` told each source and target cell. */
+export function paintStyle(look: Y.Map<number | string>, sheet: FormatSheet, from: { rows: readonly number[]; cols: readonly number[] }, to: Range, each?: (fromRow: number, fromCol: number, row: number, col: number) => void): void;
