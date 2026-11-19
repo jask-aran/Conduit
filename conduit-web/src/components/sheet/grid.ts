@@ -229,7 +229,12 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   const write = (list: { row: number; col: number; input: string }[], label?: string) => { if (list.length) events.write(list, label); };
   // Made once a part: a new function or object for the grid on each render has it work everything out again, the cost of each arrow-key move.
   const handlersOf = (p: Part): Partial<DataEditorProps> => ({
-    onGridSelectionChange: (next) => { choose(p, fit(p, next)); events.selected(picked()); },
+    onGridSelectionChange: (next) => {
+      // A merge across the frozen rows' edge, moved onto, is selected whole, in both parts.
+      const cell = next.current && !next.columns.length && !next.rows.length ? next.current.cell : undefined, home = cell && frozenRows ? mergeAt(p.map.sheet(cell[1]), cell[0]) : undefined;
+      if (home && home.top < frozenRows && home.bottom >= frozenRows && next.current!.range.width * next.current!.range.height === 1) { api.select(home); if (owner !== p) owner.editor?.focus(); return; }
+      choose(p, fit(p, next)); events.selected(picked());
+    },
     onCellsEdited: (cells) => {
       write(cells.map(({ location: [col, row], value }) => ({ row: p.map.sheet(row), col, input: value.kind === GridCellKind.Boolean ? (value.data ? "TRUE" : "FALSE") : value.kind === GridCellKind.Text ? value.data : "" })));
       return true;
@@ -320,11 +325,17 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         api.select({ top: row, bottom: row, left: col, right: col });
         return;
       }
-      // An arrow from a merge steps past its edge, from its top-left.
-      const home = step && !(event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) ? mergeAt(p.map.sheet(cell[1]), cell[0]) : undefined, inPart = home && clip(p, home);
-      if (step && inPart) {
-        const col = step[0] < 0 ? nextShown(inPart.left, -1) : step[0] > 0 ? nextShown(inPart.right, 1) : inPart.left, drawn = step[1] < 0 ? inPart.top - 1 : step[1] > 0 ? inPart.bottom + 1 : inPart.top;
-        if (col >= 0 && col < size.cols && drawn >= 0 && drawn < (p === head ? size.head : size.rows)) { event.cancel(); const row = p.map.sheet(drawn); api.select({ top: row, bottom: row, left: col, right: col }); return; }
+      // An arrow from a merge steps past its edge, from its top-left: by the sheet's rows, as a merge may run across the frozen rows' edge.
+      const home = step && !(event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) ? mergeAt(p.map.sheet(cell[1]), cell[0]) : undefined;
+      if (step && home) {
+        event.cancel();
+        const col = step[0] < 0 ? nextShown(home.left, -1) : step[0] > 0 ? nextShown(home.right, 1) : home.left, hidden = options.columns.hidden();
+        let row = step[1] < 0 ? home.top - 1 : step[1] > 0 ? home.bottom + 1 : p.map.sheet(cell[1]);
+        while (step[1] < 0 && row >= 0 && hidden.has(row)) row--;
+        if (row < 0 || row > body.map.sheet(size.rows - 1) || (step[0] && col >= home.left && col <= home.right)) return;
+        api.select({ top: row, bottom: row, left: col, right: col });
+        if (partOf(row) !== p) partOf(row).editor?.focus();
+        return;
       }
       // An arrow, Tab or Shift and an arrow onto a hidden column goes on past it, to the next column shown.
       const across = !hiddenCols.size || event.ctrlKey || event.metaKey || event.altKey ? 0 : event.key === "Tab" ? (event.shiftKey ? -1 : 1) : step && !step[1] ? step[0] : 0;
