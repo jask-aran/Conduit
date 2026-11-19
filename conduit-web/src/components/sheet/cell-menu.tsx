@@ -19,14 +19,19 @@ const keys = (event: KeyboardEvent) => {
   if (event.key === "Enter") first.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
 };
 
+/** The menu's own focus on opening goes to its search field, so typing searches; on a phone it stays, so a long press does not raise the keyboard. */
+export const focusSearch = (event: Event) => {
+  const field = (event.currentTarget as HTMLElement | null)?.querySelector<HTMLInputElement>("input.ui-search");
+  if (field && !matchMedia(PHONE_LAYOUT_QUERY).matches) { event.preventDefault(); field.focus(); }
+};
+
 /** The cell menu's groups under a field that keeps the rows (or submenus holding them) whose names hold what is typed. `after`: sections shown while nothing is. */
 export function SheetMenu(props: { groups: (SheetMenuEntry[] | false | null | undefined)[]; after?: JSX.Element }) {
   const [query, setQuery] = createSignal(""), phone = matchMedia(PHONE_LAYOUT_QUERY).matches;
   const shown = () => { const asked = query().trim().toLowerCase(); return props.groups.flatMap((group) => { const kept = group ? group.filter((entry) => !asked || has(entry, asked)) : []; return kept.length ? [kept] : []; }); };
   const row = (entry: SheetMenuEntry) => <MenuRow icon={entry.icon} keys={entry.keys} meta={entry.meta} destructive={entry.destructive} disabled={entry.disabled} onSelect={() => entry.run?.()}>{entry.label}</MenuRow>;
-  // On a phone the field is not focused, so a long press does not raise the keyboard.
   return <>
-    <SearchSection placeholder="Search the menu" value={query()} onInput={setQuery} field={{ "aria-label": "Search the menu", onKeyDown: keys, ref: (field: HTMLInputElement) => { if (!phone) requestAnimationFrame(() => field.focus()); } }} />
+    <SearchSection placeholder="Search the menu" value={query()} onInput={setQuery} field={{ "aria-label": "Search the menu", onKeyDown: keys }} />
     <For each={shown()}>{(group) => <MenuSection><For each={group}>{(entry) => entry.sub
       ? <MenuSub phone={phone}><MenuSubTrigger icon={entry.icon} meta={entry.meta}>{entry.label}</MenuSubTrigger><MenuSubContent><MenuSection><For each={entry.sub}>{row}</For></MenuSection></MenuSubContent></MenuSub>
       : row(entry)}</For></MenuSection>}</For>

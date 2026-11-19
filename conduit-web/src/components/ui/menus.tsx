@@ -102,10 +102,10 @@ export function MenuContent(props: ContentProps) {
   return <KMenu.Portal mount={mount()}><KMenu.Content as={Surface} data-piece="MenuContent" data-slot="ui-menu-content" style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}
     ref={(element: HTMLElement) => { if (local.keep) holdFocus(element, local.keep); }} {...rest}><MenuBody>{props.children}</MenuBody></KMenu.Content></KMenu.Portal>;
 }
-export function ContextMenuContent(props: ParentProps<Caps & { onCloseAutoFocus?: (event: Event) => void }>) {
+export function ContextMenuContent(props: ParentProps<Caps & { onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void }>) {
   if (useContext(RowMenuDeferred)) return null;
   const mount = createFullscreenPortalMount();
-  return <KContextMenu.Portal mount={mount()}><KContextMenu.Content as={Surface} data-piece="ContextMenuContent" data-slot="ui-context-menu-content" width={props.width} height={props.height} onCloseAutoFocus={props.onCloseAutoFocus} style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}><MenuBody>{props.children}</MenuBody></KContextMenu.Content></KContextMenu.Portal>;
+  return <KContextMenu.Portal mount={mount()}><KContextMenu.Content as={Surface} data-piece="ContextMenuContent" data-slot="ui-context-menu-content" width={props.width} height={props.height} onOpenAutoFocus={props.onOpenAutoFocus} onCloseAutoFocus={props.onCloseAutoFocus} style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}><MenuBody>{props.children}</MenuBody></KContextMenu.Content></KContextMenu.Portal>;
 }
 type ItemProps = ParentProps<{ disabled?: boolean; variant?: "destructive"; onSelect?: () => void }>;
 export const MenuItem = (props: ItemProps) => <KMenu.Item as={MenuAction} disabled={props.disabled} onSelect={props.onSelect} data-destructive={props.variant === "destructive" ? "" : undefined}>{props.children}</KMenu.Item>;

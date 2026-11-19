@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createResource, createSignal, on, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { Empty, Frost, Icons, Notice } from "@/components/ui";
 import { sheetLineIcons as LineIcons, sheetMergeIcons as MergeIcons, sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
-import { SheetMenu, type SheetMenuEntry } from "./cell-menu";
+import { focusSearch, SheetMenu, type SheetMenuEntry } from "./cell-menu";
 import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { createSheetMerges, type SheetMergeKind } from "./merges";
 import { Input } from "@/components/ui/controls";
@@ -532,7 +532,12 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       <Show when={!failed()} fallback={<Empty role="alert">The sheet could not be drawn: {failed()}</Empty>}>
         <ContextMenu placement="bottom-start">
           <ContextMenuTrigger as="div" ref={setIsland} class="ui-spreadsheet-grid" data-own-keys={OWN_KEYS} />
-          <ContextMenuContent onCloseAutoFocus={(event) => { const open = opening; opening = undefined; if (open) { event.preventDefault(); open(); } }}>
+          {/* Shut, the menu gives the keyboard back to the grid, unless what it ran (a prompt, a comment) took it meanwhile. */}
+          <ContextMenuContent onOpenAutoFocus={focusSearch} onCloseAutoFocus={(event) => {
+            const open = opening, was = document.activeElement;
+            opening = undefined; event.preventDefault();
+            if (open) open(); else requestAnimationFrame(() => { if (document.activeElement === was || document.activeElement === document.body) grid()?.focus(); });
+          }}>
             <SheetMenu groups={menuGroups()} after={<>
               <Show when={picked()}>{(range) => <Show when={range().bottom > range().top || range().right > range().left}><MenuSection>
                 <Show when={!merges.is(range())}>
