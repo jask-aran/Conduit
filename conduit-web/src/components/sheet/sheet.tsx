@@ -419,12 +419,12 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       [
         ...kind !== "cols" ? [
           { label: `Insert ${rowsSaid} above`, icon: <Icons.Add />, keys: whole ? ["Ctrl", "Shift", "="] : undefined, run: () => structure("insert-rows", range.top, nRows) },
-          ...kind === "rows" ? [{ label: `Insert ${rowsSaid} below`, icon: <Icons.Add />, run: () => structure("insert-rows", range.bottom + 1, nRows) }] : [],
+          { label: `Insert ${rowsSaid} below`, icon: <Icons.Add />, run: () => structure("insert-rows", range.bottom + 1, nRows) },
         ] : [],
         // Make chart goes here, under the inserts.
         ...kind !== "rows" ? [
           { label: `Insert ${colsSaid} left`, icon: <Icons.Add />, keys: whole ? ["Ctrl", "Shift", "="] : undefined, run: () => structure("insert-cols", range.left, nCols) },
-          ...kind === "cols" ? [{ label: `Insert ${colsSaid} right`, icon: <Icons.Add />, run: () => structure("insert-cols", range.right + 1, nCols) }] : [],
+          { label: `Insert ${colsSaid} right`, icon: <Icons.Add />, run: () => structure("insert-cols", range.right + 1, nCols) },
         ] : [],
       ],
       kind === "rows" && [
@@ -443,20 +443,20 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         ] },
         ...kind !== "cols" ? [{ label: `Delete ${rowsSaid}`, icon: <Icons.Delete />, destructive: true, keys: whole ? ["Ctrl", "-"] : undefined, run: () => deleteRows(range) }] : [],
         ...kind !== "rows" ? [{ label: `Delete ${colsSaid}`, icon: <Icons.Delete />, destructive: true, keys: whole ? ["Ctrl", "-"] : undefined, run: () => structure("delete-cols", range.left, nCols) }] : [],
-        ...kind === "rows" ? [
+        ...kind !== "cols" ? [
           { label: `Hide ${rowsSaid}`, icon: <Icons.Hide />, run: hideRows },
           ...hiddenIn(range) ? [{ label: "Unhide rows", icon: <Icons.Preview />, run: () => { const lines = between(range.top, range.bottom); history.act("Unhide rows", () => { sizes.setHidden(lines, false); filters.show(lines); }); } }] : [],
         ] : [],
-        ...kind === "cols" ? [
+        ...kind !== "rows" ? [
           { label: `Hide ${colsSaid}`, icon: <Icons.Hide />, keys: ["Ctrl", "0"], run: () => history.act("Hide columns", () => sizes.setHiddenCols(between(range.left, range.right), true)) },
           ...hiddenColsBy(range).length ? [{ label: "Unhide columns", icon: <Icons.Preview />, keys: ["Ctrl", "Shift", "0"], run: () => history.act("Unhide columns", () => sizes.setHiddenCols(hiddenColsBy(range), false)) }] : [],
         ] : [],
       ],
-      kind === "rows" && [
+      kind !== "cols" && [
         { label: `Resize ${rowsSaid}…`, icon: <Icons.Resize />, keys: ["Alt", "H", "O", "H"], run: () => sized("HOH", range) },
         { label: "Fit row height", icon: <Icons.Resize />, keys: ["Alt", "H", "O", "A"], run: () => history.act("Row height", () => sized("HOA", range)) },
       ],
-      kind === "cols" && [
+      kind !== "rows" && [
         { label: `Resize ${colsSaid}…`, icon: <Icons.Resize />, keys: ["Alt", "H", "O", "W"], run: () => sized("HOW", range) },
         { label: "Fit column width", icon: <Icons.Resize />, keys: ["Alt", "H", "O", "I"], run: () => history.act("Column width", () => sized("HOI", range)) },
         { label: "Default width…", icon: <Icons.Resize />, keys: ["Alt", "H", "O", "D"], run: () => sized("HOD", range) },
