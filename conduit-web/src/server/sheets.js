@@ -438,6 +438,8 @@ export function sheetKind(hub) {
       const box = (a, b, c, d) => across ? { start: { sheet: here, row: c, col: a }, end: { sheet: here, row: d, col: b } } : { start: { sheet: here, row: a, col: c }, end: { sheet: here, row: b, col: d } };
       const [first, last] = [others[0], others.at(-1)];
       if (removing) {
+        // Lines added where the block is parked first, so removing them leaves every range running past the tab's edge as it was.
+        (across ? engine.addColumns : engine.addRows).call(engine, here, [size, depth]);
         engine.moveCells(box(lo, lo + depth - 1, first, last), across ? { sheet: here, row: first, col: size } : { sheet: here, row: size, col: first });
         (across ? engine.removeColumns : engine.removeRows).call(engine, here, [size, depth]);
         if (lo + depth < size) engine.moveCells(box(lo + depth, size - 1, first, last), across ? { sheet: here, row: first, col: lo } : { sheet: here, row: lo, col: first });
@@ -475,6 +477,10 @@ export function sheetKind(hub) {
    * move up into their place, each with its look, as the rows a sort moves (`reorder`), and its last rows are emptied.
    */
   const dedupe = (room, sheet, area, header, by) => {
+    // Whole columns reach the tab's last row: the empty rows under the data are not repeats of each other.
+    let bottom = area.bottom;
+    while (bottom > area.top && Array.from({ length: area.right - area.left + 1 }, (_, c) => sheet.input(bottom, area.left + c)).every((input) => !input)) bottom -= 1;
+    area = { ...area, bottom };
     const top = area.top + (header ? 1 : 0), seen = new Set(), kept = [], gone = [];
     for (let r = top; r <= area.bottom; r += 1) {
       const said = Array.from({ length: area.right - area.left + 1 }, (_, c) => valueText(sheet.value(r, area.left + c)).toLowerCase()).join("\u0000");
@@ -505,6 +511,8 @@ export function sheetKind(hub) {
     sized(room, null, rows, cols);
     await intoFolder(room, by);
     const at = room.book.tabs().findIndex((one) => one.id === source.id) + 1, kept = lookOf(room, source), typed = source.inputs();
+    // A chart is found by its id on whichever tab holds it: the copy's charts are charts of their own.
+    if (Array.isArray(kept.charts)) kept.charts = kept.charts.map((chart) => ({ ...chart, id: rowId() }));
     const done = hub.as(room, by, (sign) => room.book.tabOp("add", { name: called, at, rows, cols }, sign)), copy = room.book.tab(done.tab);
     hub.as(room, by, (sign) => room.doc.transact(() => {
       typed.forEach((line, r) => line.forEach((input, c) => { if (input) room.cells.set(key(copy.rowAt(r), copy.colAt(c)), input); }));
