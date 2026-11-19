@@ -236,6 +236,24 @@ def g_filter(wb):
 def r_filter(wb, raw): return {"autofilter": wb.active.auto_filter.ref or ""}
 feature("autofilter")((g_filter, r_filter))
 
+def g_conditions(wb):
+    from openpyxl.worksheet.filters import CustomFilter, CustomFilters, FilterColumn, Filters
+    ws = wb.active; ws.append(["key", "n", "day", "text", "pick"])
+    for i in range(1, 9): ws.append([f"k{i}", i, datetime.datetime(2026, 1, i * 3), f"x{'ab' if i % 2 else 'cd'}y", "a" if i % 3 else ""])
+    for r in range(2, 10): ws.cell(r, 3).number_format = "yyyy-mm-dd"
+    ws.auto_filter.ref = "A1:E9"
+    custom = lambda *pairs, both=False: CustomFilters(_and=both, customFilter=[CustomFilter(operator=o, val=v) for o, v in pairs])
+    for col in [FilterColumn(colId=0, filters=Filters(filter=["k1", "k3", "k5"])), FilterColumn(colId=1, customFilters=custom(("greaterThan", "2"))),
+                FilterColumn(colId=2, customFilters=custom(("greaterThanOrEqual", "46027"), ("lessThanOrEqual", "46040"), both=True)),
+                FilterColumn(colId=3, customFilters=custom(("equal", "*ab*"))), FilterColumn(colId=4, filters=Filters(blank=True))]: ws.auto_filter.filterColumn.append(col)
+def r_conditions(wb, raw):
+    out = {}
+    for col in wb.active.auto_filter.filterColumn:
+        f, c = col.filters, col.customFilters
+        out[f"column {col.colId}"] = [sorted(f.filter) if f else [], bool(f and f.blank), [[x.operator or "equal", x.val] for x in c.customFilter] if c else [], bool(c and c._and)]
+    return out
+feature("filter conditions")((g_conditions, r_conditions))
+
 def g_charts(wb):
     ws = wb.active; ws.append(["m", "a", "b"])
     for i in range(1, 7): ws.append([f"m{i}", i, i * 2])

@@ -14,7 +14,7 @@ const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships
 const EMU_PER_PX = 9525;
 
 /** A tab's table as its own part, its columns named by its header row's text; none where a header is empty, repeated or not text (a year as a number), as Excel would repair it. */
-export function tablePart(table, values, id, taken) {
+export function tablePart(table, values, id, taken, filtered = "") {
   const area = parseRange(String(table?.range ?? ""));
   if (!area || area.bottom <= area.top) return null;
   const names = Array.from({ length: area.right - area.left + 1 }, (_, c) => { const value = values[area.top]?.[area.left + c]; return typeof value === "string" ? value : ""; });
@@ -23,7 +23,7 @@ export function tablePart(table, values, id, taken) {
   const said = String(table.name ?? ""), called = /^[A-Za-z_\\][\w.]*$/.test(said) && !/^[A-Z]{1,3}\d+$/i.test(said) && !taken.has(said.toLowerCase()) ? said : `Table${id}`, ref = rangeA1(area);
   taken.add(called.toLowerCase());
   return { name: `xl/tables/table${id}.xml`, type: `${TYPE}spreadsheetml.table+xml`, rel: `${REL}/table`, element: "tableParts", block: (rid) => `<tableParts count="1"><tablePart r:id="${rid}"/></tableParts>`,
-    xml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="${id}" name="${escaped(called)}" displayName="${escaped(called)}" ref="${ref}"><autoFilter ref="${ref}"/><tableColumns count="${names.length}">${names.map((name, n) => `<tableColumn id="${n + 1}" name="${escaped(name)}"/>`).join("")}</tableColumns><tableStyleInfo name="${escaped(table.style ?? "TableStyleMedium2")}" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/></table>` };
+    xml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="${id}" name="${escaped(called)}" displayName="${escaped(called)}" ref="${ref}"><autoFilter ref="${ref}"${filtered ? `>${filtered}</autoFilter>` : "/>"}<tableColumns count="${names.length}">${names.map((name, n) => `<tableColumn id="${n + 1}" name="${escaped(name)}"/>`).join("")}</tableColumns><tableStyleInfo name="${escaped(table.style ?? "TableStyleMedium2")}" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/></table>` };
 }
 
 const PLOT = { column: "barChart", bar: "barChart", line: "lineChart", area: "areaChart", pie: "pieChart", scatter: "scatterChart" };

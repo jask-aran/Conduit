@@ -69,6 +69,42 @@ const validationsXml = (list) => {
   const kept = (Array.isArray(list) ? list : []).filter((one) => typeof one?.range === "string" && /^(\$?[A-Z]{1,3}\$?\d+(:\$?[A-Z]{1,3}\$?\d+)?\s*)+$/.test(one.range));
   return kept.length ? `<dataValidations count="${kept.length}">${kept.map((one) => `<dataValidation${VALIDATION.filter((name) => one[name] !== undefined).map((name) => ` ${name}="${escaped(one[name])}"`).join("")} sqref="${escaped(one.range)}">${["formula1", "formula2"].filter((name) => one[name] !== undefined).map((name) => `<${name}>${escaped(one[name])}</${name}>`).join("")}</dataValidation>`).join("")}</dataValidations>` : "";
 };
+// A filter's conditions (sheet-format.d.ts SheetFilterWhen) and kept values, by column letter, as an `<autoFilter>`'s `<filterColumn>`s, and back.
+// "Is exactly" is one `<filter>`, kept values several; a date is its serial, read back as a date where the column's first value wears a date format.
+const wild = (text) => String(text ?? "").replace(/[*?~]/g, "~$&"), unwild = (text) => text.replace(/~([*?~])/g, "$1");
+const serial = (day) => /^\d{4}-\d{2}-\d{2}$/.test(String(day)) ? Date.parse(`${day}T00:00Z`) / 864e5 + 25569 : Number(day);
+const dayText = (n) => new Date(Math.round((n - 25569) * 864e5)).toISOString().slice(0, 10);
+const custom = (pairs, and) => `<customFilters${and ? ' and="1"' : ""}>${pairs.map(([operator, val]) => `<customFilter operator="${operator}" val="${escaped(val)}"/>`).join("")}</customFilters>`;
+const WHEN_XML = {
+  contains: (a) => custom([["equal", `*${wild(a)}*`]]), "not-contains": (a) => custom([["notEqual", `*${wild(a)}*`]]), starts: (a) => custom([["equal", `${wild(a)}*`]]), ends: (a) => custom([["equal", `*${wild(a)}`]]),
+  equals: (a) => `<filters><filter val="${escaped(a)}"/></filters>`, empty: () => '<filters blank="1"/>', filled: () => custom([["notEqual", " "]]),
+  greater: (a) => custom([["greaterThan", a]]), less: (a) => custom([["lessThan", a]]), between: (a, b) => custom([["greaterThanOrEqual", a], ["lessThanOrEqual", b]], true),
+  before: (a) => custom([["lessThan", serial(a)]]), after: (a) => custom([["greaterThan", serial(a)]]), dates: (a, b) => custom([["greaterThanOrEqual", serial(a)], ["lessThanOrEqual", serial(b)]], true),
+};
+const filterColumns = (filter) => {
+  const area = parseRange(String(filter?.range ?? "")), cols = new Map();
+  if (!area) return "";
+  for (const [letter, values] of Object.entries(filter.keep ?? {})) if (Array.isArray(values)) cols.set(letter, `<filters${values.includes("") ? ' blank="1"' : ""}>${values.filter(Boolean).map((value) => `<filter val="${escaped(value)}"/>`).join("")}</filters>`);
+  for (const [letter, when] of Object.entries(filter.when ?? {})) if (WHEN_XML[when?.is]) cols.set(letter, WHEN_XML[when.is](when.a ?? "", when.b ?? ""));
+  return [...cols].filter(([letter]) => /^[A-Z]{1,3}$/.test(letter) && colIndex(letter) >= area.left && colIndex(letter) <= area.right).sort(([a], [b]) => colIndex(a) - colIndex(b)).map(([letter, xml]) => `<filterColumn colId="${colIndex(letter) - area.left}">${xml}</filterColumn>`).join("");
+};
+const READ_CUSTOM = [[/^equal \*(.*)\*$/, "contains"], [/^notEqual \*(.*)\*$/, "not-contains"], [/^equal \*(.*)$/, "ends"], [/^equal (.*)\*$/, "starts"], [/^notEqual  $/, "filled"], [/^greaterThan (.*)$/, "greater"], [/^lessThan (.*)$/, "less"], [/^equal (.*)$/, "equals"]];
+const filterOf = (xml, range, dated, drop) => {
+  const area = parseRange(range), keep = {}, when = {};
+  for (const column of xml.match(/<filterColumn\b[\s\S]*?<\/filterColumn>/g) ?? []) {
+    const letter = colName(area.left + Number(attr(column, "colId"))), date = dated(area.left + Number(attr(column, "colId")));
+    const values = [...column.matchAll(/<filter\b[^>]*>/g)].map(([tag]) => attr(tag, "val") ?? ""), blank = ["1", "true"].includes(attr(/<filters\b[^>]*>/.exec(column)?.[0] ?? "", "blank"));
+    const customs = [...column.matchAll(/<customFilter\b[^>]*>/g)].map(([tag]) => `${attr(tag, "operator") ?? "equal"} ${attr(tag, "val") ?? ""}`);
+    if (/<filters\b/.test(column)) { if (values.length === 1 && !blank) when[letter] = { is: "equals", a: values[0] }; else if (!values.length && blank) when[letter] = { is: "empty" }; else keep[letter] = [...values, ...(blank ? [""] : [])]; continue; }
+    const pair = customs.length === 2 && /^greaterThanOrEqual /.test(customs[0]) && /^lessThanOrEqual /.test(customs[1]) ? [customs[0].split(" ")[1], customs[1].split(" ")[1]] : null;
+    if (pair) { when[letter] = date ? { is: "dates", a: dayText(Number(pair[0])), b: dayText(Number(pair[1])) } : { is: "between", a: pair[0], b: pair[1] }; continue; }
+    const found = customs.length === 1 && READ_CUSTOM.map(([re, is]) => [re.exec(customs[0]), is]).find(([hit]) => hit);
+    if (!found) { drop("filter conditions the sheet does not have"); continue; }
+    const [hit, is] = found, a = unwild(hit[1] ?? "");
+    when[letter] = date && (is === "greater" || is === "less") ? { is: is === "greater" ? "after" : "before", a: dayText(Number(a)) } : is === "filled" ? { is } : { is, a };
+  }
+  return { ...(Object.keys(keep).length ? { keep } : {}), ...(Object.keys(when).length ? { when } : {}) };
+};
 const sheetOf = (path) => { const n = /^xl\/worksheets\/sheet(\d+)\.xml$/.exec(path)?.[1]; return n ? Number(n) - 1 : -1; };
 /** A formula as this engine reads it: the prefixes a newer function is stored under are taken off. */
 const translated = (formula) => `=${formula.replace(/_xlfn\.|_xlws\.|_xlpm\./g, "")}`;
@@ -148,8 +184,10 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     if (table) { const head = /<table\b[^>]*>/.exec(table)[0], style = attr(/<tableStyleInfo\b[^>]*>/.exec(table)?.[0] ?? "", "name"); tab.table = { range: attr(head, "ref"), name: attr(head, "displayName") ?? attr(head, "name"), ...(style ? { style } : {}) }; }
     drop("tables after a tab's first", tables.length);
     const filter = /<autoFilter\b[^>]*>/.exec(xml)?.[0];
-    if (filter && attr(filter, "ref") && !table) tab.filter = { range: attr(filter, "ref") };
-    drop("filter criteria", (xml.match(/<filterColumn\b/g) ?? []).length);
+    // A table's filter is its own part's: its conditions are read from there.
+    const filtering = table ? /<autoFilter\b[\s\S]*?(?:\/>|<\/autoFilter>)/.exec(table)?.[0] : /<autoFilter\b[^>]*?(?:\/>|>[\s\S]*?<\/autoFilter>)/.exec(xml)?.[0];
+    const dated = (c) => { const cell = tab.data[parseRange(attr(filtering, "ref")).top + 1]?.[c]; return typeof cell?.z === "string" && XLSX.SSF.is_date(cell.z); };
+    if (filtering && attr(filtering, "ref")) { const conditions = filterOf(filtering, attr(filtering, "ref"), dated, drop); if (!table || Object.keys(conditions).length) tab.filter = { range: attr(filtering, "ref"), ...conditions }; }
     const color = /<tabColor\b[^>]*>/.exec(xml)?.[0];
     if (color && /^[0-9A-F]{8}$/i.test(attr(color, "rgb") ?? "")) tab.color = `#${attr(color, "rgb").slice(2).toUpperCase()}`; else drop("tab colours from the theme", color ? 1 : 0);
     drop("validation rules (in Excel 2010's form, naming another tab)", xml.match(/<x14:dataValidation\b/g)?.length ?? 0);
@@ -329,7 +367,7 @@ export function exportXlsx(tabs) {
     sheet["!rows"] = tab.typed.map((_, r) => { const height = tab.look[`height:${r + 1}`]; return { ...(typeof height === "number" ? { hpt: height * PT_PER_PX } : {}), ...(tab.look[`hidden:${r + 1}`] || filteredOut.has(r + 1) ? { hidden: true } : {}) }; });
     // A table is its own part (xlsx-parts.js); one Excel would repair is written as its filter alone.
     // The table's part holds its own filter: a sheet's filter over it is one Excel repairs.
-    tab.tablePart = tab.look.table ? tablePart(tab.look.table, tab.values, ++tables, tableNames) : null;
+    tab.tablePart = tab.look.table ? tablePart(tab.look.table, tab.values, ++tables, tableNames, filterColumns(tab.look.filter?.range === tab.look.table.range ? tab.look.filter : null)) : null;
     const filtered = tab.tablePart ? undefined : tab.look.filter?.range ?? tab.look.table?.range;
     if (typeof filtered === "string") sheet["!autofilter"] = { ref: filtered };
     if (Array.isArray(tab.look.merges)) sheet["!merges"] = tab.look.merges.map((range) => XLSX.utils.decode_range(String(range)));
@@ -341,10 +379,11 @@ export function exportXlsx(tabs) {
   const ruled = tabs.some((tab) => ["rules", "rulesKept"].some((name) => Array.isArray(tab.look[name]) && tab.look[name].length)), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(orphaned(`=${formula}`, known)), tabs.map((tab) => tab.look.rulesKept)) : null;
   const validations = tabs.map((tab) => validationsXml(tab.look.validations));
   // A tab's colour (`tabColor`): #RRGGBB as imported, or an ink the page set, written as its hex.
+  const conditions = tabs.map((tab) => tab.tablePart ? "" : filterColumns(tab.look.filter));
   const colors = tabs.map((tab) => { const color = String(tab.look.tabColor ?? ""); return /^#[0-9A-F]{6}$/i.test(color) || SHEET_INKS.includes(color) ? `<tabColor rgb="FF${rgbOf(color)}"/>` : ""; });
   let drawings = 0, charts = 1;
   const parts = tabs.map((tab) => { const drawing = Array.isArray(tab.look.charts) ? drawingPart(tab.look.charts, tab.name, drawings + 1, charts) : null; if (drawing) { drawings += 1; charts += drawing.count; } return [tab.tablePart, drawing].filter(Boolean); });
-  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean) && !colors.some(Boolean)) return withParts(written, parts, placed);
+  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean) && !colors.some(Boolean) && !conditions.some(Boolean)) return withParts(written, parts, placed);
   let restyled = null;
   return withParts(editParts(written, (path, xml, all) => {
     if (styled && !restyled) {
@@ -354,6 +393,7 @@ export function exportXlsx(tabs) {
     if (path === "xl/styles.xml") return rules ? withDxfs(restyled?.styles ?? xml, rules.dxfs) : restyled?.styles ?? xml;
     const n = sheetOf(path), [rows, cols] = panes[n] ?? [0, 0], sheet = withRules(n >= 0 && restyled ? restyled.sheets[n] : xml, rules?.sheets[n]);
     const valid = [[validations[n], (xml) => placed(xml, "dataValidations", validations[n])], [colors[n], (xml) => /<sheetPr\b/.test(xml) ? xml.replace(/<sheetPr\b([^>]*?)(\/?)>/, (_, head, closed) => `<sheetPr${head}>${colors[n]}${closed ? "</sheetPr>" : ""}`) : placed(xml, "sheetPr", `<sheetPr>${colors[n]}</sheetPr>`)]]
+      .concat([[conditions[n], (xml) => xml.replace(/<autoFilter ref="([^"]*)"\/>/, (_, ref) => `<autoFilter ref="${ref}">${conditions[n]}</autoFilter>`)]])
       .reduce((xml, [has, put]) => n >= 0 && has ? put(xml) : xml, sheet);
     return rows || cols ? valid.replace(/<sheetView workbookViewId="0"\/>/, paneXml(rows, cols)) : valid;
   }), parts, placed);
