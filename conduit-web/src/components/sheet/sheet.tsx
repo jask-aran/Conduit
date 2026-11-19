@@ -237,7 +237,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       // The formula bar reads the selected cell again only when it may have changed.
       const area = at();
       if (!cells || (area && cells.some(({ row, col }) => row === area.top && col === area.left))) setChanged((n) => n + 1);
-      if (!cells) moved();
+      // A tab shown, or lines put in or taken out: the comments' highlights are found again on what the grid now draws.
+      if (!cells) { moved(); marks.anchors(anchors); }
       if (change.structure) setFiltering(null);
     });
     const restyled = () => { made?.update(null); moved(); };
