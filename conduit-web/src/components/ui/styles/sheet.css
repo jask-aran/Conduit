@@ -30,6 +30,14 @@
 /* Over a row's lower edge beside its number, a drag sizes the row (components/sheet/sizes.ts); the grid sets its canvas's own cursor inline. */
 .ui-spreadsheet-grid[data-row-edge] canvas { cursor: row-resize !important; }
 .ui-spreadsheet-waiting { position: absolute; inset: 0; }
+/* A tab's charts (components/sheet/charts.tsx): a layer over the cells that clips them, each chart an object on the sheet, placed and sized where it is
+   drawn; selected, its corner handle shows and its edge brightens, as it is not a row with a wash. */
+.ui-sheet-charts { position: absolute; z-index: 1; overflow: hidden; pointer-events: none; font-family: var(--font-sans); font-size: var(--text-caption); }
+.ui-sheet-chart { position: absolute; top: 0; left: 0; pointer-events: auto; cursor: move; outline: none; background: var(--background); border-radius: var(--radius-inset); box-shadow: inset 0 0 0 var(--hairline) var(--border); }
+.ui-sheet-chart[data-selected] { box-shadow: inset 0 0 0 var(--hairline) var(--muted-foreground); }
+.ui-sheet-chart-art { width: 100%; height: 100%; }
+.ui-sheet-chart-art > svg { display: block; }
+.ui-sheet-chart-handle { position: absolute; right: 0; bottom: 0; width: var(--space-md); height: var(--space-md); cursor: nwse-resize; background: var(--foreground); border-radius: var(--radius-round); transform: translate(50%, 50%); }
 .ui-spreadsheet-margin { flex: 0 0 var(--measure-md); min-width: 0; overflow-y: auto; padding: 0 var(--space-md); }
 .ui-spreadsheet[data-margin="none"] .ui-spreadsheet-margin { display: none; }
 /* The grid in two parts while rows are frozen (components/sheet/grid.ts): the letters and frozen rows, as tall as they are, over the rows that scroll. */

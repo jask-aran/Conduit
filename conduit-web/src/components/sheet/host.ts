@@ -142,6 +142,9 @@ export interface SheetGrid {
   height(row: number, height: number): void;
   /** A range's box on screen, clipped to the grid's; null when none of it is in view. */
   bounds(range: SheetRange): SheetBox | null;
+  /** A cell's box on screen, in view or not (null in a hidden row); `area`: where the cells are drawn, under the letters and beside the row numbers. */
+  origin(row: number, col: number): SheetBox | null;
+  area(): SheetBox | null;
   /** The cell under a point of the viewport. */
   cellAt(x: number, y: number): { row: number; col: number } | null;
   theme(look: SheetLook): void;

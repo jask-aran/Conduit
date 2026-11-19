@@ -6,6 +6,7 @@ import { CONFIG, createWorkbookModel } from "../sheet-engine.js";
 import { listFormats, writeFormat } from "../sheet-formats.js";
 import { listStyles, writeStyle } from "../sheet-styles.js";
 import { readRules, rulesA1, rulesIds, shiftRefs } from "../sheet-rules.js";
+import { chartIds, chartsA1, keptCharts } from "../sheet-charts.js";
 import { writePrivateFile } from "../private-file.js";
 
 /*
@@ -186,6 +187,8 @@ export function sheetKind(hub) {
       const next = rules.map((rule) => ({ ...rule, ranges: rule.ranges.flatMap(([from, to]) => { const one = moved({ from, to }); return one ? [[one.from, one.to]] : []; }) })).filter((rule) => rule.ranges.length);
       if (JSON.stringify(next) !== JSON.stringify(rules)) out.push([`rules:${sheet.id}`, next.length ? JSON.stringify(next) : null]);
     }
+    const charts = keptCharts(sheet, room.look.get(`charts:${sheet.id}`), isRows, at, count);
+    if (charts !== undefined) out.push([`charts:${sheet.id}`, charts]);
     return () => { for (const [name, value] of out) if (value === null) room.look.delete(name); else room.look.set(name, value); };
   };
   /**
@@ -251,6 +254,7 @@ export function sheetKind(hub) {
       const [what, ...ids] = name.split(":");
       if (ids.length === 1 && ids[0] === sheet.id && what === "merges") { const said = mergesA1(sheet, value); if (said.length) out.merges = said; }
       else if (ids.length === 1 && ids[0] === sheet.id && what === "rules") { const said = rulesA1(sheet, value); if (said.length) out.rules = said; else if (Array.isArray(value)) out.rules = value; }
+      else if (ids.length === 1 && ids[0] === sheet.id && what === "charts") { const said = chartsA1(sheet, value); if (said.length) out.charts = said; }
       else if (ids.length === 1 && ids[0] === sheet.id && RANGED.includes(what)) { const said = rangedA1(sheet, value); if (said) out[what] = said; }
       else if (ids.length === 1 && ids[0] === sheet.id) out[what] = value;
       else if (ids.length === 1 && sheet.indexOfRow(ids[0]) >= 0) out[`${what}:${sheet.indexOfRow(ids[0]) + 1}`] = value;
@@ -273,6 +277,7 @@ export function sheetKind(hub) {
         if (ids.length) room.look.set(`merges:${tab}`, JSON.stringify(ids));
       }
       else if (at === undefined && what === "rules") { const ids = rulesIds(sheet, value); if (ids) room.look.set(`rules:${tab}`, ids); }
+      else if (at === undefined && what === "charts") { const ids = chartIds(sheet, value); if (ids) room.look.set(`charts:${tab}`, ids); }
       else if (at === undefined && RANGED.includes(what)) { const ids = rangedIds(sheet, value); if (ids) room.look.set(`${what}:${tab}`, ids); }
       else if (at === undefined) room.look.set(`${what}:${tab}`, value);
       else if (row >= 0 && row < rows) room.look.set(`${what}:${sheet.rowAt(row)}`, value);

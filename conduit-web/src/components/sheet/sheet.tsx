@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, createSignal, on, onCleanup, Show, untrack, type JSX } from "solid-js";
+import { createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { Empty, Frost, Icons, Notice } from "@/components/ui";
 import { sheetMergeIcons as MergeIcons, sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
 import { createDecisionScope } from "@/components/ui/decision-dialog";
@@ -24,6 +24,8 @@ import { createSheetTools } from "./tools";
 import { createSheetFind } from "./find";
 import { createSheetHistory } from "./history";
 import { FormatMenu } from "./format-menu";
+
+const SheetCharts = lazy(() => import("./charts"));
 
 // Cells written into the text a comment quotes, and how much of each: enough to read.
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
@@ -416,6 +418,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     </div>
     <div ref={body} class="ui-spreadsheet-body">
       <Show when={!failed()} fallback={<Empty role="alert">The sheet could not be drawn: {failed()}</Empty>}>
+        {/* Before the grid, so Tab reaches a chart before the grid keeps it. */}
+        <Show when={model()}>{(sheet) => <SheetCharts look={look} model={sheet()} grid={grid} scrolled={scrolled} zoom={zoom} hidden={sizes.hidden} hiddenCols={sizes.hiddenCols} act={history.act} undo={() => history.undo()} redo={() => history.redo()}
+          text={(row, col) => { const value = sheet().value(row, col); return value === null ? "" : typeof value === "number" ? formats.draw(row, col, value)?.text ?? String(value) : String(value); }} />}</Show>
         <ContextMenu placement="bottom-start">
           <ContextMenuTrigger as="div" ref={setIsland} class="ui-spreadsheet-grid" data-own-keys={OWN_KEYS} />
           <ContextMenuContent onCloseAutoFocus={(event) => { const open = opening; opening = undefined; if (open) { event.preventDefault(); open(); } }}>
