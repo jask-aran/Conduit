@@ -165,7 +165,7 @@ export function createSheetBrush(options: { look: Y.Map<number | string>; model:
     lay: (from: SheetCells, to: SheetRange) => lay("Paste formatting", from, to),
     /** On the grid's element: a pointer let go there ends a choice of cells, which takes the painter's look. */
     attach: (into: HTMLElement) => {
-      const up = () => { const from = held(); if (from) requestAnimationFrame(() => { const to = options.at(); hold(null); if (to) lay("Format painter", from, to); }); };
+      const up = (event: PointerEvent) => { const from = held(); if (from && event.button === 0) requestAnimationFrame(() => { const to = options.at(); hold(null); if (to) lay("Format painter", from, to); }); };
       into.addEventListener("pointerup", up);
       return () => into.removeEventListener("pointerup", up);
     },

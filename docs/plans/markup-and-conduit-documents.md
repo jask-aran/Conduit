@@ -16,7 +16,7 @@ file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background
 - Local `main` holds milestones 1 to 3 and steps (a) and (b). `origin/main` is behind it: someone other than the
   building session pushed at 14:57 on 2026-11-12, up to `d8dcf4f9d` (margin threads). Pushing is still the user's call.
 - conduit-local on :4310 runs local `main`. Try it: open the Test project in the sidebar and press "Test document";
-  the header's Paper | Thread switch; the header's "Connect a chat" menu, or a chat's menu › Connect to artifact….
+  the header's thread button; the header's "Connect a chat" menu, or a chat's menu › Connect to artifact….
 - `markup-sites.mjs` (the site's probe: 13 lines, among them that what the frame asks the hub carries no sign-in)
   passes on the build with sites, with the five below. The Test project has `Test site.site.html` beside the test
   document. A real model changed that file for a comment, twice, by accident: a script that took screenshots pressed
@@ -34,7 +34,7 @@ file, then `AGENTS.md` and `DESIGN.md`. Run it at effort `high`, as a background
   the CLI in about 20 seconds. Asked to use `conduit_artifact`, the same thread said it has no such tool (see step (c)).
   A Claude Code chat connected to the paper used `conduit_artifact` to add a paragraph for the comment and to reply.
   The paper and the project were put back afterwards (the change taken back, the comments resolved, that chat
-  deleted); the mated thread's Thread view still holds its two turns. A margin with other open comments moves a
+  deleted); the mated thread still holds its two turns. A margin with other open comments moves a
   card away from its text, which fails one check of `markup-document.mjs`: run the probes on a paper with none.
   Screenshots were looked at headless only.
 - No Markup listener is running. The user said (2026-11-12) it need not be kept live all the time; start
@@ -104,11 +104,13 @@ wrapped, so the probe does not see its id).
 - Routes: `POST /v0/document/<id>/thread` (the thread's chat, made if need be), `GET /v0/document/<id>/connections`,
   `PUT|DELETE /v0/document/<id>/connections/<chat>`, `GET /v0/chats/<chat>/connections`. A change tells clients
   `artifacts_changed`.
-- **One tab, two views** (`client/main.tsx`): `matedThreads` (chat id → paper id, kept in a setting on the device)
-  makes `tabKey` give a thread's view its paper's tab key, so `chat:<mated>` and `artifact:<id>` are one tab named
-  for the paper. `showThread` asks the hub for the thread, puts it in `hiddenChats` and sets the pane's view;
-  `paperModes` is the `Segmented` passed as `modes` to the paper's `PaneHeader` and to `ChatHeader` (`PaneHeader`
-  of kind `pane` now draws `modes`). A thread's address, or a stored pane showing one, opens its paper.
+- **The thread beside** (`client/main.tsx`): a chat
+  is known as a mated thread by `backend.mated` on its summary in `hiddenChats` (`matedPaper`). The artifact
+  header's thread button (`ArtifactPane`'s `thread`, pressed through `pressThread`) opens the thread (or the chat
+  the comments lead to) beside, goes to it when it is open elsewhere, and closes it when it is the next pane; it is lit while
+  it shows and wears `RuntimeIndicator`'s running cue. The thread's tab is grouped under its artifact, and that
+  label opens the artifact beside. A thread's address opens the thread alone. On a phone `paperModes`, the
+  `Segmented` Artifact | Thread, switches the one pane between them.
 - **The rider** is an `AgentRow` in `RunningAgents` (`client/chat/agents.tsx`) under Background: "Connected to
   <paper>", pressed to open the paper beside (window event `conduit:open-artifact`), its stop control named
   Disconnect. `AgentRow` took `icon` and `stop`. `client/document/connections.ts` is what the client knows of
@@ -167,7 +169,7 @@ file and the rest below; the user has judged none of it yet.
 - **Markup on a site**: the drawing tools and the note, pictures as interface feedback takes them, sent comments in
   the tool's own corner stack. `MarkupCapabilities.grounded` (the layer's `data-grounded`) gives the bar and the
   cards the frost's dark ground, since frost alone over a light site is white on white. Not offered: selecting text, the quote, "Ask the agent", a margin, Revert (the file's
-  history is git's). The mated thread, the Site | Thread switch, connections and the rider are the paper's.
+  history is git's). The mated thread, the thread button, connections and the rider are the paper's.
 - **For agents**: `conduit_artifact`'s `list` and `new` take sites (`kind: "site"`), and `comments`, `reply` and
   `resolve` work by a site's id; `conduit-markup document new <name> --project <id> --kind site`.
 - An unanchored review of the diff found, before it was committed: a paper that cannot be read threw where it
@@ -287,8 +289,8 @@ The code keeps `document` inside the editor and the hub's service; the pane kind
   artifact creator (`artifact:new`, `artifact:new:<project>` with the project chosen), which offers the kinds, the
   project and a name; paper is the first. Open follows the one rule (plain replaces, Ctrl keeps a tab, Alt opens beside). Rename,
   move and delete are the file's. An agent makes one with `conduit-markup document new "<name>" --project <id>`.
-- **Two views, one tab.** The pane header's segmented switch, Paper | Thread: Thread is the mated thread as an
-  ordinary chat view. The mated thread is not in the project's list of chats. The hub starts it on the first comment
+- **The thread beside.** The pane header's thread button opens the mated thread, an ordinary chat, in a pane beside
+  the paper (a phone, with no room, switches Artifact | Thread instead). The mated thread is not in the project's list of chats. The hub starts it on the first comment
   to `@conduit`, on the project's default profile.
 - **A connection is a rider.** Any other chat acts on a paper only because the person connected it ("Connect a
   chat…" on the paper, "Connect to artifact…" in the chat). The chat then shows a rider below the composer, under
@@ -311,7 +313,7 @@ project on another device, the `.paper` file is on the device and its threads an
 project's chats are; the hub may write `Test paper.paper` and a part file into
 `C:\Users\jaska\Downloads\conduitcomposer` on the Windows device to try this, deleted afterwards.
 
-The order, agreed: (a) done: papers in panes; (b) done: the mated thread as the second view, started by the hub, and
+The order, agreed: (a) done: papers in panes; (b) done: the mated thread, started by the hub, and
 connections with their rider; (c) the MCP tools and addressing by `@name`; (d) projects on another node; (e) other
 kinds of artifact.
 
@@ -517,7 +519,7 @@ document stays possible: a comment may be a mark, not only words.
   its item is resolved (so Reopen is only reachable until then); a drawing made on a document is not kept on the page
   once sent, only the blocks under it; a phone has the cards under the text, not beside a block; while annotating, the
   layer has every press, so a card is pressed only while the app is in use.
-- How the artifact creator, the Paper | Thread switch on a phone and the connection's rider feel: build, then the user judges.
+- How the artifact creator, the thread beside (the Artifact | Thread switch on a phone) and the connection's rider feel: build, then the user judges.
 - Rough edges of step (a), none yet judged by the user: in a narrow pane Markup's bar wraps to two rows (the compact
   bar is chosen by touch, not width); while one paper is being annotated its layer takes presses over the whole
   window, other panes included, and comments not yet sent stack at the window's right edge; a person with a paper

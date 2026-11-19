@@ -18,6 +18,7 @@ export function chartsA1(view: Ids, text: unknown): SheetChartA1[];
 export function chartIds(view: Pick<SheetView, "size" | "rowAt" | "colAt">, list: unknown): string | undefined;
 export function chartFrom(view: SheetView, spec: SheetChartSpec, was: SheetChart | undefined, id: string): SheetChart;
 export function keptCharts(view: SheetView, text: unknown, isRows: boolean, at: number, count: number): string | null | undefined;
-export type SheetChartData = { labels: string[]; x: (number | null)[]; series: { name: string; values: (number | null)[] }[] };
-export function chartData(area: Range, labels: "col" | "row", read: (row: number, col: number) => { value: unknown; text: string }, hidden?: { rows: ReadonlySet<number>; cols: ReadonlySet<number> }): SheetChartData;
+/** `every`: one line in how many along the labels was read (1: all of them). */
+export type SheetChartData = { every: number; labels: string[]; x: (number | null)[]; series: { name: string; values: (number | null)[] }[] };
+export function chartData(area: Range, labels: "col" | "row", read: (row: number, col: number) => { value: unknown; text: string }, hidden?: { rows: ReadonlySet<number>; cols: ReadonlySet<number> }, most?: number): SheetChartData;
 export function chartSize(chart: Partial<Size>): Size;

@@ -34,8 +34,8 @@ A new tab there is served the previous client by the service worker (`sw.js`) af
 ## Open items
 
 1. Landed (`57274bdd4`, `e0fd7908a`): docking shows the docked pane at once, docking over a held pane gates
-   unsaved edits, Ctrl from a document pane joins the nearest session pane (store `openRules`), focus kept on the
-   paper/thread switch, old-model leftovers removed. Not run: Ctrl-opening jbot, jbot in a side pane.
+   unsaved edits, Ctrl from a document pane joins the nearest session pane (store `openRules`), old-model
+   leftovers removed. Not run: Ctrl-opening jbot, jbot in a side pane.
 2. Landed (`896bb060f`): closing the shown tab goes to the one shown before it (`Pane.recent`); a tab past five is
    refused with the old notice when every tab holds a draft. Not clicked through in the browser.
 3. Added `test/pane-store.test.js`: Ctrl/Alt, document uniqueness, draft retention, recent-tab close/eviction,
