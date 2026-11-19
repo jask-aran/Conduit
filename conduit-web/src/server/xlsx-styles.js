@@ -218,6 +218,9 @@ export function writeStyles(styles, sheets) {
 
 const CELL_IS = { lessThan: "<", greaterThan: ">", lessThanOrEqual: "<=", greaterThanOrEqual: ">=", equal: "=", notEqual: "<>", between: "between", notBetween: "notBetween" };
 const OPERATOR = Object.fromEntries(Object.entries(CELL_IS).map(([word, op]) => [op, word]));
+// A text rule's kind in a file, its operator there, and the formula a workbook keeps beside it (`{t}` the text, `{c}` the range's first cell).
+const TEXT_RULES = { contains: ["containsText", "containsText", "NOT(ISERROR(SEARCH({t},{c})))"], notContains: ["notContainsText", "notContains", "ISERROR(SEARCH({t},{c}))"], begins: ["beginsWith", "beginsWith", "LEFT({c},LEN({t}))={t}"], ends: ["endsWith", "endsWith", "RIGHT({c},LEN({t}))={t}"] };
+const TEXT_KINDS = Object.fromEntries(Object.entries(TEXT_RULES).map(([op, [type]]) => [type, op]));
 const escaped = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 // What follows conditional formats in a sheet's part, in the schema's order: they go before the first of these there is.
 const AFTER_RULES = /<(?:dataValidations|hyperlinks|printOptions|pageMargins|pageSetup|headerFooter|rowBreaks|colBreaks|customProperties|cellWatches|ignoredErrors|smartTags|drawing|legacyDrawing|legacyDrawingHF|picture|oleObjects|controls|webPublishItems|tableParts|extLst)\b|<\/worksheet>/;
@@ -245,7 +248,8 @@ export function sheetRules(sheetXml, dxfs) {
     const ranges = attr(block, "sqref") ?? "";
     for (const rule of all(block, "cfRule")) {
       const type = attr(rule, "type"), formulas = all(rule, "formula").map((tag) => unescaped(within(tag, "formula")).replace(/_xlfn\.|_xlws\./g, "")), style = dxfs[Number(attr(rule, "dxfId"))];
-      const op = CELL_IS[attr(rule, "operator") ?? ""];
+      const op = CELL_IS[attr(rule, "operator") ?? ""], text = attr(rule, "text");
+      if (TEXT_KINDS[type] && style !== undefined && text !== undefined) { found.push({ priority: Number(attr(rule, "priority")) || Infinity, rule: { ranges, kind: "text", op: TEXT_KINDS[type], a: text, style: String(style), ...(["1", "true"].includes(attr(rule, "stopIfTrue")) ? { stop: true } : {}) } }); continue; }
       if (style === undefined || !formulas.length || (type === "cellIs" ? !op || (op.endsWith("etween") && formulas.length < 2) : type !== "expression")) { unread[type] = (unread[type] ?? 0) + 1; continue; }
       if (style.lossy) unread["number format or border of a rule"] = (unread["number format or border of a rule"] ?? 0) + 1;
       // Excel stops at a rule that holds and says so, the rules below it unread for that cell.
@@ -269,6 +273,11 @@ export function writeRules(tabsRules, formula) {
   };
   let priority = 0;
   const sheets = tabsRules.map((rules) => (Array.isArray(rules) ? rules : []).map((rule) => {
+    const stop = rule.stop ? ' stopIfTrue="1"' : "";
+    if (rule.kind === "text") {
+      const [type, operator, kept] = TEXT_RULES[rule.op] ?? TEXT_RULES.contains, quoted = `"${String(rule.a).replace(/"/g, '""')}"`, corner = String(rule.ranges).split(/[\s:]/)[0].replace(/\$/g, "");
+      return `<conditionalFormatting sqref="${escaped(rule.ranges)}"><cfRule type="${type}" dxfId="${dxfOf(rule.style ?? "")}" priority="${++priority}"${stop} operator="${operator}" text="${escaped(String(rule.a))}"><formula>${escaped(kept.replaceAll("{t}", quoted).replaceAll("{c}", corner))}</formula></cfRule></conditionalFormatting>`;
+    }
     const formulas = [rule.a, ...(rule.kind === "value" && rule.op?.endsWith("etween") ? [rule.b ?? ""] : [])].map((text) => `<formula>${escaped(formula(text))}</formula>`).join("");
     const kind = rule.kind === "formula" ? 'type="expression"' : `type="cellIs" operator="${OPERATOR[rule.op]}"`;
     return `<conditionalFormatting sqref="${escaped(rule.ranges)}"><cfRule ${kind} dxfId="${dxfOf(rule.style ?? "")}" priority="${++priority}"${rule.stop ? ' stopIfTrue="1"' : ""}>${formulas}</cfRule></conditionalFormatting>`;
