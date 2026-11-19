@@ -58,7 +58,7 @@ and site really right to start with". No new kind of artifact is next. Built tha
   offered on the new tab screen as "New artifact" and opened by every other way to make one.
 - Markup's bar is a **ribbon** on an artifact (the capability `bar: "ribbon"`; `"foot"` is the interface's): at the head
   of the pane, always there, no close. On a paper it holds the paper's tools first (block kinds as one menu, the text
-  marks, "Ask the agent"), then Markup's. What is sent from a ribbon is always handed to a thread: the choice to hand
+  marks), then Markup's. What is sent from a ribbon is always handed to a thread: the choice to hand
   to no one is the foot bar's alone, since an artifact always has its thread. A probe that sends a comment from a
   paper therefore makes the hub say no one listens (`markup-document.mjs` does), or it starts a real model.
 - The paper's editor: a slash menu of block kinds; tools over selected text (marks, link, comment) and over a table
@@ -72,19 +72,15 @@ and site really right to start with". No new kind of artifact is next. Built tha
   a site has none) and **Markup's set**. What each kind offers of either is one typed table,
   `client/document/artifact-capabilities.ts` (`ARTIFACT_CAPABILITIES`); the editor's side of it is `DocumentHost.tools`
   (`DocumentToolName`). The ribbon has no "Use the app" (the app is in use while no Markup tool is held; a held tool
-  pressed again is let go) and no "Ask the agent" (`@`, the tools over a selection and a block's menu start that
-  comment). On a paper a comment written and not yet sent stands in the margin beside its text, never in the corner
+  pressed again is let go). It ends with Ask the agent, which opens the ask box (`MarkupAsk`) under the tools. On a paper a comment written and not yet sent stands in the margin beside its text, never in the corner
   stack; a site's stay in the corner, as the interface's do.
 
 Asked for and not built: a **suggesting mode** beside editing, where what the person types is a suggestion (a comment)
 and not an edit. Not designed yet.
 
-Known and left: a pane narrower than the ribbon wraps it over the text; the block handle is mouse only and is clipped
-in a narrow pane; Yjs has no move, so a block moved while someone else types in it may lose those keystrokes (read
-from the code, not seen); the "+" leaves a typed "/" if its menu is dismissed; "Add a property" shows on hover or
-focus, against DESIGN.md's "nothing hides behind hover"; Alt+Shift+Arrow is the editor's own key, not a command in
-the registry; `markup-document.mjs`'s "in order" check fails on a paper that holds a table (the table's block is
-wrapped, so the probe does not see its id).
+Known and left: a pane narrower than the ribbon wraps it over the text; the block handle's grip is not drawn where the
+pane leaves it no room (Ctrl+/ still opens its menu); Yjs has no move, so a block moved while someone else types in it
+may lose those keystrokes (read from the code, not seen).
 
 ### Step (b) as built
 
@@ -194,8 +190,8 @@ file and the rest below; the user has judged none of it yet.
   way leaves the stack and is found under "Sent before"; it is not the thread the corner follows.
 - **`@` typed in a paper** (`components/document/editor.tsx`): the plugin `mentioning` starts a mention only on this
   person's typing at a word's start, in a block that holds other text; a `Popover` at the `@` lists the listeners,
-  filtered as they type (Up, Down, Enter or Tab, Escape). Picking one deletes the typed `@…` and opens the comment
-  "Ask the agent" opens, for that listener: the tool hands the paper `MarkupHost.asks` (who listens, and `ask`), so
+  filtered as they type (Up, Down, Enter or Tab, Escape). Picking one deletes the typed `@…` and opens the ask box
+  for that listener: the tool hands the paper `MarkupHost.asks` (who listens, and `ask`), so
   `@` offers nothing while Markup is closed. The menu is drawn beside `DocumentSheet`, never in it: the sheet's
   column is the editor's to fill, and a child of it that comes and goes clears the paper's text.
 
@@ -514,8 +510,8 @@ document stays possible: a comment may be a mark, not only words.
 ## Not settled
 
 - How the editor feels: the block tools in the rail, Markdown typing rules, the margin. The user has not yet said.
-  Not built: other people's carets, a placeholder, the library's own checkbox in a checklist, table controls, and
-  keeping what is typed while the hub is away if the page is closed before it answers.
+  Not built: other people's carets, the library's own checkbox in a checklist, a table's header row turned off (a
+  Markdown table always has one), and keeping what is typed while the hub is away if the page is closed before it answers.
 - The margin's rules, to be judged by use: a comment the person has resolved leaves the margin once every comment of
   its item is resolved (so Reopen is only reachable until then); a drawing made on a document is not kept on the page
   once sent, only the blocks under it; a phone has the cards under the text, not beside a block; while annotating, the

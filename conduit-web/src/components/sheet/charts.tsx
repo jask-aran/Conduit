@@ -5,7 +5,7 @@
  * Each of those is one step of the sheet's history.
  */
 import type * as Y from "yjs";
-import { createEffect, createMemo, createSignal, Index, onCleanup, Show, untrack, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, Index, on, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { CHART_LEAST, CHART_MOST, chartData, chartPlace, chartSize, readCharts, type SheetChart } from "@/sheet-charts.js";
 import { rangeA1, type SheetView } from "@/sheet-format.js";
 import { drawChart } from "./chart-draw";
@@ -30,7 +30,11 @@ export default function SheetCharts(props: { look: Y.Map<number | string>; model
   const [edited, setEdited] = createSignal<readonly { row: number; col: number }[] | null>(null, { equals: false });
   const looked = (event: { keysChanged: Set<string> }) => { if ([...event.keysChanged].some((name) => DRAWN.test(name))) setEdited(null); bump(); };
   props.look.observe(looked);
-  const off = sheet.onChange((change) => { setEdited(change.cells); bump(); });
+  // The grid's cell boxes follow a scroll, or a tab shown, once its React tree has drawn it, after the frame that tells of it: placed again a frame on.
+  const [settled, setSettled] = createSignal(0);
+  const later = () => requestAnimationFrame(() => requestAnimationFrame(() => setSettled((n) => n + 1)));
+  const off = sheet.onChange((change) => { setEdited(change.cells); bump(); if (change.structure) later(); });
+  createEffect(on(props.scrolled, later, { defer: true }));
   onCleanup(() => { props.look.unobserve(looked); off(); });
   const name = () => `charts:${sheet.id}`;
   const list = createMemo(() => { tick(); return sheet.id ? readCharts(props.look.get(name())) : []; });
@@ -41,12 +45,12 @@ export default function SheetCharts(props: { look: Y.Map<number | string>; model
     const all = readCharts(props.look.get(name())), next = change ? all.map((one) => one.id === id ? { ...one, ...change } : one) : all.filter((one) => one.id !== id);
     if (next.length) props.look.set(name(), JSON.stringify(next)); else props.look.delete(name());
   });
-  const area = createMemo(() => { props.scrolled(); tick(); return props.grid()?.area() ?? null; });
+  const area = createMemo(() => { props.scrolled(); settled(); tick(); return props.grid()?.area() ?? null; });
   // A press anywhere but on a chart lets it go.
   const away = (event: PointerEvent) => { if (!(event.target instanceof Element && event.target.closest(".ui-sheet-chart"))) setSelected(null); };
   addEventListener("pointerdown", away, true);
   onCleanup(() => removeEventListener("pointerdown", away, true));
-  const focusChart = (id: string) => layer()?.querySelector<HTMLElement>(`[data-chart="${CSS.escape(id)}"]`)?.focus();
+  const focusChart = (id: string) => layer()?.querySelector<HTMLElement>(`[data-chart="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
   createEffect(() => { const id = selected(); if (id && !list().some((one) => one.id === id)) setSelected(null); });
 
   // The layer covers the cells and clips what runs past them: placed in the frame it stands in.
@@ -69,7 +73,7 @@ export default function SheetCharts(props: { look: Y.Map<number | string>; model
       });
       const [drag, setDrag] = createSignal<{ x: number; y: number; width: number; height: number } | null>(null);
       const box = createMemo(() => {
-        props.scrolled();
+        props.scrolled(); settled();
         const at = place(), frame = area(), cell = at && frame && props.grid()?.origin(at.at.row, at.at.col), size = chartSize(chart()), zoom = props.zoom(), moved = drag();
         if (!cell || !frame) return null;
         return { x: cell.left - frame.left + (moved?.x ?? 0), y: cell.top - frame.top + (moved?.y ?? 0), width: size.width * zoom + (moved?.width ?? 0), height: size.height * zoom + (moved?.height ?? 0), cell };
@@ -105,7 +109,11 @@ export default function SheetCharts(props: { look: Y.Map<number | string>; model
         if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setSelected(null); return props.grid()?.focus(); }
         if (event.key === "Tab") {
           const all = list(), next = all[(all.findIndex((one) => one.id === chart().id) + (event.shiftKey ? all.length - 1 : 1)) % all.length];
-          if (next && next.id !== chart().id) { event.preventDefault(); setSelected(next.id); focusChart(next.id); }
+          if (!next || next.id === chart().id) return;
+          event.preventDefault(); setSelected(next.id); focusChart(next.id);
+          // Out of view, the grid is scrolled to its corner's cell (the clipped layer never scrolls).
+          const at = chartPlace(sheet, next)?.at, frame = area(), cell = at && props.grid()?.origin(at.row, at.col);
+          if (at && frame && (!cell || cell.left < frame.left || cell.top < frame.top || cell.left >= frame.left + frame.width || cell.top >= frame.top + frame.height)) props.grid()?.scroll(at);
           return;
         }
         const step = ({ ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] } as Record<string, [number, number]>)[event.key];

@@ -103,6 +103,20 @@ Then the cell menu round (checked in headless Chrome on :4310 before the fixes; 
 - Ctrl+Alt+M asks the one comments go to (the paper's comment key does the same); Comment has no chord. Comment and Ask the agent exist while
   Markup's tool is mounted, which is whenever the pane is not `quiet`; Ask needs a listener too.
 
+Then the ribbon, charts and ask box, walked in headless Chrome on :4310 (2026-11-20); the fixes on branch `sheet-check-2` were not seen there. What a later builder must know:
+- The ribbon's tools are `tools.tsx` in `SHEET_TOOLS`' order, each showing the first selected cell's state. The any-colour swatch puts on the last
+  colour picked (Markup's own ink rule) as it opens the picker; drags in the picker join one step (`history.act`'s `join`: the step on top of the
+  history is reused while the same thing changes).
+- The grid keeps Ctrl+B from the application's sidebar chord through `OWN_KEYS` (`data-own-keys`), as it does Ctrl+- and Ctrl+0.
+- Glide's column resize ends a still press at its least width (its last width starts at -1): `grid.ts` sizes a column only once its edge has moved.
+- Charts (`charts.tsx`, `chart-draw.ts`, `sheet-charts.js`): Glide's `getBounds` lags the region it reports until React commits, so the layer places
+  charts again two frames after a scroll or a tab shown. The layer is `overflow: clip`, as a focused chart would scroll a `hidden` one. A range whose
+  corners crossed is read as the box they span (`spanned`).
+- Ctrl+V of plain text parses it with `fromCsv` (`grid.ts` `pasted`). A chart redraws only when changed cells meet its range, and draws at most 200
+  lines along its labels (`charts.tsx` `POINTS`).
+- Make chart, the ribbon's Chart menu and Ask the agent (Ctrl+Alt+M) go through Markup's ask box under the tools, which also shows "Making the chart…".
+  None was sent in the walk, as a listener was held.
+
 ## Open, in rough order
 
 1. **Notes and comments from xlsx:** 16 in the budget workbook, counted but not imported. They would become comments.
@@ -119,7 +133,11 @@ Then the cell menu round (checked in headless Chrome on :4310 before the fixes; 
      keys or groups. The owner asked for the field.
    - FILTER reserves the whole source range's size to spill into (HyperFormula sizes an array before computing it), so its "if empty" value shows
      #SPILL! where cells under it are filled.
-   - Shift+click on a row number or column letter does not extend whole-row or whole-column picks; sweeping along them does.
+   - Shift+click on a row number or column letter extends a row or column pick, but from a cell it starts a new pick (Excel extends from the active cell).
+   - A wrapped cell's row is fitted when Wrap is set, not when text is typed into it: nothing refits after a write. Excel refits only rows whose height
+     was not set by hand, which the look does not tell apart (`height:` is written by a fit and by a drag alike).
+   - More decimals on a General cell of text gives `0.0` to the range, not the number cells' own decimals plus one.
+   - Ctrl+Z does nothing while a ribbon button has the focus (after Escape from one of its menus): the undo keys are the grid's alone.
    - Undoing an insert or delete of rows can leave other formulas re-cased (`=sum(a1)` back as `=SUM(A1)`).
 3. **Left by the reviews:**
    - xlsx export: where a styled row past the tab's cells crosses a styled column, only the row's style is written (`xlsx-styles.js`).
@@ -139,7 +157,9 @@ Then the cell menu round (checked in headless Chrome on :4310 before the fixes; 
      wheel; what each canvas paints per frame needs a Windows trace;
    - Windows performance traces;
    - Ctrl+Shift+0 on Windows, which may take it to switch the input language.
-5. **Charts:** parked by the owner.
+5. **Charts, waiting on the owner:** a selected chart's edge brightens (close to DESIGN's no-outline rule); the series inks were not run through a
+   palette check; charts draw over frozen rows; a moved chart snaps to the cell under its corner. A bar chart's last value label can be clipped at the
+   right edge. The ask box under the tools at 1,100 px is as wide as the folded ribbon, wraps its text and covers the margin's top card.
 
 ## How the work has gone well
 
@@ -163,3 +183,15 @@ Then the cell menu round (checked in headless Chrome on :4310 before the fixes; 
   - read the formula bar through `.ui-spreadsheet-formula` as well as its input.
 - **Verifying exports.** Check exported xlsx with openpyxl: `/home/jask/jaskNEM/.venv/bin/python -I`.
 - **The owner's workbook** is private. Read it locally only, and never copy it into the repo.
+
+## Data tools, round 2 (branch `sheet-data2`, not seen in a browser)
+
+- A filter's condition is `when: { <colId>: { is, a?, b? } }` beside `keep` in `filter:<tabId>` (by letter in sheet.json); `filterHides` tests both, so
+  the hub's `refilter` keeps it. A column has one or the other. The filter applied as it opens is written under an untracked origin (no Undo step).
+- `shift-cells` (hub, `sheets.js` `shiftCells`) works formulas out in a scratch engine: a deleted block is moved past the tab's edge and its lines
+  removed there, so its readers read #REF!. A range only partly moved (`SUM(A1:A5)` with A2 deleted) is left as it was; Excel's shrinks or grows.
+- `dedupe` reuses `reorder` (kept rows first, repeats after) and empties the tail; external references to moved cells are not rewritten, as a sort's.
+- `duplicate-tab` and tab moves are hub tab ops, not on the page's Undo, as add and delete aren't. `tabColor:<tabId>` (an ink or #rrggbb) is in the
+  look, so it is undone, saved and read in `as=book` as `look.tabColor`; xlsx does not carry it yet.
+- Grouping was not built: Glide has no outline gutter; a collapse control needs a strip left of the row numbers and above the letters (a wider marker
+  column drawn and hit-tested by hand, a taller head with its own `drawHeader` band), hidden rows reused for collapsed groups, and a look key for levels.

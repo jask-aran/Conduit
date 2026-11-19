@@ -30,6 +30,7 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
   const um = new Y.UndoManager(scope, { captureTimeout: 0, trackedOrigins: new Set<unknown>([null, SheetStep]) });
   const steps = new Map<number, SheetStep>(), listeners = new Set<() => void>(), owed: (() => void)[] = [];
   // `made`: steps that changed something or sent an op (each once), and changes made outside any. A step begun for a key that did nothing is not one.
+  let joined: { step: SheetStep; join: string } | null = null;
   let open: SheetStep | null = null, lone: SheetStep | null = null, next = 1, made = 0, out = 0, owedFrames = 0, late: ReturnType<typeof setTimeout> | undefined;
   const settle = () => {
     clearTimeout(late);
@@ -67,9 +68,11 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
   };
   const labels = (stack: typeof um.undoStack) => stack.slice(-LISTED).reverse().map((item) => String(item.meta.get(LABEL) ?? "Edit"));
   return {
-    act<T>(label: string, run: () => T): T {
+    // `join`: a change of the same thing as the step on top of the history (a colour dragged in its picker) is made part of it.
+    act<T>(label: string, run: () => T, join?: string): T {
       if (open) return run();
-      open = begin(label);
+      open = join && joined?.join === join && um.undoStack.at(-1)?.meta.get(STEP) === joined.step.id ? joined.step : begin(label);
+      joined = join ? { step: open, join } : null;
       try { return doc.transact(run, open); } finally { open = null; }
     },
     hub(op: SheetCellsOp) {

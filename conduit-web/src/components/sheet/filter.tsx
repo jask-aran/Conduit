@@ -3,17 +3,31 @@
  * are hidden as hidden rows are (sizes.ts); a table's header is bold and its rows banded (grid.ts). Sorting, filtering and making a table act as a
  * spreadsheet's do: on the selection, or with one cell selected on the filter or table it is in, else on the block of filled cells around it.
  */
-import { createMemo, createSignal, For, onCleanup, type Accessor } from "solid-js";
+import { createMemo, createSignal, For, onCleanup, Show, type Accessor } from "solid-js";
 import type * as Y from "yjs";
-import { Item, Section } from "@/components/ui";
+import { Actions, Icons, Item, SearchSection, Section } from "@/components/ui";
+import { CardForm } from "@/components/ui/card";
+import { Button, Field, Input } from "@/components/ui/controls";
+import { Dialog } from "@/components/ui/dialog";
 import { sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
-import { Popover, PopoverContent } from "@/components/ui/menus";
-import { colName, filterHides, key as cellKey, rangeA1, rangedArea, valueText, type SheetRangedLook, type SheetView } from "@/sheet-format.js";
+import { Popover, PopoverContent, Select } from "@/components/ui/menus";
+import { colName, filterHides, key as cellKey, rangeA1, rangedArea, valueText, type SheetFilterTest, type SheetFilterWhen, type SheetRangedLook, type SheetView } from "@/sheet-format.js";
 import type { SheetBox, SheetCellsOp, SheetRange } from "./host";
 import { PLAIN, type SheetCellStyle } from "./styles";
 
 // A column's values its filter lists, at most: Select all still reaches the rest.
 const LISTED = 500;
+// The filter applied again as it is opened, or as others' edits change what it hides, is no step of anyone's (history.ts tracks null and its steps).
+const UNTRACKED = Symbol("refilter");
+// A condition's test, as a spreadsheet's menu names it, and how many values it takes.
+const TESTS: { is: SheetFilterTest; label: string; takes: 0 | 1 | 2; kind?: "number" | "date" }[] = [
+  { is: "contains", label: "Text contains", takes: 1 }, { is: "not-contains", label: "Text does not contain", takes: 1 }, { is: "starts", label: "Text starts with", takes: 1 },
+  { is: "ends", label: "Text ends with", takes: 1 }, { is: "equals", label: "Text is exactly", takes: 1 },
+  { is: "greater", label: "Greater than", takes: 1, kind: "number" }, { is: "less", label: "Less than", takes: 1, kind: "number" }, { is: "between", label: "Between", takes: 2, kind: "number" },
+  { is: "before", label: "Date is before", takes: 1, kind: "date" }, { is: "after", label: "Date is after", takes: 1, kind: "date" }, { is: "dates", label: "Date is between", takes: 2, kind: "date" },
+  { is: "empty", label: "Is empty", takes: 0 }, { is: "filled", label: "Is not empty", takes: 0 },
+];
+const fits = (kind: "number" | "date" | undefined, text: string) => kind === "number" ? text.trim() !== "" && Number.isFinite(Number(text)) : kind === "date" ? /^\d{4}-\d{2}-\d{2}$/.test(text.trim()) : text !== "";
 type Ranged = { range: SheetRange; look: SheetRangedLook };
 type What = "filter" | "table";
 /** What key sequences and the menu do (sequences.tsx). `col`: the column sorted by; unsaid, the active cell's. */
@@ -103,6 +117,16 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
     if (on) for (let row = on.range.top + 1; row <= on.range.bottom; row++) seen.add(text(row, col));
     return [...seen].sort(byValue);
   };
+  /** A column's own test, keeping its values or its condition (`when`), replaced (null: none), the filter applied with it. */
+  const test = (col: number, values: ReadonlySet<string> | null, when: SheetFilterWhen | null) => {
+    const on = read("filter"), id = model()?.colAt(col);
+    if (!on || !id) return;
+    const keep = { ...on.look.keep }, whens = { ...on.look.when };
+    delete keep[id]; delete whens[id];
+    if (values) keep[id] = [...values];
+    if (when) whens[id] = when;
+    apply(on.range, { ...on.look, keep: Object.keys(keep).length ? keep : undefined, when: Object.keys(whens).length ? whens : undefined });
+  };
   /** The values the filter keeps for a column; null for all. */
   const kept = (col: number): ReadonlySet<string> | null => { changed(); const id = model()?.colAt(col), list = id ? read("filter")?.look.keep?.[id] : undefined; return list ? new Set(list) : null; };
   /** The filter written with the rows its kept values leave out now (`hide`), where that changes it. */
@@ -111,7 +135,7 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
     if (!sheet) return;
     const hide = filterHides(sheet, next), was = read("filter");
     const same = (one: SheetRange, two: SheetRange) => one.top === two.top && one.left === two.left && one.bottom === two.bottom && one.right === two.right;
-    if (was && same(was.range, range) && JSON.stringify(was.look.keep ?? {}) === JSON.stringify(next.keep ?? {}) && JSON.stringify(was.look.hide ?? []) === JSON.stringify(hide)) return;
+    if (was && same(was.range, range) && ["keep", "when"].every((what) => JSON.stringify(was.look[what as "keep"] ?? {}) === JSON.stringify(next[what as "keep"] ?? {})) && JSON.stringify(was.look.hide ?? []) === JSON.stringify(hide)) return;
     write("filter", range, { ...next, hide: hide.length ? hide : undefined });
   };
   const bolded = new Map<SheetCellStyle | undefined, SheetCellStyle>();
@@ -134,20 +158,31 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
   };
   return {
     keys, values, kept,
+    /** What a sort or filter would act on now (the selection, or the block round a lone cell), and whether its first row is a header. */
+    region: target,
+    /** The block of filled cells joined to a cell. */
+    around: (row: number, col: number) => { const sheet = model(); return sheet ? block(sheet, row, col) : null; },
     filter: () => { changed(); return read("filter"); },
     table: () => { changed(); return read("table"); },
     /** Sorts the filter's rows under its header by a column. */
     sortColumn: (col: number, descending: boolean) => { const on = read("filter"); if (on) sortRange({ range: on.range, header: true }, descending, col); },
-    /** The values a column keeps (null: every one), the filter applied with them. */
-    keep: (col: number, values: ReadonlySet<string> | null) => {
-      const on = read("filter"), id = model()?.colAt(col);
-      if (!on || !id) return;
-      const keep = { ...on.look.keep };
-      if (values) keep[id] = [...values]; else delete keep[id];
-      apply(on.range, { ...on.look, keep: Object.keys(keep).length ? keep : undefined });
+    /** The values a column keeps (null: every one), the filter applied with them; its condition goes. */
+    keep: (col: number, values: ReadonlySet<string> | null) => test(col, values, null),
+    /** A column's condition (null: none), in place of the values it kept. */
+    when: (col: number): SheetFilterWhen | null => { changed(); const id = model()?.colAt(col); return (id && read("filter")?.look.when?.[id]) || null; },
+    setWhen: (col: number, when: SheetFilterWhen | null) => test(col, null, when),
+    /** Whether a column keeps only some rows, by its values or its condition. */
+    narrows: (col: number) => { changed(); const id = model()?.colAt(col), look = read("filter")?.look; return Boolean(id && (look?.keep?.[id] || look?.when?.[id])); },
+    /** The rows under the filter's header and how many it shows, while any column narrows them. */
+    counted: () => {
+      changed();
+      const on = read("filter");
+      if (!on || !(Object.keys(on.look.keep ?? {}).length || Object.keys(on.look.when ?? {}).length)) return null;
+      const total = on.range.bottom - on.range.top;
+      return { total, shown: total - (on.look.hide?.length ?? 0) };
     },
-    /** The filter applied again to the values its rows hold now. */
-    reapply: () => { const on = read("filter"); if (on) apply(on.range, on.look); },
+    /** The filter applied again to the values its rows hold now, outside any step. */
+    reapply: () => { const on = read("filter"); if (on) look.doc!.transact(() => apply(on.range, on.look), UNTRACKED); },
     /** Rows the filter hides shown again, until it is applied again. */
     show: (rows: readonly number[]) => {
       const on = read("filter"), ids = new Set(rows.map((row) => model()?.rowAt(row)));
@@ -166,7 +201,7 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
       const on = read("filter");
       if (!on || row !== on.range.top || col < on.range.left || col > on.range.right) return 0;
       const id = model()?.colAt(col);
-      return id && on.look.keep?.[id] ? 2 : 1;
+      return id && (on.look.keep?.[id] || on.look.when?.[id]) ? 2 : 1;
     },
     /** A table's rows under its header, every other one from the first. */
     banded: (row: number, col: number) => { const on = read("table"); return Boolean(on && inside(on.range, row, col) && (row - on.range.top) % 2 === 1); },
@@ -189,27 +224,66 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
   };
 }
 
-/** A filter's column, opened from its header's mark: sorts by it, and picks the values its rows may show. */
+/** A filter's column, opened from its header's mark: sorts by it, picks the values its rows may show (searched), or asks for a condition. */
 export function FilterMenu(props: { filter: SheetFilter; at: { col: number; box: SheetBox } | null; frame: () => HTMLElement | undefined; onClose(): void }) {
-  const col = () => props.at?.col ?? 0, kept = createMemo(() => props.filter.kept(col())), every = createMemo(() => props.filter.values(col())), all = () => kept() === null;
-  const shows = (value: string) => kept()?.has(value) ?? true;
+  const col = () => props.at?.col ?? 0, kept = createMemo(() => props.filter.kept(col())), every = createMemo(() => props.filter.values(col())), all = () => kept() === null && !props.filter.when(col());
+  const [query, setQuery] = createSignal(""), [asking, setAsking] = createSignal<number | null>(null);
+  // Typed into its search, the list holds the values that hold it, and Select all picks those alone, as a spreadsheet's search does.
+  const found = createMemo(() => { const asked = query().trim().toLowerCase(); return asked ? every().filter((value) => (value === "" ? "(blanks)" : value.toLowerCase()).includes(asked)) : every(); });
+  const shows = (value: string) => !props.filter.when(col()) && (kept()?.has(value) ?? true);
   const toggle = (value: string) => {
-    const next = new Set(kept() ?? every());
+    const next = new Set(props.filter.when(col()) ? [] : kept() ?? every());
     if (!next.delete(value)) next.add(value);
     props.filter.keep(col(), next.size === every().length ? null : next);
   };
+  const pickFound = () => {
+    if (!query().trim()) return props.filter.keep(col(), all() ? new Set() : null);
+    const on = found().every(shows), next = new Set(props.filter.when(col()) ? [] : kept() ?? every());
+    for (const value of found()) if (on) next.delete(value); else next.add(value);
+    props.filter.keep(col(), next.size === every().length ? null : next);
+  };
   const sort = (descending: boolean) => { props.filter.sortColumn(col(), descending); props.onClose(); };
-  return <Popover open={props.at !== null} onOpenChange={(open) => { if (!open) props.onClose(); }} anchorRef={props.frame} placement="bottom-start"
-    anchorRect={() => { const box = props.at?.box; return box && new DOMRect(box.left, box.top, box.width, box.height); }}>
-    <PopoverContent aria-label={`Filter column ${colName(col())}`} width="sm">
-      <Section>
-        <Item icon={<SortIcons.ascending />} onClick={() => sort(false)}>Sort A–Z</Item>
-        <Item icon={<SortIcons.descending />} onClick={() => sort(true)}>Sort Z–A</Item>
-      </Section>
-      <Section title="Show" scroll>
-        <Item picked={all()} onClick={() => props.filter.keep(col(), all() ? new Set() : null)}>Select all</Item>
-        <For each={every().slice(0, LISTED)}>{(value) => <Item picked={shows(value)} onClick={() => toggle(value)}>{value === "" ? "(Blanks)" : value}</Item>}</For>
-      </Section>
-    </PopoverContent>
-  </Popover>;
+  const close = () => { setQuery(""); props.onClose(); };
+  return <>
+    <Popover open={props.at !== null} onOpenChange={(open) => { if (!open) close(); }} anchorRef={props.frame} placement="bottom-start"
+      anchorRect={() => { const box = props.at?.box; return box && new DOMRect(box.left, box.top, box.width, box.height); }}>
+      <PopoverContent aria-label={`Filter column ${colName(col())}`} width="sm">
+        <Section>
+          <Item icon={<SortIcons.ascending />} onClick={() => sort(false)}>Sort A–Z</Item>
+          <Item icon={<SortIcons.descending />} onClick={() => sort(true)}>Sort Z–A</Item>
+        </Section>
+        <Section>
+          <Item icon={<SortIcons.filter />} meta={TESTS.find((one) => one.is === props.filter.when(col())?.is)?.label} onClick={() => { const at = col(); close(); setAsking(at); }}>Filter by condition…</Item>
+          <Show when={props.filter.narrows(col())}><Item icon={<Icons.Erase />} onClick={() => { props.filter.keep(col(), null); close(); }}>Clear filter</Item></Show>
+        </Section>
+        <SearchSection placeholder="Search values" value={query()} onInput={setQuery} field={{ "aria-label": "Search values" }} />
+        <Section title="Show" scroll>
+          <Item picked={query().trim() ? found().length > 0 && found().every(shows) : all()} onClick={pickFound}>{query().trim() ? "Select all found" : "Select all"}</Item>
+          <For each={found().slice(0, LISTED)}>{(value) => <Item picked={shows(value)} onClick={() => toggle(value)}>{value === "" ? "(Blanks)" : value}</Item>}</For>
+        </Section>
+      </PopoverContent>
+    </Popover>
+    <FilterPrompt filter={props.filter} col={asking()} onClose={() => { setAsking(null); props.onClose(); }} />
+  </>;
+}
+
+/** A column's condition asked for: its test and the one or two values it compares with. */
+function FilterPrompt(props: { filter: SheetFilter; col: number | null; onClose(): void }) {
+  const [is, setIs] = createSignal<SheetFilterTest>("contains"), [a, setA] = createSignal(""), [b, setB] = createSignal("");
+  const test = () => TESTS.find((one) => one.is === is())!, ready = () => (test().takes < 1 || fits(test().kind, a())) && (test().takes < 2 || fits(test().kind, b()));
+  const set = (event: SubmitEvent) => {
+    event.preventDefault();
+    const col = props.col;
+    if (col !== null && ready()) props.filter.setWhen(col, { is: is(), ...(test().takes ? { a: a().trim() || a() } : {}), ...(test().takes > 1 ? { b: b().trim() } : {}) });
+    props.onClose();
+  };
+  const hint = () => test().kind === "date" ? "2026-01-30" : undefined;
+  return <Dialog open={props.col !== null} title={`Filter column ${colName(props.col ?? 0)}`} onOpenChange={(open) => { if (!open) props.onClose(); }}>
+    <Show when={props.col === null ? null : [props.col]}>{(asked) => { const was = props.filter.when(asked()[0]!); setIs(was?.is ?? "contains"); setA(was?.a ?? ""); setB(was?.b ?? ""); return <CardForm onSubmit={set}>
+      <Field label="Show rows where" plain><Select aria-label="Condition" value={is()} onChange={(event) => setIs(event.currentTarget.value as SheetFilterTest)}><For each={TESTS}>{(one) => <option value={one.is}>{one.label}</option>}</For></Select></Field>
+      <Show when={test().takes > 0}><Input aria-label={test().takes > 1 ? "From" : "Value"} placeholder={hint()} value={a()} onInput={(event) => setA(event.currentTarget.value)} ref={(field) => queueMicrotask(() => field.focus())} /></Show>
+      <Show when={test().takes > 1}><Input aria-label="To" placeholder={hint()} value={b()} onInput={(event) => setB(event.currentTarget.value)} /></Show>
+      <Actions><Button type="button" variant="ghost" outline onClick={() => props.onClose()}>Cancel</Button><Button type="submit" disabled={!ready()}>Filter</Button></Actions>
+    </CardForm>; }}</Show>
+  </Dialog>;
 }

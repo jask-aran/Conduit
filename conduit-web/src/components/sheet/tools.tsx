@@ -23,10 +23,10 @@ const MERGES = [["center", "Merge & Center"], ["across", "Merge across"], ["cell
 
 /**
  * `done`: after a tool has run (the grid takes focus back). `fit`: the rows of a range whose wrapping changed are fitted to their lines. `spread`: Fill down
- * or Fill right (sheet.tsx). `merge`: Merge, or unmerge (null), the selection, as its own named step. `act`: a tool's run is one step of the history, by its label. `chart`: a chart of the selection
+ * or Fill right (sheet.tsx). `merge`: Merge, or unmerge (null), the selection, as its own named step. `act`: a tool's run is one step of the history, by its label (a colour dragged in the picker one step, by `join`). `chart`: a chart of the selection
  * asked for (sheet.tsx), where one can be.
  */
-export function createSheetTools(options: { tip(name: SheetToolId): string | undefined; at: Accessor<SheetRange | null>; styles: SheetStyles; formats: SheetFormats; offered?: readonly SheetToolName[]; fit(range: SheetRange): void; spread(range: SheetRange, way: "down" | "right"): void; merge?(kind: SheetMergeKind | null): void; brush?: SheetBrush; act(label: string, run: () => void): void; chart?(kind: SheetChartKind): void; done(): void }): SheetTool[] {
+export function createSheetTools(options: { tip(name: SheetToolId): string | undefined; at: Accessor<SheetRange | null>; styles: SheetStyles; formats: SheetFormats; offered?: readonly SheetToolName[]; fit(range: SheetRange): void; spread(range: SheetRange, way: "down" | "right"): void; merge?(kind: SheetMergeKind | null): void; brush?: SheetBrush; act(label: string, run: () => void, join?: string): void; chart?(kind: SheetChartKind): void; done(): void }): SheetTool[] {
   const { at, styles, formats } = options, offered = options.offered ?? SHEET_TOOLS;
   const worn = () => { const range = at(); return range && styles.worn(range.top, range.left); };
   // `own`: the run names its own step (a merge, which may ask first). `hue`: the swatch it shows now.
@@ -46,7 +46,7 @@ export function createSheetTools(options: { tip(name: SheetToolId): string | und
     // Any other colour, as a workbook's own are kept: `#rrggbb`, fitted to the theme as it is drawn (shade.ts).
     const label = `Any ${noun} colour`, hex = () => { const on = now(); return on?.startsWith("#") ? on : undefined; };
     const any = tool(`${name}-any`, label, mark(name), () => {}, { menu, compact: true, on: () => Boolean(hex()), hue: hex,
-      pick: (picked: string) => { const range = at(); if (range) options.act(label, () => styles.set(range, { [name]: picked.toLowerCase() })); } });
+      pick: (picked: string) => { const range = at(); if (range) options.act(label, () => styles.set(range, { [name]: picked.toLowerCase() }), `${label} ${range.top}:${range.left}:${range.bottom}:${range.right}`); } });
     return [...named, any];
   };
   const all: Record<SheetToolName, () => SheetTool[]> = {

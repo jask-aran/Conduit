@@ -6,6 +6,10 @@
 .ui-document[data-width="full"] { --document-width: 100%; }
 /* In a pane the sheet has no header of its own, so find stands at its top. */
 .ui-document[data-bare] > .ui-find-bar { top: var(--space-md); }
+/* The replace row under the find row, its field as wide as find's. */
+.ui-document > .ui-find-bar { flex-wrap: wrap; }
+.ui-document-replace { display: flex; flex-basis: 100%; align-items: center; gap: var(--space-2xs); order: 1; }
+.ui-document-replace > .ui-lead-input { flex: 1; min-width: var(--control-lg); }
 .ui-document-column { min-height: 0; flex: 1; overflow-y: auto; padding: var(--space-2xl) var(--space-lg) 0; }
 /* The text, and the margin beside it. The margin wraps under the text at the width where the two no longer fit side by side, which is the text's own measure and the margin's. */
 .ui-document-page { display: flex; min-height: 100%; flex-wrap: wrap; justify-content: center; gap: var(--space-2xl); }

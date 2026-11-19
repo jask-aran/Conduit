@@ -38,15 +38,10 @@ export default function SheetSurface(props: ArtifactSurfaceProps) {
     away, stale, drawn,
     reveal: () => { const show = marks()?.reveal; return show && ((place) => { if (place.cells) show(place.cells); }); },
   });
-  // A chart is asked of the one comments go to, as a comment on its range: withdrawn, the comment is settled and a chat the hub holds at work on it stopped.
+  // A chart is asked of the one comments go to, as a comment on its range; Markup's ask box says it is being made, with Stop, as for any request.
   const chart = (place: SheetPlace, kind?: SheetChartKind) => {
-    const offer = props.offer();
-    if (!offer || props.quiet) return Promise.resolve(null);
     const words = `Make a ${kind ? `${kind} ` : ""}chart of these cells${kind ? "" : ", of the kind that fits them"}, with the chart action of conduit_artifact.`;
-    return offer.request(place, words).then(({ key, to }) => {
-      if (!to) { toast("Saved: no session was listening"); return null; }
-      return () => void Promise.allSettled([offer.withdraw(key), api(`/v0/document/${encodeURIComponent(id)}/stop`, { method: "POST", body: JSON.stringify({ item: key.split("/")[0] }) })]);
-    }, (error: Error) => { toast.error(`The chart was not asked for: ${error.message}`); return null; });
+    void offered()?.request(place, words, { doing: `Making the ${kind ? `${kind} ` : ""}chart…` }).catch((error: Error) => toast.error(`The chart was not asked for: ${error.message}`));
   };
   // Comment starts a comment on the cells selected, as the quote tool does; Ask the agent (and the ask key, as a paper's) asks the one comments go to about them. Both need Markup open.
   const about = (then: (place: NonNullable<ReturnType<SheetMarks["place"]>>) => void) => () => { const place = marks()?.place(); if (place && !props.quiet) then(place); };
