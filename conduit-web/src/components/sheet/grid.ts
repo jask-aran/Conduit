@@ -14,7 +14,7 @@ import { createCellLook } from "./cell-draw";
 import { seriesFill, sourceLine } from "./series";
 import type { SheetDrawn } from "./formats";
 import { serialOf } from "./types";
-import type { SheetPill } from "./cell-draw";
+import type { SheetPill, SheetSpill } from "./cell-draw";
 import type { SheetCellStyle } from "./styles";
 import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange, SheetReference } from "./host";
 
@@ -106,7 +106,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   let counting = false;
   /** What a cell shows; what was typed into it is read only when the grid asks (editing, copying), since drawing never does. */
   class TextCell {
-    readonly kind = GridCellKind.Text; readonly allowOverlay = false; mark = 0; pill?: SheetPill;
+    readonly kind = GridCellKind.Text; readonly allowOverlay = false; mark = 0; pill?: SheetPill; spill?: SheetSpill;
     constructor(private row: number, private col: number, private typed: string | null, readonly displayData: string, readonly contentAlign?: "left" | "center" | "right", readonly themeOverride?: Partial<Theme>, readonly worn?: SheetCellStyle, readonly frozen?: boolean) {}
     get data() { return this.typed ??= model.input(this.row, this.col); }
     get copyData() { return this.data; }
@@ -241,6 +241,14 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     return { ...given, current: { ...now, cell, range: drawn ? rect(drawn) : now.range } };
   };
   const write = (list: { row: number; col: number; input: string }[], label?: string) => { if (list.length) events.write(list, label); };
+  // Each drawn row's filled columns, found once a change (`update`), so an empty cell finds the text running into it from its left in a few reads.
+  let filledRows = new Map<number, number[]>();
+  const filledLeft = (row: number, col: number) => {
+    let list = filledRows.get(row);
+    if (!list) { list = []; for (let at = 0, cols = model.size().cols; at < cols; at++) if (model.input(row, at) !== "") list.push(at); filledRows.set(row, list); }
+    for (let n = list.length - 1; n >= 0; n--) if (list[n]! < col) return list[n]!;
+    return -1;
+  };
   // Made once a part: a new function or object for the grid on each render has it work everything out again, the cost of each arrow-key move.
   let sizing: { col: number; moved: boolean } | undefined;
   const handlersOf = (p: Part): Partial<DataEditorProps> => ({
@@ -452,6 +460,18 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
           ...(cut && one.top >= p.map.sheet(at - 1) + 1 ? { line: true } : {}),
         } as GridCell;
       };
+      // As a spreadsheet's, text runs on over the empty cells to its right until a filled one: an empty cell draws the share of it that reaches it, from
+      // the nearest filled cell to its left, where that is text that neither wraps nor clips, aligned left and outside any merge.
+      const spillInto = (row: number, col: number): SheetSpill | undefined => {
+        const from = filledLeft(row, col);
+        if (from < 0 || mergeAt(row, col) || mergeAt(row, from) || options.columns.type(row, from)) return undefined;
+        const value = model.value(row, from), style = options.columns.style(row, from);
+        if (typeof value !== "string" || !value || style?.wrap || style?.clip || (style?.align && style.align !== "left")) return undefined;
+        let offset = 0;
+        for (let at = from; at < col; at++) offset += columns[at]?.width ?? theme.width;
+        const drawn = options.columns.draw(row, from, value), text = (drawn?.text ?? value).split("\n", 1)[0]!, worn = themed(style);
+        return { text, offset, font: worn?.baseFontStyle, ink: worn?.textDark };
+      };
       const own = (row: number, col: number): GridCell => {
         const value = model.value(row, col), type = options.columns.type(row, col), mark = options.columns.mark(row, col), striped = options.columns.banded(row, col);
         // A filter's header cell in a column of checkboxes is drawn as text, so its mark shows.
@@ -463,6 +483,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         // A dropdown draws its arrow, empty or not.
         const pill = type?.startsWith("list:") ? options.columns.pill(row, col, type, value === null ? "" : String(value)) : undefined;
         if (pill) { const cell = withMark(new TextCell(row, col, input, String(value ?? ""), undefined, striped ? washed(themed(style)) : themed(style), style), mark); cell.pill = pill; return cell; }
+        if (input === "" && !value) { const spill = spillInto(row, col); if (spill) { const cell = withMark(new TextCell(row, col, "", "", undefined, striped ? washed(themed(style)) : themed(style), style), mark); cell.spill = spill; return cell; } }
         if (input === "" && !value) return style || mark || striped ? withMark(new TextCell(row, col, "", "", undefined, striped ? washed(themed(style)) : themed(style), style), mark) : EMPTY;
         // An error is shown by its code, as the engine names it; only a value that could be one is asked whether it is.
         const fault = typeof value === "string" && value.startsWith("#") && model.error(row, col) !== null;
@@ -475,7 +496,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       };
       return ([col, at]: Item): GridCell => merges.length ? merged(at, col, p.map.sheet(at)) : own(p.map.sheet(at), col);
     };
-    const content = useMemo(() => ({ head: contentOf(head), body: contentOf(body) }), [shape, theme, cellLook]);
+    const content = useMemo(() => ({ head: contentOf(head), body: contentOf(body) }), [shape, theme, cellLook, columns]);
     // One number while every row is the default height: the grid then sums no heights to scroll. Heights set while a row's edge is dragged are by the sheet's row.
     const heightOf = (p: Part) => { const kept = options.columns.heights(); return kept.size || Object.keys(heights).length ? (drawn: number) => { const row = p.map.sheet(drawn); return heights[row] ?? kept.get(row) ?? theme.row; } : theme.row; };
     const rowHeight = useMemo(() => ({ head: heightOf(head), body: heightOf(body) }), [shape, heights, theme]);
@@ -642,6 +663,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   addEventListener("paste", pasted, true);
   const api: SheetGrid = {
     update: (changed) => {
+      filledRows = new Map();
       if (!changed) {
         // A selection is held as a part draws it: kept on the same sheet rows when rows are hidden, shown or frozen.
         const was = picked(), columns = owner.current.columns.length > 0, rows = owner.current.rows.length > 0, versions = parts.map((p) => p.map.version).join(), freeze = frozenRows;
@@ -657,7 +679,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       // Only what is in view is drawn again; the rest is read as it scrolls in. A merge over rows is drawn by each of its rows.
       if (merges.length) { const seen = new Set<SheetRange>(); changed = changed.flatMap((cell) => { const one = mergeAt(cell.row, cell.col); if (!one || one.bottom === one.top) return [cell]; if (seen.has(one)) return []; seen.add(one); return Array.from({ length: one.bottom - one.top + 1 }, (_, n) => ({ row: one.top + n, col: one.left })); }); }
       for (const p of parts) {
-        const { view } = p, near = changed.flatMap(({ row: at, col }) => { const drawn = partOf(at) === p ? clip(p, { top: at, bottom: at, left: col, right: col }) : null; return drawn && drawn.top >= view.y && drawn.top < view.y + view.height + 1 && col >= view.x && col < view.x + view.width + 1 ? [{ cell: [col, drawn.top] as Item }] : []; });
+        // A cell drawn again redraws the row on to its right in view too: its text may run on over the empty cells there (`spillInto`).
+        const { view } = p, near = changed.flatMap(({ row: at, col }) => { const drawn = partOf(at) === p ? clip(p, { top: at, bottom: at, left: col, right: col }) : null; return drawn && drawn.top >= view.y && drawn.top < view.y + view.height + 1 && col < view.x + view.width + 1 ? Array.from({ length: view.x + view.width + 1 - Math.max(col, view.x) }, (_, n) => ({ cell: [Math.max(col, view.x) + n, drawn.top] as Item })) : []; });
         if (near.length) p.editor?.updateCells(near);
       }
     },

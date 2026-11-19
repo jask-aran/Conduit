@@ -14,7 +14,9 @@ import { wrapLines } from "./wrap";
 
 /** What the grid's own cells carry for this (grid.ts TextCell). */
 /** `block`: a row of a merge over several rows, drawn here against the merge's box (grid.ts). */
-export type StyledCell = { worn?: SheetCellStyle; frozen?: boolean; displayData?: string; contentAlign?: "left" | "right" | "center"; block?: unknown; pill?: SheetPill };
+export type StyledCell = { worn?: SheetCellStyle; frozen?: boolean; displayData?: string; contentAlign?: "left" | "right" | "center"; block?: unknown; pill?: SheetPill; spill?: SheetSpill };
+/** Text running on into an empty cell from a filled one `offset` pixels to its left, in that cell's font and ink (none: the grid's). */
+export type SheetSpill = { text: string; offset: number; font?: string; ink?: string };
 /** A dropdown cell's value as a pill in its option's ink (none: a plain wash); `known` false marks a value not among the options. One object for each, made once (sheet.tsx). */
 export type SheetPill = { ink?: SheetInk; known: boolean };
 // The grid's own measure of a line's height in a font: the box of these letters.
@@ -85,10 +87,20 @@ export function createCellLook(look: SheetLook) {
     ctx.restore();
     ctx.fillStyle = ink0;
   };
+  const spill = (args: Parameters<DrawCellCallback>[0], { text, offset, font: own, ink }: SheetSpill) => {
+    const { ctx, rect, theme: drawn } = args, padX = drawn.cellHorizontalPadding, font = `${own ?? drawn.baseFontStyle} ${drawn.fontFamily}`, was = [ctx.font, ctx.fillStyle] as const;
+    if (measureTextCached(text, ctx, font).width + padX <= offset) return;
+    ctx.save(); ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.width, rect.height); ctx.clip();
+    ctx.font = font; ctx.fillStyle = ink ?? drawn.textDark;
+    ctx.fillText(text, rect.x - offset + padX + 0.5, rect.y + rect.height / 2 + getMiddleCenterBias(ctx, font));
+    ctx.restore();
+    [ctx.font, ctx.fillStyle] = was;
+  };
   const draw: DrawCellCallback = (args, content) => {
     const cell = args.cell as StyledCell, style = cell.worn, shown = cell.displayData;
     if (cell.pill) pill(args, cell, cell.pill);
     else if (shown && (style?.custom || cell.block || shown.includes(SHEET_FILL))) text(args, style ?? PLAIN, cell); else content();
+    if (cell.spill) spill(args, cell.spill);
     if (!style?.edges && !cell.frozen) return;
     // The grid keeps note of the ink it set for a column's text, so it is put back.
     const { ctx, rect: { x, y, width, height } } = args, was = ctx.fillStyle;
