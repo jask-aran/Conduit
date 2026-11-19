@@ -8,7 +8,7 @@ import { listStyles, writeStyle } from "../sheet-styles.js";
 import { readRules, rulesA1, rulesIds, shiftRefs } from "../sheet-rules.js";
 import { CHART_LIMIT, chartFrom, chartIds, chartsA1, keptCharts, readCharts } from "../sheet-charts.js";
 import { writePrivateFile } from "../private-file.js";
-import { cleanOptions, writeType } from "../sheet-types.js";
+import { cleanOptions, restoreValidations, validationsA1, VALID, writeType } from "../sheet-types.js";
 
 /*
  * The sheet artifact kind on the hub (sheet-format.js): a .csv that holds the values, the formulas beside it in sheet.json, and the live copy in
@@ -285,6 +285,8 @@ export function sheetKind(hub) {
     const out = {};
     for (const [name, value] of room.look.entries()) {
       const [what, ...ids] = name.split(":");
+      // Validations are written by A1 below, from the cells that hold them.
+      if (what === "validations" || (what === "type" && String(value).startsWith(VALID))) continue;
       if (ids.length === 1 && ids[0] === sheet.id && what === "merges") { const said = mergesA1(sheet, value); if (said.length) out.merges = said; }
       else if (ids.length === 1 && ids[0] === sheet.id && what === "rules") { const said = rulesA1(sheet, value); if (said.length) out.rules = said; else if (Array.isArray(value)) out.rules = value; }
       else if (ids.length === 1 && ids[0] === sheet.id && what === "charts") { const said = chartsA1(sheet, value); if (said.length) out.charts = said; }
@@ -294,6 +296,8 @@ export function sheetKind(hub) {
       else if (ids.length === 1 && sheet.indexOfCol(ids[0]) >= 0) out[`${what}:${colName(sheet.indexOfCol(ids[0]))}`] = value;
       else if (ids.length === 2 && sheet.indexOfRow(ids[0]) >= 0 && sheet.indexOfCol(ids[1]) >= 0) out[`${what}:${a1(sheet.indexOfRow(ids[0]), sheet.indexOfCol(ids[1]))}`] = value;
     }
+    const validations = validationsA1(room.look, sheet);
+    if (validations.length) out.validations = validations;
     return out;
   };
   const restoreLook = (room, sheet, tab, kept) => {
@@ -309,6 +313,7 @@ export function sheetKind(hub) {
         }) : [];
         if (ids.length) room.look.set(`merges:${tab}`, JSON.stringify(ids));
       }
+      else if (at === undefined && what === "validations") restoreValidations(room.look, sheet, value);
       else if (at === undefined && what === "rules") { const ids = rulesIds(sheet, value); if (ids) room.look.set(`rules:${tab}`, ids); }
       else if (at === undefined && what === "charts") { const ids = chartIds(sheet, value); if (ids) room.look.set(`charts:${tab}`, ids); }
       else if (at === undefined && RANGED.includes(what)) { const ids = rangedIds(sheet, value); if (ids) room.look.set(`${what}:${tab}`, ids); }

@@ -4,8 +4,8 @@
  */
 import { createSignal, onCleanup, type Accessor } from "solid-js";
 import type * as Y from "yjs";
-import { key, type SheetView } from "@/sheet-format.js";
-import { areasOf, editValidations, listFields, optionsOf, PLAIN, readValidations, writeType, type SheetOption } from "@/sheet-types.js";
+import { key, parseRange, type SheetView } from "@/sheet-format.js";
+import { listFields, optionsOf, PLAIN, readValidations, setValidation, VALID, writeType, type SheetOption, type SheetValidation } from "@/sheet-types.js";
 import type { SheetRange } from "./host";
 
 export type SheetTypeKind = "boolean" | "date" | "list";
@@ -32,7 +32,7 @@ export interface SheetTypes {
   /** A dropdown's options, by its type; null where its list is cells on another tab. Not tracked. */
   options(type: string): readonly SheetOption[] | null;
   /** The cells a dropdown covers. */
-  areas(type: string): readonly SheetRange[];
+  cells(type: string): readonly { row: number; col: number }[];
   /** The kind every cell of the range shares (undefined: plain), null where they differ; tracked. */
   uniform(range: SheetRange): SheetTypeKind | undefined | null;
   /** The range takes the type (null: plain); a dropdown, `options`. */
@@ -51,18 +51,18 @@ const WEB = /^(https?:\/\/|www\.)[^\s]+$/i, MAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** A cell's text as the address it links to, where it is one. */
 export const addressOf = (text: string) => WEB.test(text) ? (/^www\./i.test(text) ? `https://${text}` : text) : MAIL.test(text) ? `mailto:${text}` : undefined;
 
-type Dropdown = { areas: SheetRange[]; options: SheetOption[] | null; source: SheetRange | null };
+type Dropdown = { attributes: SheetValidation; options: SheetOption[] | null; source: SheetRange | null };
 export function createSheetTypes(look: Y.Map<number | string>, model: Accessor<SheetView | undefined>, failed: (message: string) => void): SheetTypes {
-  const columns = new Map<string, string>(), cells = new Map<string, string>(), links = new Map<string, string>(), lists = new Map<string, (Dropdown | null)[]>(), [changed, setChanged] = createSignal(0);
+  const columns = new Map<string, string>(), cells = new Map<string, string>(), links = new Map<string, string>(), lists = new Map<string, Dropdown>(), [changed, setChanged] = createSignal(0);
   const kept = look as unknown as Y.Map<unknown>;
   const index = (name: string) => {
     if (name.startsWith("validations:")) {
       // A list of cells on its own tab is read from them as drawn; one on another tab lists nothing.
-      lists.set(name.slice(12), readValidations(kept, name.slice(12)).map((one) => {
-        if (one.type !== "list") return null;
-        const options = optionsOf(one), source = options ? null : /^\$?[A-Z]+\$?\d+(:\$?[A-Z]+\$?\d+)?$/i.test(String(one.formula1 ?? "")) ? areasOf({ range: String(one.formula1) })[0] ?? null : null;
-        return { areas: areasOf(one), options, source };
-      }));
+      for (const [id, one] of Object.entries(readValidations(kept, name.slice(12)))) {
+        if (one.type !== "list") continue;
+        const options = optionsOf(one), source = options ? null : /^\$?[A-Z]+\$?\d+(:\$?[A-Z]+\$?\d+)?$/i.test(String(one.formula1 ?? "")) ? parseRange(String(one.formula1).replace(/\$/g, "")) : null;
+        lists.set(id, { attributes: one, options, source });
+      }
       return true;
     }
     if (name.startsWith("link:")) { const value = look.get(name); if (typeof value === "string" && value) links.set(name.slice(5), value); else links.delete(name.slice(5)); return false; }
@@ -75,13 +75,13 @@ export function createSheetTypes(look: Y.Map<number | string>, model: Accessor<S
   const observe = (event: Y.YMapEvent<number | string>) => { let any = false; for (const name of event.keysChanged) any = index(name) || any; if (any) setChanged((n) => n + 1); };
   look.observe(observe);
   onCleanup(() => look.unobserve(observe));
-  const listOf = (type: string) => { const tab = model()?.id; return tab ? lists.get(tab)?.[Number(type.slice(5))] ?? null : null; };
+  const listOf = (type: string) => lists.get(type.slice(5)) ?? null;
+  // A list validation is a dropdown (`list:<id>`); any other is drawn plain.
   const at = (row: number, col: number) => {
-    const sheet = model(), colId = sheet?.colAt(col), tabLists = sheet?.id ? lists.get(sheet.id) : undefined;
+    const sheet = model(), colId = sheet?.colAt(col);
     if (!colId) return undefined;
-    if (tabLists) for (let n = 0; n < tabLists.length; n++) for (const area of tabLists[n]?.areas ?? []) if (row >= area.top && row <= area.bottom && col >= area.left && col <= area.right) return `list:${n}`;
     const type = (cells.size ? cells.get(key(sheet!.rowAt(row) ?? "", colId)) : undefined) ?? columns.get(colId);
-    return type === PLAIN ? undefined : type;
+    return type === PLAIN ? undefined : type?.startsWith(VALID) ? (lists.has(type.slice(VALID.length)) ? `list:${type.slice(VALID.length)}` : undefined) : type;
   };
   const kindOf = (type?: string): SheetTypeKind | undefined => type === "boolean" || type === "date" ? type : type?.startsWith("list:") ? "list" : undefined;
   const act = (run: () => void) => { try { look.doc!.transact(run); } catch (error) { failed((error as Error).message); } };
@@ -94,7 +94,13 @@ export function createSheetTypes(look: Y.Map<number | string>, model: Accessor<S
       for (let row = list.source.top; row <= Math.min(list.source.bottom, list.source.top + 199); row++) for (let col = list.source.left; col <= list.source.right; col++) { const value = sheet.value(row, col); if (value !== null && value !== "") out.push({ value: String(value) }); }
       return out;
     },
-    areas: (type) => listOf(type)?.areas ?? [],
+    cells: (type) => {
+      const sheet = model(), out: { row: number; col: number }[] = [];
+      if (!sheet) return out;
+      const { rows, cols } = sheet.size();
+      for (let col = 0; col < cols; col++) for (let row = 0; row < rows; row++) if (at(row, col) === type) out.push({ row, col });
+      return out;
+    },
     uniform: (range) => {
       changed();
       const sheet = model();
@@ -105,7 +111,7 @@ export function createSheetTypes(look: Y.Map<number | string>, model: Accessor<S
       return shared;
     },
     set: (range, kind, options) => { const sheet = model(), tab = sheet?.id; if (sheet && tab) act(() => writeType(kept, sheet as SheetView & { id: string }, range, kind, range.top === 0 && range.bottom >= sheet.size().rows - 1, options)); },
-    setOptions: (type, options) => { const tab = model()?.id, n = Number(type.slice(5)); if (tab) act(() => editValidations(kept, tab, (all) => all.map(({ inks: _, ...one }, at) => at === n ? { ...one, ...listFields(options) } : { ...one, ...(_ ? { inks: _ } : {}) }))); },
+    setOptions: (type, options) => { const tab = model()?.id, was = listOf(type)?.attributes; if (tab && was) { const { inks: _, ...rest } = was; act(() => setValidation(kept, tab, type.slice(5), { ...rest, ...listFields(options) })); } },
     link: (row, col, text) => {
       const sheet = links.size ? model() : undefined, own = sheet && links.get(key(sheet.rowAt(row) ?? "", sheet.colAt(col) ?? ""));
       return own ?? (text.includes("@") || text.includes(":") || text.startsWith("www.") ? addressOf(text) : undefined);

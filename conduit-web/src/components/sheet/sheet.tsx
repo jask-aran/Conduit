@@ -712,7 +712,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
           onSave={(options) => { const now = editingList(); setEditingList(null); if (now) history.act("Dropdown", () => {
             if (!now.type) return types.set(now.range, "list", options);
             // A renamed option renames the cells that hold it.
-            const renamed = new Map(options.flatMap((one) => one.was && one.was !== one.value ? [[one.was, one.value] as const] : [])), sheet = model(), cells = types.areas(now.type).flatMap((area) => within(inTab(area)).flat());
+            const renamed = new Map(options.flatMap((one) => one.was && one.was !== one.value ? [[one.was, one.value] as const] : [])), sheet = model(), cells = types.cells(now.type);
             types.setOptions(now.type, options);
             if (renamed.size && sheet) write(cells.flatMap((cell) => { const to = renamed.get(valueText(sheet.value(cell.row, cell.col))); return to ? [{ ...cell, input: to }] : []; }));
           }); grid()?.focus(); }} />
