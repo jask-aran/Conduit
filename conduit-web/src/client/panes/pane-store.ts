@@ -256,5 +256,9 @@ export function createPaneStore(first: Layout) {
     undo: () => step(past, setPast, future, setFuture),
     redo: () => step(future, setFuture, past, setPast),
     canUndo: () => past().length > 0, canRedo: () => future().length > 0,
+    /** The layout undo (-1) or redo (1) would show. */
+    target: (step: -1 | 1) => (step < 0 ? past() : future()).at(-1),
+    /** The last step starts from `first`: a change made in parts undoes as one. */
+    amend: (first: Layout) => setPast([...past().slice(0, -1), first]),
   };
 }

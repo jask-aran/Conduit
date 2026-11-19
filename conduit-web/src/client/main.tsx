@@ -594,6 +594,7 @@ function App() {
     for (const project of projects) {
       scopes.add(project.id);
       scopes.add(`project:${project.id}`);
+      scopes.add(`folder:${project.id}`);
       for (const chat of project.sessions) scopes.add(chat.id);
     }
     return scopes;
@@ -2620,10 +2621,20 @@ function App() {
     window.removeEventListener("keydown", note, true);
     if (!moved && shownSlots().includes(slot) && !paneElement(slot)?.contains(document.activeElement)) focusPane(slot);
   };
-  /** Pane undo and redo step whole layouts, through the same gates as any change. */
+  /** Pane undo and redo step whole layouts; an unsaved edit a step would close is asked about first, as any change's. */
   const stepPanes = async (step: -1 | 1) => {
+    const target = panes.target(step);
+    if (!target) return;
+    const nextView = (pane: PaneKey) => {
+      const id = pane === "main" ? target.row[0] : idOf(pane);
+      return id && (target.row.includes(id) || target.dock === id) ? Layouts.shownView(target.panes[id]!) : null;
+    };
+    const dirty = [...fileHandles.keys()].filter((pane) => leavesUnsaved(viewOf(pane), nextView(pane), pane));
+    if (dirty.length) {
+      if (!(await confirmDialog("Discard unsaved changes and close this file?", { destructive: true, confirmLabel: "Discard", valid: () => panes.target(step) === target }))) return;
+      dirty.forEach((pane) => handlesOf(pane).forEach((handle) => { if (handle?.hasUnsavedChanges()) handle.discardChanges(); }));
+    }
     const before = paneAView();
-    if (step < 0 ? !panes.canUndo() : !panes.canRedo()) return;
     if (step < 0) panes.undo(); else panes.redo();
     await followPaneA(before);
     focusAnyPane(keyboardPane());
@@ -2636,11 +2647,15 @@ function App() {
     if (focus && pane !== undefined) focusAnyPane(pane);
     return pane;
   };
-  /** The dock's folder viewer or terminal taken to a pane of its own: the summon goes, the pane keeps the workspace. */
-  const moveToRow = async (view: SplitView) => {
-    if (layout().summon) dismissSummon();
-    await openBeside(view);
+  /** What a summon shows, opened as a pane: the summon goes first, and undoing the open brings it back. */
+  const fromSummon = async (open: () => Promise<unknown>) => {
+    const before = layout(), last = panes.target(-1);
+    if (before.summon) dismissSummon();
+    await open();
+    if (before.summon && panes.target(-1) !== last) panes.amend(before);
   };
+  /** The dock's folder viewer or terminal taken to a pane of its own: the summon goes, the pane keeps the workspace. */
+  const moveToRow = (view: SplitView) => fromSummon(() => openBeside(view));
   const closeSlot = async (slot: number | null, focus = true) => {
     if (slot === null) return;
     const previous = slotView(slot);
@@ -2843,12 +2858,11 @@ function App() {
     const placed = { ...target, zone: target.zone };
     if (fromPane !== null) return void await movePaneDocument(fromPane, placed);
     if (group) return void await moveTabGroup(group, placed, view as SplitView);
-    return dropDocument(placed, view);
+    return /^(folder:|tool:files$)/.test(view) && layout().summon === "files" ? fromSummon(() => dropDocument(placed, view)) : dropDocument(placed, view);
   };
   const dropDocument = async (target: { pane: PaneKey; zone: "left" | "middle" | "right" }, view: string) => {
     if (view === "tool:terminal") { const id = await pickShell(); if (!id) return; view = `term:${id}`; }
     if (view === "tool:files") { const project = dockProject(); if (!project) return; view = `folder:${project.id}`; }
-    if (view.startsWith("folder:") && layout().summon === "files") dismissSummon();
     const next = view as SplitView;
     const docked = dockedSlot();
     if (docked !== null && slotView(docked) === next) {

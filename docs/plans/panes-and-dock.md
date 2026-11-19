@@ -25,7 +25,5 @@ Follow-ups of the steps already landed are in `panes-handoff.md`.
    dock, listed as the rail's docked buttons, `props.docked`); the dock's Chat tool goes once its review navigations
    (`REVIEW_NAVIGATION_EVENT` for a session or turn, `TURN_ARTIFACT_NAVIGATION_EVENT`) have another home. The phone
    keeps its tab strip this pass.
-6. **Rail foot**: the beside/over button shows both states; `smoke:panes` rewritten to the new rules.
 
-Checks per step: typecheck, `npm run smoke:panes` (rewritten in step 6; until then expect its tab and column
-scenarios to fail and say which), headed look in a tab of its own.
+Checks per step: typecheck, `npm run smoke:panes -- --project Japan`, headed look in a tab of its own.
