@@ -61,13 +61,21 @@ export function createFind(editor: Accessor<Editor | undefined>, scroller: Acces
     set({ current: Math.max(0, next) });
     inView();
   };
+  // In the bar's own fields too: Mod-H shows the replace row, Mod-F goes back to find's field (the browser has both chords otherwise).
+  const barKeys = (element: HTMLInputElement) => element.addEventListener("keydown", (event) => {
+    const key = event.key.toLowerCase();
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || (event.shiftKey && key !== "h") || (key !== "f" && key !== "h")) return;
+    event.preventDefault();
+    if (key === "h" && editor()?.isEditable) setReplacing(true);
+    queueMicrotask(() => (key === "f" ? field : replaceField)?.focus());
+  });
   const close = () => { setOpen(false); setReplacing(false); set({ query: "", current: 0 }); editor()?.commands.focus(); };
   const count = () => { const now = state(); return now?.query ? now.matches.length ? `${now.current + 1} of ${now.matches.length}` : "No matches" : undefined; };
   return {
     show,
     extension: () => Extension.create({
       name: "find",
-      addKeyboardShortcuts: () => ({ "Mod-f": () => { show(); return true; }, [PAPER_REPLACE_KEY]: () => { show(true); return true; } }),
+      addKeyboardShortcuts: () => ({ "Mod-f": () => { show(); return true; }, [PAPER_REPLACE_KEY]: () => { show(true); return true; }, "Mod-Shift-h": () => { show(true); return true; } }),
       addProseMirrorPlugins: () => [new Plugin<Found>({
         key: found,
         state: {
@@ -85,10 +93,10 @@ export function createFind(editor: Accessor<Editor | undefined>, scroller: Acces
       })],
     }),
     view: () => <Show when={open()}>
-      <DocumentFind query={state()?.query ?? ""} count={count()} inputRef={(element) => { field = element; }} onQuery={(query) => { set({ query, current: 0 }); inView(); }}
+      <DocumentFind query={state()?.query ?? ""} count={count()} inputRef={(element) => { field = element; barKeys(element); }} onQuery={(query) => { set({ query, current: 0 }); inView(); }}
         onNext={() => step(1)} onPrevious={() => step(-1)} onEscape={close} onClose={close}
         onReplacing={editor()?.isEditable ? () => { const on = !replacing(); setReplacing(on); queueMicrotask(() => (on ? replaceField : field)?.focus()); } : undefined}
-        replace={replacing() ? { value: replacement(), onValue: setReplacement, onReplace: () => replace(false), onReplaceAll: () => replace(true), inputRef: (element) => { replaceField = element; } } : undefined} />
+        replace={replacing() ? { value: replacement(), onValue: setReplacement, onReplace: () => replace(false), onReplaceAll: () => replace(true), inputRef: (element) => { replaceField = element; barKeys(element); } } : undefined} />
     </Show>,
   };
 }

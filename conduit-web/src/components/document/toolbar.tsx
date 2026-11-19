@@ -39,8 +39,10 @@ const caretColumn = (view: EditorView) => {
   while (cell > 0 && !/cell/.test($from.node(cell).type.spec.tableRole ?? "")) cell--;
   if (cell < 3) return null;
   const table = $from.node(cell - 2), start = $from.start(cell - 2), map = TableMap.get(table);
-  return { start, map, column: map.colCount($from.before(cell) - start) };
+  return { start, map, column: map.colCount($from.before(cell) - start), row: $from.index(cell - 2) };
 };
+/** The caret is in its table's first row, its header in Markdown: a row put above it would push the header down. */
+export const inHeaderRow = (view: EditorView) => caretColumn(view)?.row === 0;
 /** The caret column's alignment as its cells wear it, the first cell's. */
 export const columnAlign = (view: EditorView) => { const at = caretColumn(view); return at ? view.state.doc.nodeAt(at.start + at.map.map[at.column]!)?.attrs.align as string | null : null; };
 /** Every cell of the caret's column aligned (`align`: left, center, right, or null for none), in one change. */

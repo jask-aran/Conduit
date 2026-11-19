@@ -7,7 +7,7 @@ import { DocumentDropLine, DocumentHandle, documentBlockIcons, documentToneIcons
 import { DropdownMenu, MenuContent, MenuControl, MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger } from "@/components/ui/menus";
 import { addUnder, blockAt, blockById, blockRange, blockStarts, caretBlockAt, caretInto, deleteBlock, duplicateBlock, moveBlock, shiftBlock } from "./blocks";
 import { DOCUMENT_TURNABLE, type DocumentBlockKind } from "./host";
-import { alignColumn, columnAlign, TABLE_ALIGNS, TABLE_INSERTS } from "./toolbar";
+import { alignColumn, columnAlign, inHeaderRow, TABLE_ALIGNS, TABLE_INSERTS } from "./toolbar";
 
 /** `is`: the node a block of this kind is, and its attrs (a heading's level); a paragraph is Text. */
 type Tool = { name: DocumentBlockKind; label: string; icon: () => JSX.Element; is?: [string, Record<string, unknown>?]; run(): void };
@@ -144,7 +144,7 @@ export function createBlockHandle(editor: Accessor<Editor | undefined>, tools: r
             <Show when={inTable()}><MenuSub>
               <MenuSubTrigger icon={<documentBlockIcons.table />}>Table</MenuSubTrigger>
               <MenuSubContent width="sm">
-                <MenuSection><For each={TABLE_INSERTS}>{([icon, label, command]) => { const Icon = documentToolIcons[icon]; return <MenuRow icon={<Icon />} onSelect={table((chain) => chain[command]())}>{label}</MenuRow>; }}</For></MenuSection>
+                <MenuSection><For each={TABLE_INSERTS}>{([icon, label, command]) => { const Icon = documentToolIcons[icon], view = editor()?.view; return <MenuRow icon={<Icon />} disabled={command === "addRowBefore" && Boolean(view && inHeaderRow(view))} onSelect={table((chain) => chain[command]())}>{label}</MenuRow>; }}</For></MenuSection>
                 <MenuSection title="Align column"><For each={TABLE_ALIGNS}>{([icon, label, align]) => { const Icon = documentToolIcons[icon], view = editor()?.view; return <MenuRow icon={<Icon />} checked={Boolean(view && columnAlign(view) === align)} onSelect={() => { const now = editor()?.view; if (now) alignColumn(now, columnAlign(now) === align ? null : align); }}>{label}</MenuRow>; }}</For></MenuSection>
               </MenuSubContent>
             </MenuSub></Show>

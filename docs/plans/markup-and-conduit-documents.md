@@ -81,8 +81,7 @@ and not an edit. Not designed yet.
 
 Known and left: a pane narrower than the ribbon wraps it over the text; the block handle's grip is not drawn where the
 pane leaves it no room (Ctrl+/ still opens its menu); Yjs has no move, so a block moved while someone else types in it
-may lose those keystrokes (read from the code, not seen); Cmd+H is the Mac's own (hide the app), so there replace is
-reached from the find bar's Replace button.
+may lose those keystrokes (read from the code, not seen).
 
 ### Step (b) as built
 
