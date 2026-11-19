@@ -236,11 +236,11 @@ export function FilterMenu(props: { filter: SheetFilter; at: { col: number; box:
     if (!next.delete(value)) next.add(value);
     props.filter.keep(col(), next.size === every().length ? null : next);
   };
+  // The values found shown, and no others.
+  const alone = () => found().every(shows) && every().every((value) => found().includes(value) || !shows(value));
   const pickFound = () => {
     if (!query().trim()) return props.filter.keep(col(), all() ? new Set() : null);
-    const on = found().every(shows), next = new Set(props.filter.when(col()) ? [] : kept() ?? every());
-    for (const value of found()) if (on) next.delete(value); else next.add(value);
-    props.filter.keep(col(), next.size === every().length ? null : next);
+    props.filter.keep(col(), alone() ? new Set() : found().length === every().length ? null : new Set(found()));
   };
   const sort = (descending: boolean) => { props.filter.sortColumn(col(), descending); props.onClose(); };
   const close = () => { setQuery(""); props.onClose(); };
@@ -258,7 +258,7 @@ export function FilterMenu(props: { filter: SheetFilter; at: { col: number; box:
         </Section>
         <SearchSection placeholder="Search values" value={query()} onInput={setQuery} field={{ "aria-label": "Search values" }} />
         <Section title="Show" scroll>
-          <Item picked={query().trim() ? found().length > 0 && found().every(shows) : all()} onClick={pickFound}>{query().trim() ? "Select all found" : "Select all"}</Item>
+          <Item picked={query().trim() ? found().length > 0 && alone() : all()} onClick={pickFound}>{query().trim() ? "Select all found" : "Select all"}</Item>
           <For each={found().slice(0, LISTED)}>{(value) => <Item picked={shows(value)} onClick={() => toggle(value)}>{value === "" ? "(Blanks)" : value}</Item>}</For>
         </Section>
       </PopoverContent>
