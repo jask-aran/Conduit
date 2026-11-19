@@ -11,6 +11,8 @@
    actions; it keeps its width and the title truncates instead. */
 .ui-pane-header:where([data-header="pane"]) > .ui-seg { flex: none; }
 .ui-header-group:empty { display: none; }
+/* A header button that holds something open (a pane it opened, a panel maximised) stays lit while it does. */
+.ui-header-group > .ui-button[aria-pressed="true"] { background: var(--tint); }
 
 .ui-header-crumb { display: flex; min-width: 0; align-items: baseline; gap: var(--space-sm); font-size: var(--text-row); line-height: var(--leading-row); }
 .ui-header-crumb > strong { font-weight: var(--weight-strong); }

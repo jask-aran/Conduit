@@ -56,16 +56,15 @@ export function findView(layout: Layout, view: View) {
   return null;
 }
 
-/** What a caller knows that views alone do not: `held` tabs (a draft) are never dropped; a `document` chat (a paper's
- *  thread) stands in a document pane. */
-export type Rules = { held?: (view: View) => boolean; document?: (view: View) => boolean };
+/** What a caller knows that views alone do not: `held` tabs (a draft) are never dropped. */
+export type Rules = { held?: (view: View) => boolean };
 
 /** The session pane a Ctrl-opened tab joins: the focused one, else the one used last, else the nearest in the row (a
  *  restored layout has used only the focused pane). */
-function sessionPaneFor(layout: Layout, session: (view: View) => boolean) {
+function sessionPaneFor(layout: Layout) {
   const at = Math.max(0, layout.row.indexOf(layout.focus));
   const near = [...layout.row].sort((a, b) => Math.abs(layout.row.indexOf(a) - at) - Math.abs(layout.row.indexOf(b) - at));
-  return [...layout.used, ...near].find((id) => layout.panes[id]!.views.every(session));
+  return [...layout.used, ...near].find((id) => kindOf(layout.panes[id]!) === "session");
 }
 
 /** Adds a tab, dropping the least recently shown one that has no draft. */
@@ -82,9 +81,8 @@ function withTab(pane: Pane, view: View, held: (view: View) => boolean = () => f
 export function open(layout: Layout, view: View, verb: Verb = {}, rules: Rules = {}): Layout {
   const at = findView(layout, view);
   if (at) return focusing(withPane(layout, showing(layout.panes[at.id]!, at.index)), at.id);
-  const session = (other: View) => sessionView(other) && !rules.document?.(other);
-  if (verb.tab && session(view)) {
-    const target = sessionPaneFor(layout, session);
+  if (verb.tab && sessionView(view)) {
+    const target = sessionPaneFor(layout);
     if (target) return focusing(withPane(layout, withTab(layout.panes[target]!, view, rules.held)), target);
   }
   if (verb.beside || verb.tab) {
