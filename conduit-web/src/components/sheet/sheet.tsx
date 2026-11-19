@@ -543,8 +543,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (event.shiftKey && !event.altKey && event.code === "KeyV") { event.preventDefault(); const area = at(); if (area) paste(area, true); return; }
       if (event.altKey && event.code === ASK_KEY) { event.preventDefault(); return props.onAsk?.(); }
       // The grid has no history of its own: what this page did is undone here, never what others did.
-      const redo = event.key === "y" || (event.key === "z" && event.shiftKey);
-      if (event.key !== "z" && !redo) return;
+      // By code: with Shift or Caps Lock the key is "Z".
+      const redo = event.code === "KeyY" || (event.code === "KeyZ" && event.shiftKey);
+      if (event.code !== "KeyZ" && !redo) return;
       event.preventDefault();
       if (redo) history.redo(); else history.undo();
     }}>

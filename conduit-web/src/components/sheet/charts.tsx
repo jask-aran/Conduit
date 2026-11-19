@@ -100,7 +100,7 @@ export default function SheetCharts(props: { look: Y.Map<number | string>; model
       };
       const key = (event: KeyboardEvent) => {
         const at = place(), mod = event.ctrlKey || event.metaKey;
-        if (mod && !event.altKey && (event.key === "z" || event.key === "y")) { event.preventDefault(); event.stopPropagation(); return event.key === "y" || event.shiftKey ? props.redo() : props.undo(); }
+        if (mod && !event.altKey && (event.code === "KeyZ" || event.code === "KeyY")) { event.preventDefault(); event.stopPropagation(); return event.code === "KeyY" || event.shiftKey ? props.redo() : props.undo(); }
         if (event.key === "Delete" || event.key === "Backspace") { event.preventDefault(); save("Delete chart", chart().id, null); return props.grid()?.focus(); }
         if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setSelected(null); return props.grid()?.focus(); }
         if (event.key === "Tab") {
