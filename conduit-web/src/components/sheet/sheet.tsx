@@ -300,7 +300,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   };
   // A chart asked of the agent, as a request on the range: Markup's ask box says it is being made, and stops it.
   const askChart = (kind?: SheetChartKind, range = at()) => { const place = range && placeOf(range); if (place) props.onChart?.(place, kind); };
-  const find = createSheetFind({ model, grid, at, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols, draw: formats.draw, write: (list) => writes(list.length === 1 ? "Replace" : "Replace all")(list) });
+  const find = createSheetFind({ model, grid, at, look, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols, draw: formats.draw, write: (list) => writes(list.length === 1 ? "Replace" : "Replace all")(list) });
   const brush = createSheetBrush({ look, model, formats, at, act: history.act, failed: props.host.failed });
   const tools = createSheetTools({ tip: sequences.tip, at, styles, formats, offered: props.host.tools, done: () => grid()?.focus(), spread: (range, way) => spread(range, way), merge: (kind) => merge(kind), brush, act: history.act, chart: props.onChart && ((kind) => askChart(kind)),
     fit: (range) => sizes.fitRows(Array.from({ length: range.bottom - range.top + 1 }, (_, n) => range.top + n), readLook(root!)) });
@@ -491,6 +491,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         ] },
         { label: filters.filter() ? "Remove filter" : "Create a filter", icon: <SortIcons.filter />, keys: ["Ctrl", "Shift", "L"], run: filters.keys.filter },
         ...filteredBy(byCol) ? [{ label: "Filter column…", icon: <SortIcons.filter />, run: () => openFilter(filteredBy(byCol)!, byCol) }] : [],
+        ...filters.narrows(byCol) ? [{ label: `Clear filter from column ${colName(byCol)}`, icon: <Icons.Erase />, run: () => filters.keep(byCol, null) }] : [],
         { label: inTable() ? "Remove table" : "Format as table", icon: <SortIcons.table />, keys: ["Alt", "H", "T"], run: filters.keys.table },
       ],
       // A column's cells are plain or checkboxes (TRUE and FALSE), its type in the look (`type:<colId>`): the whole column's, so only its menu sets it.
@@ -595,6 +596,6 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       </Show>
       <Show when={props.margin}><aside class="ui-spreadsheet-margin" aria-label="Comments">{props.margin}</aside></Show>
     </div>
-    <SheetFoot tabs={tabs} id={props.id} format={() => formats.figure(at())} />
+    <SheetFoot tabs={tabs} id={props.id} format={() => formats.figure(at())} filtered={filters.counted} />
   </section>;
 }

@@ -76,7 +76,13 @@ export type SheetSortOp = { op: "sort"; range: string; column: string; descendin
  * is the rows it left out when last applied (filterHides), by id, so every page hides the same ones. A table's `name` is its own; it is drawn with a
  * bold header and banded rows, and turns the filter on over it. sheet.json writes them by A1: `{ range: "A1:D20", keep: { B: ["x"] }, hide: [3, 5] }`.
  */
-export type SheetRangedLook = { from: string; to: string; keep?: Record<string, string[]>; hide?: string[]; name?: string };
+export type SheetRangedLook = { from: string; to: string; keep?: Record<string, string[]>; when?: Record<string, SheetFilterWhen>; hide?: string[]; name?: string };
+/**
+ * A filter's condition on a column (`when`, by column id; by letter in sheet.json): text tests case aside, numbers, dates (a date-formatted number or
+ * text typed as 2026-01-30; `a` and `b` typed so), and empty. `b`: the other end of a between, both ends kept.
+ */
+export type SheetFilterTest = "contains" | "not-contains" | "starts" | "ends" | "equals" | "greater" | "less" | "between" | "before" | "after" | "dates" | "empty" | "filled";
+export type SheetFilterWhen = { is: SheetFilterTest; a?: string; b?: string };
 /** Its range in `view`; null where a corner is gone. */
 export function rangedArea(view: Pick<SheetView, "indexOfRow" | "indexOfCol">, ranged: Partial<SheetRangedLook> | null | undefined): Range | null;
 /** The rows under a filter's header its kept values leave out, by id: its `hide` as applied now. */

@@ -21,7 +21,8 @@ const FIGURES: { name: string; of(figures: SheetFigures): number | null }[] = [
 
 /** The sheet's foot: its tabs, to show, add, rename, move, hide and delete, and the figures of the cells selected. */
 /** `format`: how the selection's figures but its count are drawn, where it has one number format throughout (formats.ts). */
-export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: () => ((value: number) => string) | null }) {
+/** `filtered`: the rows under the filter's header and how many it shows, while it narrows them. */
+export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: () => ((value: number) => string) | null; filtered?: () => { shown: number; total: number } | null }) {
   const tabs = props.tabs, decide = createDecisionScope(() => props.id);
   const [renaming, setRenaming] = createSignal<string>(), [draft, setDraft] = createSignal("");
   const figures = createFigures(tabs.model, tabs.selection);
@@ -103,6 +104,7 @@ export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: () => (
     <span class="ui-spreadsheet-figures" aria-live="polite">
       <For each={listed()}>{(figure) => <DashPath title={`Copy the ${figure.name.toLowerCase()}`} path={`${figure.name} ${figure.text}`} onCopy={() => copy(figure.name, figure.value)} />}</For>
     </span>
+    <Show when={props.filtered?.()}>{(rows) => <Notice kind="tool">{rows().shown} of {rows().total} rows</Notice>}</Show>
     <Show when={slow()}><Notice kind="tool" busy live>Computing</Notice></Show>
   </ToolBar>;
 }

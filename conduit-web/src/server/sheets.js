@@ -261,11 +261,12 @@ export function sheetKind(hub) {
   /** A filter's or table's look by A1 (`{ range: "A1:D20", keep: { B: [...] } }`), from its JSON by ids (`from`/`to` corners, `keep` by column id); undefined where a corner is gone. */
   const rangedA1 = (sheet, text) => {
     try {
-      const ranged = JSON.parse(String(text)), { keep, hide } = ranged, rest = Object.fromEntries(Object.entries(ranged).filter(([name]) => !["from", "to", "keep", "hide"].includes(name))), area = rangedArea(sheet, ranged);
+      const ranged = JSON.parse(String(text)), { keep, when, hide } = ranged, rest = Object.fromEntries(Object.entries(ranged).filter(([name]) => !["from", "to", "keep", "when", "hide"].includes(name))), area = rangedArea(sheet, ranged);
       if (!area) return undefined;
-      const kept = keep && Object.fromEntries(Object.entries(keep).flatMap(([col, values]) => sheet.indexOfCol(col) >= 0 ? [[colName(sheet.indexOfCol(col)), values]] : []));
+      const lettered = (by) => by && Object.fromEntries(Object.entries(by).flatMap(([col, values]) => sheet.indexOfCol(col) >= 0 ? [[colName(sheet.indexOfCol(col)), values]] : []));
+      const kept = lettered(keep), whens = lettered(when);
       const hidden = Array.isArray(hide) ? hide.map((id) => sheet.indexOfRow(id) + 1).filter(Boolean) : [];
-      return { ...rest, range: rangeA1(area), ...(kept ? { keep: kept } : {}), ...(hidden.length ? { hide: hidden } : {}) };
+      return { ...rest, range: rangeA1(area), ...(kept ? { keep: kept } : {}), ...(whens ? { when: whens } : {}), ...(hidden.length ? { hide: hidden } : {}) };
     } catch { return undefined; }
   };
   /** A tab's merged ranges (`merges:<tabId>`, a list of corners by ids) by A1, those whose corners are gone left out. */
@@ -273,9 +274,10 @@ export function sheetKind(hub) {
   const rangedIds = (sheet, value) => {
     const area = parseRange(String(value?.range ?? "")), { rows, cols } = sheet.size();
     if (!area || area.bottom >= rows || area.right >= cols) return undefined;
-    const { keep, hide } = value, rest = Object.fromEntries(Object.entries(value).filter(([name]) => !["range", "keep", "hide"].includes(name))), colOf = (letter) => /^[A-Z]{1,3}$/.test(letter) && colIndex(letter) < cols ? sheet.colAt(colIndex(letter)) : undefined;
+    const { keep, when, hide } = value, rest = Object.fromEntries(Object.entries(value).filter(([name]) => !["range", "keep", "when", "hide"].includes(name))), colOf = (letter) => /^[A-Z]{1,3}$/.test(letter) && colIndex(letter) < cols ? sheet.colAt(colIndex(letter)) : undefined;
     const kept = keep && typeof keep === "object" ? Object.fromEntries(Object.entries(keep).flatMap(([letter, values]) => colOf(letter) && Array.isArray(values) ? [[colOf(letter), values.map(String)]] : [])) : undefined;
-    return JSON.stringify({ ...rest, from: key(sheet.rowAt(area.top), sheet.colAt(area.left)), to: key(sheet.rowAt(area.bottom), sheet.colAt(area.right)), ...(kept ? { keep: kept } : {}),
+    const whens = when && typeof when === "object" ? Object.fromEntries(Object.entries(when).flatMap(([letter, test]) => colOf(letter) && typeof test?.is === "string" ? [[colOf(letter), test]] : [])) : undefined;
+    return JSON.stringify({ ...rest, from: key(sheet.rowAt(area.top), sheet.colAt(area.left)), to: key(sheet.rowAt(area.bottom), sheet.colAt(area.right)), ...(kept ? { keep: kept } : {}), ...(whens ? { when: whens } : {}),
       ...(Array.isArray(hide) ? { hide: hide.flatMap((row) => Number.isInteger(row) && row >= 1 && row <= rows ? [sheet.rowAt(row - 1)] : []) } : {}) });
   };
   const lookOf = (room, sheet) => {
