@@ -98,7 +98,7 @@ export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bo
     return now && top !== undefined && now.y - top < (tools?.offsetHeight ?? 0) * 1.5 ? "bottom-start" as const : "top-start" as const;
   }));
   // Placed again only when what it is over changes: above the first line, or under the last.
-  const lines = createMemo(on([() => state()?.key, placement], () => { const now = state(), under = placement() === "bottom-start"; return now && (() => now.lines(under)); }));
+  const lines = createMemo(on([() => state()?.key, placement], () => { const now = state(), under = placement() === "bottom-start"; return now ? () => now.lines(under) : undefined; }));
   createEffect(on(() => state()?.key, () => { setLinking(false); setInking(undefined); setPicking(false); setShut(undefined); }, { defer: true }));
   createEffect(on(() => props.asked?.(), () => { setInking(undefined); setShut(undefined); setLinking(true); }, { defer: true }));
   const open = () => { const now = state(); return Boolean(now && (now.focused || linking() || inking()) && shut() !== now.key); };
