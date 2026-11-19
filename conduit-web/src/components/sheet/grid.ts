@@ -520,7 +520,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   let copied: { rows: number[]; cols: number[]; text: string; values: string[][] } | null = null;
   /** The rows (or columns) shown from one on: `count` of them, or those up to `last`. */
   const rowsFrom = (row: number, count: number, last = Infinity) => { const hidden = options.columns.hidden(), out: number[] = []; for (; out.length < count && row <= last; row++) if (!hidden.has(row)) out.push(row); return out; };
-  const colsFrom = (col: number, count: number, last = Infinity) => { const out: number[] = []; for (; out.length < count && col <= last; col++) out.push(col); return out; };
+  const colsFrom = (col: number, count: number, last = Infinity) => { const out: number[] = []; for (; out.length < count && col <= last && col < COL_LIMIT; col++) if (!hiddenCols.has(col)) out.push(col); return out; };
   /** A range's cells shown, cut to what the sheet holds (whole columns run on into the grid's spare room). */
   const cellsIn = (area: SheetRange) => { const held = model.size(); return { rows: rowsFrom(area.top, Infinity, Math.min(area.bottom, held.rows - 1)), cols: colsFrom(area.left, Infinity, Math.min(area.right, held.cols - 1)) }; };
   // A last empty line is how text copied elsewhere often ends; never one a copy here makes.

@@ -34,6 +34,7 @@ const lowered = (input: string, by: number) => tokenize(input).map((token) => { 
   // Only the address moves: a tab's name (Sheet2!, 'Q1 2024'!) keeps its digits.
   const at = text.lastIndexOf("!") + 1;
   return text.slice(0, at) + text.slice(at).replace(/(\$?)(\d+)/g, (all, held: string, row: string) => held ? all : String(Number(row) + by)); }).join("");
+const between = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, n) => from + n);
 const runsOf = (rows: readonly number[]) => rows.reduce<number[][]>((out, row) => { const last = out.at(-1); if (last && last.at(-1) === row - 1) last.push(row); else out.push([row]); return out; }, []);
 type Menu = { rows?: SheetRange; cols?: SheetRange };
 
@@ -323,9 +324,10 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   // The menu's own doings, over what it was opened on: a sequence's (sizes), and the cells' cut, copy, paste and clearing.
   const picked = (): SheetRange | null => { const r = rows(), c = cols(); return r && c ? { top: r.top, bottom: r.bottom, left: c.left, right: c.right } : null; };
   const sized = (keys: string, selection: SheetRange) => SHEET_SEQUENCES.find((sequence): sequence is Extract<SheetSequence, { run: unknown }> => sequence.keys === keys && "run" in sequence)?.run({ selection: () => selection, sizes, look: () => readLook(root!), ask: setQuestion, filters: filters.keys, merge, rules: () => setRuling(at()) });
-  // What a range's cuts, clears, pastes and deletes reach: its rows shown, never one hidden, which is out of sight.
+  // What a range's cuts, clears, pastes and deletes reach: its rows and columns shown, never one hidden, which is out of sight.
   const shownRows = (range: SheetRange) => { const hidden = sizes.hidden(); return Array.from({ length: range.bottom - range.top + 1 }, (_, r) => range.top + r).filter((row) => !hidden.has(row)); };
-  const within = (range: SheetRange) => shownRows(range).map((row) => Array.from({ length: range.right - range.left + 1 }, (_, c) => ({ row, col: range.left + c })));
+  const shownCols = (range: SheetRange) => { const hidden = sizes.hiddenCols(); return between(range.left, range.right).filter((col) => !hidden.has(col)); };
+  const within = (range: SheetRange) => shownRows(range).map((row) => shownCols(range).map((col) => ({ row, col })));
   const copy = (range: SheetRange, cut = false) => navigator.clipboard.writeText(grid()?.copy(range, cut) ?? "").catch((error: Error) => props.host.failed(error.message));
   const clear = (range: SheetRange, label = "Clear contents") => writes(label)(within(range).flat().map((cell) => ({ ...cell, input: "" })));
   const paste = (range: SheetRange, values = false) => void navigator.clipboard.readText().then((text) => grid()?.paste({ row: range.top, col: range.left }, text, values), (error: Error) => props.host.failed(error.message));
@@ -354,7 +356,6 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   });
   const hiddenIn = (range: SheetRange) => shownRows(range).length < range.bottom - range.top + 1;
   // A column's menu unhides the hidden columns it spans, or those just beside it, as column A hidden can be spanned by none.
-  const between = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, n) => from + n);
   const hiddenColsBy = (range: SheetRange) => { const hidden = sizes.hiddenCols(), out = between(range.left, range.right).filter((col) => hidden.has(col));
     for (const dir of [-1, 1]) for (let col = (dir < 0 ? range.left : range.right) + dir; hidden.has(col); col += dir) out.push(col);
     return out; };
