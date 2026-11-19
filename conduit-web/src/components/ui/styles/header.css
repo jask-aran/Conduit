@@ -11,6 +11,8 @@
    actions; it keeps its width and the title truncates instead. */
 .ui-pane-header:where([data-header="pane"]) > .ui-seg { flex: none; }
 .ui-header-group:empty { display: none; }
+/* A part folded for room (fitFolds, header.tsx) stays in the header, unseen, so its width is known when room comes back. */
+.ui-pane-header:where([data-header="pane"]) [data-fold][data-folded] { display: none; }
 /* A header button that holds something open (a pane it opened, a panel maximised) stays lit while it does. */
 .ui-header-group > .ui-button[aria-pressed="true"] { background: var(--tint); }
 

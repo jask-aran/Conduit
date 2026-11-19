@@ -17,22 +17,28 @@ export const PaneLetter = (props: { letter?: string; children?: JSX.Element }) =
   <PaneLetterContext.Provider value={() => props.letter}>{props.children}</PaneLetterContext.Provider>;
 
 function fitFileHeader(header: HTMLElement) {
-  const fit = () => {
+  fitFolds(header, () => {
     // The name needs room for at least the file's own name, measured from its text; headed by tabs, every tab is the
     // name (their data-need), and the actions fold before a tab does.
     const name = header.querySelector<HTMLElement>(".ui-file-name > span");
     const tabs = header.querySelector<HTMLElement>(".ui-pane-tabs[data-need]");
-    const nameFits = () => {
-      if (!name && tabs) return tabs.clientWidth + 1 >= Number(tabs.dataset.need);
-      const text = name?.firstChild;
-      if (!name || !(text instanceof Text)) return true;
-      const range = document.createRange();
-      range.setStart(text, text.data.lastIndexOf("/") + 1);
-      range.setEnd(text, text.data.length);
-      return name.clientWidth + 1 >= range.getBoundingClientRect().width;
-    };
+    if (!name && tabs) return tabs.clientWidth + 1 >= Number(tabs.dataset.need);
+    const text = name?.firstChild;
+    if (!name || !(text instanceof Text)) return true;
+    const range = document.createRange();
+    range.setStart(text, text.data.lastIndexOf("/") + 1);
+    range.setEnd(text, text.data.length);
+    return name.clientWidth + 1 >= range.getBoundingClientRect().width;
+  });
+}
+
+/** Folds the header's [data-fold] parts, lowest first, while they or its name (`nameFits`) would be squeezed, and says
+ *  which with a "headerfold" event. */
+function fitFolds(header: HTMLElement, nameFits: () => boolean) {
+  const fit = () => {
     const squeezed = () => header.scrollWidth > header.clientWidth || !nameFits();
     const foldable = [...header.querySelectorAll<HTMLElement>("[data-fold]")].sort((a, b) => Number(a.dataset.fold) - Number(b.dataset.fold));
+    if (!foldable.length && !header.dataset.foldedActions) return;
     foldable.forEach((element) => element.removeAttribute("data-folded"));
     const gone: string[] = [];
     for (const element of foldable) {
@@ -85,9 +91,11 @@ export function PaneHeader(props: JSX.HTMLAttributes<HTMLElement> & {
     return <header ref={folds.ref} data-surface="ground" {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="term"
       data-folded={TERM_FOLDS.slice(0, folds.count()).join(" ") || undefined} data-tauri-drag-region={dragRegion()}>{mark()}{local.children}{local.actions}</header>;
   }
-  const [local, rest] = splitProps(props, ["kind", "lead", "pill", "after", "actions", "frost", "children", "class", "name", "nameTitle", "place", "placeTitle", "modes", "views"]);
+  const [local, rest] = splitProps(props, ["kind", "lead", "pill", "after", "actions", "frost", "children", "class", "name", "nameTitle", "place", "placeTitle", "modes", "views", "ref"]);
   const title = children(() => local.children);
-  return <header {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="pane" data-frost={local.frost ? "" : undefined} data-tauri-drag-region={dragRegion()}>
+  // The title gives way only once every part that folds has: until then a cut anywhere in it counts as squeezed.
+  const fit = (header: HTMLElement) => fitFolds(header, () => [...header.querySelectorAll<HTMLElement>(".ui-header-title, .ui-header-title > *, .ui-header-title > * > *")].every((part) => part.scrollWidth <= part.clientWidth + 1));
+  return <header ref={(element) => { fit(element); (local.ref as ((element: HTMLElement) => void) | undefined)?.(element); }} {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="pane" data-frost={local.frost ? "" : undefined} data-tauri-drag-region={dragRegion()}>
     {mark()}
     <Show when={local.lead}><div class="ui-header-group" data-lead="">{local.lead}</div></Show>
     <div class="ui-header-title" data-tabs={holds(title(), "ui-tabs-row") ? "" : undefined}>{title()}</div>
