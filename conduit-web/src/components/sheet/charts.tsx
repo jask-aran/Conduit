@@ -4,7 +4,7 @@
  * handle sizes it, and with the keyboard the arrows move it a cell, Shift and the arrows size it, Delete takes it off and Tab goes to the next chart.
  * Each of those is one step of the sheet's history.
  */
-import * as Y from "yjs";
+import type * as Y from "yjs";
 import { createEffect, createMemo, createSignal, Index, onCleanup, Show, type JSX } from "solid-js";
 import { CHART_LEAST, CHART_MOST, chartData, chartPlace, chartSize, readCharts, type SheetChart } from "@/sheet-charts.js";
 import { rangeA1, type SheetView } from "@/sheet-format.js";
@@ -22,15 +22,15 @@ export default function SheetCharts(props: { look: Y.Map<number | string>; model
   const sheet = props.model;
   const [tick, setTick] = createSignal(0), [selected, setSelected] = createSignal<string | null>(null);
   const bump = () => setTick((n) => n + 1);
-  const watch = (event: Y.YMapEvent<number | string>) => { if ([...event.keysChanged].some((name) => name.startsWith("charts:"))) bump(); };
-  props.look.observe(watch);
+  // Any look may change what a chart draws (hidden rows, a filter, a number format), not only its own.
+  props.look.observe(bump);
   const off = sheet.onChange(bump);
-  onCleanup(() => { props.look.unobserve(watch); off(); });
+  onCleanup(() => { props.look.unobserve(bump); off(); });
   const name = () => `charts:${sheet.id}`;
   const list = createMemo(() => { tick(); return sheet.id ? readCharts(props.look.get(name())) : []; });
   // The caption's size, which the drawing is laid out from.
-  let layer: HTMLDivElement | undefined;
-  const font = () => layer ? parseFloat(getComputedStyle(layer).fontSize) || 12 : 12;
+  const [layer, setLayer] = createSignal<HTMLDivElement>();
+  const font = () => { const into = layer(); return into ? parseFloat(getComputedStyle(into).fontSize) || 12 : 12; };
   const save = (label: string, id: string, change: Partial<SheetChart> | null) => props.act(label, () => {
     const all = readCharts(props.look.get(name())), next = change ? all.map((one) => one.id === id ? { ...one, ...change } : one) : all.filter((one) => one.id !== id);
     if (next.length) props.look.set(name(), JSON.stringify(next)); else props.look.delete(name());
@@ -40,15 +40,15 @@ export default function SheetCharts(props: { look: Y.Map<number | string>; model
   const away = (event: PointerEvent) => { if (!(event.target instanceof Element && event.target.closest(".ui-sheet-chart"))) setSelected(null); };
   addEventListener("pointerdown", away, true);
   onCleanup(() => removeEventListener("pointerdown", away, true));
-  const focusChart = (id: string) => layer?.querySelector<HTMLElement>(`[data-chart="${CSS.escape(id)}"]`)?.focus();
+  const focusChart = (id: string) => layer()?.querySelector<HTMLElement>(`[data-chart="${CSS.escape(id)}"]`)?.focus();
   createEffect(() => { const id = selected(); if (id && !list().some((one) => one.id === id)) setSelected(null); });
 
   // The layer covers the cells and clips what runs past them: placed in the frame it stands in.
   const spot = createMemo((): JSX.CSSProperties => {
-    const frame = area(), base = layer?.offsetParent?.getBoundingClientRect();
+    const frame = area(), base = layer()?.offsetParent?.getBoundingClientRect();
     return frame && base ? { left: `${frame.left - base.left}px`, top: `${frame.top - base.top}px`, width: `${frame.width}px`, height: `${frame.height}px` } : { visibility: "hidden" };
   });
-  return <div ref={layer} class="ui-sheet-charts" style={spot()}>
+  return <div ref={setLayer} class="ui-sheet-charts" style={spot()}>
     <Index each={list()}>{(chart) => {
       const place = createMemo(() => { tick(); return chartPlace(sheet, chart()); });
       // Drawn again when its cells, its look or the hidden lines change, never as the grid scrolls.
@@ -107,7 +107,7 @@ export default function SheetCharts(props: { look: Y.Map<number | string>; model
         if (row && col && `${row}:${col}` !== chart().at) save("Move chart", chart().id, { at: `${row}:${col}` });
       };
       // The wheel over a chart scrolls the grid under it.
-      const wheel = (event: WheelEvent) => { const scroller = layer?.parentElement?.querySelector<HTMLElement>(".ui-spreadsheet-rows .dvn-scroller"); if (scroller) { event.preventDefault(); scroller.scrollBy(event.deltaX, event.deltaY); } };
+      const wheel = (event: WheelEvent) => { const scroller = layer()?.parentElement?.querySelector<HTMLElement>(".ui-spreadsheet-rows .dvn-scroller"); if (scroller) { event.preventDefault(); scroller.scrollBy(event.deltaX, event.deltaY); } };
       return <Show when={box()}>{(now) => <div class="ui-sheet-chart" data-chart={chart().id} data-selected={selected() === chart().id ? "" : undefined} tabindex="0" role="figure"
         aria-label={`${chart().title ?? `${chart().kind[0]!.toUpperCase()}${chart().kind.slice(1)} chart`} of ${place() ? rangeA1(place()!.area) : ""}`}
         style={{ transform: `translate(${now().x}px, ${now().y}px)`, width: `${now().width}px`, height: `${now().height}px` }}
