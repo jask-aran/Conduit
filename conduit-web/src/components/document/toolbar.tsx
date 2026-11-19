@@ -29,6 +29,28 @@ export const inkSwatch = (ink?: PaperInk) => ink ? <Swatch colour={MARKUP_INKS[i
 /** The ink put on the text selected, or the mark taken off it (none). */
 export const putInk = (chain: ChainedCommands, mark: InkedMark, ink?: PaperInk | `#${string}`) => (ink ? chain.setMark(mark, { ink }) : chain.unsetMark(mark)).run();
 const TABLE = [["delete-row", "Delete the row", "deleteRow"], ["delete-column", "Delete the column", "deleteColumn"], ["delete-table", "Delete the table", "deleteTable"]] as const;
+/** What the caret's cell offers in the block menu: rows and columns put in beside it, and its column's alignment, which Markdown keeps for a whole column. */
+export const TABLE_INSERTS = [["row-above", "Insert row above", "addRowBefore"], ["row-below", "Insert row below", "addRowAfter"], ["column-left", "Insert column left", "addColumnBefore"], ["column-right", "Insert column right", "addColumnAfter"]] as const;
+export const TABLE_ALIGNS = [["align-left", "Left", "left"], ["align-center", "Centre", "center"], ["align-right", "Right", "right"]] as const;
+/** The caret's column in its table: where the table starts, its map and the column's index; null outside a table. */
+const caretColumn = (view: EditorView) => {
+  const { $from } = view.state.selection;
+  let cell = $from.depth;
+  while (cell > 0 && !/cell/.test($from.node(cell).type.spec.tableRole ?? "")) cell--;
+  if (cell < 3) return null;
+  const table = $from.node(cell - 2), start = $from.start(cell - 2), map = TableMap.get(table);
+  return { start, map, column: map.colCount($from.before(cell) - start) };
+};
+/** The caret column's alignment as its cells wear it, the first cell's. */
+export const columnAlign = (view: EditorView) => { const at = caretColumn(view); return at ? view.state.doc.nodeAt(at.start + at.map.map[at.column]!)?.attrs.align as string | null : null; };
+/** Every cell of the caret's column aligned (`align`: left, center, right, or null for none), in one change. */
+export const alignColumn = (view: EditorView, align: string | null) => {
+  const at = caretColumn(view);
+  if (!at) return;
+  const tr = view.state.tr;
+  for (const pos of new Set(Array.from({ length: at.map.height }, (_, row) => at.start + at.map.map[row * at.map.width + at.column]!))) tr.setNodeAttribute(pos, "align", align);
+  view.dispatch(tr);
+};
 // The app's own writing of a chord is passed in (`chord`); without it, the ribbon's.
 const ribbonChord = (keys: string) => keys.split("-").map((key) => key === "Mod" ? "Ctrl" : key.length === 1 ? key.toUpperCase() : key).join(" ");
 // A press on a tool keeps the editor's focus, and with it the selection the tool acts on.
