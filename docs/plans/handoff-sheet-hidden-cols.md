@@ -22,9 +22,13 @@ Read in Glide's source: a column with a numeric `width` skips `minColumnWidth` (
 
 ## Done / left
 - Done: all of the above. Typecheck clean. xlsx round trip checked with node (scratchpad `hidcols.mjs`, `hidcols2.mjs`).
-- Not checked: anything in the browser (drawing at 0 wide, drag open, keys, menu).
-- Left: copy, cut, clear, paste and fill still reach hidden columns (hidden rows are skipped); Find matches in them; Home (Glide's own)
-  can land on a hidden column A; no Ctrl+0 / Ctrl+Shift+0 keys.
+- Done since: copy, cut, clear and paste skip hidden columns (grid.ts `colsFrom`, which the grid now writes the clipboard through; sheet.tsx
+  `shownCols`); the fill handle, Fill down and Fill right fill each run of shown columns on its own; Find skips them; Home and Ctrl+Home step
+  past a hidden column A; Ctrl+0 hides the selection's columns and Ctrl+Shift+0 shows those hidden in it.
+- Not checked: anything in the browser (drawing at 0 wide, drag open, keys, menu, the clipboard, Ctrl+Shift+0, which Windows may take for
+  switching input language).
+- Left: a fill handle source wider than one column with a hidden column inside it: the hub moves each formula by its place in the whole
+  source, so it can come from the wrong source column. Find does not find again when a column is hidden or shown while it is open.
 
 ## Gotchas
 - The row Hide (sheet.tsx) is not wrapped in `history.act`; its step name comes from `LOOKS.hidden` ("Hide rows"), so any column

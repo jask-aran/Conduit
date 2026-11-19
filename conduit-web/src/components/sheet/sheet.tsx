@@ -27,8 +27,8 @@ import { FormatMenu } from "./format-menu";
 
 // Cells written into the text a comment quotes, and how much of each: enough to read.
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
-// The grid keeps a spreadsheet's chords the application binds elsewhere: Ctrl+- deletes rows, Ctrl+Shift+1..5 are number formats.
-const OWN_KEYS = ["primary+Minus", ...[1, 2, 3, 4, 5].map((n) => `primary+shift+Digit${n}`)].join(" ");
+// The grid keeps a spreadsheet's chords the application binds elsewhere: Ctrl+- deletes rows, Ctrl+0 hides columns, Ctrl+Shift+1..5 are number formats.
+const OWN_KEYS = ["primary+Minus", "primary+Digit0", ...[0, 1, 2, 3, 4, 5].map((n) => `primary+shift+Digit${n}`)].join(" ");
 const between = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, n) => from + n);
 type Menu = { rows?: SheetRange; cols?: SheetRange };
 
@@ -373,6 +373,13 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (find.keys(event) || tabs.key(event) || history.act(tool, () => formats.key(event, at()) || styles.key(event, at())) || filters.key(event)) return;
       // Ctrl+D and Ctrl+R are the grid's only while it has the keyboard: elsewhere the browser keeps them.
       if (!event.shiftKey && !event.altKey && (event.code === "KeyD" || event.code === "KeyR")) { event.preventDefault(); const area = at(); if (area) spread(area, event.code === "KeyD" ? "down" : "right"); return; }
+      // Ctrl+0 hides the selection's columns and Ctrl+Shift+0 shows those hidden in it, as a spreadsheet's (by code: shifted, the key is ")").
+      if (!event.altKey && event.code === "Digit0") {
+        event.preventDefault();
+        const area = at(), hide = !event.shiftKey, cols = area ? between(area.left, area.right).filter((col) => hide || sizes.hiddenCols().has(col)) : [];
+        if (cols.length) history.act(hide ? "Hide columns" : "Unhide columns", () => sizes.setHiddenCols(cols, hide));
+        return;
+      }
       // Ctrl+Shift+= and Ctrl+- insert and delete whole rows or columns picked, as a spreadsheet's. A block of cells is left alone (Excel asks which
       // way to shift it), and the key held back from the browser's zoom.
       if (!event.altKey && (event.key === "-" || (event.shiftKey && (event.key === "+" || event.code === "Equal")))) {
