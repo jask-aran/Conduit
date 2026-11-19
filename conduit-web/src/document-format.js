@@ -181,7 +181,7 @@ const EXTRAS = ["callout", "toggle", "date", "color", "highlight", "underline"];
 /** The editor's and the hub's extensions. `holds`: the extras this document has (unsaid: every one); one it does not hold is out of the schema, so it is neither made nor read. */
 export const documentExtensions = (holds) => {
   const has = (extra) => !holds || holds.includes(extra);
-  return [StarterKit.configure({ undoRedo: false, trailingNode: false, paragraph: false, link: { openOnClick: false }, ...(has("underline") ? {} : { underline: false }) }), TaskList, PaperParagraph, TaskItem.configure({ nested: true }), TableKit.configure({ table: false }), PaperTable, Image,
+  return [StarterKit.configure({ undoRedo: false, trailingNode: false, paragraph: false, link: { openOnClick: false, markdownLinks: true }, ...(has("underline") ? {} : { underline: false }) }), TaskList, PaperParagraph, TaskItem.configure({ nested: true }), TableKit.configure({ table: false }), PaperTable, Image,
     ...(has("callout") ? [Callout] : []), ...(has("toggle") ? [Toggle] : []), ...(has("date") ? [Day] : []), ...(has("color") ? [inked("color", "span")] : []), ...(has("highlight") ? [inked("highlight", "mark")] : []),
     UniqueID.configure({ types: BLOCK_TYPES, generateID: blockId })];
 };

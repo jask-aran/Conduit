@@ -26,7 +26,7 @@ import { blockDiff, createSuggesting, type Change } from "./suggest";
 import { dayFrom, paperTyping, pickImages, viewed } from "./nodes";
 import { INKED, INKS, inkSwatch, MARKS, putInk, SelectionTools, TableTools, selectedRange, type PaperInk } from "./toolbar";
 import { createSlash, menuKeys, TypedMenu, typing, type Typed, type Typing } from "./typed";
-import { PAPER_COMMENT_KEY, PAPER_MARK_KEYS, paperKeys } from "./shortcuts";
+import { PAPER_COMMENT_KEY, PAPER_LINK_KEY, PAPER_MARK_KEYS, paperKeys } from "./shortcuts";
 
 /** What the caret's block is, read in this order (a list inside a quote is a list), and how a block is made that kind. */
 const KINDS: Record<DocumentBlockKind, { label: string; is?: [string, Record<string, unknown>?]; make: (chain: ChainedCommands) => ChainedCommands }> = {
@@ -55,6 +55,24 @@ const MARK_KEYS: Record<string, string[]> = Object.fromEntries(Object.entries(PA
 // The chords the text keeps from the application while it has the keyboard (`data-own-keys`, read by the shortcut manager): its marks and the comment key.
 const OWN_KEYS = [...Object.values(PAPER_MARK_KEYS), PAPER_COMMENT_KEY].map((chord) => { const parts = chord.split("-"), key = parts.pop()!; return [...parts.map((part) => part === "Mod" ? "primary" : part.toLowerCase()).sort(), `Key${key.toUpperCase()}`].join("+"); }).join(" ");
 const chordHint = (chord: string) => paperKeys(chord).join(" ");
+/** Where Mod-K has a link to make or change: text selected, or the caret in a link. Elsewhere the chord stays the application's (its palette). */
+const linkable = ({ selection, schema }: EditorState) => {
+  if (!selection.empty) return selection instanceof TextSelection;
+  const link = schema.marks.link, { $from } = selection;
+  return Boolean(link && (link.isInSet($from.marks()) || link.isInSet($from.nodeAfter?.marks ?? [])));
+};
+const LINK_OWN = `${OWN_KEYS} primary+KeyK`;
+/** Mod-K asks for the link's address (`ask`, the selection tools' field) where there is a link to make or change; Mod-click opens a link. */
+const linkKeys = (ask: () => void) => Extension.create({
+  name: "linkKeys",
+  addKeyboardShortcuts() { return { [PAPER_LINK_KEY]: () => { if (!linkable(this.editor.state)) return false; ask(); return true; } }; },
+  addProseMirrorPlugins: () => [new Plugin({ props: { handleClick: (view, _pos, event) => {
+    const href = event.ctrlKey || event.metaKey ? (event.target as Element).closest?.("a[href]")?.getAttribute("href") : null;
+    if (!href || !view.dom.contains(event.target as globalThis.Node)) return false;
+    window.open(href, "_blank", "noopener");
+    return true;
+  } } })],
+});
 /** Escape steps out of a selection to its head, so its tools go (DESIGN.md, the Escape ladder); last of the editor's keys, and never where something took the press first. */
 const collapsing = Extension.create({
   name: "collapseOnEscape",
@@ -215,7 +233,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
   let redrawSeats = () => {};
   createEffect(() => { copy.seats(); redrawSeats(); });
   const [column, setColumn] = createSignal<HTMLDivElement>(), [scroller, setScroller] = createSignal<HTMLDivElement>(), [editor, setEditor] = createSignal<Editor>();
-  const [reflowed, setReflowed] = createSignal(0);
+  const [reflowed, setReflowed] = createSignal(0), [linkAsked, setLinkAsked] = createSignal(0);
   const changes = copy.doc.getMap<Change>(CHANGES), [changed, setChanged] = createSignal<string[]>([]);
   const watching = new Set<(pressed?: string) => void>(), told: Told = { anchors: [], acts: null, working: new Set(), moved: (pressed?: string) => { for (const listener of watching) listener(pressed); }, lines: new Map() };
   const redraw = () => { const view = editor()?.view; if (view) view.dispatch(view.state.tr.setMeta(shown, true)); };
@@ -383,7 +401,7 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     {/* The editor is made only once the hub's copy is held: made before, its first empty block would be merged in as a block of its own. */}
     <Show when={copy.synced() && column()}>{(element) => {
       // Untracked: a signal or prop read in what the editor is made from would make it again (caret, undo and find lost) each time it changed.
-      const made = createTiptapEditor(() => { const at = element(); return untrack(() => ({ element: at, extensions: [...viewed(documentExtensions(props.host.holds), props.host), paperTyping(props.host, offers), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), suggesting.extension(), seatsDrawn(copy.seats, (redraw) => { redrawSeats = redraw; }, () => told.acts?.stop), hinted(props.onAsk ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), numbered(scroller), slash.extension(), blockKeys, drawn((block, name) => props.host.showMention?.(block, name)), find.extension(), collapsing, ...(props.onAsk ? [mentioning(anchor, setAsked, keys), commentKey] : [])], editorProps: { attributes: { class: documentTextClass, "aria-label": props.name, "data-own-keys": OWN_KEYS } } })); });
+      const made = createTiptapEditor(() => { const at = element(); return untrack(() => ({ element: at, extensions: [...viewed(documentExtensions(props.host.holds), props.host), paperTyping(props.host, offers), merged(copy.doc.getXmlFragment(FRAGMENT)), marked(changes, told), suggesting.extension(), seatsDrawn(copy.seats, (redraw) => { redrawSeats = redraw; }, () => told.acts?.stop), hinted(props.onAsk ? "Write, / for blocks, @ to ask an agent" : "Write, / for blocks"), numbered(scroller), slash.extension(), blockKeys, drawn((block, name) => props.host.showMention?.(block, name)), find.extension(), linkKeys(() => setLinkAsked((n) => n + 1)), collapsing, ...(props.onAsk ? [mentioning(anchor, setAsked, keys), commentKey] : [])], editorProps: { attributes: (state) => ({ class: documentTextClass, "aria-label": props.name, "data-own-keys": linkable(state) ? LINK_OWN : OWN_KEYS }) } })); });
       createEffect(() => setEditor(made()));
       return null;
     }}</Show>
@@ -391,6 +409,6 @@ export function DocumentEditor(props: { host: DocumentHost; id: string; name: st
     {/* Menus and tools beside the sheet, never in it: the sheet's column is the editor's to fill, and a child of it that comes and goes clears it. */}
     <TypedMenu label="Ask" anchor={anchor} items={offered()} name={(name) => name} active={active()} onCursor={setActive} onPick={pick} onDismiss={dismiss} />
     {slash.menu()}
-    <SelectionTools editor={editor} bounds={scroller} marks={props.host.tools} onComment={props.onComment} chord={chordHint} />
+    <SelectionTools editor={editor} bounds={scroller} asked={linkAsked} marks={props.host.tools} onComment={props.onComment} chord={chordHint} />
   </>;
 }

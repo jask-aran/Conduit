@@ -48,7 +48,7 @@ const linesOf = (view: EditorView, from: number, to: number) => {
  * the caret in a link, its address, Open, Edit and Remove. `chord` writes a chord in the editor's notation (`Mod-b`) as the app writes keys. It stands clear above the lines it is about, or under them where `bounds` (the view the
  * text scrolls in) has no room above. Escape or a press away shuts it until the selection changes.
  */
-export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bounds: Accessor<HTMLElement | undefined>; /** The marks offered (every one, unsaid). */ marks?: readonly string[]; onComment?: (about: Range) => void; chord?: (keys: string) => string }) {
+export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bounds: Accessor<HTMLElement | undefined>; /** Counted up by Mod-K: the link's field opens. */ asked?: Accessor<number>; /** The marks offered (every one, unsaid). */ marks?: readonly string[]; onComment?: (about: Range) => void; chord?: (keys: string) => string }) {
   const [linking, setLinking] = createSignal(false), [inking, setInking] = createSignal<typeof INKED[number]>(), [shut, setShut] = createSignal<string>();
   // Any colour's picker, open under the strip; the last colour chosen for each mark is kept to come back to. It puts its colour without taking the
   // editor's focus, so its hex can be typed.
@@ -73,6 +73,7 @@ export function SelectionTools(props: { editor: Accessor<Editor | undefined>; bo
     return now && top !== undefined && now.y - top < (tools?.offsetHeight ?? 0) * 1.5 ? "bottom-start" as const : "top-start" as const;
   }));
   createEffect(on(() => state()?.key, () => { setLinking(false); setInking(undefined); setPicking(false); setShut(undefined); }, { defer: true }));
+  createEffect(on(() => props.asked?.(), () => { setInking(undefined); setShut(undefined); setLinking(true); }, { defer: true }));
   const open = () => { const now = state(); return Boolean(now && (now.focused || linking() || inking()) && shut() !== now.key); };
   const chain = () => props.editor()!.chain().focus();
   const link = (href: string) => { const made = chain().extendMarkRange("link"); (href.trim() ? made.setLink({ href: href.trim() }) : made.unsetLink()).run(); setLinking(false); };
