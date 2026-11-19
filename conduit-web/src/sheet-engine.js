@@ -96,6 +96,7 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
       else if (step.delete) remove(at, step.delete);
     }
   };
+  const relaid = (delta, index) => Boolean(index) && delta.some((step) => step.insert?.some((id) => index.has(id)));
   const emit = (change) => { for (const listener of listeners) listener(change); };
   const onCells = (event) => { const keys = note().keys; for (const cell of event.keysChanged) keys.add(cell); };
   const onTabs = () => { note().tabs = true; };
@@ -120,8 +121,9 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
     };
     // The hub's own structure change was made in the engine and in `typed` first: only what `write` changed is left.
     if (transaction.origin === self) { retype(written); written = null; }
-    // A structure change rewrites many formulas, which the engine rewrites too: that is no reason to build it again.
-    else if (!structure && now.keys.size > REBUILD_AT) rebuild();
+    // A structure change rewrites many formulas, which the engine rewrites too: that is no reason to build it again. But ids put back where they were
+    // taken out (a move, or its undo) are lines whose cells kept their keys, which the engine only knows from the doc.
+    else if ((!structure && now.keys.size > REBUILD_AT) || [...now.rows].some(([id, delta]) => relaid(delta, tabs.get(id)?.rowIndex)) || [...now.cols].some(([id, delta]) => relaid(delta, tabs.get(id)?.colIndex))) rebuild();
     else {
       // Suspended rather than batched: a batch keeps what it changed for an undo, many times slower for many cells.
       engine.suspendEvaluation();
@@ -158,18 +160,22 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
   };
   const hidden = (id) => meta.get(`hidden:${id}`) === true;
   const list = () => ids.map((id) => ({ id, name: nameOf(id), hidden: hidden(id) }));
-  const structure = (id, op, at, count, write = () => {}) => {
+  /** `op` inserts, deletes or (`move-rows`, `move-cols`) moves `count` lines from `at`, moved to start at `to`: their ids move, so their cells keep their keys. */
+  const structure = (id, op, at, count, write = () => {}, to = at) => {
     const t = tabs.get(id) ?? (() => { throw refused(`No tab ${id}`); })();
-    const isRows = op === "insert-rows" || op === "delete-rows", removing = op.startsWith("delete"), before = isRows ? t.rowIds : t.colIds, line = isRows ? t.rows : t.cols, names = naming(id);
+    const isRows = op.endsWith("rows"), removing = op.startsWith("delete"), moving = op.startsWith("move"), before = isRows ? t.rowIds : t.colIds, line = isRows ? t.rows : t.cols, names = naming(id);
     // Each formula that may refer to the tab by its row and column ids, with the engine's text of it before the change.
     const formulas = [];
     eachFormula((u, row, col, input) => { if (u === t || names(input)) formulas.push([u, u.rowIds[row], u.colIds[col], engine.getCellFormula({ sheet: u.sheet, row, col })]); });
     const gone = new Set(removing ? before.slice(at, at + count) : []), across = isRows ? t.colIds : t.rowIds;
-    if (isRows) (removing ? engine.removeRows : engine.addRows).call(engine, t.sheet, [at, count]);
+    if (moving) (isRows ? engine.moveRows : engine.moveColumns).call(engine, t.sheet, at, count, to < at ? to : to + count);
+    else if (isRows) (removing ? engine.removeRows : engine.addRows).call(engine, t.sheet, [at, count]);
     else (removing ? engine.removeColumns : engine.addColumns).call(engine, t.sheet, [at, count]);
+    const relay = (list) => list.splice(to, 0, ...list.splice(at, count));
     doc.transact(() => {
-      if (removing) line.delete(at, count); else line.insert(at, Array.from({ length: count }, fresh));
-      if (isRows) { reindexRows(t); moveRows(t, at, count, removing); } else { reindexCols(t); moveCols(t, at, count, removing); }
+      if (moving) { const moved = line.slice(at, at + count); line.delete(at, count); line.insert(to, moved); }
+      else if (removing) line.delete(at, count); else line.insert(at, Array.from({ length: count }, fresh));
+      if (isRows) { reindexRows(t); if (moving) relay(t.typed); else moveRows(t, at, count, removing); } else { reindexCols(t); if (moving) t.typed.forEach(relay); else moveCols(t, at, count, removing); }
       // The cells of what was deleted, found by their ids (a cell whose other id is gone too was never placed, and is left).
       for (const one of gone) for (const other of across) { const cell = isRows ? key(one, other) : key(other, one); if (cells.has(cell)) cells.delete(cell); }
       written = new Set();
@@ -261,7 +267,7 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
         listeners.add(one); mine.add(one);
         return () => { listeners.delete(one); mine.delete(one); };
       },
-      structure: (op, at, count, write) => structure(which(), op, at, count, write),
+      structure: (op, at, count, write, to) => structure(which(), op, at, count, write, to),
       destroy: end ?? (() => { for (const one of mine) listeners.delete(one); mine.clear(); }),
     };
   };

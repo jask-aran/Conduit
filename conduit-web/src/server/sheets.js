@@ -115,58 +115,54 @@ export function sheetKind(hub) {
     return rows.sort(({ rank: [a, x] }, { rank: [b, y] }) => a === 4 || b === 4 ? a - b : sign * (a - b || (a === 1 ? String(x).localeCompare(String(y), undefined, { sensitivity: "base" }) : a === 0 || a === 2 ? Number(x) - Number(y) : 0))).map(({ row }) => row);
   };
   /**
-   * The lines (rows, or columns where not `isRows`) from `start` in the order given (old positions), across lines `from`..`to`, as a spreadsheet sorts:
-   * only those cells move, each with its own look (`<what>:<rowId>:<colId>`: a style, a number format) and a formula moved as a fill moves it, or as
-   * `formula(row, col)` (its old place) gives it. A `whole` line moves its own look too (`<what>:<lineId>`: a height, a width, hidden); else lines and
-   * their look stay. Only what changes is written, so an edit elsewhere meanwhile is kept.
+   * Columns `left`..`right` of the rows from `top` in the order given (old positions), as a spreadsheet sorts: only those cells move, each with its
+   * own look (`<what>:<rowId>:<colId>`: a style, a number format) and a formula moved as a fill moves it. Rows and their look stay. Only what changes
+   * is written, so an edit elsewhere in the rows meanwhile is kept.
    */
-  const reorder = (room, sheet, start, order, from, to, isRows = true, whole = false, formula = undefined) => {
-    const typed = sheet.inputs(), across = Array.from({ length: to - from + 1 }, (_, n) => from + n), place = (line, other) => isRows ? [line, other] : [other, line];
-    const lineId = (n) => isRows ? sheet.rowAt(n) : sheet.colAt(n), lineOf = new Map(order.map((_, n) => [lineId(start + n), start + n])), otherOf = new Map(across.map((n) => [isRows ? sheet.colAt(n) : sheet.rowAt(n), n]));
-    const worn = new Map(), wear = (at, what, value) => (worn.get(at) ?? worn.set(at, new Map()).get(at)).set(what, value), one = (row, col, here) => ({ start: { sheet: here, row, col }, end: { sheet: here, row, col } });
+  const reorder = (room, sheet, top, order, left, right) => {
+    const typed = sheet.inputs(), cols = Array.from({ length: right - left + 1 }, (_, c) => left + c), rowOf = new Map(order.map((_, n) => [sheet.rowAt(top + n), top + n])), colOf = new Map(cols.map((c) => [sheet.colAt(c), c]));
+    const worn = new Map(), cell = (row, col) => key(sheet.rowAt(row), sheet.colAt(col)), one = (row, col, here) => ({ start: { sheet: here, row, col }, end: { sheet: here, row, col } });
     for (const [name, value] of room.look.entries()) {
-      const [what, row, col, more] = name.split(":"), [line, other] = isRows ? [row, col] : [col, row];
-      if (more === undefined && col !== undefined && lineOf.has(line) && otherOf.has(other)) wear(`${lineOf.get(line)}:${otherOf.get(other)}`, what, value);
-      else if (whole && col === undefined && lineOf.has(row)) wear(`${lineOf.get(row)}`, what, value);
+      const [what, row, col, more] = name.split(":"), at = `${rowOf.get(row)}:${colOf.get(col)}`;
+      if (more === undefined && rowOf.has(row) && colOf.has(col)) (worn.get(at) ?? worn.set(at, new Map()).get(at)).set(what, value);
     }
-    const rewear = (want = new Map(), had = new Map(), name) => { for (const [what, value] of want) if (had.get(what) !== value) room.look.set(`${what}:${name}`, value); for (const what of had.keys()) if (!want.has(what)) room.look.delete(`${what}:${name}`); };
     const { engine, here } = scratch(room, sheet);
     try {
       order.forEach((was, n) => {
-        const now = start + n;
-        if (was === now) return;
-        if (whole) rewear(worn.get(`${was}`), worn.get(`${now}`), lineId(now));
-        for (const c of across) {
-          const [wr, wc] = place(was, c), [r, col] = place(now, c), input = typed[wr][wc] ?? "", cell = key(sheet.rowAt(r), sheet.colAt(col));
-          if (input.startsWith("=") && !formula) engine.setCellContents({ sheet: here, row: wr, col: wc }, input);
-          const moved = !input.startsWith("=") ? input : formula ? formula(wr, wc) : String(engine.getFillRangeData(one(wr, wc, here), one(r, col, here))[0]?.[0] ?? input);
-          if (moved !== (typed[r][col] ?? "")) { if (moved) room.cells.set(cell, moved); else room.cells.delete(cell); }
-          rewear(worn.get(`${was}:${c}`), worn.get(`${now}:${c}`), cell);
+        const to = top + n;
+        if (was !== to) for (const c of cols) {
+          const input = typed[was][c] ?? "", place = cell(to, c);
+          if (input.startsWith("=")) engine.setCellContents({ sheet: here, row: was, col: c }, input);
+          const moved = input.startsWith("=") ? String(engine.getFillRangeData(one(was, c, here), one(to, c, here))[0]?.[0] ?? input) : input;
+          if (moved !== (typed[to][c] ?? "")) { if (moved) room.cells.set(place, moved); else room.cells.delete(place); }
+          const want = worn.get(`${was}:${c}`) ?? new Map(), had = worn.get(`${to}:${c}`) ?? new Map();
+          for (const [what, value] of want) if (had.get(what) !== value) room.look.set(`${what}:${place}`, value);
+          for (const what of had.keys()) if (!want.has(what)) room.look.delete(`${what}:${place}`);
         }
       });
     } finally { engine.destroy(); }
   };
   /**
-   * `count` whole rows (or columns) from `at` moved to start at `to`, with their cells and look; every formula on the tab reading a moved cell follows it,
-   * as the engine moves them (another tab's formulas are left).
+   * Before rows or columns move: each filter's, table's and conditional format's corners stay where they are, on the cells moved into them, as
+   * they would come apart if they went with their lines (keepCorners is the delete's).
    */
-  const moveLines = (room, sheet, isRows, at, count, to) => {
-    const lo = Math.min(at, to), hi = Math.max(at, to) + count - 1, block = Array.from({ length: count }, (_, n) => at + n), rest = Array.from({ length: hi - lo + 1 }, (_, n) => lo + n).filter((n) => n < at || n >= at + count);
-    const order = to < at ? [...block, ...rest] : [...rest, ...block], typed = sheet.inputs(), { rows, cols } = sheet.size(), { engine, here } = scratch(room, sheet);
-    const after = (n) => n < lo || n > hi ? n : lo + order.indexOf(n), cellOf = (r, c) => isRows ? { sheet: here, row: after(r), col: c } : { sheet: here, row: r, col: after(c) };
-    try {
-      typed.forEach((line, r) => line.forEach((input, c) => { if (input.startsWith("=")) engine.setCellContents({ sheet: here, row: r, col: c }, input); }));
-      // The engine moves only within its sheet's size.
-      engine.setCellContents({ sheet: here, row: rows, col: cols }, 0);
-      (isRows ? engine.moveRows : engine.moveColumns).call(engine, here, at, count, to < at ? to : to + count);
-      const formula = (r, c) => engine.getCellFormula(cellOf(r, c)) ?? typed[r][c];
-      reorder(room, sheet, lo, order, 0, (isRows ? cols : rows) - 1, isRows, true, formula);
-      typed.forEach((line, r) => line.forEach((input, c) => {
-        if (!input.startsWith("=") || (isRows ? r : c) >= lo && (isRows ? r : c) <= hi) return;
-        const next = formula(r, c);
-        if (next !== input) room.cells.set(key(sheet.rowAt(r), sheet.colAt(c)), next);
-      }));
-    } finally { engine.destroy(); }
+  const keepPlaces = (room, sheet) => {
+    const stay = (corner) => { const [row, col] = String(corner).split(":"), r = sheet.indexOfRow(row), c = sheet.indexOfCol(col); return () => r < 0 || c < 0 ? corner : key(sheet.rowAt(r), sheet.colAt(c)); };
+    const after = [];
+    for (const what of RANGED) {
+      const name = `${what}:${sheet.id}`;
+      let ranged;
+      try { ranged = JSON.parse(String(room.look.get(name))); } catch { continue; }
+      if (!ranged?.from || !ranged.to) continue;
+      const from = stay(ranged.from), to = stay(ranged.to);
+      after.push(() => { const next = { ...ranged, from: from(), to: to() }; if (next.from !== ranged.from || next.to !== ranged.to) room.look.set(name, JSON.stringify(next)); });
+    }
+    const rules = readRules(room.look.get(`rules:${sheet.id}`));
+    if (rules.length) {
+      const held = rules.map((rule) => ({ rule, ranges: rule.ranges.map(([from, to]) => [stay(from), stay(to)]) }));
+      after.push(() => { const next = JSON.stringify(held.map(({ rule, ranges }) => ({ ...rule, ranges: ranges.map(([from, to]) => [from(), to()]) }))); if (next !== JSON.stringify(rules)) room.look.set(`rules:${sheet.id}`, next); });
+    }
+    return () => { for (const one of after) one(); };
   };
   /** The tab's filter applied again (its `hide`), written only where that changes. */
   const refilter = (room, sheet, by) => {
@@ -217,11 +213,11 @@ export function sheetKind(hub) {
   /**
    * The formulas an import froze (`excel:<rowId>:<colId>`, sheet-xlsx.js) that are on the tab or name it, rewritten by a change to the tab as the
    * engine rewrites a formula, in an engine of its own: OFFSET goes in under a name the engine does not know, so it parses. One that still does not
-   * parse loses its formula, so an export writes its value alone. `op`: a row or column op, or `rename` (to `at`).
+   * parse loses its formula, so an export writes its value alone. `op`: a row or column op (a move to `into`), or `rename` (to `at`).
    * Applied after the change, as `keepCorners`'s.
    */
-  const keepFrozen = (room, sheet, op, at, count) => {
-    const named = sheet.engine.getSheetName(sheet.sheet).toLowerCase(), held = [], { engine, here } = scratch(room, sheet), isRows = op.endsWith("rows"), removing = op.startsWith("delete");
+  const keepFrozen = (room, sheet, op, at, count, into = at) => {
+    const named = sheet.engine.getSheetName(sheet.sheet).toLowerCase(), held = [], { engine, here } = scratch(room, sheet), isRows = op.endsWith("rows"), removing = op.startsWith("delete"), moving = op.startsWith("move");
     try {
       for (const [name, value] of room.look.entries()) {
         const [what, row, col] = name.split(":"), tab = what === "excel" && typeof value?.formula === "string" ? room.book.tabOfRow(row) : undefined, on = tab && room.book.tab(tab);
@@ -235,8 +231,10 @@ export function sheetKind(hub) {
       if (!held.length) return () => {};
       // A name the tab cannot take is the tab op's to refuse.
       if (op === "rename") { try { engine.renameSheet(here, at); } catch { return () => {}; } }
+      else if (moving) (isRows ? engine.moveRows : engine.moveColumns).call(engine, here, at, count, into < at ? into : into + count);
       else (isRows ? removing ? engine.removeRows : engine.addRows : removing ? engine.removeColumns : engine.addColumns).call(engine, here, [at, count]);
-      const moved = (n) => removing ? (n >= at + count ? n - count : n >= at ? -1 : n) : n >= at ? n + count : n;
+      const moved = (n) => moving ? (n >= at && n < at + count ? n - at + into : into > at && n >= at + count && n < into + count ? n - count : into < at && n >= into && n < at ? n + count : n)
+        : removing ? (n >= at + count ? n - count : n >= at ? -1 : n) : n >= at ? n + count : n;
       const after = held.map(({ place, ...one }) => {
         const to = place && (place.sheet !== here || op === "rename" ? place : isRows ? { ...place, row: moved(place.row) } : { ...place, col: moved(place.col) });
         return { ...one, formula: to && to.row >= 0 && to.col >= 0 ? engine.getCellFormula(to)?.replace(/\bMOVEDREF\(/g, "OFFSET(") : undefined };
@@ -544,7 +542,8 @@ export function sheetKind(hub) {
           refilter(room, sheet, name);
           return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}) };
         }
-        // Whole rows or columns moved to start at `to`, each with its cells and its look, as a spreadsheet moves them.
+        // Whole rows or columns moved to start at `to`, their ids with them, so all held by ids (cells, their look, comments) goes with them and each
+        // formula reading them, on any tab, follows them.
         if (op === "move-rows" || op === "move-cols") {
           const sheet = pick(room, tab), isRows = op === "move-rows", { rows, cols } = sheet.size(), size = isRows ? rows : cols, what = isRows ? "row" : "column";
           index(at, size - 1, `first ${what} to move (${size} ${what}s now)`);
@@ -553,7 +552,7 @@ export function sheetKind(hub) {
           const lo = Math.min(at, to), hi = Math.max(at, to) + count - 1;
           const across = mergeAreas(room, sheet).find((one) => (isRows ? one.bottom >= lo && one.top <= hi : one.right >= lo && one.left <= hi));
           if (across) throw fault(400, `${rangeA1(across)} is merged: unmerge it to move these ${what}s`);
-          if (to !== at) hub.as(room, name, (sign) => room.doc.transact(() => { moveLines(room, sheet, isRows, at, count, to); sign(); }));
+          if (to !== at) { const places = keepPlaces(room, sheet), frozen = keepFrozen(room, sheet, op, at, count, to); hub.as(room, name, (sign) => sheet.structure(op, at, count, () => { places(); frozen(); sign(); }, to)); }
           refilter(room, sheet, name);
           return { ...sheet.size(), ...(many(room) ? { tab: sheet.name } : {}) };
         }

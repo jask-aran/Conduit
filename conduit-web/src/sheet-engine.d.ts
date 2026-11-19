@@ -9,7 +9,7 @@ export interface SheetModel extends SheetView {
   engine: HyperFormula;
   sheet: number;
   /** The hub's alone. */
-  structure(op: "insert-rows" | "delete-rows" | "insert-cols" | "delete-cols", at: number, count: number, write?: () => void): { rows: number; cols: number };
+  structure(op: "insert-rows" | "delete-rows" | "insert-cols" | "delete-cols" | "move-rows" | "move-cols", at: number, count: number, write?: () => void, to?: number): { rows: number; cols: number };
   /** A tab's view stops listening; the first tab's from createSheetModel ends the workbook. */
   destroy(): void;
 }
@@ -41,7 +41,7 @@ export interface WorkbookModel {
   cellCount(): number;
   onChange(listener: (change: WorkbookChange) => void): () => void;
   /** The hub's alone: SheetModel `structure` in this tab, rewriting formulas in every tab that refer to it. */
-  structure(tab: string, op: "insert-rows" | "delete-rows" | "insert-cols" | "delete-cols", at: number, count: number, write?: () => void): { rows: number; cols: number };
+  structure(tab: string, op: "insert-rows" | "delete-rows" | "insert-cols" | "delete-cols" | "move-rows" | "move-cols", at: number, count: number, write?: () => void, to?: number): { rows: number; cols: number };
   /** The hub's alone. `tab`: the tab acted on (the new one for add). `write` runs in the same change. Adding to a format-1 doc first names its tab after `name`. */
   tabOp<Op extends TabOp>(op: Op[0], args: Op[1], write?: () => void): { tab: string; tabs: Tab[] };
   destroy(): void;
