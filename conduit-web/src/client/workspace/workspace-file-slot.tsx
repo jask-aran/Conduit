@@ -15,6 +15,7 @@ import { httpUrl } from "../api/transport";
 import { isInstalledClient } from "../platform/installed-client.ts";
 import { directAvailable, workspaceFileJson, workspaceFileResponse } from "./direct-files";
 import type { WorkspaceEditorHandle } from "./workspace-editor";
+import { takeDraft } from "./file-documents";
 import { addReviewComment, reviewComments } from "../chat/review-comments";
 import type { ReviewNavigationRequest } from "../chat/review-navigation";
 import { createLatest } from "../state/latest";
@@ -114,6 +115,7 @@ interface FileWriteResult { path: string; size: number; createdAt?: number | nul
 export interface FileSlotHandle {
   path: () => string | null;
   hasUnsavedChanges: () => boolean;
+  draft: () => string | null;
   reload: () => Promise<void>;
   edit: () => boolean;
   save: () => Promise<void>;
@@ -192,6 +194,7 @@ export default function WorkspaceFileSlot(props: {
 
   let controller: AbortController | null = null;
   let editor: WorkspaceEditorHandle | undefined;
+  let waitingDraft: string | undefined; // a carried edit loaded before its editor was drawn
   const loadToken = createLatest();
   const releaseAsset = () => {
     const current = asset();
@@ -271,6 +274,7 @@ export default function WorkspaceFileSlot(props: {
     const payload = await workspaceFileJson<FilePreview>(projectId, `path=${encodeURIComponent(path)}${query ? `&${query}` : ""}`, { signal: controller?.signal });
     if (!owns()) return;
     if (replacesOpenDocument && editorDirty()) return;
+    const draft = payload.readOnly || payload.truncated ? undefined : takeDraft({ projectId, path: payload.path });
     releaseAsset();
     batch(() => {
       setAsset(null);
@@ -278,10 +282,11 @@ export default function WorkspaceFileSlot(props: {
       setPreview({ ...payload, kind: "text", mime: payload.mime || "text/plain" });
       setDocumentProjectId(projectId);
       setEditorDirty(false);
-      setEditing(false);
+      setEditing(draft !== undefined);
     });
     if (replacesOpenDocument) editor?.replaceDocument(payload.content);
     else editor?.openDocument(payload.path, payload.content, projectId);
+    if (draft !== undefined) { if (editor) editor.setDraft(draft); else waitingDraft = draft; }
     props.onLoaded?.({ path: payload.path, size: payload.size, kind: "text", mime: payload.mime });
   };
 
@@ -449,6 +454,7 @@ export default function WorkspaceFileSlot(props: {
   props.ref?.({
     path: () => props.path,
     hasUnsavedChanges,
+    draft: () => hasUnsavedChanges() ? editor?.getValue() ?? null : null,
     reload: async () => { if (!hasUnsavedChanges()) await load(true); },
     edit: () => {
       const file = preview();
@@ -623,7 +629,7 @@ export default function WorkspaceFileSlot(props: {
                 <WorkspaceEditor
                   projectId={documentProjectId()}
                   header={textHeader()}
-                  ref={(handle) => { editor = handle; }}
+                  ref={(handle) => { editor = handle; if (waitingDraft !== undefined) handle.setDraft(waitingDraft); waitingDraft = undefined; }}
                   path={path()}
                   value={file().content}
                   wrap={props.wrap}

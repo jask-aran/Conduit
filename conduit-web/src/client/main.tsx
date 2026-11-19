@@ -108,7 +108,7 @@ import { isShortcutRegion, type ShortcutBinding } from "./shortcuts/shortcut-typ
 import { normalizeStoredBinding } from "./shortcuts/shortcut-normalize";
 import { acknowledgeRegion } from "./shortcuts/region-cue";
 import { globalShortcuts } from "./shortcuts/global-shortcuts";
-import { fileEntryKey, formatFileView, parseFileView, sameFileEntry, type FileEntry } from "./workspace/file-documents";
+import { carryDraft, fileEntryKey, formatFileView, parseFileView, sameFileEntry, type FileEntry } from "./workspace/file-documents";
 import { dropWash, dropZoneAt } from "./panes/pane-drop";
 import type { ReviewNavigationRequest } from "./chat/review-navigation";
 import type { FileSlotHandle, FileSummary } from "./workspace/workspace-file-slot";
@@ -2655,7 +2655,16 @@ function App() {
     if (before.summon && panes.target(-1) !== last) panes.amend(before);
   };
   /** The dock's folder viewer or terminal taken to a pane of its own: the summon goes, the pane keeps the workspace. */
-  const moveToRow = (view: SplitView) => fromSummon(() => openBeside(view));
+  const moveToRow = (view: SplitView) => fromSummon(() => withDockFile(view, () => openBeside(view)));
+  /** The dock's folder viewer made a pane takes its open file and unsaved edit; an open folder pane is gone to instead. */
+  const withDockFile = async (view: string, open: () => Promise<unknown>) => {
+    const handle = dockFile(), path = handle?.path(), projectId = view === "tool:files" ? dockProject()?.id : view.startsWith("folder:") ? view.slice("folder:".length) : null;
+    if (!handle || !path || !projectId || Layouts.findView(layout(), `folder:${projectId}`)) return void await open();
+    writeSetting(`folder:${projectId}`, "file", path);
+    const draft = handle.draft(), drop = draft === null ? null : carryDraft({ projectId, path }, draft);
+    await open();
+    if (!Layouts.findView(layout(), `folder:${projectId}`)) drop?.(); else if (drop) handle.discardChanges();
+  };
   const closeSlot = async (slot: number | null, focus = true) => {
     if (slot === null) return;
     const previous = slotView(slot);
@@ -2858,7 +2867,9 @@ function App() {
     const placed = { ...target, zone: target.zone };
     if (fromPane !== null) return void await movePaneDocument(fromPane, placed);
     if (group) return void await moveTabGroup(group, placed, view as SplitView);
-    return /^(folder:|tool:files$)/.test(view) && layout().summon === "files" ? fromSummon(() => dropDocument(placed, view)) : dropDocument(placed, view);
+    if (!/^(folder:|tool:files$)/.test(view)) return dropDocument(placed, view);
+    const drop = () => withDockFile(view!, () => dropDocument(placed, view!));
+    return layout().summon === "files" ? fromSummon(drop) : drop();
   };
   const dropDocument = async (target: { pane: PaneKey; zone: "left" | "middle" | "right" }, view: string) => {
     if (view === "tool:terminal") { const id = await pickShell(); if (!id) return; view = `term:${id}`; }
