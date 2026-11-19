@@ -214,6 +214,8 @@ export function importXlsx(bytes, { tabs: only } = {}) {
         if (!own) continue;
         if (styled < STYLES_PER_TAB) { look[`style:${a1(r, c)}`] = own; styled += 1; } else drop("cell styles");
       }
+      // Each hyperlink by its cell (`link:<rowId>:<colId>`): its address, or `#Tab!A1` for a place in the workbook.
+      cellsOf(tab.data, (cell, r, c) => { if (typeof cell.l?.Target === "string") { if (r < tab.rows && c < tab.cols) { look[`link:${a1(r, c)}`] = cell.l.Target; } else drop("hyperlinks past the tab's last value"); } });
       // Merged ranges inside the tab, a lone cell being none.
       // A merge reaching past the tab's last value is cut at its edge; one left a single cell is dropped.
       const merges = (tab.sheet["!merges"] ?? []).map(({ s, e }) => ({ s, e: { r: Math.min(e.r, tab.rows - 1), c: Math.min(e.c, tab.cols - 1) } })).filter(({ s, e }) => e.r >= s.r && e.c >= s.c && (e.r > s.r || e.c > s.c));
@@ -270,6 +272,8 @@ export function exportXlsx(tabs) {
       if (formula) cell.f = stored(orphaned(formula, known));
       const format = tab.look[`fmt:${at}`] ?? tab.look[`fmt:${colName(c)}`];
       if (cell.t === "n" && typeof format === "string" && format !== "General") cell.z = format;
+      const link = tab.look[`link:${at}`];
+      if (typeof link === "string" && link) cell.l = { Target: link };
       sheet[at] = cell;
     }));
     sheet["!ref"] = `A1:${a1(Math.max(0, tab.typed.length - 1), cols - 1)}`;
