@@ -1,4 +1,4 @@
-import { createSignal, type Accessor } from "solid-js";
+import { createSignal, onCleanup, type Accessor } from "solid-js";
 import type * as Y from "yjs";
 import { createSheetView, LOOK, parseRange, parseRef, rangeA1, tabRef, type SheetBook, type SheetChange, type SheetTabOp, type SheetTabsResult, type SheetView, type Tab } from "@/sheet-format.js";
 import type { SheetAnchor, SheetCellsOp, SheetGrid, SheetHost, SheetRange } from "./host";
@@ -48,7 +48,11 @@ export function createSheetTabs(options: { doc: Y.Doc; host: SheetHost; id: stri
   const [computing, setComputing] = createSignal(true), [functions, setFunctions] = createSignal<readonly string[]>([]);
   const kept = new Map<string, Kept>(), listeners = new Set<(change: SheetChange) => void>(), look = options.doc.getMap<unknown>(LOOK), [colored, setColored] = createSignal(0);
   look.observe((event) => { for (const name of event.keysChanged) if (name.startsWith("tabColor:")) return void setColored((n) => n + 1); });
-  let book: SheetBook | undefined, worker: Worker | undefined, views = new Map<string, SheetView>(), current: SheetView | undefined, off = () => {}, waiting: string | undefined, followed: string | undefined;
+  // The engine's worker starts with the editor, so its script loads while the hub's copy is still on its way.
+  const worker = new Worker(new URL("./engine-worker.ts", import.meta.url), { type: "module", name: "Sheet engine" });
+  worker.addEventListener("error", (event) => options.host.failed(`The sheet's formulas could not be computed: ${event.message}`));
+  onCleanup(() => worker.terminate());
+  let book: SheetBook | undefined, views = new Map<string, SheetView>(), current: SheetView | undefined, off = () => {}, waiting: string | undefined, followed: string | undefined;
   const view = (id: string) => views.get(id) ?? views.set(id, book!.tab(id)).get(id)!;
   const visible = () => tabs().filter((tab) => !tab.hidden);
   const stored = () => { try { return localStorage.getItem(STORE + options.id) ?? undefined; } catch { return undefined; } };
@@ -59,7 +63,7 @@ export function createSheetTabs(options: { doc: Y.Doc; host: SheetHost; id: stri
     size: () => current!.size(), input: (r, c) => current!.input(r, c), inputs: () => current!.inputs(), value: (r, c) => current!.value(r, c), error: (r, c) => current!.error(r, c),
     rowAt: (i) => current!.rowAt(i), colAt: (i) => current!.colAt(i), indexOfRow: (id) => current!.indexOfRow(id), indexOfCol: (id) => current!.indexOfCol(id),
     onChange: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
-    destroy: () => { off(); listeners.clear(); book?.destroy(); worker?.terminate(); },
+    destroy: () => { off(); listeners.clear(); book?.destroy(); worker.terminate(); },
   };
   const emit = (change: SheetChange) => { for (const listener of listeners) listener(change); };
 
@@ -114,8 +118,6 @@ export function createSheetTabs(options: { doc: Y.Doc; host: SheetHost; id: stri
     setColor: (id, color) => { if (color) look.set(`tabColor:${id}`, color); else look.delete(`tabColor:${id}`); },
     failed: (message) => options.host.failed(message),
     open: () => {
-      worker = new Worker(new URL("./engine-worker.ts", import.meta.url), { type: "module", name: "Sheet engine" });
-      worker.addEventListener("error", (event) => options.host.failed(`The sheet's formulas could not be computed: ${event.message}`));
       const made = book = createSheetView(options.doc, worker, { name: options.name });
       made.onChange((change) => { if (change.tabs) settle(); if (change.computing) setComputing(made.computing()); if (change.functions) setFunctions(made.functions()); });
       const list = book.tabs(), saved = list.find((tab) => tab.id === stored() && !tab.hidden) ?? list.find((tab) => !tab.hidden) ?? list[0]!;

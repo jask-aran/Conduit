@@ -68,6 +68,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   // The grid's element is a signal: the menu trigger that makes it may make it again, and the grid then mounts in the one that stands.
   const [island, setIsland] = createSignal<HTMLDivElement>(), [slot, setSlot] = createSignal<HTMLDivElement>();
   let root: HTMLElement | undefined, anchors: SheetAnchor[] = [], picking: string | undefined;
+  // The grid's code is fetched with the editor, not once the hub's copy has come.
+  const gridCode = import("./grid");
   const tabs = createSheetTabs({ doc: live.doc, host: props.host, id: props.id, name: props.name, grid, at });
   // Every tab's rows and columns are in it, so a row put in or taken out is undone with the formulas the hub moved for it.
   const history = createSheetHistory(live.doc, [cells, look, live.doc.getArray(ROWS), live.doc.getArray(COLS)], (op) => tabs.cells(op)), [stepped, setStepped] = createSignal(0);
@@ -218,7 +220,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     const sheet = model(), into = island();
     if (!sheet || !into) return;
     let made: SheetGrid | undefined, over = false;
-    void import("./grid").then(({ mountGrid }) => {
+    void gridCode.then(({ mountGrid }) => {
       if (over) return;
       made = mountGrid(into, { model: sheet, events, look: untrack(drawnLook), columns: {
         width: (col) => { const width = sizes.width(col); return width === undefined ? undefined : Math.round(width * zoom()); }, freeze: sizes.freeze, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols,
