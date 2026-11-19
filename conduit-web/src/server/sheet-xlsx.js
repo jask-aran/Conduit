@@ -140,7 +140,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     room -= rows * cols - had; Object.assign(tab, { rows, cols });
     Object.assign(tab, { pane: paneOf(xml), styles });
     const ruled = sheetRules(xml, dxfs);
-    tab.rules = ruled.rules;
+    tab.rules = ruled.rules; tab.rulesKept = ruled.kept;
     for (const [type, count] of Object.entries(ruled.unread)) drop(`conditional formats (${type})`, count);
     tab.validations = validationsOf(xml);
     // A tab's first table, or else its filter, by its range (a table's name and style kept); the criteria a filter was last applied with are not read, the rows it hid are.
@@ -258,6 +258,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       drop("merged ranges past the tab's last value", (tab.sheet["!merges"]?.length ?? 0) - merges.length);
       if (merges.length) look.merges = merges.map((range) => XLSX.utils.encode_range(range));
       if (tab.rules.length) look.rules = tab.rules;
+      if (tab.rulesKept.length) look.rulesKept = tab.rulesKept;
       if (tab.validations.length) look.validations = tab.validations;
       if (tab.color) look.tabColor = tab.color;
       if (tab.charts.length) look.charts = tab.charts;
@@ -337,7 +338,7 @@ export function exportXlsx(tabs) {
   book.Workbook = { Sheets: tabs.map((tab) => ({ Hidden: tab.hidden ? 1 : 0 })) };
   const written = XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true }), count = (value) => typeof value === "number" && value > 0 ? value : 0;
   const panes = tabs.map((tab) => [count(tab.look.freezeRows), count(tab.look.freezeCols)]), styled = tabs.some((tab) => Object.keys(tab.look).some((name) => name.startsWith("style:")));
-  const ruled = tabs.some((tab) => Array.isArray(tab.look.rules) && tab.look.rules.length), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(orphaned(`=${formula}`, known))) : null;
+  const ruled = tabs.some((tab) => ["rules", "rulesKept"].some((name) => Array.isArray(tab.look[name]) && tab.look[name].length)), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(orphaned(`=${formula}`, known)), tabs.map((tab) => tab.look.rulesKept)) : null;
   const validations = tabs.map((tab) => validationsXml(tab.look.validations));
   // A tab's colour (`tabColor`): #RRGGBB as imported, or an ink the page set, written as its hex.
   const colors = tabs.map((tab) => { const color = String(tab.look.tabColor ?? ""); return /^#[0-9A-F]{6}$/i.test(color) || SHEET_INKS.includes(color) ? `<tabColor rgb="FF${rgbOf(color)}"/>` : ""; });
