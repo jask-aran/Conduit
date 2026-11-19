@@ -104,6 +104,8 @@ agents.
    - "View settings…" in the context menu breaks DESIGN's rule that menu rows don't open settings. The owner hasn't decided.
    - Ctrl+- on a block of cells does nothing; Excel asks whether to shift cells up or left, or delete whole rows or columns.
 3. **Left by the reviews:**
+   - xlsx export: where a styled row past the tab's cells crosses a styled column, only the row's style is written (`xlsx-styles.js`).
+   - xlsx: a rule's number format or border (its dxf) is counted as dropped, not kept.
    - Merge with an empty top-left blanks the only value; Excel may keep the first value in reading order (not checked).
    - "Undo N steps" can undo more than N: Yjs skips steps others have since overwritten, and the list still names them.
    - Opening a filter can make a "Filter" step: `reapply()` writes the look as a tracked change when others' edits moved what it hides.
