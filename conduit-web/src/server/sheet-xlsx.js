@@ -91,6 +91,8 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     let rows = 0, cols = 0;
     let notes = 0;
     cellsOf(data, (cell, r, c) => { if (cell.f || (cell.t !== "z" && cell.v !== "" && cell.v !== undefined)) { rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1); } if (cell.c?.length) notes++; });
+    // A merge holding a value (a title over empty columns) takes the tab out to its far corner.
+    for (const { s, e } of sheet["!merges"] ?? []) if (s.r < rows && s.c < cols && data[s.r]?.[s.c]?.v !== undefined) { rows = Math.max(rows, e.r + 1); cols = Math.max(cols, e.c + 1); }
     read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, rows: Math.max(1, rows), cols: Math.max(1, cols) });
     drop("notes", notes);
   });
