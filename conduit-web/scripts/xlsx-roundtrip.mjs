@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * The xlsx round-trip scorecard: workbooks of each feature people put in spreadsheets, written by an Excel-family tool (openpyxl, by a features
- * script kept outside the repo: `gen <dir>` writes NN.xlsx and prints {NN: feature}, `read <file> <feature>` prints that feature's facts as JSON),
+ * The xlsx round-trip scorecard: workbooks of each feature people put in spreadsheets, written by an Excel-family tool (openpyxl, by
+ * xlsx-roundtrip-features.py beside this script),
  * each imported and exported through the hub's document service in a temporary data root, then read back. Per feature: kept, changed (the first
  * fact that differs), dropped (none of its facts left), and whether the import report said so. Every export is held to what Excel is strict about
  * (parts, relationships, content types, element order, counts, style ids); a broken part fails the run. LibreOffice, where installed, converts
  * each export as a second opinion.
- * Run from conduit-web/: node --max-old-space-size=4096 scripts/xlsx-roundtrip.mjs <python with openpyxl> <features.py> [out dir] [feature filter]
+ * Run from conduit-web/: node --max-old-space-size=4096 scripts/xlsx-roundtrip.mjs [out dir] [feature filter] [--excel]
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
@@ -14,11 +14,13 @@ import os from "node:os";
 import path from "node:path";
 import * as XLSX from "xlsx";
 
-const [python, features, outArg, only] = process.argv.slice(2);
-if (!python || !features) {
-  console.log("usage: node scripts/xlsx-roundtrip.mjs <python with openpyxl> <features.py> [out dir] [feature filter]\n       node scripts/xlsx-roundtrip.mjs --check <file.xlsx>   (only what Excel is strict about)");
-  process.exit(2);
+const args = process.argv.slice(2), flags = new Set(args.filter((arg) => arg.startsWith("--"))), [first, second] = args.filter((arg) => !arg.startsWith("--"));
+if (flags.has("--help")) {
+  console.log("usage: node scripts/xlsx-roundtrip.mjs [out dir] [feature filter] [--excel]   (XLSX_PYTHON: a python with openpyxl)\n       node scripts/xlsx-roundtrip.mjs --check <file.xlsx>   (only what Excel is strict about)");
+  process.exit(0);
 }
+const python = process.env.XLSX_PYTHON ?? "/home/jask/jaskNEM/.venv/bin/python", features = new URL("./xlsx-roundtrip-features.py", import.meta.url).pathname;
+const [outArg, only] = [first, second];
 // ---- What Excel is strict about, part by part ----
 const NS = { rel: "http://schemas.openxmlformats.org/package/2006/relationships" };
 // CT_Worksheet and CT_Workbook's sequences (ECMA-376 Part 1, sml.xsd), and the stylesheet's.
@@ -97,9 +99,46 @@ function strict(bytes) {
   return faults;
 }
 
-if (python === "--check") {
-  const faults = strict(await fs.readFile(features));
+// ---- Real Excel, through COM from powershell.exe: a scratch folder in Windows' temp, one workbook at a time, every Excel it started ended ----
+const EXCEL_PS = String.raw`param([string]$Path)
+$ErrorActionPreference = 'Stop'
+$before = @(Get-Process EXCEL -ErrorAction SilentlyContinue | ForEach-Object Id); $out = @{ status = 'fails' }; $xl = $null
+try {
+  $xl = New-Object -ComObject Excel.Application
+  $xl.Visible = $false; $xl.DisplayAlerts = $false; $xl.AutomationSecurity = 3
+  # A normal load: a file Excel would offer to repair is refused here, never repaired silently.
+  try { $wb = $xl.Workbooks.Open($Path, 0, $true) } catch { $out.status = 'needs repair'; throw }
+  $sheets = 0; $charts = 0; $tables = 0; $formulas = 0
+  foreach ($ws in $wb.Worksheets) { $sheets++; $charts += $ws.ChartObjects().Count; $tables += $ws.ListObjects.Count; try { $formulas += $ws.UsedRange.SpecialCells(-4123).Count } catch {} }
+  $out = @{ status = 'opens clean'; sheets = $sheets; charts = $charts; tables = $tables; formulas = $formulas }
+  $wb.Close($false)
+} catch { $out.error = $_.Exception.Message }
+finally {
+  if ($xl) { $xl.Quit(); [void][Runtime.InteropServices.Marshal]::ReleaseComObject($xl) }
+  [GC]::Collect(); [GC]::WaitForPendingFinalizers(); Start-Sleep -Milliseconds 500
+  Get-Process EXCEL -ErrorAction SilentlyContinue | Where-Object { $before -notcontains $_.Id } | Stop-Process -Force
+}
+$out | ConvertTo-Json -Compress`;
+const excelDir = flags.has("--excel") ? path.join(execFileSync("wslpath", [execFileSync("cmd.exe", ["/c", "echo %TEMP%"], { cwd: "/mnt/c", encoding: "utf8" }).trim()], { encoding: "utf8" }).trim(), `conduit-xlsx-${process.pid}`) : null;
+if (excelDir) { await fs.mkdir(excelDir, { recursive: true }); await fs.writeFile(path.join(excelDir, "open.ps1"), EXCEL_PS); }
+const win = (file) => execFileSync("wslpath", ["-w", file], { encoding: "utf8" }).trim();
+/** What Excel makes of an export, held against what it holds: its tabs, charts, tables and formulas. */
+const excel = async (bytes) => {
+  const file = path.join(excelDir, "book.xlsx"), zip = XLSX.CFB.read(bytes, { type: "buffer" }), names = zip.FullPaths, xml = (re) => zip.FileIndex.filter((_, i) => re.test(names[i])).map((one) => Buffer.from(one.content).toString("utf8"));
+  const wrote = { sheets: (xml(/xl\/workbook\.xml$/)[0].match(/<sheet\b/g) ?? []).length, charts: xml(/xl\/charts\/chart\d+\.xml$/).length, tables: xml(/xl\/tables\/table\d+\.xml$/).length, formulas: xml(/worksheets\/sheet\d+\.xml$/).join("").match(/<f\b/g)?.length ?? 0 };
+  await fs.writeFile(file, bytes);
+  try {
+    const said = JSON.parse(execFileSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", win(path.join(excelDir, "open.ps1")), "-Path", win(file)], { cwd: "/mnt/c", encoding: "utf8", timeout: 120_000 }).trim());
+    if (said.status !== "opens clean") return `${said.status}${said.error ? ` (${said.error})` : ""}`;
+    const off = Object.keys(wrote).filter((what) => said[what] !== wrote[what]).map((what) => `${what} ${said[what]} of ${wrote[what]}`);
+    return off.length ? `opens, reads ${off.join(", ")}` : "opens clean";
+  } catch (error) { return `fails (${String(error.message).split("\n")[0]})`; } finally { await fs.rm(file, { force: true }); }
+};
+
+if (flags.has("--check")) {
+  const bytes = await fs.readFile(first), faults = strict(bytes);
   console.log(faults.join("\n") || "no faults");
+  if (excelDir) { console.log(`Excel: ${await excel(bytes)}`); await fs.rm(excelDir, { recursive: true, force: true }); }
   process.exit(faults.length ? 1 : 0);
 }
 
@@ -120,7 +159,7 @@ const rows = [], broken = [];
 for (const [nn, feature] of Object.entries(named).sort()) {
   if (only && !feature.includes(only)) continue;
   const input = path.join(out, "in", `${nn}.xlsx`), output = path.join(out, "out", `${nn}.xlsx`), before = facts(input, feature);
-  let after = {}, said = "", note = "";
+  let after = {}, said = "", note = "", opened = "-";
   try {
     const made = await documents.importXlsx(project.id, { bytes: await fs.readFile(input), name: `book${nn}` });
     const r = made.report, sum = Object.values(r.dropped).reduce((a, b) => a + b, 0);
@@ -129,20 +168,22 @@ for (const [nn, feature] of Object.entries(named).sort()) {
     await fs.writeFile(output, bytes);
     for (const one of strict(bytes)) broken.push(`${feature}: ${one}`);
     after = facts(output, feature);
+    if (excelDir) opened = await excel(bytes);
     if (soffice) try { execFileSync(soffice, ["--headless", "--convert-to", "csv", "--outdir", path.join(out, "csv"), output], { stdio: "ignore", timeout: 60_000 }); } catch { broken.push(`${feature}: LibreOffice could not convert it`); }
   } catch (error) { note = `failed: ${error.message}`; }
   const keys = Object.keys(before), kept = keys.filter((k) => same(before[k], after[k])), gone = keys.filter((k) => !(k in after));
   const verdict = note ? "failed" : !keys.length ? "not generated" : kept.length === keys.length ? "kept" : gone.length === keys.length ? "dropped" : "changed";
   const first = keys.find((k) => !same(before[k], after[k]));
   if (!note && first) note = `${kept.length}/${keys.length} kept; ${first}: ${JSON.stringify(before[first])} -> ${JSON.stringify(after[first] ?? null)}`;
-  rows.push({ feature, verdict, said, note });
+  rows.push({ feature, verdict, said, note, opened });
 }
 const cut = (text, n) => text.length > n ? `${text.slice(0, n - 1)}…` : text;
-console.log("| Feature | Result | Import report | First difference |\n| --- | --- | --- | --- |");
-for (const row of rows) console.log(`| ${row.feature} | ${row.verdict} | ${cut(row.said, 70) || "-"} | ${cut(row.note, 140).replace(/\|/g, "\\|") || "-"} |`);
+console.log(`| Feature | Result | Import report | First difference |${excelDir ? " Excel |" : ""}\n| --- | --- | --- | --- |${excelDir ? " --- |" : ""}`);
+for (const row of rows) console.log(`| ${row.feature} | ${row.verdict} | ${cut(row.said, 70) || "-"} | ${cut(row.note, 140).replace(/\|/g, "\\|") || "-"} |${excelDir ? ` ${row.opened} |` : ""}`);
 const count = (what) => rows.filter((row) => row.verdict === what).length;
 console.log(`\n${count("kept")} kept, ${count("changed")} changed, ${count("dropped")} dropped, ${count("failed")} failed of ${rows.length}. LibreOffice: ${soffice ? "converted each" : "not installed"}. Files in ${out}`);
 await documents.close?.();
 await fs.rm(dataRoot, { recursive: true, force: true });
+if (excelDir) await fs.rm(excelDir, { recursive: true, force: true });
 if (broken.length) { console.error(`\nExcel would refuse or repair:\n${broken.join("\n")}`); process.exit(1); }
 process.exit(0);
