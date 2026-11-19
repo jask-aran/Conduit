@@ -1,6 +1,7 @@
 import { Mark, mergeAttributes, Node } from "@tiptap/core";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
-import { TableKit } from "@tiptap/extension-table";
+import Paragraph from "@tiptap/extension-paragraph";
+import { Table, TableKit, renderTableToMarkdown } from "@tiptap/extension-table";
 import { UniqueID } from "@tiptap/extension-unique-id";
 import { MarkdownManager } from "@tiptap/markdown";
 import { Marked } from "marked";
@@ -169,12 +170,18 @@ export const fitted = (node) => {
 };
 
 // No trailing block: an editor that adds one writes it into the hub's copy, once for each page that has the document open.
+// Written as a person writes one: the library's pads it with a blank line each side, which the blocks' own gap doubles.
+const PaperTable = Table.extend({ renderMarkdown: (node, h) => renderTableToMarkdown(node, h).trim() });
+// A line of text that starts as a block of Markdown would (a list's mark, a heading's, a quote's, a rule, a fence) has that mark escaped, so it reads back as the text it is.
+const BLOCK_START = /^([ \t]*)(?:([-+*]|#{1,6}|>)(?=[ \t]|$)|(\d{1,9})([.)])(?=[ \t]|$)|(?=(?:[-*_][ \t]*){3,}$|`{3}|~{3}))/gm;
+const PaperParagraph = Paragraph.extend({ renderMarkdown: (node, h, ctx) => Paragraph.config.renderMarkdown(node, h, ctx).replace(BLOCK_START, (_, lead, mark, digits, dot) => mark ? `${lead}\\${mark}` : digits ? `${lead}${digits}\\${dot}` : `${lead}\\`) });
+
 /** What the format holds that plain Markdown cannot say, each by the node or mark that holds it (components/document/host.ts DocumentExtra names them for a host; `properties` is kept beside the text). */
 const EXTRAS = ["callout", "toggle", "date", "color", "highlight", "underline"];
 /** The editor's and the hub's extensions. `holds`: the extras this document has (unsaid: every one); one it does not hold is out of the schema, so it is neither made nor read. */
 export const documentExtensions = (holds) => {
   const has = (extra) => !holds || holds.includes(extra);
-  return [StarterKit.configure({ undoRedo: false, trailingNode: false, link: { openOnClick: false }, ...(has("underline") ? {} : { underline: false }) }), TaskList, TaskItem.configure({ nested: true }), TableKit, Image,
+  return [StarterKit.configure({ undoRedo: false, trailingNode: false, paragraph: false, link: { openOnClick: false }, ...(has("underline") ? {} : { underline: false }) }), TaskList, PaperParagraph, TaskItem.configure({ nested: true }), TableKit.configure({ table: false }), PaperTable, Image,
     ...(has("callout") ? [Callout] : []), ...(has("toggle") ? [Toggle] : []), ...(has("date") ? [Day] : []), ...(has("color") ? [inked("color", "span")] : []), ...(has("highlight") ? [inked("highlight", "mark")] : []),
     UniqueID.configure({ types: BLOCK_TYPES, generateID: blockId })];
 };
