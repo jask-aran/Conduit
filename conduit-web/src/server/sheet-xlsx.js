@@ -1,12 +1,14 @@
+import path from "node:path";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 import { HyperFormula } from "hyperformula";
 import * as XLSX from "xlsx";
-import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colIndex, colName, parseA1, tabName, toCsv, valueText } from "../sheet-format.js";
+import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colIndex, colName, parseA1, parseRange, tabName, toCsv, valueText } from "../sheet-format.js";
 import { CONFIG } from "../sheet-engine.js";
 import { NAMES } from "../sheet-functions.js";
 import { shiftRefs } from "../sheet-rules.js";
-import { decodeStyle, encodeStyle } from "../sheet-styles.js";
-import { ownOver, readDxfs, readStyles, seen, sheetRules, sheetStyles, withDxfs, withRules, writeRules, writeStyles } from "./xlsx-styles.js";
+import { decodeStyle, encodeStyle, SHEET_INKS } from "../sheet-styles.js";
+import { drawingPart, readCharts, tablePart, withParts } from "./xlsx-parts.js";
+import { ownOver, readDxfs, readStyles, rgbOf, seen, sheetRules, sheetStyles, withDxfs, withRules, writeRules, writeStyles } from "./xlsx-styles.js";
 
 /*
  * An .xlsx read as a workbook's files (docs/plans/sheet-xlsx-and-tabs.md): each tab's CSV of values, its formulas by address and its look, as
@@ -50,6 +52,23 @@ const editParts = (bytes, edit) => {
   }
   return changed ? XLSX.CFB.write(zip, { fileType: "zip", type: "buffer", compression: true }) : bytes;
 };
+const escaped = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const WORKSHEET = "sheetPr dimension sheetViews sheetFormatPr cols sheetData sheetCalcPr sheetProtection protectedRanges scenarios autoFilter sortState dataConsolidate customSheetViews mergeCells phoneticPr conditionalFormatting dataValidations hyperlinks printOptions pageMargins pageSetup headerFooter rowBreaks colBreaks customProperties cellWatches ignoredErrors smartTags drawing legacyDrawing legacyDrawingHF drawingHF picture oleObjects controls webPublishItems tableParts extLst".split(" ");
+/** A sheet part with `block` put where the schema has `element`: before the first element that comes after it there. */
+const placed = (xml, element, block) => {
+  const later = WORKSHEET.slice(WORKSHEET.indexOf(element) + 1).join("|");
+  return xml.replace(new RegExp(`<(?:${later})\\b|</worksheet>`), (at) => `${block}${at}`);
+};
+// A data validation's attributes as the schema has them, and each one's formulas: what is kept of one (`validations` in a tab's look) and written back.
+const VALIDATION = ["type", "errorStyle", "imeMode", "operator", "allowBlank", "showDropDown", "showInputMessage", "showErrorMessage", "errorTitle", "error", "promptTitle", "prompt"];
+const validationsOf = (xml) => [...xml.matchAll(/<dataValidation\b([^>]*?)(?:\/>|>([\s\S]*?)<\/dataValidation>)/g)].map(([, head, body = ""]) => {
+  const formula = (n) => { const found = new RegExp(`<formula${n}>([\\s\\S]*?)</formula${n}>`).exec(body); return found ? { [`formula${n}`]: unescaped(found[1]) } : {}; };
+  return { range: attr(head, "sqref") ?? "", ...Object.fromEntries(VALIDATION.flatMap((name) => attr(head, name) === undefined ? [] : [[name, attr(head, name)]])), ...formula(1), ...formula(2) };
+}).filter((one) => one.range);
+const validationsXml = (list) => {
+  const kept = (Array.isArray(list) ? list : []).filter((one) => typeof one?.range === "string" && /^(\$?[A-Z]{1,3}\$?\d+(:\$?[A-Z]{1,3}\$?\d+)?\s*)+$/.test(one.range));
+  return kept.length ? `<dataValidations count="${kept.length}">${kept.map((one) => `<dataValidation${VALIDATION.filter((name) => one[name] !== undefined).map((name) => ` ${name}="${escaped(one[name])}"`).join("")} sqref="${escaped(one.range)}">${["formula1", "formula2"].filter((name) => one[name] !== undefined).map((name) => `<${name}>${escaped(one[name])}</${name}>`).join("")}</dataValidation>`).join("")}</dataValidations>` : "";
+};
 const sheetOf = (path) => { const n = /^xl\/worksheets\/sheet(\d+)\.xml$/.exec(path)?.[1]; return n ? Number(n) - 1 : -1; };
 /** A formula as this engine reads it: the prefixes a newer function is stored under are taken off. */
 const translated = (formula) => `=${formula.replace(/_xlfn\.|_xlws\.|_xlpm\./g, "")}`;
@@ -81,6 +100,9 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   const targets = Object.fromEntries((text("xl/_rels/workbook.xml.rels").match(/<Relationship\b[^>]*>/g) ?? []).map((tag) => [attr(tag, "Id"), attr(tag, "Target") ?? ""]));
   const stylesXml = text("xl/styles.xml"), themeXml = text(Object.values(targets).find((target) => /theme\d*\.xml$/.test(target))?.replace(/^\/?(xl\/)?/, "xl/") ?? "");
   const formatsOf = readStyles(stylesXml, themeXml), dxfs = readDxfs(stylesXml, themeXml);
+  // The parts a part links to by a relationship of this type (`table`, `drawing`, `chart`…), by their paths in the zip.
+  const linked = (from, type) => (text(from.replace(/([^/]+)$/, "_rels/$1.rels")).match(/<Relationship\b[^>]*>/g) ?? []).filter((tag) => (attr(tag, "Type") ?? "").endsWith(`/${type}`))
+    .map((tag) => { const target = attr(tag, "Target") ?? ""; return target.startsWith("/") ? target.slice(1) : path.posix.normalize(path.posix.join(path.posix.dirname(from), target)); });
   const xmlOf = Object.fromEntries((text("xl/workbook.xml").match(/<sheet\b[^>]*>/g) ?? []).map((tag) => { const target = targets[attr(tag, "r:id")] ?? ""; return [attr(tag, "name"), target.startsWith("/") ? target.slice(1) : `xl/${target}`]; }));
   book.SheetNames.forEach((called, index) => {
     const sheet = book.Sheets[called], data = sheet?.["!data"];
@@ -91,7 +113,13 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     let rows = 0, cols = 0;
     let notes = 0;
     cellsOf(data, (cell, r, c) => { if (cell.f || (cell.t !== "z" && cell.v !== "" && cell.v !== undefined)) { rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1); } if (cell.c?.length) notes++; });
-    read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, rows: Math.max(1, rows), cols: Math.max(1, cols) });
+    // Its charts, each standing on a cell the tab is taken out to, and a merge holding a value (a title over empty columns) to its far corner, by no
+    // more empty cells than a tab keeps styles for (a title merged across the whole row is cut at the tab's edge, as before).
+    const most = Math.min(SHEET_LIMIT, Math.max(1, rows) * Math.max(1, cols) + STYLES_PER_TAB);
+    const grow = (r, c) => { const taller = Math.max(rows, r + 1), wider = Math.max(cols, c + 1); if (wider <= COL_LIMIT && taller * wider <= most) { rows = taller; cols = wider; return true; } return false; };
+    const charts = readCharts(xmlOf[called] ?? "", called, text, linked, drop).filter((chart) => { const at = parseA1(chart.at), area = parseRange(chart.range); return grow(at.row, at.col) && grow(area.bottom, area.right) || (drop("charts past the sheet's limits"), false); });
+    for (const { s, e } of sheet["!merges"] ?? []) if (s.r < rows && s.c < cols && data[s.r]?.[s.c]?.v !== undefined) grow(e.r, e.c);
+    read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, charts, rows: Math.max(1, rows), cols: Math.max(1, cols) });
     drop("notes", notes);
   });
   if (!read.length) throw fault(wanted ? `None of those tabs is in the workbook: its tabs are ${book.SheetNames.join(", ")}` : "That workbook has no tabs with cells");
@@ -114,7 +142,17 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     const ruled = sheetRules(xml, dxfs);
     tab.rules = ruled.rules;
     for (const [type, count] of Object.entries(ruled.unread)) drop(`conditional formats (${type})`, count);
-    drop("validation rules", xml.match(/<dataValidation\b/g)?.length ?? 0);
+    tab.validations = validationsOf(xml);
+    // A tab's first table, or else its filter, by its range (a table's name and style kept); the criteria a filter was last applied with are not read, the rows it hid are.
+    const [table, ...tables] = linked(xmlOf[tab.called] ?? "", "table").map(text).filter((part) => attr(/<table\b[^>]*>/.exec(part)?.[0] ?? "", "ref"));
+    if (table) { const head = /<table\b[^>]*>/.exec(table)[0], style = attr(/<tableStyleInfo\b[^>]*>/.exec(table)?.[0] ?? "", "name"); tab.table = { range: attr(head, "ref"), name: attr(head, "displayName") ?? attr(head, "name"), ...(style ? { style } : {}) }; }
+    drop("tables after a tab's first", tables.length);
+    const filter = /<autoFilter\b[^>]*>/.exec(xml)?.[0];
+    if (filter && attr(filter, "ref") && !table) tab.filter = { range: attr(filter, "ref") };
+    drop("filter criteria", (xml.match(/<filterColumn\b/g) ?? []).length);
+    const color = /<tabColor\b[^>]*>/.exec(xml)?.[0];
+    if (color && /^[0-9A-F]{8}$/i.test(attr(color, "rgb") ?? "")) tab.color = `#${attr(color, "rgb").slice(2).toUpperCase()}`; else drop("tab colours from the theme", color ? 1 : 0);
+    drop("validation rules (in Excel 2010's form, naming another tab)", xml.match(/<x14:dataValidation\b/g)?.length ?? 0);
   }
 
   // What is typed in each cell, and where the formulas are. 
@@ -212,12 +250,19 @@ export function importXlsx(bytes, { tabs: only } = {}) {
         if (!own) continue;
         if (styled < STYLES_PER_TAB) { look[`style:${a1(r, c)}`] = own; styled += 1; } else drop("cell styles");
       }
+      // Each hyperlink by its cell (`link:<rowId>:<colId>`): its address, or `#Tab!A1` for a place in the workbook.
+      cellsOf(tab.data, (cell, r, c) => { if (typeof cell.l?.Target === "string") { if (r < tab.rows && c < tab.cols) { look[`link:${a1(r, c)}`] = cell.l.Target; } else drop("hyperlinks past the tab's last value"); } });
       // Merged ranges inside the tab, a lone cell being none.
       // A merge reaching past the tab's last value is cut at its edge; one left a single cell is dropped.
       const merges = (tab.sheet["!merges"] ?? []).map(({ s, e }) => ({ s, e: { r: Math.min(e.r, tab.rows - 1), c: Math.min(e.c, tab.cols - 1) } })).filter(({ s, e }) => e.r >= s.r && e.c >= s.c && (e.r > s.r || e.c > s.c));
       drop("merged ranges past the tab's last value", (tab.sheet["!merges"]?.length ?? 0) - merges.length);
       if (merges.length) look.merges = merges.map((range) => XLSX.utils.encode_range(range));
       if (tab.rules.length) look.rules = tab.rules;
+      if (tab.validations.length) look.validations = tab.validations;
+      if (tab.color) look.tabColor = tab.color;
+      if (tab.charts.length) look.charts = tab.charts;
+      if (tab.table) look.table = tab.table;
+      if (tab.filter) look.filter = tab.filter;
       // A frozen formula goes with its cell (`excel:<rowId>:<colId>` once in the doc), written for the cell it was in (`anchor`), as a rule's are.
       for (const [at, one] of Object.entries(report.frozen[tab.name] ?? {})) if (!one.why.startsWith("a formula over")) look[`excel:${at}`] = { formula: one.formula, value: one.kept, anchor: at };
       if (tab.pane?.rows) look.freezeRows = tab.pane.rows;
@@ -235,7 +280,7 @@ export function importSummary(report) {
     `Tabs: ${report.tabs.map((tab) => `${tab.name} (${tab.rows}x${tab.cols}, ${tab.formulas} formulas)`).join(", ")}.${report.skipped.length ? ` Not imported: ${report.skipped.join(", ")}.` : ""}`,
     total ? `Of ${total} formulas, ${same + noCache + volatile} compute here as they did${volatile ? ` (${volatile} depend on the date or a random number and were not compared)` : ""}${frozen ? `; ${frozen} do not and hold the value the file kept, as plain values: ${Object.entries(report.reasons).map(([why, count]) => `${count} ${why}`).join(", ")}` : ""}.` : "It has no formulas.",
     ...(listed.length ? [`Frozen: ${listed.slice(0, 20).join("; ")}${listed.length > 20 ? `; and ${listed.length - 20} more (GET /v0/document/<id>?as=import lists all)` : ""}.`] : []),
-    ...(Object.keys(report.dropped).length ? [`Left out: ${Object.entries(report.dropped).map(([what, count]) => `${count} ${what}`).join(", ")}; also any charts, images and pivot tables, which are not read.`] : ["Charts, images and pivot tables are not read."]),
+    ...(Object.keys(report.dropped).length ? [`Left out: ${Object.entries(report.dropped).map(([what, count]) => `${count} ${what}`).join(", ")}; also any pivot tables, which are not read.`] : ["Pivot tables are not read."]),
   ].join("\n");
 }
 // Functions an .xlsx stores under a prefix: without it a spreadsheet shows #NAME? until the cell is entered again.
@@ -257,6 +302,8 @@ const ERROR_CODE = Object.fromEntries(Object.entries(ERROR_TEXT).map(([code, tex
  */
 export function exportXlsx(tabs) {
   const book = XLSX.utils.book_new(), known = new Set(tabs.map((tab) => tab.name.toLowerCase()));
+  let tables = 0;
+  const tableNames = new Set();
   for (const tab of tabs) {
     const sheet = {}, cols = Math.max(1, ...tab.typed.map((row) => row.length));
     tab.typed.forEach((row, r) => row.forEach((typed, c) => {
@@ -268,6 +315,8 @@ export function exportXlsx(tabs) {
       if (formula) cell.f = stored(orphaned(formula, known));
       const format = tab.look[`fmt:${at}`] ?? tab.look[`fmt:${colName(c)}`];
       if (cell.t === "n" && typeof format === "string" && format !== "General") cell.z = format;
+      const link = tab.look[`link:${at}`];
+      if (typeof link === "string" && link) cell.l = { Target: link };
       sheet[at] = cell;
     }));
     sheet["!ref"] = `A1:${a1(Math.max(0, tab.typed.length - 1), cols - 1)}`;
@@ -277,8 +326,10 @@ export function exportXlsx(tabs) {
     // The rows hidden, and those the filter hid when last applied.
     const filteredOut = new Set(tab.look.filter?.hide ?? []);
     sheet["!rows"] = tab.typed.map((_, r) => { const height = tab.look[`height:${r + 1}`]; return { ...(typeof height === "number" ? { hpt: height * PT_PER_PX } : {}), ...(tab.look[`hidden:${r + 1}`] || filteredOut.has(r + 1) ? { hidden: true } : {}) }; });
-    // A table is written as its filter alone: SheetJS writes no tables.
-    const filtered = tab.look.filter?.range ?? tab.look.table?.range;
+    // A table is its own part (xlsx-parts.js); one Excel would repair is written as its filter alone.
+    // The table's part holds its own filter: a sheet's filter over it is one Excel repairs.
+    tab.tablePart = tab.look.table ? tablePart(tab.look.table, tab.values, ++tables, tableNames) : null;
+    const filtered = tab.tablePart ? undefined : tab.look.filter?.range ?? tab.look.table?.range;
     if (typeof filtered === "string") sheet["!autofilter"] = { ref: filtered };
     if (Array.isArray(tab.look.merges)) sheet["!merges"] = tab.look.merges.map((range) => XLSX.utils.decode_range(String(range)));
     XLSX.utils.book_append_sheet(book, sheet, tab.name);
@@ -287,17 +338,24 @@ export function exportXlsx(tabs) {
   const written = XLSX.write(book, { type: "buffer", bookType: "xlsx", compression: true }), count = (value) => typeof value === "number" && value > 0 ? value : 0;
   const panes = tabs.map((tab) => [count(tab.look.freezeRows), count(tab.look.freezeCols)]), styled = tabs.some((tab) => Object.keys(tab.look).some((name) => name.startsWith("style:")));
   const ruled = tabs.some((tab) => Array.isArray(tab.look.rules) && tab.look.rules.length), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(orphaned(`=${formula}`, known))) : null;
-  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols)) return written;
+  const validations = tabs.map((tab) => validationsXml(tab.look.validations));
+  // A tab's colour (`tabColor`): #RRGGBB as imported, or an ink the page set, written as its hex.
+  const colors = tabs.map((tab) => { const color = String(tab.look.tabColor ?? ""); return /^#[0-9A-F]{6}$/i.test(color) || SHEET_INKS.includes(color) ? `<tabColor rgb="FF${rgbOf(color)}"/>` : ""; });
+  let drawings = 0, charts = 1;
+  const parts = tabs.map((tab) => { const drawing = Array.isArray(tab.look.charts) ? drawingPart(tab.look.charts, tab.name, drawings + 1, charts) : null; if (drawing) { drawings += 1; charts += drawing.count; } return [tab.tablePart, drawing].filter(Boolean); });
+  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean) && !colors.some(Boolean)) return withParts(written, parts, placed);
   let restyled = null;
-  return editParts(written, (path, xml, all) => {
+  return withParts(editParts(written, (path, xml, all) => {
     if (styled && !restyled) {
       const sheets = tabs.map((tab, n) => ({ xml: all[`xl/worksheets/sheet${n + 1}.xml`] ?? "", ...styleOf(tab.look), size: { rows: tab.typed.length, cols: Math.max(1, ...tab.typed.map((row) => row.length)) } }));
       restyled = writeStyles(all["xl/styles.xml"] ?? "", sheets);
     }
     if (path === "xl/styles.xml") return rules ? withDxfs(restyled?.styles ?? xml, rules.dxfs) : restyled?.styles ?? xml;
     const n = sheetOf(path), [rows, cols] = panes[n] ?? [0, 0], sheet = withRules(n >= 0 && restyled ? restyled.sheets[n] : xml, rules?.sheets[n]);
-    return rows || cols ? sheet.replace(/<sheetView workbookViewId="0"\/>/, paneXml(rows, cols)) : sheet;
-  });
+    const valid = [[validations[n], (xml) => placed(xml, "dataValidations", validations[n])], [colors[n], (xml) => /<sheetPr\b/.test(xml) ? xml.replace(/<sheetPr\b([^>]*?)(\/?)>/, (_, head, closed) => `<sheetPr${head}>${colors[n]}${closed ? "</sheetPr>" : ""}`) : placed(xml, "sheetPr", `<sheetPr>${colors[n]}</sheetPr>`)]]
+      .reduce((xml, [has, put]) => n >= 0 && has ? put(xml) : xml, sheet);
+    return rows || cols ? valid.replace(/<sheetView workbookViewId="0"\/>/, paneXml(rows, cols)) : valid;
+  }), parts, placed);
 }
 /** The style each cell of a tab wears, packed (empty for none), from its look by letter, row number and address: its own over its row's over its column's; and each line's own. */
 const styleOf = (look) => {

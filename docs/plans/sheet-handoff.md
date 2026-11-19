@@ -184,6 +184,18 @@ Then the ribbon, charts and ask box, walked in headless Chrome on :4310 (2026-11
 - **Verifying exports.** Check exported xlsx with openpyxl: `/home/jask/jaskNEM/.venv/bin/python -I`.
 - **The owner's workbook** is private. Read it locally only, and never copy it into the repo.
 
+## Data tools, round 2 (branch `sheet-data2`, not seen in a browser)
+
+- A filter's condition is `when: { <colId>: { is, a?, b? } }` beside `keep` in `filter:<tabId>` (by letter in sheet.json); `filterHides` tests both, so
+  the hub's `refilter` keeps it. A column has one or the other. The filter applied as it opens is written under an untracked origin (no Undo step).
+- `shift-cells` (hub, `sheets.js` `shiftCells`) works formulas out in a scratch engine: a deleted block is moved past the tab's edge and its lines
+  removed there, so its readers read #REF!. A range only partly moved (`SUM(A1:A5)` with A2 deleted) is left as it was; Excel's shrinks or grows.
+- `dedupe` reuses `reorder` (kept rows first, repeats after) and empties the tail; external references to moved cells are not rewritten, as a sort's.
+- `duplicate-tab` and tab moves are hub tab ops, not on the page's Undo, as add and delete aren't. `tabColor:<tabId>` (an ink or #rrggbb) is in the
+  look, so it is undone, saved and read in `as=book` as `look.tabColor`; xlsx does not carry it yet.
+- Grouping was not built: Glide has no outline gutter; a collapse control needs a strip left of the row numbers and above the letters (a wider marker
+  column drawn and hit-tested by hand, a taller head with its own `drawHeader` band), hidden rows reused for collapsed groups, and a look key for levels.
+
 ## Cell types, overflow, refit and links (branch `sheet-cells`, 2026-11-20; typechecked, not seen in a browser)
 
 - Look keys: `type:<colId>` or `type:<rowId>:<colId>` (`boolean`, `date`, `plain` under a typed column); a dropdown is a list entry of the tab's

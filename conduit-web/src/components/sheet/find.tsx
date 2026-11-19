@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, onCleanup, Show, type Accessor } from "solid-js";
+import type * as Y from "yjs";
 import { CaseSensitiveIcon, ReplaceAllIcon, ReplaceIcon, WholeWordIcon } from "lucide-solid";
 import { FindBar, IconButton, LeadInput, Segmented } from "@/components/ui";
 import type { SheetView } from "@/sheet-format.js";
@@ -21,7 +22,7 @@ const primary = (event: KeyboardEvent) => (event.ctrlKey || event.metaKey) && !e
  * hidden rows are left, as the sheet's other bulk writes leave them.
  */
 export function createSheetFind(options: {
-  model: Accessor<SheetView | undefined>; grid: Accessor<SheetGrid | undefined>; at: Accessor<SheetRange | null>; hidden(): ReadonlySet<number>; hiddenCols(): ReadonlySet<number>;
+  model: Accessor<SheetView | undefined>; grid: Accessor<SheetGrid | undefined>; at: Accessor<SheetRange | null>; hidden(): ReadonlySet<number>; hiddenCols(): ReadonlySet<number>; look: Y.Map<number | string>;
   draw(row: number, col: number, value: number | string): SheetDrawn | null; write(list: { row: number; col: number; input: string }[]): void;
 }) {
   const [open, setOpen] = createSignal(false), [replacing, setReplacing] = createSignal(false);
@@ -30,13 +31,16 @@ export function createSheetFind(options: {
   const [current, setCurrent] = createSignal<Cell | null>(null), [note, setNote] = createSignal<string>(), [version, setVersion] = createSignal(0);
   let field: HTMLInputElement | undefined, replaceField: HTMLInputElement | undefined;
 
-  // The sheet changing (typed, computed, another tab shown) finds again, once a frame however many cells came.
+  // The sheet changing (typed, computed, another tab shown, a column hidden or shown) finds again, once a frame however many cells came.
   createEffect(() => {
     const sheet = options.model();
     if (!open() || !sheet) return;
     let frame = 0;
-    const off = sheet.onChange(() => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; setVersion((n) => n + 1); }); });
-    onCleanup(() => { off(); cancelAnimationFrame(frame); });
+    const again = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; setVersion((n) => n + 1); }); };
+    const hid = (event: Y.YMapEvent<number | string>) => { for (const name of event.keysChanged) if (name.startsWith("hidden:")) return again(); };
+    const off = sheet.onChange(again);
+    options.look.observe(hid);
+    onCleanup(() => { off(); options.look.unobserve(hid); cancelAnimationFrame(frame); });
   });
   const fold = (text: string) => matchCase() ? text : text.toLocaleLowerCase();
   // What a cell shows, as the grid draws it: an error by its code, a number by its format, else short as a sheet shows it.

@@ -15,6 +15,10 @@ export type PaperKeyRow = { does: string; keys: string[]; typed?: string; space?
 
 /** The marks' chords, which the format's StarterKit binds. */
 export const PAPER_MARK_KEYS: Record<Exclude<DocumentMarkKind, "color" | "highlight">, string> = { bold: "Mod-b", italic: "Mod-i", strike: "Mod-Shift-s", code: "Mod-e" };
+/** Links the text selected, or changes the link the caret is in (editor.tsx). */
+export const PAPER_LINK_KEY = "Mod-k";
+/** Find with the replace row (find.tsx); Mod-Shift-H too, since a Mac keeps Cmd+H. */
+export const PAPER_REPLACE_KEY = "Mod-h";
 /** Asks the one comments go to about the text selected, or the caret's block (editor.tsx). */
 export const PAPER_COMMENT_KEY = "Mod-Alt-m";
 // Read here, not from the app's shortcut environment: the editor is lifted whole into other projects.
@@ -33,6 +37,8 @@ export const PAPER_KEYS: Record<PaperKeyGroup, readonly PaperKey[]> = {
     { does: "Italic", keys: [PAPER_MARK_KEYS.italic], typed: "*text*", tool: "italic" },
     { does: "Strikethrough", keys: [PAPER_MARK_KEYS.strike], typed: "~~text~~", tool: "strike" },
     { does: "Code", keys: [PAPER_MARK_KEYS.code], typed: "`text`", tool: "code" },
+    { does: "Link", keys: [PAPER_LINK_KEY], typed: "[text](address)" },
+    { does: "Open a link", keys: ["Mod-Click"] },
     { does: "Line break", keys: ["Shift-Enter"] },
     { does: "Undo", keys: ["Mod-z"] },
     { does: "Redo", keys: ["Shift-Mod-z", "Mod-y"] },
@@ -67,6 +73,7 @@ export const PAPER_KEYS: Record<PaperKeyGroup, readonly PaperKey[]> = {
   ],
   Paper: [
     { command: "find", keys: ["Mod-f"] },
+    { does: "Find and replace", keys: [PAPER_REPLACE_KEY, "Mod-Shift-h"] },
   ],
 };
 

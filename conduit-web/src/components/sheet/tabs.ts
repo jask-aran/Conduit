@@ -1,6 +1,6 @@
 import { createSignal, type Accessor } from "solid-js";
 import type * as Y from "yjs";
-import { createSheetView, parseRange, parseRef, rangeA1, tabRef, type SheetBook, type SheetChange, type SheetTabOp, type SheetTabsResult, type SheetView, type Tab } from "@/sheet-format.js";
+import { createSheetView, LOOK, parseRange, parseRef, rangeA1, tabRef, type SheetBook, type SheetChange, type SheetTabOp, type SheetTabsResult, type SheetView, type Tab } from "@/sheet-format.js";
 import type { SheetAnchor, SheetCellsOp, SheetGrid, SheetHost, SheetRange } from "./host";
 
 /** What the foot needs of the editor: the workbook's tabs (hidden ones too), the one shown, showing one, the hub's tab verbs, the cells selected, the shown tab and whether values are still being computed. */
@@ -15,6 +15,9 @@ export interface SheetTabs {
   computing(): boolean;
   /** Whether a tab holds anything typed. */
   filled(id: string): boolean;
+  /** A tab's colour (`tabColor:<tabId>` in the look: an ink, or #rrggbb from a workbook), and setting it (null: none) as a change of this page's. */
+  color(id: string): string | undefined;
+  setColor(id: string, color: string | null): void;
   focus(): void;
   failed(message: string): void;
 }
@@ -43,7 +46,8 @@ const A1: SheetRange = { top: 0, left: 0, bottom: 0, right: 0 };
 export function createSheetTabs(options: { doc: Y.Doc; host: SheetHost; id: string; name: string; grid: Accessor<SheetGrid | undefined>; at: Accessor<SheetRange | null> }): SheetTabsControl {
   const [tabs, setTabs] = createSignal<Tab[]>([]), [shown, setShown] = createSignal<string>(), [model, setModel] = createSignal<SheetView>();
   const [computing, setComputing] = createSignal(true), [functions, setFunctions] = createSignal<readonly string[]>([]);
-  const kept = new Map<string, Kept>(), listeners = new Set<(change: SheetChange) => void>();
+  const kept = new Map<string, Kept>(), listeners = new Set<(change: SheetChange) => void>(), look = options.doc.getMap<unknown>(LOOK), [colored, setColored] = createSignal(0);
+  look.observe((event) => { for (const name of event.keysChanged) if (name.startsWith("tabColor:")) return void setColored((n) => n + 1); });
   let book: SheetBook | undefined, worker: Worker | undefined, views = new Map<string, SheetView>(), current: SheetView | undefined, off = () => {}, waiting: string | undefined, followed: string | undefined;
   const view = (id: string) => views.get(id) ?? views.set(id, book!.tab(id)).get(id)!;
   const visible = () => tabs().filter((tab) => !tab.hidden);
@@ -97,7 +101,7 @@ export function createSheetTabs(options: { doc: Y.Doc; host: SheetHost; id: stri
   const op = async (change: SheetTabOp) => {
     try {
       const done = await options.host.cells(change) as SheetTabsResult;
-      if (change.op === "add-tab" || (change.op === "hide-tab" && !change.hidden)) { if (book?.tabs().some((tab) => tab.id === done.tab && !tab.hidden)) show(done.tab); else waiting = done.tab; }
+      if (change.op === "add-tab" || change.op === "duplicate-tab" || (change.op === "hide-tab" && !change.hidden)) { if (book?.tabs().some((tab) => tab.id === done.tab && !tab.hidden)) show(done.tab); else waiting = done.tab; }
       return done;
     } catch (error) { options.host.failed((error as Error).message); return null; }
   };
@@ -106,6 +110,8 @@ export function createSheetTabs(options: { doc: Y.Doc; host: SheetHost; id: stri
     tabs, shown, show: soon, op, model, computing, functions, selection: options.at,
     filled: (id) => { const tab = book?.tab(id); if (!tab) return false; const { rows, cols } = tab.size(); for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (tab.input(r, c)) return true; return false; },
     focus: () => options.grid()?.focus(),
+    color: (id) => { colored(); const color = look.get(`tabColor:${id}`); return typeof color === "string" ? color : undefined; },
+    setColor: (id, color) => { if (color) look.set(`tabColor:${id}`, color); else look.delete(`tabColor:${id}`); },
     failed: (message) => options.host.failed(message),
     open: () => {
       worker = new Worker(new URL("./engine-worker.ts", import.meta.url), { type: "module", name: "Sheet engine" });

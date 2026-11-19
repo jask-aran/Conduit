@@ -148,7 +148,8 @@ export const seen = (packed) => /(^| )(f=|b[trbl](?= |$))/.test(packed);
 
 export { ownOver } from "../sheet-styles.js";
 
-const rgbOf = (colour, fill) => (colour.startsWith("#") ? colour.slice(1) : INKS[colour]?.[fill ? 1 : 0] ?? "000000").toUpperCase();
+/** A colour as Excel writes it (RRGGBB): an ink as its font (or `fill`) colour, a #rrggbb as itself. */
+export const rgbOf = (colour, fill) => (colour.startsWith("#") ? colour.slice(1) : INKS[colour]?.[fill ? 1 : 0] ?? "000000").toUpperCase();
 const STROKE = { 1: "thin", medium: "medium", thick: "thick" };
 const FACE = '<name val="Calibri"/><family val="2"/><scheme val="minor"/>';
 

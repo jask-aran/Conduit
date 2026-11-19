@@ -262,11 +262,12 @@ export function sheetKind(hub) {
   /** A filter's or table's look by A1 (`{ range: "A1:D20", keep: { B: [...] } }`), from its JSON by ids (`from`/`to` corners, `keep` by column id); undefined where a corner is gone. */
   const rangedA1 = (sheet, text) => {
     try {
-      const ranged = JSON.parse(String(text)), { keep, hide } = ranged, rest = Object.fromEntries(Object.entries(ranged).filter(([name]) => !["from", "to", "keep", "hide"].includes(name))), area = rangedArea(sheet, ranged);
+      const ranged = JSON.parse(String(text)), { keep, when, hide } = ranged, rest = Object.fromEntries(Object.entries(ranged).filter(([name]) => !["from", "to", "keep", "when", "hide"].includes(name))), area = rangedArea(sheet, ranged);
       if (!area) return undefined;
-      const kept = keep && Object.fromEntries(Object.entries(keep).flatMap(([col, values]) => sheet.indexOfCol(col) >= 0 ? [[colName(sheet.indexOfCol(col)), values]] : []));
+      const lettered = (by) => by && Object.fromEntries(Object.entries(by).flatMap(([col, values]) => sheet.indexOfCol(col) >= 0 ? [[colName(sheet.indexOfCol(col)), values]] : []));
+      const kept = lettered(keep), whens = lettered(when);
       const hidden = Array.isArray(hide) ? hide.map((id) => sheet.indexOfRow(id) + 1).filter(Boolean) : [];
-      return { ...rest, range: rangeA1(area), ...(kept ? { keep: kept } : {}), ...(hidden.length ? { hide: hidden } : {}) };
+      return { ...rest, range: rangeA1(area), ...(kept ? { keep: kept } : {}), ...(whens ? { when: whens } : {}), ...(hidden.length ? { hide: hidden } : {}) };
     } catch { return undefined; }
   };
   /** A tab's merged ranges (`merges:<tabId>`, a list of corners by ids) by A1, those whose corners are gone left out. */
@@ -274,9 +275,10 @@ export function sheetKind(hub) {
   const rangedIds = (sheet, value) => {
     const area = parseRange(String(value?.range ?? "")), { rows, cols } = sheet.size();
     if (!area || area.bottom >= rows || area.right >= cols) return undefined;
-    const { keep, hide } = value, rest = Object.fromEntries(Object.entries(value).filter(([name]) => !["range", "keep", "hide"].includes(name))), colOf = (letter) => /^[A-Z]{1,3}$/.test(letter) && colIndex(letter) < cols ? sheet.colAt(colIndex(letter)) : undefined;
+    const { keep, when, hide } = value, rest = Object.fromEntries(Object.entries(value).filter(([name]) => !["range", "keep", "when", "hide"].includes(name))), colOf = (letter) => /^[A-Z]{1,3}$/.test(letter) && colIndex(letter) < cols ? sheet.colAt(colIndex(letter)) : undefined;
     const kept = keep && typeof keep === "object" ? Object.fromEntries(Object.entries(keep).flatMap(([letter, values]) => colOf(letter) && Array.isArray(values) ? [[colOf(letter), values.map(String)]] : [])) : undefined;
-    return JSON.stringify({ ...rest, from: key(sheet.rowAt(area.top), sheet.colAt(area.left)), to: key(sheet.rowAt(area.bottom), sheet.colAt(area.right)), ...(kept ? { keep: kept } : {}),
+    const whens = when && typeof when === "object" ? Object.fromEntries(Object.entries(when).flatMap(([letter, test]) => colOf(letter) && typeof test?.is === "string" ? [[colOf(letter), test]] : [])) : undefined;
+    return JSON.stringify({ ...rest, from: key(sheet.rowAt(area.top), sheet.colAt(area.left)), to: key(sheet.rowAt(area.bottom), sheet.colAt(area.right)), ...(kept ? { keep: kept } : {}), ...(whens ? { when: whens } : {}),
       ...(Array.isArray(hide) ? { hide: hide.flatMap((row) => Number.isInteger(row) && row >= 1 && row <= rows ? [sheet.rowAt(row - 1)] : []) } : {}) });
   };
   const lookOf = (room, sheet) => {
@@ -402,6 +404,124 @@ export function sheetKind(hub) {
       retake(room, book.tab(book.tabOp("add", { name, rows: 1, cols: 1 }).tab), csv);
     }
   };
+  // Data tools: shifting cells (Excel's Delete and Insert of a block).
+  /**
+   * A block's cells deleted with those below (`up`) or right of it (`left`) moving into their place, or room made for it by moving its cells and those
+   * below (`down`) or right (`right`) away, as a spreadsheet's Delete and Insert of cells: only the lines the block spans move, each cell with its own
+   * look, and each formula reading a moved cell, on any tab, follows it; one reading a deleted cell reads #REF!. Worked out in an engine of its own
+   * holding the workbook's formulas: a deleted block is first moved past the tab's edge and its lines removed there, so what read it is #REF!. A
+   * range only partly moved is left as it was (Excel's grows or shrinks).
+   */
+  const shiftCells = (room, sheet, area, way, by) => {
+    const across = way === "left" || way === "right", removing = way === "up" || way === "left", { rows, cols } = sheet.size();
+    const depth = across ? area.right - area.left + 1 : area.bottom - area.top + 1, lo = across ? area.left : area.top, typed = sheet.inputs();
+    const merged = mergeAreas(room, sheet).find((one) => across ? one.bottom >= area.top && one.top <= area.bottom && one.right >= area.left : one.right >= area.left && one.left <= area.right && one.bottom >= area.top);
+    if (merged) throw fault(400, `${rangeA1(merged)} is merged: unmerge it to shift these cells`);
+    // Room made: the tab grows by the block's depth where its last lines hold anything the shift would push past them.
+    let size = across ? cols : rows;
+    const filledAt = (n) => { for (let m = across ? area.top : area.left; m <= (across ? area.bottom : area.right); m += 1) if (across ? typed[m]?.[n] : typed[n]?.[m]) return true; return false; };
+    if (!removing && Array.from({ length: depth }, (_, n) => size - 1 - n).some((n) => n >= lo && filledAt(n))) {
+      grow(room, sheet, across ? { bottom: rows - 1, right: cols - 1 + depth } : { bottom: rows - 1 + depth, right: cols - 1 }, by);
+      size += depth;
+    }
+    const shift = removing ? -depth : depth, place = (line, other) => across ? { row: other, col: line } : { row: line, col: other };
+    const others = Array.from({ length: (across ? area.bottom - area.top : area.right - area.left) + 1 }, (_, n) => (across ? area.top : area.left) + n);
+    // Every line from the block's first to the tab's last, along the lines it spans: each takes what stood `shift` before it, else nothing.
+    const from = (line) => { const was = line - shift; return was >= (removing ? lo + depth : lo) && was < size && (removing || was < size - depth) ? was : -1; };
+    const { engine, here } = scratch(room, sheet), now = sheet.inputs();
+    const formulas = [];
+    for (const tab of room.book.tabs()) {
+      const one = room.book.tab(tab.id), id = engine.getSheetId(one.engine.getSheetName(one.sheet));
+      one.inputs().forEach((line, r) => line.forEach((input, c) => { if (input.startsWith("=")) { engine.setCellContents({ sheet: id, row: r, col: c }, input); formulas.push({ one, id, r, c, input }); } }));
+    }
+    const out = [];
+    try {
+      const box = (a, b, c, d) => across ? { start: { sheet: here, row: c, col: a }, end: { sheet: here, row: d, col: b } } : { start: { sheet: here, row: a, col: c }, end: { sheet: here, row: b, col: d } };
+      const [first, last] = [others[0], others.at(-1)];
+      if (removing) {
+        // Lines added where the block is parked first, so removing them leaves every range running past the tab's edge as it was.
+        (across ? engine.addColumns : engine.addRows).call(engine, here, [size, depth]);
+        engine.moveCells(box(lo, lo + depth - 1, first, last), across ? { sheet: here, row: first, col: size } : { sheet: here, row: size, col: first });
+        (across ? engine.removeColumns : engine.removeRows).call(engine, here, [size, depth]);
+        if (lo + depth < size) engine.moveCells(box(lo + depth, size - 1, first, last), across ? { sheet: here, row: first, col: lo } : { sheet: here, row: lo, col: first });
+      } else if (lo < size - depth) engine.moveCells(box(lo, size - depth - 1, first, last), across ? { sheet: here, row: first, col: lo + depth } : { sheet: here, row: lo + depth, col: first });
+      const zone = new Set();
+      for (let line = lo; line < size; line += 1) for (const other of others) {
+        const at = place(line, other), was = from(line), old = was < 0 ? "" : (across ? now[other]?.[was] : now[was]?.[other]) ?? "";
+        zone.add(`${at.row}:${at.col}`);
+        const next = old.startsWith("=") ? String(engine.getCellFormula({ sheet: here, ...at }) ?? old) : old;
+        if (next !== (now[at.row]?.[at.col] ?? "")) out.push([sheet, at.row, at.col, next]);
+      }
+      for (const { one, id, r, c, input } of formulas) {
+        if (one.id === sheet.id && zone.has(`${r}:${c}`)) continue;
+        const next = engine.getCellFormula({ sheet: id, row: r, col: c });
+        if (next && next !== input) out.push([one, r, c, next]);
+      }
+    } finally { engine.destroy(); }
+    // Each cell's look (`<what>:<rowId>:<colId>`: a style, a number format, a frozen formula) moves with it.
+    const ids = (line, other) => { const at = place(line, other); return key(sheet.rowAt(at.row), sheet.colAt(at.col)); };
+    const looks = new Map();
+    for (const [name, value] of room.look.entries()) { const [what, row, col, more] = name.split(":"); if (more === undefined && col !== undefined) (looks.get(`${row}:${col}`) ?? looks.set(`${row}:${col}`, new Map()).get(`${row}:${col}`)).set(what, value); }
+    hub.as(room, by, (sign) => room.doc.transact(() => {
+      for (const [one, r, c, input] of out) { const cell = key(one.rowAt(r), one.colAt(c)); if (input) room.cells.set(cell, input); else room.cells.delete(cell); }
+      for (let line = lo; line < size; line += 1) for (const other of others) {
+        const was = from(line), want = was < 0 ? new Map() : looks.get(ids(was, other)) ?? new Map(), cell = ids(line, other), had = looks.get(cell) ?? new Map();
+        for (const [what, value] of want) if (had.get(what) !== value) room.look.set(`${what}:${cell}`, value);
+        for (const what of had.keys()) if (!want.has(what)) room.look.delete(`${what}:${cell}`);
+      }
+      sign();
+    }));
+    refilter(room, sheet, by);
+  };
+  /**
+   * The rows of a range (under its header) that say again, case aside, what a row above them says in its columns, taken out: the range's cells below
+   * move up into their place, each with its look, as the rows a sort moves (`reorder`), and its last rows are emptied.
+   */
+  const dedupe = (room, sheet, area, header, by) => {
+    // Whole columns reach the tab's last row: the empty rows under the data are not repeats of each other.
+    let bottom = area.bottom;
+    while (bottom > area.top && Array.from({ length: area.right - area.left + 1 }, (_, c) => sheet.input(bottom, area.left + c)).every((input) => !input)) bottom -= 1;
+    area = { ...area, bottom };
+    const top = area.top + (header ? 1 : 0), seen = new Set(), kept = [], gone = [];
+    for (let r = top; r <= area.bottom; r += 1) {
+      const said = Array.from({ length: area.right - area.left + 1 }, (_, c) => valueText(sheet.value(r, area.left + c)).toLowerCase()).join("\u0000");
+      if (seen.has(said)) gone.push(r); else { seen.add(said); kept.push(r); }
+    }
+    if (gone.length) hub.as(room, by, (sign) => room.doc.transact(() => {
+      reorder(room, sheet, top, [...kept, ...gone], area.left, area.right);
+      const tail = new Set(gone.map((_, n) => sheet.rowAt(top + kept.length + n))), cols = new Set(Array.from({ length: area.right - area.left + 1 }, (_, c) => sheet.colAt(area.left + c)));
+      for (const row of tail) for (const col of cols) room.cells.delete(key(row, col));
+      for (const name of [...room.look.keys()]) { const [, row, col, more] = name.split(":"); if (more === undefined && tail.has(row) && cols.has(col)) room.look.delete(name); }
+      sign();
+    }));
+    refilter(room, sheet, by);
+    return { removed: gone.length, left: kept.length };
+  };
+  /** A .csv becomes a workbook folder before its second tab is written, so a failed move leaves it as it was; its tab is named then, as is its file. */
+  const intoFolder = async (room, by) => {
+    if (isFolder(room)) return;
+    const first = room.doc.getMap(TAB).get(`name:${MAIN}`) ?? tabName(room.entry.name);
+    await hub.folder(room, tabFile(first));
+    if (!room.doc.getMap(TAB).has(`name:${MAIN}`)) hub.as(room, by, (sign) => room.book.tabOp("rename", { tab: MAIN, name: first }, sign));
+  };
+  /** A copy of a tab next after it, named as Excel names one (`Data (2)`): its cells as typed (a formula reading its own tab reads the copy), and its look. */
+  const duplicateTab = async (room, source, by) => {
+    const base = source.name.replace(/ \(\d+\)$/, "").slice(0, 25), { rows, cols } = source.size();
+    let n = 2, called = `${base} (${n})`;
+    while (room.book.find(called)) called = `${base} (${++n})`;
+    sized(room, null, rows, cols);
+    await intoFolder(room, by);
+    const at = room.book.tabs().findIndex((one) => one.id === source.id) + 1, kept = lookOf(room, source), typed = source.inputs();
+    // A chart is found by its id on whichever tab holds it: the copy's charts are charts of their own.
+    if (Array.isArray(kept.charts)) kept.charts = kept.charts.map((chart) => ({ ...chart, id: rowId() }));
+    const done = hub.as(room, by, (sign) => room.book.tabOp("add", { name: called, at, rows, cols }, sign)), copy = room.book.tab(done.tab);
+    hub.as(room, by, (sign) => room.doc.transact(() => {
+      typed.forEach((line, r) => line.forEach((input, c) => { if (input) room.cells.set(key(copy.rowAt(r), copy.colAt(c)), input); }));
+      restoreLook(room, copy, done.tab, kept);
+      sign();
+    }));
+    return { tab: done.tab, tabs: tabsWithSize(room) };
+  };
   const tabsWithSize = (room) => room.book.tabs().map((tab) => ({ ...tab, ...room.book.tab(tab.id).size() }));
   const TAB_OPS = { "add-tab": "add", "rename-tab": "rename", "delete-tab": "delete", "move-tab": "move", "hide-tab": "hide" };
 
@@ -481,12 +601,13 @@ export function sheetKind(hub) {
         return `${head}${part}\n${toCsv(clip(typed, area))}`;
       },
       /** One change of cells, of rows and columns, or of tabs (contract: POST /v0/document/:id/cells). `for` is checked, and nothing is kept of it yet. */
-      async edit(room, { op, tab, at, range, from, values, value, format, style, borders, column, header, descending, count = 1, to, name: called, hidden, chart, by, for: about, type: cellType, options } = {}) {
+      async edit(room, { op, tab, at, range, from, values, value, format, style, borders, column, header, descending, count = 1, to, name: called, hidden, chart, way, by, for: about, type: cellType, options } = {}) {
         const name = typeof by === "string" && by ? by.slice(0, 80) : "agent";
         if (about !== undefined) {
           if (!/^[\w-]+\/\d+$/.test(String(about))) throw fault(400, `for is the comment answered, as <item>/<n>, not ${about}`);
           await room.markup.thread(String(about).split("/")[0]);
         }
+        if (op === "duplicate-tab") return duplicateTab(room, pick(room, tab), name);
         if (Object.hasOwn(TAB_OPS, op)) {
           const tabArgs = { tab: tab === undefined ? undefined : String(tab), name: called, at, hidden: hidden !== false };
           if (op === "add-tab") {
@@ -495,11 +616,7 @@ export function sheetKind(hub) {
             sized(room, null, START.rows, START.cols);
             // A .csv becomes a workbook folder before its second tab is written, so a failed move leaves it as it was. Its tab is named then (its file's
             // name, unless it was given one), as is the file it becomes.
-            if (!isFolder(room)) {
-              const first = room.doc.getMap(TAB).get(`name:${MAIN}`) ?? tabName(room.entry.name);
-              await hub.folder(room, tabFile(first));
-              if (!room.doc.getMap(TAB).has(`name:${MAIN}`)) hub.as(room, name, (sign) => room.book.tabOp("rename", { tab: MAIN, name: first }, sign));
-            }
+            await intoFolder(room, name);
           }
           const changed = op === "rename-tab" && typeof called === "string" ? room.book.find(tabArgs.tab) : null;
           const frozen = changed ? keepFrozen(room, room.book.tab(changed), TAB_OPS[op], called?.trim()) : () => {};
@@ -607,7 +724,23 @@ export function sheetKind(hub) {
           refilter(room, sheet, name);
           return { ...sheet.size(), ...(many(room) ? { tab: sheet.name } : {}) };
         }
-        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, type, sort, chart, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, add-tab, rename-tab, delete-tab, move-tab or hide-tab");
+        if (op === "shift-cells") {
+          const ref = parseRef(range ?? at), sheet = pick(room, tab, ref.tab ?? undefined), area = parseRange(ref.range), { rows, cols } = sheet.size();
+          if (!area) throw fault(400, `range is an A1 range such as B2:C5 (or Data!B2:C5), not ${range ?? at}`);
+          if (!["up", "left", "down", "right"].includes(way)) throw fault(400, "way is up or left (the cells deleted) or down or right (cells inserted)");
+          if (area.top >= rows || area.left >= cols) throw fault(400, `${rangeA1(area)} is past the tab's edge: it is ${rows} rows x ${cols} columns`);
+          shiftCells(room, sheet, { ...area, bottom: Math.min(area.bottom, rows - 1), right: Math.min(area.right, cols - 1) }, way, name);
+          return { cells: [label(room, sheet, area)], ...sheet.size(), ...(many(room) ? { tab: sheet.name } : {}) };
+        }
+        if (op === "dedupe") {
+          const ref = parseRef(range ?? at), sheet = pick(room, tab, ref.tab ?? undefined), area = parseRange(ref.range), { rows, cols } = sheet.size();
+          if (!area) throw fault(400, `range is an A1 range such as A1:D20 (or Data!A1:D20), not ${range ?? at}`);
+          if (area.top >= rows || area.left >= cols) throw fault(400, `${rangeA1(area)} is past the tab's edge: it is ${rows} rows x ${cols} columns`);
+          const across = mergeAreas(room, sheet).find((one) => one.bottom >= area.top && one.top <= area.bottom && one.right >= area.left && one.left <= area.right);
+          if (across) throw fault(400, `${rangeA1(across)} is merged: unmerge it to remove duplicates from ${rangeA1(area)}`);
+          return { ...dedupe(room, sheet, { ...area, bottom: Math.min(area.bottom, rows - 1), right: Math.min(area.right, cols - 1) }, header === true, name), ...(many(room) ? { tab: sheet.name } : {}) };
+        }
+        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, type, sort, chart, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, shift-cells, dedupe, add-tab, duplicate-tab, rename-tab, delete-tab, move-tab or hide-tab");
         const sheet = pick(room, tab), { rows, cols } = sheet.size(), isRows = op.endsWith("rows"), size = isRows ? rows : cols, what = isRows ? "row" : "column", removing = op.startsWith("delete");
         if (!Number.isInteger(count) || count < 1 || count > CALL_LIMIT) throw fault(400, "count is how many, 1 or more");
         index(at, removing ? size - 1 : size, `${what} to ${removing ? "delete" : "insert before"} (${size} ${what}s now)`);

@@ -83,11 +83,38 @@ export const rangedArea = (view, ranged) => {
   const [top, left] = at(ranged?.from), [bottom, right] = at(ranged?.to);
   return top >= 0 && left >= 0 && bottom >= top && right >= left ? { top, left, bottom, right } : null;
 };
+// A date as a spreadsheet counts it (days from 1899-12-30): a number already is one, typed text as 2026-01-30 is read as one.
+const dayOf = (value) => typeof value === "number" ? Math.floor(value) : /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "").trim()) ? Date.parse(`${String(value).trim()}T00:00Z`) / 864e5 + 25569 : NaN;
+const numberOf = (value) => typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
+/** Whether a value passes a filter's condition on its column (SheetFilterWhen); text is matched case aside. */
+const passes = (when, value) => {
+  const text = valueText(value).toLowerCase(), a = String(when.a ?? "").toLowerCase(), b = String(when.b ?? "");
+  const within = (n, from, to) => n >= Math.min(from, to) && n <= Math.max(from, to);
+  switch (when.is) {
+    case "contains": return text.includes(a);
+    case "not-contains": return !text.includes(a);
+    case "starts": return text.startsWith(a);
+    case "ends": return text.endsWith(a);
+    case "equals": return text === a;
+    case "empty": return text === "";
+    case "filled": return text !== "";
+    case "greater": return numberOf(value) > Number(when.a);
+    case "less": return numberOf(value) < Number(when.a);
+    case "between": return within(numberOf(value), Number(when.a), Number(b));
+    case "before": return dayOf(value) < dayOf(when.a);
+    case "after": return dayOf(value) > dayOf(when.a);
+    case "dates": return within(dayOf(value), dayOf(when.a), dayOf(b));
+    default: return true;
+  }
+};
 export const filterHides = (view, filter) => {
   const area = rangedArea(view, filter), out = [];
-  if (!area || !filter.keep) return out;
-  const cols = Object.entries(filter.keep).flatMap(([id, list]) => { const col = view.indexOfCol(id); return col >= area.left && col <= area.right ? [[col, new Set(list)]] : []; });
-  if (cols.length) for (let row = area.top + 1; row <= area.bottom; row++) if (cols.some(([col, list]) => !list.has(valueText(view.value(row, col))))) out.push(view.rowAt(row));
+  if (!area || (!filter.keep && !filter.when)) return out;
+  const ofCols = (by) => Object.entries(by ?? {}).flatMap(([id, test]) => { const col = view.indexOfCol(id); return col >= area.left && col <= area.right ? [[col, test]] : []; });
+  const kept = ofCols(filter.keep).map(([col, list]) => [col, new Set(list)]), whens = ofCols(filter.when);
+  if (kept.length || whens.length) for (let row = area.top + 1; row <= area.bottom; row++) {
+    if (kept.some(([col, list]) => !list.has(valueText(view.value(row, col)))) || whens.some(([col, when]) => !passes(when, view.value(row, col)))) out.push(view.rowAt(row));
+  }
   return out;
 };
 /** A tab not there (yet): what a model or view of it reads. */

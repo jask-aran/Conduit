@@ -26,6 +26,8 @@ export type FormulaEditorHost = {
   /** Every function the engine has registered, custom ones included. */
   functions(): readonly string[];
   write(row: number, col: number, input: string): void;
+  /** Ctrl+Enter: what was typed in the cell written to every cell selected with it; false where the selection is that cell alone. */
+  fill?(from: Cell, input: string): boolean;
   /** The merged range a cell is in, if any: a move leaves it from its far edge. */
   merged(row: number, col: number): { top: number; left: number; bottom: number; right: number } | undefined;
   /** The cell selected, read again when its value changes. */
@@ -179,6 +181,7 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
       if (list.length && (event.key === "Tab" || (event.key === "Enter" && !doubt())) && !event.shiftKey) { take(); accept(list[active()]!); return; }
       if (list.length && event.key === "Escape") { take(); if (doubt()) setHeld(null); else setShut(text()); return; }
       if (event.key === "Enter" && event.altKey) { take(); const at = caret(); put(text().slice(0, at) + "\n" + text().slice(at), at + 1); return; }
+      if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !event.altKey) { take(); const input = finish(text()); if (host.fill?.(now, input)) { end(); host.grid()?.focus(); } else commit(undefined, true, true); return; }
       if (event.key === "Enter" || event.key === "Tab") { take(); const back = event.shiftKey ? -1 : 1; commit(event.key === "Enter" ? [back, 0] : [0, back], true, true); return; }
       if (event.key === "Escape") { take(); cancel(); return; }
       if (event.key === "F4") { take(); turnAnchors(); return; }
