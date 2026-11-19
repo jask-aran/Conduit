@@ -451,8 +451,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         // An empty value is an empty cell but for a formula that gives nothing.
         const input = value === null || typeof value === "string" ? model.input(row, col) : null;
         const style = options.columns.style(row, col);
-        // An empty cell is drawn for its fill and edges alone.
-        if (input === "") return style || mark || striped ? withMark(new TextCell(row, col, "", "", undefined, striped ? washed(themed(style)) : themed(style), style), mark) : EMPTY;
+        // An empty cell is drawn for its fill and edges alone; one an array formula spills text into is not empty.
+        if (input === "" && !value) return style || mark || striped ? withMark(new TextCell(row, col, "", "", undefined, striped ? washed(themed(style)) : themed(style), style), mark) : EMPTY;
         // An error is shown by its code, as the engine names it; only a value that could be one is asked whether it is.
         const fault = typeof value === "string" && value.startsWith("#") && model.error(row, col) !== null;
         const drawn = fault || value === null || typeof value === "boolean" ? null : options.columns.draw(row, col, value);
