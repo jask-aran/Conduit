@@ -11,7 +11,7 @@ const storageState = await session.context.storageState();
 const scratch = "panes-smoke-scratch.txt";
 const api = (method, path, data) => session.context.request.fetch(`${origin}/v0/${path}`, { method, data, headers: { origin, "content-type": "application/octet-stream" } });
 const results = [];
-let project, files = [], chat, created = false;
+let project, other, files = [], chat, created = false;
 
 async function scenario(name, run) {
   // Room for a chat, two panes and the dock at the 16px unit.
@@ -92,6 +92,7 @@ try {
     if (files.length >= 6) { project = candidate; break; }
   }
   if (!project) throw new Error(`No project${wanted ? ` named ${wanted}` : ""} with six top-level files`);
+  other = projects.find((candidate) => candidate.kind !== "unstructured" && candidate.id !== project.id && !candidate.name.includes(project.name) && !project.name.includes(candidate.name));
   const owner = projects.find((candidate) => candidate.kind !== "unstructured" && candidate.sessions?.some((thread) => thread.templateId !== "agent"));
   chat = owner && { project: owner.name, id: owner.sessions.find((thread) => thread.templateId !== "agent").id };
   // The one file edits go into; never saved, removed at the end.
@@ -120,8 +121,7 @@ try {
     await dockClick(page, 3, { button: "right" });
     await page.getByRole("menuitem", { name: "Open beside", exact: true }).click();
     check("Open beside opened it", await until(page, (path) => new URL(location.href).searchParams.get("panes")?.includes(`:${path}`), files[3]));
-    const shown = await paneViews(page);
-    await page.reload();
+    const shown = await paneViews(page); await page.reload();
     check("documents survive reload", await until(page, () => document.querySelectorAll(".ui-file-viewer").length === 2, undefined, 8000));
     check("same views", JSON.stringify(await paneViews(page)) === JSON.stringify(shown));
   });
@@ -140,8 +140,7 @@ try {
 
   await scenario("panes swap and keyboard focus cycles between them", async (page, check) => {
     await open(page);
-    await dockRow(page, 0).click({ modifiers: ["Alt"] });
-    await page.locator("[data-pane-slot] .ui-file-viewer").waitFor();
+    await dockRow(page, 0).click({ modifiers: ["Alt"] }); await page.locator("[data-pane-slot] .ui-file-viewer").waitFor();
     const before = await paneViews(page);
     await page.locator('[data-pane-slot] [aria-label="Swap with the pane beside"]').click();
     check("panes swapped", await until(page, (views) => new URL(location.href).searchParams.get("panes") === views, [...before].reverse().join(";")));
@@ -155,13 +154,11 @@ try {
 
   await scenario("summons survive reload and dismiss back to the held dock pane", async (page, check) => {
     const params = new URLSearchParams({ panes: `page:project:${project.id};page:dashboard`, dock: "1" });
-    await page.goto(`${origin}/project/${project.id}?${params}`);
-    await page.locator("[data-pane-slot].main-split").waitFor({ state: "visible" });
+    await page.goto(`${origin}/project/${project.id}?${params}`); await page.locator("[data-pane-slot].main-split").waitFor({ state: "visible" });
     const files = page.locator('[data-region="workspace-rail"] [data-tool="files"]');
     await files.click();
     check("summon hides held pane", await until(page, () => document.querySelector("[data-pane-slot]")?.getAttribute("data-docked") === "hidden"));
-    await page.reload();
-    await page.getByRole("radiogroup", { name: "Folder viewer", exact: true }).waitFor();
+    await page.reload(); await page.getByRole("radiogroup", { name: "Folder viewer", exact: true }).waitFor();
     await files.click();
     check("dismiss restores held pane", await until(page, () => document.querySelector("[data-pane-slot]")?.getAttribute("data-docked") === ""));
   });
@@ -177,8 +174,7 @@ try {
     check("and no pane", JSON.stringify(await paneViews(page)) === JSON.stringify(views), JSON.stringify(await paneViews(page)));
     await row(page, "[data-pane-slot]", files[1]).click({ modifiers: ["Alt"] });
     check("Alt opened a file pane", await until(page, (count) => new URL(location.href).searchParams.get("panes")?.split(";").length === count, views.length + 1));
-    await page.keyboard.press("Control+Alt+z");
-    await page.keyboard.press("Control+Alt+z");
+    await page.keyboard.press("Control+Alt+z"); await page.keyboard.press("Control+Alt+z");
     check("undo brought the summon back", await until(page, (folder) => !new URL(location.href).searchParams.get("panes")?.includes(folder), folder) && await until(page, () => new URL(location.href).searchParams.get("summon") === "files"), page.url());
     await page.keyboard.press("Control+Alt+Shift+z");
     check("redo moved it again", await until(page, (folder) => new URL(location.href).searchParams.get("panes")?.includes(folder), folder) && !new URL(page.url()).searchParams.get("summon"));
@@ -224,7 +220,18 @@ try {
     check("edit kept", (await editor.textContent()).includes("modes-probe"));
   });
 
-  await scenario("the dock's unsaved edit when focus moves to another workspace", async () => "needs a decision: today the edit is dropped without asking");
+  await scenario("the dock keeps a workspace whose file has an unsaved edit when focus moves to another", async (page, check) => {
+    if (!other) return "no second project";
+    const counter = countWrites(page), header = () => page.locator(".workspace-panel .ui-pane-header").first().textContent();
+    await page.goto(`${origin}/project/${project.id}?panes=${encodeURIComponent(`page:project:${project.id};page:project:${other.id}`)}`);
+    await page.locator('[data-region="workspace-rail"] [data-tool="files"]').click();
+    await showTree(page); await row(page, ".workspace-panel", scratch).waitFor();
+    const editor = await editScratch(page, ".workspace-panel", " dock-hold-probe");
+    await page.locator("[data-pane-slot]").first().click({ position: { x: 24, y: 400 } });
+    check("focus moved to the other workspace's pane", await until(page, () => document.activeElement?.closest("[data-pane-slot]")), await where(page));
+    check("the dock kept its workspace and the edit", (await header()).includes(project.name) && (await editor.textContent()).includes("dock-hold-probe"), await header());
+    check("no file written", counter.writes === 0);
+  });
 
   await scenario("a chat in pane B names its project in its header", async (page, check) => {
     if (!chat) return "no project holds a chat";
@@ -239,23 +246,17 @@ try {
     const geometry = () => page.evaluate(() => { const box = (selector) => { const r = document.querySelector(selector)?.getBoundingClientRect(); return r ? { left: Math.round(r.left), right: Math.round(r.right) } : null; }; return { dock: box(".workspace-panel"), main: box(".chat-main"), slot: box("[data-pane-slot]") }; });
     const dragBy = async (selector, dx) => {
       const handle = await page.locator(selector).first().boundingBox();
-      await page.mouse.move(handle.x + handle.width / 2, handle.y + 200);
-      await page.mouse.down();
+      await page.mouse.move(handle.x + handle.width / 2, handle.y + 200); await page.mouse.down();
       for (let step = 1; step <= 8; step++) await page.mouse.move(handle.x + handle.width / 2 + dx * step / 8, handle.y + 200);
       const mid = await geometry();
-      await page.mouse.up();
-      await page.waitForTimeout(300);
+      await page.mouse.up(); await page.waitForTimeout(300);
       return mid;
     };
-    const before = await geometry();
-    const mid = await dragBy('.ui-resize-edge[data-edge="pane"][data-dock]', -120);
-    const after = await geometry();
+    const before = await geometry(), mid = await dragBy('.ui-resize-edge[data-edge="pane"][data-dock]', -120), after = await geometry();
     check("mid-drag the dock stays at the right edge", mid.dock && Math.abs(mid.dock.right - before.dock.right) <= 2 && mid.dock.left < before.dock.left - 60, JSON.stringify({ before: before.dock, mid: mid.dock }));
     check("the dock took the width", after.dock.left < before.dock.left - 60 && Math.abs(after.dock.right - before.dock.right) <= 2, JSON.stringify({ before: before.dock, after: after.dock }));
     check("the panes gave it up", after.slot.right <= after.dock.left + 2 && after.main.left === before.main.left, JSON.stringify(after));
-    const beforePanes = await geometry();
-    const midPanes = await dragBy('.ui-resize-edge[data-edge="pane"]:not([data-dock])', -100);
-    const afterPanes = await geometry();
+    const beforePanes = await geometry(), midPanes = await dragBy('.ui-resize-edge[data-edge="pane"]:not([data-dock])', -100), afterPanes = await geometry();
     check("mid-drag the panes follow the edge", midPanes.main.right < beforePanes.main.right - 50 && midPanes.slot.right === beforePanes.slot.right, JSON.stringify({ before: beforePanes, mid: midPanes }));
     check("the edge stays where it was dropped", Math.abs(afterPanes.main.right - midPanes.main.right) <= 4 && afterPanes.dock.left === beforePanes.dock.left, JSON.stringify({ mid: midPanes, after: afterPanes }));
   });
@@ -265,8 +266,7 @@ try {
     const rows = page.locator('.ui-row[data-density=list][data-doc-view^="files:"]');
     await rows.first().waitFor({ timeout: 4000 }).catch(() => {});
     if (!await rows.count()) return `${project.name}'s page lists no files; try --project <name>`;
-    const name = await rows.first().getAttribute("title");
-    await rows.first().click();
+    const name = await rows.first().getAttribute("title"); await rows.first().click();
     check("opened in pane A with the keyboard", await until(page, () => document.activeElement?.closest(".chat-main .ui-file-viewer")), await where(page));
     check("its file", (await paneViews(page)).some((view) => decodeURIComponent(view).includes(name)));
   });

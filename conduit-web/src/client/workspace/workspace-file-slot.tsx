@@ -154,8 +154,6 @@ function errorCode(cause: unknown): string {
 export default function WorkspaceFileSlot(props: {
   projectId: string;
   path: string | null;
-  slot: "primary" | "secondary";
-  focused: boolean;
   closable: boolean;
   busy: boolean;
   wrap: boolean;
@@ -190,8 +188,7 @@ export default function WorkspaceFileSlot(props: {
   const saving = () => saveState() === "saving" || saveState() === "overwriting";
   const [documentProjectId, setDocumentProjectId] = createSignal(props.projectId);
   const hasUnsavedChanges = () => Boolean(preview() && !preview()!.readOnly && !preview()!.truncated && editorDirty());
-  const label = props.slot === "primary" ? "File preview" : "Second file preview";
-  const closeLabel = props.slot === "primary" ? "Close file" : "Close second file";
+  const label = "File preview", closeLabel = "Close file";
 
   let controller: AbortController | null = null;
   let editor: WorkspaceEditorHandle | undefined;
@@ -544,8 +541,6 @@ export default function WorkspaceFileSlot(props: {
     <ContextMenuTrigger
       as={FileView}
       tabIndex={-1}
-      data-slot={props.slot}
-      focused={props.focused}
       aria-label={label}
       onFocusIn={props.onFocus}
       onPointerDown={props.onFocus}
