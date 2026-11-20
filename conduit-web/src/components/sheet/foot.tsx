@@ -35,10 +35,10 @@ const INK_NAMES: Record<string, string> = { red: "Red", amber: "Amber", green: "
 export const addTab = (tabs: SheetTabs) => { const names = new Set(tabs.tabs().map((tab) => tab.name.toLowerCase())); let n = tabs.tabs().length + 1; while (names.has(`sheet${n}`) || names.has(`sheet ${n}`)) n++; void tabs.op({ op: "add-tab", name: `Sheet ${n}` }); };
 
 /** `filtered`: the rows under the filter's header and how many it shows, while it narrows them. `act`: a change made as one named step (history.ts). */
-export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: (range: SheetRange) => ((value: number) => string) | null; filtered?: () => { shown: number; total: number } | null; mode?: () => string | null; act(label: string, run: () => void): void }) {
+export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: (range: SheetRange) => ((value: number) => string) | null; filtered?: () => { shown: number; total: number } | null; mode?: () => string | null; others?: () => readonly SheetRange[]; act(label: string, run: () => void): void }) {
   const tabs = props.tabs, decide = createDecisionScope(() => props.id);
   const [renaming, setRenaming] = createSignal<string>(), [draft, setDraft] = createSignal("");
-  const figures = createFigures(tabs.model, tabs.selection);
+  const figures = createFigures(tabs.model, tabs.selection, props.others);
   const visible = () => tabs.tabs().filter((tab) => !tab.hidden), hidden = () => tabs.tabs().filter((tab) => tab.hidden);
   // The figures fold before the tabs give way: first to the sum, then to none.
   let strip: HTMLDivElement | undefined;

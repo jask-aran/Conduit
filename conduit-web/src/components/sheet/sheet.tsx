@@ -1027,6 +1027,6 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       </Show>
       <Show when={props.margin}><aside class="ui-spreadsheet-margin" aria-label="Comments">{props.margin}</aside></Show>
     </div>
-    <SheetFoot tabs={tabs} id={props.id} mode={() => extending() ? "Extend selection" : adding() ? "Add to selection" : null} format={(range) => formats.figure(range)} filtered={filters.counted} act={history.act} />
+    <SheetFoot tabs={tabs} id={props.id} others={others} mode={() => extending() ? "Extend selection" : adding() ? "Add to selection" : null} format={(range) => formats.figure(range)} filtered={filters.counted} act={history.act} />
   </section>;
 }
