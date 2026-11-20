@@ -611,7 +611,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     if (source < 0) return;
     for (const run of runsOf([...new Set([source, ...(down ? rows : cols)])])) if (run.length > 1 || run[0] !== source) for (const side of runsOf(down ? cols : rows)) {
       const by = run[0]! - source, [lines, across] = down ? [run, side] : [side, run];
+      // From the source line, so the hub copies its look (number format, style, type, chip) with its values.
       hub({ op: "fill", range: rangeA1({ top: lines[0]!, bottom: lines.at(-1)!, left: across[0]!, right: across.at(-1)! }),
+        from: rangeA1(down ? { top: source, bottom: source, left: side[0]!, right: side.at(-1)! } : { top: side[0]!, bottom: side.at(-1)!, left: source, right: source }),
         values: down ? [side.map((col) => shifted(sheet.input(source, col), by, 0))] : side.map((row) => [shifted(sheet.input(row, source), 0, by)]) });
     }
   });

@@ -1,4 +1,7 @@
 import { key } from "./sheet-format.js";
+import { writeFormat } from "./sheet-formats.js";
+import { paintStyle } from "./sheet-styles.js";
+import { PLAIN, putType } from "./sheet-types.js";
 
 /*
  * Smart chips (sheet-chips.d.ts): `chip:<rowId>:<colId>` in a sheet's look holds what a cell is shown as, by ids, so it follows its cell through sorts,
@@ -64,4 +67,20 @@ export function copyChips(look, sheet, pairs) {
     const at = `${CHIP}${key(rowId, colId)}`;
     if (from === undefined) { if (look.has(at)) look.delete(at); } else if (look.get(at) !== from) look.set(at, from);
   }
+}
+
+/**
+ * The whole look of cells copied to cells, as a fill copies it (`[fromRow, fromCol, toRow, toCol]`): style, number format, type (a validation with
+ * it) and chip, each target made to wear what its source wears, whether its own or its line's.
+ */
+export function copyLook(look, sheet, pairs) {
+  const list = [...pairs], worn = (what, row, col) => look.get(`${what}:${key(sheet.rowAt(row), sheet.colAt(col))}`) ?? look.get(`${what}:${sheet.colAt(col)}`);
+  for (const [fromRow, fromCol, row, col] of list) {
+    if (!sheet.rowAt(fromRow) || !sheet.colAt(fromCol) || !sheet.rowAt(row) || !sheet.colAt(col)) continue;
+    const one = { top: row, bottom: row, left: col, right: col }, type = worn("type", fromRow, fromCol);
+    paintStyle(look, sheet, { rows: [fromRow], cols: [fromCol] }, one);
+    writeFormat(look, sheet, one, String(worn("fmt", fromRow, fromCol) ?? "General"), false);
+    putType(look, sheet, one, type === undefined || type === PLAIN ? null : String(type), false);
+  }
+  copyChips(look, sheet, list);
 }

@@ -12,7 +12,7 @@ import { writePrivateFile } from "../private-file.js";
 import { cleanOptions, readDate, restoreValidations, validationsA1, VALID, writeType } from "../sheet-types.js";
 import { hubRefusal } from "../sheet-valid.js";
 import { changeTable, makeTable, placed as placedTables, readTables, removeTable, tableFilter, tablesA1, tablesIds, tableWrites, takenNames, writeTables } from "../sheet-tables.js";
-import { cleanChip, clearChips, copyChips, writeChip } from "../sheet-chips.js";
+import { cleanChip, clearChips, copyLook, writeChip } from "../sheet-chips.js";
 
 /*
  * The sheet artifact kind on the hub (sheet-format.js): a .csv that holds the values, the formulas beside it in sheet.json, and the live copy in
@@ -759,9 +759,9 @@ export function sheetKind(hub) {
           writeCells(room, sheet, dated, name, true);
           // A table grows to hold an entry beside it, and fills a calculated column, as the page's (sheet-tables.js).
           hub.as(room, name, (sign) => room.doc.transact(() => { if (tableWrites(room.look, sheet, dated, (row, col, input) => { const cell = key(sheet.rowAt(row), sheet.colAt(col)); if (input) room.cells.set(cell, input); else room.cells.delete(cell); }, shiftRefs)) sign(); }));
-          // A fill from its source carries the source's chips, as it carries its formulas.
+          // A fill from its source carries the source's whole look (style, number format, type, chip), as it carries its formulas, as Excel's fill copies the cell.
           if (source) { const wrap = (n, from, size) => from + (((n - from) % size) + size) % size, tall = source.bottom - source.top + 1, wide = source.right - source.left + 1;
-            hub.as(room, name, (sign) => room.doc.transact(() => { copyChips(room.look, sheet, dated.map(([r, c]) => [wrap(r, source.top, tall), wrap(c, source.left, wide), r, c])); sign(); })); }
+            hub.as(room, name, (sign) => room.doc.transact(() => { copyLook(room.look, sheet, dated.map(([r, c]) => [wrap(r, source.top, tall), wrap(c, source.left, wide), r, c])); sign(); })); }
           return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}), ...sheet.size() };
         }
         // A range's number formats (sheet-formats.js) or styles (sheet-styles.js), set first when given; whole columns (B:D), or for styles rows (3:5), set theirs.
