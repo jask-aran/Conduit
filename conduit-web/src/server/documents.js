@@ -1127,7 +1127,7 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
       }
       if (!bytes?.length) throw fault(400, "Send the .xlsx file, or from: its path in the project's folder");
       if (tabs !== undefined && (!Array.isArray(tabs) || tabs.some((tab) => typeof tab !== "string"))) throw fault(400, "tabs is a list of tab names");
-      const at = [within(into), `${named(name ?? (typeof from === "string" ? nameOf(from).replace(/\.xlsx$/i, "") : undefined))}${FOLDER}`].filter(Boolean).join("/");
+      const at = [within(into), `${named(name ?? (typeof from === "string" ? nameOf(from).replace(/\.(?:xlsx|xlsm|xlsb|xls|ods|csv|tsv)$/i, "") : undefined))}${FOLDER}`].filter(Boolean).join("/");
       if (await disk.stat(at)) throw fault(409, `A sheet named ${nameOf(at)} is already there`);
       const { tabs: read, report } = await importXlsxApart(new Uint8Array(bytes), { tabs }), id = crypto.randomBytes(8).toString("hex");
       await disk.inside(at);

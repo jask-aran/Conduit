@@ -145,7 +145,11 @@ const same = (value, cell) => {
 export function importXlsx(bytes, { tabs: only } = {}) {
   let book;
   // sheetStubs: without it a formula whose kept value is empty is left out. cellStyles: column widths and hidden rows and columns come only with it. xlfn: the prefixes stay, so `translated` is the one place they go.
-  try { book = XLSX.read(bytes, { type: "array", dense: true, cellFormula: true, cellNF: true, cellText: false, cellHTML: false, cellStyles: true, sheetStubs: true, xlfn: true, bookFiles: true }); }
+  // Text that is good UTF-8 (a CSV or TSV without a byte-order mark) is read as such: SheetJS would read its bytes as Latin-1.
+  const zipOrOle = (bytes[0] === 0x50 && bytes[1] === 0x4b) || (bytes[0] === 0xd0 && bytes[1] === 0xcf) || (bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff);
+  let utf8 = null;
+  if (!zipOrOle) try { utf8 = new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch { /* another encoding: SheetJS's guess */ }
+  try { book = XLSX.read(utf8 ?? bytes, { type: utf8 === null ? "array" : "string", dense: true, cellFormula: true, cellNF: true, cellText: false, cellHTML: false, cellStyles: true, sheetStubs: true, xlfn: true, bookFiles: true }); }
   catch (error) { throw fault(`That file could not be read as an .xlsx: ${error?.message ?? error}`); }
   const wanted = only?.length ? new Set(only.map((name) => name.toLowerCase())) : null, meta = book.Workbook?.Sheets ?? [];
   const dropped = {}, drop = (what, count = 1) => { if (count) dropped[what] = (dropped[what] ?? 0) + count; };
@@ -156,6 +160,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   // Each tab's XML part, by the workbook's own list and its links, read for its pane and styles.
   const part = (path) => book.files?.[path]?.content, text = (path) => { const bytes = part(path); return bytes ? Buffer.from(bytes.buffer, bytes.byteOffset, bytes.length).toString("utf8") : ""; };
   const targets = Object.fromEntries((text("xl/_rels/workbook.xml.rels").match(/<Relationship\b[^>]*>/g) ?? []).map((tag) => [attr(tag, "Id"), attr(tag, "Target") ?? ""]));
+  drop("macros (an export is an .xlsx, which holds none; nothing in them is run)", part("xl/vbaProject.bin") ? 1 : 0);
   const stylesXml = text("xl/styles.xml"), themeXml = text(Object.values(targets).find((target) => /theme\d*\.xml$/.test(target))?.replace(/^\/?(xl\/)?/, "xl/") ?? "");
   const formatsOf = readStyles(stylesXml, themeXml), dxfs = readDxfs(stylesXml, themeXml);
   // The parts a part links to by a relationship of this type (`table`, `drawing`, `chart`…), by their paths in the zip.
