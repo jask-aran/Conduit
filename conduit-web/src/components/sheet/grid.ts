@@ -842,6 +842,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         // The keyboard follows the active cell into the other part: the frozen rows' part goes as they are unfrozen, and the keyboard with it.
         const typing = parts.find((p) => p.host?.contains(document.activeElement));
         drive.structure?.();
+        // The active cell hidden (its row, its column, or a group folded over it) goes on to the next cell shown, one cell selected, as a spreadsheet's.
+        if (was && cell && !columns && (hiddenCols.has(cell.col) || !parts.some((p) => clip(p, was)))) return void api.select({ top: cell.row, bottom: cell.row, left: cell.col, right: cell.col });
         if (!was || columns || (versions === parts.map((p) => p.map.version).join() && freeze === frozenRows)) return;
         if (rows) spread(was, partOf(was.top), (_, drawn) => ({ columns: CompactSelection.empty(), rows: CompactSelection.fromSingleSelection([drawn.top, drawn.bottom + 1]) }));
         else api.select(was);
