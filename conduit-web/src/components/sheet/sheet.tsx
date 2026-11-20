@@ -88,7 +88,22 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   } });
   // Every tab's rows and columns are in it, so a row put in or taken out is undone with the formulas the hub moved for it; and the tabs' order and names,
   // so adding, deleting, moving, renaming and hiding a tab are steps too.
-  const history = createSheetHistory(live.doc, [cells, look, live.doc.getArray(ROWS), live.doc.getArray(COLS), live.doc.getArray(TABS), live.doc.getMap(TAB)], (op) => tabs.cells(op)), [stepped, setStepped] = createSignal(0);
+  // An Undo or Redo that would bring back a tab name another tab has taken since is not run: formulas naming it could no longer say which tab they mean.
+  const clash = (item: Y.UndoManager["undoStack"][number], back: boolean) => {
+    const meta = live.doc.getMap(TAB), order = live.doc.getArray(TABS), named = new Map<string, string>(), going = new Set<string>();
+    live.doc.transact((tr) => {
+      Y.iterateDeletedStructs(tr, item.deletions, (one) => { if (one instanceof Y.Item && one.deleted && one.parent === meta && one.parentSub?.startsWith("name:")) named.set(one.parentSub.slice(5), String(one.content.getContent()[0])); });
+      Y.iterateDeletedStructs(tr, item.insertions, (one) => { if (one instanceof Y.Item && !one.deleted && one.parent === order) for (const id of one.content.getContent()) going.add(String(id)); });
+    }, clash);
+    const after = tabs.tabs().filter((tab) => !going.has(tab.id)).map((tab) => ({ id: tab.id, name: (named.get(tab.id) ?? tab.name).toLowerCase() }));
+    for (const [id, name] of named) {
+      if (!after.some((tab) => tab.id !== id && tab.name === name.toLowerCase())) continue;
+      toast(`${back ? "Can't undo" : "Can't redo"}: another tab is now called ${name}`);
+      return true;
+    }
+    return false;
+  };
+  const history = createSheetHistory(live.doc, [cells, look, live.doc.getArray(ROWS), live.doc.getArray(COLS), live.doc.getArray(TABS), live.doc.getMap(TAB)], (op) => tabs.cells(op), clash), [stepped, setStepped] = createSignal(0);
   // F4 outside the editor repeats the last step on the selection, as Excel's: what it ran of styles, borders, number formats, inserts, deletes and
   // fills (each remembered as it runs, a step's together) runs again, one step of the same name.
   // By what each is (a run of deletes made one by one is one delete again).
@@ -110,21 +125,6 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const watchers = new Set<(pressed?: string) => void>(), moved = (pressed?: string) => watchers.forEach((listener) => listener(pressed));
   createEffect(() => props.onState?.(live.state()));
   onCleanup(() => history.destroy());
-  // An Undo or Redo that brings back a name another tab has taken since renames that tab as a duplicate is named ("Data (2)"), outside the history.
-  const untwin = (event: Y.YMapEvent<unknown>) => {
-    if (!(event.transaction.origin instanceof Y.UndoManager)) return;
-    for (const entry of event.keysChanged) {
-      const id = entry.startsWith("name:") ? entry.slice(5) : "", name = id && event.target.get(entry);
-      if (typeof name !== "string") continue;
-      const others = new Set(tabs.tabs().filter((tab) => tab.id !== id).map((tab) => tab.name.toLowerCase()));
-      if (!others.has(name.toLowerCase())) continue;
-      let n = 2, free = `${name.replace(/ \(\d+\)$/, "").slice(0, 25)} (${n})`;
-      while (others.has(free.toLowerCase())) free = `${name.replace(/ \(\d+\)$/, "").slice(0, 25)} (${++n})`;
-      void tabs.cells({ op: "rename-tab", tab: id, name: free }).catch((error: Error) => props.host.failed(error.message));
-    }
-  };
-  live.doc.getMap(TAB).observe(untwin);
-  onCleanup(() => live.doc.getMap(TAB).unobserve(untwin));
 
   const write = (list: readonly { row: number; col: number; input: string }[]) => {
     const sheet = model();
