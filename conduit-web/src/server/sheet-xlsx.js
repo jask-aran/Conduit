@@ -114,6 +114,13 @@ const filterOf = (xml, range, dated, drop) => {
   }
   return { ...(Object.keys(keep).length ? { keep } : {}), ...(Object.keys(when).length ? { when } : {}) };
 };
+// A tab's page setup and its protection, kept as the file wrote each element (`print`, `protection` in its look; the workbook's on the first tab) and
+// written back whole; a sheet's fit-to-page flag is its sheetPr's.
+const PRINT = ["printOptions", "pageMargins", "pageSetup", "headerFooter", "rowBreaks", "colBreaks"];
+const elementOf = (xml, name) => new RegExp(`<${name}\\b[^>]*?(?:/>|>[\\s\\S]*?</${name}>)`).exec(xml)?.[0];
+const whole = (xml, name) => typeof xml === "string" && xml === elementOf(xml, name) ? xml : "";
+/** A sheet part with its element `name` made `block`: in place of the one there, or where the schema has it. */
+const swapped = (xml, name, block) => elementOf(xml, name) ? xml.replace(elementOf(xml, name), () => block) : placed(xml, name, block);
 const sheetOf = (path) => { const n = /^xl\/worksheets\/sheet(\d+)\.xml$/.exec(path)?.[1]; return n ? Number(n) - 1 : -1; };
 /** A formula as this engine reads it: the prefixes a newer function is stored under are taken off. */
 const translated = (formula) => `=${formula.replace(/_xlfn\.|_xlws\.|_xlpm\./g, "")}`;
@@ -220,6 +227,10 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     const filtering = table ? /<autoFilter\b[\s\S]*?(?:\/>|<\/autoFilter>)/.exec(table)?.[0] : /<autoFilter\b[^>]*?(?:\/>|>[\s\S]*?<\/autoFilter>)/.exec(xml)?.[0];
     const dated = (c) => { const cell = tab.data[parseRange(attr(filtering, "ref")).top + 1]?.[c]; return typeof cell?.z === "string" && XLSX.SSF.is_date(cell.z); };
     if (filtering && attr(filtering, "ref")) { const conditions = filterOf(filtering, attr(filtering, "ref"), dated, drop); if (!table || Object.keys(conditions).length) tab.filter = { range: attr(filtering, "ref"), ...conditions }; }
+    const print = Object.fromEntries([...PRINT, "pageSetUpPr"].flatMap((name) => { const one = elementOf(xml, name); return one ? [[name, one.replace(/\sr:id="[^"]*"/, "")]] : []; }));
+    if (Object.keys(print).length) { tab.print = print; keep("page setups"); }
+    tab.protection = elementOf(xml, "sheetProtection");
+    if (tab.protection) keep("sheet protections");
     const color = /<tabColor\b[^>]*>/.exec(xml)?.[0];
     if (color && /^[0-9A-F]{8}$/i.test(attr(color, "rgb") ?? "")) tab.color = `#${attr(color, "rgb").slice(2).toUpperCase()}`; else drop("tab colours from the theme", color ? 1 : 0);
     drop("validation rules (in Excel 2010's form, naming another tab)", xml.match(/<x14:dataValidation\b/g)?.length ?? 0);
@@ -332,6 +343,9 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       if (tab.rulesKept.length) look.rulesKept = tab.rulesKept;
       if (tab.validations.length) look.validations = tab.validations;
       if (tab.color) look.tabColor = tab.color;
+      if (tab.print) look.print = tab.print;
+      if (tab.protection) look.protection = tab.protection;
+      if (tab === read[0] && elementOf(text("xl/workbook.xml"), "workbookProtection")) look.bookProtection = elementOf(text("xl/workbook.xml"), "workbookProtection");
       if (tab.charts.length) look.charts = tab.charts;
       for (const [at, note] of Object.entries(tab.notes)) look[`note:${at}`] = note;
       for (const [at, list] of Object.entries(tab.drawn)) look[`drawing:${at}`] = list;
@@ -430,7 +444,9 @@ export function exportXlsx(tabs) {
   const validations = tabs.map((tab) => validationsXml(tab.look.validations)), inked = tabs.map((tab) => inksXml(tab.look.validations));
   // A tab's colour (`tabColor`): #RRGGBB as imported, or an ink the page set, written as its hex.
   const conditions = tabs.map((tab) => tab.tablePart ? "" : filterColumns(tab.look.filter));
-  const colors = tabs.map((tab) => { const color = String(tab.look.tabColor ?? ""); return /^#[0-9A-F]{6}$/i.test(color) || SHEET_INKS.includes(color) ? `<tabColor rgb="FF${rgbOf(color)}"/>` : ""; });
+  const colors = tabs.map((tab) => { const color = String(tab.look.tabColor ?? ""); return (/^#[0-9A-F]{6}$/i.test(color) || SHEET_INKS.includes(color) ? `<tabColor rgb="FF${rgbOf(color)}"/>` : "") + whole(tab.look.print?.pageSetUpPr, "pageSetUpPr"); });
+  const printed = tabs.map((tab) => [...PRINT.map((name) => [name, whole(tab.look.print?.[name], name)]), ["sheetProtection", whole(tab.look.protection, "sheetProtection")]].filter(([, xml]) => xml));
+  const locked = whole(tabs[0]?.look.bookProtection, "workbookProtection");
   let drawings = 0, charts = 1, noted = 0, blocks = 1, media = 1;
   const parts = tabs.map((tab) => {
     const drawn = Object.entries(tab.look).flatMap(([name, list]) => /^drawing:[A-Z]{1,3}\d+$/.test(name) ? [[name.slice(8), list]] : []);
@@ -440,7 +456,7 @@ export function exportXlsx(tabs) {
     return [tab.tablePart, drawing, ...notes.parts].filter(Boolean);
   });
   const persons = personsPart(tabs[0]?.look.persons), bookParts = persons && parts.some((list) => list.some((part) => part.name.startsWith("xl/threadedComments/"))) ? [persons] : [];
-  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean) && !inked.some(Boolean) && !colors.some(Boolean) && !conditions.some(Boolean)) return withParts(written, parts, placed, bookParts);
+  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean) && !inked.some(Boolean) && !colors.some(Boolean) && !conditions.some(Boolean) && !printed.some((list) => list.length) && !locked) return withParts(written, parts, placed, bookParts);
   let restyled = null;
   return withParts(editParts(written, (path, xml, all) => {
     if (styled && !restyled) {
@@ -448,10 +464,12 @@ export function exportXlsx(tabs) {
       restyled = writeStyles(all["xl/styles.xml"] ?? "", sheets);
     }
     if (path === "xl/styles.xml") return rules ? withDxfs(restyled?.styles ?? xml, rules.dxfs) : restyled?.styles ?? xml;
+    if (path === "xl/workbook.xml") return locked ? xml.replace(/<bookViews\b|<sheets\b/, (at) => `${locked}${at}`) : xml;
     const n = sheetOf(path), [rows, cols] = panes[n] ?? [0, 0], sheet = withRules(n >= 0 && restyled ? restyled.sheets[n] : xml, rules?.sheets[n]);
-    const valid = [[validations[n], (xml) => placed(xml, "dataValidations", validations[n])], [colors[n], (xml) => /<sheetPr\b/.test(xml) ? xml.replace(/<sheetPr\b([^>]*?)(\/?)>/, (_, head, closed) => `<sheetPr${head}>${colors[n]}${closed ? "</sheetPr>" : ""}`) : placed(xml, "sheetPr", `<sheetPr>${colors[n]}</sheetPr>`)]]
+    let valid = [[validations[n], (xml) => placed(xml, "dataValidations", validations[n])], [colors[n], (xml) => /<sheetPr\b/.test(xml) ? xml.replace(/<sheetPr\b([^>]*?)(\/?)>/, (_, head, closed) => `<sheetPr${head}>${colors[n]}${closed ? "</sheetPr>" : ""}`) : placed(xml, "sheetPr", `<sheetPr>${colors[n]}</sheetPr>`)]]
       .concat([[inked[n], (xml) => /<extLst>/.test(xml) ? xml.replace("</extLst>", `${inked[n]}</extLst>`) : placed(xml, "extLst", `<extLst>${inked[n]}</extLst>`)], [conditions[n], (xml) => xml.replace(/<autoFilter ref="([^"]*)"\/>/, (_, ref) => `<autoFilter ref="${ref}">${conditions[n]}</autoFilter>`)]])
       .reduce((xml, [has, put]) => n >= 0 && has ? put(xml) : xml, sheet);
+    for (const [name, block] of printed[n] ?? []) valid = swapped(valid, name, block);
     return rows || cols ? valid.replace(/<sheetView workbookViewId="0"\/>/, paneXml(rows, cols)) : valid;
   }), parts, placed, bookParts);
 }
