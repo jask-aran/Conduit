@@ -243,7 +243,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     if (Object.keys(tab.outline).length) keep("grouped rows and columns", Object.keys(tab.outline).length);
     tab.outlinePr = /<outlinePr\b[^>]*>/.exec(xml)?.[0];
     const print = Object.fromEntries([...PRINT, "pageSetUpPr"].flatMap((name) => { const one = elementOf(xml, name); return one ? [[name, one.replace(/\sr:id="[^"]*"/, "")]] : []; }));
-    if (Object.keys(print).length) { tab.print = print; if (Object.keys(print).some((name) => name !== "pageMargins")) keep("page setups"); }
+    if (Object.keys(print).length) tab.print = print;
     tab.protection = elementOf(xml, "sheetProtection");
     if (tab.protection) keep("sheet protections");
     const color = /<tabColor\b[^>]*>/.exec(xml)?.[0];

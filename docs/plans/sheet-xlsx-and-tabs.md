@@ -144,7 +144,8 @@ the kept value (measured on a generated workbook; W8 not run).
 **What round-trips and what cannot.** Exact (measured on the exported files): values, formula text (`_xlfn.` restored),
 tab names and order, number formats, merges and defined names. Written by our own parts beside SheetJS's: fonts, fills,
 borders and alignment, cell-value and formula conditional formats, row heights, hidden rows and columns, and frozen panes.
-Lost: validation, charts, images, pivots (their cells survive as values), notes, hyperlinks and print settings. Shared
+Lost: pivots (their cells survive as values), slicers, sparklines and macros; everything else in the scorecard
+comes back (round 4). Shared
 formulas are written out per cell, so the file grows, but Excel reads them the same.
 
 ## Library choice
@@ -305,42 +306,47 @@ and `<chartSpace>` are in schema order, every `count` matches, and style and dxf
 The features script is `scripts/xlsx-roundtrip-features.py` (`XLSX_PYTHON` names a python with openpyxl). LibreOffice is not installed here. openpyxl cannot write threaded comments or dynamic-array metadata
 (`cm=`), so those are not tested: the spilling formulas are legacy array formulas with their cached cells.
 
-| Feature | Before (main, 2026-11-20) | After round 1 | After round 2 | After round 3 |
-| --- | --- | --- | --- | --- |
-| values (numbers, text, booleans, dates, times, errors, 5,000-character text, leading zeros, text like numbers) | kept | kept | kept | same |
-| formulas (relative, absolute, another tab, whole column, XLOOKUP, TEXT) | kept | kept | kept (1 frozen: `TEXT` gives another value here) | same |
-| array formula (CSE) | changed: value kept, written as a plain formula | same | same | kept, live |
-| spilling formulas (UNIQUE, SEQUENCE, SORT) | changed: values kept, formulas lost | same | same | kept, live; exported as Excel's dynamic arrays |
-| functions the engine lacks (LAMBDA, CELL, GETPIVOTDATA) | changed: values kept, `_xlfn.` taken off LAMBDA | same | same | same; Excel reads 2 of them with an implicit @ (LAMBDA loses `_xlfn.`/`_xlpm.`) |
-| defined names | changed: names lost, formulas using them frozen | same | same | kept, computed |
-| number formats (20 built-in and custom) | kept | kept | kept | same |
-| fonts (face, size, double underline) | changed: face lost | same | kept, face not shown | same |
-| fills (solid, pattern) | changed: patterns become solid | same | kept, pattern not shown | same |
-| borders (dashed, dotted, double, diagonal) | changed: drawn thin, diagonals lost | same | kept, line styles and diagonals not shown | same |
-| alignment, wrap, indent, rotation, shrink | changed: indent, rotation, shrink lost | same | kept, indent, rotation and shrink not shown | same |
-| widths, heights, hidden rows and columns, frozen panes | changed: heights off by up to 0.25 pt | same | same | same |
-| merges | **dropped** past the last value | kept | kept | same |
-| conditional: cell value, formula | kept | kept | kept | same |
-| conditional: colour scale, data bar, icon set, top 10 | dropped (reported) | same | kept, not shown | same |
-| conditional: a rule's number format | changed: lost (reported) | same | kept, not shown | same |
-| data validations (list, whole number, date, custom) | **dropped** | kept | kept | kept (and a dropdown's option inks, in a sheet extension) |
-| hyperlinks (web, mail, a place in the workbook) | **dropped** | kept | kept | same |
-| notes | dropped (reported) | same | same (waits on the owner) | same |
-| tables | **dropped**, not reported | kept | kept | same |
-| autofilter | **dropped**, not reported | kept | kept | same |
-| filter conditions (values, custom, dates, blanks) | not in the scorecard | not in the scorecard | kept | same |
-| charts (bar, line, pie) | **dropped**, not reported | kept | kept | same |
-| images | dropped, not reported | dropped (reported) | same | same |
-| tabs: odd names, colours, a hidden tab | changed: colours lost | kept | kept | same |
-| print settings | dropped, not reported | same | same | changed: print area and titles kept (as names), page setup lost |
-| workbook and sheet protection | dropped, not reported | same | same | same |
+| Feature | Before (main, 2026-11-20) | After round 1 | After round 2 | After round 3 | After round 4 |
+| --- | --- | --- | --- | --- | --- |
+| values (numbers, text, booleans, dates, times, errors, 5,000-character text, leading zeros, text like numbers) | kept | kept | kept | same | same |
+| formulas (relative, absolute, another tab, whole column, XLOOKUP, TEXT) | kept | kept | kept (1 frozen: `TEXT` gives another value here) | same | same |
+| array formula (CSE) | changed: value kept, written as a plain formula | same | same | kept, live | same |
+| spilling formulas (UNIQUE, SEQUENCE, SORT) | changed: values kept, formulas lost | same | same | kept, live; exported as Excel's dynamic arrays | same |
+| functions the engine lacks (LAMBDA, CELL, GETPIVOTDATA) | changed: values kept, `_xlfn.` taken off LAMBDA | same | same | same; Excel reads 2 of them with an implicit @ (LAMBDA loses `_xlfn.`/`_xlpm.`) | kept (LAMBDA and LET written with `_xlfn.`/`_xlpm.` as dynamic arrays; CELL still read with @, as Excel reads the original) |
+| defined names | changed: names lost, formulas using them frozen | same | same | kept, computed | same |
+| number formats (20 built-in and custom) | kept | kept | kept | same | same |
+| fonts (face, size, double underline) | changed: face lost | same | kept, face not shown | same | same |
+| fills (solid, pattern) | changed: patterns become solid | same | kept, pattern not shown | same | same |
+| borders (dashed, dotted, double, diagonal) | changed: drawn thin, diagonals lost | same | kept, line styles and diagonals not shown | same | same |
+| alignment, wrap, indent, rotation, shrink | changed: indent, rotation, shrink lost | same | kept, indent, rotation and shrink not shown | same | same |
+| widths, heights, hidden rows and columns, frozen panes | changed: heights off by up to 0.25 pt | same | same | same | kept (sizes exact) |
+| merges | **dropped** past the last value | kept | kept | same | same |
+| conditional: cell value, formula | kept | kept | kept | same | same |
+| conditional: colour scale, data bar, icon set, top 10 | dropped (reported) | same | kept, not shown | same | kept, not shown; ranges follow inserts and moves |
+| conditional: a rule's number format | changed: lost (reported) | same | kept, not shown | same | same |
+| data validations (list, whole number, date, custom) | **dropped** | kept | kept | kept (and a dropdown's option inks, in a sheet extension) | same |
+| hyperlinks (web, mail, a place in the workbook) | **dropped** | kept | kept | same | same |
+| notes | dropped (reported) | same | same (waits on the owner) | same | kept, not shown (on their cells: follow inserts and sorts) |
+| threaded comments | not in the scorecard | | | | kept, not shown (replies, resolved, people) |
+| tables | **dropped**, not reported | kept | kept | same | same |
+| autofilter | **dropped**, not reported | kept | kept | same | same |
+| filter conditions (values, custom, dates, blanks) | not in the scorecard | not in the scorecard | kept | same | same |
+| charts (bar, line, pie) | **dropped**, not reported | kept | kept | same | same |
+| images | dropped, not reported | dropped (reported) | same | same | kept, not shown (pictures and shapes, on their cells) |
+| tabs: odd names, colours, a hidden tab | changed: colours lost | kept | kept | same | same |
+| row and column groups (outline levels, collapsed) | not in the scorecard | | | | kept, not shown |
+| print settings | dropped, not reported | same | same | changed: print area and titles kept (as names), page setup lost | kept (page setup, headers, breaks) |
+| workbook and sheet protection | dropped, not reported | same | same | same | kept |
 
-The counts went from 5 kept, 15 changed and 10 dropped of 30 workbooks, to 12, 12 and 6 after round 1, to 22, 7 and 2 of 31 after round 2, and to 25, 4 and 2 after round 3. Merging main before round 3 dropped data validations
+The counts went from 5 kept, 15 changed and 10 dropped of 30 workbooks, to 12, 12 and 6 after round 1, to 22, 7 and 2 of 31 after round 2, to 25, 4 and 2 after round 3, and to 33 kept of 33 after round 4 (threaded comments and groups
+added to the scorecard; threaded comments are written into the generated file by hand, as openpyxl cannot write them). Merging main before round 3 dropped data validations
 (its cell types clipped them to the tab's values); that was fixed first.
 "Not shown" means the look holds it and an export writes it back, but the page does not draw it.
 
-**In real Excel** (`--excel`, **measured**): every export opens clean after rounds 2 and 3. A dynamic-array export opens spilling with no implicit
-`@`; a dropdown's inks extension survives Excel's own edit and save. Rule ranges kept unread (`rulesKept`) are A1 at tab level, so they do not follow
+**In real Excel** (`--excel`, **measured**): every export opens clean after rounds 2, 3 and 4. Round 4 also counts each export's notes, threaded
+comments and pictures as Excel reads them, and they match what was written. The one `@` left is `CELL("row",A2)`, which Excel reads with an
+implicit `@` in the generated input as well. A dynamic-array export opens spilling with no implicit
+`@`; a dropdown's inks extension survives Excel's own edit and save. Rule ranges kept unread (`rulesKept`) are held by row and column ids since round 4, so they follow
 inserted rows. That covers all 31 scorecard workbooks and hand-built
 looks: six chart kinds, labels by row, a tab name that needs quotes, two tables with one name, and a table with filter conditions. Excel
 also reads the same number of tabs, charts, tables and formulas as were written.
@@ -349,10 +355,30 @@ The one repair Excel asked for, and nothing else had caught, was a table whose h
 written as its filter alone. A file that needs repair is refused on a normal load, so `--excel` reports it as "needs repair". COM's
 repair modes (`CorruptLoad` 1 and 2) refused the files I broke on purpose too, so the mode cannot say what Excel would have changed.
 
+**Other files (measured with a probe of `importXlsx`, round 4).** SheetJS reads them all; only `.xlsx` and `.xlsm` have the parts our own readers
+use (styles, rules, charts, notes, pictures), so the others come in as SheetJS reads them. Every export is an `.xlsx`.
+
+| File | Opens | What comes across | Export |
+| --- | --- | --- | --- |
+| `.xlsx` | yes | everything in the scorecard | `.xlsx` |
+| `.xlsm` | yes | as `.xlsx`; its macros are reported left out and never run | `.xlsx`, without the macros |
+| `.xlsb` | yes | values, formulas and number formats SheetJS reads; no styles, rules, charts or notes | `.xlsx` |
+| `.xls` | yes | as `.xlsb` | `.xlsx` |
+| `.ods` | yes | values and formulas (checked: one formula came across live) | `.xlsx` |
+| `.csv`, `.tsv` | yes | values; separators `,` `;` and tab are guessed, quoted newlines kept; UTF-8 with or without a byte-order mark, UTF-16 with one, else Latin-1 | `.xlsx` |
+
+Not in the scorecard: openpyxl writes none of these; `.xls` and `.xlsb` formulas were not checked (SheetJS's writer used for the probe writes them
+without formulas). Keeping an `.xlsm`'s macros would make its export an `.xlsm` (another content type and name): not built.
+
+**A large workbook (measured, round 4).** 200,000 cells over 5 tabs (2,000 rows by 20 columns each, half of them formulas, every tenth row bold and
+filled), written by openpyxl (no cached values), through the hub's document service: import 3.1 s, first open 5.0 s, export 2.7 s (3.2 MB), the
+process's peak memory 809 MB. Nothing in it grew faster than the cells; no change made. Excel's check of it timed out (counting each formula over COM).
+
 ## Still to build
 
-Steps 1 to 9 of the first build order have landed. Left: an OFFSET plugin, and Excel notes as Markup comments (waiting on
-the owner: 16 notes would hand 16 items to agents).
+Steps 1 to 9 of the first build order have landed. Left: an OFFSET plugin; Excel notes as Markup comments (waiting on
+the owner: 16 notes would hand 16 items to agents; they are kept on their cells as `note:<rowId>:<colId>`); drawing groups, pictures,
+kept rules and page setup in the page; an `.xlsm` export that keeps its macros.
 
 ## Open decisions for the owner
 
