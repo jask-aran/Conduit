@@ -621,7 +621,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         // An empty cell is drawn for its fill and edges alone; one an array formula spills text into is not empty.
         // A dropdown draws its arrow, empty or not.
         const pill = type?.startsWith("list:") ? options.columns.pill(row, col, type, value === null ? "" : String(value)) : undefined;
-        if (pill) { const cell = withMark(new TextCell(row, col, input, String(value ?? ""), undefined, striped ? washed(themed(style), striped) : themed(style), style), mark); cell.pill = pill; return cell; }
+        if (pill) { const cell = withMark(new TextCell(row, col, input, String(value ?? ""), undefined, striped ? washed(themed(style), striped) : themed(style), style), mark); cell.pill = pill; cell.invalid = options.columns.invalid?.(row, col); return cell; }
         if (input === "" && !value) { const spill = spillInto(row, col); if (spill) { const cell = withMark(new TextCell(row, col, "", "", undefined, striped ? washed(themed(style), striped) : themed(style), style), mark); cell.spill = spill; return cell; } }
         if (input === "" && !value && type === "date") { const cell = withMark(new TextCell(row, col, "", "", undefined, striped ? washed(themed(style), striped) : themed(style), style), mark); cell.arrow = true; return cell; }
         if (input === "" && !value) return style || mark || striped ? withMark(new TextCell(row, col, "", "", undefined, striped ? washed(themed(style), striped) : themed(style), style), mark) : EMPTY;

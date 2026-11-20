@@ -42,6 +42,7 @@ import { createChipControl } from "./chips";
 import { clearChips, copyChips } from "@/sheet-chips.js";
 import { createSheetValidity } from "./validity";
 import { ValidationPrompt } from "./validation";
+import { brokenText } from "@/sheet-valid.js";
 import type { SheetPill } from "./cell-draw";
 import type { SheetChartKind } from "@/sheet-charts.js";
 
@@ -142,16 +143,18 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     dropdown: (range, options) => { history.act("Dropdown", () => types.set(range, "list", options)); openList(range.top, range.left); } });
   // What a cell is edited as, in the editor and the formula bar: a date, time or percentage as typed, not its serial (entryText).
   const shownInput = (row: number, col: number) => entryText(types.shown(row, col, model()?.input(row, col) ?? ""), formats.at(row, col));
-  const write = (given: readonly { row: number; col: number; input: string }[]) => {
+  // `pasted`: a paste, let through as Excel lets one through, what breaks a rule marked and counted.
+  const write = (given: readonly { row: number; col: number; input: string }[], pasted = false) => {
     const sheet = model();
     if (!sheet) return;
     // Read as Excel reads an entry (a date, a time, an amount is its number), a General cell taking the format that shows it as typed, before its
     // validation judges it. The hub is sent what was typed: it reads it itself, format and all.
     const read = given.map((cell) => ({ ...cell, ...readEntry(cell.input, formats.at(cell.row, cell.col)) })), typed = (row: number, col: number, input: string) => given.find((one) => one.row === row && one.col === col)?.input ?? input;
     // A Stop rule broken refuses the whole write; what only the engine can judge is the hub's `set`, refused there with the rule's message.
-    const { local: list, hub: judged, refused, told } = validity.sort(read.map(({ row, col, input }) => ({ row, col, input })));
+    const { local: list, hub: judged, refused, told, broken } = validity.sort(read.map(({ row, col, input }) => ({ row, col, input })), pasted);
     if (refused) return props.host.failed(refused);
     if (told) toast(told);
+    if (broken) toast(brokenText(broken.count, a1(broken.first.row, broken.first.col), "pasted"));
     for (const { row, col, input } of judged) hub({ op: "set", at: a1(row, col), value: typed(row, col, input) });
     // A cell past the sheet's edge has no row or column of its own yet: the hub makes them as it sets it.
     const past: { row: number; col: number; input: string }[] = [];
@@ -162,11 +165,14 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     for (const { row, col, input } of past) hub({ op: "set", at: a1(row, col), value: typed(row, col, input) });
   };
   const hub = (op: Parameters<SheetHost["cells"]>[0]) => void history.hub(op).catch((error: Error) => props.host.failed(error.message));
+  // A fill is let through as Excel's is: the hub says what of it breaks a rule.
+  const fill = (op: Parameters<SheetHost["cells"]>[0]) => void history.hub(op).then((said) => { const broken = (said as { broken?: unknown } | null)?.broken; if (typeof broken === "string") toast(broken); }, (error: Error) => props.host.failed(error.message));
   const labelOf = (list: readonly { row: number; col: number; input: string }[]) => list.every(({ input }) => !input) ? "Clear contents" : list.length === 1 ? `Typing in ${a1(list[0]!.row, list[0]!.col)}` : "Paste";
   const writes = (label: string) => (list: readonly { row: number; col: number; input: string }[]) => history.act(label || labelOf(list), () => write(list));
   const editor = createFormulaEditor({
     grid, input: (row, col) => shownInput(row, col), functions: tabs.functions, merged: (row, col) => merges.at(row, col),
     write: (row, col, input) => writes("")([{ row, col, input: types.typed(row, col, input) }]),
+    refuse: (row, col, input) => { const { refused } = validity.sort([{ row, col, input: readEntry(types.typed(row, col, input), formats.at(row, col)).input }]); if (refused) props.host.failed(refused); return Boolean(refused); },
     // As a spreadsheet's Ctrl+Enter: each shown cell selected takes it, a formula moved from the cell typed in to its own.
     fill: (from, input) => { const area = at(); if (!area || (area.top === area.bottom && area.left === area.right)) return false; writes("Fill selection")(within(grid()?.lines() ? inTab(area) : area).flat().map(({ row, col }) => ({ row, col, input: shifted(input, row - from.row, col - from.col) }))); return true; },
     selected: () => { changed(); const area = at(); return area && { row: area.top, col: area.left }; }, error: (row, col) => model()?.error(row, col) ?? null,
@@ -250,9 +256,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     write: (list, label, pairs) => {
       const was = (row: number, col: number) => model()?.input(row, col) ?? "";
       if (label === "Paste") chip.pasted(list, was);
-      history.act(label || labelOf(list), () => { write(list.map((cell) => ({ ...cell, input: types.typed(cell.row, cell.col, cell.input) }))); const sheet = model(); if (pairs && sheet) copyChips(look as unknown as Y.Map<unknown>, sheet, pairs); });
+      history.act(label || labelOf(list), () => { write(list.map((cell) => ({ ...cell, input: types.typed(cell.row, cell.col, cell.input) })), Boolean(label?.startsWith("Paste"))); const sheet = model(); if (pairs && sheet) copyChips(look as unknown as Y.Map<unknown>, sheet, pairs); });
     },
-    fill: (range, values, from) => hub({ op: "fill", range: rangeA1(range), values, ...(from ? { from: rangeA1(from) } : {}) }),
+    fill: (range, values, from) => fill({ op: "fill", range: rangeA1(range), values, ...(from ? { from: rangeA1(from) } : {}) }),
     resized: (col, width) => history.act("Column width", () => sizes.setWidths(span("cols", col), width / zoom())),
     autofit: (kind, line) => history.act(kind === "cols" ? "Fit column width" : "Fit row height", () => kind === "cols" ? sizes.fitColumns(span("cols", line), readLook(root!)) : sizes.fitRows(span("rows", line), readLook(root!))),
     menu: setMenu,
@@ -630,7 +636,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     for (const run of runsOf([...new Set([source, ...(down ? rows : cols)])])) if (run.length > 1 || run[0] !== source) for (const side of runsOf(down ? cols : rows)) {
       const by = run[0]! - source, [lines, across] = down ? [run, side] : [side, run];
       // From the source line, so the hub copies its look (number format, style, type, chip) with its values.
-      hub({ op: "fill", range: rangeA1({ top: lines[0]!, bottom: lines.at(-1)!, left: across[0]!, right: across.at(-1)! }),
+      fill({ op: "fill", range: rangeA1({ top: lines[0]!, bottom: lines.at(-1)!, left: across[0]!, right: across.at(-1)! }),
         from: rangeA1(down ? { top: source, bottom: source, left: side[0]!, right: side.at(-1)! } : { top: side[0]!, bottom: side.at(-1)!, left: source, right: source }),
         values: down ? [side.map((col) => shifted(sheet.input(source, col), by, 0))] : side.map((row) => [shifted(sheet.input(row, source), 0, by)]) });
     }

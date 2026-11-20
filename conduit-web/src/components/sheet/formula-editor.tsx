@@ -26,6 +26,8 @@ export type FormulaEditorHost = {
   /** Every function the engine has registered, custom ones included. */
   functions(): readonly string[];
   write(row: number, col: number, input: string): void;
+  /** An entry a Stop rule refuses: true once its message is shown, and the edit stays (Excel's Retry). */
+  refuse?(row: number, col: number, input: string): boolean;
   /** Ctrl+Enter: what was typed in the cell written to every cell selected with it; false where the selection is that cell alone. */
   fill?(from: Cell, input: string): boolean;
   /** The merged range a cell is in, if any: a move leaves it from its far edge. */
@@ -131,6 +133,7 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
     const unknown = check && isFormula(text()) && !doubt() ? unknownCalls(text(), tokens(), known())[0] : undefined;
     if (unknown) { const name = text().slice(unknown.from, unknown.to); setHeld({ text: text(), name, from: unknown.from, to: unknown.to, near: nearestFunctions(name, names(), known(), OFFERED) }); return; }
     const input = finish(text()), grid = host.grid();
+    if (check && input !== host.input(now.row, now.col) && host.refuse?.(now.row, now.col, input)) { const field = fields[place()]; if (field) getSelection()?.selectAllChildren(field); return; }
     end();
     if (input !== host.input(now.row, now.col)) host.write(now.row, now.col, input);
     // Moved as an arrow key moves the selection: scrolled only as far as it must be.

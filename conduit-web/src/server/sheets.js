@@ -10,7 +10,7 @@ import { readRules, rulesA1, rulesIds, shiftRefs } from "../sheet-rules.js";
 import { CHART_LIMIT, chartFrom, chartIds, chartsA1, keptCharts, readCharts } from "../sheet-charts.js";
 import { writePrivateFile } from "../private-file.js";
 import { cleanOptions, readDate, restoreValidations, validationsA1, VALID, writeType } from "../sheet-types.js";
-import { hubRefusal } from "../sheet-valid.js";
+import { brokenText, hubBroken, hubRefusal } from "../sheet-valid.js";
 import { changeTable, makeTable, placed as placedTables, readTables, removeTable, tableFilter, tablesA1, tablesIds, tableWrites, takenNames, writeTables } from "../sheet-tables.js";
 import { cleanChip, clearChips, copyLook, writeChip } from "../sheet-chips.js";
 
@@ -753,8 +753,9 @@ export function sheetKind(hub) {
             const type = room.look.get(`type:${key(sheet.rowAt(r), sheet.colAt(c))}`) ?? room.look.get(`type:${sheet.colAt(c)}`), day = type === "date" && input && !input.startsWith("=") ? readDate(input) : null;
             return day === null ? [r, c, input] : [r, c, String(day)];
           });
-          // A data validation's Stop rule refuses the whole write, saying the rule, as Excel refuses an entry (sheet-valid.js): it judges each entry as read (readEntry).
-          const refused = hubRefusal(room.look, sheet, dated.map(([r, c, input]) => [r, c, readEntry(input).input]));
+          // A data validation's Stop rule refuses a set, saying the rule and the cell, as Excel refuses an entry (sheet-valid.js): it judges the entry as
+          // read (readEntry). A fill is let through, as Excel's paste and fill are: what breaks a rule is marked on the page, and said in the reply.
+          const refused = op === "set" && hubRefusal(room.look, sheet, dated.map(([r, c, input]) => [r, c, readEntry(input).input]));
           if (refused) throw fault(400, refused);
           writeCells(room, sheet, dated, name, true);
           // A table grows to hold an entry beside it, and fills a calculated column, as the page's (sheet-tables.js).
@@ -762,7 +763,8 @@ export function sheetKind(hub) {
           // A fill from its source carries the source's whole look (style, number format, type, chip), as it carries its formulas, as Excel's fill copies the cell.
           if (source) { const wrap = (n, from, size) => from + (((n - from) % size) + size) % size, tall = source.bottom - source.top + 1, wide = source.right - source.left + 1;
             hub.as(room, name, (sign) => room.doc.transact(() => { copyLook(room.look, sheet, dated.map(([r, c]) => [wrap(r, source.top, tall), wrap(c, source.left, wide), r, c])); sign(); })); }
-          return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}), ...sheet.size() };
+          const broken = op === "fill" ? hubBroken(room.look, sheet, dated.map(([r, c]) => [r, c, sheet.input(r, c)])) : [];
+          return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}), ...sheet.size(), ...(broken.length ? { broken: brokenText(broken.length, a1(...broken[0]), "filled") } : {}) };
         }
         // A range's number formats (sheet-formats.js) or styles (sheet-styles.js), set first when given; whole columns (B:D), or for styles rows (3:5), set theirs.
         if (op === "format" || op === "style") {
