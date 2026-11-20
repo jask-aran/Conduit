@@ -430,7 +430,9 @@ const ERROR_CODE = Object.fromEntries(Object.entries(ERROR_TEXT).map(([code, tex
  * @param {{ name: string, hidden: boolean, typed: string[][], values: unknown[][], look: Record<string, unknown> }[]} tabs  `values`: what each cell computes
  * @returns {Buffer}
  */
-export function exportXlsx(tabs) {
+export function exportXlsx(given) {
+  // Two tabs of one name (an Undo can bring a name back that another tab has since taken) would stop SheetJS: the later is told apart, as a duplicate is named.
+  const taken = new Set(), tabs = given.map((tab) => { let name = tab.name, n = 1; while (taken.has(name.toLowerCase())) name = `${tab.name.slice(0, 25)} (${++n})`; taken.add(name.toLowerCase()); return name === tab.name ? tab : { ...tab, name }; });
   const book = XLSX.utils.book_new(), known = new Set(tabs.map((tab) => tab.name.toLowerCase()));
   let tables = 0;
   const tableNames = new Set();

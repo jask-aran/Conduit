@@ -1,3 +1,4 @@
+import * as Y from "yjs";
 import { createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { Empty, Frost, Icons, Notice } from "@/components/ui";
 import { sheetLineIcons as LineIcons, sheetMergeIcons as MergeIcons, sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
@@ -97,6 +98,21 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const watchers = new Set<(pressed?: string) => void>(), moved = (pressed?: string) => watchers.forEach((listener) => listener(pressed));
   createEffect(() => props.onState?.(live.state()));
   onCleanup(() => history.destroy());
+  // An Undo or Redo that brings back a name another tab has taken since renames that tab as a duplicate is named ("Data (2)"), outside the history.
+  const untwin = (event: Y.YMapEvent<unknown>) => {
+    if (!(event.transaction.origin instanceof Y.UndoManager)) return;
+    for (const entry of event.keysChanged) {
+      const id = entry.startsWith("name:") ? entry.slice(5) : "", name = id && event.target.get(entry);
+      if (typeof name !== "string") continue;
+      const others = new Set(tabs.tabs().filter((tab) => tab.id !== id).map((tab) => tab.name.toLowerCase()));
+      if (!others.has(name.toLowerCase())) continue;
+      let n = 2, free = `${name.replace(/ \(\d+\)$/, "").slice(0, 25)} (${n})`;
+      while (others.has(free.toLowerCase())) free = `${name.replace(/ \(\d+\)$/, "").slice(0, 25)} (${++n})`;
+      void tabs.cells({ op: "rename-tab", tab: id, name: free }).catch((error: Error) => props.host.failed(error.message));
+    }
+  };
+  live.doc.getMap(TAB).observe(untwin);
+  onCleanup(() => live.doc.getMap(TAB).unobserve(untwin));
 
   const write = (list: readonly { row: number; col: number; input: string }[]) => {
     const sheet = model();
