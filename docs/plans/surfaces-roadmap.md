@@ -164,7 +164,7 @@ are the reference unless there is a reason to differ. Storage and xlsx: `docs/pl
 - [ ] Notes and threaded comments from xlsx as Markup comments, waiting on the owner (16 notes would hand 16 items to
   agents); they are kept on their cells (`note:`) and not drawn, as pictures and page setup are not.
 - [ ] OFFSET with cell arguments (frozen on import today); an `.xlsm` export that keeps its macros.
-- [ ] Not built: Shift+F8 (add to the selection: Glide's `rangeStack` is never used), Ctrl+F3 (no names dialog).
+- [ ] Not built: Ctrl+F3 (no names dialog).
 - [ ] Undo stops waiting for a hub op after a timer (`history.ts`), so a slow op lets a queued Undo take the step
   before it: wait while the request is pending, and time only frames owed after the reply.
 - [ ] Deleting a merge's top row or left column leaves the merge empty (the value goes with its line); check Excel.

@@ -256,7 +256,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const zoom = () => props.host.display?.().zoom ?? 1;
   const drawnLook = () => readLook(root!, props.host.display?.());
   const events: SheetGridEvents = {
-    selected: (range, list = [], cell) => batch(() => { setAt(range); if (list !== untrack(others)) setOthers(list); setActiveCell(cell); }),
+    // The same range again (the active cell moved round it) is not a new selection.
+    selected: (range, list = [], cell) => batch(() => { const was = untrack(at); if (!range || !was || !sameRange(range, was)) setAt(range); if (list !== untrack(others)) setOthers(list); setActiveCell(cell); }),
     refused: () => void toast(MULTIPLE),
     write: (list, label, pairs) => {
       const was = (row: number, col: number) => model()?.input(row, col) ?? "";

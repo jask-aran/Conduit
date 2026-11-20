@@ -249,7 +249,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   const setOthers = (list: readonly SheetRange[], at = list.length) => {
     slot = Math.min(at, list.length);
     if (list === others) return;
-    others = list; otherMarks = list.map((range) => ({ color: (now) => String(now.grid.accentLight), range, style: "no-outline" }));
+    // Washed, and past one cell outlined in the accent at half, as the grid draws the active range.
+    others = list; otherMarks = list.flatMap((range): Mark[] => [{ color: (now) => String(now.grid.accentLight), range, style: "no-outline" },
+      ...range.top < range.bottom || range.left < range.right ? [{ color: (now: SheetLook) => String(now.grid.accentColor).replace(/[\d.]+\)$/, "0.5)"), range, style: "solid-outline" as const }] : []]);
     drive.marks?.();
   };
   /** The active range joins the others at its place in their order; the next one picked comes after them all. */
@@ -323,6 +325,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     if (down) { row += by; if (row < block.y || row > bottom) { row = by > 0 ? block.y : bottom; col = across(col); } }
     else { const next = nextShown(col, by); if (next !== col && next >= block.x && next <= right) col = next; else { col = by > 0 ? shownAt(block.x) : right; row = row + by < block.y ? bottom : row + by > bottom ? block.y : row + by; } }
     choose(p, { ...p.current, current: { ...p.current.current!, cell: [col, row] } }); api.show(p.map.sheet(row), col);
+    if (others.length) tell();
     return true;
   };
   /** The selection from the active cell to a drawn cell, the active cell kept, as Shift and a jump make it. */
@@ -784,7 +787,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     // Shift from a cell, as a spreadsheet's: whole columns (or rows) from the active cell's to the one pressed. From lines picked, the grid's own extends them.
     const was = owner.current.current?.cell, adding = (event.ctrlKey || event.metaKey || options.columns.adding()) && !event.shiftKey;
     // Ctrl and a press on letters or numbers adds those columns or rows as a range of their own, the grid's own pick (one list of them all) kept out.
-    if (capture && adding && event.button === 0 && !event.cancelBubble && (across || down) && from >= 0 && !onEdge) { event.preventDefault(); event.stopPropagation(); addRange(picked()); }
+    if (capture && adding && event.button === 0 && !event.cancelBubble && (across || down) && from >= 0 && !onEdge) { event.preventDefault(); event.stopPropagation(); addRange(picked()); p.editor?.focus(); }
     else if (capture) {
       if (event.cancelBubble || event.button !== 0 || !event.shiftKey || event.ctrlKey || event.metaKey || !(across || down) || from < 0 || onEdge || !was || owner.current.columns.length || owner.current.rows.length || !(across || p === owner)) return;
       event.preventDefault(); event.stopPropagation();
@@ -810,7 +813,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     const move = (moved: PointerEvent) => { place = across ? moved.clientX : moved.clientY; };
     const up = () => { cancelAnimationFrame(frame); removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", up); };
     stop(); stop = up;
-    addEventListener("pointermove", move); addEventListener("pointerup", up); addEventListener("pointercancel", up); frame = requestAnimationFrame(pick);
+    // Taken from the grid (Ctrl), the press picks its line at once: let go before the next frame, it would pick nothing.
+    addEventListener("pointermove", move); addEventListener("pointerup", up); addEventListener("pointercancel", up); if (capture) pick(performance.now()); else frame = requestAnimationFrame(pick);
   };
   // A Shift press extending from a cell is taken in capture, so it is the sheet's alone, not the grid's, which would start a pick of its own (a press
   // the formula editor took first has stopped).
