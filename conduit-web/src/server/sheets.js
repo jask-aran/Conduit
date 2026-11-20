@@ -185,6 +185,24 @@ export function sheetKind(hub) {
    * Before rows or columns are deleted: each filter's and table's corner on one of them moves to the nearest one left inside its range, and one with
    * none left is taken off, so deleting its header or last row keeps it.
    */
+  /**
+   * Once lines are inserted: each cell between two of the same type (a dropdown, date or checkbox, or plain under a typed column) takes it, a date its
+   * number format too, as Excel extends a validation over a line put inside it; at its edge it does not.
+   */
+  const extendTypes = (room, sheet, isRows, at, count) => () => {
+    const { rows, cols } = sheet.size();
+    if (at < 1 || at + count >= (isRows ? rows : cols)) return;
+    const line = (n) => isRows ? sheet.rowAt(n) : sheet.colAt(n), cross = (m) => isRows ? sheet.colAt(m) : sheet.rowAt(m);
+    const copy = (name) => {
+      const kept = room.look.get(name(at - 1));
+      if (kept === undefined || kept !== room.look.get(name(at + count))) return undefined;
+      for (let n = at; n < at + count; n++) room.look.set(name(n), kept);
+      return kept;
+    };
+    const extend = (name) => { if (copy((n) => `type:${name(n)}`) === "date") copy((n) => `fmt:${name(n)}`); };
+    if (!isRows) extend(line);
+    for (let m = 0, across = isRows ? cols : rows; m < across; m++) extend((n) => isRows ? key(line(n), cross(m)) : key(cross(m), line(n)));
+  };
   const keepCorners = (room, sheet, isRows, at, count) => {
     const out = [], gone = (n) => n >= at && n < at + count;
     const id = (n) => isRows ? sheet.rowAt(n) : sheet.colAt(n), corner = (text, n) => { const [row, col] = String(text).split(":"); return isRows ? key(id(n), col) : key(row, id(n)); };
@@ -766,7 +784,7 @@ export function sheetKind(hub) {
         if (removing && at + count > size) throw fault(400, `There are ${size - at} ${what}s from ${at}: count is at most that`);
         if (removing && count >= size) throw fault(400, `A tab keeps at least one ${what}`);
         if (!removing) sized(room, sheet, isRows ? rows + count : rows, isRows ? cols : cols + count);
-        const corners = removing ? keepCorners(room, sheet, isRows, at, count) : () => {}, frozen = keepFrozen(room, sheet, op, at, count);
+        const corners = removing ? keepCorners(room, sheet, isRows, at, count) : extendTypes(room, sheet, isRows, at, count), frozen = keepFrozen(room, sheet, op, at, count);
         return { ...hub.as(room, name, (sign) => sheet.structure(op, at, count, () => { corners(); frozen(); sign(); })), ...(many(room) ? { tab: sheet.name } : {}) };
       },
     },
