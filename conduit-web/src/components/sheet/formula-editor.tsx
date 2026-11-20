@@ -9,7 +9,7 @@ import { Item, Match, Section } from "@/components/ui";
 import { Popover, PopoverContent } from "@/components/ui/menus";
 import { a1, rangeA1 } from "@/sheet-format.js";
 import { contextAt, cycleAnchors, finish, INKS, inksOf, isFormula, tokenize, unknownCalls, type FormulaContext, type FormulaToken } from "./formula";
-import { argumentAt, errorReason, FUNCTION_HELP, functionOffers, nearestFunctions, type FunctionOffer } from "./functions";
+import { argumentAt, CHIPS, errorReason, FUNCTION_HELP, functionOffers, nearestFunctions, type FunctionOffer } from "./functions";
 import type { SheetGrid, SheetReference } from "./host";
 
 type Cell = { row: number; col: number };
@@ -34,6 +34,8 @@ export type FormulaEditorHost = {
   selected(): Cell | null;
   /** An error cell's message, else null. */
   error(row: number, col: number): string | null;
+  /** One of CHIPS taken from what `@` offered in an empty cell. */
+  chip?(cell: Cell, name: string): void;
 };
 /** A function name the engine does not have, held at commit: where it stands in `text`, and the real names nearest it. */
 export type FormulaDoubt = { text: string; name: string; from: number; to: number; near: readonly FunctionOffer[] };
@@ -102,6 +104,8 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
     if (!editing()) return [];
     const was = doubt(), word = context().word;
     if (was) return was.near;
+    const cell = editing()!, chip = host.chip && shut() !== text() && !host.input(cell.row, cell.col) ? /^@(\w*)$/.exec(text()) : null;
+    if (chip) return Object.keys(CHIPS).filter((name) => name.toLowerCase().startsWith(chip[1]!.toLowerCase())).map((name) => ({ name, chip: true as const }));
     return word && shut() !== text() ? functionOffers(word.text, names(), known(), OFFERED) : [];
   });
   const hint = createMemo(() => editing() ? context().call : null, null, { equals: (a, b) => a?.name === b?.name && a?.arg === b?.arg });
@@ -143,6 +147,8 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
   };
   const canPoint = () => isFormula(text()) && Boolean(pointing() || context().point);
   const accept = (offer: FunctionOffer) => {
+    const chip = offer.chip && editing();
+    if (chip) { end(); host.chip!(chip, offer.name); return; }
     const span = doubt() ?? context().word, now = text();
     if (!span) return;
     const rest = now.slice(span.to);
@@ -294,8 +300,8 @@ export function FormulaHelp(props: { editor: FormulaEditor; frame: () => HTMLEle
       }}</Show>}>
         <Section role="listbox" title={editor.doubt() ? `${editor.doubt()!.name.toUpperCase()} is not a function` : undefined} note={editor.doubt() ? "Tab uses one · Enter keeps it" : undefined}>
           <For each={editor.offered()}>{(offer, at) =>
-            <Item role="option" aria-selected={editor.active() === at()} active={editor.active() === at()} onMouseDown={keep} onClick={() => editor.accept(offer)} detail={FUNCTION_HELP[offer.name]?.about} meta={offer.typedFor ? `for ${offer.typedFor}` : undefined}>
-              <Match text={offer.name} query={editor.doubt() ? "" : editor.context().word?.text ?? ""} />
+            <Item role="option" aria-selected={editor.active() === at()} active={editor.active() === at()} onMouseDown={keep} onClick={() => editor.accept(offer)} detail={offer.chip ? CHIPS[offer.name] : FUNCTION_HELP[offer.name]?.about} meta={offer.typedFor ? `for ${offer.typedFor}` : undefined}>
+              <Match text={offer.name} query={offer.chip ? editor.text().slice(1) : editor.doubt() ? "" : editor.context().word?.text ?? ""} />
             </Item>}</For>
         </Section>
       </Show>

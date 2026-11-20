@@ -4,6 +4,7 @@ import { keycapPage } from "./pages/keycap";
 import { inputPage } from "./pages/input";
 import { textareaPage } from "./pages/textarea";
 import { selectPage } from "./pages/select";
+import { calendarPage } from "./pages/calendar";
 import { sliderPage } from "./pages/slider";
 import { switchPage } from "./pages/switch";
 import { spinnerPage } from "./pages/spinner";
@@ -58,6 +59,7 @@ const piecePages: Page[] = [
   inputPage,
   textareaPage,
   selectPage,
+  calendarPage,
   sliderPage,
   switchPage,
   spinnerPage,

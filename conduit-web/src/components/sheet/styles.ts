@@ -13,11 +13,17 @@ import { wrapLines } from "./wrap";
 
 /**
  * What a cell is drawn with, its column's, row's and own style together. `color`, `fill` and `edgeColor`: an ink or a workbook's `#rrggbb`. `edges`: top 1,
- * right 2, bottom 4, left 8, `edgeWeight` px wide. `size`: points. `custom`: the grid draws its text itself (cell-draw.ts).
+ * right 2, bottom 4, left 8, `edgeWeight` px wide, `edgeLine` an import's dashed, dotted or double line. `size`: points. `custom`: the grid draws its text
+ * itself (cell-draw.ts). What an xlsx import keeps (sheet-styles.js): `face` its font, `double` underline, `shrink` to fit, `indent` levels, `rotate` degrees
+ * anticlockwise (-90 to 90, 255 stacked), `repeat` Excel's Fill alignment, `diagonal` lines.
  */
-export type SheetCellStyle = { bold: boolean; italic: boolean; underline: boolean; strike: boolean; wrap: boolean; clip: boolean; color?: SheetInk | SheetHex; fill?: SheetInk | SheetHex; align?: "left" | "center" | "right"; valign: "top" | "middle" | "bottom"; edges: number; edgeColor?: SheetHex; edgeWeight: number; size?: number; custom: boolean };
+export type SheetCellStyle = { bold: boolean; italic: boolean; underline: boolean; strike: boolean; wrap: boolean; clip: boolean; color?: SheetInk | SheetHex; fill?: SheetInk | SheetHex; align?: "left" | "center" | "right"; valign: "top" | "middle" | "bottom"; edges: number; edgeColor?: SheetHex; edgeWeight: number; size?: number; custom: boolean;
+  face?: string; double?: boolean; shrink?: boolean; indent?: number; rotate?: number; repeat?: boolean; diagonal?: "up" | "down" | "both"; edgeLine?: "dashed" | "dotted" | "double" };
 export const PLAIN: SheetCellStyle = { bold: false, italic: false, underline: false, strike: false, wrap: false, clip: false, valign: "middle", edges: 0, edgeWeight: 1, custom: false };
-const WEIGHTS: Readonly<Record<string, number>> = { medium: 2, thick: 3 };
+// How much of a patterned fill is its pattern's colour, so it is drawn as the two colours' mix (Excel's names, lower case).
+const PATTERN_SHARE: Readonly<Record<string, number>> = { darkgray: 0.75, mediumgray: 0.5, lightgray: 0.25, gray125: 0.125, gray0625: 0.0625 };
+const mixHex = (one: string, two: string, share: number) => `#${[1, 3, 5].map((at) => Math.round(parseInt(one.slice(at, at + 2), 16) * share + parseInt(two.slice(at, at + 2), 16) * (1 - share)).toString(16).padStart(2, "0")).join("")}` as SheetHex;
+const WEIGHTS: Readonly<Record<string, number>> = { medium: 2, thick: 3, mediumdashed: 2, mediumdashdot: 2, mediumdashdotdot: 2, slantdashdot: 2 };
 /** The grid's text size (`13px`) for a cell of `points`: the sheet's text is the 11 points a workbook's is by default. */
 export const textSize = (base: string, points?: number) => points ? `${Math.round(parseFloat(base) * points / 11 * 10) / 10}px` : base;
 // Excel's: Ctrl with B, I, U, and 5 for a line through.
@@ -64,8 +70,18 @@ export function createSheetStyles(look: Y.Map<number | string>, model: Accessor<
     const style: SheetCellStyle = { bold: on("b"), italic: on("i"), underline: on("u"), strike: on("s"), wrap: on("w"), clip: on("x"), color: (attrs.c ?? undefined) as SheetCellStyle["color"], fill: (attrs.f ?? undefined) as SheetCellStyle["fill"],
       align: (attrs.h ?? undefined) as SheetCellStyle["align"], valign: (attrs.v ?? "middle") as SheetCellStyle["valign"], edges, edgeColor: (attrs.bc ?? undefined) as SheetHex | undefined, edgeWeight: WEIGHTS[attrs.bw ?? ""] ?? 1,
       size: attrs.z ? Number(attrs.z) : undefined, custom: false };
-    style.custom = style.wrap || style.underline || style.strike || style.valign !== "middle";
-    return style.custom || style.clip || style.bold || style.italic || style.color || style.fill || style.align || style.size || edges ? style : null;
+    // What an import keeps, each set only where a cell has it.
+    if (attrs.n) style.face = attrs.n.replace(/_/g, " ");
+    if (attrs.u2) style.double = true;
+    if (attrs.k) style.shrink = true;
+    if (attrs.in) style.indent = Number(attrs.in);
+    if (attrs.r) { const r = Number(attrs.r); style.rotate = r === 255 ? 255 : r > 90 ? 90 - r : r; }
+    if (attrs.hx) { if (attrs.hx === "fill") style.repeat = true; else style.align = attrs.hx === "justify" ? style.align ?? "left" : "center"; }
+    if (attrs.bd) style.diagonal = attrs.bd as SheetCellStyle["diagonal"];
+    if (attrs.bs) { style.edgeWeight = WEIGHTS[attrs.bs] ?? (attrs.bs === "double" ? 3 : 1); style.edgeLine = attrs.bs.includes("dot") && !attrs.bs.includes("dash") ? "dotted" : attrs.bs.includes("dash") ? "dashed" : attrs.bs === "double" ? "double" : undefined; }
+    if (attrs.fp && attrs.fb && style.fill?.startsWith("#")) style.fill = mixHex(style.fill, attrs.fb, PATTERN_SHARE[attrs.fp] ?? (attrs.fp.startsWith("dark") ? 0.5 : 0.25));
+    style.custom = style.wrap || style.underline || style.strike || style.valign !== "middle" || Boolean(style.double || style.shrink || style.indent || style.rotate || style.repeat);
+    return style.custom || style.clip || style.bold || style.italic || style.color || style.fill || style.align || style.size || edges || style.face || style.diagonal ? style : null;
   };
   // Each mix made once, by the three styles' own objects, so a frame's draws make nothing new (formats.ts says why).
   const mix = (col: StyleAttrs, row: StyleAttrs, own: StyleAttrs) => {

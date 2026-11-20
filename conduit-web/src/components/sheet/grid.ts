@@ -16,6 +16,7 @@ import type { SheetDrawn } from "./formats";
 import type { SheetPill, SheetSpill } from "./cell-draw";
 import type { SheetCellStyle } from "./styles";
 import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange, SheetReference } from "./host";
+import type { OutlineLine } from "./outline";
 
 /** What the grid reads of the sheet besides its cells: each column's width and type, the rows whose height is not the default (`look`), a value as its cell's number format draws it (formats.ts), a cell's style (styles.ts), and whether an import froze it. */
 export type SheetColumns = { width(col: number): number | undefined; type(row: number, col: number): string | undefined;
@@ -26,13 +27,34 @@ export type SheetColumns = { width(col: number): number | undefined; type(row: n
   /** A filter's mark on a header cell (0 none, 1 a filter, 2 one keeping only some values) and a table's banded rows (filter.tsx). */
   mark(row: number, col: number): number; banded(row: number, col: number): boolean;
   /** The tab's merged ranges (merges.ts). */
-  merges(): readonly SheetRange[] };
+  merges(): readonly SheetRange[];
+  /** A row's or column's group level and the control standing on it (outline.ts). */
+  outline(kind: "rows" | "cols", line: number): OutlineLine };
 // How near a row's lower edge, beside its number, a press takes the edge to drag.
 const EDGE_SLOP = 3;
 // How often (ms) a drag held past the grid's edge scrolls it on by a column.
 const SWEEP_STEP = 60;
 // How thick (px) the line under a row number is where rows after it are hidden.
 const HIDDEN_LINE = 2;
+// A group's bracket: one line a level, this far (px) apart, along its row numbers' left or its letters' top; its control a chevron this wide.
+const OUTLINE_STEP = 3, OUTLINE_MARK = 7;
+const outlineMark = (line: OutlineLine, across: boolean) => ({ x: 2 + (across ? 0 : line.level * OUTLINE_STEP), y: 2 + (across ? line.level * OUTLINE_STEP : 0) });
+const drawOutline = (ctx: CanvasRenderingContext2D, box: Rectangle, line: OutlineLine, ink: string, across: boolean) => {
+  if (!line.level && !line.control) return;
+  const was = ctx.fillStyle;
+  ctx.fillStyle = ink;
+  for (let k = 0; k < line.level; k++) if (across) ctx.fillRect(box.x, box.y + 1 + k * OUTLINE_STEP, box.width, 1); else ctx.fillRect(box.x + 1 + k * OUTLINE_STEP, box.y, 1, box.height);
+  if (line.control) {
+    // Shut, it points along the lines it would open; open, across them.
+    const at = outlineMark(line, across), x = box.x + at.x, y = across ? box.y + at.y : box.y + (box.height - OUTLINE_MARK) / 2, m = OUTLINE_MARK, h = m / 2;
+    ctx.beginPath();
+    if ((line.control === "shut") === across) { ctx.moveTo(x, y + h / 2); ctx.lineTo(x + m, y + h / 2); ctx.lineTo(x + h, y + h * 1.5); } else { ctx.moveTo(x + h / 2, y); ctx.lineTo(x + h / 2, y + m); ctx.lineTo(x + h * 1.5, y + h); }
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = was;
+};
+/** Whether a press at (x, y) in a header cell is on its group's control. */
+const onOutline = (line: OutlineLine, across: boolean, x: number, y: number) => { if (!line.control) return false; const at = outlineMark(line, across); return x <= at.x + OUTLINE_MARK + 2 && (!across || y <= at.y + OUTLINE_MARK + 2); };
 // How near a column's side (px) a press takes the edge to size it: the grid's own reach.
 const COL_EDGE = 5;
 type GridOptions = { model: SheetView; columns: SheetColumns; events: SheetGridEvents; look: SheetLook };
@@ -244,6 +266,17 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   const write = (list: { row: number; col: number; input: string }[], label?: string) => { if (list.length) events.write(list, label); };
   // Each drawn row's filled columns, found once a change (`update`), so an empty cell finds the text running into it from its left in a few reads.
   let filledRows = new Map<number, number[]>(), measure: CanvasRenderingContext2D | null = null;
+  // The cells each part has made (`contentOf`), by the sheet's row.
+  const made = new Set<Map<number, Map<number, GridCell>>>();
+  // Each column's runs of filled cells in a part's drawn rows, as [first, last] pairs in order, found once a change of that column; and the last row
+  // and column holding anything: Ctrl and an arrow, and Ctrl+End, then read no cell on their way.
+  const runs = new Map<Part, Map<number, number[]>>(), filledRun = (p: Part, col: number, end: number) => {
+    const byCol = runs.get(p) ?? runs.set(p, new Map()).get(p)!;
+    let list = byCol.get(col);
+    if (!list) { list = []; for (let n = 0; n < end; n++) if (model.input(p.map.sheet(n), col) !== "") { if (list.length && list.at(-1) === n - 1) list[list.length - 1] = n; else list.push(n, n); } byCol.set(col, list); }
+    return list;
+  };
+  let lastUsed: { row: number; col: number } | null = null;
   /** How far from a dropdown cell's left its pill reaches (cell-draw.ts), where a click opens its options too. */
   const pillReach = (value: unknown) => {
     const text = value === null || value === undefined ? "" : String(value);
@@ -311,6 +344,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     onColumnResize: (_, width, col) => { if (sizing && col === sizing.col) sizing.moved = true; if (sizing?.moved) drive.width?.(col, width); },
     // Let go, the resize is over: Glide's own fit on a double click (to its 500 px cap, drawn but never kept) comes after, and is left out for the sheet's.
     onColumnResizeEnd: (_, width, col) => { if (sizing?.moved) events.resized(col, width); sizing = undefined; },
+    onHeaderClicked: (col, event) => { if (onOutline(options.columns.outline("cols", col), true, event.localEventX, event.localEventY)) events.outline?.("cols", col); },
     onHeaderContextMenu: (col) => { const area = picked(); events.menu({ cols: owner.current.columns.hasIndex(col) && area ? area : { top: 0, bottom: 0, left: col, right: col } }); },
     onCellContextMenu: ([col, drawn]) => {
       const row = p.map.sheet(drawn), area = picked(), inside = area && row >= area.top && row <= area.bottom && (col < 0 || (col >= area.left && col <= area.right));
@@ -321,6 +355,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     // A press on a filter's mark, in its header cell's right end, opens the filter.
     onCellClicked: ([col, row], event) => {
       p.editor?.focus();
+      if (col < 0 && onOutline(options.columns.outline("rows", p.map.sheet(row)), false, event.localEventX, event.localEventY)) return void events.outline?.("rows", p.map.sheet(row));
       const at = p.map.sheet(row), value = model.value(at, col), link = (event.ctrlKey || event.metaKey) && typeof value === "string" ? options.columns.link(at, col, value) : undefined;
       // Ctrl and a click follows a cell's link.
       if (link) return void events.follow?.(link);
@@ -352,7 +387,16 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         const line = vertical || !hiddenCols.size ? null : Array.from({ length: size.cols }, (_, col) => col).filter((col) => !hiddenCols.has(col)), of = (n: number) => line ? line[n]! : n;
         const end = vertical ? (p === head ? size.head : size.rows) : line ? line.length : size.cols, at = (n: number) => vertical ? filled(far[0], n) : filled(of(n), far[1]);
         let n = vertical ? far[1] : line ? Math.max(0, line.findIndex((col) => col >= far[0])) : far[0];
-        if (n + dir >= 0 && n + dir < end) {
+        if (n + dir >= 0 && n + dir < end && vertical) {
+          // By the column's runs: to the end of the run it is in and goes on in, else to the next run's near end, else to the edge.
+          const list = filledRun(p, far[0], end);
+          let i = 0, lo = 0, hi = list.length / 2;
+          while (lo < hi) { const mid = (lo + hi) >> 1; if (list[2 * mid + 1]! < n) lo = mid + 1; else hi = mid; }
+          i = lo;
+          const inside = i < list.length / 2 && list[2 * i]! <= n;
+          if (inside && n + dir >= list[2 * i]! && n + dir <= list[2 * i + 1]!) n = dir > 0 ? list[2 * i + 1]! : list[2 * i]!;
+          else { const next = dir > 0 ? (inside ? i + 1 : i) : i - 1; n = next >= 0 && next < list.length / 2 ? (dir > 0 ? list[2 * next]! : list[2 * next + 1]!) : dir > 0 ? end - 1 : 0; }
+        } else if (n + dir >= 0 && n + dir < end) {
           if (at(n) && at(n + dir)) while (n + dir >= 0 && n + dir < end && at(n + dir)) n += dir;
           else { n += dir; while (!at(n) && n + dir >= 0 && n + dir < end) n += dir; }
         }
@@ -366,10 +410,13 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       // Ctrl+End goes to the last row and column holding anything, not the grid's run-on end.
       if (event.key === "End" && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey) {
         event.cancel();
-        const { rows, cols } = model.size();
-        let bottom = 0, right = 0;
-        for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) if (model.input(row, col) !== "") { bottom = Math.max(bottom, row); right = Math.max(right, col); }
-        api.select({ top: bottom, bottom, left: right, right });
+        if (!lastUsed) {
+          const { rows, cols } = model.size();
+          let bottom = 0, right = 0;
+          for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) if (model.input(row, col) !== "") { bottom = Math.max(bottom, row); right = Math.max(right, col); }
+          lastUsed = { row: bottom, col: right };
+        }
+        api.select({ top: lastUsed.row, bottom: lastUsed.row, left: lastUsed.col, right: lastUsed.col });
         return;
       }
       // Home goes to the row's first column shown, Ctrl+Home to the part's first cell shown: the grid's own would land on a hidden column A.
@@ -431,6 +478,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       if (!("markerKind" in cell)) return;
       const drawn = cell.row - 1, row = p.map.sheet(drawn), { ctx, rect: box, theme: drawnTheme } = args;
       markerCellRenderer.draw({ ...args, cell: { ...cell, row: row + 1 } }, { ...cell, row: row + 1 });
+      drawOutline(ctx, box, options.columns.outline("rows", row), drawnTheme.textMedium, false);
       if (p.map.sheet(drawn + 1) > row + 1 && (p === body || drawn + 1 < size.head)) { ctx.fillStyle = drawnTheme.textMedium; ctx.fillRect(box.x, box.y + box.height - HIDDEN_LINE, box.width, HIDDEN_LINE); }
     } });
   }
@@ -511,9 +559,20 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         if (typeof value === "string" && !fault) made.link = options.columns.link(row, col, value);
         return made;
       };
-      return ([col, at]: Item): GridCell => merges.length ? merged(at, col, p.map.sheet(at)) : own(p.map.sheet(at), col);
+      // Each cell as made, by the sheet's row, until it changes (`update`) or the rows' heights do (a merge's share): a selection moved draws
+      // every cell in view again, and reads nothing of the sheet for it.
+      const kept = new Map<number, Map<number, GridCell>>();
+      made.add(kept);
+      let by = rowHeights.get(p);
+      return ([col, at]: Item): GridCell => {
+        if (rowHeights.get(p) !== by) { kept.clear(); by = rowHeights.get(p); }
+        const row = p.map.sheet(at), line = kept.get(row) ?? kept.set(row, new Map()).get(row)!;
+        let cell = line.get(col);
+        if (!cell) line.set(col, cell = merges.length ? merged(at, col, row) : own(row, col));
+        return cell;
+      };
     };
-    const content = useMemo(() => ({ head: contentOf(head), body: contentOf(body) }), [shape, theme, cellLook, columns]);
+    const content = useMemo(() => { made.clear(); return { head: contentOf(head), body: contentOf(body) }; }, [shape, theme, cellLook, columns]);
     // One number while every row is the default height: the grid then sums no heights to scroll. Heights set while a row's edge is dragged are by the sheet's row.
     const heightOf = (p: Part) => { const kept = options.columns.heights(); return kept.size || Object.keys(heights).length ? (drawn: number) => { const row = p.map.sheet(drawn); return heights[row] ?? kept.get(row) ?? theme.row; } : theme.row; };
     const rowHeight = useMemo(() => ({ head: heightOf(head), body: heightOf(body) }), [shape, heights, theme]);
@@ -530,6 +589,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       const { ctx, rect: box, columnIndex: col } = args;
       if (args.isSelected) { const inset = col ? 1 : 0; for (const fill of [theme.grid.bgHeader, theme.picked]) { ctx.fillStyle = String(fill); ctx.fillRect(box.x + inset, box.y, box.width - inset, box.height); } }
       draw();
+      drawOutline(ctx, box, options.columns.outline("cols", col), args.theme.textMedium, true);
       if (!hiddenCols.size) return;
       ctx.fillStyle = args.theme.textMedium;
       if (hiddenCols.has(col + 1)) ctx.fillRect(box.x + box.width - HIDDEN_LINE, box.y, HIDDEN_LINE, box.height);
@@ -695,6 +755,13 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   const api: SheetGrid = {
     update: (changed) => {
       filledRows = new Map();
+      if (!changed) { runs.clear(); lastUsed = null; } else for (const { row, col } of changed) {
+        for (const byCol of runs.values()) byCol.delete(col);
+        // Filled, the last cell used can only grow; emptied on its last row or column, it is found again.
+        if (!lastUsed) continue;
+        if (model.input(row, col) !== "") lastUsed = { row: Math.max(row, lastUsed.row), col: Math.max(col, lastUsed.col) };
+        else if (row === lastUsed.row || col === lastUsed.col) lastUsed = null;
+      }
       if (!changed) {
         // A selection is held as a part draws it: kept on the same sheet rows when rows are hidden, shown or frozen.
         const was = picked(), columns = owner.current.columns.length > 0, rows = owner.current.rows.length > 0, versions = parts.map((p) => p.map.version).join(), freeze = frozenRows;
@@ -709,6 +776,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       }
       // Only what is in view is drawn again; the rest is read as it scrolls in. A merge over rows is drawn by each of its rows.
       if (merges.length) { const seen = new Set<SheetRange>(); changed = changed.flatMap((cell) => { const one = mergeAt(cell.row, cell.col); if (!one || one.bottom === one.top) return [cell]; if (seen.has(one)) return []; seen.add(one); return Array.from({ length: one.bottom - one.top + 1 }, (_, n) => ({ row: one.top + n, col: one.left })); }); }
+      // A changed cell's whole row is made again: its text may run on over the empty cells to its right.
+      for (const kept of made) for (const { row } of changed) kept.delete(row);
       for (const p of parts) {
         // A cell drawn again redraws the row on to its right in view too: its text may run on over the empty cells there (`spillInto`).
         const { view } = p, from = new Map<number, number>();

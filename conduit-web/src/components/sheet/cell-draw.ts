@@ -35,13 +35,33 @@ export function createCellLook(look: SheetLook) {
     if (style?.fill) made.bgCell = ink(style.fill, "fill");
     if (over || style?.color) made.textDark = over || ink(style!.color!, "text", style!.fill);
     if (style?.bold || style?.italic || style?.size) made.baseFontStyle = `${style.italic ? "italic " : ""}${style.bold ? look.strong : weight} ${textSize(size, style.size)}`;
+    // A workbook's face where the device has it, else the sheet's own.
+    if (style?.face) made.fontFamily = `"${style.face}", ${look.grid.fontFamily}`;
     const out = Object.keys(made).length ? made : undefined;
     byInk.set(over, out);
     return out;
   };
   // The text as the grid would place it, then moved, broken, lined or spread to the cell's edges as the style and format say; the grid has already set its font and ink.
+  // Turned text, about the cell's middle: stacked (255) letter under letter, else at its angle; clipped to the cell.
+  const turned = (args: Parameters<DrawCellCallback>[0], style: SheetCellStyle, shown: string) => {
+    const { ctx, rect, theme: drawn } = args, font = `${drawn.baseFontStyle} ${drawn.fontFamily}`, box = measureTextCached(EM, ctx, font), em = box.actualBoundingBoxAscent + box.actualBoundingBoxDescent;
+    ctx.save(); ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.width, rect.height); ctx.clip();
+    ctx.textAlign = "center";
+    if (style.rotate === 255) { const step = em * drawn.lineHeight, top = rect.y + rect.height / 2 - (step * (shown.length - 1)) / 2; [...shown].forEach((letter, n) => ctx.fillText(letter, rect.x + rect.width / 2, top + n * step)); }
+    else { ctx.translate(rect.x + rect.width / 2, rect.y + rect.height / 2); ctx.rotate(-style.rotate! * Math.PI / 180); ctx.fillText(shown.split("\n", 1)[0]!, 0, getMiddleCenterBias(ctx, font)); }
+    ctx.restore(); ctx.textAlign = "start";
+  };
   const text = (args: Parameters<DrawCellCallback>[0], style: SheetCellStyle, cell: StyledCell) => {
-    const { ctx, rect, theme: drawn } = args, padX = drawn.cellHorizontalPadding, padY = drawn.cellVerticalPadding, font = `${drawn.baseFontStyle} ${drawn.fontFamily}`, shown = cell.displayData!;
+    if (style.rotate) return turned(args, style, cell.displayData!);
+    const { ctx, rect: whole, theme: drawn } = args, padX = drawn.cellHorizontalPadding, padY = drawn.cellVerticalPadding, shown0 = cell.displayData!;
+    // An indent level is three of the font's zeros wide, from the side the text is aligned to; shrink to fit draws the text smaller until it fits.
+    let font = `${drawn.baseFontStyle} ${drawn.fontFamily}`, shown = shown0;
+    const was = ctx.font;
+    const indent = style.indent ? style.indent * 3 * measureTextCached("0", ctx, font).width : 0, right = cell.contentAlign === "right";
+    const rect = indent ? { ...whole, x: right ? whole.x : whole.x + indent, width: whole.width - indent } : whole;
+    if (style.shrink && !style.wrap) { const room = rect.width - 2 * padX, wide = measureTextCached(shown, ctx, font).width; if (wide > room && room > 0) { font = font.replace(/([\d.]+)px/, (_, px: string) => `${Math.max(1, Math.floor(Number(px) * room / wide * 10) / 10)}px`); ctx.font = font; } }
+    // Excel's Fill repeats the text across the cell as many whole times as fit.
+    if (style.repeat && shown) { const one = measureTextCached(shown, ctx, font).width; if (one > 0) shown = shown.repeat(Math.max(1, Math.floor((rect.width - 2 * padX) / one))); }
     const spread = shown.indexOf(SHEET_FILL), lines = spread < 0 && style.wrap ? wrapLines(ctx, shown, font, rect.width - 2 * padX) : [shown.split("\n", 1)[0]!];
     const box = measureTextCached(EM, ctx, font), em = box.actualBoundingBoxAscent + box.actualBoundingBoxDescent, step = drawn.lineHeight * em, tall = em + step * (lines.length - 1);
     const top = style.valign === "top" ? rect.y + padY : style.valign === "bottom" ? rect.y + rect.height - padY - tall : Math.max(rect.y + padY, rect.y + rect.height / 2 - tall / 2);
@@ -58,9 +78,10 @@ export function createCellLook(look: SheetLook) {
         const x = at(align);
         ctx.textAlign = align;
         ctx.fillText(piece, x, middle + bias);
-        if (!style.underline && !style.strike && !cell.link) continue;
+        if (!style.underline && !style.double && !style.strike && !cell.link) continue;
         const width = measureTextCached(piece, ctx, font).width, from = align === "right" ? x - width : align === "center" ? x - width / 2 : x;
-        if (style.underline) ctx.fillRect(from, Math.round(middle + em / 2), width, 1);
+        if (style.underline || style.double) ctx.fillRect(from, Math.round(middle + em / 2), width, 1);
+        if (style.double) ctx.fillRect(from, Math.round(middle + em / 2) + 2, width, 1);
         // A link is the text colour with a muted underline.
         else if (cell.link) { const ink = ctx.fillStyle; ctx.fillStyle = String(look.grid.textMedium); ctx.fillRect(from, Math.round(middle + em / 2), width, 1); ctx.fillStyle = ink; }
         if (style.strike) ctx.fillRect(from, Math.round(middle), width, 1);
@@ -68,6 +89,7 @@ export function createCellLook(look: SheetLook) {
     });
     ctx.textAlign = "start";
     if (clip) ctx.restore();
+    ctx.font = was;
   };
   // The value in a rounded wash of its ink, and the arrow that opens the options at the cell's right end; a value not among them in plain text, marked.
   const pill = (args: Parameters<DrawCellCallback>[0], cell: StyledCell, { ink, known }: SheetPill) => {
@@ -105,17 +127,30 @@ export function createCellLook(look: SheetLook) {
     if (cell.pill) pill(args, cell, cell.pill);
     else if (shown && (style?.custom || cell.block || cell.link || shown.includes(SHEET_FILL))) text(args, style ?? PLAIN, cell); else content();
     if (cell.spill) spill(args, cell.spill);
-    if (!style?.edges && !cell.frozen) return;
+    if (!style?.edges && !cell.frozen && !style?.diagonal) return;
     // The grid keeps note of the ink it set for a column's text, so it is put back.
     const { ctx, rect: { x, y, width, height } } = args, was = ctx.fillStyle;
     if (style?.edges) {
       const w = style.edgeWeight;
       ctx.fillStyle = style.edgeColor ? shade(style.edgeColor, "edge") : look.edge;
       // The first row's top is under the column letters' line: its top edge is drawn just inside.
-      if (style.edges & 1) ctx.fillRect(x, args.row === 0 ? y + 1 : y, width, w);
-      if (style.edges & 2) ctx.fillRect(x + width - w, y, w, height);
-      if (style.edges & 4) ctx.fillRect(x, y + height - w, width, w);
-      if (style.edges & 8) ctx.fillRect(x, y, w, height);
+      // A dashed or dotted edge in runs of its line; a double one as two lines a pixel apart.
+      const line = style.edgeLine, run = line === "dotted" ? 1 : 3, rule = (left: number, top: number, wide: number, tall: number) => {
+        if (line === "double") { if (wide > tall) { ctx.fillRect(left, top, wide, 1); ctx.fillRect(left, top + tall - 1, wide, 1); } else { ctx.fillRect(left, top, 1, tall); ctx.fillRect(left + wide - 1, top, 1, tall); } return; }
+        if (!line) return ctx.fillRect(left, top, wide, tall);
+        const along = wide > tall;
+        for (let at = 0, end = along ? wide : tall; at < end; at += 2 * run) along ? ctx.fillRect(left + at, top, Math.min(run, end - at), tall) : ctx.fillRect(left, top + at, wide, Math.min(run, end - at));
+      };
+      if (style.edges & 1) rule(x, args.row === 0 ? y + 1 : y, width, w);
+      if (style.edges & 2) rule(x + width - w, y, w, height);
+      if (style.edges & 4) rule(x, y + height - w, width, w);
+      if (style.edges & 8) rule(x, y, w, height);
+    }
+    if (style?.diagonal) {
+      ctx.strokeStyle = style.edgeColor ? shade(style.edgeColor, "edge") : look.edge; ctx.lineWidth = 1; ctx.beginPath();
+      if (style.diagonal !== "up") { ctx.moveTo(x, y); ctx.lineTo(x + width, y + height); }
+      if (style.diagonal !== "down") { ctx.moveTo(x, y + height); ctx.lineTo(x + width, y); }
+      ctx.stroke();
     }
     if (cell.frozen) {
       ctx.fillStyle = look.warn;

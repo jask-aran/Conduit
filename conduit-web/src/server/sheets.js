@@ -3,8 +3,8 @@ import path from "node:path";
 import { HyperFormula } from "hyperformula";
 import { isDateFormat } from "numfmt";
 import { CALL_LIMIT, CELLS, COLS, COL_LIMIT, LOOK, MAIN, ROWS, SHEET_FORMAT, SHEET_LIMIT, TAB, TABS, WORKBOOK_LIMIT, a1, colId, filterHides, rangedArea, colIndex, colName, colsOf, fromCsv, key, parseA1, parseRange, parseRef, rangeA1, rowId, rowsOf, tabName, tabNameFault, tabRef, toCsv, valueText } from "../sheet-format.js";
-import { CONFIG, createWorkbookModel } from "../sheet-engine.js";
-import { listFormats, writeFormat } from "../sheet-formats.js";
+import { CONFIG, createWorkbookModel, dateFunctions } from "../sheet-engine.js";
+import { formatDates, listFormats, writeFormat } from "../sheet-formats.js";
 import { listStyles, writeStyle } from "../sheet-styles.js";
 import { readRules, rulesA1, rulesIds, shiftRefs } from "../sheet-rules.js";
 import { CHART_LIMIT, chartFrom, chartIds, chartsA1, keptCharts, readCharts } from "../sheet-charts.js";
@@ -56,6 +56,8 @@ export function sheetKind(hub) {
   /** The merge a cell is hidden under (inside one, not its upper-left), if any. */
   const hiddenUnder = (areas, r, c) => areas.find((one) => r >= one.top && r <= one.bottom && c >= one.left && c <= one.right && (r !== one.top || c !== one.left));
   // A value an op writes under a merge's hidden cells would be kept unseen: it is left out (emptying one goes through). A file read again keeps all.
+  let dates;
+  // `guarded`: written by a person or agent (set, fill): a merge's hidden cells are left, and a formula giving a date in a General cell is formatted as one.
   const writeCells = (room, sheet, written, by, guarded = false) => hub.as(room, by, (sign) => room.doc.transact(() => {
     const areas = guarded ? mergeAreas(room, sheet) : [];
     for (const [r, c, input] of written) {
@@ -63,6 +65,7 @@ export function sheetKind(hub) {
       const cell = key(sheet.rowAt(r), sheet.colAt(c));
       if (!input) room.cells.delete(cell); else if (room.cells.get(cell) !== input) room.cells.set(cell, input);
     }
+    if (guarded) formatDates(room.look, sheet, written.map(([row, col, input]) => ({ row, col, input })), dates ??= dateFunctions(), (name) => { const id = room.book.find(name); return id ? room.book.tab(id) : undefined; });
     sign();
   }));
   /** A comment's range: its two corners by row and column ids, where both are still there, and the tab their rows are in. */
@@ -160,10 +163,11 @@ export function sheetKind(hub) {
       const from = stay(ranged.from), to = stay(ranged.to);
       after.push(() => { const next = { ...ranged, from: from(), to: to() }; if (next.from !== ranged.from || next.to !== ranged.to) room.look.set(name, JSON.stringify(next)); });
     }
-    const rules = readRules(room.look.get(`rules:${sheet.id}`));
-    if (rules.length) {
+    for (const [what, read] of RULED) {
+      const rules = read(room.look.get(`${what}:${sheet.id}`));
+      if (!rules.length) continue;
       const held = rules.map((rule) => ({ rule, ranges: rule.ranges.map(([from, to]) => [stay(from), stay(to)]) }));
-      after.push(() => { const next = JSON.stringify(held.map(({ rule, ranges }) => ({ ...rule, ranges: ranges.map(([from, to]) => [from(), to()]) }))); if (next !== JSON.stringify(rules)) room.look.set(`rules:${sheet.id}`, next); });
+      after.push(() => { const next = JSON.stringify(held.map(({ rule, ranges }) => ({ ...rule, ranges: ranges.map(([from, to]) => [from(), to()]) }))); if (next !== JSON.stringify(rules)) room.look.set(`${what}:${sheet.id}`, next); });
     }
     // A chart too, its range and the cell it stands on: it draws the same cells' places and stands where it stood.
     const charts = readCharts(room.look.get(`charts:${sheet.id}`));
@@ -185,6 +189,24 @@ export function sheetKind(hub) {
    * Before rows or columns are deleted: each filter's and table's corner on one of them moves to the nearest one left inside its range, and one with
    * none left is taken off, so deleting its header or last row keeps it.
    */
+  /**
+   * Once lines are inserted: each cell between two of the same type (a dropdown, date or checkbox, or plain under a typed column) takes it, a date its
+   * number format too, as Excel extends a validation over a line put inside it; at its edge it does not.
+   */
+  const extendTypes = (room, sheet, isRows, at, count) => () => {
+    const { rows, cols } = sheet.size();
+    if (at < 1 || at + count >= (isRows ? rows : cols)) return;
+    const line = (n) => isRows ? sheet.rowAt(n) : sheet.colAt(n), cross = (m) => isRows ? sheet.colAt(m) : sheet.rowAt(m);
+    const copy = (name) => {
+      const kept = room.look.get(name(at - 1));
+      if (kept === undefined || kept !== room.look.get(name(at + count))) return undefined;
+      for (let n = at; n < at + count; n++) room.look.set(name(n), kept);
+      return kept;
+    };
+    const extend = (name) => { if (copy((n) => `type:${name(n)}`) === "date") copy((n) => `fmt:${name(n)}`); };
+    if (!isRows) extend(line);
+    for (let m = 0, across = isRows ? cols : rows; m < across; m++) extend((n) => isRows ? key(line(n), cross(m)) : key(cross(m), line(n)));
+  };
   const keepCorners = (room, sheet, isRows, at, count) => {
     const out = [], gone = (n) => n >= at && n < at + count;
     const id = (n) => isRows ? sheet.rowAt(n) : sheet.colAt(n), corner = (text, n) => { const [row, col] = String(text).split(":"); return isRows ? key(id(n), col) : key(row, id(n)); };
@@ -212,10 +234,11 @@ export function sheetKind(hub) {
       if (JSON.stringify(next) !== JSON.stringify(merges)) out.push([`merges:${sheet.id}`, next.length ? JSON.stringify(next) : null]);
     }
     // A conditional format's ranges each as a filter's; one left with none goes.
-    const rules = readRules(room.look.get(`rules:${sheet.id}`));
-    if (rules.length) {
+    for (const [what, read] of RULED) {
+      const rules = read(room.look.get(`${what}:${sheet.id}`));
+      if (!rules.length) continue;
       const next = rules.map((rule) => ({ ...rule, ranges: rule.ranges.flatMap(([from, to]) => { const one = moved({ from, to }); return one ? [[one.from, one.to]] : []; }) })).filter((rule) => rule.ranges.length);
-      if (JSON.stringify(next) !== JSON.stringify(rules)) out.push([`rules:${sheet.id}`, next.length ? JSON.stringify(next) : null]);
+      if (JSON.stringify(next) !== JSON.stringify(rules)) out.push([`${what}:${sheet.id}`, next.length ? JSON.stringify(next) : null]);
     }
     const charts = keptCharts(sheet, room.look.get(`charts:${sheet.id}`), isRows, at, count);
     if (charts !== undefined) out.push([`charts:${sheet.id}`, charts]);
@@ -282,6 +305,22 @@ export function sheetKind(hub) {
     return JSON.stringify({ ...rest, from: key(sheet.rowAt(area.top), sheet.colAt(area.left)), to: key(sheet.rowAt(area.bottom), sheet.colAt(area.right)), ...(kept ? { keep: kept } : {}), ...(whens ? { when: whens } : {}),
       ...(Array.isArray(hide) ? { hide: hide.flatMap((row) => Number.isInteger(row) && row >= 1 && row <= rows ? [sheet.rowAt(row - 1)] : []) } : {}) });
   };
+  /**
+   * The conditional formats an import keeps unread (`rulesKept:<tabId>`, sheet-xlsx.js: colour scales, data bars, icon sets, top N), each its ranges by
+   * corner ids as a rule's, so they follow inserts and moves; by A1 at the file.
+   */
+  const readKept = (text) => { try { const list = typeof text === "string" ? JSON.parse(text) : text; return Array.isArray(list) ? list.filter((one) => Array.isArray(one?.ranges) && typeof one.xml === "string") : []; } catch { return []; } };
+  // One kept by A1 before ids (an import of 2026-11) stays as it is.
+  const keptA1 = (sheet, text) => [...(Array.isArray(text) ? text.filter((one) => typeof one?.ranges === "string") : []), ...readKept(text)].flatMap((one) => typeof one.ranges === "string" ? [one] : (() => { const areas = one.ranges.flatMap(([from, to]) => { const area = rangedArea(sheet, { from, to }); return area ? [rangeA1(area)] : []; }); return areas.length ? [{ ...one, ranges: areas.join(" ") }] : []; })());
+  const keptIds = (sheet, list) => {
+    const { rows, cols } = sheet.size(), corner = (row, col) => key(sheet.rowAt(Math.min(row, rows - 1)), sheet.colAt(Math.min(col, cols - 1)));
+    const out = (Array.isArray(list) ? list : []).flatMap((one) => {
+      const ranges = String(one?.ranges ?? "").split(/\s+/).flatMap((part) => { const area = parseRange(part.replace(/\$/g, "")); return area && area.top < rows && area.left < cols ? [[corner(area.top, area.left), corner(area.bottom, area.right)]] : []; });
+      return ranges.length && typeof one.xml === "string" ? [{ ...one, ranges }] : [];
+    });
+    return out.length ? JSON.stringify(out) : undefined;
+  };
+  const RULED = [["rules", readRules], ["rulesKept", readKept]];
   const lookOf = (room, sheet) => {
     const out = {};
     for (const [name, value] of room.look.entries()) {
@@ -290,6 +329,7 @@ export function sheetKind(hub) {
       if (what === "validations" || (what === "type" && String(value).startsWith(VALID))) continue;
       if (ids.length === 1 && ids[0] === sheet.id && what === "merges") { const said = mergesA1(sheet, value); if (said.length) out.merges = said; }
       else if (ids.length === 1 && ids[0] === sheet.id && what === "rules") { const said = rulesA1(sheet, value); if (said.length) out.rules = said; else if (Array.isArray(value)) out.rules = value; }
+      else if (ids.length === 1 && ids[0] === sheet.id && what === "rulesKept") { const said = keptA1(sheet, value); if (said.length) out.rulesKept = said; }
       else if (ids.length === 1 && ids[0] === sheet.id && what === "charts") { const said = chartsA1(sheet, value); if (said.length) out.charts = said; }
       else if (ids.length === 1 && ids[0] === sheet.id && RANGED.includes(what)) { const said = rangedA1(sheet, value); if (said) out[what] = said; }
       else if (ids.length === 1 && ids[0] === sheet.id) out[what] = value;
@@ -316,6 +356,7 @@ export function sheetKind(hub) {
       }
       else if (at === undefined && what === "validations") restoreValidations(room.look, sheet, value);
       else if (at === undefined && what === "rules") { const ids = rulesIds(sheet, value); if (ids) room.look.set(`rules:${tab}`, ids); }
+      else if (at === undefined && what === "rulesKept") { const ids = keptIds(sheet, value); if (ids) room.look.set(`rulesKept:${tab}`, ids); }
       else if (at === undefined && what === "charts") { const ids = chartIds(sheet, value); if (ids) room.look.set(`charts:${tab}`, ids); }
       else if (at === undefined && RANGED.includes(what)) { const ids = rangedIds(sheet, value); if (ids) room.look.set(`${what}:${tab}`, ids); }
       else if (at === undefined) room.look.set(`${what}:${tab}`, value);
@@ -418,6 +459,8 @@ export function sheetKind(hub) {
    * holding the workbook's formulas: a deleted block is first moved past the tab's edge and its lines removed there, so what read it is #REF!. A
    * range only partly moved is left as it was (Excel's grows or shrinks).
    */
+  // A range of cells in an engine's reading of a formula (its tab, quoted or bare, then its corners), strings passed over.
+  const RANGES = /(?<=^(?:[^"]*"[^"]*")*[^"]*)(?:(?:'((?:[^']|'')+)'|([A-Za-z_][\w.]*))!)?\$?([A-Z]+)\$?(\d+):\$?([A-Z]+)\$?(\d+)(?![\w(])/g;
   const shiftCells = (room, sheet, area, way, by) => {
     const across = way === "left" || way === "right", removing = way === "up" || way === "left", { rows, cols } = sheet.size();
     const depth = across ? area.right - area.left + 1 : area.bottom - area.top + 1, lo = across ? area.left : area.top, typed = sheet.inputs();
@@ -440,7 +483,27 @@ export function sheetKind(hub) {
       const one = room.book.tab(tab.id), id = engine.getSheetId(one.engine.getSheetName(one.sheet));
       one.inputs().forEach((line, r) => line.forEach((input, c) => { if (input.startsWith("=")) { engine.setCellContents({ sheet: id, row: r, col: c }, input); formulas.push({ one, id, r, c, input, read: engine.getCellFormula({ sheet: id, row: r, col: c }) }); } }));
     }
-    const out = [];
+    const readings = new Map(formulas.flatMap(({ one, r, c, read }) => one.id === sheet.id && read ? [[`${r}:${c}`, read]] : []));
+    const out = [], name = sheet.engine.getSheetName(sheet.sheet).toLowerCase();
+    // A range only partly in what moves grows or shrinks as Excel's does (the engine leaves it): its lines across the block's, its first or last line
+    // inside the lines that move. Matched by place against the engine's own reading, as the engine rewrites every reference it moved.
+    const map = (n) => removing ? (n < lo ? n : n >= lo + depth ? n - depth : null) : n < lo ? n : n + depth;
+    const resize = (read, next, mine) => {
+      const before = [...read.matchAll(RANGES)], after = [...next.matchAll(RANGES)];
+      if (before.length !== after.length) return next;
+      let text = next;
+      for (let n = before.length - 1; n >= 0; n--) {
+        const [, quoted, bare, c1, r1, c2, r2] = before[n], tab = quoted?.replace(/''/g, "'") ?? bare;
+        if (quoted === undefined && bare === undefined ? !mine : tab.toLowerCase() !== name) continue;
+        const [a, b] = across ? [colIndex(c1), colIndex(c2)] : [Number(r1) - 1, Number(r2) - 1], [p, q] = across ? [Number(r1) - 1, Number(r2) - 1] : [colIndex(c1), colIndex(c2)];
+        if (p < others[0] || q > others.at(-1) || a >= (removing ? lo + depth : lo) || b < lo || (removing && a >= lo && b < lo + depth)) continue;
+        const from = map(a) ?? lo, to = map(b) ?? lo - 1, spot = after[n];
+        const ends = across ? [[colName(from), r1], [colName(to), r2]] : [[c1, String(from + 1)], [c2, String(to + 1)]];
+        const written = spot[0].replace(/(\$?)[A-Z]+(\$?)\d+:(\$?)[A-Z]+(\$?)\d+$/, (_, d1, d2, d3, d4) => `${d1}${ends[0][0]}${d2}${ends[0][1]}:${d3}${ends[1][0]}${d4}${ends[1][1]}`);
+        text = text.slice(0, spot.index) + written + text.slice(spot.index + spot[0].length);
+      }
+      return text;
+    };
     try {
       const box = (a, b, c, d) => across ? { start: { sheet: here, row: c, col: a }, end: { sheet: here, row: d, col: b } } : { start: { sheet: here, row: a, col: c }, end: { sheet: here, row: b, col: d } };
       const [first, last] = [others[0], others.at(-1)];
@@ -455,14 +518,15 @@ export function sheetKind(hub) {
       for (let line = lo; line < size; line += 1) for (const other of others) {
         const at = place(line, other), was = from(line), old = was < 0 ? "" : (across ? now[other]?.[was] : now[was]?.[other]) ?? "";
         zone.add(`${at.row}:${at.col}`);
-        const next = old.startsWith("=") ? String(engine.getCellFormula({ sheet: here, ...at }) ?? old) : old;
+        const read = was < 0 ? undefined : readings.get(across ? `${other}:${was}` : `${was}:${other}`);
+        const next = old.startsWith("=") ? (read ? resize(read, String(engine.getCellFormula({ sheet: here, ...at }) ?? old), true) : String(engine.getCellFormula({ sheet: here, ...at }) ?? old)) : old;
         if (next !== (now[at.row]?.[at.col] ?? "")) out.push([sheet, at.row, at.col, next]);
       }
       // Compared with the engine's own reading before the shift, not with the text typed: the engine writes `=sum(a1)` as `=SUM(A1)`, and a formula
       // the shift did not move is left as it was typed.
       for (const { one, id, r, c, read } of formulas) {
         if (one.id === sheet.id && zone.has(`${r}:${c}`)) continue;
-        const next = engine.getCellFormula({ sheet: id, row: r, col: c });
+        const moved = engine.getCellFormula({ sheet: id, row: r, col: c }), next = moved && resize(read, moved, one.id === sheet.id);
         if (next && next !== read) out.push([one, r, c, next]);
       }
     } finally { engine.destroy(); }
@@ -766,7 +830,7 @@ export function sheetKind(hub) {
         if (removing && at + count > size) throw fault(400, `There are ${size - at} ${what}s from ${at}: count is at most that`);
         if (removing && count >= size) throw fault(400, `A tab keeps at least one ${what}`);
         if (!removing) sized(room, sheet, isRows ? rows + count : rows, isRows ? cols : cols + count);
-        const corners = removing ? keepCorners(room, sheet, isRows, at, count) : () => {}, frozen = keepFrozen(room, sheet, op, at, count);
+        const corners = removing ? keepCorners(room, sheet, isRows, at, count) : extendTypes(room, sheet, isRows, at, count), frozen = keepFrozen(room, sheet, op, at, count);
         return { ...hub.as(room, name, (sign) => sheet.structure(op, at, count, () => { corners(); frozen(); sign(); })), ...(many(room) ? { tab: sheet.name } : {}) };
       },
     },

@@ -50,7 +50,7 @@ open is in the list below:
   round-trips as `stop`;
 - xlsx import grows a tab only through styled cells, rows and columns touching its values, as far as the limits allow; LibreOffice's
   whole-row runs become row styles; hand-set row heights are kept; lost line styles are reported; export joins alike columns;
-- Undo waits for every tagged update a hub op sent (the hub's reply counts them as `tagged`); deleting a tab clears the history;
+- Undo waits for every tagged update a hub op sent (the hub's reply counts them as `tagged`);
 - the fill handle steps a typed `2026-01-30` by days.
 
 Then: undoing an insert or delete of rows moves formulas typed since (the hub's model is `owner`, keeps its engine's rewrite and writes it);
@@ -185,12 +185,14 @@ Then the ribbon, charts and ask box, walked in headless Chrome on :4310 (2026-11
 - A filter's condition is `when: { <colId>: { is, a?, b? } }` beside `keep` in `filter:<tabId>` (by letter in sheet.json); `filterHides` tests both, so
   the hub's `refilter` keeps it. A column has one or the other. The filter applied as it opens is written under an untracked origin (no Undo step).
 - `shift-cells` (hub, `sheets.js` `shiftCells`) works formulas out in a scratch engine: a deleted block is moved past the tab's edge and its lines
-  removed there, so its readers read #REF!. A range only partly moved (`SUM(A1:A5)` with A2 deleted) is left as it was; Excel's shrinks or grows.
+  removed there, so its readers read #REF!. A range only partly moved grows or shrinks as Excel's (`resize`, matched against the engine's reading).
 - `dedupe` reuses `reorder` (kept rows first, repeats after) and empties the tail; external references to moved cells are not rewritten, as a sort's.
-- `duplicate-tab` and tab moves are hub tab ops, not on the page's Undo, as add and delete aren't. `tabColor:<tabId>` (an ink or #rrggbb) is in the
+- Tab ops (add, duplicate, rename, move, hide, delete) go through `history.hub` as named steps, the tabs' order and `tab` meta in the history's scope; a tab
+  deleted by someone else still ends the history (`ownTabs` in sheet.tsx). Undoing an add on a workbook folder leaving its CSV file behind is unchecked. `tabColor:<tabId>` (an ink or #rrggbb) is in the
   look, so it is undone, saved and read in `as=book` as `look.tabColor`; xlsx does not carry it yet.
-- Grouping was not built: Glide has no outline gutter; a collapse control needs a strip left of the row numbers and above the letters (a wider marker
-  column drawn and hit-tested by hand, a taller head with its own `drawHeader` band), hidden rows reused for collapsed groups, and a look key for levels.
+- Grouping (`outline.ts`): `outline:<lineId>` is a row's or column's level (1–7; sheet.json `outline:5` / `outline:C`); collapsed lines are `hidden:`. With
+  no gutter, the bracket (a line a level) and the control (a chevron on the line after the group, or before one at the tab's end) are drawn in the
+  row-number cell and the letter's own canvas (`drawOutline`, grid.ts) and hit there. Expanding shows nested collapsed groups too; xlsx does not carry it yet.
 
 ## Cell types, overflow, refit and links (branch `sheet-cells`, 2026-11-20; typechecked, not seen in a browser)
 
@@ -216,7 +218,7 @@ What a later builder must know:
   it as d/m/yyyy (`types.shown`, the inverse of `types.typed`).
 - Styles reach the styles' index only as their transaction ends: anything measuring with the new style (a row fit) is a second transaction of the
   same step (`tools.tsx` `fitted`).
-- Shifting: HyperFormula's `moveCells` moves only references wholly inside the block, which is why a partly covered range stays; and its
+- Shifting: HyperFormula's `moveCells` moves only references wholly inside the block (`shiftCells` resizes the rest itself); and its
   `getCellFormula` spells every formula its own way, so compare its reading before and after, never with the typed text.
 - Filter: opening one makes no step. Select all found keeps the found values alone (Excel's Select All Search Results).
 - Glide fits a column on a double click of its edge by itself (to its 500 px cap, drawn only): the grid drops that after a resize ends.
@@ -224,10 +226,22 @@ What a later builder must know:
   the list it told last (`toldTabs`).
 
 Open after the walk:
-- A row put in inside a dropdown's range has no dropdown (Excel's takes the row above's validation).
-- A formula on a date (`=E2+30`) shows a serial: Excel gives it the date format.
 - Delete cells… and Insert cells… start on Shift cells left / right; Excel starts on up / down for a block wider than tall.
 - The dropdown options dialog draws each row's colour picker above its Up and Delete buttons; the link popover's labels sit close to its frame.
 - At a 1,600 px window the ribbon folds into "Format" once the undo group gains its chevron.
 - Ctrl+Z does nothing after the Undo several list is shut (focus stays on its button), as in item 2's ribbon note.
 
+
+## Grid speed and imported looks (branch `sheet-draw`, 2026-11-20)
+
+- Glide redraws every cell in view on any selection change (`computeCanBlit` compares `selection`), so a move's cost is our per-cell cost: `grid.ts`
+  `contentOf` keeps each made cell by the sheet's row until `update` drops its row (or rows' heights change). Anything a cell's look reads must reach
+  `update` (a change list, or `null` for all), or the grid shows the old cell.
+- Ctrl+arrow down a column searches that column's runs of filled cells (`filledRun`, dropped per changed column); Ctrl+End keeps `lastUsed` as cells are
+  typed. The first Ctrl+End after a load or a structure change still reads the whole tab (24 ms on 10,000 × 8 at 1x).
+- The foot's figures are read in a task of their own on every selection change (no settle wait), sliced at 3 ms; the cell menu's `sub` may be a
+  function, made as the submenu opens.
+- Imported style codes now drawn (`styles.ts` `make`, `cell-draw.ts`): `n`, `u2`, `k`, `in`, `r`, `hx`, `bs`, `bd`, and `fp`/`fb` as a mix of the two
+  colours (only where `f` is #rrggbb). Not seen in a browser: no import was run. Conditional-format kinds kept as `rulesKept` are not drawn yet.
+- Opening a sheet: the grid, tabs and canvases still appear about 350 ms after the pane's first paint (the grid mounts once the hub's copy and the
+  model are held); the margin's height jumps with them.

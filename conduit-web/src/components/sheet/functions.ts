@@ -111,7 +111,9 @@ export const FUNCTION_HELP: Readonly<Record<string, FunctionHelp>> = {
 };
 
 /** A function offered: its name, and the other name it was typed as (WRONG_NAMES), shown as "for" that. */
-export type FunctionOffer = { name: string; typedFor?: string };
+export type FunctionOffer = { name: string; typedFor?: string; chip?: true };
+/** What `@` in an empty cell offers, as a spreadsheet's smart chips: a type for the cell, or today's date written in it. */
+export const CHIPS: Readonly<Record<string, string>> = { Date: "A date picked from a calendar", Dropdown: "Options to pick from", Today: "Today's date" };
 
 // Most used first: a name typed is offered the common function it starts, never the rare one before it in the alphabet.
 const POPULAR = ["SUM", "AVERAGE", "IF", "COUNT", "MAX", "MIN", "ROUND", "VLOOKUP", "COUNTIF", "SUMIF", "IFERROR", "AND", "OR", "CONCATENATE", "LEFT", "RIGHT", "MID", "LEN", "TRIM",

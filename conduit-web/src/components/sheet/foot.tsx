@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, mergeProps, onCleanup, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Index, mergeProps, onCleanup, Show, type JSX } from "solid-js";
 import { DashPath, Dot, IconButton, Icons, Input, Notice, PaneTab, PaneTabs, ToolBar } from "@/components/ui";
 import { sheetDataIcons as DataIcons } from "@/components/ui/sheet-icons";
 import { SHEET_INKS } from "@/sheet-styles.js";
@@ -11,9 +11,10 @@ import { toast } from "@/components/ui/notifications";
 import { tabNameFault, type Tab } from "@/sheet-format.js";
 import { createFigures, type SheetFigures } from "./stats";
 import type { SheetTabs } from "./tabs";
+import type { SheetRange } from "./host";
 
 // Shown as the grid shows a number: a long one cut to what a sheet shows.
-const shown = (value: number) => Number(value.toPrecision(12)).toLocaleString(undefined, { maximumFractionDigits: 10 });
+const NUMBER = new Intl.NumberFormat(undefined, { maximumFractionDigits: 10 }), shown = (value: number) => NUMBER.format(Number(value.toPrecision(12)));
 const FIGURES: { name: string; of(figures: SheetFigures): number | null }[] = [
   { name: "Sum", of: (f) => f.numbers ? f.sum : null },
   { name: "Average", of: (f) => f.numbers ? f.sum / f.numbers : null },
@@ -23,14 +24,14 @@ const FIGURES: { name: string; of(figures: SheetFigures): number | null }[] = [
 ];
 
 /** The sheet's foot: its tabs, to show, add, rename, move, hide and delete, and the figures of the cells selected. */
-/** `format`: how the selection's figures but its count are drawn, where it has one number format throughout (formats.ts). */
+/** `format`: how a range's figures but its count are drawn, where it has one number format throughout (formats.ts). */
 // A tab dragged along the strip, as a spreadsheet's: its id, under a type of its own so nothing else dropped there moves a tab.
 const DRAGGED = "application/x-conduit-sheet-tab";
 const inkOf = (color: string) => (SHEET_INKS as readonly string[]).includes(color) ? `var(${SHEET_INK_TOKENS[color as keyof typeof SHEET_INK_TOKENS]})` : color;
 const INK_NAMES: Record<string, string> = { red: "Red", amber: "Amber", green: "Green", blue: "Blue" };
 
 /** `filtered`: the rows under the filter's header and how many it shows, while it narrows them. `act`: a change made as one named step (history.ts). */
-export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: () => ((value: number) => string) | null; filtered?: () => { shown: number; total: number } | null; act(label: string, run: () => void): void }) {
+export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: (range: SheetRange) => ((value: number) => string) | null; filtered?: () => { shown: number; total: number } | null; act(label: string, run: () => void): void }) {
   const tabs = props.tabs, decide = createDecisionScope(() => props.id);
   const [renaming, setRenaming] = createSignal<string>(), [draft, setDraft] = createSignal("");
   const figures = createFigures(tabs.model, tabs.selection);
@@ -39,7 +40,8 @@ export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: () => (
   let strip: HTMLDivElement | undefined;
   const folds = createFolds(2, { over: () => strip ? strip.scrollWidth - strip.clientWidth : 0, content: true });
   // Folded by an attribute, never by taking them out, so a change of figures is all the fold watches for.
-  const listed = () => { const format = figures() && props.format?.(); return FIGURES.flatMap((figure) => { const value = figures() && figure.of(figures()!); return value === null || value === undefined ? [] : [{ name: figure.name, value, text: format && figure.name !== "Count" ? format(value) : shown(value) }]; }); };
+  // Made again only as the figures, or the format of the cells they are of, change: never per move of the selection.
+  const listed = createMemo(() => { const now = figures(), format = now && props.format?.(now.range); return now ? FIGURES.flatMap((figure) => { const value = figure.of(now); return value === null ? [] : [{ name: figure.name, value, text: format && figure.name !== "Count" ? format(value) : shown(value) }]; }) : []; });
 
   // Computing is said once it has taken a whole turn of the spinner, so a change computed at once never flashes it.
   const [slow, setSlow] = createSignal(false);
@@ -133,7 +135,7 @@ export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: () => (
     </div>
     <IconButton label="Add a tab" onClick={add}><Icons.Add /></IconButton>
     <span class="ui-spreadsheet-figures" aria-live="polite">
-      <For each={listed()}>{(figure) => <DashPath title={`Copy the ${figure.name.toLowerCase()}`} path={`${figure.name} ${figure.text}`} onCopy={() => copy(figure.name, figure.value)} />}</For>
+      <Index each={listed()}>{(figure) => <DashPath title={`Copy the ${figure().name.toLowerCase()}`} path={`${figure().name} ${figure().text}`} onCopy={() => copy(figure().name, figure().value)} />}</Index>
     </span>
     <Show when={props.filtered?.()}>{(rows) => <Notice kind="tool">{rows().shown} of {rows().total} rows</Notice>}</Show>
     <Show when={slow()}><Notice kind="tool" busy live>Computing</Notice></Show>

@@ -31,6 +31,11 @@ if (HyperFormula.version === "3.5.0") {
     link.call(this, rest, end);
   };
 }
+/** The engine's functions whose result is a date, or a date and time, as its own metadata says, with the format each result takes (sheet-formats.js formulaDate). */
+export const dateFunctions = () => Object.fromEntries(HyperFormula.getRegisteredFunctionNames(CONFIG.language ?? "enGB").flatMap((name) => {
+  const kind = HyperFormula.getFunctionPlugin(name)?.implementedFunctions?.[name]?.returnNumberType;
+  return kind === "NUMBER_DATE" ? [[name, "d/m/yyyy"]] : kind === "NUMBER_DATETIME" ? [[name, "d/m/yyyy h:mm"]] : [];
+}));
 // Past this many cells in one change a new engine is built from the doc, which is then faster than as many single sets.
 const REBUILD_AT = 50_000;
 const raw = (input) => input === undefined || input === "" ? null : input;
@@ -387,7 +392,7 @@ export function serveSheetModel(port) {
     const tabs = new Map(), of = (id) => tabs.get(id) ?? tabs.set(id, book.tab(id)).get(id);
     post(changed.map(({ tab, row, col }) => key(of(tab).rowAt(row), of(tab).colAt(col))), changed.map(({ tab, row, col }) => sent(book.engine.getCellValue({ sheet: of(tab).sheet, row, col }))), false);
   };
-  port.postMessage({ functions: HyperFormula.getRegisteredFunctionNames(CONFIG.language ?? "enGB") });
+  port.postMessage({ functions: HyperFormula.getRegisteredFunctionNames(CONFIG.language ?? "enGB"), dates: dateFunctions() });
   port.addEventListener("message", ({ data }) => { if (queue.push(data.update) === 1) setTimeout(take, 0); });
   port.start?.();
 }
