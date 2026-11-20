@@ -107,9 +107,10 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   // F4 outside the editor repeats the last step on the selection, as Excel's: what it ran of styles, borders, number formats, inserts, deletes and
   // fills (each remembered as it runs, a step's together) runs again, one step of the same name.
   // By what each is (a run of deletes made one by one is one delete again).
-  let again = new Map<string, (range: SheetRange) => void>(), fresh = true, repeating = false;
-  const remember = (what: string, run: (range: SheetRange) => void) => { if (repeating) return; if (fresh) { again = new Map(); fresh = false; queueMicrotask(() => { fresh = true; }); } again.set(what, run); };
-  const repeat = (range: SheetRange) => { const runs = [...again.values()]; if (!runs.length) return; repeating = true; try { history.act(history.steps().undo[0] ?? "Repeat", () => runs.forEach((run) => run(range))); } finally { repeating = false; } };
+  // `of`: the step they made; any step since (typing, a sort) is the last one and is not repeated, so F4 does nothing rather than an older step.
+  let again = new Map<string, (range: SheetRange) => void>(), fresh = true, repeating = false, of = 0;
+  const remember = (what: string, run: (range: SheetRange) => void) => { if (repeating) return; if (fresh) { again = new Map(); fresh = false; queueMicrotask(() => { fresh = true; of = history.last(); }); } again.set(what, run); };
+  const repeat = (range: SheetRange) => { const runs = [...again.values()]; if (!runs.length || history.last() !== of) return; repeating = true; try { history.act(history.steps().undo[0] ?? "Repeat", () => runs.forEach((run) => run(range))); } finally { repeating = false; } of = history.last(); };
   for (const [made, name, what] of [[styles, "set", "style"], [styles, "borders", "borders"], [styles, "clear", "clear"], [formats, "set", "format"]] as const) {
     const held = made as unknown as Record<string, (range: SheetRange, ...rest: unknown[]) => void>, own = held[name]!;
     held[name] = (range: SheetRange, ...rest: unknown[]) => { remember(what, (to) => own(to, ...rest)); own(range, ...rest); };

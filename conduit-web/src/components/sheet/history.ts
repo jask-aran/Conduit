@@ -104,6 +104,8 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
     clear: () => { um.clear(); changed(); },
     undo: (count?: number) => walk(true, count),
     redo: (count?: number) => walk(false, count),
+    /** The id of the latest step begun. */
+    last: () => next - 1,
     canUndo: () => um.canUndo(),
     canRedo: () => um.canRedo(),
     steps: () => ({ undo: labels(um.undoStack), redo: labels(um.redoStack) }),
