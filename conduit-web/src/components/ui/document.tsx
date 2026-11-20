@@ -1,6 +1,6 @@
 import { AlignCenterIcon, AlignLeftIcon, AlignRightIcon, BaselineIcon, BetweenHorizontalEndIcon, BetweenHorizontalStartIcon, BetweenVerticalEndIcon, BetweenVerticalStartIcon, BoldIcon, CalendarIcon, ChevronRightIcon, CodeIcon, ExternalLinkIcon, Grid2x2XIcon, GripVerticalIcon, Heading1Icon, Heading2Icon, Heading3Icon, HighlighterIcon, ImageIcon, ImageOffIcon, InfoIcon, ItalicIcon, LinkIcon, ListChecksIcon, ListCollapseIcon, ListIcon, ListOrderedIcon,
   MessageSquarePlusIcon, MinusIcon, PencilIcon, FileDiffIcon, PilcrowIcon, ReplaceAllIcon, ReplaceIcon, StrikethroughIcon, TableColumnsSplitIcon, TableIcon, TableRowsSplitIcon, TextQuoteIcon, TriangleAlertIcon, UnlinkIcon } from "lucide-solid";
-import { createEffect, createSignal, onCleanup, Show, splitProps, type JSX } from "solid-js";
+import { children, createEffect, createSignal, onCleanup, Show, splitProps, type JSX } from "solid-js";
 // Through the barrel, as markup.tsx does, so the editor's chunk takes the header from the app's own.
 import { Button, FindBar, Frost, IconButton, Icons, LeadInput, PaneHeader, Spinner } from "./index";
 import { createArtWindow } from "./chat-art";
@@ -117,6 +117,8 @@ export function DocumentSheet(props: { ref?: (element: HTMLDivElement) => void; 
   // Each fold's need is measured as it is drawn (as the ribbon's are), so no width is named here. (The margin keeps its flex basis while tucked: it is
   // what says how wide it would stand.)
   const SNUG = 1, TUCKED = 2;
+  // Made once: a JSX prop makes its element anew on each read, and `Show` reads it for its test as well as for its child.
+  const margin = children(() => props.margin);
   const [fold, setFold] = createSignal(0);
   let column: HTMLDivElement | undefined, body: HTMLDivElement | undefined, aside: HTMLElement | undefined;
   // Both folds' needs are read in one go, snug put on the column and back for the reading (which restyles the column and its page alone), and the fold is
@@ -138,7 +140,7 @@ export function DocumentSheet(props: { ref?: (element: HTMLDivElement) => void; 
     {props.find}
     <div ref={(element) => { column = element; sized.observe(element); props.scroller?.(element); }} class="ui-document-column" data-snug={fold() === SNUG ? "" : undefined} onPointerMove={(event) => props.onHover?.(event)} onPointerLeave={() => props.onHover?.(null)}><div class="ui-document-page" data-margin={props.marginEmpty ? "none" : fold() === TUCKED ? "tucked" : "beside"}>
       <div ref={body} class="ui-document-body">{props.head}<div ref={props.ref} class="ui-document-content">{props.children}</div>{props.over}{props.foot}</div>
-      <Show when={props.margin}><aside ref={aside} class="ui-document-margin" aria-label="Comments">{props.margin}</aside></Show>
+      <Show when={margin()}><aside ref={aside} class="ui-document-margin" aria-label="Comments">{margin()}</aside></Show>
     </div></div>
     {props.edge}
   </section>;

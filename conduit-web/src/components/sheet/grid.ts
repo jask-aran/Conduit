@@ -438,6 +438,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       p.editor?.focus();
       if (col < 0 && onOutline(options.columns.outline("rows", p.map.sheet(row)), false, event.localEventX, event.localEventY, event.bounds.height, look.target)) return void events.outline?.("rows", p.map.sheet(row));
       const at = p.map.sheet(row), value = model.value(at, col), link = (event.ctrlKey || event.metaKey) && typeof value === "string" ? options.columns.link(at, col, value) : undefined;
+      // A click on the active cell of a larger selection selects that cell alone, as Excel's (the grid moves nothing for it).
+      const now = p.current.current, plain = !event.shiftKey && !event.ctrlKey && !event.metaKey;
+      if (plain && now && now.cell[0] === col && now.cell[1] === row && (others.length || p.current.columns.length || p.current.rows.length || now.range.width > 1 || now.range.height > 1)) select({ top: at, bottom: at, left: col, right: col });
       // Ctrl and a click follows a cell's link.
       if (link) return void events.follow?.(link);
       const cell = options.columns.mark(at, col) && event.localEventX >= event.bounds.width - Number(look.grid.headerIconSize) - 2 * Number(look.grid.cellHorizontalPadding) ? box(p, col, row) : undefined;
@@ -840,7 +843,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     const linked = cell && typeof value === "string" && options.columns.link(cell.row, cell.col, value) !== undefined;
     pressing = { add: add && !linked, cell, within: Boolean(cell && !linked && all().some((one) => inside(one, cell.row, cell.col))) };
   };
-  const letGo = () => { const was = pressing; pressing = null; if (was?.within && was.cell) deselect(was.cell); };
+  // A drag from the active cell (or its fill handle) moves no cell the grid would focus: the pane, which takes focus on a press, would keep the keyboard.
+  const letGo = () => { const was = pressing; pressing = null; if (was?.within && was.cell) deselect(was.cell); if (was && document.activeElement?.contains(element)) owner.editor?.focus(); };
   element.addEventListener("pointerdown", sweep); element.addEventListener("pointerdown", extend, true); element.addEventListener("pointerdown", press, true); addEventListener("pointerup", letGo);
   // A double click on a column letter's edge, or a row number's, fits that column or row to what it shows.
   const autofit = (event: MouseEvent) => {
@@ -899,8 +903,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   const paste = (at: { row: number; col: number }, given: readonly (readonly string[])[], values = false, transposed = false) => {
     // Copied here, the copy's own lines are pasted, at its own size.
     const from = copied && flat(given) === copied.text ? copied : null, straight = from ? (values ? from.values : from.typed) : given.at(-1)?.length === 0 ? given.slice(0, -1) : given;
-    // Into several ranges, only one cell is pasted, into every cell of each, as Excel's.
-    if (others.length) {
+    // Into several ranges, only one cell is pasted, into every cell of each, as Excel's; so is one cell into one range of several cells (not a lone merge).
+    const area = picked(), merge = area && mergeAt(area.top, area.left), lone = straight.length === 1 && straight[0]!.length === 1;
+    if (others.length || (lone && !transposed && area && (area.top !== area.bottom || area.left !== area.right) && !(merge && merge.bottom === area.bottom && merge.right === area.right))) {
       const input = straight.length === 1 && straight[0]!.length === 1 ? straight[0]![0]! : null;
       if (input === null) return events.refused();
       return write(cellsOf(all()).map(({ row, col }) => ({ row, col, input: from && !values && input.startsWith("=") ? shiftRefs(input, row - from.rows[0]!, col - from.cols[0]!) : input })), values ? "Paste values" : "Paste");

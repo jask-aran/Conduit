@@ -74,6 +74,11 @@
 
 :root { --menu-width-cap: calc(100vw - var(--space-xl)); --menu-height-cap: var(--measure-2xl); }
 @media (--conduit-phone-layout) { :root { --menu-width-cap: var(--measure-sm); --menu-height-cap: var(--measure-lg); } }
+/* Kobalte writes these on a popper's positioner as it places it: inherited, each write restyled the whole menu. The surface takes the one it reads. */
+@property --kb-popper-content-available-height { syntax: "*"; inherits: false; } @property --kb-popper-content-available-width { syntax: "*"; inherits: false; }
+@property --kb-popper-anchor-width { syntax: "*"; inherits: false; } @property --kb-popper-content-transform-origin { syntax: "*"; inherits: false; }
+@property --kb-popper-content-overflow-padding { syntax: "*"; inherits: false; } @property --menu-room { syntax: "*"; inherits: false; }
+[data-popper-positioner] > .ui-menu { --kb-popper-content-available-height: inherit; }
 .ui-menu { max-width: min(var(--menu-width, var(--menu-width-cap)), calc(100vw - var(--space-xl))); max-height: min(var(--menu-height, var(--menu-height-cap)), var(--menu-room, 100dvh));
   overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--tint) transparent; }
 .ui-menu-parent { display: flex; flex-direction: column; transition: filter var(--duration-quick) var(--ease-change); }

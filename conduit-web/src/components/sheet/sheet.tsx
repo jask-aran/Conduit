@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import { batch, createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, Show, untrack, type JSX } from "solid-js";
+import { batch, children, createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { Empty, Frost, Icons, Notice } from "@/components/ui";
 import { sheetLineIcons as LineIcons, sheetMergeIcons as MergeIcons, sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
 import { DedupePrompt, focusSearch, menuAt, SheetMenu, ShiftPrompt, SplitPrompt, type SheetMenuEntry, type SheetShiftWay } from "./cell-menu";
@@ -934,6 +934,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     ] as (SheetMenuEntry[] | false)[]).map((group) => group && guard(group));
   };
   createEffect(on(tabs.shown, () => setFiltering(null), { defer: true }));
+  // A JSX prop makes its element anew on each read: the margin is made once, or each read would be another margin fetching and laying out its cards.
+  const margin = children(() => props.margin);
   return <section ref={(element) => { root = element; art(element); }} class="ui-spreadsheet" aria-label={props.name} data-margin={props.marginEmpty ? "none" : "beside"}
     onKeyDown={(event) => {
       if (!(event.ctrlKey || event.metaKey) || !island()?.contains(event.target as Node)) return;
@@ -1072,11 +1074,11 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         <DedupePrompt asked={deduping() ? { range: rangeA1(deduping()!.range), header: deduping()!.header } : null} onRemove={(header) => { const asked = untrack(deduping); if (asked) dedupe(asked.range, header); }} onClose={() => { setDeduping(null); grid()?.focus(); }} />
         <SplitPrompt open={splitting() !== null} onSplit={(separator) => { const range = untrack(splitting); if (range) void split(range, separator); }} onClose={() => { setSplitting(null); grid()?.focus(); }} />
         <ShiftPrompt asked={shifting()} frame={() => body} onClose={() => { setShifting(null); grid()?.focus(); }} onChoose={(way) => { const asked = untrack(shifting); if (asked) shift(asked.verb, asked.range, way); }} />
-        <find.view beside={Boolean(props.margin) && !props.marginEmpty} />
+        <find.view beside={Boolean(margin()) && !props.marginEmpty} />
         <SheetShortcuts open={showingKeys()} onOpenChange={setShowingKeys} />
         <Show when={!model()}><Empty role="status" class="ui-spreadsheet-waiting">Opening the sheet…</Empty></Show>
       </Show>
-      <Show when={props.margin}><aside class="ui-spreadsheet-margin" aria-label="Comments">{props.margin}</aside></Show>
+      <Show when={margin()}><aside class="ui-spreadsheet-margin" aria-label="Comments">{margin()}</aside></Show>
     </div>
     <SheetFoot tabs={tabs} id={props.id} others={others} mode={() => extending() ? "Extend selection" : adding() ? "Add to selection" : null} format={(range) => formats.figure(range)} filtered={filters.counted} act={history.act} />
   </section>;
