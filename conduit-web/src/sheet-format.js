@@ -1,6 +1,6 @@
 import * as Y from "yjs";
 import { blockId } from "./block-id.js";
-import { getFormatFromId, parseValue } from "numfmt";
+import { format as formatValue, getFormatFromId, getFormatInfo, parseValue } from "numfmt";
 
 /*
  * A sheet (the `sheet` artifact kind): a workbook of tabs of cells kept in a Yjs doc that the hub and every open page merge, and computed by the same
@@ -149,6 +149,22 @@ export const readEntry = (input, format) => {
   if (!read || typeof read.value !== "number") return { input };
   if (typeof format === "string" && format.trim() === "@") return { input: `'${input}` };
   return plain || read.formatId === undefined ? { input } : { input: String(read.value), format: ENTERED[read.formatId] ?? getFormatFromId(read.formatId) };
+};
+
+/**
+ * A cell's input as it is edited, as Excel's formula bar shows it: a number in a date, time or percent format written as an entry of that kind that
+ * readEntry reads back to the same number (1/03/2026, 9:30:00 PM, 1/03/2026 9:30:00 PM, 5%); anything else (a plain or currency number, a formula,
+ * text) as it is.
+ */
+export const entryText = (input, format) => {
+  const text = input.trim();
+  if (typeof format !== "string" || !NUMBER.test(text)) return input;
+  const value = Number(text), { type } = getFormatInfo(format);
+  // The fewest digits that read back as the same number.
+  if (type === "percent") return [15, 16, 17].map((digits) => `${+(value * 100).toPrecision(digits)}%`).find((shown) => Number(readEntry(shown).input) === value) ?? input;
+  if ((type !== "date" && type !== "time" && type !== "datetime") || value < 0 || value >= 2958466) return input;
+  const day = type !== "time" || value >= 1, time = type !== "date" || value % 1 !== 0;
+  return formatValue([day && "d/mm/yyyy", time && "h:mm:ss AM/PM"].filter(Boolean).join(" "), value);
 };
 
 /**

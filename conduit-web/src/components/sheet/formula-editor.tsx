@@ -8,7 +8,8 @@ import { batch, createEffect, createMemo, createSignal, For, onCleanup, Show, un
 import { Item, Match, Section } from "@/components/ui";
 import { Popover, PopoverContent } from "@/components/ui/menus";
 import { a1, rangeA1 } from "@/sheet-format.js";
-import { contextAt, cycleAnchors, finish, INKS, inksOf, isFormula, tokenize, unknownCalls, type FormulaContext, type FormulaToken } from "./formula";
+import { escapeName, SPECIALS, structuredFor, tableAt, type TableInfos } from "@/sheet-structured.js";
+import { bracketAt, contextAt, cycleAnchors, finish, INKS, inksOf, isFormula, tokenize, unknownCalls, type FormulaContext, type FormulaToken } from "./formula";
 import { argumentAt, CHIPS, errorReason, FUNCTION_HELP, functionOffers, nearestFunctions, type FunctionOffer } from "./functions";
 import type { SheetGrid, SheetReference } from "./host";
 
@@ -26,6 +27,8 @@ export type FormulaEditorHost = {
   /** Every function the engine has registered, custom ones included. */
   functions(): readonly string[];
   write(row: number, col: number, input: string): void;
+  /** An entry a Stop rule refuses: true once its message is shown, and the edit stays (Excel's Retry). */
+  refuse?(row: number, col: number, input: string): boolean;
   /** Ctrl+Enter: what was typed in the cell written to every cell selected with it; false where the selection is that cell alone. */
   fill?(from: Cell, input: string): boolean;
   /** The merged range a cell is in, if any: a move leaves it from its far edge. */
@@ -38,6 +41,9 @@ export type FormulaEditorHost = {
   chip?(cell: Cell, name: string, offer: FunctionOffer): void;
   /** What `@` offers past CHIPS for what was typed after it. */
   chips?(query: string): readonly FunctionOffer[];
+  /** This tab's tables (sheet-structured.d.ts), and every table's name, for structured references. */
+  tables?(): TableInfos;
+  tableNames?(): readonly string[];
 };
 /** A function name the engine does not have, held at commit: where it stands in `text`, and the real names nearest it. */
 export type FormulaDoubt = { text: string; name: string; from: number; to: number; near: readonly FunctionOffer[] };
@@ -107,8 +113,22 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
     const was = doubt(), word = context().word;
     if (was) return was.near;
     const cell = editing()!, chip = host.chip && shut() !== text() && !host.input(cell.row, cell.col) ? /^@([^=\n]*)$/.exec(text()) : null;
-    if (chip) return [...Object.keys(CHIPS).filter((name) => name.toLowerCase().startsWith(chip[1]!.toLowerCase())).map((name) => ({ name, chip: true as const })), ...host.chips?.(chip[1]!) ?? []].slice(0, OFFERED);
-    return word && shut() !== text() ? functionOffers(word.text, names(), known(), OFFERED) : [];
+    // Every chip, under its group's title (People, Artifacts, Insert), the list scrolling.
+    if (chip) return [...host.chips?.(chip[1]!) ?? [], ...Object.keys(CHIPS).filter((name) => name.toLowerCase().startsWith(chip[1]!.toLowerCase())).map((name) => ({ name, chip: true as const, group: "Insert" }))];
+    if (shut() === text()) return [];
+    // In a table's brackets: its columns (and, but for `[@`, Excel's #All, #Data, #Headers, #Totals and #This Row).
+    const bracket = bracketAt(text(), caret());
+    if (bracket) {
+      const tables = host.tables?.(), tab = tables && [...tables.values()][0]?.tab, table = bracket.table ? tables?.get(bracket.table.toLowerCase()) : tables && tab ? tableAt(tables, { tab, row: cell.row, col: cell.col }) : undefined;
+      if (!table) return [];
+      const low = bracket.typed.toLowerCase(), close = "]".repeat(bracket.closes);
+      return [...table?.columns ?? [], ...bracket.row ? [] : SPECIALS].filter((name) => name.toLowerCase().startsWith(low)).slice(0, OFFERED).map((name) => ({
+        name, detail: name.startsWith("#") ? "Rows of the table" : `Column of ${table.name}`,
+        insert: { from: bracket.from, text: bracket.row && bracket.closes === 1 && !/^[\p{L}\p{N}_]+$/u.test(name) ? `[${escapeName(name)}]]` : escapeName(name) + close } }));
+    }
+    if (!word) return [];
+    const tableOffers = (host.tableNames?.() ?? []).filter((name) => name.toLowerCase().startsWith(word.text.toLowerCase())).map((name) => ({ name, detail: "Table", insert: { from: word.from, text: `${name}[` } }));
+    return [...tableOffers, ...functionOffers(word.text, names(), known(), OFFERED)].slice(0, OFFERED);
   });
   const hint = createMemo(() => editing() ? context().call : null, null, { equals: (a, b) => a?.name === b?.name && a?.arg === b?.arg });
   createEffect(() => { offered(); setActive(0); });
@@ -131,6 +151,7 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
     const unknown = check && isFormula(text()) && !doubt() ? unknownCalls(text(), tokens(), known())[0] : undefined;
     if (unknown) { const name = text().slice(unknown.from, unknown.to); setHeld({ text: text(), name, from: unknown.from, to: unknown.to, near: nearestFunctions(name, names(), known(), OFFERED) }); return; }
     const input = finish(text()), grid = host.grid();
+    if (check && input !== host.input(now.row, now.col) && host.refuse?.(now.row, now.col, input)) { const field = fields[place()]; if (field) getSelection()?.selectAllChildren(field); return; }
     end();
     if (input !== host.input(now.row, now.col)) host.write(now.row, now.col, input);
     // Moved as an arrow key moves the selection: scrolled only as far as it must be.
@@ -148,7 +169,9 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
     const was = pointing(), spot = was ?? context().point, now = text();
     if (!spot) return false;
     const replaced = now.slice(spot.from, spot.to), prefix = was ? was.prefix : replaced.endsWith(":") ? replaced : "";
-    const reference = prefix ? prefix + a1(at.row, at.col) : rangeA1(box(anchor, at)), to = spot.from + reference.length;
+    // A whole part of a table is written as Excel writes it (`[@Qty]`, `Sales[Amount]`).
+    const cell = editing()!, tables = host.tables?.(), first = tables && [...tables.values()][0];
+    const reference = prefix ? prefix + a1(at.row, at.col) : (first && structuredFor(tables, { tab: first.tab, row: cell.row, col: cell.col }, first.tab, box(anchor, at))) || rangeA1(box(anchor, at)), to = spot.from + reference.length;
     batch(() => { put(now.slice(0, spot.from) + reference + now.slice(spot.to), to); setPointing({ from: spot.from, to, prefix, anchor, at }); });
     host.grid()?.show(at.row, at.col);
     return true;
@@ -157,6 +180,7 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
   const accept = (offer: FunctionOffer) => {
     const chip = offer.chip && editing();
     if (chip) { end(); host.chip!(chip, offer.name, offer); return; }
+    if (offer.insert) { const now = text(), { from, text: name } = offer.insert; batch(() => { setHeld(null); put(now.slice(0, from) + name + now.slice(caret()), from + name.length); }); return; }
     const span = doubt() ?? context().word, now = text();
     if (!span) return;
     const rest = now.slice(span.to);
@@ -299,6 +323,14 @@ export function FormulaHelp(props: { editor: FormulaEditor; frame: () => HTMLEle
   </div>}</Show>;
   // Kept built, it is first placed while empty, so its placer never sees it run off the window to flip it: it opens on the side of the cell with more room.
   const below = () => { const box = editor.anchor()?.getBoundingClientRect(); return !box || box.top + box.bottom < innerHeight; };
+  // The offers in runs of one group each, every offer with its place in the whole list, which the arrows walk.
+  const groups = createMemo(() => editor.offered().reduce<{ title?: string; items: { offer: FunctionOffer; at: number }[] }[]>((out, offer, at) => {
+    const last = out.at(-1);
+    if (last && last.title === offer.group) last.items.push({ offer, at }); else out.push({ title: offer.group, items: [{ offer, at }] });
+    return out;
+  }, []));
+  let list: HTMLDivElement | undefined;
+  createEffect(() => { editor.active(); list?.querySelector("[aria-selected=true]")?.scrollIntoView({ block: "nearest" }); });
   return <Popover open={editor.offered().length > 0 || signature() !== null || editor.fault() !== null} anchorRef={props.frame} anchorRect={() => editor.anchor()?.getBoundingClientRect()} placement={below() ? "bottom-start" : "top-start"} kept>
     <PopoverContent aria-label="Functions" width="md" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}>
       <Show when={editor.offered().length} fallback={<Show when={signature()} fallback={fault()}>{(call) => {
@@ -308,12 +340,13 @@ export function FormulaHelp(props: { editor: FormulaEditor; frame: () => HTMLEle
           <Show when={call().help}>{(help) => <small>{help().about}</small>}</Show>
         </div>;
       }}</Show>}>
-        <Section role="listbox" title={editor.doubt() ? `${editor.doubt()!.name.toUpperCase()} is not a function` : undefined} note={editor.doubt() ? "Tab uses one · Enter keeps it" : undefined}>
-          <For each={editor.offered()}>{(offer, at) =>
-            <Item role="option" aria-selected={editor.active() === at()} active={editor.active() === at()} onMouseDown={keep} onClick={() => editor.accept(offer)} detail={offer.chip ? offer.detail ?? CHIPS[offer.name] : FUNCTION_HELP[offer.name]?.about} meta={offer.typedFor ? `for ${offer.typedFor}` : undefined}>
-              <Match text={offer.name} query={offer.chip ? editor.text().slice(1) : editor.doubt() ? "" : editor.context().word?.text ?? ""} />
-            </Item>}</For>
-        </Section>
+        <div role="listbox" ref={list}><For each={groups()}>{(group) =>
+          <Section title={group.title ?? (editor.doubt() ? `${editor.doubt()!.name.toUpperCase()} is not a function` : undefined)} note={editor.doubt() ? "Tab uses one · Enter keeps it" : undefined}>
+            <For each={group.items}>{({ offer, at }) =>
+              <Item role="option" aria-selected={editor.active() === at} active={editor.active() === at} onMouseDown={keep} onClick={() => editor.accept(offer)} detail={offer.chip ? offer.detail ?? CHIPS[offer.name] : FUNCTION_HELP[offer.name]?.about} meta={offer.typedFor ? `for ${offer.typedFor}` : undefined}>
+                <Match text={offer.name} query={offer.chip ? editor.text().slice(1) : editor.doubt() ? "" : editor.context().word?.text ?? ""} />
+              </Item>}</For>
+          </Section>}</For></div>
       </Show>
     </PopoverContent>
   </Popover>;

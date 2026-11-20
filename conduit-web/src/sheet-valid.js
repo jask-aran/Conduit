@@ -76,8 +76,10 @@ export function breaks(rule, value, { read, list, custom }) {
   return ok === undefined ? false : !ok;
 }
 
-/** A rule in words: "a whole number between 1 and 10". */
-export function ruleText(rule) {
+// A list said by its first few values.
+const FEW = 5;
+/** A rule in words: "a whole number between 1 and 10". `listed`: a list's values read from its cells, said instead of its reference. */
+export function ruleText(rule, listed) {
   const plain = (formula) => {
     const text = String(formula ?? "").replace(/^=/, ""), n = Number(text);
     if (text === "" || !Number.isFinite(n)) return text;
@@ -85,16 +87,18 @@ export function ruleText(rule) {
     if (rule.type === "time") { const minutes = Math.round(n * 1440); return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`; }
     return text;
   };
-  if (rule.type === "list") return `one of ${optionsOf(rule)?.map((one) => one.value).join(", ") ?? plain(rule.formula1)}`;
+  const values = rule.type === "list" ? optionsOf(rule)?.map((one) => one.value) ?? listed?.map(String) : undefined;
+  if (values) return `one of ${values.slice(0, FEW).join(", ")}${values.length > FEW ? ", …" : ""}`;
+  if (rule.type === "list") return `one of ${plain(rule.formula1)}`;
   if (rule.type === "custom") return `a value for which ${plain(rule.formula1)} is TRUE`;
   const operator = rule.operator ?? "between", two = operator === "between" || operator === "notBetween";
   return `${KIND_SAID[rule.type] ?? "a value"} ${SAID[operator] ?? operator} ${plain(rule.formula1)}${two ? ` and ${plain(rule.formula2)}` : ""}`;
 }
 
-/** What an entry breaking the rule at `row`, `col` is told: its own title and message, else what the cell takes. `stop`: the entry is refused. */
-export function refusal(rule, row, col) {
+/** What an entry breaking the rule at `row`, `col` is told: its own title and message, else what the cell takes. `stop`: the entry is refused. `listed`: as ruleText's. */
+export function refusal(rule, row, col, listed) {
   const style = rule.errorStyle === "warning" || rule.errorStyle === "information" ? rule.errorStyle : "stop";
-  const own = rule.error ? `${rule.errorTitle ? `${rule.errorTitle}: ` : ""}${rule.error}` : `${a1(row, col)} takes ${ruleText(rule)}`;
+  const own = rule.error ? `${rule.errorTitle ? `${rule.errorTitle}: ` : ""}${rule.error}` : `${a1(row, col)} takes ${ruleText(rule, listed)}`;
   return { stop: style === "stop" && on(rule.showErrorMessage), style, message: own };
 }
 
@@ -130,12 +134,13 @@ export function writeRule(look, sheet, area, attributes, columns) {
 }
 
 /**
- * The hub's judgement of cells about to be written (`[row, col, input]`), with the engine (`sheet.engine`, `sheet.sheet`): the first Stop rule an
- * entry breaks, as its message, else null. A formula entry is judged by what it computes; an operand the engine cannot compute lets the entry through.
+ * The hub's judgement of cells written or about to be (`[row, col, input]`), with the engine (`sheet.engine`, `sheet.sheet`): `each(row, col, said)`
+ * told of each that breaks its rule, until it returns false. A formula entry is judged by what it computes; an operand the engine cannot compute
+ * lets the entry through.
  */
-export function hubRefusal(look, sheet, written) {
+function judge(look, sheet, written, each) {
   const all = readValidations(look, sheet.id);
-  if (!Object.keys(all).length) return null;
+  if (!Object.keys(all).length) return;
   const calc = (formula) => { try { const out = sheet.engine.calculateFormula(formula, sheet.sheet); return out !== null && typeof out === "object" && !Array.isArray(out) ? undefined : out; } catch { return undefined; } };
   for (const [row, col, input] of written) {
     const rule = input ? ruleAt(look, sheet, row, col, all) : undefined;
@@ -143,13 +148,25 @@ export function hubRefusal(look, sheet, written) {
     const value = String(input).startsWith("=") ? calc(String(input)) : entryValue(input);
     if (value === undefined || Array.isArray(value)) continue;
     const at = () => anchorOf(look, sheet, rule.id);
+    const list = (formula) => { const out = calc(`=${String(formula ?? "").replace(/^=/, "")}`); return Array.isArray(out) ? out.flat().filter((one) => one !== null && one !== "").map(String) : out === undefined ? undefined : [String(out)]; };
     const broken = breaks(rule, value, {
       read: (formula) => { const kept = constant(formula); if (kept !== undefined) return kept; const out = calc(`=${String(formula ?? "").replace(/^=/, "")}`); return Array.isArray(out) ? undefined : out; },
-      list: (formula) => { const out = calc(`=${String(formula ?? "").replace(/^=/, "")}`); return Array.isArray(out) ? out.flat().filter((one) => one !== null && one !== "").map(String) : out === undefined ? undefined : [String(out)]; },
-      custom: (formula) => calc(customAt(formula, at(), row, col, value)),
+      list, custom: (formula) => calc(customAt(formula, at(), row, col, value)),
     });
-    const said = broken ? refusal(rule, row, col) : null;
-    if (said?.stop) return said.message;
+    if (broken && each(row, col, refusal(rule, row, col, rule.type === "list" ? list(rule.formula1) : undefined)) === false) return;
   }
-  return null;
 }
+/** The first Stop rule an entry about to be written breaks, as its message naming the cell, else null. */
+export function hubRefusal(look, sheet, written) {
+  let out = null;
+  judge(look, sheet, written, (row, col, said) => { if (!said.stop) return true; out = said.message.startsWith(`${a1(row, col)} `) ? said.message : `${a1(row, col)}: ${said.message}`; return false; });
+  return out;
+}
+/** The cells just written that break their rules, as `[row, col]`, as a fill lets them through. */
+export function hubBroken(look, sheet, written) {
+  const out = [];
+  judge(look, sheet, written, (row, col) => { out.push([row, col]); });
+  return out;
+}
+/** What a person is told of the values a paste or fill let through that break their rules: how many, and the first. */
+export const brokenText = (count, first, verb) => count === 1 ? `A ${verb} value breaks a rule, at ${first}` : `${count} ${verb} values break a rule, first at ${first}`;

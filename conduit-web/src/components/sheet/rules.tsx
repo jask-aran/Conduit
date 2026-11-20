@@ -134,11 +134,12 @@ export function createSheetRules(look: Y.Map<number | string>, model: Accessor<S
     change(at: number, rule: Omit<SheetRule, "ranges" | "anchor">) { const id = model()?.id, list = own(), was = list[at]; if (!id || !was) return; list[at] = { ...rule, ...(was.stop ? { stop: true } : {}), ranges: was.ranges, anchor: was.anchor }; look.set(`rules:${id}`, JSON.stringify(list)); setVersion((n) => n + 1); },
     raise(at: number) { const id = model()?.id, list = own(); if (!id || at < 1 || !list[at]) return; [list[at - 1], list[at]] = [list[at]!, list[at - 1]!]; look.set(`rules:${id}`, JSON.stringify(list)); setVersion((n) => n + 1); },
     /** A rule on `area` (clipped to the tab) put first, as a spreadsheet puts a new one. */
-    add(area: Range, rule: Omit<SheetRule, "ranges" | "anchor">) {
+    /** `more`: the other ranges selected with it, which the one rule covers too, as Excel's applies to several. */
+    add(area: Range, rule: Omit<SheetRule, "ranges" | "anchor">, more: readonly Range[] = []) {
       const sheet = model(), size = sheet?.size();
       if (!sheet?.id || !size || area.top >= size.rows || area.left >= size.cols) return;
-      const from = key(sheet.rowAt(area.top)!, sheet.colAt(area.left)!), to = key(sheet.rowAt(Math.min(area.bottom, size.rows - 1))!, sheet.colAt(Math.min(area.right, size.cols - 1))!);
-      look.set(`rules:${sheet.id}`, JSON.stringify([{ ...rule, ranges: [[from, to]], anchor: a1(area.top, area.left) }, ...readRules(look.get(`rules:${sheet.id}`))].slice(0, RULE_LIMIT)));
+      const ranges = [...more, area].filter((one) => one.top < size.rows && one.left < size.cols).map((one) => [key(sheet.rowAt(one.top)!, sheet.colAt(one.left)!), key(sheet.rowAt(Math.min(one.bottom, size.rows - 1))!, sheet.colAt(Math.min(one.right, size.cols - 1))!)]);
+      look.set(`rules:${sheet.id}`, JSON.stringify([{ ...rule, ranges, anchor: a1(area.top, area.left) }, ...readRules(look.get(`rules:${sheet.id}`))].slice(0, RULE_LIMIT)));
       setVersion((n) => n + 1);
     },
     count: () => { const id = model()?.id; return id ? readRules(look.get(`rules:${id}`)).length : 0; },

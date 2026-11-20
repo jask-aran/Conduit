@@ -1,4 +1,4 @@
-import { colIndex, colName, key, parseRange, rangeA1, rangedArea } from "./sheet-format.js";
+import { CELLS, colIndex, colName, key, parseRange, rangeA1, rangedArea, rowId, rowsOf as linesOf, tabRef } from "./sheet-format.js";
 import { blockId } from "./block-id.js";
 
 /*
@@ -52,6 +52,9 @@ const meets = (one, two) => one.top <= two.bottom && two.top <= one.bottom && on
 
 /** A table's rows by index: its header (-1: none), its first and last data rows, its total row (-1: none). */
 export const rowsOf = (area, table) => ({ header: table.header === false ? -1 : area.top, first: area.top + (table.header === false ? 0 : 1), last: area.bottom - (table.total ? 1 : 0), total: table.total ? area.bottom : -1 });
+/** A placed table of a tab as structured references read it (sheet-structured.d.ts TableInfo). */
+export const infoOf = (sheet, { table, range }) => ({ name: table.name, tab: sheet.id, sheet: tabRef(sheet.name), ...rowsOf(range, table), left: range.left, right: range.right,
+  columns: Array.from({ length: range.right - range.left + 1 }, (_, n) => columnName(sheet, table, range, range.left + n)) });
 /** A tab's tables where they are now (by index); those whose corners are gone left out. */
 export const placed = (look, sheet) => readTables(look, sheet.id).flatMap((table) => { const range = rangedArea(sheet, table); return range ? [{ table, range }] : []; });
 /** The table's filter as a tab's is held (sheet-format.d.ts SheetRangedLook: its header row to its last data row), or null where it shows none. */
@@ -61,9 +64,11 @@ export function tableFilter(sheet, table, area) {
   return { from: table.from, to: key(sheet.rowAt(last), sheet.colAt(area.right)), keep: table.keep, when: table.when, hide: table.hide };
 }
 
-/** The SUBTOTAL a total cell writes for a function of TOTALS over a data column (101-109: the rows a filter hides left out, as Excel's). */
+/** The SUBTOTAL a total cell writes for a function of TOTALS over its column, named (101-109: the rows a filter hides left out, as Excel's). */
 const CODES = { average: 101, count: 103, countNums: 102, max: 104, min: 105, sum: 109 };
-export const totalFormula = (fn, column) => CODES[fn] ? `=SUBTOTAL(${CODES[fn]},${rangeA1(column)})` : "";
+export const totalFormula = (fn, name) => CODES[fn] ? `=SUBTOTAL(${CODES[fn]},[${name.replace(/['#[\]]/g, "'$&")}])` : "";
+/** A table's column's name: its header's text, Column<n> where it has none. */
+export const columnName = (sheet, table, range, col) => (table.header === false ? "" : sheet.input(range.top, col)) || `Column${col - range.left + 1}`;
 /** The function of TOTALS a total cell's formula is, or undefined. */
 export function totalOf(input) {
   const code = /^=SUBTOTAL\((\d+),[^,()]+\)$/i.exec(String(input ?? "").replace(/\s/g, ""))?.[1];
@@ -117,7 +122,7 @@ export function changeTable(look, sheet, id, change, set) {
       range = { ...range, bottom: row };
       set(row, range.left, "Total");
       for (let c = range.left + 1; c < range.right; c++) set(row, c, "");
-      if (range.right > range.left) set(row, range.right, totalFormula("sum", { top: rowsOf(range, table).first, bottom: row - 1, left: range.right, right: range.right }));
+      if (range.right > range.left) set(row, range.right, totalFormula("sum", columnName(sheet, table, range, range.right)));
       table = { ...table, total: true };
     } else {
       for (let c = range.left; c <= range.right; c++) set(range.bottom, c, "");
@@ -177,10 +182,24 @@ const newRow = (look, sheet, range, rows, grown, input, set, shift) => {
     if (above.startsWith("=") && Array.from({ length: range.bottom - rows.first + 1 }, (_, n) => input(rows.first + n, c)).every((one) => one.startsWith("="))) set(grown.bottom, c, shift(above, 1, 0));
   }
 };
-/** A row added under a table's last (Tab in its last cell), where that row is empty and the table has no total row; its index, or null. */
+/**
+ * A row added under a table's last data row (Tab in its last cell): with a total row, a tab's row put in above it, which the table's corners then
+ * hold; else the row under it where that is empty. Its index, or null.
+ */
 export function addTableRow(look, sheet, id, set, shift) {
   const list = placed(look, sheet), one = list.find((each) => each.table.id === id);
-  if (!one || one.table.total) return null;
+  if (!one) return null;
+  if (one.table.total) {
+    const { range, table } = one, rows = rowsOf(range, table), made = rowId(), cells = look.doc.getMap(CELLS);
+    look.doc.getArray(linesOf(sheet.id)).insert(range.bottom, [made]);
+    // The view reads the new row's index once the step is done: its cells and look are written by its id.
+    for (let c = range.left; c <= range.right; c++) {
+      const col = sheet.colAt(c), above = sheet.input(rows.last, c);
+      for (const what of ["type", "fmt", "style"]) { const kept = look.get(`${what}:${key(sheet.rowAt(rows.last), col)}`); if (kept !== undefined) look.set(`${what}:${key(made, col)}`, kept); }
+      if (above.startsWith("=") && Array.from({ length: rows.last - rows.first + 1 }, (_, n) => sheet.input(rows.first + n, c)).every((each) => each.startsWith("="))) cells.set(key(made, col), shift(above, 1, 0));
+    }
+    return range.bottom;
+  }
   const { table, range } = one, row = range.bottom + 1, grown = { ...range, bottom: row };
   if (row >= sheet.size().rows || list.some((each) => each !== one && meets(each.range, { ...range, top: row, bottom: row })) || Array.from({ length: range.right - range.left + 1 }, (_, c) => sheet.input(row, range.left + c)).some(Boolean)) return null;
   newRow(look, sheet, range, rowsOf(range, table), grown, (r, c) => sheet.input(r, c), set, shift);
@@ -196,7 +215,7 @@ export function putFilter(look, sheet, id, { keep, when, hide }) {
   }));
 }
 /** The SUBTOTAL a table's total cell writes for `fn` (TOTALS, or "none"), over its column's data. */
-export function totalAt(table, range, col, fn) { const { first, last } = rowsOf(range, table); return fn === "none" ? "" : totalFormula(fn, { top: first, bottom: last, left: col, right: col }); }
+export function totalAt(sheet, table, range, col, fn) { return fn === "none" ? "" : totalFormula(fn, columnName(sheet, table, range, col)); }
 // A cell's own type, number format and style, as the cell above has them.
 const copyLook = (look, sheet, fromRow, fromCol, row, col) => {
   for (const what of ["type", "fmt", "style"]) {

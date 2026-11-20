@@ -85,7 +85,7 @@ const PRESETS: Readonly<Record<string, { detail: string; options: SheetOption[] 
   Rating: { detail: "One to five stars", options: [1, 2, 3, 4, 5].map((n) => ({ value: "★".repeat(n) + "☆".repeat(5 - n) })) },
   "Yes/No": { detail: "Yes or No", options: [{ value: "Yes", ink: "green" }, { value: "No", ink: "red" }] },
 };
-const WEB = /^https?:\/\/[^\s]+$/i;
+const WEB = /^https?:\/\/[^\s]+$/i, USED = "conduit:sheet-chips-used";
 type Cell = { row: number; col: number };
 type Card = { row: number; col: number; box: SheetBox; kind: string; title: string; meta?: string; actions: readonly SheetChipAction[] };
 
@@ -129,17 +129,22 @@ export function createChipControl(o: {
     return made("Date", undefined, [{ label: "Pick a date", keys: ["Alt", "↓"], run: () => o.openDate(row, col) }]);
   };
   const people = () => o.host.people?.() ?? [], artifacts = () => o.host.artifacts?.() ?? [];
+  // How often this viewer has taken each offer, so the most used stand first in their group (a per-viewer convenience: lost, the order is the list's own).
+  const used = (): Record<string, number> => { try { return JSON.parse(localStorage.getItem(USED) ?? "{}") ?? {}; } catch { return {}; } };
+  const use = (id: string) => { try { const all = used(); all[id] = (all[id] ?? 0) + 1; localStorage.setItem(USED, JSON.stringify(all)); } catch { /* not kept */ } };
   const offers = (query: string): FunctionOffer[] => {
-    const needle = query.trim().toLowerCase(), hit = (name: string) => !needle || name.toLowerCase().includes(needle);
+    const needle = query.trim().toLowerCase(), hit = (name: string) => !needle || name.toLowerCase().includes(needle), counts = used();
+    const ranked = (group: string, list: FunctionOffer[]) => list.map((one) => ({ ...one, group })).sort((a, b) => (counts[b.id!] ?? 0) - (counts[a.id!] ?? 0));
     return [
-      ...people().filter((one) => hit(one.name)).map((one) => ({ name: one.name, chip: true as const, detail: one.role, id: `person:${one.id}` })),
-      ...Object.entries(PRESETS).filter(([name]) => hit(name)).map(([name, one]) => ({ name, chip: true as const, detail: `Dropdown: ${one.detail}`, id: `preset:${name}` })),
-      ...artifacts().filter((one) => hit(one.name)).map((one) => ({ name: one.name, chip: true as const, detail: ARTIFACT_NAMES[one.type], id: `artifact:${one.id}` })),
+      ...ranked("People", people().filter((one) => hit(one.name)).map((one) => ({ name: one.name, chip: true as const, detail: one.role, id: `person:${one.id}` }))),
+      ...ranked("Artifacts", artifacts().filter((one) => hit(one.name)).map((one) => ({ name: one.name, chip: true as const, detail: ARTIFACT_NAMES[one.type], id: `artifact:${one.id}` }))),
+      ...ranked("Insert", Object.entries(PRESETS).filter(([name]) => hit(name)).map(([name, one]) => ({ name, chip: true as const, detail: `Dropdown: ${one.detail}`, id: `preset:${name}` }))),
     ];
   };
   /** An offer of `offers` taken in an empty cell; false where it is none of them. */
   const take = ({ row, col }: Cell, taken: FunctionOffer) => {
     const [what, ...rest] = (taken.id ?? "").split(":"), id = rest.join(":");
+    if (taken.id) use(taken.id);
     if (what === "person") { const one = people().find((person) => person.id === id); if (one) set("Person chip", row, col, { kind: "person", id: one.id, name: one.name, role: one.role }); }
     else if (what === "artifact") { const one = artifacts().find((made) => made.id === id); if (one) set("File chip", row, col, { kind: "artifact", id: one.id, name: one.name, type: one.type }); }
     else if (what === "preset" && PRESETS[id]) return void o.dropdown({ top: row, bottom: row, left: col, right: col }, PRESETS[id]!.options), true;

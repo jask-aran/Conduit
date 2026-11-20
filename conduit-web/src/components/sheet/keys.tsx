@@ -18,6 +18,7 @@ const SHEET_KEYS: [string, [string, ...string[]][]][] = [
     ["Extend the selection", "Shift+Arrow"], ["Extend to the edge of the data", "Ctrl+Shift+Arrow"], ["Extend to the last cell used", "Ctrl+Shift+End"],
     ["Current region, then the whole sheet", "Ctrl+A"], ["Current region", "Ctrl+Shift+*"], ["Whole sheet", "Ctrl+Shift+Space"],
     ["Whole column", "Ctrl+Space"], ["Whole row", "Shift+Space"], ["Only the active cell", "Shift+Backspace", "Esc"], ["Extend the selection with the arrows, on or off", "F8"],
+    ["Add a cell, range, column or row to the selection", "Ctrl+Click", "Ctrl+Drag"], ["Take a selected cell out of it", "Ctrl+Click"], ["Add the next range with the arrows, on or off", "Shift+F8"],
   ]],
   ["Edit", [
     ["Edit the cell", "F2"], ["Start typing over the cell", "Any letter or number"], ["Cancel the entry", "Esc"], ["New line in the cell", "Alt+Enter"],

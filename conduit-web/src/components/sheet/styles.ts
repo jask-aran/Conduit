@@ -43,7 +43,8 @@ export interface SheetStyles {
   /** Every style the range wears its own, borders too, taken off (Clear formatting). */
   clear(range: SheetRange): void;
   /** Ctrl with B, I, U or 5 toggles that on the range, from what its first cell wears. True when taken. */
-  key(event: KeyboardEvent, range: SheetRange | null): boolean;
+  /** `from`: the range whose first cell says which way a toggle goes (the active range, with several selected). */
+  key(event: KeyboardEvent, range: SheetRange | null, from?: SheetRange): boolean;
   /** How many lines a cell's text takes: wrapped to its column's width where it wraps (sizes.ts fits a row by it). */
   lines(row: number, col: number, text: string, look: SheetLook): number;
   /** How wide a cell's text is drawn in its font: its widest line, or the width it wraps to. */
@@ -131,14 +132,14 @@ export function createSheetStyles(look: Y.Map<number | string>, model: Accessor<
     set: (range, style) => write(range, { style }),
     borders: (range, kind) => write(range, { borders: kind }),
     clear: (range) => write(range, { style: { bold: false, italic: false, underline: false, strike: false, wrap: false, color: null, fill: null, align: null, valign: null, size: null, borderColor: null, borderWeight: null }, borders: "none" }),
-    key: (event, range) => {
+    key: (event, range, from = range ?? undefined) => {
       // As a spreadsheet's: Ctrl+Shift+& draws the range's outline, Ctrl+Shift+_ takes its borders off.
       const edge = (event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey ? ({ Digit7: "outer", Minus: "none" } as const)[event.code as "Digit7" | "Minus"] : undefined;
       if (edge && range) { event.preventDefault(); write(range, { borders: edge }); return true; }
       const name = (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey ? KEYS[event.code] : undefined;
       if (!name || !range) return false;
       event.preventDefault();
-      write(range, { style: { [name]: !worn(range.top, range.left)[name] } });
+      write(range, { style: { [name]: !worn(from!.top, from!.left)[name] } });
       return true;
     },
     lines: count,

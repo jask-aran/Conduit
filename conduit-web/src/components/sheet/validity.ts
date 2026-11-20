@@ -34,21 +34,25 @@ export function createSheetValidity(look: Y.Map<number | string>, model: () => S
     custom: () => undefined,
   });
   return {
-    /** The cells a write may make here (`local`), those sent to the hub to be judged with the engine (`hub`), and why it is refused, if it is. */
-    sort(list: readonly Cell[]): { local: Cell[]; hub: Cell[]; refused?: string; told?: string } {
+    /**
+     * The cells a write may make here (`local`), those sent to the hub to be judged with the engine (`hub`), and why it is refused, if it is.
+     * `lenient` (a paste, as Excel's): nothing is refused or sent to be judged; `broken` counts what breaks its rule, and names the first.
+     */
+    sort(list: readonly Cell[], lenient = false): { local: Cell[]; hub: Cell[]; refused?: string; told?: string; broken?: { count: number; first: Cell } } {
       const sheet = sheetOf();
       if (!sheet || !Object.keys(rules(sheet)).length) return { local: [...list], hub: [] };
       const local: Cell[] = [], hub: Cell[] = [];
-      let told: string | undefined;
+      let told: string | undefined, count = 0, first: Cell | undefined;
       for (const cell of list) {
         const rule = cell.input ? ruleOf(sheet, cell.row, cell.col) : undefined;
         if (!rule) { local.push(cell); continue; }
-        const broken = cell.input.startsWith("=") ? undefined : breaks(rule, entryValue(cell.input), reads(sheet));
+        const read = reads(sheet), broken = cell.input.startsWith("=") ? undefined : breaks(rule, entryValue(cell.input), read);
+        if (lenient) { if (broken) { count++; first ??= cell; } local.push(cell); continue; }
         if (broken === undefined) { hub.push(cell); continue; }
-        if (broken) { const said = refusal(rule, cell.row, cell.col); if (said.stop) return { local: [], hub: [], refused: said.message }; told ??= said.message; }
+        if (broken) { const said = refusal(rule, cell.row, cell.col, rule.type === "list" ? read.list(rule.formula1) : undefined); if (said.stop) return { local: [], hub: [], refused: said.message }; told ??= said.message; }
         local.push(cell);
       }
-      return { local, hub, told };
+      return { local, hub, told, ...first ? { broken: { count, first } } : {} };
     },
     /** Whether a drawn cell breaks its rule (a custom rule, or one reading what the page can't, is not marked). */
     invalid(row: number, col: number) {

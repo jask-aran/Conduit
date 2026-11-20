@@ -111,8 +111,9 @@ export const FUNCTION_HELP: Readonly<Record<string, FunctionHelp>> = {
 };
 
 /** A function offered: its name, and the other name it was typed as (WRONG_NAMES), shown as "for" that. */
-/** `detail` and `id`: a chip the sheet offers past CHIPS (a person, an artifact, a ready-made dropdown), by its id. */
-export type FunctionOffer = { name: string; typedFor?: string; chip?: true; detail?: string; id?: string };
+/** `detail` and `id`: a chip the sheet offers past CHIPS (a person, an artifact, a ready-made dropdown), by its id; `group`: the title it is listed under. */
+/** `insert`: a table's or column's name, written over the text from `from` to the caret. */
+export type FunctionOffer = { name: string; typedFor?: string; chip?: true; detail?: string; id?: string; group?: string; insert?: { from: number; text: string } };
 /** What `@` in an empty cell offers, as a spreadsheet's smart chips: a type for the cell, or today's date written in it. */
 export const CHIPS: Readonly<Record<string, string>> = { Date: "A date picked from a calendar", Dropdown: "Options to pick from", Today: "Today's date" };
 

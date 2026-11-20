@@ -137,7 +137,8 @@ const REF = /(?<![\w.$])(?:(\$?[A-Za-z]{1,3}\$?\d+)(?::(\$?[A-Za-z]{1,3}\$?\d+))
 const movedCol = (text, by) => { const held = text.startsWith("$"), col = colIndex(text.replace("$", "")) + (held ? 0 : by); return col < 0 || col >= 16384 ? null : `${held ? "$" : ""}${colName(col)}`; };
 const movedRow = (text, by) => { const held = text.startsWith("$"), row = Number(text.replace("$", "")) + (held ? 0 : by); return row < 1 || row > 1048576 ? null : `${held ? "$" : ""}${row}`; };
 const movedCell = (text, rows, cols) => { const [, col, row] = /^(\$?[A-Za-z]+)(\$?\d+)$/.exec(text), c = movedCol(col, cols), r = movedRow(row, rows); return c && r && c + r; };
-export const shiftRefs = (formula, rows, cols) => !rows && !cols ? formula : String(formula).split(/("(?:[^"]|"")*"|'(?:[^']|'')*')/).map((part, nth) => nth % 2 ? part
+// A structured reference's brackets (sheet-structured.js) are kept as they are: `[@Q1]` names a column, not a cell.
+export const shiftRefs = (formula, rows, cols) => !rows && !cols ? formula : String(formula).split(/("(?:[^"]|"")*"|'(?:[^']|'')*'|\[(?:[^[\]']|'.|\[(?:[^[\]']|'.)*\])*\])/).map((part, nth) => nth % 2 ? part
   : part.replace(REF, (all, from, to, colFrom, colTo, rowFrom, rowTo) => {
     const ends = from ? [movedCell(from, rows, cols), to && movedCell(to, rows, cols)] : colFrom ? [movedCol(colFrom, cols), movedCol(colTo, cols)] : [movedRow(rowFrom, rows), movedRow(rowTo, rows)];
     return ends.some((end) => end === null) ? "#REF!" : ends.filter(Boolean).join(":");

@@ -25,7 +25,7 @@ export function DropdownList(props: { at: SheetBox | null; options: readonly She
     anchorRect={() => { const box = props.at; return box ? new DOMRect(box.left, box.top, box.width, box.height) : undefined; }}>
     <PopoverContent aria-label="Options" width="sm">
       <SearchList items={[...props.options]} placeholder="Search options" empty="No option matches." matches={(one, needle) => one.value.toLowerCase().includes(needle)}
-        isCurrent={(one) => one.value === props.value} onChoose={(one) => props.onPick(one.value)} row={(one) => ({ icon: swatch(one.ink), label: one.value })} />
+        isCurrent={(one) => one.value === props.value} onCurrent onChoose={(one) => props.onPick(one.value)} row={(one) => ({ icon: swatch(one.ink), label: one.value })} />
       <Section><MenuAction onClick={props.onEdit}>Edit options</MenuAction></Section>
     </PopoverContent>
   </Popover>;
