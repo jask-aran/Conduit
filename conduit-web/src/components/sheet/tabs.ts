@@ -1,6 +1,8 @@
 import { createSignal, type Accessor } from "solid-js";
 import type * as Y from "yjs";
 import { createSheetView, LOOK, parseRange, parseRef, rangeA1, tabRef, type SheetBook, type SheetChange, type SheetTabOp, type SheetTabsResult, type SheetView, type Tab } from "@/sheet-format.js";
+import { toA1, type TableInfos } from "@/sheet-structured.js";
+import { infoOf, placed } from "@/sheet-tables.js";
 import type { SheetAnchor, SheetCellsOp, SheetGrid, SheetHost, SheetRange } from "./host";
 
 /** What the foot needs of the editor: the workbook's tabs (hidden ones too), the one shown, showing one, the hub's tab verbs, the cells selected, the shown tab and whether values are still being computed. */
@@ -54,7 +56,12 @@ export function createSheetTabs(options: { doc: Y.Doc; host: SheetHost; id: stri
   const kept = new Map<string, Kept>(), listeners = new Set<(change: SheetChange) => void>(), look = options.doc.getMap<unknown>(LOOK), [colored, setColored] = createSignal(0);
   look.observe((event) => { for (const name of event.keysChanged) if (name.startsWith("tabColor:")) return void setColored((n) => n + 1); });
   let book: SheetBook | undefined, worker: Worker | undefined, views = new Map<string, SheetView>(), current: SheetView | undefined, off = () => {}, waiting: string | undefined, followed: string | undefined;
-  const view = (id: string) => views.get(id) ?? views.set(id, book!.tab(id)).get(id)!;
+  const view = (id: string) => views.get(id) ?? views.set(id, structured(book!.tab(id))).get(id)!;
+  // Every tab's tables as structured references read them, built once a task (a frame's draw asks for them per cell).
+  let infos: TableInfos | null = null;
+  const tablesNow = () => { if (!infos) { infos = new Map(book!.tabs().flatMap((tab) => { const sheet = view(tab.id); return placed(look as never, sheet).map((one) => [one.table.name.toLowerCase(), infoOf(sheet, one)] as const); })); queueMicrotask(() => { infos = null; }); } return infos; };
+  // A tab's view reads a rule's or list's structured references (`=Sales[Status]`) as A1, as the engine reads a cell's.
+  const structured = (one: SheetView): SheetView => Object.assign(one, { a1: (formula: string, row = 0, col = 0) => { const text = String(formula); if (!text.includes("[") && !/[A-Za-z_]{2}/.test(text)) return text; const tables = tablesNow(); const done = tables.size && one.id ? toA1(text, tables, { tab: one.id, row, col }) : null; return done ? done.a1 : text; } });
   const visible = () => tabs().filter((tab) => !tab.hidden);
   const stored = () => { try { return localStorage.getItem(STORE + options.id) ?? undefined; } catch { return undefined; } };
 
@@ -62,7 +69,7 @@ export function createSheetTabs(options: { doc: Y.Doc; host: SheetHost; id: stri
   const proxy: SheetView = {
     get id() { return current?.id; }, get name() { return current?.name ?? ""; },
     size: () => current!.size(), input: (r, c) => current!.input(r, c), inputs: () => current!.inputs(), value: (r, c) => current!.value(r, c), error: (r, c) => current!.error(r, c),
-    rowAt: (i) => current!.rowAt(i), colAt: (i) => current!.colAt(i), indexOfRow: (id) => current!.indexOfRow(id), indexOfCol: (id) => current!.indexOfCol(id),
+    rowAt: (i) => current!.rowAt(i), colAt: (i) => current!.colAt(i), indexOfRow: (id) => current!.indexOfRow(id), indexOfCol: (id) => current!.indexOfCol(id), a1: (formula, row, col) => current?.a1?.(formula, row, col) ?? formula,
     onChange: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
     destroy: () => { off(); listeners.clear(); book?.destroy(); worker?.terminate(); },
   };

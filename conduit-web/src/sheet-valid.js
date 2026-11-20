@@ -141,7 +141,7 @@ export function writeRule(look, sheet, area, attributes, columns) {
 function judge(look, sheet, written, each) {
   const all = readValidations(look, sheet.id);
   if (!Object.keys(all).length) return;
-  const calc = (formula) => { try { const out = sheet.engine.calculateFormula(formula, sheet.sheet); return out !== null && typeof out === "object" && !Array.isArray(out) ? undefined : out; } catch { return undefined; } };
+  const calc = (formula, row = 0, col = 0) => { try { const out = sheet.engine.calculateFormula(sheet.a1 ? sheet.a1(formula, row, col) : formula, sheet.sheet); return out !== null && typeof out === "object" && !Array.isArray(out) ? undefined : out; } catch { return undefined; } };
   for (const [row, col, input] of written) {
     const rule = input ? ruleAt(look, sheet, row, col, all) : undefined;
     if (!rule) continue;
@@ -151,7 +151,7 @@ function judge(look, sheet, written, each) {
     const list = (formula) => { const out = calc(`=${String(formula ?? "").replace(/^=/, "")}`); return Array.isArray(out) ? out.flat().filter((one) => one !== null && one !== "").map(String) : out === undefined ? undefined : [String(out)]; };
     const broken = breaks(rule, value, {
       read: (formula) => { const kept = constant(formula); if (kept !== undefined) return kept; const out = calc(`=${String(formula ?? "").replace(/^=/, "")}`); return Array.isArray(out) ? undefined : out; },
-      list, custom: (formula) => calc(customAt(formula, at(), row, col, value)),
+      list, custom: (formula) => calc(customAt(formula, at(), row, col, value), row, col),
     });
     if (broken && each(row, col, refusal(rule, row, col, rule.type === "list" ? list(rule.formula1) : undefined)) === false) return;
   }

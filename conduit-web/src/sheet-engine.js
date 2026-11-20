@@ -406,6 +406,7 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
       error: (r, c) => { const value = read(r, c); return isError(value) ? value.message || value.value : null; },
       rowAt: (i) => t().rowIds[i], colAt: (i) => t().colIds[i],
       indexOfRow: (id) => t().rowIndex.get(id) ?? -1, indexOfCol: (id) => t().colIndex.get(id) ?? -1,
+      a1: (formula, row = 0, col = 0) => { const text = String(formula ?? ""), done = infos.size && t().id !== undefined ? toA1(text, infos, { tab: t().id, row, col }) : null; return done ? done.a1 : text; },
       onChange(listener) {
         const one = (change) => {
           const id = which(), moved = change.structure.includes(id);

@@ -12,7 +12,8 @@ import type { SheetRange } from "./host";
 type Cell = { row: number; col: number; input: string };
 type Sheet = SheetView & { id: string };
 const CELL = /^\$?[A-Z]{1,3}\$?\d+$/i, RANGE = /^\$?[A-Z]{1,3}\$?\d+(:\$?[A-Z]{1,3}\$?\d+)?$/i;
-const bare = (formula: unknown) => String(formula ?? "").trim().replace(/^=/, "");
+// A table's column or row part (`=Sales[Status]`) is read as the cells it is now.
+const bareOf = (sheet: SheetView) => (formula: unknown) => { const text = String(formula ?? "").trim(); return (sheet.a1 ? sheet.a1(text) : text).replace(/^=/, ""); };
 
 export function createSheetValidity(look: Y.Map<number | string>, model: () => SheetView | undefined) {
   const kept = look as unknown as Y.Map<unknown>;
@@ -22,7 +23,7 @@ export function createSheetValidity(look: Y.Map<number | string>, model: () => S
   const sheetOf = () => { const sheet = model(); return sheet?.id ? sheet as Sheet : undefined; };
   const ruleOf = (sheet: Sheet, row: number, col: number): SheetRule | undefined => { const held = rules(sheet); for (const _ in held) return ruleAt(kept, sheet, row, col, held); return undefined; };
   // Operands the page can read: constants, and cells of the tab shown. Anything else is the hub's.
-  const reads = (sheet: Sheet) => ({
+  const reads = (sheet: Sheet, bare = bareOf(sheet)) => ({
     read: (formula: unknown) => { const one = constant(formula); if (one !== undefined) return one; const at = CELL.test(bare(formula)) ? parseRange(bare(formula).replace(/\$/g, "")) : null; return at ? sheet.value(at.top, at.left) : undefined; },
     list: (formula: unknown) => {
       const at = RANGE.test(bare(formula)) ? parseRange(bare(formula).replace(/\$/g, "")) : null;

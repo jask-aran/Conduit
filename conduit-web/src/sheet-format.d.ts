@@ -111,6 +111,8 @@ export interface SheetView {
   colAt(i: number): string | undefined;
   indexOfRow(id: string): number;
   indexOfCol(id: string): number;
+  /** A formula's structured references (sheet-structured.js) as A1, read from the cell at `row`, `col` (a rule's or chart's formula reads the tables as a cell's does). */
+  a1?(formula: string, row?: number, col?: number): string;
   onChange(listener: (change: SheetChange) => void): () => void;
   /** Stops its listeners. */
   destroy(): void;

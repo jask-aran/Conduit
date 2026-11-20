@@ -366,6 +366,11 @@ export function sheetKind(hub) {
     if (tables.length) out.tables = tables;
     return out;
   };
+  // Excel takes no structured reference in a validation's formula: an export writes it by A1, from the rule's first cell.
+  const forExcel = (sheet, look) => look.validations ? { ...look, validations: look.validations.map((one) => {
+    const at = parseRange(String(one.range).split(/\s+/)[0].replace(/\$/g, "")) ?? { top: 0, left: 0 }, a1Of = (formula) => typeof formula === "string" && sheet.a1 ? sheet.a1(formula, at.top, at.left) : formula;
+    return { ...one, ...(one.formula1 === undefined ? {} : { formula1: a1Of(one.formula1) }), ...(one.formula2 === undefined ? {} : { formula2: a1Of(one.formula2) }) };
+  }) } : look;
   const restoreLook = (room, sheet, tab, kept) => {
     for (const [name, value] of Object.entries(kept ?? {})) {
       const [what, at, more] = name.split(":"), col = /^[A-Z]{1,3}$/.test(at ?? "") ? colIndex(at) : -1, row = /^\d+$/.test(at ?? "") ? Number(at) - 1 : -1, cell = at ? parseA1(at) : null, { rows, cols } = sheet.size();
@@ -689,7 +694,7 @@ export function sheetKind(hub) {
       async read(room, as, range, tab) {
         if (as === "tabs") return { tabs: tabsWithSize(room) };
         // For an export: every tab, what is typed in it, what that computes, and its look by letter and address.
-        if (as === "book") return { tabs: room.book.tabs().map((tab) => { const sheet = room.book.tab(tab.id), typed = sheet.inputs(); return { name: tab.name, hidden: tab.hidden, typed, values: typed.map((row, r) => row.map((input, col) => sheet.engine.getCellValue({ sheet: sheet.sheet, row: r, col }))), look: lookOf(room, sheet) }; }) };
+        if (as === "book") return { tabs: room.book.tabs().map((tab) => { const sheet = room.book.tab(tab.id), typed = sheet.inputs(); return { name: tab.name, hidden: tab.hidden, typed, values: typed.map((row, r) => row.map((input, col) => sheet.engine.getCellValue({ sheet: sheet.sheet, row: r, col }))), look: forExcel(sheet, lookOf(room, sheet)) }; }) };
         const ref = parseRef(range ?? ""), sheet = pick(room, tab, ref.tab ?? undefined), { rows, cols } = sheet.size(), whole = { top: 0, left: 0, bottom: rows - 1, right: cols - 1 };
         const asked = ref.range === "" ? whole : parseRange(ref.range);
         if (!asked) throw fault(400, `range is an A1 range such as B2:C5 (or Data!B2:C5), not ${range}`);

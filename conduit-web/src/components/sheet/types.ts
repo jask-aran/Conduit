@@ -36,7 +36,10 @@ const WEB = /^(https?:\/\/|www\.)[^\s]+$/i, MAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** A cell's text as the address it links to, where it is one. */
 export const addressOf = (text: string) => WEB.test(text) ? (/^www\./i.test(text) ? `https://${text}` : text) : MAIL.test(text) ? `mailto:${text}` : undefined;
 
-type Dropdown = { attributes: SheetValidation; options: SheetOption[] | null; source: SheetRange | null };
+type Dropdown = { attributes: SheetValidation; options: SheetOption[] | null; source: string | null };
+// A list's cells on its own tab, read as they are now (a table's column, `=Sales[Status]`, grows with it).
+const RANGE = /^\$?[A-Z]+\$?\d+(:\$?[A-Z]+\$?\d+)?$/i;
+const sourceOf = (sheet: SheetView, formula: string): SheetRange | null => { const text = (sheet.a1 ? sheet.a1(formula) : formula).replace(/^=/, ""); return RANGE.test(text) ? parseRange(text.replace(/\$/g, "")) : null; };
 export function createSheetTypes(look: Y.Map<number | string>, model: Accessor<SheetView | undefined>, failed: (message: string) => void): SheetTypes {
   const columns = new Map<string, string>(), cells = new Map<string, string>(), links = new Map<string, string>(), lists = new Map<string, Dropdown>(), [changed, setChanged] = createSignal(0);
   const kept = look as unknown as Y.Map<unknown>;
@@ -45,7 +48,7 @@ export function createSheetTypes(look: Y.Map<number | string>, model: Accessor<S
       // A list of cells on its own tab is read from them as drawn; one on another tab lists nothing.
       for (const [id, one] of Object.entries(readValidations(kept, name.slice(12)))) {
         if (one.type !== "list") continue;
-        const options = optionsOf(one), source = options ? null : /^\$?[A-Z]+\$?\d+(:\$?[A-Z]+\$?\d+)?$/i.test(String(one.formula1 ?? "")) ? parseRange(String(one.formula1).replace(/\$/g, "")) : null;
+        const options = optionsOf(one), source = options ? null : String(one.formula1 ?? "");
         lists.set(id, { attributes: one, options, source });
       }
       return true;
@@ -73,10 +76,10 @@ export function createSheetTypes(look: Y.Map<number | string>, model: Accessor<S
   return {
     at,
     options: (type) => {
-      const list = listOf(type), sheet = model();
-      if (!list?.source || !sheet) return list?.options ?? null;
+      const list = listOf(type), sheet = model(), source = list?.source && sheet ? sourceOf(sheet, list.source) : null;
+      if (!source || !sheet) return list?.options ?? null;
       const out: SheetOption[] = [];
-      for (let row = list.source.top; row <= Math.min(list.source.bottom, list.source.top + 199); row++) for (let col = list.source.left; col <= list.source.right; col++) { const value = sheet.value(row, col); if (value !== null && value !== "") out.push({ value: String(value) }); }
+      for (let row = source.top; row <= Math.min(source.bottom, source.top + 199); row++) for (let col = source.left; col <= source.right; col++) { const value = sheet.value(row, col); if (value !== null && value !== "") out.push({ value: String(value) }); }
       return out;
     },
     cells: (type) => {
