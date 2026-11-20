@@ -8,27 +8,37 @@ import { Card } from "./card";
 import { haptic, overlayHaptics } from "./haptics";
 import { Overlay, Scrim } from "./overlay";
 
-/* What shuts a dialog usually clears what it showed in the same step, and some callers unmount it as they shut it, so
- * as one shuts its scrim is copied whole before the document is updated, and the inert copy plays the leave. */
+/* What shuts a dialog usually clears what it showed in the same step, and some callers unmount it as they shut it, so as one shuts its scrim is copied
+ * before the document is updated, and the inert copy plays the leave. A part wholly out of sight (a list's rows past its edge) is an empty box its height. */
+function copyInSight(from: Element, into: Element, sight: { top: number; bottom: number; left: number; right: number }, scrolled: [HTMLElement, number][]) {
+  for (const node of from.childNodes) {
+    if (!(node instanceof HTMLElement)) { into.appendChild(node.cloneNode(true)); continue; }
+    const box = node.getBoundingClientRect(), copy = node.cloneNode(false) as HTMLElement;
+    into.appendChild(copy);
+    if (box.width && (box.bottom <= sight.top || box.top >= sight.bottom || box.right <= sight.left || box.left >= sight.right)) { Object.assign(copy.style, { blockSize: `${box.height}px`, flex: "none" }); continue; }
+    if (node.scrollTop) scrolled.push([copy, node.scrollTop]);
+    const clips = node.scrollHeight > node.clientHeight && getComputedStyle(node).overflowY !== "visible";
+    copyInSight(node, copy, clips ? { top: Math.max(sight.top, box.top), bottom: Math.min(sight.bottom, box.bottom), left: sight.left, right: sight.right } : sight, scrolled);
+  }
+}
 function createLeave(scrim: () => HTMLElement | undefined, open: () => boolean, mount: () => Node | undefined, wanted: () => boolean) {
   const leave = () => {
     const real = scrim();
     if (!real || !wanted() || reducedMotion() || !real.isConnected && !real.childElementCount) return;
-    // Where each part is scrolled is read before the copy is put in: read after, it lays the copy out first.
-    const from = real.querySelectorAll<HTMLElement>("*"), scrolled = Array.from(from, (element) => element.scrollTop);
-    const still = real.cloneNode(true) as HTMLElement;
+    // Where each part stands and is scrolled is read before the copy is put in: read after, it lays the copy out first.
+    const still = real.cloneNode(false) as HTMLElement, scrolled: [HTMLElement, number][] = [];
+    copyInSight(real, still, { top: 0, bottom: innerHeight, left: 0, right: innerWidth }, scrolled);
     still.inert = true;
     still.setAttribute("aria-hidden", "true");
     still.removeAttribute("role");
     still.removeAttribute("id");
     still.dataset.state = "closed";
     still.style.removeProperty("display");
-    const to = still.querySelectorAll<HTMLElement>("*");
     for (const surface of still.querySelectorAll(":scope > .ui-card, :scope > .ui-overlay")) { surface.removeAttribute("data-entering"); surface.setAttribute("data-leaving", ""); }
-    for (const element of to) element.removeAttribute("id");
+    for (const element of still.querySelectorAll("[id]")) element.removeAttribute("id");
     const wait = duration("--duration-quick", real) + 60;
     (mount() ?? document.body).appendChild(still);
-    scrolled.forEach((top, index) => { if (top && to[index]) to[index]!.scrollTop = top; });
+    for (const [element, top] of scrolled) element.scrollTop = top;
     real.style.display = "none";
     setTimeout(() => still.remove(), wait);
   };
