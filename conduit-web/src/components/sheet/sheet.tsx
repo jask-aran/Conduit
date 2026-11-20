@@ -38,6 +38,10 @@ import { sheetChartIcons as ChartIcons } from "@/components/ui/sheet-icons";
 import { createSheetTypes, type SheetTypeKind } from "./types";
 import { DropdownList, DropdownPrompt, type DropdownOption } from "./dropdown";
 import { LinkPrompt } from "./link";
+import { createChipControl } from "./chips";
+import { clearChips, copyChips } from "@/sheet-chips.js";
+import { createSheetValidity } from "./validity";
+import { ValidationPrompt } from "./validation";
 import type { SheetPill } from "./cell-draw";
 import type { SheetChartKind } from "@/sheet-charts.js";
 
@@ -64,6 +68,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const [menu, setMenu] = createSignal<Menu>({});
   const outline = createSheetOutline(look, model);
   const formats = createSheetFormats(look, model, props.host.failed), styles = createSheetStyles(look, model, props.host.failed), types = createSheetTypes(look, model, props.host.failed);
+  // Data validation (validity.ts): writes judged, broken cells marked, the dialog open on a range.
+  const validity = createSheetValidity(look, model), [validating, setValidating] = createSignal<SheetRange | null>(null);
   // A dropdown's list open on its cell, and the options being edited for a range (`type`: the list's, else a new one).
   const [listing, setListing] = createSignal<{ row: number; col: number; box: SheetBox } | null>(null), [editingList, setEditingList] = createSignal<{ range: SheetRange; type?: string; options: readonly DropdownOption[] } | null>(null);
   const [dating, setDating] = createSignal<{ row: number; col: number; box: SheetBox } | null>(null);
@@ -130,19 +136,28 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   createEffect(() => props.onState?.(live.state()));
   onCleanup(() => history.destroy());
 
-  const write = (typed: readonly { row: number; col: number; input: string }[]) => {
+  // Smart chips (chips.tsx): drawn, carded, offered by `@` and pasted.
+  const chip = createChipControl({ look, cells, model, grid, act: (label, run) => history.act(label, run), host: props.host, link: types.link, type: types.at,
+    editLink: (row, col) => openLink(row, col), openDate: (row, col) => openDate(row, col),
+    dropdown: (range, options) => { history.act("Dropdown", () => types.set(range, "list", options)); openList(range.top, range.left); } });
+  const write = (given: readonly { row: number; col: number; input: string }[]) => {
     const sheet = model();
     if (!sheet) return;
-    // Read as Excel reads an entry (a date, a time, an amount is its number), a General cell taking the format that shows it as typed.
-    const read = typed.map((cell) => ({ ...cell, ...readEntry(cell.input, formats.at(cell.row, cell.col)) })), list = read.map(({ row, col, input }) => ({ row, col, input }));
+    // Read as Excel reads an entry (a date, a time, an amount is its number), a General cell taking the format that shows it as typed, before its
+    // validation judges it. The hub is sent what was typed: it reads it itself, format and all.
+    const read = given.map((cell) => ({ ...cell, ...readEntry(cell.input, formats.at(cell.row, cell.col)) })), typed = (row: number, col: number, input: string) => given.find((one) => one.row === row && one.col === col)?.input ?? input;
+    // A Stop rule broken refuses the whole write; what only the engine can judge is the hub's `set`, refused there with the rule's message.
+    const { local: list, hub: judged, refused, told } = validity.sort(read.map(({ row, col, input }) => ({ row, col, input })));
+    if (refused) return props.host.failed(refused);
+    if (told) toast(told);
+    for (const { row, col, input } of judged) hub({ op: "set", at: a1(row, col), value: typed(row, col, input) });
     // A cell past the sheet's edge has no row or column of its own yet: the hub makes them as it sets it.
     const past: { row: number; col: number; input: string }[] = [];
     // A merge shows only its upper-left cell: a value written under the rest would be kept unseen (emptying them, as Merge does, is let through).
     const hiddenIn = (row: number, col: number) => { const one = merges.at(row, col); return one !== undefined && (row !== one.top || col !== one.left); };
-    live.doc.transact(() => { for (const { row, col, input } of list) { if (input && hiddenIn(row, col)) continue; const rowId = sheet.rowAt(row), colId = sheet.colAt(col); if (!rowId || !colId) { if (input) past.push({ row, col, input }); continue; } if (input) cells.set(key(rowId, colId), input); else cells.delete(key(rowId, colId)); } formatDates(look, sheet, list, tabs.dates(), tabs.named);
-      for (const { row, col, format } of read) if (format && !formats.at(row, col) && sheet.rowAt(row) && sheet.colAt(col)) writeFormat(look, sheet, { top: row, bottom: row, left: col, right: col }, format, false); });
-    // The hub reads what was typed itself, format and all.
-    for (const { row, col, input } of past) hub({ op: "set", at: a1(row, col), value: typed.find((one) => one.row === row && one.col === col)?.input ?? input });
+    live.doc.transact(() => { for (const { row, col, input } of list) { if (input && hiddenIn(row, col)) continue; const rowId = sheet.rowAt(row), colId = sheet.colAt(col); if (!rowId || !colId) { if (input) past.push({ row, col, input }); continue; } if (input) cells.set(key(rowId, colId), input); else { cells.delete(key(rowId, colId)); clearChips(look as unknown as Y.Map<unknown>, [key(rowId, colId)]); } } formatDates(look, sheet, list, tabs.dates(), tabs.named);
+      for (const { row, col, format } of read) if (format && !formats.at(row, col) && sheet.rowAt(row) && sheet.colAt(col) && list.some((one) => one.row === row && one.col === col)) writeFormat(look, sheet, { top: row, bottom: row, left: col, right: col }, format, false); });
+    for (const { row, col, input } of past) hub({ op: "set", at: a1(row, col), value: typed(row, col, input) });
   };
   const hub = (op: Parameters<SheetHost["cells"]>[0]) => void history.hub(op).catch((error: Error) => props.host.failed(error.message));
   const labelOf = (list: readonly { row: number; col: number; input: string }[]) => list.every(({ input }) => !input) ? "Clear contents" : list.length === 1 ? `Typing in ${a1(list[0]!.row, list[0]!.col)}` : "Paste";
@@ -153,7 +168,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     // As a spreadsheet's Ctrl+Enter: each shown cell selected takes it, a formula moved from the cell typed in to its own.
     fill: (from, input) => { const area = at(); if (!area || (area.top === area.bottom && area.left === area.right)) return false; writes("Fill selection")(within(inTab(area)).flat().map(({ row, col }) => ({ row, col, input: shifted(input, row - from.row, col - from.col) }))); return true; },
     selected: () => { changed(); const area = at(); return area && { row: area.top, col: area.left }; }, error: (row, col) => model()?.error(row, col) ?? null,
-    chip: ({ row, col }, name) => {
+    chips: chip.offers,
+    chip: ({ row, col }, name, offer) => {
+      if (chip.take({ row, col }, offer)) return;
       const range = { top: row, bottom: row, left: col, right: col };
       if (name === "Dropdown") return editList(range);
       if (name === "Date") { setType(range, "date"); return openDate(row, col); }
@@ -212,14 +229,19 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const drawnLook = () => readLook(root!, props.host.display?.());
   const events: SheetGridEvents = {
     selected: setAt,
-    write: (list, label) => writes(label ?? "")(list.map((cell) => ({ ...cell, input: types.typed(cell.row, cell.col, cell.input) }))),
+    write: (list, label, pairs) => {
+      const was = (row: number, col: number) => model()?.input(row, col) ?? "";
+      if (label === "Paste") chip.pasted(list, was);
+      history.act(label || labelOf(list), () => { write(list.map((cell) => ({ ...cell, input: types.typed(cell.row, cell.col, cell.input) }))); const sheet = model(); if (pairs && sheet) copyChips(look as unknown as Y.Map<unknown>, sheet, pairs); });
+    },
     fill: (range, values, from) => hub({ op: "fill", range: rangeA1(range), values, ...(from ? { from: rangeA1(from) } : {}) }),
     resized: (col, width) => history.act("Column width", () => sizes.setWidths(span("cols", col), width / zoom())),
     autofit: (kind, line) => history.act(kind === "cols" ? "Fit column width" : "Fit row height", () => kind === "cols" ? sizes.fitColumns(span("cols", line), readLook(root!)) : sizes.fitRows(span("rows", line), readLook(root!))),
     menu: setMenu,
     moved: () => { setScrolled((n) => n + 1); moved(); },
     drawn: () => props.onDrawn?.(),
-    pressed: (row, col) => { setExtending(false); const hit = anchors.find((anchor) => { const range = rangeOf(anchor); return range && row >= range.top && row <= range.bottom && col >= range.left && col <= range.right; }); if (hit) moved(hit.key); },
+    // A press on a chip already selected opens its card, as a second click does in a spreadsheet's.
+    pressed: (row, col) => { const was = at(); if (was && was.top === row && was.bottom === row && was.left === col && was.right === col && chip.chips.at(row, col)) requestAnimationFrame(() => chip.open(row, col)); setExtending(false); const hit = anchors.find((anchor) => { const range = rangeOf(anchor); return range && row >= range.top && row <= range.bottom && col >= range.left && col <= range.right; }); if (hit) moved(hit.key); },
     key: (event, row, col) => {
       const bare = !event.ctrlKey && !event.altKey && !event.metaKey;
       // Shift+F10 and the Menu key open the cell menu at the active cell, its search focused.
@@ -249,6 +271,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       const plain = !event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey, type = types.at(row, col);
       // Space ticks (or clears) every checkbox of the selection as the active one goes, as one step.
       if (plain && event.key === " " && type === "boolean") { event.preventDefault(); toggle(row, col); return true; }
+      if (chip.key(event, row, col)) return true;
       // Enter and Alt+Down open a dropdown's options.
       if (type?.startsWith("list:") && ((plain && event.key === "Enter") || (event.altKey && !event.ctrlKey && event.key === "ArrowDown"))) { event.preventDefault(); openList(row, col); return true; }
       if (type === "date" && event.altKey && !event.ctrlKey && event.key === "ArrowDown") { event.preventDefault(); openDate(row, col); return true; }
@@ -323,7 +346,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       made = mountGrid(into, { model: sheet, events, look: untrack(drawnLook), filled: index, columns: {
         width: (col) => { const width = sizes.width(col); return width === undefined ? undefined : Math.round(width * zoom()); }, freeze: sizes.freeze, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols,
         heights: () => { const by = zoom(), kept = sizes.heights(); return by === 1 ? kept : new Map([...kept].map(([row, height]) => [row, Math.round(height * by)])); },
-        type: types.at, pill: pillOf, link: types.link, draw: (row, col, value) => formats.draw(row, col, value, rules.fmt(row, col)), dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded, merges: merges.list, outline: outline.line, formulas: () => untrack(formulasShown), extending: () => untrack(extending),
+        type: types.at, pill: pillOf, link: types.link, chip: (row, col, shown) => chip.chips.drawn(row, col, shown, types.link(row, col, shown)), draw: (row, col, value) => formats.draw(row, col, value, rules.fmt(row, col)), dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), invalid: validity.invalid, mark: filters.mark, banded: filters.banded, merges: merges.list, outline: outline.line, formulas: () => untrack(formulasShown), extending: () => untrack(extending),
       } });
       setGrid(made);
       fitWrapped();
@@ -628,6 +651,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     { label: "Replace", keys: ["Ctrl", "H"], run: () => { opening = () => find.show(true); } },
     { label: "Go to…", keys: ["F5"], run: () => { opening = () => addressField?.focus(); } },
     { label: "Insert link…", keys: ["Ctrl", "K"], run: () => { const area = at(); if (area) opening = () => openLink(area.top, area.left); } },
+    ...chip.actions((({ top, left } = at() ?? { top: -1, left: -1 }) => top < 0 ? null : { row: top, col: left })()),
     ...props.onChart ? [{ label: "Make chart", keys: ["Alt", "F1"], run: () => askChart() }] : [],
     { label: "New tab", keys: ["Shift", "F11"], run: () => addTab(tabs) },
     { label: "Duplicate tab", run: () => { const id = tabs.shown(); if (id) void tabs.op({ op: "duplicate-tab", tab: id }); } },
@@ -799,6 +823,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
           { label: "Remove duplicates…", icon: DataIcons.dedupe, run: () => { const on = nRows === 1 && nCols === 1 ? filters.region() : { range: inTab(range), header: false }; if (on) opening = () => setDeduping(on); } },
           { label: "Trim whitespace", icon: DataIcons.trim, run: () => trim(range) },
           { label: "Split text to columns…", icon: DataIcons.split, disabled: nCols > 1, run: () => { opening = () => setSplitting(range); } },
+          { label: "Data validation…", icon: DataIcons.data, run: () => { opening = () => setValidating(inTab(range)); } },
         ] },
       ],
       // Plain, checkboxes (TRUE and FALSE), dates or a dropdown's options (sheet-types.js): whole columns take a column's type, other ranges each cell its own.
@@ -879,6 +904,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       </Frost>
       {/* The ribbon (Markup's bar with the sheet's tools) stands here, at the row's end, folding to the room the formula field leaves it. */}
       <div ref={setSlot} class="ui-spreadsheet-slot" />
+      <Show when={(() => { changed(); const rule = validity.rule(at()); return rule?.showInputMessage === "1" && (rule.prompt || rule.promptTitle) ? rule : undefined; })()}>{(rule) =>
+        <Notice kind="tool" title={String(rule().prompt ?? "")}>{rule().promptTitle ? `${String(rule().promptTitle)}: ` : ""}{String(rule().prompt ?? "")}</Notice>}</Show>
       <Show when={frozenHere()}>{(cell) => <Notice kind="tool" title={cell().why ? `${cell().formula}: ${cell().why}` : cell().formula}>Frozen on import: ={cell().formula.replace(/^=/, "")}</Notice>}</Show>
     </div>
     <div ref={body} class="ui-spreadsheet-body">
@@ -933,6 +960,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
           onType={(typed) => { const now = dating(); setDating(null); if (now) { editor.begin(now, "enter", "cell"); editor.typed(typed, typed.length); } }} />
         <LinkPrompt at={linking()} frame={() => body} onClose={() => { setLinking(null); grid()?.focus(); }}
           onSave={(text, address) => { const now = linking(); setLinking(null); if (now) history.act(address ? "Link" : "Remove link", () => { if (text !== now.text) write([{ row: now.row, col: now.col, input: text }]); types.setLink(now.row, now.col, address || null); }); grid()?.focus(); }} />
+        {chip.view(() => body)}
         <DropdownPrompt given={editingList()?.options ?? null} onClose={() => { setEditingList(null); grid()?.focus(); }}
           onSave={(options) => { const now = editingList(); setEditingList(null); if (now) history.act("Dropdown", () => {
             if (!now.type) return types.set(now.range, "list", options);
@@ -941,6 +969,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
             types.setOptions(now.type, options);
             if (renamed.size && sheet) write(cells.flatMap((cell) => { const to = renamed.get(valueText(sheet.value(cell.row, cell.col))); return to ? [{ ...cell, input: to }] : []; }));
           }); grid()?.focus(); }} />
+        <ValidationPrompt range={validating()} rule={untrack(() => validity.rule(validating()))} onClose={() => { setValidating(null); grid()?.focus(); }}
+          onSave={(rule) => { const range = untrack(validating); setValidating(null); if (range) history.act("Data validation", () => validity.set(range, rule)); grid()?.focus(); }} />
         <DedupePrompt asked={deduping() ? { range: rangeA1(deduping()!.range), header: deduping()!.header } : null} onRemove={(header) => { const asked = untrack(deduping); if (asked) dedupe(asked.range, header); }} onClose={() => { setDeduping(null); grid()?.focus(); }} />
         <SplitPrompt open={splitting() !== null} onSplit={(separator) => { const range = untrack(splitting); if (range) void split(range, separator); }} onClose={() => { setSplitting(null); grid()?.focus(); }} />
         <ShiftPrompt asked={shifting()} frame={() => body} onClose={() => { setShifting(null); grid()?.focus(); }} onChoose={(way) => { const asked = untrack(shifting); if (asked) shift(asked.verb, asked.range, way); }} />

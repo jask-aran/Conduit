@@ -14,8 +14,10 @@ notes behind them are in git history. Tick an item by deleting it.
 - [ ] 30. jbot channels: messaging apps (Telegram, Discord, Slack, WhatsApp, Signal, SMS, email) as jbot's channels,
   grown through the jbot message log (see jbot below). Worth keeping from the study: a conversation in a
   messaging app attaches to a thread, and a command there starts a fresh one.
-- [ ] Email client (2026-11-15): a Work pane over a hub-synced Gmail copy over IMAP, and jbot's mailbox as a second account.
-  Plan and phase 1 starter prompt in `docs/plans/email.md`.
+- [ ] Email: what is left of `docs/plans/email.md` (the pane and sorting by splits are built): snooze, waiting-on and
+  the keyboard set; jbot working a split on request or on a schedule; filing nothing automatically until the person has
+  watched the splits for a week; jbot's `mail` tool on (`CONDUIT_AGENT_MAIL`); jbot's mailbox as a second account, then
+  retiring the Executor Gmail routine (`mail-task.js`, `mailbox.js`).
 - [ ] 31. A single drawer pane from the bottom, later. Not recursive splits.
 - [ ] 32. Browser tabs as pane tabs, a setting (2026-11-03): today a browser is one document, a tab beside chats and
   pages in any pane. A person who keeps many sites open may want each browser tab to be one of the pane's tabs instead;
@@ -31,13 +33,16 @@ notes behind them are in git history. Tick an item by deleting it.
 
 ### Later or lower priority
 
-- [ ] Render tools (generative UI): a model calls `render_table`, `render_chart` or `render_choice` with structured data
-  and Conduit draws it as a native transcript block from library components; a Conduit-owned tool, over MCP for Codex
-  and Claude Code. No model-written HTML. From the deleted component-system plan, never built.
+- [ ] Generative UI: a model sends a table, chart or choice as structured data through one Conduit-owned tool (over MCP
+  for Codex and Claude Code), and Conduit draws it as a native transcript block from library components. No
+  model-written HTML. Format (A2UI v1.0) and open questions in `docs/plans/generative-interfaces-research.md`.
 - [ ] 21. Generic tool servers (MCP, OpenAPI, stdio), only if Connectors prove too narrow.
 - [ ] 22. Commit message drafting with its own model.
 - [ ] 23. Notification destinations. jbot-only for now.
 - [ ] 25. A new-chat screen instead of the dashboard. Deferred.
+- [ ] A release loop that runs by itself, drawn as its state machine: new commit, gate, internal build; a red gate
+  goes to a fixer agent that lands a fix; a stall pauses it for a person; promotion to production by hand. The owner
+  filed it with no words of their own: ask what they want before building.
 
 ### Keyboard
 
@@ -128,6 +133,57 @@ What still knows a paper's blocks outside the paper's two entries:
   comments over a file of Markdown alone. Its block ids and its id are kept beside it, matched to the file's blocks by content when the file
   changes outside Conduit; front matter and what its schema cannot hold stay the file's text. A `.md` is one only when made or opened as one.
   Still the paper's own: properties, the extras, and a home beside the file for what Markdown cannot say.
-- [ ] The `sheet` kind (`.csv`, `server/sheets.js`, `sheet-format.js`): cells in a Yjs room computed by the same formula engine on the hub and
-  the page; the file holds values, `sheet.json` beside it the formulas. Not yet: seats, suggestions, and keeping what an agent changed for a
-  comment to take back; a column's `date` type is not read from text, and one tab per file.
+
+### Panes
+
+The model is DESIGN.md's "Places and panes", "Focus and opening" and "Tabs"; `npm run smoke:panes` checks it.
+
+- [ ] The rest of the dock: overflow becomes the row's "more panes" control (today `foldedSlots` fold into the dock, as
+  the rail's docked buttons); the dock's Chat tool goes once its review navigations (`REVIEW_NAVIGATION_EVENT`,
+  `TURN_ARTIFACT_NAVIGATION_EVENT`) have another home. The phone keeps its tab strip.
+- [ ] Alt in a pane's folder viewer leaves the keyboard on the page body, not where it was (cause unmeasured).
+- [ ] A narrow folder viewer (the dock) folds its tree after a plain open, leaving the keyboard on the page body: a feel
+  question for the owner.
+- [ ] Not walked in a browser: "Move to a pane" carrying an unsaved edit; Files → Changes → Files with an edit;
+  Ctrl-opening jbot and jbot in a side pane; closing the shown tab going to the one shown before.
+- [ ] DeX: dragging handles with a mouse is poor (cause unmeasured; the drags are HTML5 drag and drop, which Android
+  WebView may not start for a mouse: read `dragstart` and `pointerType` over the WebView devtools socket). The
+  on-screen keyboard showing beside a physical one is Samsung's `show_ime_with_hard_keyboard`, not Conduit's.
+
+### Sheet
+
+The `sheet` kind (`.csv`, `server/sheets.js`, `sheet-format.js`), heading for Excel parity; Excel's behaviour and keys
+are the reference unless there is a reason to differ. Storage and xlsx: `docs/plans/sheet-xlsx-and-tabs.md`.
+
+- [ ] Data validation of every kind.
+- [ ] Tables.
+- [ ] Smart chips.
+- [ ] The command palette's speed over a sheet.
+- [ ] Typed-date entry: a date typed into a column read as that column's `date` type.
+- [ ] Seats, suggestions, and keeping what an agent changed for a comment to take back.
+- [ ] Notes and threaded comments from xlsx as Markup comments, waiting on the owner (16 notes would hand 16 items to
+  agents); they are kept on their cells (`note:`) and not drawn, as pictures and page setup are not.
+- [ ] OFFSET with cell arguments (frozen on import today); an `.xlsm` export that keeps its macros.
+- [ ] Not built: Shift+F8 (add to the selection: Glide's `rangeStack` is never used), Ctrl+F3 (no names dialog).
+- [ ] Undo stops waiting for a hub op after a timer (`history.ts`), so a slow op lets a queued Undo take the step
+  before it: wait while the request is pending, and time only frames owed after the reply.
+- [ ] Deleting a merge's top row or left column leaves the merge empty (the value goes with its line); check Excel.
+- [ ] "Undo N steps" can undo more than N: Yjs skips steps others have overwritten, and the list still names them.
+- [ ] Ctrl+Z does nothing while a ribbon button holds the focus (after Escape from its menu, or after the Undo several
+  list shuts): the undo keys are the grid's alone.
+- [ ] Find does not search again when a column is hidden or shown while it is open; More decimals on a General text
+  cell gives the range `0.0`; Merge with an empty top-left blanks the only value (Excel's not checked).
+- [ ] xlsx: where a styled row past the tab's cells crosses a styled column only the row's style is written
+  (`xlsx-styles.js`); frozen formulas (`excel:`) are not rewritten by row and column changes outside `cells.edit`;
+  `documents.js` passes the import report to `exportXlsx`, which ignores it.
+- [ ] Gridlines cross overflowing text; Delete cells… and Insert cells… start on left/right where Excel starts on
+  up/down for a block wider than tall; the dropdown options dialog draws each colour picker above its Up and Delete;
+  at a 1,600 px window the ribbon folds into "Format" once the undo group gains its chevron.
+- [ ] Opening a sheet: the grid, tabs and canvases appear about 350 ms after the pane's first paint, and the margin's
+  height jumps; the cell menu's second frame is about 20 ms (its rows' icons are built as JSX by the caller).
+- [ ] Charts, waiting on the owner: a selected chart's brightened edge (DESIGN's no-outline rule); series inks not run
+  through a palette check; charts draw over frozen rows; a moved chart snaps to the cell under its corner; the ask box
+  under the tools at 1,100 px covers the margin's top card.
+- [ ] The owner's call: "View settings…" in the cell menu breaks DESIGN's rule that menu rows don't open settings.
+- [ ] Unchecked on real devices: swiping the grid by touch on a phone; Ctrl+Shift+0 on Windows (which may switch the
+  input language); a Windows trace of sideways scroll under frozen rows.

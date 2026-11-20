@@ -10,6 +10,8 @@ import { readRules, rulesA1, rulesIds, shiftRefs } from "../sheet-rules.js";
 import { CHART_LIMIT, chartFrom, chartIds, chartsA1, keptCharts, readCharts } from "../sheet-charts.js";
 import { writePrivateFile } from "../private-file.js";
 import { cleanOptions, readDate, restoreValidations, validationsA1, VALID, writeType } from "../sheet-types.js";
+import { hubRefusal } from "../sheet-valid.js";
+import { cleanChip, clearChips, copyChips, writeChip } from "../sheet-chips.js";
 
 /*
  * The sheet artifact kind on the hub (sheet-format.js): a .csv that holds the values, the formulas beside it in sheet.json, and the live copy in
@@ -69,6 +71,7 @@ export function sheetKind(hub) {
       const cell = key(sheet.rowAt(r), sheet.colAt(c));
       if (!input) room.cells.delete(cell); else if (room.cells.get(cell) !== input) room.cells.set(cell, input);
     }
+    clearChips(room.look, written.flatMap(([r, c, input]) => input ? [] : [key(sheet.rowAt(r), sheet.colAt(c))]));
     if (guarded) formatDates(room.look, sheet, written.map(([row, col, input]) => ({ row, col, input })), dates ??= dateFunctions(), (name) => { const id = room.book.find(name); return id ? room.book.tab(id) : undefined; });
     sign();
   }));
@@ -685,7 +688,7 @@ export function sheetKind(hub) {
       },
       /** One change of cells, of rows and columns, or of tabs (contract: POST /v0/document/:id/cells). `for` is checked, and nothing is kept of it yet. */
       async edit(room, args = {}) {
-        const { op, tab, at, range, from, values, value, format, style, borders, column, header, descending, count = 1, to, name: called, hidden, chart, way, by, for: about, type: cellType, options } = args, own = room.own;
+        const { op, tab, at, range, from, values, value, format, style, borders, column, header, descending, count = 1, to, name: called, hidden, chart, way, by, for: about, type: cellType, options, chip } = args, own = room.own;
         const name = typeof by === "string" && by ? by.slice(0, 80) : "agent";
         if (about !== undefined) {
           if (!/^[\w-]+\/\d+$/.test(String(about))) throw fault(400, `for is the comment answered, as <item>/<n>, not ${about}`);
@@ -731,7 +734,13 @@ export function sheetKind(hub) {
             const type = room.look.get(`type:${key(sheet.rowAt(r), sheet.colAt(c))}`) ?? room.look.get(`type:${sheet.colAt(c)}`), day = type === "date" && input && !input.startsWith("=") ? readDate(input) : null;
             return day === null ? [r, c, input] : [r, c, String(day)];
           });
+          // A data validation's Stop rule refuses the whole write, saying the rule, as Excel refuses an entry (sheet-valid.js): it judges each entry as read (readEntry).
+          const refused = hubRefusal(room.look, sheet, dated.map(([r, c, input]) => [r, c, readEntry(input).input]));
+          if (refused) throw fault(400, refused);
           writeCells(room, sheet, dated, name, true);
+          // A fill from its source carries the source's chips, as it carries its formulas.
+          if (source) { const wrap = (n, from, size) => from + (((n - from) % size) + size) % size, tall = source.bottom - source.top + 1, wide = source.right - source.left + 1;
+            hub.as(room, name, (sign) => room.doc.transact(() => { copyChips(room.look, sheet, dated.map(([r, c]) => [wrap(r, source.top, tall), wrap(c, source.left, wide), r, c])); sign(); })); }
           return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}), ...sheet.size() };
         }
         // A range's number formats (sheet-formats.js) or styles (sheet-styles.js), set first when given; whole columns (B:D), or for styles rows (3:5), set theirs.
@@ -769,6 +778,14 @@ export function sheetKind(hub) {
             sign();
           }));
           return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}) };
+        }
+        // A cell shown as a smart chip (sheet-chips.js), or plain again with `chip: null`.
+        if (op === "chip") {
+          const ref = parseRef(at), sheet = pick(room, tab, ref.tab ?? undefined), cell = parseA1(ref.range), { rows, cols } = sheet.size();
+          if (!cell || cell.row >= rows || cell.col >= cols) throw fault(400, `at is one cell's A1 address on the tab, such as B4, not ${at}`);
+          if (chip !== null && !cleanChip(chip)) throw fault(400, "chip is { kind: \"link\", url?, title? }, { kind: \"person\", id, name, role? }, { kind: \"artifact\", id, name, type? }, { kind: \"date\" } or null");
+          hub.as(room, name, (sign) => room.doc.transact(() => { writeChip(room.look, room.cells, sheet, cell.row, cell.col, chip); sign(); }));
+          return { cells: [label(room, sheet, { top: cell.row, bottom: cell.row, left: cell.col, right: cell.col })], ...(many(room) ? { tab: sheet.name } : {}) };
         }
         if (op === "sort") {
           const ref = parseRef(range ?? at), sheet = pick(room, tab, ref.tab ?? undefined), area = parseRange(ref.range), { rows, cols } = sheet.size();
@@ -838,7 +855,7 @@ export function sheetKind(hub) {
           if (across) throw fault(400, `${rangeA1(across)} is merged: unmerge it to remove duplicates from ${rangeA1(area)}`);
           return { ...dedupe(room, sheet, { ...area, bottom: Math.min(area.bottom, rows - 1), right: Math.min(area.right, cols - 1) }, header === true, name), ...(many(room) ? { tab: sheet.name } : {}) };
         }
-        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, type, sort, chart, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, shift-cells, dedupe, add-tab, duplicate-tab, rename-tab, delete-tab, move-tab or hide-tab");
+        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, type, chip, sort, chart, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, shift-cells, dedupe, add-tab, duplicate-tab, rename-tab, delete-tab, move-tab or hide-tab");
         const sheet = pick(room, tab), { rows, cols } = sheet.size(), isRows = op.endsWith("rows"), size = isRows ? rows : cols, what = isRows ? "row" : "column", removing = op.startsWith("delete");
         if (!Number.isInteger(count) || count < 1 || count > CALL_LIMIT) throw fault(400, "count is how many, 1 or more");
         index(at, removing ? size - 1 : size, `${what} to ${removing ? "delete" : "insert before"} (${size} ${what}s now)`);

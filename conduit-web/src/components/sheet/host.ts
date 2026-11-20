@@ -10,6 +10,7 @@ import type { SheetFormatOp } from "@/sheet-formats.js";
 import type { SheetBorders, SheetInk, SheetStyleOp } from "@/sheet-styles.js";
 import type { SheetChartKind, SheetChartSpec } from "@/sheet-charts.js";
 import type { SheetTypeOp } from "@/sheet-types.js";
+import type { SheetChipOp } from "@/sheet-chips.js";
 
 /** Cells by position, 0-based and inclusive (sheet-format.js parseRange). */
 export type SheetRange = { top: number; left: number; bottom: number; right: number };
@@ -44,6 +45,7 @@ export type SheetCellsOp = { client?: number; step?: number } & (
   | SheetFormatOp
   | SheetStyleOp
   | SheetTypeOp
+  | SheetChipOp
   | SheetSortOp
   | { op: "chart"; chart?: SheetChartSpec & { id?: string; delete?: boolean }; tab?: string }
   | SheetTabOp);
@@ -81,6 +83,12 @@ export interface SheetHost {
   display?(): SheetDisplay;
   /** Opens the app's settings for how a sheet is drawn. */
   openSettings?(): void;
+  /** Who `@` offers as person chips: the signed-in person and the agents the app knows. Read where asked, so getters follow. */
+  people?(): readonly { id: string; name: string; role: string; agent?: boolean }[];
+  /** The project's artifacts `@` offers as chips, asked for when `@` is typed; a chip's name follows its rename here. */
+  artifacts?(): readonly { id: string; name: string; type: "paper" | "sheet" | "site" | "markdown" }[];
+  /** Opens a chip's artifact beside, or an agent's thread. */
+  open?(target: { artifact: string } | { agent: string }): void;
 }
 
 /** `zoom`: what the grid's sizes are drawn at (1 is 100%); the sizes a sheet keeps stay its own. `focusCell`: the active cell's row and column are washed. */
@@ -178,7 +186,8 @@ export interface SheetGrid {
 export type SheetGridEvents = {
   selected(range: SheetRange | null): void;
   /** What was typed into a cell, or pasted, as inputs by position; the editor writes them. */
-  write(cells: readonly { row: number; col: number; input: string }[], label?: string): void;
+  /** `chips`: a paste of cells copied here, each `[fromRow, fromCol, row, col]`, whose chips go with them. */
+  write(cells: readonly { row: number; col: number; input: string }[], label?: string, chips?: readonly [number, number, number, number][]): void;
   /** A paste or a fill dragged past the sheet's edge, or a fill whose formulas move: the hub's fill. `from`: the fill handle's source, whose formulas the hub moves into `values`. */
   fill(range: SheetRange, values: string[][], from?: SheetRange): void;
   resized(col: number, width: number): void;

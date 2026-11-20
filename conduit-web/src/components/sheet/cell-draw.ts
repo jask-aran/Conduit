@@ -16,11 +16,25 @@ import { wrapLines } from "./wrap";
 /** What the grid's own cells carry for this (grid.ts TextCell). */
 /** `block`: a row of a merge over several rows, drawn here against the merge's box (grid.ts). */
 /** `arrow`: a date cell's, at its right end, which opens its calendar; `mark`: a filter's caret there (grid.ts). The text keeps clear of either. */
-export type StyledCell = { worn?: SheetCellStyle; frozen?: boolean; displayData?: string; contentAlign?: "left" | "right" | "center"; block?: unknown; pill?: SheetPill; spill?: SheetSpill; link?: string; arrow?: boolean; mark?: number };
+export type StyledCell = { worn?: SheetCellStyle; frozen?: boolean; invalid?: boolean; displayData?: string; contentAlign?: "left" | "right" | "center"; block?: unknown; pill?: SheetPill; spill?: SheetSpill; link?: string; arrow?: boolean; mark?: number; chip?: SheetChipLook };
 /** Text running on into an empty cell from a filled one `offset` pixels to its left, in that cell's font and ink (none: the grid's). */
 export type SheetSpill = { text: string; offset: number; font?: string; ink?: string };
 /** A dropdown cell's value as a pill in its option's ink (none: a plain wash); `known` false marks a value not among the options. One object for each, made once (sheet.tsx). */
 export type SheetPill = { ink?: SheetInk; known: boolean };
+/** A smart chip as drawn (chips.tsx): its icon and its text. One object for each, made as its cell is. */
+export type SheetChipLook = { icon: SheetChipIcon; text: string };
+export type SheetChipIcon = keyof typeof CHIP_ICONS;
+// Lucide's icons (24 units, stroked 2) as canvas paths, made once: link, user, bot, file-text, sheet, calendar.
+const CHIP_ICONS = {
+  link: ["M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71", "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"],
+  person: ["M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2", "M16 7a4 4 0 1 1-8 0a4 4 0 1 1 8 0"],
+  agent: ["M12 8V4H8", "M6 8h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z", "M2 14h2", "M20 14h2", "M15 13v2", "M9 13v2"],
+  paper: ["M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z", "M14 2v5a1 1 0 0 0 1 1h5", "M10 9H8", "M16 13H8", "M16 17H8"],
+  sheet: ["M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z", "M3 9h18", "M3 15h18", "M9 9v12", "M15 9v12"],
+  date: ["M8 2v3", "M16 2v3", "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z", "M3 9h18"],
+} as const;
+let chipPaths: Record<SheetChipIcon, Path2D> | undefined;
+const pathOf = (icon: SheetChipIcon) => (chipPaths ??= Object.fromEntries(Object.entries(CHIP_ICONS).map(([name, list]) => { const path = new Path2D(); for (const d of list) path.addPath(new Path2D(d)); return [name, path]; })) as Record<SheetChipIcon, Path2D>)[icon];
 // The grid's own measure of a line's height in a font: the box of these letters.
 const EM = "ABCi09jgqpy";
 
@@ -119,6 +133,23 @@ export function createCellLook(look: SheetLook) {
     ctx.restore();
     ctx.fillStyle = ink0;
   };
+  // A smart chip: a rounded wash as wide as its icon and text (as a dropdown's pill), the icon at its left, the text cut short with an ellipsis.
+  const chip = (args: Parameters<DrawCellCallback>[0], { icon, text }: SheetChipLook) => {
+    const { ctx, rect, theme: drawn } = args, padX = drawn.cellHorizontalPadding, font = `${drawn.baseFontStyle} ${drawn.fontFamily}`;
+    const box = measureTextCached(EM, ctx, font), em = box.actualBoundingBoxAscent + box.actualBoundingBoxDescent, middle = rect.y + rect.height / 2, size = Math.round(em * 1.15);
+    const tall = Math.min(rect.height - 2, em + 2 * drawn.cellVerticalPadding), room = rect.width - 2 * padX - size - padX / 2, was = [ctx.fillStyle, ctx.strokeStyle, ctx.lineWidth] as const;
+    let shown = text;
+    if (room > 0 && measureTextCached(shown, ctx, font).width > room) { while (shown.length > 1 && measureTextCached(`${shown}…`, ctx, font).width > room) shown = shown.slice(0, -1); shown = `${shown.trimEnd()}…`; }
+    const wide = Math.min(rect.width - padX, size + padX / 2 + (room > 0 ? measureTextCached(shown, ctx, font).width : 0) + padX), left = rect.x + padX / 2;
+    ctx.save(); ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.width, rect.height); ctx.clip();
+    ctx.fillStyle = look.mark; ctx.beginPath(); ctx.roundRect(left, middle - tall / 2, wide, tall, tall / 2); ctx.fill();
+    ctx.save(); ctx.translate(left + padX / 2, middle - size / 2); ctx.scale(size / 24, size / 24);
+    ctx.strokeStyle = String(look.grid.textMedium); ctx.lineWidth = 2; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.stroke(pathOf(icon)); ctx.restore();
+    ctx.fillStyle = was[0];
+    if (room > 0) ctx.fillText(shown, left + padX / 2 + size + padX / 2, middle + getMiddleCenterBias(ctx, font));
+    ctx.restore();
+    [ctx.fillStyle, ctx.strokeStyle, ctx.lineWidth] = was;
+  };
   const spill = (args: Parameters<DrawCellCallback>[0], { text, offset, font: own, ink }: SheetSpill) => {
     const { ctx, rect, theme: drawn } = args, padX = drawn.cellHorizontalPadding, font = `${own ?? drawn.baseFontStyle} ${drawn.fontFamily}`, was = [ctx.font, ctx.fillStyle] as const;
     // Measured in its own font: the cache's font is only its key.
@@ -144,12 +175,13 @@ export function createCellLook(look: SheetLook) {
     if (style?.icon) drawIcon(args.ctx, args.rect, style.icon, args.theme.cellHorizontalPadding);
     // A date's arrow or a filter's caret at the right end: the text is drawn in the room left of it.
     const end = cell.arrow || cell.mark ? Number(look.grid.headerIconSize) / 2 + args.theme.cellHorizontalPadding : 0;
-    if (cell.pill) pill(args, cell, cell.pill);
+    if (cell.chip) chip(end ? { ...args, rect: { ...args.rect, width: args.rect.width - end } } : args, cell.chip);
+    else if (cell.pill) pill(args, cell, cell.pill);
     else if (shown && end && cell.contentAlign === "right") text({ ...args, rect: { ...args.rect, width: args.rect.width - end } }, style ?? PLAIN, cell);
     else if (shown && (style?.custom || cell.block || cell.link || shown.includes(SHEET_FILL))) text(args, style ?? PLAIN, cell); else if (!style?.bare) content();
     if (cell.arrow) drawArrow(args.ctx, args.rect, args.theme.cellHorizontalPadding);
     if (cell.spill) spill(args, cell.spill);
-    if (!style?.edges && !cell.frozen && !style?.diagonal) return;
+    if (!style?.edges && !cell.frozen && !cell.invalid && !style?.diagonal) return;
     // The grid keeps note of the ink it set for a column's text, so it is put back.
     const { ctx, rect: { x, y, width, height } } = args, was = ctx.fillStyle;
     if (style?.edges) {
@@ -173,6 +205,11 @@ export function createCellLook(look: SheetLook) {
       if (style.diagonal !== "up") { ctx.moveTo(x, y); ctx.lineTo(x + width, y + height); }
       if (style.diagonal !== "down") { ctx.moveTo(x, y + height); ctx.lineTo(x + width, y); }
       ctx.stroke();
+    }
+    // A cell breaking its data validation: a corner at its top left, in the error ink (validity.ts).
+    if (cell.invalid) {
+      ctx.fillStyle = look.error;
+      ctx.beginPath(); ctx.moveTo(x + 1, y + 1); ctx.lineTo(x + 1 + look.corner, y + 1); ctx.lineTo(x + 1, y + 1 + look.corner); ctx.closePath(); ctx.fill();
     }
     if (cell.frozen) {
       ctx.fillStyle = look.warn;

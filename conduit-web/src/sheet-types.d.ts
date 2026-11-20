@@ -18,6 +18,8 @@ export type SheetOption = { value: string; ink?: SheetInk };
 export const VALID: "valid:";
 /** An Excel data validation's attributes, as an import keeps them; `inks` a dropdown's colours, ours alone. */
 export type SheetValidation = { type?: string; formula1?: string; formula2?: string; inks?: Record<string, SheetInk>; [attribute: string]: unknown };
+/** The area takes `kept` as its type (null: plain), as writeType does, in the caller's transaction. */
+export function putType(look: Y.Map<unknown>, sheet: FormatSheet & { id: string }, area: Range, kept: string | null, columns: boolean): void;
 export function readValidations(look: Y.Map<unknown>, tab: string): Record<string, SheetValidation>;
 export function setValidation(look: Y.Map<unknown>, tab: string, id: string, attributes: SheetValidation): void;
 export function optionsOf(validation: SheetValidation): SheetOption[] | null;

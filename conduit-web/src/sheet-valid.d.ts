@@ -1,0 +1,22 @@
+import type * as Y from "yjs";
+import type { Range } from "./sheet-format.js";
+import type { FormatSheet } from "./sheet-formats.js";
+import type { SheetValidation } from "./sheet-types.js";
+
+export type SheetRuleKind = "whole" | "decimal" | "list" | "date" | "time" | "textLength" | "custom";
+export type SheetRuleOperator = "between" | "notBetween" | "equal" | "notEqual" | "greaterThan" | "lessThan" | "greaterThanOrEqual" | "lessThanOrEqual";
+export const RULE_KINDS: SheetRuleKind[];
+export const OPERATORS: SheetRuleOperator[];
+export type SheetRule = SheetValidation & { id: string };
+type Sheetish = FormatSheet & { id: string; indexOfRow(id: string): number; indexOfCol(id: string): number };
+export function ruleAt(look: Y.Map<unknown>, sheet: Sheetish, row: number, col: number, all?: Record<string, SheetValidation>): SheetRule | undefined;
+export function readTime(text: string): number | null;
+export function entryValue(input: string): string | number | boolean | null;
+export function constant(formula: unknown): string | number | undefined;
+export type RuleReads = { read(formula: unknown): unknown; list(formula: unknown): readonly unknown[] | undefined; custom(formula: unknown): unknown };
+export function breaks(rule: SheetValidation, value: unknown, reads: RuleReads): boolean | undefined;
+export function ruleText(rule: SheetValidation): string;
+export function refusal(rule: SheetValidation, row: number, col: number): { stop: boolean; style: "stop" | "warning" | "information"; message: string };
+export function customAt(formula: unknown, anchor: { row: number; col: number }, row: number, col: number, value: unknown): string;
+export function anchorOf(look: Y.Map<unknown>, sheet: Sheetish, id: string): { row: number; col: number };
+export function writeRule(look: Y.Map<unknown>, sheet: Sheetish, area: Range, attributes: SheetValidation | null, columns: boolean): void;
