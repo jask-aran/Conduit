@@ -1085,7 +1085,8 @@ export function createDocuments({ dataRoot, projects, changed = () => {}, chats 
     const own = room.own = Number.isInteger(client) && Number.isInteger(step) && step >= 0 && step < 2 ** 32 ? { client: String(client), step, sent: 0 } : null;
     let out;
     try { out = KINDS[room.entry.kind].cells[op](room, ...args); } finally { room.own = null; }
-    return own ? Promise.resolve(out).then((said) => said && typeof said === "object" && !Array.isArray(said) ? { ...said, tagged: own.sent } : said) : out;
+    // An op that takes the tag up again after an await (sheets.js `intoFolder`) holds it to its end.
+    return own ? Promise.resolve(out).finally(() => { if (room.own === own) room.own = null; }).then((said) => said && typeof said === "object" && !Array.isArray(said) ? { ...said, tagged: own.sent } : said) : out;
   };
   const looking = setInterval(() => { for (const loading of rooms.values()) void loading.then((room) => room.peers.size || room.away ? room.work(() => see(room)) : null).catch(() => {}); }, LOOK_EVERY_MS);
   looking.unref();

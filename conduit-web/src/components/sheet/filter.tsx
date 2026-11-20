@@ -29,7 +29,7 @@ const TESTS: { is: SheetFilterTest; label: string; takes: 0 | 1 | 2; kind?: "num
   { is: "before", label: "Date is before", takes: 1, kind: "date" }, { is: "after", label: "Date is after", takes: 1, kind: "date" }, { is: "dates", label: "Date is between", takes: 2, kind: "date" },
   { is: "empty", label: "Is empty", takes: 0 }, { is: "filled", label: "Is not empty", takes: 0 },
 ];
-const fits = (kind: "number" | "date" | undefined, text: string) => kind === "number" ? text.trim() !== "" && Number.isFinite(Number(text)) : kind === "date" ? /^\d{4}-\d{2}-\d{2}$/.test(text.trim()) : text !== "";
+const fits = (kind: "number" | "date" | undefined, text: string) => kind === "number" ? text.trim() !== "" && Number.isFinite(Number(text)) : kind === "date" ? readDay(text) !== null : text !== "";
 type Ranged = { range: SheetRange; look: SheetRangedLook };
 type What = "filter" | "table";
 /** What key sequences and the menu do (sequences.tsx). `col`: the column sorted by; unsaid, the active cell's. */
@@ -271,10 +271,11 @@ export function FilterMenu(props: { filter: SheetFilter; at: { col: number; box:
   </>;
 }
 
-const DATE_HINT = "2026-01-30";
-// A condition's date is written as ISO, which `dayOf` (sheet-format.js) reads; a typed one is read as a date cell reads it.
-const readDay = (text: string) => { const serial = readDate(text); return serial === null ? null : serialDay(serial); };
-const writeDay = (day: CalendarDay) => `${day.year}-${String(day.month).padStart(2, "0")}-${String(day.day).padStart(2, "0")}`;
+const DATE_HINT = "30/1/2026";
+// A condition's date is shown and typed as a date cell is (d/m/yyyy) and kept as ISO, which `dayOf` (sheet-format.js) reads.
+function readDay(text: string) { const serial = readDate(text); return serial === null ? null : serialDay(serial); }
+const writeDay = (day: CalendarDay) => `${day.day}/${day.month}/${day.year}`;
+const isoDay = (text: string) => { const day = readDay(text); return day ? `${day.year}-${String(day.month).padStart(2, "0")}-${String(day.day).padStart(2, "0")}` : text.trim(); };
 /** A column's condition asked for: its test and the one or two values it compares with. */
 function FilterPrompt(props: { filter: SheetFilter; col: number | null; onClose(): void }) {
   const [is, setIs] = createSignal<SheetFilterTest>("contains"), [a, setA] = createSignal(""), [b, setB] = createSignal("");
@@ -282,11 +283,13 @@ function FilterPrompt(props: { filter: SheetFilter; col: number | null; onClose(
   const set = (event: SubmitEvent) => {
     event.preventDefault();
     const col = props.col;
-    if (col !== null && ready()) props.filter.setWhen(col, { is: is(), ...(test().takes ? { a: a().trim() || a() } : {}), ...(test().takes > 1 ? { b: b().trim() } : {}) });
+    const kept = (text: string) => test().kind === "date" ? isoDay(text) : text.trim();
+    if (col !== null && ready()) props.filter.setWhen(col, { is: is(), ...(test().takes ? { a: kept(a()) || a() } : {}), ...(test().takes > 1 ? { b: kept(b()) } : {}) });
     props.onClose();
   };
   return <Dialog open={props.col !== null} title={`Filter column ${colName(props.col ?? 0)}`} onOpenChange={(open) => { if (!open) props.onClose(); }}>
-    <Show when={props.col === null ? null : [props.col]}>{(asked) => { const was = props.filter.when(asked()[0]!); setIs(was?.is ?? "contains"); setA(was?.a ?? ""); setB(was?.b ?? ""); return <CardForm onSubmit={set}>
+    <Show when={props.col === null ? null : [props.col]}>{(asked) => { const was = props.filter.when(asked()[0]!), shown = (text = "") => TESTS.find((one) => one.is === was?.is)?.kind === "date" && readDay(text) ? writeDay(readDay(text)!) : text;
+      setIs(was?.is ?? "contains"); setA(shown(was?.a)); setB(shown(was?.b)); return <CardForm onSubmit={set}>
       <Field label="Show rows where" plain><Select aria-label="Condition" value={is()} onChange={(event) => setIs(event.currentTarget.value as SheetFilterTest)}><For each={TESTS}>{(one) => <option value={one.is}>{one.label}</option>}</For></Select></Field>
       <Show when={test().kind === "date"} fallback={<>
         <Show when={test().takes > 0}><Input aria-label={test().takes > 1 ? "From" : "Value"} value={a()} onInput={(event) => setA(event.currentTarget.value)} ref={(field) => queueMicrotask(() => field.focus())} /></Show>

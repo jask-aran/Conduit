@@ -569,13 +569,15 @@ export function sheetKind(hub) {
     refilter(room, sheet, by);
     return { removed: gone.length, left: kept.length };
   };
-  /** A .csv becomes a workbook folder before its second tab is written, so a failed move leaves it as it was; its tab is named then, as is its file.
-   * Awaited only when needed: a page's step tags only what an op writes before its first await (documents.js `cells`). */
+  /** A .csv becomes a workbook folder before its second tab is written, so a failed move leaves it as it was; its tab is named then, as is its file. */
   const intoFolder = async (room, by) => {
     if (isFolder(room)) return;
-    const first = room.doc.getMap(TAB).get(`name:${MAIN}`) ?? tabName(room.entry.name);
+    const first = room.doc.getMap(TAB).get(`name:${MAIN}`) ?? tabName(room.entry.name), own = room.own;
     await hub.folder(room, tabFile(first));
     if (!room.doc.getMap(TAB).has(`name:${MAIN}`)) hub.as(room, by, (sign) => room.book.tabOp("rename", { tab: MAIN, name: first }, sign));
+    // The page's step goes on past the move (the first tab's naming is the move's, never undone): what the op writes from here to its end, with no
+    // await between, is tagged as before it (documents.js `cells`).
+    room.own = own;
   };
   /** A copy of a tab next after it, named as Excel names one (`Data (2)`): its cells as typed (a formula reading its own tab reads the copy), and its look. */
   const duplicateTab = async (room, source, by) => {

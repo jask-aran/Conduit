@@ -73,8 +73,8 @@ export function DateField(props: { value: string; onInput(text: string): void; r
       onKeyDown={(event) => { if (event.altKey && event.key === "ArrowDown") { event.preventDefault(); setOpen(true); } }} />
     <Button variant="ghost" size="icon-sm" aria-label="Pick a date" aria-expanded={open()} onClick={() => setOpen((was) => !was)}><CalendarIcon /></Button>
     <Popover open={open()} onOpenChange={setOpen} anchorRef={() => box} placement="bottom-end">
-      <PopoverContent aria-label="Pick a date" width="sm" onOpenAutoFocus={(event) => event.preventDefault()}>
-        <Show when={open()}><Calendar value={props.read(props.value)} autofocus onPick={(day) => { props.onInput(props.write(day)); setOpen(false); }} onType={(key) => { setOpen(false); props.onInput(props.value + key); input?.focus(); }} /></Show>
+      <PopoverContent aria-label="Pick a date" width="sm" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => { event.preventDefault(); input?.focus(); }}>
+        <Show when={open()}><Calendar value={props.read(props.value)} autofocus onPick={(day) => { props.onInput(props.write(day)); setOpen(false); input?.focus(); }} onType={(key) => { setOpen(false); props.onInput(props.value + key); input?.focus(); }} /></Show>
       </PopoverContent>
     </Popover>
   </div>;
