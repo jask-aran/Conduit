@@ -3,8 +3,8 @@ import path from "node:path";
 import { HyperFormula } from "hyperformula";
 import { isDateFormat } from "numfmt";
 import { CALL_LIMIT, CELLS, COLS, COL_LIMIT, LOOK, MAIN, ROWS, SHEET_FORMAT, SHEET_LIMIT, TAB, TABS, WORKBOOK_LIMIT, a1, colId, filterHides, rangedArea, colIndex, colName, colsOf, fromCsv, key, parseA1, parseRange, parseRef, rangeA1, rowId, rowsOf, tabName, tabNameFault, tabRef, toCsv, valueText } from "../sheet-format.js";
-import { CONFIG, createWorkbookModel } from "../sheet-engine.js";
-import { listFormats, writeFormat } from "../sheet-formats.js";
+import { CONFIG, createWorkbookModel, dateFunctions } from "../sheet-engine.js";
+import { formatDates, listFormats, writeFormat } from "../sheet-formats.js";
 import { listStyles, writeStyle } from "../sheet-styles.js";
 import { readRules, rulesA1, rulesIds, shiftRefs } from "../sheet-rules.js";
 import { CHART_LIMIT, chartFrom, chartIds, chartsA1, keptCharts, readCharts } from "../sheet-charts.js";
@@ -56,6 +56,8 @@ export function sheetKind(hub) {
   /** The merge a cell is hidden under (inside one, not its upper-left), if any. */
   const hiddenUnder = (areas, r, c) => areas.find((one) => r >= one.top && r <= one.bottom && c >= one.left && c <= one.right && (r !== one.top || c !== one.left));
   // A value an op writes under a merge's hidden cells would be kept unseen: it is left out (emptying one goes through). A file read again keeps all.
+  let dates;
+  // `guarded`: written by a person or agent (set, fill): a merge's hidden cells are left, and a formula giving a date in a General cell is formatted as one.
   const writeCells = (room, sheet, written, by, guarded = false) => hub.as(room, by, (sign) => room.doc.transact(() => {
     const areas = guarded ? mergeAreas(room, sheet) : [];
     for (const [r, c, input] of written) {
@@ -63,6 +65,7 @@ export function sheetKind(hub) {
       const cell = key(sheet.rowAt(r), sheet.colAt(c));
       if (!input) room.cells.delete(cell); else if (room.cells.get(cell) !== input) room.cells.set(cell, input);
     }
+    if (guarded) formatDates(room.look, sheet, written.map(([row, col, input]) => ({ row, col, input })), dates ??= dateFunctions(), (name) => { const id = room.book.find(name); return id ? room.book.tab(id) : undefined; });
     sign();
   }));
   /** A comment's range: its two corners by row and column ids, where both are still there, and the tab their rows are in. */

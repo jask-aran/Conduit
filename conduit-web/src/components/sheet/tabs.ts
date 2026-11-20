@@ -27,6 +27,10 @@ export interface SheetTabsControl extends SheetTabs {
   open(): SheetView;
   /** The engine's function names, custom ones included ([] until its worker says). */
   functions(): readonly string[];
+  /** Its functions whose result is a date, each with its format. */
+  dates(): Readonly<Record<string, string>>;
+  /** A tab by its name (any case). */
+  named(name: string): SheetView | undefined;
   cells(op: SheetCellsOp): Promise<unknown>;
   /** A range as a comment says it: with its tab where the workbook has several. */
   where(range: SheetRange): { range: string; tab?: string };
@@ -108,6 +112,8 @@ export function createSheetTabs(options: { doc: Y.Doc; host: SheetHost; id: stri
 
   return {
     tabs, shown, show: soon, op, model, computing, functions, selection: options.at,
+    dates: () => book?.dates() ?? {},
+    named: (name) => { const id = book?.find(name); return id ? view(id) : undefined; },
     filled: (id) => { const tab = book?.tab(id); if (!tab) return false; const { rows, cols } = tab.size(); for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (tab.input(r, c)) return true; return false; },
     focus: () => options.grid()?.focus(),
     color: (id) => { colored(); const color = look.get(`tabColor:${id}`); return typeof color === "string" ? color : undefined; },

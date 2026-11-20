@@ -224,7 +224,6 @@ What a later builder must know:
   the list it told last (`toldTabs`).
 
 Open after the walk:
-- A formula on a date (`=E2+30`) shows a serial: Excel gives it the date format.
 - Delete cells… and Insert cells… start on Shift cells left / right; Excel starts on up / down for a block wider than tall.
 - The dropdown options dialog draws each row's colour picker above its Up and Delete buttons; the link popover's labels sit close to its frame.
 - At a 1,600 px window the ribbon folds into "Format" once the undo group gains its chevron.
