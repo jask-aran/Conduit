@@ -334,7 +334,7 @@ The features script is `scripts/xlsx-roundtrip-features.py` (`XLSX_PYTHON` names
 | charts (bar, line, pie) | **dropped**, not reported | kept | kept | same | same |
 | images | dropped, not reported | dropped (reported) | same | same | kept, not shown (pictures and shapes, on their cells) |
 | tabs: odd names, colours, a hidden tab | changed: colours lost | kept | kept | same | same |
-| row and column groups (outline levels, collapsed) | not in the scorecard | | | | kept, not shown |
+| row and column groups (outline levels, collapsed) | not in the scorecard | | | | kept (`outline:<lineId>`, the level, as the page's grouping keeps it) |
 | print settings | dropped, not reported | same | same | changed: print area and titles kept (as names), page setup lost | kept (page setup, headers, breaks) |
 | workbook and sheet protection | dropped, not reported | same | same | same | kept |
 
@@ -343,8 +343,10 @@ added to the scorecard; threaded comments are written into the generated file by
 (its cell types clipped them to the tab's values); that was fixed first.
 "Not shown" means the look holds it and an export writes it back, but the page does not draw it.
 
-**In real Excel** (`--excel`, **measured**): every export opens clean after rounds 2, 3 and 4. Round 4 also counts each export's notes, threaded
-comments and pictures as Excel reads them, and they match what was written. The one `@` left is `CELL("row",A2)`, which Excel reads with an
+**In real Excel** (`--excel`, **measured**): every export opens after rounds 2, 3 and 4. Round 4 also counts each export's notes, threaded
+comments, pictures and hidden columns as Excel reads them, and they match what was written. Counting hidden columns found that every export
+before round 4 wrote a `<col>` with no width for each column without one, which Excel draws zero wide: such columns opened hidden. They are now
+left out. The one `@` left is `CELL("row",A2)`, which Excel reads with an
 implicit `@` in the generated input as well. A dynamic-array export opens spilling with no implicit
 `@`; a dropdown's inks extension survives Excel's own edit and save. Rule ranges kept unread (`rulesKept`) are held by row and column ids since round 4, so they follow
 inserted rows. That covers all 31 scorecard workbooks and hand-built
@@ -372,7 +374,9 @@ without formulas). Keeping an `.xlsm`'s macros would make its export an `.xlsm` 
 
 **A large workbook (measured, round 4).** 200,000 cells over 5 tabs (2,000 rows by 20 columns each, half of them formulas, every tenth row bold and
 filled), written by openpyxl (no cached values), through the hub's document service: import 3.1 s, first open 5.0 s, export 2.7 s (3.2 MB), the
-process's peak memory 809 MB. Nothing in it grew faster than the cells; no change made. Excel's check of it timed out (counting each formula over COM).
+process's peak memory 809 MB. At 400,000 cells (4,000 rows a tab): import 4.8 s, first open 8.3 s, export 4.0 s, peak 1,559 MB, so time and memory
+grow about as the cells do. No change made. An export still passes through the zip three times (SheetJS writes it, then our styles and our parts
+each read and write it again). Excel's check of the 200,000-cell export timed out at two minutes; why was not found.
 
 ## Still to build
 

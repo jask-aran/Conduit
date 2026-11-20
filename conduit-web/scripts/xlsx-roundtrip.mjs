@@ -109,10 +109,10 @@ try {
   $xl.Visible = $false; $xl.DisplayAlerts = $false; $xl.AutomationSecurity = 3
   # A normal load: a file Excel would offer to repair is refused here, never repaired silently.
   try { $wb = $xl.Workbooks.Open($Path, 0, $true) } catch { $out.status = 'needs repair'; throw }
-  $sheets = 0; $charts = 0; $tables = 0; $formulas = 0; $at = 0; $notes = 0; $threads = 0; $images = 0
-  foreach ($ws in $wb.Worksheets) { $sheets++; $charts += $ws.ChartObjects().Count; $tables += $ws.ListObjects.Count; $notes += $ws.Comments.Count; $threads += $ws.CommentsThreaded.Count; $images += @($ws.Shapes | Where-Object { $_.Type -eq 13 }).Count; try { $found = $ws.UsedRange.SpecialCells(-4123); $formulas += $found.Count; foreach ($cell in $found.Cells) { if ("$($cell.Formula2)" -like '*@*') { $at++ } } } catch {} }
+  $sheets = 0; $charts = 0; $tables = 0; $formulas = 0; $at = 0; $notes = 0; $threads = 0; $images = 0; $hiddenCols = 0
+  foreach ($ws in $wb.Worksheets) { $sheets++; $charts += $ws.ChartObjects().Count; $tables += $ws.ListObjects.Count; $notes += $ws.Comments.Count; $threads += $ws.CommentsThreaded.Count; $images += @($ws.Shapes | Where-Object { $_.Type -eq 13 }).Count; $hiddenCols += @(1..$ws.UsedRange.Columns.Count | Where-Object { $ws.Columns.Item($_).Hidden }).Count; try { $found = $ws.UsedRange.SpecialCells(-4123); $formulas += $found.Count; foreach ($cell in $found.Cells) { if ("$($cell.Formula2)" -like '*@*') { $at++ } } } catch {} }
   # A formula Excel reads as one value where the file meant it to spill shows as =@…: counted in "at".
-  $out = @{ status = 'opens clean'; sheets = $sheets; charts = $charts; tables = $tables; formulas = $formulas; at = $at; notes = $notes; threads = $threads; images = $images }
+  $out = @{ status = 'opens clean'; sheets = $sheets; charts = $charts; tables = $tables; formulas = $formulas; at = $at; notes = $notes; threads = $threads; images = $images; hiddenCols = $hiddenCols }
   $wb.Close($false)
 } catch { $out.error = $_.Exception.Message }
 finally {
@@ -130,6 +130,8 @@ const excel = async (bytes) => {
   const wrote = { sheets: (xml(/xl\/workbook\.xml$/)[0].match(/<sheet\b/g) ?? []).length, charts: xml(/xl\/charts\/chart\d+\.xml$/).length, tables: xml(/xl\/tables\/table\d+\.xml$/).length, formulas: [...xml(/worksheets\/sheet\d+\.xml$/).join("").matchAll(/<c\b([^>]*)><f\b([^>]*)/g)].reduce((n, [, cell, head]) => { const ref = /ref="([^"]+)"/.exec(head)?.[1], area = ref && !/\bcm=/.test(cell) && XLSX.utils.decode_range(ref); return n + (area ? (area.e.r - area.s.r + 1) * (area.e.c - area.s.c + 1) : 1); }, 0), at: 0,
     threads: xml(/threadedComments\/threadedComment\d+\.xml$/).join("").match(/<threadedComment (?![^>]*parentId)/g)?.length ?? 0, images: xml(/xl\/drawings\/drawing\d+\.xml$/).join("").match(/<(?:xdr:)?pic>/g)?.length ?? 0 };
   // Excel counts a threaded comment's note (its projection for older versions) as the thread alone.
+  // Excel takes a column written with no width as zero wide, so hidden: its hidden columns are those the file hid, and no more.
+  wrote.hiddenCols = [...xml(/worksheets\/sheet\d+\.xml$/).join("").matchAll(/<col\b[^>]*>/g)].reduce((n, [tag]) => /\shidden="(?:1|true)"/.test(tag) ? n + Number(/max="(\d+)"/.exec(tag)[1]) - Number(/min="(\d+)"/.exec(tag)[1]) + 1 : n, 0);
   wrote.notes = (xml(/xl\/comments\d*\.xml$/).join("").match(/<comment /g)?.length ?? 0) - wrote.threads;
   await fs.writeFile(file, bytes);
   try {

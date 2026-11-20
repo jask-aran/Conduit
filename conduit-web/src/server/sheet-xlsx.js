@@ -20,8 +20,8 @@ import { ownOver, readDxfs, readStyles, rgbOf, seen, sheetRules, sheetStyles, wi
 /** @typedef {{ tabs: { name: string, rows: number, cols: number, formulas: number }[], skipped: string[], computed: { same: number, frozen: number, noCache: number, volatile: number }, frozen: Record<string, Record<string, { formula: string, why: string, kept?: string }>>, reasons: Record<string, number>, dropped: Record<string, number> }} ImportReport */
 
 const PT_PER_PX = 0.75;
-// Sizes are kept in pixels unrounded, so a width or height comes back as the file had it; the float's noise is taken off at the file.
-const exact = (size) => Math.round(size * 1e6) / 1e6;
+// A size as the file had it (`exact:<line>`: a width in characters, a height in points), written back while the line's pixels still round from it.
+const exact = (kept, px, toPx, toFile) => typeof kept === "number" && Math.round(toPx(kept)) === px ? kept : toFile(px);
 // Pixels to a character of a column's width, Excel's for its default font: SheetJS's own guess makes them double on read and six on write.
 const PX_PER_CHAR = 7, STYLES_PER_TAB = 20_000;
 // Pictures an import keeps, in bytes as the look holds them (base64), over the workbook.
@@ -209,7 +209,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   if (total > WORKBOOK_LIMIT) throw fault(`That workbook is too large for a sheet (${total} cells over its tabs; at most ${WORKBOOK_LIMIT}). Import some of its tabs (tabs): ${sizes()}`);
   // The workbook's defined names, each local one by its tab's name here; kept on the first tab's look (`names`) and computed (sheet-engine.js `defineNames`).
   const tabNamed = new Map(read.map((tab) => [tab.called, tab.name]));
-  // The people threaded comments name, kept on the first tab as the names are.
+  // The people threaded comments name, kept on the first tab (an export takes them from whichever tab holds them, as it moves).
   const persons = /<personList\b[\s\S]*<\/personList>/.exec(text(linked("xl/workbook.xml", "person")[0] ?? ""))?.[0];
   const definedNames = (book.Workbook?.Names ?? []).flatMap((one) => typeof one.Name === "string" && typeof one.Ref === "string" ? [{ name: one.Name, ref: one.Ref, ...(one.Sheet !== undefined && tabNamed.has(book.SheetNames[one.Sheet]) ? { tab: tabNamed.get(book.SheetNames[one.Sheet]) } : {}) }] : []);
   // Read once the workbook fits: a tab grows to take in the empty cells a fill or an edge shows on, while it still fits.
@@ -235,11 +235,11 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     const filtering = table ? /<autoFilter\b[\s\S]*?(?:\/>|<\/autoFilter>)/.exec(table)?.[0] : /<autoFilter\b[^>]*?(?:\/>|>[\s\S]*?<\/autoFilter>)/.exec(xml)?.[0];
     const dated = (c) => { const cell = tab.data[parseRange(attr(filtering, "ref")).top + 1]?.[c]; return typeof cell?.z === "string" && XLSX.SSF.is_date(cell.z); };
     if (filtering && attr(filtering, "ref")) { const conditions = filterOf(filtering, attr(filtering, "ref"), dated, drop); if (!table || Object.keys(conditions).length) tab.filter = { range: attr(filtering, "ref"), ...conditions }; }
-    // Its outline (Excel's row and column groups): each line's level and whether its group is collapsed, kept by line (`outline:<row or column>`), and
-    // where the summaries sit (`outlinePr`). The sheet does not draw groups yet.
+    // Its outline (Excel's row and column groups): each line's level (`outline:<row or column>`, as the page's grouping keeps it; a collapsed group's lines
+    // are hidden, and its mark is written again from them), and where the summaries sit (`outlinePr`).
     tab.outline = {};
-    for (const [tag] of xml.matchAll(/<row\b[^>]*>/g)) { const level = Number(attr(tag, "outlineLevel") ?? 0), r = Number(attr(tag, "r")) - 1, shut = ["1", "true"].includes(attr(tag, "collapsed")); if ((level || shut) && r < tab.rows) tab.outline[r + 1] = { ...(level ? { level } : {}), ...(shut ? { collapsed: true } : {}) }; }
-    for (const [tag] of xml.matchAll(/<col\b[^>]*>/g)) { const level = Number(attr(tag, "outlineLevel") ?? 0), shut = ["1", "true"].includes(attr(tag, "collapsed")); if (level || shut) for (let c = Number(attr(tag, "min")) - 1; c < Math.min(Number(attr(tag, "max")), tab.cols); c++) tab.outline[colName(c)] = { ...(level ? { level } : {}), ...(shut ? { collapsed: true } : {}) }; }
+    for (const [tag] of xml.matchAll(/<row\b[^>]*>/g)) { const level = Number(attr(tag, "outlineLevel") ?? 0), r = Number(attr(tag, "r")) - 1; if (level > 0 && level < 8 && r < tab.rows) tab.outline[r + 1] = level; }
+    for (const [tag] of xml.matchAll(/<col\b[^>]*>/g)) { const level = Number(attr(tag, "outlineLevel") ?? 0); if (level > 0 && level < 8) for (let c = Number(attr(tag, "min")) - 1; c < Math.min(Number(attr(tag, "max")), tab.cols); c++) tab.outline[colName(c)] = level; }
     if (Object.keys(tab.outline).length) keep("grouped rows and columns", Object.keys(tab.outline).length);
     tab.outlinePr = /<outlinePr\b[^>]*>/.exec(xml)?.[0];
     const print = Object.fromEntries([...PRINT, "pageSetUpPr"].flatMap((name) => { const one = elementOf(xml, name); return one ? [[name, one.replace(/\sr:id="[^"]*"/, "")]] : []; }));
@@ -323,7 +323,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
         if (typeof typed === "string" && typed.startsWith("=")) { inputs[a1(r, c)] = typed; return valueText(values[r]?.[c]); }
         return typed === null ? "" : String(typed);
       }));
-      (tab.sheet["!cols"] ?? []).forEach((col, c) => { if (c >= tab.cols) return; if (col?.width || col?.wpx) look[`width:${colName(c)}`] = col.width ? col.width * PX_PER_CHAR : col.wpx; if (col?.hidden) look[`hidden:${colName(c)}`] = 1; });
+      (tab.sheet["!cols"] ?? []).forEach((col, c) => { if (c >= tab.cols) return; if (col?.width || col?.wpx) look[`width:${colName(c)}`] = Math.round(col.width ? col.width * PX_PER_CHAR : col.wpx); if (col.width) look[`exact:${colName(c)}`] = col.width; if (col?.hidden) look[`hidden:${colName(c)}`] = 1; });
       (tab.sheet["!rows"] ?? []).forEach((row, r) => { if (r < tab.rows && row?.hidden) look[`hidden:${r + 1}`] = 1; });
       // A number format is kept for a column where most of its numbers share it, and for the cells that differ, up to a count.
       cellsOf(tab.data, (cell, r, c) => { if (cell.t === "n" && r < tab.rows && c < tab.cols) (formats.get(c) ?? formats.set(c, new Map()).get(c)).set(r, typeof cell.z === "string" ? cell.z : "General"); });
@@ -340,7 +340,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       for (const [c, index] of colStyles) if (formatsOf[index]) { if (c < tab.cols) look[`style:${colName(c)}`] = formatsOf[index]; else if (shows[index] && !tab.styles.wide.has(c)) drop("column styles past the tab's edge"); }
       for (const [r, index] of rowStyles) if (formatsOf[index]) { if (r < tab.rows) look[`style:${r + 1}`] = formatsOf[index]; else if (shows[index]) drop("row styles past the tab's edge"); }
       let styled = 0;
-      for (const [r, height] of heights) if (r < tab.rows) look[`height:${r + 1}`] = height / PT_PER_PX;
+      for (const [r, height] of heights) if (r < tab.rows) { look[`height:${r + 1}`] = Math.round(height / PT_PER_PX); look[`exact:${r + 1}`] = height; }
       for (const [r, c, index] of cellStyles) {
         if (r >= tab.rows || c >= tab.cols) { drop("styled cells past the tab's last value"); continue; }
         const under = { ...attrs(colStyles.get(c)), ...attrs(rowStyles.get(r)) }, own = encodeStyle(ownOver(under, attrs(index)));
@@ -461,13 +461,15 @@ export function exportXlsx(tabs) {
       sheet[at] = cell;
     }));
     sheet["!ref"] = `A1:${a1(Math.max(0, tab.typed.length - 1), cols - 1)}`;
-    // A column without its own width takes the tab's default (`width` alone), where it has one.
-    const level = (at) => { const n = tab.look[`outline:${at}`]?.level; return Number.isInteger(n) && n > 0 && n < 8 ? { level: n } : {}; };
-    sheet["!cols"] = Array.from({ length: cols }, (_, c) => { const width = tab.look[`width:${colName(c)}`] ?? tab.look.width; return { ...(typeof width === "number" ? { width: exact(width / PX_PER_CHAR) } : {}), ...(tab.look[`hidden:${colName(c)}`] ? { hidden: true } : {}), ...level(colName(c)) }; });
+    // A column without its own width takes the tab's default (`width` alone), where it has one; one with nothing of its own is left out, as a `<col>`
+    // with no width is one Excel draws zero wide.
+    const level = (at) => { const n = tab.look[`outline:${at}`]; return Number.isInteger(n) && n > 0 && n < 8 ? { level: n } : {}; };
+    sheet["!cols"] = Array.from({ length: cols }, (_, c) => { const width = tab.look[`width:${colName(c)}`] ?? tab.look.width; const col = { ...(typeof width === "number" ? { width: exact(tab.look[`exact:${colName(c)}`], width, (chars) => chars * PX_PER_CHAR, (px) => px / PX_PER_CHAR) } : {}), ...(tab.look[`hidden:${colName(c)}`] ? { hidden: true } : {}), ...level(colName(c)) }; return Object.keys(col).length ? col : null; });
+    if (!sheet["!cols"].some(Boolean)) delete sheet["!cols"];
     // Each row's height where it has its own, in points (SheetJS writes pixels as points), and the rows hidden.
     // The rows hidden, and those the filter hid when last applied.
     const filteredOut = new Set(tab.look.filter?.hide ?? []);
-    sheet["!rows"] = tab.typed.map((_, r) => { const height = tab.look[`height:${r + 1}`]; return { ...(typeof height === "number" ? { hpt: exact(height * PT_PER_PX) } : {}), ...(tab.look[`hidden:${r + 1}`] || filteredOut.has(r + 1) ? { hidden: true } : {}), ...level(r + 1) }; });
+    sheet["!rows"] = tab.typed.map((_, r) => { const height = tab.look[`height:${r + 1}`]; return { ...(typeof height === "number" ? { hpt: exact(tab.look[`exact:${r + 1}`], height, (pt) => pt / PT_PER_PX, (px) => px * PT_PER_PX) } : {}), ...(tab.look[`hidden:${r + 1}`] || filteredOut.has(r + 1) ? { hidden: true } : {}), ...level(r + 1) }; });
     // A table is its own part (xlsx-parts.js); one Excel would repair is written as its filter alone.
     // The table's part holds its own filter: a sheet's filter over it is one Excel repairs.
     tab.tablePart = tab.look.table ? tablePart(tab.look.table, tab.values, ++tables, tableNames, filterColumns(tab.look.filter?.range === tab.look.table.range ? tab.look.filter : null)) : null;
@@ -487,9 +489,12 @@ export function exportXlsx(tabs) {
   const conditions = tabs.map((tab) => tab.tablePart ? "" : filterColumns(tab.look.filter));
   const colors = tabs.map((tab) => { const color = String(tab.look.tabColor ?? ""); return (/^#[0-9A-F]{6}$/i.test(color) || SHEET_INKS.includes(color) ? `<tabColor rgb="FF${rgbOf(color)}"/>` : "") + whole(tab.look.print?.pageSetUpPr, "pageSetUpPr"); });
   const printed = tabs.map((tab) => [...PRINT.map((name) => [name, whole(tab.look.print?.[name], name)]), ["sheetProtection", whole(tab.look.protection, "sheetProtection")]].filter(([, xml]) => xml));
-  const locked = whole(tabs[0]?.look.bookProtection, "workbookProtection");
-  // A collapsed group's mark, on the line after it, which SheetJS does not write; and the outline's settings in sheetPr.
-  const shut = tabs.map((tab) => Object.entries(tab.look).flatMap(([name, line]) => /^outline:/.test(name) && line?.collapsed ? [name.slice(8)] : []));
+  const locked = whole(tabs.find((tab) => tab.look.bookProtection)?.look.bookProtection, "workbookProtection");
+  // A collapsed group's mark, which SheetJS does not write: on the line after a hidden one of a deeper level, as Excel marks it (summaries below and
+  // right); and the outline's settings in sheetPr.
+  const levelOf = (look, at) => Number.isInteger(look[`outline:${at}`]) ? look[`outline:${at}`] : 0;
+  const shut = tabs.map((tab) => [...Array.from({ length: tab.typed.length }, (_, r) => r + 1), ...Array.from({ length: Math.max(1, ...tab.typed.map((row) => row.length)) }, (_, c) => colName(c))]
+    .filter((at, n, all) => { const before = typeof at === "number" ? at - 1 : n > 0 && typeof all[n - 1] === "string" ? all[n - 1] : null; return before !== null && before !== 0 && tab.look[`hidden:${before}`] && levelOf(tab.look, before) > levelOf(tab.look, at); }).map(String));
   colors.forEach((_, n) => { const pr = whole(tabs[n].look.outlinePr, "outlinePr"); if (pr) colors[n] = colors[n].replace(/(<tabColor[^>]*>)?/, (color) => `${color}${pr}`); });
   let drawings = 0, charts = 1, noted = 0, blocks = 1, media = 1;
   const parts = tabs.map((tab) => {
@@ -499,7 +504,9 @@ export function exportXlsx(tabs) {
     if (notes.blocks) { noted += 1; blocks += notes.blocks; }
     return [tab.tablePart, drawing, ...notes.parts].filter(Boolean);
   });
-  const persons = personsPart(tabs[0]?.look.persons), bookParts = persons && parts.some((list) => list.some((part) => part.name.startsWith("xl/threadedComments/"))) ? [persons] : [];
+  const persons = personsPart(tabs.find((tab) => tab.look.persons)?.look.persons), bookParts = persons && parts.some((list) => list.some((part) => part.name.startsWith("xl/threadedComments/"))) ? [persons] : [];
+  // A thread names its people: without them it is left to its note, which Excel reads alone.
+  if (!persons) parts.forEach((list, n) => { parts[n] = list.filter((part) => !part.name.startsWith("xl/threadedComments/")); });
   if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean) && !inked.some(Boolean) && !colors.some(Boolean) && !conditions.some(Boolean) && !printed.some((list) => list.length) && !locked && !tabs.some((tab) => Object.keys(tab.look).some((name) => name.startsWith("outline:")))) return withParts(written, parts, placed, bookParts);
   let restyled = null;
   return withParts(editParts(written, (path, xml, all) => {
