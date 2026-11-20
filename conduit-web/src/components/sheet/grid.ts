@@ -244,6 +244,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   const write = (list: { row: number; col: number; input: string }[], label?: string) => { if (list.length) events.write(list, label); };
   // Each drawn row's filled columns, found once a change (`update`), so an empty cell finds the text running into it from its left in a few reads.
   let filledRows = new Map<number, number[]>(), measure: CanvasRenderingContext2D | null = null;
+  // The cells each part has made (`contentOf`), by the sheet's row.
+  const made = new Set<Map<number, Map<number, GridCell>>>();
   /** How far from a dropdown cell's left its pill reaches (cell-draw.ts), where a click opens its options too. */
   const pillReach = (value: unknown) => {
     const text = value === null || value === undefined ? "" : String(value);
@@ -511,9 +513,20 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         if (typeof value === "string" && !fault) made.link = options.columns.link(row, col, value);
         return made;
       };
-      return ([col, at]: Item): GridCell => merges.length ? merged(at, col, p.map.sheet(at)) : own(p.map.sheet(at), col);
+      // Each cell as made, by the sheet's row, until it changes (`update`) or the rows' heights do (a merge's share): a selection moved draws
+      // every cell in view again, and reads nothing of the sheet for it.
+      const kept = new Map<number, Map<number, GridCell>>();
+      made.add(kept);
+      let by = rowHeights.get(p);
+      return ([col, at]: Item): GridCell => {
+        if (rowHeights.get(p) !== by) { kept.clear(); by = rowHeights.get(p); }
+        const row = p.map.sheet(at), line = kept.get(row) ?? kept.set(row, new Map()).get(row)!;
+        let cell = line.get(col);
+        if (!cell) line.set(col, cell = merges.length ? merged(at, col, row) : own(row, col));
+        return cell;
+      };
     };
-    const content = useMemo(() => ({ head: contentOf(head), body: contentOf(body) }), [shape, theme, cellLook, columns]);
+    const content = useMemo(() => { made.clear(); return { head: contentOf(head), body: contentOf(body) }; }, [shape, theme, cellLook, columns]);
     // One number while every row is the default height: the grid then sums no heights to scroll. Heights set while a row's edge is dragged are by the sheet's row.
     const heightOf = (p: Part) => { const kept = options.columns.heights(); return kept.size || Object.keys(heights).length ? (drawn: number) => { const row = p.map.sheet(drawn); return heights[row] ?? kept.get(row) ?? theme.row; } : theme.row; };
     const rowHeight = useMemo(() => ({ head: heightOf(head), body: heightOf(body) }), [shape, heights, theme]);
@@ -709,6 +722,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       }
       // Only what is in view is drawn again; the rest is read as it scrolls in. A merge over rows is drawn by each of its rows.
       if (merges.length) { const seen = new Set<SheetRange>(); changed = changed.flatMap((cell) => { const one = mergeAt(cell.row, cell.col); if (!one || one.bottom === one.top) return [cell]; if (seen.has(one)) return []; seen.add(one); return Array.from({ length: one.bottom - one.top + 1 }, (_, n) => ({ row: one.top + n, col: one.left })); }); }
+      // A changed cell's whole row is made again: its text may run on over the empty cells to its right.
+      for (const kept of made) for (const { row } of changed) kept.delete(row);
       for (const p of parts) {
         // A cell drawn again redraws the row on to its right in view too: its text may run on over the empty cells there (`spillInto`).
         const { view } = p, from = new Map<number, number>();
