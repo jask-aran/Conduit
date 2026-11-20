@@ -230,6 +230,13 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     const filtering = table ? /<autoFilter\b[\s\S]*?(?:\/>|<\/autoFilter>)/.exec(table)?.[0] : /<autoFilter\b[^>]*?(?:\/>|>[\s\S]*?<\/autoFilter>)/.exec(xml)?.[0];
     const dated = (c) => { const cell = tab.data[parseRange(attr(filtering, "ref")).top + 1]?.[c]; return typeof cell?.z === "string" && XLSX.SSF.is_date(cell.z); };
     if (filtering && attr(filtering, "ref")) { const conditions = filterOf(filtering, attr(filtering, "ref"), dated, drop); if (!table || Object.keys(conditions).length) tab.filter = { range: attr(filtering, "ref"), ...conditions }; }
+    // Its outline (Excel's row and column groups): each line's level and whether its group is collapsed, kept by line (`outline:<row or column>`), and
+    // where the summaries sit (`outlinePr`). The sheet does not draw groups yet.
+    tab.outline = {};
+    for (const [tag] of xml.matchAll(/<row\b[^>]*>/g)) { const level = Number(attr(tag, "outlineLevel") ?? 0), r = Number(attr(tag, "r")) - 1, shut = ["1", "true"].includes(attr(tag, "collapsed")); if ((level || shut) && r < tab.rows) tab.outline[r + 1] = { ...(level ? { level } : {}), ...(shut ? { collapsed: true } : {}) }; }
+    for (const [tag] of xml.matchAll(/<col\b[^>]*>/g)) { const level = Number(attr(tag, "outlineLevel") ?? 0), shut = ["1", "true"].includes(attr(tag, "collapsed")); if (level || shut) for (let c = Number(attr(tag, "min")) - 1; c < Math.min(Number(attr(tag, "max")), tab.cols); c++) tab.outline[colName(c)] = { ...(level ? { level } : {}), ...(shut ? { collapsed: true } : {}) }; }
+    if (Object.keys(tab.outline).length) keep("grouped rows and columns", Object.keys(tab.outline).length);
+    tab.outlinePr = /<outlinePr\b[^>]*>/.exec(xml)?.[0];
     const print = Object.fromEntries([...PRINT, "pageSetUpPr"].flatMap((name) => { const one = elementOf(xml, name); return one ? [[name, one.replace(/\sr:id="[^"]*"/, "")]] : []; }));
     if (Object.keys(print).length) { tab.print = print; if (Object.keys(print).some((name) => name !== "pageMargins")) keep("page setups"); }
     tab.protection = elementOf(xml, "sheetProtection");
@@ -347,6 +354,8 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       if (tab.validations.length) look.validations = tab.validations;
       if (tab.color) look.tabColor = tab.color;
       if (tab.print) look.print = tab.print;
+      for (const [at, line] of Object.entries(tab.outline)) look[`outline:${at}`] = line;
+      if (tab.outlinePr && Object.keys(tab.outline).length) look.outlinePr = tab.outlinePr;
       if (tab.protection) look.protection = tab.protection;
       if (tab === read[0] && elementOf(text("xl/workbook.xml"), "workbookProtection")) look.bookProtection = elementOf(text("xl/workbook.xml"), "workbookProtection");
       if (tab.charts.length) look.charts = tab.charts;
@@ -448,11 +457,12 @@ export function exportXlsx(tabs) {
     }));
     sheet["!ref"] = `A1:${a1(Math.max(0, tab.typed.length - 1), cols - 1)}`;
     // A column without its own width takes the tab's default (`width` alone), where it has one.
-    sheet["!cols"] = Array.from({ length: cols }, (_, c) => { const width = tab.look[`width:${colName(c)}`] ?? tab.look.width; return { ...(typeof width === "number" ? { width: exact(width / PX_PER_CHAR) } : {}), ...(tab.look[`hidden:${colName(c)}`] ? { hidden: true } : {}) }; });
+    const level = (at) => { const n = tab.look[`outline:${at}`]?.level; return Number.isInteger(n) && n > 0 && n < 8 ? { level: n } : {}; };
+    sheet["!cols"] = Array.from({ length: cols }, (_, c) => { const width = tab.look[`width:${colName(c)}`] ?? tab.look.width; return { ...(typeof width === "number" ? { width: exact(width / PX_PER_CHAR) } : {}), ...(tab.look[`hidden:${colName(c)}`] ? { hidden: true } : {}), ...level(colName(c)) }; });
     // Each row's height where it has its own, in points (SheetJS writes pixels as points), and the rows hidden.
     // The rows hidden, and those the filter hid when last applied.
     const filteredOut = new Set(tab.look.filter?.hide ?? []);
-    sheet["!rows"] = tab.typed.map((_, r) => { const height = tab.look[`height:${r + 1}`]; return { ...(typeof height === "number" ? { hpt: exact(height * PT_PER_PX) } : {}), ...(tab.look[`hidden:${r + 1}`] || filteredOut.has(r + 1) ? { hidden: true } : {}) }; });
+    sheet["!rows"] = tab.typed.map((_, r) => { const height = tab.look[`height:${r + 1}`]; return { ...(typeof height === "number" ? { hpt: exact(height * PT_PER_PX) } : {}), ...(tab.look[`hidden:${r + 1}`] || filteredOut.has(r + 1) ? { hidden: true } : {}), ...level(r + 1) }; });
     // A table is its own part (xlsx-parts.js); one Excel would repair is written as its filter alone.
     // The table's part holds its own filter: a sheet's filter over it is one Excel repairs.
     tab.tablePart = tab.look.table ? tablePart(tab.look.table, tab.values, ++tables, tableNames, filterColumns(tab.look.filter?.range === tab.look.table.range ? tab.look.filter : null)) : null;
@@ -473,6 +483,9 @@ export function exportXlsx(tabs) {
   const colors = tabs.map((tab) => { const color = String(tab.look.tabColor ?? ""); return (/^#[0-9A-F]{6}$/i.test(color) || SHEET_INKS.includes(color) ? `<tabColor rgb="FF${rgbOf(color)}"/>` : "") + whole(tab.look.print?.pageSetUpPr, "pageSetUpPr"); });
   const printed = tabs.map((tab) => [...PRINT.map((name) => [name, whole(tab.look.print?.[name], name)]), ["sheetProtection", whole(tab.look.protection, "sheetProtection")]].filter(([, xml]) => xml));
   const locked = whole(tabs[0]?.look.bookProtection, "workbookProtection");
+  // A collapsed group's mark, on the line after it, which SheetJS does not write; and the outline's settings in sheetPr.
+  const shut = tabs.map((tab) => Object.entries(tab.look).flatMap(([name, line]) => /^outline:/.test(name) && line?.collapsed ? [name.slice(8)] : []));
+  colors.forEach((_, n) => { const pr = whole(tabs[n].look.outlinePr, "outlinePr"); if (pr) colors[n] = colors[n].replace(/(<tabColor[^>]*>)?/, (color) => `${color}${pr}`); });
   let drawings = 0, charts = 1, noted = 0, blocks = 1, media = 1;
   const parts = tabs.map((tab) => {
     const drawn = Object.entries(tab.look).flatMap(([name, list]) => /^drawing:[A-Z]{1,3}\d+$/.test(name) ? [[name.slice(8), list]] : []);
@@ -482,7 +495,7 @@ export function exportXlsx(tabs) {
     return [tab.tablePart, drawing, ...notes.parts].filter(Boolean);
   });
   const persons = personsPart(tabs[0]?.look.persons), bookParts = persons && parts.some((list) => list.some((part) => part.name.startsWith("xl/threadedComments/"))) ? [persons] : [];
-  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean) && !inked.some(Boolean) && !colors.some(Boolean) && !conditions.some(Boolean) && !printed.some((list) => list.length) && !locked) return withParts(written, parts, placed, bookParts);
+  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean) && !inked.some(Boolean) && !colors.some(Boolean) && !conditions.some(Boolean) && !printed.some((list) => list.length) && !locked && !tabs.some((tab) => Object.keys(tab.look).some((name) => name.startsWith("outline:")))) return withParts(written, parts, placed, bookParts);
   let restyled = null;
   return withParts(editParts(written, (path, xml, all) => {
     if (styled && !restyled) {
@@ -496,6 +509,9 @@ export function exportXlsx(tabs) {
       .concat([[inked[n], (xml) => /<extLst>/.test(xml) ? xml.replace("</extLst>", `${inked[n]}</extLst>`) : placed(xml, "extLst", `<extLst>${inked[n]}</extLst>`)], [conditions[n], (xml) => xml.replace(/<autoFilter ref="([^"]*)"\/>/, (_, ref) => `<autoFilter ref="${ref}">${conditions[n]}</autoFilter>`)]])
       .reduce((xml, [has, put]) => n >= 0 && has ? put(xml) : xml, sheet);
     for (const [name, block] of printed[n] ?? []) valid = swapped(valid, name, block);
+    // SheetJS writes a column's level twice, once as an attribute the schema does not have.
+    if (n >= 0) valid = valid.replace(/(<col\b[^>]*?)\slevel="\d+"/g, "$1");
+    for (const at of shut[n] ?? []) valid = /^\d+$/.test(at) ? valid.replace(new RegExp(`<row r="${at}"(?=[\\s>])`), (row) => `${row} collapsed="1"`) : valid.replace(/<col\b[^>]*>/g, (col) => attr(col, "min") === String(colIndex(at) + 1) ? col.replace(/^<col/, '<col collapsed="1"') : col);
     return rows || cols ? valid.replace(/<sheetView workbookViewId="0"\/>/, paneXml(rows, cols)) : valid;
   }), parts, placed, bookParts);
 }

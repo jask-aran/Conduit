@@ -323,6 +323,20 @@ def r_tabs(wb, raw):
     out.update(formula_facts(wb, raw)); return out
 feature("tabs: names, colours, hidden")((g_tabs, r_tabs))
 
+def g_groups(wb):
+    ws = wb.active
+    for r in range(1, 11):
+        for c in range(1, 6): ws.cell(r, c, r * c)
+    ws.row_dimensions.group(2, 4, outline_level=1); ws.row_dimensions.group(3, 3, outline_level=2, hidden=True); ws.row_dimensions[4].collapsed = True
+    ws.row_dimensions.group(7, 8, outline_level=1, hidden=True); ws.row_dimensions[9].collapsed = True
+    ws.column_dimensions.group("B", "C", outline_level=1)
+def r_groups(wb, raw):
+    ws = wb.active
+    out = {f"row {k}": [d.outlineLevel, bool(d.hidden), bool(d.collapsed)] for k, d in ws.row_dimensions.items() if d.outlineLevel or d.collapsed}
+    out.update({f"col {k}": [d.outlineLevel, bool(d.hidden)] for k, d in ws.column_dimensions.items() if d.outlineLevel})
+    return out
+feature("outline groups")((g_groups, r_groups))
+
 def g_print(wb):
     ws = wb.active; numbers(ws, 30)
     ws.page_setup.orientation = "landscape"; ws.page_setup.paperSize = ws.PAPERSIZE_A4; ws.page_setup.fitToWidth = 1; ws.sheet_properties.pageSetUpPr.fitToPage = True
