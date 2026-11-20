@@ -8,10 +8,11 @@ import { PHONE_LAYOUT_QUERY } from "@/components/ui/layout";
 import { MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, Popover, PopoverContent, Select } from "@/components/ui/menus";
 import type { SheetBox } from "./host";
 
-/** One row of the cell menu: a doing, or (`sub`) a submenu of them. */
-export type SheetMenuEntry = { label: string; icon?: JSX.Element; keys?: string[]; meta?: string; destructive?: boolean; disabled?: boolean; run?(): void; sub?: SheetMenuEntry[] };
+/** One row of the cell menu: a doing, or (`sub`) a submenu of them, made as it opens (or as a search reads it), when given as a function. */
+export type SheetMenuEntry = { label: string; icon?: JSX.Element; keys?: string[]; meta?: string; destructive?: boolean; disabled?: boolean; run?(): void; sub?: SheetMenuEntry[] | (() => SheetMenuEntry[]) };
 
-const has = (entry: SheetMenuEntry, query: string): boolean => entry.label.toLowerCase().includes(query) || Boolean(entry.sub?.some((one) => has(one, query)));
+const subOf = (entry: SheetMenuEntry) => typeof entry.sub === "function" ? entry.sub() : entry.sub;
+const has = (entry: SheetMenuEntry, query: string): boolean => entry.label.toLowerCase().includes(query) || Boolean(subOf(entry)?.some((one) => has(one, query)));
 // The typing is the field's: the menu's own keys would pick a row by its first letter. Down goes into the rows, Enter picks the first one shown.
 const keys = (event: KeyboardEvent) => {
   if (event.key === "Escape" || event.key === "Tab") return;
@@ -41,7 +42,7 @@ export function SheetMenu(props: { groups: (SheetMenuEntry[] | false | null | un
   return <>
     <SearchSection placeholder="Search the menu" value={query()} onInput={setQuery} field={{ "aria-label": "Search the menu", onKeyDown: keys }} />
     <For each={shown()}>{(group) => <MenuSection><For each={group}>{(entry) => entry.sub
-      ? <MenuSub phone={phone}><MenuSubTrigger icon={entry.icon} meta={entry.meta}>{entry.label}</MenuSubTrigger><MenuSubContent><MenuSection><For each={entry.sub}>{row}</For></MenuSection></MenuSubContent></MenuSub>
+      ? <MenuSub phone={phone}><MenuSubTrigger icon={entry.icon} meta={entry.meta}>{entry.label}</MenuSubTrigger><MenuSubContent><MenuSection><For each={subOf(entry)}>{row}</For></MenuSection></MenuSubContent></MenuSub>
       : row(entry)}</For></MenuSection>}</For>
     <Show when={!query().trim()}>{props.after}</Show>
   </>;
