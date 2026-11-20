@@ -723,7 +723,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
           onEdit={() => { const now = listing(); setListing(null); if (now) editList({ top: now.row, bottom: now.row, left: now.col, right: now.col }); }} />
         <CalendarPopover at={(() => { const box = dating()?.box; return box ? new DOMRect(box.left, box.top, box.width, box.height) : null; })()} frame={() => body} onClose={() => { setDating(null); grid()?.focus(); }}
           value={(() => { const now = dating(), value = now && model()?.value(now.row, now.col); return typeof value === "number" ? serialDay(value) : null; })()}
-          onPick={(day) => { const now = dating(), serial = daySerial(day); setDating(null); if (now && serial !== null) writes(`Pick in ${a1(now.row, now.col)}`)([{ row: now.row, col: now.col, input: String(serial) }]); grid()?.focus(); }} />
+          onPick={(day) => { const now = dating(), serial = daySerial(day); setDating(null); if (now && serial !== null) writes(`Pick in ${a1(now.row, now.col)}`)([{ row: now.row, col: now.col, input: String(serial) }]); grid()?.focus(); }}
+          onType={(typed) => { const now = dating(); setDating(null); if (now) { editor.begin(now, "enter", "cell"); editor.typed(typed, typed.length); } }} />
         <LinkPrompt at={linking()} frame={() => body} onClose={() => { setLinking(null); grid()?.focus(); }}
           onSave={(text, address) => { const now = linking(); setLinking(null); if (now) history.act(address ? "Link" : "Remove link", () => { if (text !== now.text) write([{ row: now.row, col: now.col, input: text }]); types.setLink(now.row, now.col, address || null); }); grid()?.focus(); }} />
         <DropdownPrompt given={editingList()?.options ?? null} onClose={() => { setEditingList(null); grid()?.focus(); }}

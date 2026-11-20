@@ -30,7 +30,7 @@ export const calendarPage: Page = {
     { selector: ".ui-calendar-day[data-checked]", name: "Chosen", does: "the day the value holds, current weight, no fill", from: "Calendar value" },
   ] },
   examples: [
-    row("pick a day", "Arrows, PageUp and PageDown move the cursor; Enter or a press picks", () => <Picking />, { surfaces: ["frost"], code: "<Calendar value onPick>" }),
+    row("pick a day", "Arrows, PageUp and PageDown move the cursor; Enter or a press picks", () => <Picking />, { surfaces: ["ground"], code: "<Calendar value onPick>" }),
     row("date field", "Typed, or picked from the calendar its button (or Alt+Down) opens", () => <Field />, { code: "<DateField value onInput read write>" }),
   ],
   tokens: [{ title: "Calendar", tokens: [

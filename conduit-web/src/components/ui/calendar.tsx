@@ -22,9 +22,10 @@ export const today = (): CalendarDay => { const now = new Date(); return { year:
 
 /**
  * The month of the cursor's day, weeks from Monday: the arrows move the cursor by a day and Up and Down by a week, PageUp and PageDown by a month,
- * Home and End to the week's ends; Enter or a press picks. The chosen day is current, today marked; Escape is the popover's.
+ * Home and End to the week's ends; Enter or a press picks. The chosen day is current, today marked; Escape is the popover's. A character typed is
+ * `onType`'s, so a date can be typed where the calendar was opened.
  */
-export function Calendar(props: { value?: CalendarDay | null; onPick(day: CalendarDay): void; autofocus?: boolean }) {
+export function Calendar(props: { value?: CalendarDay | null; onPick(day: CalendarDay): void; onType?(key: string): void; autofocus?: boolean }) {
   const [cursor, setCursor] = createSignal(count(props.value ?? today()));
   const now = count(today()), chosen = () => props.value ? count(props.value) : null;
   const days = createMemo(() => {
@@ -37,7 +38,8 @@ export function Calendar(props: { value?: CalendarDay | null; onPick(day: Calend
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     const move = keys[event.key];
     if (move) { event.preventDefault(); setCursor(move(cursor())); return; }
-    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); props.onPick(dayOf(cursor())); }
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); props.onPick(dayOf(cursor())); return; }
+    if (event.key.length === 1 && props.onType) { event.preventDefault(); props.onType(event.key); }
   };
   return <Section>
     <div class="ui-title ui-calendar-head"><span>{MONTH.format(cursor() * DAY_MS)}</span><small>
@@ -48,16 +50,16 @@ export function Calendar(props: { value?: CalendarDay | null; onPick(day: Calend
       <For each={WEEKDAYS}>{(name) => <span class="ui-calendar-weekday" aria-hidden="true">{name}</span>}</For>
       <For each={days()}>{(n) => <button type="button" class="ui-calendar-day" tabIndex={-1} aria-label={LONG.format(n * DAY_MS)}
         data-outside={dayOf(n).month !== month() ? "" : undefined} data-highlighted={n === cursor() ? "" : undefined} data-checked={n === chosen() ? "" : undefined} data-today={n === now ? "" : undefined}
-        onPointerMove={() => { if (n !== cursor()) setCursor(n); }} onClick={() => props.onPick(dayOf(n))}>{dayOf(n).day}</button>}</For>
+        onPointerMove={() => { if (n !== cursor() && dayOf(n).month === month()) setCursor(n); }} onClick={() => props.onPick(dayOf(n))}>{dayOf(n).day}</button>}</For>
     </div>
   </Section>;
 }
 
 /** The calendar in a popover at `at` (a box in `frame`'s coordinates; null: shut), as a cell's list opens. */
-export function CalendarPopover(props: { at: DOMRect | null; frame: () => HTMLElement | undefined; value?: CalendarDay | null; onPick(day: CalendarDay): void; onClose(): void }) {
+export function CalendarPopover(props: { at: DOMRect | null; frame: () => HTMLElement | undefined; value?: CalendarDay | null; onPick(day: CalendarDay): void; onType?(key: string): void; onClose(): void }) {
   return <Popover open={props.at !== null} onOpenChange={(open) => { if (!open) props.onClose(); }} anchorRef={props.frame} placement="bottom-start" anchorRect={() => props.at ?? undefined}>
-    <PopoverContent aria-label="Pick a date" width="sm" onOpenAutoFocus={(event) => event.preventDefault()}>
-      <Show when={props.at}><Calendar value={props.value} onPick={props.onPick} autofocus /></Show>
+    <PopoverContent aria-label="Pick a date" width="sm" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}>
+      <Show when={props.at}><Calendar value={props.value} onPick={props.onPick} onType={props.onType} autofocus /></Show>
     </PopoverContent>
   </Popover>;
 }
@@ -65,14 +67,14 @@ export function CalendarPopover(props: { at: DOMRect | null; frame: () => HTMLEl
 /** A date typed or picked: the field, and beside it the calendar's button. `read` and `write` turn its text into a day and back. */
 export function DateField(props: { value: string; onInput(text: string): void; read(text: string): CalendarDay | null; write(day: CalendarDay): string; "aria-label": string; placeholder?: string; autofocus?: boolean }) {
   const [open, setOpen] = createSignal(false);
-  let box: HTMLDivElement | undefined;
+  let box: HTMLDivElement | undefined, input: HTMLInputElement | undefined;
   return <div class="ui-date-field" ref={box}>
-    <Input aria-label={props["aria-label"]} placeholder={props.placeholder} value={props.value} onInput={(event) => props.onInput(event.currentTarget.value)} ref={(field) => { if (props.autofocus) queueMicrotask(() => field.focus()); }}
+    <Input aria-label={props["aria-label"]} placeholder={props.placeholder} value={props.value} onInput={(event) => props.onInput(event.currentTarget.value)} ref={(field) => { input = field; if (props.autofocus) queueMicrotask(() => field.focus()); }}
       onKeyDown={(event) => { if (event.altKey && event.key === "ArrowDown") { event.preventDefault(); setOpen(true); } }} />
     <Button variant="ghost" size="icon-sm" aria-label="Pick a date" aria-expanded={open()} onClick={() => setOpen((was) => !was)}><CalendarIcon /></Button>
     <Popover open={open()} onOpenChange={setOpen} anchorRef={() => box} placement="bottom-end">
       <PopoverContent aria-label="Pick a date" width="sm" onOpenAutoFocus={(event) => event.preventDefault()}>
-        <Show when={open()}><Calendar value={props.read(props.value)} autofocus onPick={(day) => { props.onInput(props.write(day)); setOpen(false); }} /></Show>
+        <Show when={open()}><Calendar value={props.read(props.value)} autofocus onPick={(day) => { props.onInput(props.write(day)); setOpen(false); }} onType={(key) => { setOpen(false); props.onInput(props.value + key); input?.focus(); }} /></Show>
       </PopoverContent>
     </Popover>
   </div>;
