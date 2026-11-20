@@ -14,6 +14,7 @@ import { formatDates } from "@/sheet-formats.js";
 import { daySerial, serialDay } from "@/sheet-types.js";
 import { CalendarPopover, today } from "@/components/ui/calendar";
 import { SheetFoot } from "./foot";
+import { createSheetOutline } from "./outline";
 import { createSheetTabs } from "./tabs";
 import { ASK_KEY, type SheetAnchor, type SheetBox, type SheetGrid, type SheetGridEvents, type SheetHost, type SheetMarks, type SheetPlace, type SheetRange, type SheetState } from "./host";
 import { createLiveSheet } from "./live";
@@ -58,6 +59,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const [model, setModel] = createSignal<SheetView>(), [grid, setGrid] = createSignal<SheetGrid>(), [failed, setFailed] = createSignal<string>();
   const [at, setAt] = createSignal<SheetRange | null>(null), [changed, setChanged] = createSignal(0), [address, setAddress] = createSignal<string | null>(null), [scrolled, setScrolled] = createSignal(0);
   const [menu, setMenu] = createSignal<Menu>({});
+  const outline = createSheetOutline(look, model);
   const formats = createSheetFormats(look, model, props.host.failed), styles = createSheetStyles(look, model, props.host.failed), types = createSheetTypes(look, model, props.host.failed);
   // A dropdown's list open on its cell, and the options being edited for a range (`type`: the list's, else a new one).
   const [listing, setListing] = createSignal<{ row: number; col: number; box: SheetBox } | null>(null), [editingList, setEditingList] = createSignal<{ range: SheetRange; type?: string; options: readonly DropdownOption[] } | null>(null);
@@ -187,6 +189,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       // Enter and Alt+Down open a dropdown's options.
       if (type?.startsWith("list:") && ((plain && event.key === "Enter") || (event.altKey && !event.ctrlKey && event.key === "ArrowDown"))) { event.preventDefault(); openList(row, col); return true; }
       if (type === "date" && event.altKey && !event.ctrlKey && event.key === "ArrowDown") { event.preventDefault(); openDate(row, col); return true; }
+      if (event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey && (event.key === "ArrowRight" || event.key === "ArrowLeft")) { event.preventDefault(); const area = at(); if (area) group(area, event.key === "ArrowRight" ? 1 : -1); return true; }
       // As a spreadsheet's: Alt+= opens a SUM of the numbers just above (else just left), Ctrl+; today's date, each to be finished in the cell.
       const sum = event.altKey && !event.ctrlKey && !event.metaKey && event.key === "=", today = event.ctrlKey && !event.altKey && !event.shiftKey && event.key === ";";
       if (sum || today) {
@@ -225,7 +228,11 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     },
     hovered: (address) => { const into = island(); if (into && into.title !== (address ?? "")) into.title = address ?? ""; },
     filter: (_, col, box) => { filters.reapply(); setFiltering({ col, box }); },
+    outline: (kind, line) => history.act(outline.line(kind, line).control === "shut" ? "Expand group" : "Collapse group", () => outline.toggle(kind, line)),
   };
+  // As a spreadsheet's Alt+Shift+Right and Left: the selection's rows, or its whole columns, a group deeper or shallower.
+  const group = (range: SheetRange, by: 1 | -1, kind = wholeOf(range, "cols") && !wholeOf(range, "rows") ? "cols" as const : "rows" as const) =>
+    history.act(`${by > 0 ? "Group" : "Ungroup"} ${kind === "cols" ? "columns" : "rows"}`, () => kind === "cols" ? outline.group("cols", range.left, range.right, by) : outline.group("rows", range.top, range.bottom, by));
 
   // The model is made once the hub's copy is held, so it is built once from it and not cell by cell as it arrives.
   createEffect(() => {
@@ -243,7 +250,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       made = mountGrid(into, { model: sheet, events, look: untrack(drawnLook), columns: {
         width: (col) => { const width = sizes.width(col); return width === undefined ? undefined : Math.round(width * zoom()); }, freeze: sizes.freeze, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols,
         heights: () => { const by = zoom(), kept = sizes.heights(); return by === 1 ? kept : new Map([...kept].map(([row, height]) => [row, Math.round(height * by)])); },
-        type: types.at, pill: pillOf, link: types.link, draw: formats.draw, dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded, merges: merges.list,
+        type: types.at, pill: pillOf, link: types.link, draw: formats.draw, dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded, merges: merges.list, outline: outline.line,
       } });
       setGrid(made);
     }, (error: Error) => { setFailed(error.message); props.onDrawn?.(); });
@@ -587,6 +594,14 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         ...kind !== "cols" ? [
           { label: `Hide ${rowsSaid}`, icon: <Icons.Hide />, run: hideRows },
           ...hiddenIn(range) ? [{ label: "Unhide rows", icon: <Icons.Preview />, run: () => { const lines = between(range.top, range.bottom); history.act("Unhide rows", () => { sizes.setHidden(lines, false); filters.show(lines); }); } }] : [],
+        ] : [],
+        ...kind !== "cols" ? [
+          { label: `Group ${rowsSaid}`, icon: <DataIcons.group />, keys: ["Alt", "Shift", "→"], run: () => group(range, 1, "rows") },
+          ...between(range.top, range.bottom).some((row) => outline.line("rows", row).level) ? [{ label: `Ungroup ${rowsSaid}`, icon: <DataIcons.ungroup />, keys: ["Alt", "Shift", "←"], run: () => group(range, -1, "rows") }] : [],
+        ] : [],
+        ...kind !== "rows" ? [
+          { label: `Group ${colsSaid}`, icon: <DataIcons.group />, keys: whole ? ["Alt", "Shift", "→"] : undefined, run: () => group(range, 1, "cols") },
+          ...between(range.left, range.right).some((col) => outline.line("cols", col).level) ? [{ label: `Ungroup ${colsSaid}`, icon: <DataIcons.ungroup />, keys: whole ? ["Alt", "Shift", "←"] : undefined, run: () => group(range, -1, "cols") }] : [],
         ] : [],
         ...kind !== "rows" ? [
           { label: `Hide ${colsSaid}`, icon: <Icons.Hide />, keys: ["Ctrl", "0"], run: () => history.act("Hide columns", () => sizes.setHiddenCols(between(range.left, range.right), true)) },

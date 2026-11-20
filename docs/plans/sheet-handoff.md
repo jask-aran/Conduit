@@ -190,8 +190,9 @@ Then the ribbon, charts and ask box, walked in headless Chrome on :4310 (2026-11
 - Tab ops (add, duplicate, rename, move, hide, delete) go through `history.hub` as named steps, the tabs' order and `tab` meta in the history's scope; a tab
   deleted by someone else still ends the history (`ownTabs` in sheet.tsx). Undoing an add on a workbook folder leaving its CSV file behind is unchecked. `tabColor:<tabId>` (an ink or #rrggbb) is in the
   look, so it is undone, saved and read in `as=book` as `look.tabColor`; xlsx does not carry it yet.
-- Grouping was not built: Glide has no outline gutter; a collapse control needs a strip left of the row numbers and above the letters (a wider marker
-  column drawn and hit-tested by hand, a taller head with its own `drawHeader` band), hidden rows reused for collapsed groups, and a look key for levels.
+- Grouping (`outline.ts`): `outline:<lineId>` is a row's or column's level (1–7; sheet.json `outline:5` / `outline:C`); collapsed lines are `hidden:`. With
+  no gutter, the bracket (a line a level) and the control (a chevron on the line after the group, or before one at the tab's end) are drawn in the
+  row-number cell and the letter's own canvas (`drawOutline`, grid.ts) and hit there. Expanding shows nested collapsed groups too; xlsx does not carry it yet.
 
 ## Cell types, overflow, refit and links (branch `sheet-cells`, 2026-11-20; typechecked, not seen in a browser)
 

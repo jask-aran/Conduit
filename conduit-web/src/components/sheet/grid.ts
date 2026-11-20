@@ -16,6 +16,7 @@ import type { SheetDrawn } from "./formats";
 import type { SheetPill, SheetSpill } from "./cell-draw";
 import type { SheetCellStyle } from "./styles";
 import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange, SheetReference } from "./host";
+import type { OutlineLine } from "./outline";
 
 /** What the grid reads of the sheet besides its cells: each column's width and type, the rows whose height is not the default (`look`), a value as its cell's number format draws it (formats.ts), a cell's style (styles.ts), and whether an import froze it. */
 export type SheetColumns = { width(col: number): number | undefined; type(row: number, col: number): string | undefined;
@@ -26,13 +27,34 @@ export type SheetColumns = { width(col: number): number | undefined; type(row: n
   /** A filter's mark on a header cell (0 none, 1 a filter, 2 one keeping only some values) and a table's banded rows (filter.tsx). */
   mark(row: number, col: number): number; banded(row: number, col: number): boolean;
   /** The tab's merged ranges (merges.ts). */
-  merges(): readonly SheetRange[] };
+  merges(): readonly SheetRange[];
+  /** A row's or column's group level and the control standing on it (outline.ts). */
+  outline(kind: "rows" | "cols", line: number): OutlineLine };
 // How near a row's lower edge, beside its number, a press takes the edge to drag.
 const EDGE_SLOP = 3;
 // How often (ms) a drag held past the grid's edge scrolls it on by a column.
 const SWEEP_STEP = 60;
 // How thick (px) the line under a row number is where rows after it are hidden.
 const HIDDEN_LINE = 2;
+// A group's bracket: one line a level, this far (px) apart, along its row numbers' left or its letters' top; its control a chevron this wide.
+const OUTLINE_STEP = 3, OUTLINE_MARK = 7;
+const outlineMark = (line: OutlineLine, across: boolean) => ({ x: 2 + (across ? 0 : line.level * OUTLINE_STEP), y: 2 + (across ? line.level * OUTLINE_STEP : 0) });
+const drawOutline = (ctx: CanvasRenderingContext2D, box: Rectangle, line: OutlineLine, ink: string, across: boolean) => {
+  if (!line.level && !line.control) return;
+  const was = ctx.fillStyle;
+  ctx.fillStyle = ink;
+  for (let k = 0; k < line.level; k++) if (across) ctx.fillRect(box.x, box.y + 1 + k * OUTLINE_STEP, box.width, 1); else ctx.fillRect(box.x + 1 + k * OUTLINE_STEP, box.y, 1, box.height);
+  if (line.control) {
+    // Shut, it points along the lines it would open; open, across them.
+    const at = outlineMark(line, across), x = box.x + at.x, y = across ? box.y + at.y : box.y + (box.height - OUTLINE_MARK) / 2, m = OUTLINE_MARK, h = m / 2;
+    ctx.beginPath();
+    if ((line.control === "shut") === across) { ctx.moveTo(x, y + h / 2); ctx.lineTo(x + m, y + h / 2); ctx.lineTo(x + h, y + h * 1.5); } else { ctx.moveTo(x + h / 2, y); ctx.lineTo(x + h / 2, y + m); ctx.lineTo(x + h * 1.5, y + h); }
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = was;
+};
+/** Whether a press at (x, y) in a header cell is on its group's control. */
+const onOutline = (line: OutlineLine, across: boolean, x: number, y: number) => { if (!line.control) return false; const at = outlineMark(line, across); return x <= at.x + OUTLINE_MARK + 2 && (!across || y <= at.y + OUTLINE_MARK + 2); };
 // How near a column's side (px) a press takes the edge to size it: the grid's own reach.
 const COL_EDGE = 5;
 type GridOptions = { model: SheetView; columns: SheetColumns; events: SheetGridEvents; look: SheetLook };
@@ -311,6 +333,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     onColumnResize: (_, width, col) => { if (sizing && col === sizing.col) sizing.moved = true; if (sizing?.moved) drive.width?.(col, width); },
     // Let go, the resize is over: Glide's own fit on a double click (to its 500 px cap, drawn but never kept) comes after, and is left out for the sheet's.
     onColumnResizeEnd: (_, width, col) => { if (sizing?.moved) events.resized(col, width); sizing = undefined; },
+    onHeaderClicked: (col, event) => { if (onOutline(options.columns.outline("cols", col), true, event.localEventX, event.localEventY)) events.outline?.("cols", col); },
     onHeaderContextMenu: (col) => { const area = picked(); events.menu({ cols: owner.current.columns.hasIndex(col) && area ? area : { top: 0, bottom: 0, left: col, right: col } }); },
     onCellContextMenu: ([col, drawn]) => {
       const row = p.map.sheet(drawn), area = picked(), inside = area && row >= area.top && row <= area.bottom && (col < 0 || (col >= area.left && col <= area.right));
@@ -321,6 +344,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     // A press on a filter's mark, in its header cell's right end, opens the filter.
     onCellClicked: ([col, row], event) => {
       p.editor?.focus();
+      if (col < 0 && onOutline(options.columns.outline("rows", p.map.sheet(row)), false, event.localEventX, event.localEventY)) return void events.outline?.("rows", p.map.sheet(row));
       const at = p.map.sheet(row), value = model.value(at, col), link = (event.ctrlKey || event.metaKey) && typeof value === "string" ? options.columns.link(at, col, value) : undefined;
       // Ctrl and a click follows a cell's link.
       if (link) return void events.follow?.(link);
@@ -431,6 +455,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       if (!("markerKind" in cell)) return;
       const drawn = cell.row - 1, row = p.map.sheet(drawn), { ctx, rect: box, theme: drawnTheme } = args;
       markerCellRenderer.draw({ ...args, cell: { ...cell, row: row + 1 } }, { ...cell, row: row + 1 });
+      drawOutline(ctx, box, options.columns.outline("rows", row), drawnTheme.textMedium, false);
       if (p.map.sheet(drawn + 1) > row + 1 && (p === body || drawn + 1 < size.head)) { ctx.fillStyle = drawnTheme.textMedium; ctx.fillRect(box.x, box.y + box.height - HIDDEN_LINE, box.width, HIDDEN_LINE); }
     } });
   }
@@ -530,6 +555,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       const { ctx, rect: box, columnIndex: col } = args;
       if (args.isSelected) { const inset = col ? 1 : 0; for (const fill of [theme.grid.bgHeader, theme.picked]) { ctx.fillStyle = String(fill); ctx.fillRect(box.x + inset, box.y, box.width - inset, box.height); } }
       draw();
+      drawOutline(ctx, box, options.columns.outline("cols", col), args.theme.textMedium, true);
       if (!hiddenCols.size) return;
       ctx.fillStyle = args.theme.textMedium;
       if (hiddenCols.has(col + 1)) ctx.fillRect(box.x + box.width - HIDDEN_LINE, box.y, HIDDEN_LINE, box.height);
