@@ -320,9 +320,11 @@ export function MarkupBar(props: { view: MarkupView; own?: readonly MarkupOwnToo
     else if (inkedByKeys) { if (untrack(inking) === inkedByKeys) setInking(null); inkedByKeys = null; }
   });
   const kinds = (menu: string) => { const now = () => of(menu).find((tool) => tool.active) ?? of(menu)[0]!; const glyph = () => of(menu).find((tool) => tool.glyph)?.glyph;
+    // The icon is made again only when another tool's is shown, not each time the tools' states are read again (a sheet's, on every move).
+    const icon = createMemo(() => glyph() ?? now().icon);
     if (inkSet(menu)) return <IconButton ref={(button: HTMLButtonElement) => inkButtons.set(menu, button)} label={`${menu}: ${now().label}`} aria-pressed={inking() === menu} aria-expanded={inking() === menu} disabled={of(menu).every((tool) => tool.disabled)} style={{ color: now().swatch }} onMouseDown={(event) => event.preventDefault()} onClick={(event) => { if (!using()) props.onView("use"); anchor = event.currentTarget; setPickingOwn(false); setInking(inking() === menu ? null : menu); }}>{of(menu)[0]!.icon()}{tip(shared(menu))}</IconButton>;
     return <DropdownMenu modal={false} placement="bottom-start" open={keyed() === menu ? true : undefined} onOpenChange={(open) => { if (!open) return; setInking(null); if (!using()) props.onView("use"); }}>
-    <MenuControl as={IconButton} label={glyph() ? menu : `${menu}: ${now().label}`} onFocus={() => { if (keyedMenu !== menu || keyed() === menu) return; const back = returnTo; keyedMenu = returnTo = null; back?.focus({ preventScroll: true }); }}>{(glyph() ?? now().icon)()}{tip(shared(menu))}</MenuControl>
+    <MenuControl as={IconButton} label={glyph() ? menu : `${menu}: ${now().label}`} onFocus={() => { if (keyedMenu !== menu || keyed() === menu) return; const back = returnTo; keyedMenu = returnTo = null; back?.focus({ preventScroll: true }); }}>{icon()()}{tip(shared(menu))}</MenuControl>
     <MenuContent width="sm" keep={() => keyedMenu === menu} onOpenAutoFocus={(event) => { if (keyedMenu === menu) event.preventDefault(); }} onCloseAutoFocus={(event) => { if (keyedMenu === menu) event.preventDefault(); }}><MenuSection title={menu}><For each={of(menu)}>{(tool) => choice(tool)}</For></MenuSection></MenuContent>
   </DropdownMenu>; };
   // In the host's order: a menu stands where its first tool does.

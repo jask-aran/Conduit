@@ -196,6 +196,13 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (event.key === "F1" && event.altKey && !event.ctrlKey && !event.metaKey) { event.preventDefault(); askChart(); return true; }
       // Alt+Down on a filter's header cell opens its list.
       if (event.altKey && !event.ctrlKey && event.key === "ArrowDown" && filters.mark(row, col)) { event.preventDefault(); const box = grid()?.bounds({ top: row, bottom: row, left: col, right: col }); if (box) { filters.reapply(); setFiltering({ col, box }); } return true; }
+      // Ctrl+' and Ctrl+Shift+" type the formula, or the value, of the cell above; Ctrl+Shift+; the time (by key: Glide gives no code).
+      if (event.ctrlKey && !event.altKey && (event.key === "'" || event.key === '"' || event.key === ":")) {
+        event.preventDefault();
+        const text = event.key === ":" ? new Date().toTimeString().slice(0, 5) : row > 0 ? event.key === '"' ? valueText(model()?.value(row - 1, col) ?? null) : model()?.input(row - 1, col) ?? "" : "";
+        editor.begin({ row, col }, "enter", "cell"); editor.typed(text, text.length);
+        return true;
+      }
       if (event.key === " " && event.ctrlKey !== event.shiftKey && !event.altKey && !event.metaKey) { event.preventDefault(); grid()?.whole(event.ctrlKey ? "cols" : "rows"); return true; }
       const plain = !event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey, type = types.at(row, col);
       // Space ticks (or clears) every checkbox of the selection as the active one goes, as one step.
@@ -565,15 +572,18 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     // with a column of numbers (or dates) under one of its words, as a spreadsheet guesses one; else there is none and every row sorts.
     const valueAt = (row: number, col: number) => model()?.value(row, col) ?? null, filled = (value: unknown) => value !== null && value !== "";
     const under = (col: number) => { for (let row = 1; row <= lastRow; row++) { const value = valueAt(row, col); if (filled(value)) return value; } return null; };
-    const tops = between(0, lastCol).filter((col) => filled(valueAt(0, col))), worded = tops.length > 0 && tops.every((col) => typeof valueAt(0, col) === "string");
-    const frozen = sizes.freeze().rows || (worded && tops.some((col) => typeof under(col) === "number") ? 1 : 0);
-    const header = frozen ? valueText(valueAt(frozen - 1, byCol)) : "", named = header ? `“${header}”` : `column ${colName(byCol)}`;
-    const sortSheet = (descending: boolean) => history.act(`Sort sheet ${descending ? "Z–A" : "A–Z"}`, () => { if (frozen < lastRow) hub({ op: "sort", range: rangeA1({ top: frozen, bottom: lastRow, left: 0, right: lastCol }), column: colName(byCol), descending }); });
+    // Read as Sort sheet opens, not with the menu.
+    const header = () => {
+      const tops = between(0, lastCol).filter((col) => filled(valueAt(0, col))), worded = tops.length > 0 && tops.every((col) => typeof valueAt(0, col) === "string");
+      const frozen = sizes.freeze().rows || (worded && tops.some((col) => typeof under(col) === "number") ? 1 : 0), text = frozen ? valueText(valueAt(frozen - 1, byCol)) : "";
+      return { frozen, named: text ? `“${text}”` : `column ${colName(byCol)}` };
+    };
+    const sortSheet = (frozen: number, descending: boolean) => history.act(`Sort sheet ${descending ? "Z–A" : "A–Z"}`, () => { if (frozen < lastRow) hub({ op: "sort", range: rangeA1({ top: frozen, bottom: lastRow, left: 0, right: lastCol }), column: colName(byCol), descending }); });
     const hideRows = () => history.act("Hide rows", () => sizes.setHidden(between(range.top, range.bottom), true));
     return [
       [
         ...props.onAsk ? [{ label: "Ask the agent", icon: <Icons.Agent />, keys: ["Ctrl", "Alt", "M"], run: () => { grid()?.select(range); props.onAsk?.(); } }] : [],
-        ...props.onComment ? [{ label: "Comment", icon: <Icons.Chat />, run: () => { grid()?.select(range); props.onComment?.(); } }] : [],
+        ...props.onComment ? [{ label: "Comment", icon: <Icons.Chat />, keys: ["Shift", "F2"], run: () => { grid()?.select(range); props.onComment?.(); } }] : [],
       ],
       [
         { label: "Cut", icon: <Icons.Cut />, keys: ["Ctrl", "X"], run: () => void copy(range, true).then(() => clear(range, "Cut")) },
@@ -593,7 +603,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
           { label: `Insert ${rowsSaid} above`, icon: <Icons.Add />, keys: whole ? ["Ctrl", "Shift", "="] : undefined, run: () => structure("insert-rows", range.top, nRows) },
           { label: `Insert ${rowsSaid} below`, icon: <Icons.Add />, run: () => structure("insert-rows", range.bottom + 1, nRows) },
         ] : [],
-        ...props.onChart && (nRows > 1 || nCols > 1) ? [{ label: "Make chart", icon: <ChartIcons.column />, run: () => askChart(undefined, range) }] : [],
+        ...props.onChart && (nRows > 1 || nCols > 1) ? [{ label: "Make chart", icon: <ChartIcons.column />, keys: ["Alt", "F1"], run: () => askChart(undefined, range) }] : [],
         ...kind !== "rows" ? [
           { label: `Insert ${colsSaid} left`, icon: <Icons.Add />, keys: whole ? ["Ctrl", "Shift", "="] : undefined, run: () => structure("insert-cols", range.left, nCols) },
           { label: `Insert ${colsSaid} right`, icon: <Icons.Add />, run: () => structure("insert-cols", range.right + 1, nCols) },
@@ -608,7 +618,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         { label: `Move ${colsSaid} right`, icon: <LineIcons.right />, disabled: range.right >= lastCol, run: () => moveBy(false, 1) },
       ],
       [
-        { label: "Clear", icon: <Icons.Erase />, sub: [
+        { label: "Clear", icon: <Icons.Erase />, sub: () => [
           { label: "Clear contents", keys: ["Delete"], run: () => clear(range) },
           { label: "Clear formatting", keys: ["Alt", "H", "E", "F"], run: () => history.act("Clear formatting", clearFormats) },
           { label: "Clear all", run: () => history.act("Clear all", () => { clear(range); clearFormats(); }) },
@@ -620,8 +630,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
           { label: "Insert cells…", icon: <Icons.Add />, keys: ["Ctrl", "Shift", "="], run: () => { opening = () => askShift("insert", range); } },
         ] : [],
         ...kind !== "cols" ? [
-          { label: `Hide ${rowsSaid}`, icon: <Icons.Hide />, run: hideRows },
-          ...hiddenIn(range) ? [{ label: "Unhide rows", icon: <Icons.Preview />, run: () => { const lines = between(range.top, range.bottom); history.act("Unhide rows", () => { sizes.setHidden(lines, false); filters.show(lines); }); } }] : [],
+          { label: `Hide ${rowsSaid}`, icon: <Icons.Hide />, keys: ["Ctrl", "9"], run: hideRows },
+          ...hiddenIn(range) ? [{ label: "Unhide rows", icon: <Icons.Preview />, keys: ["Ctrl", "Shift", "9"], run: () => { const lines = between(range.top, range.bottom); history.act("Unhide rows", () => { sizes.setHidden(lines, false); filters.show(lines); }); } }] : [],
         ] : [],
         ...kind !== "cols" ? [
           { label: `Group ${rowsSaid}`, icon: <DataIcons.group />, keys: ["Alt", "Shift", "→"], run: () => group(range, 1, "rows") },
@@ -646,26 +656,26 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         { label: "Default width…", icon: <Icons.Resize />, keys: ["Alt", "H", "O", "D"], run: () => sized("HOD", range) },
       ],
       [
-        { label: "Sort range", icon: <SortIcons.ascending />, sub: [
+        { label: "Sort range", icon: <SortIcons.ascending />, sub: () => [
           { label: `A to Z by column ${colName(byCol)}`, icon: <SortIcons.ascending />, keys: ["Alt", "H", "S", "S"], run: () => filters.keys.sort(false, byCol) },
           { label: `Z to A by column ${colName(byCol)}`, icon: <SortIcons.descending />, keys: ["Alt", "H", "S", "O"], run: () => filters.keys.sort(true, byCol) },
         ] },
-        { label: "Sort sheet", icon: <SortIcons.ascending />, sub: [
-          { label: `A to Z by ${named}`, icon: <SortIcons.ascending />, run: () => sortSheet(false) },
-          { label: `Z to A by ${named}`, icon: <SortIcons.descending />, run: () => sortSheet(true) },
-        ] },
+        { label: "Sort sheet", icon: <SortIcons.ascending />, sub: () => { const { frozen, named } = header(); return [
+          { label: `A to Z by ${named}`, icon: <SortIcons.ascending />, run: () => sortSheet(frozen, false) },
+          { label: `Z to A by ${named}`, icon: <SortIcons.descending />, run: () => sortSheet(frozen, true) },
+        ]; } },
         { label: filters.filter() ? "Remove filter" : "Create a filter", icon: <SortIcons.filter />, keys: ["Ctrl", "Shift", "L"], run: filters.keys.filter },
-        ...filteredBy(byCol) ? [{ label: "Filter column…", icon: <SortIcons.filter />, run: () => openFilter(filteredBy(byCol)!, byCol) }] : [],
+        ...filteredBy(byCol) ? [{ label: "Filter column…", icon: <SortIcons.filter />, keys: ["Alt", "↓"], run: () => openFilter(filteredBy(byCol)!, byCol) }] : [],
         ...filters.narrows(byCol) ? [{ label: `Clear filter from column ${colName(byCol)}`, icon: <Icons.Erase />, run: () => filters.keep(byCol, null) }] : [],
         { label: inTable() ? "Remove table" : "Format as table", icon: <SortIcons.table />, keys: ["Alt", "H", "T"], run: filters.keys.table },
-        { label: "Data", icon: <DataIcons.data />, sub: [
+        { label: "Data", icon: <DataIcons.data />, sub: () => [
           { label: "Remove duplicates…", icon: <DataIcons.dedupe />, run: () => { const on = nRows === 1 && nCols === 1 ? filters.region() : { range: inTab(range), header: false }; if (on) opening = () => setDeduping(on); } },
           { label: "Trim whitespace", icon: <DataIcons.trim />, run: () => trim(range) },
           { label: "Split text to columns…", icon: <DataIcons.split />, disabled: nCols > 1, run: () => { opening = () => setSplitting(range); } },
         ] },
       ],
       // Plain, checkboxes (TRUE and FALSE), dates or a dropdown's options (sheet-types.js): whole columns take a column's type, other ranges each cell its own.
-      [{ label: "Cell type", icon: <LineIcons.type />, meta: ((kind) => kind === null ? undefined : kind ? TYPE_NAMES[kind] : "Plain")(types.uniform(range)), sub: [
+      [{ label: "Cell type", icon: <LineIcons.type />, meta: ((kind) => kind === null ? undefined : kind ? TYPE_NAMES[kind] : "Plain")(types.uniform(range)), sub: () => [
         { label: "Plain", run: () => setType(range, null) },
         { label: "Checkbox", icon: <LineIcons.checkbox />, run: () => setType(range, "boolean") },
         { label: "Date", icon: <LineIcons.date />, run: () => setType(range, "date") },
@@ -692,15 +702,6 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         event.preventDefault();
         const area = at(), lines = area ? between(area.top, area.bottom) : [];
         if (lines.length) history.act(event.shiftKey ? "Unhide rows" : "Hide rows", () => { sizes.setHidden(lines, !event.shiftKey); if (event.shiftKey) filters.show(lines); });
-        return;
-      }
-      // Ctrl+' and Ctrl+Shift+" type the formula, or the value, of the cell above; Ctrl+Shift+; the time.
-      if (!event.altKey && (event.code === "Quote" || (event.code === "Semicolon" && event.shiftKey))) {
-        event.preventDefault();
-        const area = at();
-        if (!area) return;
-        const { top: row, left: col } = area, text = event.code === "Semicolon" ? new Date().toTimeString().slice(0, 5) : row > 0 ? event.shiftKey ? valueText(model()?.value(row - 1, col) ?? null) : model()?.input(row - 1, col) ?? "" : "";
-        editor.begin({ row, col }, "enter", "cell"); editor.typed(text, text.length);
         return;
       }
       // Ctrl+Shift+* selects the current region.
@@ -829,6 +830,6 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       </Show>
       <Show when={props.margin}><aside class="ui-spreadsheet-margin" aria-label="Comments">{props.margin}</aside></Show>
     </div>
-    <SheetFoot tabs={tabs} id={props.id} format={() => formats.figure(at())} filtered={filters.counted} act={history.act} />
+    <SheetFoot tabs={tabs} id={props.id} format={(range) => formats.figure(range)} filtered={filters.counted} act={history.act} />
   </section>;
 }

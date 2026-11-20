@@ -3,7 +3,7 @@
  * (formats.ts) or merge, and shows what its first cell wears. Their names are stable: a key sequence is bound to a tool by its name (sequences.tsx).
  * Bold and Italic stand alone; Underline and Strikethrough share one menu, Wrap and Clip another, and each ink set ends in any colour.
  */
-import type { Accessor } from "solid-js";
+import { createMemo, type Accessor } from "solid-js";
 import { Swatch } from "@/components/ui";
 import { sheetChartIcons, sheetMergeIcons, sheetToolIcons } from "@/components/ui/sheet-icons";
 import { CHART_KINDS, type SheetChartKind } from "@/sheet-charts.js";
@@ -28,11 +28,13 @@ const MERGES = [["center", "Merge & Center"], ["across", "Merge across"], ["cell
  */
 export function createSheetTools(options: { tip(name: SheetToolId): string | undefined; at: Accessor<SheetRange | null>; styles: SheetStyles; formats: SheetFormats; offered?: readonly SheetToolName[]; fit(range: SheetRange): void; spread(range: SheetRange, way: "down" | "right"): void; merge?(kind: SheetMergeKind | null): void; brush?: SheetBrush; act(label: string, run: () => void, join?: string): void; chart?(kind: SheetChartKind): void; done(): void }): SheetTool[] {
   const { at, styles, formats } = options, offered = options.offered ?? SHEET_TOOLS;
-  const worn = () => { const range = at(); return range && styles.worn(range.top, range.left); };
+  // Read once a move, not once a tool: the same style (one object for each mix, styles.ts) or format moved onto changes no tool.
+  const worn = createMemo(() => { const range = at(); return range && styles.worn(range.top, range.left); }), some = createMemo(() => Boolean(at()));
+  const format = createMemo(() => { const range = at(); return range ? formats.at(range.top, range.left) ?? "General" : null; });
   // `own`: the run names its own step (a merge, which may ask first). `hue`: the swatch it shows now.
   const tool = (name: SheetToolId, label: string, icon: SheetTool["icon"], run: (range: SheetRange) => void, rest: Partial<SheetTool> & { on?(): boolean; own?: boolean; hue?(): string | undefined } = {}): SheetTool => {
     const { on, own, hue, ...more } = rest;
-    const made: SheetTool = { name, label, icon, ...more, get tip() { return options.tip(name); }, get active() { return on?.() ?? false; }, get pressed() { return on && !more.menu ? on() : undefined; }, get disabled() { return !at(); },
+    const made: SheetTool = { name, label, icon, ...more, get tip() { return options.tip(name); }, get active() { return on?.() ?? false; }, get pressed() { return on && !more.menu ? on() : undefined; }, get disabled() { return !some(); },
       run: () => { const range = at(); if (range) { if (own) run(range); else options.act(label, () => run(range)); } options.done(); } };
     // A getter of its own: spread into the tool, it would be read once.
     return hue ? Object.defineProperty(made, "swatch", { get: hue, enumerable: true }) : made;
@@ -71,8 +73,8 @@ export function createSheetTools(options: { tip(name: SheetToolId): string | und
     align: () => ALIGNS.map(([side, label]) => tool(`align-${side}`, label, mark(`align-${side}`), (range) => styles.set(range, { align: worn()?.align === side ? null : side }), { menu: "Align", on: () => worn()?.align === side })),
     valign: () => VALIGNS.map(([side, label]) => tool(`valign-${side}`, label, mark(`valign-${side}`), (range) => styles.set(range, { valign: side === "middle" ? null : side }), { menu: "Vertical align", on: () => (worn()?.valign ?? "middle") === side })),
     format: () => SHEET_PRESETS.map((preset) => tool(`format-${preset.id}` as SheetToolId, preset.name, mark("format"), (range) => formats.set(range, preset.format),
-      { menu: "Number format", glyph: mark("format"), on: () => { const range = at(), format = range && formats.at(range.top, range.left); return Boolean(range) && (format ?? "General") === preset.format; } }))
-      .concat(tool("format-custom", "Custom format…", mark("format"), (range) => formats.ask(range), { menu: "Number format", own: true, on: () => { const range = at(), format = range && formats.at(range.top, range.left); return Boolean(format) && !SHEET_PRESETS.some((one) => one.format === format); } })),
+      { menu: "Number format", glyph: mark("format"), on: () => format() === preset.format }))
+      .concat(tool("format-custom", "Custom format…", mark("format"), (range) => formats.ask(range), { menu: "Number format", own: true, on: () => { const now = format(); return now !== null && !SHEET_PRESETS.some((one) => one.format === now); } })),
     decimals: () => [tool("decimals-more", "More decimals", mark("decimals-more"), (range) => formats.decimals(range, 1)), tool("decimals-fewer", "Fewer decimals", mark("decimals-fewer"), (range) => formats.decimals(range, -1))],
     // Each kind asks the agent for a chart of the selection: nothing is drawn here until it makes one.
     chart: () => options.chart ? CHART_KINDS.map((kind) => { const Icon = sheetChartIcons[kind]; return tool(`chart-${kind}`, `${kind[0]!.toUpperCase()}${kind.slice(1)} chart`, () => <Icon />, () => options.chart!(kind), { menu: "Chart", own: true, glyph: () => <sheetChartIcons.column /> }); }) : [],
