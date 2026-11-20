@@ -109,7 +109,8 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
     const was = doubt(), word = context().word;
     if (was) return was.near;
     const cell = editing()!, chip = host.chip && shut() !== text() && !host.input(cell.row, cell.col) ? /^@([^=\n]*)$/.exec(text()) : null;
-    if (chip) return [...Object.keys(CHIPS).filter((name) => name.toLowerCase().startsWith(chip[1]!.toLowerCase())).map((name) => ({ name, chip: true as const })), ...host.chips?.(chip[1]!) ?? []].slice(0, OFFERED);
+    // Every chip, under its group's title (People, Artifacts, Insert), the list scrolling.
+    if (chip) return [...host.chips?.(chip[1]!) ?? [], ...Object.keys(CHIPS).filter((name) => name.toLowerCase().startsWith(chip[1]!.toLowerCase())).map((name) => ({ name, chip: true as const, group: "Insert" }))];
     return word && shut() !== text() ? functionOffers(word.text, names(), known(), OFFERED) : [];
   });
   const hint = createMemo(() => editing() ? context().call : null, null, { equals: (a, b) => a?.name === b?.name && a?.arg === b?.arg });
@@ -302,6 +303,14 @@ export function FormulaHelp(props: { editor: FormulaEditor; frame: () => HTMLEle
   </div>}</Show>;
   // Kept built, it is first placed while empty, so its placer never sees it run off the window to flip it: it opens on the side of the cell with more room.
   const below = () => { const box = editor.anchor()?.getBoundingClientRect(); return !box || box.top + box.bottom < innerHeight; };
+  // The offers in runs of one group each, every offer with its place in the whole list, which the arrows walk.
+  const groups = createMemo(() => editor.offered().reduce<{ title?: string; items: { offer: FunctionOffer; at: number }[] }[]>((out, offer, at) => {
+    const last = out.at(-1);
+    if (last && last.title === offer.group) last.items.push({ offer, at }); else out.push({ title: offer.group, items: [{ offer, at }] });
+    return out;
+  }, []));
+  let list: HTMLDivElement | undefined;
+  createEffect(() => { editor.active(); list?.querySelector("[aria-selected=true]")?.scrollIntoView({ block: "nearest" }); });
   return <Popover open={editor.offered().length > 0 || signature() !== null || editor.fault() !== null} anchorRef={props.frame} anchorRect={() => editor.anchor()?.getBoundingClientRect()} placement={below() ? "bottom-start" : "top-start"} kept>
     <PopoverContent aria-label="Functions" width="md" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}>
       <Show when={editor.offered().length} fallback={<Show when={signature()} fallback={fault()}>{(call) => {
@@ -311,12 +320,13 @@ export function FormulaHelp(props: { editor: FormulaEditor; frame: () => HTMLEle
           <Show when={call().help}>{(help) => <small>{help().about}</small>}</Show>
         </div>;
       }}</Show>}>
-        <Section role="listbox" title={editor.doubt() ? `${editor.doubt()!.name.toUpperCase()} is not a function` : undefined} note={editor.doubt() ? "Tab uses one · Enter keeps it" : undefined}>
-          <For each={editor.offered()}>{(offer, at) =>
-            <Item role="option" aria-selected={editor.active() === at()} active={editor.active() === at()} onMouseDown={keep} onClick={() => editor.accept(offer)} detail={offer.chip ? offer.detail ?? CHIPS[offer.name] : FUNCTION_HELP[offer.name]?.about} meta={offer.typedFor ? `for ${offer.typedFor}` : undefined}>
-              <Match text={offer.name} query={offer.chip ? editor.text().slice(1) : editor.doubt() ? "" : editor.context().word?.text ?? ""} />
-            </Item>}</For>
-        </Section>
+        <div role="listbox" ref={list}><For each={groups()}>{(group) =>
+          <Section title={group.title ?? (editor.doubt() ? `${editor.doubt()!.name.toUpperCase()} is not a function` : undefined)} note={editor.doubt() ? "Tab uses one · Enter keeps it" : undefined}>
+            <For each={group.items}>{({ offer, at }) =>
+              <Item role="option" aria-selected={editor.active() === at} active={editor.active() === at} onMouseDown={keep} onClick={() => editor.accept(offer)} detail={offer.chip ? offer.detail ?? CHIPS[offer.name] : FUNCTION_HELP[offer.name]?.about} meta={offer.typedFor ? `for ${offer.typedFor}` : undefined}>
+                <Match text={offer.name} query={offer.chip ? editor.text().slice(1) : editor.doubt() ? "" : editor.context().word?.text ?? ""} />
+              </Item>}</For>
+          </Section>}</For></div>
       </Show>
     </PopoverContent>
   </Popover>;

@@ -224,13 +224,15 @@ export function SearchList<T>(props: {
   matches: (item: T, needle: string) => boolean;
   onChoose: (item: T) => void;
   isCurrent?: (item: T) => boolean;
+  /** Opened with the current item active (else the first), so Enter takes it and the arrows go on from it, as a dropdown cell's list (a list of values to pick one of). */
+  onCurrent?: boolean;
   placeholder: string;
   empty?: string;
   row: (item: T) => { icon?: JSX.Element; label: JSX.Element; meta?: JSX.Element; title?: string };
 }) {
   const id = createUniqueId();
   const [query, setQuery] = createSignal("");
-  const [active, setActive] = createSignal(-1);
+  const [active, setActive] = createSignal(props.onCurrent ? Math.max(0, props.isCurrent ? props.items.findIndex(props.isCurrent) : 0) : -1);
   const rows = createMemo(() => {
     const needle = query().trim().toLowerCase();
     return needle ? props.items.filter((item) => props.matches(item, needle)) : props.items;
