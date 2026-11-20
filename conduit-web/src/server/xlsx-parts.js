@@ -44,18 +44,35 @@ export function chartXml(chart, tab) {
   const title = chart.title ? `<c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>${escaped(chart.title)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title><c:autoTitleDeleted val="0"/>` : '<c:autoTitleDeleted val="1"/>';
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="${REL}"><c:roundedCorners val="0"/><c:chart>${title}<c:plotArea><c:layout/><c:${plot}>${head}${series}${tail}</c:plotArea><c:legend><c:legendPos val="${plot === "pieChart" ? "r" : "b"}"/><c:overlay val="0"/></c:legend><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart></c:chartSpace>`;
 }
-/** A tab's charts as a drawing part (each chart at its cell, its size kept: a one-cell anchor) and its chart parts, numbered from `first`. */
-export function drawingPart(charts, tab, id, first) {
+/**
+ * A tab's charts as a drawing part (each chart at its cell, its size kept: a one-cell anchor) and its chart parts, numbered from `first`; with the
+ * drawings kept whole (`drawn`: `[A1, kept][]`, from `drawing:<A1>` in the look: pictures, shapes), each moved to its cell, its pictures numbered
+ * from `media`. `count`: the charts; `media`: the pictures.
+ */
+export function drawingPart(charts, tab, id, first, drawn = [], media = 1) {
   const fit = charts.filter((chart) => CHART_KINDS.includes(chart.kind) && parseRange(String(chart.range ?? "")) && /^[A-Z]{1,3}\d+$/.test(String(chart.at ?? "")));
-  if (!fit.length) return null;
   const anchors = fit.map((chart, n) => {
     const [, letters, digits] = /^([A-Z]+)(\d+)$/.exec(chart.at), { width, height } = chartSize(chart);
     return `<xdr:oneCellAnchor><xdr:from><xdr:col>${colIndex(letters)}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${Number(digits) - 1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="${width * EMU_PER_PX}" cy="${height * EMU_PER_PX}"/><xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${n + 2}" name="Chart ${n + 1}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId${n + 1}"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:oneCellAnchor>`;
-  }).join("");
+  });
+  const pictures = [], links = fit.map((_, n) => [`rId${n + 1}`, `${REL}/chart`, `../charts/chart${first + n}.xml`]);
+  for (const [at, list] of drawn) for (const kept of Array.isArray(list) ? list : []) {
+    const place = parseA1(at);
+    if (!place || typeof kept?.xml !== "string" || !/^<(\w+:)?(?:oneCellAnchor|twoCellAnchor|absoluteAnchor)\b[\s\S]*>$/.test(kept.xml)) continue;
+    const ids = new Map(), [rows, cols] = Array.isArray(kept.span) ? kept.span : [0, 0], lines = { from: { row: place.row, col: place.col }, to: { row: place.row + rows, col: place.col + cols } };
+    const xml = kept.xml.replace(/(<(?:\w+:)?(from|to)>[\s\S]*?<\/(?:\w+:)?\2>)/g, (corner, _, side) => corner.replace(/(<(?:\w+:)?(col|row)>)\d+(<)/g, (__, open, line, close) => `${open}${lines[side][line]}${close}`))
+      .replace(/(\sr:embed=")([^"]+)"/g, (_, head, rid) => {
+        const one = kept.media?.[rid];
+        if (!ids.has(rid) && typeof one?.data === "string" && /^[a-z0-9]{2,5}$/.test(String(one.ext))) { ids.set(rid, `rIdPic${media}`); links.push([`rIdPic${media}`, `${REL}/image`, `../media/picture${media}.${one.ext}`]); pictures.push([`xl/media/picture${media}.${one.ext}`, Buffer.from(one.data, "base64"), { ext: one.ext }]); media += 1; }
+        return ids.has(rid) ? `${head}${ids.get(rid)}"` : `${head}"`;
+      }).replace(/(<(?:\w+:)?cNvPr\b[^>]*?\sid=")\d+/g, (_, head) => `${head}${1000 + anchors.length}`);
+    anchors.push(xml);
+  }
+  if (!anchors.length) return null;
   return { name: `xl/drawings/drawing${id}.xml`, type: `${TYPE}drawing+xml`, rel: `${REL}/drawing`, element: "drawing", block: (rid) => `<drawing r:id="${rid}"/>`,
-    xml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="${REL}">${anchors}</xdr:wsDr>`,
-    more: [[`xl/drawings/_rels/drawing${id}.xml.rels`, rels(fit.map((_, n) => [`rId${n + 1}`, `${REL}/chart`, `../charts/chart${first + n}.xml`]))], ...fit.map((chart, n) => [`xl/charts/chart${first + n}.xml`, chartXml(chart, tab), `${TYPE}drawingml.chart+xml`])],
-    count: fit.length };
+    xml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="${REL}">${anchors.join("")}</xdr:wsDr>`,
+    more: [[`xl/drawings/_rels/drawing${id}.xml.rels`, rels(links)], ...fit.map((chart, n) => [`xl/charts/chart${first + n}.xml`, chartXml(chart, tab), `${TYPE}drawingml.chart+xml`]), ...pictures],
+    count: fit.length, media };
 }
 const rels = (list) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${list.map(([id, type, target]) => `<Relationship Id="${id}" Type="${type}" Target="${target}"/>`).join("")}</Relationships>`;
 
@@ -119,9 +136,10 @@ export const personsPart = (xml) => typeof xml === "string" && /^<personList\b[\
 export function withParts(bytes, sheets, placed, book = []) {
   if (!sheets.some((parts) => parts.length) && !book.length) return bytes;
   const zip = XLSX.CFB.read(bytes, { type: "buffer" }), get = (name) => { const file = XLSX.CFB.find(zip, `/${name}`); return file ? Buffer.from(file.content).toString("utf8") : null; };
-  const put = (name, text) => { const file = XLSX.CFB.find(zip, `/${name}`), content = Buffer.from(text, "utf8"); if (file) { file.content = content; file.size = content.length; } else XLSX.CFB.utils.cfb_add(zip, `/${name}`, content); };
+  const put = (name, text) => { const file = XLSX.CFB.find(zip, `/${name}`), content = Buffer.isBuffer(text) ? text : Buffer.from(text, "utf8"); if (file) { file.content = content; file.size = content.length; } else XLSX.CFB.utils.cfb_add(zip, `/${name}`, content); };
   let types = get("[Content_Types].xml") ?? "";
-  const typed = (name, type) => { types = types.replace(new RegExp(`<Override PartName="/${name.replace(/[.]/g, "\\.")}"[^>]*/>`), "").replace("</Types>", `<Override PartName="/${name}" ContentType="${type}"/></Types>`); };
+  // A picture is typed by its extension, as Excel types them.
+  const typed = (name, type) => typeof type === "object" ? void (new RegExp(`Extension="${type.ext}"`, "i").test(types) || (types = types.replace("</Types>", `<Default Extension="${type.ext}" ContentType="image/${{ jpg: "jpeg", jpe: "jpeg", svg: "svg+xml", tif: "tiff", emf: "x-emf", wmf: "x-wmf" }[type.ext] ?? type.ext}"/></Types>`))) : void (types = types.replace(new RegExp(`<Override PartName="/${name.replace(/[.]/g, "\\.")}"[^>]*/>`), "").replace("</Types>", `<Override PartName="/${name}" ContentType="${type}"/></Types>`));
   sheets.forEach((parts, n) => {
     if (!parts.length) return;
     const sheetName = `xl/worksheets/sheet${n + 1}.xml`, relsName = `xl/worksheets/_rels/sheet${n + 1}.xml.rels`;
@@ -145,21 +163,24 @@ export function withParts(bytes, sheets, placed, book = []) {
   return XLSX.CFB.write(zip, { fileType: "zip", type: "buffer", compression: true });
 }
 
+/** A drawing anchor's corner (`from`, `to`) on a line (`col`, `row`), whatever the prefix; NaN where it has none. */
+export const cornerOf = (anchor, side, what) => Number(new RegExp(`<(?:\\w+:)?${side}>[\\s\\S]*?<(?:\\w+:)?${what}>(\\d+)<`).exec(anchor)?.[1] ?? NaN);
 const KIND_OF = { barChart: (xml) => /<(?:\w+:)?barDir val="bar"/.test(xml) ? "bar" : "column", bar3DChart: (xml) => /<(?:\w+:)?barDir val="bar"/.test(xml) ? "bar" : "column", lineChart: () => "line", line3DChart: () => "line", areaChart: () => "area", area3DChart: () => "area", pieChart: () => "pie", pie3DChart: () => "pie", doughnutChart: () => "pie", scatterChart: () => "scatter" };
 /**
  * A sheet's charts read from its drawing, as the look holds them by A1 (SheetChartA1): each its plot's kind, the range its series' references span
  * on this tab, whether they run down columns, its title, cell and size. `text(name)`: a part's XML; `linked(from, type)`: the parts a part links to.
  * What cannot be read so is counted in `drop`.
  */
-export function readCharts(sheetName, tabName, text, linked, drop) {
+export function readCharts(sheetName, tabName, text, linked, drop, other = () => {}) {
   const found = [];
   for (const drawing of linked(sheetName, "drawing")) {
     const xml = text(drawing), targets = Object.fromEntries((text(drawing.replace(/([^/]+)$/, "_rels/$1.rels")).match(/<Relationship\b[^>]*>/g) ?? []).map((tag) => { const target = attr(tag, "Target") ?? ""; return [attr(tag, "Id"), target.startsWith("/") ? target.slice(1) : path.posix.normalize(path.posix.join(path.posix.dirname(drawing), target))]; }));
-    drop("images", (xml.match(/<(?:xdr:)?pic>/g) ?? []).length);
-    for (const [anchor] of xml.matchAll(/<(?:xdr:)?(?:oneCellAnchor|twoCellAnchor|absoluteAnchor)\b[\s\S]*?<\/(?:xdr:)?(?:oneCellAnchor|twoCellAnchor|absoluteAnchor)>/g)) {
+    // The drawing's namespaces, put on each anchor kept whole, so it reads the same in a drawing of other prefixes.
+    const spaces = [.../<(?:\w+:)?wsDr\b[^>]*>/.exec(xml)?.[0].matchAll(/\sxmlns(?::\w+)?="[^"]*"/g) ?? []].map(([one]) => one);
+    for (const [anchor] of xml.matchAll(/<(?:\w+:)?(?:oneCellAnchor|twoCellAnchor|absoluteAnchor)\b[\s\S]*?<\/(?:\w+:)?(?:oneCellAnchor|twoCellAnchor|absoluteAnchor)>/g)) {
       const rid = /<(?:\w+:)?chart\b[^>]*r:id="([^"]+)"/.exec(anchor)?.[1];
-      if (!rid) continue;
-      const chart = text(targets[rid] ?? ""), plot = Object.keys(KIND_OF).find((name) => new RegExp(`<(?:\\w+:)?${name}>`).test(chart)), at = (side, what) => Number(new RegExp(`<(?:xdr:)?${side}>[\\s\\S]*?<(?:xdr:)?${what}>(\\d+)<`).exec(anchor)?.[1] ?? NaN);
+      if (!rid) { other(anchor.replace(/^<[^>]*?(?=\/?>)/, (head) => head + spaces.filter((one) => !head.includes(one.split("=")[0])).join("")), targets); continue; }
+      const chart = text(targets[rid] ?? ""), plot = Object.keys(KIND_OF).find((name) => new RegExp(`<(?:\\w+:)?${name}>`).test(chart)), at = (side, what) => cornerOf(anchor, side, what);
       const refs = [...chart.matchAll(/<(?:\w+:)?f>([^<]*)<\/(?:\w+:)?f>/g)].map(([, f]) => unescaped(f)), areas = refs.map((f) => { const cut = f.lastIndexOf("!"), tab = f.slice(0, cut).replace(/^'|'$/g, "").replace(/''/g, "'"); return tab === tabName ? parseRange(f.slice(cut + 1).replace(/\$/g, "")) : null; });
       if (!plot || !areas.length || areas.some((area) => !area) || Number.isNaN(at("from", "col"))) { drop(plot && areas.length ? "charts reading another tab" : "charts of a kind the sheet does not draw"); continue; }
       const span = areas.reduce((all, one) => ({ top: Math.min(all.top, one.top), left: Math.min(all.left, one.left), bottom: Math.max(all.bottom, one.bottom), right: Math.max(all.right, one.right) }));

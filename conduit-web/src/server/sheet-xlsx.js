@@ -7,7 +7,7 @@ import { CONFIG, defineNames } from "../sheet-engine.js";
 import { NAMES } from "../sheet-functions.js";
 import { shiftRefs } from "../sheet-rules.js";
 import { decodeStyle, encodeStyle, SHEET_INKS } from "../sheet-styles.js";
-import { drawingPart, notesParts, personsPart, readCharts, readNotes, tablePart, withParts } from "./xlsx-parts.js";
+import { cornerOf, drawingPart, notesParts, personsPart, readCharts, readNotes, tablePart, withParts } from "./xlsx-parts.js";
 import { ownOver, readDxfs, readStyles, rgbOf, seen, sheetRules, sheetStyles, withDxfs, withRules, writeRules, writeStyles } from "./xlsx-styles.js";
 
 /*
@@ -22,6 +22,8 @@ import { ownOver, readDxfs, readStyles, rgbOf, seen, sheetRules, sheetStyles, wi
 const PT_PER_PX = 0.75;
 // Pixels to a character of a column's width, Excel's for its default font: SheetJS's own guess makes them double on read and six on write.
 const PX_PER_CHAR = 7, STYLES_PER_TAB = 20_000;
+// Pictures an import keeps, in bytes as the look holds them (base64), over the workbook.
+const MEDIA_LIMIT = 16 << 20;
 const VOLATILE = /\b(?:TODAY|NOW|RAND|RANDBETWEEN|RANDARRAY)\s*\(/i, FORMATS_PER_TAB = 2000, PASSES = 4;
 const ERROR_TEXT = { 0: "#NULL!", 7: "#DIV/0!", 15: "#VALUE!", 23: "#REF!", 29: "#NAME?", 36: "#NUM!", 42: "#N/A", 43: "#GETTING_DATA" };
 const fault = (message) => Object.assign(new Error(message), { status: 422 });
@@ -140,6 +142,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   // What is kept for export though the sheet does not show it.
   const held = {}, keep = (what, count = 1) => { if (count) held[what] = (held[what] ?? 0) + count; };
   const skipped = [], read = [], names = new Set();
+  let mediaKept = 0;
   // Each tab's XML part, by the workbook's own list and its links, read for its pane and styles.
   const part = (path) => book.files?.[path]?.content, text = (path) => { const bytes = part(path); return bytes ? Buffer.from(bytes.buffer, bytes.byteOffset, bytes.length).toString("utf8") : ""; };
   const targets = Object.fromEntries((text("xl/_rels/workbook.xml.rels").match(/<Relationship\b[^>]*>/g) ?? []).map((tag) => [attr(tag, "Id"), attr(tag, "Target") ?? ""]));
@@ -161,14 +164,27 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     // more empty cells than a tab keeps styles for (a title merged across the whole row is cut at the tab's edge, as before).
     const most = Math.min(SHEET_LIMIT, Math.max(1, rows) * Math.max(1, cols) + STYLES_PER_TAB);
     const grow = (r, c) => { const taller = Math.max(rows, r + 1), wider = Math.max(cols, c + 1); if (wider <= COL_LIMIT && taller * wider <= most) { rows = taller; cols = wider; return true; } return false; };
-    const charts = readCharts(xmlOf[called] ?? "", called, text, linked, drop).filter((chart) => { const at = parseA1(chart.at), area = parseRange(chart.range); return grow(at.row, at.col) && grow(area.bottom, area.right) || (drop("charts past the sheet's limits"), false); });
+    // Its pictures and shapes, each kept whole on the cell its corner stands on, with its pictures' bytes while they fit in what an import keeps.
+    const drawn = {};
+    const keepDrawing = (anchor, targets) => {
+      const xml = anchor.replace(/<(?:\w+:)?hlinkClick\b[^>]*?(?:\/>|>[\s\S]*?<\/(?:\w+:)?hlinkClick>)/g, ""), what = /<(?:\w+:)?pic>/.test(xml) ? "images" : "shapes", media = {};
+      if (/\sr:(?!embed=)\w+="/.test(xml)) return drop(`${what} linked to other parts`);
+      for (const [, rid] of xml.matchAll(/\sr:embed="([^"]+)"/g)) { const bytes = part(targets[rid] ?? ""); if (!bytes) return drop(`${what} whose picture is missing`); media[rid] = { data: Buffer.from(bytes).toString("base64"), ext: path.posix.extname(targets[rid]).slice(1).toLowerCase() }; }
+      const size = Object.values(media).reduce((sum, one) => sum + one.data.length, 0);
+      if (mediaKept + size > MEDIA_LIMIT) return drop(`${what} past the ${MEDIA_LIMIT >> 20} MB of pictures an import keeps`);
+      const [row, col, toRow, toCol] = [["from", "row"], ["from", "col"], ["to", "row"], ["to", "col"]].map(([side, line]) => cornerOf(xml, side, line)), at = Number.isNaN(row) ? { row: 0, col: 0 } : { row, col };
+      if (!grow(at.row, at.col)) return drop(`${what} past the sheet's limits`);
+      mediaKept += size; keep(what);
+      (drawn[a1(at.row, at.col)] ??= []).push({ xml, ...(size ? { media } : {}), ...(Number.isNaN(toRow) ? {} : { span: [toRow - at.row, toCol - at.col] }) });
+    };
+    const charts = readCharts(xmlOf[called] ?? "", called, text, linked, drop, keepDrawing).filter((chart) => { const at = parseA1(chart.at), area = parseRange(chart.range); return grow(at.row, at.col) && grow(area.bottom, area.right) || (drop("charts past the sheet's limits"), false); });
     for (const { s, e } of sheet["!merges"] ?? []) if (s.r < rows && s.c < cols && data[s.r]?.[s.c]?.v !== undefined) grow(e.r, e.c);
     // A validation's cells (the tab holds it on its cells, sheet-types.js): its columns, and its rows as far as the same room lets (a whole column stops at the values).
     for (const one of validationsOf(text(xmlOf[called] ?? ""))) for (const part of one.range.split(/\s+/)) { const area = parseRange(part.replace(/\$/g, "")); if (area && !grow(area.bottom, area.right)) grow(Math.min(area.bottom, rows - 1), area.right); }
     // Its notes and threaded comments, kept on their cells for export (not shown): a cell holding one is taken in as a chart's is.
     const notes = Object.fromEntries(Object.entries(readNotes(xmlOf[called] ?? "", text, linked)).filter(([at]) => { const { row, col } = parseA1(at) ?? {}; return row !== undefined && (grow(row, col) || (drop("notes past the sheet's limits"), false)); }));
     for (const note of Object.values(notes)) { keep("notes"); keep("threaded comments", note.thread?.length ?? 0); }
-    read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, charts, notes, rows: Math.max(1, rows), cols: Math.max(1, cols) });
+    read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, charts, notes, drawn, rows: Math.max(1, rows), cols: Math.max(1, cols) });
   });
   if (!read.length) throw fault(wanted ? `None of those tabs is in the workbook: its tabs are ${book.SheetNames.join(", ")}` : "That workbook has no tabs with cells");
   const sizes = () => read.map((tab) => `${tab.name} ${tab.rows}x${tab.cols}`).join(", ");
@@ -318,6 +334,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       if (tab.color) look.tabColor = tab.color;
       if (tab.charts.length) look.charts = tab.charts;
       for (const [at, note] of Object.entries(tab.notes)) look[`note:${at}`] = note;
+      for (const [at, list] of Object.entries(tab.drawn)) look[`drawing:${at}`] = list;
       if (tab.table) look.table = tab.table;
       if (tab.filter) look.filter = tab.filter;
       // A frozen formula goes with its cell (`excel:<rowId>:<colId>` once in the doc), written for the cell it was in (`anchor`), as a rule's are.
@@ -414,10 +431,11 @@ export function exportXlsx(tabs) {
   // A tab's colour (`tabColor`): #RRGGBB as imported, or an ink the page set, written as its hex.
   const conditions = tabs.map((tab) => tab.tablePart ? "" : filterColumns(tab.look.filter));
   const colors = tabs.map((tab) => { const color = String(tab.look.tabColor ?? ""); return /^#[0-9A-F]{6}$/i.test(color) || SHEET_INKS.includes(color) ? `<tabColor rgb="FF${rgbOf(color)}"/>` : ""; });
-  let drawings = 0, charts = 1, noted = 0, blocks = 1;
+  let drawings = 0, charts = 1, noted = 0, blocks = 1, media = 1;
   const parts = tabs.map((tab) => {
-    const drawing = Array.isArray(tab.look.charts) ? drawingPart(tab.look.charts, tab.name, drawings + 1, charts) : null, notes = notesParts(tab.look, noted + 1, blocks);
-    if (drawing) { drawings += 1; charts += drawing.count; }
+    const drawn = Object.entries(tab.look).flatMap(([name, list]) => /^drawing:[A-Z]{1,3}\d+$/.test(name) ? [[name.slice(8), list]] : []);
+    const drawing = drawingPart(Array.isArray(tab.look.charts) ? tab.look.charts : [], tab.name, drawings + 1, charts, drawn, media), notes = notesParts(tab.look, noted + 1, blocks);
+    if (drawing) { drawings += 1; charts += drawing.count; media = drawing.media; }
     if (notes.blocks) { noted += 1; blocks += notes.blocks; }
     return [tab.tablePart, drawing, ...notes.parts].filter(Boolean);
   });

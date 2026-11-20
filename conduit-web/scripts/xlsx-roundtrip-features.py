@@ -303,7 +303,10 @@ def g_image(wb):
     from PIL import Image
     ws = wb.active; ws["A1"] = 1; buf = io.BytesIO(); Image.new("RGB", (20, 20), "red").save(buf, "PNG"); ws.add_image(XImage(buf), "C3")
 def r_image(wb, raw):
-    return {f"media {i}": True for i, n in enumerate(n for n in zipfile.ZipFile(io.BytesIO(raw)).namelist() if n.startswith("xl/media/"))}
+    z = zipfile.ZipFile(io.BytesIO(raw)); out = {f"media {i}": len(z.read(n)) for i, n in enumerate(n for n in z.namelist() if n.startswith("xl/media/"))}
+    for n in (n for n in z.namelist() if re.match(r"xl/drawings/drawing\d+\.xml$", n)):
+        for i, m in enumerate(re.finditer(r"<(?:\w+:)?from><(?:\w+:)?col>(\d+)</(?:\w+:)?col>.*?<(?:\w+:)?row>(\d+)<.*?<(?:\w+:)?ext cx=\"(\d+)\" cy=\"(\d+)\"", z.read(n).decode())): out[f"anchor {i}"] = list(m.groups())
+    return out
 feature("images")((g_image, r_image))
 
 def g_tabs(wb):
