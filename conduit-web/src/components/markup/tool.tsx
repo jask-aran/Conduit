@@ -677,10 +677,13 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
 
   // Heard after the surface, and only in its pane: Escape stops the request out where nothing nearer took it, and the ask key opens the box where the surface has no ask of its own (a site).
   const later = (event: KeyboardEvent) => {
+    // The two keys are tested first: the page is searched for an open menu on every key typed otherwise.
+    const stop = event.key === "Escape" && working(), ask = (event.ctrlKey || event.metaKey) && event.altKey && event.code === "KeyM" && can.bar !== "foot" && can.listeners;
+    if (!stop && !ask) return;
     const framed = host.frame?.(), pane = framed?.classList.contains("ui-markup-room") ? framed.parentElement : framed, target = event.target as Node;
     if (event.defaultPrevented || props.hidden || asking() || document.querySelector(`${MENUS}, [role='dialog']`) || !(layer?.contains(target) || pane?.contains(target))) return;
-    if (event.key === "Escape" && working()) { event.preventDefault(); stopWork(); }
-    else if ((event.ctrlKey || event.metaKey) && event.altKey && event.code === "KeyM" && can.bar !== "foot" && can.listeners) { event.preventDefault(); openAsk(host.place?.() ?? null); }
+    event.preventDefault();
+    if (stop) stopWork(); else openAsk(host.place?.() ?? null);
   };
   const POINTER_EVENTS = ["pointermove", "pointerdown", "pointerup", "pointercancel", "mousedown", "mouseup", "click", "dblclick", "contextmenu", "wheel", "touchstart", "touchmove", "touchend", "touchcancel"] as const;
   onMount(() => {
