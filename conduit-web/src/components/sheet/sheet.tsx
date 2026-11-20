@@ -415,8 +415,13 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const art = createArtWindow(true);
   // The app's tokens change with the Interface size and the theme, each set on the root element; so does much else (a dialog's scroll lock, a route's
   // motion), so the grid is drawn again only where the text's colour or the unit of size has changed.
-  let told = "";
+  // Asked only once the root's attributes, its inline style's own properties aside, say something new: a dialog's scroll lock (overflow, padding) changes
+  // no token, and reading the computed style as it opens would make the browser restyle the page there and then.
+  let told = "", held = "";
   const relook = new MutationObserver(() => {
+    const at = document.documentElement, said = [...at.attributes].map((one) => one.name === "style" ? [...at.style].filter((name) => name.startsWith("--")).map((name) => `${name}:${at.style.getPropertyValue(name)}`).join(";") : `${one.name}=${one.value}`).join(" ");
+    if (said === held) return;
+    held = said;
     const made = grid(), shown = root && getComputedStyle(root), now = shown ? `${shown.color} ${shown.getPropertyValue("--u-space")} ${shown.getPropertyValue("--muted-foreground")}` : "";
     if (made && root && now !== told) { told = now; made.theme(untrack(drawnLook)); }
   });
