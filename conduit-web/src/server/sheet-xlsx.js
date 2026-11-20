@@ -432,8 +432,15 @@ const ERROR_CODE = Object.fromEntries(Object.entries(ERROR_TEXT).map(([code, tex
  * @returns {Buffer}
  */
 export function exportXlsx(given) {
-  // Two tabs of one name (an Undo can bring a name back that another tab has since taken) would stop SheetJS: the later is told apart, as a duplicate is named.
-  const taken = new Set(), tabs = given.map((tab) => { let name = tab.name, n = 1; while (taken.has(name.toLowerCase())) name = `${tab.name.slice(0, 25)} (${++n})`; taken.add(name.toLowerCase()); return name === tab.name ? tab : { ...tab, name }; });
+  // Two tabs of one name (a doc written outside the hub) would stop SheetJS: the later is told apart, as a duplicate is named, by a name no tab has. A formula
+  // naming it reads the first, as the engine has it (sheet-engine.js `rebuild`), so none is rewritten.
+  const taken = new Set(given.map((tab) => tab.name.toLowerCase())), seen = new Set(), tabs = given.map((tab) => {
+    if (!seen.has(tab.name.toLowerCase())) { seen.add(tab.name.toLowerCase()); return tab; }
+    let n = 2, name = `${tab.name.slice(0, 25)} (${n})`;
+    while (taken.has(name.toLowerCase())) name = `${tab.name.slice(0, 25)} (${++n})`;
+    taken.add(name.toLowerCase());
+    return { ...tab, name };
+  });
   const book = XLSX.utils.book_new(), known = new Set(tabs.map((tab) => tab.name.toLowerCase()));
   let tables = 0;
   const tableNames = new Set();
