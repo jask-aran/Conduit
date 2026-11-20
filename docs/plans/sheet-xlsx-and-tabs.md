@@ -1,403 +1,95 @@
 # Sheets: workbooks with tabs, and xlsx in and out
 
-A plan, 2026-11-15, for two asks: workbooks with several tabs, and importing from and exporting to `.xlsx` with formulas
-that keep working. Evidence is marked **measured** (run here, scripts and raw results in the session's scratch folder
-`xlsx-research/`), **read** (in source or docs), or **guess**. The owner's workbooks are called W1 to W9, largest first;
-only shapes and counts are given.
-
-## Findings from the Paper xlsx package
-
-**Licence (read).** `paper-xlsx` has `LICENCE.rst`: "This software is under the MIT Licence. Copyright (c) 2010 openpyxl.
-Portions Copyright (c) 2026 Paper Instruments, Inc." The `skills` repo is MIT too. Nothing blocks depending on it.
-
-**What it is (read).** It is a hard fork of openpyxl that keeps the import name `openpyxl` (version 0.2.2, "Alpha", last
-commit 2026-09-23, one dependency). It is pure Python, so the Node hub could only use it by running Python.
-
-**What it adds for agents (read).** The fork is about editing an existing `.xlsx` in place without losing anything:
-
-- *Preserve mode*: the original zip stays the source of truth, and a save patches only the parts a supported edit owns.
-  Anything else raises a typed `PaperRefusal` that names the reason.
-- *Save receipts*: what changed, which cached results were removed, and whether a recalculation was asked for.
-- *Formula freshness*: when an input changes, cached results go stale. The fork deletes them and asks Excel to recalculate
-  on open, and it refuses a `data_only` save that would drop formulas.
-- Search, `scan_errors`, `diff_workbooks`, `copy_format`, `append_table_row` and `chart.repoint`.
-- Row and column inserts that also rewrite names, tables, charts and filters, and return the address changes.
-- A LibreOffice "oracle" to recalculate a workbook (it has no formula engine of its own).
-
-**How it models a workbook (read).** It uses openpyxl's model:
-
-- A workbook holds worksheets. A cell's `value` is either the formula text or a value, and you get one or the other per
-  load: cached values need a second load with `data_only=True`.
-- Shared formulas are expanded on read, and stock openpyxl dissolves them on write. Array formulas are `ArrayFormula`
-  objects.
-- Defined names live on the workbook and on each sheet. Tables are `ws.tables`.
-- Styles are Font, Fill, Border, Alignment and a `number_format` string. Merged ranges, column and row dimensions (width,
-  hidden), `freeze_panes`, data validation, conditional formatting, legacy notes, charts and images are all modelled.
-- Pivots, sparklines, slicers and the newer (x14) extensions are kept only as untouched bytes in preserve mode.
-
-**Its evals (read).** The test fixtures are frozen by a hash manifest:
-
-- One fixture per feature: names, tables, merges, validation, hidden parts, shared plus array formulas, a schedule saved
-  with and without cached values, and a file written by LibreOffice.
-- A "gauntlet" file that combines everything, plus corrupt and legacy files that must be refused, and a 150,000-cell file
-  for speed.
-- A five-job "battery" that measures how stock openpyxl damages files and asserts the fork ends each job correct or
-  loudly refused. The damage it measures: sparklines and conditional formats dropped, shared formulas dissolved, a
-  `SUM` range and a defined name left pointing at the old cells after `insert_rows`, and formulas lost on a `data_only`
-  save.
-- It says plainly that no fixture was written by Excel.
-
-**Lessons for Conduit.** A reader must get formulas and cached values together. A writer must write cached values or ask
-for a recalculation, never stale values silently. Shared formulas and `_xlfn.` prefixes are where simple writers break.
-Structure edits must rewrite references everywhere (HyperFormula already does this for us). Anything dropped is
-reported, never silent: our import report plays the part of their receipt. Conduit converts a workbook rather than
-editing the `.xlsx` in place, so preserve mode, the fork's main value, does not apply to us.
-
-## What the owner's workbooks use
-
-**Measured** with openpyxl 3.1.5 and a raw scan of each zip, over the 9 workbooks the previous agent converted:
-
-| Feature | Workbooks (of 9) | How much |
-| --- | --- | --- |
-| Several tabs | 6 | 2 to 28 tabs; 35 of the 49 readable workbooks found have 2 or more |
-| Hidden tabs | 2 | 25 |
-| Cross-tab references | 6 | 138,143 of 862,755 formulas (16%) |
-| Defined names | 4 | 126 (36 user-visible); none used in a cell formula |
-| Tables / structured references | 1 | 2 tables / 0 formulas |
-| Array (CSE) formulas / dynamic arrays | 3 / 0 | 55 / 0 |
-| Shared-formula groups | 7 | 1,065 |
-| `_xlfn.` functions | 2 | 14 (FLOOR.MATH, STDEV.S; COVARIANCE.S, VAR.S elsewhere) |
-| Bare `TRUE`/`FALSE` in formulas | 2 | 801 formulas |
-| Number formats other than General | 9 | 7 to 25 per workbook: currency, thousands, %, dates |
-| Date cells | 8 | 64,232 |
-| Bold / fill / borders | 6 / 7 / 7 | 2,551 / 98,323 / 125,475 cells |
-| Column widths set | 9 | 919 columns |
-| Frozen panes | 3 | 28 tabs |
-| Merged ranges | 5 | 521 (477 in one) |
-| Hidden rows / columns | 3 / 3 | 8,951 / 12 |
-| Data validation / conditional formats | 3 / 5 | 277 rules / 367 ranges |
-| Notes (comments); threaded comments | 4; 0 | 957 (953 in one) |
-| Charts / pivot tables / images | 6 / 1 / 2 | 20 / 4 / 5 |
-| Hyperlinks / external links | 4 / 1 | 42 / 1 (no formula uses it) |
-| Macros, 1904 dates, sparklines, slicers | 0 | |
-
-Three more facts from the files:
-
-- **No cached values.** W6 was written by openpyxl and has no cached values at all: all 66,003 formulas have an empty
-  `<v>`. Three of the 49 files have this producer. Import must not trust an empty cache.
-- **Used range.** W6 also claims 16,384 columns because empty cells carry formatting. Size a tab by its content, not by
-  its stated range.
-- **Size.** W1 has 1.28 million cells and 704,038 formulas across 28 tabs, 19 of them hidden.
-
-## Formula compatibility
-
-**How xlsx stores formulas (read and measured).**
-
-- `<f>` holds the text without the `=`.
-- *Shared formulas* store the text once, on the group's first cell (`t="shared"`, `ref`, `si`). The other cells carry
-  only the group number, and the reader shifts the references for each cell.
-- *Array formulas* (`t="array" ref=…`) sit on the range's first cell; the other cells hold only values. *Dynamic
-  arrays* add a `cm` attribute and `xl/metadata.xml`.
-- Functions newer than Excel 2007 are written `_xlfn.NAME`; FILTER and SORT are written `_xlfn._xlws.`. Excel shows
-  `#NAME?` when the prefix is missing (read; not checked in Excel here).
-- References are A1 in the file. R1C1 is only a display setting.
-- Dates are serial numbers in the 1900 system, including Excel's false 29 February 1900. A date is told apart only by
-  its number format.
-
-**What HyperFormula 3.5.0 does with each (measured, `scripts/hf-gaps*.cjs`).**
-
-| Gap | Owner's files | Fix |
-| --- | --- | --- |
-| Cross-tab references | 138,143 formulas | Tabs in one engine. Measured: W7's 314 formulas, 156 of which failed before, all now equal Excel's cached values |
-| `OFFSET` with cell or `ROW()` arguments (HyperFormula only parses constant arguments) | 72 in 2 workbooks; in W8 55 roots break 304 dependants | Freeze (below). A function of our own cannot take over the name `OFFSET`, and `INDEX(…):INDEX(…)` does not parse |
-| RANK (also RANK.EQ) | 95; 190 over all 49 | A function plugin (verified) |
-| AVERAGEIFS | 175 | A plugin that calls the built-in SUMIFS and COUNTIFS (verified with 1 and 2 conditions) |
-| Bare `TRUE`/`FALSE` give `#NAME?` | 801 formulas | Engine-wide named expressions `TRUE` = `=TRUE()` and `FALSE` = `=FALSE()` (verified). The text is left as typed |
-| `_xlfn.` prefix gives a parse error | 14 | Removed on import; added back on export from a list. Verified: the exported formulas match the originals exactly |
-| CSE arrays (`SUM(A*B)`) give `#VALUE!` | 55 | `=ARRAYFORMULA(…)` on the anchor, or the `useArrayArithmetic` setting (both verified to give 14 on a toy) |
-| 3D references, structured references, `[1]` external references, INDIRECT, IMPORTRANGE, DUMMYFUNCTION | 0 to 4 cells | Freeze |
-| XNPV rejects its arguments | 1 root cell, 5 dependants | Freeze. Cause not found |
-| Dates before March 1900 off by one | none | `leapYear1900: true` with `nullDate` 1899-12-31: DATE(1900,1,1) = 1 and DATE(2024,1,1) = 45292, as in Excel |
-| NETWORKDAYS on text dates | 2 to 12 cells in W1 | None: `dateFormats: []` is a decision already made. Reported |
-
-**Custom functions (read in the typings and measured).** A class extends `FunctionPlugin`. Its static
-`implementedFunctions` maps a name to `{ method, parameters, repeatLastArgs }`, and
-`HyperFormula.registerFunctionPlugin(Plugin, { enGB: names, enUS: names })` registers it before any engine is built:
-
-```js
-class ExcelGaps extends FunctionPlugin {
-  rank(ast, state) { return this.runFunction(ast.args, state, this.metadata("RANK"), (n, range, ascending) => { /* 1 + how many beat n */ }); }
-  averageifs(ast, state) { /* SUMIFS(...) / COUNTIFS(args minus the first), #DIV/0! when nothing matches */ }
-}
-ExcelGaps.implementedFunctions = { RANK: { method: "rank", parameters: [NUMBER, RANGE, BOOLEAN default false] }, "RANK.EQ": { ...same }, AVERAGEIFS: { method: "averageifs", parameters: [RANGE, RANGE, NOERROR], repeatLastArgs: 2 } };
-```
-
-It belongs in a module that `sheet-format.js` imports, so the hub and the page compute the same values.
-
-**Freezing.** When a formula cannot be parsed or names a function we do not have, import stores Excel's cached value as
-the cell's input. It also keeps `{ formula, value, anchor }` under `excel:<rowId>:<colId>` in `look`. Export writes the
-original formula back only while the cell still holds that value, so a later edit simply wins. The hub's row, column and
-tab ops rewrite these formulas as the engine rewrites any (OFFSET goes into a scratch engine under a name it does not
-know, so it parses); a sort moves them as a fill does, from `anchor`. Dependent cells, through ranges too, compute from
-the kept value (measured on a generated workbook; W8 not run).
-
-**What round-trips and what cannot.** Exact (measured on the exported files): values, formula text (`_xlfn.` restored),
-tab names and order, number formats, merges and defined names. Written by our own parts beside SheetJS's: fonts, fills,
-borders and alignment, cell-value and formula conditional formats, row heights, hidden rows and columns, and frozen panes.
-Lost: pivots (their cells survive as values), slicers, sparklines and macros; everything else in the scorecard
-comes back (round 4). Shared
-formulas are written out per cell, so the file grows, but Excel reads them the same.
-
-## Library choice
-
-**Measured** (`scripts/libtrial.cjs`, `trials.sh`, `compare.py`): read, write back, reopen with openpyxl, compare.
-
-| | SheetJS CE 0.20.3 | exceljs 4.4.0 |
-| --- | --- | --- |
-| W1 read (1.28M cells) | 14.6 s, 1.44 GB peak memory (dense and no text: 8.7 s, 658 MB) | 13.4 s, 4.6 GB |
-| W1 write | 8.5 s | 16.6 s |
-| W2 (563k cells) read / write / memory | 2.1 s / 1.1 s / 448 MB | 1.8 s / 2.4 s / 754 MB |
-| W4 (61k formulas, 14 tabs) | 1.4 s, 429 MB | 1.3 s, 547 MB |
-| Failed to read | 0 of 9 | W6: a crash in its drawing parser that no option avoids |
-| Written file reopens | all checked | W4 unreadable: it writes `<v>NaN</v>` for error results |
-| Formulas, cached values, tab names | all survive (`_xlfn.` removed on read, then restored by us) | all survive where readable |
-| Styles / defined names | fills read, nothing written / all kept | kept / 31 of 33 dropped in W9 |
-| Release, licence, size | 2024, Apache-2.0, 0 dependencies, 7.8 MB | Oct 2023 (prerelease Dec 2024), MIT, 9 dependencies, 23 MB |
-
-**Recommendation: SheetJS Community Edition 0.20.3** for both import and export. It read every file, its memory is a
-third of exceljs's, it has no dependencies, and it gives formulas and cached values in one pass. It has three traps, all
-measured:
-
-- Read with `sheetStubs: true`. Without it SheetJS silently drops formula cells whose cached result is empty: it lost all
-  65,996 of W6's.
-- Its dense writer needs every row present.
-- It strips `_xlfn.` on read unless `xlfn: true`.
-
-Its gaps (read in source): it writes no fonts, fills, borders, frozen panes or `calcPr`. Distribution: the npm package
-`xlsx` stops at 0.18.5, which has published security advisories (from memory). Current versions come only as a tarball
-from `cdn.sheetjs.com`.
-
-**Runner-up: exceljs**, if styles become worth its failures and memory. **Python** (openpyxl, or the Paper fork) is the
-leanest reader: in streaming mode it held 33 to 39 MB with both passes taking 1.9 s on W4 and 4.4 s on W2. But it would
-put Python on every hub and device, so it stays a test oracle in the scratch checks only.
-
-## Tabs design
-
-**On disk.** A one-tab sheet stays `<name>.csv`, unchanged. A workbook is a folder `<name>.sheet/` with one
-`<tab name>.csv` of computed values per tab; Conduit's state stays in the side folder.
-
-- *Tab names as file names.* Excel already forbids `\ / ? * [ ] :` in tab names and keeps them unique ignoring case.
-  `" < > |`, control characters and a trailing dot or space are written as `%XX`.
-- *Becoming a folder.* The first time a tab is added to a `.csv` sheet, the file moves to `<name>.sheet/<name>.csv`. Its
-  id is kept by `paths.json` (`BY_PATH.renamed`).
-- *Alternatives weighed.* A folder for every sheet would change today's files. A `.xlsx` as the live file is not a plain
-  result file and cannot be diffed. A manifest beside the folder would be Conduit state in the project folder.
-- *Finding workbooks.* Discovery (`git ls-files '*.csv'` or `walk` in `documents.js`) already finds the tab files. A
-  CSV whose parent folder ends in `.sheet` belongs to that folder's artifact. `at()` refuses to open one alone ("a tab of
-  workbook X").
-- *What `disk` needs.* `localDisk` and `deviceDisk` gain `list(dir)`, `mkdir`, folder `rename` and `removeTree`.
-- *Edits outside Conduit.* A tab file edited outside goes through today's `take`, for that tab. A new CSV in the folder
-  is a new last tab. A missing file whose content shows up under a new name is a rename. A tab file deleted alone is
-  written back.
-
-**Yjs** (`SHEET_FORMAT` becomes 2):
-
-- `tabs`: a Y.Array of tab ids in order.
-- `tab`: a Y.Map holding `name:<tabId>` and `hidden:<tabId>`.
-- Tab `main` keeps the root `rows`/`cols`; any other tab has `rows:<tabId>`/`cols:<tabId>`.
-- `cells` and `look` stay one map each: row and column ids are unique across the whole doc, so `rowId:colId` already
-  names its tab. The hub checks new ids against the doc.
-- A version-1 doc has no `tabs`: it reads as `["main"]`, named after its file. **Migration writes nothing until a second
-  tab is added.**
-- Tab-level look: `freezeRows:<tabId>` and `freezeCols:<tabId>` (counts); and `fmt:<colId>` or `fmt:<rowId>:<colId>` for number formats.
-- Only the hub adds, renames, removes or moves tabs, as with rows today. A page may write `hidden:`.
-
-**HyperFormula.** One engine for the whole workbook (`buildFromSheets`), with each tab id mapped to the engine's sheet
-id. That id stays the same when other tabs are removed (measured).
-
-- `Data!A1` and `'My Data'!A1` work (measured).
-- `renameSheet` rewrites every formula that refers to the tab (measured). The hub reads the changed formulas back and
-  writes them, in all tabs, in the same transaction as the name. A page applies the rename to its own engine before the
-  cells.
-- `removeSheet` leaves `=Gone!A1` showing `#REF!`, and it works again if a tab of that name comes back (measured).
-  Export writes `#REF!` in its place.
-- Inserting rows in one tab shifts references to it from other tabs (measured). So `structure` must compare formulas in
-  every tab, first narrowed to formulas whose text names the tab.
-- Tab order does not matter to the engine (it has no reorder, and 3D references are not supported).
-
-**`sheet-format.js` API.**
-
-- New `createWorkbookModel(doc, { name })` returning:
-  - `tabs()`: `[{ id, name, hidden }]`.
-  - `tab(id)`: today's `SheetModel` unchanged, plus `id` and `name`. So `grid.ts` does not change.
-  - `tabOfRow(rowId)`.
-  - `onChange`, with `tab` and `tabs` in each change.
-  - `structure(tab, op, at, count, write)` and `tabOp(op, …)` (the hub's alone).
-- `createSheetModel(doc)` stays as the first tab's view.
-- `serveSheetModel` computes the whole workbook. `createSheetView` gains `tab(id)`; values stay keyed by the cell key.
-- New: `TABS`, `TAB`, `rowsOf(tab)`, `colsOf(tab)`, `parseRef("'My Data'!B2:C5")` giving `{ tab, range }`, and
-  `WORKBOOK_LIMIT`.
-- `CONFIG` gains `leapYear1900` and `nullDate`, the TRUE/FALSE names, and the plugin.
-
-**Hub and agents.**
-
-- Addresses take an optional tab: `at: "Data!B4"`, `range: "'My Data'!B2:C5"`. Without one they mean the first tab, as
-  today.
-- `GET /v0/document/:id` starts with `# workbook <name>: tabs Summary (20x8), Data (3394x57, hidden); this is Summary`
-  and takes `?tab=`. `?as=cells` adds `tab` and `tabs`.
-- `POST …/cells` gains `add-tab {name, at?}`, `rename-tab {tab, name}`, `delete-tab {tab}`, `move-tab {tab, at}` and
-  `hide-tab {tab, hidden}`. Row and column ops take `tab`.
-- `conduit_artifact` gains a `tabs` action; the CLI gains `document tabs <id> [add|rename|delete|move|hide] …`.
-- `sheet.json` format 2 is `{ format: 2, tabs: [{ id, name, file, hidden, inputs, look }], names }`. Format 1 is read as
-  one tab.
-
-**Comments.** `under.cells` is unchanged, because the row id already gives the tab. `where()` returns `Data!B4:C5`,
-`context()` names the tab, and the page switches to the comment's tab when opening it.
-
-## Import and export design
-
-**Where import runs.** On the hub, in a `worker_thread`: W1 alone blocks for 9 to 15 s. The worker:
-
-1. Parses with SheetJS.
-2. Translates: adds `=`; removes `_xlfn.`/`_xlws.`; turns CSE arrays into `ARRAYFORMULA`; leaves the members of an array
-   empty; prefixes `'` to text that would read as a number, boolean or formula (`00123`); turns dates into their serials
-   with the format kept in `look`; takes widths in px from Excel's widths (about 7 px per character, a guess); keeps
-   merges; turns names into named expressions; freezes what cannot compute; sizes each tab by its content.
-3. Computes everything in a throwaway engine and compares with Excel's cache.
-4. Hands back plain data.
-
-The main thread then writes the CSV (or folder), `sheet.json` and an `import.json` report, and adopts the result.
-
-**The report**, shown to the person once as a notice on the new artifact, and readable later with `?as=import`:
-
-- each tab's size and number of formulas;
-- `computed: { same, differ, frozen, noCache }`;
-- the first 50 differing or frozen cells with the reason, and counts by reason;
-- what was dropped, with counts: charts, conditional formats, validation, notes, pivots, styles, images, hyperlinks and
-  hidden rows.
-
-**Verbs.**
-
-- `POST /v0/projects/:id/artifacts/import`. Either raw xlsx bytes from the page (drop or file picker; `?name=&folder=`),
-  or JSON `{ from: "<a .xlsx in the project>", name?, folder?, tabs?: [..] }` for agents.
-- `GET /v0/document/:id?as=xlsx` to download.
-- `POST /v0/document/:id/export { to?, replace? }` writes into the project folder and refuses to overwrite unless
-  `replace` is set.
-- `conduit_artifact` actions `import` and `export`; the CLI's `document import <project> <file.xlsx> [--name] [--tabs]`
-  and `document export <id> [to]`.
-- An agent imports, reads the report, and fixes or explains the cells listed.
-
-**Limits:** a file of up to 30 MB, at most `WORKBOOK_LIMIT` cells, and a 60 s worker timeout. `tabs` lets someone import
-part of a big workbook.
-
-**Export** writes, through SheetJS:
-
-- each formula with `_xlfn.` added back, using a list kept beside the plugin;
-- the values Conduit computed, as cached values;
-- frozen cells' original formulas;
-- number formats, widths (`wpx`), merges, names, hidden tabs and the tab order.
-
-**Verification: the round-trip scorecard** (`conduit-web/scripts/xlsx-roundtrip.mjs`, **measured**). It takes 30 workbooks, one per
-feature, written by openpyxl with the cached values Excel keeps put back in by hand. It imports each one and exports it through the hub's
-document service in a temporary data root, then reads both files back with openpyxl. Each export is also held to what Excel is strict about:
-every part has a content type, every relationship target exists, `r:id`s resolve, children of `<worksheet>`, `<workbook>`, `<styleSheet>`
-and `<chartSpace>` are in schema order, every `count` matches, and style and dxf ids are in range. Any fault fails the run.
-
-The features script is `scripts/xlsx-roundtrip-features.py` (`XLSX_PYTHON` names a python with openpyxl). LibreOffice is not installed here. openpyxl cannot write threaded comments or dynamic-array metadata
-(`cm=`), so those are not tested: the spilling formulas are legacy array formulas with their cached cells.
-
-| Feature | Before (main, 2026-11-20) | After round 1 | After round 2 | After round 3 | After round 4 |
-| --- | --- | --- | --- | --- | --- |
-| values (numbers, text, booleans, dates, times, errors, 5,000-character text, leading zeros, text like numbers) | kept | kept | kept | same | same |
-| formulas (relative, absolute, another tab, whole column, XLOOKUP, TEXT) | kept | kept | kept (1 frozen: `TEXT` gives another value here) | same | same |
-| array formula (CSE) | changed: value kept, written as a plain formula | same | same | kept, live | same |
-| spilling formulas (UNIQUE, SEQUENCE, SORT) | changed: values kept, formulas lost | same | same | kept, live; exported as Excel's dynamic arrays | same |
-| functions the engine lacks (LAMBDA, CELL, GETPIVOTDATA) | changed: values kept, `_xlfn.` taken off LAMBDA | same | same | same; Excel reads 2 of them with an implicit @ (LAMBDA loses `_xlfn.`/`_xlpm.`) | kept (LAMBDA and LET written with `_xlfn.`/`_xlpm.` as dynamic arrays; CELL still read with @, as Excel reads the original) |
-| defined names | changed: names lost, formulas using them frozen | same | same | kept, computed | same |
-| number formats (20 built-in and custom) | kept | kept | kept | same | same |
-| fonts (face, size, double underline) | changed: face lost | same | kept, face not shown | same | same |
-| fills (solid, pattern) | changed: patterns become solid | same | kept, pattern not shown | same | same |
-| borders (dashed, dotted, double, diagonal) | changed: drawn thin, diagonals lost | same | kept, line styles and diagonals not shown | same | same |
-| alignment, wrap, indent, rotation, shrink | changed: indent, rotation, shrink lost | same | kept, indent, rotation and shrink not shown | same | same |
-| widths, heights, hidden rows and columns, frozen panes | changed: heights off by up to 0.25 pt | same | same | same | kept (sizes exact) |
-| merges | **dropped** past the last value | kept | kept | same | same |
-| conditional: cell value, formula | kept | kept | kept | same | same |
-| conditional: colour scale, data bar, icon set, top 10 | dropped (reported) | same | kept, not shown | same | kept, not shown; ranges follow inserts and moves |
-| conditional: a rule's number format | changed: lost (reported) | same | kept, not shown | same | same |
-| data validations (list, whole number, date, custom) | **dropped** | kept | kept | kept (and a dropdown's option inks, in a sheet extension) | same |
-| hyperlinks (web, mail, a place in the workbook) | **dropped** | kept | kept | same | same |
-| notes | dropped (reported) | same | same (waits on the owner) | same | kept, not shown (on their cells: follow inserts and sorts) |
-| threaded comments | not in the scorecard | | | | kept, not shown (replies, resolved, people) |
-| tables | **dropped**, not reported | kept | kept | same | same |
-| autofilter | **dropped**, not reported | kept | kept | same | same |
-| filter conditions (values, custom, dates, blanks) | not in the scorecard | not in the scorecard | kept | same | same |
-| charts (bar, line, pie) | **dropped**, not reported | kept | kept | same | same |
-| images | dropped, not reported | dropped (reported) | same | same | kept, not shown (pictures and shapes, on their cells) |
-| tabs: odd names, colours, a hidden tab | changed: colours lost | kept | kept | same | same |
-| row and column groups (outline levels, collapsed) | not in the scorecard | | | | kept (`outline:<lineId>`, the level, as the page's grouping keeps it) |
-| print settings | dropped, not reported | same | same | changed: print area and titles kept (as names), page setup lost | kept (page setup, headers, breaks) |
-| workbook and sheet protection | dropped, not reported | same | same | same | kept |
-
-The counts went from 5 kept, 15 changed and 10 dropped of 30 workbooks, to 12, 12 and 6 after round 1, to 22, 7 and 2 of 31 after round 2, to 25, 4 and 2 after round 3, and to 33 kept of 33 after round 4 (threaded comments and groups
-added to the scorecard; threaded comments are written into the generated file by hand, as openpyxl cannot write them). Merging main before round 3 dropped data validations
-(its cell types clipped them to the tab's values); that was fixed first.
-"Not shown" means the look holds it and an export writes it back, but the page does not draw it.
-
-**In real Excel** (`--excel`, **measured**): every export opens after rounds 2, 3 and 4. Round 4 also counts each export's notes, threaded
-comments, pictures and hidden columns as Excel reads them, and they match what was written. Counting hidden columns found that every export
-before round 4 wrote a `<col>` with no width for each column without one, which Excel draws zero wide: such columns opened hidden. They are now
-left out. The one `@` left is `CELL("row",A2)`, which Excel reads with an
-implicit `@` in the generated input as well. A dynamic-array export opens spilling with no implicit
-`@`; a dropdown's inks extension survives Excel's own edit and save. Rule ranges kept unread (`rulesKept`) are held by row and column ids since round 4, so they follow
-inserted rows. That covers all 31 scorecard workbooks and hand-built
-looks: six chart kinds, labels by row, a tab name that needs quotes, two tables with one name, and a table with filter conditions. Excel
-also reads the same number of tabs, charts, tables and formulas as were written.
-
-The one repair Excel asked for, and nothing else had caught, was a table whose header cell held a number (a year). Such a table is now
-written as its filter alone. A file that needs repair is refused on a normal load, so `--excel` reports it as "needs repair". COM's
-repair modes (`CorruptLoad` 1 and 2) refused the files I broke on purpose too, so the mode cannot say what Excel would have changed.
-
-**Other files (measured with a probe of `importXlsx`, round 4).** SheetJS reads them all; only `.xlsx` and `.xlsm` have the parts our own readers
-use (styles, rules, charts, notes, pictures), so the others come in as SheetJS reads them. Every export is an `.xlsx`.
-
-| File | Opens | What comes across | Export |
-| --- | --- | --- | --- |
-| `.xlsx` | yes | everything in the scorecard | `.xlsx` |
-| `.xlsm` | yes | as `.xlsx`; its macros are reported left out and never run | `.xlsx`, without the macros |
-| `.xlsb` | yes | values, formulas and number formats SheetJS reads; no styles, rules, charts or notes | `.xlsx` |
-| `.xls` | yes | as `.xlsb` | `.xlsx` |
-| `.ods` | yes | values and formulas (checked: one formula came across live) | `.xlsx` |
-| `.csv`, `.tsv` | yes | values; separators `,` `;` and tab are guessed, quoted newlines kept; UTF-8 with or without a byte-order mark, UTF-16 with one, else Latin-1 | `.xlsx` |
-
-Not in the scorecard: openpyxl writes none of these; `.xls` and `.xlsb` formulas were not checked (SheetJS's writer used for the probe writes them
-without formulas). Keeping an `.xlsm`'s macros would make its export an `.xlsm` (another content type and name): not built.
-
-**A large workbook (measured, round 4).** 200,000 cells over 5 tabs (2,000 rows by 20 columns each, half of them formulas, every tenth row bold and
-filled), written by openpyxl (no cached values), through the hub's document service: import 3.1 s, first open 5.0 s, export 2.7 s (3.2 MB), the
-process's peak memory 809 MB. At 400,000 cells (4,000 rows a tab): import 4.8 s, first open 8.3 s, export 4.0 s, peak 1,559 MB, so time and memory
-grow about as the cells do. No change made. An export still passes through the zip three times (SheetJS writes it, then our styles and our parts
-each read and write it again). Excel's check of the 200,000-cell export timed out at two minutes; why was not found.
-
-## Still to build
-
-Steps 1 to 9 of the first build order have landed. Left: an OFFSET plugin; Excel notes as Markup comments (waiting on
-the owner: 16 notes would hand 16 items to agents; they are kept on their cells as `note:<rowId>:<colId>`); drawing groups, pictures,
-kept rules and page setup in the page; an `.xlsm` export that keeps its macros.
-
-## Open decisions for the owner
-
-1. **Layout.** A folder `<name>.sheet/` with one CSV per tab; `.csv` sheets untouched until they get a second tab, when
-   the file moves into the folder. *Recommended.* The other way: a `.csv` never gains tabs, and a workbook is made as one.
-2. **Workbook size.** The engine and the Yjs doc grow together (previous agent's bench: W1 would need about 726 MB of
-   engine and 434 MB of doc in every page). *Recommend 500,000 cells per workbook*, with W1 imported a few tabs at a time.
-3. **Formulas Conduit cannot compute.** *Recommend freezing* them (Excel's value, with the formula kept for export).
-   The other way: import them as errors.
-
-## Packages that would be added
-
-| Package | Version | Licence | For |
-| --- | --- | --- | --- |
-| `xlsx` (SheetJS CE) | 0.20.3, from `https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz` | Apache-2.0 | import and export, on the hub |
-| `numfmt` | 4.1.3 (released 2026-11-10; 3.2.6 is the last of the older line) | MIT, no dependencies | drawing number formats in the grid |
-
-`hyperformula` 3.5.0 (GPL-3.0-only) is already in. Python and openpyxl stay in the scratch checks only.
+How the `sheet` kind keeps workbooks and reads and writes `.xlsx`, and what the code cannot say about it. The formats
+and look keys are in the headers of `sheet-format.js`, `sheet-styles.js`, `sheet-types.js`, `server/sheets.js` and
+`server/sheet-xlsx.js`. Open work is in `surfaces-roadmap.md` under "Sheet".
+
+## What real workbooks hold
+
+Measured over the owner's nine largest workbooks (only shapes and counts):
+
+- **No cached values.** A file written by openpyxl has an empty `<v>` on every formula. Import never trusts an empty
+  cache.
+- **Used range.** A file can claim 16,384 columns because empty cells carry formatting. A tab is sized by its content,
+  never by its stated range.
+- **Size.** The largest has 1.28 million cells and 704,038 formulas across 28 tabs, 19 hidden: more than
+  `WORKBOOK_LIMIT` (500,000 cells; the engine and the Yjs doc grow together in every page), so such a workbook is
+  imported a few tabs at a time.
+- 16% of formulas name another tab; shared formulas, `_xlfn.` functions, bare `TRUE`/`FALSE`, CSE arrays and
+  `OFFSET` with cell arguments all occur.
+
+## Decisions
+
+- **Formulas Conduit cannot compute are frozen**: the cell holds Excel's cached value, and `excel:<rowId>:<colId>` in
+  the look keeps `{ formula, value, anchor }`. Export writes the formula back only while the cell still holds that
+  value, so a later edit wins. Dependants compute from the kept value.
+- **SheetJS Community Edition** (from `cdn.sheetjs.com`: the npm `xlsx` package stops at 0.18.5) for import and
+  export, with our own parts written beside its output (styles, panes, rules, charts, notes, pictures). It read every
+  workbook with a third of exceljs's memory; exceljs crashed on one and wrote unreadable files for another. Python
+  (openpyxl) stays a test oracle only, so no hub needs Python.
+- **FILTER cannot resize**: HyperFormula sizes an array before computing it, so FILTER reserves its whole source
+  range to spill into, and its "if empty" value shows `#SPILL!` where cells under that range are filled.
+- **Conduit's chords win over Excel's** where they clash: Ctrl+G stays the leader (F5 goes to the name box), Ctrl+.
+  the workspace panel (Excel's corners of the selection is not offered); the sheet took Ctrl+/ (the paper's Block menu
+  chord) for its keys list. The grid keeps Ctrl+B, Ctrl+-, Ctrl+0 and others from the application through
+  `data-own-keys` (`OWN_KEYS` in `sheet.tsx`).
+- **A browser tab keeps its reserved keys**: Ctrl+T, Ctrl+N, Ctrl+W, Ctrl+Tab, Ctrl+Page Down/Up, Ctrl+Shift+T/N/W/Q
+  never reach the page (so Format as table is Alt H T, and tabs also step with Ctrl+Shift+Page Down/Up). F5, F6,
+  Shift+F11 and Ctrl+1–9 reach the page when it holds them back (Chromium's reserved list, from memory).
+- **HyperFormula traps**: `moveCells` moves only references wholly inside the block (`shiftCells` resizes the rest
+  itself), and `getCellFormula` spells every formula its own way, so compare its reading before and after, never
+  with the typed text.
+
+## The round-trip scorecard
+
+`conduit-web/scripts/xlsx-roundtrip.mjs` (how to run: `docs/TESTING.md`, "Sheets") makes one workbook per feature
+with openpyxl (`xlsx-roundtrip-features.py`), with Excel's cached values put back by hand, imports and exports each
+through the hub's document service in a temporary data root, and reads both back. Each export is also held to what
+Excel is strict about (content types, relationship targets, `r:id`s, schema order, counts, style and dxf ids); any
+fault fails the run. openpyxl cannot write dynamic-array metadata, so spilling formulas are tested as legacy array
+formulas; threaded comments are written into the generated file by hand.
+
+| Feature | Result |
+| --- | --- |
+| values (numbers, text, booleans, dates, times, errors, long text, leading zeros, text like numbers) | kept |
+| formulas (relative, absolute, another tab, whole column, XLOOKUP, TEXT) | kept (`TEXT` frozen: it gives another value here) |
+| array formulas (CSE), spilling formulas (UNIQUE, SEQUENCE, SORT) | kept, live; spills exported as Excel's dynamic arrays |
+| functions the engine lacks (LAMBDA, LET, CELL, GETPIVOTDATA) | kept frozen; LAMBDA and LET written with `_xlfn.`/`_xlpm.` as dynamic arrays; CELL read with an implicit @, as Excel reads the original |
+| defined names | kept, computed |
+| number formats, fonts, fills, borders, alignment | kept |
+| widths, heights, hidden rows and columns, frozen panes | kept (sizes exact) |
+| merges, data validations, hyperlinks, tables, autofilter, filter conditions, charts, tabs (odd names, colours, hidden) | kept |
+| conditional formats of every kind | kept; ranges follow inserts and moves |
+| notes, threaded comments, images | kept on their cells, not drawn |
+| row and column groups | kept |
+| print settings, protection | kept |
+
+33 of 33 kept. With `--excel` every export opens in real Excel with no repair, and Excel reads the same number of tabs,
+charts, tables, formulas, notes, pictures and hidden columns as were written. The one repair Excel ever asked for was a
+table whose header cell held a number: such a table is written as its filter alone. COM's repair modes refuse broken
+files too, so they cannot say what Excel would change.
+
+## Other files
+
+SheetJS reads them all; only `.xlsx` and `.xlsm` have the parts our own readers use. Every export is an `.xlsx`.
+
+| File | What comes across |
+| --- | --- |
+| `.xlsx` | everything in the scorecard |
+| `.xlsm` | as `.xlsx`; its macros are reported left out, never run, and not exported |
+| `.xlsb`, `.xls` | values, formulas and number formats; no styles, rules, charts or notes (formulas unchecked) |
+| `.ods` | values and formulas |
+| `.csv`, `.tsv` | values; separators `,` `;` and tab guessed, quoted newlines kept; UTF-8 with or without a byte-order mark, UTF-16 with one, else Latin-1 |
+
+## A large workbook
+
+200,000 cells over 5 tabs (half formulas, every tenth row styled), no cached values: import 3.1 s, first open 5.0 s,
+export 2.7 s (3.2 MB), peak memory 809 MB. At 400,000 cells: 4.8 s, 8.3 s, 4.0 s, 1,559 MB, so time and memory grow
+about as the cells do. An export passes through the zip three times (SheetJS writes it, then our styles and our parts
+each read and write it). Excel's check of the 200,000-cell export timed out at two minutes; why was not found.
+
+## What is lost
+
+Pivots (their cells survive as values), slicers, sparklines, macros, and a data bar's solid fill (it lives in an
+extension list that is not kept). Shared formulas are written out per cell, so the file grows, but Excel reads them
+the same.
