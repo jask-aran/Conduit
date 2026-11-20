@@ -48,7 +48,7 @@ function createWidthSettle(frame: () => HTMLElement | undefined, width: () => un
   createEffect(() => {
     const element = frame();
     if (!element) return;
-    settled = element.getBoundingClientRect().width;
+    // The observer's first call gives the opening width, after the frame's own layout: read here, it lays the new overlay out mid-task.
     const observer = new ResizeObserver(() => { if (!running) settled = element.getBoundingClientRect().width; });
     observer.observe(element);
     onCleanup(() => observer.disconnect());

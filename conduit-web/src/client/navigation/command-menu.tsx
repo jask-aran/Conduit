@@ -8,7 +8,8 @@ import { StatusDot } from "@/components/ui/nav";
 import { OverlayActions, OverlayBar, OverlayChip, OverlayList, OverlaySplit, type OverlayAction } from "@/components/ui/overlay";
 import { Item, Match, Section } from "@/components/ui/popover";
 import { Expand } from "@/components/ui/expand";
-import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
+import { Windowed } from "@/components/ui/windowed";
+import { createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from "solid-js";
 import type { JSX } from "solid-js";
 import { FileInputIcon, FilePlus2Icon, SlashIcon, SlidersHorizontalIcon } from "lucide-solid";
 import { activityLabel } from "../../activity.js";
@@ -278,21 +279,22 @@ export function CommandMenu(props: {
   });
   createEffect(() => props.onPageChange?.(page()));
 
-  // Shut, it reads nothing: an artifact's actions (a sheet's cell menu for the selection) would be made again on every change they read.
-  const commands = createMemo(() => {
-    if (!props.open) return [];
+  // Made once a page is opened: an artifact's actions (a sheet's cell menu for the selection) would be made again on every change they read,
+  // a typed letter among them. Shut, it keeps what it showed, so the list does not change under the dialog's leaving.
+  const commands = createMemo<PaletteCommand[]>((shown) => {
+    if (!props.open) return shown ?? [];
     const currentPage = page();
+    if (!chatPage()) return untrack(() => resolvePaletteCommands(props.context, { page: currentPage }));
     const all = resolvePaletteCommands(props.context, { page: currentPage });
     const scope = chatScope();
-    if (!chatPage()) return all;
     if (scope.kind === "unresolved") return [];
     return all.filter((command) => command.entity === "chat" && command.chat
       && chatNavigable(command.chat) && matchesChatView(command.chat)
       && (scope.kind === "all" || command.project?.id === scope.project.id));
   });
 
-  const builtRows = createMemo<Row[]>(() => {
-    if (!props.open) return [];
+  const builtRows = createMemo<Row[]>((shown) => {
+    if (!props.open) return shown ?? [];
     const currentPage = page();
     const source = commands();
     const out: Row[] = [];
@@ -490,7 +492,7 @@ export function CommandMenu(props: {
   createEffect(() => { void chatView(); void chatSort(); setActive(0); });
   createEffect(() => {
     if (props.open && active() === 0 && listbox) listbox.scrollTop = 0;
-    else if (props.open) document.getElementById(optionId(active()))?.scrollIntoView({ block: "nearest" });
+    else if (props.open && chatPage()) document.getElementById(optionId(active()))?.scrollIntoView({ block: "nearest" });
   });
   createEffect(() => {
     // The field is shut while choosing a destination, so the list holds the keys.
@@ -500,7 +502,7 @@ export function CommandMenu(props: {
     if (editingId() && props.open) queueMicrotask(() => { renameInput?.focus(); renameInput?.select(); });
   });
 
-  const close = () => { resetTransient(); props.onOpenChange(false); };
+  const close = () => { props.onOpenChange(false); resetTransient(); };
   const runCommand = (command: PaletteCommand) => {
     if (FOCUS_MOVING_COMMAND_IDS.has(command.id)) returnFocus = null;
     close();
@@ -843,6 +845,7 @@ export function CommandMenu(props: {
     }
     if (event.key === "ArrowDown") { event.preventDefault(); if (chatPage() && !inList) listbox?.focus(); else move(1); return; }
     if (event.key === "ArrowUp") { event.preventDefault(); if (chatPage() && !inList) { setActive(Math.max(0, selectable().length - 1)); listbox?.focus(); } else if (chatPage() && active() === 0) input?.focus(); else move(-1); return; }
+    if ((event.key === "PageDown" || event.key === "PageUp") && !chatPage()) { event.preventDefault(); const step = pageRows() * (event.key === "PageDown" ? 1 : -1); setActive((at) => Math.min(Math.max(0, selectable().length - 1), Math.max(0, at + step))); return; }
     if (event.key === "Home" && (!chatPage() || inList)) { event.preventDefault(); setActive(0); return; }
     if (event.key === "End" && (!chatPage() || inList)) { event.preventDefault(); setActive(Math.max(0, selectable().length - 1)); return; }
     if (event.key === "Tab" && !event.shiftKey) {
@@ -968,6 +971,26 @@ export function CommandMenu(props: {
     </Item>;
   };
 
+  // A windowed slot's row: what it shows follows the entry it is given, so a filtered or scrolled list re-creates no row.
+  let pageRows = () => 10;
+  const flat = createMemo(() => rows().filter((row, at, all) => row.type !== "heading" || (row.label && all[at + 1] && all[at + 1]!.type !== "heading")));
+  const flatAt = createMemo(() => flat().flatMap((row, at) => row.type === "heading" ? [] : [at]));
+  const liveRow = (entry: () => Row) => {
+    const row = () => entry() as SelectableRow;
+    const command = () => { const one = row(); return one.type === "command" ? one.command : undefined; };
+    const label = () => { const one = row(); return one.type === "model" ? one.model.label : one.type === "command" ? one.command.label : one.type === "destination" ? one.project.name : ""; };
+    // Made again only when the slot's icon changes, not for each entry it is given.
+    const glyph = createMemo(() => { const one = row(); return one.type === "destination" ? one.project : one.type === "model" ? (modelSelectorPage() ? undefined : SlidersHorizontalIcon) : one.type === "command" ? icons[one.command.icon] : undefined; });
+    const icon = createMemo(() => { const one = glyph(); if (!one) return undefined; if (typeof one === "function") { const Icon = one; return <Icon />; } return placeIcon(one); });
+    const checked = () => { const one = row(); return (one.type === "model" ? modelSelectorPage() && one.model.spec === props.currentModel : one.type === "command" && one.command.checked) || undefined; };
+    return <Item id={optionId(indexOf(row()))} role="option" aria-selected={lit(row())} active={lit(row())} title={label()} onMouseDown={(event: MouseEvent) => event.preventDefault()}
+      onCursor={() => { setPointerCursor(true); setActive(indexOf(row())); }} onClick={(event: MouseEvent) => runPointerRow(row(), event)}
+      icon={icon()} meta={row().type === "model" ? (row() as Extract<SelectableRow, { type: "model" }>).model.spec : undefined} checked={checked()} destructive={command()?.destructive}
+      keys={command() ? commandShortcut(command()!)?.split(/\s+/) : undefined} opens={command()?.kind === "page"}>
+      <Match text={label()} query={queryText()} />
+    </Item>;
+  };
+
   const phoneActions = (): OverlayAction[] => {
     if (!chatPage() || moveMode()) return [];
     if (selectionMode()) return [
@@ -1033,7 +1056,7 @@ export function CommandMenu(props: {
         <OverlayList managed id="command-listbox" ref={listbox} role={chatPage() && !moveMode() ? "tree" : "listbox"} aria-label={modelSelectorPage() ? "Models" : chatPage() ? "Chat browser" : "Commands"}
           aria-activedescendant={selectable().length ? optionId(active()) : undefined} tabIndex={chatPage() || selectionMode() || moveMode() ? 0 : -1}
           onFocus={() => setListFocused(true)} onBlur={() => setListFocused(false)} onMouseLeave={() => setPointerCursor(false)} onKeyDown={keydown}>
-          <Show when={selectable().length} fallback={<Empty kind="overlay">{emptyMessage()}</Empty>}>
+          <Show when={selectable().length} fallback={<Empty kind="overlay">{emptyMessage()}</Empty>}><Show when={!chatPage()} fallback={
             <For each={sections().map((section) => section.key)}>{(key) => {
               const section = () => sectionsByKey().get(key);
               return <Show when={section()}><Section title={section()!.label || undefined}>
@@ -1045,8 +1068,9 @@ export function CommandMenu(props: {
                   </>;
                 }}</For>
               </Section></Show>;
-            }}</For>
-          </Show>
+            }}</For>}>
+            <Windowed items={flat()} title={(row) => row.type === "heading" ? row.label : undefined} row={liveRow} reveal={flatAt()[active()]} control={(api) => { pageRows = api.pageRows; }} />
+          </Show></Show>
         </OverlayList>
       </OverlaySplit>
       <CommandHintBar

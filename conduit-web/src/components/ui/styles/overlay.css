@@ -35,6 +35,7 @@
 .ui-overlay-list .ui-row:where([data-density="menu"]) > .ui-icon { color: var(--muted-foreground); }
 .ui-overlay-list .ui-section + .ui-section { margin: var(--space-xs) 0 0; border: 0; padding: 0; }
 .ui-overlay-list .ui-title { padding: var(--space-md) var(--space-lg) var(--space-xs); }
+.ui-overlay-list .ui-title[data-gap] { padding-top: calc(var(--space-md) + var(--space-xs)); }
 .ui-overlay-split { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1fr); }
 .ui-overlay-split[data-aside] { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
 .ui-overlay-aside { min-width: 0; overflow: auto; border-left: var(--hairline) solid var(--tint); padding: var(--space-xl); }
