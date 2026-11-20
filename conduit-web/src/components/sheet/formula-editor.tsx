@@ -121,6 +121,7 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
 
   const put = (next: string, at: number) => batch(() => { setText(next); setCaret(at); });
   const end = () => batch(() => { setEditing(null); setPointing(null); setShut(null); setHeld(null); });
+  let tabbed: { row: number; col: number } | undefined;
   const commit = (move?: readonly [number, number], focus = true, check = false) => {
     const now = editing();
     if (!now) return;
@@ -131,8 +132,11 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
     end();
     if (input !== host.input(now.row, now.col)) host.write(now.row, now.col, input);
     // Moved as an arrow key moves the selection: scrolled only as far as it must be.
+    // Entries along a row with Tab, then Enter, go to the next row under the first of them, as a spreadsheet's.
+    const back = move?.[0] === 1 && tabbed?.row === now.row ? tabbed.col : undefined;
+    tabbed = move?.[1] ? { row: now.row, col: tabbed?.row === now.row ? tabbed.col : now.col } : undefined;
     if (move) { const one = host.merged(now.row, now.col), from: [number, number] = one ? [move[0] > 0 ? one.bottom : one.top, move[1] > 0 ? one.right : one.left] : [now.row, now.col];
-      const row = Math.max(0, from[0] + move[0]), col = Math.max(0, from[1] + move[1]); grid?.select({ top: row, bottom: row, left: col, right: col }); grid?.show(row, col); }
+      const row = Math.max(0, from[0] + move[0]), col = back ?? Math.max(0, from[1] + move[1]); grid?.select({ top: row, bottom: row, left: col, right: col }); grid?.show(row, col); }
     if (focus) grid?.focus();
   };
   const cancel = () => { if (!editing()) return; end(); host.grid()?.focus(); };

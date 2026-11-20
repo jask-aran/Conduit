@@ -13,7 +13,9 @@ import { shiftRefs } from "@/sheet-rules.js";
 import { formatDates } from "@/sheet-formats.js";
 import { daySerial, serialDay } from "@/sheet-types.js";
 import { CalendarPopover, today } from "@/components/ui/calendar";
-import { SheetFoot } from "./foot";
+import { addTab, SheetFoot } from "./foot";
+import { createFilled, type SheetFilled } from "./jump";
+import { SheetShortcuts } from "./keys";
 import { createSheetOutline } from "./outline";
 import { createSheetTabs } from "./tabs";
 import { ASK_KEY, type SheetAnchor, type SheetBox, type SheetGrid, type SheetGridEvents, type SheetHost, type SheetMarks, type SheetPlace, type SheetRange, type SheetState } from "./host";
@@ -23,7 +25,7 @@ import { createArtWindow } from "@/components/ui/chat-art";
 import { createFormulaEditor, FormulaField, FormulaHelp } from "./formula-editor";
 import { createSequenceKeys, SequenceHint, SHEET_SEQUENCES, SizePrompt, type SheetSequence, type SizeQuestion } from "./sequences";
 import { createSheetSizes, dragRowEdges } from "./sizes";
-import { createSheetFilter, FilterMenu } from "./filter";
+import { createSheetFilter, FilterMenu, regionAround } from "./filter";
 import { createSheetFormats } from "./formats";
 import { createSheetBrush, createSheetStyles, measureShown } from "./styles";
 import { createSheetRules, RulePrompt, RulesMenu } from "./rules";
@@ -43,7 +45,7 @@ const SheetCharts = lazy(() => import("./charts"));
 // Cells written into the text a comment quotes, and how much of each: enough to read.
 const QUOTED_CELLS = 200, QUOTED_CHARS = 40;
 // The grid keeps a spreadsheet's chords the application binds elsewhere: Ctrl+B is Bold (the sidebar elsewhere), Ctrl+- deletes rows, Ctrl+0 hides columns, Ctrl+Shift+1..5 are number formats.
-const OWN_KEYS = ["primary+KeyB", "primary+Minus", "primary+Digit0", ...[0, 1, 2, 3, 4, 5, 6].map((n) => `primary+shift+Digit${n}`), "primary+Backslash", "alt+primary+KeyV", "primary+KeyK"].join(" ");
+const OWN_KEYS = ["primary+KeyB", "primary+Minus", "primary+Digit0", ...[0, 1, 2, 3, 4, 5, 6].map((n) => `primary+shift+Digit${n}`), "primary+Backslash", "alt+primary+KeyV", "primary+KeyK", "primary+Slash"].join(" ");
 // A formula moved as a fill moves it; text stays as typed.
 const shifted = (input: string, rows: number, cols: number) => input.startsWith("=") ? shiftRefs(input, rows, cols) : input;
 const REFIT = "refit";
@@ -73,7 +75,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   };
   // The grid's element is a signal: the menu trigger that makes it may make it again, and the grid then mounts in the one that stands.
   const [island, setIsland] = createSignal<HTMLDivElement>(), [slot, setSlot] = createSignal<HTMLDivElement>();
-  let root: HTMLElement | undefined, anchors: SheetAnchor[] = [], picking: string | undefined;
+  let root: HTMLElement | undefined, anchors: SheetAnchor[] = [], picking: string | undefined, addressField: HTMLInputElement | undefined, filled: SheetFilled | undefined;
+  const [showingKeys, setShowingKeys] = createSignal(false);
   // The grid's code is fetched with the editor, not once the hub's copy has come.
   const gridCode = import("./grid");
   // Tabs this page added or deleted: they come and go with its steps, so their going does not end the history.
@@ -182,6 +185,17 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     drawn: () => props.onDrawn?.(),
     pressed: (row, col) => { const hit = anchors.find((anchor) => { const range = rangeOf(anchor); return range && row >= range.top && row <= range.bottom && col >= range.left && col <= range.right; }); if (hit) moved(hit.key); },
     key: (event, row, col) => {
+      const bare = !event.ctrlKey && !event.altKey && !event.metaKey;
+      // Shift+F10 and the Menu key open the cell menu at the active cell, its search focused.
+      if ((event.key === "F10" && event.shiftKey && bare) || (event.key === "ContextMenu" && bare)) { event.preventDefault(); openMenu(); return true; }
+      // F5 goes to a cell or range typed in the name box (Excel's Go To; Ctrl+G stays the application's leader). Shift+F11 adds a tab.
+      if (event.key === "F5" && bare && !event.shiftKey) { event.preventDefault(); addressField?.focus(); return true; }
+      if (event.key === "F11" && event.shiftKey && bare) { event.preventDefault(); addTab(tabs); return true; }
+      // Shift+F2 comments on the selection, Alt+F1 asks for a chart of it.
+      if (event.key === "F2" && event.shiftKey && bare) { event.preventDefault(); props.onComment?.(); return true; }
+      if (event.key === "F1" && event.altKey && !event.ctrlKey && !event.metaKey) { event.preventDefault(); askChart(); return true; }
+      // Alt+Down on a filter's header cell opens its list.
+      if (event.altKey && !event.ctrlKey && event.key === "ArrowDown" && filters.mark(row, col)) { event.preventDefault(); const box = grid()?.bounds({ top: row, bottom: row, left: col, right: col }); if (box) { filters.reapply(); setFiltering({ col, box }); } return true; }
       if (event.key === " " && event.ctrlKey !== event.shiftKey && !event.altKey && !event.metaKey) { event.preventDefault(); grid()?.whole(event.ctrlKey ? "cols" : "rows"); return true; }
       const plain = !event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey, type = types.at(row, col);
       // Space ticks (or clears) every checkbox of the selection as the active one goes, as one step.
@@ -211,7 +225,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "m") return false;
       // AltGr is Ctrl and Alt together: what it types is typed.
       if ((event.ctrlKey || event.metaKey) && !(event.ctrlKey && event.altKey)) return false;
-      if (event.key === "Enter" || event.key === "F2") { event.preventDefault(); editor.begin({ row, col }, "edit", "cell"); return true; }
+      // Enter moves on, as a spreadsheet's (grid.ts); F2 edits.
+      if (event.key === "F2") { event.preventDefault(); editor.begin({ row, col }, "edit", "cell"); return true; }
       // Not held back: the editor has focus before the browser types the key, so it lands there, and every key after it.
       if (event.key.length !== 1 && event.key !== "Process") return false;
       editor.begin({ row, col }, "enter", "cell");
@@ -245,9 +260,11 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     const sheet = model(), into = island();
     if (!sheet || !into) return;
     let made: SheetGrid | undefined, over = false;
+    const index = filled = createFilled(cells, sheet);
+    onCleanup(() => { index.off(); if (filled === index) filled = undefined; });
     void gridCode.then(({ mountGrid }) => {
       if (over) return;
-      made = mountGrid(into, { model: sheet, events, look: untrack(drawnLook), columns: {
+      made = mountGrid(into, { model: sheet, events, look: untrack(drawnLook), filled: index, columns: {
         width: (col) => { const width = sizes.width(col); return width === undefined ? undefined : Math.round(width * zoom()); }, freeze: sizes.freeze, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols,
         heights: () => { const by = zoom(), kept = sizes.heights(); return by === 1 ? kept : new Map([...kept].map(([row, height]) => [row, Math.round(height * by)])); },
         type: types.at, pill: pillOf, link: types.link, draw: formats.draw, dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded, merges: merges.list, outline: outline.line,
@@ -406,6 +423,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     watch: (listener) => { watchers.add(listener); return () => watchers.delete(listener); },
     reveal: (address) => { const range = parseRange(tabs.reveal(address)); if (range) grid()?.select(range); },
     focus: () => grid()?.focus(),
+    shortcuts: () => setShowingKeys(true),
     history: { undo: history.undo, redo: history.redo, canUndo: () => (stepped(), history.canUndo()), canRedo: () => (stepped(), history.canRedo()), steps: () => (stepped(), history.steps()) },
   };
   // Highlights are drawn by the grid: told again once it is made.
@@ -487,6 +505,16 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     opening = () => { grid()?.select(cell); grid()?.focus(); requestAnimationFrame(() => { const box = grid()?.bounds(cell); if (box) { filters.reapply(); setFiltering({ col, box }); } }); };
   };
   createEffect(() => { if (!filters.filter()) setFiltering(null); });
+  // The cell menu from the keyboard, over the selection as a right-click on it opens it, standing at its active cell.
+  const openMenu = () => {
+    const area = at(), made = grid(), into = island();
+    if (!area || !made || !into) return;
+    const lines = made.lines(), box = made.bounds({ top: area.top, bottom: area.top, left: area.left, right: area.left }) ?? into.getBoundingClientRect();
+    setMenu(lines === "rows" ? { rows: area } : lines === "cols" ? { cols: area } : { rows: { ...area, left: 0, right: 0 }, cols: { ...area, top: 0, bottom: 0 } });
+    into.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: box.left + Math.min(box.width / 2, 24), clientY: box.top + box.height }));
+  };
+  // The current region round a cell (Ctrl+A, Ctrl+Shift+*), found on the index of filled cells.
+  const regionOf = (row: number, col: number) => { const sheet = model(); return sheet && filled ? regionAround(sheet.size(), filled.has, row, col) : filters.around(row, col); };
   const TYPE_NAMES: Record<SheetTypeKind, string> = { boolean: "Checkbox", date: "Date", list: "Dropdown" };
   // A date cell draws its ISO text through a date format: one that has none takes the sheet's Date.
   // A date cell is a serial number in a date format: one with none takes the sheet's Date, and the dates its cells hold as text are read into serials.
@@ -648,7 +676,35 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   createEffect(on(tabs.shown, () => setFiltering(null), { defer: true }));
   return <section ref={(element) => { root = element; art(element); }} class="ui-spreadsheet" aria-label={props.name} data-margin={props.marginEmpty ? "none" : "beside"}
     onKeyDown={(event) => {
+      // F6 takes the keyboard from the grid to the ribbon, and back.
+      if (event.key === "F6" && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        const ribbon = slot(), inGrid = island()?.contains(event.target as Node);
+        if (inGrid) { const first = ribbon?.querySelector<HTMLElement>("button:not([disabled]), [tabindex='0']"); if (first) { event.preventDefault(); first.focus(); } }
+        else if (ribbon?.contains(event.target as Node)) { event.preventDefault(); grid()?.focus(); }
+        return;
+      }
       if (!(event.ctrlKey || event.metaKey) || !island()?.contains(event.target as Node)) return;
+      // Ctrl+/ lists the sheet's keys; Ctrl+1 asks for a number format of the person's own (in a browser tab, the browser keeps Ctrl+1 and Ctrl+9).
+      if (!event.altKey && !event.shiftKey && event.code === "Slash") { event.preventDefault(); return setShowingKeys(true); }
+      if (!event.altKey && !event.shiftKey && event.code === "Digit1") { event.preventDefault(); return formats.ask(at()); }
+      // Ctrl+9 hides the selection's rows and Ctrl+Shift+9 shows those hidden in it, as the cell menu's Hide and Unhide rows.
+      if (!event.altKey && event.code === "Digit9") {
+        event.preventDefault();
+        const area = at(), lines = area ? between(area.top, area.bottom) : [];
+        if (lines.length) history.act(event.shiftKey ? "Unhide rows" : "Hide rows", () => { sizes.setHidden(lines, !event.shiftKey); if (event.shiftKey) filters.show(lines); });
+        return;
+      }
+      // Ctrl+' and Ctrl+Shift+" type the formula, or the value, of the cell above; Ctrl+Shift+; the time.
+      if (!event.altKey && (event.code === "Quote" || (event.code === "Semicolon" && event.shiftKey))) {
+        event.preventDefault();
+        const area = at();
+        if (!area) return;
+        const { top: row, left: col } = area, text = event.code === "Semicolon" ? new Date().toTimeString().slice(0, 5) : row > 0 ? event.shiftKey ? valueText(model()?.value(row - 1, col) ?? null) : model()?.input(row - 1, col) ?? "" : "";
+        editor.begin({ row, col }, "enter", "cell"); editor.typed(text, text.length);
+        return;
+      }
+      // Ctrl+Shift+* selects the current region.
+      if (!event.altKey && event.shiftKey && event.code === "Digit8") { event.preventDefault(); const area = at(), around = area && regionOf(area.top, area.left); if (around) grid()?.select(around); return; }
       // A style's chord is its tool's step: Ctrl+B is Bold.
       const tool = tools.find((one) => one.keys?.length === 2 && one.keys[1]!.toLowerCase() === event.key.toLowerCase())?.label ?? "";
       if (find.keys(event) || tabs.key(event) || history.act(tool, () => formats.key(event, at()) || styles.key(event, at())) || filters.key(event)) return;
@@ -657,7 +713,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       // Ctrl+A selects the block of data round the active cell, and pressed again (or where there is none) the whole tab, as a spreadsheet's.
       if (!event.shiftKey && !event.altKey && event.code === "KeyA") {
         event.preventDefault();
-        const area = at(), size = model()?.size(), around = area && filters.around(area.top, area.left), same = (one: SheetRange, two: SheetRange) => one.top === two.top && one.left === two.left && one.bottom === two.bottom && one.right === two.right;
+        const area = at(), size = model()?.size(), around = area && regionOf(area.top, area.left), same = (one: SheetRange, two: SheetRange) => one.top === two.top && one.left === two.left && one.bottom === two.bottom && one.right === two.right;
         if (!area || !size) return;
         const lone = around && (around.bottom > around.top || around.right > around.left || model()?.input(around.top, around.left));
         return grid()?.select(lone && !same(around, area) ? around : { top: 0, left: 0, bottom: Math.max(0, size.rows - 1), right: Math.max(0, size.cols - 1) });
@@ -694,7 +750,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (redo) history.redo(); else history.undo();
     }}>
     <div class="ui-spreadsheet-bar">
-      <Input class="ui-spreadsheet-address ui-frost ui-frost-raised" aria-label="Cell" spellcheck={false} value={address() ?? (at() ? addressOf(at()!) : "")} onFocus={(event) => event.currentTarget.select()} onInput={(event) => setAddress(event.currentTarget.value)}
+      <Input ref={addressField} class="ui-spreadsheet-address ui-frost ui-frost-raised" aria-label="Cell" spellcheck={false} value={address() ?? (at() ? addressOf(at()!) : "")} onFocus={(event) => event.currentTarget.select()} onInput={(event) => setAddress(event.currentTarget.value)}
         onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); go(); } else if (event.key === "Escape") { setAddress(null); grid()?.focus(); } }} onBlur={() => setAddress(null)} />
       {/* The formula bar edits the selected cell: focused, it opens the cell to edit as F2 does. */}
       <Frost lift="raised" ref={formula} class="ui-input ui-spreadsheet-formula" onFocusIn={() => { const area = at(); if (area && !editor.editing()) editor.begin({ row: area.top, col: area.left }, "edit", "bar"); }}>
@@ -768,6 +824,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         <SplitPrompt open={splitting() !== null} onSplit={(separator) => { const range = untrack(splitting); if (range) void split(range, separator); }} onClose={() => { setSplitting(null); grid()?.focus(); }} />
         <ShiftPrompt asked={shifting()} frame={() => body} onClose={() => { setShifting(null); grid()?.focus(); }} onChoose={(way) => { const asked = untrack(shifting); if (asked) shift(asked.verb, asked.range, way); }} />
         <find.view beside={Boolean(props.margin) && !props.marginEmpty} />
+        <SheetShortcuts open={showingKeys()} onOpenChange={setShowingKeys} />
         <Show when={!model()}><Empty role="status" class="ui-spreadsheet-waiting">Opening the sheet…</Empty></Show>
       </Show>
       <Show when={props.margin}><aside class="ui-spreadsheet-margin" aria-label="Comments">{props.margin}</aside></Show>
