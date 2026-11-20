@@ -129,7 +129,8 @@ const translated = (formula) => `=${formula.replace(/_xlfn\.|_xlws\.|_xlpm\./g, 
 const kept = (cell) => cell.t === "e" ? ERROR_TEXT[cell.v] ?? "#VALUE!" : cell.t === "b" ? (cell.v ? "TRUE" : "FALSE") : cell.t === "d" ? "" : String(cell.v ?? "");
 /** Whether what this engine computed is what the file kept: numbers to nine significant digits, text as it is, any error for any error. */
 const same = (value, cell) => {
-  if (isError(value)) return cell.t === "e";
+  // Any error for any error, but a function or name this engine lacks is not the error the file kept.
+  if (isError(value)) return cell.t === "e" && (value.value !== "#NAME?" || ERROR_TEXT[cell.v] === "#NAME?");
   if (cell.t === "n") return typeof value === "number" ? Math.abs(value - cell.v) <= 1e-9 * Math.max(1, Math.abs(value), Math.abs(cell.v)) : value === null && cell.v === 0;
   if (cell.t === "b") return value === cell.v;
   if (cell.t === "s" || cell.t === "str") return (value === null ? "" : String(value)) === String(cell.v ?? "");
@@ -378,9 +379,30 @@ export function importSummary(report) {
   ].join("\n");
 }
 // Functions an .xlsx stores under a prefix: without it a spreadsheet shows #NAME? until the cell is entered again.
-const PREFIXED = new Set("STDEV.S STDEV.P VAR.S VAR.P COVARIANCE.S COVARIANCE.P FLOOR.MATH CEILING.MATH CEILING.PRECISE FLOOR.PRECISE ISO.CEILING IFS SWITCH MAXIFS MINIFS CONCAT TEXTJOIN XLOOKUP XMATCH IFNA XOR RANK.EQ RANK.AVG PERCENTILE.INC PERCENTILE.EXC PERCENTRANK.INC PERCENTRANK.EXC QUARTILE.INC QUARTILE.EXC MODE.SNGL MODE.MULT NORM.DIST NORM.INV NORM.S.DIST NORM.S.INV T.DIST T.DIST.2T T.DIST.RT T.INV T.INV.2T T.TEST CHISQ.DIST CHISQ.DIST.RT CHISQ.INV CHISQ.INV.RT CHISQ.TEST F.DIST F.DIST.RT F.INV F.INV.RT F.TEST Z.TEST BINOM.DIST BINOM.DIST.RANGE BINOM.INV NEGBINOM.DIST POISSON.DIST EXPON.DIST GAMMA.DIST GAMMA.INV BETA.DIST BETA.INV WEIBULL.DIST LOGNORM.DIST LOGNORM.INV HYPGEOM.DIST CONFIDENCE.NORM CONFIDENCE.T NETWORKDAYS.INTL WORKDAY.INTL DAYS ISOWEEKNUM NUMBERVALUE FORECAST.LINEAR UNICHAR UNICODE BITAND BITOR BITXOR BITLSHIFT BITRSHIFT SHEET SHEETS FORMULATEXT ISFORMULA PERMUTATIONA GAMMA GAUSS PHI SEC CSC COT SECH CSCH COTH ACOT ACOTH ARABIC BASE DECIMAL COMBINA MUNIT SKEW.P AGGREGATE ERF.PRECISE ERFC.PRECISE GAMMALN.PRECISE UNIQUE SEQUENCE RANDARRAY SORTBY TAKE DROP CHOOSECOLS CHOOSEROWS EXPAND VSTACK HSTACK TEXTBEFORE TEXTAFTER".split(" "));
+const PREFIXED = new Set("STDEV.S STDEV.P VAR.S VAR.P COVARIANCE.S COVARIANCE.P FLOOR.MATH CEILING.MATH CEILING.PRECISE FLOOR.PRECISE ISO.CEILING IFS SWITCH MAXIFS MINIFS CONCAT TEXTJOIN XLOOKUP XMATCH IFNA XOR RANK.EQ RANK.AVG PERCENTILE.INC PERCENTILE.EXC PERCENTRANK.INC PERCENTRANK.EXC QUARTILE.INC QUARTILE.EXC MODE.SNGL MODE.MULT NORM.DIST NORM.INV NORM.S.DIST NORM.S.INV T.DIST T.DIST.2T T.DIST.RT T.INV T.INV.2T T.TEST CHISQ.DIST CHISQ.DIST.RT CHISQ.INV CHISQ.INV.RT CHISQ.TEST F.DIST F.DIST.RT F.INV F.INV.RT F.TEST Z.TEST BINOM.DIST BINOM.DIST.RANGE BINOM.INV NEGBINOM.DIST POISSON.DIST EXPON.DIST GAMMA.DIST GAMMA.INV BETA.DIST BETA.INV WEIBULL.DIST LOGNORM.DIST LOGNORM.INV HYPGEOM.DIST CONFIDENCE.NORM CONFIDENCE.T NETWORKDAYS.INTL WORKDAY.INTL DAYS ISOWEEKNUM NUMBERVALUE FORECAST.LINEAR UNICHAR UNICODE BITAND BITOR BITXOR BITLSHIFT BITRSHIFT SHEET SHEETS FORMULATEXT ISFORMULA PERMUTATIONA GAMMA GAUSS PHI SEC CSC COT SECH CSCH COTH ACOT ACOTH ARABIC BASE DECIMAL COMBINA MUNIT SKEW.P AGGREGATE ERF.PRECISE ERFC.PRECISE GAMMALN.PRECISE UNIQUE SEQUENCE RANDARRAY SORTBY TAKE DROP CHOOSECOLS CHOOSEROWS EXPAND VSTACK HSTACK TEXTBEFORE TEXTAFTER TEXTSPLIT TOCOL TOROW WRAPROWS WRAPCOLS ARRAYTOTEXT VALUETOTEXT LAMBDA LET MAP REDUCE SCAN BYROW BYCOL MAKEARRAY ISOMITTED".split(" "));
 const SCOPED = new Set(["FILTER", "SORT"]);
-const stored = (formula) => formula.slice(1).split(/("(?:[^"]|"")*")/).map((part, nth) => nth % 2 ? part : part.replace(/([A-Za-z][A-Za-z0-9.]*)\(/g, (all, name) => PREFIXED.has(name.toUpperCase()) ? `_xlfn.${all}` : SCOPED.has(name.toUpperCase()) ? `_xlfn._xlws.${all}` : all)).join("");
+const stored = (formula) => withParams(formula.slice(1)).split(/("(?:[^"]|"")*")/).map((part, nth) => nth % 2 ? part : part.replace(/(?<![\w.])([A-Za-z][A-Za-z0-9.]*)\(/g, (all, name) => PREFIXED.has(name.toUpperCase()) ? `_xlfn.${all}` : SCOPED.has(name.toUpperCase()) ? `_xlfn._xlws.${all}` : all)).join("");
+/** A LAMBDA's parameters and a LET's names, stored as `_xlpm.<name>` wherever they are used in it: without the prefix Excel reads them as names of the workbook. */
+const withParams = (text) => {
+  let out = text;
+  for (let at = 0, found; (found = /(?<![\w.])(?:LAMBDA|LET)\(/gi.exec(out.slice(at))); ) {
+    const open = at + found.index + found[0].length, args = [];
+    let depth = 0, quoted = false, from = open, end = out.length;
+    for (let i = open; i < out.length; i++) {
+      const ch = out[i];
+      if (ch === '"') quoted = !quoted;
+      else if (quoted) continue;
+      else if (ch === "(") depth++;
+      else if (ch === ")" && depth-- === 0) { args.push(out.slice(from, i)); end = i; break; }
+      else if (ch === "," && depth === 0) { args.push(out.slice(from, i)); from = i + 1; }
+    }
+    const lambda = /^LAMBDA/i.test(found[0]), names = args.slice(0, -1).filter((_, n) => lambda || n % 2 === 0).map((name) => name.trim()).filter((name) => /^[A-Za-z_][\w.]*$/.test(name) && !name.startsWith("_xlpm."));
+    const span = names.length ? out.slice(open, end).split(/("(?:[^"]|"")*")/).map((part, nth) => nth % 2 ? part : part.replace(new RegExp(`(?<![\\w.$!'])(${names.map((name) => name.replace(/\./g, "\\.")).join("|")})(?![\\w.!])`, "gi"), "_xlpm.$1")).join("") : out.slice(open, end);
+    out = out.slice(0, open) + span + out.slice(end);
+    at = open;
+  }
+  return out;
+};
 // A reference to a tab the workbook no longer has is #REF!, as a spreadsheet makes it when the tab is deleted: a file naming a missing tab is one to repair.
 const TAB_REF = /(?<![#\p{L}\p{N}_.'])('(?:[^']|'')+'|[\p{L}_][\p{L}\p{N}_.]*)!(?:\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?|\$?[A-Z]{1,3}:\$?[A-Z]{1,3}|\$?\d+:\$?\d+)/gu;
 // A frozen formula reading a table or another workbook (`[`) is written as its value: the export has neither part.
@@ -416,6 +438,8 @@ export function exportXlsx(tabs) {
         cell.F = rows > 1 || cols > 1 ? `${at}:${a1(r + rows - 1, c + cols - 1)}` : at;
         if (!entered || array.dynamic) cell.D = true;
       }
+      // A formula of LAMBDA, LET and their kin is a dynamic array where Excel makes it, or Excel reads it with an implicit @.
+      if (formula && !cell.F && /(?<![\w.])(?:LAMBDA|LET|MAP|REDUCE|SCAN|BYROW|BYCOL|MAKEARRAY)\(/i.test(outside(formula))) { cell.F = at; cell.D = true; }
       const format = tab.look[`fmt:${at}`] ?? tab.look[`fmt:${colName(c)}`];
       if (cell.t === "n" && typeof format === "string" && format !== "General") cell.z = format;
       const link = tab.look[`link:${at}`];

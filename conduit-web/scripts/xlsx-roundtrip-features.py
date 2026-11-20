@@ -82,8 +82,10 @@ feature("spilling formulas")((g_spill, r_spill))
 
 def g_unknown(wb):
     ws = wb.active; numbers(ws)
-    ws["B1"] = "=_xlfn.LAMBDA(x,x*2)(A1)"; ws["B2"] = "=CELL(\"row\",A2)"; ws["B3"] = "=GETPIVOTDATA(\"x\",A1)"
-    return {"Sheet!B1": 20, "Sheet!B2": 2, "Sheet!B3": "#REF!"}
+    # As Excel writes them: an array formula of one cell (Excel adds the dynamic-array mark openpyxl cannot write).
+    ws["B1"] = ArrayFormula("B1", "=_xlfn.LAMBDA(_xlpm.x,_xlpm.x*2)(A1)"); ws["B2"] = "=CELL(\"row\",A2)"; ws["B3"] = "=GETPIVOTDATA(\"x\",A1)"
+    ws["B4"] = ArrayFormula("B4", '=_xlfn.LET(_xlpm.n,A4,_xlpm.label,"n",_xlpm.label&_xlpm.n)')
+    return {"Sheet!B1": 20, "Sheet!B2": 2, "Sheet!B3": "#REF!", "Sheet!B4": "n40"}
 feature("functions the engine lacks")((g_unknown, formula_facts))
 
 def g_names(wb):
