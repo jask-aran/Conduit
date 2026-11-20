@@ -317,6 +317,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       let row = next.bottom;
       while (row > next.top && hidden.has(row)) row--;
       select(next, cycle.filter((_, n) => n !== to), to, by > 0 ? undefined : { row, col: hiddenCols.has(next.right) ? nextShown(next.right, -1) : next.right });
+      // Into the other part (across the frozen rows' edge), the keyboard goes with it.
+      if (owner !== p) owner.editor?.focus();
       return true;
     }
     if (lone) return false;
