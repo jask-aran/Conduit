@@ -116,6 +116,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   }
   // Ctrl+` shows each formula as written in its cell; F8 extends the selection with the arrows, shown in the foot, until F8 or Esc again.
   const [formulasShown, setFormulasShown] = createSignal(false), [extending, setExtending] = createSignal(false);
+  createEffect(on(() => tabs.shown(), () => setExtending(false), { defer: true }));
   live.own(history.origin);
   history.onChange(() => setStepped((n) => n + 1));
   createEffect(() => history.scope(tabs.tabs().flatMap((tab) => [live.doc.getArray(rowsOf(tab.id)), live.doc.getArray(colsOf(tab.id))])));
@@ -211,7 +212,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     menu: setMenu,
     moved: () => { setScrolled((n) => n + 1); moved(); },
     drawn: () => props.onDrawn?.(),
-    pressed: (row, col) => { const hit = anchors.find((anchor) => { const range = rangeOf(anchor); return range && row >= range.top && row <= range.bottom && col >= range.left && col <= range.right; }); if (hit) moved(hit.key); },
+    pressed: (row, col) => { setExtending(false); const hit = anchors.find((anchor) => { const range = rangeOf(anchor); return range && row >= range.top && row <= range.bottom && col >= range.left && col <= range.right; }); if (hit) moved(hit.key); },
     key: (event, row, col) => {
       const bare = !event.ctrlKey && !event.altKey && !event.metaKey;
       // Shift+F10 and the Menu key open the cell menu at the active cell, its search focused.
