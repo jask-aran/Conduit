@@ -141,7 +141,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     const hiddenIn = (row: number, col: number) => { const one = merges.at(row, col); return one !== undefined && (row !== one.top || col !== one.left); };
     live.doc.transact(() => { for (const { row, col, input } of list) { if (input && hiddenIn(row, col)) continue; const rowId = sheet.rowAt(row), colId = sheet.colAt(col); if (!rowId || !colId) { if (input) past.push({ row, col, input }); continue; } if (input) cells.set(key(rowId, colId), input); else cells.delete(key(rowId, colId)); } formatDates(look, sheet, list, tabs.dates(), tabs.named);
       for (const { row, col, format } of read) if (format && !formats.at(row, col) && sheet.rowAt(row) && sheet.colAt(col)) writeFormat(look, sheet, { top: row, bottom: row, left: col, right: col }, format, false); });
-    for (const { row, col, input } of past) hub({ op: "set", at: a1(row, col), value: input });
+    // The hub reads what was typed itself, format and all.
+    for (const { row, col, input } of past) hub({ op: "set", at: a1(row, col), value: typed.find((one) => one.row === row && one.col === col)?.input ?? input });
   };
   const hub = (op: Parameters<SheetHost["cells"]>[0]) => void history.hub(op).catch((error: Error) => props.host.failed(error.message));
   const labelOf = (list: readonly { row: number; col: number; input: string }[]) => list.every(({ input }) => !input) ? "Clear contents" : list.length === 1 ? `Typing in ${a1(list[0]!.row, list[0]!.col)}` : "Paste";
