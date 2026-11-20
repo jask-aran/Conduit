@@ -7,6 +7,9 @@ export const TYPE_CELL_LIMIT: number;
 /** A typed date (2026-03-15, 15/3/2026, 15 Mar 2026…) as the engine's serial number; null for anything else. */
 export function readDate(text: string): number | null;
 export function dateText(serial: number): string;
+/** A day (month from 1) as its serial number (null before March 1900), and a serial as its day. */
+export function daySerial(day: { year: number; month: number; day: number }): number | null;
+export function serialDay(serial: number): { year: number; month: number; day: number };
 /** A cell's own type where its column has one and it is plain. */
 export const PLAIN: "plain";
 /** One of a dropdown's options: its value and, drawn as its pill's colour, an ink. */

@@ -143,7 +143,7 @@ export function createSheetView(doc, port, { name: called } = {}) {
   const order = doc.getArray(TABS), meta = doc.getMap(TAB), cells = doc.getMap(CELLS), views = new Set(), listeners = new Set();
   // `stale`: each cell typed since the worker last answered, with the number of the update that typed it; `next`: a whole set of values arriving in parts.
   const stale = new Map();
-  let toldTabs = "", ids = [], tabs = new Map(), rowTab = new Map(), watched = new Map(), values = new Map(), next = null, names = [], posted = 0, taken = 0, built = false, isReady;
+  let toldTabs = "", ids = [], tabs = new Map(), rowTab = new Map(), watched = new Map(), values = new Map(), next = null, names = [], dates = {}, posted = 0, taken = 0, built = false, isReady;
   const nameOf = (id) => meta.get(`name:${id}`) ?? (id === MAIN ? called ?? FIRST : id);
   const list = () => ids.map((id) => ({ id, name: nameOf(id), hidden: meta.get(`hidden:${id}`) === true }));
   const index = (id) => {
@@ -178,7 +178,7 @@ export function createSheetView(doc, port, { name: called } = {}) {
   };
   const onUpdate = (update) => { posted += 1; port.postMessage({ update }); if (posted === taken + 1) tell({ computing: true }); };
   const onMessage = ({ data }) => {
-    if (data.functions) { names = data.functions; return tell({ functions: true }); }
+    if (data.functions) { names = data.functions; dates = data.dates ?? {}; return tell({ functions: true }); }
     const into = data.full ? (next ??= new Map()) : values;
     for (let i = 0; i < data.at.length; i++) { const value = data.value[i]; if (value === null) into.delete(data.at[i]); else into.set(data.at[i], value); }
     if (!data.full) redraw(data.at);
@@ -226,6 +226,7 @@ export function createSheetView(doc, port, { name: called } = {}) {
     find: (which) => { const text = String(which ?? "").trim(), low = text.toLowerCase(); return tabs.has(text) ? text : ids.find((id) => nameOf(id).toLowerCase() === low) ?? null; },
     tabOfRow: (id) => rowTab.get(id)?.id,
     functions: () => names,
+    dates: () => dates,
     computing: () => !built || taken < posted,
     onChange: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
     destroy() { doc.off("afterTransaction", after); doc.off("update", onUpdate); port.removeEventListener("message", onMessage); views.clear(); listeners.clear(); },

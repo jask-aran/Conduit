@@ -119,6 +119,8 @@ export type SheetMarks = {
   watch(listener: (pressed?: string) => void): () => void;
   reveal(place: string): void;
   focus(): void;
+  /** Opens the list of the sheet's keys. */
+  shortcuts(): void;
   /** What this page did, taken back and put back `count` steps at a time (never another's writing); `steps`: the latest steps' names, newest first. Read where drawn. */
   history: { undo(count?: number): boolean; redo(count?: number): boolean; canUndo(): boolean; canRedo(): boolean; steps(): { undo: string[]; redo: string[] } };
 };
@@ -191,6 +193,8 @@ export type SheetGridEvents = {
   filter?(row: number, col: number, box: SheetBox): void;
   /** A dropdown cell's arrow pressed, with the cell's box. */
   dropdown?(row: number, col: number, box: SheetBox): void;
+  /** A row or column group's control pressed in the row numbers or the letters (outline.ts), on the line it stands on. */
+  outline?(kind: "rows" | "cols", line: number): void;
   /** A link Ctrl+clicked, to go to; and the link under the pointer as it moves (undefined: none). */
   follow?(address: string): void;
   hovered?(address: string | undefined): void;

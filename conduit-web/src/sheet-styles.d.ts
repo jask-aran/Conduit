@@ -26,7 +26,7 @@ export type SheetStyle = {
  * (`h=center`, `c=#0070c0`, `bw=medium`, `z=9`), `bt br bb bl` edges, `-` before one for its default set on purpose: "b c=red f=amber h=center bt bb", "-b".
  * As attributes: each code to true or false (a flag or an edge), or a word or null (a value).
  */
-export type StyleAttrs = Partial<Record<"b" | "i" | "u" | "s" | "w" | "x" | "bt" | "br" | "bb" | "bl", boolean> & Record<"c" | "f" | "h" | "v" | "bc" | "bw" | "z", string | null>>;
+export type StyleAttrs = Partial<Record<"b" | "i" | "u" | "s" | "w" | "x" | "bt" | "br" | "bb" | "bl" | "u2" | "k", boolean> & Record<"c" | "f" | "h" | "v" | "bc" | "bw" | "z" | "n" | "bs" | "bd" | "fp" | "fb" | "in" | "r" | "hx", string | null>>;
 export function decodeStyle(text: unknown): StyleAttrs;
 export function encodeStyle(attrs: StyleAttrs): string;
 /** A fault is an Error with status 400. */

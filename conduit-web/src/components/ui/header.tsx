@@ -94,7 +94,9 @@ export function PaneHeader(props: JSX.HTMLAttributes<HTMLElement> & {
   const [local, rest] = splitProps(props, ["kind", "lead", "pill", "after", "actions", "frost", "children", "class", "name", "nameTitle", "place", "placeTitle", "modes", "views", "ref"]);
   const title = children(() => local.children);
   // The title gives way only once every part that folds has: until then a cut anywhere in it counts as squeezed.
-  const fit = (header: HTMLElement) => fitFolds(header, () => [...header.querySelectorAll<HTMLElement>(".ui-header-title, .ui-header-title > *, .ui-header-title > * > *")].every((part) => part.scrollWidth <= part.clientWidth + 1));
+  // A phone's pill is the title: squeezed once its name breaks onto a second line.
+  const fit = (header: HTMLElement) => fitFolds(header, () => [...header.querySelectorAll<HTMLElement>(".ui-header-title, .ui-header-title > *, .ui-header-title > * > *")].every((part) => part.scrollWidth <= part.clientWidth + 1)
+    && [...header.querySelectorAll(".ui-header-pill > strong")].every((name) => { const range = document.createRange(); range.selectNodeContents(name); return range.getClientRects().length <= 1; }));
   return <header ref={(element) => { fit(element); (local.ref as ((element: HTMLElement) => void) | undefined)?.(element); }} {...(rest as JSX.HTMLAttributes<HTMLElement>)} class="ui-pane-header" data-header="pane" data-frost={local.frost ? "" : undefined} data-tauri-drag-region={dragRegion()}>
     {mark()}
     <Show when={local.lead}><div class="ui-header-group" data-lead="">{local.lead}</div></Show>

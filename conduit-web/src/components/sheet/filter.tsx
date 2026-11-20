@@ -9,6 +9,8 @@ import { Actions, Icons, Item, SearchSection, Section } from "@/components/ui";
 import { CardForm } from "@/components/ui/card";
 import { Button, Field, Input } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
+import { DateField, type CalendarDay } from "@/components/ui/calendar";
+import { readDate, serialDay } from "@/sheet-types.js";
 import { sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
 import { Popover, PopoverContent, Select } from "@/components/ui/menus";
 import { colName, filterHides, key as cellKey, rangeA1, rangedArea, valueText, type SheetFilterTest, type SheetFilterWhen, type SheetRangedLook, type SheetView } from "@/sheet-format.js";
@@ -36,6 +38,23 @@ export type SheetFilter = ReturnType<typeof createSheetFilter>;
 
 const inside = (range: SheetRange, row: number, col: number) => row >= range.top && row <= range.bottom && col >= range.left && col <= range.right;
 const byValue = (a: string, b: string) => a === b ? 0 : a === "" ? 1 : b === "" ? -1 : a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+
+/** The filled cells joined to a cell, across corners too, as a spreadsheet finds the data a cell is in: each side run out to its end, then the others again. */
+export const regionAround = ({ rows, cols }: { rows: number; cols: number }, has: (row: number, col: number) => boolean, row: number, col: number): SheetRange => {
+  const area = { top: row, bottom: row, left: col, right: col };
+  const any = (top: number, bottom: number, left: number, right: number) => {
+    for (let r = Math.max(0, top); r <= Math.min(rows - 1, bottom); r++) for (let c = Math.max(0, left); c <= Math.min(cols - 1, right); c++) if (has(r, c)) return true;
+    return false;
+  };
+  for (let grew = true; grew;) {
+    grew = false;
+    while (area.top > 0 && any(area.top - 1, area.top - 1, area.left - 1, area.right + 1)) { area.top--; grew = true; }
+    while (area.bottom < rows - 1 && any(area.bottom + 1, area.bottom + 1, area.left - 1, area.right + 1)) { area.bottom++; grew = true; }
+    while (area.left > 0 && any(area.top - 1, area.bottom + 1, area.left - 1, area.left - 1)) { area.left--; grew = true; }
+    while (area.right < cols - 1 && any(area.top - 1, area.bottom + 1, area.right + 1, area.right + 1)) { area.right++; grew = true; }
+  }
+  return area;
+};
 
 /** `bold`: whether a cell wears bold (styles.ts), which makes a first row a header. */
 export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<SheetView | undefined>, selection: Accessor<SheetRange | null>, hub: (op: SheetCellsOp) => void, bold: (row: number, col: number) => boolean) {
@@ -65,22 +84,7 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
   };
   const text = (row: number, col: number) => valueText(model()?.value(row, col) ?? null);
 
-  /** The filled cells joined to a cell, across corners too, as a spreadsheet finds the data a cell is in: each side run out to its end, then the others again. */
-  const block = (sheet: SheetView, row: number, col: number): SheetRange => {
-    const { rows, cols } = sheet.size(), area = { top: row, bottom: row, left: col, right: col };
-    const any = (top: number, bottom: number, left: number, right: number) => {
-      for (let r = Math.max(0, top); r <= Math.min(rows - 1, bottom); r++) for (let c = Math.max(0, left); c <= Math.min(cols - 1, right); c++) if (sheet.input(r, c) !== "") return true;
-      return false;
-    };
-    for (let grew = true; grew;) {
-      grew = false;
-      while (area.top > 0 && any(area.top - 1, area.top - 1, area.left - 1, area.right + 1)) { area.top--; grew = true; }
-      while (area.bottom < rows - 1 && any(area.bottom + 1, area.bottom + 1, area.left - 1, area.right + 1)) { area.bottom++; grew = true; }
-      while (area.left > 0 && any(area.top - 1, area.bottom + 1, area.left - 1, area.left - 1)) { area.left--; grew = true; }
-      while (area.right < cols - 1 && any(area.top - 1, area.bottom + 1, area.right + 1, area.right + 1)) { area.right++; grew = true; }
-    }
-    return area;
-  };
+  const block = (sheet: SheetView, row: number, col: number) => regionAround(sheet.size(), (r, c) => sheet.input(r, c) !== "", row, col);
   // A first row of text is a header where it is bold, where a row under it holds a number or TRUE/FALSE, or where each of its cells is said
   // nowhere else in its column. A one-column list of different words therefore keeps its first word on top: select the rest to sort it.
   const headed = (sheet: SheetView, range: SheetRange) => {
@@ -267,6 +271,10 @@ export function FilterMenu(props: { filter: SheetFilter; at: { col: number; box:
   </>;
 }
 
+const DATE_HINT = "2026-01-30";
+// A condition's date is written as ISO, which `dayOf` (sheet-format.js) reads; a typed one is read as a date cell reads it.
+const readDay = (text: string) => { const serial = readDate(text); return serial === null ? null : serialDay(serial); };
+const writeDay = (day: CalendarDay) => `${day.year}-${String(day.month).padStart(2, "0")}-${String(day.day).padStart(2, "0")}`;
 /** A column's condition asked for: its test and the one or two values it compares with. */
 function FilterPrompt(props: { filter: SheetFilter; col: number | null; onClose(): void }) {
   const [is, setIs] = createSignal<SheetFilterTest>("contains"), [a, setA] = createSignal(""), [b, setB] = createSignal("");
@@ -277,12 +285,16 @@ function FilterPrompt(props: { filter: SheetFilter; col: number | null; onClose(
     if (col !== null && ready()) props.filter.setWhen(col, { is: is(), ...(test().takes ? { a: a().trim() || a() } : {}), ...(test().takes > 1 ? { b: b().trim() } : {}) });
     props.onClose();
   };
-  const hint = () => test().kind === "date" ? "2026-01-30" : undefined;
   return <Dialog open={props.col !== null} title={`Filter column ${colName(props.col ?? 0)}`} onOpenChange={(open) => { if (!open) props.onClose(); }}>
     <Show when={props.col === null ? null : [props.col]}>{(asked) => { const was = props.filter.when(asked()[0]!); setIs(was?.is ?? "contains"); setA(was?.a ?? ""); setB(was?.b ?? ""); return <CardForm onSubmit={set}>
       <Field label="Show rows where" plain><Select aria-label="Condition" value={is()} onChange={(event) => setIs(event.currentTarget.value as SheetFilterTest)}><For each={TESTS}>{(one) => <option value={one.is}>{one.label}</option>}</For></Select></Field>
-      <Show when={test().takes > 0}><Input aria-label={test().takes > 1 ? "From" : "Value"} placeholder={hint()} value={a()} onInput={(event) => setA(event.currentTarget.value)} ref={(field) => queueMicrotask(() => field.focus())} /></Show>
-      <Show when={test().takes > 1}><Input aria-label="To" placeholder={hint()} value={b()} onInput={(event) => setB(event.currentTarget.value)} /></Show>
+      <Show when={test().kind === "date"} fallback={<>
+        <Show when={test().takes > 0}><Input aria-label={test().takes > 1 ? "From" : "Value"} value={a()} onInput={(event) => setA(event.currentTarget.value)} ref={(field) => queueMicrotask(() => field.focus())} /></Show>
+        <Show when={test().takes > 1}><Input aria-label="To" value={b()} onInput={(event) => setB(event.currentTarget.value)} /></Show>
+      </>}>
+        <DateField aria-label={test().takes > 1 ? "From" : "Date"} placeholder={DATE_HINT} value={a()} onInput={setA} read={readDay} write={writeDay} autofocus />
+        <Show when={test().takes > 1}><DateField aria-label="To" placeholder={DATE_HINT} value={b()} onInput={setB} read={readDay} write={writeDay} /></Show>
+      </Show>
       <Actions><Button type="button" variant="ghost" outline onClick={() => props.onClose()}>Cancel</Button><Button type="submit" disabled={!ready()}>Filter</Button></Actions>
     </CardForm>; }}</Show>
   </Dialog>;
