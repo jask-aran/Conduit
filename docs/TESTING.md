@@ -332,6 +332,9 @@ Encode the order a harness really says things in, captured, not guessed.
 ## Renderer benchmark and the Conduit harness
 
 `npm run bench:renderer` times the transcript renderer without a server.
+From the repository root, `node scripts/benchmark-backgrounds.mjs <baseline commit> [cpu slowdown]` and
+`benchmark-jbot.mjs` (same arguments) run the old and new components side by side in a tab of the headed Chrome on
+:9222, served by `npm run gallery:dev -- --port 5181 --strictPort`, and write their report under `docs/performance/`.
 `startConduitHarness()` (`test/helpers/conduit-harness.js`) starts a Conduit
 process with a fake Codex app-server for HTTP, WebSocket and restart checks.
 

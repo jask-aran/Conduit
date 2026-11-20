@@ -33,10 +33,9 @@ notes behind them are in git history. Tick an item by deleting it.
 
 ### Later or lower priority
 
-- [ ] Render tools (generative UI): a model calls `render_table`, `render_chart` or `render_choice` with structured data
-  and Conduit draws it as a native transcript block from library components; a Conduit-owned tool, over MCP for Codex
-  and Claude Code. No model-written HTML. Format (A2UI v1.0) and open questions in
-  `docs/plans/generative-interfaces-research.md`.
+- [ ] Generative UI: a model sends a table, chart or choice as structured data through one Conduit-owned tool (over MCP
+  for Codex and Claude Code), and Conduit draws it as a native transcript block from library components. No
+  model-written HTML. Format (A2UI v1.0) and open questions in `docs/plans/generative-interfaces-research.md`.
 - [ ] 21. Generic tool servers (MCP, OpenAPI, stdio), only if Connectors prove too narrow.
 - [ ] 22. Commit message drafting with its own model.
 - [ ] 23. Notification destinations. jbot-only for now.

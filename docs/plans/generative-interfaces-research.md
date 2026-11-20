@@ -1,7 +1,7 @@
 # Generative interfaces: interactive interface an agent makes
 
 How an agent makes interactive interface in Conduit, in the transcript or as an artifact. Nothing is built. The
-roadmap's "Render tools" item is the first use. json-render, A2UI and the AI SDK's generative UI were compared on
+roadmap's "Generative UI" item is the first use. json-render, A2UI and the AI SDK's generative UI were compared on
 2026-11-14 (in git history).
 
 ## Decided

@@ -1,8 +1,9 @@
 # Sheets: workbooks with tabs, and xlsx in and out
 
 How the `sheet` kind keeps workbooks and reads and writes `.xlsx`, and what the code cannot say about it. The formats
-and look keys are in the headers of `sheet-format.js`, `sheet-styles.js`, `sheet-types.js`, `server/sheets.js` and
-`server/sheet-xlsx.js`. Open work is in `surfaces-roadmap.md` under "Sheet".
+and look keys are stated where each is read and written: the headers of `sheet-format.js`, `sheet-styles.js`,
+`sheet-types.js`, `server/sheets.js` and `server/sheet-xlsx.js`, and the `components/sheet/` modules that own a key
+(`sizes.ts`, `outline.ts`, `types.ts`, `tabs.ts`). Open work is in `surfaces-roadmap.md` under "Sheet".
 
 ## What real workbooks hold
 
@@ -39,6 +40,10 @@ Measured over the owner's nine largest workbooks (only shapes and counts):
 - **HyperFormula traps**: `moveCells` moves only references wholly inside the block (`shiftCells` resizes the rest
   itself), and `getCellFormula` spells every formula its own way, so compare its reading before and after, never
   with the typed text.
+- **The grid's cell cache**: Glide redraws every cell in view on any selection change, so `grid.ts` keeps each made
+  cell until `update` drops its row. Anything a cell's look reads must reach `update`, or the grid shows the old cell.
+- **Sheet-only icons** go in `components/ui/sheet-icons.tsx`, which loads lazily, never the library's `icons.tsx`: the
+  initial bundle has no room, and `start-conduit.sh restart` refuses a build over its budget.
 
 ## The round-trip scorecard
 

@@ -25,8 +25,7 @@ become with an agent. It began as feedback on Conduit's own interface, and that 
 - **A file changed outside Conduit wins**: the hub takes it as the artifact, blocks matched by id. A file it cannot read
   is an error shown, never a guess. No Markdown twin: export is a command.
 - **One addressee per comment**, and only it is told. The mated thread (an ordinary hidden chat, on the project's
-  default profile) is the default; `@name` in a comment's words sends it to that listener. The person's persistent
-  agent is not a listener on artifacts for now.
+  default profile) is the default; `@name` in a comment's words sends it to that listener.
 - **A connection is a rider**: any other chat acts on an artifact's comments only because the person connected it. One
   registry of listeners; two arrivals: a chat Conduit runs is woken by a notice, a session it does not run keeps `wait`.
   Any chat can read or change any artifact it names; a connection only decides who is handed comments.
@@ -47,12 +46,10 @@ become with an agent. It began as feedback on Conduit's own interface, and that 
   drawing on a paper keeps only the blocks under it; a phone has the cards under the text), the rider's wording, the
   Artifact | Thread switch on a phone.
 - Not built: other people's carets; keeping what is typed while the hub is away if the page closes first; dismissing
-  several comments at once; a person told that an artifact's file cannot be read or its device is away.
-- Every person's client is recorded as author `person` until there is a name to give it.
+  several comments at once.
 - A paper on another device is unproven on a real device (checked only with a made-up one).
 - The site, none of it judged by the owner: its name and that it is one file (images and scripts beside it are not
   served); `srcdoc` takes the hub's address as its base, so a relative link opens the hub's sign-in page in the frame;
-  marks do not follow it when it scrolls; a site on another device is asked for every two seconds; the first comment
-  on an artifact starts a model with no word to the person.
+  marks do not follow it when it scrolls; a site on another device is asked for every two seconds.
 - Deleting an artifact leaves its mated thread, hidden; whether it should go with it.
 - Moving Markup and the editor into the shared components package: parked until the package's scope is decided.
