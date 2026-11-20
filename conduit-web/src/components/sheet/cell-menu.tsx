@@ -47,15 +47,19 @@ export const menuAt = (target: Element, x: number, y: number) => {
   window.addEventListener("contextmenu", twice, true); setTimeout(() => window.removeEventListener("contextmenu", twice, true), 800);
 };
 
+const FIRST = 16;
 /**
  * The cell menu's groups under a field that keeps the rows (and submenus' rows) whose names hold what is typed. `after`: sections shown while nothing
  * is; `more`: rows found only by a search (the ribbon's tools, which `after` shows as submenus).
  */
 export function SheetMenu(props: { groups: (SheetMenuEntry[] | false | null | undefined)[]; after?: JSX.Element; more?: () => SheetMenuEntry[] }) {
-  const [query, setQuery] = createSignal(""), phone = matchMedia(PHONE_LAYOUT_QUERY).matches;
+  const [query, setQuery] = createSignal(""), [whole, setWhole] = createSignal(false), phone = matchMedia(PHONE_LAYOUT_QUERY).matches;
+  // The rows past the first screenful are made the frame after it is shown, so it opens in one: searching and the arrows reach them by then.
+  requestAnimationFrame(() => setTimeout(() => setWhole(true)));
   const shown = () => {
     const asked = query().trim().toLowerCase();
-    if (!asked) return props.groups.filter((group): group is SheetMenuEntry[] => Boolean(group && group.length));
+    if (!asked && whole()) return props.groups.filter((group): group is SheetMenuEntry[] => Boolean(group && group.length));
+    if (!asked) { let left = FIRST; return props.groups.flatMap((group) => { const kept = group ? group.slice(0, Math.max(0, left)) : []; left -= kept.length; return kept.length ? [kept] : []; }); }
     return [...props.groups, props.more?.()].flatMap((group) => { const kept = group ? group.flatMap((entry) => found(entry, asked)) : []; return kept.length ? [kept] : []; });
   };
   const row = (entry: SheetMenuEntry) => <MenuRow icon={entry.icon} keys={entry.keys} meta={entry.meta} destructive={entry.destructive} disabled={entry.disabled} onSelect={() => entry.run?.()}>{entry.label}</MenuRow>;
@@ -64,7 +68,7 @@ export function SheetMenu(props: { groups: (SheetMenuEntry[] | false | null | un
     <For each={shown()}>{(group) => <MenuSection><For each={group}>{(entry) => entry.sub
       ? <MenuSub phone={phone}><MenuSubTrigger icon={entry.icon} meta={entry.meta}>{entry.label}</MenuSubTrigger><MenuSubContent><MenuSection><For each={subOf(entry)}>{row}</For></MenuSection></MenuSubContent></MenuSub>
       : row(entry)}</For></MenuSection>}</For>
-    <Show when={!query().trim()}>{props.after}</Show>
+    <Show when={!query().trim() && whole()}>{props.after}</Show>
   </>;
 }
 
