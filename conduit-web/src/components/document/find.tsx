@@ -38,14 +38,15 @@ export function createFind(editor: Accessor<Editor | undefined>, scroller: Acces
   const set = (change: { query?: string; current?: number }) => { const view = editor()?.view; if (view) view.dispatch(view.state.tr.setMeta(found, change)); };
   /** The blocks wholly in view, read before a change is drawn, while the text is laid out already. */
   const seen = () => { const view = editor()?.view, box = scroller()?.getBoundingClientRect(); return view && box ? [blockAtY(view, box.top) + 1, blockAtY(view, box.bottom) - 1] as const : null; };
-  /** The current match brought into view; measured only where it is not in a block wholly in view (`was`, from before the change), which saves laying the paper out at each letter typed. */
-  const inView = (was = seen()) => {
-    const view = editor()?.view, now = state(), match = now?.matches[now.current];
+  const now = () => { const made = editor(); return made ? found.getState(made.state) : undefined; }; // not `state`, which is told only after the frame that draws a change
+  /** The current match brought into view; measured only where it is not in a block wholly in view (`was`, from before a change that moves no text), which saves laying the paper out at each letter typed. */
+  const inView = (was: readonly [number, number] | null = seen()) => {
+    const view = editor()?.view, at = now(), match = at?.matches[at.current];
     if (!view || !match || (was && match.block >= was[0] && match.block <= was[1])) return;
-    const at = view.coordsAtPos(match.from), box = scroller()!.getBoundingClientRect();
-    if (at.top < box.top || at.bottom > box.bottom) scroller()!.scrollBy({ top: at.top - box.top - box.height / 3 });
+    const coords = view.coordsAtPos(match.from), box = scroller()!.getBoundingClientRect();
+    if (coords.top < box.top || coords.bottom > box.bottom) scroller()!.scrollBy({ top: coords.top - box.top - box.height / 3 });
   };
-  const step = (by: 1 | -1) => { const now = state(); if (!now?.matches.length) return; const was = seen(); set({ current: (now.current + by + now.matches.length) % now.matches.length }); inView(was); };
+  const step = (by: 1 | -1) => { const at = now(); if (!at?.matches.length) return; const was = seen(); set({ current: (at.current + by + at.matches.length) % at.matches.length }); inView(was); };
   const show = (replace = false) => {
     const made = editor();
     if (!made) return;
@@ -58,15 +59,14 @@ export function createFind(editor: Accessor<Editor | undefined>, scroller: Acces
   };
   // The current match, or every one (last first, so each is where it was found), written as the replacement in one change; then the next match after it is current.
   const replace = (every: boolean) => {
-    const view = editor()?.view, now = view && found.getState(view.state), text = replacement();
-    if (!view?.editable || !now?.matches.length) return;
-    const tr = view.state.tr, chosen = every ? [...now.matches].reverse() : [now.matches[now.current]!];
+    const view = editor()?.view, at = now(), text = replacement();
+    if (!view?.editable || !at?.matches.length) return;
+    const tr = view.state.tr, chosen = every ? [...at.matches].reverse() : [at.matches[at.current]!];
     for (const match of chosen) if (text) tr.insertText(text, match.from, match.to); else tr.delete(match.from, match.to);
-    const was = seen();
     view.dispatch(tr);
-    const after = chosen.at(-1)!.from + text.length, next = found.getState(view.state)!.matches.findIndex((match) => match.from >= after);
+    const after = chosen.at(-1)!.from + text.length, next = now()!.matches.findIndex((match) => match.from >= after);
     set({ current: Math.max(0, next) });
-    inView(was);
+    inView(null); // measured after, as the replacement may have moved the text under it
   };
   // In the bar's own fields too: Mod-H shows the replace row, Mod-F goes back to find's field (the browser has both chords otherwise).
   const barKeys = (element: HTMLInputElement) => element.addEventListener("keydown", (event) => {
@@ -77,7 +77,7 @@ export function createFind(editor: Accessor<Editor | undefined>, scroller: Acces
     queueMicrotask(() => (key === "f" ? field : replaceField)?.focus());
   });
   const close = () => { setOpen(false); setReplacing(false); set({ query: "", current: 0 }); editor()?.commands.focus(); };
-  const count = () => { const now = state(); return now?.query ? now.matches.length ? `${now.current + 1} of ${now.matches.length}` : "No matches" : undefined; };
+  const count = () => { const at = state(); return at?.query ? at.matches.length ? `${at.current + 1} of ${at.matches.length}` : "No matches" : undefined; };
   return {
     show,
     extension: () => Extension.create({
