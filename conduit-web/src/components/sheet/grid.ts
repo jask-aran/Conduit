@@ -13,7 +13,7 @@ import { shiftRefs } from "@/sheet-rules.js";
 import { createCellLook } from "./cell-draw";
 import { seriesFill, sourceLine } from "./series";
 import type { SheetDrawn } from "./formats";
-import type { SheetPill, SheetSpill } from "./cell-draw";
+import type { SheetChipLook, SheetPill, SheetSpill } from "./cell-draw";
 import type { SheetCellStyle } from "./styles";
 import type { SheetBox, SheetGrid, SheetGridEvents, SheetLook, SheetRange, SheetReference } from "./host";
 import type { OutlineLine } from "./outline";
@@ -23,6 +23,8 @@ import type { SheetFilled } from "./jump";
 export type SheetColumns = { width(col: number): number | undefined; type(row: number, col: number): string | undefined;
   /** A dropdown cell's pill for the value it shows (cell-draw.ts); undefined where the cell is no dropdown. */
   pill(row: number, col: number, type: string | undefined, shown: string): SheetPill | undefined;
+  /** A cell's smart chip as drawn (chips.tsx); undefined for most. */
+  chip?(row: number, col: number, shown: string): SheetChipLook | undefined;
   /** Where a cell's link goes (types.ts); undefined where it is none. */
   link(row: number, col: number, text: string): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; dated(row: number, col: number): boolean; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean; invalid?(row: number, col: number): boolean; freeze(): { rows: number; cols: number }; hidden(): ReadonlySet<number>; hiddenCols(): ReadonlySet<number>;
   /** A filter's mark on a header cell (0 none, 1 a filter, 2 one keeping only some values) and a table's banded rows (filter.tsx). */
@@ -136,7 +138,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   let counting = false;
   /** What a cell shows; what was typed into it is read only when the grid asks (editing, copying), since drawing never does. */
   class TextCell {
-    readonly kind = GridCellKind.Text; readonly allowOverlay = false; mark = 0; pill?: SheetPill; spill?: SheetSpill; link?: string; arrow?: boolean; invalid?: boolean;
+    readonly kind = GridCellKind.Text; readonly allowOverlay = false; mark = 0; pill?: SheetPill; spill?: SheetSpill; chip?: SheetChipLook; link?: string; arrow?: boolean; invalid?: boolean;
     constructor(private row: number, private col: number, private typed: string | null, readonly displayData: string, readonly contentAlign?: "left" | "center" | "right", readonly themeOverride?: Partial<Theme>, readonly worn?: SheetCellStyle, readonly frozen?: boolean) {}
     get data() { return this.typed ??= model.input(this.row, this.col); }
     get copyData() { return this.data; }
@@ -293,7 +295,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     choose(p, { columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: { cell: [cell[0], cell[1]], range: { x: Math.min(cell[0], to[0]), y: Math.min(cell[1], to[1]), width: Math.abs(cell[0] - to[0]) + 1, height: Math.abs(cell[1] - to[1]) + 1 }, rangeStack: [] } });
     asked = null; events.selected(picked()); api.show(p.map.sheet(to[1]), to[0]);
   };
-  const write = (list: { row: number; col: number; input: string }[], label?: string) => { if (list.length) events.write(list, label); };
+  const write = (list: { row: number; col: number; input: string }[], label?: string, from?: [number, number, number, number][]) => { if (list.length) events.write(list, label, from); };
   // Each drawn row's filled columns, found once a change (`update`), so an empty cell finds the text running into it from its left in a few reads.
   let filledRows = new Map<number, number[]>(), measure: CanvasRenderingContext2D | null = null;
   // The cells each part has made (`contentOf`), by the sheet's row.
@@ -595,7 +597,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       // the nearest filled cell to its left, where that is text that neither wraps, clips, shrinks, repeats nor turns, aligned left and outside any merge.
       const spillInto = (row: number, col: number): SheetSpill | undefined => {
         const from = filledLeft(row, col);
-        if (from < 0 || mergeAt(row, col) || mergeAt(row, from) || options.columns.type(row, from)) return undefined;
+        if (from < 0 || mergeAt(row, col) || mergeAt(row, from) || options.columns.type(row, from) || options.columns.chip?.(row, from, "")) return undefined;
         const value = model.value(row, from), style = options.columns.style(row, from);
         if (typeof value !== "string" || !value || style?.wrap || style?.clip || style?.shrink || style?.repeat || style?.rotate || (style?.align && style.align !== "left")) return undefined;
         let offset = 0;
@@ -631,6 +633,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         if (typeof value === "string" && !fault) made.link = options.columns.link(row, col, value);
         if (type === "date") made.arrow = true;
         if (options.columns.invalid?.(row, col)) made.invalid = true;
+        const chip = options.columns.chip?.(row, col, made.displayData);
+        if (chip) made.chip = chip;
         return made;
       };
       // Each cell as made, by the sheet's row, until it changes (`update`) or the rows' heights do (a merge's share): a selection moved draws
@@ -801,7 +805,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     if (!rows.length || !cols.length) return;
     const typed = lines.map((line, y) => line.map((input, x) => from && !values && input.startsWith("=") ? shiftRefs(input, rows[y]! - from.rows[transposed ? x : y]!, cols[x]! - from.cols[transposed ? y : x]!) : input));
     const bottom = rows.at(-1)!, right = cols.at(-1)!, held = model.size(), label = transposed ? "Paste transposed" : values ? "Paste values" : "Paste";
-    if (bottom < held.rows && right < held.cols) return write(typed.flatMap((line, y) => line.map((input, x) => ({ row: rows[y]!, col: cols[x]!, input }))), label);
+    // Copied here, each cell's chip goes with it (chips.tsx).
+    const chips = from && !values ? typed.flatMap((line, y) => line.map((_, x): [number, number, number, number] => [from.rows[transposed ? x : y]!, from.cols[transposed ? y : x]!, rows[y]!, cols[x]!])) : undefined;
+    if (bottom < held.rows && right < held.cols) return write(typed.flatMap((line, y) => line.map((input, x) => ({ row: rows[y]!, col: cols[x]!, input }))), label, chips);
     const block = Array.from({ length: bottom - at.row + 1 }, (_, r) => Array.from({ length: right - at.col + 1 }, (_, c) => model.input(at.row + r, at.col + c)));
     typed.forEach((line, y) => line.forEach((input, x) => { block[rows[y]! - at.row]![cols[x]! - at.col] = input; }));
     events.fill({ top: at.row, left: at.col, bottom, right }, block);
