@@ -20,6 +20,8 @@ import { ownOver, readDxfs, readStyles, rgbOf, seen, sheetRules, sheetStyles, wi
 /** @typedef {{ tabs: { name: string, rows: number, cols: number, formulas: number }[], skipped: string[], computed: { same: number, frozen: number, noCache: number, volatile: number }, frozen: Record<string, Record<string, { formula: string, why: string, kept?: string }>>, reasons: Record<string, number>, dropped: Record<string, number> }} ImportReport */
 
 const PT_PER_PX = 0.75;
+// Sizes are kept in pixels unrounded, so a width or height comes back as the file had it; the float's noise is taken off at the file.
+const exact = (size) => Math.round(size * 1e6) / 1e6;
 // Pixels to a character of a column's width, Excel's for its default font: SheetJS's own guess makes them double on read and six on write.
 const PX_PER_CHAR = 7, STYLES_PER_TAB = 20_000;
 // Pictures an import keeps, in bytes as the look holds them (base64), over the workbook.
@@ -308,7 +310,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
         if (typeof typed === "string" && typed.startsWith("=")) { inputs[a1(r, c)] = typed; return valueText(values[r]?.[c]); }
         return typed === null ? "" : String(typed);
       }));
-      (tab.sheet["!cols"] ?? []).forEach((col, c) => { if (c >= tab.cols) return; if (col?.width || col?.wpx) look[`width:${colName(c)}`] = Math.round(col.width ? col.width * PX_PER_CHAR : col.wpx); if (col?.hidden) look[`hidden:${colName(c)}`] = 1; });
+      (tab.sheet["!cols"] ?? []).forEach((col, c) => { if (c >= tab.cols) return; if (col?.width || col?.wpx) look[`width:${colName(c)}`] = col.width ? col.width * PX_PER_CHAR : col.wpx; if (col?.hidden) look[`hidden:${colName(c)}`] = 1; });
       (tab.sheet["!rows"] ?? []).forEach((row, r) => { if (r < tab.rows && row?.hidden) look[`hidden:${r + 1}`] = 1; });
       // A number format is kept for a column where most of its numbers share it, and for the cells that differ, up to a count.
       cellsOf(tab.data, (cell, r, c) => { if (cell.t === "n" && r < tab.rows && c < tab.cols) (formats.get(c) ?? formats.set(c, new Map()).get(c)).set(r, typeof cell.z === "string" ? cell.z : "General"); });
@@ -325,7 +327,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       for (const [c, index] of colStyles) if (formatsOf[index]) { if (c < tab.cols) look[`style:${colName(c)}`] = formatsOf[index]; else if (shows[index] && !tab.styles.wide.has(c)) drop("column styles past the tab's edge"); }
       for (const [r, index] of rowStyles) if (formatsOf[index]) { if (r < tab.rows) look[`style:${r + 1}`] = formatsOf[index]; else if (shows[index]) drop("row styles past the tab's edge"); }
       let styled = 0;
-      for (const [r, height] of heights) if (r < tab.rows) look[`height:${r + 1}`] = Math.round(height / PT_PER_PX);
+      for (const [r, height] of heights) if (r < tab.rows) look[`height:${r + 1}`] = height / PT_PER_PX;
       for (const [r, c, index] of cellStyles) {
         if (r >= tab.rows || c >= tab.cols) { drop("styled cells past the tab's last value"); continue; }
         const under = { ...attrs(colStyles.get(c)), ...attrs(rowStyles.get(r)) }, own = encodeStyle(ownOver(under, attrs(index)));
@@ -422,11 +424,11 @@ export function exportXlsx(tabs) {
     }));
     sheet["!ref"] = `A1:${a1(Math.max(0, tab.typed.length - 1), cols - 1)}`;
     // A column without its own width takes the tab's default (`width` alone), where it has one.
-    sheet["!cols"] = Array.from({ length: cols }, (_, c) => { const width = tab.look[`width:${colName(c)}`] ?? tab.look.width; return { ...(typeof width === "number" ? { width: width / PX_PER_CHAR } : {}), ...(tab.look[`hidden:${colName(c)}`] ? { hidden: true } : {}) }; });
+    sheet["!cols"] = Array.from({ length: cols }, (_, c) => { const width = tab.look[`width:${colName(c)}`] ?? tab.look.width; return { ...(typeof width === "number" ? { width: exact(width / PX_PER_CHAR) } : {}), ...(tab.look[`hidden:${colName(c)}`] ? { hidden: true } : {}) }; });
     // Each row's height where it has its own, in points (SheetJS writes pixels as points), and the rows hidden.
     // The rows hidden, and those the filter hid when last applied.
     const filteredOut = new Set(tab.look.filter?.hide ?? []);
-    sheet["!rows"] = tab.typed.map((_, r) => { const height = tab.look[`height:${r + 1}`]; return { ...(typeof height === "number" ? { hpt: height * PT_PER_PX } : {}), ...(tab.look[`hidden:${r + 1}`] || filteredOut.has(r + 1) ? { hidden: true } : {}) }; });
+    sheet["!rows"] = tab.typed.map((_, r) => { const height = tab.look[`height:${r + 1}`]; return { ...(typeof height === "number" ? { hpt: exact(height * PT_PER_PX) } : {}), ...(tab.look[`hidden:${r + 1}`] || filteredOut.has(r + 1) ? { hidden: true } : {}) }; });
     // A table is its own part (xlsx-parts.js); one Excel would repair is written as its filter alone.
     // The table's part holds its own filter: a sheet's filter over it is one Excel repairs.
     tab.tablePart = tab.look.table ? tablePart(tab.look.table, tab.values, ++tables, tableNames, filterColumns(tab.look.filter?.range === tab.look.table.range ? tab.look.filter : null)) : null;
