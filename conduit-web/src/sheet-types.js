@@ -71,7 +71,7 @@ export const listFields = (options) => {
 /** A validation's attributes changed (in the caller's transaction). */
 export function setValidation(look, tab, id, attributes) { const all = readValidations(look, tab); all[id] = attributes; writeValidations(look, tab, all); }
 
-const putType = (look, sheet, at, kept, columns) => {
+export const putType = (look, sheet, at, kept, columns) => {
   const cols = [];
   for (let c = at.left; c <= at.right; c++) cols.push(sheet.colAt(c));
   if (columns) {

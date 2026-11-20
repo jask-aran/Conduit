@@ -16,7 +16,7 @@ import { wrapLines } from "./wrap";
 /** What the grid's own cells carry for this (grid.ts TextCell). */
 /** `block`: a row of a merge over several rows, drawn here against the merge's box (grid.ts). */
 /** `arrow`: a date cell's, at its right end, which opens its calendar; `mark`: a filter's caret there (grid.ts). The text keeps clear of either. */
-export type StyledCell = { worn?: SheetCellStyle; frozen?: boolean; displayData?: string; contentAlign?: "left" | "right" | "center"; block?: unknown; pill?: SheetPill; spill?: SheetSpill; link?: string; arrow?: boolean; mark?: number };
+export type StyledCell = { worn?: SheetCellStyle; frozen?: boolean; invalid?: boolean; displayData?: string; contentAlign?: "left" | "right" | "center"; block?: unknown; pill?: SheetPill; spill?: SheetSpill; link?: string; arrow?: boolean; mark?: number };
 /** Text running on into an empty cell from a filled one `offset` pixels to its left, in that cell's font and ink (none: the grid's). */
 export type SheetSpill = { text: string; offset: number; font?: string; ink?: string };
 /** A dropdown cell's value as a pill in its option's ink (none: a plain wash); `known` false marks a value not among the options. One object for each, made once (sheet.tsx). */
@@ -149,7 +149,7 @@ export function createCellLook(look: SheetLook) {
     else if (shown && (style?.custom || cell.block || cell.link || shown.includes(SHEET_FILL))) text(args, style ?? PLAIN, cell); else if (!style?.bare) content();
     if (cell.arrow) drawArrow(args.ctx, args.rect, args.theme.cellHorizontalPadding);
     if (cell.spill) spill(args, cell.spill);
-    if (!style?.edges && !cell.frozen && !style?.diagonal) return;
+    if (!style?.edges && !cell.frozen && !cell.invalid && !style?.diagonal) return;
     // The grid keeps note of the ink it set for a column's text, so it is put back.
     const { ctx, rect: { x, y, width, height } } = args, was = ctx.fillStyle;
     if (style?.edges) {
@@ -173,6 +173,11 @@ export function createCellLook(look: SheetLook) {
       if (style.diagonal !== "up") { ctx.moveTo(x, y); ctx.lineTo(x + width, y + height); }
       if (style.diagonal !== "down") { ctx.moveTo(x, y + height); ctx.lineTo(x + width, y); }
       ctx.stroke();
+    }
+    // A cell breaking its data validation: a corner at its top left, in the error ink (validity.ts).
+    if (cell.invalid) {
+      ctx.fillStyle = look.error;
+      ctx.beginPath(); ctx.moveTo(x + 1, y + 1); ctx.lineTo(x + 1 + look.corner, y + 1); ctx.lineTo(x + 1, y + 1 + look.corner); ctx.closePath(); ctx.fill();
     }
     if (cell.frozen) {
       ctx.fillStyle = look.warn;

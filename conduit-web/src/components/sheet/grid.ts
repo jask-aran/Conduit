@@ -24,7 +24,7 @@ export type SheetColumns = { width(col: number): number | undefined; type(row: n
   /** A dropdown cell's pill for the value it shows (cell-draw.ts); undefined where the cell is no dropdown. */
   pill(row: number, col: number, type: string | undefined, shown: string): SheetPill | undefined;
   /** Where a cell's link goes (types.ts); undefined where it is none. */
-  link(row: number, col: number, text: string): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; dated(row: number, col: number): boolean; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean; freeze(): { rows: number; cols: number }; hidden(): ReadonlySet<number>; hiddenCols(): ReadonlySet<number>;
+  link(row: number, col: number, text: string): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; dated(row: number, col: number): boolean; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean; invalid?(row: number, col: number): boolean; freeze(): { rows: number; cols: number }; hidden(): ReadonlySet<number>; hiddenCols(): ReadonlySet<number>;
   /** A filter's mark on a header cell (0 none, 1 a filter, 2 one keeping only some values) and a table's banded rows (filter.tsx). */
   mark(row: number, col: number): number; banded(row: number, col: number): boolean;
   /** The tab's merged ranges (merges.ts). */
@@ -136,7 +136,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   let counting = false;
   /** What a cell shows; what was typed into it is read only when the grid asks (editing, copying), since drawing never does. */
   class TextCell {
-    readonly kind = GridCellKind.Text; readonly allowOverlay = false; mark = 0; pill?: SheetPill; spill?: SheetSpill; link?: string; arrow?: boolean;
+    readonly kind = GridCellKind.Text; readonly allowOverlay = false; mark = 0; pill?: SheetPill; spill?: SheetSpill; link?: string; arrow?: boolean; invalid?: boolean;
     constructor(private row: number, private col: number, private typed: string | null, readonly displayData: string, readonly contentAlign?: "left" | "center" | "right", readonly themeOverride?: Partial<Theme>, readonly worn?: SheetCellStyle, readonly frozen?: boolean) {}
     get data() { return this.typed ??= model.input(this.row, this.col); }
     get copyData() { return this.data; }
@@ -630,6 +630,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
           input !== null && !input.startsWith("=") && options.columns.frozen(row, col) || undefined), mark);
         if (typeof value === "string" && !fault) made.link = options.columns.link(row, col, value);
         if (type === "date") made.arrow = true;
+        if (options.columns.invalid?.(row, col)) made.invalid = true;
         return made;
       };
       // Each cell as made, by the sheet's row, until it changes (`update`) or the rows' heights do (a merge's share): a selection moved draws

@@ -10,6 +10,7 @@ import { readRules, rulesA1, rulesIds, shiftRefs } from "../sheet-rules.js";
 import { CHART_LIMIT, chartFrom, chartIds, chartsA1, keptCharts, readCharts } from "../sheet-charts.js";
 import { writePrivateFile } from "../private-file.js";
 import { cleanOptions, readDate, restoreValidations, validationsA1, VALID, writeType } from "../sheet-types.js";
+import { hubRefusal } from "../sheet-valid.js";
 
 /*
  * The sheet artifact kind on the hub (sheet-format.js): a .csv that holds the values, the formulas beside it in sheet.json, and the live copy in
@@ -727,6 +728,9 @@ export function sheetKind(hub) {
             const type = room.look.get(`type:${key(sheet.rowAt(r), sheet.colAt(c))}`) ?? room.look.get(`type:${sheet.colAt(c)}`), day = type === "date" && input && !input.startsWith("=") ? readDate(input) : null;
             return day === null ? [r, c, input] : [r, c, String(day)];
           });
+          // A data validation's Stop rule refuses the whole write, saying the rule, as Excel refuses an entry (sheet-valid.js).
+          const refused = hubRefusal(room.look, sheet, dated);
+          if (refused) throw fault(400, refused);
           writeCells(room, sheet, dated, name, true);
           return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}), ...sheet.size() };
         }

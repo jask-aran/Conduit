@@ -38,6 +38,8 @@ import { sheetChartIcons as ChartIcons } from "@/components/ui/sheet-icons";
 import { createSheetTypes, type SheetTypeKind } from "./types";
 import { DropdownList, DropdownPrompt, type DropdownOption } from "./dropdown";
 import { LinkPrompt } from "./link";
+import { createSheetValidity } from "./validity";
+import { ValidationPrompt } from "./validation";
 import type { SheetPill } from "./cell-draw";
 import type { SheetChartKind } from "@/sheet-charts.js";
 
@@ -64,6 +66,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const [menu, setMenu] = createSignal<Menu>({});
   const outline = createSheetOutline(look, model);
   const formats = createSheetFormats(look, model, props.host.failed), styles = createSheetStyles(look, model, props.host.failed), types = createSheetTypes(look, model, props.host.failed);
+  // Data validation (validity.ts): writes judged, broken cells marked, the dialog open on a range.
+  const validity = createSheetValidity(look, model), [validating, setValidating] = createSignal<SheetRange | null>(null);
   // A dropdown's list open on its cell, and the options being edited for a range (`type`: the list's, else a new one).
   const [listing, setListing] = createSignal<{ row: number; col: number; box: SheetBox } | null>(null), [editingList, setEditingList] = createSignal<{ range: SheetRange; type?: string; options: readonly DropdownOption[] } | null>(null);
   const [dating, setDating] = createSignal<{ row: number; col: number; box: SheetBox } | null>(null);
@@ -130,9 +134,14 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   createEffect(() => props.onState?.(live.state()));
   onCleanup(() => history.destroy());
 
-  const write = (list: readonly { row: number; col: number; input: string }[]) => {
+  const write = (given: readonly { row: number; col: number; input: string }[]) => {
     const sheet = model();
     if (!sheet) return;
+    // A Stop rule broken refuses the whole write; what only the engine can judge is the hub's `set`, refused there with the rule's message.
+    const { local: list, hub: judged, refused, told } = validity.sort(given);
+    if (refused) return props.host.failed(refused);
+    if (told) toast(told);
+    for (const { row, col, input } of judged) hub({ op: "set", at: a1(row, col), value: input });
     // A cell past the sheet's edge has no row or column of its own yet: the hub makes them as it sets it.
     const past: { row: number; col: number; input: string }[] = [];
     // A merge shows only its upper-left cell: a value written under the rest would be kept unseen (emptying them, as Merge does, is let through).
@@ -319,7 +328,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       made = mountGrid(into, { model: sheet, events, look: untrack(drawnLook), filled: index, columns: {
         width: (col) => { const width = sizes.width(col); return width === undefined ? undefined : Math.round(width * zoom()); }, freeze: sizes.freeze, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols,
         heights: () => { const by = zoom(), kept = sizes.heights(); return by === 1 ? kept : new Map([...kept].map(([row, height]) => [row, Math.round(height * by)])); },
-        type: types.at, pill: pillOf, link: types.link, draw: (row, col, value) => formats.draw(row, col, value, rules.fmt(row, col)), dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded, merges: merges.list, outline: outline.line, formulas: () => untrack(formulasShown), extending: () => untrack(extending),
+        type: types.at, pill: pillOf, link: types.link, draw: (row, col, value) => formats.draw(row, col, value, rules.fmt(row, col)), dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), invalid: validity.invalid, mark: filters.mark, banded: filters.banded, merges: merges.list, outline: outline.line, formulas: () => untrack(formulasShown), extending: () => untrack(extending),
       } });
       setGrid(made);
       fitWrapped();
@@ -795,6 +804,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
           { label: "Remove duplicates…", icon: <DataIcons.dedupe />, run: () => { const on = nRows === 1 && nCols === 1 ? filters.region() : { range: inTab(range), header: false }; if (on) opening = () => setDeduping(on); } },
           { label: "Trim whitespace", icon: <DataIcons.trim />, run: () => trim(range) },
           { label: "Split text to columns…", icon: <DataIcons.split />, disabled: nCols > 1, run: () => { opening = () => setSplitting(range); } },
+          { label: "Data validation…", icon: <DataIcons.data />, run: () => { opening = () => setValidating(inTab(range)); } },
         ] },
       ],
       // Plain, checkboxes (TRUE and FALSE), dates or a dropdown's options (sheet-types.js): whole columns take a column's type, other ranges each cell its own.
@@ -875,6 +885,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       </Frost>
       {/* The ribbon (Markup's bar with the sheet's tools) stands here, at the row's end, folding to the room the formula field leaves it. */}
       <div ref={setSlot} class="ui-spreadsheet-slot" />
+      <Show when={(() => { changed(); const rule = validity.rule(at()); return rule?.showInputMessage === "1" && (rule.prompt || rule.promptTitle) ? rule : undefined; })()}>{(rule) =>
+        <Notice kind="tool" title={String(rule().prompt ?? "")}>{rule().promptTitle ? `${String(rule().promptTitle)}: ` : ""}{String(rule().prompt ?? "")}</Notice>}</Show>
       <Show when={frozenHere()}>{(cell) => <Notice kind="tool" title={cell().why ? `${cell().formula}: ${cell().why}` : cell().formula}>Frozen on import: ={cell().formula.replace(/^=/, "")}</Notice>}</Show>
     </div>
     <div ref={body} class="ui-spreadsheet-body">
@@ -937,6 +949,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
             types.setOptions(now.type, options);
             if (renamed.size && sheet) write(cells.flatMap((cell) => { const to = renamed.get(valueText(sheet.value(cell.row, cell.col))); return to ? [{ ...cell, input: to }] : []; }));
           }); grid()?.focus(); }} />
+        <ValidationPrompt range={validating()} rule={untrack(() => validity.rule(validating()))} onClose={() => { setValidating(null); grid()?.focus(); }}
+          onSave={(rule) => { const range = untrack(validating); setValidating(null); if (range) history.act("Data validation", () => validity.set(range, rule)); grid()?.focus(); }} />
         <DedupePrompt asked={deduping() ? { range: rangeA1(deduping()!.range), header: deduping()!.header } : null} onRemove={(header) => { const asked = untrack(deduping); if (asked) dedupe(asked.range, header); }} onClose={() => { setDeduping(null); grid()?.focus(); }} />
         <SplitPrompt open={splitting() !== null} onSplit={(separator) => { const range = untrack(splitting); if (range) void split(range, separator); }} onClose={() => { setSplitting(null); grid()?.focus(); }} />
         <ShiftPrompt asked={shifting()} frame={() => body} onClose={() => { setShifting(null); grid()?.focus(); }} onChoose={(way) => { const asked = untrack(shifting); if (asked) shift(asked.verb, asked.range, way); }} />
