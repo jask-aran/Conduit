@@ -2,7 +2,7 @@
  * Every key the sheet takes, by group, in Excel's words for what it does: the list a person opens with Ctrl+/ or the palette's Shortcuts.
  * Kept by hand beside the handlers (grid.ts onKeyDown, sheet.tsx `events.key` and its section's keydown, formula-editor.tsx, sequences.tsx).
  */
-import { createComputed, createSignal, For, on } from "solid-js";
+import { createComputed, createRoot, For, on, type JSX } from "solid-js";
 import { Group, Keycap, OverlayPage, SettingLine } from "@/components/ui";
 import { OverlayDialog } from "@/components/ui/dialog";
 
@@ -44,18 +44,21 @@ const SHEET_KEYS: [string, [string, ...string[]][]][] = [
   ]],
 ];
 
+// The list never changes: made once, in a root of its own, a while after a sheet opens, and moved into the dialog each time it opens.
+let made: JSX.Element[] | undefined;
+const list = () => made ??= createRoot(() => SHEET_KEYS.map(([title, rows]) => <Group title={title}>
+  <For each={rows}>{([does, ...keys]) => <SettingLine plain label={does}><For each={keys}>{(chord) => <Keycap>{chord}</Keycap>}</For></SettingLine>}</For>
+</Group>));
+
 /** The sheet's keys, by group; the keyboard goes back to where it was as it shuts. */
 export function SheetShortcuts(props: { open: boolean; onOpenChange(open: boolean): void }) {
   let back: HTMLElement | null = null;
-  // The groups past the first two are made the frame after it opens, so it opens in one.
-  const [whole, setWhole] = createSignal(false);
-  createComputed(on(() => props.open, (open) => { setWhole(false); if (open) { back = document.activeElement instanceof HTMLElement ? document.activeElement : null; requestAnimationFrame(() => setTimeout(() => setWhole(true))); } }));
+  setTimeout(list, 1000);
+  createComputed(on(() => props.open, (open) => { if (open) back = document.activeElement instanceof HTMLElement ? document.activeElement : null; }));
   return <OverlayDialog open={props.open} onOpenChange={props.onOpenChange} label="Sheet shortcuts" placement="center" layout="rail"
     onCloseAutoFocus={(event) => { event.preventDefault(); if (back?.isConnected) back.focus({ preventScroll: true }); back = null; }}>
     <OverlayPage title="Sheet shortcuts" onClose={() => props.onOpenChange(false)}>
-      <For each={whole() ? SHEET_KEYS : SHEET_KEYS.slice(0, 2)}>{([title, rows]) => <Group title={title}>
-        <For each={rows}>{([does, ...keys]) => <SettingLine plain label={does}><For each={keys}>{(chord) => <Keycap>{chord}</Keycap>}</For></SettingLine>}</For>
-      </Group>}</For>
+      {list()}
     </OverlayPage>
   </OverlayDialog>;
 }

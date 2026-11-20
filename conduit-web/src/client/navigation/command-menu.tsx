@@ -278,7 +278,9 @@ export function CommandMenu(props: {
   });
   createEffect(() => props.onPageChange?.(page()));
 
+  // Shut, it reads nothing: an artifact's actions (a sheet's cell menu for the selection) would be made again on every change they read.
   const commands = createMemo(() => {
+    if (!props.open) return [];
     const currentPage = page();
     const all = resolvePaletteCommands(props.context, { page: currentPage });
     const scope = chatScope();
@@ -660,7 +662,7 @@ export function CommandMenu(props: {
   };
 
   const runPaletteShortcut = (commandId: string) => {
-    const command = commands().find((candidate) => candidate.id === commandId);
+    const command = (props.open ? commands() : resolvePaletteCommands(props.context, { page: page() })).find((candidate) => candidate.id === commandId);
     if (!command) return;
     if (command.kind === "page" && command.page) {
       openPalettePage(canonicalPage(command.page)!, command.id === COMMAND_IDS.searchChats);

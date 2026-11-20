@@ -341,8 +341,13 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     onCleanup(() => { over = true; off(); look.unobserve(restyled); made?.destroy(); setGrid(undefined); });
   });
   const art = createArtWindow(true);
-  // The app's tokens change with the Interface size and the theme, each set on the root element.
-  const relook = new MutationObserver(() => { const made = grid(); if (made && root) made.theme(untrack(drawnLook)); });
+  // The app's tokens change with the Interface size and the theme, each set on the root element; so does much else (a dialog's scroll lock, a route's
+  // motion), so the grid is drawn again only where the text's colour or the unit of size has changed.
+  let told = "";
+  const relook = new MutationObserver(() => {
+    const made = grid(), shown = root && getComputedStyle(root), now = shown ? `${shown.color} ${shown.getPropertyValue("--u-space")} ${shown.getPropertyValue("--muted-foreground")}` : "";
+    if (made && root && now !== told) { told = now; made.theme(untrack(drawnLook)); }
+  });
   relook.observe(document.documentElement, { attributes: true });
   onCleanup(() => relook.disconnect());
   // Drawn at another zoom, what stands where has moved.
