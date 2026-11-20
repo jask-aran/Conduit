@@ -255,7 +255,7 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
       return places;
     };
     // The hub's own structure change was made in the engine and in `typed` first: only what `write` changed is left (and its own rewrites).
-    if (transaction.origin === self) { retype(written); written = null; }
+    if (transaction.origin === self) { for (const [place, input] of retype(written)) engine.setCellContents(place, input); written = null; }
     // A structure change rewrites many formulas, which the engine rewrites too: that is no reason to build it again.
     else if (!structure && now.keys.size > REBUILD_AT) rebuild();
     else {

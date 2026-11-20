@@ -206,6 +206,17 @@ export function addTableRow(look, sheet, id, set, shift) {
   writeTables(look, sheet.id, list.map((each) => each === one ? { ...table, ...corners(sheet, grown) } : each.table));
   return row;
 }
+/** Rows put in through a table's data (from `at`, `count` of them, by index as the tab now stands) take each calculated column's formula (one every other data row holds), moved. */
+export function fillInserted(look, sheet, at, count, set, shift) {
+  for (const { table, range } of placed(look, sheet)) {
+    const rows = rowsOf(range, table), from = at - 1 >= rows.first ? at - 1 : at + count;
+    if (at <= range.top || at + count - 1 > rows.last || from > rows.last) continue;
+    for (let c = range.left; c <= range.right; c++) {
+      const above = sheet.input(from, c);
+      if (above.startsWith("=") && Array.from({ length: rows.last - rows.first + 1 }, (_, n) => rows.first + n).every((r) => (r >= at && r < at + count) || sheet.input(r, c).startsWith("="))) for (let n = 0; n < count; n++) set(at + n, c, shift(above, at + n - from, 0));
+    }
+  }
+}
 /** A table's own filter written (`keep`, `when`, `hide`; undefined: none). */
 export function putFilter(look, sheet, id, { keep, when, hide }) {
   writeTables(look, sheet.id, readTables(look, sheet.id).map((table) => {

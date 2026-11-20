@@ -147,14 +147,16 @@ export function cycleAnchors(reference: string): string {
 /** A formula as it is written into the cell: function names and references upper-cased, open calls closed, trimmed. Other text is kept as typed. */
 export function finish(text: string) {
   if (!isFormula(text)) return text;
-  let out = "", depth = 0;
+  let out = "", depth = 0, brackets = "";
   for (const token of tokenize(text)) {
     const part = text.slice(token.from, token.to);
+    // A structured reference left open (`Sales[Qty`) runs to the end: its brackets are closed before the calls.
+    if (token.kind === "name" && token.to === text.length && part.includes("[")) brackets = "]".repeat(Math.max(0, part.replace(/'./g, "").split("[").length - part.replace(/'./g, "").split("]").length));
     const cut = token.kind === "ref" ? tabCut(part) : 0;
     out += token.kind === "call" || token.kind === "ref" || (token.kind === "name" && /^(true|false)$/i.test(part)) ? part.slice(0, cut) + part.slice(cut).toUpperCase() : part;
     if (token.kind === "open") depth++; else if (token.kind === "close") depth = Math.max(0, depth - 1);
   }
-  return (out.trim() + ")".repeat(depth)).trim();
+  return (out.trim() + brackets + ")".repeat(depth)).trim();
 }
 
 /** The calls whose function the engine does not have (`known`: its names, upper-cased). */

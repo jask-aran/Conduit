@@ -11,6 +11,7 @@ export function referencesOf(text: string): Reference[];
 export function tableAt(tables: TableInfos, at: CellAt): TableInfo | undefined;
 /** `names`: "" for a bare reference (`[@Qty]`) outside any table. */
 export function toA1(text: string, tables: TableInfos, at: CellAt): { a1: string; stored: string; names: string[] } | null;
+export function areasOf(text: string, tables: TableInfos, at: CellAt): { start: number; end: number; tab: string; area: Range }[];
 export function alignA1(stored: string, engine: string, tables: TableInfos): string;
 export function structuredFor(tables: TableInfos, at: CellAt, tab: string, area: Range): string | null;
 export function fromA1(text: string, tables: TableInfos, at: CellAt, sheetTab: (name: string) => string | undefined): string;

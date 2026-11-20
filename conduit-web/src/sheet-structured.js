@@ -134,6 +134,15 @@ export function toA1(text, tables, at) {
   return { a1: a1 + text.slice(from), stored: stored + text.slice(kept), names: [...names] };
 }
 
+/** A formula's structured references (and bare table names) that name cells, from its cell `at`: each `{ start, end, tab, area }`, `area` by index. */
+export function areasOf(text, tables, at) {
+  return referencesOf(text).flatMap((ref) => {
+    const table = ref.kind === "a1" || (ref.kind === "name" && !tables.has(ref.table.toLowerCase())) ? undefined : tableOf(tables, ref, at), parts = table && ref.kind === "struct" && partsOf(text, ref);
+    const area = !table ? null : ref.kind === "name" ? { top: table.first, bottom: table.last, left: table.left, right: table.right } : parts && areaOf(table, parts, at);
+    return area && typeof area !== "string" && area.top <= area.bottom ? [{ start: ref.start, end: ref.end, tab: table.tab, area }] : [];
+  });
+}
+
 /**
  * A formula the engine rewrote (its A1 refs moved by a row or column inserted, deleted or moved), as the stored structured text: each A1 reference
  * of `stored` takes the engine's, in order, each structured one stays. `stored` itself where they do not pair up.

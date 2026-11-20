@@ -8,7 +8,7 @@ import { batch, createEffect, createMemo, createSignal, For, onCleanup, Show, un
 import { Item, Match, Section } from "@/components/ui";
 import { Popover, PopoverContent } from "@/components/ui/menus";
 import { a1, rangeA1 } from "@/sheet-format.js";
-import { escapeName, SPECIALS, structuredFor, tableAt, type TableInfos } from "@/sheet-structured.js";
+import { areasOf, escapeName, SPECIALS, structuredFor, tableAt, type TableInfos } from "@/sheet-structured.js";
 import { bracketAt, contextAt, cycleAnchors, finish, INKS, inksOf, isFormula, tokenize, unknownCalls, type FormulaContext, type FormulaToken } from "./formula";
 import { argumentAt, CHIPS, errorReason, FUNCTION_HELP, functionOffers, nearestFunctions, type FunctionOffer } from "./functions";
 import type { SheetGrid, SheetReference } from "./host";
@@ -97,7 +97,13 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
   // The reference last pointed at: its span of the text, what was typed of it first (a range typed to its colon is finished by pointing), its corners.
   const [pointing, setPointing] = createSignal<{ from: number; to: number; prefix: string; anchor: Cell; at: Cell } | null>(null);
   const fields: Partial<Record<FormulaPlace, HTMLElement>> = {};
-  const tokens = createMemo(() => tokenize(text())), inks = createMemo(() => inksOf(tokens()));
+  // A structured reference to this tab's table is a reference as an A1 one is: inked, its cells outlined (an A1 one to the same cells shares its ink).
+  const tokens = createMemo(() => {
+    const list = tokenize(text()), cell = editing(), tables = cell && text().length > 1 ? host.tables?.() : undefined, tab = tables && [...tables.values()][0]?.tab;
+    if (!tab) return list;
+    const areas = new Map(areasOf(text(), tables!, { tab, row: cell!.row, col: cell!.col }).filter((one) => one.tab === tab).map((one) => [one.start, one]));
+    return areas.size ? list.map((token) => { const one = token.kind === "name" ? areas.get(token.from) : undefined; return one && one.end === token.to ? { ...token, ref: one.area, key: rangeA1(one.area) } : token; }) : list;
+  }), inks = createMemo(() => inksOf(tokens()));
   const context = createMemo(() => contextAt(text(), tokens(), caret()));
   // Told to the grid only when they change: a key that changes no reference redraws nothing.
   const references = createMemo<readonly SheetReference[]>(() => {
@@ -343,7 +349,7 @@ export function FormulaHelp(props: { editor: FormulaEditor; frame: () => HTMLEle
         <div role="listbox" ref={list}><For each={groups()}>{(group) =>
           <Section title={group.title ?? (editor.doubt() ? `${editor.doubt()!.name.toUpperCase()} is not a function` : undefined)} note={editor.doubt() ? "Tab uses one · Enter keeps it" : undefined}>
             <For each={group.items}>{({ offer, at }) =>
-              <Item role="option" aria-selected={editor.active() === at} active={editor.active() === at} onMouseDown={keep} onClick={() => editor.accept(offer)} detail={offer.chip ? offer.detail ?? CHIPS[offer.name] : FUNCTION_HELP[offer.name]?.about} meta={offer.typedFor ? `for ${offer.typedFor}` : undefined}>
+              <Item role="option" aria-selected={editor.active() === at} active={editor.active() === at} onMouseDown={keep} onClick={() => editor.accept(offer)} detail={offer.chip ? offer.detail ?? CHIPS[offer.name] : offer.insert ? offer.detail : FUNCTION_HELP[offer.name]?.about} meta={offer.typedFor ? `for ${offer.typedFor}` : undefined}>
                 <Match text={offer.name} query={offer.chip ? editor.text().slice(1) : editor.doubt() ? "" : editor.context().word?.text ?? ""} />
               </Item>}</For>
           </Section>}</For></div>

@@ -11,7 +11,7 @@ import { CHART_LIMIT, chartFrom, chartIds, chartsA1, keptCharts, readCharts } fr
 import { writePrivateFile } from "../private-file.js";
 import { cleanOptions, readDate, restoreValidations, validationsA1, VALID, writeType } from "../sheet-types.js";
 import { brokenText, hubBroken, hubRefusal } from "../sheet-valid.js";
-import { changeTable, makeTable, placed as placedTables, readTables, removeTable, tableFilter, tablesA1, tablesIds, tableWrites, takenNames, writeTables } from "../sheet-tables.js";
+import { changeTable, fillInserted, makeTable, placed as placedTables, readTables, removeTable, tableFilter, tablesA1, tablesIds, tableWrites, takenNames, writeTables } from "../sheet-tables.js";
 import { cleanChip, clearChips, copyLook, writeChip } from "../sheet-chips.js";
 
 /*
@@ -912,7 +912,9 @@ export function sheetKind(hub) {
         if (removing && count >= size) throw fault(400, `A tab keeps at least one ${what}`);
         if (!removing) sized(room, sheet, isRows ? rows + count : rows, isRows ? cols : cols + count);
         const corners = removing ? keepCorners(room, sheet, isRows, at, count) : extendTypes(room, sheet, isRows, at, count), frozen = keepFrozen(room, sheet, op, at, count);
-        return { ...hub.as(room, name, (sign) => sheet.structure(op, at, count, () => { corners(); frozen(); sign(); })), ...(many(room) ? { tab: sheet.name } : {}) };
+        // Rows put in through a table take its calculated columns' formulas, as Excel's.
+        const calculated = () => { if (isRows && !removing) fillInserted(room.look, sheet, at, count, (row, col, input) => room.cells.set(key(sheet.rowAt(row), sheet.colAt(col)), input), shiftRefs); };
+        return { ...hub.as(room, name, (sign) => sheet.structure(op, at, count, () => { corners(); frozen(); calculated(); sign(); })), ...(many(room) ? { tab: sheet.name } : {}) };
       },
     },
   };
