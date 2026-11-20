@@ -6,7 +6,9 @@ import { webSocketUrl } from "../api/transport.js";
 import type { ArtifactSurfaceProps } from "./artifact-kinds";
 import { api } from "../api/client";
 import { ARTIFACT_KINDS } from "./artifact-kinds";
-import { sheetCells } from "./artifacts";
+import { artifactsOf, sheetCells } from "./artifacts";
+import { accountName } from "../state/account";
+import { agentName, agentView } from "../state/agent";
 import { sheetDisplay } from "../preferences/sheet-display";
 
 /** A sheet in its pane: the hub's live copy in the sheet editor, comments on ranges of cells in the margin beside it. It declares no seats, suggestions or answer acts (Keep, Revert), which a sheet does not have yet. */
@@ -17,6 +19,14 @@ export default function SheetSurface(props: ArtifactSurfaceProps) {
     socket: async (sheet) => new WebSocket(await webSocketUrl(`/v0/document/${sheet}/live`)), author: () => "person",
     cells: (op) => sheetCells(id, op), failed: (message) => toast.error(message), tools: ARTIFACT_KINDS.sheet.cells,
     frozen: () => api<{ report: { frozen?: SheetFrozen } | null }>(`/v0/document/${encodeURIComponent(id)}?as=import`).then(({ report }) => report?.frozen ?? null, () => null),
+    // `@` offers the people the app knows (the signed-in person and jbot: it keeps no directory of others) and the project's other artifacts.
+    people: () => [{ id: "me", name: accountName() || "Me", role: "Person" }, { id: "jbot", name: agentName(), role: "Agent", agent: true }],
+    artifacts: () => artifactsOf(props.about().project).filter((one) => one.id !== id).map((one) => ({ id: one.id, name: one.name, type: one.kind })),
+    open: (target) => {
+      if ("artifact" in target) return void window.dispatchEvent(new CustomEvent("conduit:open-artifact", { detail: { id: target.artifact, beside: true } }));
+      const chatId = agentView()?.home?.chatId;
+      if (chatId) window.dispatchEvent(new CustomEvent("conduit:open-agent", { detail: { chatId } }));
+    },
     display: sheetDisplay, openSettings: () => window.dispatchEvent(new CustomEvent("conduit:open-settings", { detail: "artifacts" })),
   };
   props.onSurface({
