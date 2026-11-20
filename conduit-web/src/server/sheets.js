@@ -10,7 +10,7 @@ import { readRules, rulesA1, rulesIds, shiftRefs } from "../sheet-rules.js";
 import { CHART_LIMIT, chartFrom, chartIds, chartsA1, keptCharts, readCharts } from "../sheet-charts.js";
 import { writePrivateFile } from "../private-file.js";
 import { cleanOptions, readDate, restoreValidations, validationsA1, VALID, writeType } from "../sheet-types.js";
-import { brokenText, hubBroken, hubRefusal } from "../sheet-valid.js";
+import { brokenText, hubBroken, hubRefusal, OPERATORS, RULE_KINDS, ruleFields, ruleSpec, ruleText, writeRule } from "../sheet-valid.js";
 import { changeTable, fillInserted, makeTable, placed as placedTables, readTables, removeTable, tableFilter, tablesA1, tablesIds, tableWrites, takenNames, unstructureAll, writeTables } from "../sheet-tables.js";
 import { cleanChip, clearChips, copyLook, writeChip } from "../sheet-chips.js";
 
@@ -636,6 +636,11 @@ export function sheetKind(hub) {
       return { tab: done.tab, tabs: tabsWithSize(room) };
     });
   };
+  /** The validations over `area`, each the part of its cells inside it, in the shape the validate op takes, and in words. */
+  const rulesIn = (room, sheet, area) => validationsA1(room.look, sheet).flatMap(({ range, ...rule }) => {
+    const inside = range.split(" ").flatMap((part) => { const one = parseRange(part), cut = one && { top: Math.max(one.top, area.top), left: Math.max(one.left, area.left), bottom: Math.min(one.bottom, area.bottom), right: Math.min(one.right, area.right) }; return cut && cut.top <= cut.bottom && cut.left <= cut.right ? [rangeA1(cut)] : []; });
+    return inside.length ? [{ range: inside.join(" "), ...ruleSpec(rule), said: ruleText(rule) }] : [];
+  });
   const tabsWithSize = (room) => room.book.tabs().map((tab) => ({ ...tab, ...room.book.tab(tab.id).size() }));
   const TAB_OPS = { "add-tab": "add", "rename-tab": "rename", "delete-tab": "delete", "move-tab": "move", "hide-tab": "hide" };
 
@@ -712,11 +717,14 @@ export function sheetKind(hub) {
         const part = area === whole || rangeA1(area) === rangeA1(whole) ? "" : `; this is ${rangeA1(area)}, its first line row ${area.top + 1} and its first field column ${colName(area.left)}`;
         const head = many(room) ? `# workbook ${room.entry.name}: tabs ${listed(room)}; this is ${sheet.name}, ${rows} rows x ${cols} columns; formulas are shown as typed; address cells as A1, another tab's as Data!A1 or 'My tab'!A1`
           : `# sheet ${room.entry.name}: ${rows} rows x ${cols} columns; formulas are shown as typed; address cells as A1`;
-        return `${head}${part}\n${toCsv(clip(typed, area))}`;
+        // What the CSV cannot show: the tab's tables and which of the cells hold a validation rule (validate lists them).
+        const tables = tablesA1(sheet, readTables(room.look, sheet.id)), ruled = rulesIn(room, sheet, area).map((one) => one.range);
+        const more = `${tables.length ? `; tables ${tables.map((one) => `${one.name} ${one.range}`).join(", ")}` : ""}${ruled.length ? `; validation rules on ${ruled.join(" ")}` : ""}`;
+        return `${head}${part}${more}\n${toCsv(clip(typed, area))}`;
       },
       /** One change of cells, of rows and columns, or of tabs (contract: POST /v0/document/:id/cells). `for` is checked, and nothing is kept of it yet. */
       async edit(room, args = {}) {
-        const { op, tab, at, range, from, values, value, format, style, borders, column, header, descending, count = 1, to, name: called, hidden, chart, table: tabled, way, by, for: about, type: cellType, options, chip } = args, own = room.own;
+        const { op, tab, at, range, from, values, value, format, style, borders, column, header, descending, count = 1, to, name: called, hidden, chart, table: tabled, way, by, for: about, type: cellType, options, chip, rule } = args, own = room.own;
         const name = typeof by === "string" && by ? by.slice(0, 80) : "agent";
         if (about !== undefined) {
           if (!/^[\w-]+\/\d+$/.test(String(about))) throw fault(400, `for is the comment answered, as <item>/<n>, not ${about}`);
@@ -810,6 +818,25 @@ export function sheetKind(hub) {
             sign();
           }));
           return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}) };
+        }
+        // A range's data validation (sheet-valid.js), as the page's Data validation dialog writes it: `rule` set over the range, null clearing it; the
+        // range's rules, in the shape `rule` takes, are the answer.
+        if (op === "validate") {
+          const ref = parseRef(range ?? at), sheet = pick(room, tab, ref.tab ?? undefined), { rows, cols } = sheet.size(), columns = /^\$?([A-Za-z]{1,3}):\$?([A-Za-z]{1,3})$/.exec(ref.range);
+          const area = columns ? { top: 0, bottom: rows - 1, left: Math.min(colIndex(columns[1]), colIndex(columns[2])), right: Math.max(colIndex(columns[1]), colIndex(columns[2])) } : parseRange(ref.range);
+          if (!area) throw fault(400, `range is an A1 range such as B2:C5, or whole columns such as B:D (Data!B:D for a tab), not ${range ?? at}`);
+          if (area.top >= rows || area.left >= cols) throw fault(400, `${rangeA1(area)} is past the tab's edge: it is ${rows} rows x ${cols} columns`);
+          if (rule !== undefined) {
+            const { kind, operator = "between", values = [], blank, input, alert } = rule ?? {}, two = operator === "between" || operator === "notBetween", compares = kind !== "list" && kind !== "custom";
+            if (rule !== null && (typeof rule !== "object" || !RULE_KINDS.includes(kind) || !OPERATORS.includes(operator) || !Array.isArray(values) || !values.every((one) => typeof one === "string") || !values[0]?.trim() || (compares && two && !values[1]?.trim()))) throw fault(400, `rule is { kind: ${RULE_KINDS.join(", ")}; operator: ${OPERATORS.join(", ")}; values: a list's values or its source (=F2:F9, =Sales[Status]), a custom rule's formula, else the operands (two for between); blank, input: { title, text }, alert: { style: stop, warning or information, title, text } }, or null to clear it`);
+            const attributes = rule && ruleFields({ kind, operator, a: kind === "list" && !values[0].trim().startsWith("=") ? values.join(",") : values[0], b: values[1], blank: blank !== false,
+              prompting: input !== false, promptTitle: String(input?.title ?? ""), prompt: String(input?.text ?? ""), alerting: alert !== false, style: ["warning", "information"].includes(alert?.style) ? alert.style : "stop", errorTitle: String(alert?.title ?? ""), error: String(alert?.text ?? "") });
+            hub.as(room, name, (sign) => room.doc.transact(() => {
+              try { writeRule(room.look, sheet, area, attributes, area.top === 0 && area.bottom >= rows - 1); } catch (error) { throw fault(400, error.message); }
+              sign();
+            }));
+          }
+          return { cells: [label(room, sheet, area)], rules: rulesIn(room, sheet, area), ...(many(room) ? { tab: sheet.name } : {}) };
         }
         // A cell shown as a smart chip (sheet-chips.js), or plain again with `chip: null`.
         if (op === "chip") {
@@ -910,7 +937,7 @@ export function sheetKind(hub) {
           if (across) throw fault(400, `${rangeA1(across)} is merged: unmerge it to remove duplicates from ${rangeA1(area)}`);
           return { ...dedupe(room, sheet, { ...area, bottom: Math.min(area.bottom, rows - 1), right: Math.min(area.right, cols - 1) }, header === true, name), ...(many(room) ? { tab: sheet.name } : {}) };
         }
-        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, type, chip, sort, chart, table, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, shift-cells, dedupe, add-tab, duplicate-tab, rename-tab, delete-tab, move-tab or hide-tab");
+        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, type, validate, chip, sort, chart, table, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, shift-cells, dedupe, add-tab, duplicate-tab, rename-tab, delete-tab, move-tab or hide-tab");
         const sheet = pick(room, tab), { rows, cols } = sheet.size(), isRows = op.endsWith("rows"), size = isRows ? rows : cols, what = isRows ? "row" : "column", removing = op.startsWith("delete");
         if (!Number.isInteger(count) || count < 1 || count > CALL_LIMIT) throw fault(400, "count is how many, 1 or more");
         index(at, removing ? size - 1 : size, `${what} to ${removing ? "delete" : "insert before"} (${size} ${what}s now)`);

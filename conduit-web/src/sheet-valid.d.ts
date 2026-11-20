@@ -20,4 +20,10 @@ export function refusal(rule: SheetValidation, row: number, col: number, listed?
 export function brokenText(count: number, first: string, verb: string): string;
 export function customAt(formula: unknown, anchor: { row: number; col: number }, row: number, col: number, value: unknown): string;
 export function anchorOf(look: Y.Map<unknown>, sheet: Sheetish, id: string): { row: number; col: number };
+/** The Data validation dialog's form, as ruleFields reads it. */
+export type RuleForm = { kind: SheetRuleKind | "any"; operator?: SheetRuleOperator; a?: string; b?: string; blank?: boolean; prompting?: boolean; promptTitle?: string; prompt?: string; alerting?: boolean; style?: "stop" | "warning" | "information"; errorTitle?: string; error?: string; inks?: Record<string, unknown>; dropDown?: boolean };
+export function ruleFields(form: RuleForm): SheetValidation | null;
+/** POST /v0/document/:id/cells `{ op: "validate", range, rule?, tab? }`: no `rule` lists the range's rules in this shape, `null` clears them. */
+export type RuleSpec = { kind: SheetRuleKind; operator?: SheetRuleOperator; values?: string[]; blank?: boolean; input?: { title?: string; text?: string } | false; alert?: { style?: "stop" | "warning" | "information"; title?: string; text?: string } | false };
+export function ruleSpec(rule: SheetValidation): RuleSpec;
 export function writeRule(look: Y.Map<unknown>, sheet: Sheetish, area: Range, attributes: SheetValidation | null, columns: boolean): void;

@@ -9,8 +9,8 @@ import { Button, Field, Input, Segmented, Switch } from "@/components/ui/control
 import { Dialog } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/menus";
 import { rangeA1 } from "@/sheet-format.js";
-import { dateText, optionsOf, readDate, type SheetValidation } from "@/sheet-types.js";
-import { readTime, type SheetRuleKind, type SheetRuleOperator } from "@/sheet-valid.js";
+import { dateText, optionsOf, type SheetValidation } from "@/sheet-types.js";
+import { ruleFields, type SheetRuleKind, type SheetRuleOperator } from "@/sheet-valid.js";
 import type { SheetRange } from "./host";
 
 const KINDS: { value: SheetRuleKind | "any"; label: string }[] = [
@@ -34,14 +34,6 @@ const shown = (kind: string, formula: unknown) => {
   if (kind === "time") { const minutes = Math.round(n * 1440); return `${Math.floor(minutes / 60)}:${pad(minutes % 60)}`; }
   return text;
 };
-const kept = (kind: string, typed: string) => {
-  const text = typed.trim();
-  if (text.startsWith("=")) return text.slice(1);
-  if (kind === "date") return String(readDate(text) ?? text);
-  if (kind === "time") return String(readTime(text) ?? text);
-  return text;
-};
-
 /** The rule for `range` (null: shut); `rule` what its first cell holds. `onSave(null)` takes the range's rules off. */
 export function ValidationPrompt(props: { range: SheetRange | null; rule: SheetValidation | undefined; onSave(attributes: SheetValidation | null): void; onClose(): void }) {
   const [tab, setTab] = createSignal<Tab>("settings"), [kind, setKind] = createSignal<SheetRuleKind | "any">("any"), [operator, setOperator] = createSignal<SheetRuleOperator>("between");
@@ -62,22 +54,8 @@ export function ValidationPrompt(props: { range: SheetRange | null; rule: SheetV
   const two = () => operator() === "between" || operator() === "notBetween";
   const compares = () => !["any", "list", "custom"].includes(kind());
   const ready = () => kind() === "any" || (a().trim() !== "" && (!compares() || !two() || b().trim() !== ""));
-  const attributes = (): SheetValidation | null => {
-    const type = kind();
-    if (type === "any") return null;
-    // A typed list is kept quoted, as Excel writes one (its inks kept for the values still listed); a range or name as its formula.
-    const listed = type === "list" && !a().trim().startsWith("=");
-    const values = listed ? a().split(",").map((one) => one.trim()).filter(Boolean) : [];
-    const inks = listed && props.rule?.inks ? Object.fromEntries(Object.entries(props.rule.inks).filter(([value]) => values.includes(value))) : undefined;
-    const set = (name: string, value: string | false) => value ? { [name]: value } : {};
-    return {
-      type, ...set("operator", compares() && operator() !== "between" && operator()), ...set("allowBlank", blank() && "1"), ...set("showDropDown", type === "list" && on1(props.rule?.showDropDown) && "1"),
-      ...set("showInputMessage", prompting() && "1"), ...set("showErrorMessage", alerting() && "1"), ...set("errorStyle", style() !== "stop" && style()),
-      ...set("errorTitle", errorTitle().trim()), ...set("error", error().trim()), ...set("promptTitle", promptTitle().trim()), ...set("prompt", prompt().trim()),
-      formula1: listed ? `"${values.map((one) => one.replace(/"/g, '""')).join(",")}"` : kept(type, a()), ...set("formula2", compares() && two() && kept(type, b())),
-      ...inks && Object.keys(inks).length ? { inks } : {},
-    };
-  };
+  const attributes = () => ruleFields({ kind: kind(), operator: operator(), a: a(), b: b(), blank: blank(), prompting: prompting(), promptTitle: promptTitle(), prompt: prompt(),
+    alerting: alerting(), style: style(), errorTitle: errorTitle(), error: error(), inks: props.rule?.inks, dropDown: on1(props.rule?.showDropDown) });
   const save = (event: SubmitEvent) => { event.preventDefault(); if (ready()) props.onSave(attributes()); };
   return <Dialog open={props.range !== null} title="Data validation" description={props.range ? `Cells ${rangeA1(props.range)}` : undefined} onOpenChange={(open) => { if (!open) props.onClose(); }}>
     <CardForm onSubmit={save}>

@@ -76,6 +76,7 @@ export function breaks(rule, value, { read, list, custom }) {
   return ok === undefined ? false : !ok;
 }
 
+const clock = (n) => { const minutes = Math.round(n * 1440); return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`; };
 // A list said by its first few values.
 const FEW = 5;
 /** A rule in words: "a whole number between 1 and 10". `listed`: a list's values read from its cells, said instead of its reference. */
@@ -84,7 +85,7 @@ export function ruleText(rule, listed) {
     const text = String(formula ?? "").replace(/^=/, ""), n = Number(text);
     if (text === "" || !Number.isFinite(n)) return text;
     if (rule.type === "date") return dateText(n);
-    if (rule.type === "time") { const minutes = Math.round(n * 1440); return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`; }
+    if (rule.type === "time") return clock(n);
     return text;
   };
   const values = rule.type === "list" ? optionsOf(rule)?.map((one) => one.value) ?? listed?.map(String) : undefined;
@@ -119,6 +120,41 @@ export function anchorOf(look, sheet, id) {
     if (row >= 0 && col >= 0 && (!best || col < best.col || (col === best.col && row < best.row))) best = { row, col };
   }
   return best ?? { row: 0, col: 0 };
+}
+
+/** An operand as kept from what was typed: a formula without its `=`, a typed date or time as its serial, else as typed. */
+const keptOperand = (kind, typed) => {
+  const text = String(typed ?? "").trim();
+  if (text.startsWith("=")) return text.slice(1);
+  if (kind === "date") return String(readDate(text) ?? text);
+  if (kind === "time") return String(readTime(text) ?? text);
+  return text;
+};
+/**
+ * The Data validation dialog's form (or an agent's `validate`) as Excel's attributes, null for Any value: `a` a list's values (comma-separated) or its
+ * source (`=$F$2:$F$9`, `=Sales[Status]`), else the first operand, `b` the second; `inks` a dropdown's kept for the values still listed, `dropDown` kept.
+ */
+export function ruleFields({ kind, operator = "between", a = "", b = "", blank = true, prompting = true, promptTitle = "", prompt = "", alerting = true, style = "stop", errorTitle = "", error = "", inks, dropDown }) {
+  if (!RULE_KINDS.includes(kind)) return null;
+  const compares = kind !== "list" && kind !== "custom", two = operator === "between" || operator === "notBetween";
+  const listed = kind === "list" && !String(a).trim().startsWith("="), values = listed ? String(a).split(",").map((one) => one.trim()).filter(Boolean) : [];
+  const kept = inks && listed ? Object.fromEntries(Object.entries(inks).filter(([value]) => values.includes(value))) : {};
+  const set = (name, value) => value ? { [name]: value } : {};
+  return {
+    type: kind, ...set("operator", compares && operator !== "between" && operator), ...set("allowBlank", blank && "1"), ...set("showDropDown", kind === "list" && dropDown && "1"),
+    ...set("showInputMessage", prompting && "1"), ...set("showErrorMessage", alerting && "1"), ...set("errorStyle", style !== "stop" && style),
+    ...set("errorTitle", errorTitle.trim()), ...set("error", error.trim()), ...set("promptTitle", promptTitle.trim()), ...set("prompt", prompt.trim()),
+    formula1: listed ? `"${values.map((one) => one.replace(/"/g, '""')).join(",")}"` : keptOperand(kind, a), ...set("formula2", compares && two && keptOperand(kind, b)),
+    ...Object.keys(kept).length ? { inks: kept } : {},
+  };
+}
+/** A rule's attributes as an agent's `validate` gives one: `{ kind, operator?, values, blank, input?, alert }` (values a list's, else its operands; a formula with its `=`). */
+export function ruleSpec(rule) {
+  const operand = (formula) => { const text = String(formula ?? ""), n = Number(text); return text === "" ? [] : !Number.isFinite(n) ? [`=${text}`] : [rule.type === "date" ? dateText(n) : rule.type === "time" ? clock(n) : text]; };
+  const options = rule.type === "list" ? optionsOf(rule)?.map((one) => one.value) : null;
+  return { kind: rule.type, ...rule.type !== "list" && rule.type !== "custom" ? { operator: rule.operator ?? "between" } : {}, values: options ?? [...operand(rule.formula1), ...operand(rule.formula2)], blank: on(rule.allowBlank),
+    ...on(rule.showInputMessage) && (rule.promptTitle || rule.prompt) ? { input: { ...rule.promptTitle ? { title: rule.promptTitle } : {}, ...rule.prompt ? { text: rule.prompt } : {} } } : {},
+    alert: on(rule.showErrorMessage) ? { style: rule.errorStyle ?? "stop", ...rule.errorTitle ? { title: rule.errorTitle } : {}, ...rule.error ? { text: rule.error } : {} } : false };
 }
 
 /** The area takes the rule (`attributes`, Excel's own; null: none), clipped to the tab, in the caller's transaction; rules no cell holds any more go. */
