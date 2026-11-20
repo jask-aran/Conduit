@@ -50,7 +50,7 @@ open is in the list below:
   round-trips as `stop`;
 - xlsx import grows a tab only through styled cells, rows and columns touching its values, as far as the limits allow; LibreOffice's
   whole-row runs become row styles; hand-set row heights are kept; lost line styles are reported; export joins alike columns;
-- Undo waits for every tagged update a hub op sent (the hub's reply counts them as `tagged`); deleting a tab clears the history;
+- Undo waits for every tagged update a hub op sent (the hub's reply counts them as `tagged`);
 - the fill handle steps a typed `2026-01-30` by days.
 
 Then: undoing an insert or delete of rows moves formulas typed since (the hub's model is `owner`, keeps its engine's rewrite and writes it);
@@ -187,7 +187,8 @@ Then the ribbon, charts and ask box, walked in headless Chrome on :4310 (2026-11
 - `shift-cells` (hub, `sheets.js` `shiftCells`) works formulas out in a scratch engine: a deleted block is moved past the tab's edge and its lines
   removed there, so its readers read #REF!. A range only partly moved grows or shrinks as Excel's (`resize`, matched against the engine's reading).
 - `dedupe` reuses `reorder` (kept rows first, repeats after) and empties the tail; external references to moved cells are not rewritten, as a sort's.
-- `duplicate-tab` and tab moves are hub tab ops, not on the page's Undo, as add and delete aren't. `tabColor:<tabId>` (an ink or #rrggbb) is in the
+- Tab ops (add, duplicate, rename, move, hide, delete) go through `history.hub` as named steps, the tabs' order and `tab` meta in the history's scope; a tab
+  deleted by someone else still ends the history (`ownTabs` in sheet.tsx). Undoing an add on a workbook folder leaving its CSV file behind is unchecked. `tabColor:<tabId>` (an ink or #rrggbb) is in the
   look, so it is undone, saved and read in `as=book` as `look.tabColor`; xlsx does not carry it yet.
 - Grouping was not built: Glide has no outline gutter; a collapse control needs a strip left of the row numbers and above the letters (a wider marker
   column drawn and hit-tested by hand, a taller head with its own `drawHeader` band), hidden rows reused for collapsed groups, and a look key for levels.

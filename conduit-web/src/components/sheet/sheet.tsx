@@ -8,7 +8,7 @@ import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { createSheetMerges, type SheetMergeKind } from "./merges";
 import { Input } from "@/components/ui/controls";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
-import { CELLS, COLS, LOOK, ROWS, a1, colIndex, colName, colsOf, fromCsv, key, parseRange, rangeA1, rowsOf, runsOf, valueText, type SheetView } from "@/sheet-format.js";
+import { CELLS, COLS, LOOK, ROWS, TAB, TABS, a1, colIndex, colName, colsOf, fromCsv, key, parseRange, rangeA1, rowsOf, runsOf, valueText, type SheetView } from "@/sheet-format.js";
 import { shiftRefs } from "@/sheet-rules.js";
 import { formatDates } from "@/sheet-formats.js";
 import { daySerial, serialDay } from "@/sheet-types.js";
@@ -74,15 +74,21 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   let root: HTMLElement | undefined, anchors: SheetAnchor[] = [], picking: string | undefined;
   // The grid's code is fetched with the editor, not once the hub's copy has come.
   const gridCode = import("./grid");
-  const tabs = createSheetTabs({ doc: live.doc, host: props.host, id: props.id, name: props.name, grid, at });
-  // Every tab's rows and columns are in it, so a row put in or taken out is undone with the formulas the hub moved for it.
-  const history = createSheetHistory(live.doc, [cells, look, live.doc.getArray(ROWS), live.doc.getArray(COLS)], (op) => tabs.cells(op)), [stepped, setStepped] = createSignal(0);
+  // Tabs this page added or deleted: they come and go with its steps, so their going does not end the history.
+  const ownTabs = new Set<string>();
+  const tabs = createSheetTabs({ doc: live.doc, host: props.host, id: props.id, name: props.name, grid, at, send: (op) => {
+    if ("tab" in op) ownTabs.add(op.tab);
+    return history.hub(op).then((done) => { const made = (done as { tab?: unknown } | null)?.tab; if ((op.op === "add-tab" || op.op === "duplicate-tab") && typeof made === "string") ownTabs.add(made); return done; });
+  } });
+  // Every tab's rows and columns are in it, so a row put in or taken out is undone with the formulas the hub moved for it; and the tabs' order and names,
+  // so adding, deleting, moving, renaming and hiding a tab are steps too.
+  const history = createSheetHistory(live.doc, [cells, look, live.doc.getArray(ROWS), live.doc.getArray(COLS), live.doc.getArray(TABS), live.doc.getMap(TAB)], (op) => tabs.cells(op)), [stepped, setStepped] = createSignal(0);
   live.own(history.origin);
   history.onChange(() => setStepped((n) => n + 1));
   createEffect(() => history.scope(tabs.tabs().flatMap((tab) => [live.doc.getArray(rowsOf(tab.id)), live.doc.getArray(colsOf(tab.id))])));
-  // A tab deleted, by anyone, ends the history, as Excel's does: a step on it could not be undone.
+  // A tab deleted by another person or agent ends the history: a step on it could not be undone. One this page added or deleted comes and goes with its steps.
   let tabIds: Set<string> | undefined;
-  createEffect(() => { const ids = new Set(tabs.tabs().map((tab) => tab.id)); if (tabIds && [...tabIds].some((id) => !ids.has(id))) history.clear(); tabIds = ids; });
+  createEffect(() => { const ids = new Set(tabs.tabs().map((tab) => tab.id)); if (tabIds && [...tabIds].some((id) => !ids.has(id) && !ownTabs.has(id))) history.clear(); tabIds = ids; });
   const watchers = new Set<(pressed?: string) => void>(), moved = (pressed?: string) => watchers.forEach((listener) => listener(pressed));
   createEffect(() => props.onState?.(live.state()));
   onCleanup(() => history.destroy());
