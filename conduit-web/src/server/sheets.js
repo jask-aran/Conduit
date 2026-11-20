@@ -569,7 +569,8 @@ export function sheetKind(hub) {
     refilter(room, sheet, by);
     return { removed: gone.length, left: kept.length };
   };
-  /** A .csv becomes a workbook folder before its second tab is written, so a failed move leaves it as it was; its tab is named then, as is its file. */
+  /** A .csv becomes a workbook folder before its second tab is written, so a failed move leaves it as it was; its tab is named then, as is its file.
+   * Awaited only when needed: a page's step tags only what an op writes before its first await (documents.js `cells`). */
   const intoFolder = async (room, by) => {
     if (isFolder(room)) return;
     const first = room.doc.getMap(TAB).get(`name:${MAIN}`) ?? tabName(room.entry.name);
@@ -582,7 +583,7 @@ export function sheetKind(hub) {
     let n = 2, called = `${base} (${n})`;
     while (room.book.find(called)) called = `${base} (${++n})`;
     sized(room, null, rows, cols);
-    await intoFolder(room, by);
+    if (!isFolder(room)) await intoFolder(room, by);
     const at = room.book.tabs().findIndex((one) => one.id === source.id) + 1, kept = lookOf(room, source), typed = source.inputs();
     // A chart is found by its id on whichever tab holds it: the copy's charts are charts of their own.
     if (Array.isArray(kept.charts)) kept.charts = kept.charts.map((chart) => ({ ...chart, id: rowId() }));
@@ -688,7 +689,7 @@ export function sheetKind(hub) {
             sized(room, null, START.rows, START.cols);
             // A .csv becomes a workbook folder before its second tab is written, so a failed move leaves it as it was. Its tab is named then (its file's
             // name, unless it was given one), as is the file it becomes.
-            await intoFolder(room, name);
+            if (!isFolder(room)) await intoFolder(room, name);
           }
           const changed = op === "rename-tab" && typeof called === "string" ? room.book.find(tabArgs.tab) : null;
           const frozen = changed ? keepFrozen(room, room.book.tab(changed), TAB_OPS[op], called?.trim()) : () => {};
