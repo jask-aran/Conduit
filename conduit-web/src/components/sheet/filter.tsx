@@ -247,23 +247,37 @@ export function FilterMenu(props: { filter: SheetFilter; at: { col: number; box:
     props.filter.keep(col(), alone() ? new Set() : found().length === every().length ? null : new Set(found()));
   };
   const sort = (descending: boolean) => { props.filter.sortColumn(col(), descending); props.onClose(); };
-  const close = () => { setQuery(""); props.onClose(); };
+  const close = () => { setQuery(""); setCursor(-1); props.onClose(); };
+  const ask = () => { const at = col(); close(); setAsking(at); }, clear = () => { props.filter.keep(col(), null); close(); };
+  // The keyboard stays in the search: Up and Down pick a row, Enter runs it (a value shown or hidden), or with none picked shows the values found alone.
+  const [cursor, setCursor] = createSignal(-1);
+  const rows = () => [() => sort(false), () => sort(true), ask, ...props.filter.narrows(col()) ? [clear] : [], pickFound, ...found().slice(0, LISTED).map((value) => () => toggle(value))];
+  const listed = () => rows().length - Math.min(found().length, LISTED) - 1;
+  const key = (event: KeyboardEvent) => {
+    const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+    if (step) { event.preventDefault(); setCursor((at) => Math.max(-1, Math.min(rows().length - 1, at + step))); }
+    else if (event.key === "Enter" && !event.isComposing) {
+      event.preventDefault();
+      if (cursor() >= 0) rows()[cursor()]!();
+      else if (query().trim()) { props.filter.keep(col(), found().length === every().length ? null : new Set(found())); close(); }
+    }
+  };
   return <>
     <Popover open={props.at !== null} onOpenChange={(open) => { if (!open) close(); }} anchorRef={props.frame} placement="bottom-start"
       anchorRect={() => { const box = props.at?.box; return box && new DOMRect(box.left, box.top, box.width, box.height); }}>
       <PopoverContent aria-label={`Filter column ${colName(col())}`} width="sm">
         <Section>
-          <Item icon={<SortIcons.ascending />} onClick={() => sort(false)}>Sort A–Z</Item>
-          <Item icon={<SortIcons.descending />} onClick={() => sort(true)}>Sort Z–A</Item>
+          <Item icon={<SortIcons.ascending />} active={cursor() === 0} onClick={() => sort(false)}>Sort A–Z</Item>
+          <Item icon={<SortIcons.descending />} active={cursor() === 1} onClick={() => sort(true)}>Sort Z–A</Item>
         </Section>
         <Section>
-          <Item icon={<SortIcons.filter />} meta={TESTS.find((one) => one.is === props.filter.when(col())?.is)?.label} onClick={() => { const at = col(); close(); setAsking(at); }}>Filter by condition…</Item>
-          <Show when={props.filter.narrows(col())}><Item icon={<Icons.Erase />} onClick={() => { props.filter.keep(col(), null); close(); }}>Clear filter</Item></Show>
+          <Item icon={<SortIcons.filter />} meta={TESTS.find((one) => one.is === props.filter.when(col())?.is)?.label} active={cursor() === 2} onClick={ask}>Filter by condition…</Item>
+          <Show when={props.filter.narrows(col())}><Item icon={<Icons.Erase />} active={cursor() === 3} onClick={clear}>Clear filter</Item></Show>
         </Section>
-        <SearchSection placeholder="Search values" value={query()} onInput={setQuery} field={{ "aria-label": "Search values" }} />
+        <SearchSection placeholder="Search values" value={query()} onInput={(text) => { setQuery(text); setCursor(-1); }} field={{ "aria-label": "Search values", onKeyDown: key }} />
         <Section title="Show" scroll>
-          <Item picked={query().trim() ? found().length > 0 && alone() : all()} onClick={pickFound}>{query().trim() ? "Select all found" : "Select all"}</Item>
-          <For each={found().slice(0, LISTED)}>{(value) => <Item picked={shows(value)} onClick={() => toggle(value)}>{value === "" ? "(Blanks)" : value}</Item>}</For>
+          <Item picked={query().trim() ? found().length > 0 && alone() : all()} active={cursor() === listed()} onClick={pickFound}>{query().trim() ? "Select all found" : "Select all"}</Item>
+          <For each={found().slice(0, LISTED)}>{(value, at) => <Item picked={shows(value)} active={cursor() === listed() + 1 + at()} onClick={() => toggle(value)}>{value === "" ? "(Blanks)" : value}</Item>}</For>
         </Section>
       </PopoverContent>
     </Popover>
