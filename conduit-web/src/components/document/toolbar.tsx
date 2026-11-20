@@ -157,8 +157,9 @@ export function TableTools(props: { editor: Accessor<Editor | undefined>; body: 
   }, null, { equals: (a, b) => a?.pos === b?.pos && a?.doc === b?.doc });
   const box = createMemo(() => {
     props.moved();
-    const pos = table()?.pos ?? null, view = props.editor()?.view, body = props.body()?.getBoundingClientRect(), wrapper = pos === null ? null : view?.nodeDOM(pos) as HTMLElement | null;
-    const drawn = wrapper?.querySelector?.("table")?.getBoundingClientRect(), room = wrapper?.getBoundingClientRect();
+    // Nothing is measured with the caret in no table: a read here lays the page out inside whatever changed it (the paper opening, a key typed).
+    const pos = table()?.pos ?? null, wrapper = pos === null ? null : props.editor()?.view.nodeDOM(pos) as HTMLElement | null;
+    const drawn = wrapper?.querySelector?.("table")?.getBoundingClientRect(), room = wrapper?.getBoundingClientRect(), body = drawn && props.body()?.getBoundingClientRect();
     if (!drawn || !room || !body) return undefined;
     // A table wider than its column scrolls in its wrapper: its edges are the wrapper's where it runs past them.
     const left = Math.max(drawn.left, room.left), right = Math.min(drawn.right, room.right);

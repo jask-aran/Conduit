@@ -33,7 +33,9 @@ export function createLiveDocument(host: DocumentHost, id: string) {
       if (bytes[0] === FRAME.have) return send(FRAME.update, Y.encodeStateAsUpdate(doc, bytes.subarray(1)));
       if (bytes[0] === FRAME.seats) { try { setSeats(JSON.parse(new TextDecoder().decode(bytes.subarray(1))) as DocumentSeat[]); } catch { setSeats([]); } return; }
       settle(doc);
-      Y.applyUpdate(doc, bytes.subarray(1), hub);
+      // Not heard as a change to send: what the hub sent is not sent back, and hearing it has Yjs write the whole of it out again (a paper's worth on the first).
+      doc.off("update", sent);
+      try { Y.applyUpdate(doc, bytes.subarray(1), hub); } finally { doc.on("update", sent); }
       tries = 0;
       setState("live");
       setSynced(true);
@@ -43,7 +45,8 @@ export function createLiveDocument(host: DocumentHost, id: string) {
     next.onclose = (event) => { setSeats([]); if (event.code !== STALE) return again(); over = true; setState("stale"); };
   };
   // What is written while the socket is down is not lost: the next `have` asks for it.
-  doc.on("update", (update: Uint8Array, origin: unknown) => { if (origin !== hub) send(FRAME.update, update); });
+  const sent = (update: Uint8Array) => send(FRAME.update, update);
+  doc.on("update", sent);
   void connect();
   onCleanup(() => { over = true; clearTimeout(retry); socket?.close(); doc.destroy(); });
   return { doc, state, synced, seats };
