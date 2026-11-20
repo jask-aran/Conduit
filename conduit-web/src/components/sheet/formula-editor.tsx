@@ -295,7 +295,9 @@ export function FormulaHelp(props: { editor: FormulaEditor; frame: () => HTMLEle
   const fault = () => <Show when={editor.fault()}>{(why) => <div class="ui-formula-hint" onMouseDown={keep}>
     <span>{why().text}</span><Show when={why().near.length}><small>Did you mean {why().near.map((one) => one.name).join(" or ")}?</small></Show>
   </div>}</Show>;
-  return <Popover open={editor.offered().length > 0 || signature() !== null || editor.fault() !== null} anchorRef={props.frame} anchorRect={() => editor.anchor()?.getBoundingClientRect()} placement="bottom-start" kept>
+  // Kept built, it is first placed while empty, so its placer never sees it run off the window to flip it: it opens on the side of the cell with more room.
+  const below = () => { const box = editor.anchor()?.getBoundingClientRect(); return !box || box.top + box.bottom < innerHeight; };
+  return <Popover open={editor.offered().length > 0 || signature() !== null || editor.fault() !== null} anchorRef={props.frame} anchorRect={() => editor.anchor()?.getBoundingClientRect()} placement={below() ? "bottom-start" : "top-start"} kept>
     <PopoverContent aria-label="Functions" width="md" onOpenAutoFocus={(event) => event.preventDefault()} onCloseAutoFocus={(event) => event.preventDefault()}>
       <Show when={editor.offered().length} fallback={<Show when={signature()} fallback={fault()}>{(call) => {
         const at = () => call().help ? argumentAt(call().help!, call().arg) : -1;

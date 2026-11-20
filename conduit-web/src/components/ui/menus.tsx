@@ -214,7 +214,7 @@ export function Popover(props: ParentProps<{ open?: boolean; onOpenChange?: (ope
 export const PopoverTrigger = KPopover.Trigger;
 export function PopoverContent(props: ParentProps<Caps & { "aria-label"?: string; wide?: boolean; snug?: boolean; onPointerDownOutside?: (event: Event & { target: EventTarget | null }) => void; onOpenAutoFocus?: (event: Event) => void; onCloseAutoFocus?: (event: Event) => void }>) {
   const mount = createFullscreenPortalMount();
-  return <KPopover.Portal mount={mount()}><KPopover.Content as={Surface} data-piece="PopoverContent" data-slot="ui-popover-content" {...props} /></KPopover.Portal>;
+  return <KPopover.Portal mount={mount()}><KPopover.Content as={Surface} data-piece="PopoverContent" data-slot="ui-popover-content" style={{ "--menu-room": "var(--kb-popper-content-available-height)" }} {...props} /></KPopover.Portal>;
 }
 
 export function SearchList<T>(props: {
