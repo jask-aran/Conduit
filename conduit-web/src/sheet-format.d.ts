@@ -137,7 +137,7 @@ export type SheetPageMessage = { update: Uint8Array };
  * first); the last part of an answer says how many updates the worker has `taken`, and its values hold for the doc as of that update.
  */
 export type SheetEngineMessage =
-  | { functions: string[] }
+  | { functions: string[]; dates: Record<string, string> }
   | { at: string[]; value: (SheetValue | null)[]; full?: true; taken?: number };
 
 /** What changed of the workbook as a whole: its tabs, whether it is still computing, the function names. */
@@ -155,6 +155,8 @@ export interface SheetBook {
   tabOfRow(rowId: string): string | undefined;
   /** [] until the worker says. */
   functions(): readonly string[];
+  /** The functions whose result is a date, with the format each takes ({} until the worker says). */
+  dates(): Readonly<Record<string, string>>;
   /** True until values hold for every change made to the doc. */
   computing(): boolean;
   onChange(listener: (change: SheetBookChange) => void): () => void;

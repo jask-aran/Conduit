@@ -29,6 +29,10 @@ export function readDate(text) {
   return null;
 }
 
+/** A calendar's day (month from 1) as its serial number, and back. */
+export const daySerial = ({ year, month, day }) => serial(year, month, day);
+export const serialDay = (n) => { const at = new Date((Math.floor(n) - 25569) * 864e5); return { year: at.getUTCFullYear(), month: at.getUTCMonth() + 1, day: at.getUTCDate() }; };
+
 /** A serial number as the Date format draws it (d/m/yyyy), as a date cell is edited; readDate reads it back. */
 export const dateText = (serial) => { const day = new Date((Math.floor(serial) - 25569) * 864e5); return `${day.getUTCDate()}/${day.getUTCMonth() + 1}/${day.getUTCFullYear()}`; };
 
