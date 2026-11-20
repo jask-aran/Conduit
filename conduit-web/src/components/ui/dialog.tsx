@@ -14,6 +14,8 @@ function createLeave(scrim: () => HTMLElement | undefined, open: () => boolean, 
   const leave = () => {
     const real = scrim();
     if (!real || !wanted() || reducedMotion() || !real.isConnected && !real.childElementCount) return;
+    // Where each part is scrolled is read before the copy is put in: read after, it lays the copy out first.
+    const from = real.querySelectorAll<HTMLElement>("*"), scrolled = Array.from(from, (element) => element.scrollTop);
     const still = real.cloneNode(true) as HTMLElement;
     still.inert = true;
     still.setAttribute("aria-hidden", "true");
@@ -21,13 +23,14 @@ function createLeave(scrim: () => HTMLElement | undefined, open: () => boolean, 
     still.removeAttribute("id");
     still.dataset.state = "closed";
     still.style.removeProperty("display");
-    const from = real.querySelectorAll<HTMLElement>("*"), to = still.querySelectorAll<HTMLElement>("*");
+    const to = still.querySelectorAll<HTMLElement>("*");
     for (const surface of still.querySelectorAll(":scope > .ui-card, :scope > .ui-overlay")) { surface.removeAttribute("data-entering"); surface.setAttribute("data-leaving", ""); }
     for (const element of to) element.removeAttribute("id");
+    const wait = duration("--duration-quick", real) + 60;
     (mount() ?? document.body).appendChild(still);
-    from.forEach((element, index) => { if (element.scrollTop && to[index]) to[index]!.scrollTop = element.scrollTop; });
+    scrolled.forEach((top, index) => { if (top && to[index]) to[index]!.scrollTop = top; });
     real.style.display = "none";
-    setTimeout(() => still.remove(), duration("--duration-quick", still) + 60);
+    setTimeout(() => still.remove(), wait);
   };
   // A computation runs before the document is updated: what the dialog shows is still there to copy.
   createComputed(on(open, (now) => { if (now) scrim()?.style.removeProperty("display"); else leave(); }, { defer: true }));
