@@ -486,8 +486,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
           return;
         }
       }
-      // Home goes to the row's first column shown, Ctrl+Home to the part's first cell shown: the grid's own would land on a hidden column A.
-      if (event.key === "Home" && !event.shiftKey && !event.altKey && hiddenCols.has(0)) {
+      // Home goes to the row's first column shown, Ctrl+Home to the part's first cell shown, one cell selected: the grid's own would land on a hidden
+      // column A, and keeps a range whose active cell is already there.
+      if (event.key === "Home" && !event.shiftKey && !event.altKey) {
         event.cancel();
         const row = p.map.sheet(event.ctrlKey || event.metaKey ? 0 : cell[1]), col = shownAt(0);
         api.select({ top: row, bottom: row, left: col, right: col });
@@ -838,12 +839,22 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         // A selection is held as a part draws it: kept on the same sheet rows when rows are hidden, shown or frozen.
         const was = picked(), columns = owner.current.columns.length > 0, rows = owner.current.rows.length > 0, versions = parts.map((p) => p.map.version).join(), freeze = frozenRows;
         const cell = owner.current.current && { row: owner.map.sheet(owner.current.current.cell[1]), col: owner.current.current.cell[0] };
+        // The keyboard follows the active cell into the other part: the frozen rows' part goes as they are unfrozen, and the keyboard with it.
+        const typing = parts.find((p) => p.host?.contains(document.activeElement));
         drive.structure?.();
         if (!was || columns || (versions === parts.map((p) => p.map.version).join() && freeze === frozenRows)) return;
         if (rows) spread(was, partOf(was.top), (_, drawn) => ({ columns: CompactSelection.empty(), rows: CompactSelection.fromSingleSelection([drawn.top, drawn.bottom + 1]) }));
         else api.select(was);
         if (cell && !rows) { const into = partOf(cell.row), drawn = clip(into, { top: cell.row, bottom: cell.row, left: cell.col, right: cell.col }), held = into.current.current;
           if (drawn && held) choose(into, { ...into.current, current: { ...held, cell: [cell.col, drawn.top] } }); }
+        // Frozen rows put back are mounted a few frames after this, and their canvas takes the keyboard only once laid out: tried each frame till then.
+        const follow = (frames: number) => {
+          if (document.activeElement !== document.body && !parts.some((p) => p !== owner && p.host?.contains(document.activeElement))) return;
+          owner.editor?.focus();
+          if (!owner.host?.contains(document.activeElement)) owner.host?.querySelector<HTMLElement>("canvas[tabindex]")?.focus({ preventScroll: true });
+          if (!owner.host?.contains(document.activeElement) && frames) requestAnimationFrame(() => follow(frames - 1));
+        };
+        if (typing && typing !== owner) follow(20);
         return;
       }
       // Only what is in view is drawn again; the rest is read as it scrolls in. A merge over rows is drawn by each of its rows.
