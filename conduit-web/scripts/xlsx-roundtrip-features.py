@@ -255,13 +255,15 @@ POST = {"threaded comments": post_threads}
 
 def g_table(wb):
     ws = wb.active
-    ws.append(["Name", "Qty", "Price"])
-    for row in [["a", 1, 2.5], ["b", 2, 3.5], ["c", 3, 4.5]]: ws.append(row)
-    t = Table(displayName="Sales", ref="A1:C4"); t.tableStyleInfo = TableStyleInfo(name="TableStyleMedium9", showRowStripes=True); ws.add_table(t)
+    ws.append(["Name", "Qty", "Price", "Net amount"])
+    # Structured references: a calculated column, and a sum over a column from outside the table.
+    for row in [["a", 1, 2.5], ["b", 2, 3.5], ["c", 3, 4.5]]: ws.append([*row, "=Sales[[#This Row],[Qty]]*Sales[[#This Row],[Price]]"])
+    ws["H1"] = "=SUM(Sales[Qty])+Costs[[#Totals],[Cost]]"
+    t = Table(displayName="Sales", ref="A1:D4"); t.tableStyleInfo = TableStyleInfo(name="TableStyleMedium9", showRowStripes=True); ws.add_table(t)
     # A second table on the tab, with a total row summing its second column.
     for r, row in enumerate([["Item", "Cost"], ["x", 4], ["y", 6], ["Total", "=SUBTOTAL(109,F2:F3)"]], 1): ws.cell(r, 5, row[0]); ws.cell(r, 6, row[1])
     t = Table(displayName="Costs", ref="E1:F4", totalsRowCount=1); t._initialise_columns(); t.tableColumns[0].totalsRowLabel = "Total"; t.tableColumns[1].totalsRowFunction = "sum"; t.autoFilter = AutoFilter(ref="E1:F3"); t.autoFilter.add_filter_column(0, ["x"]); ws.add_table(t)
-def r_table(wb, raw): return {f"table {n}": [t.ref, t.tableStyleInfo.name if t.tableStyleInfo else "", t.totalsRowCount or 0, [c.totalsRowFunction for c in t.tableColumns], [(f.colId, f.filters.filter if f.filters else None) for f in (t.autoFilter.filterColumn if t.autoFilter else [])]] for n, t in ((t.displayName, t) for t in wb.active.tables.values())}
+def r_table(wb, raw): return {f"table {n}": [t.ref, t.tableStyleInfo.name if t.tableStyleInfo else "", t.totalsRowCount or 0, [c.totalsRowFunction for c in t.tableColumns], [(f.colId, f.filters.filter if f.filters else None) for f in (t.autoFilter.filterColumn if t.autoFilter else [])]] for n, t in ((t.displayName, t) for t in wb.active.tables.values())} | {"formulas": [wb.active["D3"].value, wb.active["H1"].value]}
 feature("tables")((g_table, r_table))
 
 def g_filter(wb):

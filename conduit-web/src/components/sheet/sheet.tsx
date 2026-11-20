@@ -13,6 +13,7 @@ import { CELLS, COLS, LOOK, ROWS, TAB, TABS, a1, colIndex, colName, colsOf, from
 import { shiftRefs } from "@/sheet-rules.js";
 import { formatDates, writeFormat } from "@/sheet-formats.js";
 import { daySerial, serialDay } from "@/sheet-types.js";
+import { toA1 } from "@/sheet-structured.js";
 import { CalendarPopover, today } from "@/components/ui/calendar";
 import { addTab, SheetFoot } from "./foot";
 import { createFilled, type SheetFilled } from "./jump";
@@ -174,12 +175,13 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const writes = (label: string) => (list: readonly { row: number; col: number; input: string }[]) => history.act(label || labelOf(list), () => write(list));
   const editor = createFormulaEditor({
     grid, input: (row, col) => shownInput(row, col), functions: tabs.functions, merged: (row, col) => merges.at(row, col),
-    write: (row, col, input) => writes("")([{ row, col, input: types.typed(row, col, input) }]),
+    // A formula's table and column names in their own casing (sheet-structured.js), in the person's own step.
+    write: (row, col, input) => { const tab = model()?.id, cased = tab && input.includes("[") ? toA1(input, filters.tables.infos(), { tab, row, col })?.stored : undefined; writes("")([{ row, col, input: types.typed(row, col, cased ?? input) }]); },
     refuse: (row, col, input) => { const { refused } = validity.sort([{ row, col, input: readEntry(types.typed(row, col, input), formats.at(row, col)).input }]); if (refused) props.host.failed(refused); return Boolean(refused); },
     // As a spreadsheet's Ctrl+Enter: each shown cell selected takes it, a formula moved from the cell typed in to its own.
     fill: (from, input) => { const area = at(); if (!area || (area.top === area.bottom && area.left === area.right)) return false; writes("Fill selection")(within(grid()?.lines() ? inTab(area) : area).flat().map(({ row, col }) => ({ row, col, input: shifted(input, row - from.row, col - from.col) }))); return true; },
     selected: () => { changed(); const area = at(); return area && { row: area.top, col: area.left }; }, error: (row, col) => model()?.error(row, col) ?? null,
-    chips: chip.offers,
+    chips: chip.offers, tables: () => filters.tables.infos(), tableNames: () => filters.tables.names(),
     chip: ({ row, col }, name, offer) => {
       if (chip.take({ row, col }, offer)) return;
       const range = { top: row, bottom: row, left: col, right: col };

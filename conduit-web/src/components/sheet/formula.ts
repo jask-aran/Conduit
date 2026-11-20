@@ -24,6 +24,8 @@ const letters = (name: string) => { let col = 0; for (const letter of name.toUpp
 const span = (a: number, b: number) => [Math.min(a, b), Math.max(a, b)] as const;
 // Where a reference ends: what follows may not carry the word on.
 const ends = (text: string, at: number) => !/[\w.(]/.test(text[at] ?? "");
+// Past a structured reference's brackets (`[@Qty]`, `[[#Totals],[Tax]]`; `'` escapes the next character), or the text's end where one is open.
+const bracketEnd = (text: string, at: number) => { let depth = 0; for (let i = at; i < text.length; i++) { const ch = text[i]; if (ch === "'") i++; else if (ch === "[") depth++; else if (ch === "]" && --depth === 0) return i + 1; } return text.length; };
 
 export const isFormula = (text: string) => text.startsWith("=");
 
@@ -39,6 +41,7 @@ export function tokenize(text: string): FormulaToken[] {
       for (; end < text.length; end++) if (text[end] === '"') { if (text[end + 1] === '"') end++; else { end++; break; } }
       push("string", at, Math.min(end, text.length)); at = Math.min(end, text.length); continue;
     }
+    if (char === "[") { const end = bracketEnd(text, at); push("name", at, end); at = end; continue; }
     if (/\s/.test(char)) { let end = at + 1; while (end < text.length && /\s/.test(text[end]!)) end++; push("space", at, end); at = end; continue; }
     if (char === "(" || char === ")") { push(char === "(" ? "open" : "close", at, at + 1); at++; continue; }
     if (char === "," || char === ";") { push("separator", at, at + 1); at++; continue; }
@@ -56,6 +59,7 @@ export function tokenize(text: string): FormulaToken[] {
       let after = at + (word?.[0].length ?? 0);
       while (/\s/.test(text[after] ?? "")) after++;
       if (word && text[after] === "(") { push("call", at, at + word[0].length); at += word[0].length; continue; }
+      if (word && text[at + word[0].length] === "[") { const end = bracketEnd(text, at + word[0].length); push("name", at, end); at = end; continue; }
       if (cell && ends(text, at + cell[0].length) || cell && text[at + cell[0].length] === ":") {
         const row = Number(cell[2]) - 1, col = letters(cell[1]!);
         let end = at + cell[0].length, ref: SheetRange = { top: row, bottom: row, left: col, right: col };
@@ -103,6 +107,27 @@ export function contextAt(text: string, tokens: readonly FormulaToken[], caret: 
   const word = at && at.to === caret && (at.kind === "name" || at.kind === "ref" || at.kind === "call") && /^[A-Za-z][\w.]*$/.test(text.slice(at.from, at.to)) && opener(prev) ? { from: at.from, to: at.to, text: text.slice(at.from, at.to) } : null;
   const inner = calls.findLast((call) => call.name);
   return { point, word, call: inner?.name ? { name: inner.name, arg: inner.arg } : null };
+}
+
+/**
+ * The structured reference the caret is typing in, if any: its table's name (null: the cell's own), where the name being typed starts, what is typed
+ * of it, whether it is this row's (`[@`), and the brackets left to close when one is taken.
+ */
+export function bracketAt(text: string, caret: number): { table: string | null; from: number; typed: string; row: boolean; closes: number } | null {
+  if (!isFormula(text)) return null;
+  const open: number[] = [];
+  for (let i = 1; i < caret; i++) {
+    const ch = text[i];
+    if (ch === '"' && !open.length) { for (i++; i < caret && (text[i] !== '"' || text[i + 1] === '"'); i++) if (text[i] === '"') i++; }
+    else if (ch === "'" && open.length) i++;
+    else if (ch === "[") open.push(i);
+    else if (ch === "]") open.pop();
+  }
+  if (!open.length) return null;
+  const outer = open[0]!, inner = open[open.length - 1]!, row = text[outer + 1] === "@", from = inner + 1 + (inner === outer && row ? 1 : 0), typed = text.slice(from, caret);
+  if (/[[\],:]/.test(typed)) return null;
+  const table = /[\p{L}_\\][\p{L}\p{N}_.]*$/u.exec(text.slice(0, outer))?.[0] ?? null;
+  return { table, from, typed, row, closes: row ? open.length : 1 };
 }
 
 // A1 → $A$1 → A$1 → $A1 → A1, every corner alike; a whole column or row has one mark to turn.
