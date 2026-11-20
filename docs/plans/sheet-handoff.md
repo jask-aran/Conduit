@@ -231,3 +231,17 @@ Open after the walk:
 - At a 1,600 px window the ribbon folds into "Format" once the undo group gains its chevron.
 - Ctrl+Z does nothing after the Undo several list is shut (focus stays on its button), as in item 2's ribbon note.
 
+
+## Grid speed and imported looks (branch `sheet-draw`, 2026-11-20)
+
+- Glide redraws every cell in view on any selection change (`computeCanBlit` compares `selection`), so a move's cost is our per-cell cost: `grid.ts`
+  `contentOf` keeps each made cell by the sheet's row until `update` drops its row (or rows' heights change). Anything a cell's look reads must reach
+  `update` (a change list, or `null` for all), or the grid shows the old cell.
+- Ctrl+arrow down a column searches that column's runs of filled cells (`filledRun`, dropped per changed column); Ctrl+End keeps `lastUsed` as cells are
+  typed. The first Ctrl+End after a load or a structure change still reads the whole tab (24 ms on 10,000 × 8 at 1x).
+- The foot's figures are read in a task of their own on every selection change (no settle wait), sliced at 3 ms; the cell menu's `sub` may be a
+  function, made as the submenu opens.
+- Imported style codes now drawn (`styles.ts` `make`, `cell-draw.ts`): `n`, `u2`, `k`, `in`, `r`, `hx`, `bs`, `bd`, and `fp`/`fb` as a mix of the two
+  colours (only where `f` is #rrggbb). Not seen in a browser: no import was run. Conditional-format kinds kept as `rulesKept` are not drawn yet.
+- Opening a sheet: the grid, tabs and canvases still appear about 350 ms after the pane's first paint (the grid mounts once the hub's copy and the
+  model are held); the margin's height jumps with them.
