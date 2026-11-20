@@ -471,10 +471,18 @@ export function exportXlsx(given) {
   const book = XLSX.utils.book_new(), known = new Set(tabs.map((tab) => tab.name.toLowerCase()));
   let tables = 0;
   const tableNames = new Set(), listedOf = (tab) => Array.isArray(tab.look.tables) ? tab.look.tables : tab.look.table ? [tab.look.table] : [];
-  // A formula reading a table is written in Excel's file form (Table1[[#This Row],[Qty]]).
+  // A formula reading a table is written in Excel's file form (Table1[[#This Row],[Qty]]); one reading a table written as its filter alone (tablePart:
+  // a header Excel would repair), or under another name, by A1.
   const infos = infosOf(tabs.map((tab) => [tab.name, listedOf(tab), tab]), (one, area, n, tab) => { const value = one.header === false ? "" : tab.values[area.top]?.[area.left + n]; return typeof value === "string" ? value : ""; });
+  const named = new Set(), parted = new Map([...infos].filter(([low, one]) => { const names = one.header < 0 ? [] : one.columns.map((_, n) => tabs.find((tab) => tab.name === one.tab)?.values[one.header]?.[one.left + n]);
+    const ok = names.every((name) => typeof name === "string" && name) && new Set(names.map((name) => name.toLowerCase())).size === names.length && /^[\p{L}_\\][\p{L}\p{N}_.]*$/u.test(one.name) && !/^[A-Z]{1,3}\d+$/i.test(one.name) && !named.has(low);
+    if (ok) named.add(low);
+    return ok; }));
   for (const tab of tabs) {
-    const file = (formula, r, c) => infos.size && formula.includes("[") ? toFile(formula, infos, { tab: tab.name, row: r, col: c }) : formula;
+    const file = (formula, r, c) => {
+      const spot = { tab: tab.name, row: r, col: c }, done = infos.size ? toA1(formula, infos, spot) : null;
+      return !done ? formula : done.names.every((name) => parted.has(name)) ? toFile(done.stored, parted, spot) : done.a1;
+    };
     const sheet = {}, cols = Math.max(1, ...tab.typed.map((row) => row.length));
     // A formula that spills is an array formula over the cells it spills into (Excel's dynamic array, `D`), or over the range it was entered on with
     // Ctrl+Shift+Enter (`array:` in the look, not dynamic); the cells it spills into hold their values.

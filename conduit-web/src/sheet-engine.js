@@ -64,7 +64,9 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
   let engine, ids = [], tabs = new Map(), bySheet = new Map(), rowTab = new Map(), colTab = new Map(), named = new Map(), names = "", watched = [], pending = null, written = null;
   // Structured references (sheet-structured.js): the tables as they read them, the A1 each such cell gave the engine, and which cells read which table.
   let infos = new Map(), given = new Map(), uses = new Map(), refers = new Map(), heads = new Set(), fixes = [];
+  // `typing`: the cells the change being taken wrote, whose casing the hub leaves (an undo of the step would not undo its rewrite); the page writes it.
   const fixing = {};
+  let typing = null;
   const defined = () => listed(order).flatMap((id) => listOf(look.get(`names:${id}`)));
   const nameOf = (id) => meta.get(`name:${id}`) ?? (id === MAIN ? called ?? FIRST : id);
   const engineName = (id) => meta.get(`name:${id}`) ?? (id === MAIN ? FIRST : id);
@@ -103,7 +105,7 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
     for (const name of done.names) (refers.get(name) ?? refers.set(name, new Set()).get(name)).add(cell);
     uses.set(cell, done.names); given.set(cell, done.a1);
     // The hub writes the tables' and columns' names in their own casing.
-    if (owner && done.stored !== input) fixes.push([cell, input, done.stored]);
+    if (owner && done.stored !== input && !typing?.has(cell)) fixes.push([cell, input, done.stored]);
     return done.a1;
   };
   /** The formula the engine holds for a cell as the doc would hold it: a structured one's A1 references the engine moved, written into its text. */
@@ -130,6 +132,7 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
       const place = placeOf(cell), input = place && place.t.typed[place.at.row][place.at.col];
       if (input) { const after = edit(input, { tab: place.t.id, row: place.at.row, col: place.at.col }); if (after !== input) fixes.push([cell, input, after]); }
     }
+    let changes = [];
     engine.suspendEvaluation();
     try {
       for (const name of changed) for (const cell of [...refers.get(name) ?? []]) {
@@ -138,7 +141,8 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
         const was = given.get(cell), now = toEngine(place.t, place.at.row, place.at.col, place.t.typed[place.at.row][place.at.col]);
         if (now !== was) engine.setCellContents(place.at, now);
       }
-    } finally { return engine.resumeEvaluation(); }
+    } finally { changes = engine.resumeEvaluation(); }
+    return changes;
   };
   /** The hub's rewrites of structured references (names in their own casing, renamed tables and columns), written once the change is whole. */
   const writeFixes = () => {
@@ -245,7 +249,9 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
     const kept = [];
     const retype = (done) => {
       const places = [];
+      typing = now.keys;
       for (const cell of now.keys) { if (done?.has(cell)) continue; const place = placeOf(cell); if (place) { const input = cells.get(cell); place.t.typed[place.at.row][place.at.col] = input ?? ""; places.push([place.at, toEngine(place.t, place.at.row, place.at.col, input)]); } else forget(cell); }
+      typing = null;
       return places;
     };
     // The hub's own structure change was made in the engine and in `typed` first: only what `write` changed is left (and its own rewrites).
@@ -270,6 +276,8 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
         // cells: each reads what it read, which the engine's rewrite says, whatever text an undo put back.
         if (structure) eachFormula((t, row, col, input) => {
           const place = { sheet: t.sheet, row, col }, cell = key(t.rowIds[row], t.colIds[col]), rewritten = engine.getCellFormula(place), stored = rewritten && asStored(cell, input, rewritten);
+          // What the engine holds now, so `retable` sets again only the cells whose A1 the move did not already make.
+          if (rewritten && given.has(cell)) given.set(cell, rewritten);
           // The engine writes `=sum(a1)` as `=SUM(A1)`: a formula differing only so was not moved, and stays as typed.
           if (stored === input || stored?.toUpperCase() === input.toUpperCase()) return;
           if (owner && stored && (relaid || !now.keys.has(cell))) { t.typed[row][col] = stored; kept.push([cell, input, stored]); } else engine.setCellContents(place, toEngine(t, row, col, input));
@@ -322,6 +330,7 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
       for (const [u, row, col, was, input] of formulas) {
         if (u === t && gone.has(isRows ? row : col)) continue;
         const place = { sheet: u.sheet, row: u.rowIndex.get(row), col: u.colIndex.get(col) }, cell = key(row, col), after = engine.getCellFormula(place), stored = after && after !== was ? asStored(cell, input, after) : input;
+        if (after && given.has(cell)) given.set(cell, after);
         if (stored !== input) { cells.set(cell, stored); u.typed[place.row][place.col] = stored; written.add(cell); }
       }
       write();
