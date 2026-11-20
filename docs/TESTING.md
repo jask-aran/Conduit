@@ -203,6 +203,15 @@ next load can hang.
 | `stream-budget.mjs` | Tasks over 6.94ms while an answer streams, what ran in them, how evenly the text appeared. Live model call by default; `MODEL=<spec>` selects the Render test profile instead. |
 | `turn-profile.mjs [prompt] [--app \| --phone] [--save <file>]` | Where a streamed Render test profile turn's main-thread time goes, by trace state: % busy, compositor frames drawn and dropped, tasks against 6.94ms, rendering by phase, JS self time by function. Defaults to the gallery's live phone; `--app` uses the app, `--phone` the app at 412x860 and 2.625x with touch. Build with source maps for names. |
 | `resume-reconnect.mjs [--away <ms>]` | How long a page takes to be live again after time in the background. |
+| `markup-*.mjs` | Markup on the interface, papers and sites. `markup-delivery.mjs` and `markup-thread.mjs` run before any Markup change lands. A probe that sends a comment from an artifact addresses it to a chat on a scripted profile: sent to the bar's own choice it goes to the artifact's thread and starts a real model. |
+
+### Sheets
+
+Probe on the owner's test sheet "probe-sheet", in scratch columns Z and beyond, cleared after; read cells with
+`GET /v0/document/<id>?as=cells`. The xlsx round-trip scorecard is
+`node --max-old-space-size=4096 scripts/xlsx-roundtrip.mjs [out dir] [feature] [--excel]` (`--help`; `XLSX_PYTHON`
+names a python with openpyxl, which also reads exported files back). The owner's own workbooks are private: read them
+locally, never copy them into the repo.
 
 ### Frame budget
 
@@ -212,7 +221,8 @@ animation frames. In headed Windows Chrome, drive the page with Playwright
 `devtools.timeline,toplevel` (`stream-budget.mjs --windows` does this). Don't
 use the CLI's `performance_start_trace` for frame numbers on DOM-heavy work:
 it turns on invalidation tracking, which reported ten times the over-budget
-tasks on a KaTeX stream.
+tasks on a KaTeX stream. A tab opened behind another reports `visible` yet runs 7–57 frames a second: bring it to
+the front (`bringToFront`) before timing frames.
 
 For streaming-render faults, replay the Render test profile's KaTeX replies in the
 `test` project and check every frame for a math element removed or emptied,
@@ -322,6 +332,9 @@ Encode the order a harness really says things in, captured, not guessed.
 ## Renderer benchmark and the Conduit harness
 
 `npm run bench:renderer` times the transcript renderer without a server.
+From the repository root, `node scripts/benchmark-backgrounds.mjs <baseline commit> [cpu slowdown]` and
+`benchmark-jbot.mjs` (same arguments) run the old and new components side by side in a tab of the headed Chrome on
+:9222, served by `npm run gallery:dev -- --port 5181 --strictPort`, and write their report under `docs/performance/`.
 `startConduitHarness()` (`test/helpers/conduit-harness.js`) starts a Conduit
 process with a fake Codex app-server for HTTP, WebSocket and restart checks.
 
