@@ -24,6 +24,8 @@ const PT_PER_PX = 0.75;
 const exact = (kept, px, toPx, toFile) => typeof kept === "number" && Math.round(toPx(kept)) === px ? kept : toFile(px);
 // Pixels to a character of a column's width, Excel's for its default font: SheetJS's own guess makes them double on read and six on write.
 const PX_PER_CHAR = 7, STYLES_PER_TAB = 20_000;
+// Excel's standard column, 8.43 characters of Calibri 11.
+const STANDARD_PX = 64;
 // Pictures an import keeps, in bytes as the look holds them (base64), over the workbook.
 const MEDIA_LIMIT = 16 << 20;
 const VOLATILE = /\b(?:TODAY|NOW|RAND|RANDBETWEEN|RANDARRAY)\s*\(/i, FORMATS_PER_TAB = 2000, PASSES = 4;
@@ -240,7 +242,6 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     tab.outline = {};
     for (const [tag] of xml.matchAll(/<row\b[^>]*>/g)) { const level = Number(attr(tag, "outlineLevel") ?? 0), r = Number(attr(tag, "r")) - 1; if (level > 0 && level < 8 && r < tab.rows) tab.outline[r + 1] = level; }
     for (const [tag] of xml.matchAll(/<col\b[^>]*>/g)) { const level = Number(attr(tag, "outlineLevel") ?? 0); if (level > 0 && level < 8) for (let c = Number(attr(tag, "min")) - 1; c < Math.min(Number(attr(tag, "max")), tab.cols); c++) tab.outline[colName(c)] = level; }
-    if (Object.keys(tab.outline).length) keep("grouped rows and columns", Object.keys(tab.outline).length);
     tab.outlinePr = /<outlinePr\b[^>]*>/.exec(xml)?.[0];
     const print = Object.fromEntries([...PRINT, "pageSetUpPr"].flatMap((name) => { const one = elementOf(xml, name); return one ? [[name, one.replace(/\sr:id="[^"]*"/, "")]] : []; }));
     if (Object.keys(print).length) tab.print = print;
@@ -464,9 +465,12 @@ export function exportXlsx(given) {
     }));
     sheet["!ref"] = `A1:${a1(Math.max(0, tab.typed.length - 1), cols - 1)}`;
     // A column without its own width takes the tab's default (`width` alone), where it has one; one with nothing of its own is left out, as a `<col>`
-    // with no width is one Excel draws zero wide.
+    // with no width is one Excel draws zero wide: one written for its group or for being hidden is given Excel's standard width.
     const level = (at) => { const n = tab.look[`outline:${at}`]; return Number.isInteger(n) && n > 0 && n < 8 ? { level: n } : {}; };
-    sheet["!cols"] = Array.from({ length: cols }, (_, c) => { const width = tab.look[`width:${colName(c)}`] ?? tab.look.width; const col = { ...(typeof width === "number" ? { width: exact(tab.look[`exact:${colName(c)}`], width, (chars) => chars * PX_PER_CHAR, (px) => px / PX_PER_CHAR) } : {}), ...(tab.look[`hidden:${colName(c)}`] ? { hidden: true } : {}), ...level(colName(c)) }; return Object.keys(col).length ? col : null; });
+    sheet["!cols"] = Array.from({ length: cols }, (_, c) => {
+      const width = tab.look[`width:${colName(c)}`] ?? tab.look.width, more = { ...(tab.look[`hidden:${colName(c)}`] ? { hidden: true } : {}), ...level(colName(c)) };
+      return typeof width === "number" ? { width: exact(tab.look[`exact:${colName(c)}`], width, (chars) => chars * PX_PER_CHAR, (px) => px / PX_PER_CHAR), ...more } : Object.keys(more).length ? { width: STANDARD_PX / PX_PER_CHAR, ...more } : null;
+    });
     if (!sheet["!cols"].some(Boolean)) delete sheet["!cols"];
     // Each row's height where it has its own, in points (SheetJS writes pixels as points), and the rows hidden.
     // The rows hidden, and those the filter hid when last applied.
