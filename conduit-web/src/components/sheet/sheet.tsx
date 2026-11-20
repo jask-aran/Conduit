@@ -11,6 +11,8 @@ import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSecti
 import { CELLS, COLS, LOOK, ROWS, a1, colIndex, colName, colsOf, fromCsv, key, parseRange, rangeA1, rowsOf, runsOf, valueText, type SheetView } from "@/sheet-format.js";
 import { shiftRefs } from "@/sheet-rules.js";
 import { formatDates } from "@/sheet-formats.js";
+import { daySerial, serialDay } from "@/sheet-types.js";
+import { CalendarPopover } from "@/components/ui/calendar";
 import { SheetFoot } from "./foot";
 import { createSheetTabs } from "./tabs";
 import { ASK_KEY, type SheetAnchor, type SheetBox, type SheetGrid, type SheetGridEvents, type SheetHost, type SheetMarks, type SheetPlace, type SheetRange, type SheetState } from "./host";
@@ -59,6 +61,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const formats = createSheetFormats(look, model, props.host.failed), styles = createSheetStyles(look, model, props.host.failed), types = createSheetTypes(look, model, props.host.failed);
   // A dropdown's list open on its cell, and the options being edited for a range (`type`: the list's, else a new one).
   const [listing, setListing] = createSignal<{ row: number; col: number; box: SheetBox } | null>(null), [editingList, setEditingList] = createSignal<{ range: SheetRange; type?: string; options: readonly DropdownOption[] } | null>(null);
+  const [dating, setDating] = createSignal<{ row: number; col: number; box: SheetBox } | null>(null);
   const [linking, setLinking] = createSignal<{ row: number; col: number; box: SheetBox; text: string; address: string; own: boolean } | null>(null);
   const pills = new Map<string, SheetPill>();
   const pillOf = (_row: number, _col: number, type: string | undefined, shown: string): SheetPill | undefined => {
@@ -170,6 +173,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (plain && event.key === " " && type === "boolean") { event.preventDefault(); toggle(row, col); return true; }
       // Enter and Alt+Down open a dropdown's options.
       if (type?.startsWith("list:") && ((plain && event.key === "Enter") || (event.altKey && !event.ctrlKey && event.key === "ArrowDown"))) { event.preventDefault(); openList(row, col); return true; }
+      if (type === "date" && event.altKey && !event.ctrlKey && event.key === "ArrowDown") { event.preventDefault(); const box = grid()?.bounds({ top: row, bottom: row, left: col, right: col }); if (box) setDating({ row, col, box }); return true; }
       // As a spreadsheet's: Alt+= opens a SUM of the numbers just above (else just left), Ctrl+; today's date, each to be finished in the cell.
       const sum = event.altKey && !event.ctrlKey && !event.metaKey && event.key === "=", today = event.ctrlKey && !event.altKey && !event.shiftKey && event.key === ";";
       if (sum || today) {
@@ -717,6 +721,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
           value={(() => { const now = listing(); return now ? valueText(model()?.value(now.row, now.col) ?? null) : ""; })()} onClose={() => { setListing(null); grid()?.focus(); }}
           onPick={(value) => { const now = listing(); setListing(null); if (now) writes(`Pick in ${a1(now.row, now.col)}`)([{ row: now.row, col: now.col, input: value }]); grid()?.focus(); }}
           onEdit={() => { const now = listing(); setListing(null); if (now) editList({ top: now.row, bottom: now.row, left: now.col, right: now.col }); }} />
+        <CalendarPopover at={(() => { const box = dating()?.box; return box ? new DOMRect(box.left, box.top, box.width, box.height) : null; })()} frame={() => body} onClose={() => { setDating(null); grid()?.focus(); }}
+          value={(() => { const now = dating(), value = now && model()?.value(now.row, now.col); return typeof value === "number" ? serialDay(value) : null; })()}
+          onPick={(day) => { const now = dating(), serial = daySerial(day); setDating(null); if (now && serial !== null) writes(`Pick in ${a1(now.row, now.col)}`)([{ row: now.row, col: now.col, input: String(serial) }]); grid()?.focus(); }} />
         <LinkPrompt at={linking()} frame={() => body} onClose={() => { setLinking(null); grid()?.focus(); }}
           onSave={(text, address) => { const now = linking(); setLinking(null); if (now) history.act(address ? "Link" : "Remove link", () => { if (text !== now.text) write([{ row: now.row, col: now.col, input: text }]); types.setLink(now.row, now.col, address || null); }); grid()?.focus(); }} />
         <DropdownPrompt given={editingList()?.options ?? null} onClose={() => { setEditingList(null); grid()?.focus(); }}

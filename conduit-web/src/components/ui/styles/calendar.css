@@ -1,0 +1,12 @@
+/* calendar.tsx: imported by it, so it loads with the piece. Days are menu rows' grammar: the cursor washed, the chosen day current, no ring. */
+.ui-calendar-head { align-items: center; padding-block: var(--space-xs); }
+.ui-calendar-head > small { display: inline-flex; gap: var(--space-2xs); }
+.ui-calendar { display: grid; grid-template-columns: repeat(7, minmax(var(--control-xs), 1fr)); gap: var(--space-2xs); padding: 0 var(--space-xs) var(--space-xs); outline: none; }
+.ui-calendar-weekday { display: grid; height: var(--control-xs); place-items: center; color: var(--muted-foreground); font: var(--weight-rest) var(--text-label) var(--font-data); text-transform: uppercase; }
+.ui-calendar-day { position: relative; display: grid; height: var(--control-sm); place-items: center; border: 0; border-radius: var(--radius-control); background: none; padding: 0; color: inherit; font: inherit; font-size: var(--text-row); font-variant-numeric: tabular-nums; cursor: default; outline: none; }
+.ui-calendar-day[data-outside] { color: var(--muted-foreground); }
+.ui-calendar-day[data-highlighted] { background: var(--tint); color: var(--foreground); }
+.ui-calendar-day[data-checked] { color: var(--foreground); font-weight: var(--weight-current); }
+.ui-calendar-day[data-today]::after { content: ""; position: absolute; bottom: var(--space-2xs); width: var(--space-xs); height: var(--space-xs); border-radius: var(--radius-round); background: currentColor; }
+.ui-date-field { display: flex; align-items: center; gap: var(--space-xs); }
+.ui-date-field > .ui-input { min-width: 0; flex: 1; }
