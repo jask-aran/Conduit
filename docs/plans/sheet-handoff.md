@@ -246,7 +246,7 @@ Open after the walk:
 - Opening a sheet: the grid, tabs and canvases still appear about 350 ms after the pane's first paint (the grid mounts once the hub's copy and the
   model are held); the margin's height jumps with them.
 
-## Keys, against Excel (branch `sheet-keys`, 2026-11-20; typechecked, not seen in a browser)
+## Keys, against Excel (branches `sheet-keys`, `sheet-keys2`, 2026-11-20; `sheet-keys2` walked in headless Chrome)
 
 The list a person sees is `components/sheet/keys.tsx` (Ctrl+/, or the palette's Shortcuts, whose label was "Paper shortcuts"); keep it beside the
 handlers: grid.ts `onKeyDown`, sheet.tsx `events.key` (Glide's key event, no `code`) and the section's keydown (a real event, by `code`), formula-editor.tsx.
@@ -254,19 +254,21 @@ handlers: grid.ts `onKeyDown`, sheet.tsx `events.key` (Glide's key event, no `co
   merge is one cell. Enter after Tab entries goes back under the first, but only through the editor's commits.
 - Conduit kept: Ctrl+G (leader; F5 goes to the name box instead), Ctrl+. (workspace panel; Excel's corners of the selection is not offered). The sheet
   took Ctrl+/ (the paper's Block menu chord) for its keys list.
-- The browser keeps Ctrl+1, Ctrl+5, Ctrl+9 (tab switching), F11 (full screen) and Ctrl+T in a Chrome tab; they work in the desktop app only.
-  Whether Chrome lets the page keep F6 and Shift+F11 is unchecked.
+- A Chrome tab keeps for itself only its reserved keys (Ctrl+T, Ctrl+N, Ctrl+W, Ctrl+Tab, Ctrl+Page Down/Up, Ctrl+Shift+T/N/W/Q); F6, F5,
+  Shift+F11 and Ctrl+1–9 reach the page when it holds them back (Chromium's reserved list, from memory: headless Chrome cannot show it). Tabs are
+  stepped with Ctrl+Shift+Page Down/Up as well (Google Sheets' keys) for a tab.
 - Speed: grid.ts's per-column run index and `lastUsed` (sheet-draw) are filled from `jump.ts`, a byte a cell a column of which cells hold anything,
   built from the doc's filled cells in idle slices after each change of rows, columns or tab; Ctrl+A and Ctrl+Shift+* find the current region on it
   (`regionAround`, filter.tsx). Node harness, 50,000 × 3 filled: Ctrl+Down 13–31 ms → 0.4–0.9 ms, Ctrl+End 120–205 ms → 0.1 ms, Ctrl+A 40–51 ms
   → 2.5–3 ms; a jump before the idle build has finished builds it at once (30 ms).
 
-Action audit, pointer-only today (no Excel key, or none given yet): Ask/Comment have keys (Ctrl+Alt+M, Shift+F2); still pointer-only are Paste transposed,
-Freeze rows/columns (Excel's Alt W F F only for Unfreeze), Insert below/right, Move rows/columns, Clear all, Sort sheet, Clear filter from column, the Data
-submenu (Remove duplicates, Trim, Split text), Cell type (checkbox, date, dropdown, Dropdown…), the tab menu's Duplicate, Tab colour, Move, Hide, Unhide,
-Delete, the foot's All tabs, View settings…, conditional rules (Alt H L), and chart kinds (ribbon). Every menu is reachable by Shift+F10 / the Menu key and
-its search field (type to find a row, Down into the rows, Enter runs, Esc back to the grid).
+Every action is reachable by keyboard: the cell menu (Shift+F10, Menu key) searches its submenus' rows, the ribbon's tools and the dialogs (a searched
+submenu row stands in the list with its submenu's name); Alt+Q (Excel's Search) opens the command palette, which lists all of them for the selection
+(`SheetMarks.actions`, the palette's `artifact-actions` source); F6 / Shift+F6 go round grid, ribbon and tabs; in the ribbon Left/Right/Home/End, Esc back;
+on a tab Left/Right, Enter, F2, Shift+F10 for its menu (Duplicate, Tab colour, Move, Hide, Delete), Esc back. Every menu and dialog gives the keyboard
+back to the grid as it shuts (checked for each in headless Chrome).
 
-Open: the cell menu opened by key is a synthetic `contextmenu` on the grid's element (sheet.tsx `openMenu`), unseen; whether the Menu key also fires
-Chrome's own `contextmenu` (opening it twice) is unchecked. Typing then Enter in a selected block leaves the block (the editor's commit selects one cell).
-Page Up/Down, Home and Ctrl+Home are Glide's own; Ctrl+Shift+Home was not read. Show formulas (Ctrl+`), F4 repeat, F8 / Shift+F8, Ctrl+. are not built.
+Open: not built: Show formulas (Ctrl+`), F4 repeat outside the editor, F8 / Shift+F8, Ctrl+F3 (there is no names dialog), Excel's Esc in a submenu
+going back one level (Esc shuts the whole menu, the keyboard back on the grid). Ctrl+A at 50,000 rows was not timed in a page. Ctrl+Shift+V was not seen
+(headless has no clipboard). Key-to-focus in headless Chrome: Ctrl+1, Find, Ctrl+-, palette 5–16 ms; Ctrl+K about 30; cell menu, filter, tab menu,
+ribbon menus, rules, shortcuts list 30–100 ms, mostly headless frame pacing (the main thread's work before focus is about 20–26 ms for the cell menu).

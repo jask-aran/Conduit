@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { Empty, Frost, Icons, Notice } from "@/components/ui";
 import { sheetLineIcons as LineIcons, sheetMergeIcons as MergeIcons, sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
-import { DedupePrompt, focusSearch, SheetMenu, ShiftPrompt, SplitPrompt, type SheetMenuEntry, type SheetShiftWay } from "./cell-menu";
+import { DedupePrompt, focusSearch, menuAt, SheetMenu, ShiftPrompt, SplitPrompt, type SheetMenuEntry, type SheetShiftWay } from "./cell-menu";
 import { sheetDataIcons as DataIcons } from "@/components/ui/sheet-icons";
 import { toast } from "@/components/ui/notifications";
 import { createDecisionScope } from "@/components/ui/decision-dialog";
@@ -194,6 +194,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       // Shift+F2 comments on the selection, Alt+F1 asks for a chart of it.
       if (event.key === "F2" && event.shiftKey && bare) { event.preventDefault(); props.onComment?.(); return true; }
       if (event.key === "F1" && event.altKey && !event.ctrlKey && !event.metaKey) { event.preventDefault(); askChart(); return true; }
+      // Alt+Q searches every action by name, as Excel's Search box: the command palette, which lists the sheet's (`actions`).
+      if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === "q") { event.preventDefault(); window.dispatchEvent(new Event("conduit:open-palette")); return true; }
       // Alt+Down on a filter's header cell opens its list.
       if (event.altKey && !event.ctrlKey && event.key === "ArrowDown" && filters.mark(row, col)) { event.preventDefault(); const box = grid()?.bounds({ top: row, bottom: row, left: col, right: col }); if (box) { filters.reapply(); setFiltering({ col, box }); } return true; }
       // Ctrl+' and Ctrl+Shift+" type the formula, or the value, of the cell above; Ctrl+Shift+; the time (by key: Glide gives no code).
@@ -316,6 +318,34 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     const offKeys = sequences.attach(into), offBrush = brush.attach(into), offEdges = dragRowEdges(into, grid, (row, height) => history.act("Row height", () => sizes.setHeights(span("rows", row), height / zoom())));
     onCleanup(() => { offKeys(); offBrush(); offEdges(); });
   });
+  // F6 and Shift+F6 go round the grid, the ribbon and the tabs, as Excel's go round its panes; in the ribbon Left and Right (Home, End) go along
+  // its tools as they stand on screen and Esc goes back to the grid. Native listeners: the ribbon is portalled into the slot, so its keys reach
+  // the section's own handler by way of the pane, not the slot.
+  createEffect(() => {
+    const ribbon = slot();
+    if (!ribbon || !root) return;
+    const section = root, parts = () => [island(), ribbon, section.querySelector<HTMLElement>(".ui-spreadsheet-tabs")];
+    const enter = [() => grid()?.focus(), () => (ribbon.querySelector<HTMLElement>("[data-set=edit] button:not([disabled])") ?? ribbon.querySelector<HTMLElement>("button:not([disabled])"))?.focus(),
+      () => section.querySelector<HTMLElement>(".ui-spreadsheet-tabs [aria-selected=true] .ui-tab-open")?.focus()];
+    const round = (event: KeyboardEvent) => {
+      if (event.key !== "F6" || event.ctrlKey || event.altKey || event.metaKey) return;
+      const from = parts().findIndex((part) => part?.contains(event.target as Node));
+      if (from < 0) return;
+      event.preventDefault();
+      enter[(from + (event.shiftKey ? 2 : 1)) % 3]!();
+    };
+    const keys = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.altKey || event.metaKey || (event.target as HTMLElement).closest("input, textarea, [role=radiogroup], [role=menu], [role=dialog]")) return;
+      if (event.key === "Escape") { event.preventDefault(); return grid()?.focus(); }
+      const by = { ArrowRight: 1, ArrowLeft: -1, Home: -Infinity, End: Infinity }[event.key];
+      if (!by) return;
+      const tools = [...ribbon.querySelectorAll<HTMLElement>("button:not([disabled])")].filter((one) => one.offsetParent).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+      const at = tools.indexOf(event.target as HTMLElement), to = tools[Math.max(0, Math.min(tools.length - 1, Number.isFinite(by) ? at + by : by > 0 ? tools.length - 1 : 0))];
+      if (to) { event.preventDefault(); to.focus(); }
+    };
+    section.addEventListener("keydown", round); ribbon.addEventListener("keydown", keys);
+    onCleanup(() => { section.removeEventListener("keydown", round); ribbon.removeEventListener("keydown", keys); });
+  });
   const cellBox = createMemo<JSX.CSSProperties>((was) => {
     scrolled();
     const now = editor.editing(), made = grid(), into = island();
@@ -431,6 +461,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     reveal: (address) => { const range = parseRange(tabs.reveal(address)); if (range) grid()?.select(range); },
     focus: () => grid()?.focus(),
     shortcuts: () => setShowingKeys(true),
+    actions: () => actions(),
     history: { undo: history.undo, redo: history.redo, canUndo: () => (stepped(), history.canUndo()), canRedo: () => (stepped(), history.canRedo()), steps: () => (stepped(), history.steps()) },
   };
   // Highlights are drawn by the grid: told again once it is made.
@@ -516,9 +547,36 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const openMenu = () => {
     const area = at(), made = grid(), into = island();
     if (!area || !made || !into) return;
-    const lines = made.lines(), box = made.bounds({ top: area.top, bottom: area.top, left: area.left, right: area.left }) ?? into.getBoundingClientRect();
-    setMenu(lines === "rows" ? { rows: area } : lines === "cols" ? { cols: area } : { rows: { ...area, left: 0, right: 0 }, cols: { ...area, top: 0, bottom: 0 } });
-    into.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: box.left + Math.min(box.width / 2, 24), clientY: box.top + box.height }));
+    const box = made.bounds({ top: area.top, bottom: area.top, left: area.left, right: area.left }) ?? into.getBoundingClientRect();
+    aimMenu(area);
+    menuAt(into, box.left + Math.min(box.width / 2, 24), box.top + box.height);
+  };
+  const aimMenu = (area: SheetRange) => { const lines = grid()?.lines(); setMenu(lines === "rows" ? { rows: area } : lines === "cols" ? { cols: area } : { rows: { ...area, left: 0, right: 0 }, cols: { ...area, top: 0, bottom: 0 } }); };
+  // What only a search of the cell menu, or the command palette, finds besides its rows: the ribbon's tools and the sheet's dialogs. Each runs as its
+  // menu row or key does, the same named step.
+  const moreActions = (): SheetMenuEntry[] => [
+    ...tools.filter((tool) => !tool.pick).map((tool) => ({ label: tool.label, keys: tool.keys, meta: tool.menu, run: tool.run })),
+    { label: "Conditional formatting…", keys: ["Alt", "H", "L"], run: () => { opening = () => setRuling(at()); } },
+    { label: "Find", keys: ["Ctrl", "F"], run: () => { opening = () => find.show(false); } },
+    { label: "Replace", keys: ["Ctrl", "H"], run: () => { opening = () => find.show(true); } },
+    { label: "Go to…", keys: ["F5"], run: () => { opening = () => addressField?.focus(); } },
+    { label: "Insert link…", keys: ["Ctrl", "K"], run: () => { const area = at(); if (area) opening = () => openLink(area.top, area.left); } },
+    ...props.onChart ? [{ label: "Make chart", keys: ["Alt", "F1"], run: () => askChart() }] : [],
+    { label: "New tab", keys: ["Shift", "F11"], run: () => addTab(tabs) },
+    { label: "Duplicate tab", run: () => { const id = tabs.shown(); if (id) void tabs.op({ op: "duplicate-tab", tab: id }); } },
+    { label: "Sheet shortcuts", keys: ["Ctrl", "/"], run: () => { opening = () => setShowingKeys(true); } },
+  ];
+  // Every action of the cell menu at the selection, and the rest, in one list (the command palette's): run from there, what a row leaves to the menu's
+  // shutting (a prompt it opens) runs a frame on, and the keyboard is the grid's again unless that took it.
+  const actions = () => {
+    const area = at();
+    if (!area) return [];
+    aimMenu(area);
+    const flat = (list: SheetMenuEntry[], under?: string): SheetMenuEntry[] => list.flatMap((one) => one.sub ? flat(typeof one.sub === "function" ? one.sub() : one.sub, one.label) : [{ ...one, meta: one.meta ?? under }]);
+    return flat([...menuGroups().flatMap((group) => group || []), ...moreActions()]).filter((one) => !one.disabled).map((one) => ({ label: one.label, keys: one.keys, meta: one.meta, run: () => {
+      one.run?.(); const open = opening; opening = undefined;
+      requestAnimationFrame(() => { if (open) open(); else if (!document.activeElement?.matches("input, textarea, [contenteditable], [role=dialog] *, [role=alertdialog] *")) grid()?.focus(); });
+    } }));
   };
   // The current region round a cell (Ctrl+A, Ctrl+Shift+*), found on the index of filled cells.
   const regionOf = (row: number, col: number) => { const sheet = model(); return sheet && filled ? regionAround(sheet.size(), filled.has, row, col) : filters.around(row, col); };
@@ -686,13 +744,6 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   createEffect(on(tabs.shown, () => setFiltering(null), { defer: true }));
   return <section ref={(element) => { root = element; art(element); }} class="ui-spreadsheet" aria-label={props.name} data-margin={props.marginEmpty ? "none" : "beside"}
     onKeyDown={(event) => {
-      // F6 takes the keyboard from the grid to the ribbon, and back.
-      if (event.key === "F6" && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        const ribbon = slot(), inGrid = island()?.contains(event.target as Node);
-        if (inGrid) { const first = ribbon?.querySelector<HTMLElement>("button:not([disabled]), [tabindex='0']"); if (first) { event.preventDefault(); first.focus(); } }
-        else if (ribbon?.contains(event.target as Node)) { event.preventDefault(); grid()?.focus(); }
-        return;
-      }
       if (!(event.ctrlKey || event.metaKey) || !island()?.contains(event.target as Node)) return;
       // Ctrl+/ lists the sheet's keys; Ctrl+1 asks for a number format of the person's own (in a browser tab, the browser keeps Ctrl+1 and Ctrl+9).
       if (!event.altKey && !event.shiftKey && event.code === "Slash") { event.preventDefault(); return setShowingKeys(true); }
@@ -775,7 +826,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
             opening = undefined; event.preventDefault();
             if (open) open(); else requestAnimationFrame(() => { const now = document.activeElement; if (!now?.matches("input, textarea, [contenteditable], [role=dialog] *, [role=alertdialog] *")) grid()?.focus(); });
           }}>
-            <SheetMenu groups={menuGroups()} after={<>
+            <SheetMenu groups={menuGroups()} more={moreActions} after={<>
               <Show when={picked()}>{(range) => <Show when={range().bottom > range().top || range().right > range().left}><MenuSection>
                 <Show when={!merges.is(range())}>
                   <MenuRow icon={<MergeIcons.merge />} keys={["Alt", "H", "M", "C"]} onSelect={() => merge("center", range())}>Merge &amp; Center</MenuRow>

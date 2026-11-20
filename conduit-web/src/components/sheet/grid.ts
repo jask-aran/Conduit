@@ -264,6 +264,20 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     if (!drawn && cell[0] === now.cell[0] && cell[1] === now.cell[1]) return given;
     return { ...given, current: { ...now, cell, range: drawn ? rect(drawn) : now.range } };
   };
+  /** Enter (`down`) or Tab in a selection of more than one cell: the active cell goes round it, the selection kept; false where it is one cell. */
+  const round = (p: Part, down: boolean, by: number) => {
+    const cell = p.current.current?.cell, block = p.current.current?.range;
+    if (!cell || !block || block.width * block.height < 2 || p.current.columns.length || p.current.rows.length) return false;
+    // A lone merge is one cell: Enter and Tab leave it from its far edge.
+    const merge = mergeAt(p.map.sheet(cell[1]), cell[0]);
+    if (merge && block.x === merge.left && block.x + block.width - 1 === merge.right && p.map.sheet(block.y) === merge.top && p.map.sheet(block.y + block.height - 1) === merge.bottom) return false;
+    const right = block.x + block.width - 1, bottom = block.y + block.height - 1, across = (col: number) => { const next = nextShown(col, by); return next === col || next < block.x || next > right ? (by > 0 ? shownAt(block.x) : right) : next; };
+    let [col, row] = cell;
+    if (down) { row += by; if (row < block.y || row > bottom) { row = by > 0 ? block.y : bottom; col = across(col); } }
+    else { const next = nextShown(col, by); if (next !== col && next >= block.x && next <= right) col = next; else { col = by > 0 ? shownAt(block.x) : right; row = row + by < block.y ? bottom : row + by > bottom ? block.y : row + by; } }
+    choose(p, { ...p.current, current: { ...p.current.current!, cell: [col, row] } }); api.show(p.map.sheet(row), col);
+    return true;
+  };
   /** The selection from the active cell to a drawn cell, the active cell kept, as Shift and a jump make it. */
   const extendTo = (p: Part, cell: Item, to: readonly [number, number]) => {
     choose(p, { columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: { cell: [cell[0], cell[1]], range: { x: Math.min(cell[0], to[0]), y: Math.min(cell[1], to[1]), width: Math.abs(cell[0] - to[0]) + 1, height: Math.abs(cell[1] - to[1]) + 1 }, rangeStack: [] } });
@@ -433,21 +447,17 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         api.select({ top: row, bottom: row, left: col, right: col });
         return;
       }
+      // Shift+Page Down and Up move the selection's far edge a screen down or up, the active cell kept.
+      if ((event.key === "PageDown" || event.key === "PageUp") && event.shiftKey && !event.altKey && !ctrl && block) {
+        event.cancel();
+        const farCol = block.x === cell[0] ? block.x + block.width - 1 : block.x, farRow = block.y === cell[1] ? block.y + block.height - 1 : block.y;
+        return extendTo(p, cell, [farCol, Math.max(0, Math.min((p === head ? size.head : size.rows) - 1, farRow + (event.key === "PageDown" ? 1 : -1) * Math.max(1, view.height - 1)))]);
+      }
       // Enter and Tab go on to the next cell down or right (Shift: back), as a spreadsheet's; in a selection of more than one cell they go round
       // it, the selection kept, down each column (Enter) or along each row (Tab).
       if ((event.key === "Enter" || event.key === "Tab") && !ctrl && !event.altKey) {
         const down = event.key === "Enter", by = event.shiftKey ? -1 : 1;
-        // A lone merge is one cell: Enter and Tab leave it from its far edge.
-        const merge = mergeAt(p.map.sheet(cell[1]), cell[0]), lone = merge && block && block.x === merge.left && block.x + block.width - 1 === merge.right && p.map.sheet(block.y) === merge.top && p.map.sheet(block.y + block.height - 1) === merge.bottom;
-        if (block && !lone && block.width * block.height > 1 && !p.current.columns.length && !p.current.rows.length) {
-          event.cancel(); event.preventDefault();
-          const right = block.x + block.width - 1, bottom = block.y + block.height - 1, across = (col: number) => { const next = nextShown(col, by); return next === col || next < block.x || next > right ? (by > 0 ? shownAt(block.x) : right) : next; };
-          let [col, row] = cell;
-          if (down) { row += by; if (row < block.y || row > bottom) { row = by > 0 ? block.y : bottom; col = across(col); } }
-          else { const next = nextShown(col, by); if (next !== col && next >= block.x && next <= right) col = next; else { col = by > 0 ? shownAt(block.x) : right; row = row + by < block.y ? bottom : row + by > bottom ? block.y : row + by; } }
-          choose(p, { ...p.current, current: { ...p.current.current!, cell: [col, row] } }); api.show(p.map.sheet(row), col);
-          return;
-        }
+        if (round(p, down, by)) { event.cancel(); event.preventDefault(); return; }
         if (down) {
           event.cancel();
           // From a merge, past its edge; across the frozen rows' edge, into the other part.
@@ -893,6 +903,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     theme: (next) => { look = next; drive.look?.(look); },
     scroll: (to) => { if (to) { const drawn = clip(body, { top: to.row, bottom: to.row, left: to.col, right: to.col }); body.editor?.scrollTo(to.col, drawn?.top ?? 0, "both", 0, 0, { hAlign: "start", vAlign: "start" }); } return { row: body.map.sheet(body.view.y), col: body.view.x }; },
     focus: () => owner.editor?.focus(),
+    round: (down, by) => round(owner, down, by),
     destroy: () => { stop(); element.removeEventListener("pointerdown", sweep); element.removeEventListener("pointerdown", extend, true); element.removeEventListener("dblclick", autofit); removeEventListener("pointerup", ctrl, true); removeEventListener("copy", clipped, true); removeEventListener("cut", clipped, true); removeEventListener("paste", pasted, true); root.unmount(); },
   };
   return api;

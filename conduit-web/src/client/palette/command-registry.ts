@@ -11,7 +11,7 @@ export interface PaletteContext {
   devClient: boolean;
   chatId: string | null;
   /** The artifact whose pane is being worked in, and which of ARTIFACT_COMMANDS it offers: its commands are listed in the chat's place. */
-  artifact?: { offers: Partial<Record<ArtifactCommand, unknown>> } | null;
+  artifact?: { offers: Partial<Record<ArtifactCommand, unknown>>; actions?(): { label: string; keys?: string[]; meta?: string; run(): void }[] } | null;
   project?: Project;
   projects: Project[];
   templates: Template[];
@@ -446,6 +446,14 @@ export const paletteSources: PaletteSource[] = [{
       run: (actions) => actions.chooseEffort(level),
     }));
   },
+}, {
+  // The artifact's own actions by name (a sheet's cell menu, tools and dialogs), each running as its menu row does.
+  id: "artifact-actions",
+  page: null,
+  commands: (context) => (context.artifact?.actions?.() ?? []).map((action) => ({
+    id: `artifact-action:${action.meta ?? ""}:${action.label}`, group: "artifact", label: action.meta ? `${action.meta} › ${action.label}` : action.label,
+    icon: "command", keywords: [], shortcut: action.keys ? action.keys.join(action.keys.filter((key) => !["Ctrl", "Alt", "Shift"].includes(key)).length > 1 ? " " : "+") : null, searchValue: `${action.meta ?? ""} ${action.label}`, run: () => action.run(),
+  })),
 }, {
   id: "chats",
   page: "chat-search",

@@ -12,7 +12,12 @@ import type { SheetBox } from "./host";
 export type SheetMenuEntry = { label: string; icon?: JSX.Element; keys?: string[]; meta?: string; destructive?: boolean; disabled?: boolean; run?(): void; sub?: SheetMenuEntry[] | (() => SheetMenuEntry[]) };
 
 const subOf = (entry: SheetMenuEntry) => typeof entry.sub === "function" ? entry.sub() : entry.sub;
-const has = (entry: SheetMenuEntry, query: string): boolean => entry.label.toLowerCase().includes(query) || Boolean(subOf(entry)?.some((one) => has(one, query)));
+// Searched, a submenu's rows stand in the list themselves (the submenu's name beside them), so Enter runs the first: every row of one whose name
+// matches, else those of its rows that do.
+const found = (entry: SheetMenuEntry, query: string): SheetMenuEntry[] => {
+  const named = entry.label.toLowerCase().includes(query), sub = subOf(entry);
+  return sub ? sub.flatMap((one) => named ? [one] : found(one, query)).map((one) => ({ ...one, meta: one.meta ?? entry.label })) : named ? [entry] : [];
+};
 // The typing is the field's: the menu's own keys would pick a row by its first letter. Down goes into the rows, Enter picks the first one shown.
 const keys = (event: KeyboardEvent) => {
   if (event.key === "Escape" || event.key === "Tab") return;
@@ -34,17 +39,36 @@ export const focusSearch = (event: Event) => {
   if (field && !matchMedia(PHONE_LAYOUT_QUERY).matches) { event.preventDefault(); setTimeout(() => field.focus()); }
 };
 
-/** The cell menu's groups under a field that keeps the rows (or submenus holding them) whose names hold what is typed. `after`: sections shown while nothing is. */
-export function SheetMenu(props: { groups: (SheetMenuEntry[] | false | null | undefined)[]; after?: JSX.Element }) {
-  const [query, setQuery] = createSignal(""), phone = matchMedia(PHONE_LAYOUT_QUERY).matches;
-  const shown = () => { const asked = query().trim().toLowerCase(); return props.groups.flatMap((group) => { const kept = group ? group.filter((entry) => !asked || has(entry, asked)) : []; return kept.length ? [kept] : []; }); };
+/** A context menu opened from the keyboard (Shift+F10, the Menu key) on `target` at a point. The browser's own contextmenu for the same key (Windows
+ * sends one as the key comes up) is held back: it would open the menu a second time, at the element's middle. */
+export const menuAt = (target: Element, x: number, y: number) => {
+  target.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+  const twice = (event: Event) => { if (event.isTrusted && !(event as PointerEvent).pointerType) { event.preventDefault(); event.stopPropagation(); } };
+  window.addEventListener("contextmenu", twice, true); setTimeout(() => window.removeEventListener("contextmenu", twice, true), 800);
+};
+
+const FIRST = 16;
+/**
+ * The cell menu's groups under a field that keeps the rows (and submenus' rows) whose names hold what is typed. `after`: sections shown while nothing
+ * is; `more`: rows found only by a search (the ribbon's tools, which `after` shows as submenus).
+ */
+export function SheetMenu(props: { groups: (SheetMenuEntry[] | false | null | undefined)[]; after?: JSX.Element; more?: () => SheetMenuEntry[] }) {
+  const [query, setQuery] = createSignal(""), [whole, setWhole] = createSignal(false), phone = matchMedia(PHONE_LAYOUT_QUERY).matches;
+  // The rows past the first screenful are made the frame after it is shown, so it opens in one: searching and the arrows reach them by then.
+  requestAnimationFrame(() => setTimeout(() => setWhole(true)));
+  const shown = () => {
+    const asked = query().trim().toLowerCase();
+    if (!asked && whole()) return props.groups.filter((group): group is SheetMenuEntry[] => Boolean(group && group.length));
+    if (!asked) { let left = FIRST; return props.groups.flatMap((group) => { const kept = group ? group.slice(0, Math.max(0, left)) : []; left -= kept.length; return kept.length ? [kept] : []; }); }
+    return [...props.groups, props.more?.()].flatMap((group) => { const kept = group ? group.flatMap((entry) => found(entry, asked)) : []; return kept.length ? [kept] : []; });
+  };
   const row = (entry: SheetMenuEntry) => <MenuRow icon={entry.icon} keys={entry.keys} meta={entry.meta} destructive={entry.destructive} disabled={entry.disabled} onSelect={() => entry.run?.()}>{entry.label}</MenuRow>;
   return <>
     <SearchSection placeholder="Search the menu" value={query()} onInput={setQuery} field={{ "aria-label": "Search the menu", onKeyDown: keys }} />
     <For each={shown()}>{(group) => <MenuSection><For each={group}>{(entry) => entry.sub
       ? <MenuSub phone={phone}><MenuSubTrigger icon={entry.icon} meta={entry.meta}>{entry.label}</MenuSubTrigger><MenuSubContent><MenuSection><For each={subOf(entry)}>{row}</For></MenuSection></MenuSubContent></MenuSub>
       : row(entry)}</For></MenuSection>}</For>
-    <Show when={!query().trim()}>{props.after}</Show>
+    <Show when={!query().trim() && whole()}>{props.after}</Show>
   </>;
 }
 
