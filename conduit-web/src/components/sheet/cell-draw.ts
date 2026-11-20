@@ -15,7 +15,8 @@ import { wrapLines } from "./wrap";
 
 /** What the grid's own cells carry for this (grid.ts TextCell). */
 /** `block`: a row of a merge over several rows, drawn here against the merge's box (grid.ts). */
-export type StyledCell = { worn?: SheetCellStyle; frozen?: boolean; displayData?: string; contentAlign?: "left" | "right" | "center"; block?: unknown; pill?: SheetPill; spill?: SheetSpill; link?: string };
+/** `arrow`: a date cell's, at its right end, which opens its calendar; `mark`: a filter's caret there (grid.ts). The text keeps clear of either. */
+export type StyledCell = { worn?: SheetCellStyle; frozen?: boolean; displayData?: string; contentAlign?: "left" | "right" | "center"; block?: unknown; pill?: SheetPill; spill?: SheetSpill; link?: string; arrow?: boolean; mark?: number };
 /** Text running on into an empty cell from a filled one `offset` pixels to its left, in that cell's font and ink (none: the grid's). */
 export type SheetSpill = { text: string; offset: number; font?: string; ink?: string };
 /** A dropdown cell's value as a pill in its option's ink (none: a plain wash); `known` false marks a value not among the options. One object for each, made once (sheet.tsx). */
@@ -55,11 +56,11 @@ export function createCellLook(look: SheetLook) {
   const text = (args: Parameters<DrawCellCallback>[0], style: SheetCellStyle, cell: StyledCell) => {
     if (style.rotate) return turned(args, style, cell.displayData!);
     const { ctx, rect: whole, theme: drawn } = args, padX = drawn.cellHorizontalPadding, padY = drawn.cellVerticalPadding, shown0 = cell.displayData!;
-    // An indent level is three of the font's zeros wide, from the side the text is aligned to; shrink to fit draws the text smaller until it fits.
+    // An indent level is three of the font's spaces wide (Excel's), from the side the text is aligned to; shrink to fit draws the text smaller until it fits.
     let font = `${drawn.baseFontStyle} ${drawn.fontFamily}`, shown = shown0;
     const was = ctx.font;
     // A kept rule's icon stands at the cell's left, the text in the room past it.
-    const indent = style.indent ? style.indent * 3 * measureTextCached("0", ctx, font).width : 0, right = cell.contentAlign === "right", room = style.icon ? iconSize(whole.height) + padX : 0;
+    const indent = style.indent ? style.indent * 3 * measureTextCached(" ", ctx, font).width : 0, right = cell.contentAlign === "right", room = style.icon ? iconSize(whole.height) + padX : 0;
     const rect = indent || room ? { ...whole, x: whole.x + room + (right ? 0 : indent), width: whole.width - indent - room } : whole;
     if (style.shrink && !style.wrap) { const room = rect.width - 2 * padX, wide = measureTextCached(shown, ctx, font).width; if (wide > room && room > 0) { font = font.replace(/([\d.]+)px/, (_, px: string) => `${Math.max(1, Math.floor(Number(px) * room / wide * 10) / 10)}px`); ctx.font = font; } }
     // Excel's Fill repeats the text across the cell as many whole times as fit.
@@ -93,6 +94,13 @@ export function createCellLook(look: SheetLook) {
     if (clip) ctx.restore();
     ctx.font = was;
   };
+  // The arrow at a cell's right end that opens its options or calendar.
+  const drawArrow = (ctx: CanvasRenderingContext2D, rect: { x: number; y: number; width: number; height: number }, padX: number) => {
+    const arrow = Number(look.grid.headerIconSize) / 2, x = rect.x + rect.width - padX - arrow, y = rect.y + rect.height / 2 - arrow / 4, was = ctx.fillStyle;
+    ctx.fillStyle = String(look.grid.textMedium);
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + arrow, y); ctx.lineTo(x + arrow / 2, y + arrow / 2); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = was;
+  };
   // The value in a rounded wash of its ink, and the arrow that opens the options at the cell's right end; a value not among them in plain text, marked.
   const pill = (args: Parameters<DrawCellCallback>[0], cell: StyledCell, { ink, known }: SheetPill) => {
     const { ctx, rect, theme: drawn } = args, padX = drawn.cellHorizontalPadding, font = `${drawn.baseFontStyle} ${drawn.fontFamily}`, shown = cell.displayData ?? "";
@@ -106,9 +114,7 @@ export function createCellLook(look: SheetLook) {
     }
     ctx.fillStyle = ink0;
     if (shown) { ctx.save(); ctx.beginPath(); ctx.rect(rect.x, rect.y, padX + room, rect.height); ctx.clip(); ctx.fillText(shown, rect.x + padX + 0.5, middle + getMiddleCenterBias(ctx, font)); ctx.restore(); }
-    const x = rect.x + rect.width - padX - arrow, y = middle - arrow / 4;
-    ctx.fillStyle = String(look.grid.textMedium);
-    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + arrow, y); ctx.lineTo(x + arrow / 2, y + arrow / 2); ctx.closePath(); ctx.fill();
+    drawArrow(ctx, rect, padX);
     if (shown && !known) { ctx.fillStyle = look.error; ctx.beginPath(); ctx.moveTo(rect.x + 1, rect.y + 1); ctx.lineTo(rect.x + 1 + look.corner, rect.y + 1); ctx.lineTo(rect.x + 1, rect.y + 1 + look.corner); ctx.closePath(); ctx.fill(); }
     ctx.restore();
     ctx.fillStyle = ink0;
@@ -136,8 +142,12 @@ export function createCellLook(look: SheetLook) {
     const cell = args.cell as StyledCell, style = cell.worn, shown = style?.bare ? "" : cell.displayData;
     if (style?.bar) bar(args, style.bar);
     if (style?.icon) drawIcon(args.ctx, args.rect, style.icon, args.theme.cellHorizontalPadding);
+    // A date's arrow or a filter's caret at the right end: the text is drawn in the room left of it.
+    const end = cell.arrow || cell.mark ? Number(look.grid.headerIconSize) / 2 + args.theme.cellHorizontalPadding : 0;
     if (cell.pill) pill(args, cell, cell.pill);
+    else if (shown && end && cell.contentAlign === "right") text({ ...args, rect: { ...args.rect, width: args.rect.width - end } }, style ?? PLAIN, cell);
     else if (shown && (style?.custom || cell.block || cell.link || shown.includes(SHEET_FILL))) text(args, style ?? PLAIN, cell); else if (!style?.bare) content();
+    if (cell.arrow) drawArrow(args.ctx, args.rect, args.theme.cellHorizontalPadding);
     if (cell.spill) spill(args, cell.spill);
     if (!style?.edges && !cell.frozen && !style?.diagonal) return;
     // The grid keeps note of the ink it set for a column's text, so it is put back.

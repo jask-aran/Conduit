@@ -48,6 +48,8 @@ export interface SheetStyles {
   lines(row: number, col: number, text: string, look: SheetLook): number;
   /** How wide a cell's text is drawn in its font: its widest line, or the width it wraps to. */
   width(row: number, col: number, text: string, look: SheetLook): number;
+  /** The rows holding a cell that wraps by its own style (a wrap, or Excel's justify or distributed): read from the styles' index, not the tab. */
+  wrapped(): number[];
   /** The rows of the range a wrapped cell would need more than one line in. */
   taller(range: SheetRange, look: SheetLook): number[];
 }
@@ -79,7 +81,8 @@ export function createSheetStyles(look: Y.Map<number | string>, model: Accessor<
     if (attrs.k) style.shrink = true;
     if (attrs.in) style.indent = Number(attrs.in);
     if (attrs.r) { const r = Number(attrs.r); style.rotate = r === 255 ? 255 : r > 90 ? 90 - r : r; }
-    if (attrs.hx) { if (attrs.hx === "fill") style.repeat = true; else style.align = attrs.hx === "justify" ? style.align ?? "left" : "center"; }
+    // Justified and distributed text wraps in Excel, so its row fits its lines as a wrapped cell's does.
+    if (attrs.hx) { if (attrs.hx === "fill") style.repeat = true; else { style.align = attrs.hx === "justify" ? style.align ?? "left" : "center"; if (attrs.hx === "justify" || attrs.hx === "distributed") style.wrap = true; } }
     if (attrs.bd) style.diagonal = attrs.bd as SheetCellStyle["diagonal"];
     if (attrs.bs) { style.edgeWeight = WEIGHTS[attrs.bs] ?? (attrs.bs === "double" ? 3 : 1); style.edgeLine = attrs.bs.includes("dot") && !attrs.bs.includes("dash") ? "dotted" : attrs.bs.includes("dash") ? "dashed" : attrs.bs === "double" ? "double" : undefined; }
     if (attrs.fp && attrs.fb && style.fill?.startsWith("#")) style.fill = mixHex(style.fill, attrs.fb, PATTERN_SHARE[attrs.fp] ?? (attrs.fp.startsWith("dark") ? 0.5 : 0.25));
@@ -146,6 +149,11 @@ export function createSheetStyles(look: Y.Map<number | string>, model: Accessor<
       if (style?.wrap) return (widthOf(look, model(), col) ?? sheetLook.width) - 2 * Number(sheetLook.grid.cellHorizontalPadding);
       measure.font = fontOf(style, sheetLook);
       return Math.max(...text.split("\n").map((line) => measure!.measureText(line).width));
+    },
+    wrapped: () => {
+      const sheet = model(), out = new Set<number>();
+      if (sheet) for (const [at, attrs] of cells) if (attrs.w || attrs.hx === "justify" || attrs.hx === "distributed") { const row = sheet.indexOfRow(at.slice(0, at.indexOf(":"))); if (row >= 0) out.add(row); }
+      return [...out];
     },
     taller: (range, sheetLook) => {
       const sheet = model(), out: number[] = [];

@@ -197,6 +197,8 @@ export type SheetGridEvents = {
   filter?(row: number, col: number, box: SheetBox): void;
   /** A dropdown cell's arrow pressed, with the cell's box. */
   dropdown?(row: number, col: number, box: SheetBox): void;
+  /** A date cell's arrow pressed: its calendar opens on it. */
+  dated?(row: number, col: number, box: SheetBox): void;
   /** A row or column group's control pressed in the row numbers or the letters (outline.ts), on the line it stands on. */
   outline?(kind: "rows" | "cols", line: number): void;
   /** A link Ctrl+clicked, to go to; and the link under the pointer as it moves (undefined: none). */

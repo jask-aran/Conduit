@@ -259,6 +259,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     },
     activated: (row, col) => types.at(row, col)?.startsWith("list:") ? openList(row, col) : editor.begin({ row, col }, "edit", "cell"),
     dropdown: (row, col, box) => setListing({ row, col, box }),
+    // After the press has given the grid the keyboard, which would shut the calendar as it takes its focus.
+    dated: (row, col, box) => requestAnimationFrame(() => setDating({ row, col, box })),
     // A place in the workbook (`#Tab!A1`) is gone to; anything else opens beside.
     follow: (address) => {
       // Only web and mail addresses leave the page: a workbook's links are anyone's.
@@ -300,7 +302,10 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         type: types.at, pill: pillOf, link: types.link, draw: (row, col, value) => formats.draw(row, col, value, rules.fmt(row, col)), dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded, merges: merges.list, outline: outline.line,
       } });
       setGrid(made);
+      fitWrapped();
     }, (error: Error) => { setFailed(error.message); props.onDrawn?.(); });
+    // An imported tab's wrapped cells fit their rows as it is shown, as Excel fits rows with no height of their own on opening.
+    const fitWrapped = () => { const rows = styles.wrapped(); if (rows.length && root) live.doc.transact(() => sizes.refit(rows, readLook(root!)), REFIT); };
     const off = sheet.onChange((change) => {
       const cells = change.structure ? null : change.cells;
       // A wrapped cell's row fits its text again, whoever changed it, unless a person set its height; not a step of the history.
@@ -312,7 +317,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       const area = at();
       if (!cells || (area && cells.some(({ row, col }) => row === area.top && col === area.left))) setChanged((n) => n + 1);
       // A tab shown, or lines put in or taken out: the comments' highlights are found again on what the grid now draws.
-      if (!cells) { moved(); marks.anchors(anchors); }
+      if (!cells) { moved(); marks.anchors(anchors); fitWrapped(); }
       if (change.structure) setFiltering(null);
     });
     const restyled = () => { made?.update(null); moved(); };
