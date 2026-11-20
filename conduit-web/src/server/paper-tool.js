@@ -6,7 +6,7 @@ import { CHART_KINDS } from "../sheet-charts.js";
 import { callingChat } from "./conduit-mcp.js";
 
 const text = (words, isError = false) => ({ output: [{ type: "text", text: words }], ...(isError ? { isError: true } : {}) });
-const ACTIONS = ["answer", "list", "new", "show", "lead", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve", "cells", "fill", "format", "style", "chart", "rows", "cols", "tabs", "import", "export"];
+const ACTIONS = ["answer", "list", "new", "show", "lead", "read", "replace", "insert", "delete", "set", "suggestions", "accept", "reject", "comments", "reply", "resolve", "cells", "fill", "format", "style", "chart", "table", "validate", "chip", "rows", "cols", "tabs", "import", "export"];
 const TAB_OPS = { add: "add-tab", rename: "rename-tab", delete: "delete-tab", move: "move-tab", hide: "hide-tab", show: "hide-tab" };
 
 /** Artifacts for an agent (papers, Markdown files, sheets and sites): the hub's document service (server/documents.js) as one tool, with the verbs `conduit-markup` has. */
@@ -42,7 +42,14 @@ export function PaperTool(runtime) {
       + "style (range: A1, whole columns B:D or whole rows 3:5; style: any of bold, italic, underline, strike, wrap (true or false), color and fill (red, amber, green, blue, or null), align (left, center, right), valign (top, middle, bottom), borders ({ top, right, bottom, left }: a cell's own edges); "
       + "borders: all, outer, top, bottom, left, right or none over the range) lists the range's styles, setting what is given first; a field left out stays as it is, false or null sets the default. "
       + "chart (chart: { kind: bar (horizontal bars), column, line, area, pie or scatter; range: the cells it draws from, A1 such as A1:C13 (Data!A1:C13 for a tab); labels: col when the range's first column holds the labels and each other column is a series (its first row naming them), row the other way; title; at: the cell its top-left corner stands on; width, height: pixels at 100% }) "
-      + "makes a chart on the range's tab, drawn from its cells as they change; with chart.id it changes that chart (what is left out stays), with chart.id and delete: true takes it off; with no chart it lists the tab's charts and their ids. The person moves and sizes charts themselves.",
+      + "makes a chart on the range's tab, drawn from its cells as they change; with chart.id it changes that chart (what is left out stays), with chart.id and delete: true takes it off; with no chart it lists the tab's charts and their ids. The person moves and sizes charts themselves. "
+      + "table (range: the cells, table: { header: false when its first row is not headings }) makes a table: banded rows that grow as rows are written under them, read in formulas as Sales[Amount], or [@Amount] for the formula's own row; "
+      + "with table: { name, and any of rename, total: true or false (a row of totals), style, delete: true (back to plain cells) } it changes that table; with neither it lists the tab's tables. "
+      + "validate (range, rule: { kind: whole, decimal, date, time, textLength, list or custom; operator: between, notBetween, equal, notEqual, greaterThan, lessThan, greaterThanOrEqual or lessThanOrEqual; values: one or two bounds, a list's options or one =range such as =Sales[Status], or a custom rule's one =formula; "
+      + "blank: false to refuse empty cells; alert: { style: stop (refuses, the default), warning or information; title; text } or false; input: { title, text } shown beside the cell }) sets what the range's cells may hold, rule: null clears it, and with no rule it lists the range's rules. "
+      + "A set that breaks a stop rule is refused, naming the cell and its rule; a fill is written and says which cells break one. "
+      + "chip (at: one cell, chip: { kind: link, url, title } | { kind: person, id, name } | { kind: artifact, id, name } | { kind: date } | null) shows the cell as a pill, or as plain text again. "
+      + "What is set or filled is read as a person's typing is: 2026-03-01 or 1/3/2026 (day first) is a date, 9:30 pm a time, 5% and $1,200.50 numbers in that format; a leading ' keeps text.",
     parameters: Type.Object({
       action: Type.Union(ACTIONS.map((value) => Type.Literal(value))),
       paper: Type.Optional(Type.String({ description: "A paper's id." })),
@@ -90,6 +97,9 @@ export function PaperTool(runtime) {
         kind: Type.Optional(Type.Union(CHART_KINDS.map((value) => Type.Literal(value)))), range: Type.Optional(Type.String()), labels: Type.Optional(Type.Union([Type.Literal("col"), Type.Literal("row")])),
         title: Type.Optional(Type.Union([Type.String(), Type.Null()])), at: Type.Optional(Type.String()), width: Type.Optional(Type.Integer()), height: Type.Optional(Type.Integer()),
       }, { description: "chart: what to make or change." })),
+      table: Type.Optional(Type.Object({ name: Type.Optional(Type.String()), rename: Type.Optional(Type.String()), header: Type.Optional(Type.Boolean()), total: Type.Optional(Type.Boolean()), style: Type.Optional(Type.String()), delete: Type.Optional(Type.Boolean()) }, { description: "table: the table to make or change." })),
+      rule: Type.Optional(Type.Any({ description: "validate: the rule, or null to clear the range's." })),
+      chip: Type.Optional(Type.Any({ description: "chip: the pill, or null for plain text." })),
     }),
     replay: "unsafe",
     execute: async (args, api = {}, context) => {
@@ -145,9 +155,21 @@ export function PaperTool(runtime) {
           const done = await documents.cells(paper, { op: "chart", tab: args.tab, chart: args.chart, by, for: args.for });
           return text(`${done.chart ? `${args.chart?.id ? "Changed" : "Made"} the chart ${done.chart}. ` : args.chart?.delete ? `Deleted the chart ${args.chart.id}. ` : ""}${done.charts.length ? `Charts on the ${done.tab ? `tab ${done.tab}` : "sheet"}:\n${done.charts.map((one) => `${one.id}  ${one.kind} of ${one.range} (labels in its first ${one.labels === "col" ? "column" : "row"}) at ${one.at}, ${one.width}x${one.height}${one.title ? `, "${one.title}"` : ""}`).join("\n")}` : `The ${done.tab ? `tab ${done.tab}` : "sheet"} has no charts.`}`);
         }
+        if (args.action === "table") {
+          const done = await documents.cells(paper, { op: "table", tab: args.tab, range: args.range, table: args.table, by, for: args.for });
+          return text(done.tables.length ? `Tables on the ${done.tab ? `tab ${done.tab}` : "sheet"}:\n${done.tables.map((one) => `${one.name}  ${one.range}${one.total ? ", with a total row" : ""}`).join("\n")}` : `The ${done.tab ? `tab ${done.tab}` : "sheet"} has no tables.`);
+        }
+        if (args.action === "validate") {
+          const done = await documents.cells(paper, { op: "validate", tab: args.tab, range: args.range ?? args.at, rule: args.rule, by, for: args.for });
+          return text(done.rules.length ? done.rules.map(({ range, said, ...rule }) => `${range} takes ${said}: ${JSON.stringify(rule)}`).join("\n") : `No rule on ${done.cells.join(", ")}.`);
+        }
+        if (args.action === "chip") {
+          const done = await documents.cells(paper, { op: "chip", tab: args.tab, at: args.at, chip: args.chip ?? null, by, for: args.for });
+          return text(`${args.chip ? "Made a chip of" : "Plain text again:"} ${done.cells.join(", ")}.`);
+        }
         if (args.action === "fill" || (args.action === "set" && args.at !== undefined)) {
           const done = await documents.cells(paper, { op: args.action, tab: args.tab, at: args.at, range: args.range, values: args.values, value: args.value ?? args.text, by, for: args.for });
-          return text(`Wrote ${done.cells.join(", ")}; the ${done.tab ? `tab ${done.tab}` : "sheet"} is ${done.rows} rows x ${done.cols} columns.`);
+          return text(`Wrote ${done.cells.join(", ")}; the ${done.tab ? `tab ${done.tab}` : "sheet"} is ${done.rows} rows x ${done.cols} columns.${done.broken ? ` ${done.broken}.` : ""}`);
         }
         if (args.action === "tabs") {
           const place = args.at === undefined ? undefined : /^\d+$/.test(String(args.at).trim()) ? Number(args.at) - 1 : NaN;

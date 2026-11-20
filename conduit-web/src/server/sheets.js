@@ -892,7 +892,7 @@ export function sheetKind(hub) {
           if (ref && !area) throw fault(400, `range is an A1 range such as A1:D20, not ${range}`);
           const one = spec.name === undefined ? undefined : placedTables(room.look, sheet).find((each) => each.table.name.toLowerCase() === String(spec.name).toLowerCase());
           if (spec.name !== undefined && !one) throw fault(400, `No table ${spec.name}${many(room) ? ` on ${sheet.name}` : ""}`);
-          if (!one && !area) throw fault(400, "range is the cells to make a table of");
+          if (!one && !area) return { tables: tablesA1(sheet, readTables(room.look, sheet.id)), ...(many(room) ? { tab: sheet.name } : {}) };
           const set = (row, col, input) => { const cell = key(sheet.rowAt(row), sheet.colAt(col)); if (input) room.cells.set(cell, input); else room.cells.delete(cell); };
           // A total row added under a table at the tab's edge grows the tab to hold it.
           if (one && spec.total === true && !one.table.total) grow(room, sheet, { ...one.range, bottom: one.range.bottom + 1 }, name);
