@@ -27,6 +27,7 @@ import { createFormulaEditor, FormulaField, FormulaHelp } from "./formula-editor
 import { createSequenceKeys, SequenceHint, SHEET_SEQUENCES, SizePrompt, type SheetSequence, type SizeQuestion } from "./sequences";
 import { createSheetSizes, dragRowEdges } from "./sizes";
 import { createSheetFilter, FilterMenu, regionAround } from "./filter";
+import type { PlacedTable } from "./tables";
 import { createSheetFormats } from "./formats";
 import { createSheetBrush, createSheetStyles, measureShown } from "./styles";
 import { createSheetRules, RulePrompt, RulesMenu } from "./rules";
@@ -56,6 +57,8 @@ const OWN_KEYS = ["primary+KeyB", "primary+Minus", "primary+Digit0", ...[0, 1, 2
 const shifted = (input: string, rows: number, cols: number) => input.startsWith("=") ? shiftRefs(input, rows, cols) : input;
 const REFIT = "refit";
 const between = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, n) => from + n);
+// Whether `ok` comes true within a few seconds, checked each frame: a hub op's lines arriving.
+const until = (ok: () => boolean) => new Promise<boolean>((done) => { const since = performance.now(), wait = () => ok() ? done(true) : performance.now() - since > 5000 ? done(false) : requestAnimationFrame(wait); wait(); });
 type Menu = { rows?: SheetRange; cols?: SheetRange };
 
 /** A sheet: the hub's live copy drawn in the grid, a formula bar over it, the comment margin beside it. */
@@ -199,7 +202,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     return held?.formula && held.value === sheet!.input(row, col) ? { formula: held.formula, why: whyOf().get(held.formula) } : undefined;
   };
   const frozenHere = () => { changed(); const area = at(); return area ? frozenAt(area.top, area.left) : undefined; };
-  const filters = createSheetFilter(look, model, at, hub, (row, col) => Boolean(styles.at(row, col)?.bold), { act: history.act, select: (range) => grid()?.select(range), setType: (range, kind) => setType(range, kind) }), [filtering, setFiltering] = createSignal<{ col: number; box: SheetBox } | null>(null);
+  const filters = createSheetFilter(look, model, at, hub, (row, col) => Boolean(styles.at(row, col)?.bold), { act: history.act, select: (range) => grid()?.select(range), setType: (range, kind) => setType(range, kind), room: (on) => roomBelow(on) }), [filtering, setFiltering] = createSignal<{ col: number; box: SheetBox } | null>(null);
   const sizes = createSheetSizes(look, model, styles.lines, filters.hidden, measureShown(styles, formats, model)), [question, setQuestion] = createSignal<SizeQuestion | null>(null);
   const merges = createSheetMerges(look, model), rules = createSheetRules(look, model), [ruling, setRuling] = createSignal<SheetRange | null>(null), decisions = createDecisionScope(() => props.id);
   // A style, number format, type, validation or conditional rule set on cells past the tab's last row or column first grows the tab to hold them, as
@@ -209,10 +212,23 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     if (!size) return;
     const to = { ...range, bottom: lines === "cols" || range.bottom >= 1_048_575 ? Math.min(range.bottom, size.rows - 1) : range.bottom, right: lines === "rows" || range.right >= 16_383 ? Math.min(range.right, size.cols - 1) : range.right };
     if (to.bottom < size.rows && to.right < size.cols) return run(to);
-    const later = history.later(), held = () => { const now = model()?.size(); return Boolean(now && now.rows > to.bottom && now.cols > to.right); };
+    const later = history.later();
     void Promise.all([to.bottom >= size.rows && history.hub({ op: "insert-rows", at: size.rows, count: to.bottom + 1 - size.rows }), to.right >= size.cols && history.hub({ op: "insert-cols", at: size.cols, count: to.right + 1 - size.cols })])
-      .then(() => new Promise<boolean>((done) => { const since = performance.now(), wait = () => held() ? done(true) : performance.now() - since > 5000 ? done(false) : requestAnimationFrame(wait); wait(); }))
+      .then(() => until(() => { const now = model()?.size(); return Boolean(now && now.rows > to.bottom && now.cols > to.right); }))
       .then((grown) => { if (grown) later(() => run(to)); }, (error: Error) => props.host.failed(error.message));
+  };
+  // Tab in a table's last cell with filled cells or the tab's edge under it: as Excel's, the cells under its columns are pushed down (the tab grown at
+  // its edge) and the row added, one step; not where that would split a table below that spans other columns.
+  const roomBelow = (on: PlacedTable) => {
+    const size = model()?.size(), { range } = on, row = range.bottom + 1;
+    if (!size) return;
+    const split = filters.tables.all().find((one) => one.range.top > range.bottom && one.range.left <= range.right && one.range.right >= range.left && (one.range.left < range.left || one.range.right > range.right));
+    if (split) return void toast(`Can't add a row to ${on.table.name}: it would split ${split.table.name} below it`);
+    history.act("Add table row", () => {
+      const later = history.later(), free = () => { const sheet = model(); return Boolean(sheet && sheet.size().rows > row && between(range.left, range.right).every((col) => !sheet.input(row, col))); };
+      void history.hub(row >= size.rows ? { op: "insert-rows", at: size.rows, count: 1 } : { op: "shift-cells", range: rangeA1({ ...range, top: row, bottom: row }), way: "down" })
+        .then(() => until(free)).then((made) => { if (made) later(() => { const added = filters.tables.addRow(on); if (added !== null) grid()?.select({ top: added, bottom: added, left: range.left, right: range.left }); }); }, (error: Error) => props.host.failed(error.message));
+    });
   };
   for (const [made, name] of [[styles, "set"], [styles, "borders"], [formats, "set"], [types, "set"], [validity, "set"], [rules, "add"]] as const) {
     const held = made as unknown as Record<string, (range: SheetRange, ...rest: unknown[]) => void>, own = held[name]!.bind(made);

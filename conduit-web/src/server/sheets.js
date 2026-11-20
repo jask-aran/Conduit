@@ -567,6 +567,10 @@ export function sheetKind(hub) {
         for (const [what, value] of want) if (had.get(what) !== value) room.look.set(`${what}:${cell}`, value);
         for (const what of had.keys()) if (!want.has(what)) room.look.delete(`${what}:${cell}`);
       }
+      // A table wholly in the lines that move goes with its cells, as Excel's does.
+      const tables = placedTables(room.look, sheet), moves = ({ range: at }) => (across ? at.top >= area.top && at.bottom <= area.bottom && at.left >= lo + (removing ? depth : 0) : at.left >= area.left && at.right <= area.right && at.top >= lo + (removing ? depth : 0));
+      if (tables.some(moves)) writeTables(room.look, sheet.id, tables.map((one) => { if (!moves(one)) return one.table; const at = one.range, to = across ? { ...at, left: at.left + shift, right: at.right + shift } : { ...at, top: at.top + shift, bottom: at.bottom + shift };
+        return { ...one.table, from: key(sheet.rowAt(to.top), sheet.colAt(to.left)), to: key(sheet.rowAt(to.bottom), sheet.colAt(to.right)) }; }));
       sign();
     }));
     refilter(room, sheet, by);
