@@ -231,7 +231,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     const dated = (c) => { const cell = tab.data[parseRange(attr(filtering, "ref")).top + 1]?.[c]; return typeof cell?.z === "string" && XLSX.SSF.is_date(cell.z); };
     if (filtering && attr(filtering, "ref")) { const conditions = filterOf(filtering, attr(filtering, "ref"), dated, drop); if (!table || Object.keys(conditions).length) tab.filter = { range: attr(filtering, "ref"), ...conditions }; }
     const print = Object.fromEntries([...PRINT, "pageSetUpPr"].flatMap((name) => { const one = elementOf(xml, name); return one ? [[name, one.replace(/\sr:id="[^"]*"/, "")]] : []; }));
-    if (Object.keys(print).length) { tab.print = print; keep("page setups"); }
+    if (Object.keys(print).length) { tab.print = print; if (Object.keys(print).some((name) => name !== "pageMargins")) keep("page setups"); }
     tab.protection = elementOf(xml, "sheetProtection");
     if (tab.protection) keep("sheet protections");
     const color = /<tabColor\b[^>]*>/.exec(xml)?.[0];
