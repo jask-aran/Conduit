@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import { createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, Show, untrack, type JSX } from "solid-js";
+import { batch, createEffect, createMemo, createResource, createSignal, lazy, on, onCleanup, Show, untrack, type JSX } from "solid-js";
 import { Empty, Frost, Icons, Notice } from "@/components/ui";
 import { sheetLineIcons as LineIcons, sheetMergeIcons as MergeIcons, sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
 import { DedupePrompt, focusSearch, menuAt, SheetMenu, ShiftPrompt, SplitPrompt, type SheetMenuEntry, type SheetShiftWay } from "./cell-menu";
@@ -54,6 +54,8 @@ const OWN_KEYS = ["primary+KeyB", "primary+Minus", "primary+Digit0", ...[0, 1, 2
 // A formula moved as a fill moves it; text stays as typed.
 const shifted = (input: string, rows: number, cols: number) => input.startsWith("=") ? shiftRefs(input, rows, cols) : input;
 const REFIT = "refit";
+// Excel's words for an action that does not work while several ranges are selected.
+const MULTIPLE = "This action won't work on multiple selections";
 const between = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, n) => from + n);
 type Menu = { rows?: SheetRange; cols?: SheetRange };
 
@@ -66,6 +68,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const [model, setModel] = createSignal<SheetView>(), [grid, setGrid] = createSignal<SheetGrid>(), [failed, setFailed] = createSignal<string>();
   const [at, setAt] = createSignal<SheetRange | null>(null), [changed, setChanged] = createSignal(0), [address, setAddress] = createSignal<string | null>(null), [scrolled, setScrolled] = createSignal(0);
   const [menu, setMenu] = createSignal<Menu>({});
+  // The ranges selected besides the active one (`at`), in the order picked, and the active cell (grid.ts).
+  const [others, setOthers] = createSignal<readonly SheetRange[]>([]), [activeCell, setActiveCell] = createSignal<{ row: number; col: number }>();
+  const several = () => others().length > 0 && at() !== null;
   const outline = createSheetOutline(look, model);
   const formats = createSheetFormats(look, model, props.host.failed), styles = createSheetStyles(look, model, props.host.failed), types = createSheetTypes(look, model, props.host.failed);
   // Data validation (validity.ts): writes judged, broken cells marked, the dialog open on a range.
@@ -124,8 +129,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   // The style and number format chords (Ctrl+B, Ctrl+Shift+%) are repeated too, as Excel's.
   for (const made of [styles, formats]) { const own = made.key; made.key = (event, range) => { const done = own(event, range); if (done) remember(`key ${event.code}`, (to) => own(event, to)); return done; }; }
   // Ctrl+` shows each formula as written in its cell; F8 extends the selection with the arrows, shown in the foot, until F8 or Esc again.
-  const [formulasShown, setFormulasShown] = createSignal(false), [extending, setExtending] = createSignal(false);
-  createEffect(on(() => tabs.shown(), () => setExtending(false), { defer: true }));
+  // Shift+F8 adds the next range picked to the selection, shown in the foot, until Shift+F8 or Esc again.
+  const [formulasShown, setFormulasShown] = createSignal(false), [extending, setExtending] = createSignal(false), [adding, setAdding] = createSignal(false);
+  createEffect(on(() => tabs.shown(), () => { setExtending(false); setAdding(false); }, { defer: true }));
   live.own(history.origin);
   history.onChange(() => setStepped((n) => n + 1));
   createEffect(() => history.scope(tabs.tabs().flatMap((tab) => [live.doc.getArray(rowsOf(tab.id)), live.doc.getArray(colsOf(tab.id))])));
@@ -228,7 +234,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const zoom = () => props.host.display?.().zoom ?? 1;
   const drawnLook = () => readLook(root!, props.host.display?.());
   const events: SheetGridEvents = {
-    selected: setAt,
+    selected: (range, list = [], cell) => batch(() => { setAt(range); if (list !== untrack(others)) setOthers(list); setActiveCell(cell); }),
+    refused: () => void toast(MULTIPLE),
     write: (list, label, pairs) => {
       const was = (row: number, col: number) => model()?.input(row, col) ?? "";
       if (label === "Paste") chip.pasted(list, was);
@@ -248,8 +255,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if ((event.key === "F10" && event.shiftKey && bare) || (event.key === "ContextMenu" && bare)) { event.preventDefault(); openMenu(); return true; }
       // F5 goes to a cell or range typed in the name box (Excel's Go To; Ctrl+G stays the application's leader). Shift+F11 adds a tab.
       if (event.key === "F4" && bare && !event.shiftKey) { event.preventDefault(); const area = at(); if (area) repeat(area); return true; }
-      if (event.key === "F8" && bare && !event.shiftKey) { event.preventDefault(); setExtending((was) => !was); return true; }
+      if (event.key === "F8" && bare) { event.preventDefault(); if (event.shiftKey) { setAdding((was) => !was); setExtending(false); } else { setExtending((was) => !was); setAdding(false); } return true; }
       if (event.key === "Escape" && extending()) setExtending(false);
+      if (event.key === "Escape" && adding()) { event.preventDefault(); setAdding(false); return true; }
       if (event.key === "`" && event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) { event.preventDefault(); setFormulasShown((was) => !was); grid()?.update(null); return true; }
       if (event.key === "F5" && bare && !event.shiftKey) { event.preventDefault(); addressField?.focus(); return true; }
       if (event.key === "F11" && event.shiftKey && bare) { event.preventDefault(); addTab(tabs); return true; }
@@ -347,7 +355,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       made = mountGrid(into, { model: sheet, events, look: untrack(drawnLook), filled: index, columns: {
         width: (col) => { const width = sizes.width(col); return width === undefined ? undefined : Math.round(width * zoom()); }, freeze: sizes.freeze, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols,
         heights: () => { const by = zoom(), kept = sizes.heights(); return by === 1 ? kept : new Map([...kept].map(([row, height]) => [row, Math.round(height * by)])); },
-        type: types.at, pill: pillOf, link: types.link, chip: (row, col, shown) => chip.chips.drawn(row, col, shown, types.link(row, col, shown)), draw: (row, col, value) => formats.draw(row, col, value, rules.fmt(row, col)), dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), invalid: validity.invalid, mark: filters.mark, banded: filters.banded, merges: merges.list, outline: outline.line, formulas: () => untrack(formulasShown), extending: () => untrack(extending),
+        type: types.at, pill: pillOf, link: types.link, chip: (row, col, shown) => chip.chips.drawn(row, col, shown, types.link(row, col, shown)), draw: (row, col, value) => formats.draw(row, col, value, rules.fmt(row, col)), dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), invalid: validity.invalid, mark: filters.mark, banded: filters.banded, merges: merges.list, outline: outline.line, formulas: () => untrack(formulasShown), extending: () => untrack(extending), adding: () => untrack(adding),
       } });
       setGrid(made);
       fitWrapped();
@@ -898,7 +906,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (redo) history.redo(); else history.undo();
     }}>
     <div class="ui-spreadsheet-bar">
-      <Input ref={addressField} class="ui-spreadsheet-address ui-frost ui-frost-raised" aria-label="Cell" spellcheck={false} value={address() ?? (at() ? addressOf(at()!) : "")} onFocus={(event) => event.currentTarget.select()} onInput={(event) => setAddress(event.currentTarget.value)}
+      <Input ref={addressField} class="ui-spreadsheet-address ui-frost ui-frost-raised" aria-label="Cell" spellcheck={false} value={address() ?? (several() && activeCell() ? a1(activeCell()!.row, activeCell()!.col) : at() ? addressOf(at()!) : "")} onFocus={(event) => event.currentTarget.select()} onInput={(event) => setAddress(event.currentTarget.value)}
         onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); go(); } else if (event.key === "Escape") { setAddress(null); grid()?.focus(); } }} onBlur={() => setAddress(null)} />
       {/* The formula bar edits the selected cell: focused, it opens the cell to edit as F2 does. */}
       <Frost lift="raised" ref={formula} class="ui-input ui-spreadsheet-formula" onFocusIn={() => { const area = at(); if (area && !editor.editing()) editor.begin({ row: area.top, col: area.left }, "edit", "bar"); }}>
@@ -982,6 +990,6 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       </Show>
       <Show when={props.margin}><aside class="ui-spreadsheet-margin" aria-label="Comments">{props.margin}</aside></Show>
     </div>
-    <SheetFoot tabs={tabs} id={props.id} mode={() => extending() ? "Extend selection" : null} format={(range) => formats.figure(range)} filtered={filters.counted} act={history.act} />
+    <SheetFoot tabs={tabs} id={props.id} mode={() => extending() ? "Extend selection" : adding() ? "Add to selection" : null} format={(range) => formats.figure(range)} filtered={filters.counted} act={history.act} />
   </section>;
 }

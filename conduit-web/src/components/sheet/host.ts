@@ -154,6 +154,8 @@ export interface SheetGrid {
   lines(): "cols" | "rows" | null;
   /** A range's cells shown, as the clipboard's text (tab-separated, quoted as a spreadsheet's), held as copied from this grid unless cut. */
   copy(range: SheetRange, cut: boolean): string;
+  /** Every range selected taken as one copy (they share their rows, or their columns); null, and refused, where they do not or it is a cut. */
+  copyAll(cut: boolean): string | null;
   /** The clipboard's text pasted at a cell, into the rows and columns shown from it: copied from this grid, its formulas' relative references move with
    * it, or (`values`) what its cells showed is pasted. */
   /** `transposed`: its rows laid down as columns (Paste transposed). */
@@ -184,7 +186,10 @@ export interface SheetGrid {
 
 /** What the island tells the editor. */
 export type SheetGridEvents = {
-  selected(range: SheetRange | null): void;
+  /** `others`: the other ranges selected with it (Ctrl and a click, Shift+F8), in the order picked; `cell`: the active cell. */
+  selected(range: SheetRange | null, others?: readonly SheetRange[], cell?: { row: number; col: number }): void;
+  /** An action that does not work on several ranges was asked for while they are selected. */
+  refused(): void;
   /** What was typed into a cell, or pasted, as inputs by position; the editor writes them. */
   /** `chips`: a paste of cells copied here, each `[fromRow, fromCol, row, col]`, whose chips go with them. */
   write(cells: readonly { row: number; col: number; input: string }[], label?: string, chips?: readonly [number, number, number, number][]): void;
