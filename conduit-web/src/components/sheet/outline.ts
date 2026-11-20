@@ -3,7 +3,7 @@
  * `outline:C`), so a group follows its lines through inserts, moves and sorts. A collapsed group's lines are hidden (`hidden:<id>`). A group's control
  * stands on the line after its last, as Excel's summary row below and column right; a group running to the tab's edge has it on the line before its first.
  */
-import { createSignal, onCleanup, type Accessor } from "solid-js";
+import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js";
 import type * as Y from "yjs";
 import type { SheetView } from "@/sheet-format.js";
 
@@ -21,6 +21,8 @@ export function createSheetOutline(look: Y.Map<number | string>, model: Accessor
   const observe = (event: Y.YMapEvent<number | string>) => { let any = false; for (const name of event.keysChanged) any = index(name) || any; if (any) { version++; setChanged((n) => n + 1); } };
   look.observe(observe);
   onCleanup(() => look.unobserve(observe));
+  // Rows or columns moved keep the tab's size and maybe its last line, but not which lines are grouped where.
+  createEffect(() => { const off = model()?.onChange((change) => { if (change.structure) version++; }); if (off) onCleanup(off); });
   const id = (kind: OutlineKind, n: number) => n < 0 ? undefined : kind === "rows" ? model()?.rowAt(n) : model()?.colAt(n);
   const level = (kind: OutlineKind, n: number) => { const one = id(kind, n); return one ? levels.get(one) ?? 0 : 0; };
   const size = (kind: OutlineKind) => { const sheet = model(); return sheet ? sheet.size()[kind] : 0; };
