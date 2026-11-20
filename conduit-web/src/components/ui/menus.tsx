@@ -128,7 +128,7 @@ export function MenuSubContent(props: ParentProps<Caps>) {
   return <KMenu.Portal mount={mount()}><KMenu.SubContent as={submenu?.phone() ? MenuPanel : Surface} ref={submenu?.setContent} data-piece="MenuSubContent" data-slot="ui-menu-sub-content" width={props.width} height={props.height}
     style={{ "--menu-room": "var(--kb-popper-content-available-height)" }}><MenuBody>{props.children}</MenuBody></KMenu.SubContent></KMenu.Portal>;
 }
-export const MenuSection = (props: ParentProps<{ title?: string; note?: JSX.Element }>) => <KMenu.Group as={Section} title={props.title} note={props.note}>{props.children}</KMenu.Group>;
+export const MenuSection = (props: ParentProps<{ title?: string; note?: JSX.Element; hidden?: boolean }>) => <KMenu.Group as={Section} title={props.title} note={props.note} hidden={props.hidden}>{props.children}</KMenu.Group>;
 export type MenuRowAction = { label: string; icon: JSX.Element; onSelect: () => void; disabled?: boolean; destructive?: boolean };
 export const MenuRow = (props: RowProps & { actions?: MenuRowAction[] }) => {
   const [local, rest] = splitProps(props, ["actions"]);

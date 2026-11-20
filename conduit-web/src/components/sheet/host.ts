@@ -195,6 +195,7 @@ export type SheetGridEvents = {
   menu(target: { rows?: SheetRange; cols?: SheetRange }): void;
   /** Scrolled or resized: what is drawn where has moved. */
   moved(): void;
+  /** A cell pressed, or a column's letter (`row` -1) or a row's number (`col` -1). */
   pressed(row: number, col: number): void;
   /** A key pressed on the selected cell: true when the editor took it (typing starts an edit; Enter and F2 open one), and the grid leaves it alone. */
   key(event: SheetKey, row: number, col: number): boolean;

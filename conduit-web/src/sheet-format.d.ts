@@ -45,6 +45,8 @@ export function tabNameFault(name: unknown): string | null;
 export function tabName(name: unknown): string;
 /** What a typed cell shows until the engine says (null for a formula): a number, a percentage, TRUE/FALSE, or text (a leading `'` dropped). */
 export function guess(input: string): number | boolean | string | null;
+/** A typed entry as Excel reads it: its input as kept, and the format a General cell takes for it. */
+export function readEntry(input: string, format?: string): { input: string; format?: string };
 export function runsOf(list: readonly number[]): number[][];
 export function toCsv(rows: string[][], eol?: string, sep?: string): string;
 export function fromCsv(text: string, sep?: string): string[][];

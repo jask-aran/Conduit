@@ -1,4 +1,4 @@
-import { createSignal, For, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, Show, type Component, type JSX } from "solid-js";
 import { Actions, Item, SearchSection, Section } from "@/components/ui";
 import { CardForm } from "@/components/ui/card";
 import { Button, Field, Input, Switch } from "@/components/ui/controls";
@@ -6,24 +6,30 @@ import { Dialog } from "@/components/ui/dialog";
 import { Row } from "@/components/ui/row";
 import { PHONE_LAYOUT_QUERY } from "@/components/ui/layout";
 import { MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, Popover, PopoverContent, Select } from "@/components/ui/menus";
-import type { SheetBox } from "./host";
+import type { SheetBox, SheetRange } from "./host";
 
-/** One row of the cell menu: a doing, or (`sub`) a submenu of them, made as it opens (or as a search reads it), when given as a function. */
-export type SheetMenuEntry = { label: string; icon?: JSX.Element; keys?: string[]; meta?: string; destructive?: boolean; disabled?: boolean; run?(): void; sub?: SheetMenuEntry[] | (() => SheetMenuEntry[]) };
+/** One row of the cell menu: a doing, or (`sub`) a submenu of them, made as it opens (or as a search reads it), when given as a function. Its icon is
+ * a component, made only where a row shows it. */
+export type SheetMenuEntry = { label: string; icon?: Component; keys?: string[]; meta?: string; destructive?: boolean; disabled?: boolean; run?(): void; sub?: SheetMenuEntry[] | (() => SheetMenuEntry[]) };
 
 const subOf = (entry: SheetMenuEntry) => typeof entry.sub === "function" ? entry.sub() : entry.sub;
-// Searched, a submenu's rows stand in the list themselves (the submenu's name beside them), so Enter runs the first: every row of one whose name
-// matches, else those of its rows that do.
-const found = (entry: SheetMenuEntry, query: string): SheetMenuEntry[] => {
-  const named = entry.label.toLowerCase().includes(query), sub = subOf(entry);
-  return sub ? sub.flatMap((one) => named ? [one] : found(one, query)).map((one) => ({ ...one, meta: one.meta ?? entry.label })) : named ? [entry] : [];
-};
+// Searched, every row stands in one list (a submenu's with the submenu's name beside it), so Enter runs the first; each typed word starts a word of
+// its name, its submenu's, or a word said for one of those.
+type Leaf = { entry: SheetMenuEntry; under?: string; words: string[] };
+const SAID: Record<string, string[]> = { delete: ["remove"], remove: ["delete"], insert: ["add"], add: ["insert"], clear: ["erase"], cell: ["cells"] };
+const leaves = (entries: SheetMenuEntry[], under?: string): Leaf[] => entries.flatMap((entry) => {
+  const sub = subOf(entry);
+  if (sub) return leaves(sub, entry.label);
+  const words = `${under ?? ""} ${entry.label}`.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  return [{ entry, under, words: [...words, ...words.flatMap((word) => SAID[word] ?? [])] }];
+});
+const matches = (leaf: Leaf, asked: string[]) => asked.every((word) => leaf.words.some((one) => one.startsWith(word)));
 // The typing is the field's: the menu's own keys would pick a row by its first letter. Down goes into the rows, Enter picks the first one shown.
 const keys = (event: KeyboardEvent) => {
   if (event.key === "Escape" || event.key === "Tab") return;
   event.stopPropagation();
   if (event.key !== "ArrowDown" && event.key !== "Enter") return;
-  const first = (event.currentTarget as HTMLElement).closest("[role=menu]")?.querySelector<HTMLElement>("[role=menuitem]:not([data-disabled])");
+  const first = (event.currentTarget as HTMLElement).closest("[role=menu]")?.querySelector<HTMLElement>("[role=menuitem]:not([data-disabled]):not([hidden])");
   if (!first) return;
   event.preventDefault();
   first.focus();
@@ -47,28 +53,49 @@ export const menuAt = (target: Element, x: number, y: number) => {
   window.addEventListener("contextmenu", twice, true); setTimeout(() => window.removeEventListener("contextmenu", twice, true), 800);
 };
 
-const FIRST = 16;
+const FIRST = 12, STEP = 8, FOUND = 5;
 /**
  * The cell menu's groups under a field that keeps the rows (and submenus' rows) whose names hold what is typed. `after`: sections shown while nothing
  * is; `more`: rows found only by a search (the ribbon's tools, which `after` shows as submenus).
  */
 export function SheetMenu(props: { groups: (SheetMenuEntry[] | false | null | undefined)[]; after?: JSX.Element; more?: () => SheetMenuEntry[] }) {
-  const [query, setQuery] = createSignal(""), [whole, setWhole] = createSignal(false), phone = matchMedia(PHONE_LAYOUT_QUERY).matches;
-  // The rows past the first screenful are made the frame after it is shown, so it opens in one: searching and the arrows reach them by then.
-  requestAnimationFrame(() => setTimeout(() => setWhole(true)));
-  const shown = () => {
-    const asked = query().trim().toLowerCase();
-    if (!asked && whole()) return props.groups.filter((group): group is SheetMenuEntry[] => Boolean(group && group.length));
-    if (!asked) { let left = FIRST; return props.groups.flatMap((group) => { const kept = group ? group.slice(0, Math.max(0, left)) : []; left -= kept.length; return kept.length ? [kept] : []; }); }
-    return [...props.groups, props.more?.()].flatMap((group) => { const kept = group ? group.flatMap((entry) => found(entry, asked)) : []; return kept.length ? [kept] : []; });
-  };
-  const row = (entry: SheetMenuEntry) => <MenuRow icon={entry.icon} keys={entry.keys} meta={entry.meta} destructive={entry.destructive} disabled={entry.disabled} onSelect={() => entry.run?.()}>{entry.label}</MenuRow>;
+  const [query, setQuery] = createSignal(""), phone = matchMedia(PHONE_LAYOUT_QUERY).matches;
+  const groups = createMemo(() => props.groups.filter((group): group is SheetMenuEntry[] => Boolean(group && group.length)));
+  // A first screenful is made as it opens, the rest a few rows a task after it, so no task holds a frame: searching and the arrows reach them by then.
+  const [limit, setLimit] = createSignal(FIRST), [away, setAway] = createSignal(false);
+  const grow = () => setTimeout(() => { if (away() || limit() === Infinity) return; if (limit() < groups().flat().length) { setLimit(limit() + STEP); grow(); } else setLimit(Infinity); });
+  requestAnimationFrame(grow);
+  const before = createMemo(() => { let n = 0; return new Map(groups().map((group) => { const at = n; n += group.length; return [group, at]; })); });
+  const asked = createMemo(() => query().trim().toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean), [], { equals: (one, two) => one.join(" ") === two.join(" ") });
+  const searching = createMemo(() => asked().length > 0);
+  // Its own rows are hidden as a search starts and let go a task later (each row kept would cost every arrow); cleared, they are made again as at opening.
+  createEffect(on(searching, (now) => { if (now) setTimeout(() => setAway(searching())); else { setAway(false); setLimit(FIRST); requestAnimationFrame(grow); } }, { defer: true }));
+  // Read once a search starts, as stable rows: a row is made when it first matches (a few a task), then hidden and passed over by the arrows when it
+  // stops.
+  const all = createMemo<Leaf[] | undefined>((was) => was ?? (searching() ? leaves([...groups().flat(), ...props.more?.() ?? []]) : undefined));
+  const hits = createMemo(() => new Set(searching() ? all()?.filter((leaf) => matches(leaf, asked())) : []));
+  const [tick, setTick] = createSignal(0);
+  const made = createMemo<Leaf[]>((was) => {
+    tick();
+    const had = new Set(was), now = hits();
+    let fresh = 0;
+    const next = (all() ?? []).filter((leaf) => had.has(leaf) || (now.has(leaf) && fresh++ < FOUND));
+    if (fresh > FOUND) setTimeout(() => setTick((n) => n + 1));
+    return next;
+  }, []);
+  const row = (entry: SheetMenuEntry, meta = entry.meta, off = () => false) => <MenuRow icon={entry.icon && <entry.icon />} keys={entry.keys} meta={meta}
+    destructive={entry.destructive} hidden={off()} disabled={entry.disabled || off()} onSelect={() => entry.run?.()}>{entry.label}</MenuRow>;
   return <>
     <SearchSection placeholder="Search the menu" value={query()} onInput={setQuery} field={{ "aria-label": "Search the menu", onKeyDown: keys }} />
-    <For each={shown()}>{(group) => <MenuSection><For each={group}>{(entry) => entry.sub
-      ? <MenuSub phone={phone}><MenuSubTrigger icon={entry.icon} meta={entry.meta}>{entry.label}</MenuSubTrigger><MenuSubContent><MenuSection><For each={subOf(entry)}>{row}</For></MenuSection></MenuSubContent></MenuSub>
-      : row(entry)}</For></MenuSection>}</For>
-    <Show when={!query().trim() && whole()}>{props.after}</Show>
+    <Show when={!away()}><For each={groups()}>{(group) => {
+      const kept = () => group.slice(0, Math.max(0, limit() - (before().get(group) ?? 0)));
+      return <MenuSection hidden={searching() || !kept().length}><For each={kept()}>{(entry) => entry.sub
+        ? <MenuSub phone={phone}><MenuSubTrigger icon={entry.icon && <entry.icon />} meta={entry.meta}>{entry.label}</MenuSubTrigger>
+          <MenuSubContent><MenuSection><For each={subOf(entry)}>{(one) => row(one)}</For></MenuSection></MenuSubContent></MenuSub>
+        : row(entry)}</For></MenuSection>;
+    }}</For>
+    <Show when={limit() === Infinity}><div hidden={searching()}>{props.after}</div></Show></Show>
+    <MenuSection hidden={!searching()}><For each={made()}>{(leaf) => row(leaf.entry, leaf.entry.meta ?? leaf.under, () => !hits().has(leaf))}</For></MenuSection>
   </>;
 }
 
@@ -80,9 +107,11 @@ const SHIFTS: Record<"delete" | "insert", { way: SheetShiftWay; label: string; k
 };
 
 /** Asked at the block: the arrows and Enter, or a row's letter, choose; Escape leaves it as it was. */
-export function ShiftPrompt(props: { asked: { verb: "delete" | "insert"; box: SheetBox } | null; frame: () => HTMLElement | undefined; onChoose(way: SheetShiftWay): void; onClose(): void }) {
+export function ShiftPrompt(props: { asked: { verb: "delete" | "insert"; box: SheetBox; range: SheetRange } | null; frame: () => HTMLElement | undefined; onChoose(way: SheetShiftWay): void; onClose(): void }) {
   const [active, setActive] = createSignal(0), list = () => SHIFTS[props.asked?.verb ?? "delete"];
   const choose = (way: SheetShiftWay) => { props.onChoose(way); props.onClose(); };
+  // As Excel's, it starts on shifting cells up or down, unless the block is taller than it is wide.
+  const across = () => { const range = props.asked?.range; return Boolean(range && range.bottom - range.top > range.right - range.left); };
   const keys = (event: KeyboardEvent) => {
     const by = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0, letter = list().find((one) => one.key === event.key.toUpperCase());
     if (by) setActive((at) => Math.min(list().length - 1, Math.max(0, at + by)));
@@ -93,7 +122,7 @@ export function ShiftPrompt(props: { asked: { verb: "delete" | "insert"; box: Sh
   };
   return <Popover open={props.asked !== null} onOpenChange={(open) => { if (!open) props.onClose(); }} anchorRef={props.frame} placement="bottom-start"
     anchorRect={() => { const box = props.asked?.box; return box && new DOMRect(box.left, box.top, box.width, box.height); }}>
-    <PopoverContent aria-label={props.asked?.verb === "insert" ? "Insert cells" : "Delete cells"} width="sm" onOpenAutoFocus={(event) => { event.preventDefault(); setActive(0); }}>
+    <PopoverContent aria-label={props.asked?.verb === "insert" ? "Insert cells" : "Delete cells"} width="sm" onOpenAutoFocus={(event) => { event.preventDefault(); setActive(across() ? 0 : 1); }}>
       <div tabIndex={-1} onKeyDown={keys} ref={(element) => queueMicrotask(() => element.focus())}>
         <Section title={props.asked?.verb === "insert" ? "Insert" : "Delete"}>
           <For each={list()}>{(one, at) => <Item keys={[one.key]} active={active() === at()} onCursor={() => setActive(at())} onClick={() => choose(one.way)}>{one.label}</Item>}</For>

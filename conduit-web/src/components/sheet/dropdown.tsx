@@ -47,10 +47,15 @@ export function DropdownPrompt(props: { given: readonly DropdownOption[] | null;
             <option value="">No colour</option><For each={SHEET_INKS as SheetInk[]}>{(ink) => <option value={ink}>{INK_NAMES[ink]}</option>}</For>
           </Select>
           <Button type="button" variant="ghost" disabled={at === 0} onClick={() => raise(at)}>Up</Button>
-          <Button type="button" variant="ghost" onClick={() => setOptions((all) => all.filter((_, n) => n !== at))}>Delete</Button>
+          <Button type="button" variant="ghost" onClick={(event) => {
+            const last = at === options().length - 1, form = event.currentTarget.form;
+            setOptions((all) => all.filter((_, n) => n !== at));
+            // The keyboard goes on to the next option's field, or to Add option after the last: left on the row taken away, it would fall out of the dialog.
+            queueMicrotask(() => (last ? form?.querySelector<HTMLElement>("[data-add]") : form?.querySelectorAll<HTMLInputElement>("input[aria-label^='Option']")[at])?.focus());
+          }}>Delete</Button>
         </>} />}</Index>
       <Actions>
-        <Button type="button" variant="ghost" outline onClick={(event) => {
+        <Button type="button" variant="ghost" outline data-add onClick={(event) => {
           setOptions((all) => [...all, { value: "" }]);
           // `autofocus` acts only as the dialog opens: the added row's field is focused by hand, to be typed into.
           const form = event.currentTarget.form; queueMicrotask(() => [...form?.querySelectorAll<HTMLInputElement>("input[aria-label^='Option']") ?? []].at(-1)?.focus());
