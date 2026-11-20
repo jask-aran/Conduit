@@ -246,6 +246,15 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   let filledRows = new Map<number, number[]>(), measure: CanvasRenderingContext2D | null = null;
   // The cells each part has made (`contentOf`), by the sheet's row.
   const made = new Set<Map<number, Map<number, GridCell>>>();
+  // Each column's runs of filled cells in a part's drawn rows, as [first, last] pairs in order, found once a change of that column; and the last row
+  // and column holding anything: Ctrl and an arrow, and Ctrl+End, then read no cell on their way.
+  const runs = new Map<Part, Map<number, number[]>>(), filledRun = (p: Part, col: number, end: number) => {
+    const byCol = runs.get(p) ?? runs.set(p, new Map()).get(p)!;
+    let list = byCol.get(col);
+    if (!list) { list = []; for (let n = 0; n < end; n++) if (model.input(p.map.sheet(n), col) !== "") { if (list.length && list.at(-1) === n - 1) list[list.length - 1] = n; else list.push(n, n); } byCol.set(col, list); }
+    return list;
+  };
+  let lastUsed: { row: number; col: number } | null = null;
   /** How far from a dropdown cell's left its pill reaches (cell-draw.ts), where a click opens its options too. */
   const pillReach = (value: unknown) => {
     const text = value === null || value === undefined ? "" : String(value);
@@ -354,7 +363,16 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         const line = vertical || !hiddenCols.size ? null : Array.from({ length: size.cols }, (_, col) => col).filter((col) => !hiddenCols.has(col)), of = (n: number) => line ? line[n]! : n;
         const end = vertical ? (p === head ? size.head : size.rows) : line ? line.length : size.cols, at = (n: number) => vertical ? filled(far[0], n) : filled(of(n), far[1]);
         let n = vertical ? far[1] : line ? Math.max(0, line.findIndex((col) => col >= far[0])) : far[0];
-        if (n + dir >= 0 && n + dir < end) {
+        if (n + dir >= 0 && n + dir < end && vertical) {
+          // By the column's runs: to the end of the run it is in and goes on in, else to the next run's near end, else to the edge.
+          const list = filledRun(p, far[0], end);
+          let i = 0, lo = 0, hi = list.length / 2;
+          while (lo < hi) { const mid = (lo + hi) >> 1; if (list[2 * mid + 1]! < n) lo = mid + 1; else hi = mid; }
+          i = lo;
+          const inside = i < list.length / 2 && list[2 * i]! <= n;
+          if (inside && n + dir >= list[2 * i]! && n + dir <= list[2 * i + 1]!) n = dir > 0 ? list[2 * i + 1]! : list[2 * i]!;
+          else { const next = dir > 0 ? (inside ? i + 1 : i) : i - 1; n = next >= 0 && next < list.length / 2 ? (dir > 0 ? list[2 * next]! : list[2 * next + 1]!) : dir > 0 ? end - 1 : 0; }
+        } else if (n + dir >= 0 && n + dir < end) {
           if (at(n) && at(n + dir)) while (n + dir >= 0 && n + dir < end && at(n + dir)) n += dir;
           else { n += dir; while (!at(n) && n + dir >= 0 && n + dir < end) n += dir; }
         }
@@ -368,10 +386,13 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       // Ctrl+End goes to the last row and column holding anything, not the grid's run-on end.
       if (event.key === "End" && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey) {
         event.cancel();
-        const { rows, cols } = model.size();
-        let bottom = 0, right = 0;
-        for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) if (model.input(row, col) !== "") { bottom = Math.max(bottom, row); right = Math.max(right, col); }
-        api.select({ top: bottom, bottom, left: right, right });
+        if (!lastUsed) {
+          const { rows, cols } = model.size();
+          let bottom = 0, right = 0;
+          for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) if (model.input(row, col) !== "") { bottom = Math.max(bottom, row); right = Math.max(right, col); }
+          lastUsed = { row: bottom, col: right };
+        }
+        api.select({ top: lastUsed.row, bottom: lastUsed.row, left: lastUsed.col, right: lastUsed.col });
         return;
       }
       // Home goes to the row's first column shown, Ctrl+Home to the part's first cell shown: the grid's own would land on a hidden column A.
@@ -708,6 +729,13 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   const api: SheetGrid = {
     update: (changed) => {
       filledRows = new Map();
+      if (!changed) { runs.clear(); lastUsed = null; } else for (const { row, col } of changed) {
+        for (const byCol of runs.values()) byCol.delete(col);
+        // Filled, the last cell used can only grow; emptied on its last row or column, it is found again.
+        if (!lastUsed) continue;
+        if (model.input(row, col) !== "") lastUsed = { row: Math.max(row, lastUsed.row), col: Math.max(col, lastUsed.col) };
+        else if (row === lastUsed.row || col === lastUsed.col) lastUsed = null;
+      }
       if (!changed) {
         // A selection is held as a part draws it: kept on the same sheet rows when rows are hidden, shown or frozen.
         const was = picked(), columns = owner.current.columns.length > 0, rows = owner.current.rows.length > 0, versions = parts.map((p) => p.map.version).join(), freeze = frozenRows;
