@@ -6,7 +6,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Row } from "@/components/ui/row";
 import { PHONE_LAYOUT_QUERY } from "@/components/ui/layout";
 import { MenuRow, MenuSection, MenuSub, MenuSubContent, MenuSubTrigger, Popover, PopoverContent, Select } from "@/components/ui/menus";
-import type { SheetBox } from "./host";
+import type { SheetBox, SheetRange } from "./host";
 
 /** One row of the cell menu: a doing, or (`sub`) a submenu of them, made as it opens (or as a search reads it), when given as a function. Its icon is
  * a component, made only where a row shows it. */
@@ -107,9 +107,11 @@ const SHIFTS: Record<"delete" | "insert", { way: SheetShiftWay; label: string; k
 };
 
 /** Asked at the block: the arrows and Enter, or a row's letter, choose; Escape leaves it as it was. */
-export function ShiftPrompt(props: { asked: { verb: "delete" | "insert"; box: SheetBox } | null; frame: () => HTMLElement | undefined; onChoose(way: SheetShiftWay): void; onClose(): void }) {
+export function ShiftPrompt(props: { asked: { verb: "delete" | "insert"; box: SheetBox; range: SheetRange } | null; frame: () => HTMLElement | undefined; onChoose(way: SheetShiftWay): void; onClose(): void }) {
   const [active, setActive] = createSignal(0), list = () => SHIFTS[props.asked?.verb ?? "delete"];
   const choose = (way: SheetShiftWay) => { props.onChoose(way); props.onClose(); };
+  // As Excel's, it starts on shifting cells up or down, unless the block is taller than it is wide.
+  const across = () => { const range = props.asked?.range; return Boolean(range && range.bottom - range.top > range.right - range.left); };
   const keys = (event: KeyboardEvent) => {
     const by = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0, letter = list().find((one) => one.key === event.key.toUpperCase());
     if (by) setActive((at) => Math.min(list().length - 1, Math.max(0, at + by)));
@@ -120,7 +122,7 @@ export function ShiftPrompt(props: { asked: { verb: "delete" | "insert"; box: Sh
   };
   return <Popover open={props.asked !== null} onOpenChange={(open) => { if (!open) props.onClose(); }} anchorRef={props.frame} placement="bottom-start"
     anchorRect={() => { const box = props.asked?.box; return box && new DOMRect(box.left, box.top, box.width, box.height); }}>
-    <PopoverContent aria-label={props.asked?.verb === "insert" ? "Insert cells" : "Delete cells"} width="sm" onOpenAutoFocus={(event) => { event.preventDefault(); setActive(0); }}>
+    <PopoverContent aria-label={props.asked?.verb === "insert" ? "Insert cells" : "Delete cells"} width="sm" onOpenAutoFocus={(event) => { event.preventDefault(); setActive(across() ? 0 : 1); }}>
       <div tabIndex={-1} onKeyDown={keys} ref={(element) => queueMicrotask(() => element.focus())}>
         <Section title={props.asked?.verb === "insert" ? "Insert" : "Delete"}>
           <For each={list()}>{(one, at) => <Item keys={[one.key]} active={active() === at()} onCursor={() => setActive(at())} onClick={() => choose(one.way)}>{one.label}</Item>}</For>

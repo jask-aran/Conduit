@@ -734,6 +734,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       return;
     }
     if (event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey || !(across || down) || from < 0 || onEdge) return;
+    events.pressed(across ? -1 : p.map.sheet(from), across ? from : -1);
     // Each frame, not each move: held past an edge, the grid scrolls a line at a time under a still pointer and the pick runs on with it.
     // The body scrolls (the head never does up or down); a drag down the head's numbers stays in the head.
     let to = from, place = across ? event.clientX : event.clientY, frame = 0, stepped = 0;

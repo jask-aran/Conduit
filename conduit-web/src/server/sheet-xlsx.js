@@ -382,15 +382,17 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   } finally { engine.destroy(); }
 }
 
+// A count and what it counts, one of them said in the singular ("1 note", "1 filter condition the sheet does not have").
+const said = (count, what) => `${count} ${count === 1 ? what.replace(/^(.*?\w)s\b/, "$1") : what}`;
 /** A report in words: what came across, what was frozen and why, what was left out. */
 export function importSummary(report) {
   const { same, frozen, noCache, volatile } = report.computed, total = same + frozen + noCache + volatile, listed = Object.entries(report.frozen).flatMap(([tab, cells]) => Object.entries(cells).map(([at, one]) => `${tab}!${at} ${one.formula} (${one.why})`));
   return [
-    `Tabs: ${report.tabs.map((tab) => `${tab.name} (${tab.rows}x${tab.cols}, ${tab.formulas} formulas)`).join(", ")}.${report.skipped.length ? ` Not imported: ${report.skipped.join(", ")}.` : ""}`,
-    total ? `Of ${total} formulas, ${same + noCache + volatile} compute here as they did${volatile ? ` (${volatile} depend on the date or a random number and were not compared)` : ""}${frozen ? `; ${frozen} do not and hold the value the file kept, as plain values: ${Object.entries(report.reasons).map(([why, count]) => `${count} ${why}`).join(", ")}` : ""}.` : "It has no formulas.",
+    `Tabs: ${report.tabs.map((tab) => `${tab.name} (${tab.rows}x${tab.cols}, ${said(tab.formulas, "formulas")})`).join(", ")}.${report.skipped.length ? ` Not imported: ${report.skipped.join(", ")}.` : ""}`,
+    total ? `Of ${said(total, "formulas")}, ${same + noCache + volatile} compute here as they did${volatile ? ` (${volatile} depend on the date or a random number and were not compared)` : ""}${frozen ? `; ${frozen} do not and hold the value the file kept, as plain values: ${Object.entries(report.reasons).map(([why, count]) => `${count} ${why}`).join(", ")}` : ""}.` : "It has no formulas.",
     ...(listed.length ? [`Frozen: ${listed.slice(0, 20).join("; ")}${listed.length > 20 ? `; and ${listed.length - 20} more (GET /v0/document/<id>?as=import lists all)` : ""}.`] : []),
-    ...(Object.keys(report.kept ?? {}).length ? [`Kept for export, not shown here: ${Object.entries(report.kept).map(([what, count]) => `${count} ${what}`).join(", ")}.`] : []),
-    ...(Object.keys(report.dropped).length ? [`Left out: ${Object.entries(report.dropped).map(([what, count]) => `${count} ${what}`).join(", ")}; also any pivot tables, which are not read.`] : ["Pivot tables are not read."]),
+    ...(Object.keys(report.kept ?? {}).length ? [`Kept for export, not shown here: ${Object.entries(report.kept).map(([what, count]) => said(count, what)).join(", ")}.`] : []),
+    ...(Object.keys(report.dropped).length ? [`Left out: ${Object.entries(report.dropped).map(([what, count]) => said(count, what)).join(", ")}; also any pivot tables, which are not read.`] : ["Pivot tables are not read."]),
   ].join("\n");
 }
 // Functions an .xlsx stores under a prefix: without it a spreadsheet shows #NAME? until the cell is entered again.

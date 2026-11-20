@@ -87,6 +87,7 @@ export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: (range:
     const list = [...strip!.querySelectorAll<HTMLElement>(".ui-tab")], by = { ArrowRight: 1, ArrowLeft: -1, Home: -Infinity, End: Infinity }[event.key];
     if (by) { event.preventDefault(); return list[Math.max(0, Math.min(list.length - 1, Number.isFinite(by) ? list.indexOf(at) + by : by > 0 ? list.length - 1 : 0))]?.querySelector<HTMLElement>(".ui-tab-open")?.focus(); }
     if (event.key === "Escape") { event.preventDefault(); return tabs.focus(); }
+    if (event.key === "F11" && event.shiftKey) { event.preventDefault(); return addTab(tabs); }
     if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") { event.preventDefault(); const box = at.getBoundingClientRect(); menuAt(at, box.left + box.width / 2, box.top); }
   };
   const one = (tab: Tab) => {
