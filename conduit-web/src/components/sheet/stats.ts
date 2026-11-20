@@ -10,15 +10,18 @@ const SLICE_MS = 3;
 const yieldTask = () => new Promise<void>((resolve) => { const channel = new MessageChannel(); channel.port1.onmessage = () => resolve(); channel.port2.postMessage(null); });
 
 /** The figures of the cells selected, read from the model's computed values off the selection's task; null for one cell or none. Whole rows or columns count only the tab's own cells. */
-export function createFigures(model: Accessor<SheetView | undefined>, selection: Accessor<SheetRange | null>): Accessor<SheetFigures | null> {
+/** `others`: the ranges selected besides it, counted too, each cell once where they overlap. */
+export function createFigures(model: Accessor<SheetView | undefined>, selection: Accessor<SheetRange | null>, others: Accessor<readonly SheetRange[]> = () => []): Accessor<SheetFigures | null> {
   const [figures, setFigures] = createSignal<SheetFigures | null>(null);
   const [changed, setChanged] = createSignal(0);
   createEffect(() => { const sheet = model(); if (sheet) onCleanup(sheet.onChange(() => setChanged((n) => n + 1))); });
   createEffect(() => {
     changed();
-    const sheet = model(), range = selection();
-    if (!sheet || !range || (range.top === range.bottom && range.left === range.right)) return setFigures(null);
-    const { rows, cols } = sheet.size(), area = { ...range, bottom: Math.min(range.bottom, rows - 1), right: Math.min(range.right, cols - 1) };
+    const sheet = model(), range = selection(), more = others();
+    if (!sheet || !range || (!more.length && range.top === range.bottom && range.left === range.right)) return setFigures(null);
+    const { rows, cols } = sheet.size(), areas = [...more, range].map((one) => ({ ...one, bottom: Math.min(one.bottom, rows - 1), right: Math.min(one.right, cols - 1) })), area = areas.at(-1)!;
+    // The ranges before each that it overlaps: a cell in one of those is counted there.
+    const before = areas.map((one, n) => areas.slice(0, n).filter((two) => two.top <= one.bottom && two.bottom >= one.top && two.left <= one.right && two.right >= one.left));
     let over = false;
     onCleanup(() => { over = true; });
     void (async () => {
@@ -26,8 +29,9 @@ export function createFigures(model: Accessor<SheetView | undefined>, selection:
       if (over) return;
       const done: SheetFigures = { count: 0, numbers: 0, sum: 0, min: Infinity, max: -Infinity, range: area };
       let until = performance.now() + SLICE_MS;
-      for (let r = area.top; r <= area.bottom; r++) {
-        for (let c = area.left; c <= area.right; c++) {
+      for (let n = 0; n < areas.length; n++) for (let r = areas[n]!.top, { bottom, left, right } = areas[n]!, over = before[n]!; r <= bottom; r++) {
+        for (let c = left; c <= right; c++) {
+          if (over.length && over.some((two) => r >= two.top && r <= two.bottom && c >= two.left && c <= two.right)) continue;
           const value = sheet.value(r, c);
           if (value === null || value === "") continue;
           done.count++;
