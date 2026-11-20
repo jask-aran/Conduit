@@ -30,6 +30,7 @@ export function columnName(sheet: Pick<Sheetish, "input">, table: SheetTable, ra
 export function totalOf(input: unknown): SheetTotal | undefined;
 export function makeTable(look: Look, sheet: Sheetish, area: Range, header: boolean, set: Writer): SheetTable;
 export function changeTable(look: Look, sheet: Sheetish, id: string, change: SheetTableChange, set: Writer): SheetTable;
+export function unstructureAll(look: Look, tabs: (Sheetish & Pick<SheetView, "name" | "inputs">)[], name: string, set: (sheet: Sheetish, row: number, col: number, input: string) => void): void;
 export function removeTable(look: Look, sheet: Sheetish, id: string): void;
 export function tableWrites(look: Look, sheet: Sheetish, written: readonly (readonly [number, number, string])[], set: Writer, shift: (formula: string, rows: number, cols: number) => string): boolean;
 export function addTableRow(look: Look, sheet: Sheetish, id: string, set: Writer, shift: (formula: string, rows: number, cols: number) => string, pushed?: boolean): number | null;

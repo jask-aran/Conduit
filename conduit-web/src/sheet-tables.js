@@ -1,5 +1,6 @@
 import { colIndex, colName, key, parseRange, rangeA1, rangedArea, tabRef } from "./sheet-format.js";
 import { blockId } from "./block-id.js";
+import { unstructure } from "./sheet-structured.js";
 
 /*
  * A tab's tables (Excel's Ctrl+T), as its look holds them in `tables:<tabId>` (sheet-tables.d.ts SheetTable): each by its corners' row and column ids,
@@ -132,6 +133,15 @@ export function changeTable(look, sheet, id, change, set) {
   }
   writeTables(look, sheet.id, list.map((each) => each === one ? { ...table, ...corners(sheet, range) } : each.table));
   return table;
+}
+/** Each formula of the workbook (`tabs`: every tab's view) reading table `name` with those references as A1 (unstructure), written by `set`: Convert to Range. */
+export function unstructureAll(look, tabs, name, set) {
+  const infos = new Map(tabs.flatMap((sheet) => placed(look, sheet).map((one) => [one.table.name.toLowerCase(), infoOf(sheet, one)]))), low = name.toLowerCase(), own = infos.get(low);
+  if (own) for (const sheet of tabs) sheet.inputs().forEach((line, row) => line.forEach((input, col) => {
+    if (!input.startsWith("=") || !(input.toLowerCase().includes(low) || (sheet.id === own.tab && input.includes("[")))) return;
+    const next = unstructure(input, infos, { tab: sheet.id, row, col }, low);
+    if (next !== input) set(sheet, row, col, next);
+  }));
 }
 export function removeTable(look, sheet, id) { writeTables(look, sheet.id, placed(look, sheet).filter((one) => one.table.id !== id).map((one) => one.table)); }
 

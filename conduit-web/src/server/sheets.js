@@ -11,7 +11,7 @@ import { CHART_LIMIT, chartFrom, chartIds, chartsA1, keptCharts, readCharts } fr
 import { writePrivateFile } from "../private-file.js";
 import { cleanOptions, readDate, restoreValidations, validationsA1, VALID, writeType } from "../sheet-types.js";
 import { brokenText, hubBroken, hubRefusal } from "../sheet-valid.js";
-import { changeTable, fillInserted, makeTable, placed as placedTables, readTables, removeTable, tableFilter, tablesA1, tablesIds, tableWrites, takenNames, writeTables } from "../sheet-tables.js";
+import { changeTable, fillInserted, makeTable, placed as placedTables, readTables, removeTable, tableFilter, tablesA1, tablesIds, tableWrites, takenNames, unstructureAll, writeTables } from "../sheet-tables.js";
 import { cleanChip, clearChips, copyLook, writeChip } from "../sheet-chips.js";
 
 /*
@@ -867,7 +867,8 @@ export function sheetKind(hub) {
           hub.as(room, name, (sign) => room.doc.transact(() => {
             try {
               if (!one) makeTable(room.look, sheet, area, spec.header !== false, set);
-              else if (spec.delete === true) removeTable(room.look, sheet, one.table.id);
+              // Convert to Range: the formulas reading it read its cells by A1, in the same change.
+              else if (spec.delete === true) { unstructureAll(room.look, room.book.tabs().map((each) => room.book.tab(each.id)), one.table.name, (on, row, col, input) => room.cells.set(key(on.rowAt(row), on.colAt(col)), input)); removeTable(room.look, sheet, one.table.id); }
               else changeTable(room.look, sheet, one.table.id, { name: spec.rename, total: spec.total, style: spec.style, filter: spec.filter, range: area ?? undefined }, set);
             } catch (error) { throw fault(400, error.message); }
             sign();

@@ -11,9 +11,9 @@ import { Button, Field, Input, Switch } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { CELLS, key, parseRange, rangeA1, rangedArea, type SheetView } from "@/sheet-format.js";
 import { shiftRefs } from "@/sheet-rules.js";
-import { addTableRow, changeTable, infoOf, makeTable, nameFault, putFilter, readTables, removeTable, rowsOf, TABLE_STYLE, tableWrites, takenNames, totalAt, totalOf, type PlacedTable, type SheetTable, type SheetTableChange } from "@/sheet-tables.js";
+import { addTableRow, changeTable, infoOf, makeTable, nameFault, putFilter, readTables, rowsOf, TABLE_STYLE, tableWrites, takenNames, totalAt, totalOf, type PlacedTable, type SheetTable, type SheetTableChange } from "@/sheet-tables.js";
 import { SheetStep } from "./history";
-import type { SheetRange } from "./host";
+import type { SheetCellsOp, SheetRange } from "./host";
 import type { SheetTypeKind } from "./types";
 
 export type { PlacedTable };
@@ -28,7 +28,7 @@ const CYCLE = [1, 5, 3, 1, 3, 5, 4];
 const toneOf = (style = TABLE_STYLE) => style === "none" ? 0 : CYCLE[(Number(/(\d+)$/.exec(style)?.[1] ?? 2) - 1) % 7] ?? 1;
 const TOTAL_NAMES: [string, string][] = [["none", "None"], ["sum", "Sum"], ["average", "Average"], ["count", "Count"], ["countNums", "Count numbers"], ["max", "Max"], ["min", "Min"]];
 
-export function createSheetTables(look: Y.Map<number | string>, model: Accessor<SheetView | undefined>, act: (label: string, run: () => void) => void) {
+export function createSheetTables(look: Y.Map<number | string>, model: Accessor<SheetView | undefined>, act: (label: string, run: () => void) => void, hub: (op: SheetCellsOp) => void) {
   const doc = look.doc!, cells = doc.getMap<string>(CELLS);
   let text: unknown, tab: string | undefined, list: SheetTable[] = [], placed: PlacedTable[] = [], ids: (string | undefined)[][] = [];
   const all = (): PlacedTable[] => {
@@ -75,7 +75,8 @@ export function createSheetTables(look: Y.Map<number | string>, model: Accessor<
     },
     make: (range: SheetRange, header: boolean) => { const sheet = model(); if (sheet) run("Convert to table", () => makeTable(look, sheet, range, header, set)); },
     change: (one: PlacedTable, change: SheetTableChange, label = "Table") => { const sheet = model(); if (sheet) run(label, () => changeTable(look, sheet, one.table.id, change, set)); },
-    remove: (one: PlacedTable) => { const sheet = model(); if (sheet) removeTable(look, sheet, one.table.id); },
+    /** Convert to range, by the hub, which writes the formulas reading it by A1 in the same step. */
+    remove: (one: PlacedTable) => hub({ op: "table", table: { name: one.table.name, delete: true } }),
     /** A table's own filter written, in the caller's step. */
     put: (id: string, filter: Pick<SheetTable, "keep" | "when" | "hide">) => { const sheet = model(); if (sheet) putFilter(look, sheet, id, filter); },
     /** A row added under the table's last (Tab in its last cell), as one step; its index, or null where none can be. `pushed`: its total row was pushed down. */

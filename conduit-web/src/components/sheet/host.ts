@@ -48,6 +48,8 @@ export type SheetCellsOp = { client?: number; step?: number } & (
   | SheetChipOp
   | SheetSortOp
   | { op: "chart"; chart?: SheetChartSpec & { id?: string; delete?: boolean }; tab?: string }
+  /** A table taken off (Convert to range): the formulas reading it are written by A1. */
+  | { op: "table"; table: { name: string; delete: true }; tab?: string }
   | SheetTabOp);
 
 /** A cell an import could not compute, as GET /v0/document/:id?as=import reports it (server/sheet-xlsx.js): the file's formula, why, and the value it holds instead. By tab name, then A1. */

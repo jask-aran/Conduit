@@ -134,6 +134,23 @@ export function toA1(text, tables, at) {
   return { a1: a1 + text.slice(from), stored: stored + text.slice(kept), names: [...names] };
 }
 
+/**
+ * A formula with each structured reference to table `name` (lowercased) as A1, from its cell `at`, as Excel's Convert to Range writes them: anchored
+ * (`$B$2:$B$4`), this row's anchored by column only (`$B2`), so a formula filled down still reads its own row.
+ */
+export function unstructure(text, tables, at, name) {
+  const table = tables.get(name);
+  let out = "", from = 0;
+  for (const ref of referencesOf(text)) {
+    if (ref.kind === "a1" || !table || tableOf(tables, ref, at) !== table) continue;
+    const parts = ref.kind === "struct" ? partsOf(text, ref) : null, area = ref.kind === "name" ? { top: table.first, bottom: table.last, left: table.left, right: table.right } : parts ? areaOf(table, parts, at) : "#REF!";
+    const corner = (row, col) => `$${colName(col)}${parts?.row ? "" : "$"}${row + 1}`;
+    out += text.slice(from, ref.start) + (typeof area === "string" ? area : area.top > area.bottom ? "#REF!" : `${table.tab === at.tab ? "" : `${table.sheet}!`}${corner(area.top, area.left)}${area.top === area.bottom && area.left === area.right ? "" : `:${corner(area.bottom, area.right)}`}`);
+    from = ref.end;
+  }
+  return out + text.slice(from);
+}
+
 /** A formula's structured references (and bare table names) that name cells, from its cell `at`: each `{ start, end, tab, area }`, `area` by index. */
 export function areasOf(text, tables, at) {
   return referencesOf(text).flatMap((ref) => {

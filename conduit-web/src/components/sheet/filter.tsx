@@ -70,7 +70,7 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
   onCleanup(() => look.unobserve(observe));
   // Read for every cell the grid draws: parsed once a text, and its range found again only where its corners are no longer where they were.
   const held: Record<What, { text?: string; one: SheetRangedLook | null; at: Ranged | null; ids: (string | undefined)[] }> = { filter: { one: null, at: null, ids: [] } };
-  const tables = createSheetTables(look, model, host.act);
+  const tables = createSheetTables(look, model, host.act, hub);
   const read = (what: What): Ranged | null => {
     const sheet = model(), text = sheet?.id ? look.get(`${what}:${sheet.id}`) : undefined, one = held[what];
     if (!sheet || typeof text !== "string") return null;
