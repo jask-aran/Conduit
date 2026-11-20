@@ -11,6 +11,7 @@ import { CHART_LIMIT, chartFrom, chartIds, chartsA1, keptCharts, readCharts } fr
 import { writePrivateFile } from "../private-file.js";
 import { cleanOptions, readDate, restoreValidations, validationsA1, VALID, writeType } from "../sheet-types.js";
 import { hubRefusal } from "../sheet-valid.js";
+import { readTables, tablesA1, tablesIds, takenNames, writeTables } from "../sheet-tables.js";
 
 /*
  * The sheet artifact kind on the hub (sheet-format.js): a .csv that holds the values, the formulas beside it in sheet.json, and the live copy in
@@ -27,8 +28,8 @@ export const tabOfFile = (file) => file.slice(0, -4).replace(/%([0-9A-F]{2})/gi,
 
 export function sheetKind(hub) {
   const { fault } = hub, START = { rows: 20, cols: 8 }, SIDE = "sheet.json";
-  /** The tab's look that names a range by its corners' ids (`filter:<tabId>`, `table:<tabId>`, sheet-format.d.ts SheetRangedLook). */
-  const RANGED = ["filter", "table"];
+  /** The tab's look that names a range by its corners' ids (`filter:<tabId>`, sheet-format.d.ts SheetRangedLook); its tables are a list of such (sheet-tables.js). */
+  const RANGED = ["filter"];
   const blank = (rows, cols) => Array.from({ length: rows }, () => new Array(cols).fill(""));
   const isFolder = (room) => room.entry.path.endsWith(FOLDER);
   /** Tabs are named wherever one is addressed once there are several (or the sheet is a workbook folder). */
@@ -170,6 +171,11 @@ export function sheetKind(hub) {
       const held = rules.map((rule) => ({ rule, ranges: rule.ranges.map(([from, to]) => [stay(from), stay(to)]) }));
       after.push(() => { const next = JSON.stringify(held.map(({ rule, ranges }) => ({ ...rule, ranges: ranges.map(([from, to]) => [from(), to()]) }))); if (next !== JSON.stringify(rules)) room.look.set(`${what}:${sheet.id}`, next); });
     }
+    const tables = readTables(room.look, sheet.id);
+    if (tables.length) {
+      const held = tables.map((table) => ({ table, from: stay(table.from), to: stay(table.to) }));
+      after.push(() => writeTables(room.look, sheet.id, held.map(({ table, from, to }) => ({ ...table, from: from(), to: to() }))));
+    }
     // A chart too, its range and the cell it stands on: it draws the same cells' places and stands where it stood.
     const charts = readCharts(room.look.get(`charts:${sheet.id}`));
     if (charts.length) {
@@ -226,6 +232,8 @@ export function sheetKind(hub) {
       const next = moved(ranged);
       if (!next) out.push([name, null]); else if (next.from !== ranged.from || next.to !== ranged.to) out.push([name, JSON.stringify(next)]);
     }
+    const tables = readTables(room.look, sheet.id), keptTables = tables.flatMap((table) => { const one = moved(table); return one ? [one] : []; });
+    if (JSON.stringify(keptTables) !== JSON.stringify(tables) || room.look.has(`table:${sheet.id}`)) out.push([() => writeTables(room.look, sheet.id, keptTables)]);
     // A merge shrinks as a filter does; one left a single cell goes.
     let merges;
     try { merges = JSON.parse(String(room.look.get(`merges:${sheet.id}`))); } catch { merges = null; }
@@ -243,7 +251,7 @@ export function sheetKind(hub) {
     }
     const charts = keptCharts(sheet, room.look.get(`charts:${sheet.id}`), isRows, at, count);
     if (charts !== undefined) out.push([`charts:${sheet.id}`, charts]);
-    return () => { for (const [name, value] of out) if (value === null) room.look.delete(name); else room.look.set(name, value); };
+    return () => { for (const [name, value] of out) if (typeof name === "function") name(); else if (value === null) room.look.delete(name); else room.look.set(name, value); };
   };
   /**
    * The formulas an import froze (`excel:<rowId>:<colId>`, sheet-xlsx.js) that are on the tab or name it, rewritten by a change to the tab as the
@@ -327,7 +335,7 @@ export function sheetKind(hub) {
     for (const [name, value] of room.look.entries()) {
       const [what, ...ids] = name.split(":");
       // Validations are written by A1 below, from the cells that hold them.
-      if (what === "validations" || (what === "type" && String(value).startsWith(VALID))) continue;
+      if (what === "validations" || (what === "type" && String(value).startsWith(VALID)) || what === "tables" || what === "table") continue;
       if (ids.length === 1 && ids[0] === sheet.id && what === "merges") { const said = mergesA1(sheet, value); if (said.length) out.merges = said; }
       else if (ids.length === 1 && ids[0] === sheet.id && what === "rules") { const said = rulesA1(sheet, value); if (said.length) out.rules = said; else if (Array.isArray(value)) out.rules = value; }
       else if (ids.length === 1 && ids[0] === sheet.id && what === "rulesKept") { const said = keptA1(sheet, value); if (said.length) out.rulesKept = said; }
@@ -338,8 +346,9 @@ export function sheetKind(hub) {
       else if (ids.length === 1 && sheet.indexOfCol(ids[0]) >= 0) out[`${what}:${colName(sheet.indexOfCol(ids[0]))}`] = value;
       else if (ids.length === 2 && sheet.indexOfRow(ids[0]) >= 0 && sheet.indexOfCol(ids[1]) >= 0) out[`${what}:${a1(sheet.indexOfRow(ids[0]), sheet.indexOfCol(ids[1]))}`] = value;
     }
-    const validations = validationsA1(room.look, sheet);
+    const validations = validationsA1(room.look, sheet), tables = tablesA1(sheet, readTables(room.look, sheet.id));
     if (validations.length) out.validations = validations;
+    if (tables.length) out.tables = tables;
     return out;
   };
   const restoreLook = (room, sheet, tab, kept) => {
@@ -356,6 +365,7 @@ export function sheetKind(hub) {
         if (ids.length) room.look.set(`merges:${tab}`, JSON.stringify(ids));
       }
       else if (at === undefined && what === "validations") restoreValidations(room.look, sheet, value);
+      else if (at === undefined && (what === "tables" || what === "table")) writeTables(room.look, tab, tablesIds(sheet, value, takenNames(room.look, tab)));
       else if (at === undefined && what === "rules") { const ids = rulesIds(sheet, value); if (ids) room.look.set(`rules:${tab}`, ids); }
       else if (at === undefined && what === "rulesKept") { const ids = keptIds(sheet, value); if (ids) room.look.set(`rulesKept:${tab}`, ids); }
       else if (at === undefined && what === "charts") { const ids = chartIds(sheet, value); if (ids) room.look.set(`charts:${tab}`, ids); }

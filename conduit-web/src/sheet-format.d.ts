@@ -73,10 +73,10 @@ export type SheetTabOp =
  */
 export type SheetSortOp = { op: "sort"; range: string; column: string; descending?: boolean; header?: boolean; tab?: string };
 /**
- * `look`'s `filter:<tabId>` and `table:<tabId>`, JSON: a range by its corners (`<rowId>:<colId>`), its first row the header. A filter's `keep` holds,
- * by column id, the values (as valueText writes them, "" for blank) its rows under the header may show; a column without one keeps every row; `hide`
- * is the rows it left out when last applied (filterHides), by id, so every page hides the same ones. A table's `name` is its own; it is drawn with a
- * bold header and banded rows, and turns the filter on over it. sheet.json writes them by A1: `{ range: "A1:D20", keep: { B: ["x"] }, hide: [3, 5] }`.
+ * `look`'s `filter:<tabId>`, JSON: a range by its corners (`<rowId>:<colId>`), its first row the header (a tab's tables, sheet-tables.d.ts, are
+ * kept so too). A filter's `keep` holds, by column id, the values (as valueText writes them, "" for blank) its rows under the header may show; a
+ * column without one keeps every row; `hide` is the rows it left out when last applied (filterHides), by id, so every page hides the same ones.
+ * sheet.json writes them by A1: `{ range: "A1:D20", keep: { B: ["x"] }, hide: [3, 5] }`.
  */
 export type SheetRangedLook = { from: string; to: string; keep?: Record<string, string[]>; when?: Record<string, SheetFilterWhen>; hide?: string[]; name?: string };
 /**

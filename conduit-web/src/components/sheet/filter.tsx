@@ -1,6 +1,6 @@
 /*
- * A tab's filter (a spreadsheet's AutoFilter) and its table, as its look holds them (sheet-format.d.ts SheetRangedLook). The rows a filter leaves out
- * are hidden as hidden rows are (sizes.ts); a table's header is bold and its rows banded (grid.ts). Sorting, filtering and making a table act as a
+ * A tab's filter (a spreadsheet's AutoFilter) and its tables, as its look holds them (sheet-format.d.ts SheetRangedLook, tables.tsx). The rows a filter
+ * leaves out are hidden as hidden rows are (sizes.ts); a table's header is bold and its rows banded (grid.ts). Sorting, filtering and making a table act as a
  * spreadsheet's do: on the selection, or with one cell selected on the filter or table it is in, else on the block of filled cells around it.
  */
 import { createMemo, createSignal, For, onCleanup, Show, type Accessor } from "solid-js";
@@ -16,6 +16,7 @@ import { Popover, PopoverContent, Select } from "@/components/ui/menus";
 import { colName, filterHides, key as cellKey, rangeA1, rangedArea, valueText, type SheetFilterTest, type SheetFilterWhen, type SheetRangedLook, type SheetView } from "@/sheet-format.js";
 import type { SheetBox, SheetCellsOp, SheetRange } from "./host";
 import { PLAIN, type SheetCellStyle } from "./styles";
+import { createSheetTables, TablePrompt } from "./tables";
 
 // A column's values its filter lists, at most: Select all still reaches the rest.
 const LISTED = 500;
@@ -31,7 +32,7 @@ const TESTS: { is: SheetFilterTest; label: string; takes: 0 | 1 | 2; kind?: "num
 ];
 const fits = (kind: "number" | "date" | undefined, text: string) => kind === "number" ? text.trim() !== "" && Number.isFinite(Number(text)) : kind === "date" ? readDay(text) !== null : text !== "";
 type Ranged = { range: SheetRange; look: SheetRangedLook };
-type What = "filter" | "table";
+type What = "filter";
 /** What key sequences and the menu do (sequences.tsx). `col`: the column sorted by; unsaid, the active cell's. */
 export type SheetFilterKeys = { sort(descending: boolean, col?: number): void; filter(): void; table(): void };
 export type SheetFilter = ReturnType<typeof createSheetFilter>;
@@ -59,11 +60,12 @@ export const regionAround = ({ rows, cols }: { rows: number; cols: number }, has
 /** `bold`: whether a cell wears bold (styles.ts), which makes a first row a header. */
 export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<SheetView | undefined>, selection: Accessor<SheetRange | null>, hub: (op: SheetCellsOp) => void, bold: (row: number, col: number) => boolean) {
   const [changed, setChanged] = createSignal(0);
-  const observe = (event: Y.YMapEvent<number | string>) => { for (const name of event.keysChanged) if (name.startsWith("filter:") || name.startsWith("table:")) return void setChanged((n) => n + 1); };
+  const observe = (event: Y.YMapEvent<number | string>) => { for (const name of event.keysChanged) if (name.startsWith("filter:") || name.startsWith("table:") || name.startsWith("tables:")) return void setChanged((n) => n + 1); };
   look.observe(observe);
   onCleanup(() => look.unobserve(observe));
   // Read for every cell the grid draws: parsed once a text, and its range found again only where its corners are no longer where they were.
-  const held: Record<What, { text?: string; one: SheetRangedLook | null; at: Ranged | null; ids: (string | undefined)[] }> = { filter: { one: null, at: null, ids: [] }, table: { one: null, at: null, ids: [] } };
+  const held: Record<What, { text?: string; one: SheetRangedLook | null; at: Ranged | null; ids: (string | undefined)[] }> = { filter: { one: null, at: null, ids: [] } };
+  const tables = createSheetTables(look, model);
   const read = (what: What): Ranged | null => {
     const sheet = model(), text = sheet?.id ? look.get(`${what}:${sheet.id}`) : undefined, one = held[what];
     if (!sheet || typeof text !== "string") return null;
@@ -99,7 +101,11 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
     const area = selection(), sheet = model();
     if (!area || !sheet) return null;
     const { rows, cols } = sheet.size(), lone = area.top === area.bottom && area.left === area.right, columns = !lone && area.top === 0 && area.bottom >= rows - 1;
-    if (lone) for (const what of ["filter", "table"] as const) { const on = read(what); if (on && inside(on.range, area.top, area.left)) return { range: on.range, header: true }; }
+    if (lone) {
+      const filtered = read("filter"), table = tables.at(area.top, area.left);
+      if (filtered && inside(filtered.range, area.top, area.left)) return { range: filtered.range, header: true };
+      if (table) return { range: table.range, header: table.table.header !== false };
+    }
     if (area.top >= rows || area.left >= cols) return null;
     let range = { ...area, bottom: Math.min(area.bottom, rows - 1), right: Math.min(area.right, cols - 1) };
     if (lone) range = block(sheet, area.top, area.left);
@@ -146,14 +152,16 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
   const keys: SheetFilterKeys = {
     sort: (descending, col) => { const on = target(); if (on) sortRange(on, descending, col ?? selection()?.left ?? on.range.left); },
     filter: () => { if (read("filter")) write("filter", null); else { const on = target(); if (on) write("filter", on.range); } },
-    // Made over the selection, or taken off where the active cell is in it, its filter with it. A filter already there keeps the values it keeps in
-    // the table's columns.
+    // Made over the selection (none over another table), or taken off where the active cell is in one, the filter on it with it. The tab's filter
+    // moves onto a new table unless it is on other cells, keeping the values it keeps in the table's columns.
     table: () => {
-      const now = read("table"), area = selection(), off = now && area && inside(now.range, area.top, area.left), on = off ? null : target(), was = read("filter");
-      if (!off && !on) return;
+      const area = selection(), now = area && tables.at(area.top, area.left), on = now ? null : target(), was = read("filter");
+      const same = (one: SheetRange, two: SheetRange) => one.top === two.top && one.left === two.left && one.bottom === two.bottom && one.right === two.right;
+      if (now) return void look.doc!.transact(() => { tables.remove(now); if (was && same(was.range, now.range)) write("filter", null); });
+      if (!on || tables.overlaps(on.range)) return;
       look.doc!.transact(() => {
-        write("table", on?.range ?? null, { name: now?.look.name ?? "Table1" });
-        if (!on) return write("filter", null);
+        tables.make(on.range);
+        if (was && !(was.range.top <= on.range.bottom && on.range.top <= was.range.bottom && was.range.left <= on.range.right && on.range.left <= was.range.right)) return;
         const keep = Object.fromEntries(Object.entries(was?.look.keep ?? {}).filter(([id]) => { const col = model()?.indexOfCol(id) ?? -1; return col >= on.range.left && col <= on.range.right; }));
         const ids = [model()?.rowAt(on.range.top), model()?.colAt(on.range.left), model()?.rowAt(on.range.bottom), model()?.colAt(on.range.right)];
         if (ids.every(Boolean)) apply(on.range, { from: cellKey(ids[0]!, ids[1]!), to: cellKey(ids[2]!, ids[3]!), keep: Object.keys(keep).length ? keep : undefined });
@@ -167,7 +175,14 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
     /** The block of filled cells joined to a cell. */
     around: (row: number, col: number) => { const sheet = model(); return sheet ? block(sheet, row, col) : null; },
     filter: () => { changed(); return read("filter"); },
-    table: () => { changed(); return read("table"); },
+    /** The table the active cell is in. */
+    table: () => { changed(); const area = selection(); return area ? tables.at(area.top, area.left) : null; },
+    tables,
+    /** What only the palette and a search of the cell menu find of the active cell's table; each runs once the menu has shut. */
+    tableActions: () => { changed(); const area = selection(), on = area && tables.at(area.top, area.left); return on ? [
+      { label: "Rename table…", meta: on.table.name, run: () => tables.setRenaming(on) },
+      { label: "Convert to range", run: () => keys.table() },
+    ] : []; },
     /** Sorts the filter's rows under its header by a column. */
     sortColumn: (col: number, descending: boolean) => { const on = read("filter"); if (on) sortRange({ range: on.range, header: true }, descending, col); },
     /** The values a column keeps (null: every one), the filter applied with them; its condition goes. */
@@ -207,12 +222,10 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
       const id = model()?.colAt(col);
       return id && (on.look.keep?.[id] || on.look.when?.[id]) ? 2 : 1;
     },
-    /** A table's rows under its header, every other one from the first. */
-    banded: (row: number, col: number) => { const on = read("table"); return Boolean(on && inside(on.range, row, col) && (row - on.range.top) % 2 === 1); },
-    /** A cell's style, bold in a table's header. */
+    banded: tables.banded,
+    /** A cell's style, bold in a table's header and total row. */
     style: (worn: SheetCellStyle | undefined, row: number, col: number) => {
-      const on = read("table");
-      if (!on || row !== on.range.top || col < on.range.left || col > on.range.right || worn?.bold) return worn;
+      if (worn?.bold || !tables.edge(row, col)) return worn;
       let made = bolded.get(worn);
       if (!made) bolded.set(worn, made = { ...(worn ?? PLAIN), bold: true });
       return made;
@@ -282,6 +295,7 @@ export function FilterMenu(props: { filter: SheetFilter; at: { col: number; box:
       </PopoverContent>
     </Popover>
     <FilterPrompt filter={props.filter} col={asking()} onClose={() => { setAsking(null); props.onClose(); }} />
+    <TablePrompt tables={props.filter.tables} onClose={props.onClose} />
   </>;
 }
 

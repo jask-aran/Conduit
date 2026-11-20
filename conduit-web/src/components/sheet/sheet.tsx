@@ -636,6 +636,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     ...props.onChart ? [{ label: "Make chart", keys: ["Alt", "F1"], run: () => askChart() }] : [],
     { label: "New tab", keys: ["Shift", "F11"], run: () => addTab(tabs) },
     { label: "Duplicate tab", run: () => { const id = tabs.shown(); if (id) void tabs.op({ op: "duplicate-tab", tab: id }); } },
+    ...filters.tableActions().map((one) => ({ ...one, run: () => { opening = one.run; } })),
     { label: "Sheet shortcuts", keys: ["Ctrl", "/"], run: () => { opening = () => setShowingKeys(true); } },
   ];
   // Every action of the cell menu at the selection, and the rest, in one list (the command palette's): run from there, what a row leaves to the menu's

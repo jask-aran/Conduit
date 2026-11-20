@@ -1,6 +1,7 @@
 import path from "node:path";
 import * as XLSX from "xlsx";
-import { a1, colIndex, parseA1, parseRange, rangeA1, rowId, tabRef } from "../sheet-format.js";
+import { a1, colIndex, colName, parseA1, parseRange, rangeA1, rowId, tabRef } from "../sheet-format.js";
+import { TOTALS } from "../sheet-tables.js";
 import { CHART_KINDS, chartSize } from "../sheet-charts.js";
 
 /*
@@ -13,17 +14,33 @@ const attr = (tag, name) => { const found = new RegExp(`\\s${name}="([^"]*)"`).e
 const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships", TYPE = "application/vnd.openxmlformats-officedocument.";
 const EMU_PER_PX = 9525;
 
-/** A tab's table as its own part, its columns named by its header row's text; none where a header is empty, repeated or not text (a year as a number), as Excel would repair it. */
+/**
+ * A tab's table (sheet-tables.d.ts SheetTableA1) as its own part, its columns named by its header row's text (`Column1`… with none), each column's
+ * total as Excel writes it; none where a header is empty, repeated or not text (a year as a number), as Excel would repair it. `range`: its A1.
+ */
 export function tablePart(table, values, id, taken, filtered = "") {
-  const area = parseRange(String(table?.range ?? ""));
-  if (!area || area.bottom <= area.top) return null;
-  const names = Array.from({ length: area.right - area.left + 1 }, (_, c) => { const value = values[area.top]?.[area.left + c]; return typeof value === "string" ? value : ""; });
+  const area = parseRange(String(table?.range ?? "")), header = table?.header !== false, total = Boolean(table?.total);
+  if (!area || area.bottom - area.top < Number(header) + Number(total)) return null;
+  const width = area.right - area.left + 1, names = Array.from({ length: width }, (_, c) => { if (!header) return `Column${c + 1}`; const value = values[area.top]?.[area.left + c]; return typeof value === "string" ? value : ""; });
   if (names.some((name) => !name) || new Set(names.map((name) => name.toLowerCase())).size < names.length) return null;
   // A table's name is the workbook's: one another tab's table has, or one Excel would not take, is numbered instead.
-  const said = String(table.name ?? ""), called = /^[A-Za-z_\\][\w.]*$/.test(said) && !/^[A-Z]{1,3}\d+$/i.test(said) && !taken.has(said.toLowerCase()) ? said : `Table${id}`, ref = rangeA1(area);
+  const said = String(table.name ?? ""), called = /^[\p{L}_\\][\p{L}\p{N}_.]*$/u.test(said) && !/^[A-Z]{1,3}\d+$/i.test(said) && !taken.has(said.toLowerCase()) ? said : `Table${id}`, ref = rangeA1(area);
   taken.add(called.toLowerCase());
-  return { name: `xl/tables/table${id}.xml`, type: `${TYPE}spreadsheetml.table+xml`, rel: `${REL}/table`, element: "tableParts", block: (rid) => `<tableParts count="1"><tablePart r:id="${rid}"/></tableParts>`,
-    xml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="${id}" name="${escaped(called)}" displayName="${escaped(called)}" ref="${ref}"><autoFilter ref="${ref}"${filtered ? `>${filtered}</autoFilter>` : "/>"}<tableColumns count="${names.length}">${names.map((name, n) => `<tableColumn id="${n + 1}" name="${escaped(name)}"/>`).join("")}</tableColumns><tableStyleInfo name="${escaped(table.style ?? "TableStyleMedium2")}" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/></table>` };
+  const filter = header ? `<autoFilter ref="${rangeA1({ ...area, bottom: area.bottom - Number(total) })}"${filtered ? `>${filtered}</autoFilter>` : "/>"}` : "";
+  const columns = names.map((name, n) => {
+    const fn = total ? table.totals?.[colName(area.left + n)] : undefined, label = total && !fn ? values[area.bottom]?.[area.left + n] : undefined;
+    return `<tableColumn id="${n + 1}" name="${escaped(name)}"${fn ? ` totalsRowFunction="${fn}"` : typeof label === "string" && label ? ` totalsRowLabel="${escaped(label)}"` : ""}/>`;
+  }).join("");
+  const style = table.style === "none" ? "" : `<tableStyleInfo name="${escaped(table.style ?? "TableStyleMedium2")}" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/>`;
+  return { range: ref, name: `xl/tables/table${id}.xml`, type: `${TYPE}spreadsheetml.table+xml`, rel: `${REL}/table`, element: "tableParts", block: (...rids) => `<tableParts count="${rids.length}">${rids.map((rid) => `<tablePart r:id="${rid}"/>`).join("")}</tableParts>`,
+    xml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="${id}" name="${escaped(called)}" displayName="${escaped(called)}" ref="${ref}"${header ? "" : ' headerRowCount="0"'}${total ? ' totalsRowCount="1"' : ""}>${filter}<tableColumns count="${width}">${columns}</tableColumns>${style}</table>` };
+}
+/** A table part read (sheet-tables.d.ts SheetTableA1): its range, name, header and total rows, style and each column's total Excel's list has. */
+export function tableOf(xml) {
+  const head = /<table\b[^>]*>/.exec(xml)[0], range = attr(head, "ref"), area = parseRange(range), info = /<tableStyleInfo\b[^>]*>/.exec(xml)?.[0], style = info ? attr(info, "name") : "none";
+  const total = Number(attr(head, "totalsRowCount") ?? 0) > 0;
+  const totals = Object.fromEntries([...xml.matchAll(/<tableColumn\b[^>]*>/g)].flatMap(([tag], n) => { const fn = attr(tag, "totalsRowFunction"); return total && area && TOTALS.includes(fn) ? [[colName(area.left + n), fn]] : []; }));
+  return { range, name: attr(head, "displayName") ?? attr(head, "name"), ...(attr(head, "headerRowCount") === "0" ? { header: false } : {}), ...(total ? { total: true } : {}), ...(style && style !== "TableStyleMedium2" ? { style } : {}), ...(Object.keys(totals).length ? { totals } : {}) };
 }
 
 const PLOT = { column: "barChart", bar: "barChart", line: "lineChart", area: "areaChart", pie: "pieChart", scatter: "scatterChart" };
@@ -144,13 +161,16 @@ export function withParts(bytes, sheets, placed, book = []) {
     if (!parts.length) return;
     const sheetName = `xl/worksheets/sheet${n + 1}.xml`, relsName = `xl/worksheets/_rels/sheet${n + 1}.xml.rels`;
     let sheet = get(sheetName), had = get(relsName) ?? rels([]);
+    // Parts of one element (a tab's tables) are listed in one block.
+    const blocks = new Map();
     parts.forEach((part, k) => {
       const rid = `rIdPart${k + 1}`;
       had = had.replace("</Relationships>", `<Relationship Id="${rid}" Type="${part.rel}" Target="${path.posix.relative("xl/worksheets", part.name)}"/></Relationships>`);
       put(part.name, part.xml); typed(part.name, part.type);
       for (const [name, xml, type] of part.more ?? []) { put(name, xml); if (type) typed(name, type); }
-      if (part.element) sheet = placed(sheet, part.element, part.block(rid));
+      if (part.element) blocks.set(part.element, [...blocks.get(part.element) ?? [part], rid]);
     });
+    for (const [element, [part, ...rids]] of blocks) sheet = placed(sheet, element, part.block(...rids));
     put(relsName, had); put(sheetName, sheet);
   });
   if (book.length) {

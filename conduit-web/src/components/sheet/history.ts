@@ -7,7 +7,7 @@ export class SheetStep { counted = false; constructor(readonly id: number, reado
 // Excel keeps 100 steps; the list shows the latest of them.
 const KEPT = 100, LISTED = 20, STEP = "step", LABEL = "label", WAIT_MS = 3000;
 // A change made outside any named step is named by the look it changed.
-const LOOKS: Record<string, string> = { style: "Format cells", fmt: "Number format", width: "Column width", height: "Row height", hidden: "Hide rows", freezeRows: "Freeze panes", freezeCols: "Freeze panes", filter: "Filter", table: "Table", type: "Column type" };
+const LOOKS: Record<string, string> = { style: "Format cells", fmt: "Number format", width: "Column width", height: "Row height", hidden: "Hide rows", freezeRows: "Freeze panes", freezeCols: "Freeze panes", filter: "Filter", table: "Table", tables: "Table", type: "Column type" };
 const described = (changed: Map<unknown, readonly unknown[]>) => {
   for (const events of changed.values()) for (const event of events) if (event instanceof Y.YMapEvent) for (const name of event.keysChanged) { const what = LOOKS[name.slice(0, name.indexOf(":"))]; if (what) return what; }
   return "Edit";

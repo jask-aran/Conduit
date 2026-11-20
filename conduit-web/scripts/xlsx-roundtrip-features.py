@@ -257,7 +257,10 @@ def g_table(wb):
     ws.append(["Name", "Qty", "Price"])
     for row in [["a", 1, 2.5], ["b", 2, 3.5], ["c", 3, 4.5]]: ws.append(row)
     t = Table(displayName="Sales", ref="A1:C4"); t.tableStyleInfo = TableStyleInfo(name="TableStyleMedium9", showRowStripes=True); ws.add_table(t)
-def r_table(wb, raw): return {f"table {n}": [t.ref, t.tableStyleInfo.name if t.tableStyleInfo else ""] for n, t in ((t.displayName, t) for t in wb.active.tables.values())}
+    # A second table on the tab, with a total row summing its second column.
+    for r, row in enumerate([["Item", "Cost"], ["x", 4], ["y", 6], ["Total", "=SUBTOTAL(109,F2:F3)"]], 1): ws.cell(r, 5, row[0]); ws.cell(r, 6, row[1])
+    t = Table(displayName="Costs", ref="E1:F4", totalsRowCount=1); t._initialise_columns(); t.tableColumns[0].totalsRowLabel = "Total"; t.tableColumns[1].totalsRowFunction = "sum"; ws.add_table(t)
+def r_table(wb, raw): return {f"table {n}": [t.ref, t.tableStyleInfo.name if t.tableStyleInfo else "", t.totalsRowCount or 0, [c.totalsRowFunction for c in t.tableColumns]] for n, t in ((t.displayName, t) for t in wb.active.tables.values())}
 feature("tables")((g_table, r_table))
 
 def g_filter(wb):

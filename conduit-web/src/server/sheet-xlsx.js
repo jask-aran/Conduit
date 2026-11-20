@@ -7,7 +7,7 @@ import { CONFIG, defineNames } from "../sheet-engine.js";
 import { NAMES } from "../sheet-functions.js";
 import { shiftRefs } from "../sheet-rules.js";
 import { decodeStyle, encodeStyle, SHEET_INKS } from "../sheet-styles.js";
-import { cornerOf, drawingPart, notesParts, personsPart, readCharts, readNotes, tablePart, withParts } from "./xlsx-parts.js";
+import { cornerOf, drawingPart, notesParts, personsPart, readCharts, readNotes, tableOf, tablePart, withParts } from "./xlsx-parts.js";
 import { ownOver, readDxfs, readStyles, rgbOf, seen, sheetRules, sheetStyles, withDxfs, withRules, writeRules, writeStyles } from "./xlsx-styles.js";
 
 /*
@@ -228,10 +228,10 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     tab.rules = ruled.rules; tab.rulesKept = ruled.kept;
     for (const [type, count] of Object.entries(ruled.unread)) drop(`conditional formats (${type})`, count);
     tab.validations = validationsOf(xml);
-    // A tab's first table, or else its filter, by its range (a table's name and style kept); the criteria a filter was last applied with are not read, the rows it hid are.
-    const [table, ...tables] = linked(xmlOf[tab.called] ?? "", "table").map(text).filter((part) => attr(/<table\b[^>]*>/.exec(part)?.[0] ?? "", "ref"));
-    if (table) { const head = /<table\b[^>]*>/.exec(table)[0], style = attr(/<tableStyleInfo\b[^>]*>/.exec(table)?.[0] ?? "", "name"); tab.table = { range: attr(head, "ref"), name: attr(head, "displayName") ?? attr(head, "name"), ...(style ? { style } : {}) }; }
-    drop("tables after a tab's first", tables.length);
+    // Each table by its range, name, header and total rows, style and each column's total; the tab's filter is its first table's, or else the
+    // sheet's own. The criteria a filter was last applied with are read, the rows it hid are.
+    const parts = linked(xmlOf[tab.called] ?? "", "table").map(text).filter((part) => attr(/<table\b[^>]*>/.exec(part)?.[0] ?? "", "ref")), table = parts[0];
+    tab.tables = parts.map(tableOf);
     const filter = /<autoFilter\b[^>]*>/.exec(xml)?.[0];
     // A table's filter is its own part's: its conditions are read from there.
     const filtering = table ? /<autoFilter\b[\s\S]*?(?:\/>|<\/autoFilter>)/.exec(table)?.[0] : /<autoFilter\b[^>]*?(?:\/>|>[\s\S]*?<\/autoFilter>)/.exec(xml)?.[0];
@@ -367,7 +367,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       if (tab.charts.length) look.charts = tab.charts;
       for (const [at, note] of Object.entries(tab.notes)) look[`note:${at}`] = note;
       for (const [at, list] of Object.entries(tab.drawn)) look[`drawing:${at}`] = list;
-      if (tab.table) look.table = tab.table;
+      if (tab.tables.length) look.tables = tab.tables;
       if (tab.filter) look.filter = tab.filter;
       // A frozen formula goes with its cell (`excel:<rowId>:<colId>` once in the doc), written for the cell it was in (`anchor`), as a rule's are.
       for (const [at, one] of Object.entries(report.frozen[tab.name] ?? {})) if (!one.why.startsWith("a formula over")) look[`excel:${at}`] = { formula: one.formula, value: one.kept, anchor: at };
@@ -483,10 +483,12 @@ export function exportXlsx(given) {
     // The rows hidden, and those the filter hid when last applied.
     const filteredOut = new Set(tab.look.filter?.hide ?? []);
     sheet["!rows"] = tab.typed.map((_, r) => { const height = tab.look[`height:${r + 1}`]; return { ...(typeof height === "number" ? { hpt: exact(tab.look[`exact:${r + 1}`], height, (pt) => pt / PT_PER_PX, (px) => px * PT_PER_PX) } : {}), ...(tab.look[`hidden:${r + 1}`] || filteredOut.has(r + 1) ? { hidden: true } : {}), ...level(r + 1) }; });
-    // A table is its own part (xlsx-parts.js); one Excel would repair is written as its filter alone.
-    // The table's part holds its own filter: a sheet's filter over it is one Excel repairs.
-    tab.tablePart = tab.look.table ? tablePart(tab.look.table, tab.values, ++tables, tableNames, filterColumns(tab.look.filter?.range === tab.look.table.range ? tab.look.filter : null)) : null;
-    const filtered = tab.tablePart ? undefined : tab.look.filter?.range ?? tab.look.table?.range;
+    // Each table is its own part (xlsx-parts.js); one Excel would repair is written as its filter alone. A table's part holds its own filter: the
+    // tab's filter over one is written there, as a sheet's filter over it is one Excel repairs.
+    const listed = Array.isArray(tab.look.tables) ? tab.look.tables : tab.look.table ? [tab.look.table] : [], filter = tab.look.filter;
+    tab.tableParts = listed.flatMap((table) => { const part = tablePart(table, tab.values, tables + 1, tableNames, filterColumns(filter?.range === table.range ? filter : null)); if (part) tables++; return part ?? []; });
+    tab.filterInTable = tab.tableParts.some((part) => part.range === filter?.range);
+    const filtered = tab.filterInTable ? undefined : filter?.range ?? (tab.tableParts.length ? undefined : listed.find((table) => table.header !== false)?.range);
     if (typeof filtered === "string") sheet["!autofilter"] = { ref: filtered };
     if (Array.isArray(tab.look.merges)) sheet["!merges"] = tab.look.merges.map((range) => XLSX.utils.decode_range(String(range)));
     XLSX.utils.book_append_sheet(book, sheet, tab.name);
@@ -499,7 +501,7 @@ export function exportXlsx(given) {
   const ruled = tabs.some((tab) => ["rules", "rulesKept"].some((name) => Array.isArray(tab.look[name]) && tab.look[name].length)), rules = ruled ? writeRules(tabs.map((tab) => tab.look.rules), (formula) => stored(orphaned(`=${formula}`, known)), tabs.map((tab) => tab.look.rulesKept)) : null;
   const validations = tabs.map((tab) => validationsXml(tab.look.validations)), inked = tabs.map((tab) => inksXml(tab.look.validations));
   // A tab's colour (`tabColor`): #RRGGBB as imported, or an ink the page set, written as its hex.
-  const conditions = tabs.map((tab) => tab.tablePart ? "" : filterColumns(tab.look.filter));
+  const conditions = tabs.map((tab) => tab.filterInTable ? "" : filterColumns(tab.look.filter));
   const colors = tabs.map((tab) => { const color = String(tab.look.tabColor ?? ""); return (/^#[0-9A-F]{6}$/i.test(color) || SHEET_INKS.includes(color) ? `<tabColor rgb="FF${rgbOf(color)}"/>` : "") + whole(tab.look.print?.pageSetUpPr, "pageSetUpPr"); });
   const printed = tabs.map((tab) => [...PRINT.map((name) => [name, whole(tab.look.print?.[name], name)]), ["sheetProtection", whole(tab.look.protection, "sheetProtection")]].filter(([, xml]) => xml));
   const locked = whole(tabs.find((tab) => tab.look.bookProtection)?.look.bookProtection, "workbookProtection");
@@ -515,7 +517,7 @@ export function exportXlsx(given) {
     const drawing = drawingPart(Array.isArray(tab.look.charts) ? tab.look.charts : [], tab.name, drawings + 1, charts, drawn, media), notes = notesParts(tab.look, noted + 1, blocks);
     if (drawing) { drawings += 1; charts += drawing.count; media = drawing.media; }
     if (notes.blocks) { noted += 1; blocks += notes.blocks; }
-    return [tab.tablePart, drawing, ...notes.parts].filter(Boolean);
+    return [...tab.tableParts, drawing, ...notes.parts].filter(Boolean);
   });
   const persons = personsPart(tabs.find((tab) => tab.look.persons)?.look.persons), bookParts = persons && parts.some((list) => list.some((part) => part.name.startsWith("xl/threadedComments/"))) ? [persons] : [];
   // A thread names its people: without them it is left to its note, which Excel reads alone.
