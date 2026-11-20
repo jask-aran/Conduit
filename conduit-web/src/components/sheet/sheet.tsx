@@ -316,6 +316,23 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     const offKeys = sequences.attach(into), offBrush = brush.attach(into), offEdges = dragRowEdges(into, grid, (row, height) => history.act("Row height", () => sizes.setHeights(span("rows", row), height / zoom())));
     onCleanup(() => { offKeys(); offBrush(); offEdges(); });
   });
+  // The ribbon's keys, as Excel's: Left and Right (Home, End) go along its tools as they stand on screen, F6 and Esc go back to the grid. Listened
+  // to on the slot itself: the ribbon is portalled into it, so its keys reach the section's handler by way of the pane, not the slot.
+  createEffect(() => {
+    const ribbon = slot();
+    if (!ribbon) return;
+    const keys = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.altKey || event.metaKey || (event.target as HTMLElement).closest("input, textarea, [role=radiogroup], [role=menu], [role=dialog]")) return;
+      if (event.key === "F6" || event.key === "Escape") { event.preventDefault(); return grid()?.focus(); }
+      const by = { ArrowRight: 1, ArrowLeft: -1, Home: -Infinity, End: Infinity }[event.key];
+      if (!by) return;
+      const tools = [...ribbon.querySelectorAll<HTMLElement>("button:not([disabled])")].filter((one) => one.offsetParent).sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+      const at = tools.indexOf(event.target as HTMLElement), to = tools[Math.max(0, Math.min(tools.length - 1, Number.isFinite(by) ? at + by : by > 0 ? tools.length - 1 : 0))];
+      if (to) { event.preventDefault(); to.focus(); }
+    };
+    ribbon.addEventListener("keydown", keys);
+    onCleanup(() => ribbon.removeEventListener("keydown", keys));
+  });
   const cellBox = createMemo<JSX.CSSProperties>((was) => {
     scrolled();
     const now = editor.editing(), made = grid(), into = island();
@@ -519,6 +536,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     const lines = made.lines(), box = made.bounds({ top: area.top, bottom: area.top, left: area.left, right: area.left }) ?? into.getBoundingClientRect();
     setMenu(lines === "rows" ? { rows: area } : lines === "cols" ? { cols: area } : { rows: { ...area, left: 0, right: 0 }, cols: { ...area, top: 0, bottom: 0 } });
     into.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: box.left + Math.min(box.width / 2, 24), clientY: box.top + box.height }));
+    // The browser's own contextmenu for the same key (Windows sends one as the key comes up) would open it a second time, at the canvas's middle.
+    const twice = (event: Event) => { if (event.isTrusted && !(event as PointerEvent).pointerType) { event.preventDefault(); event.stopPropagation(); } };
+    window.addEventListener("contextmenu", twice, true); setTimeout(() => window.removeEventListener("contextmenu", twice, true), 800);
   };
   // The current region round a cell (Ctrl+A, Ctrl+Shift+*), found on the index of filled cells.
   const regionOf = (row: number, col: number) => { const sheet = model(); return sheet && filled ? regionAround(sheet.size(), filled.has, row, col) : filters.around(row, col); };
@@ -688,9 +708,10 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     onKeyDown={(event) => {
       // F6 takes the keyboard from the grid to the ribbon, and back.
       if (event.key === "F6" && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        const ribbon = slot(), inGrid = island()?.contains(event.target as Node);
-        if (inGrid) { const first = ribbon?.querySelector<HTMLElement>("button:not([disabled]), [tabindex='0']"); if (first) { event.preventDefault(); first.focus(); } }
-        else if (ribbon?.contains(event.target as Node)) { event.preventDefault(); grid()?.focus(); }
+        // Into the sheet's own tools first (the ribbon's mode set comes first in its markup); back from it is the slot's (above).
+        if (!island()?.contains(event.target as Node)) return;
+        const first = slot()?.querySelector<HTMLElement>("[data-set=edit] button:not([disabled])") ?? slot()?.querySelector<HTMLElement>("button:not([disabled])");
+        if (first) { event.preventDefault(); first.focus(); }
         return;
       }
       if (!(event.ctrlKey || event.metaKey) || !island()?.contains(event.target as Node)) return;
