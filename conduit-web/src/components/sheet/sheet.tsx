@@ -168,7 +168,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     grid, input: (row, col) => shownInput(row, col), functions: tabs.functions, merged: (row, col) => merges.at(row, col),
     write: (row, col, input) => writes("")([{ row, col, input: types.typed(row, col, input) }]),
     // As a spreadsheet's Ctrl+Enter: each shown cell selected takes it, a formula moved from the cell typed in to its own.
-    fill: (from, input) => { const area = at(); if (!area || (area.top === area.bottom && area.left === area.right)) return false; writes("Fill selection")(within(inTab(area)).flat().map(({ row, col }) => ({ row, col, input: shifted(input, row - from.row, col - from.col) }))); return true; },
+    fill: (from, input) => { const area = at(); if (!area || (area.top === area.bottom && area.left === area.right)) return false; writes("Fill selection")(within(grid()?.lines() ? inTab(area) : area).flat().map(({ row, col }) => ({ row, col, input: shifted(input, row - from.row, col - from.col) }))); return true; },
     selected: () => { changed(); const area = at(); return area && { row: area.top, col: area.left }; }, error: (row, col) => model()?.error(row, col) ?? null,
     chips: chip.offers,
     chip: ({ row, col }, name, offer) => {
@@ -196,6 +196,22 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const filters = createSheetFilter(look, model, at, hub, (row, col) => Boolean(styles.at(row, col)?.bold), { act: history.act, select: (range) => grid()?.select(range), setType: (range, kind) => setType(range, kind) }), [filtering, setFiltering] = createSignal<{ col: number; box: SheetBox } | null>(null);
   const sizes = createSheetSizes(look, model, styles.lines, filters.hidden, measureShown(styles, formats, model)), [question, setQuestion] = createSignal<SizeQuestion | null>(null);
   const merges = createSheetMerges(look, model), rules = createSheetRules(look, model), [ruling, setRuling] = createSignal<SheetRange | null>(null), decisions = createDecisionScope(() => props.id);
+  // A style, number format, type, validation or conditional rule set on cells past the tab's last row or column first grows the tab to hold them, as
+  // typing there does, and is set once the hub's new lines have come, in the same step; whole columns or rows selected grow only across.
+  const reach = (range: SheetRange, run: (range: SheetRange) => void) => {
+    const size = model()?.size(), lines = grid()?.lines();
+    if (!size) return;
+    const to = { ...range, bottom: lines === "cols" || range.bottom >= 1_048_575 ? Math.min(range.bottom, size.rows - 1) : range.bottom, right: lines === "rows" || range.right >= 16_383 ? Math.min(range.right, size.cols - 1) : range.right };
+    if (to.bottom < size.rows && to.right < size.cols) return run(to);
+    const later = history.later(), held = () => { const now = model()?.size(); return Boolean(now && now.rows > to.bottom && now.cols > to.right); };
+    void Promise.all([to.bottom >= size.rows && history.hub({ op: "insert-rows", at: size.rows, count: to.bottom + 1 - size.rows }), to.right >= size.cols && history.hub({ op: "insert-cols", at: size.cols, count: to.right + 1 - size.cols })])
+      .then(() => new Promise<boolean>((done) => { const since = performance.now(), wait = () => held() ? done(true) : performance.now() - since > 5000 ? done(false) : requestAnimationFrame(wait); wait(); }))
+      .then((grown) => { if (grown) later(() => run(to)); }, (error: Error) => props.host.failed(error.message));
+  };
+  for (const [made, name] of [[styles, "set"], [styles, "borders"], [formats, "set"], [types, "set"], [validity, "set"], [rules, "add"]] as const) {
+    const held = made as unknown as Record<string, (range: SheetRange, ...rest: unknown[]) => void>, own = held[name]!.bind(made);
+    held[name] = (range: SheetRange, ...rest: unknown[]) => reach(range, (to) => own(to, ...rest));
+  }
   // As a spreadsheet's: Merge & Center on a merge unmerges it, and a merge emptying cells that hold values asks first.
   const merge = (kind: SheetMergeKind | null, asked = at()) => {
     if (!asked) return;
@@ -829,7 +845,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
           { label: "Remove duplicates…", icon: DataIcons.dedupe, run: () => { const on = nRows === 1 && nCols === 1 ? filters.region() : { range: inTab(range), header: false }; if (on) opening = () => setDeduping(on); } },
           { label: "Trim whitespace", icon: DataIcons.trim, run: () => trim(range) },
           { label: "Split text to columns…", icon: DataIcons.split, disabled: nCols > 1, run: () => { opening = () => setSplitting(range); } },
-          { label: "Data validation…", icon: DataIcons.data, run: () => { opening = () => setValidating(inTab(range)); } },
+          { label: "Data validation…", icon: DataIcons.data, run: () => { opening = () => setValidating(range); } },
         ] },
       ],
       // Plain, checkboxes (TRUE and FALSE), dates or a dropdown's options (sheet-types.js): whole columns take a column's type, other ranges each cell its own.
@@ -942,7 +958,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
               {/* Each selects what the menu was opened on (within the tab) before it acts, as the ribbon's tools act on the selection. */}
               <Show when={formatted()}>{(range) => <>
                 <FormattingMenu tools={tools} range={range()} select={(area) => grid()?.select(inTab(area))} />
-                <RulesMenu rules={rules} open={() => { grid()?.select(inTab(range())); setRuling(inTab(range())); }} />
+                <RulesMenu rules={rules} open={() => { grid()?.select(inTab(range())); setRuling(range()); }} />
                 <FormatMenu formats={formats} range={range()} />
               </>}</Show>
               <Show when={props.host.openSettings}>{(open) => <MenuSection><MenuRow icon={<Icons.Settings />} onSelect={() => open()()}>View settings…</MenuRow></MenuSection>}</Show>

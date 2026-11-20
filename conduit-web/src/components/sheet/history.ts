@@ -83,6 +83,8 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
       joined = join ? { step: open, join } : null;
       try { return doc.transact(run, open); } finally { open = null; }
     },
+    /** The step open now (else a new one), to finish later, once an op it sent has come back: what `run` changes then is part of it. */
+    later() { const step = open ?? begin("Edit"); return (run: () => void) => doc.transact(run, step); },
     hub(op: SheetCellsOp) {
       // Ops sent together outside a step (the fill handle's, a run of shown rows each) are one step.
       const step = open ?? lone ?? (lone = begin(opLabel(op)));
