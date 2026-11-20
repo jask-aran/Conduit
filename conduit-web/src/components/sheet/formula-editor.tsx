@@ -34,8 +34,10 @@ export type FormulaEditorHost = {
   selected(): Cell | null;
   /** An error cell's message, else null. */
   error(row: number, col: number): string | null;
-  /** One of CHIPS taken from what `@` offered in an empty cell. */
-  chip?(cell: Cell, name: string): void;
+  /** One of CHIPS, or of `chips`, taken from what `@` offered in an empty cell. */
+  chip?(cell: Cell, name: string, offer: FunctionOffer): void;
+  /** What `@` offers past CHIPS for what was typed after it. */
+  chips?(query: string): readonly FunctionOffer[];
 };
 /** A function name the engine does not have, held at commit: where it stands in `text`, and the real names nearest it. */
 export type FormulaDoubt = { text: string; name: string; from: number; to: number; near: readonly FunctionOffer[] };
@@ -104,8 +106,8 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
     if (!editing()) return [];
     const was = doubt(), word = context().word;
     if (was) return was.near;
-    const cell = editing()!, chip = host.chip && shut() !== text() && !host.input(cell.row, cell.col) ? /^@(\w*)$/.exec(text()) : null;
-    if (chip) return Object.keys(CHIPS).filter((name) => name.toLowerCase().startsWith(chip[1]!.toLowerCase())).map((name) => ({ name, chip: true as const }));
+    const cell = editing()!, chip = host.chip && shut() !== text() && !host.input(cell.row, cell.col) ? /^@([^=\n]*)$/.exec(text()) : null;
+    if (chip) return [...Object.keys(CHIPS).filter((name) => name.toLowerCase().startsWith(chip[1]!.toLowerCase())).map((name) => ({ name, chip: true as const })), ...host.chips?.(chip[1]!) ?? []].slice(0, OFFERED);
     return word && shut() !== text() ? functionOffers(word.text, names(), known(), OFFERED) : [];
   });
   const hint = createMemo(() => editing() ? context().call : null, null, { equals: (a, b) => a?.name === b?.name && a?.arg === b?.arg });
@@ -154,7 +156,7 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
   const canPoint = () => isFormula(text()) && Boolean(pointing() || context().point);
   const accept = (offer: FunctionOffer) => {
     const chip = offer.chip && editing();
-    if (chip) { end(); host.chip!(chip, offer.name); return; }
+    if (chip) { end(); host.chip!(chip, offer.name, offer); return; }
     const span = doubt() ?? context().word, now = text();
     if (!span) return;
     const rest = now.slice(span.to);
@@ -308,7 +310,7 @@ export function FormulaHelp(props: { editor: FormulaEditor; frame: () => HTMLEle
       }}</Show>}>
         <Section role="listbox" title={editor.doubt() ? `${editor.doubt()!.name.toUpperCase()} is not a function` : undefined} note={editor.doubt() ? "Tab uses one · Enter keeps it" : undefined}>
           <For each={editor.offered()}>{(offer, at) =>
-            <Item role="option" aria-selected={editor.active() === at()} active={editor.active() === at()} onMouseDown={keep} onClick={() => editor.accept(offer)} detail={offer.chip ? CHIPS[offer.name] : FUNCTION_HELP[offer.name]?.about} meta={offer.typedFor ? `for ${offer.typedFor}` : undefined}>
+            <Item role="option" aria-selected={editor.active() === at()} active={editor.active() === at()} onMouseDown={keep} onClick={() => editor.accept(offer)} detail={offer.chip ? offer.detail ?? CHIPS[offer.name] : FUNCTION_HELP[offer.name]?.about} meta={offer.typedFor ? `for ${offer.typedFor}` : undefined}>
               <Match text={offer.name} query={offer.chip ? editor.text().slice(1) : editor.doubt() ? "" : editor.context().word?.text ?? ""} />
             </Item>}</For>
         </Section>
