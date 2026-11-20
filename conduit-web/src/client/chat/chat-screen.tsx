@@ -67,14 +67,18 @@ export function ChatHeader(props: {
   const details = () => ([["Harness", runtimeLabel()], ["Version", props.live?.binaryVersion || props.runtime?.binaryVersion ? `v${props.live?.binaryVersion || props.runtime?.binaryVersion}` : null],
     ["Profile", profileLabel()], ["Tools", posture()], ["Session", sessionId()]] as [string, string | null | undefined][]).filter((line): line is [string, string] => Boolean(line[1]));
   const [detailsOpen, setDetailsOpen] = createSignal(false);
+  // A phone's header buttons fold, least used first, into the pill's menu (PaneHeader's "headerfold"); the sidebar's never does.
+  const [folded, setFolded] = createSignal<string[]>([]);
+  const watchFolds = (header: HTMLElement) => header.addEventListener("headerfold", (event) => setFolded((event as CustomEvent<string[]>).detail));
+  const foldedRow = (key: string, icon: JSX.Element, label: string, onSelect: () => void) => <Show when={folded().includes(key)}><MenuRow icon={icon} onSelect={onSelect}>{label}</MenuRow></Show>;
   const placeMark = () => props.parent ? <Icons.Agent /> : props.alone || props.placeLabel ? undefined
     : !props.project || props.project.slug === "chat" ? <HarnessMark id="conduit" />
     : isWorkspace(props.project) ? <WorkspaceGlyph appearance={props.project.workspaceAppearance} /> : <Icons.Folder />;
-  return <PaneHeader frost={!!props.tabs && tabFrostOn()}
+  return <PaneHeader ref={watchFolds} frost={!!props.tabs && tabFrostOn()}
     // Kept while the sidebar is open: the page slides off it whole, beside it, and comes back unchanged.
     lead={<>
       <HeaderButton label="Toggle Sidebar" icon={<Icons.Sidebar />} aria-expanded={props.mobileSidebarOpen} tabIndex={0} onClick={props.onToggleMobileSidebar} />
-      <HeaderButton label="New chat" icon={<Icons.NewChat />} tabIndex={0} onClick={props.onNewChat} />
+      <HeaderButton label="New chat" icon={<Icons.NewChat />} tabIndex={0} data-fold="2" onClick={props.onNewChat} />
     </>}
     pill={props.pill ?? <Show when={!props.appDashboard} fallback={<HeaderPill label={props.title} icon={<HarnessMark id="conduit" />} />}>
       {/* Opening, the context is read afresh, so Context shows its reading before it is unfolded. */}
@@ -82,6 +86,9 @@ export function ChatHeader(props: {
         <MenuControl as={HeaderPill} opens label={props.title} icon={placeMark()} aria-label={`${moreLabel()}: ${props.title}`} data-header-more="" />
         <MenuContent width="md" unfolds>
           <MenuSection>
+            {foldedRow("2", <Icons.NewChat />, "New chat", props.onNewChat)}
+            {foldedRow("1", <Icons.Search />, "Search chats", props.onOpenSearch)}
+            {foldedRow("0", <Icons.Terminal />, "Command palette", props.onOpenPalette)}
             <Show when={props.parent?.open}><MenuRow icon={<Icons.Agent />} meta={props.parent!.title} onSelect={() => props.parent?.open?.()}>Open parent</MenuRow></Show>
             <MenuRow icon={<Icons.Share />} onSelect={props.onShare}>Share</MenuRow>
             <Show when={props.onRename}>
@@ -119,8 +126,8 @@ export function ChatHeader(props: {
     modes={props.modes}
     actions={<>
       {/* On a desktop search and the palette are the right rail's; a phone's header keeps them. */}
-      <HeaderButton only="phone" label="Search chats" icon={<Icons.Search />} onClick={props.onOpenSearch} />
-      <HeaderButton only="phone" label="Open command palette" title="Command palette" icon={<Icons.Terminal />} onClick={props.onOpenPalette} />
+      <HeaderButton only="phone" label="Search chats" icon={<Icons.Search />} data-fold="1" onClick={props.onOpenSearch} />
+      <HeaderButton only="phone" label="Open command palette" title="Command palette" icon={<Icons.Terminal />} data-fold="0" onClick={props.onOpenPalette} />
       <Show when={!props.appDashboard}>
         <HeaderButton only="desktop" label={shareLabel()} icon={<Icons.Share />} onClick={props.onShare} />
       </Show>

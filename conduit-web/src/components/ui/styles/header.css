@@ -34,7 +34,7 @@ button.ui-header-place { cursor: pointer; }
 [data-presentation="phone"] { --header-height: calc(var(--pill-size) + var(--space-md) + var(--space-xs)); }
 [data-presentation="phone"] .ui-pane-header:where([data-header="pane"]) { width: 100%; padding: var(--space-md) var(--space-md) var(--space-xs); background: none; }
 [data-presentation="phone"] .ui-header-title { display: none; }
-[data-presentation="phone"] .ui-header-pill { display: inline-flex; min-width: 0; height: var(--pill-size); flex: 0 1 auto; align-items: center; gap: var(--space-sm);
+[data-presentation="phone"] .ui-header-pill { display: inline-flex; min-width: var(--measure-2xs); height: var(--pill-size); flex: 0 1 auto; align-items: center; gap: var(--space-sm);
   margin-inline: auto; padding: 0 var(--space-xl) 0 var(--space-lg); border-radius: var(--radius-round); color: var(--foreground); font: inherit; text-align: start; }
 [data-presentation="phone"] :is(.ui-header-pill, .ui-header-pills) ~ .ui-header-group[data-actions] { margin-left: 0; }
 [data-presentation="phone"] .ui-header-pills { display: inline-flex; min-width: 0; flex: 0 1 auto; gap: var(--pill-gap); margin-inline: auto; }
@@ -45,8 +45,10 @@ button.ui-header-place { cursor: pointer; }
 [data-presentation="phone"] button.ui-header-pill { cursor: pointer; }
 [data-presentation="phone"] :is(button.ui-header-pill, .ui-header-count):is(:active, [data-expanded], [aria-expanded="true"]) { background-image: linear-gradient(var(--tint), var(--tint)); }
 [data-presentation="phone"] .ui-header-group { height: var(--pill-size); gap: var(--pill-gap); padding: 0 var(--hairline); border-radius: var(--radius-round); }
-[data-presentation="phone"] .ui-header-group > .ui-button { width: calc(var(--pill-slot) - var(--space-xs)); height: var(--pill-slot-height); border-radius: var(--radius-round); }
-[data-presentation="phone"] .ui-header-group > .ui-button:only-child { width: var(--pill-slot); }
+[data-presentation="phone"] .ui-header-group > .ui-button { height: var(--pill-slot-height); border-radius: var(--radius-round); }
+/* An icon is a capsule of the pill; a button with words (a value, a count) keeps their width. */
+[data-presentation="phone"] .ui-header-group > .ui-button[data-size^="icon"] { width: calc(var(--pill-slot) - var(--space-xs)); }
+[data-presentation="phone"] .ui-header-group > .ui-button[data-size^="icon"]:only-child { width: var(--pill-slot); }
 
 @media (--conduit-phone-layout) {
   [data-presentation="phone"] { --header-height: calc(var(--pill-size) + var(--space-md) + var(--space-xs) + var(--safe-area-inset-top, env(safe-area-inset-top, 0px))); }
