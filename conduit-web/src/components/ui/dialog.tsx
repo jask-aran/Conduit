@@ -8,18 +8,14 @@ import { Card } from "./card";
 import { haptic, overlayHaptics } from "./haptics";
 import { Overlay, Scrim } from "./overlay";
 
-/* What shuts a dialog usually clears what it showed in the same step, and some callers unmount it as they shut it, so
- * as one shuts its scrim is copied before the document is updated, and the inert copy plays the leave. Only what is in sight is copied: a part
- * wholly out of it (a long list's rows past its scroller's edge) is an empty box of its height, so the copy costs what shows, not all it holds. */
+/* What shuts a dialog usually clears what it showed in the same step, and some callers unmount it as they shut it, so as one shuts its scrim is copied
+ * before the document is updated, and the inert copy plays the leave. A part wholly out of sight (a list's rows past its edge) is an empty box its height. */
 function copyInSight(from: Element, into: Element, sight: { top: number; bottom: number; left: number; right: number }, scrolled: [HTMLElement, number][]) {
   for (const node of from.childNodes) {
     if (!(node instanceof HTMLElement)) { into.appendChild(node.cloneNode(true)); continue; }
     const box = node.getBoundingClientRect(), copy = node.cloneNode(false) as HTMLElement;
     into.appendChild(copy);
-    if (box.width && (box.bottom <= sight.top || box.top >= sight.bottom || box.right <= sight.left || box.left >= sight.right)) {
-      copy.style.blockSize = `${box.height}px`; copy.style.flex = "none";
-      continue;
-    }
+    if (box.width && (box.bottom <= sight.top || box.top >= sight.bottom || box.right <= sight.left || box.left >= sight.right)) { Object.assign(copy.style, { blockSize: `${box.height}px`, flex: "none" }); continue; }
     if (node.scrollTop) scrolled.push([copy, node.scrollTop]);
     const clips = node.scrollHeight > node.clientHeight && getComputedStyle(node).overflowY !== "visible";
     copyInSight(node, copy, clips ? { top: Math.max(sight.top, box.top), bottom: Math.min(sight.bottom, box.bottom), left: sight.left, right: sight.right } : sight, scrolled);
