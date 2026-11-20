@@ -236,7 +236,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     menu: setMenu,
     moved: () => { setScrolled((n) => n + 1); moved(); },
     drawn: () => props.onDrawn?.(),
-    pressed: (row, col) => { setExtending(false); const hit = anchors.find((anchor) => { const range = rangeOf(anchor); return range && row >= range.top && row <= range.bottom && col >= range.left && col <= range.right; }); if (hit) moved(hit.key); },
+    // A press on a chip already selected opens its card, as a second click does in a spreadsheet's.
+    pressed: (row, col) => { const was = at(); if (was && was.top === row && was.bottom === row && was.left === col && was.right === col && chip.chips.at(row, col)) requestAnimationFrame(() => chip.open(row, col)); setExtending(false); const hit = anchors.find((anchor) => { const range = rangeOf(anchor); return range && row >= range.top && row <= range.bottom && col >= range.left && col <= range.right; }); if (hit) moved(hit.key); },
     key: (event, row, col) => {
       const bare = !event.ctrlKey && !event.altKey && !event.metaKey;
       // Shift+F10 and the Menu key open the cell menu at the active cell, its search focused.
