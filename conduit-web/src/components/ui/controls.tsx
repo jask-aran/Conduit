@@ -76,20 +76,23 @@ export function SelectTrigger(props: Omit<JSX.ButtonHTMLAttributes<HTMLButtonEle
 export function Segmented<T extends string>(props: { label: string; value: T; options: ReadonlyArray<{ value: T; label: string; icon?: JSX.Element; count?: number; title?: string; disabled?: boolean }>; onChange: (value: T) => void; size?: "sm"; pill?: boolean; icons?: boolean; arrows?: boolean; disabled?: boolean; tabIndex?: number; id?: string; haptic?: HapticProp; fold?: number }) {
   const index = () => Math.max(0, props.options.findIndex((option) => option.value === props.value));
   // Each segment is as wide as its words, so the thumb is put under the chosen one by measure, before it is painted:
-  // it slides only when the choice changes, and snaps when the segments resize or first show.
+  // it slides only when the choice changes, and snaps when the segments resize or first show. First shown, it is placed
+  // by the observer, which is told after the page is laid out and before it is painted: a read as it is made would lay
+  // out the page inside whatever made it (a pane opening).
   let group: HTMLElement | undefined;
   const sizes = new ResizeObserver(() => place(true));
   onCleanup(() => sizes.disconnect());
+  const observe = () => { for (const part of group?.querySelectorAll(":scope > button") ?? []) sizes.observe(part); };
   const place = (snap = false) => {
     const on = group?.querySelector<HTMLElement>(':scope > [aria-checked="true"]'), thumb = group?.firstElementChild as HTMLElement | null;
-    for (const part of group?.querySelectorAll(":scope > button") ?? []) sizes.observe(part);
+    observe();
     if (!group || !thumb || !on?.offsetWidth) return;
     if (snap) thumb.style.transition = "none";
     group.style.setProperty("--thumb-at", `${on.offsetLeft}px`);
     group.style.setProperty("--thumb-width", `${on.offsetWidth}px`);
     if (snap) { void thumb.offsetLeft; thumb.style.transition = ""; }
   };
-  createEffect(() => { index(); place(); });
+  createEffect((first: boolean) => { index(); if (first) observe(); else place(); return false; }, true);
   const move = (event: KeyboardEvent & { currentTarget: HTMLDivElement }) => {
     const step = ["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : ["ArrowLeft", "ArrowUp"].includes(event.key) ? -1 : 0;
     if (!props.arrows || !step || props.disabled) return;

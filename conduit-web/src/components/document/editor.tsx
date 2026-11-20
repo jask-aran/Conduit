@@ -7,7 +7,7 @@ import { render } from "solid-js/web";
 import { createTiptapEditor } from "solid-tiptap";
 import { isOn, markAttrs, probeEditor, readEditor, sameJson } from "./read";
 import { lateSync, settle } from "./sync";
-import { redo, undo, ySyncPlugin, yUndoPlugin, yUndoPluginKey } from "y-prosemirror";
+import { redo, undo, ySyncPlugin, ySyncPluginKey, yUndoPlugin, yUndoPluginKey } from "y-prosemirror";
 import type { Doc, Map as YMap, XmlFragment } from "yjs";
 import { MARKUP_INKS } from "@/components/ui/markup";
 import { DocumentAnswered, DocumentCount, DocumentSeatJump, DocumentSheet, documentBlockIcons, documentMarkClass, documentTextClass, documentToolIcons, documentWritingIcons, type DocumentWidth } from "@/components/ui/document";
@@ -103,9 +103,12 @@ const step = (made: Editor, doc: Doc | null, run: typeof undo) => {
   if (start !== null) made.view.dispatch(made.state.tr.setSelection(TextSelection.near(now.resolve(Math.min(now.content.size, Math.max(start, end?.b ?? start))), -1)).scrollIntoView());
   return true;
 };
+// Text drawn from the document (the hub's, an undo) is the writer's to link: linked here it would be written back as ours, and the first sync would
+// have every block of the paper read for links as the paper opens.
+const unlinked = new Plugin({ filterTransaction: (tr) => { if (tr.getMeta(ySyncPluginKey)?.isChangeOrigin) tr.setMeta("preventAutolink", true); return true; } });
 const merged = (blocks: XmlFragment) => Extension.create({
   name: "liveDocument",
-  addProseMirrorPlugins: () => [ySyncPlugin(blocks), yUndoPlugin(), lateSync()],
+  addProseMirrorPlugins: () => [ySyncPlugin(blocks), yUndoPlugin(), lateSync(), unlinked],
   addKeyboardShortcuts() { return { "Mod-z": () => step(this.editor, blocks.doc, undo), "Mod-y": () => step(this.editor, blocks.doc, redo), "Shift-Mod-z": () => step(this.editor, blocks.doc, redo) }; },
 });
 
