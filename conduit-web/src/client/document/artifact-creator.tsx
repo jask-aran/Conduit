@@ -62,7 +62,7 @@ export default function ArtifactCreator(props: { project?: string; projects: Pro
     <Show when={error()}><Note kind="card" tone="error">{error()}</Note></Show>
     <Show when={imported()}>{(made) => <Note kind="card"><For each={made().summary.split("\n")}>{(line) => <p>{line}</p>}</For></Note>}</Show>
     <Actions kind="card"><Button variant="ghost" outline disabled={busy()} onClick={props.onBack}>Back</Button>
-      <Show when={imported()} fallback={<><Show when={kind() === "sheet"}><Button variant="ghost" outline disabled={busy() || !project()} onClick={pick}>{busy() ? "Importing…" : "Import .xlsx"}</Button></Show><Button disabled={!ready()} onClick={() => void create()}>Create</Button></>}>
+      <Show when={imported()} fallback={<><Show when={kind() === "sheet"}><Button variant="ghost" outline disabled={busy() || !project()} onClick={pick}>{busy() ? "Importing…" : "Import file"}</Button></Show><Button disabled={!ready()} onClick={() => void create()}>Create</Button></>}>
         {(made) => <Button onClick={() => props.onMade(made())}>Open {made().name}</Button>}
       </Show></Actions>
   </PaneHome>;
