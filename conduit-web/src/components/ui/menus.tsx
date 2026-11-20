@@ -169,9 +169,10 @@ export function MenuSub(props: ParentProps<{ phone?: boolean }>) {
   const [content, setContent] = createSignal<HTMLElement>();
   const setParentChild = useContext(MenuLayerContext);
   const close = () => { setOpen(false); trigger()?.focus({ preventScroll: true }); };
+  // Escape in an open submenu goes back one level, as a desktop's menus do (Kobalte's shuts the whole menu); on a phone a tap outside it does too.
   createEffect(() => {
-    if (!props.phone || !open()) return;
-    setParentChild?.(close);
+    if (!open()) return;
+    if (props.phone) setParentChild?.(close);
     const back = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       // A deeper submenu handles its own Back before this level.
@@ -181,7 +182,7 @@ export function MenuSub(props: ParentProps<{ phone?: boolean }>) {
       close();
     };
     document.addEventListener("keydown", back, true);
-    onCleanup(() => { setParentChild?.(undefined); document.removeEventListener("keydown", back, true); });
+    onCleanup(() => { if (props.phone) setParentChild?.(undefined); document.removeEventListener("keydown", back, true); });
   });
   const anchorRect = (anchor?: HTMLElement) => {
     if (!props.phone) return anchor?.getBoundingClientRect();
