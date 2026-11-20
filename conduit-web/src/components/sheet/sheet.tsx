@@ -89,6 +89,18 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   // Every tab's rows and columns are in it, so a row put in or taken out is undone with the formulas the hub moved for it; and the tabs' order and names,
   // so adding, deleting, moving, renaming and hiding a tab are steps too.
   const history = createSheetHistory(live.doc, [cells, look, live.doc.getArray(ROWS), live.doc.getArray(COLS), live.doc.getArray(TABS), live.doc.getMap(TAB)], (op) => tabs.cells(op)), [stepped, setStepped] = createSignal(0);
+  // F4 outside the editor repeats the last step on the selection, as Excel's: what it ran of styles, borders, number formats, inserts, deletes and
+  // fills (each remembered as it runs, a step's together) runs again, one step of the same name.
+  // By what each is (a run of deletes made one by one is one delete again).
+  let again = new Map<string, (range: SheetRange) => void>(), fresh = true, repeating = false;
+  const remember = (what: string, run: (range: SheetRange) => void) => { if (repeating) return; if (fresh) { again = new Map(); fresh = false; queueMicrotask(() => { fresh = true; }); } again.set(what, run); };
+  const repeat = (range: SheetRange) => { const runs = [...again.values()]; if (!runs.length) return; repeating = true; try { history.act(history.steps().undo[0] ?? "Repeat", () => runs.forEach((run) => run(range))); } finally { repeating = false; } };
+  for (const [made, name, what] of [[styles, "set", "style"], [styles, "borders", "borders"], [styles, "clear", "clear"], [formats, "set", "format"]] as const) {
+    const held = made as unknown as Record<string, (range: SheetRange, ...rest: unknown[]) => void>, own = held[name]!;
+    held[name] = (range: SheetRange, ...rest: unknown[]) => { remember(what, (to) => own(to, ...rest)); own(range, ...rest); };
+  }
+  // Ctrl+` shows each formula as written in its cell; F8 extends the selection with the arrows, shown in the foot, until F8 or Esc again.
+  const [formulasShown, setFormulasShown] = createSignal(false), [extending, setExtending] = createSignal(false);
   live.own(history.origin);
   history.onChange(() => setStepped((n) => n + 1));
   createEffect(() => history.scope(tabs.tabs().flatMap((tab) => [live.doc.getArray(rowsOf(tab.id)), live.doc.getArray(colsOf(tab.id))])));
@@ -205,6 +217,10 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       // Shift+F10 and the Menu key open the cell menu at the active cell, its search focused.
       if ((event.key === "F10" && event.shiftKey && bare) || (event.key === "ContextMenu" && bare)) { event.preventDefault(); openMenu(); return true; }
       // F5 goes to a cell or range typed in the name box (Excel's Go To; Ctrl+G stays the application's leader). Shift+F11 adds a tab.
+      if (event.key === "F4" && bare && !event.shiftKey) { event.preventDefault(); const area = at(); if (area) repeat(area); return true; }
+      if (event.key === "F8" && bare && !event.shiftKey) { event.preventDefault(); setExtending((was) => !was); return true; }
+      if (event.key === "Escape" && extending()) setExtending(false);
+      if (event.key === "`" && event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) { event.preventDefault(); setFormulasShown((was) => !was); grid()?.update(null); return true; }
       if (event.key === "F5" && bare && !event.shiftKey) { event.preventDefault(); addressField?.focus(); return true; }
       if (event.key === "F11" && event.shiftKey && bare) { event.preventDefault(); addTab(tabs); return true; }
       // Shift+F2 comments on the selection, Alt+F1 asks for a chart of it.
@@ -299,7 +315,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       made = mountGrid(into, { model: sheet, events, look: untrack(drawnLook), filled: index, columns: {
         width: (col) => { const width = sizes.width(col); return width === undefined ? undefined : Math.round(width * zoom()); }, freeze: sizes.freeze, hidden: sizes.hidden, hiddenCols: sizes.hiddenCols,
         heights: () => { const by = zoom(), kept = sizes.heights(); return by === 1 ? kept : new Map([...kept].map(([row, height]) => [row, Math.round(height * by)])); },
-        type: types.at, pill: pillOf, link: types.link, draw: (row, col, value) => formats.draw(row, col, value, rules.fmt(row, col)), dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded, merges: merges.list, outline: outline.line,
+        type: types.at, pill: pillOf, link: types.link, draw: (row, col, value) => formats.draw(row, col, value, rules.fmt(row, col)), dated: formats.dated, style: (row, col) => rules.style(filters.style(styles.at(row, col), row, col), row, col), frozen: (row, col) => Boolean(frozenAt(row, col)), mark: filters.mark, banded: filters.banded, merges: merges.list, outline: outline.line, formulas: () => untrack(formulasShown), extending: () => untrack(extending),
       } });
       setGrid(made);
       fitWrapped();
@@ -420,7 +436,10 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     // After the grid has drawn the selection: focused with none, it selects its first cell.
     requestAnimationFrame(() => grid()?.focus());
   };
-  const structure = (op: "insert-rows" | "insert-cols" | "delete-rows" | "delete-cols", at: number, count = 1) => hub({ op, at, count });
+  const structure = (op: "insert-rows" | "insert-cols" | "delete-rows" | "delete-cols", at: number, count = 1) => {
+    remember(op, (range) => op.endsWith("rows") ? structure(op, range.top, range.bottom - range.top + 1) : structure(op, range.left, range.right - range.left + 1));
+    return hub({ op, at, count });
+  };
   // Ctrl+- and Ctrl+Shift+= on a block of cells ask, as a spreadsheet's do, which way what is round it goes; whole rows or columns picked are not asked.
   const [shifting, setShifting] = createSignal<{ verb: "delete" | "insert"; range: SheetRange; box: SheetBox } | null>(null);
   const askShift = (verb: "delete" | "insert", range: SheetRange) => { const box = grid()?.bounds(range); if (box) setShifting({ verb, range, box }); };
@@ -542,7 +561,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   // Fill down and Fill right: the selection's first shown row (or column) into the rest of it, from the shown row above (or column left) where it is
   // one deep, as a spreadsheet's; the hub moves the formulas. Each run of shown rows and columns is a fill of its own, its formulas first moved to where
   // the run starts.
-  const spread = (picked: SheetRange, way: "down" | "right") => history.act(`Fill ${way}`, () => {
+  const spread = (picked: SheetRange, way: "down" | "right"): void => history.act(`Fill ${way}`, () => {
+    remember("spread", (range) => spread(range, way));
     const sheet = model();
     if (!sheet) return;
     // Whole columns or rows reach the grid's spare room past the data; filling it would grow the tab on every press.
@@ -917,6 +937,6 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       </Show>
       <Show when={props.margin}><aside class="ui-spreadsheet-margin" aria-label="Comments">{props.margin}</aside></Show>
     </div>
-    <SheetFoot tabs={tabs} id={props.id} format={(range) => formats.figure(range)} filtered={filters.counted} act={history.act} />
+    <SheetFoot tabs={tabs} id={props.id} mode={() => extending() ? "Extend selection" : null} format={(range) => formats.figure(range)} filtered={filters.counted} act={history.act} />
   </section>;
 }

@@ -30,7 +30,9 @@ export type SheetColumns = { width(col: number): number | undefined; type(row: n
   /** The tab's merged ranges (merges.ts). */
   merges(): readonly SheetRange[];
   /** A row's or column's group level and the control standing on it (outline.ts). */
-  outline(kind: "rows" | "cols", line: number): OutlineLine };
+  outline(kind: "rows" | "cols", line: number): OutlineLine;
+  /** Whether cells show their formulas as written (Ctrl+`), and whether the arrows extend the selection (F8). */
+  formulas(): boolean; extending(): boolean };
 // How near a row's lower edge, beside its number, a press takes the edge to drag.
 const EDGE_SLOP = 3;
 // How often (ms) a drag held past the grid's edge scrolls it on by a column.
@@ -406,6 +408,12 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         const col = step[0] ? nextShown(cell[0], step[0]) : cell[0], drawn = cell[1] + step[1];
         if (drawn >= 0 && drawn < (p === head ? size.head : size.rows)) { event.cancel(); const row = p.map.sheet(drawn); api.select({ top: row, bottom: row, left: col, right: col }); return; }
       }
+      // In extend mode (F8) a plain arrow moves the selection's far corner, as Shift and the arrow do.
+      if (step && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && options.columns.extending()) {
+        event.cancel();
+        const range = p.current.current?.range ?? { x: cell[0], y: cell[1], width: 1, height: 1 }, far = [range.x === cell[0] ? range.x + range.width - 1 : range.x, range.y === cell[1] ? range.y + range.height - 1 : range.y] as const;
+        return extendTo(p, cell, [step[0] ? nextShown(far[0], step[0]) : far[0], Math.max(0, Math.min((p === head ? size.head : size.rows) - 1, far[1] + step[1]))]);
+      }
       // Ctrl and an arrow go as a spreadsheet's: from a value along a run of values to its last, else on to the next value, else to the edge; Shift
       // moves the selection's far edge so, the active cell kept. Within the part, past its hidden rows; across, over hidden columns as if not there.
       if (step && (event.ctrlKey || event.metaKey) && !event.altKey) {
@@ -603,6 +611,9 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         // An empty value is an empty cell but for a formula that gives nothing.
         const input = value === null || typeof value === "string" ? model.input(row, col) : null;
         const style = options.columns.style(row, col);
+        // Formulas shown (Ctrl+`): a formula cell shows what was typed, at its left.
+        const written = options.columns.formulas() ? input ?? model.input(row, col) : null;
+        if (written?.startsWith("=")) return withMark(new TextCell(row, col, written, written, "left", striped ? washed(themed(style)) : themed(style), style), mark);
         // An empty cell is drawn for its fill and edges alone; one an array formula spills text into is not empty.
         // A dropdown draws its arrow, empty or not.
         const pill = type?.startsWith("list:") ? options.columns.pill(row, col, type, value === null ? "" : String(value)) : undefined;

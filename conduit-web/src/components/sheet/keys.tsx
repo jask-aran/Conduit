@@ -17,7 +17,7 @@ const SHEET_KEYS: [string, [string, ...string[]][]][] = [
   ["Select", [
     ["Extend the selection", "Shift+Arrow"], ["Extend to the edge of the data", "Ctrl+Shift+Arrow"], ["Extend to the last cell used", "Ctrl+Shift+End"],
     ["Current region, then the whole sheet", "Ctrl+A"], ["Current region", "Ctrl+Shift+*"], ["Whole sheet", "Ctrl+Shift+Space"],
-    ["Whole column", "Ctrl+Space"], ["Whole row", "Shift+Space"], ["Only the active cell", "Shift+Backspace", "Esc"],
+    ["Whole column", "Ctrl+Space"], ["Whole row", "Shift+Space"], ["Only the active cell", "Shift+Backspace", "Esc"], ["Extend the selection with the arrows, on or off", "F8"],
   ]],
   ["Edit", [
     ["Edit the cell", "F2"], ["Start typing over the cell", "Any letter or number"], ["Cancel the entry", "Esc"], ["New line in the cell", "Alt+Enter"],
@@ -26,7 +26,7 @@ const SHEET_KEYS: [string, [string, ...string[]][]][] = [
     ["Copy the formula from above", "Ctrl+'"], ["Copy the value from above", "Ctrl+Shift+\""], ["AutoSum", "Alt+="],
     ["Undo", "Ctrl+Z"], ["Redo", "Ctrl+Y", "Ctrl+Shift+Z"], ["Cut, copy, paste", "Ctrl+X", "Ctrl+C", "Ctrl+V"], ["Paste values", "Ctrl+Shift+V"],
     ["Paste formatting", "Ctrl+Alt+V"], ["Insert or edit a link", "Ctrl+K"], ["Open the cell's list or calendar", "Alt+Down"],
-    ["Find", "Ctrl+F"], ["Replace", "Ctrl+H"],
+    ["Find", "Ctrl+F"], ["Replace", "Ctrl+H"], ["Repeat the last action on the selection", "F4"], ["Show formulas, or values", "Ctrl+`"],
   ]],
   ["Rows, columns and tabs", [
     ["Insert rows, columns or cells", "Ctrl+Shift++"], ["Delete rows, columns or cells", "Ctrl+-"], ["Hide rows", "Ctrl+9"], ["Unhide rows", "Ctrl+Shift+9"],
