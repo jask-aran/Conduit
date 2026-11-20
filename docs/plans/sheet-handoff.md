@@ -245,3 +245,28 @@ Open after the walk:
   colours (only where `f` is #rrggbb). Not seen in a browser: no import was run. Conditional-format kinds kept as `rulesKept` are not drawn yet.
 - Opening a sheet: the grid, tabs and canvases still appear about 350 ms after the pane's first paint (the grid mounts once the hub's copy and the
   model are held); the margin's height jumps with them.
+
+## Keys, against Excel (branch `sheet-keys`, 2026-11-20; typechecked, not seen in a browser)
+
+The list a person sees is `components/sheet/keys.tsx` (Ctrl+/, or the palette's Shortcuts, whose label was "Paper shortcuts"); keep it beside the
+handlers: grid.ts `onKeyDown`, sheet.tsx `events.key` (Glide's key event, no `code`) and the section's keydown (a real event, by `code`), formula-editor.tsx.
+- Changed from before: plain Enter moves down (Shift+Enter up) instead of editing; F2 edits. Enter and Tab go round a selection of several cells; a lone
+  merge is one cell. Enter after Tab entries goes back under the first, but only through the editor's commits.
+- Conduit kept: Ctrl+G (leader; F5 goes to the name box instead), Ctrl+. (workspace panel; Excel's corners of the selection is not offered). The sheet
+  took Ctrl+/ (the paper's Block menu chord) for its keys list.
+- The browser keeps Ctrl+1, Ctrl+5, Ctrl+9 (tab switching), F11 (full screen) and Ctrl+T in a Chrome tab; they work in the desktop app only.
+  Whether Chrome lets the page keep F6 and Shift+F11 is unchecked.
+- Speed: grid.ts's per-column run index and `lastUsed` (sheet-draw) are filled from `jump.ts`, a byte a cell a column of which cells hold anything,
+  built from the doc's filled cells in idle slices after each change of rows, columns or tab; Ctrl+A and Ctrl+Shift+* find the current region on it
+  (`regionAround`, filter.tsx). Node harness, 50,000 × 3 filled: Ctrl+Down 13–31 ms → 0.4–0.9 ms, Ctrl+End 120–205 ms → 0.1 ms, Ctrl+A 40–51 ms
+  → 2.5–3 ms; a jump before the idle build has finished builds it at once (30 ms).
+
+Action audit, pointer-only today (no Excel key, or none given yet): Ask/Comment have keys (Ctrl+Alt+M, Shift+F2); still pointer-only are Paste transposed,
+Freeze rows/columns (Excel's Alt W F F only for Unfreeze), Insert below/right, Move rows/columns, Clear all, Sort sheet, Clear filter from column, the Data
+submenu (Remove duplicates, Trim, Split text), Cell type (checkbox, date, dropdown, Dropdown…), the tab menu's Duplicate, Tab colour, Move, Hide, Unhide,
+Delete, the foot's All tabs, View settings…, conditional rules (Alt H L), and chart kinds (ribbon). Every menu is reachable by Shift+F10 / the Menu key and
+its search field (type to find a row, Down into the rows, Enter runs, Esc back to the grid).
+
+Open: the cell menu opened by key is a synthetic `contextmenu` on the grid's element (sheet.tsx `openMenu`), unseen; whether the Menu key also fires
+Chrome's own `contextmenu` (opening it twice) is unchecked. Typing then Enter in a selected block leaves the block (the editor's commit selects one cell).
+Page Up/Down, Home and Ctrl+Home are Glide's own; Ctrl+Shift+Home was not read. Show formulas (Ctrl+`), F4 repeat, F8 / Shift+F8, Ctrl+. are not built.

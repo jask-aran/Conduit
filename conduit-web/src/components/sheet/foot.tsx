@@ -30,6 +30,9 @@ const DRAGGED = "application/x-conduit-sheet-tab";
 const inkOf = (color: string) => (SHEET_INKS as readonly string[]).includes(color) ? `var(${SHEET_INK_TOKENS[color as keyof typeof SHEET_INK_TOKENS]})` : color;
 const INK_NAMES: Record<string, string> = { red: "Red", amber: "Amber", green: "Green", blue: "Blue" };
 
+/** Adds a tab after the last, named as a spreadsheet names it (Sheet 3), as Shift+F11 and the strip's Add do. */
+export const addTab = (tabs: SheetTabs) => { const names = new Set(tabs.tabs().map((tab) => tab.name.toLowerCase())); let n = tabs.tabs().length + 1; while (names.has(`sheet${n}`) || names.has(`sheet ${n}`)) n++; void tabs.op({ op: "add-tab", name: `Sheet ${n}` }); };
+
 /** `filtered`: the rows under the filter's header and how many it shows, while it narrows them. `act`: a change made as one named step (history.ts). */
 export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: (range: SheetRange) => ((value: number) => string) | null; filtered?: () => { shown: number; total: number } | null; act(label: string, run: () => void): void }) {
   const tabs = props.tabs, decide = createDecisionScope(() => props.id);
@@ -50,7 +53,6 @@ export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: (range:
   // The shown tab is kept in view in the strip.
   createEffect(() => { const id = tabs.shown(); queueMicrotask(() => strip?.querySelector<HTMLElement>(`[data-tab="${CSS.escape(id ?? "")}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" })); });
 
-  const add = () => { const names = new Set(tabs.tabs().map((tab) => tab.name.toLowerCase())); let n = tabs.tabs().length + 1; while (names.has(`sheet${n}`) || names.has(`sheet ${n}`)) n++; void tabs.op({ op: "add-tab", name: `Sheet ${n}` }); };
   const rename = (tab: Tab) => { setDraft(tab.name); setRenaming(tab.id); };
   const commit = (tab: Tab) => {
     const name = draft().trim();
@@ -85,14 +87,14 @@ export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: (range:
         <ContextMenuTrigger as={(attrs: Omit<JSX.HTMLAttributes<HTMLSpanElement>, "draggable">) => <PaneTab id={tab.id} lit={tabs.shown() === tab.id} title={tab.name}
           icon={tabs.color(tab.id) ? <Dot style={{ color: inkOf(tabs.color(tab.id)!) }} /> : undefined}
           onOpen={() => { if (!held) { tabs.show(tab.id); tabs.focus(); } }} drag={mergeProps(attrs, {
-            onDblClick: () => rename(tab), draggable: true,
+            onDblClick: () => rename(tab), draggable: true, onKeyDown: (event: KeyboardEvent) => { if (event.key === "F2") { event.preventDefault(); rename(tab); } },
             onDragStart: (event: DragEvent) => { event.dataTransfer?.setData(DRAGGED, tab.id); if (event.dataTransfer) event.dataTransfer.effectAllowed = "move"; },
             onDragOver: (event: DragEvent) => { if (event.dataTransfer?.types.includes(DRAGGED)) event.preventDefault(); },
             onDrop: (event: DragEvent) => drop(event, tab),
           })} />} />
         <ContextMenuContent>
           <MenuSection>
-            <MenuRow icon={<Icons.Edit />} onSelect={() => rename(tab)}>Rename</MenuRow>
+            <MenuRow icon={<Icons.Edit />} keys={["F2"]} onSelect={() => rename(tab)}>Rename</MenuRow>
             <MenuRow icon={<DataIcons.duplicate />} onSelect={() => void tabs.op({ op: "duplicate-tab", tab: tab.id })}>Duplicate</MenuRow>
             <MenuSub><MenuSubTrigger icon={<DataIcons.color />}>Tab colour</MenuSubTrigger><MenuSubContent><MenuSection>
               <For each={SHEET_INKS}>{(ink) => <MenuRow icon={<Dot style={{ color: inkOf(ink) }} />} checked={tabs.color(tab.id) === ink} onSelect={() => color(tab, ink)}>{INK_NAMES[ink]}</MenuRow>}</For>
@@ -133,7 +135,7 @@ export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: (range:
     <div ref={strip} class="ui-spreadsheet-tabs" role="tablist" aria-label="Tabs">
       <PaneTabs><For each={visible()}>{one}</For></PaneTabs>
     </div>
-    <IconButton label="Add a tab" onClick={add}><Icons.Add /></IconButton>
+    <IconButton label="Add a tab" onClick={() => addTab(tabs)}><Icons.Add /></IconButton>
     <span class="ui-spreadsheet-figures" aria-live="polite">
       <Index each={listed()}>{(figure) => <DashPath title={`Copy the ${figure().name.toLowerCase()}`} path={`${figure().name} ${figure().text}`} onCopy={() => copy(figure().name, figure().value)} />}</Index>
     </span>

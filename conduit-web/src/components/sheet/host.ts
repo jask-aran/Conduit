@@ -119,6 +119,8 @@ export type SheetMarks = {
   watch(listener: (pressed?: string) => void): () => void;
   reveal(place: string): void;
   focus(): void;
+  /** Opens the list of the sheet's keys. */
+  shortcuts(): void;
   /** What this page did, taken back and put back `count` steps at a time (never another's writing); `steps`: the latest steps' names, newest first. Read where drawn. */
   history: { undo(count?: number): boolean; redo(count?: number): boolean; canUndo(): boolean; canRedo(): boolean; steps(): { undo: string[]; redo: string[] } };
 };

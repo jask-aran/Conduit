@@ -35,6 +35,7 @@ export default function SheetSurface(props: ArtifactSurfaceProps) {
       tools: () => marks()?.tools() ?? [],
       slot: () => marks()?.slot(),
     },
+    offers: () => ({ shortcuts: () => marks()?.shortcuts() }),
     away, stale, drawn,
     reveal: () => { const show = marks()?.reveal; return show && ((place) => { if (place.cells) show(place.cells); }); },
   });
