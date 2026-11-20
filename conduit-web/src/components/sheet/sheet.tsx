@@ -88,18 +88,29 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   } });
   // Every tab's rows and columns are in it, so a row put in or taken out is undone with the formulas the hub moved for it; and the tabs' order and names,
   // so adding, deleting, moving, renaming and hiding a tab are steps too.
-  const history = createSheetHistory(live.doc, [cells, look, live.doc.getArray(ROWS), live.doc.getArray(COLS), live.doc.getArray(TABS), live.doc.getMap(TAB)], (op) => tabs.cells(op)), [stepped, setStepped] = createSignal(0);
+  // An Undo or Redo that would bring back a tab name another tab has taken since is not run: formulas naming it could no longer say which tab they mean.
+  const clash = (item: Y.UndoManager["undoStack"][number], back: boolean) => {
+    const meta = live.doc.getMap(TAB), order = live.doc.getArray(TABS), named = new Map<string, string>(), going = new Set<string>();
+    live.doc.transact((tr) => {
+      Y.iterateDeletedStructs(tr, item.deletions, (one) => { if (one instanceof Y.Item && one.deleted && one.parent === meta && one.parentSub?.startsWith("name:")) named.set(one.parentSub.slice(5), String(one.content.getContent()[0])); });
+      Y.iterateDeletedStructs(tr, item.insertions, (one) => { if (one instanceof Y.Item && !one.deleted && one.parent === order) for (const id of one.content.getContent()) going.add(String(id)); });
+    }, clash);
+    const after = tabs.tabs().filter((tab) => !going.has(tab.id)).map((tab) => ({ id: tab.id, name: (named.get(tab.id) ?? tab.name).toLowerCase() }));
+    for (const [id, name] of named) {
+      if (!after.some((tab) => tab.id !== id && tab.name === name.toLowerCase())) continue;
+      toast(`${back ? "Can't undo" : "Can't redo"}: another tab is now called ${name}`);
+      return true;
+    }
+    return false;
+  };
+  const history = createSheetHistory(live.doc, [cells, look, live.doc.getArray(ROWS), live.doc.getArray(COLS), live.doc.getArray(TABS), live.doc.getMap(TAB)], (op) => tabs.cells(op), clash), [stepped, setStepped] = createSignal(0);
   // F4 outside the editor repeats the last step on the selection, as Excel's: what it ran of styles, borders, number formats, inserts, deletes and
   // fills (each remembered as it runs, a step's together) runs again, one step of the same name.
-  // By what each is (a run of deletes made one by one is one delete again). Only while its step is still the last one made: after any other, F4 does nothing.
-  let again = new Map<string, (range: SheetRange) => void>(), fresh = true, repeating = false, againStep: number | undefined;
-  const remember = (what: string, run: (range: SheetRange) => void) => { if (repeating) return; if (fresh) { again = new Map(); againStep = history.current(); fresh = false; queueMicrotask(() => { fresh = true; }); } again.set(what, run); };
-  const repeat = (range: SheetRange) => {
-    const runs = [...again.values()];
-    if (!runs.length || againStep === undefined || history.top() !== againStep) return;
-    repeating = true;
-    try { history.act(history.steps().undo[0] ?? "Repeat", () => { againStep = history.current(); runs.forEach((run) => run(range)); }); } finally { repeating = false; }
-  };
+  // By what each is (a run of deletes made one by one is one delete again).
+  // `of`: the step they made; any step since (typing, a sort) is the last one and is not repeated, so F4 does nothing rather than an older step.
+  let again = new Map<string, (range: SheetRange) => void>(), fresh = true, repeating = false, of = 0;
+  const remember = (what: string, run: (range: SheetRange) => void) => { if (repeating) return; if (fresh) { again = new Map(); fresh = false; queueMicrotask(() => { fresh = true; of = history.last(); }); } again.set(what, run); };
+  const repeat = (range: SheetRange) => { const runs = [...again.values()]; if (!runs.length || history.last() !== of) return; repeating = true; try { history.act(history.steps().undo[0] ?? "Repeat", () => runs.forEach((run) => run(range))); } finally { repeating = false; } of = history.last(); };
   for (const [made, name, what] of [[styles, "set", "style"], [styles, "borders", "borders"], [styles, "clear", "clear"], [formats, "set", "format"]] as const) {
     const held = made as unknown as Record<string, (range: SheetRange, ...rest: unknown[]) => void>, own = held[name]!;
     held[name] = (range: SheetRange, ...rest: unknown[]) => { remember(what, (to) => own(to, ...rest)); own(range, ...rest); };
@@ -108,6 +119,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   for (const made of [styles, formats]) { const own = made.key; made.key = (event, range) => { const done = own(event, range); if (done) remember(`key ${event.code}`, (to) => own(event, to)); return done; }; }
   // Ctrl+` shows each formula as written in its cell; F8 extends the selection with the arrows, shown in the foot, until F8 or Esc again.
   const [formulasShown, setFormulasShown] = createSignal(false), [extending, setExtending] = createSignal(false);
+  createEffect(on(() => tabs.shown(), () => setExtending(false), { defer: true }));
   live.own(history.origin);
   history.onChange(() => setStepped((n) => n + 1));
   createEffect(() => history.scope(tabs.tabs().flatMap((tab) => [live.doc.getArray(rowsOf(tab.id)), live.doc.getArray(colsOf(tab.id))])));
@@ -117,21 +129,6 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const watchers = new Set<(pressed?: string) => void>(), moved = (pressed?: string) => watchers.forEach((listener) => listener(pressed));
   createEffect(() => props.onState?.(live.state()));
   onCleanup(() => history.destroy());
-  // An Undo or Redo that brings back a name another tab has taken since renames that tab as a duplicate is named ("Data (2)"), outside the history.
-  const untwin = (event: Y.YMapEvent<unknown>) => {
-    if (!(event.transaction.origin instanceof Y.UndoManager)) return;
-    for (const entry of event.keysChanged) {
-      const id = entry.startsWith("name:") ? entry.slice(5) : "", name = id && event.target.get(entry);
-      if (typeof name !== "string") continue;
-      const others = new Set(tabs.tabs().filter((tab) => tab.id !== id).map((tab) => tab.name.toLowerCase()));
-      if (!others.has(name.toLowerCase())) continue;
-      let n = 2, free = `${name.replace(/ \(\d+\)$/, "").slice(0, 25)} (${n})`;
-      while (others.has(free.toLowerCase())) free = `${name.replace(/ \(\d+\)$/, "").slice(0, 25)} (${++n})`;
-      void tabs.cells({ op: "rename-tab", tab: id, name: free }).catch((error: Error) => props.host.failed(error.message));
-    }
-  };
-  live.doc.getMap(TAB).observe(untwin);
-  onCleanup(() => live.doc.getMap(TAB).unobserve(untwin));
 
   const write = (list: readonly { row: number; col: number; input: string }[]) => {
     const sheet = model();
@@ -218,7 +215,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     menu: setMenu,
     moved: () => { setScrolled((n) => n + 1); moved(); },
     drawn: () => props.onDrawn?.(),
-    pressed: (row, col) => { const hit = anchors.find((anchor) => { const range = rangeOf(anchor); return range && row >= range.top && row <= range.bottom && col >= range.left && col <= range.right; }); if (hit) moved(hit.key); },
+    pressed: (row, col) => { setExtending(false); const hit = anchors.find((anchor) => { const range = rangeOf(anchor); return range && row >= range.top && row <= range.bottom && col >= range.left && col <= range.right; }); if (hit) moved(hit.key); },
     key: (event, row, col) => {
       const bare = !event.ctrlKey && !event.altKey && !event.metaKey;
       // Shift+F10 and the Menu key open the cell menu at the active cell, its search focused.
@@ -449,9 +446,8 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     requestAnimationFrame(() => grid()?.focus());
   };
   const structure = (op: "insert-rows" | "insert-cols" | "delete-rows" | "delete-cols", at: number, count = 1) => {
-    // Sent first, so the step it makes outside one is the one remembered.
-    hub({ op, at, count });
     remember(op, (range) => op.endsWith("rows") ? structure(op, range.top, range.bottom - range.top + 1) : structure(op, range.left, range.right - range.left + 1));
+    return hub({ op, at, count });
   };
   // Ctrl+- and Ctrl+Shift+= on a block of cells ask, as a spreadsheet's do, which way what is round it goes; whole rows or columns picked are not asked.
   const [shifting, setShifting] = createSignal<{ verb: "delete" | "insert"; range: SheetRange; box: SheetBox } | null>(null);

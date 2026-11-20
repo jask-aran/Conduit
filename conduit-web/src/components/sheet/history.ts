@@ -29,7 +29,8 @@ const opLabel = (op: SheetCellsOp) => {
  */
 // Any Yjs type, whatever its events.
 type Scoped = Y.AbstractType<any>;
-export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: SheetCellsOp) => Promise<unknown>) {
+// `refused`: why a step would not be undone or redone as things stand (it brings back a tab name taken since); that step is dropped and not run.
+export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: SheetCellsOp) => Promise<unknown>, refused?: (item: Y.UndoManager["undoStack"][number], back: boolean) => boolean) {
   const um = new Y.UndoManager(scope, { captureTimeout: 0, trackedOrigins: new Set<unknown>([null, SheetStep]) });
   const steps = new Map<number, SheetStep>(), listeners = new Set<() => void>(), owed: (() => void)[] = [];
   // `made`: steps that changed something or sent an op (each once), and changes made outside any. A step begun for a key that did nothing is not one.
@@ -65,7 +66,11 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
   const walk = (back: boolean, count = 1) => {
     if (out || owedFrames > 0) { const at = made; owed.push(() => { if (made === at) walk(back, count); }); return true; }
     let done = false;
-    for (let n = 0; n < count; n++) done = (back ? um.undo() : um.redo()) !== null || done;
+    for (let n = 0; n < count; n++) {
+      const stack = back ? um.undoStack : um.redoStack, top = stack.at(-1);
+      if (top && refused?.(top, back)) { stack.pop(); break; }
+      done = (back ? um.undo() : um.redo()) !== null || done;
+    }
     changed();
     return done;
   };
@@ -99,12 +104,11 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
     clear: () => { um.clear(); changed(); },
     undo: (count?: number) => walk(true, count),
     redo: (count?: number) => walk(false, count),
+    /** The id of the latest step begun. */
+    last: () => next - 1,
     canUndo: () => um.canUndo(),
     canRedo: () => um.canRedo(),
     steps: () => ({ undo: labels(um.undoStack), redo: labels(um.redoStack) }),
-    // The step being made (the open one, or the hub's lone one), and the one on top of the history.
-    current: () => (open ?? lone)?.id,
-    top: () => um.undoStack.at(-1)?.meta.get(STEP) as number | undefined,
     scope: (types: Scoped[]) => um.addToScope(types),
     onChange: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
     destroy: () => { listeners.clear(); um.destroy(); },

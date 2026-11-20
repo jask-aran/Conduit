@@ -2497,7 +2497,7 @@ function App() {
   const setSlotView = async (slot: number, next: SplitView | null) => {
     if (!(await gate(slot, next))) return false;
     const id = idOf(slot);
-    if (!id) return false;
+    if (!id) { leaves(slot); return false; }
     batch(() => {
       leaves(slot);
       if (!next && dockSlot() === slot) { setDockSlot(null); closePanel(); }

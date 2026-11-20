@@ -569,33 +569,37 @@ export function sheetKind(hub) {
     refilter(room, sheet, by);
     return { removed: gone.length, left: kept.length };
   };
-  /** A .csv becomes a workbook folder before its second tab is written, so a failed move leaves it as it was; its tab is named then, as is its file. */
+  /**
+   * A page's step (documents.js `cells`) tags what an op writes while it runs unbroken; after an await the op takes it up again around writes with no await
+   * between, so nothing another op writes meanwhile is tagged as this page's.
+   */
+  const owning = (room, own, run) => { room.own = own; try { return run(); } finally { room.own = null; } };
+  /** A .csv becomes a workbook folder before its second tab is written, so a failed move leaves it as it was; its tab is named then, as is its file (never undone). */
   const intoFolder = async (room, by) => {
     if (isFolder(room)) return;
-    const first = room.doc.getMap(TAB).get(`name:${MAIN}`) ?? tabName(room.entry.name), own = room.own;
+    const first = room.doc.getMap(TAB).get(`name:${MAIN}`) ?? tabName(room.entry.name);
     await hub.folder(room, tabFile(first));
     if (!room.doc.getMap(TAB).has(`name:${MAIN}`)) hub.as(room, by, (sign) => room.book.tabOp("rename", { tab: MAIN, name: first }, sign));
-    // The page's step goes on past the move (the first tab's naming is the move's, never undone): what the op writes from here to its end, with no
-    // await between, is tagged as before it (documents.js `cells`).
-    room.own = own;
   };
   /** A copy of a tab next after it, named as Excel names one (`Data (2)`): its cells as typed (a formula reading its own tab reads the copy), and its look. */
-  const duplicateTab = async (room, source, by) => {
+  const duplicateTab = async (room, source, by, own) => {
     const base = source.name.replace(/ \(\d+\)$/, "").slice(0, 25), { rows, cols } = source.size();
-    let n = 2, called = `${base} (${n})`;
-    while (room.book.find(called)) called = `${base} (${++n})`;
     sized(room, null, rows, cols);
     if (!isFolder(room)) await intoFolder(room, by);
-    const at = room.book.tabs().findIndex((one) => one.id === source.id) + 1, kept = lookOf(room, source), typed = source.inputs();
-    // A chart is found by its id on whichever tab holds it: the copy's charts are charts of their own.
-    if (Array.isArray(kept.charts)) kept.charts = kept.charts.map((chart) => ({ ...chart, id: rowId() }));
-    const done = hub.as(room, by, (sign) => room.book.tabOp("add", { name: called, at, rows, cols }, sign)), copy = room.book.tab(done.tab);
-    hub.as(room, by, (sign) => room.doc.transact(() => {
-      typed.forEach((line, r) => line.forEach((input, c) => { if (input) room.cells.set(key(copy.rowAt(r), copy.colAt(c)), input); }));
-      restoreLook(room, copy, done.tab, kept);
-      sign();
-    }));
-    return { tab: done.tab, tabs: tabsWithSize(room) };
+    return owning(room, own, () => {
+      let n = 2, called = `${base} (${n})`;
+      while (room.book.find(called)) called = `${base} (${++n})`;
+      const at = room.book.tabs().findIndex((one) => one.id === source.id) + 1, kept = lookOf(room, source), typed = source.inputs();
+      // A chart is found by its id on whichever tab holds it: the copy's charts are charts of their own.
+      if (Array.isArray(kept.charts)) kept.charts = kept.charts.map((chart) => ({ ...chart, id: rowId() }));
+      const done = hub.as(room, by, (sign) => room.book.tabOp("add", { name: called, at, rows, cols }, sign)), copy = room.book.tab(done.tab);
+      hub.as(room, by, (sign) => room.doc.transact(() => {
+        typed.forEach((line, r) => line.forEach((input, c) => { if (input) room.cells.set(key(copy.rowAt(r), copy.colAt(c)), input); }));
+        restoreLook(room, copy, done.tab, kept);
+        sign();
+      }));
+      return { tab: done.tab, tabs: tabsWithSize(room) };
+    });
   };
   const tabsWithSize = (room) => room.book.tabs().map((tab) => ({ ...tab, ...room.book.tab(tab.id).size() }));
   const TAB_OPS = { "add-tab": "add", "rename-tab": "rename", "delete-tab": "delete", "move-tab": "move", "hide-tab": "hide" };
@@ -676,13 +680,15 @@ export function sheetKind(hub) {
         return `${head}${part}\n${toCsv(clip(typed, area))}`;
       },
       /** One change of cells, of rows and columns, or of tabs (contract: POST /v0/document/:id/cells). `for` is checked, and nothing is kept of it yet. */
-      async edit(room, { op, tab, at, range, from, values, value, format, style, borders, column, header, descending, count = 1, to, name: called, hidden, chart, way, by, for: about, type: cellType, options } = {}) {
+      async edit(room, args = {}) {
+        const { op, tab, at, range, from, values, value, format, style, borders, column, header, descending, count = 1, to, name: called, hidden, chart, way, by, for: about, type: cellType, options } = args, own = room.own;
         const name = typeof by === "string" && by ? by.slice(0, 80) : "agent";
         if (about !== undefined) {
           if (!/^[\w-]+\/\d+$/.test(String(about))) throw fault(400, `for is the comment answered, as <item>/<n>, not ${about}`);
           await room.markup.thread(String(about).split("/")[0]);
+          return owning(room, own, () => this.edit(room, { ...args, for: undefined }));
         }
-        if (op === "duplicate-tab") return duplicateTab(room, pick(room, tab), name);
+        if (op === "duplicate-tab") return duplicateTab(room, pick(room, tab), name, own);
         if (Object.hasOwn(TAB_OPS, op)) {
           const tabArgs = { tab: tab === undefined ? undefined : String(tab), name: called, at, hidden: hidden !== false };
           if (op === "add-tab") {
@@ -693,10 +699,12 @@ export function sheetKind(hub) {
             // name, unless it was given one), as is the file it becomes.
             if (!isFolder(room)) await intoFolder(room, name);
           }
-          const changed = op === "rename-tab" && typeof called === "string" ? room.book.find(tabArgs.tab) : null;
-          const frozen = changed ? keepFrozen(room, room.book.tab(changed), TAB_OPS[op], called?.trim()) : () => {};
-          const done = hub.as(room, name, (sign) => room.book.tabOp(TAB_OPS[op], tabArgs, () => { frozen(); sign(); }));
-          return { tab: done.tab, tabs: tabsWithSize(room) };
+          return owning(room, own, () => {
+            const changed = op === "rename-tab" && typeof called === "string" ? room.book.find(tabArgs.tab) : null;
+            const frozen = changed ? keepFrozen(room, room.book.tab(changed), TAB_OPS[op], called?.trim()) : () => {};
+            const done = hub.as(room, name, (sign) => room.book.tabOp(TAB_OPS[op], tabArgs, () => { frozen(); sign(); }));
+            return { tab: done.tab, tabs: tabsWithSize(room) };
+          });
         }
         if (op === "set" || op === "fill") {
           const ref = parseRef(op === "set" ? at : range ?? at), sheet = pick(room, tab, ref.tab ?? undefined);
