@@ -28,7 +28,7 @@ export function layStyle(worn: SheetCellStyle | undefined, attrs: StyleAttrs): S
   const hue = <T,>(code: "c" | "f" | "bc", was: T) => code in attrs ? (attrs[code] ?? undefined) as T : was;
   const edges = EDGES.reduce((on, [code, bit]) => attrs[code] === true ? on | bit : attrs[code] === false ? on & ~bit : on, base.edges);
   const style = { ...base, bold: flag("b", base.bold), italic: flag("i", base.italic), underline: flag("u", base.underline), strike: flag("s", base.strike), color: hue("c", base.color), fill: hue("f", base.fill), edges, edgeColor: hue("bc", base.edgeColor) };
-  style.custom = style.wrap || style.underline || style.strike || style.valign !== "middle";
+  style.custom = style.wrap || style.underline || style.strike || style.valign !== "middle" || Boolean(style.double || style.shrink || style.indent || style.rotate || style.repeat);
   return style;
 }
 
