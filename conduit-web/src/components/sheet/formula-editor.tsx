@@ -8,7 +8,8 @@ import { batch, createEffect, createMemo, createSignal, For, onCleanup, Show, un
 import { Item, Match, Section } from "@/components/ui";
 import { Popover, PopoverContent } from "@/components/ui/menus";
 import { a1, rangeA1 } from "@/sheet-format.js";
-import { contextAt, cycleAnchors, finish, INKS, inksOf, isFormula, tokenize, unknownCalls, type FormulaContext, type FormulaToken } from "./formula";
+import { escapeName, SPECIALS, structuredFor, tableAt, type TableInfos } from "@/sheet-structured.js";
+import { bracketAt, contextAt, cycleAnchors, finish, INKS, inksOf, isFormula, tokenize, unknownCalls, type FormulaContext, type FormulaToken } from "./formula";
 import { argumentAt, CHIPS, errorReason, FUNCTION_HELP, functionOffers, nearestFunctions, type FunctionOffer } from "./functions";
 import type { SheetGrid, SheetReference } from "./host";
 
@@ -38,6 +39,9 @@ export type FormulaEditorHost = {
   chip?(cell: Cell, name: string, offer: FunctionOffer): void;
   /** What `@` offers past CHIPS for what was typed after it. */
   chips?(query: string): readonly FunctionOffer[];
+  /** This tab's tables (sheet-structured.d.ts), and every table's name, for structured references. */
+  tables?(): TableInfos;
+  tableNames?(): readonly string[];
 };
 /** A function name the engine does not have, held at commit: where it stands in `text`, and the real names nearest it. */
 export type FormulaDoubt = { text: string; name: string; from: number; to: number; near: readonly FunctionOffer[] };
@@ -108,7 +112,20 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
     if (was) return was.near;
     const cell = editing()!, chip = host.chip && shut() !== text() && !host.input(cell.row, cell.col) ? /^@([^=\n]*)$/.exec(text()) : null;
     if (chip) return [...Object.keys(CHIPS).filter((name) => name.toLowerCase().startsWith(chip[1]!.toLowerCase())).map((name) => ({ name, chip: true as const })), ...host.chips?.(chip[1]!) ?? []].slice(0, OFFERED);
-    return word && shut() !== text() ? functionOffers(word.text, names(), known(), OFFERED) : [];
+    if (shut() === text()) return [];
+    // In a table's brackets: its columns (and, but for `[@`, Excel's #All, #Data, #Headers, #Totals and #This Row).
+    const bracket = bracketAt(text(), caret());
+    if (bracket) {
+      const tables = host.tables?.(), tab = tables && [...tables.values()][0]?.tab, table = bracket.table ? tables?.get(bracket.table.toLowerCase()) : tables && tab ? tableAt(tables, { tab, row: cell.row, col: cell.col }) : undefined;
+      if (!table) return [];
+      const low = bracket.typed.toLowerCase(), close = "]".repeat(bracket.closes);
+      return [...table?.columns ?? [], ...bracket.row ? [] : SPECIALS].filter((name) => name.toLowerCase().startsWith(low)).slice(0, OFFERED).map((name) => ({
+        name, detail: name.startsWith("#") ? "Rows of the table" : `Column of ${table.name}`,
+        insert: { from: bracket.from, text: bracket.row && bracket.closes === 1 && !/^[\p{L}\p{N}_]+$/u.test(name) ? `[${escapeName(name)}]]` : escapeName(name) + close } }));
+    }
+    if (!word) return [];
+    const tableOffers = (host.tableNames?.() ?? []).filter((name) => name.toLowerCase().startsWith(word.text.toLowerCase())).map((name) => ({ name, detail: "Table", insert: { from: word.from, text: `${name}[` } }));
+    return [...tableOffers, ...functionOffers(word.text, names(), known(), OFFERED)].slice(0, OFFERED);
   });
   const hint = createMemo(() => editing() ? context().call : null, null, { equals: (a, b) => a?.name === b?.name && a?.arg === b?.arg });
   createEffect(() => { offered(); setActive(0); });
@@ -148,7 +165,9 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
     const was = pointing(), spot = was ?? context().point, now = text();
     if (!spot) return false;
     const replaced = now.slice(spot.from, spot.to), prefix = was ? was.prefix : replaced.endsWith(":") ? replaced : "";
-    const reference = prefix ? prefix + a1(at.row, at.col) : rangeA1(box(anchor, at)), to = spot.from + reference.length;
+    // A whole part of a table is written as Excel writes it (`[@Qty]`, `Sales[Amount]`).
+    const cell = editing()!, tables = host.tables?.(), first = tables && [...tables.values()][0];
+    const reference = prefix ? prefix + a1(at.row, at.col) : (first && structuredFor(tables, { tab: first.tab, row: cell.row, col: cell.col }, first.tab, box(anchor, at))) || rangeA1(box(anchor, at)), to = spot.from + reference.length;
     batch(() => { put(now.slice(0, spot.from) + reference + now.slice(spot.to), to); setPointing({ from: spot.from, to, prefix, anchor, at }); });
     host.grid()?.show(at.row, at.col);
     return true;
@@ -157,6 +176,7 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
   const accept = (offer: FunctionOffer) => {
     const chip = offer.chip && editing();
     if (chip) { end(); host.chip!(chip, offer.name, offer); return; }
+    if (offer.insert) { const now = text(), { from, text: name } = offer.insert; batch(() => { setHeld(null); put(now.slice(0, from) + name + now.slice(caret()), from + name.length); }); return; }
     const span = doubt() ?? context().word, now = text();
     if (!span) return;
     const rest = now.slice(span.to);

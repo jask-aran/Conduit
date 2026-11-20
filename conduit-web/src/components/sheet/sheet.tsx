@@ -13,6 +13,7 @@ import { CELLS, COLS, LOOK, ROWS, TAB, TABS, a1, colIndex, colName, colsOf, from
 import { shiftRefs } from "@/sheet-rules.js";
 import { formatDates, writeFormat } from "@/sheet-formats.js";
 import { daySerial, serialDay } from "@/sheet-types.js";
+import { toA1 } from "@/sheet-structured.js";
 import { CalendarPopover, today } from "@/components/ui/calendar";
 import { addTab, SheetFoot } from "./foot";
 import { createFilled, type SheetFilled } from "./jump";
@@ -181,7 +182,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     const past: { row: number; col: number; input: string }[] = [];
     // A merge shows only its upper-left cell: a value written under the rest would be kept unseen (emptying them, as Merge does, is let through).
     const hiddenIn = (row: number, col: number) => { const one = merges.at(row, col); return one !== undefined && (row !== one.top || col !== one.left); };
-    live.doc.transact(() => { for (const { row, col, input } of list) { if (input && hiddenIn(row, col)) continue; const rowId = sheet.rowAt(row), colId = sheet.colAt(col); if (!rowId || !colId) { if (input) past.push({ row, col, input }); continue; } if (input) cells.set(key(rowId, colId), input); else { cells.delete(key(rowId, colId)); clearChips(look as unknown as Y.Map<unknown>, [key(rowId, colId)]); } } formatDates(look, sheet, list, tabs.dates(), tabs.named);
+    live.doc.transact(() => { for (const { row, col, input } of list) { if (input && hiddenIn(row, col)) continue; const rowId = sheet.rowAt(row), colId = sheet.colAt(col); if (!rowId || !colId) { if (input) past.push({ row, col, input }); continue; } if (input) cells.set(key(rowId, colId), input); else cells.delete(key(rowId, colId)); clearChips(look as unknown as Y.Map<unknown>, [[key(rowId, colId), input]]); } formatDates(look, sheet, list, tabs.dates(), tabs.named);
       for (const { row, col, format } of read) if (format && !formats.at(row, col) && sheet.rowAt(row) && sheet.colAt(col) && list.some((one) => one.row === row && one.col === col)) writeFormat(look, sheet, { top: row, bottom: row, left: col, right: col }, format, false); });
     for (const { row, col, input } of past) hub({ op: "set", at: a1(row, col), value: typed(row, col, input) });
   };
@@ -190,11 +191,12 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const writes = (label: string) => (list: readonly { row: number; col: number; input: string }[]) => history.act(label || labelOf(list), () => write(list));
   const editor = createFormulaEditor({
     grid, input: (row, col) => types.shown(row, col, model()?.input(row, col) ?? ""), functions: tabs.functions, merged: (row, col) => merges.at(row, col),
-    write: (row, col, input) => writes("")([{ row, col, input: types.typed(row, col, input) }]),
+    // A formula's table and column names in their own casing (sheet-structured.js), in the person's own step.
+    write: (row, col, input) => { const tab = model()?.id, cased = tab && input.includes("[") ? toA1(input, filters.tables.infos(), { tab, row, col })?.stored : undefined; writes("")([{ row, col, input: types.typed(row, col, cased ?? input) }]); },
     // As a spreadsheet's Ctrl+Enter: each shown cell selected takes it, a formula moved from the cell typed in to its own.
     fill: (from, input) => { const area = at(); if (!area || (area.top === area.bottom && area.left === area.right && !several())) return false; writes("Fill selection")(cellsOf(ranges().map(inTab)).map(({ row, col }) => ({ row, col, input: shifted(input, row - from.row, col - from.col) }))); return true; },
     selected: () => { changed(); const area = at(); return area && { row: area.top, col: area.left }; }, error: (row, col) => model()?.error(row, col) ?? null,
-    chips: chip.offers,
+    chips: chip.offers, tables: () => filters.tables.infos(), tableNames: () => filters.tables.names(),
     chip: ({ row, col }, name, offer) => {
       if (chip.take({ row, col }, offer)) return;
       const range = { top: row, bottom: row, left: col, right: col };

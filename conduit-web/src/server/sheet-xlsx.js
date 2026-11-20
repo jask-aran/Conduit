@@ -2,8 +2,9 @@ import path from "node:path";
 import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 import { HyperFormula } from "hyperformula";
 import * as XLSX from "xlsx";
-import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colIndex, colName, parseA1, parseRange, tabName, toCsv, valueText } from "../sheet-format.js";
+import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colIndex, colName, parseA1, parseRange, tabName, tabRef, toCsv, valueText } from "../sheet-format.js";
 import { CONFIG, defineNames } from "../sheet-engine.js";
+import { fromFile, toA1, toFile } from "../sheet-structured.js";
 import { totalFormula } from "../sheet-tables.js";
 import { NAMES } from "../sheet-functions.js";
 import { shiftRefs } from "../sheet-rules.js";
@@ -127,6 +128,17 @@ const whole = (xml, name) => typeof xml === "string" && xml === elementOf(xml, n
 /** A sheet part with its element `name` made `block`: in place of the one there, or where the schema has it. */
 const swapped = (xml, name, block) => elementOf(xml, name) ? xml.replace(elementOf(xml, name), () => block) : placed(xml, name, block);
 const sheetOf = (path) => { const n = /^xl\/worksheets\/sheet(\d+)\.xml$/.exec(path)?.[1]; return n ? Number(n) - 1 : -1; };
+/**
+ * Every tab's tables as structured references read them (sheet-structured.d.ts TableInfo), each tab by its name: `tabs` as [name, tables by A1],
+ * `column(table, area, n, tab)` a column's name ("" for Column<n>).
+ */
+const infosOf = (tabs, column) => new Map(tabs.flatMap(([name, list, tab]) => list.flatMap((one) => {
+  const area = parseRange(String(one?.range ?? ""));
+  if (!area || typeof one.name !== "string") return [];
+  const header = one.header === false ? -1 : area.top, total = one.total ? area.bottom : -1;
+  return [[one.name.toLowerCase(), { name: one.name, tab: name, sheet: tabRef(name), header, first: header < 0 ? area.top : area.top + 1, last: total < 0 ? area.bottom : area.bottom - 1, total, left: area.left, right: area.right,
+    columns: Array.from({ length: area.right - area.left + 1 }, (_, n) => column(one, area, n, tab) || `Column${n + 1}`) }]];
+})));
 /** A formula as this engine reads it: the prefixes a newer function is stored under are taken off. */
 const translated = (formula) => `=${formula.replace(/_xlfn\.|_xlws\.|_xlpm\./g, "")}`;
 const kept = (cell) => cell.t === "e" ? ERROR_TEXT[cell.v] ?? "#VALUE!" : cell.t === "b" ? (cell.v ? "TRUE" : "FALSE") : cell.t === "d" ? "" : String(cell.v ?? "");
@@ -258,8 +270,10 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   const formulas = [];
   for (const tab of read) {
     tab.typed = Array.from({ length: tab.rows }, () => new Array(tab.cols).fill(null));
+    // A table's columns are named by its header row's text where it has one, as Excel repairs a part naming them otherwise.
+    for (const one of tab.tables) { const area = parseRange(one.range); if (area && one.header !== false) one.columns = one.columns?.map((name, n) => { const head = tab.data[area.top]?.[area.left + n]; return typeof head?.v === "string" && head.v ? head.v : name; }); }
     // A table's total cell is the SUBTOTAL its column's function writes, over its data by A1, which the engine reads.
-    const totals = new Map(tab.tables.flatMap(({ range, header, totals: fns }) => { const area = parseRange(range); return area && fns ? Object.entries(fns).map(([letter, fn]) => [a1(area.bottom, colIndex(letter)), totalFormula(fn, { top: area.top + (header === false ? 0 : 1), bottom: area.bottom - 1, left: colIndex(letter), right: colIndex(letter) }).slice(1)]) : []; }));
+    const totals = new Map(tab.tables.flatMap(({ range, columns, totals: fns }) => { const area = parseRange(range); return area && fns ? Object.entries(fns).map(([letter, fn]) => [a1(area.bottom, colIndex(letter)), totalFormula(fn, columns?.[colIndex(letter) - area.left] ?? `Column${colIndex(letter) - area.left + 1}`).slice(1)]) : []; }));
     cellsOf(tab.data, (given, r, c) => {
       if (r >= tab.rows || c >= tab.cols) return;
       const cell = totals.has(a1(r, c)) ? { ...given, f: totals.get(a1(r, c)) } : given;
@@ -271,6 +285,12 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       else if (cell.t === "n") tab.typed[r][c] = cell.v;
       else if (cell.t !== "z" && kept(cell) !== "") tab.typed[r][c] = cell.t === "s" || cell.t === "str" ? String(cell.v) : kept(cell);
     });
+  }
+  // A formula reading a table is kept as Excel shows it ([@Qty] in its own table) and computed here by A1, as the hub's engine computes it.
+  const infos = infosOf(read.map((tab) => [tab.name, tab.tables]), (one, _, n) => one.columns?.[n]);
+  if (infos.size) for (const one of formulas) {
+    const spot = { tab: one.tab.name, row: one.r, col: one.c }, kept = one.formula.includes("[") ? fromFile(one.formula, infos, spot) : one.formula, done = toA1(kept, infos, spot);
+    if (done) { (one.tab.stored ??= new Map()).set(`${one.r}:${one.c}`, done.stored); one.tab.typed[one.r][one.c] = done.a1; }
   }
   let engine;
   try { engine = HyperFormula.buildFromSheets(Object.fromEntries(read.map((tab) => [tab.name, tab.typed])), CONFIG, NAMES); }
@@ -326,7 +346,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     const tabs = read.map((tab) => {
       const values = engine.getSheetValues(tab.id), inputs = {}, look = {}, formats = new Map();
       const csv = tab.typed.map((row, r) => row.map((typed, c) => {
-        if (typeof typed === "string" && typed.startsWith("=")) { inputs[a1(r, c)] = typed; return valueText(values[r]?.[c]); }
+        if (typeof typed === "string" && typed.startsWith("=")) { inputs[a1(r, c)] = tab.stored?.get(`${r}:${c}`) ?? typed; return valueText(values[r]?.[c]); }
         return typed === null ? "" : String(typed);
       }));
       (tab.sheet["!cols"] ?? []).forEach((col, c) => { if (c >= tab.cols) return; if (col?.width || col?.wpx) look[`width:${colName(c)}`] = Math.round(col.width ? col.width * PX_PER_CHAR : col.wpx); if (col.width) look[`exact:${colName(c)}`] = col.width; if (col?.hidden) look[`hidden:${colName(c)}`] = 1; });
@@ -372,7 +392,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       if (tab.charts.length) look.charts = tab.charts;
       for (const [at, note] of Object.entries(tab.notes)) look[`note:${at}`] = note;
       for (const [at, list] of Object.entries(tab.drawn)) look[`drawing:${at}`] = list;
-      if (tab.tables.length) look.tables = tab.tables.map(({ totals: _, ...one }) => one);
+      if (tab.tables.length) look.tables = tab.tables.map(({ totals: _, columns: __, ...one }) => one);
       if (tab.filter) look.filter = tab.filter;
       // A frozen formula goes with its cell (`excel:<rowId>:<colId>` once in the doc), written for the cell it was in (`anchor`), as a rule's are.
       for (const [at, one] of Object.entries(report.frozen[tab.name] ?? {})) if (!one.why.startsWith("a formula over")) look[`excel:${at}`] = { formula: one.formula, value: one.kept, anchor: at };
@@ -450,8 +470,19 @@ export function exportXlsx(given) {
   });
   const book = XLSX.utils.book_new(), known = new Set(tabs.map((tab) => tab.name.toLowerCase()));
   let tables = 0;
-  const tableNames = new Set();
+  const tableNames = new Set(), listedOf = (tab) => Array.isArray(tab.look.tables) ? tab.look.tables : tab.look.table ? [tab.look.table] : [];
+  // A formula reading a table is written in Excel's file form (Table1[[#This Row],[Qty]]); one reading a table written as its filter alone (tablePart:
+  // a header Excel would repair), or under another name, by A1.
+  const infos = infosOf(tabs.map((tab) => [tab.name, listedOf(tab), tab]), (one, area, n, tab) => { const value = one.header === false ? "" : tab.values[area.top]?.[area.left + n]; return typeof value === "string" ? value : ""; });
+  const named = new Set(), parted = new Map([...infos].filter(([low, one]) => { const names = one.header < 0 ? [] : one.columns.map((_, n) => tabs.find((tab) => tab.name === one.tab)?.values[one.header]?.[one.left + n]);
+    const ok = names.every((name) => typeof name === "string" && name) && new Set(names.map((name) => name.toLowerCase())).size === names.length && /^[\p{L}_\\][\p{L}\p{N}_.]*$/u.test(one.name) && !/^[A-Z]{1,3}\d+$/i.test(one.name) && !named.has(low);
+    if (ok) named.add(low);
+    return ok; }));
   for (const tab of tabs) {
+    const file = (formula, r, c) => {
+      const spot = { tab: tab.name, row: r, col: c }, done = infos.size ? toA1(formula, infos, spot) : null;
+      return !done ? formula : done.names.every((name) => parted.has(name)) ? toFile(done.stored, parted, spot) : done.a1;
+    };
     const sheet = {}, cols = Math.max(1, ...tab.typed.map((row) => row.length));
     // A formula that spills is an array formula over the cells it spills into (Excel's dynamic array, `D`), or over the range it was entered on with
     // Ctrl+Shift+Enter (`array:` in the look, not dynamic); the cells it spills into hold their values.
@@ -462,7 +493,7 @@ export function exportXlsx(given) {
       const formula = typed.startsWith("=") ? typed : from && held.value === typed && typeof held.formula === "string" && !outside(held.formula).includes("[") ? shiftRefs(held.formula, r - from.row, c - from.col) : null;
       const cell = isError(value) ? { t: "e", v: ERROR_CODE[value.value] ?? 15, w: value.value } : typeof value === "number" ? { t: "n", v: value } : typeof value === "boolean" ? { t: "b", v: value } : { t: "s", v: String(value ?? "") };
       if (cell.t === "s" && cell.v === "" && !formula) return;
-      if (formula) cell.f = stored(orphaned(formula, known));
+      if (formula) cell.f = stored(orphaned(file(formula, r, c), known));
       const array = tab.look[`array:${at}`], entered = parseRange(String(array?.range ?? "")), size = formula && typed.startsWith("=") ? spill(r, c) : null;
       if (size && (entered || size.rows > 1 || size.cols > 1)) {
         const [rows, cols] = entered && !array.dynamic ? [entered.bottom - entered.top + 1, entered.right - entered.left + 1] : [size.rows, size.cols];
@@ -493,8 +524,8 @@ export function exportXlsx(given) {
     // Each table is its own part (xlsx-parts.js); one Excel would repair is written as its filter alone. A table's part holds its own filter: the
     // tab's filter over one is written there, as a sheet's filter over it is one Excel repairs.
     // A tab's filter over a table (as the page made one before tables kept their own) is the table's.
-    const listed = Array.isArray(tab.look.tables) ? tab.look.tables : tab.look.table ? [tab.look.table] : [], filter = tab.look.filter, own = (table) => table.range === filter?.range && !table.keep && !table.when;
-    const made = listed.map((table) => { const part = tablePart(table, tab.values, tables + 1, tableNames, filterColumns(own(table) ? filter : table), tab.typed); if (part) tables++; return part; });
+    const listed = listedOf(tab), filter = tab.look.filter, own = (table) => table.range === filter?.range && !table.keep && !table.when;
+    const made = listed.map((table) => { const part = tablePart(table, tab.values, tables + 1, tableNames, filterColumns(own(table) ? filter : table), tab.typed, (formula, r, c) => stored(file(formula, r, c))); if (part) tables++; return part; });
     tab.tableParts = made.filter(Boolean);
     tab.filterInTable = listed.some((table, n) => own(table) && made[n]);
     const filtered = tab.filterInTable || listed.some((table) => table.range === filter?.range) ? undefined : filter?.range;

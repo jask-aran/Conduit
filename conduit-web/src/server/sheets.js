@@ -72,7 +72,7 @@ export function sheetKind(hub) {
       const cell = key(sheet.rowAt(r), sheet.colAt(c));
       if (!input) room.cells.delete(cell); else if (room.cells.get(cell) !== input) room.cells.set(cell, input);
     }
-    clearChips(room.look, written.flatMap(([r, c, input]) => input ? [] : [key(sheet.rowAt(r), sheet.colAt(c))]));
+    clearChips(room.look, written.map(([r, c, input]) => [key(sheet.rowAt(r), sheet.colAt(c)), input]));
     if (guarded) formatDates(room.look, sheet, written.map(([row, col, input]) => ({ row, col, input })), dates ??= dateFunctions(), (name) => { const id = room.book.find(name); return id ? room.book.tab(id) : undefined; });
     sign();
   }));

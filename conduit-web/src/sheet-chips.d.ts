@@ -13,7 +13,7 @@ export function cleanChip(chip: unknown): SheetChip | null;
 export function readChip(text: unknown): SheetChip | null;
 export function hostOf(url: string): string;
 export function writeChip(look: Y.Map<unknown>, cells: Y.Map<string>, sheet: FormatSheet, row: number, col: number, chip: SheetChip | null): void;
-export function clearChips(look: Y.Map<unknown>, ids: Iterable<string>): void;
+export function clearChips(look: Y.Map<unknown>, written: Iterable<readonly [string, string]>): void;
 export function copyChips(look: Y.Map<unknown>, sheet: FormatSheet, pairs: Iterable<readonly [number, number, number, number]>): void;
 /** POST /v0/document/:id/cells `{ op: "chip", at, chip, tab? }`: the cell `at` (A1) shown as `chip`, or plain again with `chip: null`. */
 export type SheetChipOp = { op: "chip"; at: string; chip: SheetChip | null; tab?: string };

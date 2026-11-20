@@ -1,7 +1,9 @@
 import { HyperFormula } from "hyperformula";
 import * as Y from "yjs";
-import { CELLS, COL_LIMIT, FIRST, LOOK, MAIN, NONE, SHEET_LIMIT, TAB, TABS, colsOf, isError, key, listed, rowId, rowsOf, sent, tabName, tabNameFault } from "./sheet-format.js";
+import { CELLS, COL_LIMIT, FIRST, LOOK, MAIN, NONE, SHEET_LIMIT, TAB, TABS, colsOf, isError, key, listed, rowId, rowsOf, sent, tabName, tabNameFault, tabRef } from "./sheet-format.js";
 import { NAMES } from "./sheet-functions.js";
+import { alignA1, renameColumn, renameTable, toA1 } from "./sheet-structured.js";
+import { readTables } from "./sheet-tables.js";
 
 /*
  * The formula engine over a sheet's doc (sheet-format.js), kept apart from the format so a page, which computes in a worker (`serveSheetModel`,
@@ -60,6 +62,11 @@ const listOf = (value) => { try { const list = typeof value === "string" ? JSON.
 export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
   const order = doc.getArray(TABS), meta = doc.getMap(TAB), cells = doc.getMap(CELLS), look = doc.getMap(LOOK), self = {}, listeners = new Set();
   let engine, ids = [], tabs = new Map(), bySheet = new Map(), rowTab = new Map(), colTab = new Map(), named = new Map(), names = "", watched = [], pending = null, written = null;
+  // Structured references (sheet-structured.js): the tables as they read them, the A1 each such cell gave the engine, and which cells read which table.
+  let infos = new Map(), given = new Map(), uses = new Map(), refers = new Map(), heads = new Set(), fixes = [];
+  // `typing`: the cells the change being taken wrote, whose casing the hub leaves (an undo of the step would not undo its rewrite); the page writes it.
+  const fixing = {};
+  let typing = null;
   const defined = () => listed(order).flatMap((id) => listOf(look.get(`names:${id}`)));
   const nameOf = (id) => meta.get(`name:${id}`) ?? (id === MAIN ? called ?? FIRST : id);
   const engineName = (id) => meta.get(`name:${id}`) ?? (id === MAIN ? FIRST : id);
@@ -73,6 +80,75 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
   };
   const eachFormula = (each) => {
     for (const t of tabs.values()) for (let row = 0; row < t.typed.length; row++) { const line = t.typed[row]; for (let col = 0; col < line.length; col++) { const input = line[col]; if (typeof input === "string" && input.charCodeAt(0) === 61) each(t, row, col, input); } }
+  };
+  /** The workbook's tables as references read them (sheet-structured.d.ts TableInfo), `id` and `cols` (column ids) to tell a rename from a move. */
+  const tableInfos = () => {
+    const out = new Map();
+    for (const t of tabs.values()) for (const table of readTables(look, t.id)) {
+      const from = placeOf(table.from), to = placeOf(table.to);
+      if (from?.t !== t || to?.t !== t || out.has(table.name.toLowerCase())) continue;
+      const { row: top, col: left } = from.at, { row: bottom, col: right } = to.at, header = table.header === false ? -1 : top, total = table.total ? bottom : -1;
+      const columns = Array.from({ length: right - left + 1 }, (_, n) => (header < 0 ? "" : String(t.typed[header]?.[left + n] ?? "")) || `Column${n + 1}`);
+      out.set(table.name.toLowerCase(), { id: table.id, name: table.name, tab: t.id, sheet: tabRef(named.get(t.id)), header, first: header < 0 ? top : top + 1, last: total < 0 ? bottom : bottom - 1, total, left, right, columns, cols: t.colIds.slice(left, right + 1), head: t.rowIds[top] });
+    }
+    return out;
+  };
+  const forget = (cell) => { for (const name of uses.get(cell) ?? []) refers.get(name)?.delete(cell); uses.delete(cell); given.delete(cell); };
+  const mentions = (input) => { const low = input.toLowerCase(); for (const name of infos.keys()) if (low.includes(name)) return true; return false; };
+  /** What the engine is given for a cell's input: a formula's structured references as A1, the cell noted as reading their tables. */
+  const toEngine = (t, row, col, input) => {
+    const cell = key(t.rowIds[row], t.colIds[col]);
+    if (uses.has(cell)) forget(cell);
+    if (typeof input !== "string" || input.charCodeAt(0) !== 61 || !(input.includes("[") || (infos.size && mentions(input)))) return raw(input);
+    const done = toA1(input, infos, { tab: t.id, row, col });
+    if (!done) return raw(input);
+    for (const name of done.names) (refers.get(name) ?? refers.set(name, new Set()).get(name)).add(cell);
+    uses.set(cell, done.names); given.set(cell, done.a1);
+    // The hub writes the tables' and columns' names in their own casing.
+    if (owner && done.stored !== input && !typing?.has(cell)) fixes.push([cell, input, done.stored]);
+    return done.a1;
+  };
+  /** The formula the engine holds for a cell as the doc would hold it: a structured one's A1 references the engine moved, written into its text. */
+  const asStored = (cell, input, rewritten) => given.has(cell) ? (rewritten === given.get(cell) ? input : alignA1(input, rewritten, infos)) : rewritten;
+  /**
+   * The tables read again (after their look, a header cell or the lines under them changed): each cell reading one that changed is given its A1 again,
+   * and the hub rewrites a renamed table's or column's references. The cells the engine changed, or null when it was not asked.
+   */
+  const retable = () => {
+    const next = tableInfos(), changed = new Set(), byId = new Map([...infos.values()].map((one) => [one.id, one]));
+    const same = (one, two) => one && two && one.name === two.name && one.tab === two.tab && one.sheet === two.sheet && one.header === two.header && one.first === two.first && one.last === two.last && one.total === two.total && one.left === two.left && one.right === two.right && one.columns.join("\n") === two.columns.join("\n");
+    for (const name of new Set([...infos.keys(), ...next.keys()])) if (!same(infos.get(name), next.get(name))) changed.add(name);
+    if (!changed.size) return null;
+    changed.add("");
+    const renames = [];
+    if (owner) for (const one of next.values()) {
+      const was = byId.get(one.id);
+      if (!was) continue;
+      if (was.name !== one.name) for (const cell of refers.get(was.name.toLowerCase()) ?? []) renames.push([cell, (text) => renameTable(text, was.name, one.name)]);
+      one.cols.forEach((col, n) => { const at = was.cols.indexOf(col); if (at >= 0 && was.columns[at] !== one.columns[n] && was.columns[at].toLowerCase() !== one.columns[n].toLowerCase()) for (const cell of refers.get(was.name.toLowerCase()) ?? []) renames.push([cell, (text, place) => renameColumn(text, next, place, one, was.columns[at], one.columns[n])]); });
+    }
+    infos = next; heads = new Set([...next.values()].map((one) => one.head));
+    for (const [cell, edit] of renames) {
+      const place = placeOf(cell), input = place && place.t.typed[place.at.row][place.at.col];
+      if (input) { const after = edit(input, { tab: place.t.id, row: place.at.row, col: place.at.col }); if (after !== input) fixes.push([cell, input, after]); }
+    }
+    let changes = [];
+    engine.suspendEvaluation();
+    try {
+      for (const name of changed) for (const cell of [...refers.get(name) ?? []]) {
+        const place = placeOf(cell);
+        if (!place) { forget(cell); continue; }
+        const was = given.get(cell), now = toEngine(place.t, place.at.row, place.at.col, place.t.typed[place.at.row][place.at.col]);
+        if (now !== was) engine.setCellContents(place.at, now);
+      }
+    } finally { changes = engine.resumeEvaluation(); }
+    return changes;
+  };
+  /** The hub's rewrites of structured references (names in their own casing, renamed tables and columns), written once the change is whole. */
+  const writeFixes = () => {
+    if (!fixes.length) return;
+    const now = fixes; fixes = [];
+    queueMicrotask(() => doc.transact(() => { for (const [cell, was, after] of now) if (cells.get(cell) === was) cells.set(cell, after); }, fixing));
   };
   /** A formula that may refer to the tab: its text names it (a cheap test, and one that may say yes for nothing). */
   const naming = (id) => { const plain = named.get(id).toLowerCase(), quoted = plain.replace(/'/g, "''"); return (input) => { const text = input.toLowerCase(); return text.includes(plain) || text.includes(quoted); }; };
@@ -94,7 +170,9 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
       t.typed = Array.from({ length: t.rowIds.length }, () => blank(t.colIds.length));
       grids[named.get(t.id)] = Array.from({ length: t.rowIds.length }, () => new Array(t.colIds.length).fill(null));
     }
-    for (const [cell, input] of cells) { const place = placeOf(cell); if (place) { place.t.typed[place.at.row][place.at.col] = input ?? ""; grids[named.get(place.t.id)][place.at.row][place.at.col] = raw(input); } }
+    for (const [cell, input] of cells) { const place = placeOf(cell); if (place) place.t.typed[place.at.row][place.at.col] = input ?? ""; }
+    infos = tableInfos(); heads = new Set([...infos.values()].map((one) => one.head)); given = new Map(); uses = new Map(); refers = new Map();
+    for (const t of tabs.values()) t.typed.forEach((line, row) => line.forEach((input, col) => { if (input !== "") grids[named.get(t.id)][row][col] = toEngine(t, row, col, input); }));
     engine?.destroy();
     engine = HyperFormula.buildFromSheets(grids, CONFIG, NAMES);
     defineNames(engine, defined());
@@ -171,10 +249,12 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
     const kept = [];
     const retype = (done) => {
       const places = [];
-      for (const cell of now.keys) { if (done?.has(cell)) continue; const place = placeOf(cell); if (place) { const input = cells.get(cell); place.t.typed[place.at.row][place.at.col] = input ?? ""; places.push([place.at, raw(input)]); } }
+      typing = now.keys;
+      for (const cell of now.keys) { if (done?.has(cell)) continue; const place = placeOf(cell); if (place) { const input = cells.get(cell); place.t.typed[place.at.row][place.at.col] = input ?? ""; places.push([place.at, toEngine(place.t, place.at.row, place.at.col, input)]); } else forget(cell); }
+      typing = null;
       return places;
     };
-    // The hub's own structure change was made in the engine and in `typed` first: only what `write` changed is left.
+    // The hub's own structure change was made in the engine and in `typed` first: only what `write` changed is left (and its own rewrites).
     if (transaction.origin === self) { retype(written); written = null; }
     // A structure change rewrites many formulas, which the engine rewrites too: that is no reason to build it again.
     else if (!structure && now.keys.size > REBUILD_AT) rebuild();
@@ -195,21 +275,28 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
         // hub's own change would have made it; the hub (`owner`) writes those so every copy follows. Lines moved back (`relay`) move no formula's
         // cells: each reads what it read, which the engine's rewrite says, whatever text an undo put back.
         if (structure) eachFormula((t, row, col, input) => {
-          const place = { sheet: t.sheet, row, col }, rewritten = engine.getCellFormula(place);
+          const place = { sheet: t.sheet, row, col }, cell = key(t.rowIds[row], t.colIds[col]), rewritten = engine.getCellFormula(place), stored = rewritten && asStored(cell, input, rewritten);
+          // What the engine holds now, so `retable` sets again only the cells whose A1 the move did not already make.
+          if (rewritten && given.has(cell)) given.set(cell, rewritten);
           // The engine writes `=sum(a1)` as `=SUM(A1)`: a formula differing only so was not moved, and stays as typed.
-          if (rewritten === input || rewritten?.toUpperCase() === input.toUpperCase()) return;
-          const cell = key(t.rowIds[row], t.colIds[col]);
-          if (owner && rewritten && (relaid || !now.keys.has(cell))) { t.typed[row][col] = rewritten; kept.push([cell, input, rewritten]); } else engine.setCellContents(place, input);
+          if (stored === input || stored?.toUpperCase() === input.toUpperCase()) return;
+          if (owner && stored && (relaid || !now.keys.has(cell))) { t.typed[row][col] = stored; kept.push([cell, input, stored]); } else engine.setCellContents(place, toEngine(t, row, col, input));
         });
       } catch { failed = true; } finally { changed = engine.resumeEvaluation().flatMap((change) => change.address && bySheet.has(change.address.sheet) ? [{ tab: bySheet.get(change.address.sheet).id, row: change.address.row, col: change.address.col }] : []); }
     }
     // A move the engine refused (one cutting through a spilt array) is built again from the doc.
     if (failed) { rebuild(); changed = null; kept.length = 0; twice = [...tabs.values()].some((t) => t.rowIds.length !== t.rowIndex.size || t.colIds.length !== t.colIndex.size); }
+    // The tables read again where one may have changed: its look, a header cell, or lines moved.
+    else if (now.tables || structure || (heads.size && [...now.keys].some((cell) => heads.has(cell.slice(0, cell.indexOf(":")))))) {
+      const more = retable();
+      if (more && changed) changed = changed.concat(more.flatMap((change) => change.address && bySheet.has(change.address.sheet) ? [{ tab: bySheet.get(change.address.sheet).id, row: change.address.row, col: change.address.col }] : []));
+    }
+    writeFixes();
     emit({ tabs: now.tabs, structure: moved, cells: changed });
     // The rewrites first, written for the places before the empty lines are taken out, which then rewrites them again.
     if (kept.length || (owner && twice)) queueMicrotask(() => { if (kept.length) doc.transact(() => { written = new Set(); for (const [cell, was, after] of kept) if (cells.get(cell) === was) { cells.set(cell, after); written.add(cell); } }, self); if (owner && twice) unrepeat(); });
   };
-  const onLook = (event) => { for (const name of event.keysChanged) if (name.startsWith("names:")) return onTabs(); };
+  const onLook = (event) => { for (const name of event.keysChanged) if (name.startsWith("names:")) return onTabs(); else if (name.startsWith("table")) note().tables = true; };
   order.observe(onTabs); meta.observe(onTabs); cells.observe(onCells); look.observe(onLook);
   doc.on("afterTransaction", flush);
   rebuild();
@@ -227,7 +314,7 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
     const isRows = op.endsWith("rows"), removing = op.startsWith("delete"), moving = op.startsWith("move"), before = isRows ? t.rowIds : t.colIds, line = isRows ? t.rows : t.cols, names = naming(id);
     // Each formula that may refer to the tab by its row and column ids, with the engine's text of it before the change.
     const formulas = [];
-    eachFormula((u, row, col, input) => { if (u === t || names(input)) formulas.push([u, u.rowIds[row], u.colIds[col], engine.getCellFormula({ sheet: u.sheet, row, col })]); });
+    eachFormula((u, row, col, input) => { if (u === t || names(input) || given.has(key(u.rowIds[row], u.colIds[col]))) formulas.push([u, u.rowIds[row], u.colIds[col], engine.getCellFormula({ sheet: u.sheet, row, col }), input]); });
     const gone = new Set(removing ? before.slice(at, at + count) : []), across = isRows ? t.colIds : t.rowIds;
     if (moving) (isRows ? engine.moveRows : engine.moveColumns).call(engine, t.sheet, at, count, to < at ? to : to + count);
     else if (isRows) (removing ? engine.removeRows : engine.addRows).call(engine, t.sheet, [at, count]);
@@ -240,10 +327,11 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
       // The cells of what was deleted, found by their ids (a cell whose other id is gone too was never placed, and is left).
       for (const one of gone) for (const other of across) { const cell = isRows ? key(one, other) : key(other, one); if (cells.has(cell)) cells.delete(cell); }
       written = new Set();
-      for (const [u, row, col, was] of formulas) {
+      for (const [u, row, col, was, input] of formulas) {
         if (u === t && gone.has(isRows ? row : col)) continue;
-        const place = { sheet: u.sheet, row: u.rowIndex.get(row), col: u.colIndex.get(col) }, after = engine.getCellFormula(place);
-        if (after && after !== was) { const cell = key(row, col); cells.set(cell, after); u.typed[place.row][place.col] = after; written.add(cell); }
+        const place = { sheet: u.sheet, row: u.rowIndex.get(row), col: u.colIndex.get(col) }, cell = key(row, col), after = engine.getCellFormula(place), stored = after && after !== was ? asStored(cell, input, after) : input;
+        if (after && given.has(cell)) given.set(cell, after);
+        if (stored !== input) { cells.set(cell, stored); u.typed[place.row][place.col] = stored; written.add(cell); }
       }
       write();
     }, self);
@@ -252,10 +340,10 @@ export function createWorkbookModel(doc, { name: called, owner = false } = {}) {
   /** The tab takes the name in the engine, which rewrites each formula naming it, and the doc is written so (the change that writes it then builds the engine again). */
   const rename = (id, to) => {
     const names = naming(id), formulas = [];
-    eachFormula((u, row, col, input) => { if (names(input)) formulas.push([u, row, col, engine.getCellFormula({ sheet: u.sheet, row, col })]); });
+    eachFormula((u, row, col, input) => { if (names(input)) formulas.push([u, row, col, engine.getCellFormula({ sheet: u.sheet, row, col }), input]); });
     engine.renameSheet(tabs.get(id).sheet, to);
     meta.set(`name:${id}`, to);
-    for (const [u, row, col, was] of formulas) { const after = engine.getCellFormula({ sheet: u.sheet, row, col }); if (after && after !== was) cells.set(key(u.rowIds[row], u.colIds[col]), after); }
+    for (const [u, row, col, was, input] of formulas) { const cell = key(u.rowIds[row], u.colIds[col]), after = engine.getCellFormula({ sheet: u.sheet, row, col }); if (after && after !== was) { const stored = asStored(cell, input, after); if (stored !== input) cells.set(cell, stored); } }
   };
   const free = (name, but) => {
     const fault = tabNameFault(name);

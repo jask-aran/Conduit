@@ -45,8 +45,16 @@ export function writeChip(look, cells, sheet, row, col, chip) {
   if (text) cells.set(at, text);
 }
 
-/** Cells emptied lose their chips, as Excel's Clear Contents takes a hyperlink's text. `ids`: each `<rowId>:<colId>`. */
-export function clearChips(look, ids) { for (const at of ids) if (look.has(`${CHIP}${at}`)) look.delete(`${CHIP}${at}`); }
+/**
+ * Cells written lose the chips they no longer show: an emptied cell any chip, as Excel's Clear Contents takes a hyperlink's text, and a cell typed over
+ * a person's or an artifact's, whose drawn name would hide what it now holds. `written`: each `[<rowId>:<colId>, input]`.
+ */
+export function clearChips(look, written) {
+  for (const [at, input] of written) {
+    const held = look.get(`${CHIP}${at}`), chip = held === undefined ? null : readChip(held);
+    if (held !== undefined && (!input || (chip && "name" in chip && chip.name !== input))) look.delete(`${CHIP}${at}`);
+  }
+}
 
 /** Chips copied from cells to cells, by position (`[fromRow, fromCol, toRow, toCol]`): where the source has none, the target's goes. */
 export function copyChips(look, sheet, pairs) {

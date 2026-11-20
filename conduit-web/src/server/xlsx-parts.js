@@ -16,9 +16,11 @@ const EMU_PER_PX = 9525;
 
 /**
  * A tab's table (sheet-tables.d.ts SheetTableA1) as its own part, its columns named by its header row's text (`Column1`… with none), each column's
- * total as Excel writes it (from its total cell's SUBTOTAL); none where a header is empty, repeated or not text (a year as a number), as Excel would repair it. `range`: its A1.
+ * total as Excel writes it (from its total cell's SUBTOTAL, else its formula as a custom one) and its calculated column's formula (one every data row
+ * holds the same), each written by `file` (the formula as the file holds it, without its `=`, at its cell); none where a header is empty, repeated or
+ * not text (a year as a number), as Excel would repair it. `range`: its A1.
  */
-export function tablePart(table, values, id, taken, filtered = "", typed = []) {
+export function tablePart(table, values, id, taken, filtered = "", typed = [], file = (formula) => formula.slice(1)) {
   const area = parseRange(String(table?.range ?? "")), header = table?.header !== false, total = Boolean(table?.total);
   if (!area || area.bottom - area.top < Number(header) + Number(total)) return null;
   const width = area.right - area.left + 1, names = Array.from({ length: width }, (_, c) => { if (!header) return `Column${c + 1}`; const value = values[area.top]?.[area.left + c]; return typeof value === "string" ? value : ""; });
@@ -27,9 +29,13 @@ export function tablePart(table, values, id, taken, filtered = "", typed = []) {
   const said = String(table.name ?? ""), called = /^[\p{L}_\\][\p{L}\p{N}_.]*$/u.test(said) && !/^[A-Z]{1,3}\d+$/i.test(said) && !taken.has(said.toLowerCase()) ? said : `Table${id}`, ref = rangeA1(area);
   taken.add(called.toLowerCase());
   const filter = header && table.filter !== false ? `<autoFilter ref="${rangeA1({ ...area, bottom: area.bottom - Number(total) })}"${filtered ? `>${filtered}</autoFilter>` : "/>"}` : "";
+  const first = area.top + Number(header), last = area.bottom - Number(total);
   const columns = names.map((name, n) => {
-    const fn = total ? totalOf(typed[area.bottom]?.[area.left + n]) : undefined, label = total && !fn ? values[area.bottom]?.[area.left + n] : undefined;
-    return `<tableColumn id="${n + 1}" name="${escaped(name)}"${fn ? ` totalsRowFunction="${fn}"` : typeof label === "string" && label ? ` totalsRowLabel="${escaped(label)}"` : ""}/>`;
+    const c = area.left + n, under = typed[area.bottom]?.[c], fn = total ? totalOf(under) : undefined, own = total && !fn && typeof under === "string" && under.startsWith("=") ? file(under, area.bottom, c) : undefined;
+    const label = total && !fn && !own ? values[area.bottom]?.[c] : undefined, formula = typed[first]?.[c];
+    const calculated = typeof formula === "string" && formula.startsWith("=") && formula.includes("[") && Array.from({ length: last - first + 1 }, (_, k) => typed[first + k]?.[c]).every((one) => one === formula) ? file(formula, first, c) : undefined;
+    const inner = `${calculated ? `<calculatedColumnFormula>${escaped(calculated)}</calculatedColumnFormula>` : ""}${own ? `<totalsRowFormula>${escaped(own)}</totalsRowFormula>` : ""}`;
+    return `<tableColumn id="${n + 1}" name="${escaped(name)}"${fn ? ` totalsRowFunction="${fn}"` : own ? ' totalsRowFunction="custom"' : typeof label === "string" && label ? ` totalsRowLabel="${escaped(label)}"` : ""}${inner ? `>${inner}</tableColumn>` : "/>"}`;
   }).join("");
   const style = table.style === "none" ? "" : `<tableStyleInfo name="${escaped(table.style ?? "TableStyleMedium2")}" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/>`;
   return { range: ref, name: `xl/tables/table${id}.xml`, type: `${TYPE}spreadsheetml.table+xml`, rel: `${REL}/table`, element: "tableParts", block: (...rids) => `<tableParts count="${rids.length}">${rids.map((rid) => `<tablePart r:id="${rid}"/>`).join("")}</tableParts>`,
@@ -39,8 +45,9 @@ export function tablePart(table, values, id, taken, filtered = "", typed = []) {
 export function tableOf(xml) {
   const head = /<table\b[^>]*>/.exec(xml)[0], range = attr(head, "ref"), area = parseRange(range), info = /<tableStyleInfo\b[^>]*>/.exec(xml)?.[0], style = info ? attr(info, "name") : "none";
   const total = Number(attr(head, "totalsRowCount") ?? 0) > 0;
-  const totals = Object.fromEntries([...xml.matchAll(/<tableColumn\b[^>]*>/g)].flatMap(([tag], n) => { const fn = attr(tag, "totalsRowFunction"); return total && area && TOTALS.includes(fn) ? [[colName(area.left + n), fn]] : []; }));
-  return { range, name: attr(head, "displayName") ?? attr(head, "name"), ...(attr(head, "headerRowCount") === "0" ? { header: false } : {}), ...(total ? { total: true } : {}), ...(style && style !== "TableStyleMedium2" ? { style } : {}), ...(Object.keys(totals).length ? { totals } : {}) };
+  const tags = [...xml.matchAll(/<tableColumn\b[^>]*>/g)].map(([tag]) => tag);
+  const totals = Object.fromEntries(tags.flatMap((tag, n) => { const fn = attr(tag, "totalsRowFunction"); return total && area && TOTALS.includes(fn) ? [[colName(area.left + n), fn]] : []; }));
+  return { range, columns: tags.map((tag, n) => attr(tag, "name") ?? `Column${n + 1}`), name: attr(head, "displayName") ?? attr(head, "name"), ...(attr(head, "headerRowCount") === "0" ? { header: false } : {}), ...(total ? { total: true } : {}), ...(style && style !== "TableStyleMedium2" ? { style } : {}), ...(Object.keys(totals).length ? { totals } : {}) };
 }
 
 const PLOT = { column: "barChart", bar: "barChart", line: "lineChart", area: "areaChart", pie: "pieChart", scatter: "scatterChart" };
