@@ -133,6 +133,8 @@ export function createFormulaEditor(host: FormulaEditorHost): FormulaEditor {
     if (input !== host.input(now.row, now.col)) host.write(now.row, now.col, input);
     // Moved as an arrow key moves the selection: scrolled only as far as it must be.
     // Entries along a row with Tab, then Enter, go to the next row under the first of them, as a spreadsheet's.
+    // In a selection of several cells, the entry goes on round it, the selection kept.
+    if (move && grid?.round(move[0] !== 0, move[0] || move[1])) { tabbed = undefined; if (focus) grid.focus(); return; }
     const back = move?.[0] === 1 && tabbed?.row === now.row ? tabbed.col : undefined;
     tabbed = move?.[1] ? { row: now.row, col: tabbed?.row === now.row ? tabbed.col : now.col } : undefined;
     if (move) { const one = host.merged(now.row, now.col), from: [number, number] = one ? [move[0] > 0 ? one.bottom : one.top, move[1] > 0 ? one.right : one.left] : [now.row, now.col];

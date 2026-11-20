@@ -653,7 +653,8 @@ export function MarkupTool(props: { host: MarkupHost; mode: Mode; onMode: (mode:
       event.preventDefault();
       // Words on the page are followed by the comment about them; the comment's Enter is Done.
       if (event.target instanceof HTMLInputElement) noteField?.focus({ preventScroll: true });
-      else if (replyTo() === undefined) openNote(null);
+      // Done or Escape gives the keyboard back to the surface (a sheet's grid), not the page.
+      else if (replyTo() === undefined) { openNote(null); host.margin?.focus?.(); }
       else if (event.key === "Enter") void answer();
       else setReplyTo(undefined);
       return;

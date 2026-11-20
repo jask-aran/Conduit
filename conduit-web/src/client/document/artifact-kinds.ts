@@ -27,6 +27,8 @@ export type ArtifactSurface = {
   markup: Omit<MarkupHost, PaneMarkup>;
   /** Its own commands of the palette's ARTIFACT_COMMANDS (the pane adds the thread and the margin's next and previous comment). Read each time the palette or a shortcut asks, so it follows what the surface has ready. */
   offers?(): FocusedArtifact["offers"];
+  /** Its own actions by name, read as the palette opens. */
+  actions?(): ReturnType<NonNullable<FocusedArtifact["actions"]>>;
   /** Controls of its own for the pane's header, put after the comment list and before "Connect a chat". */
   header?(): JSX.Element;
   /** Its copy is out of touch with the hub and keeps what is written until it is back: the header says it is reconnecting. */

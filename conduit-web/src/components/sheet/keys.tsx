@@ -2,7 +2,7 @@
  * Every key the sheet takes, by group, in Excel's words for what it does: the list a person opens with Ctrl+/ or the palette's Shortcuts.
  * Kept by hand beside the handlers (grid.ts onKeyDown, sheet.tsx `events.key` and its section's keydown, formula-editor.tsx, sequences.tsx).
  */
-import { createComputed, For, on } from "solid-js";
+import { createComputed, createSignal, For, on } from "solid-js";
 import { Group, Keycap, OverlayPage, SettingLine } from "@/components/ui";
 import { OverlayDialog } from "@/components/ui/dialog";
 
@@ -12,7 +12,7 @@ const SHEET_KEYS: [string, [string, ...string[]][]][] = [
     ["Move one cell", "Arrow keys"], ["To the edge of the data region", "Ctrl+Arrow"], ["Start of the row", "Home"], ["To cell A1", "Ctrl+Home"],
     ["To the last cell used", "Ctrl+End"], ["Down or up a screen", "Page Down", "Page Up"], ["Right or left a screen", "Alt+Page Down", "Alt+Page Up"],
     ["Next cell down, or round a selection", "Enter", "Shift+Enter"], ["Next cell right, or round a selection", "Tab", "Shift+Tab"],
-    ["Show the active cell", "Ctrl+Backspace"], ["Go to a cell or range", "F5"], ["Next or previous tab", "Ctrl+Page Down", "Ctrl+Page Up"],
+    ["Show the active cell", "Ctrl+Backspace"], ["Go to a cell or range", "F5"], ["Next or previous tab", "Ctrl+Page Down", "Ctrl+Page Up", "Ctrl+Shift+Page Down", "Ctrl+Shift+Page Up"],
   ]],
   ["Select", [
     ["Extend the selection", "Shift+Arrow"], ["Extend to the edge of the data", "Ctrl+Shift+Arrow"], ["Extend to the last cell used", "Ctrl+Shift+End"],
@@ -31,7 +31,7 @@ const SHEET_KEYS: [string, [string, ...string[]][]][] = [
   ["Rows, columns and tabs", [
     ["Insert rows, columns or cells", "Ctrl+Shift++"], ["Delete rows, columns or cells", "Ctrl+-"], ["Hide rows", "Ctrl+9"], ["Unhide rows", "Ctrl+Shift+9"],
     ["Hide columns", "Ctrl+0"], ["Unhide columns", "Ctrl+Shift+0"], ["Group", "Alt+Shift+Right"], ["Ungroup", "Alt+Shift+Left"],
-    ["Filter on or off", "Ctrl+Shift+L"], ["Open a filter's list", "Alt+Down"], ["Format as table", "Alt H T"], ["New tab", "Shift+F11"], ["Rename the tab", "F2 on the tab"],
+    ["Filter on or off", "Ctrl+Shift+L"], ["Open a filter's list", "Alt+Down"], ["Format as table", "Alt H T"], ["New tab", "Shift+F11"], ["Rename the tab", "F2 on the tab"], ["The tab's menu", "Shift+F10 on the tab"],
   ]],
   ["Format", [
     ["Bold", "Ctrl+B"], ["Italic", "Ctrl+I"], ["Underline", "Ctrl+U"], ["Strikethrough", "Ctrl+5"], ["Custom number format", "Ctrl+1"],
@@ -39,7 +39,7 @@ const SHEET_KEYS: [string, [string, ...string[]][]][] = [
     ["Percent", "Ctrl+Shift+%"], ["Scientific", "Ctrl+Shift+^"], ["Outline border", "Ctrl+Shift+&"], ["Remove borders", "Ctrl+Shift+_"], ["Clear formatting", "Ctrl+\\"],
   ]],
   ["Menus and tools", [
-    ["Cell menu", "Shift+F10", "Menu key"], ["To the ribbon and back", "F6"], ["Ribbon key tips", "Alt"], ["Chart of the selection", "Alt+F1"],
+    ["Cell menu (type to search it)", "Shift+F10", "Menu key"], ["Search every action by name", "Alt+Q"], ["Round the grid, the ribbon and the tabs", "F6", "Shift+F6"], ["Along the ribbon or the tabs", "Left", "Right"], ["Ribbon key tips", "Alt"], ["Chart of the selection", "Alt+F1"],
     ["Comment on the selection", "Shift+F2"], ["Ask the agent about the selection", "Ctrl+Alt+M"], ["These shortcuts", "Ctrl+/"],
   ]],
 ];
@@ -47,11 +47,13 @@ const SHEET_KEYS: [string, [string, ...string[]][]][] = [
 /** The sheet's keys, by group; the keyboard goes back to where it was as it shuts. */
 export function SheetShortcuts(props: { open: boolean; onOpenChange(open: boolean): void }) {
   let back: HTMLElement | null = null;
-  createComputed(on(() => props.open, (open) => { if (open) back = document.activeElement instanceof HTMLElement ? document.activeElement : null; }));
+  // The groups past the first two are made the frame after it opens, so it opens in one.
+  const [whole, setWhole] = createSignal(false);
+  createComputed(on(() => props.open, (open) => { setWhole(false); if (open) { back = document.activeElement instanceof HTMLElement ? document.activeElement : null; requestAnimationFrame(() => setTimeout(() => setWhole(true))); } }));
   return <OverlayDialog open={props.open} onOpenChange={props.onOpenChange} label="Sheet shortcuts" placement="center" layout="rail"
     onCloseAutoFocus={(event) => { event.preventDefault(); if (back?.isConnected) back.focus({ preventScroll: true }); back = null; }}>
     <OverlayPage title="Sheet shortcuts" onClose={() => props.onOpenChange(false)}>
-      <For each={SHEET_KEYS}>{([title, rows]) => <Group title={title}>
+      <For each={whole() ? SHEET_KEYS : SHEET_KEYS.slice(0, 2)}>{([title, rows]) => <Group title={title}>
         <For each={rows}>{([does, ...keys]) => <SettingLine plain label={does}><For each={keys}>{(chord) => <Keycap>{chord}</Keycap>}</For></SettingLine>}</For>
       </Group>}</For>
     </OverlayPage>
