@@ -1,5 +1,6 @@
 import * as Y from "yjs";
 import { blockId } from "./block-id.js";
+import { getFormatFromId, parseValue } from "numfmt";
 
 /*
  * A sheet (the `sheet` artifact kind): a workbook of tabs of cells kept in a Yjs doc that the hub and every open page merge, and computed by the same
@@ -130,6 +131,24 @@ export const guess = (input) => {
   if (input.charCodeAt(0) === 61) return null;
   const text = input.trim(), percent = text.endsWith("%") && NUMBER.test(text.slice(0, -1));
   return NUMBER.test(text) ? Number(text) : percent ? Number(text.slice(0, -1)) / 100 : /^(?:true|false)$/i.test(text) ? text.toLowerCase() === "true" : input.charCodeAt(0) === 39 ? input.slice(1) : input;
+};
+
+// The format Excel gives an entry it reads, by numfmt's id for it, in the sheet's own forms (its Date is d/m/yyyy, its Currency $#,##0.00).
+const ENTERED = { 5: "$#,##0", 6: "$#,##0", 7: "$#,##0.00", 8: "$#,##0.00", 14: "d/m/yyyy", 22: "d/m/yyyy h:mm" };
+/**
+ * A typed entry as Excel reads it into a cell, so the page's typing, a paste, a fill and an agent's `set` give one cell: a date (1/3/2026, 1-Mar-26,
+ * 2026-03-01, 1/3: day before month), a time (9:30, 9:30 pm), a percentage, an amount ($1,200.50) or a grouped number (1,200) is its number, and
+ * `format` the number format that shows it as typed, for a cell still General. A formula, a leading apostrophe, TRUE or FALSE, a plain number and
+ * text stay as typed (two numbers joined by a dash, 3-4, are text, where Excel would read a date); in a Text cell (`@`) an entry that would read as
+ * a number keeps its text, behind an apostrophe. As Excel, 007 is the number 7.
+ */
+export const readEntry = (input, format) => {
+  const text = input.trim(), first = input.charCodeAt(0);
+  if (!text || first === 61 || first === 39 || /^(?:true|false)$/i.test(text) || /^\d+-\d+$/.test(text)) return { input };
+  const plain = NUMBER.test(text), read = plain ? { value: Number(text) } : parseValue(text, { locale: "en-AU" });
+  if (!read || typeof read.value !== "number") return { input };
+  if (typeof format === "string" && format.trim() === "@") return { input: `'${input}` };
+  return plain || read.formatId === undefined ? { input } : { input: String(read.value), format: ENTERED[read.formatId] ?? getFormatFromId(read.formatId) };
 };
 
 /**

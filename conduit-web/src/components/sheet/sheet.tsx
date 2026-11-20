@@ -9,9 +9,9 @@ import { createDecisionScope } from "@/components/ui/decision-dialog";
 import { createSheetMerges, type SheetMergeKind } from "./merges";
 import { Input } from "@/components/ui/controls";
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger, MenuRow, MenuSection } from "@/components/ui/menus";
-import { CELLS, COLS, LOOK, ROWS, TAB, TABS, a1, colIndex, colName, colsOf, fromCsv, key, parseRange, rangeA1, rowsOf, runsOf, valueText, type SheetView } from "@/sheet-format.js";
+import { CELLS, COLS, LOOK, ROWS, TAB, TABS, a1, colIndex, colName, colsOf, fromCsv, key, parseRange, rangeA1, readEntry, rowsOf, runsOf, valueText, type SheetView } from "@/sheet-format.js";
 import { shiftRefs } from "@/sheet-rules.js";
-import { formatDates } from "@/sheet-formats.js";
+import { formatDates, writeFormat } from "@/sheet-formats.js";
 import { daySerial, serialDay } from "@/sheet-types.js";
 import { CalendarPopover, today } from "@/components/ui/calendar";
 import { addTab, SheetFoot } from "./foot";
@@ -130,14 +130,17 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   createEffect(() => props.onState?.(live.state()));
   onCleanup(() => history.destroy());
 
-  const write = (list: readonly { row: number; col: number; input: string }[]) => {
+  const write = (typed: readonly { row: number; col: number; input: string }[]) => {
     const sheet = model();
     if (!sheet) return;
+    // Read as Excel reads an entry (a date, a time, an amount is its number), a General cell taking the format that shows it as typed.
+    const read = typed.map((cell) => ({ ...cell, ...readEntry(cell.input, formats.at(cell.row, cell.col)) })), list = read.map(({ row, col, input }) => ({ row, col, input }));
     // A cell past the sheet's edge has no row or column of its own yet: the hub makes them as it sets it.
     const past: { row: number; col: number; input: string }[] = [];
     // A merge shows only its upper-left cell: a value written under the rest would be kept unseen (emptying them, as Merge does, is let through).
     const hiddenIn = (row: number, col: number) => { const one = merges.at(row, col); return one !== undefined && (row !== one.top || col !== one.left); };
-    live.doc.transact(() => { for (const { row, col, input } of list) { if (input && hiddenIn(row, col)) continue; const rowId = sheet.rowAt(row), colId = sheet.colAt(col); if (!rowId || !colId) { if (input) past.push({ row, col, input }); continue; } if (input) cells.set(key(rowId, colId), input); else cells.delete(key(rowId, colId)); } formatDates(look, sheet, list, tabs.dates(), tabs.named); });
+    live.doc.transact(() => { for (const { row, col, input } of list) { if (input && hiddenIn(row, col)) continue; const rowId = sheet.rowAt(row), colId = sheet.colAt(col); if (!rowId || !colId) { if (input) past.push({ row, col, input }); continue; } if (input) cells.set(key(rowId, colId), input); else cells.delete(key(rowId, colId)); } formatDates(look, sheet, list, tabs.dates(), tabs.named);
+      for (const { row, col, format } of read) if (format && !formats.at(row, col) && sheet.rowAt(row) && sheet.colAt(col)) writeFormat(look, sheet, { top: row, bottom: row, left: col, right: col }, format, false); });
     for (const { row, col, input } of past) hub({ op: "set", at: a1(row, col), value: input });
   };
   const hub = (op: Parameters<SheetHost["cells"]>[0]) => void history.hub(op).catch((error: Error) => props.host.failed(error.message));
