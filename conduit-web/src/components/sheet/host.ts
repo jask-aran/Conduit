@@ -167,6 +167,8 @@ export interface SheetGrid {
   /** The first cell in view; given one, it is scrolled to the top left first. */
   scroll(to?: { row: number; col: number }): { row: number; col: number };
   focus(): void;
+  /** Enter (`down`) or Tab, `by` 1 or -1, in a selection of several cells: its active cell goes round it, as the keys do; false where it is one cell. */
+  round(down: boolean, by: number): boolean;
   destroy(): void;
 }
 
