@@ -7,7 +7,7 @@ import { CONFIG, defineNames } from "../sheet-engine.js";
 import { NAMES } from "../sheet-functions.js";
 import { shiftRefs } from "../sheet-rules.js";
 import { decodeStyle, encodeStyle, SHEET_INKS } from "../sheet-styles.js";
-import { drawingPart, readCharts, tablePart, withParts } from "./xlsx-parts.js";
+import { drawingPart, notesParts, personsPart, readCharts, readNotes, tablePart, withParts } from "./xlsx-parts.js";
 import { ownOver, readDxfs, readStyles, rgbOf, seen, sheetRules, sheetStyles, withDxfs, withRules, writeRules, writeStyles } from "./xlsx-styles.js";
 
 /*
@@ -137,6 +137,8 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   catch (error) { throw fault(`That file could not be read as an .xlsx: ${error?.message ?? error}`); }
   const wanted = only?.length ? new Set(only.map((name) => name.toLowerCase())) : null, meta = book.Workbook?.Sheets ?? [];
   const dropped = {}, drop = (what, count = 1) => { if (count) dropped[what] = (dropped[what] ?? 0) + count; };
+  // What is kept for export though the sheet does not show it.
+  const held = {}, keep = (what, count = 1) => { if (count) held[what] = (held[what] ?? 0) + count; };
   const skipped = [], read = [], names = new Set();
   // Each tab's XML part, by the workbook's own list and its links, read for its pane and styles.
   const part = (path) => book.files?.[path]?.content, text = (path) => { const bytes = part(path); return bytes ? Buffer.from(bytes.buffer, bytes.byteOffset, bytes.length).toString("utf8") : ""; };
@@ -154,8 +156,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     while (names.has(name.toLowerCase())) name = `${tabName(called).slice(0, 27)} ${n++}`;
     names.add(name.toLowerCase());
     let rows = 0, cols = 0;
-    let notes = 0;
-    cellsOf(data, (cell, r, c) => { if (cell.f || (cell.t !== "z" && cell.v !== "" && cell.v !== undefined)) { rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1); } if (cell.c?.length) notes++; });
+    cellsOf(data, (cell, r, c) => { if (cell.f || (cell.t !== "z" && cell.v !== "" && cell.v !== undefined)) { rows = Math.max(rows, r + 1); cols = Math.max(cols, c + 1); } });
     // Its charts, each standing on a cell the tab is taken out to, and a merge holding a value (a title over empty columns) to its far corner, by no
     // more empty cells than a tab keeps styles for (a title merged across the whole row is cut at the tab's edge, as before).
     const most = Math.min(SHEET_LIMIT, Math.max(1, rows) * Math.max(1, cols) + STYLES_PER_TAB);
@@ -164,8 +165,10 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     for (const { s, e } of sheet["!merges"] ?? []) if (s.r < rows && s.c < cols && data[s.r]?.[s.c]?.v !== undefined) grow(e.r, e.c);
     // A validation's cells (the tab holds it on its cells, sheet-types.js): its columns, and its rows as far as the same room lets (a whole column stops at the values).
     for (const one of validationsOf(text(xmlOf[called] ?? ""))) for (const part of one.range.split(/\s+/)) { const area = parseRange(part.replace(/\$/g, "")); if (area && !grow(area.bottom, area.right)) grow(Math.min(area.bottom, rows - 1), area.right); }
-    read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, charts, rows: Math.max(1, rows), cols: Math.max(1, cols) });
-    drop("notes", notes);
+    // Its notes and threaded comments, kept on their cells for export (not shown): a cell holding one is taken in as a chart's is.
+    const notes = Object.fromEntries(Object.entries(readNotes(xmlOf[called] ?? "", text, linked)).filter(([at]) => { const { row, col } = parseA1(at) ?? {}; return row !== undefined && (grow(row, col) || (drop("notes past the sheet's limits"), false)); }));
+    for (const note of Object.values(notes)) { keep("notes"); keep("threaded comments", note.thread?.length ?? 0); }
+    read.push({ called, name, hidden: Boolean(meta[index]?.Hidden), sheet, data, charts, notes, rows: Math.max(1, rows), cols: Math.max(1, cols) });
   });
   if (!read.length) throw fault(wanted ? `None of those tabs is in the workbook: its tabs are ${book.SheetNames.join(", ")}` : "That workbook has no tabs with cells");
   const sizes = () => read.map((tab) => `${tab.name} ${tab.rows}x${tab.cols}`).join(", ");
@@ -175,6 +178,8 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   if (total > WORKBOOK_LIMIT) throw fault(`That workbook is too large for a sheet (${total} cells over its tabs; at most ${WORKBOOK_LIMIT}). Import some of its tabs (tabs): ${sizes()}`);
   // The workbook's defined names, each local one by its tab's name here; kept on the first tab's look (`names`) and computed (sheet-engine.js `defineNames`).
   const tabNamed = new Map(read.map((tab) => [tab.called, tab.name]));
+  // The people threaded comments name, kept on the first tab as the names are.
+  const persons = /<personList\b[\s\S]*<\/personList>/.exec(text(linked("xl/workbook.xml", "person")[0] ?? ""))?.[0];
   const definedNames = (book.Workbook?.Names ?? []).flatMap((one) => typeof one.Name === "string" && typeof one.Ref === "string" ? [{ name: one.Name, ref: one.Ref, ...(one.Sheet !== undefined && tabNamed.has(book.SheetNames[one.Sheet]) ? { tab: tabNamed.get(book.SheetNames[one.Sheet]) } : {}) }] : []);
   // Read once the workbook fits: a tab grows to take in the empty cells a fill or an edge shows on, while it still fits.
   const shows = formatsOf.map(seen);
@@ -312,17 +317,19 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       if (tab.validations.length) look.validations = tab.validations;
       if (tab.color) look.tabColor = tab.color;
       if (tab.charts.length) look.charts = tab.charts;
+      for (const [at, note] of Object.entries(tab.notes)) look[`note:${at}`] = note;
       if (tab.table) look.table = tab.table;
       if (tab.filter) look.filter = tab.filter;
       // A frozen formula goes with its cell (`excel:<rowId>:<colId>` once in the doc), written for the cell it was in (`anchor`), as a rule's are.
       for (const [at, one] of Object.entries(report.frozen[tab.name] ?? {})) if (!one.why.startsWith("a formula over")) look[`excel:${at}`] = { formula: one.formula, value: one.kept, anchor: at };
       for (const [at, array] of Object.entries(tab.arrays ?? {})) look[`array:${at}`] = array;
       if (tab === read[0] && definedNames.length) look.names = definedNames;
+      if (tab === read[0] && persons) look.persons = persons;
       if (tab.pane?.rows) look.freezeRows = tab.pane.rows;
       if (tab.pane?.cols) look.freezeCols = tab.pane.cols;
       return { name: tab.name, hidden: tab.hidden, csv: toCsv(csv), inputs, look, rows: tab.rows, cols: tab.cols, formulas: Object.keys(inputs).length };
     });
-    return { tabs, report: { tabs: tabs.map(({ name, rows, cols, formulas: count }) => ({ name, rows, cols, formulas: count })), skipped, ...report, dropped } };
+    return { tabs, report: { tabs: tabs.map(({ name, rows, cols, formulas: count }) => ({ name, rows, cols, formulas: count })), skipped, ...report, dropped, kept: held } };
   } finally { engine.destroy(); }
 }
 
@@ -333,6 +340,7 @@ export function importSummary(report) {
     `Tabs: ${report.tabs.map((tab) => `${tab.name} (${tab.rows}x${tab.cols}, ${tab.formulas} formulas)`).join(", ")}.${report.skipped.length ? ` Not imported: ${report.skipped.join(", ")}.` : ""}`,
     total ? `Of ${total} formulas, ${same + noCache + volatile} compute here as they did${volatile ? ` (${volatile} depend on the date or a random number and were not compared)` : ""}${frozen ? `; ${frozen} do not and hold the value the file kept, as plain values: ${Object.entries(report.reasons).map(([why, count]) => `${count} ${why}`).join(", ")}` : ""}.` : "It has no formulas.",
     ...(listed.length ? [`Frozen: ${listed.slice(0, 20).join("; ")}${listed.length > 20 ? `; and ${listed.length - 20} more (GET /v0/document/<id>?as=import lists all)` : ""}.`] : []),
+    ...(Object.keys(report.kept ?? {}).length ? [`Kept for export, not shown here: ${Object.entries(report.kept).map(([what, count]) => `${count} ${what}`).join(", ")}.`] : []),
     ...(Object.keys(report.dropped).length ? [`Left out: ${Object.entries(report.dropped).map(([what, count]) => `${count} ${what}`).join(", ")}; also any pivot tables, which are not read.`] : ["Pivot tables are not read."]),
   ].join("\n");
 }
@@ -406,9 +414,15 @@ export function exportXlsx(tabs) {
   // A tab's colour (`tabColor`): #RRGGBB as imported, or an ink the page set, written as its hex.
   const conditions = tabs.map((tab) => tab.tablePart ? "" : filterColumns(tab.look.filter));
   const colors = tabs.map((tab) => { const color = String(tab.look.tabColor ?? ""); return /^#[0-9A-F]{6}$/i.test(color) || SHEET_INKS.includes(color) ? `<tabColor rgb="FF${rgbOf(color)}"/>` : ""; });
-  let drawings = 0, charts = 1;
-  const parts = tabs.map((tab) => { const drawing = Array.isArray(tab.look.charts) ? drawingPart(tab.look.charts, tab.name, drawings + 1, charts) : null; if (drawing) { drawings += 1; charts += drawing.count; } return [tab.tablePart, drawing].filter(Boolean); });
-  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean) && !inked.some(Boolean) && !colors.some(Boolean) && !conditions.some(Boolean)) return withParts(written, parts, placed);
+  let drawings = 0, charts = 1, noted = 0, blocks = 1;
+  const parts = tabs.map((tab) => {
+    const drawing = Array.isArray(tab.look.charts) ? drawingPart(tab.look.charts, tab.name, drawings + 1, charts) : null, notes = notesParts(tab.look, noted + 1, blocks);
+    if (drawing) { drawings += 1; charts += drawing.count; }
+    if (notes.blocks) { noted += 1; blocks += notes.blocks; }
+    return [tab.tablePart, drawing, ...notes.parts].filter(Boolean);
+  });
+  const persons = personsPart(tabs[0]?.look.persons), bookParts = persons && parts.some((list) => list.some((part) => part.name.startsWith("xl/threadedComments/"))) ? [persons] : [];
+  if (!styled && !ruled && !panes.some(([rows, cols]) => rows || cols) && !validations.some(Boolean) && !inked.some(Boolean) && !colors.some(Boolean) && !conditions.some(Boolean)) return withParts(written, parts, placed, bookParts);
   let restyled = null;
   return withParts(editParts(written, (path, xml, all) => {
     if (styled && !restyled) {
@@ -421,7 +435,7 @@ export function exportXlsx(tabs) {
       .concat([[inked[n], (xml) => /<extLst>/.test(xml) ? xml.replace("</extLst>", `${inked[n]}</extLst>`) : placed(xml, "extLst", `<extLst>${inked[n]}</extLst>`)], [conditions[n], (xml) => xml.replace(/<autoFilter ref="([^"]*)"\/>/, (_, ref) => `<autoFilter ref="${ref}">${conditions[n]}</autoFilter>`)]])
       .reduce((xml, [has, put]) => n >= 0 && has ? put(xml) : xml, sheet);
     return rows || cols ? valid.replace(/<sheetView workbookViewId="0"\/>/, paneXml(rows, cols)) : valid;
-  }), parts, placed);
+  }), parts, placed, bookParts);
 }
 /** The style each cell of a tab wears, packed (empty for none), from its look by letter, row number and address: its own over its row's over its column's; and each line's own. */
 const styleOf = (look) => {

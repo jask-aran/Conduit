@@ -109,10 +109,10 @@ try {
   $xl.Visible = $false; $xl.DisplayAlerts = $false; $xl.AutomationSecurity = 3
   # A normal load: a file Excel would offer to repair is refused here, never repaired silently.
   try { $wb = $xl.Workbooks.Open($Path, 0, $true) } catch { $out.status = 'needs repair'; throw }
-  $sheets = 0; $charts = 0; $tables = 0; $formulas = 0; $at = 0
-  foreach ($ws in $wb.Worksheets) { $sheets++; $charts += $ws.ChartObjects().Count; $tables += $ws.ListObjects.Count; try { $found = $ws.UsedRange.SpecialCells(-4123); $formulas += $found.Count; foreach ($cell in $found.Cells) { if ("$($cell.Formula2)" -like '*@*') { $at++ } } } catch {} }
+  $sheets = 0; $charts = 0; $tables = 0; $formulas = 0; $at = 0; $notes = 0; $threads = 0; $images = 0
+  foreach ($ws in $wb.Worksheets) { $sheets++; $charts += $ws.ChartObjects().Count; $tables += $ws.ListObjects.Count; $notes += $ws.Comments.Count; $threads += $ws.CommentsThreaded.Count; $images += @($ws.Shapes | Where-Object { $_.Type -eq 13 }).Count; try { $found = $ws.UsedRange.SpecialCells(-4123); $formulas += $found.Count; foreach ($cell in $found.Cells) { if ("$($cell.Formula2)" -like '*@*') { $at++ } } } catch {} }
   # A formula Excel reads as one value where the file meant it to spill shows as =@…: counted in "at".
-  $out = @{ status = 'opens clean'; sheets = $sheets; charts = $charts; tables = $tables; formulas = $formulas; at = $at }
+  $out = @{ status = 'opens clean'; sheets = $sheets; charts = $charts; tables = $tables; formulas = $formulas; at = $at; notes = $notes; threads = $threads; images = $images }
   $wb.Close($false)
 } catch { $out.error = $_.Exception.Message }
 finally {
@@ -127,7 +127,10 @@ const win = (file) => execFileSync("wslpath", ["-w", file], { encoding: "utf8" }
 /** What Excel makes of an export, held against what it holds: its tabs, charts, tables and formulas. */
 const excel = async (bytes) => {
   const file = path.join(excelDir, "book.xlsx"), zip = XLSX.CFB.read(bytes, { type: "buffer" }), names = zip.FullPaths, xml = (re) => zip.FileIndex.filter((_, i) => re.test(names[i])).map((one) => Buffer.from(one.content).toString("utf8"));
-  const wrote = { sheets: (xml(/xl\/workbook\.xml$/)[0].match(/<sheet\b/g) ?? []).length, charts: xml(/xl\/charts\/chart\d+\.xml$/).length, tables: xml(/xl\/tables\/table\d+\.xml$/).length, formulas: [...xml(/worksheets\/sheet\d+\.xml$/).join("").matchAll(/<c\b([^>]*)><f\b([^>]*)/g)].reduce((n, [, cell, head]) => { const ref = /ref="([^"]+)"/.exec(head)?.[1], area = ref && !/\bcm=/.test(cell) && XLSX.utils.decode_range(ref); return n + (area ? (area.e.r - area.s.r + 1) * (area.e.c - area.s.c + 1) : 1); }, 0), at: 0 };
+  const wrote = { sheets: (xml(/xl\/workbook\.xml$/)[0].match(/<sheet\b/g) ?? []).length, charts: xml(/xl\/charts\/chart\d+\.xml$/).length, tables: xml(/xl\/tables\/table\d+\.xml$/).length, formulas: [...xml(/worksheets\/sheet\d+\.xml$/).join("").matchAll(/<c\b([^>]*)><f\b([^>]*)/g)].reduce((n, [, cell, head]) => { const ref = /ref="([^"]+)"/.exec(head)?.[1], area = ref && !/\bcm=/.test(cell) && XLSX.utils.decode_range(ref); return n + (area ? (area.e.r - area.s.r + 1) * (area.e.c - area.s.c + 1) : 1); }, 0), at: 0,
+    threads: xml(/threadedComments\/threadedComment\d+\.xml$/).join("").match(/<threadedComment (?![^>]*parentId)/g)?.length ?? 0, images: xml(/xl\/drawings\/drawing\d+\.xml$/).join("").match(/<(?:xdr:)?pic>/g)?.length ?? 0 };
+  // Excel counts a threaded comment's note (its projection for older versions) as the thread alone.
+  wrote.notes = (xml(/xl\/comments\d*\.xml$/).join("").match(/<comment /g)?.length ?? 0) - wrote.threads;
   await fs.writeFile(file, bytes);
   try {
     const said = JSON.parse(execFileSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", win(path.join(excelDir, "open.ps1")), "-Path", win(file)], { cwd: "/mnt/c", encoding: "utf8", timeout: 120_000 }).trim());
@@ -165,7 +168,7 @@ for (const [nn, feature] of Object.entries(named).sort()) {
   try {
     const made = await documents.importXlsx(project.id, { bytes: await fs.readFile(input), name: `book${nn}` });
     const r = made.report, sum = Object.values(r.dropped).reduce((a, b) => a + b, 0);
-    said = [sum && `left out ${Object.entries(r.dropped).map(([what, n]) => `${n} ${what}`).join(", ")}`, r.computed.frozen && `${r.computed.frozen} frozen`].filter(Boolean).join("; ");
+    said = [Object.keys(r.kept ?? {}).length && `kept ${Object.entries(r.kept).map(([what, n]) => `${n} ${what}`).join(", ")}`, sum && `left out ${Object.entries(r.dropped).map(([what, n]) => `${n} ${what}`).join(", ")}`, r.computed.frozen && `${r.computed.frozen} frozen`].filter(Boolean).join("; ");
     const { bytes } = await documents.exportXlsx(made.id);
     await fs.writeFile(output, bytes);
     for (const one of strict(bytes)) broken.push(`${feature}: ${one}`);

@@ -221,6 +221,35 @@ def g_notes(wb):
 def r_notes(wb, raw): return {c.coordinate: c.comment.text for c in wb.active["A"] if c.comment}
 feature("notes")((g_notes, r_notes))
 
+TC = "http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments"
+G = lambda kind, n: "{6A9F1C2E-%s-4000-8000-00000000000%d}" % (kind, n)  # Excel reads only real GUIDs here
+THREADS = [("A1", G("0001", 1), G("0002", 1), None, "Is this right?"), ("A1", G("0001", 2), G("0002", 2), G("0001", 1), "Yes, checked."), ("A2", G("0001", 3), G("0002", 2), None, "Source: @Ann")]
+def g_threads(wb):
+    ws = wb.active; numbers(ws, 3)
+    for ref, tid, _, parent, text in THREADS:
+        if not parent: ws[ref].comment = Comment(f"[Threaded comment]\n\nYour version of Excel allows you to read this threaded comment.\n\nComment:\n    {text}", f"tc={tid}")
+def post_threads(parts):
+    """Excel's own parts for threaded comments, which openpyxl cannot write: the threads, the people, and their links."""
+    parts["xl/threadedComments/threadedComment1.xml"] = (f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<ThreadedComments xmlns="{TC}" xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        + "".join('<threadedComment ref="%s" dT="2026-03-0%dT09:15:00.00" personId="%s" id="%s"%s%s><text>%s</text></threadedComment>' % (ref, i + 4, pid, tid, ' parentId="%s"' % parent if parent else "", ' done="1"' if i == 1 else "", text) for i, (ref, tid, pid, parent, text) in enumerate(THREADS)) + "</ThreadedComments>").encode()
+    parts["xl/persons/person.xml"] = (f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<personList xmlns="{TC}" xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><person displayName="Ann Lee" id="%s" userId="ann@example.com" providerId="None"/><person displayName="Bob Ng" id="%s" userId="bob@example.com" providerId="None"/></personList>' % (G("0002", 1), G("0002", 2))).encode()
+    rel = lambda part, rid, kind, target: parts.__setitem__(part, parts[part].decode().replace("</Relationships>", f'<Relationship Id="{rid}" Type="http://schemas.microsoft.com/office/2017/10/relationships/{kind}" Target="{target}"/></Relationships>').encode())
+    rel("xl/worksheets/_rels/sheet1.xml.rels", "rIdTc", "threadedComment", "/xl/threadedComments/threadedComment1.xml"); rel("xl/_rels/workbook.xml.rels", "rIdPeople", "person", "persons/person.xml")
+    types = parts["[Content_Types].xml"].decode().replace("</Types>", '<Override PartName="/xl/threadedComments/threadedComment1.xml" ContentType="application/vnd.ms-excel.threadedcomments+xml"/><Override PartName="/xl/persons/person.xml" ContentType="application/vnd.ms-excel.person+xml"/></Types>')
+    parts["[Content_Types].xml"] = types.encode()
+def r_threads(wb, raw):
+    z = zipfile.ZipFile(io.BytesIO(raw)); names = z.namelist()
+    people = {m.group(2): m.group(1) for n in names if n.startswith("xl/persons/") for m in re.finditer(r'<person displayName="([^"]*)" id="([^"]*)"', z.read(n).decode())}
+    out = {}
+    for n in sorted(n for n in names if n.startswith("xl/threadedComments/")):
+        for i, m in enumerate(re.finditer(r"<threadedComment\b([^>]*)><text>([^<]*)</text>", z.read(n).decode())):
+            a = dict(re.findall(r'(\w+)="([^"]*)"', m.group(1)))
+            out[f"{a.get('ref')} {i}"] = [m.group(2), a.get("dT"), people.get(a.get("personId"), "?"), "parentId" in a, a.get("done", "")]
+    out.update({f"note {c.coordinate}": c.comment.author for c in wb.active["A"] if c.comment})
+    return out
+feature("threaded comments")((g_threads, r_threads))
+POST = {"threaded comments": post_threads}
+
 def g_table(wb):
     ws = wb.active
     ws.append(["Name", "Qty", "Price"])
@@ -305,9 +334,10 @@ def r_protect(wb, raw): return {"workbook structure": bool(wb.security and wb.se
 feature("protection")((g_protect, r_protect))
 
 NOT_T = re.compile(r' t="\w+"')
-def cached(path, cache):
-    """Each formula's value as Excel keeps it beside the formula (openpyxl writes none)."""
+def cached(path, cache, post=None):
+    """Each formula's value as Excel keeps it beside the formula (openpyxl writes none), and parts openpyxl cannot write (`post`)."""
     z = zipfile.ZipFile(path); parts = {n: z.read(n) for n in z.namelist()}; z.close()
+    if post: post(parts)
     book = parts["xl/workbook.xml"].decode(); rels = parts["xl/_rels/workbook.xml.rels"].decode()
     for key, value in cache.items():
         tab, at = key.rsplit("!", 1)
@@ -329,7 +359,7 @@ if __name__ == "__main__":
     if sys.argv[1] == "gen":
         names = {}
         for i, (name, (gen, _)) in enumerate(F.items()):
-            wb = openpyxl.Workbook(); cache = gen(wb) or {}; path = f"{sys.argv[2]}/{i:02d}.xlsx"; wb.save(path); cached(path, cache); names[f"{i:02d}"] = name
+            wb = openpyxl.Workbook(); cache = gen(wb) or {}; path = f"{sys.argv[2]}/{i:02d}.xlsx"; wb.save(path); cached(path, cache, POST.get(name)); names[f"{i:02d}"] = name
         print(json.dumps(names))
     else:
         raw = open(sys.argv[2], "rb").read(); wb = openpyxl.load_workbook(io.BytesIO(raw))

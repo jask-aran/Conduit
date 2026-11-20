@@ -1,6 +1,6 @@
 import path from "node:path";
 import * as XLSX from "xlsx";
-import { a1, colIndex, parseRange, rangeA1, rowId, tabRef } from "../sheet-format.js";
+import { a1, colIndex, parseA1, parseRange, rangeA1, rowId, tabRef } from "../sheet-format.js";
 import { CHART_KINDS, chartSize } from "../sheet-charts.js";
 
 /*
@@ -59,9 +59,65 @@ export function drawingPart(charts, tab, id, first) {
 }
 const rels = (list) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${list.map(([id, type, target]) => `<Relationship Id="${id}" Type="${type}" Target="${target}"/>`).join("")}</Relationships>`;
 
-/** A written workbook given each sheet's parts (`sheets[n]`: those of xl/worksheets/sheet<n+1>.xml), each linked from its sheet, put in its place there (`placed`), and typed. */
-export function withParts(bytes, sheets, placed) {
-  if (!sheets.some((parts) => parts.length)) return bytes;
+const MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main", MS_REL = "http://schemas.microsoft.com/office/2017/10/relationships";
+const NOTE = /^<comment\b[\s\S]*<\/comment>$/, THREAD = /^<threadedComment\b[\s\S]*<\/threadedComment>$/;
+/**
+ * A sheet's notes and threaded comments by cell, as the look keeps them (`note:<A1>`): each note's `<comment>` as the file wrote it (its rich text, its
+ * ref and author id taken off), its author, its plain text, whether it shows and its box's size, and the cell's thread, each comment as written.
+ */
+export function readNotes(sheetName, text, linked) {
+  const out = {}, tag = (name) => `<(?:\\w+:)?${name}`;
+  for (const part of linked(sheetName, "comments")) {
+    const xml = text(part), authors = [...(/<authors>([\s\S]*?)<\/authors>/.exec(xml)?.[1] ?? "").matchAll(/<author>([\s\S]*?)<\/author>|<author\/>/g)].map(([, name]) => unescaped(name ?? ""));
+    for (const [comment] of xml.matchAll(/<comment\b[\s\S]*?<\/comment>/g)) {
+      const head = /<comment\b[^>]*>/.exec(comment)[0], ref = attr(head, "ref");
+      if (ref) out[ref] = { author: authors[Number(attr(head, "authorId"))] ?? "", text: [...comment.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map(([, t]) => unescaped(t)).join(""), xml: comment.replace(/\s(?:ref|authorId)="[^"]*"/g, "") };
+    }
+  }
+  for (const part of linked(sheetName, "vmlDrawing")) for (const [shape] of text(part).matchAll(new RegExp(`${tag("shape")}\\b[\\s\\S]*?</(?:\\w+:)?shape>`, "g"))) {
+    const row = new RegExp(`${tag("Row")}>(\\d+)<`).exec(shape)?.[1], col = new RegExp(`${tag("Column")}>(\\d+)<`).exec(shape)?.[1], note = row !== undefined && col !== undefined ? out[a1(Number(row), Number(col))] : null;
+    if (!note) continue;
+    if (new RegExp(`${tag("Visible")}\\b`).test(shape)) note.visible = true;
+    const style = attr(/<(?:\w+:)?shape\b[^>]*>/.exec(shape)?.[0], "style") ?? "", size = (name) => new RegExp(`(?:^|;)\\s*${name}:([\\d.]+(?:pt|px))`).exec(style)?.[1];
+    if (size("width") && size("height")) note.box = [size("width"), size("height")];
+  }
+  for (const part of linked(sheetName, "threadedComment")) for (const [one] of text(part).matchAll(/<threadedComment\b[\s\S]*?<\/threadedComment>/g)) {
+    const ref = attr(/<threadedComment\b[^>]*>/.exec(one)[0], "ref");
+    if (ref) (out[ref] ??= { author: "", text: "", xml: "" }).thread = [...(out[ref].thread ?? []), one.replace(/\sref="[^"]*"/, "")];
+  }
+  return out;
+}
+/**
+ * A tab's notes (`note:<A1>` in its look) as its parts: the notes part, the VML drawing Excel shows them with (its shapes in blocks of 1024 from
+ * `block`), and a threads part where a cell has a thread. Numbered `id`; `blocks`: how many shape blocks it took.
+ */
+export function notesParts(look, id, block) {
+  const notes = Object.entries(look).flatMap(([name, note]) => { const at = /^note:([A-Z]{1,3}\d+)$/.exec(name)?.[1]; return at && note && typeof note === "object" ? [[at, note]] : []; });
+  if (!notes.length) return { parts: [], blocks: 0 };
+  const authors = [...new Set(notes.map(([, note]) => String(note.author ?? "")))], blocks = Math.ceil(notes.length / 1024);
+  const comment = (at, note) => (typeof note.xml === "string" && NOTE.test(note.xml) ? note.xml : `<comment><text><t xml:space="preserve">${escaped(note.text ?? "")}</t></text></comment>`).replace(/^<comment\b/, `<comment ref="${at}" authorId="${authors.indexOf(String(note.author ?? ""))}"`);
+  const shape = ([at, note], n) => {
+    const { row, col } = parseA1(at), [width, height] = Array.isArray(note.box) && note.box.every((size) => /^[\d.]+(?:pt|px)$/.test(size)) ? note.box : ["108pt", "59.25pt"];
+    return `<v:shape id="_x0000_s${block * 1024 + n + 1}" type="#_x0000_t202" style="position:absolute;margin-left:59.25pt;margin-top:1.5pt;width:${width};height:${height};z-index:${n + 1}${note.visible ? "" : ";visibility:hidden"}" fillcolor="#ffffe1" o:insetmode="auto"><v:fill color2="#ffffe1"/><v:shadow on="t" color="black" obscured="t"/><v:path o:connecttype="none"/><v:textbox style="mso-direction-alt:auto"><div style="text-align:left"></div></v:textbox><x:ClientData ObjectType="Note"><x:MoveWithCells/><x:SizeWithCells/><x:Anchor>${col + 1}, 15, ${Math.max(0, row - 1)}, 10, ${col + 3}, 15, ${row + 3}, 4</x:Anchor><x:AutoFill>False</x:AutoFill><x:Row>${row}</x:Row><x:Column>${col}</x:Column>${note.visible ? "<x:Visible/>" : ""}</x:ClientData></v:shape>`;
+  };
+  const vml = `<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="${Array.from({ length: blocks }, (_, n) => block + n).join(",")}"/></o:shapelayout><v:shapetype id="_x0000_t202" coordsize="21600,21600" o:spt="202" path="m,l,21600r21600,l21600,xe"><v:stroke joinstyle="miter"/><v:path gradientshapeok="t" o:connecttype="rect"/></v:shapetype>${notes.map(shape).join("")}</xml>`;
+  const threads = notes.flatMap(([at, note]) => (Array.isArray(note.thread) ? note.thread : []).filter((one) => typeof one === "string" && THREAD.test(one)).map((one) => one.replace(/^<threadedComment\b/, `<threadedComment ref="${at}"`)));
+  const parts = [
+    { name: `xl/comments${id}.xml`, type: `${TYPE}spreadsheetml.comments+xml`, rel: `${REL}/comments`, xml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<comments xmlns="${MAIN}"><authors>${authors.map((name) => `<author>${escaped(name)}</author>`).join("")}</authors><commentList>${notes.map(([at, note]) => comment(at, note)).join("")}</commentList></comments>` },
+    { name: `xl/drawings/vmlDrawing${id}.vml`, type: `${TYPE}vmlDrawing`, rel: `${REL}/vmlDrawing`, element: "legacyDrawing", block: (rid) => `<legacyDrawing r:id="${rid}"/>`, xml: vml },
+    ...(threads.length ? [{ name: `xl/threadedComments/threadedComment${id}.xml`, type: "application/vnd.ms-excel.threadedcomments+xml", rel: `${MS_REL}/threadedComment`, xml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<ThreadedComments xmlns="http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments" xmlns:x="${MAIN}">${threads.join("")}</ThreadedComments>` }] : []),
+  ];
+  return { parts, blocks };
+}
+/** The workbook's people who wrote threaded comments (`xl/persons/person.xml`), as a part of the workbook's own for `withParts`. */
+export const personsPart = (xml) => typeof xml === "string" && /^<personList\b[\s\S]*<\/personList>$/.test(xml) ? { name: "xl/persons/person.xml", type: "application/vnd.ms-excel.person+xml", rel: `${MS_REL}/person`, xml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${xml}` } : null;
+
+/**
+ * A written workbook given each sheet's parts (`sheets[n]`: those of xl/worksheets/sheet<n+1>.xml), each linked from its sheet, put in its place there
+ * (`placed`) where it has one (`element`), and typed; `book`: parts linked from the workbook itself.
+ */
+export function withParts(bytes, sheets, placed, book = []) {
+  if (!sheets.some((parts) => parts.length) && !book.length) return bytes;
   const zip = XLSX.CFB.read(bytes, { type: "buffer" }), get = (name) => { const file = XLSX.CFB.find(zip, `/${name}`); return file ? Buffer.from(file.content).toString("utf8") : null; };
   const put = (name, text) => { const file = XLSX.CFB.find(zip, `/${name}`), content = Buffer.from(text, "utf8"); if (file) { file.content = content; file.size = content.length; } else XLSX.CFB.utils.cfb_add(zip, `/${name}`, content); };
   let types = get("[Content_Types].xml") ?? "";
@@ -75,10 +131,15 @@ export function withParts(bytes, sheets, placed) {
       had = had.replace("</Relationships>", `<Relationship Id="${rid}" Type="${part.rel}" Target="${path.posix.relative("xl/worksheets", part.name)}"/></Relationships>`);
       put(part.name, part.xml); typed(part.name, part.type);
       for (const [name, xml, type] of part.more ?? []) { put(name, xml); if (type) typed(name, type); }
-      sheet = placed(sheet, part.element, part.block(rid));
+      if (part.element) sheet = placed(sheet, part.element, part.block(rid));
     });
     put(relsName, had); put(sheetName, sheet);
   });
+  if (book.length) {
+    let had = get("xl/_rels/workbook.xml.rels") ?? rels([]);
+    book.forEach((part, k) => { had = had.replace("</Relationships>", `<Relationship Id="rIdBook${k + 1}" Type="${part.rel}" Target="${path.posix.relative("xl", part.name)}"/></Relationships>`); put(part.name, part.xml); typed(part.name, part.type); });
+    put("xl/_rels/workbook.xml.rels", had);
+  }
   if (!/Extension="rels"/.test(types)) types = types.replace("</Types>", `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/></Types>`);
   put("[Content_Types].xml", types);
   return XLSX.CFB.write(zip, { fileType: "zip", type: "buffer", compression: true });
