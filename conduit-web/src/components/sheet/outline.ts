@@ -61,6 +61,16 @@ export function createSheetOutline(look: Y.Map<number | string>, model: Accessor
         if (next) look.set(`outline:${one}`, next); else look.delete(`outline:${one}`);
       }
     },
+    /** The control of the innermost group line `n` is in, or the one standing on it: its line, and whether it is shut. */
+    around(kind: OutlineKind, n: number): { line: number; shut: boolean } | undefined {
+      const own = level(kind, n), last = size(kind) - 1;
+      if (!own) { const here = this.line(kind, n).control; return here ? { line: n, shut: here === "shut" } : undefined; }
+      let to = n, from = n;
+      while (to < last && level(kind, to + 1) >= own) to++;
+      while (from > 0 && level(kind, from - 1) >= own) from--;
+      const at = to < last ? to + 1 : from - 1;
+      return at >= 0 ? { line: at, shut: hidden(kind, n) } : undefined;
+    },
     /** The group whose control is on line `n` collapsed (its lines hidden) or, collapsed, shown again; false where none is there. In the caller's transaction. */
     toggle(kind: OutlineKind, n: number) {
       const group = groupAt(kind, n);

@@ -270,6 +270,11 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     filter: (_, col, box) => { filters.reapply(); setFiltering({ col, box }); },
     outline: (kind, line) => history.act(outline.line(kind, line).control === "shut" ? "Expand group" : "Collapse group", () => outline.toggle(kind, line)),
   };
+  // The group the active cell's row or column is in (or whose control it is on) collapsed or expanded, as its chevron does.
+  const folding = (kind: "rows" | "cols", n: number) => {
+    const at = outline.around(kind, n), what = kind === "cols" ? "column" : "row";
+    return at ? [{ label: `${at.shut ? "Expand" : "Collapse"} ${what} group`, icon: at.shut ? <Icons.Preview /> : <Icons.Hide />, run: () => events.outline?.(kind, at.line) }] : [];
+  };
   // As a spreadsheet's Alt+Shift+Right and Left: the selection's rows, or its whole columns, a group deeper or shallower.
   const group = (range: SheetRange, by: 1 | -1, kind = wholeOf(range, "cols") && !wholeOf(range, "rows") ? "cols" as const : "rows" as const) =>
     history.act(`${by > 0 ? "Group" : "Ungroup"} ${kind === "cols" ? "columns" : "rows"}`, () => kind === "cols" ? outline.group("cols", range.left, range.right, by) : outline.group("rows", range.top, range.bottom, by));
@@ -718,10 +723,12 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         ...kind !== "cols" ? [
           { label: `Group ${rowsSaid}`, icon: <DataIcons.group />, keys: ["Alt", "Shift", "→"], run: () => group(range, 1, "rows") },
           ...between(range.top, range.bottom).some((row) => outline.line("rows", row).level) ? [{ label: `Ungroup ${rowsSaid}`, icon: <DataIcons.ungroup />, keys: ["Alt", "Shift", "←"], run: () => group(range, -1, "rows") }] : [],
+          ...folding("rows", range.top),
         ] : [],
         ...kind !== "rows" ? [
           { label: `Group ${colsSaid}`, icon: <DataIcons.group />, keys: whole ? ["Alt", "Shift", "→"] : undefined, run: () => group(range, 1, "cols") },
           ...between(range.left, range.right).some((col) => outline.line("cols", col).level) ? [{ label: `Ungroup ${colsSaid}`, icon: <DataIcons.ungroup />, keys: whole ? ["Alt", "Shift", "←"] : undefined, run: () => group(range, -1, "cols") }] : [],
+          ...folding("cols", range.left),
         ] : [],
         ...kind !== "rows" ? [
           { label: `Hide ${colsSaid}`, icon: <Icons.Hide />, keys: ["Ctrl", "0"], run: () => history.act("Hide columns", () => sizes.setHiddenCols(between(range.left, range.right), true)) },

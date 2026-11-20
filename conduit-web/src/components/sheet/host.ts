@@ -19,7 +19,7 @@ export type SheetRange = { top: number; left: number; bottom: number; right: num
  */
 /** `focus`: the wash over the active cell's row and column, empty while the focus cell is off. */
 export type SheetLook = { grid: Record<string, string | number>; row: number; header: number; picked: string; width: number; error: string; live: string; warn: string; mark: string; markCurrent: string; focus: string; inks: string[];
-  strong: string; edge: string; corner: number; palette: Record<SheetInk, { text: string; fill: string }> };
+  strong: string; edge: string; corner: number; target: number; palette: Record<SheetInk, { text: string; fill: string }> };
 /** A reference in the formula being edited, outlined on the grid in its ink; `pointing`: the one being pointed at with the mouse or arrows. */
 export type SheetReference = { range: SheetRange; ink: number; pointing: boolean };
 /** A key pressed on the grid, as the editor is asked whether it takes it. */

@@ -54,8 +54,12 @@ const drawOutline = (ctx: CanvasRenderingContext2D, box: Rectangle, line: Outlin
   }
   ctx.fillStyle = was;
 };
-/** Whether a press at (x, y) in a header cell is on its group's control. */
-const onOutline = (line: OutlineLine, across: boolean, x: number, y: number) => { if (!line.control) return false; const at = outlineMark(line, across); return x <= at.x + OUTLINE_MARK + 2 && (!across || y <= at.y + OUTLINE_MARK + 2); };
+/** Whether a press at (x, y) in a header cell `tall` high is on its group's control: within a pointer target's square about the chevron's middle. */
+const onOutline = (line: OutlineLine, across: boolean, x: number, y: number, tall: number, target: number) => {
+  if (!line.control) return false;
+  const at = outlineMark(line, across), middle = { x: at.x + OUTLINE_MARK / 2, y: across ? at.y + OUTLINE_MARK / 2 : tall / 2 };
+  return Math.abs(x - middle.x) <= target / 2 && Math.abs(y - middle.y) <= target / 2;
+};
 // How near a column's side (px) a press takes the edge to size it: the grid's own reach.
 const COL_EDGE = 5;
 type GridOptions = { model: SheetView; columns: SheetColumns; events: SheetGridEvents; look: SheetLook; filled: SheetFilled };
@@ -368,7 +372,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     onColumnResize: (_, width, col) => { if (sizing && col === sizing.col) sizing.moved = true; if (sizing?.moved) drive.width?.(col, width); },
     // Let go, the resize is over: Glide's own fit on a double click (to its 500 px cap, drawn but never kept) comes after, and is left out for the sheet's.
     onColumnResizeEnd: (_, width, col) => { if (sizing?.moved) events.resized(col, width); sizing = undefined; },
-    onHeaderClicked: (col, event) => { if (onOutline(options.columns.outline("cols", col), true, event.localEventX, event.localEventY)) events.outline?.("cols", col); },
+    onHeaderClicked: (col, event) => { if (onOutline(options.columns.outline("cols", col), true, event.localEventX, event.localEventY, event.bounds.height, look.target)) events.outline?.("cols", col); },
     onHeaderContextMenu: (col) => { const area = picked(); events.menu({ cols: owner.current.columns.hasIndex(col) && area ? area : { top: 0, bottom: 0, left: col, right: col } }); },
     onCellContextMenu: ([col, drawn]) => {
       const row = p.map.sheet(drawn), area = picked(), inside = area && row >= area.top && row <= area.bottom && (col < 0 || (col >= area.left && col <= area.right));
@@ -379,7 +383,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     // A press on a filter's mark, in its header cell's right end, opens the filter.
     onCellClicked: ([col, row], event) => {
       p.editor?.focus();
-      if (col < 0 && onOutline(options.columns.outline("rows", p.map.sheet(row)), false, event.localEventX, event.localEventY)) return void events.outline?.("rows", p.map.sheet(row));
+      if (col < 0 && onOutline(options.columns.outline("rows", p.map.sheet(row)), false, event.localEventX, event.localEventY, event.bounds.height, look.target)) return void events.outline?.("rows", p.map.sheet(row));
       const at = p.map.sheet(row), value = model.value(at, col), link = (event.ctrlKey || event.metaKey) && typeof value === "string" ? options.columns.link(at, col, value) : undefined;
       // Ctrl and a click follows a cell's link.
       if (link) return void events.follow?.(link);
