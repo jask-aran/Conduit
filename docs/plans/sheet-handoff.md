@@ -185,7 +185,7 @@ Then the ribbon, charts and ask box, walked in headless Chrome on :4310 (2026-11
 - A filter's condition is `when: { <colId>: { is, a?, b? } }` beside `keep` in `filter:<tabId>` (by letter in sheet.json); `filterHides` tests both, so
   the hub's `refilter` keeps it. A column has one or the other. The filter applied as it opens is written under an untracked origin (no Undo step).
 - `shift-cells` (hub, `sheets.js` `shiftCells`) works formulas out in a scratch engine: a deleted block is moved past the tab's edge and its lines
-  removed there, so its readers read #REF!. A range only partly moved (`SUM(A1:A5)` with A2 deleted) is left as it was; Excel's shrinks or grows.
+  removed there, so its readers read #REF!. A range only partly moved grows or shrinks as Excel's (`resize`, matched against the engine's reading).
 - `dedupe` reuses `reorder` (kept rows first, repeats after) and empties the tail; external references to moved cells are not rewritten, as a sort's.
 - `duplicate-tab` and tab moves are hub tab ops, not on the page's Undo, as add and delete aren't. `tabColor:<tabId>` (an ink or #rrggbb) is in the
   look, so it is undone, saved and read in `as=book` as `look.tabColor`; xlsx does not carry it yet.
@@ -216,7 +216,7 @@ What a later builder must know:
   it as d/m/yyyy (`types.shown`, the inverse of `types.typed`).
 - Styles reach the styles' index only as their transaction ends: anything measuring with the new style (a row fit) is a second transaction of the
   same step (`tools.tsx` `fitted`).
-- Shifting: HyperFormula's `moveCells` moves only references wholly inside the block, which is why a partly covered range stays; and its
+- Shifting: HyperFormula's `moveCells` moves only references wholly inside the block (`shiftCells` resizes the rest itself); and its
   `getCellFormula` spells every formula its own way, so compare its reading before and after, never with the typed text.
 - Filter: opening one makes no step. Select all found keeps the found values alone (Excel's Select All Search Results).
 - Glide fits a column on a double click of its edge by itself (to its 500 px cap, drawn only): the grid drops that after a resize ends.

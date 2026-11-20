@@ -439,6 +439,8 @@ export function sheetKind(hub) {
    * holding the workbook's formulas: a deleted block is first moved past the tab's edge and its lines removed there, so what read it is #REF!. A
    * range only partly moved is left as it was (Excel's grows or shrinks).
    */
+  // A range of cells in an engine's reading of a formula (its tab, quoted or bare, then its corners), strings passed over.
+  const RANGES = /(?<=^(?:[^"]*"[^"]*")*[^"]*)(?:(?:'((?:[^']|'')+)'|([A-Za-z_][\w.]*))!)?\$?([A-Z]+)\$?(\d+):\$?([A-Z]+)\$?(\d+)(?![\w(])/g;
   const shiftCells = (room, sheet, area, way, by) => {
     const across = way === "left" || way === "right", removing = way === "up" || way === "left", { rows, cols } = sheet.size();
     const depth = across ? area.right - area.left + 1 : area.bottom - area.top + 1, lo = across ? area.left : area.top, typed = sheet.inputs();
@@ -461,7 +463,27 @@ export function sheetKind(hub) {
       const one = room.book.tab(tab.id), id = engine.getSheetId(one.engine.getSheetName(one.sheet));
       one.inputs().forEach((line, r) => line.forEach((input, c) => { if (input.startsWith("=")) { engine.setCellContents({ sheet: id, row: r, col: c }, input); formulas.push({ one, id, r, c, input, read: engine.getCellFormula({ sheet: id, row: r, col: c }) }); } }));
     }
-    const out = [];
+    const readings = new Map(formulas.flatMap(({ one, r, c, read }) => one.id === sheet.id && read ? [[`${r}:${c}`, read]] : []));
+    const out = [], name = sheet.engine.getSheetName(sheet.sheet).toLowerCase();
+    // A range only partly in what moves grows or shrinks as Excel's does (the engine leaves it): its lines across the block's, its first or last line
+    // inside the lines that move. Matched by place against the engine's own reading, as the engine rewrites every reference it moved.
+    const map = (n) => removing ? (n < lo ? n : n >= lo + depth ? n - depth : null) : n < lo ? n : n + depth;
+    const resize = (read, next, mine) => {
+      const before = [...read.matchAll(RANGES)], after = [...next.matchAll(RANGES)];
+      if (before.length !== after.length) return next;
+      let text = next;
+      for (let n = before.length - 1; n >= 0; n--) {
+        const [, quoted, bare, c1, r1, c2, r2] = before[n], tab = quoted?.replace(/''/g, "'") ?? bare;
+        if (quoted === undefined && bare === undefined ? !mine : tab.toLowerCase() !== name) continue;
+        const [a, b] = across ? [colIndex(c1), colIndex(c2)] : [Number(r1) - 1, Number(r2) - 1], [p, q] = across ? [Number(r1) - 1, Number(r2) - 1] : [colIndex(c1), colIndex(c2)];
+        if (p < others[0] || q > others.at(-1) || a >= (removing ? lo + depth : lo) || b < lo || (removing && a >= lo && b < lo + depth)) continue;
+        const from = map(a) ?? lo, to = map(b) ?? lo - 1, spot = after[n];
+        const ends = across ? [[colName(from), r1], [colName(to), r2]] : [[c1, String(from + 1)], [c2, String(to + 1)]];
+        const written = spot[0].replace(/(\$?)[A-Z]+(\$?)\d+:(\$?)[A-Z]+(\$?)\d+$/, (_, d1, d2, d3, d4) => `${d1}${ends[0][0]}${d2}${ends[0][1]}:${d3}${ends[1][0]}${d4}${ends[1][1]}`);
+        text = text.slice(0, spot.index) + written + text.slice(spot.index + spot[0].length);
+      }
+      return text;
+    };
     try {
       const box = (a, b, c, d) => across ? { start: { sheet: here, row: c, col: a }, end: { sheet: here, row: d, col: b } } : { start: { sheet: here, row: a, col: c }, end: { sheet: here, row: b, col: d } };
       const [first, last] = [others[0], others.at(-1)];
@@ -476,14 +498,15 @@ export function sheetKind(hub) {
       for (let line = lo; line < size; line += 1) for (const other of others) {
         const at = place(line, other), was = from(line), old = was < 0 ? "" : (across ? now[other]?.[was] : now[was]?.[other]) ?? "";
         zone.add(`${at.row}:${at.col}`);
-        const next = old.startsWith("=") ? String(engine.getCellFormula({ sheet: here, ...at }) ?? old) : old;
+        const read = was < 0 ? undefined : readings.get(across ? `${other}:${was}` : `${was}:${other}`);
+        const next = old.startsWith("=") ? (read ? resize(read, String(engine.getCellFormula({ sheet: here, ...at }) ?? old), true) : String(engine.getCellFormula({ sheet: here, ...at }) ?? old)) : old;
         if (next !== (now[at.row]?.[at.col] ?? "")) out.push([sheet, at.row, at.col, next]);
       }
       // Compared with the engine's own reading before the shift, not with the text typed: the engine writes `=sum(a1)` as `=SUM(A1)`, and a formula
       // the shift did not move is left as it was typed.
       for (const { one, id, r, c, read } of formulas) {
         if (one.id === sheet.id && zone.has(`${r}:${c}`)) continue;
-        const next = engine.getCellFormula({ sheet: id, row: r, col: c });
+        const moved = engine.getCellFormula({ sheet: id, row: r, col: c }), next = moved && resize(read, moved, one.id === sheet.id);
         if (next && next !== read) out.push([one, r, c, next]);
       }
     } finally { engine.destroy(); }
