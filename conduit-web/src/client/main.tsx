@@ -2465,8 +2465,8 @@ function App() {
     if (leavesUnsaved(previous, next, pane) && !(await confirmDialog("Discard unsaved changes and close this file?", { destructive: true, confirmLabel: "Discard", valid: () => viewOf(pane) === previous }))) return false;
     if (viewOf(pane) !== previous) return false;
     if (arrives(pane, previous, next) && !(await arrive(pane, next!, () => viewOf(pane) === previous))) return false;
-    // Passed: the artifact made behind takes the pane with the change the caller makes next, so it is no longer arriving.
-    leaves(pane);
+    // Passed: the artifact made behind stays arriving until the caller's change shows it (changeLayout's `leaving`, in one
+    // batch), so it is never unmade in between and made again still opening.
     return true;
   };
   // Pane A draws the route: a change that leaves it showing a route view sends the route there, one drive at a time.
@@ -2481,9 +2481,12 @@ function App() {
     if (route && route !== after && paneAView() === after) panes.replace((current) => fromRoute(current, route));
   };
   /** Every change to the layout: `record` makes it a step Undo pane change goes back over. */
-  const changeLayout = async (change: (current: Layouts.Layout) => Layouts.Layout, options: { record?: boolean; inPaneA?: () => unknown } = {}) => {
+  const changeLayout = async (change: (current: Layouts.Layout) => Layouts.Layout, options: { record?: boolean; inPaneA?: () => unknown; leaving?: PaneKey | null } = {}) => {
     const before = paneAView();
-    if (options.record === false) panes.replace(change); else panes.apply(change);
+    batch(() => {
+      if (options.leaving != null) leaves(options.leaving);
+      if (options.record === false) panes.replace(change); else panes.apply(change);
+    });
     await followPaneA(before, options.inPaneA);
   };
   /** Shows `next` in a pane in place (no step in pane history), or closes it (`null`, a step). */
@@ -2503,8 +2506,7 @@ function App() {
   const setPaneView = async (pane: PaneKey, next: SplitView | null) => {
     if (pane !== "main") return await setSlotView(pane, next);
     if (!(await gate("main", next))) return false;
-    leaves("main");
-    await changeLayout((current) => next ? Layouts.show(current, current.row[0]!, next) : Layouts.closePane(current, current.row[0]!), { record: !next });
+    await changeLayout((current) => next ? Layouts.show(current, current.row[0]!, next) : Layouts.closePane(current, current.row[0]!), { record: !next, leaving: "main" });
     return true;
   };
   // An artifact taking the place of what a pane shows is made behind it (pending) and takes its place in the frame it is
@@ -2571,13 +2573,11 @@ function App() {
     const after = Layouts.open(before, view, verb, openRules);
     if (Object.values(after.panes).some((pane) => pane.views.length > Layouts.TAB_CAP && pane.views.length > (before.panes[pane.id]?.views.length ?? 0))) return void toast.info("Every tab in this pane has an unsent draft; close one to open another.");
     const at = Layouts.findView(before, view);
-    if (!at) {
-      // The pane giving up what it shows: the focused one replaced, or a full row's neighbour.
-      const gone = Layouts.findView(after, Layouts.shownView(focused)) ? Object.keys(before.panes).find((id) => !after.panes[id]) : before.focus;
-      const pane = gone ? keyOf(gone) : null;
-      if (pane !== null && !(await gate(pane, gone === before.focus ? view : null))) return;
-    }
-    await changeLayout((current) => Layouts.open(current, view, verb, openRules), { record: !at, inPaneA });
+    // The pane giving up what it shows: the focused one replaced, or a full row's neighbour.
+    const gone = at ? undefined : Layouts.findView(after, Layouts.shownView(focused)) ? Object.keys(before.panes).find((id) => !after.panes[id]) : before.focus;
+    const pane = gone ? keyOf(gone) : null;
+    if (pane !== null && !(await gate(pane, gone === before.focus ? view : null))) return;
+    await changeLayout((current) => Layouts.open(current, view, verb, openRules), { record: !at, inPaneA, leaving: pane });
     const now = layout();
     if (!at && !verb.beside && now.focus === before.focus && Layouts.kindOf(focused) === "session" && focused.views.length > 1 && !now.panes[before.focus]?.views.includes(Layouts.shownView(focused))) {
       toast(`Closed ${focused.views.length} tabs`, { action: { label: "Undo", onClick: () => void stepPanes(-1) } });
@@ -3523,7 +3523,7 @@ function App() {
   const switchTab = async (pane: PaneKey, index: number) => {
     const id = idOf(pane);
     if (!id || !(await gate(pane, paneData(pane)?.views[index] ?? null))) return;
-    await changeLayout((current) => Layouts.switchTab(current, id, index), { record: false });
+    await changeLayout((current) => Layouts.switchTab(current, id, index), { record: false, leaving: pane });
     focusAnyPane(pane);
   };
   const closeTab = async (pane: PaneKey, index: number) => {
@@ -3532,7 +3532,7 @@ function App() {
     if (!id || !data) return;
     if (data.views.length < 2) return await closeDocument(pane);
     if (index === data.active && !(await gate(pane, data.views[index === 0 ? 1 : index - 1] ?? null))) return;
-    await changeLayout((current) => Layouts.closeTab(current, id, index));
+    await changeLayout((current) => Layouts.closeTab(current, id, index), { leaving: index === data.active ? pane : null });
   };
   const openFileKeys = createMemo(() => {
     const keys = new Map<string, "focused" | "shown">();
@@ -3862,7 +3862,7 @@ function App() {
     if (held !== null && !(await gate(held, null))) return;
     // Pane A docking: the pane beside it becomes pane A, and the docked pane takes that pane's slot.
     movingDocuments = true;
-    try { await changeLayout((current) => Layouts.moveToDock(current, id)); } finally { movingDocuments = false; }
+    try { await changeLayout((current) => Layouts.moveToDock(current, id), { leaving: held }); } finally { movingDocuments = false; }
     // Shown at once: the dock's one pane, not a pane put away out of sight.
     const slot = keyOf(id);
     if (typeof slot === "number") { freshlyDocked.add(slot); showDocked(slot); }
