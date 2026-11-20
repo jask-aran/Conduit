@@ -7,6 +7,7 @@ export type CellAt = { tab: string; row: number; col: number };
 export type Reference = { kind: "a1" | "struct" | "name"; start: number; end: number; table?: string | null; open?: number };
 export function referencesOf(text: string): Reference[];
 export function tableAt(tables: TableInfos, at: CellAt): TableInfo | undefined;
+/** `names`: "" for a bare reference (`[@Qty]`) outside any table. */
 export function toA1(text: string, tables: TableInfos, at: CellAt): { a1: string; stored: string; names: string[] } | null;
 export function alignA1(stored: string, engine: string, tables: TableInfos): string;
 export function structuredFor(tables: TableInfos, at: CellAt, tab: string, area: Range): string | null;

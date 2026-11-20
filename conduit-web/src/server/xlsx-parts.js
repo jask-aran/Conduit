@@ -39,8 +39,9 @@ export function tablePart(table, values, id, taken, filtered = "", typed = []) {
 export function tableOf(xml) {
   const head = /<table\b[^>]*>/.exec(xml)[0], range = attr(head, "ref"), area = parseRange(range), info = /<tableStyleInfo\b[^>]*>/.exec(xml)?.[0], style = info ? attr(info, "name") : "none";
   const total = Number(attr(head, "totalsRowCount") ?? 0) > 0;
-  const totals = Object.fromEntries([...xml.matchAll(/<tableColumn\b[^>]*>/g)].flatMap(([tag], n) => { const fn = attr(tag, "totalsRowFunction"); return total && area && TOTALS.includes(fn) ? [[colName(area.left + n), fn]] : []; }));
-  return { range, name: attr(head, "displayName") ?? attr(head, "name"), ...(attr(head, "headerRowCount") === "0" ? { header: false } : {}), ...(total ? { total: true } : {}), ...(style && style !== "TableStyleMedium2" ? { style } : {}), ...(Object.keys(totals).length ? { totals } : {}) };
+  const tags = [...xml.matchAll(/<tableColumn\b[^>]*>/g)].map(([tag]) => tag);
+  const totals = Object.fromEntries(tags.flatMap((tag, n) => { const fn = attr(tag, "totalsRowFunction"); return total && area && TOTALS.includes(fn) ? [[colName(area.left + n), fn]] : []; }));
+  return { range, columns: tags.map((tag, n) => attr(tag, "name") ?? `Column${n + 1}`), name: attr(head, "displayName") ?? attr(head, "name"), ...(attr(head, "headerRowCount") === "0" ? { header: false } : {}), ...(total ? { total: true } : {}), ...(style && style !== "TableStyleMedium2" ? { style } : {}), ...(Object.keys(totals).length ? { totals } : {}) };
 }
 
 const PLOT = { column: "barChart", bar: "barChart", line: "lineChart", area: "areaChart", pie: "pieChart", scatter: "scatterChart" };

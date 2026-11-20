@@ -259,7 +259,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   for (const tab of read) {
     tab.typed = Array.from({ length: tab.rows }, () => new Array(tab.cols).fill(null));
     // A table's total cell is the SUBTOTAL its column's function writes, over its data by A1, which the engine reads.
-    const totals = new Map(tab.tables.flatMap(({ range, header, totals: fns }) => { const area = parseRange(range); return area && fns ? Object.entries(fns).map(([letter, fn]) => [a1(area.bottom, colIndex(letter)), totalFormula(fn, { top: area.top + (header === false ? 0 : 1), bottom: area.bottom - 1, left: colIndex(letter), right: colIndex(letter) }).slice(1)]) : []; }));
+    const totals = new Map(tab.tables.flatMap(({ range, columns, totals: fns }) => { const area = parseRange(range); return area && fns ? Object.entries(fns).map(([letter, fn]) => [a1(area.bottom, colIndex(letter)), totalFormula(fn, columns?.[colIndex(letter) - area.left] ?? `Column${colIndex(letter) - area.left + 1}`).slice(1)]) : []; }));
     cellsOf(tab.data, (given, r, c) => {
       if (r >= tab.rows || c >= tab.cols) return;
       const cell = totals.has(a1(r, c)) ? { ...given, f: totals.get(a1(r, c)) } : given;

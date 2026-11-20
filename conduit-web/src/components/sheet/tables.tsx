@@ -94,7 +94,7 @@ export function createSheetTables(look: Y.Map<number | string>, model: Accessor<
         { label: "Rename table…", meta: on.table.name, run: () => setAsked({ kind: "rename", table: on }) },
         { label: "Resize table…", meta: rangeA1(on.range), run: () => setAsked({ kind: "resize", table: on }) },
         { label: on.table.total ? "Remove total row" : "Add total row", keys: ["Ctrl", "Shift", "T"], run: () => tables.change(on, { total: !on.table.total }, "Total row") },
-        ...total !== null && col > on.range.left ? TOTAL_NAMES.map(([fn, label]) => ({ label: `Total: ${label}`, meta: fn === total ? "Now" : undefined, run: () => run("Total row", () => set(rows.total, col, totalAt(on.table, on.range, col, fn))) })) : [],
+        ...total !== null && col > on.range.left ? TOTAL_NAMES.map(([fn, label]) => ({ label: `Total: ${label}`, meta: fn === total ? "Now" : undefined, run: () => run("Total row", () => { if (sheet) set(rows.total, col, totalAt(sheet, on.table, on.range, col, fn)); }) })) : [],
         ...TABLE_STYLES.map((one) => ({ label: `Table style: ${one.label}`, meta: (on.table.style ?? TABLE_STYLE) === one.style ? "Now" : undefined, run: () => tables.change(on, { style: one.style }, "Table style") })),
         ...([["Plain", null], ["Checkbox", "boolean"], ["Date", "date"]] as const).map(([label, kind]) => ({ label: `Column type: ${label}`, run: () => setType(data, kind) })),
         { label: "Convert to range", run: () => act("Convert to range", () => tables.remove(on)) },

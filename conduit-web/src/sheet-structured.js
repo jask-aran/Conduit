@@ -115,8 +115,8 @@ export function toA1(text, tables, at) {
   const names = new Set();
   for (const ref of refs) {
     const table = tableOf(tables, ref, at);
-    if (ref.table !== null) names.add(ref.table.toLowerCase());
-    else if (table) names.add(table.name.toLowerCase());
+    // A bare one outside any table is noted under "", so a table grown or made round its cell finds it.
+    names.add(ref.table !== null ? ref.table.toLowerCase() : table ? table.name.toLowerCase() : "");
     a1 += text.slice(from, ref.start);
     from = ref.end;
     if (ref.kind === "name") { a1 += a1Of(table, { top: table.first, bottom: table.last, left: table.left, right: table.right }, at); stored += text.slice(kept, ref.start) + table.name; kept = ref.end; continue; }

@@ -11,7 +11,7 @@ export type SheetTableA1 = Omit<SheetTable, "id" | "from" | "to" | "keep" | "whe
 export type PlacedTable = { table: SheetTable; range: Range };
 export type SheetTableChange = { name?: string; style?: string; filter?: boolean; range?: Range; total?: boolean };
 type Sheetish = Pick<SheetView, "id" | "indexOfRow" | "indexOfCol" | "rowAt" | "colAt" | "size" | "input">;
-type Look = Pick<Y.Map<unknown>, "get" | "set" | "has" | "delete" | "keys">;
+type Look = Pick<Y.Map<unknown>, "get" | "set" | "has" | "delete" | "keys" | "doc">;
 type Writer = (row: number, col: number, input: string) => void;
 export const TABLE_STYLE: string;
 export const TOTALS: SheetTotal[];
@@ -24,7 +24,8 @@ export function newTable(sheet: Pick<Sheetish, "rowAt" | "colAt">, area: Range, 
 export function rowsOf(area: Range, table: SheetTable): { header: number; first: number; last: number; total: number };
 export function placed(look: Pick<Look, "get">, sheet: Pick<Sheetish, "id" | "indexOfRow" | "indexOfCol">): PlacedTable[];
 export function tableFilter(sheet: Pick<Sheetish, "rowAt" | "colAt">, table: SheetTable, area: Range): SheetRangedLook | null;
-export function totalFormula(fn: string, column: Range): string;
+export function totalFormula(fn: string, name: string): string;
+export function columnName(sheet: Pick<Sheetish, "input">, table: SheetTable, range: Range, col: number): string;
 export function totalOf(input: unknown): SheetTotal | undefined;
 export function makeTable(look: Look, sheet: Sheetish, area: Range, header: boolean, set: Writer): SheetTable;
 export function changeTable(look: Look, sheet: Sheetish, id: string, change: SheetTableChange, set: Writer): SheetTable;
@@ -32,6 +33,6 @@ export function removeTable(look: Look, sheet: Sheetish, id: string): void;
 export function tableWrites(look: Look, sheet: Sheetish, written: readonly (readonly [number, number, string])[], set: Writer, shift: (formula: string, rows: number, cols: number) => string): boolean;
 export function addTableRow(look: Look, sheet: Sheetish, id: string, set: Writer, shift: (formula: string, rows: number, cols: number) => string): number | null;
 export function putFilter(look: Look, sheet: Pick<Sheetish, "id">, id: string, filter: Pick<SheetTable, "keep" | "when" | "hide">): void;
-export function totalAt(table: SheetTable, range: Range, col: number, fn: string): string;
+export function totalAt(sheet: Pick<Sheetish, "input">, table: SheetTable, range: Range, col: number, fn: string): string;
 export function tablesA1(sheet: Pick<Sheetish, "indexOfRow" | "indexOfCol">, list: SheetTable[]): SheetTableA1[];
 export function tablesIds(sheet: Sheetish, given: unknown, taken: ReadonlySet<string>): SheetTable[];
