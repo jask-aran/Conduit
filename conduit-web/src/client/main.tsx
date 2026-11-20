@@ -2372,6 +2372,10 @@ function App() {
     setPaletteNonce((value) => value + 1);
     setPaletteOpen(true);
   };
+  // A surface whose keys hold the palette's chord (a sheet's Ctrl+K is its link) opens it by event: a sheet's Alt+Q, Excel's search.
+  const openPaletteFromEvent = () => openPalette(null);
+  window.addEventListener("conduit:open-palette", openPaletteFromEvent);
+  onCleanup(() => window.removeEventListener("conduit:open-palette", openPaletteFromEvent));
   const toggleSearchPalette = () => {
     if (paletteOpen() && palettePage() === "chat-search") {
       setPaletteOpen(false);

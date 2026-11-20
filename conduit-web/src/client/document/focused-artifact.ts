@@ -8,7 +8,9 @@ import type { ArtifactKind } from "./artifacts";
  * offer is one of the registry's ARTIFACT_COMMANDS; one a kind leaves out (a site has no blocks to move) is neither
  * listed nor run. While one is held, the palette lists its commands in place of the chat's.
  */
-export type FocusedArtifact = { id: string; kind: ArtifactKind; offers: Partial<Record<ArtifactCommand, () => void>> };
+/** One of a surface's own actions, by name (a sheet's cell menu, tools and dialogs): the palette lists them under the artifact's commands. `meta`: the menu it stands in. */
+export type ArtifactAction = { label: string; keys?: string[]; meta?: string; run(): void };
+export type FocusedArtifact = { id: string; kind: ArtifactKind; offers: Partial<Record<ArtifactCommand, () => void>>; actions?(): ArtifactAction[] };
 const [holder, setHolder] = createSignal<(() => FocusedArtifact | null) | null>(null);
 export const focusedArtifact = () => holder()?.() ?? null;
 

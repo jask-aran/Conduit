@@ -121,6 +121,8 @@ export type SheetMarks = {
   focus(): void;
   /** Opens the list of the sheet's keys. */
   shortcuts(): void;
+  /** Every action of the cell menu at the selection, the ribbon's tools and the sheet's dialogs, by name: the command palette lists them. */
+  actions(): { label: string; keys?: string[]; meta?: string; run(): void }[];
   /** What this page did, taken back and put back `count` steps at a time (never another's writing); `steps`: the latest steps' names, newest first. Read where drawn. */
   history: { undo(count?: number): boolean; redo(count?: number): boolean; canUndo(): boolean; canRedo(): boolean; steps(): { undo: string[]; redo: string[] } };
 };
