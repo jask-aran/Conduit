@@ -12,7 +12,7 @@ import { CELLS, COLS, LOOK, ROWS, a1, colIndex, colName, colsOf, fromCsv, key, p
 import { shiftRefs } from "@/sheet-rules.js";
 import { formatDates } from "@/sheet-formats.js";
 import { daySerial, serialDay } from "@/sheet-types.js";
-import { CalendarPopover } from "@/components/ui/calendar";
+import { CalendarPopover, today } from "@/components/ui/calendar";
 import { SheetFoot } from "./foot";
 import { createSheetTabs } from "./tabs";
 import { ASK_KEY, type SheetAnchor, type SheetBox, type SheetGrid, type SheetGridEvents, type SheetHost, type SheetMarks, type SheetPlace, type SheetRange, type SheetState } from "./host";
@@ -106,6 +106,13 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     // As a spreadsheet's Ctrl+Enter: each shown cell selected takes it, a formula moved from the cell typed in to its own.
     fill: (from, input) => { const area = at(); if (!area || (area.top === area.bottom && area.left === area.right)) return false; writes("Fill selection")(within(inTab(area)).flat().map(({ row, col }) => ({ row, col, input: shifted(input, row - from.row, col - from.col) }))); return true; },
     selected: () => { changed(); const area = at(); return area && { row: area.top, col: area.left }; }, error: (row, col) => model()?.error(row, col) ?? null,
+    chip: ({ row, col }, name) => {
+      const range = { top: row, bottom: row, left: col, right: col };
+      if (name === "Dropdown") return editList(range);
+      if (name === "Date") { setType(range, "date"); return openDate(row, col); }
+      history.act("Today", () => { write([{ row, col, input: String(daySerial(today())) }]); if (!formats.dated(row, col)) formats.set(range, "d/m/yyyy"); });
+      grid()?.focus();
+    },
   });
   // A cell its import froze keeps the file's formula under `excel:<rowId>:<colId>` (server/sheet-xlsx.js), so the mark follows it as rows, columns
   // and tabs change; it is marked while it holds what the import left, as an export writes the formula back. Why it froze is the import report's, found by its formula.
@@ -173,7 +180,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       if (plain && event.key === " " && type === "boolean") { event.preventDefault(); toggle(row, col); return true; }
       // Enter and Alt+Down open a dropdown's options.
       if (type?.startsWith("list:") && ((plain && event.key === "Enter") || (event.altKey && !event.ctrlKey && event.key === "ArrowDown"))) { event.preventDefault(); openList(row, col); return true; }
-      if (type === "date" && event.altKey && !event.ctrlKey && event.key === "ArrowDown") { event.preventDefault(); const box = grid()?.bounds({ top: row, bottom: row, left: col, right: col }); if (box) setDating({ row, col, box }); return true; }
+      if (type === "date" && event.altKey && !event.ctrlKey && event.key === "ArrowDown") { event.preventDefault(); openDate(row, col); return true; }
       // As a spreadsheet's: Alt+= opens a SUM of the numbers just above (else just left), Ctrl+; today's date, each to be finished in the cell.
       const sum = event.altKey && !event.ctrlKey && !event.metaKey && event.key === "=", today = event.ctrlKey && !event.altKey && !event.shiftKey && event.key === ";";
       if (sum || today) {
@@ -490,6 +497,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     const box = grid()?.bounds({ top: row, bottom: row, left: col, right: col }), text = valueText(model()?.value(row, col) ?? null);
     if (box) setLinking({ row, col, box, text, address: types.link(row, col, text) ?? "", own: Boolean(types.link(row, col, "")) });
   };
+  const openDate = (row: number, col: number) => { const box = grid()?.bounds({ top: row, bottom: row, left: col, right: col }); if (box) setDating({ row, col, box }); };
   const openList = (row: number, col: number) => { const box = grid()?.bounds({ top: row, bottom: row, left: col, right: col }); if (box) setListing({ row, col, box }); };
   const toggle = (row: number, col: number) => {
     const sheet = model(), area = at();
