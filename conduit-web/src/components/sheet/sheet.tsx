@@ -91,14 +91,21 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const history = createSheetHistory(live.doc, [cells, look, live.doc.getArray(ROWS), live.doc.getArray(COLS), live.doc.getArray(TABS), live.doc.getMap(TAB)], (op) => tabs.cells(op)), [stepped, setStepped] = createSignal(0);
   // F4 outside the editor repeats the last step on the selection, as Excel's: what it ran of styles, borders, number formats, inserts, deletes and
   // fills (each remembered as it runs, a step's together) runs again, one step of the same name.
-  // By what each is (a run of deletes made one by one is one delete again).
-  let again = new Map<string, (range: SheetRange) => void>(), fresh = true, repeating = false;
-  const remember = (what: string, run: (range: SheetRange) => void) => { if (repeating) return; if (fresh) { again = new Map(); fresh = false; queueMicrotask(() => { fresh = true; }); } again.set(what, run); };
-  const repeat = (range: SheetRange) => { const runs = [...again.values()]; if (!runs.length) return; repeating = true; try { history.act(history.steps().undo[0] ?? "Repeat", () => runs.forEach((run) => run(range))); } finally { repeating = false; } };
+  // By what each is (a run of deletes made one by one is one delete again). Only while its step is still the last one made: after any other, F4 does nothing.
+  let again = new Map<string, (range: SheetRange) => void>(), fresh = true, repeating = false, againStep: number | undefined;
+  const remember = (what: string, run: (range: SheetRange) => void) => { if (repeating) return; if (fresh) { again = new Map(); againStep = history.current(); fresh = false; queueMicrotask(() => { fresh = true; }); } again.set(what, run); };
+  const repeat = (range: SheetRange) => {
+    const runs = [...again.values()];
+    if (!runs.length || againStep === undefined || history.top() !== againStep) return;
+    repeating = true;
+    try { history.act(history.steps().undo[0] ?? "Repeat", () => { againStep = history.current(); runs.forEach((run) => run(range)); }); } finally { repeating = false; }
+  };
   for (const [made, name, what] of [[styles, "set", "style"], [styles, "borders", "borders"], [styles, "clear", "clear"], [formats, "set", "format"]] as const) {
     const held = made as unknown as Record<string, (range: SheetRange, ...rest: unknown[]) => void>, own = held[name]!;
     held[name] = (range: SheetRange, ...rest: unknown[]) => { remember(what, (to) => own(to, ...rest)); own(range, ...rest); };
   }
+  // The style and number format chords (Ctrl+B, Ctrl+Shift+%) are repeated too, as Excel's.
+  for (const made of [styles, formats]) { const own = made.key; made.key = (event, range) => { const done = own(event, range); if (done) remember(`key ${event.code}`, (to) => own(event, to)); return done; }; }
   // Ctrl+` shows each formula as written in its cell; F8 extends the selection with the arrows, shown in the foot, until F8 or Esc again.
   const [formulasShown, setFormulasShown] = createSignal(false), [extending, setExtending] = createSignal(false);
   live.own(history.origin);
@@ -442,8 +449,9 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     requestAnimationFrame(() => grid()?.focus());
   };
   const structure = (op: "insert-rows" | "insert-cols" | "delete-rows" | "delete-cols", at: number, count = 1) => {
+    // Sent first, so the step it makes outside one is the one remembered.
+    hub({ op, at, count });
     remember(op, (range) => op.endsWith("rows") ? structure(op, range.top, range.bottom - range.top + 1) : structure(op, range.left, range.right - range.left + 1));
-    return hub({ op, at, count });
   };
   // Ctrl+- and Ctrl+Shift+= on a block of cells ask, as a spreadsheet's do, which way what is round it goes; whole rows or columns picked are not asked.
   const [shifting, setShifting] = createSignal<{ verb: "delete" | "insert"; range: SheetRange; box: SheetBox } | null>(null);

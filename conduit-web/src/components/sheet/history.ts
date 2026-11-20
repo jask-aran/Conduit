@@ -102,6 +102,9 @@ export function createSheetHistory(doc: Y.Doc, scope: Scoped[], send: (op: Sheet
     canUndo: () => um.canUndo(),
     canRedo: () => um.canRedo(),
     steps: () => ({ undo: labels(um.undoStack), redo: labels(um.redoStack) }),
+    // The step being made (the open one, or the hub's lone one), and the one on top of the history.
+    current: () => (open ?? lone)?.id,
+    top: () => um.undoStack.at(-1)?.meta.get(STEP) as number | undefined,
     scope: (types: Scoped[]) => um.addToScope(types),
     onChange: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
     destroy: () => { listeners.clear(); um.destroy(); },
