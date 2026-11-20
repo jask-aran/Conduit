@@ -160,10 +160,11 @@ export function sheetKind(hub) {
       const from = stay(ranged.from), to = stay(ranged.to);
       after.push(() => { const next = { ...ranged, from: from(), to: to() }; if (next.from !== ranged.from || next.to !== ranged.to) room.look.set(name, JSON.stringify(next)); });
     }
-    const rules = readRules(room.look.get(`rules:${sheet.id}`));
-    if (rules.length) {
+    for (const [what, read] of RULED) {
+      const rules = read(room.look.get(`${what}:${sheet.id}`));
+      if (!rules.length) continue;
       const held = rules.map((rule) => ({ rule, ranges: rule.ranges.map(([from, to]) => [stay(from), stay(to)]) }));
-      after.push(() => { const next = JSON.stringify(held.map(({ rule, ranges }) => ({ ...rule, ranges: ranges.map(([from, to]) => [from(), to()]) }))); if (next !== JSON.stringify(rules)) room.look.set(`rules:${sheet.id}`, next); });
+      after.push(() => { const next = JSON.stringify(held.map(({ rule, ranges }) => ({ ...rule, ranges: ranges.map(([from, to]) => [from(), to()]) }))); if (next !== JSON.stringify(rules)) room.look.set(`${what}:${sheet.id}`, next); });
     }
     // A chart too, its range and the cell it stands on: it draws the same cells' places and stands where it stood.
     const charts = readCharts(room.look.get(`charts:${sheet.id}`));
@@ -212,10 +213,11 @@ export function sheetKind(hub) {
       if (JSON.stringify(next) !== JSON.stringify(merges)) out.push([`merges:${sheet.id}`, next.length ? JSON.stringify(next) : null]);
     }
     // A conditional format's ranges each as a filter's; one left with none goes.
-    const rules = readRules(room.look.get(`rules:${sheet.id}`));
-    if (rules.length) {
+    for (const [what, read] of RULED) {
+      const rules = read(room.look.get(`${what}:${sheet.id}`));
+      if (!rules.length) continue;
       const next = rules.map((rule) => ({ ...rule, ranges: rule.ranges.flatMap(([from, to]) => { const one = moved({ from, to }); return one ? [[one.from, one.to]] : []; }) })).filter((rule) => rule.ranges.length);
-      if (JSON.stringify(next) !== JSON.stringify(rules)) out.push([`rules:${sheet.id}`, next.length ? JSON.stringify(next) : null]);
+      if (JSON.stringify(next) !== JSON.stringify(rules)) out.push([`${what}:${sheet.id}`, next.length ? JSON.stringify(next) : null]);
     }
     const charts = keptCharts(sheet, room.look.get(`charts:${sheet.id}`), isRows, at, count);
     if (charts !== undefined) out.push([`charts:${sheet.id}`, charts]);
@@ -282,6 +284,22 @@ export function sheetKind(hub) {
     return JSON.stringify({ ...rest, from: key(sheet.rowAt(area.top), sheet.colAt(area.left)), to: key(sheet.rowAt(area.bottom), sheet.colAt(area.right)), ...(kept ? { keep: kept } : {}), ...(whens ? { when: whens } : {}),
       ...(Array.isArray(hide) ? { hide: hide.flatMap((row) => Number.isInteger(row) && row >= 1 && row <= rows ? [sheet.rowAt(row - 1)] : []) } : {}) });
   };
+  /**
+   * The conditional formats an import keeps unread (`rulesKept:<tabId>`, sheet-xlsx.js: colour scales, data bars, icon sets, top N), each its ranges by
+   * corner ids as a rule's, so they follow inserts and moves; by A1 at the file.
+   */
+  const readKept = (text) => { try { const list = typeof text === "string" ? JSON.parse(text) : text; return Array.isArray(list) ? list.filter((one) => Array.isArray(one?.ranges) && typeof one.xml === "string") : []; } catch { return []; } };
+  // One kept by A1 before ids (an import of 2026-11) stays as it is.
+  const keptA1 = (sheet, text) => [...(Array.isArray(text) ? text.filter((one) => typeof one?.ranges === "string") : []), ...readKept(text)].flatMap((one) => typeof one.ranges === "string" ? [one] : (() => { const areas = one.ranges.flatMap(([from, to]) => { const area = rangedArea(sheet, { from, to }); return area ? [rangeA1(area)] : []; }); return areas.length ? [{ ...one, ranges: areas.join(" ") }] : []; })());
+  const keptIds = (sheet, list) => {
+    const { rows, cols } = sheet.size(), corner = (row, col) => key(sheet.rowAt(Math.min(row, rows - 1)), sheet.colAt(Math.min(col, cols - 1)));
+    const out = (Array.isArray(list) ? list : []).flatMap((one) => {
+      const ranges = String(one?.ranges ?? "").split(/\s+/).flatMap((part) => { const area = parseRange(part.replace(/\$/g, "")); return area && area.top < rows && area.left < cols ? [[corner(area.top, area.left), corner(area.bottom, area.right)]] : []; });
+      return ranges.length && typeof one.xml === "string" ? [{ ...one, ranges }] : [];
+    });
+    return out.length ? JSON.stringify(out) : undefined;
+  };
+  const RULED = [["rules", readRules], ["rulesKept", readKept]];
   const lookOf = (room, sheet) => {
     const out = {};
     for (const [name, value] of room.look.entries()) {
@@ -290,6 +308,7 @@ export function sheetKind(hub) {
       if (what === "validations" || (what === "type" && String(value).startsWith(VALID))) continue;
       if (ids.length === 1 && ids[0] === sheet.id && what === "merges") { const said = mergesA1(sheet, value); if (said.length) out.merges = said; }
       else if (ids.length === 1 && ids[0] === sheet.id && what === "rules") { const said = rulesA1(sheet, value); if (said.length) out.rules = said; else if (Array.isArray(value)) out.rules = value; }
+      else if (ids.length === 1 && ids[0] === sheet.id && what === "rulesKept") { const said = keptA1(sheet, value); if (said.length) out.rulesKept = said; }
       else if (ids.length === 1 && ids[0] === sheet.id && what === "charts") { const said = chartsA1(sheet, value); if (said.length) out.charts = said; }
       else if (ids.length === 1 && ids[0] === sheet.id && RANGED.includes(what)) { const said = rangedA1(sheet, value); if (said) out[what] = said; }
       else if (ids.length === 1 && ids[0] === sheet.id) out[what] = value;
@@ -316,6 +335,7 @@ export function sheetKind(hub) {
       }
       else if (at === undefined && what === "validations") restoreValidations(room.look, sheet, value);
       else if (at === undefined && what === "rules") { const ids = rulesIds(sheet, value); if (ids) room.look.set(`rules:${tab}`, ids); }
+      else if (at === undefined && what === "rulesKept") { const ids = keptIds(sheet, value); if (ids) room.look.set(`rulesKept:${tab}`, ids); }
       else if (at === undefined && what === "charts") { const ids = chartIds(sheet, value); if (ids) room.look.set(`charts:${tab}`, ids); }
       else if (at === undefined && RANGED.includes(what)) { const ids = rangedIds(sheet, value); if (ids) room.look.set(`${what}:${tab}`, ids); }
       else if (at === undefined) room.look.set(`${what}:${tab}`, value);

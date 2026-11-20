@@ -40,11 +40,11 @@ export default function ArtifactCreator(props: { project?: string; projects: Pro
   };
   // An Excel file becomes a sheet: what did not come across is said here before the sheet is opened.
   const [imported, setImported] = createSignal<(Artifact & { summary: string }) | null>(null);
-  const pick = () => { const picker = Object.assign(document.createElement("input"), { type: "file", accept: ".xlsx" }); picker.onchange = () => void bring(picker.files?.[0]); picker.click(); };
+  const pick = () => { const picker = Object.assign(document.createElement("input"), { type: "file", accept: ".xlsx,.xlsm,.xlsb,.xls,.ods,.csv,.tsv" }); picker.onchange = () => void bring(picker.files?.[0]); picker.click(); };
   const bring = async (file: File | undefined) => {
     if (!file || !project() || busy()) return;
     setBusy(true); setError("");
-    try { setImported(await importXlsx(project(), file, typed()?.trim() || file.name.replace(/\.xlsx$/i, ""))); }
+    try { setImported(await importXlsx(project(), file, typed()?.trim() || file.name.replace(/\.(?:xlsx|xlsm|xlsb|xls|ods|csv|tsv)$/i, ""))); }
     catch (cause) { setError((cause as Error).message); }
     finally { setBusy(false); }
   };

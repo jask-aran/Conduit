@@ -82,8 +82,10 @@ feature("spilling formulas")((g_spill, r_spill))
 
 def g_unknown(wb):
     ws = wb.active; numbers(ws)
-    ws["B1"] = "=_xlfn.LAMBDA(x,x*2)(A1)"; ws["B2"] = "=CELL(\"row\",A2)"; ws["B3"] = "=GETPIVOTDATA(\"x\",A1)"
-    return {"Sheet!B1": 20, "Sheet!B2": 2, "Sheet!B3": "#REF!"}
+    # As Excel writes them: an array formula of one cell (Excel adds the dynamic-array mark openpyxl cannot write).
+    ws["B1"] = ArrayFormula("B1", "=_xlfn.LAMBDA(_xlpm.x,_xlpm.x*2)(A1)"); ws["B2"] = "=CELL(\"row\",A2)"; ws["B3"] = "=GETPIVOTDATA(\"x\",A1)"
+    ws["B4"] = ArrayFormula("B4", '=_xlfn.LET(_xlpm.n,A4,_xlpm.label,"n",_xlpm.label&_xlpm.n)')
+    return {"Sheet!B1": 20, "Sheet!B2": 2, "Sheet!B3": "#REF!", "Sheet!B4": "n40"}
 feature("functions the engine lacks")((g_unknown, formula_facts))
 
 def g_names(wb):
@@ -221,6 +223,35 @@ def g_notes(wb):
 def r_notes(wb, raw): return {c.coordinate: c.comment.text for c in wb.active["A"] if c.comment}
 feature("notes")((g_notes, r_notes))
 
+TC = "http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments"
+G = lambda kind, n: "{6A9F1C2E-%s-4000-8000-00000000000%d}" % (kind, n)  # Excel reads only real GUIDs here
+THREADS = [("A1", G("0001", 1), G("0002", 1), None, "Is this right?"), ("A1", G("0001", 2), G("0002", 2), G("0001", 1), "Yes, checked."), ("A2", G("0001", 3), G("0002", 2), None, "Source: @Ann")]
+def g_threads(wb):
+    ws = wb.active; numbers(ws, 3)
+    for ref, tid, _, parent, text in THREADS:
+        if not parent: ws[ref].comment = Comment(f"[Threaded comment]\n\nYour version of Excel allows you to read this threaded comment.\n\nComment:\n    {text}", f"tc={tid}")
+def post_threads(parts):
+    """Excel's own parts for threaded comments, which openpyxl cannot write: the threads, the people, and their links."""
+    parts["xl/threadedComments/threadedComment1.xml"] = (f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<ThreadedComments xmlns="{TC}" xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        + "".join('<threadedComment ref="%s" dT="2026-03-0%dT09:15:00.00" personId="%s" id="%s"%s%s><text>%s</text></threadedComment>' % (ref, i + 4, pid, tid, ' parentId="%s"' % parent if parent else "", ' done="1"' if i == 1 else "", text) for i, (ref, tid, pid, parent, text) in enumerate(THREADS)) + "</ThreadedComments>").encode()
+    parts["xl/persons/person.xml"] = (f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<personList xmlns="{TC}" xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><person displayName="Ann Lee" id="%s" userId="ann@example.com" providerId="None"/><person displayName="Bob Ng" id="%s" userId="bob@example.com" providerId="None"/></personList>' % (G("0002", 1), G("0002", 2))).encode()
+    rel = lambda part, rid, kind, target: parts.__setitem__(part, parts[part].decode().replace("</Relationships>", f'<Relationship Id="{rid}" Type="http://schemas.microsoft.com/office/2017/10/relationships/{kind}" Target="{target}"/></Relationships>').encode())
+    rel("xl/worksheets/_rels/sheet1.xml.rels", "rIdTc", "threadedComment", "/xl/threadedComments/threadedComment1.xml"); rel("xl/_rels/workbook.xml.rels", "rIdPeople", "person", "persons/person.xml")
+    types = parts["[Content_Types].xml"].decode().replace("</Types>", '<Override PartName="/xl/threadedComments/threadedComment1.xml" ContentType="application/vnd.ms-excel.threadedcomments+xml"/><Override PartName="/xl/persons/person.xml" ContentType="application/vnd.ms-excel.person+xml"/></Types>')
+    parts["[Content_Types].xml"] = types.encode()
+def r_threads(wb, raw):
+    z = zipfile.ZipFile(io.BytesIO(raw)); names = z.namelist()
+    people = {m.group(2): m.group(1) for n in names if n.startswith("xl/persons/") for m in re.finditer(r'<person displayName="([^"]*)" id="([^"]*)"', z.read(n).decode())}
+    out = {}
+    for n in sorted(n for n in names if n.startswith("xl/threadedComments/")):
+        for i, m in enumerate(re.finditer(r"<threadedComment\b([^>]*)><text>([^<]*)</text>", z.read(n).decode())):
+            a = dict(re.findall(r'(\w+)="([^"]*)"', m.group(1)))
+            out[f"{a.get('ref')} {i}"] = [m.group(2), a.get("dT"), people.get(a.get("personId"), "?"), "parentId" in a, a.get("done", "")]
+    out.update({f"note {c.coordinate}": c.comment.author for c in wb.active["A"] if c.comment})
+    return out
+feature("threaded comments")((g_threads, r_threads))
+POST = {"threaded comments": post_threads}
+
 def g_table(wb):
     ws = wb.active
     ws.append(["Name", "Qty", "Price"])
@@ -274,7 +305,10 @@ def g_image(wb):
     from PIL import Image
     ws = wb.active; ws["A1"] = 1; buf = io.BytesIO(); Image.new("RGB", (20, 20), "red").save(buf, "PNG"); ws.add_image(XImage(buf), "C3")
 def r_image(wb, raw):
-    return {f"media {i}": True for i, n in enumerate(n for n in zipfile.ZipFile(io.BytesIO(raw)).namelist() if n.startswith("xl/media/"))}
+    z = zipfile.ZipFile(io.BytesIO(raw)); out = {f"media {i}": len(z.read(n)) for i, n in enumerate(n for n in z.namelist() if n.startswith("xl/media/"))}
+    for n in (n for n in z.namelist() if re.match(r"xl/drawings/drawing\d+\.xml$", n)):
+        for i, m in enumerate(re.finditer(r"<(?:\w+:)?from><(?:\w+:)?col>(\d+)</(?:\w+:)?col>.*?<(?:\w+:)?row>(\d+)<.*?<(?:\w+:)?ext cx=\"(\d+)\" cy=\"(\d+)\"", z.read(n).decode())): out[f"anchor {i}"] = list(m.groups())
+    return out
 feature("images")((g_image, r_image))
 
 def g_tabs(wb):
@@ -288,6 +322,20 @@ def r_tabs(wb, raw):
     out = {f"tab {i}": [s.title, s.sheet_state, rgb(s.sheet_properties.tabColor)] for i, s in enumerate(wb.worksheets)}
     out.update(formula_facts(wb, raw)); return out
 feature("tabs: names, colours, hidden")((g_tabs, r_tabs))
+
+def g_groups(wb):
+    ws = wb.active
+    for r in range(1, 11):
+        for c in range(1, 6): ws.cell(r, c, r * c)
+    ws.row_dimensions.group(2, 4, outline_level=1); ws.row_dimensions.group(3, 3, outline_level=2, hidden=True); ws.row_dimensions[4].collapsed = True
+    ws.row_dimensions.group(7, 8, outline_level=1, hidden=True); ws.row_dimensions[9].collapsed = True
+    ws.column_dimensions.group("B", "C", outline_level=1)
+def r_groups(wb, raw):
+    ws = wb.active
+    out = {f"row {k}": [d.outlineLevel, bool(d.hidden), bool(d.collapsed)] for k, d in ws.row_dimensions.items() if d.outlineLevel or d.collapsed}
+    out.update({f"col {k}": [d.outlineLevel, bool(d.hidden)] for k, d in ws.column_dimensions.items() if d.outlineLevel})
+    return out
+feature("outline groups")((g_groups, r_groups))
 
 def g_print(wb):
     ws = wb.active; numbers(ws, 30)
@@ -305,9 +353,10 @@ def r_protect(wb, raw): return {"workbook structure": bool(wb.security and wb.se
 feature("protection")((g_protect, r_protect))
 
 NOT_T = re.compile(r' t="\w+"')
-def cached(path, cache):
-    """Each formula's value as Excel keeps it beside the formula (openpyxl writes none)."""
+def cached(path, cache, post=None):
+    """Each formula's value as Excel keeps it beside the formula (openpyxl writes none), and parts openpyxl cannot write (`post`)."""
     z = zipfile.ZipFile(path); parts = {n: z.read(n) for n in z.namelist()}; z.close()
+    if post: post(parts)
     book = parts["xl/workbook.xml"].decode(); rels = parts["xl/_rels/workbook.xml.rels"].decode()
     for key, value in cache.items():
         tab, at = key.rsplit("!", 1)
@@ -329,7 +378,7 @@ if __name__ == "__main__":
     if sys.argv[1] == "gen":
         names = {}
         for i, (name, (gen, _)) in enumerate(F.items()):
-            wb = openpyxl.Workbook(); cache = gen(wb) or {}; path = f"{sys.argv[2]}/{i:02d}.xlsx"; wb.save(path); cached(path, cache); names[f"{i:02d}"] = name
+            wb = openpyxl.Workbook(); cache = gen(wb) or {}; path = f"{sys.argv[2]}/{i:02d}.xlsx"; wb.save(path); cached(path, cache, POST.get(name)); names[f"{i:02d}"] = name
         print(json.dumps(names))
     else:
         raw = open(sys.argv[2], "rb").read(); wb = openpyxl.load_workbook(io.BytesIO(raw))
