@@ -242,7 +242,7 @@ Open after the walk:
 - The foot's figures are read in a task of their own on every selection change (no settle wait), sliced at 3 ms; the cell menu's `sub` may be a
   function, made as the submenu opens.
 - Imported style codes now drawn (`styles.ts` `make`, `cell-draw.ts`): `n`, `u2`, `k`, `in`, `r`, `hx`, `bs`, `bd`, and `fp`/`fb` as a mix of the two
-  colours (only where `f` is #rrggbb). Not seen in a browser: no import was run. Conditional-format kinds kept as `rulesKept` are not drawn yet.
+  colours (only where `f` is #rrggbb). Conditional-format kinds kept as `rulesKept` are drawn since `sheet-fix4` (below).
 - Opening a sheet: the grid, tabs and canvases still appear about 350 ms after the pane's first paint (the grid mounts once the hub's copy and the
   model are held); the margin's height jumps with them.
 
@@ -268,7 +268,28 @@ submenu row stands in the list with its submenu's name); Alt+Q (Excel's Search) 
 on a tab Left/Right, Enter, F2, Shift+F10 for its menu (Duplicate, Tab colour, Move, Hide, Delete), Esc back. Every menu and dialog gives the keyboard
 back to the grid as it shuts (checked for each in headless Chrome).
 
-Open: not built: Show formulas (Ctrl+`), F4 repeat outside the editor, F8 / Shift+F8, Ctrl+F3 (there is no names dialog), Excel's Esc in a submenu
-going back one level (Esc shuts the whole menu, the keyboard back on the grid). Ctrl+A at 50,000 rows was not timed in a page. Ctrl+Shift+V was not seen
+Open: not built: Shift+F8 (the grid holds one range: Glide's `rangeStack` is never used), Ctrl+F3 (there is no names dialog). Ctrl+A at 50,000 rows was not timed in a page. Ctrl+Shift+V was not seen
 (headless has no clipboard). Key-to-focus in headless Chrome: Ctrl+1, Find, Ctrl+-, palette 5–16 ms; Ctrl+K about 30; cell menu, filter, tab menu,
 ribbon menus, rules, shortcuts list 30–100 ms, mostly headless frame pacing (the main thread's work before focus is about 20–26 ms for the cell menu).
+
+## Polish round (branch `sheet-fix4`, 2026-11-20; each seen in headless Chrome on :4310 with the branch's build routed in)
+
+- Kept rules drawn (`scales.ts`, laid by `rules.tsx` over the drawn rules' style): colour scales, data bars (Excel 2007's fade: the solid flag lives in the
+  sheet's extension list, which is not kept), icon sets drawn with paths (arrows, traffic lights, symbols, signs, ratings, quarters; others as lights),
+  top/bottom N, above/below average, duplicate/unique. A rule's figures are read once a change, as its first cell is drawn; any kept rule makes the
+  tab `wide` (every change redraws all cells). The import now stores each kept rule's colours resolved (`colors`) and its dxf as a packed `style`/`fmt`;
+  an older import's dxf is read on the page by its plain rgb colours. A rule's `fmt` (drawn or kept) now draws the cells it matches (`rules.fmt`).
+  Kept rules draw below the drawn ones, whatever the file's priorities.
+- A group's chevron is hit in a `--control-xs` square about it (there is no pointer-target token); the cell menu offers Collapse/Expand row or column group
+  for the active cell (`outline.around`).
+- Escape in a submenu goes back one level in every library menu (`MenuSub`): Kobalte's own Escape shuts the whole menu; the library did this only on a phone.
+- A date cell draws the dropdown's arrow and a press on it opens the calendar (a frame later, after the grid has taken the keyboard). A cell with a
+  filter's caret or a date's arrow draws right-aligned text clear of it. Justify and distributed wrap (`styles.ts`); a tab's own-wrapped cells fit
+  their rows as it is shown (`styles.wrapped`, origin `refit`), so an imported wrapped cell is no longer cut.
+- Ctrl+` (formulas shown, not saved), F4 repeat (sheet.tsx `remember`: wraps `styles.set/borders/clear`, `formats.set`, `structure`, `spread`; Ctrl+B and
+  the other style keys go through `styles.key` and are not repeated), F8 extend mode (grid option `extending`, "Extend selection" in the foot).
+- Speed: the command palette resolves its commands only while open (an artifact's `actions` built the whole cell menu on every selection change); the
+  sheet's theme observer redraws only when the text colour or `--u-space` changes (a dialog's scroll lock set the root's style and redrew the grid).
+  Open: the cell menu's second frame is still about 20 ms headless: its rows' lucide icons are built by the caller as JSX before the library sees them,
+  so memoizing them needs the menu to take icon components, or a cache in `icons.tsx` (initial bundle).
+
