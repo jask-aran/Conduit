@@ -1,4 +1,4 @@
-import { CELLS, colIndex, colName, key, parseRange, rangeA1, rangedArea, rowId, rowsOf as linesOf, tabRef } from "./sheet-format.js";
+import { colIndex, colName, key, parseRange, rangeA1, rangedArea, tabRef } from "./sheet-format.js";
 import { blockId } from "./block-id.js";
 
 /*
@@ -183,26 +183,15 @@ const newRow = (look, sheet, range, rows, grown, input, set, shift) => {
   }
 };
 /**
- * A row added under a table's last data row (Tab in its last cell): with a total row, a tab's row put in above it, which the table's corners then
- * hold; else the row under it where that is empty. Its index, or null.
+ * A row added under a table's last data row (Tab in its last cell), where that row is empty: the row under the table, or, with a total row, the total
+ * row's own once the hub has pushed it down a row (`pushed`, shift-cells), which the table's last corner then follows. Its index, or null.
  */
-export function addTableRow(look, sheet, id, set, shift) {
+export function addTableRow(look, sheet, id, set, shift, pushed = false) {
   const list = placed(look, sheet), one = list.find((each) => each.table.id === id);
-  if (!one) return null;
-  if (one.table.total) {
-    const { range, table } = one, rows = rowsOf(range, table), made = rowId(), cells = look.doc.getMap(CELLS);
-    look.doc.getArray(linesOf(sheet.id)).insert(range.bottom, [made]);
-    // The view reads the new row's index once the step is done: its cells and look are written by its id.
-    for (let c = range.left; c <= range.right; c++) {
-      const col = sheet.colAt(c), above = sheet.input(rows.last, c);
-      for (const what of ["type", "fmt", "style"]) { const kept = look.get(`${what}:${key(sheet.rowAt(rows.last), col)}`); if (kept !== undefined) look.set(`${what}:${key(made, col)}`, kept); }
-      if (above.startsWith("=") && Array.from({ length: rows.last - rows.first + 1 }, (_, n) => sheet.input(rows.first + n, c)).every((each) => each.startsWith("="))) cells.set(key(made, col), shift(above, 1, 0));
-    }
-    return range.bottom;
-  }
-  const { table, range } = one, row = range.bottom + 1, grown = { ...range, bottom: row };
-  if (row >= sheet.size().rows || list.some((each) => each !== one && meets(each.range, { ...range, top: row, bottom: row })) || Array.from({ length: range.right - range.left + 1 }, (_, c) => sheet.input(row, range.left + c)).some(Boolean)) return null;
-  newRow(look, sheet, range, rowsOf(range, table), grown, (r, c) => sheet.input(r, c), set, shift);
+  if (!one || (one.table.total && !pushed)) return null;
+  const { table, range } = one, rows = rowsOf(range, table), row = rows.last + 1, grown = { ...range, bottom: range.bottom + 1 };
+  if (grown.bottom >= sheet.size().rows || list.some((each) => each !== one && meets(each.range, { ...range, top: row, bottom: row })) || Array.from({ length: range.right - range.left + 1 }, (_, c) => sheet.input(row, range.left + c)).some(Boolean)) return null;
+  newRow(look, sheet, { ...range, bottom: rows.last }, rows, { ...range, bottom: row }, (r, c) => sheet.input(r, c), set, shift);
   writeTables(look, sheet.id, list.map((each) => each === one ? { ...table, ...corners(sheet, grown) } : each.table));
   return row;
 }

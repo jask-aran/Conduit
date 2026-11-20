@@ -248,17 +248,17 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
       .then(() => until(() => { const now = model()?.size(); return Boolean(now && now.rows > far.bottom && now.cols > far.right); }))
       .then((grown) => { if (grown) later(() => run(to)); }, (error: Error) => props.host.failed(error.message));
   };
-  // Tab in a table's last cell with filled cells or the tab's edge under it: as Excel's, the cells under its columns are pushed down (the tab grown at
-  // its edge) and the row added, one step; not where that would split a table below that spans other columns.
+  // Tab in a table's last cell with a total row, or filled cells or the tab's edge under it: as Excel's, the cells under its columns from its total row
+  // (else the row under it) are pushed down (the tab grown at its edge) and the row added, one step; not where that would split a table below that spans other columns.
   const roomBelow = (on: PlacedTable) => {
-    const size = model()?.size(), { range } = on, row = range.bottom + 1;
+    const size = model()?.size(), { range } = on, total = Boolean(on.table.total), row = total ? range.bottom : range.bottom + 1;
     if (!size) return;
     const split = filters.tables.all().find((one) => one.range.top > range.bottom && one.range.left <= range.right && one.range.right >= range.left && (one.range.left < range.left || one.range.right > range.right));
     if (split) return void toast(`Can't add a row to ${on.table.name}: it would split ${split.table.name} below it`);
     history.act("Add table row", () => {
       const later = history.later(), free = () => { const sheet = model(); return Boolean(sheet && sheet.size().rows > row && between(range.left, range.right).every((col) => !sheet.input(row, col))); };
       void history.hub(row >= size.rows ? { op: "insert-rows", at: size.rows, count: 1 } : { op: "shift-cells", range: rangeA1({ ...range, top: row, bottom: row }), way: "down" })
-        .then(() => until(free)).then((made) => { if (made) later(() => { const added = filters.tables.addRow(on); if (added !== null) grid()?.select({ top: added, bottom: added, left: range.left, right: range.left }); }); }, (error: Error) => props.host.failed(error.message));
+        .then(() => until(free)).then((made) => { if (made) later(() => { const added = filters.tables.addRow(on, total); if (added !== null) grid()?.select({ top: added, bottom: added, left: range.left, right: range.left }); }); }, (error: Error) => props.host.failed(error.message));
     });
   };
   for (const [made, name] of [[styles, "set"], [styles, "borders"], [formats, "set"], [types, "set"], [validity, "set"], [rules, "add"]] as const) {

@@ -60,7 +60,7 @@ export const regionAround = ({ rows, cols }: { rows: number; cols: number }, has
 };
 
 /** What the page lends a filter: its history's named steps, the grid's selection, and a range's cell type (sheet.tsx `setType`). */
-/** `room`: Tab in a table's last cell with no free row under it: room made below it, then the row added. */
+/** `room`: Tab in a table's last cell with a total row or no free row under it: room made below its data, then the row added. */
 export type SheetFilterHost = { act(label: string, run: () => void): void; select(range: SheetRange): void; setType(range: SheetRange, kind: SheetTypeKind | null): void; room?(table: PlacedTable): void };
 /** `bold`: whether a cell wears bold (styles.ts), which makes a first row a header. */
 export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<SheetView | undefined>, selection: Accessor<SheetRange | null>, hub: (op: SheetCellsOp) => void, bold: (row: number, col: number) => boolean, host: SheetFilterHost) {
@@ -290,7 +290,7 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
       const area = selection(), table = here();
       if (!area || !table || area.top !== area.bottom || area.left !== area.right || area.left !== table.range.right || area.top !== rowsOf(table.range, table.table).last) return false;
       const row = tables.addRow(table);
-      if (row === null && (table.table.total || !host.room)) return false;
+      if (row === null && !host.room) return false;
       event.preventDefault();
       if (row === null) return host.room!(table), true;
       host.select({ top: row, bottom: row, left: table.range.left, right: table.range.left });

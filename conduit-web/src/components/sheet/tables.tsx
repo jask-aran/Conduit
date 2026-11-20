@@ -78,8 +78,8 @@ export function createSheetTables(look: Y.Map<number | string>, model: Accessor<
     remove: (one: PlacedTable) => { const sheet = model(); if (sheet) removeTable(look, sheet, one.table.id); },
     /** A table's own filter written, in the caller's step. */
     put: (id: string, filter: Pick<SheetTable, "keep" | "when" | "hide">) => { const sheet = model(); if (sheet) putFilter(look, sheet, id, filter); },
-    /** A row added under the table's last (Tab in its last cell), as one step; its index, or null where none can be. */
-    addRow: (one: PlacedTable) => { const sheet = model(); let row: number | null = null; if (sheet) act("Add table row", () => { row = addTableRow(look, sheet, one.table.id, set, shiftRefs); }); return row; },
+    /** A row added under the table's last (Tab in its last cell), as one step; its index, or null where none can be. `pushed`: its total row was pushed down. */
+    addRow: (one: PlacedTable, pushed = false) => { const sheet = model(); let row: number | null = null; if (sheet) act("Add table row", () => { row = addTableRow(look, sheet, one.table.id, set, shiftRefs, pushed); }); return row; },
     /** Why a name won't do for the table (sheet-tables.js nameFault), or null. */
     fault: (one: PlacedTable, name: string) => { const taken = takenNames(look); taken.delete(one.table.name.toLowerCase()); return nameFault(name, taken); },
     /** A cell in a table's header (1) or total row (2), else 0. */
