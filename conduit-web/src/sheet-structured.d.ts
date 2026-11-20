@@ -5,6 +5,8 @@ export type TableInfo = { name: string; tab: string; sheet: string; header: numb
 export type TableInfos = ReadonlyMap<string, TableInfo>;
 export type CellAt = { tab: string; row: number; col: number };
 export type Reference = { kind: "a1" | "struct" | "name"; start: number; end: number; table?: string | null; open?: number };
+export const SPECIALS: string[];
+export function escapeName(name: string): string;
 export function referencesOf(text: string): Reference[];
 export function tableAt(tables: TableInfos, at: CellAt): TableInfo | undefined;
 /** `names`: "" for a bare reference (`[@Qty]`) outside any table. */

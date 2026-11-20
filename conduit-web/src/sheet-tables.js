@@ -1,4 +1,4 @@
-import { CELLS, colIndex, colName, key, parseRange, rangeA1, rangedArea, rowId, rowsOf as linesOf } from "./sheet-format.js";
+import { CELLS, colIndex, colName, key, parseRange, rangeA1, rangedArea, rowId, rowsOf as linesOf, tabRef } from "./sheet-format.js";
 import { blockId } from "./block-id.js";
 
 /*
@@ -52,6 +52,9 @@ const meets = (one, two) => one.top <= two.bottom && two.top <= one.bottom && on
 
 /** A table's rows by index: its header (-1: none), its first and last data rows, its total row (-1: none). */
 export const rowsOf = (area, table) => ({ header: table.header === false ? -1 : area.top, first: area.top + (table.header === false ? 0 : 1), last: area.bottom - (table.total ? 1 : 0), total: table.total ? area.bottom : -1 });
+/** A placed table of a tab as structured references read it (sheet-structured.d.ts TableInfo). */
+export const infoOf = (sheet, { table, range }) => ({ name: table.name, tab: sheet.id, sheet: tabRef(sheet.name), ...rowsOf(range, table), left: range.left, right: range.right,
+  columns: Array.from({ length: range.right - range.left + 1 }, (_, n) => columnName(sheet, table, range, range.left + n)) });
 /** A tab's tables where they are now (by index); those whose corners are gone left out. */
 export const placed = (look, sheet) => readTables(look, sheet.id).flatMap((table) => { const range = rangedArea(sheet, table); return range ? [{ table, range }] : []; });
 /** The table's filter as a tab's is held (sheet-format.d.ts SheetRangedLook: its header row to its last data row), or null where it shows none. */

@@ -168,7 +168,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     // As a spreadsheet's Ctrl+Enter: each shown cell selected takes it, a formula moved from the cell typed in to its own.
     fill: (from, input) => { const area = at(); if (!area || (area.top === area.bottom && area.left === area.right)) return false; writes("Fill selection")(within(inTab(area)).flat().map(({ row, col }) => ({ row, col, input: shifted(input, row - from.row, col - from.col) }))); return true; },
     selected: () => { changed(); const area = at(); return area && { row: area.top, col: area.left }; }, error: (row, col) => model()?.error(row, col) ?? null,
-    chips: chip.offers,
+    chips: chip.offers, tables: () => filters.tables.infos(), tableNames: () => filters.tables.names(),
     chip: ({ row, col }, name, offer) => {
       if (chip.take({ row, col }, offer)) return;
       const range = { top: row, bottom: row, left: col, right: col };

@@ -11,7 +11,7 @@ import { Button, Field, Input, Switch } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
 import { CELLS, key, parseRange, rangeA1, rangedArea, type SheetView } from "@/sheet-format.js";
 import { shiftRefs } from "@/sheet-rules.js";
-import { addTableRow, changeTable, makeTable, nameFault, putFilter, readTables, removeTable, rowsOf, TABLE_STYLE, tableWrites, takenNames, totalAt, totalOf, type PlacedTable, type SheetTable, type SheetTableChange } from "@/sheet-tables.js";
+import { addTableRow, changeTable, infoOf, makeTable, nameFault, putFilter, readTables, removeTable, rowsOf, TABLE_STYLE, tableWrites, takenNames, totalAt, totalOf, type PlacedTable, type SheetTable, type SheetTableChange } from "@/sheet-tables.js";
 import { SheetStep } from "./history";
 import type { SheetRange } from "./host";
 import type { SheetTypeKind } from "./types";
@@ -59,6 +59,10 @@ export function createSheetTables(look: Y.Map<number | string>, model: Accessor<
   const run = (label: string, change: () => void) => act(label, () => { try { change(); } catch { /* checked before it is asked for */ } });
   const tables = {
     all, at, asked, setAsked,
+    /** This tab's tables as structured references read them, by lowercased name (the formula editor's). */
+    infos: () => { const sheet = model(); return new Map(sheet ? all().map((one) => [one.table.name.toLowerCase(), infoOf(sheet, one)] as const) : []); },
+    /** Every tab's tables' names. */
+    names: () => [...look.keys()].flatMap((name) => /^tables?:[^:]+$/.test(name) ? readTables(look, name.slice(name.indexOf(":") + 1)).map((one) => one.name) : []),
     /** A table asked for over a range, its first row a header where `header`: the prompt confirms both. */
     ask: (made: { range: SheetRange; header: boolean }) => setAsked({ kind: "make", ...made }),
     /** Why a range won't do for a new table (or the table resized), or null. */

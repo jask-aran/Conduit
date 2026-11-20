@@ -25,6 +25,7 @@ export function rowsOf(area: Range, table: SheetTable): { header: number; first:
 export function placed(look: Pick<Look, "get">, sheet: Pick<Sheetish, "id" | "indexOfRow" | "indexOfCol">): PlacedTable[];
 export function tableFilter(sheet: Pick<Sheetish, "rowAt" | "colAt">, table: SheetTable, area: Range): SheetRangedLook | null;
 export function totalFormula(fn: string, name: string): string;
+export function infoOf(sheet: Pick<Sheetish, "id" | "name" | "input">, one: PlacedTable): import("./sheet-structured.js").TableInfo;
 export function columnName(sheet: Pick<Sheetish, "input">, table: SheetTable, range: Range, col: number): string;
 export function totalOf(input: unknown): SheetTotal | undefined;
 export function makeTable(look: Look, sheet: Sheetish, area: Range, header: boolean, set: Writer): SheetTable;

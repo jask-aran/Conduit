@@ -10,7 +10,8 @@ const SHEET = String.raw`(?:'(?:[^']|'')*'|[A-Za-z_À-￿][\w.À-￿]*)!`, CELL 
 const ERROR = String.raw`#(?:REF!|VALUE!|NAME\?|N\/A|DIV\/0!|NUM!|NULL!)`;
 const REF = new RegExp(`(?:${SHEET})?(?:${CELL}(?::(?:${SHEET})?${CELL})?|\\$?[A-Za-z]{1,3}:\\$?[A-Za-z]{1,3}|\\$?\\d+:\\$?\\d+|${ERROR})`, "iy");
 const IDENT = /[A-Za-z_\\À-￿][\w.\\À-￿]*/y, NUMBER = /\d*\.?\d+(?:E[+-]?\d+)?/iy, WORD = /[\w.\\À-￿]/;
-const SPECIALS = ["#All", "#Data", "#Headers", "#Totals", "#This Row"];
+/** Excel's special items, which name a table's rows. */
+export const SPECIALS = ["#All", "#Data", "#Headers", "#Totals", "#This Row"];
 
 const quoted = (text, at, mark) => { for (let i = at + 1; i < text.length; i++) if (text[i] === mark) { if (text[i + 1] === mark) i++; else return i + 1; } return text.length; };
 const bracketEnd = (text, at) => { let depth = 0; for (let i = at; i < text.length; i++) { const ch = text[i]; if (ch === "'") i++; else if (ch === "[") depth++; else if (ch === "]" && --depth === 0) return i + 1; } return text.length; };
@@ -45,7 +46,8 @@ export function referencesOf(text) {
 }
 
 const unescape = (text) => text.replace(/'(.)/g, "$1");
-const escape = (name) => name.replace(/['#[\]]/g, "'$&");
+/** A column's name as brackets hold it: `'` before each `'`, `#`, `[` and `]`. */
+export const escapeName = (name) => name.replace(/['#[\]]/g, "'$&"), escape = escapeName;
 const special = (text) => SPECIALS.find((one) => one.toLowerCase() === text.trim().replace(/\s+/g, " ").toLowerCase());
 // Items in brackets `[a],[b]:[c]` from `at`: each `{ text, start, end }` (its inside), `range` when joined to the one before by `:`.
 const itemsOf = (text, at, stop) => {
