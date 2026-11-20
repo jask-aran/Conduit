@@ -14,9 +14,11 @@ import { readDate, serialDay } from "@/sheet-types.js";
 import { sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
 import { Popover, PopoverContent, Select } from "@/components/ui/menus";
 import { colName, filterHides, key as cellKey, rangeA1, rangedArea, valueText, type SheetFilterTest, type SheetFilterWhen, type SheetRangedLook, type SheetView } from "@/sheet-format.js";
-import type { SheetBox, SheetCellsOp, SheetRange } from "./host";
+import type { SheetBox, SheetCellsOp, SheetKey, SheetRange } from "./host";
 import { PLAIN, type SheetCellStyle } from "./styles";
-import { createSheetTables, TablePrompt } from "./tables";
+import { createSheetTables, TablePrompt, type PlacedTable } from "./tables";
+import type { SheetTypeKind } from "./types";
+import { rowsOf, tableFilter } from "@/sheet-tables.js";
 
 // A column's values its filter lists, at most: Select all still reaches the rest.
 const LISTED = 500;
@@ -31,7 +33,7 @@ const TESTS: { is: SheetFilterTest; label: string; takes: 0 | 1 | 2; kind?: "num
   { is: "empty", label: "Is empty", takes: 0 }, { is: "filled", label: "Is not empty", takes: 0 },
 ];
 const fits = (kind: "number" | "date" | undefined, text: string) => kind === "number" ? text.trim() !== "" && Number.isFinite(Number(text)) : kind === "date" ? readDay(text) !== null : text !== "";
-type Ranged = { range: SheetRange; look: SheetRangedLook };
+type Ranged = { range: SheetRange; look: SheetRangedLook; table?: PlacedTable };
 type What = "filter";
 /** What key sequences and the menu do (sequences.tsx). `col`: the column sorted by; unsaid, the active cell's. */
 export type SheetFilterKeys = { sort(descending: boolean, col?: number): void; filter(): void; table(): void };
@@ -57,15 +59,17 @@ export const regionAround = ({ rows, cols }: { rows: number; cols: number }, has
   return area;
 };
 
+/** What the page lends a filter: its history's named steps, the grid's selection, and a range's cell type (sheet.tsx `setType`). */
+export type SheetFilterHost = { act(label: string, run: () => void): void; select(range: SheetRange): void; setType(range: SheetRange, kind: SheetTypeKind | null): void };
 /** `bold`: whether a cell wears bold (styles.ts), which makes a first row a header. */
-export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<SheetView | undefined>, selection: Accessor<SheetRange | null>, hub: (op: SheetCellsOp) => void, bold: (row: number, col: number) => boolean) {
+export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<SheetView | undefined>, selection: Accessor<SheetRange | null>, hub: (op: SheetCellsOp) => void, bold: (row: number, col: number) => boolean, host: SheetFilterHost) {
   const [changed, setChanged] = createSignal(0);
   const observe = (event: Y.YMapEvent<number | string>) => { for (const name of event.keysChanged) if (name.startsWith("filter:") || name.startsWith("table:") || name.startsWith("tables:")) return void setChanged((n) => n + 1); };
   look.observe(observe);
   onCleanup(() => look.unobserve(observe));
   // Read for every cell the grid draws: parsed once a text, and its range found again only where its corners are no longer where they were.
   const held: Record<What, { text?: string; one: SheetRangedLook | null; at: Ranged | null; ids: (string | undefined)[] }> = { filter: { one: null, at: null, ids: [] } };
-  const tables = createSheetTables(look, model);
+  const tables = createSheetTables(look, model, host.act);
   const read = (what: What): Ranged | null => {
     const sheet = model(), text = sheet?.id ? look.get(`${what}:${sheet.id}`) : undefined, one = held[what];
     if (!sheet || typeof text !== "string") return null;
@@ -77,12 +81,29 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
     one.ids = range ? [sheet.rowAt(range.top), sheet.rowAt(range.bottom), sheet.colAt(range.left), sheet.colAt(range.right)] : [];
     return one.at;
   };
+  // Every filter of the tab: its own, then each table's (its header row to its last data row); made again only when either changes.
+  let ownWas: Ranged | null = null, tablesWas: readonly PlacedTable[] = [], every: Ranged[] = [];
+  const all = (): Ranged[] => {
+    const own = read("filter"), placed = tables.all(), sheet = model();
+    if (own === ownWas && placed === tablesWas) return every;
+    ownWas = own; tablesWas = placed;
+    every = [...own ? [own] : [], ...placed.flatMap((table) => { const one = sheet && tableFilter(sheet, table.table, table.range); return one ? [{ range: { ...table.range, bottom: rowsOf(table.range, table.table).last }, look: one, table }] : []; })];
+    return every;
+  };
+  // The filter the active cell is in, a table's first; else the tab's own.
+  const current = (): Ranged | null => { const area = selection(), list = all(); return (area && [...list].reverse().find((one) => inside(one.range, area.top, area.left))) ?? read("filter"); };
   const write = (what: What, range: SheetRange | null, rest: Partial<SheetRangedLook> = {}) => {
     const sheet = model();
     if (!sheet?.id) return;
     if (!range) return void look.delete(`${what}:${sheet.id}`);
     const ids = [sheet.rowAt(range.top), sheet.colAt(range.left), sheet.rowAt(range.bottom), sheet.colAt(range.right)];
     if (ids.every(Boolean)) look.set(`${what}:${sheet.id}`, JSON.stringify({ ...rest, from: cellKey(ids[0]!, ids[1]!), to: cellKey(ids[2]!, ids[3]!) }));
+  };
+  // A filter written: the tab's own, or a table's `keep`, `when` and `hide`.
+  const put = (on: Ranged, next: SheetRangedLook) => {
+    if (!on.table) return write("filter", on.range, next);
+    const { keep, when, hide } = next;
+    tables.put(on.table.table.id, { keep, when, hide });
   };
   const text = (row: number, col: number) => valueText(model()?.value(row, col) ?? null);
 
@@ -96,15 +117,16 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
     return cols.every((col) => bold(range.top, col)) || below.some((row) => cols.some((col) => { const value = sheet.value(row, col); return typeof value === "number" || typeof value === "boolean"; }))
       || cols.every((col) => below.every((row) => text(row, col).toLowerCase() !== text(range.top, col).toLowerCase()));
   };
-  // A lone cell is the filter or table it is in, else its block; whole columns are the block around their first filled cell, as wide as they are.
+  // A lone cell is the filter or table it is in (a table's rows without its total row), else its block; whole columns are the block around their
+  // first filled cell, as wide as they are.
   const target = (): { range: SheetRange; header: boolean } | null => {
     const area = selection(), sheet = model();
     if (!area || !sheet) return null;
     const { rows, cols } = sheet.size(), lone = area.top === area.bottom && area.left === area.right, columns = !lone && area.top === 0 && area.bottom >= rows - 1;
     if (lone) {
-      const filtered = read("filter"), table = tables.at(area.top, area.left);
+      const table = tables.at(area.top, area.left), filtered = read("filter");
+      if (table) return { range: { ...table.range, bottom: rowsOf(table.range, table.table).last }, header: table.table.header !== false };
       if (filtered && inside(filtered.range, area.top, area.left)) return { range: filtered.range, header: true };
-      if (table) return { range: table.range, header: table.table.header !== false };
     }
     if (area.top >= rows || area.left >= cols) return null;
     let range = { ...area, bottom: Math.min(area.bottom, rows - 1), right: Math.min(area.right, cols - 1) };
@@ -123,50 +145,60 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
   /** The values a column's rows under the filter's header show, each once, in order, "" (blank) last. */
   const values = (col: number) => {
     changed();
-    const on = read("filter"), seen = new Set<string>();
+    const on = current(), seen = new Set<string>();
     if (on) for (let row = on.range.top + 1; row <= on.range.bottom; row++) seen.add(text(row, col));
     return [...seen].sort(byValue);
   };
   /** A column's own test, keeping its values or its condition (`when`), replaced (null: none), the filter applied with it. */
   const test = (col: number, values: ReadonlySet<string> | null, when: SheetFilterWhen | null) => {
-    const on = read("filter"), id = model()?.colAt(col);
+    const on = current(), id = model()?.colAt(col);
     if (!on || !id) return;
     const keep = { ...on.look.keep }, whens = { ...on.look.when };
     delete keep[id]; delete whens[id];
     if (values) keep[id] = [...values];
     if (when) whens[id] = when;
-    apply(on.range, { ...on.look, keep: Object.keys(keep).length ? keep : undefined, when: Object.keys(whens).length ? whens : undefined });
+    apply(on, { ...on.look, keep: Object.keys(keep).length ? keep : undefined, when: Object.keys(whens).length ? whens : undefined });
   };
   /** The values the filter keeps for a column; null for all. */
-  const kept = (col: number): ReadonlySet<string> | null => { changed(); const id = model()?.colAt(col), list = id ? read("filter")?.look.keep?.[id] : undefined; return list ? new Set(list) : null; };
+  const kept = (col: number): ReadonlySet<string> | null => { changed(); const id = model()?.colAt(col), list = id ? current()?.look.keep?.[id] : undefined; return list ? new Set(list) : null; };
   /** The filter written with the rows its kept values leave out now (`hide`), where that changes it. */
-  const apply = (range: SheetRange, next: SheetRangedLook) => {
+  const apply = (on: Ranged, next: SheetRangedLook) => {
     const sheet = model();
     if (!sheet) return;
-    const hide = filterHides(sheet, next), was = read("filter");
-    const same = (one: SheetRange, two: SheetRange) => one.top === two.top && one.left === two.left && one.bottom === two.bottom && one.right === two.right;
-    if (was && same(was.range, range) && ["keep", "when"].every((what) => JSON.stringify(was.look[what as "keep"] ?? {}) === JSON.stringify(next[what as "keep"] ?? {})) && JSON.stringify(was.look.hide ?? []) === JSON.stringify(hide)) return;
-    write("filter", range, { ...next, hide: hide.length ? hide : undefined });
+    const hide = filterHides(sheet, next);
+    if (["keep", "when"].every((what) => JSON.stringify(on.look[what as "keep"] ?? {}) === JSON.stringify(next[what as "keep"] ?? {})) && JSON.stringify(on.look.hide ?? []) === JSON.stringify(hide)) return;
+    put(on, { ...next, hide: hide.length ? hide : undefined });
   };
   const bolded = new Map<SheetCellStyle | undefined, SheetCellStyle>();
+  const here = () => { const area = selection(); return area ? tables.at(area.top, area.left) : null; };
   const keys: SheetFilterKeys = {
     sort: (descending, col) => { const on = target(); if (on) sortRange(on, descending, col ?? selection()?.left ?? on.range.left); },
-    filter: () => { if (read("filter")) write("filter", null); else { const on = target(); if (on) write("filter", on.range); } },
-    // Made over the selection (none over another table), or taken off where the active cell is in one, the filter on it with it. The tab's filter
-    // moves onto a new table unless it is on other cells, keeping the values it keeps in the table's columns.
-    table: () => {
-      const area = selection(), now = area && tables.at(area.top, area.left), on = now ? null : target(), was = read("filter");
-      const same = (one: SheetRange, two: SheetRange) => one.top === two.top && one.left === two.left && one.bottom === two.bottom && one.right === two.right;
-      if (now) return void look.doc!.transact(() => { tables.remove(now); if (was && same(was.range, now.range)) write("filter", null); });
-      if (!on || tables.overlaps(on.range)) return;
-      look.doc!.transact(() => {
-        tables.make(on.range);
-        if (was && !(was.range.top <= on.range.bottom && on.range.top <= was.range.bottom && was.range.left <= on.range.right && on.range.left <= was.range.right)) return;
-        const keep = Object.fromEntries(Object.entries(was?.look.keep ?? {}).filter(([id]) => { const col = model()?.indexOfCol(id) ?? -1; return col >= on.range.left && col <= on.range.right; }));
-        const ids = [model()?.rowAt(on.range.top), model()?.colAt(on.range.left), model()?.rowAt(on.range.bottom), model()?.colAt(on.range.right)];
-        if (ids.every(Boolean)) apply(on.range, { from: cellKey(ids[0]!, ids[1]!), to: cellKey(ids[2]!, ids[3]!), keep: Object.keys(keep).length ? keep : undefined });
-      });
+    // In a table, its filter buttons shown or hidden; elsewhere the tab's own filter on or off.
+    filter: () => {
+      const table = here();
+      if (table) return tables.change(table, { filter: table.table.filter === false }, table.table.filter === false ? "Filter" : "Remove filter");
+      if (read("filter")) write("filter", null); else { const on = target(); if (on) write("filter", on.range); }
     },
+    // A table asked for over the selection (Convert to table), or taken off where the active cell is in one (Convert to range).
+    table: () => {
+      const table = here();
+      if (table) return host.act("Convert to range", () => tables.remove(table));
+      const on = target();
+      if (on) tables.ask({ range: on.range, header: on.header });
+    },
+  };
+  // Ctrl+Space, Shift+Space and Ctrl+A in a table: its column's data, its row, its data; pressed again, with its header and total rows, then on as
+  // the sheet's own.
+  const pick = (kind: "cols" | "rows" | "all") => {
+    const area = selection(), table = here();
+    if (!area || !table) return false;
+    const { range } = table, rows = rowsOf(range, table.table), data = { ...range, top: rows.first, bottom: rows.last };
+    const same = (one: SheetRange) => one.top === area.top && one.bottom === area.bottom && one.left === area.left && one.right === area.right;
+    const steps = kind === "cols" ? [{ ...data, left: area.left, right: area.right }, { ...range, left: area.left, right: area.right }] : kind === "rows" ? [{ ...area, left: range.left, right: range.right }] : [data, range];
+    const next = steps.find((step, n) => !same(step) && (n === 0 || same(steps[n - 1]!)));
+    if (!next) return false;
+    host.select(next);
+    return true;
   };
   return {
     keys, values, kept,
@@ -174,51 +206,56 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
     region: target,
     /** The block of filled cells joined to a cell. */
     around: (row: number, col: number) => { const sheet = model(); return sheet ? block(sheet, row, col) : null; },
-    filter: () => { changed(); return read("filter"); },
+    /** The filter the active cell is in (a table's own, else the tab's). */
+    filter: () => { changed(); return current(); },
     /** The table the active cell is in. */
-    table: () => { changed(); const area = selection(); return area ? tables.at(area.top, area.left) : null; },
+    table: () => { changed(); return here(); },
     tables,
     /** What only the palette and a search of the cell menu find of the active cell's table; each runs once the menu has shut. */
-    tableActions: () => { changed(); const area = selection(), on = area && tables.at(area.top, area.left); return on ? [
-      { label: "Rename table…", meta: on.table.name, run: () => tables.setRenaming(on) },
-      { label: "Convert to range", run: () => keys.table() },
-    ] : []; },
+    tableActions: () => { changed(); const on = here(), area = selection(); return on ? tables.actions(on, (range, kind) => host.setType(range, kind), area?.left) : []; },
+    /** A table column's data takes a cell type (from its header's menu), as rows it grows into do. */
+    typeColumn: (col: number, kind: SheetTypeKind | null) => { const on = here(); if (on) { const rows = rowsOf(on.range, on.table); host.setType({ top: rows.first, bottom: rows.last, left: col, right: col }, kind); } },
     /** Sorts the filter's rows under its header by a column. */
-    sortColumn: (col: number, descending: boolean) => { const on = read("filter"); if (on) sortRange({ range: on.range, header: true }, descending, col); },
+    sortColumn: (col: number, descending: boolean) => { const on = current(); if (on) sortRange({ range: on.range, header: true }, descending, col); },
     /** The values a column keeps (null: every one), the filter applied with them; its condition goes. */
     keep: (col: number, values: ReadonlySet<string> | null) => test(col, values, null),
     /** A column's condition (null: none), in place of the values it kept. */
-    when: (col: number): SheetFilterWhen | null => { changed(); const id = model()?.colAt(col); return (id && read("filter")?.look.when?.[id]) || null; },
+    when: (col: number): SheetFilterWhen | null => { changed(); const id = model()?.colAt(col); return (id && current()?.look.when?.[id]) || null; },
     setWhen: (col: number, when: SheetFilterWhen | null) => test(col, null, when),
     /** Whether a column keeps only some rows, by its values or its condition. */
-    narrows: (col: number) => { changed(); const id = model()?.colAt(col), look = read("filter")?.look; return Boolean(id && (look?.keep?.[id] || look?.when?.[id])); },
-    /** The rows under the filter's header and how many it shows, while any column narrows them. */
+    narrows: (col: number) => { changed(); const id = model()?.colAt(col), look = current()?.look; return Boolean(id && (look?.keep?.[id] || look?.when?.[id])); },
+    /** The rows under the filter's header and how many it shows, while any column narrows them: the active cell's, else the first that does. */
     counted: () => {
       changed();
-      const on = read("filter");
-      if (!on || !(Object.keys(on.look.keep ?? {}).length || Object.keys(on.look.when ?? {}).length)) return null;
+      const narrowing = (one: Ranged | null) => one && (Object.keys(one.look.keep ?? {}).length || Object.keys(one.look.when ?? {}).length) ? one : null;
+      const on = narrowing(current()) ?? all().find(narrowing);
+      if (!on) return null;
       const total = on.range.bottom - on.range.top;
       return { total, shown: total - (on.look.hide?.length ?? 0) };
     },
-    /** The filter applied again to the values its rows hold now, outside any step. */
-    reapply: () => { const on = read("filter"); if (on) look.doc!.transact(() => apply(on.range, on.look), UNTRACKED); },
-    /** Rows the filter hides shown again, until it is applied again. */
+    /** Every filter applied again to the values its rows hold now, outside any step. */
+    reapply: () => { const list = all(); if (list.length) look.doc!.transact(() => { for (const on of list) apply(on, on.look); }, UNTRACKED); },
+    /** Rows a filter hides shown again, until it is applied again. */
     show: (rows: readonly number[]) => {
-      const on = read("filter"), ids = new Set(rows.map((row) => model()?.rowAt(row)));
-      if (!on?.look.hide?.some((id) => ids.has(id))) return;
-      const hide = on.look.hide.filter((id) => !ids.has(id));
-      write("filter", on.range, { ...on.look, hide: hide.length ? hide : undefined });
+      const ids = new Set(rows.map((row) => model()?.rowAt(row)));
+      for (const on of all()) {
+        if (!on.look.hide?.some((id) => ids.has(id))) continue;
+        const hide = on.look.hide.filter((id) => !ids.has(id));
+        put(on, { ...on.look, hide: hide.length ? hide : undefined });
+      }
     },
-    /** The rows the filter hid when last applied (`hide`): one snapshot every page and the grid read alike. */
+    /** The rows the filters hid when last applied (`hide`): one snapshot every page and the grid read alike. */
     hidden: (): ReadonlySet<number> => {
-      const sheet = model(), on = read("filter"), out = new Set<number>();
-      if (sheet && on?.look.hide) for (const id of on.look.hide) { const row = sheet.indexOfRow(id); if (row > on.range.top && row <= on.range.bottom) out.add(row); }
+      const sheet = model(), out = new Set<number>();
+      if (sheet) for (const on of all()) for (const id of on.look.hide ?? []) { const row = sheet.indexOfRow(id); if (row > on.range.top && row <= on.range.bottom) out.add(row); }
       return out;
     },
-    /** The filter's mark on a header cell: 0 none, 1 a filter, 2 a filter keeping only some values. */
+    /** A filter's mark on a header cell: 0 none, 1 a filter, 2 a filter keeping only some values. */
     mark: (row: number, col: number) => {
-      const on = read("filter");
-      if (!on || row !== on.range.top || col < on.range.left || col > on.range.right) return 0;
+      const list = all();
+      if (!list.length) return 0;
+      const on = list.find((one) => row === one.range.top && col >= one.range.left && col <= one.range.right);
+      if (!on) return 0;
       const id = model()?.colAt(col);
       return id && (on.look.keep?.[id] || on.look.when?.[id]) ? 2 : 1;
     },
@@ -230,12 +267,31 @@ export function createSheetFilter(look: Y.Map<number | string>, model: Accessor<
       if (!made) bolded.set(worn, made = { ...(worn ?? PLAIN), bold: true });
       return made;
     },
-    /** Ctrl+Shift+L turns the filter on or off, Ctrl+T makes a table or takes it off. True when taken. */
+    /**
+     * Ctrl+Shift+L turns the filter on or off; Ctrl+T and Ctrl+L ask for a table (a browser tab keeps Ctrl+T for a new tab; Ctrl+L reaches the page,
+     * as the desktop app's both do); Ctrl+A in a table selects its data, then all of it. True when taken.
+     */
     key: (event: KeyboardEvent) => {
-      const ctrl = (event.ctrlKey || event.metaKey) && !event.altKey, which = ctrl && event.shiftKey && event.code === "KeyL" ? keys.filter : ctrl && !event.shiftKey && event.code === "KeyT" ? keys.table : null;
+      const ctrl = (event.ctrlKey || event.metaKey) && !event.altKey;
+      if (ctrl && !event.shiftKey && event.code === "KeyA" && pick("all")) { event.preventDefault(); return true; }
+      const table = here();
+      if (ctrl && event.shiftKey && event.code === "KeyT" && table) { event.preventDefault(); tables.change(table, { total: !table.table.total }, "Total row"); return true; }
+      const which = ctrl && event.shiftKey && event.code === "KeyL" ? keys.filter : ctrl && !event.shiftKey && (event.code === "KeyT" || event.code === "KeyL") ? () => { if (!here()) keys.table(); } : null;
       if (!which) return false;
       event.preventDefault();
       which();
+      return true;
+    },
+    /** The grid's keys in a table: Ctrl+Space and Shift+Space select its column and row; Tab in its last cell adds a row. True when taken. */
+    gridKey: (event: SheetKey) => {
+      if (event.key === " " && event.ctrlKey !== event.shiftKey && !event.altKey && !event.metaKey && pick(event.ctrlKey ? "cols" : "rows")) { event.preventDefault(); return true; }
+      if (event.key !== "Tab" || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return false;
+      const area = selection(), table = here();
+      if (!area || !table || area.top !== area.bottom || area.left !== area.right || area.left !== table.range.right || area.top !== rowsOf(table.range, table.table).last) return false;
+      const row = tables.addRow(table);
+      if (row === null) return false;
+      event.preventDefault();
+      host.select({ top: row, bottom: row, left: table.range.left, right: table.range.left });
       return true;
     },
   };
@@ -264,7 +320,9 @@ export function FilterMenu(props: { filter: SheetFilter; at: { col: number; box:
   const ask = () => { const at = col(); close(); setAsking(at); }, clear = () => { props.filter.keep(col(), null); close(); };
   // The keyboard stays in the search: Up and Down pick a row, Enter runs it (a value shown or hidden), or with none picked shows the values found alone.
   const [cursor, setCursor] = createSignal(-1);
-  const rows = () => [() => sort(false), () => sort(true), ask, ...props.filter.narrows(col()) ? [clear] : [], pickFound, ...found().slice(0, LISTED).map((value) => () => toggle(value))];
+  const typed = (kind: SheetTypeKind | null) => () => { props.filter.typeColumn(col(), kind); close(); };
+  const types = () => props.filter.table() ? TYPES.map(([, kind]) => typed(kind)) : [], typesAt = () => 3 + Number(props.filter.narrows(col()));
+  const rows = () => [() => sort(false), () => sort(true), ask, ...props.filter.narrows(col()) ? [clear] : [], ...types(), pickFound, ...found().slice(0, LISTED).map((value) => () => toggle(value))];
   const listed = () => rows().length - Math.min(found().length, LISTED) - 1;
   const key = (event: KeyboardEvent) => {
     const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
@@ -287,6 +345,9 @@ export function FilterMenu(props: { filter: SheetFilter; at: { col: number; box:
           <Item icon={<SortIcons.filter />} meta={TESTS.find((one) => one.is === props.filter.when(col())?.is)?.label} active={cursor() === 2} onClick={ask}>Filter by condition…</Item>
           <Show when={props.filter.narrows(col())}><Item icon={<Icons.Erase />} active={cursor() === 3} onClick={clear}>Clear filter</Item></Show>
         </Section>
+        <Show when={props.filter.table()}><Section title="Column type">
+          <For each={TYPES}>{([label, kind], at) => <Item active={cursor() === typesAt() + at()} onClick={typed(kind)}>{label}</Item>}</For>
+        </Section></Show>
         <SearchSection placeholder="Search values" value={query()} onInput={(text) => { setQuery(text); setCursor(-1); }} field={{ "aria-label": "Search values", onKeyDown: key }} />
         <Section title="Show" scroll>
           <Item picked={query().trim() ? found().length > 0 && alone() : all()} active={cursor() === listed()} onClick={pickFound}>{query().trim() ? "Select all found" : "Select all"}</Item>
@@ -299,6 +360,7 @@ export function FilterMenu(props: { filter: SheetFilter; at: { col: number; box:
   </>;
 }
 
+const TYPES = [["Plain", null], ["Checkbox", "boolean"], ["Date", "date"]] as const;
 const DATE_HINT = "30/1/2026";
 // A condition's date is shown and typed as a date cell is (d/m/yyyy) and kept as ISO, which `dayOf` (sheet-format.js) reads.
 function readDay(text: string) { const serial = readDate(text); return serial === null ? null : serialDay(serial); }

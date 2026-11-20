@@ -4,6 +4,7 @@ import { HyperFormula } from "hyperformula";
 import * as XLSX from "xlsx";
 import { COL_LIMIT, SHEET_LIMIT, WORKBOOK_LIMIT, a1, colIndex, colName, parseA1, parseRange, tabName, toCsv, valueText } from "../sheet-format.js";
 import { CONFIG, defineNames } from "../sheet-engine.js";
+import { totalFormula } from "../sheet-tables.js";
 import { NAMES } from "../sheet-functions.js";
 import { shiftRefs } from "../sheet-rules.js";
 import { decodeStyle, encodeStyle, SHEET_INKS } from "../sheet-styles.js";
@@ -228,15 +229,16 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     tab.rules = ruled.rules; tab.rulesKept = ruled.kept;
     for (const [type, count] of Object.entries(ruled.unread)) drop(`conditional formats (${type})`, count);
     tab.validations = validationsOf(xml);
-    // Each table by its range, name, header and total rows, style and each column's total; the tab's filter is its first table's, or else the
-    // sheet's own. The criteria a filter was last applied with are read, the rows it hid are.
-    const parts = linked(xmlOf[tab.called] ?? "", "table").map(text).filter((part) => attr(/<table\b[^>]*>/.exec(part)?.[0] ?? "", "ref")), table = parts[0];
-    tab.tables = parts.map(tableOf);
-    const filter = /<autoFilter\b[^>]*>/.exec(xml)?.[0];
-    // A table's filter is its own part's: its conditions are read from there.
-    const filtering = table ? /<autoFilter\b[\s\S]*?(?:\/>|<\/autoFilter>)/.exec(table)?.[0] : /<autoFilter\b[^>]*?(?:\/>|>[\s\S]*?<\/autoFilter>)/.exec(xml)?.[0];
-    const dated = (c) => { const cell = tab.data[parseRange(attr(filtering, "ref")).top + 1]?.[c]; return typeof cell?.z === "string" && XLSX.SSF.is_date(cell.z); };
-    if (filtering && attr(filtering, "ref")) { const conditions = filterOf(filtering, attr(filtering, "ref"), dated, drop); if (!table || Object.keys(conditions).length) tab.filter = { range: attr(filtering, "ref"), ...conditions }; }
+    // Each table by its range, name, header and total rows, style and filter (its part's own: a table without one shows no buttons), and the sheet's
+    // own filter. The criteria a filter was last applied with are read; the rows it hid are hidden rows.
+    const conditionsOf = (filtering) => { const ref = attr(filtering, "ref"), dated = (c) => { const cell = tab.data[parseRange(ref).top + 1]?.[c]; return typeof cell?.z === "string" && XLSX.SSF.is_date(cell.z); }; return filterOf(filtering, ref, dated, drop); };
+    const autoFilter = (part) => /<autoFilter\b[^>]*?(?:\/>|>[\s\S]*?<\/autoFilter>)/.exec(part)?.[0];
+    tab.tables = linked(xmlOf[tab.called] ?? "", "table").map(text).filter((part) => attr(/<table\b[^>]*>/.exec(part)?.[0] ?? "", "ref")).map((part) => {
+      const one = tableOf(part), filtering = autoFilter(part);
+      return filtering && attr(filtering, "ref") ? { ...one, ...conditionsOf(filtering) } : one.header === false ? one : { ...one, filter: false };
+    });
+    const filtering = autoFilter(xml);
+    if (filtering && attr(filtering, "ref")) tab.filter = { range: attr(filtering, "ref"), ...conditionsOf(filtering) };
     // Its outline (Excel's row and column groups): each line's level (`outline:<row or column>`, as the page's grouping keeps it; a collapsed group's lines
     // are hidden, and its mark is written again from them), and where the summaries sit (`outlinePr`).
     tab.outline = {};
@@ -256,8 +258,11 @@ export function importXlsx(bytes, { tabs: only } = {}) {
   const formulas = [];
   for (const tab of read) {
     tab.typed = Array.from({ length: tab.rows }, () => new Array(tab.cols).fill(null));
-    cellsOf(tab.data, (cell, r, c) => {
+    // A table's total cell is the SUBTOTAL its column's function writes, over its data by A1, which the engine reads.
+    const totals = new Map(tab.tables.flatMap(({ range, header, totals: fns }) => { const area = parseRange(range); return area && fns ? Object.entries(fns).map(([letter, fn]) => [a1(area.bottom, colIndex(letter)), totalFormula(fn, { top: area.top + (header === false ? 0 : 1), bottom: area.bottom - 1, left: colIndex(letter), right: colIndex(letter) }).slice(1)]) : []; }));
+    cellsOf(tab.data, (given, r, c) => {
       if (r >= tab.rows || c >= tab.cols) return;
+      const cell = totals.has(a1(r, c)) ? { ...given, f: totals.get(a1(r, c)) } : given;
       // An array formula (a dynamic one that spills, or one entered with Ctrl+Shift+Enter) is typed on its first cell alone, and spills over the rest as
       // the engine computes it; its range and kind are kept (`array:<cell>`) so an export writes it as the file had it.
       if (cell.F && !cell.f) return;
@@ -367,7 +372,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
       if (tab.charts.length) look.charts = tab.charts;
       for (const [at, note] of Object.entries(tab.notes)) look[`note:${at}`] = note;
       for (const [at, list] of Object.entries(tab.drawn)) look[`drawing:${at}`] = list;
-      if (tab.tables.length) look.tables = tab.tables;
+      if (tab.tables.length) look.tables = tab.tables.map(({ totals: _, ...one }) => one);
       if (tab.filter) look.filter = tab.filter;
       // A frozen formula goes with its cell (`excel:<rowId>:<colId>` once in the doc), written for the cell it was in (`anchor`), as a rule's are.
       for (const [at, one] of Object.entries(report.frozen[tab.name] ?? {})) if (!one.why.startsWith("a formula over")) look[`excel:${at}`] = { formula: one.formula, value: one.kept, anchor: at };
@@ -481,14 +486,16 @@ export function exportXlsx(given) {
     if (!sheet["!cols"].some(Boolean)) delete sheet["!cols"];
     // Each row's height where it has its own, in points (SheetJS writes pixels as points), and the rows hidden.
     // The rows hidden, and those the filter hid when last applied.
-    const filteredOut = new Set(tab.look.filter?.hide ?? []);
+    const filteredOut = new Set([...tab.look.filter?.hide ?? [], ...(Array.isArray(tab.look.tables) ? tab.look.tables.flatMap((table) => table.hide ?? []) : [])]);
     sheet["!rows"] = tab.typed.map((_, r) => { const height = tab.look[`height:${r + 1}`]; return { ...(typeof height === "number" ? { hpt: exact(tab.look[`exact:${r + 1}`], height, (pt) => pt / PT_PER_PX, (px) => px * PT_PER_PX) } : {}), ...(tab.look[`hidden:${r + 1}`] || filteredOut.has(r + 1) ? { hidden: true } : {}), ...level(r + 1) }; });
     // Each table is its own part (xlsx-parts.js); one Excel would repair is written as its filter alone. A table's part holds its own filter: the
     // tab's filter over one is written there, as a sheet's filter over it is one Excel repairs.
-    const listed = Array.isArray(tab.look.tables) ? tab.look.tables : tab.look.table ? [tab.look.table] : [], filter = tab.look.filter;
-    tab.tableParts = listed.flatMap((table) => { const part = tablePart(table, tab.values, tables + 1, tableNames, filterColumns(filter?.range === table.range ? filter : null)); if (part) tables++; return part ?? []; });
-    tab.filterInTable = tab.tableParts.some((part) => part.range === filter?.range);
-    const filtered = tab.filterInTable ? undefined : filter?.range ?? (tab.tableParts.length ? undefined : listed.find((table) => table.header !== false)?.range);
+    // A tab's filter over a table (as the page made one before tables kept their own) is the table's.
+    const listed = Array.isArray(tab.look.tables) ? tab.look.tables : tab.look.table ? [tab.look.table] : [], filter = tab.look.filter, own = (table) => table.range === filter?.range && !table.keep && !table.when;
+    const made = listed.map((table) => { const part = tablePart(table, tab.values, tables + 1, tableNames, filterColumns(own(table) ? filter : table), tab.typed); if (part) tables++; return part; });
+    tab.tableParts = made.filter(Boolean);
+    tab.filterInTable = listed.some((table, n) => own(table) && made[n]);
+    const filtered = tab.filterInTable || listed.some((table) => table.range === filter?.range) ? undefined : filter?.range;
     if (typeof filtered === "string") sheet["!autofilter"] = { ref: filtered };
     if (Array.isArray(tab.look.merges)) sheet["!merges"] = tab.look.merges.map((range) => XLSX.utils.decode_range(String(range)));
     XLSX.utils.book_append_sheet(book, sheet, tab.name);

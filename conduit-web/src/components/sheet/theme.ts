@@ -57,7 +57,7 @@ export function readLook(where: HTMLElement, as: SheetDisplay = { gridlines: tru
     // A wash of each ink: the grid fills a reference with it and outlines it in the ink itself.
     inks: INKS.map((ink) => colour(`color-mix(in oklch, var(${ink}), transparent var(--tone-wash))`)),
     strong: token("--weight-strong") || "600", edge: colour("var(--muted-foreground)"), corner: length("var(--space-sm)"), target: length("var(--control-xs)"),
-    palette: Object.fromEntries(SHEET_INKS.map((ink) => [ink, { text: colour(`var(${SHEET_INK_TOKENS[ink]})`), fill: colour(sheetFill(ink)) }])) as SheetLook["palette"],
+    palette: Object.fromEntries(SHEET_INKS.map((ink) => [ink, { text: colour(`var(${SHEET_INK_TOKENS[ink]})`), fill: colour(sheetFill(ink)), band: colour(wash("--tone-wash", SHEET_INK_TOKENS[ink])) }])) as SheetLook["palette"],
   };
   probe.remove();
   return look;

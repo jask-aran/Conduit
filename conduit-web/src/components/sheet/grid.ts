@@ -25,8 +25,8 @@ export type SheetColumns = { width(col: number): number | undefined; type(row: n
   pill(row: number, col: number, type: string | undefined, shown: string): SheetPill | undefined;
   /** Where a cell's link goes (types.ts); undefined where it is none. */
   link(row: number, col: number, text: string): string | undefined; heights(): ReadonlyMap<number, number>; draw(row: number, col: number, value: number | string): SheetDrawn | null; dated(row: number, col: number): boolean; style(row: number, col: number): SheetCellStyle | undefined; frozen(row: number, col: number): boolean; invalid?(row: number, col: number): boolean; freeze(): { rows: number; cols: number }; hidden(): ReadonlySet<number>; hiddenCols(): ReadonlySet<number>;
-  /** A filter's mark on a header cell (0 none, 1 a filter, 2 one keeping only some values) and a table's banded rows (filter.tsx). */
-  mark(row: number, col: number): number; banded(row: number, col: number): boolean;
+  /** A filter's mark on a header cell (0 none, 1 a filter, 2 one keeping only some values) and a table's banded rows' wash (0 none, 1 grey, 2+ an ink of SHEET_INKS; tables.tsx). */
+  mark(row: number, col: number): number; banded(row: number, col: number): number;
   /** The tab's merged ranges (merges.ts). */
   merges(): readonly SheetRange[];
   /** A row's or column's group level and the control standing on it (outline.ts). */
@@ -573,7 +573,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     const contentOf = (p: Part) => {
       const hues = { destructive: theme.error, live: theme.live, warn: theme.warn }, { theme: themed } = cellLook;
       // A table's banded rows are washed where a cell has no fill of its own; made once a look, as the grid compares them by identity.
-      const washes = new Map<Partial<Theme> | undefined, Partial<Theme>>(), washed = (made?: Partial<Theme>) => made?.bgCell ? made : washes.get(made) ?? washes.set(made, { ...made, bgCell: theme.mark }).get(made)!;
+      const washes = [0, 1, 2, 3, 4, 5].map(() => new Map<Partial<Theme> | undefined, Partial<Theme>>()), tones = [theme.mark, theme.mark, ...Object.values(theme.palette).map((ink) => ink.band)];
+      const washed = (made: Partial<Theme> | undefined, tone: number) => made?.bgCell ? made : washes[tone]!.get(made) ?? washes[tone]!.set(made, { ...made, bgCell: tones[tone] }).get(made)!;
       const withMark = (cell: TextCell, mark: number) => { cell.mark = mark; return cell; };
       // A merge is its top-left cell spanning its columns in each of its rows; past one row, each row draws its share of the whole (`block`: the
       // pixels above it in the merge, and the merge's height), and the rows' own lines inside it are left out (`lineCut`): each cell outside a
@@ -614,19 +615,19 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         const style = options.columns.style(row, col);
         // Formulas shown (Ctrl+`): a formula cell shows what was typed, at its left.
         const written = options.columns.formulas() ? input ?? model.input(row, col) : null;
-        if (written?.startsWith("=")) return withMark(new TextCell(row, col, written, written, "left", striped ? washed(themed(style)) : themed(style), style), mark);
+        if (written?.startsWith("=")) return withMark(new TextCell(row, col, written, written, "left", striped ? washed(themed(style), striped) : themed(style), style), mark);
         // An empty cell is drawn for its fill and edges alone; one an array formula spills text into is not empty.
         // A dropdown draws its arrow, empty or not.
         const pill = type?.startsWith("list:") ? options.columns.pill(row, col, type, value === null ? "" : String(value)) : undefined;
-        if (pill) { const cell = withMark(new TextCell(row, col, input, String(value ?? ""), undefined, striped ? washed(themed(style)) : themed(style), style), mark); cell.pill = pill; return cell; }
-        if (input === "" && !value) { const spill = spillInto(row, col); if (spill) { const cell = withMark(new TextCell(row, col, "", "", undefined, striped ? washed(themed(style)) : themed(style), style), mark); cell.spill = spill; return cell; } }
-        if (input === "" && !value && type === "date") { const cell = withMark(new TextCell(row, col, "", "", undefined, striped ? washed(themed(style)) : themed(style), style), mark); cell.arrow = true; return cell; }
-        if (input === "" && !value) return style || mark || striped ? withMark(new TextCell(row, col, "", "", undefined, striped ? washed(themed(style)) : themed(style), style), mark) : EMPTY;
+        if (pill) { const cell = withMark(new TextCell(row, col, input, String(value ?? ""), undefined, striped ? washed(themed(style), striped) : themed(style), style), mark); cell.pill = pill; return cell; }
+        if (input === "" && !value) { const spill = spillInto(row, col); if (spill) { const cell = withMark(new TextCell(row, col, "", "", undefined, striped ? washed(themed(style), striped) : themed(style), style), mark); cell.spill = spill; return cell; } }
+        if (input === "" && !value && type === "date") { const cell = withMark(new TextCell(row, col, "", "", undefined, striped ? washed(themed(style), striped) : themed(style), style), mark); cell.arrow = true; return cell; }
+        if (input === "" && !value) return style || mark || striped ? withMark(new TextCell(row, col, "", "", undefined, striped ? washed(themed(style), striped) : themed(style), style), mark) : EMPTY;
         // An error is shown by its code, as the engine names it; only a value that could be one is asked whether it is.
         const fault = typeof value === "string" && value.startsWith("#") && model.error(row, col) !== null;
         const drawn = fault || value === null || typeof value === "boolean" ? null : options.columns.draw(row, col, value);
         const worn = themed(style, fault ? theme.error : drawn?.hue && hues[drawn.hue]);
-        const made = withMark(new TextCell(row, col, input, drawn ? drawn.text : shown(value), style?.align ?? (typeof value === "number" || type === "number" ? "right" : undefined), striped ? washed(worn) : worn, style,
+        const made = withMark(new TextCell(row, col, input, drawn ? drawn.text : shown(value), style?.align ?? (typeof value === "number" || type === "number" ? "right" : undefined), striped ? washed(worn, striped) : worn, style,
           input !== null && !input.startsWith("=") && options.columns.frozen(row, col) || undefined), mark);
         if (typeof value === "string" && !fault) made.link = options.columns.link(row, col, value);
         if (type === "date") made.arrow = true;

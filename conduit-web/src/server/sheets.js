@@ -11,7 +11,7 @@ import { CHART_LIMIT, chartFrom, chartIds, chartsA1, keptCharts, readCharts } fr
 import { writePrivateFile } from "../private-file.js";
 import { cleanOptions, readDate, restoreValidations, validationsA1, VALID, writeType } from "../sheet-types.js";
 import { hubRefusal } from "../sheet-valid.js";
-import { readTables, tablesA1, tablesIds, takenNames, writeTables } from "../sheet-tables.js";
+import { changeTable, makeTable, placed as placedTables, readTables, removeTable, tableFilter, tablesA1, tablesIds, tableWrites, takenNames, writeTables } from "../sheet-tables.js";
 
 /*
  * The sheet artifact kind on the hub (sheet-format.js): a .csv that holds the values, the formulas beside it in sheet.json, and the live copy in
@@ -186,11 +186,14 @@ export function sheetKind(hub) {
   };
   /** The tab's filter applied again (its `hide`), written only where that changes. */
   const refilter = (room, sheet, by) => {
-    const name = `filter:${sheet.id}`, text = room.look.get(name);
+    const name = `filter:${sheet.id}`, text = room.look.get(name), tables = placedTables(room.look, sheet);
     let filter;
-    try { filter = JSON.parse(String(text)); } catch { return; }
-    const hide = filterHides(sheet, filter), next = JSON.stringify({ ...filter, hide: hide.length ? hide : undefined });
-    if (next !== text) hub.as(room, by, (sign) => room.doc.transact(() => { room.look.set(name, next); sign(); }));
+    try { filter = JSON.parse(String(text)); } catch { filter = null; }
+    const hide = filter && filterHides(sheet, filter), next = filter && JSON.stringify({ ...filter, hide: hide.length ? hide : undefined });
+    // Each table's own filter too.
+    const kept = tables.map(({ table, range }) => { const own = tableFilter(sheet, table, range), hide = own ? filterHides(sheet, own) : []; const { hide: _, ...rest } = table; return own && hide.length ? { ...rest, hide } : rest; });
+    const retable = JSON.stringify(kept) !== JSON.stringify(tables.map((one) => one.table));
+    if ((next && next !== text) || retable) hub.as(room, by, (sign) => room.doc.transact(() => { if (next && next !== text) room.look.set(name, next); if (retable) writeTables(room.look, sheet.id, kept); sign(); }));
   };
   /**
    * Before rows or columns are deleted: each filter's and table's corner on one of them moves to the nearest one left inside its range, and one with
@@ -232,7 +235,13 @@ export function sheetKind(hub) {
       const next = moved(ranged);
       if (!next) out.push([name, null]); else if (next.from !== ranged.from || next.to !== ranged.to) out.push([name, JSON.stringify(next)]);
     }
-    const tables = readTables(room.look, sheet.id), keptTables = tables.flatMap((table) => { const one = moved(table); return one ? [one] : []; });
+    // A table whose total row goes keeps its data, its total row gone.
+    const tables = readTables(room.look, sheet.id), keptTables = tables.flatMap((table) => {
+      const area = rangedArea(sheet, table), one = moved(table);
+      if (!one || !(isRows && table.total && area && gone(area.bottom))) return one ? [one] : [];
+      const { total: _, ...rest } = one;
+      return [rest];
+    });
     if (JSON.stringify(keptTables) !== JSON.stringify(tables) || room.look.has(`table:${sheet.id}`)) out.push([() => writeTables(room.look, sheet.id, keptTables)]);
     // A merge shrinks as a filter does; one left a single cell goes.
     let merges;
@@ -692,7 +701,7 @@ export function sheetKind(hub) {
       },
       /** One change of cells, of rows and columns, or of tabs (contract: POST /v0/document/:id/cells). `for` is checked, and nothing is kept of it yet. */
       async edit(room, args = {}) {
-        const { op, tab, at, range, from, values, value, format, style, borders, column, header, descending, count = 1, to, name: called, hidden, chart, way, by, for: about, type: cellType, options } = args, own = room.own;
+        const { op, tab, at, range, from, values, value, format, style, borders, column, header, descending, count = 1, to, name: called, hidden, chart, table: tabled, way, by, for: about, type: cellType, options } = args, own = room.own;
         const name = typeof by === "string" && by ? by.slice(0, 80) : "agent";
         if (about !== undefined) {
           if (!/^[\w-]+\/\d+$/.test(String(about))) throw fault(400, `for is the comment answered, as <item>/<n>, not ${about}`);
@@ -742,6 +751,8 @@ export function sheetKind(hub) {
           const refused = hubRefusal(room.look, sheet, dated);
           if (refused) throw fault(400, refused);
           writeCells(room, sheet, dated, name, true);
+          // A table grows to hold an entry beside it, and fills a calculated column, as the page's (sheet-tables.js).
+          hub.as(room, name, (sign) => room.doc.transact(() => { if (tableWrites(room.look, sheet, dated, (row, col, input) => { const cell = key(sheet.rowAt(row), sheet.colAt(col)); if (input) room.cells.set(cell, input); else room.cells.delete(cell); }, shiftRefs)) sign(); }));
           return { cells: [label(room, sheet, area)], ...(many(room) ? { tab: sheet.name } : {}), ...sheet.size() };
         }
         // A range's number formats (sheet-formats.js) or styles (sheet-styles.js), set first when given; whole columns (B:D), or for styles rows (3:5), set theirs.
@@ -818,6 +829,28 @@ export function sheetKind(hub) {
           if (next !== all) hub.as(room, name, (sign) => room.doc.transact(() => { if (next.length) room.look.set(held, JSON.stringify(next)); else room.look.delete(held); sign(); }));
           return { charts: chartsA1(sheet, room.look.get(held)), ...(made ? { chart: made.id } : {}), ...(many(room) ? { tab: sheet.name } : {}) };
         }
+        // A tab's tables (sheet-tables.js), as the page makes and changes them: `table.name` names one to change (`rename`, `total`, `style`, `filter`,
+        // `range` to resize it) or take off (`delete`); without one, a table is made over `range` (`header`: false writes Column1… over it).
+        if (op === "table") {
+          const spec = tabled ?? {}, ref = range === undefined ? null : parseRef(String(range)), sheet = pick(room, tab, ref?.tab ?? undefined), area = ref && parseRange(ref.range);
+          if (typeof spec !== "object" || Array.isArray(spec)) throw fault(400, "table is { name, rename, total, style, filter, delete } for a table, or { header } with range to make one");
+          if (ref && !area) throw fault(400, `range is an A1 range such as A1:D20, not ${range}`);
+          const one = spec.name === undefined ? undefined : placedTables(room.look, sheet).find((each) => each.table.name.toLowerCase() === String(spec.name).toLowerCase());
+          if (spec.name !== undefined && !one) throw fault(400, `No table ${spec.name}${many(room) ? ` on ${sheet.name}` : ""}`);
+          if (!one && !area) throw fault(400, "range is the cells to make a table of");
+          const set = (row, col, input) => { const cell = key(sheet.rowAt(row), sheet.colAt(col)); if (input) room.cells.set(cell, input); else room.cells.delete(cell); };
+          // A total row added under a table at the tab's edge grows the tab to hold it.
+          if (one && spec.total === true && !one.table.total) grow(room, sheet, { ...one.range, bottom: one.range.bottom + 1 }, name);
+          hub.as(room, name, (sign) => room.doc.transact(() => {
+            try {
+              if (!one) makeTable(room.look, sheet, area, spec.header !== false, set);
+              else if (spec.delete === true) removeTable(room.look, sheet, one.table.id);
+              else changeTable(room.look, sheet, one.table.id, { name: spec.rename, total: spec.total, style: spec.style, filter: spec.filter, range: area ?? undefined }, set);
+            } catch (error) { throw fault(400, error.message); }
+            sign();
+          }));
+          return { tables: tablesA1(sheet, readTables(room.look, sheet.id)), ...(many(room) ? { tab: sheet.name } : {}) };
+        }
         // Whole rows or columns moved to start at `to`, their ids with them, so all held by ids (cells, their look, comments) goes with them and each
         // formula reading them, on any tab, follows them.
         if (op === "move-rows" || op === "move-cols") {
@@ -848,7 +881,7 @@ export function sheetKind(hub) {
           if (across) throw fault(400, `${rangeA1(across)} is merged: unmerge it to remove duplicates from ${rangeA1(area)}`);
           return { ...dedupe(room, sheet, { ...area, bottom: Math.min(area.bottom, rows - 1), right: Math.min(area.right, cols - 1) }, header === true, name), ...(many(room) ? { tab: sheet.name } : {}) };
         }
-        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, type, sort, chart, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, shift-cells, dedupe, add-tab, duplicate-tab, rename-tab, delete-tab, move-tab or hide-tab");
+        if (!["insert-rows", "insert-cols", "delete-rows", "delete-cols"].includes(op)) throw fault(400, "op is set, fill, format, style, type, sort, chart, table, insert-rows, insert-cols, delete-rows, delete-cols, move-rows, move-cols, shift-cells, dedupe, add-tab, duplicate-tab, rename-tab, delete-tab, move-tab or hide-tab");
         const sheet = pick(room, tab), { rows, cols } = sheet.size(), isRows = op.endsWith("rows"), size = isRows ? rows : cols, what = isRows ? "row" : "column", removing = op.startsWith("delete");
         if (!Number.isInteger(count) || count < 1 || count > CALL_LIMIT) throw fault(400, "count is how many, 1 or more");
         index(at, removing ? size - 1 : size, `${what} to ${removing ? "delete" : "insert before"} (${size} ${what}s now)`);
