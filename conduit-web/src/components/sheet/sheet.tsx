@@ -376,11 +376,19 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     for (const kind of ["mousedown", "mouseup", "click"] as const) into.addEventListener(kind, hold, true);
     onCleanup(() => { up(); into.removeEventListener("pointerdown", press, true); for (const kind of ["mousedown", "mouseup", "click"] as const) into.removeEventListener(kind, hold, true); });
   });
-  // `Data!B2` shows its tab; `B:D` and `3:9` are whole columns and rows.
+  /** A defined name's reference (an imported workbook's, `names:<tabId>`), the shown tab's own before the workbook's. */
+  const definedRef = (name: string) => {
+    const here = tabs.tabs().find((tab) => tab.id === tabs.shown())?.name, found: { ref: string; tab?: string }[] = [];
+    for (const [entry, value] of look) if (entry.startsWith("names:")) { try { const list: unknown = typeof value === "string" ? JSON.parse(value) : value; if (Array.isArray(list)) found.push(...list.filter((one) => typeof one?.ref === "string" && String(one.name).toLowerCase() === name.toLowerCase())); } catch { /* not a list */ } }
+    return (found.find((one) => one.tab === here) ?? found.find((one) => one.tab === undefined))?.ref;
+  };
+  // `Data!B2` shows its tab; `B:D` and `3:9` are whole columns and rows; a defined name goes to its range. Past Excel's last row or column is no address.
   const go = () => {
-    const typed = (address() ?? "").trim(), local = typed ? tabs.reveal(typed).replace(/\$/g, "") : "", cols = /^([A-Za-z]{1,3}):([A-Za-z]{1,3})$/.exec(local), rows = /^(\d+):(\d+)$/.exec(local);
-    const range = cols ? { top: 0, bottom: 0, left: Math.min(colIndex(cols[1]!), colIndex(cols[2]!)), right: Math.max(colIndex(cols[1]!), colIndex(cols[2]!)) }
+    const said = (address() ?? "").trim(), typed = /^[A-Za-z_\\][\w.\\]*$/.test(said) && !parseRange(said) ? definedRef(said) ?? said : said;
+    const local = typed ? tabs.reveal(typed).replace(/\$/g, "") : "", cols = /^([A-Za-z]{1,3}):([A-Za-z]{1,3})$/.exec(local), rows = /^(\d+):(\d+)$/.exec(local);
+    const given = cols ? { top: 0, bottom: 0, left: Math.min(colIndex(cols[1]!), colIndex(cols[2]!)), right: Math.max(colIndex(cols[1]!), colIndex(cols[2]!)) }
       : rows ? { left: 0, right: 0, top: Math.max(0, Math.min(+rows[1]!, +rows[2]!) - 1), bottom: Math.max(+rows[1]!, +rows[2]!) - 1 } : parseRange(local);
+    const range = given && given.bottom < 1_048_576 && given.right < 16_384 ? given : null;
     setAddress(null);
     if (range) { grid()?.select(range); if (cols || rows) grid()?.whole(cols ? "cols" : "rows"); }
     // After the grid has drawn the selection: focused with none, it selects its first cell.

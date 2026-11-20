@@ -187,8 +187,12 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     frozenRows = Math.min(options.columns.freeze().rows, held.rows);
     head.map.set(hidden, frozenRows);
     body.map.set(frozenRows ? new Set([...hidden, ...Array.from({ length: frozenRows }, (_, row) => row)]) : hidden, held.rows);
-    return { rows: Math.max(held.rows - body.map.hiddenCount() + ROOM.rows, ROOM.least.rows), head: frozenRows - head.map.hiddenCount(), cols: Math.min(COL_LIMIT, Math.max(held.cols + ROOM.cols, ROOM.least.cols)) };
+    return { rows: Math.max(held.rows - body.map.hiddenCount() + ROOM.rows, ROOM.least.rows, body.map.drawn(wanted.row) + 1 + ROOM.rows), head: frozenRows - head.map.hiddenCount(),
+      cols: Math.min(COL_LIMIT, Math.max(held.cols + ROOM.cols, ROOM.least.cols, wanted.col + 1 + ROOM.cols)) };
   };
+  // The farthest cell a selection was given (the address field, a link): the grid draws on past it, as past the sheet's own cells, so Glide never
+  // clamps the selection back into the rows it draws (it then landed, and was typed into, elsewhere).
+  const wanted = { row: 0, col: 0 };
   let size = reach();
   /** The next column shown from `col` that way; `col` itself where none past it is. */
   const nextShown = (col: number, dir: number) => { for (let at = col + dir; at >= 0 && at < size.cols; at += dir) if (!hiddenCols.has(at)) return at; return col; };
@@ -845,6 +849,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       // Held at once, not at React's next render: `whole` and the grid's own focus read it straight after. A range across the frozen rows' edge
       // is drawn in both parts, the cursor in the part of its first row.
       const into = to ? partOf(to.top) : body;
+      if (to && (body.map.drawn(to.bottom) >= size.rows || to.right >= size.cols)) { wanted.row = Math.max(wanted.row, to.bottom); wanted.col = Math.max(wanted.col, to.right); drive.structure?.(); }
       if (to) spread(to, into, (p, drawn) => ({ columns: CompactSelection.empty(), rows: CompactSelection.empty(), current: { cell: [p === into ? to.left : drawn.left, drawn.top], range: rect(drawn), rangeStack: [] } }));
       else for (const p of parts) choose(p, NO_SELECTION);
       events.selected(to);
