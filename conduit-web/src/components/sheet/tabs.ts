@@ -146,7 +146,8 @@ export function createSheetTabs(options: { doc: Y.Doc; host: SheetHost; id: stri
       if (tab && tab !== shown()) soon(tab);
     },
     key: (event) => {
-      if (!(event.ctrlKey || event.metaKey) || (event.key !== "PageDown" && event.key !== "PageUp")) return false;
+      // Ctrl+Page Down and Up, as Excel's; a browser tab keeps those, so Ctrl+Shift+Page Down and Up as well, as Google Sheets'.
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || (event.key !== "PageDown" && event.key !== "PageUp")) return false;
       event.preventDefault();
       step(event.key === "PageDown" ? 1 : -1);
       return true;

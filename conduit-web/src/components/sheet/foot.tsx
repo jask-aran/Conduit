@@ -12,6 +12,7 @@ import { tabNameFault, type Tab } from "@/sheet-format.js";
 import { createFigures, type SheetFigures } from "./stats";
 import type { SheetTabs } from "./tabs";
 import type { SheetRange } from "./host";
+import { menuAt } from "./cell-menu";
 
 // Shown as the grid shows a number: a long one cut to what a sheet shows.
 const NUMBER = new Intl.NumberFormat(undefined, { maximumFractionDigits: 10 }), shown = (value: number) => NUMBER.format(Number(value.toPrecision(12)));
@@ -78,6 +79,16 @@ export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: (range:
     void tabs.op({ op: "move-tab", tab: id, at: tabs.tabs().findIndex((one) => one.id === onto.id) });
   };
 
+  // A tab reached by the keyboard (F6 from the ribbon): Left and Right (Home, End) go along the tabs, Enter shows one, F2 renames it, Shift+F10 or
+  // the Menu key opens its menu, Esc goes back to the grid.
+  const stripKeys = (event: KeyboardEvent) => {
+    const at = (event.target as HTMLElement).closest<HTMLElement>(".ui-tab");
+    if (!at || event.ctrlKey || event.altKey || event.metaKey) return;
+    const list = [...strip!.querySelectorAll<HTMLElement>(".ui-tab")], by = { ArrowRight: 1, ArrowLeft: -1, Home: -Infinity, End: Infinity }[event.key];
+    if (by) { event.preventDefault(); return list[Math.max(0, Math.min(list.length - 1, Number.isFinite(by) ? list.indexOf(at) + by : by > 0 ? list.length - 1 : 0))]?.querySelector<HTMLElement>(".ui-tab-open")?.focus(); }
+    if (event.key === "Escape") { event.preventDefault(); return tabs.focus(); }
+    if ((event.key === "F10" && event.shiftKey) || event.key === "ContextMenu") { event.preventDefault(); const box = at.getBoundingClientRect(); menuAt(at, box.left + box.width / 2, box.top); }
+  };
   const one = (tab: Tab) => {
     const at = () => visible().findIndex((one) => one.id === tab.id);
     // A long press opens the menu, and the lift's click must not then show the tab and take the keyboard, which shuts it.
@@ -92,7 +103,8 @@ export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: (range:
             onDragOver: (event: DragEvent) => { if (event.dataTransfer?.types.includes(DRAGGED)) event.preventDefault(); },
             onDrop: (event: DragEvent) => drop(event, tab),
           })} />} />
-        <ContextMenuContent>
+        {/* Shut, it gives the keyboard back to the grid, unless Rename took it. */}
+        <ContextMenuContent onCloseAutoFocus={(event) => { event.preventDefault(); requestAnimationFrame(() => { if (!document.activeElement?.matches("input, [role=dialog] *, [role=alertdialog] *")) tabs.focus(); }); }}>
           <MenuSection>
             <MenuRow icon={<Icons.Edit />} keys={["F2"]} onSelect={() => rename(tab)}>Rename</MenuRow>
             <MenuRow icon={<DataIcons.duplicate />} onSelect={() => void tabs.op({ op: "duplicate-tab", tab: tab.id })}>Duplicate</MenuRow>
@@ -132,7 +144,7 @@ export function SheetFoot(props: { tabs: SheetTabs; id: string; format?: (range:
         </Show>
       </MenuContent>
     </DropdownMenu>
-    <div ref={strip} class="ui-spreadsheet-tabs" role="tablist" aria-label="Tabs">
+    <div ref={(element) => { strip = element; element.addEventListener("keydown", stripKeys); }} class="ui-spreadsheet-tabs" role="tablist" aria-label="Tabs">
       <PaneTabs><For each={visible()}>{one}</For></PaneTabs>
     </div>
     <IconButton label="Add a tab" onClick={() => addTab(tabs)}><Icons.Add /></IconButton>
