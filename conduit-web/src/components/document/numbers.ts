@@ -6,9 +6,11 @@ import { blockStarts, redrawBlocks } from "./blocks";
 
 /** The top-level blocks numbered now (indexes `from` to `to`), round those in view. */
 type Numbers = { from: number; to: number; set: DecorationSet };
-const numbers = new PluginKey<Numbers>("numbers");
+/** Also what find draws its matches in: the same blocks round the view, moved by the same meta. */
+export const numbers = new PluginKey<Numbers>("numbers");
 // How many blocks are numbered as a paper opens, before it is looked at; and the fewest a view is taken to hold.
-const FIRST = 80, LEAST = 12;
+export const FIRST = 80;
+const LEAST = 12;
 const starts = new WeakMap<Node, number[]>();
 const startsOf = (doc: Node) => starts.get(doc) ?? starts.set(doc, blockStarts(doc)).get(doc)!;
 const label = (block: Node, at: number, index: number) => Decoration.node(at, at + block.nodeSize, { "data-n": String(index + 1) });
@@ -18,7 +20,7 @@ const draw = (doc: Node, from: number, to: number): Numbers => {
   return { from, to, set: DecorationSet.create(doc, found) };
 };
 /** The first top-level block whose bottom is below `y` (viewport pixels). */
-const blockAtY = (view: EditorView, y: number) => {
+export const blockAtY = (view: EditorView, y: number) => {
   const at = startsOf(view.state.doc);
   let low = 0, high = at.length - 1;
   while (low < high) { const mid = (low + high) >> 1, box = (view.nodeDOM(at[mid]!) as Element | null)?.getBoundingClientRect(); if (!box || box.bottom < y) low = mid + 1; else high = mid; }

@@ -3,6 +3,8 @@ import type * as Y from "yjs";
 import type { SheetPort, SheetView, Tab } from "./sheet-format.js";
 
 export const CONFIG: Record<string, unknown>;
+/** The engine's functions whose result is a date, with the format each takes. */
+export function dateFunctions(): Record<string, string>;
 /** One tab of a workbook, computed by the engine here: a SheetView with the engine and the hub's structure changes. */
 export interface SheetModel extends SheetView {
   /** The whole workbook's engine; `sheet` is this tab's sheet in it. */

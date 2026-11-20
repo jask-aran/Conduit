@@ -9,6 +9,8 @@ import { Actions, Icons, Item, SearchSection, Section } from "@/components/ui";
 import { CardForm } from "@/components/ui/card";
 import { Button, Field, Input } from "@/components/ui/controls";
 import { Dialog } from "@/components/ui/dialog";
+import { DateField, type CalendarDay } from "@/components/ui/calendar";
+import { readDate, serialDay } from "@/sheet-types.js";
 import { sheetSortIcons as SortIcons } from "@/components/ui/sheet-icons";
 import { Popover, PopoverContent, Select } from "@/components/ui/menus";
 import { colName, filterHides, key as cellKey, rangeA1, rangedArea, valueText, type SheetFilterTest, type SheetFilterWhen, type SheetRangedLook, type SheetView } from "@/sheet-format.js";
@@ -267,6 +269,10 @@ export function FilterMenu(props: { filter: SheetFilter; at: { col: number; box:
   </>;
 }
 
+const DATE_HINT = "2026-01-30";
+// A condition's date is written as ISO, which `dayOf` (sheet-format.js) reads; a typed one is read as a date cell reads it.
+const readDay = (text: string) => { const serial = readDate(text); return serial === null ? null : serialDay(serial); };
+const writeDay = (day: CalendarDay) => `${day.year}-${String(day.month).padStart(2, "0")}-${String(day.day).padStart(2, "0")}`;
 /** A column's condition asked for: its test and the one or two values it compares with. */
 function FilterPrompt(props: { filter: SheetFilter; col: number | null; onClose(): void }) {
   const [is, setIs] = createSignal<SheetFilterTest>("contains"), [a, setA] = createSignal(""), [b, setB] = createSignal("");
@@ -277,12 +283,16 @@ function FilterPrompt(props: { filter: SheetFilter; col: number | null; onClose(
     if (col !== null && ready()) props.filter.setWhen(col, { is: is(), ...(test().takes ? { a: a().trim() || a() } : {}), ...(test().takes > 1 ? { b: b().trim() } : {}) });
     props.onClose();
   };
-  const hint = () => test().kind === "date" ? "2026-01-30" : undefined;
   return <Dialog open={props.col !== null} title={`Filter column ${colName(props.col ?? 0)}`} onOpenChange={(open) => { if (!open) props.onClose(); }}>
     <Show when={props.col === null ? null : [props.col]}>{(asked) => { const was = props.filter.when(asked()[0]!); setIs(was?.is ?? "contains"); setA(was?.a ?? ""); setB(was?.b ?? ""); return <CardForm onSubmit={set}>
       <Field label="Show rows where" plain><Select aria-label="Condition" value={is()} onChange={(event) => setIs(event.currentTarget.value as SheetFilterTest)}><For each={TESTS}>{(one) => <option value={one.is}>{one.label}</option>}</For></Select></Field>
-      <Show when={test().takes > 0}><Input aria-label={test().takes > 1 ? "From" : "Value"} placeholder={hint()} value={a()} onInput={(event) => setA(event.currentTarget.value)} ref={(field) => queueMicrotask(() => field.focus())} /></Show>
-      <Show when={test().takes > 1}><Input aria-label="To" placeholder={hint()} value={b()} onInput={(event) => setB(event.currentTarget.value)} /></Show>
+      <Show when={test().kind === "date"} fallback={<>
+        <Show when={test().takes > 0}><Input aria-label={test().takes > 1 ? "From" : "Value"} value={a()} onInput={(event) => setA(event.currentTarget.value)} ref={(field) => queueMicrotask(() => field.focus())} /></Show>
+        <Show when={test().takes > 1}><Input aria-label="To" value={b()} onInput={(event) => setB(event.currentTarget.value)} /></Show>
+      </>}>
+        <DateField aria-label={test().takes > 1 ? "From" : "Date"} placeholder={DATE_HINT} value={a()} onInput={setA} read={readDay} write={writeDay} autofocus />
+        <Show when={test().takes > 1}><DateField aria-label="To" placeholder={DATE_HINT} value={b()} onInput={setB} read={readDay} write={writeDay} /></Show>
+      </Show>
       <Actions><Button type="button" variant="ghost" outline onClick={() => props.onClose()}>Cancel</Button><Button type="submit" disabled={!ready()}>Filter</Button></Actions>
     </CardForm>; }}</Show>
   </Dialog>;

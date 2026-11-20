@@ -12,7 +12,10 @@ const described = (changed: Map<unknown, readonly unknown[]>) => {
   for (const events of changed.values()) for (const event of events) if (event instanceof Y.YMapEvent) for (const name of event.keysChanged) { const what = LOOKS[name.slice(0, name.indexOf(":"))]; if (what) return what; }
   return "Edit";
 };
+const TAB_LABELS: Record<string, string> = { "add-tab": "Add tab", "rename-tab": "Rename tab", "delete-tab": "Delete tab", "move-tab": "Move tab", "duplicate-tab": "Duplicate tab" };
 const opLabel = (op: SheetCellsOp) => {
+  if (op.op === "hide-tab") return op.hidden ? "Hide tab" : "Show tab";
+  if (TAB_LABELS[op.op]) return TAB_LABELS[op.op]!;
   const many = "count" in op && (op.count ?? 1) > 1 ? `${op.count} ` : "", [verb, what] = op.op.split("-");
   return op.op === "sort" ? `Sort ${op.descending ? "Z–A" : "A–Z"}` : what ? `${verb === "insert" ? "Insert" : verb === "move" ? "Move" : "Delete"} ${many}${what === "rows" ? "row" : "column"}${many ? "s" : ""}` : op.op === "fill" ? "Fill" : "Typing";
 };
