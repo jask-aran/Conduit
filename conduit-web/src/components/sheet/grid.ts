@@ -564,12 +564,12 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
         } as GridCell;
       };
       // As a spreadsheet's, text runs on over the empty cells to its right until a filled one: an empty cell draws the share of it that reaches it, from
-      // the nearest filled cell to its left, where that is text that neither wraps nor clips, aligned left and outside any merge.
+      // the nearest filled cell to its left, where that is text that neither wraps, clips, shrinks, repeats nor turns, aligned left and outside any merge.
       const spillInto = (row: number, col: number): SheetSpill | undefined => {
         const from = filledLeft(row, col);
         if (from < 0 || mergeAt(row, col) || mergeAt(row, from) || options.columns.type(row, from)) return undefined;
         const value = model.value(row, from), style = options.columns.style(row, from);
-        if (typeof value !== "string" || !value || style?.wrap || style?.clip || (style?.align && style.align !== "left")) return undefined;
+        if (typeof value !== "string" || !value || style?.wrap || style?.clip || style?.shrink || style?.repeat || style?.rotate || (style?.align && style.align !== "left")) return undefined;
         let offset = 0;
         for (let at = from; at < col; at++) offset += columns[at]?.width ?? theme.width;
         // No letter is wider than twice the text's size: text that cannot reach this cell makes nothing.
