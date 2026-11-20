@@ -295,7 +295,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   // The group the active cell's row or column is in (or whose control it is on) collapsed or expanded, as its chevron does.
   const folding = (kind: "rows" | "cols", n: number) => {
     const at = outline.around(kind, n), what = kind === "cols" ? "column" : "row";
-    return at ? [{ label: `${at.shut ? "Expand" : "Collapse"} ${what} group`, icon: at.shut ? <Icons.Preview /> : <Icons.Hide />, run: () => events.outline?.(kind, at.line) }] : [];
+    return at ? [{ label: `${at.shut ? "Expand" : "Collapse"} ${what} group`, icon: at.shut ? Icons.Preview : Icons.Hide, run: () => events.outline?.(kind, at.line) }] : [];
   };
   // As a spreadsheet's Alt+Shift+Right and Left: the selection's rows, or its whole columns, a group deeper or shallower.
   const group = (range: SheetRange, by: 1 | -1, kind = wholeOf(range, "cols") && !wholeOf(range, "rows") ? "cols" as const : "rows" as const) =>
@@ -703,106 +703,106 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     const hideRows = () => history.act("Hide rows", () => sizes.setHidden(between(range.top, range.bottom), true));
     return [
       [
-        ...props.onAsk ? [{ label: "Ask the agent", icon: <Icons.Agent />, keys: ["Ctrl", "Alt", "M"], run: () => { grid()?.select(range); props.onAsk?.(); } }] : [],
-        ...props.onComment ? [{ label: "Comment", icon: <Icons.Chat />, keys: ["Shift", "F2"], run: () => { grid()?.select(range); props.onComment?.(); } }] : [],
+        ...props.onAsk ? [{ label: "Ask the agent", icon: Icons.Agent, keys: ["Ctrl", "Alt", "M"], run: () => { grid()?.select(range); props.onAsk?.(); } }] : [],
+        ...props.onComment ? [{ label: "Comment", icon: Icons.Chat, keys: ["Shift", "F2"], run: () => { grid()?.select(range); props.onComment?.(); } }] : [],
       ],
       [
-        { label: "Cut", icon: <Icons.Cut />, keys: ["Ctrl", "X"], run: () => void copy(range, true).then(() => clear(range, "Cut")) },
-        { label: "Copy", icon: <Icons.Copy />, keys: ["Ctrl", "C"], run: () => void copy(range) },
-        { label: "Paste", icon: <Icons.Paste />, keys: ["Ctrl", "V"], run: () => paste(range) },
-        ...grid()?.held() ? [{ label: "Paste values only", icon: <Icons.Paste />, keys: ["Ctrl", "Shift", "V"], run: () => paste(range, true) }] : [],
-        { label: "Paste transposed", icon: <DataIcons.transpose />, run: () => paste(range, false, true) },
-        ...grid()?.source() ? [{ label: "Paste formatting only", icon: <Icons.Paste />, keys: ["Ctrl", "Alt", "V"], run: () => { const from = grid()?.source(); if (from) brush.lay(from, range); } }] : [],
+        { label: "Cut", icon: Icons.Cut, keys: ["Ctrl", "X"], run: () => void copy(range, true).then(() => clear(range, "Cut")) },
+        { label: "Copy", icon: Icons.Copy, keys: ["Ctrl", "C"], run: () => void copy(range) },
+        { label: "Paste", icon: Icons.Paste, keys: ["Ctrl", "V"], run: () => paste(range) },
+        ...grid()?.held() ? [{ label: "Paste values only", icon: Icons.Paste, keys: ["Ctrl", "Shift", "V"], run: () => paste(range, true) }] : [],
+        { label: "Paste transposed", icon: DataIcons.transpose, run: () => paste(range, false, true) },
+        ...grid()?.source() ? [{ label: "Paste formatting only", icon: Icons.Paste, keys: ["Ctrl", "Alt", "V"], run: () => { const from = grid()?.source(); if (from) brush.lay(from, range); } }] : [],
       ],
       [
-        ...kind !== "cols" ? [{ label: range.bottom ? `Freeze rows 1 to ${range.bottom + 1}` : "Freeze row 1", icon: <Icons.Pin />, run: () => history.act("Freeze panes", () => sizes.setFreeze(range.bottom + 1, sizes.freeze().cols)) }] : [],
-        ...kind !== "rows" ? [{ label: range.right ? `Freeze columns A to ${colName(range.right)}` : "Freeze column A", icon: <Icons.Pin />, run: () => history.act("Freeze panes", () => sizes.setFreeze(sizes.freeze().rows, range.right + 1)) }] : [],
-        ...sizes.freeze().rows || sizes.freeze().cols ? [{ label: "Unfreeze", icon: <Icons.PinOff />, keys: ["Alt", "W", "F", "F"], run: () => history.act("Freeze panes", () => sizes.setFreeze(0, 0)) }] : [],
+        ...kind !== "cols" ? [{ label: range.bottom ? `Freeze rows 1 to ${range.bottom + 1}` : "Freeze row 1", icon: Icons.Pin, run: () => history.act("Freeze panes", () => sizes.setFreeze(range.bottom + 1, sizes.freeze().cols)) }] : [],
+        ...kind !== "rows" ? [{ label: range.right ? `Freeze columns A to ${colName(range.right)}` : "Freeze column A", icon: Icons.Pin, run: () => history.act("Freeze panes", () => sizes.setFreeze(sizes.freeze().rows, range.right + 1)) }] : [],
+        ...sizes.freeze().rows || sizes.freeze().cols ? [{ label: "Unfreeze", icon: Icons.PinOff, keys: ["Alt", "W", "F", "F"], run: () => history.act("Freeze panes", () => sizes.setFreeze(0, 0)) }] : [],
       ],
       [
         ...kind !== "cols" ? [
-          { label: `Insert ${rowsSaid} above`, icon: <Icons.Add />, keys: whole ? ["Ctrl", "Shift", "="] : undefined, run: () => structure("insert-rows", range.top, nRows) },
-          { label: `Insert ${rowsSaid} below`, icon: <Icons.Add />, run: () => structure("insert-rows", range.bottom + 1, nRows) },
+          { label: `Insert ${rowsSaid} above`, icon: Icons.Add, keys: whole ? ["Ctrl", "Shift", "="] : undefined, run: () => structure("insert-rows", range.top, nRows) },
+          { label: `Insert ${rowsSaid} below`, icon: Icons.Add, run: () => structure("insert-rows", range.bottom + 1, nRows) },
         ] : [],
-        ...props.onChart && (nRows > 1 || nCols > 1) ? [{ label: "Make chart", icon: <ChartIcons.column />, keys: ["Alt", "F1"], run: () => askChart(undefined, range) }] : [],
+        ...props.onChart && (nRows > 1 || nCols > 1) ? [{ label: "Make chart", icon: ChartIcons.column, keys: ["Alt", "F1"], run: () => askChart(undefined, range) }] : [],
         ...kind !== "rows" ? [
-          { label: `Insert ${colsSaid} left`, icon: <Icons.Add />, keys: whole ? ["Ctrl", "Shift", "="] : undefined, run: () => structure("insert-cols", range.left, nCols) },
-          { label: `Insert ${colsSaid} right`, icon: <Icons.Add />, run: () => structure("insert-cols", range.right + 1, nCols) },
+          { label: `Insert ${colsSaid} left`, icon: Icons.Add, keys: whole ? ["Ctrl", "Shift", "="] : undefined, run: () => structure("insert-cols", range.left, nCols) },
+          { label: `Insert ${colsSaid} right`, icon: Icons.Add, run: () => structure("insert-cols", range.right + 1, nCols) },
         ] : [],
       ],
       kind === "rows" && [
-        { label: `Move ${rowsSaid} up`, icon: <LineIcons.up />, disabled: range.top === 0, run: () => moveBy(true, -1) },
-        { label: `Move ${rowsSaid} down`, icon: <LineIcons.down />, disabled: range.bottom >= lastRow, run: () => moveBy(true, 1) },
+        { label: `Move ${rowsSaid} up`, icon: LineIcons.up, disabled: range.top === 0, run: () => moveBy(true, -1) },
+        { label: `Move ${rowsSaid} down`, icon: LineIcons.down, disabled: range.bottom >= lastRow, run: () => moveBy(true, 1) },
       ],
       kind === "cols" && [
-        { label: `Move ${colsSaid} left`, icon: <LineIcons.left />, disabled: range.left === 0, run: () => moveBy(false, -1) },
-        { label: `Move ${colsSaid} right`, icon: <LineIcons.right />, disabled: range.right >= lastCol, run: () => moveBy(false, 1) },
+        { label: `Move ${colsSaid} left`, icon: LineIcons.left, disabled: range.left === 0, run: () => moveBy(false, -1) },
+        { label: `Move ${colsSaid} right`, icon: LineIcons.right, disabled: range.right >= lastCol, run: () => moveBy(false, 1) },
       ],
       [
-        { label: "Clear", icon: <Icons.Erase />, sub: () => [
+        { label: "Clear", icon: Icons.Erase, sub: () => [
           { label: "Clear contents", keys: ["Delete"], run: () => clear(range) },
           { label: "Clear formatting", keys: ["Alt", "H", "E", "F"], run: () => history.act("Clear formatting", clearFormats) },
           { label: "Clear all", run: () => history.act("Clear all", () => { clear(range); clearFormats(); }) },
         ] },
-        ...kind !== "cols" ? [{ label: `Delete ${rowsSaid}`, icon: <Icons.Delete />, destructive: true, keys: whole ? ["Ctrl", "-"] : undefined, run: () => deleteRows(range) }] : [],
-        ...kind !== "rows" ? [{ label: `Delete ${colsSaid}`, icon: <Icons.Delete />, destructive: true, keys: whole ? ["Ctrl", "-"] : undefined, run: () => structure("delete-cols", range.left, nCols) }] : [],
+        ...kind !== "cols" ? [{ label: `Delete ${rowsSaid}`, icon: Icons.Delete, destructive: true, keys: whole ? ["Ctrl", "-"] : undefined, run: () => deleteRows(range) }] : [],
+        ...kind !== "rows" ? [{ label: `Delete ${colsSaid}`, icon: Icons.Delete, destructive: true, keys: whole ? ["Ctrl", "-"] : undefined, run: () => structure("delete-cols", range.left, nCols) }] : [],
         ...!whole ? [
-          { label: "Delete cells…", icon: <Icons.Delete />, destructive: true, keys: ["Ctrl", "-"], run: () => { opening = () => askShift("delete", range); } },
-          { label: "Insert cells…", icon: <Icons.Add />, keys: ["Ctrl", "Shift", "="], run: () => { opening = () => askShift("insert", range); } },
+          { label: "Delete cells…", icon: Icons.Delete, destructive: true, keys: ["Ctrl", "-"], run: () => { opening = () => askShift("delete", range); } },
+          { label: "Insert cells…", icon: Icons.Add, keys: ["Ctrl", "Shift", "="], run: () => { opening = () => askShift("insert", range); } },
         ] : [],
         ...kind !== "cols" ? [
-          { label: `Hide ${rowsSaid}`, icon: <Icons.Hide />, keys: ["Ctrl", "9"], run: hideRows },
-          ...hiddenIn(range) ? [{ label: "Unhide rows", icon: <Icons.Preview />, keys: ["Ctrl", "Shift", "9"], run: () => { const lines = between(range.top, range.bottom); history.act("Unhide rows", () => { sizes.setHidden(lines, false); filters.show(lines); }); } }] : [],
+          { label: `Hide ${rowsSaid}`, icon: Icons.Hide, keys: ["Ctrl", "9"], run: hideRows },
+          ...hiddenIn(range) ? [{ label: "Unhide rows", icon: Icons.Preview, keys: ["Ctrl", "Shift", "9"], run: () => { const lines = between(range.top, range.bottom); history.act("Unhide rows", () => { sizes.setHidden(lines, false); filters.show(lines); }); } }] : [],
         ] : [],
         ...kind !== "cols" ? [
-          { label: `Group ${rowsSaid}`, icon: <DataIcons.group />, keys: ["Alt", "Shift", "→"], run: () => group(range, 1, "rows") },
-          ...between(range.top, range.bottom).some((row) => outline.line("rows", row).level) ? [{ label: `Ungroup ${rowsSaid}`, icon: <DataIcons.ungroup />, keys: ["Alt", "Shift", "←"], run: () => group(range, -1, "rows") }] : [],
+          { label: `Group ${rowsSaid}`, icon: DataIcons.group, keys: ["Alt", "Shift", "→"], run: () => group(range, 1, "rows") },
+          ...between(range.top, range.bottom).some((row) => outline.line("rows", row).level) ? [{ label: `Ungroup ${rowsSaid}`, icon: DataIcons.ungroup, keys: ["Alt", "Shift", "←"], run: () => group(range, -1, "rows") }] : [],
           ...folding("rows", range.top),
         ] : [],
         ...kind !== "rows" ? [
-          { label: `Group ${colsSaid}`, icon: <DataIcons.group />, keys: whole ? ["Alt", "Shift", "→"] : undefined, run: () => group(range, 1, "cols") },
-          ...between(range.left, range.right).some((col) => outline.line("cols", col).level) ? [{ label: `Ungroup ${colsSaid}`, icon: <DataIcons.ungroup />, keys: whole ? ["Alt", "Shift", "←"] : undefined, run: () => group(range, -1, "cols") }] : [],
+          { label: `Group ${colsSaid}`, icon: DataIcons.group, keys: whole ? ["Alt", "Shift", "→"] : undefined, run: () => group(range, 1, "cols") },
+          ...between(range.left, range.right).some((col) => outline.line("cols", col).level) ? [{ label: `Ungroup ${colsSaid}`, icon: DataIcons.ungroup, keys: whole ? ["Alt", "Shift", "←"] : undefined, run: () => group(range, -1, "cols") }] : [],
           ...folding("cols", range.left),
         ] : [],
         ...kind !== "rows" ? [
-          { label: `Hide ${colsSaid}`, icon: <Icons.Hide />, keys: ["Ctrl", "0"], run: () => history.act("Hide columns", () => sizes.setHiddenCols(between(range.left, range.right), true)) },
-          ...hiddenColsBy(range).length ? [{ label: "Unhide columns", icon: <Icons.Preview />, keys: ["Ctrl", "Shift", "0"], run: () => history.act("Unhide columns", () => sizes.setHiddenCols(hiddenColsBy(range), false)) }] : [],
+          { label: `Hide ${colsSaid}`, icon: Icons.Hide, keys: ["Ctrl", "0"], run: () => history.act("Hide columns", () => sizes.setHiddenCols(between(range.left, range.right), true)) },
+          ...hiddenColsBy(range).length ? [{ label: "Unhide columns", icon: Icons.Preview, keys: ["Ctrl", "Shift", "0"], run: () => history.act("Unhide columns", () => sizes.setHiddenCols(hiddenColsBy(range), false)) }] : [],
         ] : [],
       ],
       kind !== "cols" && [
-        { label: `Resize ${rowsSaid}…`, icon: <Icons.Resize />, keys: ["Alt", "H", "O", "H"], run: () => sized("HOH", range) },
-        { label: "Fit row height", icon: <Icons.Resize />, keys: ["Alt", "H", "O", "A"], run: () => history.act("Row height", () => sized("HOA", range)) },
+        { label: `Resize ${rowsSaid}…`, icon: Icons.Resize, keys: ["Alt", "H", "O", "H"], run: () => sized("HOH", range) },
+        { label: "Fit row height", icon: Icons.Resize, keys: ["Alt", "H", "O", "A"], run: () => history.act("Row height", () => sized("HOA", range)) },
       ],
       kind !== "rows" && [
-        { label: `Resize ${colsSaid}…`, icon: <Icons.Resize />, keys: ["Alt", "H", "O", "W"], run: () => sized("HOW", range) },
-        { label: "Fit column width", icon: <Icons.Resize />, keys: ["Alt", "H", "O", "I"], run: () => history.act("Column width", () => sized("HOI", range)) },
-        { label: "Default width…", icon: <Icons.Resize />, keys: ["Alt", "H", "O", "D"], run: () => sized("HOD", range) },
+        { label: `Resize ${colsSaid}…`, icon: Icons.Resize, keys: ["Alt", "H", "O", "W"], run: () => sized("HOW", range) },
+        { label: "Fit column width", icon: Icons.Resize, keys: ["Alt", "H", "O", "I"], run: () => history.act("Column width", () => sized("HOI", range)) },
+        { label: "Default width…", icon: Icons.Resize, keys: ["Alt", "H", "O", "D"], run: () => sized("HOD", range) },
       ],
       [
-        { label: "Sort range", icon: <SortIcons.ascending />, sub: () => [
-          { label: `A to Z by column ${colName(byCol)}`, icon: <SortIcons.ascending />, keys: ["Alt", "H", "S", "S"], run: () => filters.keys.sort(false, byCol) },
-          { label: `Z to A by column ${colName(byCol)}`, icon: <SortIcons.descending />, keys: ["Alt", "H", "S", "O"], run: () => filters.keys.sort(true, byCol) },
+        { label: "Sort range", icon: SortIcons.ascending, sub: () => [
+          { label: `A to Z by column ${colName(byCol)}`, icon: SortIcons.ascending, keys: ["Alt", "H", "S", "S"], run: () => filters.keys.sort(false, byCol) },
+          { label: `Z to A by column ${colName(byCol)}`, icon: SortIcons.descending, keys: ["Alt", "H", "S", "O"], run: () => filters.keys.sort(true, byCol) },
         ] },
-        { label: "Sort sheet", icon: <SortIcons.ascending />, sub: () => { const { frozen, named } = header(); return [
-          { label: `A to Z by ${named}`, icon: <SortIcons.ascending />, run: () => sortSheet(frozen, false) },
-          { label: `Z to A by ${named}`, icon: <SortIcons.descending />, run: () => sortSheet(frozen, true) },
+        { label: "Sort sheet", icon: SortIcons.ascending, sub: () => { const { frozen, named } = header(); return [
+          { label: `A to Z by ${named}`, icon: SortIcons.ascending, run: () => sortSheet(frozen, false) },
+          { label: `Z to A by ${named}`, icon: SortIcons.descending, run: () => sortSheet(frozen, true) },
         ]; } },
-        { label: filters.filter() ? "Remove filter" : "Create a filter", icon: <SortIcons.filter />, keys: ["Ctrl", "Shift", "L"], run: filters.keys.filter },
-        ...filteredBy(byCol) ? [{ label: "Filter column…", icon: <SortIcons.filter />, keys: ["Alt", "↓"], run: () => openFilter(filteredBy(byCol)!, byCol) }] : [],
-        ...filters.narrows(byCol) ? [{ label: `Clear filter from column ${colName(byCol)}`, icon: <Icons.Erase />, run: () => filters.keep(byCol, null) }] : [],
-        { label: inTable() ? "Remove table" : "Format as table", icon: <SortIcons.table />, keys: ["Alt", "H", "T"], run: filters.keys.table },
-        { label: "Data", icon: <DataIcons.data />, sub: () => [
-          { label: "Remove duplicates…", icon: <DataIcons.dedupe />, run: () => { const on = nRows === 1 && nCols === 1 ? filters.region() : { range: inTab(range), header: false }; if (on) opening = () => setDeduping(on); } },
-          { label: "Trim whitespace", icon: <DataIcons.trim />, run: () => trim(range) },
-          { label: "Split text to columns…", icon: <DataIcons.split />, disabled: nCols > 1, run: () => { opening = () => setSplitting(range); } },
+        { label: filters.filter() ? "Remove filter" : "Create a filter", icon: SortIcons.filter, keys: ["Ctrl", "Shift", "L"], run: filters.keys.filter },
+        ...filteredBy(byCol) ? [{ label: "Filter column…", icon: SortIcons.filter, keys: ["Alt", "↓"], run: () => openFilter(filteredBy(byCol)!, byCol) }] : [],
+        ...filters.narrows(byCol) ? [{ label: `Clear filter from column ${colName(byCol)}`, icon: Icons.Erase, run: () => filters.keep(byCol, null) }] : [],
+        { label: inTable() ? "Remove table" : "Format as table", icon: SortIcons.table, keys: ["Alt", "H", "T"], run: filters.keys.table },
+        { label: "Data", icon: DataIcons.data, sub: () => [
+          { label: "Remove duplicates…", icon: DataIcons.dedupe, run: () => { const on = nRows === 1 && nCols === 1 ? filters.region() : { range: inTab(range), header: false }; if (on) opening = () => setDeduping(on); } },
+          { label: "Trim whitespace", icon: DataIcons.trim, run: () => trim(range) },
+          { label: "Split text to columns…", icon: DataIcons.split, disabled: nCols > 1, run: () => { opening = () => setSplitting(range); } },
         ] },
       ],
       // Plain, checkboxes (TRUE and FALSE), dates or a dropdown's options (sheet-types.js): whole columns take a column's type, other ranges each cell its own.
-      [{ label: "Cell type", icon: <LineIcons.type />, meta: ((kind) => kind === null ? undefined : kind ? TYPE_NAMES[kind] : "Plain")(types.uniform(range)), sub: () => [
+      [{ label: "Cell type", icon: LineIcons.type, meta: ((kind) => kind === null ? undefined : kind ? TYPE_NAMES[kind] : "Plain")(types.uniform(range)), sub: () => [
         { label: "Plain", run: () => setType(range, null) },
-        { label: "Checkbox", icon: <LineIcons.checkbox />, run: () => setType(range, "boolean") },
-        { label: "Date", icon: <LineIcons.date />, run: () => setType(range, "date") },
-        { label: "Dropdown…", icon: <LineIcons.dropdown />, run: () => editList(range) },
+        { label: "Checkbox", icon: LineIcons.checkbox, run: () => setType(range, "boolean") },
+        { label: "Date", icon: LineIcons.date, run: () => setType(range, "date") },
+        { label: "Dropdown…", icon: LineIcons.dropdown, run: () => editList(range) },
       ] }],
     ];
   };
