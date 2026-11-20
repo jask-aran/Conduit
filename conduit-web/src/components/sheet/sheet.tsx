@@ -607,7 +607,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
   const shownRows = (range: SheetRange) => { const hidden = sizes.hidden(); return Array.from({ length: range.bottom - range.top + 1 }, (_, r) => range.top + r).filter((row) => !hidden.has(row)); };
   const shownCols = (range: SheetRange) => { const hidden = sizes.hiddenCols(); return between(range.left, range.right).filter((col) => !hidden.has(col)); };
   const within = (range: SheetRange) => shownRows(range).map((row) => shownCols(range).map((col) => ({ row, col })));
-  const copy = (range: SheetRange, cut = false) => { const text = several() ? grid()?.copyAll(cut) : grid()?.copy(range, cut); return text === null ? Promise.reject(new Error(MULTIPLE)) : navigator.clipboard.writeText(text ?? "").catch((error: Error) => props.host.failed(error.message)); };
+  const copy = (range: SheetRange, cut = false) => { const text = several() ? grid()?.copyAll(cut) : grid()?.copy(range, cut); return text === null ? Promise.resolve() : navigator.clipboard.writeText(text ?? "").catch((error: Error) => props.host.failed(error.message)); };
   const clear = (range: SheetRange, label = "Clear contents") => writes(label)(cellsOf(reach(range)).map((cell) => ({ ...cell, input: "" })));
   const paste = (range: SheetRange, values = false, transposed = false) => void navigator.clipboard.readText().then((text) => grid()?.paste({ row: range.top, col: range.left }, text, values, transposed), (error: Error) => props.host.failed(error.message));
   // The cell menu's Data rows: Remove duplicates (the hub's, as it moves cells as a sort does), Trim whitespace and Split text to columns.
@@ -750,7 +750,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
     const sheet = model(), area = at();
     if (!sheet || !area) return;
     const to = sheet.value(row, col) === true ? "FALSE" : "TRUE";
-    writes("Toggle checkboxes")(within(inTab(area)).flat().filter((cell) => types.at(cell.row, cell.col) === "boolean").map((cell) => ({ ...cell, input: to })));
+    writes("Toggle checkboxes")(cellsOf(ranges().map(inTab)).filter((cell) => types.at(cell.row, cell.col) === "boolean").map((cell) => ({ ...cell, input: to })));
   };
   // The cell menu, as a spreadsheet's: what it does is said of the rows or columns it was opened on, counted ("Insert 5 rows above").
   const menuGroups = (): (SheetMenuEntry[] | false)[] => {
@@ -830,7 +830,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         ] : [],
         ...kind !== "cols" ? [
           { label: `Hide ${rowsSaid}`, icon: Icons.Hide, keys: ["Ctrl", "9"], run: hideRows },
-          ...hiddenIn(range) ? [{ label: "Unhide rows", icon: Icons.Preview, keys: ["Ctrl", "Shift", "9"], run: () => { const lines = between(range.top, range.bottom); history.act("Unhide rows", () => { sizes.setHidden(lines, false); filters.show(lines); }); } }] : [],
+          ...hiddenIn(range) ? [{ label: "Unhide rows", icon: Icons.Preview, keys: ["Ctrl", "Shift", "9"], run: () => { const lines = reach(range).flatMap((one) => between(one.top, one.bottom)); history.act("Unhide rows", () => { sizes.setHidden(lines, false); filters.show(lines); }); } }] : [],
         ] : [],
         ...kind !== "cols" ? [
           { label: `Group ${rowsSaid}`, icon: DataIcons.group, keys: ["Alt", "Shift", "→"], run: () => group(range, 1, "rows") },
@@ -844,7 +844,7 @@ export function SheetEditor(props: { host: SheetHost; id: string; name: string; 
         ] : [],
         ...kind !== "rows" ? [
           { label: `Hide ${colsSaid}`, icon: Icons.Hide, keys: ["Ctrl", "0"], run: () => history.act("Hide columns", () => sizes.setHiddenCols(reach(range).flatMap((one) => between(one.left, one.right)), true)) },
-          ...hiddenColsBy(range).length ? [{ label: "Unhide columns", icon: Icons.Preview, keys: ["Ctrl", "Shift", "0"], run: () => history.act("Unhide columns", () => sizes.setHiddenCols(hiddenColsBy(range), false)) }] : [],
+          ...hiddenColsBy(range).length ? [{ label: "Unhide columns", icon: Icons.Preview, keys: ["Ctrl", "Shift", "0"], run: () => history.act("Unhide columns", () => sizes.setHiddenCols(reach(range).flatMap(hiddenColsBy), false)) }] : [],
         ] : [],
       ],
       kind !== "cols" && [

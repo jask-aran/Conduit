@@ -260,7 +260,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   // Ctrl held as a press began (`add`), the cell it was on, and whether that was selected already: let go unmoved there, it is taken out (`deselect`).
   let pressing: { add: boolean; cell: { row: number; col: number } | null; within: boolean } | null = null;
   // An arrow in Add mode moves a lone active cell of its own, the ranges before it kept; the first one adds the range there was.
-  let roaming = false;
+  let roaming = false, holding = false;
   const inside = (area: SheetRange, row: number, col: number) => row >= area.top && row <= area.bottom && col >= area.left && col <= area.right;
   /** Each part's share of a range of the sheet's, the cursor's part chosen first so the other keeps its share. */
   const spread = (to: SheetRange, into: Part, share: (p: Part, drawn: SheetRange) => GridSelection) => {
@@ -366,6 +366,7 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
   let sizing: { col: number; moved: boolean } | undefined;
   const handlersOf = (p: Part): Partial<DataEditorProps> => ({
     onGridSelectionChange: (next) => {
+      if (holding) return;
       // A merge across the frozen rows' edge, moved onto, is selected whole, in both parts.
       const cell = next.current && !next.columns.length && !next.rows.length ? next.current.cell : undefined, home = cell && frozenRows ? mergeAt(p.map.sheet(cell[1]), cell[0]) : undefined;
       const one = next.current?.range;
@@ -426,6 +427,8 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
     onHeaderContextMenu: (col) => { const area = picked(); events.menu({ cols: owner.current.columns.hasIndex(col) && area ? area : { top: 0, bottom: 0, left: col, right: col } }); },
     onCellContextMenu: ([col, drawn]) => {
       const row = p.map.sheet(drawn), area = picked(), on = (one: SheetRange) => row >= one.top && row <= one.bottom && (col < 0 || (col >= one.left && col <= one.right)), inside = area && (on(area) || others.some(on));
+      // In another range selected, the grid's own move onto the cell pressed (it knows only the active range) is kept out: the menu is over them all.
+      if (inside && !on(area)) { holding = true; queueMicrotask(() => { holding = false; }); }
       const rows = inside ? { ...area, left: 0, right: 0 } : { top: row, bottom: row, left: 0, right: 0 }, cols = inside && col >= 0 ? { ...area, top: 0, bottom: 0 } : { top: 0, bottom: 0, left: col, right: col };
       events.menu(col < 0 ? { rows } : { rows, cols });
     },
@@ -450,19 +453,21 @@ export function mountGrid(element: HTMLElement, options: GridOptions): SheetGrid
       const cell = p.current.current?.cell;
       if (!cell) return;
       if (events.key(event, p.map.sheet(cell[1]), cell[0])) return event.cancel();
-      // An arrow from whole columns or rows goes on from their active cell, to one cell.
       const step = ({ ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] } as Record<string, [number, number]>)[event.key];
-      if (step && !(event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) && (p.current.columns.length || p.current.rows.length)) {
-        const col = step[0] ? nextShown(cell[0], step[0]) : cell[0], drawn = cell[1] + step[1];
-        if (drawn >= 0 && drawn < (p === head ? size.head : size.rows)) { event.cancel(); const row = p.map.sheet(drawn); api.select({ top: row, bottom: row, left: col, right: col }); return; }
-      }
       // In Add mode (Shift+F8) a plain arrow moves a lone active cell of its own, the ranges kept; the first adds the range there was (grown since, again).
       if (step && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && options.columns.adding()) {
         event.cancel();
-        const prior = picked(), col = step[0] ? nextShown(cell[0], step[0]) : cell[0], row = p.map.sheet(Math.max(0, Math.min((p === head ? size.head : size.rows) - 1, cell[1] + step[1])));
+        // From a merge, past its edge.
+        const prior = picked(), home = mergeAt(p.map.sheet(cell[1]), cell[0]), col = step[0] ? nextShown(step[0] < 0 ? home?.left ?? cell[0] : home?.right ?? cell[0], step[0]) : cell[0];
+        const row = step[1] && home ? Math.max(0, step[1] < 0 ? home.top - 1 : home.bottom + 1) : p.map.sheet(Math.max(0, Math.min((p === head ? size.head : size.rows) - 1, cell[1] + step[1])));
         if (prior && (!roaming || prior.top !== prior.bottom || prior.left !== prior.right)) addRange(prior);
         select({ top: row, bottom: row, left: col, right: col }, others, slot); roaming = true;
         return;
+      }
+      // An arrow from whole columns or rows goes on from their active cell, to one cell.
+      if (step && !(event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) && (p.current.columns.length || p.current.rows.length)) {
+        const col = step[0] ? nextShown(cell[0], step[0]) : cell[0], drawn = cell[1] + step[1];
+        if (drawn >= 0 && drawn < (p === head ? size.head : size.rows)) { event.cancel(); const row = p.map.sheet(drawn); api.select({ top: row, bottom: row, left: col, right: col }); return; }
       }
       // In extend mode (F8) a plain arrow moves the selection's far corner, as Shift and the arrow do.
       if (step && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && options.columns.extending()) {
