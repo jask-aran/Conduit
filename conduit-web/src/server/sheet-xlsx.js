@@ -224,7 +224,7 @@ export function importXlsx(bytes, { tabs: only } = {}) {
     const rows = Math.max(tab.rows, Math.min(styles.reach.rows, Math.floor(most / cols)));
     room -= rows * cols - had; Object.assign(tab, { rows, cols });
     Object.assign(tab, { pane: paneOf(xml), styles });
-    const ruled = sheetRules(xml, dxfs);
+    const ruled = sheetRules(xml, dxfs, themeXml);
     tab.rules = ruled.rules; tab.rulesKept = ruled.kept;
     for (const [type, count] of Object.entries(ruled.unread)) drop(`conditional formats (${type})`, count);
     tab.validations = validationsOf(xml);

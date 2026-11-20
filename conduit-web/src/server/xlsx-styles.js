@@ -264,8 +264,8 @@ export function readDxfs(stylesXml, themeXml) {
  * A sheet's conditional formats as a look's rules by A1 (sheet-rules.d.ts SheetRuleA1), the first over the rest: cell-value comparisons and formulas.
  * `unread`: the rules of other kinds (colour scales, data bars, icon sets…) by kind, which are left out.
  */
-export function sheetRules(sheetXml, dxfs) {
-  const found = [], unread = {}, kept = [];
+export function sheetRules(sheetXml, dxfs, themeXml) {
+  const found = [], unread = {}, kept = [], theme = themeColours(themeXml ?? "");
   for (const block of all(sheetXml, "conditionalFormatting")) {
     const ranges = attr(block, "sqref") ?? "";
     for (const rule of all(block, "cfRule")) {
@@ -273,7 +273,11 @@ export function sheetRules(sheetXml, dxfs) {
       const op = CELL_IS[attr(rule, "operator") ?? ""], text = attr(rule, "text");
       if (TEXT_KINDS[type] && style !== undefined && text !== undefined) { found.push({ priority: Number(attr(rule, "priority")) || Infinity, rule: { ranges, kind: "text", op: TEXT_KINDS[type], a: text, style: String(style), ...(["1", "true"].includes(attr(rule, "stopIfTrue")) ? { stop: true } : {}) } }); continue; }
       // A rule the sheet does not draw (a colour scale, data bar, icon set, top 10…) is kept as the file wrote it, with its dxf, and written back.
-      if (style === undefined || !formulas.length || (type === "cellIs" ? !op || (op.endsWith("etween") && formulas.length < 2) : type !== "expression")) { kept.push({ ranges, xml: rule.replace(/\s(dxfId|priority)="[^"]*"/g, ""), ...(style ? { dxf: style.xml } : {}) }); continue; }
+      if (style === undefined || !formulas.length || (type === "cellIs" ? !op || (op.endsWith("etween") && formulas.length < 2) : type !== "expression")) {
+        // The page draws it from its colours, theme and tint resolved, and its dxf as a packed style.
+        const colors = all(rule, "color").map((tag) => colourOf(tag, theme) ?? "#000000");
+        kept.push({ ranges, xml: rule.replace(/\s(dxfId|priority)="[^"]*"/g, ""), ...(colors.length ? { colors } : {}), ...(style ? { dxf: style.xml, style: String(style), ...(style.fmt ? { fmt: style.fmt } : {}) } : {}) }); continue;
+      }
       // Excel stops at a rule that holds and says so, the rules below it unread for that cell.
       const said = { style: String(style), ...(style.fmt ? { fmt: style.fmt } : {}), ...(["1", "true"].includes(attr(rule, "stopIfTrue")) ? { stop: true } : {}) };
       found.push({ priority: Number(attr(rule, "priority")) || Infinity, rule: type === "cellIs" ? { ranges, kind: "value", op, a: formulas[0], ...(op.endsWith("etween") ? { b: formulas[1] } : {}), ...said } : { ranges, kind: "formula", a: formulas[0], ...said } });

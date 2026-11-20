@@ -9,6 +9,7 @@ import { SHEET_FILL } from "./formats";
 import type { SheetInk } from "@/sheet-styles.js";
 import type { SheetLook } from "./host";
 import { shade } from "./shade";
+import { drawIcon, iconSize, type SheetBar } from "./scales";
 import { PLAIN, textSize, type SheetCellStyle } from "./styles";
 import { wrapLines } from "./wrap";
 
@@ -57,8 +58,9 @@ export function createCellLook(look: SheetLook) {
     // An indent level is three of the font's zeros wide, from the side the text is aligned to; shrink to fit draws the text smaller until it fits.
     let font = `${drawn.baseFontStyle} ${drawn.fontFamily}`, shown = shown0;
     const was = ctx.font;
-    const indent = style.indent ? style.indent * 3 * measureTextCached("0", ctx, font).width : 0, right = cell.contentAlign === "right";
-    const rect = indent ? { ...whole, x: right ? whole.x : whole.x + indent, width: whole.width - indent } : whole;
+    // A kept rule's icon stands at the cell's left, the text in the room past it.
+    const indent = style.indent ? style.indent * 3 * measureTextCached("0", ctx, font).width : 0, right = cell.contentAlign === "right", room = style.icon ? iconSize(whole.height) + padX : 0;
+    const rect = indent || room ? { ...whole, x: whole.x + room + (right ? 0 : indent), width: whole.width - indent - room } : whole;
     if (style.shrink && !style.wrap) { const room = rect.width - 2 * padX, wide = measureTextCached(shown, ctx, font).width; if (wide > room && room > 0) { font = font.replace(/([\d.]+)px/, (_, px: string) => `${Math.max(1, Math.floor(Number(px) * room / wide * 10) / 10)}px`); ctx.font = font; } }
     // Excel's Fill repeats the text across the cell as many whole times as fit.
     if (style.repeat && shown) { const one = measureTextCached(shown, ctx, font).width; if (one > 0) shown = shown.repeat(Math.max(1, Math.floor((rect.width - 2 * padX) / one))); }
@@ -122,10 +124,20 @@ export function createCellLook(look: SheetLook) {
     ctx.restore();
     [ctx.font, ctx.fillStyle] = was;
   };
+  // A data bar from the cell's left, under its text: Excel 2007's fades to the right.
+  const bar = ({ ctx, rect }: Parameters<DrawCellCallback>[0], { share, ink, solid }: SheetBar) => {
+    const was = ctx.fillStyle, x = rect.x + 2, y = rect.y + 2, wide = Math.max(0, (rect.width - 4) * share), tall = Math.max(0, rect.height - 5);
+    if (solid) ctx.fillStyle = ink;
+    else { const fade = ctx.createLinearGradient(x, 0, x + wide, 0); fade.addColorStop(0, ink); fade.addColorStop(1, `${ink}26`); ctx.fillStyle = fade; }
+    ctx.fillRect(x, y, wide, tall);
+    ctx.fillStyle = was;
+  };
   const draw: DrawCellCallback = (args, content) => {
-    const cell = args.cell as StyledCell, style = cell.worn, shown = cell.displayData;
+    const cell = args.cell as StyledCell, style = cell.worn, shown = style?.bare ? "" : cell.displayData;
+    if (style?.bar) bar(args, style.bar);
+    if (style?.icon) drawIcon(args.ctx, args.rect, style.icon, args.theme.cellHorizontalPadding);
     if (cell.pill) pill(args, cell, cell.pill);
-    else if (shown && (style?.custom || cell.block || cell.link || shown.includes(SHEET_FILL))) text(args, style ?? PLAIN, cell); else content();
+    else if (shown && (style?.custom || cell.block || cell.link || shown.includes(SHEET_FILL))) text(args, style ?? PLAIN, cell); else if (!style?.bare) content();
     if (cell.spill) spill(args, cell.spill);
     if (!style?.edges && !cell.frozen && !style?.diagonal) return;
     // The grid keeps note of the ink it set for a column's text, so it is put back.

@@ -7,6 +7,7 @@ import type * as Y from "yjs";
 import { key, valueText, type SheetView } from "@/sheet-format.js";
 import { decodeStyle, paintStyle, writeStyle, type SheetBorders, type SheetHex, type SheetInk, type SheetStyle, type StyleAttrs } from "@/sheet-styles.js";
 import { unfilled, type SheetFormats } from "./formats";
+import type { SheetBar, SheetIcon } from "./scales";
 import type { SheetLook, SheetRange } from "./host";
 import { widthOf } from "./sizes";
 import { wrapLines } from "./wrap";
@@ -15,10 +16,12 @@ import { wrapLines } from "./wrap";
  * What a cell is drawn with, its column's, row's and own style together. `color`, `fill` and `edgeColor`: an ink or a workbook's `#rrggbb`. `edges`: top 1,
  * right 2, bottom 4, left 8, `edgeWeight` px wide, `edgeLine` an import's dashed, dotted or double line. `size`: points. `custom`: the grid draws its text
  * itself (cell-draw.ts). What an xlsx import keeps (sheet-styles.js): `face` its font, `double` underline, `shrink` to fit, `indent` levels, `rotate` degrees
- * anticlockwise (-90 to 90, 255 stacked), `repeat` Excel's Fill alignment, `diagonal` lines.
+ * anticlockwise (-90 to 90, 255 stacked), `repeat` Excel's Fill alignment, `diagonal` lines. A kept conditional format's (scales.ts): `bar`, `icon`, and
+ * `bare` for its value hidden.
  */
 export type SheetCellStyle = { bold: boolean; italic: boolean; underline: boolean; strike: boolean; wrap: boolean; clip: boolean; color?: SheetInk | SheetHex; fill?: SheetInk | SheetHex; align?: "left" | "center" | "right"; valign: "top" | "middle" | "bottom"; edges: number; edgeColor?: SheetHex; edgeWeight: number; size?: number; custom: boolean;
-  face?: string; double?: boolean; shrink?: boolean; indent?: number; rotate?: number; repeat?: boolean; diagonal?: "up" | "down" | "both"; edgeLine?: "dashed" | "dotted" | "double" };
+  face?: string; double?: boolean; shrink?: boolean; indent?: number; rotate?: number; repeat?: boolean; diagonal?: "up" | "down" | "both"; edgeLine?: "dashed" | "dotted" | "double";
+  bar?: SheetBar; icon?: SheetIcon; bare?: boolean };
 export const PLAIN: SheetCellStyle = { bold: false, italic: false, underline: false, strike: false, wrap: false, clip: false, valign: "middle", edges: 0, edgeWeight: 1, custom: false };
 // How much of a patterned fill is its pattern's colour, so it is drawn as the two colours' mix (Excel's names, lower case).
 const PATTERN_SHARE: Readonly<Record<string, number>> = { darkgray: 0.75, mediumgray: 0.5, lightgray: 0.25, gray125: 0.125, gray0625: 0.0625 };

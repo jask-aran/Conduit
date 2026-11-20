@@ -76,7 +76,7 @@ export interface SheetFormats {
   /** The format a cell draws with (its own, else its column's); undefined for General. */
   at(row: number, col: number): string | undefined;
   /** A value as its cell's format draws it; null to draw it as it is (General, text where the format has no text section, a format numfmt cannot read). */
-  draw(row: number, col: number, value: number | string): SheetDrawn | null;
+  draw(row: number, col: number, value: number | string, pattern?: string): SheetDrawn | null;
   /** The format every cell of the range shares (undefined: General), or null where they differ; tracked where it is read. */
   uniform(range: SheetRange): string | undefined | null;
   /** The range takes the format: whole columns (top to the tab's last row) their columns', else each cell its own. */
@@ -121,8 +121,8 @@ export function createSheetFormats(look: Y.Map<number | string>, model: Accessor
   return {
     at, asking, ask,
     dated: (row, col) => { const pattern = at(row, col); return Boolean(pattern && isDateFormat(pattern)); },
-    draw: (row, col, value) => {
-      const pattern = at(row, col), made = pattern ? compile(pattern) : null;
+    draw: (row, col, value, pattern = at(row, col)) => {
+      const made = pattern ? compile(pattern) : null;
       return made && (typeof value === "number" || made.text) ? made.draw(value) : null;
     },
     uniform: (range) => {

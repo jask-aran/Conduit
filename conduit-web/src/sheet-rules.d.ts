@@ -22,6 +22,6 @@ export function compileFormula(source: string | undefined, anchor: string): Rule
 export function compileRule(rule: Pick<SheetRule, "kind" | "op" | "a" | "b"> & { anchor?: string }): RuleTest | null;
 export function shiftRefs(formula: string, rows: number, cols: number): string;
 export function readRules(text: unknown): SheetRule[];
-export function ruleAreas(view: Pick<SheetView, "indexOfRow" | "indexOfCol">, rule: SheetRule): Range[];
+export function ruleAreas(view: Pick<SheetView, "indexOfRow" | "indexOfCol">, rule: Pick<SheetRule, "ranges">): Range[];
 export function rulesA1(view: Pick<SheetView, "indexOfRow" | "indexOfCol">, text: unknown): SheetRuleA1[];
 export function rulesIds(view: Pick<SheetView, "size" | "rowAt" | "colAt">, list: unknown): string | undefined;

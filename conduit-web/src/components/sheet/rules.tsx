@@ -16,6 +16,7 @@ import { Icons } from "@/components/ui";
 import { COL_LIMIT, a1, key, rangeA1, type Range, type SheetView } from "@/sheet-format.js";
 import { compileRule, readRules, RULE_LIMIT, ruleAreas, type RuleTest, type SheetCellValue, type SheetRule, type SheetRuleOp, type SheetTextOp } from "@/sheet-rules.js";
 import { decodeStyle, type StyleAttrs } from "@/sheet-styles.js";
+import { keptRules, type KeptMark } from "./scales";
 import { PLAIN, type SheetCellStyle } from "./styles";
 
 type Compiled = { rule: SheetRule; test: RuleTest; attrs: StyleAttrs };
@@ -33,17 +34,45 @@ export function layStyle(worn: SheetCellStyle | undefined, attrs: StyleAttrs): S
 }
 
 /** The rules a view's look holds for its tab, as one cell's matches (highest priority first) and as the style they lay over it. */
-export function createRuleStyles(text: (id: string) => unknown, model: Accessor<SheetView | undefined>) {
-  let said: unknown, id: string | undefined, list: Compiled[] = [], areas: Range[][] | null = null, wide = false;
+export function createRuleStyles(text: (id: string) => unknown, model: Accessor<SheetView | undefined>, keptText: (id: string) => unknown = () => undefined) {
+  let said: unknown, saidKept: unknown, id: string | undefined, list: Compiled[] = [], areas: Range[][] | null = null, wide = false, kept = keptRules(undefined);
+  // A kept rule's mark on a cell by its position, and the style it makes of each style it is laid over, by the mark's own key.
+  let keptAt = new Map<number, { mark: KeptMark; key: string } | null>(), keptLaid = new WeakMap<SheetCellStyle, Map<string, SheetCellStyle>>();
   // A cell's matches by its position (row × COL_LIMIT + column), as their numbers joined ("" for none).
   let matched = new Map<number, string>();
   let laid = new WeakMap<SheetCellStyle, Map<string, SheetCellStyle>>(), plain = new Map<string, SheetCellStyle>();
   const read = (sheet: SheetView) => {
-    const now = sheet.id ? text(sheet.id) : undefined;
-    if (now === said && sheet.id === id) return;
-    said = now; id = sheet.id; matched = new Map(); areas = null; laid = new WeakMap(); plain = new Map();
+    const now = sheet.id ? text(sheet.id) : undefined, nowKept = sheet.id ? keptText(sheet.id) : undefined;
+    if (now === said && nowKept === saidKept && sheet.id === id) return;
+    said = now; saidKept = nowKept; id = sheet.id; matched = new Map(); areas = null; laid = new WeakMap(); plain = new Map();
+    kept = keptRules(nowKept); keptAt = new Map(); keptLaid = new WeakMap();
     list = readRules(now).flatMap((rule) => { const test = compileRule(rule); return test ? [{ rule, test, attrs: decodeStyle(rule.style) }] : []; });
-    wide = list.some((one) => one.test.reads);
+    wide = Boolean(kept.size) || list.some((one) => one.test.reads);
+  };
+  const keptOf = (sheet: SheetView, row: number, col: number) => {
+    const at = row * COL_LIMIT + col;
+    let found = keptAt.get(at);
+    if (found === undefined) {
+      const mark = kept.at(sheet, row, col);
+      keptAt.set(at, found = mark ? { mark, key: JSON.stringify(mark) } : null);
+    }
+    return found;
+  };
+  // A kept rule's mark laid over the style the drawn rules made: one object for each style and mark.
+  const layKept = (worn: SheetCellStyle | undefined, { mark, key }: { mark: KeptMark; key: string }) => {
+    const base = worn ?? PLAIN;
+    let byKey = keptLaid.get(base);
+    if (!byKey) keptLaid.set(base, byKey = new Map());
+    let made = byKey.get(key);
+    if (!made) {
+      made = mark.attrs ? layStyle(base, mark.attrs) : { ...base };
+      if (mark.fill) made.fill = mark.fill;
+      if (mark.bar) made.bar = mark.bar;
+      if (mark.icon) { made.icon = mark.icon; made.custom = true; }
+      if (mark.bare) made.bare = true;
+      byKey.set(key, made);
+    }
+    return made;
   };
   const get = (sheet: SheetView) => (row: number, col: number): SheetCellValue => { if (sheet.error(row, col) !== null) throw new Error("#VALUE!"); return sheet.value(row, col); };
   const matches = (sheet: SheetView, row: number, col: number) => {
@@ -64,17 +93,27 @@ export function createRuleStyles(text: (id: string) => unknown, model: Accessor<
       const sheet = model();
       if (!sheet) return worn;
       read(sheet);
-      if (!list.length) return worn;
-      const hits = matches(sheet, row, col);
-      if (!hits) return worn;
+      if (!list.length && !kept.size) return worn;
+      const extra = kept.size ? keptOf(sheet, row, col) : null;
+      const hits = list.length ? matches(sheet, row, col) : "";
+      if (!hits) return extra ? layKept(worn, extra) : worn;
       let byHits = worn ? laid.get(worn) : plain;
       if (!byHits) laid.set(worn!, byHits = new Map());
       let made = byHits.get(hits);
       if (!made) byHits.set(hits, made = layStyle(worn, Object.assign({}, ...hits.split(" ").reverse().map((n) => list[Number(n)]!.attrs)) as StyleAttrs));
-      return made;
+      return extra ? layKept(made, extra) : made;
+    },
+    /** The number format a matching rule gives the cell (a workbook's rule may carry one), the drawn rules' first; undefined for none. */
+    fmt(row: number, col: number) {
+      const sheet = model();
+      if (!sheet) return undefined;
+      read(sheet);
+      const hits = list.length ? matches(sheet, row, col) : "";
+      for (const n of hits ? hits.split(" ") : []) { const fmt = (list[Number(n)]!.rule as { fmt?: string }).fmt; if (fmt) return fmt; }
+      return kept.size ? keptOf(sheet, row, col)?.mark.fmt : undefined;
     },
     /** The sheet's values or rows changed: every cell is asked again. */
-    changed() { matched = new Map(); areas = null; },
+    changed() { matched = new Map(); areas = null; if (kept.size) { kept.changed(); keptAt = new Map(); } },
     /** A rule reads other cells than the one it is drawn in, so a change anywhere can restyle any cell it covers. */
     wide() { const sheet = model(); if (sheet) read(sheet); return wide; },
   };
@@ -82,7 +121,7 @@ export function createRuleStyles(text: (id: string) => unknown, model: Accessor<
 
 /** The shown tab's rules drawn, and `add` and `clear` to write them (in the caller's history step). */
 export function createSheetRules(look: Y.Map<number | string>, model: Accessor<SheetView | undefined>) {
-  const drawn = createRuleStyles((id) => look.get(`rules:${id}`), model), [version, setVersion] = createSignal(0), [preset, prefer] = createSignal<RulePreset | null>(null);
+  const drawn = createRuleStyles((id) => look.get(`rules:${id}`), model, (id) => look.get(`rulesKept:${id}`)), [version, setVersion] = createSignal(0), [preset, prefer] = createSignal<RulePreset | null>(null);
   const own = () => { const id = model()?.id; return id ? readRules(look.get(`rules:${id}`)) : []; };
   return {
     ...drawn,
